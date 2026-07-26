@@ -354,7 +354,8 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    /// `Новый Массив(...)`/`Новый Структура(...)` — единственные формы
+    /// `Новый Массив(...)`/`Новый Структура(...)`/`Новый
+    /// ТаблицаЗначений()`/`Новый Соответствие()` — единственные формы
     /// `Новый`, которые пока распознаются (случай общих пользовательских
     /// типов отложен, объектов кроме коллекций ещё нет).
     fn resolve_new(&mut self, type_name: &str, args: &[AExpr]) -> Result<RExpr, SemaError> {
@@ -415,8 +416,18 @@ impl<'a> Resolver<'a> {
                 }
                 Ok(RExpr::NewTable)
             }
+            "СООТВЕТСТВИЕ" | "MAP" => {
+                if !args.is_empty() {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый Соответствие".to_string(),
+                        expected: 0,
+                        found: args.len(),
+                    });
+                }
+                Ok(RExpr::NewMap)
+            }
             _ => Err(SemaError::Unsupported(
-                "Новый поддержан только для Массив/Структура/ТаблицаЗначений пока",
+                "Новый поддержан только для Массив/Структура/ТаблицаЗначений/Соответствие пока",
             )),
         }
     }
@@ -487,8 +498,11 @@ impl<'a> Resolver<'a> {
                 // арность фиксирована и проверяется сразу.
                 let expected: Option<usize> = match method {
                     bsl_rt::BuiltinMethod::Count | bsl_rt::BuiltinMethod::Clear => Some(0),
-                    bsl_rt::BuiltinMethod::Delete => Some(1),
-                    bsl_rt::BuiltinMethod::Add => None,
+                    bsl_rt::BuiltinMethod::Delete | bsl_rt::BuiltinMethod::Get => Some(1),
+                    bsl_rt::BuiltinMethod::Insert => Some(2),
+                    // `Свойство` — 1 или 2 (см. `BslValue::structure_property`),
+                    // как и `Добавить` арность решает рантайм.
+                    bsl_rt::BuiltinMethod::Add | bsl_rt::BuiltinMethod::Property => None,
                 };
                 if let Some(expected) = expected {
                     if args.len() != expected {

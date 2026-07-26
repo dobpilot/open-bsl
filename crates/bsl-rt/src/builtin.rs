@@ -1,4 +1,5 @@
-use crate::{BslValue, RtResult};
+use crate::runtime_shapes::RuntimeShapes;
+use crate::{BslObject, BslValue, NameId, RtError, RtResult};
 
 /// Встроенные функции, вызываемые по голому имени (`Sqrt(x)`, `Pow(x,y)`,
 /// ...). Разрешаются регистронезависимо (`sqrt` == `Sqrt`), без перевода на
@@ -102,6 +103,18 @@ pub enum BuiltinMethod {
     Add,
     Delete,
     Clear,
+    /// `Структура.Вставить(Ключ, Значение)` / `Соответствие.Вставить(Ключ,
+    /// Значение)` — тоже полиморфен по получателю, но это ДРУГОЙ метод в
+    /// самой 1С, чем `Добавить` (разные имена, `Insert` не синоним `Add`),
+    /// поэтому отдельный вариант, а не переиспользование `Add`.
+    Insert,
+    /// `Соответствие.Получить(Ключ)`.
+    Get,
+    /// `Структура.Свойство(Ключ[, ЗначениеПоУмолчанию])` — см. doc comment
+    /// на `BslValue::structure_property` про отклонение от реальной
+    /// сигнатуры (там `Значение` — выходной параметр, здесь — значение по
+    /// умолчанию).
+    Property,
 }
 
 impl BuiltinMethod {
@@ -111,6 +124,9 @@ impl BuiltinMethod {
             "ADD" | "ДОБАВИТЬ" => BuiltinMethod::Add,
             "DELETE" | "УДАЛИТЬ" => BuiltinMethod::Delete,
             "CLEAR" | "ОЧИСТИТЬ" => BuiltinMethod::Clear,
+            "INSERT" | "ВСТАВИТЬ" => BuiltinMethod::Insert,
+            "GET" | "ПОЛУЧИТЬ" => BuiltinMethod::Get,
+            "PROPERTY" | "СВОЙСТВО" => BuiltinMethod::Property,
             _ => return None,
         })
     }
@@ -184,5 +200,103 @@ pub fn call_builtin_method(m: BuiltinMethod, obj: &BslValue, args: &[BslValue]) 
             obj.clear_collection()?;
             Ok(BslValue::Undefined)
         }
+        BuiltinMethod::Insert => match obj {
+            BslValue::Object(o) if matches!(&**o, BslObject::Map(_)) => {
+                obj.map_insert(args[0].clone(), args[1].clone())?;
+                Ok(BslValue::Undefined)
+            }
+            // `Структура.Вставить` доходит сюда, только если `obj` НЕ
+            // структура — сам структурный случай перехвачен раньше, в
+            // `call_builtin_method_ctx` (нужен рантайм-контекст форм).
+            _ => Err(RtError::MethodNotApplicable {
+                method: "Вставить",
+                receiver: obj.type_name(),
+            }),
+        },
+        BuiltinMethod::Get => match obj {
+            BslValue::Object(o) if matches!(&**o, BslObject::Map(_)) => obj.map_get(&args[0]),
+            _ => Err(RtError::MethodNotApplicable {
+                method: "Получить",
+                receiver: obj.type_name(),
+            }),
+        },
+        // `Структура.Свойство` перехвачен в `call_builtin_method_ctx` —
+        // сюда попадает только вызов на не-структуре.
+        BuiltinMethod::Property => Err(RtError::MethodNotApplicable {
+            method: "Свойство",
+            receiver: obj.type_name(),
+        }),
     }
+}
+
+fn is_structure(obj: &BslValue) -> bool {
+    matches!(obj, BslValue::Object(o) if matches!(&**o, BslObject::Structure(_)))
+}
+
+fn key_name(key: &BslValue, rt: &mut RuntimeShapes) -> RtResult<NameId> {
+    match key {
+        BslValue::Str(s) => Ok(rt.names.intern(&s.to_string())),
+        _ => Err(RtError::TypeError {
+            expected: "Строка",
+            op: "Ключ",
+        }),
+    }
+}
+
+/// Обёртка над `call_builtin_method` с доступом к рантайм-контексту форм
+/// (`RuntimeShapes`) — нужен только трём методам структуры, которые МЕНЯЮТ
+/// её форму (`Вставить`/`Удалить`/`Свойство` — точнее, только первые два
+/// меняют, `Свойство` лишь читает, но ключ всё равно нужно интернировать в
+/// `NameId` тем же рантайм-интернером) плюс `Очистить` на структуре (сброс
+/// формы в пустую). Для всего остального — просто делегирование в
+/// контекст-независимую `call_builtin_method`, включая `Соответствие`
+/// (`MapData` вообще не участвует в системе форм) и все остальные типы
+/// получателей.
+pub fn call_builtin_method_ctx(
+    m: BuiltinMethod,
+    obj: &BslValue,
+    args: &[BslValue],
+    rt: &mut RuntimeShapes,
+) -> RtResult<BslValue> {
+    if is_structure(obj) {
+        match m {
+            BuiltinMethod::Insert => {
+                let field = key_name(&args[0], rt)?;
+                obj.structure_insert(field, args[1].clone(), &mut rt.shapes)?;
+                return Ok(BslValue::Undefined);
+            }
+            BuiltinMethod::Delete => {
+                let field = key_name(&args[0], rt)?;
+                obj.structure_delete(field, &mut rt.shapes)?;
+                return Ok(BslValue::Undefined);
+            }
+            BuiltinMethod::Property => {
+                // Арность у `Свойство` не проверена в bsl-sema (как и у
+                // `Add`) — 1 или 2 аргумента оба валидны, но 0 или >2
+                // синтаксически пройдут резолвинг и должны стать понятной
+                // `RtError`, а не паникой на `args[0]`.
+                let Some(key_arg) = args.first() else {
+                    return Err(RtError::MethodNotApplicable {
+                        method: "Свойство",
+                        receiver: obj.type_name(),
+                    });
+                };
+                if args.len() > 2 {
+                    return Err(RtError::MethodNotApplicable {
+                        method: "Свойство",
+                        receiver: obj.type_name(),
+                    });
+                }
+                let field = key_name(key_arg, rt)?;
+                let default = args.get(1).cloned();
+                return obj.structure_property(field, default);
+            }
+            BuiltinMethod::Clear => {
+                obj.structure_clear(&mut rt.shapes)?;
+                return Ok(BslValue::Undefined);
+            }
+            _ => {}
+        }
+    }
+    call_builtin_method(m, obj, args)
 }

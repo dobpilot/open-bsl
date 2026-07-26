@@ -29,6 +29,20 @@ impl NameInterner {
         Self::default()
     }
 
+    /// Затравка рантайм-интернера уже готовой (компиляционной) таблицей
+    /// имён — `Вставить`/`Свойство` на структуре могут получить строковый
+    /// ключ, которого не было ни в одном литерале модуля, и им нужно
+    /// продолжить ИМЕННО эту нумерацию `NameId`, а не начать с нуля заново
+    /// (иначе рантайм-`NameId` столкнулись бы с компиляционными).
+    pub fn from_existing(names: Vec<String>) -> Self {
+        let index = names
+            .iter()
+            .enumerate()
+            .map(|(i, n)| (n.to_uppercase(), NameId(i as u32)))
+            .collect();
+        NameInterner { names, index }
+    }
+
     pub fn intern(&mut self, name: &str) -> NameId {
         let key = name.to_uppercase();
         if let Some(&id) = self.index.get(&key) {

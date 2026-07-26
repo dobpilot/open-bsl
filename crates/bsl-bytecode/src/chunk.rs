@@ -19,7 +19,7 @@ pub struct ExceptionRange {
 /// уровня. `n_regs` — пиковое число регистров кадра (параметры + локалы +
 /// максимум одновременно живых временных) — столько `BslValue` резервирует
 /// VM при входе в кадр.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Chunk {
     pub instrs: Vec<Instr>,
     pub consts: Vec<BslValue>,
@@ -52,7 +52,7 @@ pub struct Chunk {
 /// раз при компиляции (см. `bsl_rt::NameInterner`/`ShapeTable`): доступ к
 /// полю ссылается на них по индексу (`NameId`/индекс формы), а не хранит
 /// строку или список полей в каждой инструкции.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Program {
     pub chunks: Vec<Chunk>,
     pub names: Vec<String>,

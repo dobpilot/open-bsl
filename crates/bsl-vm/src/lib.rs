@@ -119,9 +119,15 @@ fn drive(
         return_reg: 0,
     }];
     let mut current_exception: Option<BslValue> = None;
+    // Затравлена формами/именами ЭТОЙ программы — см. `bsl_rt::RuntimeShapes`
+    // doc comment про то, почему не общий на процесс синглтон: у вложенного
+    // `Program` (см. `run_dynamic_snippet`) свои `names`/`shapes`, и рантайм-
+    // расширения этой таблицы (`Вставить`/`Удалить` на структуре, меняющие
+    // её форму) актуальны только для объектов внутри ОДНОГО такого вызова.
+    let mut runtime_shapes = bsl_rt::RuntimeShapes::seeded(program.names.clone(), program.shapes.clone());
 
     loop {
-        match step(&mut frames, &mut stack, program, &mut current_exception) {
+        match step(&mut frames, &mut stack, program, &mut current_exception, &mut runtime_shapes) {
             Ok(Step::Continue) => continue,
             Ok(Step::Done(v)) => return Ok((v, stack)),
             Err(e) => {
@@ -146,6 +152,7 @@ fn step(
     stack: &mut Vec<BslValue>,
     program: &Program,
     current_exception: &mut Option<BslValue>,
+    runtime_shapes: &mut bsl_rt::RuntimeShapes,
 ) -> Result<Step, RtError> {
     let frame_idx = frames.len() - 1;
     let func_id = frames[frame_idx].func_id;
@@ -403,6 +410,11 @@ fn step(
                 stack[d] = BslValue::new_table();
                 frames[frame_idx].pc += 1;
             }
+            Instr::NewMap { dst } => {
+                let d = frames[frame_idx].reg_index(dst);
+                stack[d] = BslValue::new_map();
+                frames[frame_idx].pc += 1;
+            }
             Instr::CollectionLen { dst, obj } => {
                 let ov = stack[frames[frame_idx].reg_index(obj)].clone();
                 let len = ov.collection_len()?;
@@ -447,7 +459,7 @@ fn step(
                 for i in 0..count {
                     args.push(stack[frames[frame_idx].reg_index(base + i)].clone());
                 }
-                let v = bsl_rt::call_builtin_method(method, &ov, &args)?;
+                let v = bsl_rt::call_builtin_method_ctx(method, &ov, &args, runtime_shapes)?;
                 let d = frames[frame_idx].reg_index(dst);
                 stack[d] = v;
                 frames[frame_idx].pc += 1;
@@ -1080,6 +1092,179 @@ mod tests {
     fn unknown_field_is_a_runtime_error() {
         let err = run_src_err("s = Новый Структура(\"x\");\nВозврат s.z;");
         assert!(matches!(err, RtError::UnknownField(_)));
+    }
+
+    #[test]
+    fn structure_insert_adds_a_new_field_at_runtime() {
+        // Задача 4 ревью: `ShapeTable` больше не только компиляционная —
+        // `Вставить` заводит поле, которого не было в литерале `Новый
+        // Структура(...)`, и оно сразу читается через `.y`.
+        let v = run_src(
+            "s = Новый Структура(\"x\", 1);\n\
+             s.Вставить(\"y\", 2);\n\
+             Возврат s.x + s.y;",
+        );
+        assert_eq!(v, num("3"));
+    }
+
+    #[test]
+    fn structure_insert_on_existing_field_overwrites_value_not_shape() {
+        let v = run_src(
+            "s = Новый Структура(\"x\", 1);\n\
+             s.Вставить(\"x\", 99);\n\
+             Возврат s.x;",
+        );
+        assert_eq!(v, num("99"));
+    }
+
+    #[test]
+    fn structure_delete_removes_field_and_shrinks_count() {
+        let v = run_src(
+            "s = Новый Структура(\"x,y\", 1, 2);\n\
+             s.Удалить(\"x\");\n\
+             Возврат s.Количество();",
+        );
+        assert_eq!(v, num("1"));
+        let err = run_src_err(
+            "s = Новый Структура(\"x,y\", 1, 2);\n\
+             s.Удалить(\"x\");\n\
+             Возврат s.x;",
+        );
+        assert!(matches!(err, RtError::UnknownField(_)));
+    }
+
+    #[test]
+    fn structure_delete_missing_field_is_a_no_op() {
+        let v = run_src(
+            "s = Новый Структура(\"x\", 1);\n\
+             s.Удалить(\"нетполя\");\n\
+             Возврат s.Количество();",
+        );
+        assert_eq!(v, num("1"));
+    }
+
+    #[test]
+    fn structure_property_returns_value_or_undefined_or_default() {
+        let v = run_src("s = Новый Структура(\"x\", 5);\nВозврат s.Свойство(\"x\");");
+        assert_eq!(v, num("5"));
+        let v = run_src("s = Новый Структура(\"x\", 5);\nВозврат s.Свойство(\"y\");");
+        assert_eq!(v, BslValue::Undefined);
+        let v = run_src("s = Новый Структура(\"x\", 5);\nВозврат s.Свойство(\"y\", 42);");
+        assert_eq!(v, num("42"));
+    }
+
+    #[test]
+    fn structure_clear_resets_field_set_not_just_values() {
+        let v = run_src(
+            "s = Новый Структура(\"x,y\", 1, 2);\n\
+             s.Очистить();\n\
+             Возврат s.Количество();",
+        );
+        assert_eq!(v, num("0"));
+        let err = run_src_err(
+            "s = Новый Структура(\"x,y\", 1, 2);\n\
+             s.Очистить();\n\
+             Возврат s.x;",
+        );
+        assert!(matches!(err, RtError::UnknownField(_)));
+    }
+
+    #[test]
+    fn structure_insert_in_a_loop_converges_on_one_shape_like_the_literal_path() {
+        // Инвариант "формы интернируются глобально по набору ключей" не
+        // должен ломаться рантайм-путём: одинаковый набор полей, заведённый
+        // через `Вставить` в цикле на РАЗНЫХ структурах, обязан давать один
+        // и тот же `Rc<Shape>`, что и прямой литерал с тем же набором —
+        // иначе инлайн-кэш на горячий доступ к полю стал бы полиморфным.
+        // Наблюдаем это косвенно: `Для Каждого` со смешанными "путём
+        // Вставить" и "литералом" структурами по-прежнему читает верно.
+        let v = run_src(
+            "a = Новый Массив(2);\n\
+             a[0] = Новый Структура();\n\
+             a[0].Вставить(\"x\", 10);\n\
+             a[0].Вставить(\"y\", 20);\n\
+             a[1] = Новый Структура(\"x,y\", 100, 200);\n\
+             сумма = 0;\n\
+             Для Каждого elem Из a Цикл\n\
+             сумма = сумма + elem.x;\n\
+             КонецЦикла\n\
+             Возврат сумма;",
+        );
+        assert_eq!(v, num("110"));
+    }
+
+    #[test]
+    fn map_insert_get_count_and_missing_key_returns_undefined() {
+        let v = run_src(
+            "м = Новый Соответствие;\n\
+             м.Вставить(\"a\", 1);\n\
+             м.Вставить(\"b\", 2);\n\
+             Возврат м.Количество();",
+        );
+        assert_eq!(v, num("2"));
+
+        let v = run_src("м = Новый Соответствие;\nм.Вставить(\"a\", 1);\nВозврат м.Получить(\"a\");");
+        assert_eq!(v, num("1"));
+
+        let v = run_src("м = Новый Соответствие;\nВозврат м.Получить(\"нет\");");
+        assert_eq!(v, BslValue::Undefined);
+    }
+
+    #[test]
+    fn map_key_hash_is_scale_independent() {
+        // "Хеш числа обязан быть независим от масштаба" — м[1.0] и м[1.00]
+        // должны быть ОДНИМ И ТЕМ ЖЕ ключом, а не двумя разными записями.
+        let v = run_src(
+            "м = Новый Соответствие;\n\
+             м.Вставить(1.0, \"первое\");\n\
+             м.Вставить(1.00, \"второе\");\n\
+             Возврат м.Количество();",
+        );
+        assert_eq!(v, num("1"));
+        let v = run_src(
+            "м = Новый Соответствие;\n\
+             м.Вставить(1.0, \"первое\");\n\
+             Возврат м.Получить(1.00);",
+        );
+        assert_eq!(str_val(&v), "первое");
+    }
+
+    #[test]
+    fn map_delete_removes_key_and_is_a_no_op_when_missing() {
+        let v = run_src(
+            "м = Новый Соответствие;\n\
+             м.Вставить(\"a\", 1);\n\
+             м.Удалить(\"a\");\n\
+             м.Удалить(\"нет\");\n\
+             Возврат м.Количество();",
+        );
+        assert_eq!(v, num("0"));
+    }
+
+    #[test]
+    fn map_for_each_yields_key_value_pairs_in_insertion_order() {
+        let v = run_src(
+            "м = Новый Соответствие;\n\
+             м.Вставить(\"a\", 1);\n\
+             м.Вставить(\"b\", 2);\n\
+             итог = \"\";\n\
+             Для Каждого пара Из м Цикл\n\
+             итог = итог + пара.Ключ + Строка(пара.Значение);\n\
+             КонецЦикла\n\
+             Возврат итог;",
+        );
+        assert_eq!(str_val(&v), "a1b2");
+    }
+
+    #[test]
+    fn map_clear_resets_count_to_zero() {
+        let v = run_src(
+            "м = Новый Соответствие;\n\
+             м.Вставить(\"a\", 1);\n\
+             м.Очистить();\n\
+             Возврат м.Количество();",
+        );
+        assert_eq!(v, num("0"));
     }
 
     #[test]

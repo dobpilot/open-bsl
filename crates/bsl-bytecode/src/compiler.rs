@@ -393,6 +393,9 @@ impl<'a> Compiler<'a> {
             RExpr::NewTable => {
                 self.emit(Instr::NewTable { dst });
             }
+            RExpr::NewMap => {
+                self.emit(Instr::NewMap { dst });
+            }
             RExpr::DynEval(e) => {
                 let s = self.alloc_temp()?;
                 self.compile_expr(e, s)?;

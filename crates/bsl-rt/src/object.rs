@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::map::MapData;
 use crate::shape::Shape;
 use crate::table::ValueTableData;
 use crate::BslValue;
@@ -29,6 +30,15 @@ pub enum BslObject {
     /// `ValueTableData::id_to_pos`. `row_id` может перестать резолвиться
     /// после `Удалить`/`Очистить`.
     TableRow(Rc<RefCell<ValueTableData>>, u64),
+    /// `Соответствие`. Ключ — любое значение (см. `impl Hash for
+    /// BslValue`), а не только `Строка`/`Число` — как и в самой 1С.
+    Map(RefCell<MapData>),
+    /// Элемент `Для Каждого` по `Соответствие` (`КлючИЗначение.Ключ`/
+    /// `.Значение`). Не структура с интернированной формой: поля здесь
+    /// всегда ровно эти два и известны только рантайму, резолвятся строкой
+    /// через `get_field_by_name` — тем же путём, что и колонки
+    /// `СтрокаТаблицыЗначений`, а не через `Shape`/`NameId`.
+    KeyValuePair(BslValue, BslValue),
 }
 
 #[derive(Debug)]

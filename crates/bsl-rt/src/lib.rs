@@ -5,20 +5,25 @@
 
 mod builtin;
 mod interner;
+mod map;
 mod object;
+mod runtime_shapes;
 mod shape;
 mod string;
 mod table;
 
 use std::cmp::Ordering;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
 use bsl_number::{BslNumber, NumError};
 
-pub use builtin::{call_builtin_fn, call_builtin_method, BuiltinFn, BuiltinMethod};
+pub use builtin::{call_builtin_method_ctx, call_builtin_fn, call_builtin_method, BuiltinFn, BuiltinMethod};
 pub use interner::{NameId, NameInterner};
+pub use map::MapData;
 pub use object::{BslObject, StructureData};
+pub use runtime_shapes::RuntimeShapes;
 pub use shape::{Shape, ShapeTable};
 pub use string::BslString;
 pub use table::ValueTableData;
@@ -135,6 +140,8 @@ impl BslValue {
                 BslObject::ValueTable(_) => "ТаблицаЗначений",
                 BslObject::TableColumns(_) => "КоллекцияКолонокТаблицыЗначений",
                 BslObject::TableRow(_, _) => "СтрокаТаблицыЗначений",
+                BslObject::Map(_) => "Соответствие",
+                BslObject::KeyValuePair(_, _) => "КлючИЗначение",
             },
         }
     }
@@ -341,6 +348,10 @@ impl BslValue {
         BslValue::Object(Rc::new(BslObject::ValueTable(ValueTableData::new())))
     }
 
+    pub fn new_map() -> Self {
+        BslValue::Object(Rc::new(BslObject::Map(std::cell::RefCell::new(MapData::new()))))
+    }
+
     /// Индекс должен быть целым неотрицательным числом — `1С` использует
     /// `Число` для индексов, отдельного целочисленного типа нет.
     fn index_as_usize(idx: &BslValue) -> RtResult<usize> {
@@ -367,6 +378,25 @@ impl BslValue {
                             .ok_or(RtError::IndexOutOfBounds { index: i as i64, len: d.row_count() })?
                     };
                     Ok(BslValue::Object(Rc::new(BslObject::TableRow(data.clone(), row_id))))
+                }
+                // ПОЗИЦИОННЫЙ, не по ключу: `Для Каждого` компилируется в
+                // общий для всех коллекций протокол `CollectionLen` + рост
+                // числового индекса `0..len` через эту же функцию (см.
+                // `bsl-bytecode::compiler::RStmt::ForEach`) — компилятор не
+                // знает на этапе компиляции, что `idx` в рантайме окажется
+                // `Соответствие`, и не может эмитить для него другой путь.
+                // Доступ ПО КЛЮЧУ у `Соответствие` поэтому сознательно НЕ
+                // здесь, а в `.Получить(Ключ)` (`map_get`) — если бы `[]`
+                // тоже читал по ключу, `м[0]` было бы неразрешимо
+                // неоднозначно между "0-я по счёту пара" и "значение по
+                // ключу 0" для карты с целочисленными ключами.
+                BslObject::Map(data) => {
+                    let i = Self::index_as_usize(idx)?;
+                    let data = data.borrow();
+                    let (k, v) = data
+                        .entry_at(i)
+                        .ok_or(RtError::IndexOutOfBounds { index: i as i64, len: data.len() })?;
+                    Ok(BslValue::Object(Rc::new(BslObject::KeyValuePair(k, v))))
                 }
                 _ => Err(RtError::NotIndexable),
             },
@@ -403,6 +433,8 @@ impl BslValue {
                 BslObject::ValueTable(data) => Ok(data.borrow().row_count()),
                 BslObject::TableColumns(data) => Ok(data.borrow().column_names.len()),
                 BslObject::TableRow(..) => Err(RtError::NotIndexable),
+                BslObject::Map(data) => Ok(data.borrow().len()),
+                BslObject::KeyValuePair(..) => Err(RtError::NotIndexable),
             },
             _ => Err(RtError::NotIndexable),
         }
@@ -437,6 +469,134 @@ impl BslValue {
                         None => Err(RtError::UnknownField(name)),
                     }
                 }
+                _ => Err(RtError::NotAnObject),
+            },
+            _ => Err(RtError::NotAnObject),
+        }
+    }
+
+    // --- Рантайм-мутация формы структуры ---------------------------------
+    //
+    // `Вставить`/`Удалить`/`Свойство` (двухаргументная форма) — в отличие
+    // от `get_field`/`set_field` выше, которые лишь ЧИТАЮТ уже готовую
+    // форму, эти три меняют её: `ShapeTable` здесь больше не голая таблица
+    // компиляции, а рантайм-контекст (`RuntimeShapes`, см. одноимённый
+    // модуль), поэтому и подписи ниже берут `&mut ShapeTable`, а не
+    // работают в изоляции. Инлайн-кэш `GetProp`/`SetProp` (`Rc::ptr_eq` на
+    // `s.shape`) сам заметит смену формы после любой из них — ничего
+    // специально инвалидировать не нужно.
+
+    /// `Структура.Вставить(Ключ, Значение)`. Поле уже есть — просто новое
+    /// значение на том же слоте, форма не меняется (у 1С `Вставить`
+    /// повторного поля — это не ошибка и не дубликат, а перезапись).
+    pub fn structure_insert(&self, field: NameId, val: BslValue, shapes: &mut ShapeTable) -> RtResult<()> {
+        match self {
+            BslValue::Object(o) => match &**o {
+                BslObject::Structure(s) => {
+                    let mut s = s.borrow_mut();
+                    match s.shape.index.get(&field).copied() {
+                        Some(slot) => s.slots[slot as usize] = val,
+                        None => {
+                            s.slots.push(val);
+                            s.shape = shapes.add_field(&s.shape, field);
+                        }
+                    }
+                    Ok(())
+                }
+                _ => Err(RtError::NotAnObject),
+            },
+            _ => Err(RtError::NotAnObject),
+        }
+    }
+
+    /// `Структура.Удалить(Ключ)`. Поля нет — no-op (симметрично
+    /// `MapData::remove`, см. его doc comment): убрать то, чего и так нет,
+    /// не повод падать.
+    pub fn structure_delete(&self, field: NameId, shapes: &mut ShapeTable) -> RtResult<()> {
+        match self {
+            BslValue::Object(o) => match &**o {
+                BslObject::Structure(s) => {
+                    let mut s = s.borrow_mut();
+                    if let Some(&slot) = s.shape.index.get(&field) {
+                        s.slots.remove(slot as usize);
+                        s.shape = shapes.remove_field(&s.shape, field);
+                    }
+                    Ok(())
+                }
+                _ => Err(RtError::NotAnObject),
+            },
+            _ => Err(RtError::NotAnObject),
+        }
+    }
+
+    /// `Структура.Свойство(Ключ)` / `Структура.Свойство(Ключ,
+    /// ЗначениеПоУмолчанию)`.
+    ///
+    /// ОТКЛОНЕНИЕ ОТ РЕАЛЬНОЙ 1С: настоящая сигнатура — `Свойство(Ключ,
+    /// Значение)`, где `Значение` — параметр ПО ССЫЛКЕ (выходной), а
+    /// возвращает функция `Булево` (найдено ли поле). Такой контракт для
+    /// ВСТРОЕННОГО метода потребовал бы протаскивать режим аргумента
+    /// (`ArgMode::ByRefLocal`) через `CallMethod` — сейчас это умеет только
+    /// `Call` для пользовательских процедур/функций (см.
+    /// `bsl-bytecode::instr::Instr::Call`), `CallMethod` вычисляет все
+    /// аргументы как значения. Ради одного метода вводить второй протокол
+    /// аргументов не стали — вместо этого второй аргумент трактуется как
+    /// значение по умолчанию (безопасный geттер: нет поля — нет и ошибки).
+    pub fn structure_property(&self, field: NameId, default: Option<BslValue>) -> RtResult<BslValue> {
+        match self {
+            BslValue::Object(o) => match &**o {
+                BslObject::Structure(s) => {
+                    let s = s.borrow();
+                    match s.shape.index.get(&field) {
+                        Some(&slot) => Ok(s.slots[slot as usize].clone()),
+                        None => Ok(default.unwrap_or(BslValue::Undefined)),
+                    }
+                }
+                _ => Err(RtError::NotAnObject),
+            },
+            _ => Err(RtError::NotAnObject),
+        }
+    }
+
+    /// `Структура.Очистить()` — сбрасывает набор полей целиком (форма
+    /// становится пустой), не только значения на месте: у 1С `Очистить()`
+    /// на структуре убирает и сами поля, следующий `Свойство`/`.Х` их уже
+    /// не найдёт.
+    pub fn structure_clear(&self, shapes: &mut ShapeTable) -> RtResult<()> {
+        match self {
+            BslValue::Object(o) => match &**o {
+                BslObject::Structure(s) => {
+                    let mut s = s.borrow_mut();
+                    s.slots.clear();
+                    s.shape = shapes.empty();
+                    Ok(())
+                }
+                _ => Err(RtError::NotAnObject),
+            },
+            _ => Err(RtError::NotAnObject),
+        }
+    }
+
+    /// `Соответствие.Вставить(Ключ, Значение)`.
+    pub fn map_insert(&self, key: BslValue, val: BslValue) -> RtResult<()> {
+        match self {
+            BslValue::Object(o) => match &**o {
+                BslObject::Map(data) => {
+                    data.borrow_mut().insert(key, val);
+                    Ok(())
+                }
+                _ => Err(RtError::NotAnObject),
+            },
+            _ => Err(RtError::NotAnObject),
+        }
+    }
+
+    /// `Соответствие.Получить(Ключ)` — `Неопределено`, если ключа нет, не
+    /// ошибка (соответствует `MapData::get`/реальной 1С).
+    pub fn map_get(&self, key: &BslValue) -> RtResult<BslValue> {
+        match self {
+            BslValue::Object(o) => match &**o {
+                BslObject::Map(data) => Ok(data.borrow().get(key).unwrap_or(BslValue::Undefined)),
                 _ => Err(RtError::NotAnObject),
             },
             _ => Err(RtError::NotAnObject),
@@ -538,6 +698,21 @@ impl BslValue {
                         .column_index(name)
                         .ok_or_else(|| RtError::UnknownColumn(name.to_string()))?;
                     data.get_cell(*row_id, col).ok_or(RtError::RowInvalidated)
+                }
+                // `КлючИЗначение.Ключ`/`.Значение` — те же два имени всегда,
+                // ни разу не интернированные как `Shape`/`NameId`, потому
+                // что этот объект заводится ЦЕЛИКОМ в рантайме
+                // (`get_index` на `Соответствие`, см. `map.rs`), а не
+                // компилируется из литерала полей.
+                BslObject::KeyValuePair(k, v) => {
+                    if name.eq_ignore_ascii_case("Ключ") || name.eq_ignore_ascii_case("Key") {
+                        Ok(k.clone())
+                    } else if name.eq_ignore_ascii_case("Значение") || name.eq_ignore_ascii_case("Value")
+                    {
+                        Ok(v.clone())
+                    } else {
+                        Err(RtError::UnknownColumn(name.to_string()))
+                    }
                 }
                 _ => Err(RtError::NotAnObject),
             },
@@ -653,6 +828,15 @@ impl BslValue {
                     d.delete_row_at(i)
                         .ok_or(RtError::IndexOutOfBounds { index: i as i64, len })
                 }
+                // `Соответствие.Удалить(Ключ)` — по значению ключа, не по
+                // позиции (в отличие от Array/ValueTable выше): в этом
+                // случае `idx` в имени параметра функции вводит в
+                // заблуждение, но сигнатура (`&BslValue`) уже общая для
+                // всех получателей, менять её ради одного случая не стоит.
+                BslObject::Map(data) => {
+                    data.borrow_mut().remove(idx);
+                    Ok(())
+                }
                 _ => Err(RtError::MethodNotApplicable {
                     method: "Удалить",
                     receiver: self.type_name(),
@@ -665,12 +849,17 @@ impl BslValue {
         }
     }
 
-    /// `Массив.Очистить()` / `ТаблицаЗначений.Очистить()`.
+    /// `Массив.Очистить()` / `ТаблицаЗначений.Очистить()` /
+    /// `Соответствие.Очистить()`.
     pub fn clear_collection(&self) -> RtResult<()> {
         match self {
             BslValue::Object(o) => match &**o {
                 BslObject::Array(v) => {
                     v.borrow_mut().clear();
+                    Ok(())
+                }
+                BslObject::Map(data) => {
+                    data.borrow_mut().clear();
                     Ok(())
                 }
                 BslObject::ValueTable(data) => {
@@ -707,6 +896,31 @@ impl PartialEq for BslValue {
     }
 }
 
+/// `Eq` — все варианты `PartialEq::eq` выше рефлексивны (десятичные числа
+/// без NaN-подобных значений, указатели сравниваются с самими собой),
+/// значит `Eq` держится честно, не только формально для `HashMap`.
+impl Eq for BslValue {}
+
+/// Нужен ключу `Соответствие` (`HashMap<BslValue, BslValue>` в `map.rs`).
+/// Согласован с `PartialEq` выше пункт-в-пункт: `Число` хэширует через
+/// `BslNumber` (см. его `impl Hash` — нормализация уже сделала хэш
+/// независимым от масштаба представления, `1.0` и `1.00` дают одно и то же
+/// (`m`, `scale`)), `Строка` — по содержимому (`BslString` производит
+/// `Hash` от `Rc<[u16]>`, тоже по значению, не по адресу), `Массив`/
+/// `Структура`/... — по адресу `Rc`, ровно как их `==` через `Rc::ptr_eq`.
+impl Hash for BslValue {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        std::mem::discriminant(self).hash(state);
+        match self {
+            BslValue::Undefined | BslValue::Null => {}
+            BslValue::Boolean(b) => b.hash(state),
+            BslValue::Number(n) => n.hash(state),
+            BslValue::Str(s) => s.hash(state),
+            BslValue::Object(o) => Rc::as_ptr(o).hash(state),
+        }
+    }
+}
+
 impl fmt::Display for BslValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -722,6 +936,8 @@ impl fmt::Display for BslValue {
                 BslObject::ValueTable(_) => write!(f, "ТаблицаЗначений"),
                 BslObject::TableColumns(_) => write!(f, "КоллекцияКолонокТаблицыЗначений"),
                 BslObject::TableRow(_, _) => write!(f, "СтрокаТаблицыЗначений"),
+                BslObject::Map(_) => write!(f, "Соответствие"),
+                BslObject::KeyValuePair(_, _) => write!(f, "КлючИЗначение"),
             },
         }
     }
