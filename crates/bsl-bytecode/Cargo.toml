@@ -7,3 +7,4 @@ edition.workspace = true
 bsl-syntax = { path = "../bsl-syntax" }
 bsl-sema = { path = "../bsl-sema" }
 bsl-rt = { path = "../bsl-rt" }
+bsl-number = { path = "../bsl-number" }

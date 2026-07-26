@@ -7,3 +7,8 @@ edition.workspace = true
 bsl-rt = { path = "../bsl-rt" }
 bsl-bytecode = { path = "../bsl-bytecode" }
 bsl-format = { path = "../bsl-format" }
+
+[dev-dependencies]
+bsl-sema = { path = "../bsl-sema" }
+bsl-syntax = { path = "../bsl-syntax" }
+bsl-number = { path = "../bsl-number" }
