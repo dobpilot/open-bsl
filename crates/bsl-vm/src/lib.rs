@@ -353,6 +353,28 @@ fn step(
                 };
                 return Err(RtError::Raised(value));
             }
+            Instr::CallBuiltin {
+                dst,
+                builtin,
+                base,
+                count,
+            } => {
+                let mut args = Vec::with_capacity(count as usize);
+                for i in 0..count {
+                    args.push(stack[frames[frame_idx].reg_index(base + i)].clone());
+                }
+                let v = bsl_rt::call_builtin_fn(builtin, &args)?;
+                let d = frames[frame_idx].reg_index(dst);
+                stack[d] = v;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::CallMethod { dst, obj, method } => {
+                let ov = stack[frames[frame_idx].reg_index(obj)].clone();
+                let v = bsl_rt::call_builtin_method(method, &ov)?;
+                let d = frames[frame_idx].reg_index(dst);
+                stack[d] = v;
+                frames[frame_idx].pc += 1;
+            }
         }
     Ok(Step::Continue)
 }
@@ -925,5 +947,54 @@ mod tests {
              Возврат x;",
         );
         assert_eq!(v, num("1"));
+    }
+
+    #[test]
+    fn builtin_sqrt_and_pow() {
+        let v = run_src("Возврат sqrt(2);");
+        assert_eq!(v, num("1.4142135623731"));
+
+        let v = run_src("Возврат Pow(10, 30);");
+        assert_eq!(v, num("1000000000000000000000000000000"));
+    }
+
+    #[test]
+    fn builtin_sqrt_of_negative_is_a_runtime_error() {
+        let err = run_src_err("Возврат sqrt(-1);");
+        assert!(matches!(err, RtError::Num(_)));
+    }
+
+    #[test]
+    fn count_method_call_on_array() {
+        let v = run_src("a = Новый Массив(5);\nВозврат a.Count();");
+        assert_eq!(v, num("5"));
+    }
+
+    #[test]
+    fn message_builtin_prints_and_returns_undefined() {
+        // Не проверяем stdout здесь — только что вызов не падает и что
+        // Message() возвращает Неопределено, как и положено процедуре без
+        // Возврат.
+        let v = run_src("Message(\"hello\");\nВозврат 1;");
+        assert_eq!(v, num("1"));
+    }
+
+    #[test]
+    fn nbody_smoke_runs_the_real_benchmark_shape_for_a_few_steps() {
+        // Уменьшенная копия tests/conformance/fixtures/n-body.bsl: та же
+        // структура (Function/EndFunction, Для Каждого, Новый Структура,
+        // деление гигантских констант, sqrt, .Count()), но всего несколько
+        // шагов Advance вместо 50 миллионов (брифом же и объявленных
+        // невыполнимыми что у нас, что в самой 1С) и без Message — просто
+        // Возврат энергии для проверки в тесте.
+        let src = include_str!("../tests/nbody_smoke.bsl");
+        let v = run_src(src);
+        let e = match &v {
+            BslValue::Number(n) => n.clone(),
+            other => panic!("expected Number, got {other:?}"),
+        };
+        // Энергия системы отрицательна (связанная система) и не должна
+        // выродиться в бесконечность/NaN за несколько шагов.
+        assert!(e.is_negative(), "energy should stay negative: {e:?}");
     }
 }

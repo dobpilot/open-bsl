@@ -217,6 +217,34 @@ impl<'a> Compiler<'a> {
             RExpr::Call { func, args } => {
                 self.compile_call(*func, args, dst)?;
             }
+            RExpr::CallBuiltinFn { builtin, args } => {
+                let base = self.next_reg;
+                for a in args {
+                    let r = self.alloc_temp()?;
+                    self.compile_expr(a, r)?;
+                }
+                let count: u8 = args
+                    .len()
+                    .try_into()
+                    .map_err(|_| CompileError::TooManyRegisters)?;
+                self.free_temp(count);
+                self.emit(Instr::CallBuiltin {
+                    dst,
+                    builtin: *builtin,
+                    base,
+                    count,
+                });
+            }
+            RExpr::CallMethod { obj, method } => {
+                let o = self.alloc_temp()?;
+                self.compile_expr(obj, o)?;
+                self.emit(Instr::CallMethod {
+                    dst,
+                    obj: o,
+                    method: *method,
+                });
+                self.free_temp(1);
+            }
             RExpr::Str(s) => {
                 let k = self.add_const(BslValue::Str(std::rc::Rc::from(s.as_str())))?;
                 self.emit(Instr::LoadConst { dst, k });

@@ -387,25 +387,71 @@ impl<'a> Resolver<'a> {
         callee: &AExpr,
         args: &[Option<AExpr>],
     ) -> Result<RExpr, SemaError> {
-        let name = match callee {
-            AExpr::Ident(n) => n,
-            _ => {
-                return Err(SemaError::Unsupported(
-                    "вызов не по простому имени (методы объектов) появится позже",
-                ))
+        match callee {
+            AExpr::Ident(name) => {
+                if let Some(sig_index_and_arity) = self
+                    .funcs
+                    .get(&name.to_uppercase())
+                    .map(|s| (s.index, s.by_val.len()))
+                {
+                    let (index, arity) = sig_index_and_arity;
+                    if args.len() != arity {
+                        return Err(SemaError::ArgumentCountMismatch {
+                            name: name.clone(),
+                            expected: arity,
+                            found: args.len(),
+                        });
+                    }
+                    let rargs = self.resolve_required_args(args)?;
+                    return Ok(RExpr::Call {
+                        func: index,
+                        args: rargs,
+                    });
+                }
+                if let Some(builtin) = bsl_rt::BuiltinFn::lookup(name) {
+                    let arity = builtin.arity();
+                    if args.len() != arity {
+                        return Err(SemaError::ArgumentCountMismatch {
+                            name: name.clone(),
+                            expected: arity,
+                            found: args.len(),
+                        });
+                    }
+                    let rargs = self.resolve_required_args(args)?;
+                    return Ok(RExpr::CallBuiltinFn {
+                        builtin,
+                        args: rargs,
+                    });
+                }
+                Err(SemaError::UndefinedFunction(name.clone()))
             }
-        };
-        let sig = self
-            .funcs
-            .get(&name.to_uppercase())
-            .ok_or_else(|| SemaError::UndefinedFunction(name.clone()))?;
-        if args.len() != sig.by_val.len() {
-            return Err(SemaError::ArgumentCountMismatch {
-                name: name.clone(),
-                expected: sig.by_val.len(),
-                found: args.len(),
-            });
+            AExpr::Field { obj, name } => {
+                let method = bsl_rt::BuiltinMethod::lookup(name).ok_or(SemaError::Unsupported(
+                    "этот метод объекта пока не поддержан",
+                ))?;
+                if !args.is_empty() {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: name.clone(),
+                        expected: 0,
+                        found: args.len(),
+                    });
+                }
+                let obj = self.resolve_expr(obj)?;
+                Ok(RExpr::CallMethod {
+                    obj: Box::new(obj),
+                    method,
+                })
+            }
+            _ => Err(SemaError::Unsupported(
+                "вызов не по простому имени/методу появится позже",
+            )),
         }
+    }
+
+    /// Пока не поддержаны пропущенные аргументы (`Ф(1, , 3)`) ни для
+    /// пользовательских функций, ни для встроенных — они появятся вместе
+    /// со значениями по умолчанию.
+    fn resolve_required_args(&mut self, args: &[Option<AExpr>]) -> Result<Vec<RExpr>, SemaError> {
         let mut rargs = Vec::with_capacity(args.len());
         for a in args {
             match a {
@@ -413,14 +459,11 @@ impl<'a> Resolver<'a> {
                 None => {
                     return Err(SemaError::Unsupported(
                         "пропущенные аргументы Ф(1, , 3) появятся вместе со значениями по умолчанию",
-                    ))
+                    ));
                 }
             }
         }
-        Ok(RExpr::Call {
-            func: sig.index,
-            args: rargs,
-        })
+        Ok(rargs)
     }
 }
 
@@ -512,6 +555,60 @@ mod tests {
             resolve_program(&prog.items).unwrap_err(),
             SemaError::UndefinedFunction("Ф".to_string())
         );
+    }
+
+    #[test]
+    fn builtin_function_call_resolves_without_user_declaration() {
+        let r = resolve_src("x = sqrt(4);");
+        assert_eq!(
+            r.body[0],
+            RStmt::AssignLocal {
+                slot: 0,
+                value: RExpr::CallBuiltinFn {
+                    builtin: bsl_rt::BuiltinFn::Sqrt,
+                    args: vec![RExpr::Number(BslNumber::from_i64(4))],
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn builtin_function_arity_mismatch_is_an_error() {
+        let prog = parse("x = Pow(2);").unwrap();
+        let stmts = items_to_stmts(prog.items);
+        assert_eq!(
+            resolve_script(&stmts).unwrap_err(),
+            SemaError::ArgumentCountMismatch {
+                name: "Pow".to_string(),
+                expected: 2,
+                found: 1,
+            }
+        );
+    }
+
+    #[test]
+    fn count_method_call_resolves_on_array() {
+        let r = resolve_src("a = Новый Массив(3);\nn = a.Count();");
+        assert_eq!(
+            r.body[1],
+            RStmt::AssignLocal {
+                slot: 1,
+                value: RExpr::CallMethod {
+                    obj: Box::new(RExpr::Local(0)),
+                    method: bsl_rt::BuiltinMethod::Count,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn unknown_method_call_is_unsupported() {
+        let prog = parse("a = Новый Массив(3);\nn = a.НетТакогоМетода();").unwrap();
+        let stmts = items_to_stmts(prog.items);
+        assert!(matches!(
+            resolve_script(&stmts).unwrap_err(),
+            SemaError::Unsupported(_)
+        ));
     }
 
     #[test]

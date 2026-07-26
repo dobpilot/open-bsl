@@ -61,6 +61,7 @@ name = "bsl-sema"
 version = "0.1.0"
 dependencies = [
  "bsl-number",
+ "bsl-rt",
  "bsl-syntax",
 ]
 

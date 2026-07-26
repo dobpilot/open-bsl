@@ -6,3 +6,4 @@ edition.workspace = true
 [dependencies]
 bsl-syntax = { path = "../bsl-syntax" }
 bsl-number = { path = "../bsl-number" }
+bsl-rt = { path = "../bsl-rt" }

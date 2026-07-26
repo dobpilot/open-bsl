@@ -6,6 +6,7 @@
 //! `BslValue` растёт по мере готовности остальных слоёв, а не заранее под
 //! все типы из брифа.
 
+mod builtin;
 mod interner;
 mod object;
 mod shape;
@@ -16,6 +17,7 @@ use std::rc::Rc;
 
 use bsl_number::{BslNumber, NumError};
 
+pub use builtin::{call_builtin_fn, call_builtin_method, BuiltinFn, BuiltinMethod};
 pub use interner::{NameId, NameInterner};
 pub use object::{BslObject, StructureData};
 pub use shape::{Shape, ShapeTable};
@@ -149,6 +151,52 @@ impl BslValue {
 
     pub fn not(&self) -> RtResult<Self> {
         Ok(BslValue::Boolean(!self.as_bool("Не")?))
+    }
+
+    // --- Трансцендентные функции (через f64 в bsl-number) ------------------
+
+    pub fn sqrt(&self) -> RtResult<Self> {
+        Ok(BslValue::Number(self.as_number("Sqrt")?.sqrt()?))
+    }
+
+    pub fn pow(&self, exp: &Self) -> RtResult<Self> {
+        Ok(BslValue::Number(self.as_number("Pow")?.pow(exp.as_number("Pow")?)?))
+    }
+
+    pub fn ln(&self) -> RtResult<Self> {
+        Ok(BslValue::Number(self.as_number("Log")?.ln()?))
+    }
+
+    pub fn log10(&self) -> RtResult<Self> {
+        Ok(BslValue::Number(self.as_number("Log10")?.log10()?))
+    }
+
+    pub fn exp(&self) -> RtResult<Self> {
+        Ok(BslValue::Number(self.as_number("Exp")?.exp()?))
+    }
+
+    pub fn sin(&self) -> RtResult<Self> {
+        Ok(BslValue::Number(self.as_number("Sin")?.sin()?))
+    }
+
+    pub fn cos(&self) -> RtResult<Self> {
+        Ok(BslValue::Number(self.as_number("Cos")?.cos()?))
+    }
+
+    pub fn tan(&self) -> RtResult<Self> {
+        Ok(BslValue::Number(self.as_number("Tan")?.tan()?))
+    }
+
+    pub fn asin(&self) -> RtResult<Self> {
+        Ok(BslValue::Number(self.as_number("ASin")?.asin()?))
+    }
+
+    pub fn acos(&self) -> RtResult<Self> {
+        Ok(BslValue::Number(self.as_number("ACos")?.acos()?))
+    }
+
+    pub fn atan(&self) -> RtResult<Self> {
+        Ok(BslValue::Number(self.as_number("ATan")?.atan()?))
     }
 
     /// `И`/`ИЛИ` в 1С НЕ короткозамкнутые: оба операнда всегда вычислены до
@@ -434,5 +482,26 @@ mod tests {
     fn display_matches_measured_platform_strings_for_collections() {
         // Строка(Новый Массив) -> "Массив" (измерено на платформе).
         assert_eq!(BslValue::new_array(vec![]).to_string(), "Массив");
+    }
+
+    #[test]
+    fn builtin_math_functions_lookup_and_call() {
+        assert_eq!(BuiltinFn::lookup("sqrt"), Some(BuiltinFn::Sqrt));
+        assert_eq!(BuiltinFn::lookup("Sqrt"), Some(BuiltinFn::Sqrt));
+        assert_eq!(BuiltinFn::lookup("СООБЩИТЬ"), Some(BuiltinFn::Message));
+        assert_eq!(BuiltinFn::lookup("НетТакойФункции"), None);
+        assert_eq!(BuiltinFn::Pow.arity(), 2);
+        assert_eq!(BuiltinFn::Sqrt.arity(), 1);
+
+        let v = call_builtin_fn(BuiltinFn::Sqrt, &[num("2")]).unwrap();
+        assert_eq!(v, num("1.4142135623731"));
+    }
+
+    #[test]
+    fn builtin_method_count_on_array() {
+        assert_eq!(BuiltinMethod::lookup("count"), Some(BuiltinMethod::Count));
+        let arr = BslValue::new_array(vec![num("1"), num("2"), num("3")]);
+        let v = call_builtin_method(BuiltinMethod::Count, &arr).unwrap();
+        assert_eq!(v, num("3"));
     }
 }

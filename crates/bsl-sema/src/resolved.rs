@@ -1,4 +1,5 @@
 use bsl_number::BslNumber;
+use bsl_rt::{BuiltinFn, BuiltinMethod};
 use bsl_syntax::{BinaryOp, UnaryOp};
 
 /// Выражение после резолвинга: идентификаторы заменены на индексы слотов,
@@ -29,6 +30,19 @@ pub enum RExpr {
     Call {
         func: u32,
         args: Vec<RExpr>,
+    },
+    /// Вызов встроенной функции по голому имени (`Sqrt(x)`, `Pow(x,y)`,
+    /// `Message(x)`, ...). Всегда по значению — ни у одной встроенной
+    /// функции параметров без `Знач` нет.
+    CallBuiltinFn {
+        builtin: BuiltinFn,
+        args: Vec<RExpr>,
+    },
+    /// `объект.Метод()` — сейчас только `Количество()`/`Count()` для
+    /// `Массив`/`Структура`; остальные методы приходят волнами позже.
+    CallMethod {
+        obj: Box<RExpr>,
+        method: BuiltinMethod,
     },
     Str(String),
     Index {
