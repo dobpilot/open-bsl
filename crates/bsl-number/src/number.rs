@@ -335,6 +335,32 @@ impl BslNumber {
         let q = div_half_up_big(&b.m, &divisor);
         BslNumber::big(q, target_scale)
     }
+
+    /// Округление К НУЛЮ (отбрасывание) — `Цел`, в отличие от
+    /// `round_to_scale` (half-up, деление/`Округл`). `/` у знаковых целых
+    /// в Rust и у `BigInt` в `num-bigint` УЖЕ усечение к нулю, поэтому
+    /// достаточно голого целочисленного деления без поправок на знак —
+    /// не нужна отдельная ветка для отрицательных, как в
+    /// `div_half_up_i128`/`div_half_up_big`.
+    pub fn trunc_to_scale(&self, target_scale: i32) -> Self {
+        let cur_scale = self.scale();
+        if target_scale >= cur_scale {
+            return self.clone();
+        }
+        let delta = cur_scale - target_scale;
+
+        if let BslNumber::Small { m, .. } = self {
+            if delta <= 38 {
+                let q = m.get() / POW10[delta as usize];
+                return BslNumber::small(q, target_scale);
+            }
+        }
+
+        let b = self.to_big();
+        let divisor = BigInt::from(10u8).pow(delta as u32);
+        let q = &b.m / &divisor;
+        BslNumber::big(q, target_scale)
+    }
 }
 
 // --- Нормализация ---------------------------------------------------------

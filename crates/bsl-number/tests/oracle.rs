@@ -89,3 +89,14 @@ fn round_to_scale_is_half_up() {
     assert_eq!(c(&n("123").round_to_scale(0)), "123");
     assert_eq!(c(&n("-2.675").round_to_scale(2)), "-2.68");
 }
+
+#[test]
+fn trunc_to_scale_is_toward_zero_not_half_up() {
+    // `Цел` отбрасывает дробную часть в СТОРОНУ НУЛЯ — не half-up, как
+    // `round_to_scale`/`Округл`: 2.9 -> 2, а не 3, и симметрично для
+    // отрицательных: -2.9 -> -2, а не -3.
+    assert_eq!(c(&n("2.9").trunc_to_scale(0)), "2");
+    assert_eq!(c(&n("-2.9").trunc_to_scale(0)), "-2");
+    assert_eq!(c(&n("2.675").trunc_to_scale(2)), "2.67");
+    assert_eq!(c(&n("123").trunc_to_scale(0)), "123");
+}

@@ -19,6 +19,14 @@ pub enum BuiltinFn {
     Asin,
     Acos,
     Atan,
+    /// `Округл(x, ЧислоРазрядов)` — арность у самой функции в 1С переменная
+    /// (второй аргумент необязателен, по умолчанию 0), но здесь всегда 2:
+    /// `bsl-sema::resolver::resolve_call` подставляет `0` литералом при
+    /// резолвинге однoаргументного вызова, а не вводит вариативную арность
+    /// ради одной функции.
+    Round,
+    /// `Цел(x)` — усечение к нулю, не округление (см. `BslValue::trunc`).
+    Trunc,
     /// Побочный эффект — печать в stdout. Заглушка на месте настоящего
     /// вывода/UI.
     Message,
@@ -63,6 +71,8 @@ impl BuiltinFn {
             "ASIN" => BuiltinFn::Asin,
             "ACOS" => BuiltinFn::Acos,
             "ATAN" => BuiltinFn::Atan,
+            "ROUND" | "ОКРУГЛ" => BuiltinFn::Round,
+            "INT" | "ЦЕЛ" => BuiltinFn::Trunc,
             "MESSAGE" | "СООБЩИТЬ" => BuiltinFn::Message,
             "STRING" | "СТРОКА" => BuiltinFn::ToString,
             "FORMAT" | "ФОРМАТ" => BuiltinFn::Format,
@@ -80,7 +90,7 @@ impl BuiltinFn {
 
     pub fn arity(self) -> usize {
         match self {
-            BuiltinFn::Pow | BuiltinFn::Format | BuiltinFn::Left | BuiltinFn::Right => 2,
+            BuiltinFn::Pow | BuiltinFn::Format | BuiltinFn::Left | BuiltinFn::Right | BuiltinFn::Round => 2,
             BuiltinFn::Mid => 3,
             _ => 1,
         }
@@ -145,6 +155,8 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         BuiltinFn::Asin => args[0].asin(),
         BuiltinFn::Acos => args[0].acos(),
         BuiltinFn::Atan => args[0].atan(),
+        BuiltinFn::Round => args[0].round(&args[1]),
+        BuiltinFn::Trunc => args[0].trunc(),
         BuiltinFn::Message => {
             println!("{}", args[0]);
             Ok(BslValue::Undefined)

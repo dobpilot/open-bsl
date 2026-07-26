@@ -198,6 +198,11 @@ fn step(
                 stack[d] = BslValue::Null;
                 frames[frame_idx].pc += 1;
             }
+            Instr::LoadSkipped { dst } => {
+                let d = frames[frame_idx].reg_index(dst);
+                stack[d] = BslValue::Skipped;
+                frames[frame_idx].pc += 1;
+            }
             Instr::Add { dst, a, b } => {
                 binop(frames, stack, frame_idx, dst, a, b, BslValue::add)?;
                 frames[frame_idx].pc += 1;
@@ -285,6 +290,18 @@ fn step(
                     frames[frame_idx].pc = target as usize;
                 } else {
                     frames[frame_idx].pc += 1;
+                }
+            }
+            Instr::JumpIfNotSkipped { src, target } => {
+                let s = frames[frame_idx].reg_index(src);
+                // Не `as_condition`/строгая булевость — это не условие
+                // пользовательского кода, а проверка внутреннего маркера
+                // (см. пролог параметров по умолчанию в
+                // `bsl-bytecode::compiler::compile_param_defaults`).
+                if matches!(stack[s], BslValue::Skipped) {
+                    frames[frame_idx].pc += 1;
+                } else {
+                    frames[frame_idx].pc = target as usize;
                 }
             }
             Instr::Call {
@@ -615,6 +632,15 @@ enum ReturnOutcome {
 }
 use ReturnOutcome::{Continuing, Done};
 
+/// `frames.pop().expect(...)` ниже — внутренний инвариант VM, не входные
+/// данные: аудит ревью (задача 5) нашёл 12 `unwrap`/`expect`/`panic!` во
+/// всём `bsl-vm/src/lib.rs`, из которых 10 — в `#[cfg(test)] mod tests`
+/// (тестовые хелперы вроде `run_src`, падение там и есть смысл теста, не
+/// риск для прод-кода), а эти два — единственные вне тестов (второй — в
+/// `unwind_to_handler` ниже). `step`/`drive` вызывают эту функцию, только
+/// пока `frames` не пуст (сам факт исполнения инструкции это гарантирует),
+/// так что кривой, но синтаксически валидный BSL-скрипт сюда никогда не
+/// приведёт — он получит `RtError` раньше, из самой инструкции.
 fn do_return_with_value(
     frames: &mut Vec<Frame>,
     stack: &mut Vec<BslValue>,
@@ -689,7 +715,9 @@ fn unwind_to_handler(
         if frames.len() == 1 {
             return false;
         }
-        let frame = frames.pop().unwrap();
+        // `frames.len() >= 2` только что проверено выше — `pop` не может
+        // вернуть `None`.
+        let frame = frames.pop().expect("frames.len() >= 2 проверено выше");
         stack.truncate(frame.call_start);
     }
 }
@@ -1439,6 +1467,73 @@ mod tests {
 
         let v = run_src("Возврат Pow(10, 30);");
         assert_eq!(v, num("1000000000000000000000000000000"));
+    }
+
+    #[test]
+    fn okrugl_rounds_half_up_in_decimal_not_f64() {
+        // Округл(2.675, 2) обязан дать 2.68: ближайший f64 к 2.675 чуть
+        // меньше самого числа, через f64 получилось бы 2.67.
+        let v = run_src("Возврат Округл(2.675, 2);");
+        assert_eq!(v, num("2.68"));
+        // Второй аргумент необязателен — по умолчанию 0 разрядов.
+        let v = run_src("Возврат Округл(2.4);");
+        assert_eq!(v, num("2"));
+        let v = run_src("Возврат Округл(2.5);");
+        assert_eq!(v, num("3"));
+    }
+
+    #[test]
+    fn cel_truncates_toward_zero_not_half_up() {
+        let v = run_src("Возврат Цел(2.9);");
+        assert_eq!(v, num("2"));
+        let v = run_src("Возврат Цел(-2.9);");
+        assert_eq!(v, num("-2"));
+    }
+
+    #[test]
+    fn skipped_call_argument_uses_declared_default() {
+        let v = run_src(
+            "Функция Ф(а, б = 100)\n\
+             Возврат а + б;\n\
+             КонецФункции\n\
+             Возврат Ф(1, );",
+        );
+        assert_eq!(v, num("101"));
+    }
+
+    #[test]
+    fn skipped_call_argument_default_may_reference_earlier_parameter() {
+        let v = run_src(
+            "Функция Ф(а, б = а + 1, в = 100)\n\
+             Возврат а + б + в;\n\
+             КонецФункции\n\
+             Возврат Ф(1, , 3);",
+        );
+        // б = а + 1 = 2 (пропущен), в = 3 (передан явно) -> 1 + 2 + 3 = 6.
+        assert_eq!(v, num("6"));
+    }
+
+    #[test]
+    fn skipped_call_argument_falls_back_to_default_when_all_optional_omitted() {
+        let v = run_src(
+            "Функция Ф(а, б = а + 1, в = 100)\n\
+             Возврат а + б + в;\n\
+             КонецФункции\n\
+             Возврат Ф(1, ,);",
+        );
+        // б = а + 1 = 2, в = 100 (оба пропущены) -> 1 + 2 + 100 = 103.
+        assert_eq!(v, num("103"));
+    }
+
+    #[test]
+    fn explicit_argument_overrides_default_even_when_declared() {
+        let v = run_src(
+            "Функция Ф(а, б = 100)\n\
+             Возврат а + б;\n\
+             КонецФункции\n\
+             Возврат Ф(1, 5);",
+        );
+        assert_eq!(v, num("6"));
     }
 
     #[test]

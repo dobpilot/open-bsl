@@ -18,6 +18,12 @@ pub enum SemaError {
         expected: usize,
         found: usize,
     },
+    /// `Ф(1, , 3)` — позиция пропущена (`,,`), но у соответствующего
+    /// параметра `Ф` нет значения по умолчанию: пропустить нечем.
+    MissingRequiredArgument {
+        name: String,
+        position: usize,
+    },
     /// Конструкция языка, для которой ещё нет резолвинга (коллекции,
     /// `Выполнить`/`Вычислить`, значения по умолчанию/пропуски аргументов,
     /// ... — приходят в последующих milestone'ах).
@@ -29,7 +35,13 @@ pub enum SemaError {
 /// рекурсия и взаимные вызовы).
 struct FuncSig {
     index: u32,
-    by_val: Vec<bool>,
+    /// Есть ли у параметра в этой позиции значение по умолчанию — длина
+    /// заодно и есть арность (по-настоящему нужен только режим передачи
+    /// каждого параметра, а он читается из `ResolvedFunction::params` на
+    /// этапе кодогена, не отсюда). Пропущенный аргумент (`Ф(1, , 3)`)
+    /// допустим только там, где здесь `true` — иначе это ошибка резолвинга
+    /// вызывающего кода, а не рантайма вызываемой функции.
+    has_default: Vec<bool>,
 }
 
 /// Резолвит весь модуль: собирает сигнатуры всех `Процедура`/`Функция` за
@@ -44,11 +56,19 @@ pub fn resolve_program(items: &[Item]) -> Result<ResolvedProgram, SemaError> {
     for item in items {
         match item {
             Item::Function(f) => {
-                declare_sig(&mut sigs, &f.name, f.params.iter().map(|p| p.by_val).collect())?;
+                declare_sig(
+                    &mut sigs,
+                    &f.name,
+                    f.params.iter().map(|p| p.default.is_some()).collect(),
+                )?;
                 func_items.push(item);
             }
             Item::Procedure(p) => {
-                declare_sig(&mut sigs, &p.name, p.params.iter().map(|p| p.by_val).collect())?;
+                declare_sig(
+                    &mut sigs,
+                    &p.name,
+                    p.params.iter().map(|p| p.default.is_some()).collect(),
+                )?;
                 func_items.push(item);
             }
             Item::VarDecl(vd) => top_stmts.push(AStmt::VarDecl(vd.clone())),
@@ -72,12 +92,22 @@ pub fn resolve_program(items: &[Item]) -> Result<ResolvedProgram, SemaError> {
             r.declare(&p.name);
         }
         let resolved_body = r.resolve_block(body)?;
+        // Значения по умолчанию резолвятся ПОСЛЕ тела, но той же `r` — её
+        // `locals`/`index` к этому моменту уже содержат слоты параметров
+        // (объявлены выше, до `resolve_block`), так что дефолт вида
+        // `Ф(б = а + 1)`, ссылающийся на предыдущий параметр, резолвится
+        // корректно.
+        let mut resolved_params = Vec::with_capacity(params.len());
+        for p in params {
+            let default = match &p.default {
+                Some(e) => Some(r.resolve_expr(e)?),
+                None => None,
+            };
+            resolved_params.push(ResolvedParam { by_val: p.by_val, default });
+        }
         functions.push(ResolvedFunction {
             name: name.clone(),
-            params: params
-                .iter()
-                .map(|p| ResolvedParam { by_val: p.by_val })
-                .collect(),
+            params: resolved_params,
             locals: r.locals,
             body: resolved_body,
         });
@@ -103,14 +133,14 @@ pub fn resolve_program(items: &[Item]) -> Result<ResolvedProgram, SemaError> {
 fn declare_sig(
     sigs: &mut HashMap<String, FuncSig>,
     name: &str,
-    by_val: Vec<bool>,
+    has_default: Vec<bool>,
 ) -> Result<(), SemaError> {
     let key = name.to_uppercase();
     if sigs.contains_key(&key) {
         return Err(SemaError::DuplicateFunction(name.to_string()));
     }
     let index = sigs.len() as u32;
-    sigs.insert(key, FuncSig { index, by_val });
+    sigs.insert(key, FuncSig { index, has_default });
     Ok(())
 }
 
@@ -439,12 +469,12 @@ impl<'a> Resolver<'a> {
     ) -> Result<RExpr, SemaError> {
         match callee {
             AExpr::Ident(name) => {
-                if let Some(sig_index_and_arity) = self
+                if let Some((index, has_default)) = self
                     .funcs
                     .get(&name.to_uppercase())
-                    .map(|s| (s.index, s.by_val.len()))
+                    .map(|s| (s.index, s.has_default.clone()))
                 {
-                    let (index, arity) = sig_index_and_arity;
+                    let arity = has_default.len();
                     if args.len() != arity {
                         return Err(SemaError::ArgumentCountMismatch {
                             name: name.clone(),
@@ -452,9 +482,51 @@ impl<'a> Resolver<'a> {
                             found: args.len(),
                         });
                     }
-                    let rargs = self.resolve_required_args(args)?;
+                    // В отличие от `resolve_required_args` (используется
+                    // ниже для builtin'ов, у которых нет объявленных
+                    // умолчаний) — пропуск позиции здесь допустим, если у
+                    // ЭТОГО параметра есть значение по умолчанию: тогда
+                    // компилируется маркер `RExpr::Skipped`, а не ошибка.
+                    let mut rargs = Vec::with_capacity(args.len());
+                    for (i, a) in args.iter().enumerate() {
+                        match a {
+                            Some(e) => rargs.push(self.resolve_expr(e)?),
+                            None if has_default[i] => rargs.push(RExpr::Skipped),
+                            None => {
+                                return Err(SemaError::MissingRequiredArgument {
+                                    name: name.clone(),
+                                    position: i,
+                                })
+                            }
+                        }
+                    }
                     return Ok(RExpr::Call {
                         func: index,
+                        args: rargs,
+                    });
+                }
+                // `Округл(x[, ЧислоРазрядов])` — единственный builtin с
+                // необязательным аргументом, до генерального механизма
+                // умолчаний builtin'ов (которого нет — см.
+                // `bsl_rt::BuiltinFn::arity`, всегда фиксированная арность).
+                // Подставляем `0` литералом здесь же, а не заводим
+                // вариативную арность ради одной функции:
+                // `BuiltinFn::Round` в рантайме всегда видит ровно 2
+                // аргумента.
+                if name.eq_ignore_ascii_case("Округл") || name.eq_ignore_ascii_case("Round") {
+                    if args.is_empty() || args.len() > 2 {
+                        return Err(SemaError::ArgumentCountMismatch {
+                            name: name.clone(),
+                            expected: 2,
+                            found: args.len(),
+                        });
+                    }
+                    let mut rargs = self.resolve_required_args(args)?;
+                    if rargs.len() == 1 {
+                        rargs.push(RExpr::Number(BslNumber::from_i64(0)));
+                    }
+                    return Ok(RExpr::CallBuiltinFn {
+                        builtin: bsl_rt::BuiltinFn::Round,
                         args: rargs,
                     });
                 }
@@ -730,6 +802,30 @@ mod tests {
                 found: 2,
             }
         );
+    }
+
+    #[test]
+    fn skipping_a_parameter_without_a_default_is_an_error() {
+        let prog = parse("Функция Ф(а, б)\nВозврат а;\nКонецФункции\nx = Ф(1, );").unwrap();
+        assert_eq!(
+            resolve_program(&prog.items).unwrap_err(),
+            SemaError::MissingRequiredArgument {
+                name: "Ф".to_string(),
+                position: 1,
+            }
+        );
+    }
+
+    #[test]
+    fn skipping_a_defaulted_parameter_resolves_to_skipped_marker() {
+        let prog = parse("Функция Ф(а, б = 100)\nВозврат а;\nКонецФункции\nx = Ф(1, );").unwrap();
+        let resolved = resolve_program(&prog.items).unwrap();
+        match &resolved.top_level.body[0] {
+            RStmt::AssignLocal { value: RExpr::Call { args, .. }, .. } => {
+                assert_eq!(args[1], RExpr::Skipped);
+            }
+            other => panic!("expected AssignLocal(Call), got {other:?}"),
+        }
     }
 
     #[test]

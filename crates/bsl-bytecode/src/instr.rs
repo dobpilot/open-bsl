@@ -11,6 +11,10 @@ pub enum Instr {
     LoadBool { dst: u8, val: bool },
     LoadUndefined { dst: u8 },
     LoadNull { dst: u8 },
+    /// Пропущенный аргумент вызова (`Ф(1, , 3)`) на месте параметра со
+    /// значением по умолчанию — см. `bsl_rt::BslValue::Skipped` и
+    /// `JumpIfNotSkipped` ниже.
+    LoadSkipped { dst: u8 },
 
     Add { dst: u8, a: u8, b: u8 },
     Sub { dst: u8, a: u8, b: u8 },
@@ -35,6 +39,12 @@ pub enum Instr {
     /// для короткого замыкания `ИЛИ` (см. `compiler.rs`) — та же строгая
     /// проверка на `Булево`, что и у `JumpIfFalse`.
     JumpIfTrue { cond: u8, target: i16 },
+    /// Пролог параметров по умолчанию (см. `compiler.rs`, `compile_chunk`):
+    /// прыгает, если `src` НЕ `BslValue::Skipped` (аргумент был передан по-
+    /// настоящему — пропускаем код, вычисляющий значение по умолчанию).
+    /// Падает через, если `src` — Skipped, и следующая инструкция(и)
+    /// вычисляет значение по умолчанию прямо в тот же регистр.
+    JumpIfNotSkipped { src: u8, target: i16 },
 
     /// `func` — индекс чанка в `Program::chunks` (0 зарезервирован под
     /// чанк верхнего уровня, поэтому `func` всегда `>= 1` для настоящего

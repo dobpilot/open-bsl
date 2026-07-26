@@ -1,5 +1,5 @@
 use bsl_rt::{BslValue, NameInterner, ShapeTable};
-use bsl_sema::{RExpr, RStmt, ResolvedFunction, ResolvedProgram};
+use bsl_sema::{RExpr, ResolvedParam, RStmt, ResolvedFunction, ResolvedProgram};
 use bsl_syntax::{BinaryOp, UnaryOp};
 
 use crate::chunk::{Chunk, ExceptionRange, Program};
@@ -32,7 +32,7 @@ pub fn compile_program(resolved: &ResolvedProgram) -> Result<Program, CompileErr
     let mut chunks = Vec::with_capacity(resolved.functions.len() + 1);
     chunks.push(compile_chunk(
         &resolved.top_level.locals,
-        0,
+        &[],
         &resolved.top_level.body,
         &resolved.functions,
         &mut names,
@@ -41,7 +41,7 @@ pub fn compile_program(resolved: &ResolvedProgram) -> Result<Program, CompileErr
     for f in &resolved.functions {
         chunks.push(compile_chunk(
             &f.locals,
-            f.params.len(),
+            &f.params,
             &f.body,
             &resolved.functions,
             &mut names,
@@ -91,13 +91,13 @@ pub fn compile_snippet(
         names.intern(n);
     }
     let mut shapes = ShapeTable::new();
-    let chunk = compile_chunk(all_locals, 0, body, &[], &mut names, &mut shapes)?;
+    let chunk = compile_chunk(all_locals, &[], body, &[], &mut names, &mut shapes)?;
     Ok((chunk, names.into_names(), shapes.into_shapes()))
 }
 
 fn compile_chunk(
     locals: &[String],
-    n_params: usize,
+    params: &[ResolvedParam],
     body: &[RStmt],
     functions: &[ResolvedFunction],
     names: &mut NameInterner,
@@ -107,7 +107,8 @@ fn compile_chunk(
         .len()
         .try_into()
         .map_err(|_| CompileError::TooManyLocals)?;
-    let n_params: u8 = n_params
+    let n_params: u8 = params
+        .len()
         .try_into()
         .map_err(|_| CompileError::TooManyLocals)?;
     let mut c = Compiler {
@@ -122,6 +123,7 @@ fn compile_chunk(
         names,
         shapes,
     };
+    c.compile_param_defaults(params)?;
     c.compile_block(body)?;
     let prop_cache = c.instrs.iter().map(|_| std::cell::RefCell::new(None)).collect();
     Ok(Chunk {
@@ -207,12 +209,31 @@ impl<'a> Compiler<'a> {
             Instr::Jump { target: t } => *t = target,
             Instr::JumpIfFalse { target: t, .. } => *t = target,
             Instr::JumpIfTrue { target: t, .. } => *t = target,
+            Instr::JumpIfNotSkipped { target: t, .. } => *t = target,
             other => unreachable!("patch_jump on non-jump instruction: {other:?}"),
         }
     }
 
     fn here(&self) -> usize {
         self.instrs.len()
+    }
+
+    /// Пролог функции: для каждого параметра со значением по умолчанию —
+    /// `JumpIfNotSkipped` вокруг кода, вычисляющего дефолт прямо в слот
+    /// параметра. Порядок — по объявлению, поэтому дефолт вида `Ф(а, б =
+    /// а + 1)` видит уже гарантированно установленный `а` (свой ли,
+    /// пропущенный ли — его собственный `JumpIfNotSkipped` идёт раньше).
+    fn compile_param_defaults(&mut self, params: &[ResolvedParam]) -> Result<(), CompileError> {
+        for (i, p) in params.iter().enumerate() {
+            if let Some(default) = &p.default {
+                let slot = i as u8;
+                let j = self.emit(Instr::JumpIfNotSkipped { src: slot, target: 0 });
+                self.compile_expr(default, slot)?;
+                let end = self.here();
+                self.patch_jump(j, end);
+            }
+        }
+        Ok(())
     }
 
     // --- Выражения ------------------------------------------------------
@@ -231,6 +252,9 @@ impl<'a> Compiler<'a> {
             }
             RExpr::Null => {
                 self.emit(Instr::LoadNull { dst });
+            }
+            RExpr::Skipped => {
+                self.emit(Instr::LoadSkipped { dst });
             }
             RExpr::Local(slot) => {
                 let src = *slot as u8;

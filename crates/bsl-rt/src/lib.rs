@@ -36,6 +36,18 @@ pub enum BslValue {
     Number(BslNumber),
     Str(BslString),
     Object(Rc<BslObject>),
+    /// Пропущенный позиционный аргумент (`Ф(1, , 3)`) — ТОЛЬКО как
+    /// временное значение параметра сразу при входе в функцию/процедуру, до
+    /// того как пролог параметров по умолчанию (см.
+    /// `bsl-bytecode::compiler`, генерация `JumpUnlessSkipped`) заменит его
+    /// резолвнутым значением по умолчанию из объявления. Отличается от
+    /// `Неопределено`: `Ф(Знач а = 1)` вызванная как `Ф()` должна дать `а`
+    /// значение `1`, а не `Неопределено`, а `Ф(,)` внутри тела, если бы
+    /// прологу не удалось подставить дефолт, должна была бы упасть, а не
+    /// молча дать `Неопределено` — снаружи этого значения не видно ни при
+    /// каких обстоятельствах, весь остальной рантайм трактует его как
+    /// ошибку типа (см. `as_number`/`as_str`/... через generic `_ => Err`).
+    Skipped,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -143,6 +155,7 @@ impl BslValue {
                 BslObject::Map(_) => "Соответствие",
                 BslObject::KeyValuePair(_, _) => "КлючИЗначение",
             },
+            BslValue::Skipped => "Skipped",
         }
     }
 
@@ -225,6 +238,35 @@ impl BslValue {
 
     pub fn exp(&self) -> RtResult<Self> {
         Ok(BslValue::Number(self.as_number("Exp")?.exp()?))
+    }
+
+    /// `Округл(Число, ЧислоРазрядов)` — decimal half-up, НЕ через `f64`:
+    /// `Округл(2.675, 2)` обязан дать `2.68`, а не `2.67` (ближайший `f64` к
+    /// `2.675` чуть меньше самого числа). Настоящая 1С принимает третий
+    /// аргумент — режим округления (банковское/математическое) — который
+    /// здесь НЕ реализован: нет доступа к платформе, чтобы снять, какой из
+    /// режимов действует по умолчанию и совпадает ли он со схемой деления
+    /// (half-up-от-нуля, см. `bsl_number::div_half_up_i128`) или это
+    /// половина-к-чётному. Используется схема деления как наиболее
+    /// вероятная (обе — стандартные способы округления в decimal-системах),
+    /// это ПРЕДПОЛОЖЕНИЕ, не измеренный факт.
+    pub fn round(&self, digits: &Self) -> RtResult<Self> {
+        let n = self.as_number("Округл")?;
+        let d = digits.as_number("Округл")?;
+        let scale = d
+            .to_i64_exact()
+            .and_then(|s| i32::try_from(s).ok())
+            .ok_or(RtError::TypeError {
+                expected: "Число (целое)",
+                op: "Округл",
+            })?;
+        Ok(BslValue::Number(n.round_to_scale(scale)))
+    }
+
+    /// `Цел(Число)` — отбрасывание дробной части К НУЛЮ (не half-up, в
+    /// отличие от `Округл` выше): `Цел(2.9) = 2`, `Цел(-2.9) = -2`.
+    pub fn trunc(&self) -> RtResult<Self> {
+        Ok(BslValue::Number(self.as_number("Цел")?.trunc_to_scale(0)))
     }
 
     pub fn sin(&self) -> RtResult<Self> {
@@ -917,6 +959,7 @@ impl Hash for BslValue {
             BslValue::Number(n) => n.hash(state),
             BslValue::Str(s) => s.hash(state),
             BslValue::Object(o) => Rc::as_ptr(o).hash(state),
+            BslValue::Skipped => {}
         }
     }
 }
@@ -939,6 +982,9 @@ impl fmt::Display for BslValue {
                 BslObject::Map(_) => write!(f, "Соответствие"),
                 BslObject::KeyValuePair(_, _) => write!(f, "КлючИЗначение"),
             },
+            // Никогда не должно реально дойти до печати (см. doc comment
+            // на варианте) — но `Display` обязан быть тотальным.
+            BslValue::Skipped => write!(f, "<Skipped>"),
         }
     }
 }
