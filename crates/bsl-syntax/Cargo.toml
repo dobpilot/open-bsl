@@ -5,3 +5,6 @@ edition.workspace = true
 
 [dependencies]
 
+[dev-dependencies]
+insta = "1"
+
