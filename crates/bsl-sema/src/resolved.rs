@@ -30,12 +30,45 @@ pub enum RExpr {
         func: u32,
         args: Vec<RExpr>,
     },
+    Str(String),
+    Index {
+        obj: Box<RExpr>,
+        index: Box<RExpr>,
+    },
+    Field {
+        obj: Box<RExpr>,
+        name: String,
+    },
+    /// `Новый Массив(d1, d2, ...)` — каждое измерение вкладывает следующий
+    /// уровень массивов (`Новый Массив(3, 4)` — массив из 3 массивов по 4).
+    NewArray {
+        dims: Vec<RExpr>,
+    },
+    /// `Новый Структура("x,y,z", ...)`. Список полей — обязательно строковый
+    /// литерал на месте вызова (см. `SemaError::Unsupported` иначе):
+    /// динамические формы, зависящие от рантайм-значения строки, отложены.
+    /// `values.len() == keys.len()` всегда — если аргументов-значений не
+    /// было вовсе, `values` заполнен `RExpr::Undefined`.
+    NewStructure {
+        keys: Vec<String>,
+        values: Vec<RExpr>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RStmt {
-    Assign {
+    AssignLocal {
         slot: u32,
+        value: RExpr,
+    },
+    AssignIndex {
+        obj: RExpr,
+        index: RExpr,
+        value: RExpr,
+    },
+    AssignField {
+        obj: RExpr,
+        name: String,
         value: RExpr,
     },
     /// Вызов процедуры/функции как оператор — результат отбрасывается.
@@ -57,6 +90,13 @@ pub enum RStmt {
         slot: u32,
         from: RExpr,
         to: RExpr,
+        body: Vec<RStmt>,
+    },
+    /// `iter` вычисляется один раз (как и границы `Для`) — компилятор
+    /// байт-кода превращает это в индексный цикл поверх длины коллекции.
+    ForEach {
+        slot: u32,
+        iter: RExpr,
         body: Vec<RStmt>,
     },
     Break,

@@ -247,7 +247,106 @@ pub fn run_program(program: &Program) -> Result<BslValue, RtError> {
                     Continuing => continue,
                 }
             }
+            Instr::GetIndex { dst, obj, idx } => {
+                let ov = stack[frames[frame_idx].reg_index(obj)].clone();
+                let iv = stack[frames[frame_idx].reg_index(idx)].clone();
+                let v = ov.get_index(&iv)?;
+                let d = frames[frame_idx].reg_index(dst);
+                stack[d] = v;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::SetIndex { obj, idx, src } => {
+                let ov = stack[frames[frame_idx].reg_index(obj)].clone();
+                let iv = stack[frames[frame_idx].reg_index(idx)].clone();
+                let sv = stack[frames[frame_idx].reg_index(src)].clone();
+                ov.set_index(&iv, sv)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::GetProp { dst, obj, name } => {
+                let ov = stack[frames[frame_idx].reg_index(obj)].clone();
+                let v = ov.get_field(name)?;
+                let d = frames[frame_idx].reg_index(dst);
+                stack[d] = v;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::SetProp { obj, name, src } => {
+                let ov = stack[frames[frame_idx].reg_index(obj)].clone();
+                let sv = stack[frames[frame_idx].reg_index(src)].clone();
+                ov.set_field(name, sv)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::NewArray { dst, base, count } => {
+                let mut dims = Vec::with_capacity(count as usize);
+                for i in 0..count {
+                    let v = stack[frames[frame_idx].reg_index(base + i)].clone();
+                    dims.push(dim_to_usize(&v)?);
+                }
+                let arr = build_nested_array(&dims);
+                let d = frames[frame_idx].reg_index(dst);
+                stack[d] = arr;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::NewStructure {
+                dst,
+                shape,
+                base,
+                count,
+            } => {
+                let shape_rc = program.shapes[shape as usize].clone();
+                let mut slots = Vec::with_capacity(count as usize);
+                for i in 0..count {
+                    slots.push(stack[frames[frame_idx].reg_index(base + i)].clone());
+                }
+                let v = BslValue::new_structure(shape_rc, slots);
+                let d = frames[frame_idx].reg_index(dst);
+                stack[d] = v;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::CollectionLen { dst, obj } => {
+                let ov = stack[frames[frame_idx].reg_index(obj)].clone();
+                let len = ov.collection_len()?;
+                let d = frames[frame_idx].reg_index(dst);
+                stack[d] = BslValue::Number(bsl_number::BslNumber::from_i64(len as i64));
+                frames[frame_idx].pc += 1;
+            }
         }
+    }
+}
+
+/// Размерность в `Новый Массив(d1, d2, ...)` обязана быть целым
+/// неотрицательным числом.
+fn dim_to_usize(v: &BslValue) -> Result<usize, RtError> {
+    match v {
+        BslValue::Number(n) => {
+            let i = n.to_i64_exact().ok_or(RtError::BadIndex)?;
+            usize::try_from(i).map_err(|_| RtError::BadIndex)
+        }
+        _ => Err(RtError::TypeError {
+            expected: "Число",
+            op: "Новый Массив(...)",
+        }),
+    }
+}
+
+/// `Новый Массив(3, 4)` — массив из 3 массивов по 4: каждое измерение
+/// вкладывает следующий уровень, элементы на дне — `Неопределено`. Каждый
+/// вложенный массив — отдельный объект (не общий `Rc`, иначе мутация одного
+/// была бы видна во всех остальных).
+fn build_nested_array(dims: &[usize]) -> BslValue {
+    match dims.split_first() {
+        Some((&n, rest)) => {
+            let items = (0..n)
+                .map(|_| {
+                    if rest.is_empty() {
+                        BslValue::Undefined
+                    } else {
+                        build_nested_array(rest)
+                    }
+                })
+                .collect();
+            BslValue::new_array(items)
+        }
+        None => BslValue::new_array(Vec::new()),
     }
 }
 
@@ -485,5 +584,130 @@ mod tests {
     fn division_by_zero_is_a_runtime_error() {
         let err = run_src_err("x = 1 / 0;");
         assert!(matches!(err, RtError::Num(bsl_number::NumError::DivideByZero)));
+    }
+
+    #[test]
+    fn array_construction_indexing_and_mutation() {
+        let v = run_src(
+            "a = Новый Массив(3);\n\
+             a[0] = 10;\n\
+             a[1] = 20;\n\
+             a[2] = a[0] + a[1];\n\
+             Возврат a[2];",
+        );
+        assert_eq!(v, num("30"));
+    }
+
+    #[test]
+    fn nested_array_dimensions() {
+        // Новый Массив(3, 4) -> массив из 3 независимых массивов по 4.
+        let v = run_src(
+            "a = Новый Массив(3, 4);\n\
+             a[0][0] = 1;\n\
+             a[1][0] = 2;\n\
+             Возврат a[0][0] + a[1][0];",
+        );
+        assert_eq!(v, num("3"));
+    }
+
+    #[test]
+    fn nested_array_slots_are_independent_objects() {
+        let v = run_src(
+            "a = Новый Массив(2, 2);\n\
+             a[0][0] = 1;\n\
+             Возврат a[1][0];",
+        );
+        // Если бы вложенные массивы были одним общим объектом (баг), тут
+        // тоже было бы 1 — а не Неопределено.
+        assert_eq!(v, BslValue::Undefined);
+    }
+
+    #[test]
+    fn array_index_out_of_bounds_is_a_runtime_error() {
+        let err = run_src_err("a = Новый Массив(1);\nВозврат a[5];");
+        assert!(matches!(err, RtError::IndexOutOfBounds { .. }));
+    }
+
+    #[test]
+    fn structure_construction_and_field_access() {
+        let v = run_src(
+            "s = Новый Структура(\"x,y,z\", 1, 2, 3);\n\
+             s.y = s.y + 100;\n\
+             Возврат s.x + s.y + s.z;",
+        );
+        assert_eq!(v, num("106"));
+    }
+
+    #[test]
+    fn structure_keys_only_defaults_to_undefined() {
+        let v = run_src("s = Новый Структура(\"x\");\nВозврат s.x;");
+        assert_eq!(v, BslValue::Undefined);
+    }
+
+    #[test]
+    fn unknown_field_is_a_runtime_error() {
+        let err = run_src_err("s = Новый Структура(\"x\");\nВозврат s.z;");
+        assert!(matches!(err, RtError::UnknownField(_)));
+    }
+
+    #[test]
+    fn arrays_are_reference_types_across_by_reference_calls() {
+        // Массив передаётся в процедуру по ссылке (как всё без Знач), и
+        // сам массив — ссылочный тип: мутация видна вызывающему в обоих
+        // смыслах сразу (тот же тест, что и by_reference, но для объекта).
+        let v = run_src(
+            "Процедура Заполнить(a)\n\
+             a[0] = 42;\n\
+             КонецПроцедуры\n\
+             b = Новый Массив(1);\n\
+             Заполнить(b);\n\
+             Возврат b[0];",
+        );
+        assert_eq!(v, num("42"));
+    }
+
+    #[test]
+    fn for_each_over_array() {
+        let v = run_src(
+            "a = Новый Массив(3);\n\
+             a[0] = 1;\n\
+             a[1] = 2;\n\
+             a[2] = 3;\n\
+             sum = 0;\n\
+             Для Каждого x Из a Цикл\n\
+             sum = sum + x;\n\
+             КонецЦикла\n\
+             Возврат sum;",
+        );
+        assert_eq!(v, num("6"));
+    }
+
+    #[test]
+    fn for_each_break_and_continue() {
+        let v = run_src(
+            "a = Новый Массив(5);\n\
+             a[0] = 1;\n a[1] = 2;\n a[2] = 3;\n a[3] = 4;\n a[4] = 5;\n\
+             sum = 0;\n\
+             Для Каждого x Из a Цикл\n\
+             Если x = 2 Тогда\n\
+             Продолжить;\n\
+             КонецЕсли;\n\
+             Если x = 5 Тогда\n\
+             Прервать;\n\
+             КонецЕсли;\n\
+             sum = sum + x;\n\
+             КонецЦикла\n\
+             Возврат sum;",
+        );
+        // 1 + 3 + 4 = 8 (2 пропущен, остановились на 5)
+        assert_eq!(v, num("8"));
+    }
+
+    #[test]
+    fn display_of_array_and_structure_matches_measured_platform_strings() {
+        let v = run_src("Возврат Новый Массив();");
+        assert_eq!(v.to_string(), "Массив");
+        let v = run_src("Возврат Новый Структура();");
+        assert_eq!(v.to_string(), "Структура");
     }
 }

@@ -1,4 +1,6 @@
-use bsl_rt::BslValue;
+use std::rc::Rc;
+
+use bsl_rt::{BslValue, Shape};
 
 use crate::instr::{ArgMode, Instr};
 
@@ -24,7 +26,14 @@ pub struct Chunk {
 /// Весь скомпилированный модуль: `chunks[0]` — скрипт верхнего уровня,
 /// `chunks[1..]` — объявленные `Процедура`/`Функция` в порядке резолвинга
 /// (индекс `i` в `ResolvedProgram::functions` соответствует `chunks[i+1]`).
+///
+/// `names`/`shapes` — общие для всего модуля таблицы, интернированные один
+/// раз при компиляции (см. `bsl_rt::NameInterner`/`ShapeTable`): доступ к
+/// полю ссылается на них по индексу (`NameId`/индекс формы), а не хранит
+/// строку или список полей в каждой инструкции.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program {
     pub chunks: Vec<Chunk>,
+    pub names: Vec<String>,
+    pub shapes: Vec<Rc<Shape>>,
 }

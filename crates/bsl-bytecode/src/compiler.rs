@@ -1,4 +1,4 @@
-use bsl_rt::BslValue;
+use bsl_rt::{BslValue, NameInterner, ShapeTable};
 use bsl_sema::{RExpr, RStmt, ResolvedFunction, ResolvedProgram};
 use bsl_syntax::{BinaryOp, UnaryOp};
 
@@ -11,6 +11,7 @@ pub enum CompileError {
     TooManyRegisters,
     TooManyConstants,
     TooManyArgModeTables,
+    TooManyShapes,
     BreakOutsideLoop,
     ContinueOutsideLoop,
 }
@@ -19,18 +20,39 @@ pub enum CompileError {
 /// `Процедура`/`Функция`, в том порядке, в котором их видит `bsl-sema`
 /// (`Call.func` в резолвнутом дереве — индекс в `resolved.functions`;
 /// здесь он сдвигается на 1, потому что `chunks[0]` — верхний уровень).
+///
+/// Имена полей и формы структур интернируются ОДИН РАЗ на весь модуль
+/// (`names`/`shapes` ниже) — а не по чанку — чтобы одинаковый список полей
+/// в разных функциях модуля давал одну и ту же форму: это и есть смысл
+/// "глобального" интернирования из брифа применительно к тому, что реально
+/// компилируется за один проход.
 pub fn compile_program(resolved: &ResolvedProgram) -> Result<Program, CompileError> {
+    let mut names = NameInterner::new();
+    let mut shapes = ShapeTable::new();
     let mut chunks = Vec::with_capacity(resolved.functions.len() + 1);
     chunks.push(compile_chunk(
         &resolved.top_level.locals,
         0,
         &resolved.top_level.body,
         &resolved.functions,
+        &mut names,
+        &mut shapes,
     )?);
     for f in &resolved.functions {
-        chunks.push(compile_chunk(&f.locals, f.params.len(), &f.body, &resolved.functions)?);
+        chunks.push(compile_chunk(
+            &f.locals,
+            f.params.len(),
+            &f.body,
+            &resolved.functions,
+            &mut names,
+            &mut shapes,
+        )?);
     }
-    Ok(Program { chunks })
+    Ok(Program {
+        chunks,
+        names: names.into_names(),
+        shapes: shapes.into_shapes(),
+    })
 }
 
 fn compile_chunk(
@@ -38,6 +60,8 @@ fn compile_chunk(
     n_params: usize,
     body: &[RStmt],
     functions: &[ResolvedFunction],
+    names: &mut NameInterner,
+    shapes: &mut ShapeTable,
 ) -> Result<Chunk, CompileError> {
     let n_locals: u8 = locals
         .len()
@@ -54,6 +78,8 @@ fn compile_chunk(
         max_reg: n_locals,
         loop_stack: Vec::new(),
         functions,
+        names,
+        shapes,
     };
     c.compile_block(body)?;
     Ok(Chunk {
@@ -89,6 +115,9 @@ struct Compiler<'a> {
     /// решить режим передачи каждого аргумента (`Знач` смотрится у
     /// вызываемой функции, а не у самого вызова).
     functions: &'a [ResolvedFunction],
+    /// Общие на весь модуль — см. `compile_program`.
+    names: &'a mut NameInterner,
+    shapes: &'a mut ShapeTable,
 }
 
 impl<'a> Compiler<'a> {
@@ -185,6 +214,67 @@ impl<'a> Compiler<'a> {
             RExpr::Call { func, args } => {
                 self.compile_call(*func, args, dst)?;
             }
+            RExpr::Str(s) => {
+                let k = self.add_const(BslValue::Str(std::rc::Rc::from(s.as_str())))?;
+                self.emit(Instr::LoadConst { dst, k });
+            }
+            RExpr::Index { obj, index } => {
+                let o = self.alloc_temp()?;
+                self.compile_expr(obj, o)?;
+                let i = self.alloc_temp()?;
+                self.compile_expr(index, i)?;
+                self.emit(Instr::GetIndex { dst, obj: o, idx: i });
+                self.free_temp(2);
+            }
+            RExpr::Field { obj, name } => {
+                let o = self.alloc_temp()?;
+                self.compile_expr(obj, o)?;
+                let name_id = self.names.intern(name);
+                self.emit(Instr::GetProp {
+                    dst,
+                    obj: o,
+                    name: name_id,
+                });
+                self.free_temp(1);
+            }
+            RExpr::NewArray { dims } => {
+                let base = self.next_reg;
+                for d in dims {
+                    let r = self.alloc_temp()?;
+                    self.compile_expr(d, r)?;
+                }
+                let count: u8 = dims
+                    .len()
+                    .try_into()
+                    .map_err(|_| CompileError::TooManyRegisters)?;
+                self.free_temp(count);
+                self.emit(Instr::NewArray { dst, base, count });
+            }
+            RExpr::NewStructure { keys, values } => {
+                let name_ids: Vec<bsl_rt::NameId> =
+                    keys.iter().map(|k| self.names.intern(k)).collect();
+                let shape_id: u16 = self
+                    .shapes
+                    .intern(&name_ids)
+                    .try_into()
+                    .map_err(|_| CompileError::TooManyShapes)?;
+                let base = self.next_reg;
+                for v in values {
+                    let r = self.alloc_temp()?;
+                    self.compile_expr(v, r)?;
+                }
+                let count: u8 = values
+                    .len()
+                    .try_into()
+                    .map_err(|_| CompileError::TooManyRegisters)?;
+                self.free_temp(count);
+                self.emit(Instr::NewStructure {
+                    dst,
+                    shape: shape_id,
+                    base,
+                    count,
+                });
+            }
         }
         Ok(())
     }
@@ -240,8 +330,31 @@ impl<'a> Compiler<'a> {
 
     fn compile_stmt(&mut self, s: &RStmt) -> Result<(), CompileError> {
         match s {
-            RStmt::Assign { slot, value } => {
+            RStmt::AssignLocal { slot, value } => {
                 self.compile_expr(value, *slot as u8)?;
+            }
+            RStmt::AssignIndex { obj, index, value } => {
+                let o = self.alloc_temp()?;
+                self.compile_expr(obj, o)?;
+                let i = self.alloc_temp()?;
+                self.compile_expr(index, i)?;
+                let v = self.alloc_temp()?;
+                self.compile_expr(value, v)?;
+                self.emit(Instr::SetIndex { obj: o, idx: i, src: v });
+                self.free_temp(3);
+            }
+            RStmt::AssignField { obj, name, value } => {
+                let o = self.alloc_temp()?;
+                self.compile_expr(obj, o)?;
+                let v = self.alloc_temp()?;
+                self.compile_expr(value, v)?;
+                let name_id = self.names.intern(name);
+                self.emit(Instr::SetProp {
+                    obj: o,
+                    name: name_id,
+                    src: v,
+                });
+                self.free_temp(2);
             }
             RStmt::ExprStmt(e) => {
                 // Результат вызова-как-оператора отбрасывается, но регистр
@@ -378,6 +491,71 @@ impl<'a> Compiler<'a> {
                 }
 
                 self.free_temp(1); // bound
+            }
+            RStmt::ForEach { slot, iter, body } => {
+                let slot = *slot as u8;
+                // Коллекция вычисляется один раз, как и границы `Для`.
+                let iter_reg = self.alloc_temp()?;
+                self.compile_expr(iter, iter_reg)?;
+                let len_reg = self.alloc_temp()?;
+                self.emit(Instr::CollectionLen {
+                    dst: len_reg,
+                    obj: iter_reg,
+                });
+                let idx_reg = self.alloc_temp()?;
+                let zero_k = self.add_const(BslValue::Number(bsl_number::BslNumber::from_i64(0)))?;
+                self.emit(Instr::LoadConst {
+                    dst: idx_reg,
+                    k: zero_k,
+                });
+
+                let cond_pc = self.here();
+                let cmp = self.alloc_temp()?;
+                self.emit(Instr::Lt {
+                    dst: cmp,
+                    a: idx_reg,
+                    b: len_reg,
+                });
+                self.free_temp(1);
+                let jf = self.emit(Instr::JumpIfFalse { cond: cmp, target: 0 });
+
+                self.emit(Instr::GetIndex {
+                    dst: slot,
+                    obj: iter_reg,
+                    idx: idx_reg,
+                });
+
+                self.loop_stack.push(LoopCtx {
+                    break_patches: Vec::new(),
+                    continue_patches: Vec::new(),
+                });
+                self.compile_block(body)?;
+
+                let incr_pc = self.here();
+                let one = self.alloc_temp()?;
+                let one_k = self.add_const(BslValue::Number(bsl_number::BslNumber::from_i64(1)))?;
+                self.emit(Instr::LoadConst { dst: one, k: one_k });
+                self.emit(Instr::Add {
+                    dst: idx_reg,
+                    a: idx_reg,
+                    b: one,
+                });
+                self.free_temp(1);
+                self.emit(Instr::Jump {
+                    target: cond_pc as i16,
+                });
+
+                let end = self.here();
+                self.patch_jump(jf, end);
+                let ctx = self.loop_stack.pop().unwrap();
+                for p in ctx.break_patches {
+                    self.patch_jump(p, end);
+                }
+                for p in ctx.continue_patches {
+                    self.patch_jump(p, incr_pc);
+                }
+
+                self.free_temp(3); // iter_reg, len_reg, idx_reg
             }
             RStmt::Break => {
                 let idx = self.emit(Instr::Jump { target: 0 });

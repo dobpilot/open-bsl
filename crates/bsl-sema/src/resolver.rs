@@ -170,10 +170,25 @@ impl<'a> Resolver<'a> {
                 AExpr::Ident(name) => {
                     let slot = self.declare(name);
                     let value = self.resolve_expr(value)?;
-                    Ok(Some(RStmt::Assign { slot, value }))
+                    Ok(Some(RStmt::AssignLocal { slot, value }))
+                }
+                AExpr::Index { obj, index } => {
+                    let obj = self.resolve_expr(obj)?;
+                    let index = self.resolve_expr(index)?;
+                    let value = self.resolve_expr(value)?;
+                    Ok(Some(RStmt::AssignIndex { obj, index, value }))
+                }
+                AExpr::Field { obj, name } => {
+                    let obj = self.resolve_expr(obj)?;
+                    let value = self.resolve_expr(value)?;
+                    Ok(Some(RStmt::AssignField {
+                        obj,
+                        name: name.clone(),
+                        value,
+                    }))
                 }
                 _ => Err(SemaError::Unsupported(
-                    "присваивание в путь (индекс/поле) появится вместе с коллекциями (M5)",
+                    "присваивание поддержано только в переменную, индекс или поле",
                 )),
             },
             AStmt::ExprStmt(e) => Ok(Some(RStmt::ExprStmt(self.resolve_expr(e)?))),
@@ -224,9 +239,14 @@ impl<'a> Resolver<'a> {
                     body,
                 }))
             }
-            AStmt::ForEach { .. } => Err(SemaError::Unsupported(
-                "Для Каждого появится вместе с коллекциями (M5)",
-            )),
+            AStmt::ForEach { var, iter, body } => {
+                let iter = self.resolve_expr(iter)?;
+                // Как и в ForNumeric: переменная объявляется до тела, живёт
+                // и после КонецЦикла.
+                let slot = self.declare(var);
+                let body = self.resolve_block(body)?;
+                Ok(Some(RStmt::ForEach { slot, iter, body }))
+            }
             AStmt::Break => Ok(Some(RStmt::Break)),
             AStmt::Continue => Ok(Some(RStmt::Continue)),
             AStmt::Return(opt) => {
@@ -282,21 +302,76 @@ impl<'a> Resolver<'a> {
                 rhs: Box::new(self.resolve_expr(rhs)?),
             }),
             AExpr::Call { callee, args } => self.resolve_call(callee, args),
-            AExpr::Str(_) => Err(SemaError::Unsupported(
-                "строки появятся вместе со строковым рантаймом (bsl-rt)",
-            )),
+            AExpr::Str(s) => Ok(RExpr::Str(s.clone())),
             AExpr::Date(_) => Err(SemaError::Unsupported("даты появятся позже")),
-            AExpr::Index { .. } => Err(SemaError::Unsupported(
-                "индексация появится вместе с коллекциями (M5)",
-            )),
-            AExpr::Field { .. } => Err(SemaError::Unsupported(
-                "доступ к полям появится вместе со структурами (M5)",
-            )),
-            AExpr::New { .. } => Err(SemaError::Unsupported(
-                "Новый появится вместе с коллекциями (M5)",
-            )),
+            AExpr::Index { obj, index } => Ok(RExpr::Index {
+                obj: Box::new(self.resolve_expr(obj)?),
+                index: Box::new(self.resolve_expr(index)?),
+            }),
+            AExpr::Field { obj, name } => Ok(RExpr::Field {
+                obj: Box::new(self.resolve_expr(obj)?),
+                name: name.clone(),
+            }),
+            AExpr::New { type_name, args } => self.resolve_new(type_name, args),
             AExpr::Ternary { .. } => Err(SemaError::Unsupported(
                 "тернарный ?() появится позже",
+            )),
+        }
+    }
+
+    /// `Новый Массив(...)`/`Новый Структура(...)` — единственные формы
+    /// `Новый`, которые пока распознаются (случай общих пользовательских
+    /// типов отложен, объектов кроме коллекций ещё нет).
+    fn resolve_new(&mut self, type_name: &str, args: &[AExpr]) -> Result<RExpr, SemaError> {
+        match type_name.to_uppercase().as_str() {
+            "МАССИВ" | "ARRAY" => {
+                let mut dims = Vec::with_capacity(args.len());
+                for a in args {
+                    dims.push(self.resolve_expr(a)?);
+                }
+                Ok(RExpr::NewArray { dims })
+            }
+            "СТРУКТУРА" | "STRUCTURE" => {
+                if args.is_empty() {
+                    return Ok(RExpr::NewStructure {
+                        keys: Vec::new(),
+                        values: Vec::new(),
+                    });
+                }
+                let key_text = match &args[0] {
+                    AExpr::Str(s) => s,
+                    _ => {
+                        return Err(SemaError::Unsupported(
+                            "Новый Структура(...) со списком полей не строковым литералом появится позже",
+                        ))
+                    }
+                };
+                let keys: Vec<String> = key_text
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                let rest = &args[1..];
+                let values = if rest.is_empty() {
+                    keys.iter().map(|_| RExpr::Undefined).collect()
+                } else {
+                    if rest.len() != keys.len() {
+                        return Err(SemaError::ArgumentCountMismatch {
+                            name: "Новый Структура".to_string(),
+                            expected: keys.len(),
+                            found: rest.len(),
+                        });
+                    }
+                    let mut vs = Vec::with_capacity(rest.len());
+                    for a in rest {
+                        vs.push(self.resolve_expr(a)?);
+                    }
+                    vs
+                };
+                Ok(RExpr::NewStructure { keys, values })
+            }
+            _ => Err(SemaError::Unsupported(
+                "Новый поддержан только для Массив/Структура пока",
             )),
         }
     }
@@ -379,7 +454,7 @@ mod tests {
         assert_eq!(r.locals, vec!["PI".to_string()]);
         assert_eq!(
             r.body,
-            vec![RStmt::Assign {
+            vec![RStmt::AssignLocal {
                 slot: 0,
                 value: RExpr::Number(BslNumber::parse_canonical("3.14").unwrap()),
             }]
@@ -400,7 +475,7 @@ mod tests {
         assert_eq!(r.locals, vec!["x".to_string()]);
         assert_eq!(
             r.body[1],
-            RStmt::Assign {
+            RStmt::AssignLocal {
                 slot: 0,
                 value: RExpr::Binary {
                     op: bsl_syntax::BinaryOp::Add,
@@ -493,5 +568,84 @@ mod tests {
                 args: vec![RExpr::Number(BslNumber::from_i64(1))],
             })]
         );
+    }
+
+    #[test]
+    fn new_array_resolves_dimensions() {
+        let r = resolve_src("a = Новый Массив(3, 4);");
+        assert_eq!(
+            r.body[0],
+            RStmt::AssignLocal {
+                slot: 0,
+                value: RExpr::NewArray {
+                    dims: vec![
+                        RExpr::Number(BslNumber::from_i64(3)),
+                        RExpr::Number(BslNumber::from_i64(4)),
+                    ],
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn new_structure_with_literal_keys_and_values() {
+        let r = resolve_src(r#"s = Новый Структура("x,y", 1, 2);"#);
+        assert_eq!(
+            r.body[0],
+            RStmt::AssignLocal {
+                slot: 0,
+                value: RExpr::NewStructure {
+                    keys: vec!["x".to_string(), "y".to_string()],
+                    values: vec![
+                        RExpr::Number(BslNumber::from_i64(1)),
+                        RExpr::Number(BslNumber::from_i64(2)),
+                    ],
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn new_structure_keys_only_defaults_values_to_undefined() {
+        let r = resolve_src(r#"s = Новый Структура("x,y");"#);
+        assert_eq!(
+            r.body[0],
+            RStmt::AssignLocal {
+                slot: 0,
+                value: RExpr::NewStructure {
+                    keys: vec!["x".to_string(), "y".to_string()],
+                    values: vec![RExpr::Undefined, RExpr::Undefined],
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn new_structure_with_dynamic_key_list_is_unsupported() {
+        // Проверка формы аргумента (строковый литерал?) идёт раньше
+        // резолвинга самого идентификатора, поэтому это Unsupported, а не
+        // UndefinedVariable("k"), даже когда k нигде не объявлена.
+        let prog = parse("s = Новый Структура(k);").unwrap();
+        let stmts = items_to_stmts(prog.items);
+        assert!(matches!(
+            resolve_script(&stmts).unwrap_err(),
+            SemaError::Unsupported(_)
+        ));
+    }
+
+    #[test]
+    fn index_and_field_assignment_targets() {
+        let r = resolve_src(
+            "a = Новый Массив(1);\ns = Новый Структура(\"x\");\na[0] = 1;\ns.x = 2;",
+        );
+        assert!(matches!(r.body[2], RStmt::AssignIndex { .. }));
+        assert!(matches!(r.body[3], RStmt::AssignField { .. }));
+    }
+
+    #[test]
+    fn for_each_declares_loop_variable() {
+        let r = resolve_src("a = Новый Массив();\nДля Каждого x Из a Цикл\ny = x;\nКонецЦикла");
+        assert_eq!(r.locals[0], "a".to_string());
+        assert!(matches!(r.body[1], RStmt::ForEach { .. }));
     }
 }
