@@ -2,7 +2,7 @@ use bsl_rt::{BslValue, NameInterner, ShapeTable};
 use bsl_sema::{RExpr, RStmt, ResolvedFunction, ResolvedProgram};
 use bsl_syntax::{BinaryOp, UnaryOp};
 
-use crate::chunk::{Chunk, Program};
+use crate::chunk::{Chunk, ExceptionRange, Program};
 use crate::instr::{ArgMode, Instr};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -74,6 +74,7 @@ fn compile_chunk(
         instrs: Vec::new(),
         consts: Vec::new(),
         call_arg_modes: Vec::new(),
+        exception_ranges: Vec::new(),
         next_reg: n_locals,
         max_reg: n_locals,
         loop_stack: Vec::new(),
@@ -86,6 +87,7 @@ fn compile_chunk(
         instrs: c.instrs,
         consts: c.consts,
         call_arg_modes: c.call_arg_modes,
+        exception_ranges: c.exception_ranges,
         n_params,
         n_locals,
         n_regs: c.max_reg,
@@ -104,6 +106,7 @@ struct Compiler<'a> {
     instrs: Vec<Instr>,
     consts: Vec<BslValue>,
     call_arg_modes: Vec<Vec<ArgMode>>,
+    exception_ranges: Vec<ExceptionRange>,
     /// Вершина свободных регистров: параметры+локалы занимают
     /// `0..n_locals`, дальше — стек временных регистров, растущий/
     /// сжимающийся вокруг компиляции каждого подвыражения (тот же приём,
@@ -557,6 +560,35 @@ impl<'a> Compiler<'a> {
 
                 self.free_temp(3); // iter_reg, len_reg, idx_reg
             }
+            RStmt::Try { body, except_body } => {
+                let start = self.here();
+                self.compile_block(body)?;
+                let end = self.here();
+                // Тело завершилось без исключения — обработчик пропускаем.
+                let skip_handler = self.emit(Instr::Jump { target: 0 });
+
+                let handler_pc = self.here();
+                self.compile_block(except_body)?;
+
+                let after = self.here();
+                self.patch_jump(skip_handler, after);
+                self.exception_ranges.push(ExceptionRange {
+                    start_pc: start,
+                    end_pc: end,
+                    handler_pc,
+                });
+            }
+            RStmt::Raise(opt) => match opt {
+                Some(e) => {
+                    let r = self.alloc_temp()?;
+                    self.compile_expr(e, r)?;
+                    self.emit(Instr::Raise { src: Some(r) });
+                    self.free_temp(1);
+                }
+                None => {
+                    self.emit(Instr::Raise { src: None });
+                }
+            },
             RStmt::Break => {
                 let idx = self.emit(Instr::Jump { target: 0 });
                 self.loop_stack

@@ -256,12 +256,18 @@ impl<'a> Resolver<'a> {
                 };
                 Ok(Some(RStmt::Return(r)))
             }
-            AStmt::Try { .. } => Err(SemaError::Unsupported(
-                "Попытка появится вместе с таблицей защищённых диапазонов (M6)",
-            )),
-            AStmt::Raise(_) => Err(SemaError::Unsupported(
-                "ВызватьИсключение появится вместе с исключениями (M6)",
-            )),
+            AStmt::Try { body, except_body } => {
+                let body = self.resolve_block(body)?;
+                let except_body = self.resolve_block(except_body)?;
+                Ok(Some(RStmt::Try { body, except_body }))
+            }
+            AStmt::Raise(opt) => {
+                let r = match opt {
+                    Some(e) => Some(self.resolve_expr(e)?),
+                    None => None,
+                };
+                Ok(Some(RStmt::Raise(r)))
+            }
             AStmt::VarDecl(vd) => {
                 // Только регистрирует слоты; значение по умолчанию —
                 // Неопределено, для этого не нужна ни одна инструкция VM
@@ -647,5 +653,23 @@ mod tests {
         let r = resolve_src("a = Новый Массив();\nДля Каждого x Из a Цикл\ny = x;\nКонецЦикла");
         assert_eq!(r.locals[0], "a".to_string());
         assert!(matches!(r.body[1], RStmt::ForEach { .. }));
+    }
+
+    #[test]
+    fn try_except_resolves_both_bodies() {
+        let r = resolve_src("Попытка\nx = 1;\nИсключение\ny = 2;\nКонецПопытки");
+        assert!(matches!(r.body[0], RStmt::Try { .. }));
+    }
+
+    #[test]
+    fn raise_with_and_without_expression() {
+        let r = resolve_src("Попытка\nВызватьИсключение \"ошибка\";\nИсключение\nВызватьИсключение;\nКонецПопытки");
+        match &r.body[0] {
+            RStmt::Try { body, except_body } => {
+                assert_eq!(body[0], RStmt::Raise(Some(RExpr::Str("ошибка".to_string()))));
+                assert_eq!(except_body[0], RStmt::Raise(None));
+            }
+            other => panic!("expected Try, got {other:?}"),
+        }
     }
 }

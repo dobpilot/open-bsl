@@ -54,6 +54,13 @@ impl Frame {
 /// Выполняет модуль с точки входа — операторов верхнего уровня (`chunks[0]`)
 /// — и возвращает значение, которым он завершился (через `Возврат` на
 /// верхнем уровне, что нетипично, но не запрещено; обычно — `Неопределено`).
+///
+/// Исключения (`Попытка`/`ВызватьИсключение`) ловятся здесь, а не внутри
+/// `step`: если очередная инструкция вернула `Err`, кадр(ы) разматываются
+/// (`unwind_to_handler`) в поисках защищённого диапазона, который её
+/// накрывает — начиная с того кадра, где ошибка произошла, и дальше наружу
+/// через вызовы. Не нашли нигде — ошибка настоящая, возвращаем её вызывающему
+/// Rust-коду.
 pub fn run_program(program: &Program) -> Result<BslValue, RtError> {
     let mut stack: Vec<BslValue> = Vec::new();
     push_own_registers(&mut stack, &program.chunks[0]);
@@ -65,24 +72,51 @@ pub fn run_program(program: &Program) -> Result<BslValue, RtError> {
         call_start: 0,
         return_reg: 0,
     }];
+    let mut current_exception: Option<BslValue> = None;
 
     loop {
-        let frame_idx = frames.len() - 1;
-        let func_id = frames[frame_idx].func_id;
-        let pc = frames[frame_idx].pc;
-        let chunk = &program.chunks[func_id];
-
-        if pc >= chunk.instrs.len() {
-            // Неявный возврат: тело кончилось без `Возврат` — результат
-            // Неопределено, как и `Возврат;` без выражения.
-            match do_return_with_value(&mut frames, &mut stack, BslValue::Undefined) {
-                Done(v) => return Ok(v),
-                Continuing => continue,
+        match step(&mut frames, &mut stack, program, &mut current_exception) {
+            Ok(Step::Continue) => continue,
+            Ok(Step::Done(v)) => return Ok(v),
+            Err(e) => {
+                if !unwind_to_handler(&mut frames, &mut stack, program, &e, &mut current_exception) {
+                    return Err(e);
+                }
+                // Иначе кадры/pc уже поправлены внутри unwind_to_handler —
+                // просто продолжаем цикл со следующей итерации.
             }
         }
+    }
+}
 
-        let instr = chunk.instrs[pc];
-        match instr {
+enum Step {
+    Continue,
+    Done(BslValue),
+}
+
+/// Выполняет РОВНО одну инструкцию текущего (верхнего) кадра.
+fn step(
+    frames: &mut Vec<Frame>,
+    stack: &mut Vec<BslValue>,
+    program: &Program,
+    current_exception: &mut Option<BslValue>,
+) -> Result<Step, RtError> {
+    let frame_idx = frames.len() - 1;
+    let func_id = frames[frame_idx].func_id;
+    let pc = frames[frame_idx].pc;
+    let chunk = &program.chunks[func_id];
+
+    if pc >= chunk.instrs.len() {
+        // Неявный возврат: тело кончилось без `Возврат` — результат
+        // Неопределено, как и `Возврат;` без выражения.
+        return Ok(match do_return_with_value(frames, stack, BslValue::Undefined) {
+            Done(v) => Step::Done(v),
+            Continuing => Step::Continue,
+        });
+    }
+
+    let instr = chunk.instrs[pc];
+    match instr {
             Instr::Move { dst, src } => {
                 let s = frames[frame_idx].reg_index(src);
                 let v = stack[s].clone();
@@ -112,27 +146,27 @@ pub fn run_program(program: &Program) -> Result<BslValue, RtError> {
                 frames[frame_idx].pc += 1;
             }
             Instr::Add { dst, a, b } => {
-                binop(&mut frames, &mut stack, frame_idx, dst, a, b, BslValue::add)?;
+                binop(frames, stack, frame_idx, dst, a, b, BslValue::add)?;
                 frames[frame_idx].pc += 1;
             }
             Instr::Sub { dst, a, b } => {
-                binop(&mut frames, &mut stack, frame_idx, dst, a, b, BslValue::sub)?;
+                binop(frames, stack, frame_idx, dst, a, b, BslValue::sub)?;
                 frames[frame_idx].pc += 1;
             }
             Instr::Mul { dst, a, b } => {
-                binop(&mut frames, &mut stack, frame_idx, dst, a, b, BslValue::mul)?;
+                binop(frames, stack, frame_idx, dst, a, b, BslValue::mul)?;
                 frames[frame_idx].pc += 1;
             }
             Instr::Div { dst, a, b } => {
-                binop(&mut frames, &mut stack, frame_idx, dst, a, b, BslValue::div)?;
+                binop(frames, stack, frame_idx, dst, a, b, BslValue::div)?;
                 frames[frame_idx].pc += 1;
             }
             Instr::And { dst, a, b } => {
-                binop(&mut frames, &mut stack, frame_idx, dst, a, b, BslValue::and)?;
+                binop(frames, stack, frame_idx, dst, a, b, BslValue::and)?;
                 frames[frame_idx].pc += 1;
             }
             Instr::Or { dst, a, b } => {
-                binop(&mut frames, &mut stack, frame_idx, dst, a, b, BslValue::or)?;
+                binop(frames, stack, frame_idx, dst, a, b, BslValue::or)?;
                 frames[frame_idx].pc += 1;
             }
             Instr::Neg { dst, src } => {
@@ -164,25 +198,25 @@ pub fn run_program(program: &Program) -> Result<BslValue, RtError> {
                 frames[frame_idx].pc += 1;
             }
             Instr::Lt { dst, a, b } => {
-                cmp(&mut frames, &mut stack, frame_idx, dst, a, b, "<", |o| {
+                cmp(frames, stack, frame_idx, dst, a, b, "<", |o| {
                     o.is_lt()
                 })?;
                 frames[frame_idx].pc += 1;
             }
             Instr::Gt { dst, a, b } => {
-                cmp(&mut frames, &mut stack, frame_idx, dst, a, b, ">", |o| {
+                cmp(frames, stack, frame_idx, dst, a, b, ">", |o| {
                     o.is_gt()
                 })?;
                 frames[frame_idx].pc += 1;
             }
             Instr::Le { dst, a, b } => {
-                cmp(&mut frames, &mut stack, frame_idx, dst, a, b, "<=", |o| {
+                cmp(frames, stack, frame_idx, dst, a, b, "<=", |o| {
                     o.is_le()
                 })?;
                 frames[frame_idx].pc += 1;
             }
             Instr::Ge { dst, a, b } => {
-                cmp(&mut frames, &mut stack, frame_idx, dst, a, b, ">=", |o| {
+                cmp(frames, stack, frame_idx, dst, a, b, ">=", |o| {
                     o.is_ge()
                 })?;
                 frames[frame_idx].pc += 1;
@@ -223,7 +257,7 @@ pub fn run_program(program: &Program) -> Result<BslValue, RtError> {
                 let callee_chunk = &program.chunks[func as usize];
                 let call_start = stack.len();
                 let own_base = stack.len();
-                push_own_registers(&mut stack, callee_chunk);
+                push_own_registers(stack, callee_chunk);
 
                 frames.push(Frame {
                     func_id: func as usize,
@@ -242,10 +276,10 @@ pub fn run_program(program: &Program) -> Result<BslValue, RtError> {
                     }
                     None => BslValue::Undefined,
                 };
-                match do_return_with_value(&mut frames, &mut stack, value) {
-                    Done(v) => return Ok(v),
-                    Continuing => continue,
-                }
+                return Ok(match do_return_with_value(frames, stack, value) {
+                    Done(v) => Step::Done(v),
+                    Continuing => Step::Continue,
+                });
             }
             Instr::GetIndex { dst, obj, idx } => {
                 let ov = stack[frames[frame_idx].reg_index(obj)].clone();
@@ -309,8 +343,18 @@ pub fn run_program(program: &Program) -> Result<BslValue, RtError> {
                 stack[d] = BslValue::Number(bsl_number::BslNumber::from_i64(len as i64));
                 frames[frame_idx].pc += 1;
             }
+            Instr::Raise { src } => {
+                let value = match src {
+                    Some(r) => stack[frames[frame_idx].reg_index(r)].clone(),
+                    // Голая форма: повторно бросаем то, что сейчас поймано
+                    // (или Неопределено, если бросить нечего — например,
+                    // `ВызватьИсключение;` вне `Исключение`).
+                    None => current_exception.clone().unwrap_or(BslValue::Undefined),
+                };
+                return Err(RtError::Raised(value));
+            }
         }
-    }
+    Ok(Step::Continue)
 }
 
 /// Размерность в `Новый Массив(d1, d2, ...)` обязана быть целым
@@ -377,6 +421,74 @@ fn do_return_with_value(
             stack[dst] = value;
             Continuing
         }
+    }
+}
+
+/// Ищет защищённый диапазон, содержащий `pc`, в данном чанке. При
+/// нескольких вложенных диапазонах (`Попытка` внутри `Попытка`) выбирает
+/// самый узкий — самый внутренний `Try` должен ловить раньше внешнего.
+fn find_handler(chunk: &bsl_bytecode::Chunk, pc: usize) -> Option<usize> {
+    chunk
+        .exception_ranges
+        .iter()
+        .filter(|r| pc >= r.start_pc && pc < r.end_pc)
+        .min_by_key(|r| r.end_pc - r.start_pc)
+        .map(|r| r.handler_pc)
+}
+
+/// Разматывает кадры в поисках обработчика для только что брошенной ошибки.
+/// Возвращает `true`, если нашли (кадры/pc уже поправлены — можно продолжать
+/// цикл `run_program`), `false` — если исключение долетело до самого низа
+/// стека кадров, не будучи пойманным нигде.
+///
+/// Кадр, где ошибка ПРОИЗОШЛА, проверяется по своему текущему `pc` (он ещё
+/// не продвинут — инструкция вернула `Err` раньше, чем дошла до
+/// инкремента). Любой кадр ВЫШЕ по стеку (куда мы попадаем, откатываясь
+/// из-за того, что внутренний вызов не поймал исключение сам) проверяется
+/// по `pc - 1` — позиции его собственной инструкции `Call`, а не следующей
+/// за ней (которая уже была продвинута в момент самого вызова).
+fn unwind_to_handler(
+    frames: &mut Vec<Frame>,
+    stack: &mut Vec<BslValue>,
+    program: &Program,
+    err: &RtError,
+    current_exception: &mut Option<BslValue>,
+) -> bool {
+    let mut first = true;
+    loop {
+        let frame_idx = frames.len() - 1;
+        let chunk = &program.chunks[frames[frame_idx].func_id];
+        let check_pc = if first {
+            frames[frame_idx].pc
+        } else {
+            frames[frame_idx].pc - 1
+        };
+        first = false;
+
+        if let Some(handler_pc) = find_handler(chunk, check_pc) {
+            *current_exception = Some(err_to_value(err));
+            frames[frame_idx].pc = handler_pc;
+            return true;
+        }
+
+        if frames.len() == 1 {
+            return false;
+        }
+        let frame = frames.pop().unwrap();
+        stack.truncate(frame.call_start);
+    }
+}
+
+/// Значение, которое видит `Исключение`-блок при повторном броске
+/// (`ВызватьИсключение;` без выражения). Для `ВызватьИсключение <знач>;` это
+/// само `<знач>`; для внутренних ошибок VM (деление на ноль, обращение к
+/// несуществующему полю, ...) — их текстовое описание, потому что
+/// полноценного объекта информации об ошибке (`ИнформацияОбОшибке()`) пока
+/// нет, это отдельная задача поверх механизма builtin-функций.
+fn err_to_value(err: &RtError) -> BslValue {
+    match err {
+        RtError::Raised(v) => v.clone(),
+        other => BslValue::Str(std::rc::Rc::from(other.to_string().as_str())),
     }
 }
 
@@ -709,5 +821,109 @@ mod tests {
         assert_eq!(v.to_string(), "Массив");
         let v = run_src("Возврат Новый Структура();");
         assert_eq!(v.to_string(), "Структура");
+    }
+
+    #[test]
+    fn try_except_catches_internal_runtime_error() {
+        let v = run_src(
+            "x = 0;\n\
+             Попытка\n\
+             x = 1 / 0;\n\
+             Исключение\n\
+             x = 99;\n\
+             КонецПопытки\n\
+             Возврат x;",
+        );
+        assert_eq!(v, num("99"));
+    }
+
+    #[test]
+    fn code_after_try_runs_normally_when_nothing_is_raised() {
+        let v = run_src(
+            "x = 0;\n\
+             Попытка\n\
+             x = 1;\n\
+             Исключение\n\
+             x = 99;\n\
+             КонецПопытки\n\
+             Возврат x;",
+        );
+        assert_eq!(v, num("1"));
+    }
+
+    #[test]
+    fn raise_with_value_is_caught_and_carries_the_value() {
+        let v = run_src(
+            "Попытка\n\
+             ВызватьИсключение \"беда\";\n\
+             Исключение\n\
+             Возврат 1;\n\
+             КонецПопытки\n\
+             Возврат 0;",
+        );
+        assert_eq!(v, num("1"));
+    }
+
+    #[test]
+    fn exception_raised_inside_a_called_function_is_caught_by_callers_try() {
+        // Попытка оборачивает ВЫЗОВ, а не сам код исключения — исключение
+        // должно долететь через границу кадра и быть пойманным снаружи.
+        let v = run_src(
+            "Функция Взрыв()\n\
+             Возврат 1 / 0;\n\
+             КонецФункции\n\
+             x = 0;\n\
+             Попытка\n\
+             x = Взрыв();\n\
+             Исключение\n\
+             x = 42;\n\
+             КонецПопытки\n\
+             Возврат x;",
+        );
+        assert_eq!(v, num("42"));
+    }
+
+    #[test]
+    fn uncaught_exception_outside_any_try_propagates_as_an_error() {
+        let err = run_src_err("x = 1 / 0;");
+        assert!(matches!(err, RtError::Num(bsl_number::NumError::DivideByZero)));
+    }
+
+    #[test]
+    fn bare_reraise_inside_except_rethrows_caught_value() {
+        // Внешняя Попытка должна поймать то же самое исключение, повторно
+        // брошенное из внутреннего Исключение через голый ВызватьИсключение.
+        let v = run_src(
+            "x = 0;\n\
+             Попытка\n\
+             Попытка\n\
+             ВызватьИсключение \"внутренняя\";\n\
+             Исключение\n\
+             ВызватьИсключение;\n\
+             КонецПопытки\n\
+             Исключение\n\
+             x = 7;\n\
+             КонецПопытки\n\
+             Возврат x;",
+        );
+        assert_eq!(v, num("7"));
+    }
+
+    #[test]
+    fn nested_try_inner_handler_wins_over_outer() {
+        let v = run_src(
+            "x = 0;\n\
+             Попытка\n\
+             Попытка\n\
+             x = 1 / 0;\n\
+             Исключение\n\
+             x = 1;\n\
+             КонецПопытки\n\
+             Исключение\n\
+             x = 2;\n\
+             КонецПопытки\n\
+             Возврат x;",
+        );
+        assert_eq!(v, num("1"));
     }
 }

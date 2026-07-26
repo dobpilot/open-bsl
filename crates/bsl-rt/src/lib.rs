@@ -51,6 +51,8 @@ pub enum RtError {
     NotAnObject,
     /// Обращение к полю, которого нет в форме структуры.
     UnknownField(NameId),
+    /// `ВызватьИсключение <значение>;` — значение, с которым бросили.
+    Raised(BslValue),
 }
 
 impl From<NumError> for RtError {
@@ -73,6 +75,7 @@ impl fmt::Display for RtError {
             RtError::BadIndex => write!(f, "индекс должен быть целым неотрицательным числом"),
             RtError::NotAnObject => write!(f, "значение не поддерживает доступ к полям"),
             RtError::UnknownField(_) => write!(f, "поле не найдено в структуре"),
+            RtError::Raised(v) => write!(f, "{v}"),
         }
     }
 }
