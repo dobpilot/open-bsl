@@ -246,7 +246,7 @@ impl<'a> Compiler<'a> {
                 self.free_temp(1);
             }
             RExpr::Str(s) => {
-                let k = self.add_const(BslValue::Str(std::rc::Rc::from(s.as_str())))?;
+                let k = self.add_const(BslValue::Str(bsl_rt::BslString::from_str(s)))?;
                 self.emit(Instr::LoadConst { dst, k });
             }
             RExpr::Index { obj, index } => {

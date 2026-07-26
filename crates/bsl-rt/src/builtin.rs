@@ -31,6 +31,21 @@ pub enum BuiltinFn {
     Format,
     /// `Число(строка)` — обратный разбор форматированной строки в число.
     ToNumber,
+
+    /// `СтрДлина`/`StrLen` — длина в код-юнитах UTF-16, не в символах.
+    StrLen,
+    /// `Лев`/`Left(строка, длина)`.
+    Left,
+    /// `Прав`/`Right(строка, длина)`.
+    Right,
+    /// `Сред`/`Mid(строка, начало, длина)` — пока только с тремя
+    /// аргументами (без опускания длины до конца строки): необязательные
+    /// аргументы появятся вместе со значениями по умолчанию в вызовах.
+    Mid,
+    Upper,
+    Lower,
+    /// `СокрЛП`/`TrimAll` — обрезка пробелов с обеих сторон.
+    TrimAll,
 }
 
 impl BuiltinFn {
@@ -51,13 +66,21 @@ impl BuiltinFn {
             "STRING" | "СТРОКА" => BuiltinFn::ToString,
             "FORMAT" | "ФОРМАТ" => BuiltinFn::Format,
             "NUMBER" | "ЧИСЛО" => BuiltinFn::ToNumber,
+            "STRLEN" | "СТРДЛИНА" => BuiltinFn::StrLen,
+            "LEFT" | "ЛЕВ" => BuiltinFn::Left,
+            "RIGHT" | "ПРАВ" => BuiltinFn::Right,
+            "MID" | "СРЕД" => BuiltinFn::Mid,
+            "UPPER" | "ВРЕГ" => BuiltinFn::Upper,
+            "LOWER" | "НРЕГ" => BuiltinFn::Lower,
+            "TRIMALL" | "СОКРЛП" => BuiltinFn::TrimAll,
             _ => return None,
         })
     }
 
     pub fn arity(self) -> usize {
         match self {
-            BuiltinFn::Pow | BuiltinFn::Format => 2,
+            BuiltinFn::Pow | BuiltinFn::Format | BuiltinFn::Left | BuiltinFn::Right => 2,
+            BuiltinFn::Mid => 3,
             _ => 1,
         }
     }
@@ -103,6 +126,15 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
                  у которого есть доступ к bsl-format — сюда попадать не должны"
             )
         }
+        BuiltinFn::StrLen => Ok(BslValue::Number(bsl_number::BslNumber::from_i64(
+            args[0].str_len()? as i64,
+        ))),
+        BuiltinFn::Left => args[0].str_left(&args[1]),
+        BuiltinFn::Right => args[0].str_right(&args[1]),
+        BuiltinFn::Mid => args[0].str_mid(&args[1], &args[2]),
+        BuiltinFn::Upper => args[0].str_upper(),
+        BuiltinFn::Lower => args[0].str_lower(),
+        BuiltinFn::TrimAll => args[0].str_trim_all(),
     }
 }
 

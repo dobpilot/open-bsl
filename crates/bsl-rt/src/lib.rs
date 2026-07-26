@@ -1,8 +1,5 @@
 //! Рантайм-слой: значения, арифметика/сравнение, коллекции (`Массив`,
-//! `Структура`). Даты и полноценные UTF-16 строки (со всеми операциями из
-//! брифа — `СтрДлина`, индексация по кодовым единицам, интернирование) сюда
-//! ещё не входят: `Str` здесь — минимальный носитель для строкового
-//! литерала-конструктора `Новый Структура("x,y,z", ...)`, не более того.
+//! `Структура`), строки UTF-16 (`Str`/`BslString`). Даты сюда ещё не входят.
 //! `BslValue` растёт по мере готовности остальных слоёв, а не заранее под
 //! все типы из брифа.
 
@@ -10,6 +7,7 @@ mod builtin;
 mod interner;
 mod object;
 mod shape;
+mod string;
 
 use std::cmp::Ordering;
 use std::fmt;
@@ -21,6 +19,7 @@ pub use builtin::{call_builtin_fn, call_builtin_method, BuiltinFn, BuiltinMethod
 pub use interner::{NameId, NameInterner};
 pub use object::{BslObject, StructureData};
 pub use shape::{Shape, ShapeTable};
+pub use string::BslString;
 
 #[derive(Debug, Clone)]
 pub enum BslValue {
@@ -28,7 +27,7 @@ pub enum BslValue {
     Null,
     Boolean(bool),
     Number(BslNumber),
-    Str(Rc<str>),
+    Str(BslString),
     Object(Rc<BslObject>),
 }
 
@@ -121,7 +120,14 @@ impl BslValue {
         }
     }
 
+    /// `+` между двумя строками — конкатенация (реальная 1С считает это
+    /// перегрузкой того же оператора, не отдельной функцией). Любая другая
+    /// комбинация типов идёт по числовому пути и получает его же ошибку
+    /// типа, если не подходит.
     pub fn add(&self, other: &Self) -> RtResult<Self> {
+        if let (BslValue::Str(a), BslValue::Str(b)) = (self, other) {
+            return Ok(BslValue::Str(a.concat(b)));
+        }
         Ok(BslValue::Number(
             self.as_number("+")?.add(other.as_number("+")?)?,
         ))
@@ -230,14 +236,67 @@ impl BslValue {
         self == other
     }
 
+    /// Сравнение строк — упорядочивание код-юнитов UTF-16, без учёта
+    /// локали (настоящая коллация для `Сортировать` в `ТаблицаЗначений` —
+    /// отдельная, ещё не сделанная задача).
     pub fn compare(&self, other: &Self, op: &'static str) -> RtResult<Ordering> {
         match (self, other) {
             (BslValue::Number(a), BslValue::Number(b)) => Ok(a.cmp(b)),
+            (BslValue::Str(a), BslValue::Str(b)) => Ok(a.cmp(b)),
             _ => Err(RtError::TypeError {
-                expected: "Число",
+                expected: "Число или Строка",
                 op,
             }),
         }
+    }
+
+    fn as_str(&self, op: &'static str) -> RtResult<&BslString> {
+        match self {
+            BslValue::Str(s) => Ok(s),
+            _ => Err(RtError::TypeError {
+                expected: "Строка",
+                op,
+            }),
+        }
+    }
+
+    fn as_usize(&self, op: &'static str) -> RtResult<usize> {
+        let n = self.as_number(op)?;
+        let i = n.to_i64_exact().ok_or(RtError::BadIndex)?;
+        usize::try_from(i).map_err(|_| RtError::BadIndex)
+    }
+
+    // --- Строки ---------------------------------------------------------
+
+    pub fn str_len(&self) -> RtResult<usize> {
+        Ok(self.as_str("СтрДлина")?.len_utf16())
+    }
+
+    pub fn str_left(&self, len: &Self) -> RtResult<Self> {
+        Ok(BslValue::Str(self.as_str("Лев")?.left(len.as_usize("Лев")?)))
+    }
+
+    pub fn str_right(&self, len: &Self) -> RtResult<Self> {
+        Ok(BslValue::Str(self.as_str("Прав")?.right(len.as_usize("Прав")?)))
+    }
+
+    pub fn str_mid(&self, start: &Self, len: &Self) -> RtResult<Self> {
+        let s = self.as_str("Сред")?;
+        let start = start.as_usize("Сред")?;
+        let len = len.as_usize("Сред")?;
+        Ok(BslValue::Str(s.substring(start, len)))
+    }
+
+    pub fn str_upper(&self) -> RtResult<Self> {
+        Ok(BslValue::Str(self.as_str("ВРег")?.to_uppercase()))
+    }
+
+    pub fn str_lower(&self) -> RtResult<Self> {
+        Ok(BslValue::Str(self.as_str("НРег")?.to_lowercase()))
+    }
+
+    pub fn str_trim_all(&self) -> RtResult<Self> {
+        Ok(BslValue::Str(self.as_str("СокрЛП")?.trim()))
     }
 
     // --- Коллекции ----------------------------------------------------

@@ -510,7 +510,7 @@ fn unwind_to_handler(
 fn err_to_value(err: &RtError) -> BslValue {
     match err {
         RtError::Raised(v) => v.clone(),
-        other => BslValue::Str(std::rc::Rc::from(other.to_string().as_str())),
+        other => BslValue::Str(bsl_rt::BslString::from_str(&other.to_string())),
     }
 }
 
@@ -530,7 +530,7 @@ fn call_builtin_with_format(
         }
         BuiltinFn::ToString => {
             let s = bsl_format::format_value(&args[0], None);
-            Ok(BslValue::Str(std::rc::Rc::from(s.as_str())))
+            Ok(BslValue::Str(bsl_rt::BslString::from_str(&s)))
         }
         BuiltinFn::Format => {
             let spec = match &args[1] {
@@ -543,7 +543,7 @@ fn call_builtin_with_format(
                 }
             };
             let s = bsl_format::format_value(&args[0], Some(&spec));
-            Ok(BslValue::Str(std::rc::Rc::from(s.as_str())))
+            Ok(BslValue::Str(bsl_rt::BslString::from_str(&s)))
         }
         BuiltinFn::ToNumber => {
             let s = match &args[0] {
@@ -555,7 +555,7 @@ fn call_builtin_with_format(
                     })
                 }
             };
-            let n = bsl_format::parse_number(s, &bsl_format::NumberFormat::default())?;
+            let n = bsl_format::parse_number(&s.to_string(), &bsl_format::NumberFormat::default())?;
             Ok(BslValue::Number(n))
         }
         other => bsl_rt::call_builtin_fn(other, args),
@@ -1078,5 +1078,54 @@ mod tests {
         assert_eq!(str_val(&v), "Да");
         let v = run_src("Возврат Строка(Неопределено);");
         assert_eq!(str_val(&v), "");
+    }
+
+    #[test]
+    fn string_concatenation_via_plus() {
+        let v = run_src(r#"Возврат "Привет, " + "мир!";"#);
+        assert_eq!(str_val(&v), "Привет, мир!");
+    }
+
+    #[test]
+    fn strdlina_counts_utf16_code_units_including_surrogate_pairs() {
+        let v = run_src(r#"Возврат СтрДлина("привет");"#);
+        assert_eq!(v, num("6"));
+        // Эмодзи вне BMP — суррогатная пара, 2 код-юнита UTF-16.
+        let v = run_src("Возврат СтрДлина(\"a\u{1F600}b\");");
+        assert_eq!(v, num("4"));
+    }
+
+    #[test]
+    fn left_right_mid_builtins() {
+        let v = run_src(r#"Возврат Лев("Привет", 3);"#);
+        assert_eq!(str_val(&v), "При");
+        let v = run_src(r#"Возврат Прав("Привет", 3);"#);
+        assert_eq!(str_val(&v), "вет");
+        let v = run_src(r#"Возврат Сред("Привет", 2, 3);"#);
+        assert_eq!(str_val(&v), "рив");
+    }
+
+    #[test]
+    fn upper_lower_trimall_builtins() {
+        let v = run_src(r#"Возврат ВРег("привет");"#);
+        assert_eq!(str_val(&v), "ПРИВЕТ");
+        let v = run_src(r#"Возврат НРег("ПРИВЕТ");"#);
+        assert_eq!(str_val(&v), "привет");
+        let v = run_src("Возврат СокрЛП(\"  привет  \");");
+        assert_eq!(str_val(&v), "привет");
+    }
+
+    #[test]
+    fn string_comparison_is_lexicographic() {
+        let v = run_src(r#"Возврат "а" < "б";"#);
+        assert_eq!(v, BslValue::Boolean(true));
+        let v = run_src(r#"Возврат "яблоко" = "яблоко";"#);
+        assert_eq!(v, BslValue::Boolean(true));
+    }
+
+    #[test]
+    fn adding_number_and_string_is_a_type_error() {
+        let err = run_src_err(r#"Возврат 1 + "a";"#);
+        assert!(matches!(err, RtError::TypeError { .. }));
     }
 }
