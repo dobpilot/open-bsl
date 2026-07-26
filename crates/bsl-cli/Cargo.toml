@@ -1,0 +1,9 @@
+[package]
+name = "bsl-cli"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+bsl-vm = { path = "../bsl-vm" }
+bsl-bytecode = { path = "../bsl-bytecode" }
+bsl-syntax = { path = "../bsl-syntax" }

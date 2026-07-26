@@ -1,0 +1,7 @@
+[package]
+name = "bsl-sema"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+bsl-syntax = { path = "../bsl-syntax" }

@@ -1,0 +1,9 @@
+[package]
+name = "bsl-bytecode"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+bsl-syntax = { path = "../bsl-syntax" }
+bsl-sema = { path = "../bsl-sema" }
+bsl-rt = { path = "../bsl-rt" }

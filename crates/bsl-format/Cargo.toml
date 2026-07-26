@@ -1,0 +1,8 @@
+[package]
+name = "bsl-format"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+bsl-number = { path = "../bsl-number" }
+bsl-rt = { path = "../bsl-rt" }

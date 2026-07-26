@@ -1,0 +1,9 @@
+[package]
+name = "bsl-vm"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+bsl-rt = { path = "../bsl-rt" }
+bsl-bytecode = { path = "../bsl-bytecode" }
+bsl-format = { path = "../bsl-format" }

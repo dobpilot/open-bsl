@@ -1,0 +1,16 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/bsl-number",
+    "crates/bsl-syntax",
+    "crates/bsl-sema",
+    "crates/bsl-rt",
+    "crates/bsl-format",
+    "crates/bsl-bytecode",
+    "crates/bsl-vm",
+    "crates/bsl-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
