@@ -235,13 +235,25 @@ impl<'a> Compiler<'a> {
                     count,
                 });
             }
-            RExpr::CallMethod { obj, method } => {
+            RExpr::CallMethod { obj, method, args } => {
                 let o = self.alloc_temp()?;
                 self.compile_expr(obj, o)?;
+                let base = self.next_reg;
+                for a in args {
+                    let r = self.alloc_temp()?;
+                    self.compile_expr(a, r)?;
+                }
+                let count: u8 = args
+                    .len()
+                    .try_into()
+                    .map_err(|_| CompileError::TooManyRegisters)?;
+                self.free_temp(count);
                 self.emit(Instr::CallMethod {
                     dst,
                     obj: o,
                     method: *method,
+                    base,
+                    count,
                 });
                 self.free_temp(1);
             }
@@ -305,6 +317,9 @@ impl<'a> Compiler<'a> {
                     base,
                     count,
                 });
+            }
+            RExpr::NewTable => {
+                self.emit(Instr::NewTable { dst });
             }
         }
         Ok(())

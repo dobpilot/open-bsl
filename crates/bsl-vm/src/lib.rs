@@ -298,7 +298,16 @@ fn step(
             }
             Instr::GetProp { dst, obj, name } => {
                 let ov = stack[frames[frame_idx].reg_index(obj)].clone();
-                let v = ov.get_field(name)?;
+                // Структура резолвится по NameId напрямую (быстрый путь);
+                // СтрокаТаблицыЗначений заводит колонки в рантайме и не
+                // могла быть интернирована на этапе компиляции — для неё
+                // (и только когда NameId-путь говорит "это не такой
+                // объект") VM резолвит имя в текст через Program::names и
+                // идёт по строковому пути.
+                let v = match ov.get_field(name) {
+                    Err(RtError::NotAnObject) => ov.get_field_by_name(&program.names[name.index()])?,
+                    other => other?,
+                };
                 let d = frames[frame_idx].reg_index(dst);
                 stack[d] = v;
                 frames[frame_idx].pc += 1;
@@ -306,7 +315,12 @@ fn step(
             Instr::SetProp { obj, name, src } => {
                 let ov = stack[frames[frame_idx].reg_index(obj)].clone();
                 let sv = stack[frames[frame_idx].reg_index(src)].clone();
-                ov.set_field(name, sv)?;
+                match ov.set_field(name, sv.clone()) {
+                    Err(RtError::NotAnObject) => {
+                        ov.set_field_by_name(&program.names[name.index()], sv)?
+                    }
+                    other => other?,
+                }
                 frames[frame_idx].pc += 1;
             }
             Instr::NewArray { dst, base, count } => {
@@ -334,6 +348,11 @@ fn step(
                 let v = BslValue::new_structure(shape_rc, slots);
                 let d = frames[frame_idx].reg_index(dst);
                 stack[d] = v;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::NewTable { dst } => {
+                let d = frames[frame_idx].reg_index(dst);
+                stack[d] = BslValue::new_table();
                 frames[frame_idx].pc += 1;
             }
             Instr::CollectionLen { dst, obj } => {
@@ -368,9 +387,19 @@ fn step(
                 stack[d] = v;
                 frames[frame_idx].pc += 1;
             }
-            Instr::CallMethod { dst, obj, method } => {
+            Instr::CallMethod {
+                dst,
+                obj,
+                method,
+                base,
+                count,
+            } => {
                 let ov = stack[frames[frame_idx].reg_index(obj)].clone();
-                let v = bsl_rt::call_builtin_method(method, &ov)?;
+                let mut args = Vec::with_capacity(count as usize);
+                for i in 0..count {
+                    args.push(stack[frames[frame_idx].reg_index(base + i)].clone());
+                }
+                let v = bsl_rt::call_builtin_method(method, &ov, &args)?;
                 let d = frames[frame_idx].reg_index(dst);
                 stack[d] = v;
                 frames[frame_idx].pc += 1;
@@ -1127,5 +1156,122 @@ mod tests {
     fn adding_number_and_string_is_a_type_error() {
         let err = run_src_err(r#"Возврат 1 + "a";"#);
         assert!(matches!(err, RtError::TypeError { .. }));
+    }
+
+    #[test]
+    fn array_add_delete_clear_methods() {
+        let v = run_src(
+            "a = Новый Массив();\n\
+             a.Добавить(1);\n\
+             a.Добавить(2);\n\
+             a.Добавить(3);\n\
+             a.Удалить(1);\n\
+             Возврат a.Количество();",
+        );
+        assert_eq!(v, num("2"));
+
+        let v = run_src(
+            "a = Новый Массив();\n\
+             a.Добавить(1);\n\
+             a.Очистить();\n\
+             Возврат a.Количество();",
+        );
+        assert_eq!(v, num("0"));
+    }
+
+    #[test]
+    fn value_table_add_column_add_row_and_field_access() {
+        let v = run_src(
+            "т = Новый ТаблицаЗначений();\n\
+             т.Колонки.Добавить(\"Имя\");\n\
+             т.Колонки.Добавить(\"Возраст\");\n\
+             строка = т.Добавить();\n\
+             строка.Имя = \"Аня\";\n\
+             строка.Возраст = 30;\n\
+             Возврат строка.Возраст;",
+        );
+        assert_eq!(v, num("30"));
+    }
+
+    #[test]
+    fn value_table_row_count_and_indexing() {
+        let v = run_src(
+            "т = Новый ТаблицаЗначений();\n\
+             т.Колонки.Добавить(\"x\");\n\
+             т.Добавить();\n\
+             т.Добавить();\n\
+             т.Добавить();\n\
+             т[1].x = 42;\n\
+             Возврат т.Количество() * 100 + т[1].x;",
+        );
+        assert_eq!(v, num("342"));
+    }
+
+    #[test]
+    fn value_table_for_each_over_rows() {
+        let v = run_src(
+            "т = Новый ТаблицаЗначений();\n\
+             т.Колонки.Добавить(\"x\");\n\
+             а = т.Добавить(); а.x = 1;\n\
+             б = т.Добавить(); б.x = 2;\n\
+             в = т.Добавить(); в.x = 3;\n\
+             сумма = 0;\n\
+             Для Каждого строка Из т Цикл\n\
+             сумма = сумма + строка.x;\n\
+             КонецЦикла\n\
+             Возврат сумма;",
+        );
+        assert_eq!(v, num("6"));
+    }
+
+    #[test]
+    fn value_table_row_identity_survives_deleting_a_different_row() {
+        // Строка держит row_id, не физическую позицию — удаление строки 0
+        // не должно сломать ранее полученную ссылку на строку 1.
+        let v = run_src(
+            "т = Новый ТаблицаЗначений();\n\
+             т.Колонки.Добавить(\"x\");\n\
+             а = т.Добавить(); а.x = 10;\n\
+             б = т.Добавить(); б.x = 20;\n\
+             т.Удалить(0);\n\
+             Возврат б.x;",
+        );
+        assert_eq!(v, num("20"));
+    }
+
+    #[test]
+    fn value_table_accessing_deleted_row_is_an_error() {
+        let err = run_src_err(
+            "т = Новый ТаблицаЗначений();\n\
+             т.Колонки.Добавить(\"x\");\n\
+             а = т.Добавить(); а.x = 10;\n\
+             т.Удалить(0);\n\
+             Возврат а.x;",
+        );
+        assert!(matches!(err, RtError::RowInvalidated));
+    }
+
+    #[test]
+    fn value_table_unknown_column_is_an_error() {
+        let err = run_src_err(
+            "т = Новый ТаблицаЗначений();\n\
+             т.Колонки.Добавить(\"x\");\n\
+             строка = т.Добавить();\n\
+             Возврат строка.y;",
+        );
+        assert!(matches!(err, RtError::UnknownColumn(_)));
+    }
+
+    #[test]
+    fn value_table_clear_resets_row_count() {
+        let v = run_src(
+            "т = Новый ТаблицаЗначений();\n\
+             т.Колонки.Добавить(\"x\");\n\
+             т.Добавить();\n\
+             т.Добавить();\n\
+             т.Очистить();\n\
+             Возврат т.Количество();",
+        );
+        assert_eq!(v, num("0"));
     }
 }

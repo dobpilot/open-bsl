@@ -8,6 +8,7 @@ mod interner;
 mod object;
 mod shape;
 mod string;
+mod table;
 
 use std::cmp::Ordering;
 use std::fmt;
@@ -20,6 +21,7 @@ pub use interner::{NameId, NameInterner};
 pub use object::{BslObject, StructureData};
 pub use shape::{Shape, ShapeTable};
 pub use string::BslString;
+pub use table::ValueTableData;
 
 #[derive(Debug, Clone)]
 pub enum BslValue {
@@ -54,6 +56,20 @@ pub enum RtError {
     UnknownField(NameId),
     /// `ВызватьИсключение <значение>;` — значение, с которым бросили.
     Raised(BslValue),
+    /// Обращение к `СтрокаТаблицы`, чья строка уже удалена (`row_id` не
+    /// резолвится в `id_to_pos`) — не тихое чтение чужих данных.
+    RowInvalidated,
+    /// Обращение к несуществующей колонке `ТаблицыЗначений`/`СтрокиТаблицы`.
+    UnknownColumn(String),
+    /// Метод объекта существует, но не для этого типа получателя, либо
+    /// вызван не с тем числом аргументов для этого типа (некоторые методы,
+    /// например `Добавить`, полиморфны: означают разное в зависимости от
+    /// типа получателя, и арность из-за этого проверяется в рантайме, не
+    /// на этапе резолвинга).
+    MethodNotApplicable {
+        method: &'static str,
+        receiver: &'static str,
+    },
 }
 
 impl From<NumError> for RtError {
@@ -77,6 +93,11 @@ impl fmt::Display for RtError {
             RtError::NotAnObject => write!(f, "значение не поддерживает доступ к полям"),
             RtError::UnknownField(_) => write!(f, "поле не найдено в структуре"),
             RtError::Raised(v) => write!(f, "{v}"),
+            RtError::RowInvalidated => write!(f, "строка таблицы значений больше не существует"),
+            RtError::UnknownColumn(name) => write!(f, "колонка «{name}» не найдена"),
+            RtError::MethodNotApplicable { method, receiver } => {
+                write!(f, "метод «{method}» не применим к «{receiver}»")
+            }
         }
     }
 }
@@ -96,6 +117,9 @@ impl BslValue {
             BslValue::Object(o) => match &**o {
                 BslObject::Array(_) => "Массив",
                 BslObject::Structure(_) => "Структура",
+                BslObject::ValueTable(_) => "ТаблицаЗначений",
+                BslObject::TableColumns(_) => "КоллекцияКолонокТаблицыЗначений",
+                BslObject::TableRow(_, _) => "СтрокаТаблицыЗначений",
             },
         }
     }
@@ -311,6 +335,10 @@ impl BslValue {
         ))))
     }
 
+    pub fn new_table() -> Self {
+        BslValue::Object(Rc::new(BslObject::ValueTable(ValueTableData::new())))
+    }
+
     /// Индекс должен быть целым неотрицательным числом — `1С` использует
     /// `Число` для индексов, отдельного целочисленного типа нет.
     fn index_as_usize(idx: &BslValue) -> RtResult<usize> {
@@ -329,7 +357,16 @@ impl BslValue {
                         .cloned()
                         .ok_or(RtError::IndexOutOfBounds { index: i as i64, len: v.len() })
                 }
-                BslObject::Structure(_) => Err(RtError::NotIndexable),
+                BslObject::ValueTable(data) => {
+                    let i = Self::index_as_usize(idx)?;
+                    let row_id = {
+                        let d = data.borrow();
+                        d.row_id_at(i)
+                            .ok_or(RtError::IndexOutOfBounds { index: i as i64, len: d.row_count() })?
+                    };
+                    Ok(BslValue::Object(Rc::new(BslObject::TableRow(data.clone(), row_id))))
+                }
+                _ => Err(RtError::NotIndexable),
             },
             _ => Err(RtError::NotIndexable),
         }
@@ -348,19 +385,22 @@ impl BslValue {
                     *slot = val;
                     Ok(())
                 }
-                BslObject::Structure(_) => Err(RtError::NotIndexable),
+                _ => Err(RtError::NotIndexable),
             },
             _ => Err(RtError::NotIndexable),
         }
     }
 
     /// Длина коллекции — используется и `Для Каждого` (компилируется в
-    /// индексный цикл поверх этой длины), и будущим `Количество()`.
+    /// индексный цикл поверх этой длины), и `Количество()`.
     pub fn collection_len(&self) -> RtResult<usize> {
         match self {
             BslValue::Object(o) => match &**o {
                 BslObject::Array(v) => Ok(v.borrow().len()),
                 BslObject::Structure(s) => Ok(s.borrow().slots.len()),
+                BslObject::ValueTable(data) => Ok(data.borrow().row_count()),
+                BslObject::TableColumns(data) => Ok(data.borrow().column_names.len()),
+                BslObject::TableRow(..) => Err(RtError::NotIndexable),
             },
             _ => Err(RtError::NotIndexable),
         }
@@ -376,7 +416,7 @@ impl BslValue {
                         None => Err(RtError::UnknownField(name)),
                     }
                 }
-                BslObject::Array(_) => Err(RtError::NotAnObject),
+                _ => Err(RtError::NotAnObject),
             },
             _ => Err(RtError::NotAnObject),
         }
@@ -395,9 +435,184 @@ impl BslValue {
                         None => Err(RtError::UnknownField(name)),
                     }
                 }
-                BslObject::Array(_) => Err(RtError::NotAnObject),
+                _ => Err(RtError::NotAnObject),
             },
             _ => Err(RtError::NotAnObject),
+        }
+    }
+
+    /// Резолвинг поля/псевдо-свойства по ИМЕНИ (не `NameId`) — нужен для
+    /// объектов, чьи "поля" известны только в рантайме: колонки
+    /// `СтрокиТаблицыЗначений` заводятся через `.Колонки.Добавить(имя)`, а
+    /// не как статичная форма структуры, поэтому по ним нельзя
+    /// интернировать `NameId` на этапе компиляции. `Структура` в эту
+    /// функцию не заходит — у неё есть более быстрый путь через
+    /// `get_field`/`NameId`, здесь она просто не находится.
+    pub fn get_field_by_name(&self, name: &str) -> RtResult<BslValue> {
+        match self {
+            BslValue::Object(o) => match &**o {
+                BslObject::ValueTable(data) => {
+                    if name.eq_ignore_ascii_case("Колонки") || name.eq_ignore_ascii_case("Columns")
+                    {
+                        Ok(BslValue::Object(Rc::new(BslObject::TableColumns(data.clone()))))
+                    } else {
+                        Err(RtError::UnknownColumn(name.to_string()))
+                    }
+                }
+                BslObject::TableRow(data, row_id) => {
+                    let data = data.borrow();
+                    let col = data
+                        .column_index(name)
+                        .ok_or_else(|| RtError::UnknownColumn(name.to_string()))?;
+                    data.get_cell(*row_id, col).ok_or(RtError::RowInvalidated)
+                }
+                _ => Err(RtError::NotAnObject),
+            },
+            _ => Err(RtError::NotAnObject),
+        }
+    }
+
+    pub fn set_field_by_name(&self, name: &str, val: BslValue) -> RtResult<()> {
+        match self {
+            BslValue::Object(o) => match &**o {
+                BslObject::TableRow(data, row_id) => {
+                    let mut data = data.borrow_mut();
+                    let col = data
+                        .column_index(name)
+                        .ok_or_else(|| RtError::UnknownColumn(name.to_string()))?;
+                    data.set_cell(*row_id, col, val).ok_or(RtError::RowInvalidated)
+                }
+                _ => Err(RtError::NotAnObject),
+            },
+            _ => Err(RtError::NotAnObject),
+        }
+    }
+
+    // --- Методы, полиморфные по типу получателя --------------------------
+    //
+    // `Добавить`/`Удалить`/`Очистить` в реальной 1С означают разное в
+    // зависимости от типа получателя (элемент массива, строка таблицы,
+    // колонка, ...) — то же имя метода, разное поведение и разная арность.
+    // Резолвинг имени в `bsl-sema` не может знать заранее, каким объектом
+    // оказится `obj` в рантайме (BSL — динамически типизированный), поэтому
+    // диспетчеризация и проверка арности — здесь, в рантайме, а не на этапе
+    // компиляции.
+
+    /// `Массив.Добавить(значение)`.
+    pub fn push_element(&self, val: BslValue) -> RtResult<()> {
+        match self {
+            BslValue::Object(o) => match &**o {
+                BslObject::Array(v) => {
+                    v.borrow_mut().push(val);
+                    Ok(())
+                }
+                _ => Err(RtError::MethodNotApplicable {
+                    method: "Добавить",
+                    receiver: self.type_name(),
+                }),
+            },
+            _ => Err(RtError::MethodNotApplicable {
+                method: "Добавить",
+                receiver: self.type_name(),
+            }),
+        }
+    }
+
+    /// `ТаблицаЗначений.Добавить()` -> новая строка.
+    pub fn table_add_row(&self) -> RtResult<BslValue> {
+        match self {
+            BslValue::Object(o) => match &**o {
+                BslObject::ValueTable(data) => {
+                    let row_id = data.borrow_mut().add_row();
+                    Ok(BslValue::Object(Rc::new(BslObject::TableRow(data.clone(), row_id))))
+                }
+                _ => Err(RtError::MethodNotApplicable {
+                    method: "Добавить",
+                    receiver: self.type_name(),
+                }),
+            },
+            _ => Err(RtError::MethodNotApplicable {
+                method: "Добавить",
+                receiver: self.type_name(),
+            }),
+        }
+    }
+
+    /// `Таблица.Колонки.Добавить(имя)`.
+    pub fn table_add_column(&self, name: &BslValue) -> RtResult<()> {
+        match self {
+            BslValue::Object(o) => match &**o {
+                BslObject::TableColumns(data) => {
+                    let name = name.as_str("Колонки.Добавить")?.to_string();
+                    data.borrow_mut().add_column(&name);
+                    Ok(())
+                }
+                _ => Err(RtError::MethodNotApplicable {
+                    method: "Добавить",
+                    receiver: self.type_name(),
+                }),
+            },
+            _ => Err(RtError::MethodNotApplicable {
+                method: "Добавить",
+                receiver: self.type_name(),
+            }),
+        }
+    }
+
+    /// `Массив.Удалить(индекс)` / `ТаблицаЗначений.Удалить(индекс)`.
+    pub fn delete_element(&self, idx: &BslValue) -> RtResult<()> {
+        match self {
+            BslValue::Object(o) => match &**o {
+                BslObject::Array(v) => {
+                    let mut v = v.borrow_mut();
+                    let i = Self::index_as_usize(idx)?;
+                    let len = v.len();
+                    if i >= len {
+                        return Err(RtError::IndexOutOfBounds { index: i as i64, len });
+                    }
+                    v.remove(i);
+                    Ok(())
+                }
+                BslObject::ValueTable(data) => {
+                    let mut d = data.borrow_mut();
+                    let i = Self::index_as_usize(idx)?;
+                    let len = d.row_count();
+                    d.delete_row_at(i)
+                        .ok_or(RtError::IndexOutOfBounds { index: i as i64, len })
+                }
+                _ => Err(RtError::MethodNotApplicable {
+                    method: "Удалить",
+                    receiver: self.type_name(),
+                }),
+            },
+            _ => Err(RtError::MethodNotApplicable {
+                method: "Удалить",
+                receiver: self.type_name(),
+            }),
+        }
+    }
+
+    /// `Массив.Очистить()` / `ТаблицаЗначений.Очистить()`.
+    pub fn clear_collection(&self) -> RtResult<()> {
+        match self {
+            BslValue::Object(o) => match &**o {
+                BslObject::Array(v) => {
+                    v.borrow_mut().clear();
+                    Ok(())
+                }
+                BslObject::ValueTable(data) => {
+                    data.borrow_mut().clear();
+                    Ok(())
+                }
+                _ => Err(RtError::MethodNotApplicable {
+                    method: "Очистить",
+                    receiver: self.type_name(),
+                }),
+            },
+            _ => Err(RtError::MethodNotApplicable {
+                method: "Очистить",
+                receiver: self.type_name(),
+            }),
         }
     }
 }
@@ -431,6 +646,9 @@ impl fmt::Display for BslValue {
             BslValue::Object(o) => match &**o {
                 BslObject::Array(_) => write!(f, "Массив"),
                 BslObject::Structure(_) => write!(f, "Структура"),
+                BslObject::ValueTable(_) => write!(f, "ТаблицаЗначений"),
+                BslObject::TableColumns(_) => write!(f, "КоллекцияКолонокТаблицыЗначений"),
+                BslObject::TableRow(_, _) => write!(f, "СтрокаТаблицыЗначений"),
             },
         }
     }
@@ -560,7 +778,7 @@ mod tests {
     fn builtin_method_count_on_array() {
         assert_eq!(BuiltinMethod::lookup("count"), Some(BuiltinMethod::Count));
         let arr = BslValue::new_array(vec![num("1"), num("2"), num("3")]);
-        let v = call_builtin_method(BuiltinMethod::Count, &arr).unwrap();
+        let v = call_builtin_method(BuiltinMethod::Count, &arr, &[]).unwrap();
         assert_eq!(v, num("3"));
     }
 }

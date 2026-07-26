@@ -86,18 +86,31 @@ impl BuiltinFn {
     }
 }
 
-/// Методы объектов, вызываемые как `а.Метод()`. Пока только `Количество`
-/// для `Массив`/`Структура` — остальные (`Добавить`, `Вставить`, ...)
-/// приходят волнами, как и описано в брифе для `ТаблицаЗначений`.
+/// Методы объектов, вызываемые как `а.Метод(...)`. `Добавить`/`Удалить`/
+/// `Очистить` полиморфны по типу получателя в самой 1С (элемент массива,
+/// строка таблицы, колонка, ...) — здесь это один идентификатор на все
+/// смыслы, арность и поведение решает рантайм (см. `BslValue::push_element`
+/// и соседние методы), а не резолвинг в `bsl-sema`, который не может знать
+/// заранее, каким объектом окажется получатель.
+///
+/// Дальше идут волнами — `Найти`/`НайтиСтроки`/`Сортировать`/`Итог`,
+/// `Свернуть`/`Скопировать`/`Загрузить-ВыгрузитьКолонку`/`Сдвинуть`, как и
+/// описано в брифе — сюда пока не входят.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BuiltinMethod {
     Count,
+    Add,
+    Delete,
+    Clear,
 }
 
 impl BuiltinMethod {
     pub fn lookup(name: &str) -> Option<Self> {
         Some(match name.to_uppercase().as_str() {
             "COUNT" | "КОЛИЧЕСТВО" => BuiltinMethod::Count,
+            "ADD" | "ДОБАВИТЬ" => BuiltinMethod::Add,
+            "DELETE" | "УДАЛИТЬ" => BuiltinMethod::Delete,
+            "CLEAR" | "ОЧИСТИТЬ" => BuiltinMethod::Clear,
             _ => return None,
         })
     }
@@ -138,11 +151,38 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
     }
 }
 
-pub fn call_builtin_method(m: BuiltinMethod, obj: &BslValue) -> RtResult<BslValue> {
+/// Арность `Count`/`Delete`/`Clear` не зависит от получателя и уже
+/// проверена в `bsl-sema`; арность `Add` — зависит (0 для строки таблицы,
+/// 1 для элемента массива/колонки), поэтому здесь просто читаем
+/// `args.len()` и решаем сами, а не полагаемся на проверку выше по стеку.
+pub fn call_builtin_method(m: BuiltinMethod, obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
     match m {
         BuiltinMethod::Count => {
             let len = obj.collection_len()?;
             Ok(BslValue::Number(bsl_number::BslNumber::from_i64(len as i64)))
+        }
+        BuiltinMethod::Add => match args {
+            [] => obj.table_add_row(),
+            [v] => match obj.push_element(v.clone()) {
+                Ok(()) => Ok(BslValue::Undefined),
+                Err(crate::RtError::MethodNotApplicable { .. }) => {
+                    obj.table_add_column(v)?;
+                    Ok(BslValue::Undefined)
+                }
+                Err(e) => Err(e),
+            },
+            _ => Err(crate::RtError::MethodNotApplicable {
+                method: "Добавить",
+                receiver: obj.type_name(),
+            }),
+        },
+        BuiltinMethod::Delete => {
+            obj.delete_element(&args[0])?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::Clear => {
+            obj.clear_collection()?;
+            Ok(BslValue::Undefined)
         }
     }
 }

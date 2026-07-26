@@ -376,8 +376,18 @@ impl<'a> Resolver<'a> {
                 };
                 Ok(RExpr::NewStructure { keys, values })
             }
+            "ТАБЛИЦАЗНАЧЕНИЙ" | "VALUETABLE" => {
+                if !args.is_empty() {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый ТаблицаЗначений".to_string(),
+                        expected: 0,
+                        found: args.len(),
+                    });
+                }
+                Ok(RExpr::NewTable)
+            }
             _ => Err(SemaError::Unsupported(
-                "Новый поддержан только для Массив/Структура пока",
+                "Новый поддержан только для Массив/Структура/ТаблицаЗначений пока",
             )),
         }
     }
@@ -429,17 +439,32 @@ impl<'a> Resolver<'a> {
                 let method = bsl_rt::BuiltinMethod::lookup(name).ok_or(SemaError::Unsupported(
                     "этот метод объекта пока не поддержан",
                 ))?;
-                if !args.is_empty() {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: name.clone(),
-                        expected: 0,
-                        found: args.len(),
-                    });
+                // `Добавить` полиморфен по типу получателя (0 аргументов —
+                // новая строка таблицы, 1 — элемент массива/колонка), а тип
+                // получателя в динамическом BSL здесь ещё не известен:
+                // финальную проверку арности для него делает рантайм (см.
+                // `bsl_rt::call_builtin_method`). Для остальных методов
+                // арность фиксирована и проверяется сразу.
+                let expected: Option<usize> = match method {
+                    bsl_rt::BuiltinMethod::Count | bsl_rt::BuiltinMethod::Clear => Some(0),
+                    bsl_rt::BuiltinMethod::Delete => Some(1),
+                    bsl_rt::BuiltinMethod::Add => None,
+                };
+                if let Some(expected) = expected {
+                    if args.len() != expected {
+                        return Err(SemaError::ArgumentCountMismatch {
+                            name: name.clone(),
+                            expected,
+                            found: args.len(),
+                        });
+                    }
                 }
+                let rargs = self.resolve_required_args(args)?;
                 let obj = self.resolve_expr(obj)?;
                 Ok(RExpr::CallMethod {
                     obj: Box::new(obj),
                     method,
+                    args: rargs,
                 })
             }
             _ => Err(SemaError::Unsupported(
@@ -596,6 +621,7 @@ mod tests {
                 value: RExpr::CallMethod {
                     obj: Box::new(RExpr::Local(0)),
                     method: bsl_rt::BuiltinMethod::Count,
+                    args: vec![],
                 },
             }
         );

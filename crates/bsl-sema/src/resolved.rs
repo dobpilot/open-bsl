@@ -38,11 +38,14 @@ pub enum RExpr {
         builtin: BuiltinFn,
         args: Vec<RExpr>,
     },
-    /// `объект.Метод()` — сейчас только `Количество()`/`Count()` для
-    /// `Массив`/`Структура`; остальные методы приходят волнами позже.
+    /// `объект.Метод(args)`. Арность части методов (`Добавить`) зависит от
+    /// типа получателя, который в динамически типизированном BSL не
+    /// известен на этапе резолвинга — поэтому здесь `args` произвольной
+    /// длины, а не проверяется здесь же (см. `bsl_rt::call_builtin_method`).
     CallMethod {
         obj: Box<RExpr>,
         method: BuiltinMethod,
+        args: Vec<RExpr>,
     },
     Str(String),
     Index {
@@ -67,6 +70,9 @@ pub enum RExpr {
         keys: Vec<String>,
         values: Vec<RExpr>,
     },
+    /// `Новый ТаблицаЗначений()` — колонки заводятся отдельно, через
+    /// `.Колонки.Добавить(имя)` (см. `CallMethod`), не в конструкторе.
+    NewTable,
 }
 
 #[derive(Debug, Clone, PartialEq)]
