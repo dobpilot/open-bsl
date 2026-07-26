@@ -77,4 +77,14 @@ fn main() {
     // умножение) на нескольких шагах Advance.
     let nbody_src = include_str!("../tests/nbody_smoke.bsl");
     time_it("nbody (3 шага Advance)", nbody_src);
+
+    // 5. n-body, 200 шагов Advance — see tests/conformance/fixtures/
+    // n-body-perf.bsl для того, почему не брифовские 100000 (масштаб растёт
+    // быстрее квадратично; 1000 шагов уже падает через ~98с на MAX_SCALE).
+    // Только здесь, не в cargo test — растущий масштаб делает каждый шаг
+    // медленнее предыдущего, так что абсолютное время мало что говорит без
+    // сравнения с `nbody (3 шага Advance)` выше на той же машине.
+    let nbody_perf_src =
+        include_str!("../../../tests/conformance/fixtures/n-body-perf.bsl");
+    time_it("nbody (200 шагов Advance)", nbody_perf_src);
 }

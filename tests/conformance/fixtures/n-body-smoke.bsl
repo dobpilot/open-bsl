@@ -1,3 +1,12 @@
+// Ответвление n-body.bsl (задача 2, ревью) — быстрый дымовой вариант,
+// 3 итерации Advance вместо неисполнимых 50 000 000, той же формы, что и
+// crates/bsl-vm/tests/nbody_smoke.bsl (не его копия: тот файл возвращает
+// энергию из Возврат для проверки в Rust-тесте, а этот пишет её в stdout
+// через канонический Message(Формат(...)) — раннер сверяет именно stdout).
+//
+// НЕТ .expected по той же причине, что и у n-body-precision.bsl: нет
+// доступа к платформе для снятия эталонной энергии.
+
 Function getConst()
 	PI = 3.141592653589793;
 	SOLAR_MASS = 4 * PI * PI;
@@ -127,13 +136,13 @@ Function Main()
 	const = getConst();
 	bodies = getBodies(const);
 	OffsetMomentum(bodies,const);
-	Message(Energie(bodies));
+	Message(Формат(Energie(bodies), "ЧГ=0; ЧРД=."));
 
-	For i=1 To 50000000 Do
+	For i=1 To 3 Do
 		Advance(bodies,0.01);
 	EndDo;	
 
-	Message(Energie(bodies));
+	Message(Формат(Energie(bodies), "ЧГ=0; ЧРД=."));
 
 EndFunction
 

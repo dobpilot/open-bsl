@@ -1,5 +1,6 @@
 ---
 source: crates/bsl-syntax/tests/nbody_ast_snapshot.rs
+assertion_line: 17
 expression: program
 ---
 Program {
@@ -1769,12 +1770,26 @@ Program {
                                 Some(
                                     Call {
                                         callee: Ident(
-                                            "Energie",
+                                            "Формат",
                                         ),
                                         args: [
                                             Some(
-                                                Ident(
-                                                    "bodies",
+                                                Call {
+                                                    callee: Ident(
+                                                        "Energie",
+                                                    ),
+                                                    args: [
+                                                        Some(
+                                                            Ident(
+                                                                "bodies",
+                                                            ),
+                                                        ),
+                                                    ],
+                                                },
+                                            ),
+                                            Some(
+                                                Str(
+                                                    "ЧГ=0; ЧРД=.",
                                                 ),
                                             ),
                                         ],
@@ -1789,7 +1804,7 @@ Program {
                             "1",
                         ),
                         to: Number(
-                            "50000000",
+                            "100",
                         ),
                         body: [
                             ExprStmt(
@@ -1822,12 +1837,26 @@ Program {
                                 Some(
                                     Call {
                                         callee: Ident(
-                                            "Energie",
+                                            "Формат",
                                         ),
                                         args: [
                                             Some(
-                                                Ident(
-                                                    "bodies",
+                                                Call {
+                                                    callee: Ident(
+                                                        "Energie",
+                                                    ),
+                                                    args: [
+                                                        Some(
+                                                            Ident(
+                                                                "bodies",
+                                                            ),
+                                                        ),
+                                                    ],
+                                                },
+                                            ),
+                                            Some(
+                                                Str(
+                                                    "ЧГ=0; ЧРД=.",
                                                 ),
                                             ),
                                         ],

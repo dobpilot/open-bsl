@@ -15,7 +15,9 @@ fn tokenize(src: &str) -> Vec<TokenKind> {
 
 #[test]
 fn nbody_fixture_tokenizes_without_errors() {
-    let src = include_str!("../../../tests/conformance/fixtures/n-body.bsl");
+    // См. nbody_ast_snapshot.rs: n-body.bsl разрезан на три варианта задачей
+    // 2 ревью, n-body-precision.bsl несёт ту же грамматику.
+    let src = include_str!("../../../tests/conformance/fixtures/n-body-precision.bsl");
     let toks = tokenize(src);
     assert!(toks.len() > 500, "expected a substantial token stream, got {}", toks.len());
 
