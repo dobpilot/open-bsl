@@ -207,14 +207,6 @@ fn step(
                 binop(frames, stack, frame_idx, dst, a, b, BslValue::div)?;
                 frames[frame_idx].pc += 1;
             }
-            Instr::And { dst, a, b } => {
-                binop(frames, stack, frame_idx, dst, a, b, BslValue::and)?;
-                frames[frame_idx].pc += 1;
-            }
-            Instr::Or { dst, a, b } => {
-                binop(frames, stack, frame_idx, dst, a, b, BslValue::or)?;
-                frames[frame_idx].pc += 1;
-            }
             Instr::Neg { dst, src } => {
                 let s = frames[frame_idx].reg_index(src);
                 let v = stack[s].neg()?;
@@ -278,6 +270,14 @@ fn step(
                     frames[frame_idx].pc += 1;
                 } else {
                     frames[frame_idx].pc = target as usize;
+                }
+            }
+            Instr::JumpIfTrue { cond, target } => {
+                let c = frames[frame_idx].reg_index(cond);
+                if stack[c].as_condition()? {
+                    frames[frame_idx].pc = target as usize;
+                } else {
+                    frames[frame_idx].pc += 1;
                 }
             }
             Instr::Call {
@@ -941,6 +941,41 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn short_circuit_and_skips_right_operand_on_false() {
+        // Без ленивости `Неопределено.Свойство` бросил бы NotAnObject —
+        // здесь этого не должно случиться, левый операнд уже решил результат.
+        let v = run_src("Возврат Ложь И Неопределено.Свойство;");
+        assert_eq!(v, BslValue::Boolean(false));
+    }
+
+    #[test]
+    fn short_circuit_or_skips_right_operand_on_true() {
+        let v = run_src("Возврат Истина ИЛИ Неопределено.Свойство;");
+        assert_eq!(v, BslValue::Boolean(true));
+    }
+
+    #[test]
+    fn short_circuit_still_enforces_strict_boolean_on_evaluated_operands() {
+        // Левый операнд не решает результат -> правый вычисляется и обязан
+        // быть `Булево`, как и левый.
+        let err = run_src_err("Возврат Истина И 1;");
+        assert!(matches!(err, RtError::TypeError { expected: "Булево", .. }));
+
+        let err = run_src_err("Возврат Ложь ИЛИ 1;");
+        assert!(matches!(err, RtError::TypeError { expected: "Булево", .. }));
+    }
+
+    #[test]
+    fn short_circuit_chain_of_three_operands() {
+        // Цепочка `А И Б И В`: если А уже Ложь, ни Б, ни В вычисляться не
+        // должны.
+        let v = run_src(
+            "Возврат Ложь И Неопределено.Свойство И Неопределено.ДругоеСвойство;",
+        );
+        assert_eq!(v, BslValue::Boolean(false));
     }
 
     #[test]

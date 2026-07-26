@@ -244,24 +244,11 @@ impl BslValue {
         Ok(BslValue::Number(self.as_number("ATan")?.atan()?))
     }
 
-    /// `И`/`ИЛИ` в 1С НЕ короткозамкнутые: оба операнда всегда вычислены до
-    /// вызова этой функции (это делает вызывающий код в VM), здесь только
-    /// комбинирование уже готовых булевых значений. Важно: `a? && b?` в
-    /// Rust сам короткозамкнутый (`&&` не оценит правую часть, если левая
-    /// уже `false`) — это ровно то, чего мы хотим избежать, поэтому обе
-    /// стороны приводятся к `bool` до `&&`/`||`, отдельными выражениями.
-    pub fn and(&self, other: &Self) -> RtResult<Self> {
-        let a = self.as_bool("И")?;
-        let b = other.as_bool("И")?;
-        Ok(BslValue::Boolean(a && b))
-    }
-
-    pub fn or(&self, other: &Self) -> RtResult<Self> {
-        let a = self.as_bool("ИЛИ")?;
-        let b = other.as_bool("ИЛИ")?;
-        Ok(BslValue::Boolean(a || b))
-    }
-
+    /// `И`/`ИЛИ` в 1С короткозамкнутые, поэтому у `BslValue` больше нет
+    /// `and`/`or`: комбинирование живёт в потоке управления кодогена
+    /// (`Instr::JumpIfFalse`/`JumpIfTrue` в `bsl-bytecode::compiler`), а не
+    /// здесь, — правый операнд физически не вычисляется, если левый уже
+    /// решил результат.
     pub fn as_condition(&self) -> RtResult<bool> {
         self.as_bool("Условие")
     }
@@ -753,18 +740,6 @@ mod tests {
         // Если 1 Тогда — ошибка, не приведение.
         let err = num("1").as_condition().unwrap_err();
         assert!(matches!(err, RtError::TypeError { expected: "Булево", .. }));
-    }
-
-    #[test]
-    fn logical_ops_do_not_need_short_circuit_evaluation_here() {
-        assert_eq!(
-            BslValue::Boolean(true).and(&BslValue::Boolean(false)).unwrap(),
-            BslValue::Boolean(false)
-        );
-        assert_eq!(
-            BslValue::Boolean(false).or(&BslValue::Boolean(true)).unwrap(),
-            BslValue::Boolean(true)
-        );
     }
 
     #[test]

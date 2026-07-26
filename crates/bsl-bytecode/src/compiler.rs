@@ -206,6 +206,7 @@ impl<'a> Compiler<'a> {
         match &mut self.instrs[idx] {
             Instr::Jump { target: t } => *t = target,
             Instr::JumpIfFalse { target: t, .. } => *t = target,
+            Instr::JumpIfTrue { target: t, .. } => *t = target,
             other => unreachable!("patch_jump on non-jump instruction: {other:?}"),
         }
     }
@@ -247,6 +248,35 @@ impl<'a> Compiler<'a> {
                         self.emit(Instr::Not { dst, src: dst });
                     }
                 }
+            }
+            // `И`/`ИЛИ` короткозамкнутые в BSL: правый операнд не должен
+            // вычисляться, если результат уже решён левым (защитный идиом
+            // `ЗначениеЗаполнено(х) И х.Свойство = 1` иначе всегда падает).
+            // Оба операнда компилируются прямо в `dst`, а не во временные
+            // регистры: после первого `JumpIfFalse`/`JumpIfTrue` в `dst`
+            // уже лежит финальный результат, если он решился на левом.
+            //
+            // Второй `JumpIfFalse`/`JumpIfTrue` (тоже прыгающий в `end`)
+            // существует не ради ветвления — обе его ветки сходятся в одной
+            // точке — а ради строгой проверки булевости правого операнда:
+            // без него `Ложь ИЛИ 1` тихо вернул бы `1` вместо ошибки типа.
+            RExpr::Binary { op: BinaryOp::And, lhs, rhs } => {
+                self.compile_expr(lhs, dst)?;
+                let short = self.emit(Instr::JumpIfFalse { cond: dst, target: 0 });
+                self.compile_expr(rhs, dst)?;
+                let checked = self.emit(Instr::JumpIfFalse { cond: dst, target: 0 });
+                let end = self.here();
+                self.patch_jump(short, end);
+                self.patch_jump(checked, end);
+            }
+            RExpr::Binary { op: BinaryOp::Or, lhs, rhs } => {
+                self.compile_expr(lhs, dst)?;
+                let short = self.emit(Instr::JumpIfTrue { cond: dst, target: 0 });
+                self.compile_expr(rhs, dst)?;
+                let checked = self.emit(Instr::JumpIfTrue { cond: dst, target: 0 });
+                let end = self.here();
+                self.patch_jump(short, end);
+                self.patch_jump(checked, end);
             }
             RExpr::Binary { op, lhs, rhs } => {
                 let a = self.alloc_temp()?;
@@ -728,7 +758,8 @@ fn binop_instr(op: BinaryOp, dst: u8, a: u8, b: u8) -> Instr {
         BinaryOp::Gt => Instr::Gt { dst, a, b },
         BinaryOp::Le => Instr::Le { dst, a, b },
         BinaryOp::Ge => Instr::Ge { dst, a, b },
-        BinaryOp::And => Instr::And { dst, a, b },
-        BinaryOp::Or => Instr::Or { dst, a, b },
+        // Перехватываются раньше в `compile_expr` (короткое замыкание) —
+        // сюда никогда не доходят.
+        BinaryOp::And | BinaryOp::Or => unreachable!("short-circuit ops handled in compile_expr"),
     }
 }
