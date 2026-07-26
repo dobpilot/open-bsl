@@ -29,6 +29,9 @@ name = "bsl-cli"
 version = "0.1.0"
 dependencies = [
  "bsl-bytecode",
+ "bsl-format",
+ "bsl-rt",
+ "bsl-sema",
  "bsl-syntax",
  "bsl-vm",
 ]

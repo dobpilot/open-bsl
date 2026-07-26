@@ -52,7 +52,47 @@ pub fn compile_program(resolved: &ResolvedProgram) -> Result<Program, CompileErr
         chunks,
         names: names.into_names(),
         shapes: shapes.into_shapes(),
+        top_level_locals: resolved.top_level.locals.clone(),
     })
+}
+
+/// Компилирует фрагмент для `Выполнить`/`Вычислить`: `all_locals` — уже
+/// расширенный список (существующие top-level переменные + новые,
+/// объявленные во фрагменте, см. `bsl_sema::resolve_snippet_stmts`),
+/// `program_names` — таблица имён полей ОСНОВНОЙ программы, которой нужно
+/// ЗАСЕЯТЬ интернер фрагмента: иначе `GetProp`/`SetProp` на структуру,
+/// созданную статическим кодом, получили бы другой `NameId` для того же
+/// имени поля и не нашли бы его (см. `bsl-vm`). Вызовов пользовательских
+/// процедур/функций фрагмент делать не может — `functions` пуст: снаружи
+/// это `resolve_snippet_stmts`, у которой таблица сигнатур тоже всегда
+/// пуста, так что `RExpr::Call` сюда прийти не может физически.
+/// Возвращает чанк, полную (старую + новую) таблицу имён полей и полную
+/// таблицу форм. Обе таблицы — новые, ЛОКАЛЬНЫЕ для этого фрагмента: имена
+/// засеяны из `program_names` для согласованности `NameId` с уже
+/// существующими объектами (см. модуль), но формы, в отличие от имён, у
+/// фрагмента всегда СВОИ — `shape`-индексы внутри чанка ссылаются именно
+/// на возвращаемый отсюда список, а не на какой-то внешний. Вызывающий
+/// ОБЯЗАН передать именно ЭТОТ список форм в `Program`, с которым чанк
+/// будет исполняться — иначе `NewStructure` попадёт по чужому индексу.
+///
+/// REPL персистит оба списка в сессии, чтобы объект, созданный одной
+/// строкой, и обращение к его (новому) полю в следующей строке получили
+/// одинаковый `NameId`/форму. `Выполнить`/`Вычислить` внутри уже
+/// работающего скрипта их просто отбрасывает — та же логика, что и с
+/// новыми локалями: нет материализованного кадра, чтобы сохранить между
+/// вызовами.
+pub fn compile_snippet(
+    all_locals: &[String],
+    body: &[RStmt],
+    program_names: &[String],
+) -> Result<(Chunk, Vec<String>, Vec<std::rc::Rc<bsl_rt::Shape>>), CompileError> {
+    let mut names = NameInterner::new();
+    for n in program_names {
+        names.intern(n);
+    }
+    let mut shapes = ShapeTable::new();
+    let chunk = compile_chunk(all_locals, 0, body, &[], &mut names, &mut shapes)?;
+    Ok((chunk, names.into_names(), shapes.into_shapes()))
 }
 
 fn compile_chunk(
@@ -320,6 +360,16 @@ impl<'a> Compiler<'a> {
             }
             RExpr::NewTable => {
                 self.emit(Instr::NewTable { dst });
+            }
+            RExpr::DynEval(e) => {
+                let s = self.alloc_temp()?;
+                self.compile_expr(e, s)?;
+                self.emit(Instr::RunDynamic {
+                    src: s,
+                    dst,
+                    is_eval: true,
+                });
+                self.free_temp(1);
             }
         }
         Ok(())
@@ -632,6 +682,17 @@ impl<'a> Compiler<'a> {
                     self.emit(Instr::Raise { src: None });
                 }
             },
+            RStmt::Execute(e) => {
+                let s = self.alloc_temp()?;
+                self.compile_expr(e, s)?;
+                let d = self.alloc_temp()?; // результат отбрасывается, но регистр нужен
+                self.emit(Instr::RunDynamic {
+                    src: s,
+                    dst: d,
+                    is_eval: false,
+                });
+                self.free_temp(2);
+            }
             RStmt::Break => {
                 let idx = self.emit(Instr::Jump { target: 0 });
                 self.loop_stack

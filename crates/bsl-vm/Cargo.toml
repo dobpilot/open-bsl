@@ -8,7 +8,8 @@ bsl-rt = { path = "../bsl-rt" }
 bsl-bytecode = { path = "../bsl-bytecode" }
 bsl-format = { path = "../bsl-format" }
 bsl-number = { path = "../bsl-number" }
-
-[dev-dependencies]
+# Выполнить/Вычислить компилируют строку в байт-код тем же движком, что и
+# статический код ("один движок, одна семантика" из брифа) — поэтому VM
+# теперь зависит от всего фронтенда, не только от bsl-bytecode.
 bsl-sema = { path = "../bsl-sema" }
 bsl-syntax = { path = "../bsl-syntax" }

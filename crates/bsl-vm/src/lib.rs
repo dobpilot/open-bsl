@@ -64,8 +64,54 @@ impl Frame {
 pub fn run_program(program: &Program) -> Result<BslValue, RtError> {
     let mut stack: Vec<BslValue> = Vec::new();
     push_own_registers(&mut stack, &program.chunks[0]);
+    let (value, _stack) = drive(program, 0, stack)?;
+    Ok(value)
+}
+
+/// Для REPL (`bsl-cli`): исполняет один чанк с готовым стеком (уже
+/// дополненным под `chunk.n_regs`) и возвращает и значение (`Возврат` в
+/// строке, если был), и финальный стек — REPL сохраняет его целиком как
+/// новое состояние сессии для следующей строки (в отличие от
+/// `Выполнить`/`Вычислить` внутри уже работающего скрипта, REPL не
+/// ограничен статически размеченным окружающим кадром — расти можно
+/// сколько угодно, каждая строка это просто новый чанк поверх той же
+/// растущей таблицы имён).
+/// `locals` — имена слотов ЭТОЙ строки (все накопленные за сессию, включая
+/// новые в этой строке) в порядке, СОВПАДАЮЩЕМ с раскладкой регистров
+/// `chunk` (он был скомпилирован именно с этим списком как `all_locals`,
+/// см. `bsl_bytecode::compile_snippet`). Передаётся дальше как
+/// `Program::top_level_locals`, чтобы `Выполнить`/`Вычислить`, вызванные
+/// ИЗНУТРИ этой строки, могли резолвить переменные REPL-сессии на те же
+/// слоты — без этого они не видели бы вообще ничего (список был бы пуст)
+/// и завели бы каждое имя как новую, независимую переменную.
+pub fn run_repl_chunk(
+    chunk: &bsl_bytecode::Chunk,
+    names: Vec<String>,
+    shapes: Vec<std::rc::Rc<bsl_rt::Shape>>,
+    locals: Vec<String>,
+    stack: Vec<BslValue>,
+) -> Result<(BslValue, Vec<BslValue>), RtError> {
+    let program = Program {
+        chunks: vec![chunk.clone()],
+        names,
+        shapes,
+        top_level_locals: locals,
+    };
+    drive(&program, 0, stack)
+}
+
+/// Выполняет `program.chunks[func_id]` с нуля, используя `stack` как
+/// начальное содержимое регистров (уже дополненное/подготовленное
+/// вызывающим), и возвращает и значение, и финальный стек — нужен
+/// `run_isolated` для `Выполнить`/`Вычислить`, которому важно прочитать
+/// состояние регистров ПОСЛЕ завершения, а не только значение `Возврат`.
+fn drive(
+    program: &Program,
+    func_id: usize,
+    mut stack: Vec<BslValue>,
+) -> Result<(BslValue, Vec<BslValue>), RtError> {
     let mut frames = vec![Frame {
-        func_id: 0,
+        func_id,
         pc: 0,
         param_aliases: Vec::new(),
         own_base: 0,
@@ -77,7 +123,7 @@ pub fn run_program(program: &Program) -> Result<BslValue, RtError> {
     loop {
         match step(&mut frames, &mut stack, program, &mut current_exception) {
             Ok(Step::Continue) => continue,
-            Ok(Step::Done(v)) => return Ok(v),
+            Ok(Step::Done(v)) => return Ok((v, stack)),
             Err(e) => {
                 if !unwind_to_handler(&mut frames, &mut stack, program, &e, &mut current_exception) {
                     return Err(e);
@@ -404,8 +450,105 @@ fn step(
                 stack[d] = v;
                 frames[frame_idx].pc += 1;
             }
+            Instr::RunDynamic { src, dst, is_eval } => {
+                if frames.len() != 1 {
+                    return Err(RtError::DynamicNotAtTopLevel);
+                }
+                let code = stack[frames[frame_idx].reg_index(src)].clone();
+                let code = match code {
+                    BslValue::Str(s) => s.to_string(),
+                    _ => {
+                        return Err(RtError::TypeError {
+                            expected: "Строка",
+                            op: if is_eval { "Вычислить" } else { "Выполнить" },
+                        })
+                    }
+                };
+                let value = run_dynamic_snippet(&code, is_eval, program, stack, &frames[frame_idx])?;
+                let d = frames[frame_idx].reg_index(dst);
+                stack[d] = value;
+                frames[frame_idx].pc += 1;
+            }
         }
     Ok(Step::Continue)
+}
+
+/// Компилирует и исполняет `code` в контексте top-level переменных
+/// программы (см. `Instr::RunDynamic`). `is_eval` заворачивает `code` в
+/// `Возврат (...)`, чтобы получить значение выражения тем же путём, что
+/// и обычный оператор `Возврат` — общий движок для `Выполнить`/`Вычислить`
+/// без раздвоения семантики.
+///
+/// Изолированность: фрагмент исполняется на ОТДЕЛЬНОМ стеке — копии
+/// текущих значений top-level переменных плюс новые слоты под то, что
+/// фрагмент сам объявит. После исполнения обратно во внешний кадр
+/// переносятся только значения уже существовавших до вызова слотов
+/// (`0..old_count`) — их регистровые номера точно совпадают с тем, что
+/// уже использует статический код вокруг, так что перезапись безопасна.
+/// Новые имена, объявленные фрагментом, никуда не переносятся: чтобы это
+/// сделать, статический код вокруг пришлось бы компилировать в режиме
+/// материализованного кадра с именной таблицей (см. бриф) — это
+/// отдельная, ещё не сделанная работа.
+fn run_dynamic_snippet(
+    code: &str,
+    is_eval: bool,
+    program: &Program,
+    stack: &mut [BslValue],
+    top_frame: &Frame,
+) -> Result<BslValue, RtError> {
+    let src = if is_eval {
+        format!("Возврат ({code});")
+    } else {
+        code.to_string()
+    };
+
+    let parsed = bsl_syntax::parse(&src).map_err(|e| RtError::DynamicError(format!("{e:?}")))?;
+    let mut stmts = Vec::with_capacity(parsed.items.len());
+    for item in parsed.items {
+        match item {
+            bsl_syntax::Item::Stmt(s) => stmts.push(s),
+            bsl_syntax::Item::VarDecl(vd) => stmts.push(bsl_syntax::Stmt::VarDecl(vd)),
+            _ => {
+                return Err(RtError::DynamicError(
+                    "Выполнить/Вычислить не поддерживают объявление процедур/функций".to_string(),
+                ))
+            }
+        }
+    }
+
+    let (all_locals, body) = bsl_sema::resolve_snippet_stmts(&program.top_level_locals, &stmts)
+        .map_err(|e| RtError::DynamicError(format!("{e:?}")))?;
+    // ВАЖНО: `compile_snippet` возвращает СВОЙ, локальный список форм — не
+    // `program.shapes`. Индексы `shape` внутри `chunk` ссылаются именно на
+    // него, так что именно его (а не `program.shapes`) нужно передать в
+    // `Program`, с которым чанк будет исполняться — иначе `NewStructure`
+    // попадёт по чужому индексу (был баг: `shapes: program.shapes.clone()`
+    // давало пустой список форм для любого фрагмента, создающего новую
+    // структуру, и падало с индексом за границами).
+    let (chunk, _names, shapes) = bsl_bytecode::compile_snippet(&all_locals, &body, &program.names)
+        .map_err(|e| RtError::DynamicError(format!("{e:?}")))?;
+
+    let old_count = program.top_level_locals.len();
+    let mut snippet_stack: Vec<BslValue> = (0..old_count)
+        .map(|i| stack[top_frame.reg_index(i as u8)].clone())
+        .collect();
+    snippet_stack.resize(chunk.n_regs as usize, BslValue::Undefined);
+
+    let snippet_program = Program {
+        chunks: vec![chunk],
+        names: program.names.clone(),
+        shapes,
+        top_level_locals: Vec::new(),
+    };
+
+    let (value, final_stack) = drive(&snippet_program, 0, snippet_stack)?;
+
+    for i in 0..old_count {
+        let d = top_frame.reg_index(i as u8);
+        stack[d] = final_stack[i].clone();
+    }
+
+    Ok(value)
 }
 
 /// Размерность в `Новый Массив(d1, d2, ...)` обязана быть целым
@@ -464,10 +607,17 @@ fn do_return_with_value(
     value: BslValue,
 ) -> ReturnOutcome {
     let frame = frames.pop().expect("VM: возврат без активного кадра");
-    stack.truncate(frame.call_start);
     match frames.last() {
-        None => Done(value),
+        None => {
+            // Самый верхний кадр завершился: НЕ усекаем стек — `drive`
+            // возвращает его вызывающему как есть (нужно `run_isolated`,
+            // чтобы прочитать финальные значения регистров после
+            // `Выполнить`/`Вычислить`, а обычному `run_program` разницы
+            // нет — он этот стек всё равно не читает после возврата).
+            Done(value)
+        }
         Some(caller) => {
+            stack.truncate(frame.call_start);
             let dst = caller.reg_index(frame.return_reg);
             stack[dst] = value;
             Continuing
@@ -1273,5 +1423,111 @@ mod tests {
              Возврат т.Количество();",
         );
         assert_eq!(v, num("0"));
+    }
+
+    #[test]
+    fn vychislit_evaluates_an_expression() {
+        let v = run_src(r#"Возврат Вычислить("2+2");"#);
+        assert_eq!(v, num("4"));
+    }
+
+    #[test]
+    fn vychislit_sees_existing_top_level_variables() {
+        let v = run_src("x = 10;\nВозврат Вычислить(\"x * 2\");");
+        assert_eq!(v, num("20"));
+    }
+
+    #[test]
+    fn vypolnit_mutates_an_existing_top_level_variable() {
+        let v = run_src("x = 1;\nВыполнить(\"x = 5\");\nВозврат x;");
+        assert_eq!(v, num("5"));
+    }
+
+    #[test]
+    fn vypolnit_can_run_control_flow_and_read_it_back() {
+        // Внутри строкового литерала BSL перенос строки без `|` — ошибка
+        // лексера (см. multiline_string_requires_continuation_bar в
+        // bsl-syntax), поэтому фрагмент для Выполнить пишем в одну строку.
+        let v = run_src(
+            r#"sum = 0;
+Выполнить("Для i = 1 По 5 Цикл sum = sum + i; КонецЦикла");
+Возврат sum;"#,
+        );
+        assert_eq!(v, num("15"));
+    }
+
+    #[test]
+    fn vypolnit_new_local_does_not_leak_to_enclosing_scope() {
+        // временная переменная снипета не должна пережить вызов и не
+        // должна сломать окружающий скрипт — просто исчезает.
+        let v = run_src(
+            "x = 1;\n\
+             Выполнить(\"временная = 99; x = x + временная;\");\n\
+             Возврат x;",
+        );
+        assert_eq!(v, num("100"));
+    }
+
+    #[test]
+    fn vypolnit_field_access_on_structure_created_by_static_code() {
+        // Критическая проверка: интернер имён полей фрагмента засеян из
+        // program.names, поэтому NameId для "y" совпадает с тем, что уже
+        // использует статически созданная структура.
+        let v = run_src(
+            "s = Новый Структура(\"x,y\", 1, 2);\n\
+             Выполнить(\"s.y = s.y + 100\");\n\
+             Возврат s.y;",
+        );
+        assert_eq!(v, num("102"));
+    }
+
+    #[test]
+    fn vypolnit_can_construct_a_new_structure_inside_the_snippet_itself() {
+        // Регрессия: compile_snippet раньше не возвращал СВОЮ (локальную)
+        // таблицу форм, и запуск шёл с чужим (внешним) списком форм —
+        // NewStructure падал по индексу за границами, как только фрагмент
+        // сам создавал структуру (а не просто читал уже существующую).
+        // `""` внутри BSL-строкового литерала — экранирование кавычки
+        // (доубление, не бэкслеш) для вложенного списка полей "a,b".
+        let v = run_src(
+            "Возврат Вычислить(\"Новый Структура(\"\"a,b\"\", 1, 2).b\");",
+        );
+        assert_eq!(v, num("2"));
+    }
+
+    #[test]
+    fn vychislit_can_construct_and_use_new_values() {
+        let v = run_src(r#"Возврат Вычислить("Новый Массив(3).Count()");"#);
+        assert_eq!(v, num("3"));
+    }
+
+    #[test]
+    fn dynamic_code_with_syntax_error_is_a_dynamic_error() {
+        let err = run_src_err(r#"Выполнить("x = ");"#);
+        assert!(matches!(err, RtError::DynamicError(_)));
+    }
+
+    #[test]
+    fn dynamic_code_requires_a_string_argument() {
+        let err = run_src_err("Выполнить(1);");
+        assert!(matches!(err, RtError::TypeError { .. }));
+    }
+
+    #[test]
+    fn vypolnit_inside_a_function_is_not_supported_yet() {
+        let err = run_src_err(
+            "Функция Ф()\n\
+             Выполнить(\"x = 1\");\n\
+             Возврат 0;\n\
+             КонецФункции\n\
+             Возврат Ф();",
+        );
+        assert!(matches!(err, RtError::DynamicNotAtTopLevel));
+    }
+
+    #[test]
+    fn vypolnit_declaring_procedures_is_rejected() {
+        let err = run_src_err(r#"Выполнить("Процедура П() КонецПроцедуры");"#);
+        assert!(matches!(err, RtError::DynamicError(_)));
     }
 }

@@ -115,8 +115,7 @@ fn declare_sig(
 }
 
 /// Резолвит плоский скрипт верхнего уровня без объявлений функций — удобно
-/// для тестов и (в будущем) для `Выполнить`, которому объявления процедур
-/// недоступны. Функции резолвятся только через [`resolve_program`].
+/// для тестов. Функции резолвятся только через [`resolve_program`].
 pub fn resolve_script(stmts: &[AStmt]) -> Result<Resolved, SemaError> {
     let empty_funcs = HashMap::new();
     let mut r = Resolver {
@@ -129,6 +128,38 @@ pub fn resolve_script(stmts: &[AStmt]) -> Result<Resolved, SemaError> {
         locals: r.locals,
         body,
     })
+}
+
+/// Резолвит фрагмент кода для `Выполнить`/`Вычислить`: `existing_locals` —
+/// уже объявленные переменные окружающего скрипта, ЗАСЕВАЮТСЯ в резолвер
+/// первыми, поэтому ссылки на них в фрагменте попадают на ТЕ ЖЕ слоты, а
+/// не заводят копию. Новые имена, объявленные внутри фрагмента, получают
+/// слоты ПОСЛЕ существующих — полный список возвращается вызывающему,
+/// который сам решает, персистить ли их (VM для `Выполнить`/`Вычислить`
+/// внутри уже скомпилированного кода — не персистит: не может позволить
+/// себе расширять статически размеченный кадр; REPL — персистит, у него
+/// кадр и так растёт от строки к строке).
+///
+/// Вызовы пользовательских процедур/функций фрагмент делать не может —
+/// `funcs` здесь всегда пуст: сигнатуры уже откомпилированных функций
+/// сюда не передаются (see `bsl-vm` doc comment для обоснования).
+pub fn resolve_snippet_stmts(
+    existing_locals: &[String],
+    stmts: &[AStmt],
+) -> Result<(Vec<String>, Vec<RStmt>), SemaError> {
+    let empty_funcs = HashMap::new();
+    let index = existing_locals
+        .iter()
+        .enumerate()
+        .map(|(i, name)| (name.to_uppercase(), i as u32))
+        .collect();
+    let mut r = Resolver {
+        locals: existing_locals.to_vec(),
+        index,
+        funcs: &empty_funcs,
+    };
+    let body = r.resolve_block(stmts)?;
+    Ok((r.locals, body))
 }
 
 struct Resolver<'a> {
@@ -277,9 +308,7 @@ impl<'a> Resolver<'a> {
                 }
                 Ok(None)
             }
-            AStmt::Execute(_) => Err(SemaError::Unsupported(
-                "Выполнить появится вместе с компиляцией строк в рантайме (M9)",
-            )),
+            AStmt::Execute(e) => Ok(Some(RStmt::Execute(self.resolve_expr(e)?))),
         }
     }
 
@@ -432,6 +461,17 @@ impl<'a> Resolver<'a> {
                         builtin,
                         args: rargs,
                     });
+                }
+                if name.eq_ignore_ascii_case("Вычислить") || name.eq_ignore_ascii_case("Eval") {
+                    if args.len() != 1 {
+                        return Err(SemaError::ArgumentCountMismatch {
+                            name: name.clone(),
+                            expected: 1,
+                            found: args.len(),
+                        });
+                    }
+                    let mut rargs = self.resolve_required_args(args)?;
+                    return Ok(RExpr::DynEval(Box::new(rargs.remove(0))));
                 }
                 Err(SemaError::UndefinedFunction(name.clone()))
             }
@@ -794,5 +834,47 @@ mod tests {
             }
             other => panic!("expected Try, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn execute_resolves_to_rstmt_execute() {
+        let r = resolve_src(r#"Выполнить("x = 1");"#);
+        assert_eq!(
+            r.body[0],
+            RStmt::Execute(RExpr::Str("x = 1".to_string()))
+        );
+    }
+
+    #[test]
+    fn vychislit_resolves_to_dyn_eval() {
+        let r = resolve_src(r#"y = Вычислить("2+2");"#);
+        assert_eq!(
+            r.body[0],
+            RStmt::AssignLocal {
+                slot: 0,
+                value: RExpr::DynEval(Box::new(RExpr::Str("2+2".to_string()))),
+            }
+        );
+    }
+
+    #[test]
+    fn resolve_snippet_stmts_seeds_existing_locals_and_extends() {
+        let existing = vec!["x".to_string()];
+        let prog = parse("x = x + 1;\ny = 2;").unwrap();
+        let stmts = items_to_stmts(prog.items);
+        let (locals, body) = resolve_snippet_stmts(&existing, &stmts).unwrap();
+        assert_eq!(locals, vec!["x".to_string(), "y".to_string()]);
+        assert_eq!(
+            body[0],
+            RStmt::AssignLocal {
+                slot: 0,
+                value: RExpr::Binary {
+                    op: bsl_syntax::BinaryOp::Add,
+                    lhs: Box::new(RExpr::Local(0)),
+                    rhs: Box::new(RExpr::Number(BslNumber::from_i64(1))),
+                },
+            }
+        );
+        assert_eq!(body[1], RStmt::AssignLocal { slot: 1, value: RExpr::Number(BslNumber::from_i64(2)) });
     }
 }

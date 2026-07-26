@@ -49,4 +49,9 @@ pub struct Program {
     pub chunks: Vec<Chunk>,
     pub names: Vec<String>,
     pub shapes: Vec<Rc<Shape>>,
+    /// Слоты верхнего уровня по именам, в порядке — нужно `Выполнить`/
+    /// `Вычислить` (см. `bsl-vm`), чтобы резолвить уже объявленные
+    /// top-level переменные фрагмента на те же слоты, что и в статическом
+    /// коде, а не заводить их заново.
+    pub top_level_locals: Vec<String>,
 }

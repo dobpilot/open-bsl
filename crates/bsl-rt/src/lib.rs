@@ -70,6 +70,16 @@ pub enum RtError {
         method: &'static str,
         receiver: &'static str,
     },
+    /// Ошибка лексера/парсера/резолвинга/компиляции строки, переданной в
+    /// `Выполнить`/`Вычислить` — текст уже отформатирован тем слоем, что
+    /// её обнаружил (`bsl-syntax`/`bsl-sema`/`bsl-bytecode`), сюда попадает
+    /// как есть: `bsl-rt` не знает про эти крейты (обратная зависимость).
+    DynamicError(String),
+    /// `Выполнить`/`Вычислить` вызваны не из кода верхнего уровня — внутри
+    /// процедуры/функции они пока не поддержаны (нужен материализованный
+    /// кадр с именной таблицей, см. бриф; это отдельная, ещё не сделанная
+    /// работа).
+    DynamicNotAtTopLevel,
 }
 
 impl From<NumError> for RtError {
@@ -98,6 +108,11 @@ impl fmt::Display for RtError {
             RtError::MethodNotApplicable { method, receiver } => {
                 write!(f, "метод «{method}» не применим к «{receiver}»")
             }
+            RtError::DynamicError(msg) => write!(f, "{msg}"),
+            RtError::DynamicNotAtTopLevel => write!(
+                f,
+                "Выполнить/Вычислить внутри процедуры или функции пока не поддержаны"
+            ),
         }
     }
 }
