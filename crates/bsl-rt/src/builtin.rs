@@ -19,9 +19,18 @@ pub enum BuiltinFn {
     Acos,
     Atan,
     /// Побочный эффект — печать в stdout. Заглушка на месте настоящего
-    /// вывода/UI (и `Формат`, который ещё не готов — `Строка()` через
-    /// `Display` тут используется впрямую).
+    /// вывода/UI.
     Message,
+    /// `Строка(x)` = `Формат(x, Неопределено)` — форматная строка по
+    /// умолчанию. Форматирование живёт в `bsl-format` (более высокий
+    /// слой, чем этот крейт), поэтому `call_builtin_fn` ниже для этого
+    /// варианта не вызывается в реальном пайплайне — VM перехватывает его
+    /// раньше (см. `bsl-vm`); здесь только выделено имя-идентификатор.
+    ToString,
+    /// `Формат(x, spec)` — с явной форматной строкой.
+    Format,
+    /// `Число(строка)` — обратный разбор форматированной строки в число.
+    ToNumber,
 }
 
 impl BuiltinFn {
@@ -39,13 +48,16 @@ impl BuiltinFn {
             "ACOS" => BuiltinFn::Acos,
             "ATAN" => BuiltinFn::Atan,
             "MESSAGE" | "СООБЩИТЬ" => BuiltinFn::Message,
+            "STRING" | "СТРОКА" => BuiltinFn::ToString,
+            "FORMAT" | "ФОРМАТ" => BuiltinFn::Format,
+            "NUMBER" | "ЧИСЛО" => BuiltinFn::ToNumber,
             _ => return None,
         })
     }
 
     pub fn arity(self) -> usize {
         match self {
-            BuiltinFn::Pow => 2,
+            BuiltinFn::Pow | BuiltinFn::Format => 2,
             _ => 1,
         }
     }
@@ -84,6 +96,12 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         BuiltinFn::Message => {
             println!("{}", args[0]);
             Ok(BslValue::Undefined)
+        }
+        BuiltinFn::ToString | BuiltinFn::Format | BuiltinFn::ToNumber => {
+            unreachable!(
+                "форматозависимые builtin'ы (Строка/Формат/Число) перехватываются в bsl-vm, \
+                 у которого есть доступ к bsl-format — сюда попадать не должны"
+            )
         }
     }
 }

@@ -76,3 +76,16 @@ fn scale_grows_without_bound() {
 fn size_is_24_bytes() {
     assert_eq!(std::mem::size_of::<BslNumber>(), 24);
 }
+
+#[test]
+fn round_to_scale_is_half_up() {
+    // 2.675 -> 2.68 при округлении до 2 знаков половина-вверх (а не 2.67,
+    // как дало бы округление через f64 из-за двоичного приближения — брифом
+    // явно указано, что Round/Int обязаны остаться в decimal).
+    assert_eq!(c(&n("2.675").round_to_scale(2)), "2.68");
+    assert_eq!(c(&n("1.005").round_to_scale(2)), "1.01");
+    // Масштаб не меньше текущего — значение не меняется.
+    assert_eq!(c(&n("1.5").round_to_scale(5)), "1.5");
+    assert_eq!(c(&n("123").round_to_scale(0)), "123");
+    assert_eq!(c(&n("-2.675").round_to_scale(2)), "-2.68");
+}

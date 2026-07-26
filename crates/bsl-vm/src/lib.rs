@@ -363,7 +363,7 @@ fn step(
                 for i in 0..count {
                     args.push(stack[frames[frame_idx].reg_index(base + i)].clone());
                 }
-                let v = bsl_rt::call_builtin_fn(builtin, &args)?;
+                let v = call_builtin_with_format(builtin, &args)?;
                 let d = frames[frame_idx].reg_index(dst);
                 stack[d] = v;
                 frames[frame_idx].pc += 1;
@@ -511,6 +511,54 @@ fn err_to_value(err: &RtError) -> BslValue {
     match err {
         RtError::Raised(v) => v.clone(),
         other => BslValue::Str(std::rc::Rc::from(other.to_string().as_str())),
+    }
+}
+
+/// `Строка`/`Формат`/`Число`/`Message` перехватываются здесь, а не в
+/// `bsl_rt::call_builtin_fn`: форматирование живёт в `bsl-format`, которое
+/// зависит от `bsl-rt` (не наоборот) — `bsl-rt` физически не может
+/// отформатировать число сам. Всё остальное уходит в `bsl-rt` как обычно.
+fn call_builtin_with_format(
+    builtin: bsl_rt::BuiltinFn,
+    args: &[BslValue],
+) -> Result<BslValue, RtError> {
+    use bsl_rt::BuiltinFn;
+    match builtin {
+        BuiltinFn::Message => {
+            println!("{}", bsl_format::format_value(&args[0], None));
+            Ok(BslValue::Undefined)
+        }
+        BuiltinFn::ToString => {
+            let s = bsl_format::format_value(&args[0], None);
+            Ok(BslValue::Str(std::rc::Rc::from(s.as_str())))
+        }
+        BuiltinFn::Format => {
+            let spec = match &args[1] {
+                BslValue::Str(s) => s.to_string(),
+                _ => {
+                    return Err(RtError::TypeError {
+                        expected: "Строка",
+                        op: "Формат(..., СтрокаФормата)",
+                    })
+                }
+            };
+            let s = bsl_format::format_value(&args[0], Some(&spec));
+            Ok(BslValue::Str(std::rc::Rc::from(s.as_str())))
+        }
+        BuiltinFn::ToNumber => {
+            let s = match &args[0] {
+                BslValue::Str(s) => s,
+                _ => {
+                    return Err(RtError::TypeError {
+                        expected: "Строка",
+                        op: "Число(...)",
+                    })
+                }
+            };
+            let n = bsl_format::parse_number(s, &bsl_format::NumberFormat::default())?;
+            Ok(BslValue::Number(n))
+        }
+        other => bsl_rt::call_builtin_fn(other, args),
     }
 }
 
@@ -996,5 +1044,39 @@ mod tests {
         // Энергия системы отрицательна (связанная система) и не должна
         // выродиться в бесконечность/NaN за несколько шагов.
         assert!(e.is_negative(), "energy should stay negative: {e:?}");
+    }
+
+    fn str_val(v: &BslValue) -> String {
+        match v {
+            BslValue::Str(s) => s.to_string(),
+            other => panic!("expected Str, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn stroka_groups_by_default_with_nbsp() {
+        // Строка(1000.5) -> "1 000,5" (NBSP, не обычный пробел).
+        let v = run_src("Возврат Строка(1000.5);");
+        assert_eq!(str_val(&v), "1\u{A0}000,5");
+    }
+
+    #[test]
+    fn format_with_explicit_spec_suppresses_grouping() {
+        let v = run_src(r#"Возврат Формат(1000000, "ЧГ=0; ЧРД=.");"#);
+        assert_eq!(str_val(&v), "1000000");
+    }
+
+    #[test]
+    fn chislo_parses_grouped_string_back_round_trip() {
+        let v = run_src("x = Строка(1000000);\nВозврат Число(x);");
+        assert_eq!(v, num("1000000"));
+    }
+
+    #[test]
+    fn stroka_of_boolean_and_undefined_matches_measured_strings() {
+        let v = run_src("Возврат Строка(Истина);");
+        assert_eq!(str_val(&v), "Да");
+        let v = run_src("Возврат Строка(Неопределено);");
+        assert_eq!(str_val(&v), "");
     }
 }

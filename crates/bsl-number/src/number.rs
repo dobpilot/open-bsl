@@ -309,6 +309,32 @@ impl BslNumber {
             BslNumber::Big(b) => scale_up_big(&b.m, -b.scale).to_i64(),
         }
     }
+
+    /// Округление ЗНАЧЕНИЯ (не только для показа) к заданному масштабу,
+    /// половина-вверх-от-нуля — та же схема, что и у деления. Используется
+    /// форматированием (`ЧДЦ=N`) и будущими `Округл`/`Round`. Если `scale`
+    /// не меньше текущего, значение не меняется: досыпать лишние дробные
+    /// разряды — забота форматирования (нулями), не самого числа.
+    pub fn round_to_scale(&self, target_scale: i32) -> Self {
+        let cur_scale = self.scale();
+        if target_scale >= cur_scale {
+            return self.clone();
+        }
+        let delta = cur_scale - target_scale;
+
+        if let BslNumber::Small { m, .. } = self {
+            if delta <= 38 {
+                if let Some(q) = div_half_up_i128(m.get(), POW10[delta as usize]) {
+                    return BslNumber::small(q, target_scale);
+                }
+            }
+        }
+
+        let b = self.to_big();
+        let divisor = BigInt::from(10u8).pow(delta as u32);
+        let q = div_half_up_big(&b.m, &divisor);
+        BslNumber::big(q, target_scale)
+    }
 }
 
 // --- Нормализация ---------------------------------------------------------
