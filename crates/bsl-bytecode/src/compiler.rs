@@ -1,36 +1,66 @@
 use bsl_rt::BslValue;
-use bsl_sema::{RExpr, RStmt, Resolved};
+use bsl_sema::{RExpr, RStmt, ResolvedFunction, ResolvedProgram};
 use bsl_syntax::{BinaryOp, UnaryOp};
 
-use crate::chunk::Chunk;
-use crate::instr::Instr;
+use crate::chunk::{Chunk, Program};
+use crate::instr::{ArgMode, Instr};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompileError {
     TooManyLocals,
     TooManyRegisters,
     TooManyConstants,
+    TooManyArgModeTables,
     BreakOutsideLoop,
     ContinueOutsideLoop,
 }
 
-pub fn compile_script(resolved: &Resolved) -> Result<Chunk, CompileError> {
-    let n_locals: u8 = resolved
-        .locals
+/// Компилирует весь модуль: чанк верхнего уровня плюс чанк на каждую
+/// `Процедура`/`Функция`, в том порядке, в котором их видит `bsl-sema`
+/// (`Call.func` в резолвнутом дереве — индекс в `resolved.functions`;
+/// здесь он сдвигается на 1, потому что `chunks[0]` — верхний уровень).
+pub fn compile_program(resolved: &ResolvedProgram) -> Result<Program, CompileError> {
+    let mut chunks = Vec::with_capacity(resolved.functions.len() + 1);
+    chunks.push(compile_chunk(
+        &resolved.top_level.locals,
+        0,
+        &resolved.top_level.body,
+        &resolved.functions,
+    )?);
+    for f in &resolved.functions {
+        chunks.push(compile_chunk(&f.locals, f.params.len(), &f.body, &resolved.functions)?);
+    }
+    Ok(Program { chunks })
+}
+
+fn compile_chunk(
+    locals: &[String],
+    n_params: usize,
+    body: &[RStmt],
+    functions: &[ResolvedFunction],
+) -> Result<Chunk, CompileError> {
+    let n_locals: u8 = locals
         .len()
+        .try_into()
+        .map_err(|_| CompileError::TooManyLocals)?;
+    let n_params: u8 = n_params
         .try_into()
         .map_err(|_| CompileError::TooManyLocals)?;
     let mut c = Compiler {
         instrs: Vec::new(),
         consts: Vec::new(),
+        call_arg_modes: Vec::new(),
         next_reg: n_locals,
         max_reg: n_locals,
         loop_stack: Vec::new(),
+        functions,
     };
-    c.compile_block(&resolved.body)?;
+    c.compile_block(body)?;
     Ok(Chunk {
         instrs: c.instrs,
         consts: c.consts,
+        call_arg_modes: c.call_arg_modes,
+        n_params,
         n_locals,
         n_regs: c.max_reg,
     })
@@ -44,18 +74,24 @@ struct LoopCtx {
     continue_patches: Vec<usize>,
 }
 
-struct Compiler {
+struct Compiler<'a> {
     instrs: Vec<Instr>,
     consts: Vec<BslValue>,
-    /// Вершина свободных регистров: локалы занимают `0..n_locals`, дальше —
-    /// стек временных регистров, растущий/сжимающийся вокруг компиляции
-    /// каждого подвыражения (тот же приём, что в компиляторе Lua).
+    call_arg_modes: Vec<Vec<ArgMode>>,
+    /// Вершина свободных регистров: параметры+локалы занимают
+    /// `0..n_locals`, дальше — стек временных регистров, растущий/
+    /// сжимающийся вокруг компиляции каждого подвыражения (тот же приём,
+    /// что в компиляторе Lua).
     next_reg: u8,
     max_reg: u8,
     loop_stack: Vec<LoopCtx>,
+    /// Сигнатуры всех функций модуля — нужны при компиляции вызова, чтобы
+    /// решить режим передачи каждого аргумента (`Знач` смотрится у
+    /// вызываемой функции, а не у самого вызова).
+    functions: &'a [ResolvedFunction],
 }
 
-impl Compiler {
+impl<'a> Compiler<'a> {
     fn alloc_temp(&mut self) -> Result<u8, CompileError> {
         let r = self.next_reg;
         let next = r.checked_add(1).ok_or(CompileError::TooManyRegisters)?;
@@ -75,6 +111,15 @@ impl Compiler {
         let k: u16 = k.try_into().map_err(|_| CompileError::TooManyConstants)?;
         self.consts.push(v);
         Ok(k)
+    }
+
+    fn add_arg_modes(&mut self, modes: Vec<ArgMode>) -> Result<u16, CompileError> {
+        let id = self.call_arg_modes.len();
+        let id: u16 = id
+            .try_into()
+            .map_err(|_| CompileError::TooManyArgModeTables)?;
+        self.call_arg_modes.push(modes);
+        Ok(id)
     }
 
     fn emit(&mut self, i: Instr) -> usize {
@@ -137,7 +182,50 @@ impl Compiler {
                 self.emit(binop_instr(*op, dst, a, b));
                 self.free_temp(2);
             }
+            RExpr::Call { func, args } => {
+                self.compile_call(*func, args, dst)?;
+            }
         }
+        Ok(())
+    }
+
+    /// Аргументы без `Знач`, чья форма на месте вызова — голая локальная
+    /// переменная, передаются по ссылке (алиас на слот вызывающего, без
+    /// материализации значения); всё остальное — обычным значением в
+    /// регистре `base + i`. Само решение "по ссылке или нет" статично и
+    /// целиком принимается здесь, в компиляторе.
+    fn compile_call(&mut self, func: u32, args: &[RExpr], dst: u8) -> Result<(), CompileError> {
+        let params = &self.functions[func as usize].params;
+        let base = self.next_reg;
+        let mut modes = Vec::with_capacity(args.len());
+        for (i, arg) in args.iter().enumerate() {
+            let by_val = params[i].by_val;
+            if !by_val {
+                if let RExpr::Local(slot) = arg {
+                    self.alloc_temp()?; // держим диапазон [base,base+argc) непрерывным
+                    modes.push(ArgMode::ByRefLocal(*slot as u8));
+                    continue;
+                }
+            }
+            let r = self.alloc_temp()?;
+            self.compile_expr(arg, r)?;
+            modes.push(ArgMode::Value);
+        }
+        let argc: u8 = args
+            .len()
+            .try_into()
+            .map_err(|_| CompileError::TooManyRegisters)?;
+        self.free_temp(argc);
+        let arg_modes = self.add_arg_modes(modes)?;
+        let func_chunk: u16 = (func + 1)
+            .try_into()
+            .map_err(|_| CompileError::TooManyRegisters)?;
+        self.emit(Instr::Call {
+            func: func_chunk,
+            base,
+            arg_modes,
+            ret: dst,
+        });
         Ok(())
     }
 
@@ -155,6 +243,24 @@ impl Compiler {
             RStmt::Assign { slot, value } => {
                 self.compile_expr(value, *slot as u8)?;
             }
+            RStmt::ExprStmt(e) => {
+                // Результат вызова-как-оператора отбрасывается, но регистр
+                // под него всё равно нужен на время компиляции выражения.
+                let r = self.alloc_temp()?;
+                self.compile_expr(e, r)?;
+                self.free_temp(1);
+            }
+            RStmt::Return(opt) => match opt {
+                Some(e) => {
+                    let r = self.alloc_temp()?;
+                    self.compile_expr(e, r)?;
+                    self.emit(Instr::Return { src: Some(r) });
+                    self.free_temp(1);
+                }
+                None => {
+                    self.emit(Instr::Return { src: None });
+                }
+            },
             RStmt::If {
                 cond,
                 then_branch,

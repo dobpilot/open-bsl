@@ -21,6 +21,15 @@ pub enum RExpr {
         lhs: Box<RExpr>,
         rhs: Box<RExpr>,
     },
+    /// `func` — индекс в `ResolvedProgram::functions` (не в таблице чанков
+    /// байт-кода — там будет сдвиг на 1 из-за чанка верхнего уровня).
+    /// `args.len()` всегда равно числу параметров функции: в M4 вызов с
+    /// пропущенными/меньшим числом аргументов — ошибка резолвинга, а не
+    /// заполнение значениями по умолчанию (см. `SemaError::Unsupported`).
+    Call {
+        func: u32,
+        args: Vec<RExpr>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -29,6 +38,8 @@ pub enum RStmt {
         slot: u32,
         value: RExpr,
     },
+    /// Вызов процедуры/функции как оператор — результат отбрасывается.
+    ExprStmt(RExpr),
     If {
         cond: RExpr,
         then_branch: Vec<RStmt>,
@@ -50,13 +61,41 @@ pub enum RStmt {
     },
     Break,
     Continue,
+    /// `Неопределено` при отсутствии выражения — функция без `Возврат`
+    /// возвращает `Неопределено` (совпадает с неявным возвратом в конце тела).
+    Return(Option<RExpr>),
 }
 
-/// Результат резолвинга плоского скрипта верхнего уровня (без процедур —
-/// те придут в M4). `locals` — таблица слотов в порядке первого появления
-/// (оригинальное написание, для будущей отладочной информации).
+/// Параметр после резолвинга: имя больше не нужно (оно уже стало слотом
+/// 0..params.len() в `locals` той же функции), важен только режим передачи.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ResolvedParam {
+    /// `Знач`/`Val` — по значению; иначе (по умолчанию в BSL) — по ссылке.
+    pub by_val: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResolvedFunction {
+    pub name: String,
+    pub params: Vec<ResolvedParam>,
+    /// Слоты 0..params.len() — параметры (в порядке объявления), дальше —
+    /// остальные локальные переменные в порядке первого появления.
+    pub locals: Vec<String>,
+    pub body: Vec<RStmt>,
+}
+
+/// Результат резолвинга скрипта верхнего уровня (без объявлений функций).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Resolved {
     pub locals: Vec<String>,
     pub body: Vec<RStmt>,
+}
+
+/// Результат резолвинга целого модуля: все объявления процедур/функций
+/// (плоское пространство имён — в BSL нет вложенных процедур и замыканий)
+/// плюс операторы верхнего уровня, которые могут их вызывать.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResolvedProgram {
+    pub functions: Vec<ResolvedFunction>,
+    pub top_level: Resolved,
 }

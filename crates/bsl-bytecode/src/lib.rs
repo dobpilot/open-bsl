@@ -2,6 +2,6 @@ mod chunk;
 mod compiler;
 mod instr;
 
-pub use chunk::Chunk;
-pub use compiler::{compile_script, CompileError};
-pub use instr::Instr;
+pub use chunk::{Chunk, Program};
+pub use compiler::{compile_program, CompileError};
+pub use instr::{ArgMode, Instr};
