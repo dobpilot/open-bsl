@@ -123,6 +123,7 @@ fn compile_chunk(
         shapes,
     };
     c.compile_block(body)?;
+    let prop_cache = c.instrs.iter().map(|_| std::cell::RefCell::new(None)).collect();
     Ok(Chunk {
         instrs: c.instrs,
         consts: c.consts,
@@ -131,6 +132,7 @@ fn compile_chunk(
         n_params,
         n_locals,
         n_regs: c.max_reg,
+        prop_cache,
     })
 }
 

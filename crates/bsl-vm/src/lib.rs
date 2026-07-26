@@ -344,13 +344,15 @@ fn step(
             }
             Instr::GetProp { dst, obj, name } => {
                 let ov = stack[frames[frame_idx].reg_index(obj)].clone();
-                // Структура резолвится по NameId напрямую (быстрый путь);
-                // СтрокаТаблицыЗначений заводит колонки в рантайме и не
-                // могла быть интернирована на этапе компиляции — для неё
-                // (и только когда NameId-путь говорит "это не такой
-                // объект") VM резолвит имя в текст через Program::names и
-                // идёт по строковому пути.
-                let v = match ov.get_field(name) {
+                // Структура резолвится через инлайн-кэш этой ИНСТРУКЦИИ
+                // (см. Chunk::prop_cache): мономорфный сайт вызова после
+                // первого попадания читает слот напрямую, без HashMap-
+                // поиска в Shape::index. СтрокаТаблицыЗначений заводит
+                // колонки в рантайме и не могла быть интернирована на
+                // этапе компиляции — для неё (и только когда кэш-путь
+                // говорит "это не такой объект") VM резолвит имя в текст
+                // через Program::names и идёт по строковому пути.
+                let v = match ov.get_field_cached(name, &chunk.prop_cache[pc]) {
                     Err(RtError::NotAnObject) => ov.get_field_by_name(&program.names[name.index()])?,
                     other => other?,
                 };
@@ -361,7 +363,7 @@ fn step(
             Instr::SetProp { obj, name, src } => {
                 let ov = stack[frames[frame_idx].reg_index(obj)].clone();
                 let sv = stack[frames[frame_idx].reg_index(src)].clone();
-                match ov.set_field(name, sv.clone()) {
+                match ov.set_field_cached(name, sv.clone(), &chunk.prop_cache[pc]) {
                     Err(RtError::NotAnObject) => {
                         ov.set_field_by_name(&program.names[name.index()], sv)?
                     }
@@ -997,6 +999,40 @@ mod tests {
              Возврат s.x + s.y + s.z;",
         );
         assert_eq!(v, num("106"));
+    }
+
+    #[test]
+    fn get_prop_inline_cache_stays_correct_across_different_shapes() {
+        // Один и тот же GetProp (внутри тела Для Каждого) видит структуры
+        // ДВУХ разных форм подряд — если бы кэш слепо доверял старому
+        // (форма, слот) без проверки Rc::ptr_eq, второе значение
+        // прочиталось бы по слоту первой формы и оказалось бы неверным.
+        let v = run_src(
+            "a = Новый Массив(2);\n\
+             a[0] = Новый Структура(\"x,y\", 10, 20);\n\
+             a[1] = Новый Структура(\"y,x\", 200, 100);\n\
+             сумма = 0;\n\
+             Для Каждого elem Из a Цикл\n\
+             сумма = сумма + elem.x;\n\
+             КонецЦикла\n\
+             Возврат сумма;",
+        );
+        // elem.x -> 10 (форма "x,y", x на слоте 0) + 100 (форма "y,x", x на слоте 1) = 110.
+        assert_eq!(v, num("110"));
+    }
+
+    #[test]
+    fn set_prop_inline_cache_stays_correct_across_different_shapes() {
+        let v = run_src(
+            "a = Новый Массив(2);\n\
+             a[0] = Новый Структура(\"x,y\", 0, 0);\n\
+             a[1] = Новый Структура(\"y,x\", 0, 0);\n\
+             Для Каждого elem Из a Цикл\n\
+             elem.x = 42;\n\
+             КонецЦикла\n\
+             Возврат a[0].x + a[1].x;",
+        );
+        assert_eq!(v, num("84"));
     }
 
     #[test]

@@ -456,6 +456,77 @@ impl BslValue {
         }
     }
 
+    /// Инлайн-кэш для `GetProp` (см. брифовский план оптимизаций: "слот
+    /// хранит (shape_ptr, slot_idx)"). `cache` — одна ячейка НА КОНКРЕТНУЮ
+    /// инструкцию в чанке (см. `Chunk::prop_cache` в `bsl-bytecode`),
+    /// живёт между исполнениями этой инструкции. Промах — обычный поиск
+    /// по `Shape::index` плюс запись в кэш; форма меняется редко (обычно
+    /// вообще никогда для данной инструкции — иначе откуда там структура
+    /// другой формы), так что кэш почти всегда мономорфный.
+    ///
+    /// Держим `Rc<Shape>` целиком, а не голый указатель: так кэш не может
+    /// протухнуть на чужой адрес, если форма где-то освободится — он сам
+    /// продлевает ей жизнь, пока висит в кэше.
+    pub fn get_field_cached(
+        &self,
+        name: NameId,
+        cache: &std::cell::RefCell<Option<(Rc<Shape>, u32)>>,
+    ) -> RtResult<BslValue> {
+        match self {
+            BslValue::Object(o) => match &**o {
+                BslObject::Structure(s) => {
+                    let s = s.borrow();
+                    if let Some((cached_shape, slot)) = cache.borrow().as_ref() {
+                        if Rc::ptr_eq(cached_shape, &s.shape) {
+                            return Ok(s.slots[*slot as usize].clone());
+                        }
+                    }
+                    match s.shape.index.get(&name) {
+                        Some(&slot) => {
+                            *cache.borrow_mut() = Some((s.shape.clone(), slot));
+                            Ok(s.slots[slot as usize].clone())
+                        }
+                        None => Err(RtError::UnknownField(name)),
+                    }
+                }
+                _ => Err(RtError::NotAnObject),
+            },
+            _ => Err(RtError::NotAnObject),
+        }
+    }
+
+    /// Инлайн-кэш для `SetProp` — см. `get_field_cached`.
+    pub fn set_field_cached(
+        &self,
+        name: NameId,
+        val: BslValue,
+        cache: &std::cell::RefCell<Option<(Rc<Shape>, u32)>>,
+    ) -> RtResult<()> {
+        match self {
+            BslValue::Object(o) => match &**o {
+                BslObject::Structure(s) => {
+                    let mut s = s.borrow_mut();
+                    if let Some((cached_shape, slot)) = cache.borrow().as_ref() {
+                        if Rc::ptr_eq(cached_shape, &s.shape) {
+                            s.slots[*slot as usize] = val;
+                            return Ok(());
+                        }
+                    }
+                    match s.shape.index.get(&name).copied() {
+                        Some(slot) => {
+                            *cache.borrow_mut() = Some((s.shape.clone(), slot));
+                            s.slots[slot as usize] = val;
+                            Ok(())
+                        }
+                        None => Err(RtError::UnknownField(name)),
+                    }
+                }
+                _ => Err(RtError::NotAnObject),
+            },
+            _ => Err(RtError::NotAnObject),
+        }
+    }
+
     /// Резолвинг поля/псевдо-свойства по ИМЕНИ (не `NameId`) — нужен для
     /// объектов, чьи "поля" известны только в рантайме: колонки
     /// `СтрокиТаблицыЗначений` заводятся через `.Колонки.Добавить(имя)`, а
