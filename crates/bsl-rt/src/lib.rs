@@ -249,27 +249,47 @@ impl BslValue {
         Ok(BslValue::Number(self.as_number("Exp")?.exp()?))
     }
 
-    /// `Округл(Число, ЧислоРазрядов)` — decimal half-up, НЕ через `f64`:
+    /// `Округл(Число, ЧислоРазрядов, Режим)` — decimal, НЕ через `f64`:
     /// `Округл(2.675, 2)` обязан дать `2.68`, а не `2.67` (ближайший `f64` к
-    /// `2.675` чуть меньше самого числа). Настоящая 1С принимает третий
-    /// аргумент — режим округления (банковское/математическое) — который
-    /// здесь НЕ реализован: нет доступа к платформе, чтобы снять, какой из
-    /// режимов действует по умолчанию и совпадает ли он со схемой деления
-    /// (half-up-от-нуля, см. `bsl_number::div_half_up_i128`) или это
-    /// половина-к-чётному. Используется схема деления как наиболее
-    /// вероятная (обе — стандартные способы округления в decimal-системах),
-    /// это ПРЕДПОЛОЖЕНИЕ, не измеренный факт.
-    pub fn round(&self, digits: &Self) -> RtResult<Self> {
+    /// `2.675` чуть меньше самого числа).
+    ///
+    /// Все три аргумента здесь всегда есть: недостающие подставляет
+    /// `bsl-sema::resolver::resolve_call` литеральным `0` (см. там же, почему
+    /// не вариативная арность).
+    ///
+    /// Режим — параметр, а не зашитая схема, потому что НЕ ИЗМЕРЕНО ни
+    /// умолчание, ни кодировка режимов числами: см.
+    /// `bsl_number::RoundMode`/`DEFAULT_ROUND_MODE` и список замеров в
+    /// README. Здесь принято `0` -> умолчание (half-up, схема деления),
+    /// `1` -> half-even; это ПРЕДПОЛОЖЕНИЕ, помеченное как таковое, а не
+    /// снятый с платформы факт.
+    pub fn round(&self, digits: &Self, mode: &Self) -> RtResult<Self> {
         let n = self.as_number("Округл")?;
-        let d = digits.as_number("Округл")?;
-        let scale = d
+        let scale = Self::round_arg_as_i32(digits)?;
+        let mode = match Self::round_arg_as_i32(mode)? {
+            0 => bsl_number::DEFAULT_ROUND_MODE,
+            1 => bsl_number::RoundMode::HalfEven,
+            _ => {
+                return Err(RtError::TypeError {
+                    expected: "РежимОкругления (0 или 1)",
+                    op: "Округл",
+                })
+            }
+        };
+        Ok(BslValue::Number(match mode {
+            bsl_number::RoundMode::HalfUp => n.round_to_scale(scale),
+            bsl_number::RoundMode::HalfEven => n.round_to_scale_half_even(scale),
+        }))
+    }
+
+    fn round_arg_as_i32(v: &Self) -> RtResult<i32> {
+        v.as_number("Округл")?
             .to_i64_exact()
             .and_then(|s| i32::try_from(s).ok())
             .ok_or(RtError::TypeError {
                 expected: "Число (целое)",
                 op: "Округл",
-            })?;
-        Ok(BslValue::Number(n.round_to_scale(scale)))
+            })
     }
 
     /// `Цел(Число)` — отбрасывание дробной части К НУЛЮ (не half-up, в

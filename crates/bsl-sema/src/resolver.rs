@@ -518,24 +518,27 @@ impl<'a> Resolver<'a> {
                         args: rargs,
                     });
                 }
-                // `Округл(x[, ЧислоРазрядов])` — единственный builtin с
-                // необязательным аргументом, до генерального механизма
-                // умолчаний builtin'ов (которого нет — см.
+                // `Округл(x[, ЧислоРазрядов[, Режим]])` — единственный
+                // builtin с необязательными аргументами, до генерального
+                // механизма умолчаний builtin'ов (которого нет — см.
                 // `bsl_rt::BuiltinFn::arity`, всегда фиксированная арность).
-                // Подставляем `0` литералом здесь же, а не заводим
-                // вариативную арность ради одной функции:
-                // `BuiltinFn::Round` в рантайме всегда видит ровно 2
-                // аргумента.
+                // Подставляем недостающие `0` литералами здесь же, а не
+                // заводим вариативную арность ради одной функции:
+                // `BuiltinFn::Round` в рантайме всегда видит ровно 3
+                // аргумента. `0` для режима означает "умолчание" (см.
+                // `BslValue::round`), не конкретную схему — какая схема
+                // за ним стоит, НЕ ИЗМЕРЕНО.
                 if name.eq_ignore_ascii_case("Округл") || name.eq_ignore_ascii_case("Round") {
-                    if args.is_empty() || args.len() > 2 {
+                    const ROUND_ARITY: usize = 3;
+                    if args.is_empty() || args.len() > ROUND_ARITY {
                         return Err(SemaError::ArgumentCountMismatch {
                             name: name.clone(),
-                            expected: 2,
+                            expected: ROUND_ARITY,
                             found: args.len(),
                         });
                     }
                     let mut rargs = self.resolve_required_args(args)?;
-                    if rargs.len() == 1 {
+                    while rargs.len() < ROUND_ARITY {
                         rargs.push(RExpr::Number(BslNumber::from_i64(0)));
                     }
                     return Ok(RExpr::CallBuiltinFn {

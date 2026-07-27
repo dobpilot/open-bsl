@@ -100,3 +100,36 @@ fn trunc_to_scale_is_toward_zero_not_half_up() {
     assert_eq!(c(&n("2.675").trunc_to_scale(2)), "2.67");
     assert_eq!(c(&n("123").trunc_to_scale(0)), "123");
 }
+
+#[test]
+fn round_to_scale_half_even_differs_from_half_up_only_on_exact_ties() {
+    // НЕ ИЗМЕРЕНО на платформе — этот режим существует только под явно
+    // запрошенный третий аргумент `Округл` (см. `bsl_number::RoundMode`);
+    // тест фиксирует саму схему, не то, что 1С её так называет.
+    assert_eq!(c(&n("2.5").round_to_scale_half_even(0)), "2");
+    assert_eq!(c(&n("3.5").round_to_scale_half_even(0)), "4");
+    assert_eq!(c(&n("-2.5").round_to_scale_half_even(0)), "-2");
+    assert_eq!(c(&n("-3.5").round_to_scale_half_even(0)), "-4");
+    assert_eq!(c(&n("0.5").round_to_scale_half_even(0)), "0");
+    assert_eq!(c(&n("1.5").round_to_scale_half_even(0)), "2");
+
+    // Мимо ничьей обе схемы совпадают.
+    for s in ["2.4", "2.6", "-2.4", "-2.6", "2.675", "123"] {
+        assert_eq!(
+            c(&n(s).round_to_scale_half_even(2)),
+            c(&n(s).round_to_scale(2)),
+            "не на ничьей half-even обязан совпасть с half-up: {s}"
+        );
+    }
+
+    // И на большом ярусе (BigInt) тоже: 2.5 с мантиссой за пределами i128.
+    let big = n("25000000000000000000000000000000000000000.5");
+    assert_eq!(
+        c(&big.round_to_scale_half_even(0)),
+        "25000000000000000000000000000000000000000"
+    );
+    assert_eq!(
+        c(&big.round_to_scale(0)),
+        "25000000000000000000000000000000000000001"
+    );
+}

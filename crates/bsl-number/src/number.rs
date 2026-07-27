@@ -336,6 +336,32 @@ impl BslNumber {
         BslNumber::big(q, target_scale)
     }
 
+    /// Округление к заданному масштабу, ПОЛОВИНА-К-ЧЁТНОМУ. Отдельная
+    /// функция, а не параметр `round_to_scale`: half-up снят с платформы
+    /// точной ничьей (см. `div_half_up_i128`) и трогать его нельзя, а
+    /// half-even ничем не подтверждён и существует только под явно
+    /// запрошенный третий аргумент `Округл` (см. `BslValue::round`).
+    pub fn round_to_scale_half_even(&self, target_scale: i32) -> Self {
+        let cur_scale = self.scale();
+        if target_scale >= cur_scale {
+            return self.clone();
+        }
+        let delta = cur_scale - target_scale;
+
+        if let BslNumber::Small { m, .. } = self {
+            if delta <= 38 {
+                if let Some(q) = div_half_even_i128(m.get(), POW10[delta as usize]) {
+                    return BslNumber::small(q, target_scale);
+                }
+            }
+        }
+
+        let b = self.to_big();
+        let divisor = BigInt::from(10u8).pow(delta as u32);
+        let q = div_half_even_big(&b.m, &divisor);
+        BslNumber::big(q, target_scale)
+    }
+
     /// Округление К НУЛЮ (отбрасывание) — `Цел`, в отличие от
     /// `round_to_scale` (half-up, деление/`Округл`). `/` у знаковых целых
     /// в Rust и у `BigInt` в `num-bigint` УЖЕ усечение к нулю, поэтому
@@ -453,6 +479,66 @@ fn div_half_up_big(n: &BigInt, d: &BigInt) -> BigInt {
         return q;
     }
     let bump = (r.abs() * 2u8) >= d.abs();
+    if !bump {
+        return q;
+    }
+    let neg = n.is_negative() != d.is_negative();
+    if neg {
+        q - BigInt::one()
+    } else {
+        q + BigInt::one()
+    }
+}
+
+// --- Округление half-even (к чётному на ничьей) ---------------------------
+//
+// НЕ ИЗМЕРЕНО на платформе — существует только как ЯВНО ЗАПРОШЕННЫЙ третий
+// аргумент `Округл`, никогда как умолчание и никогда для деления (там
+// half-up подтверждён точной ничьей, см. выше). Отличается от half-up
+// ровно на точной ничьей: 2,5 -> 2 и 3,5 -> 4 вместо 3 и 4.
+
+fn div_half_even_i128(n: i128, d: i128) -> Option<i128> {
+    let q = n.checked_div(d)?;
+    let r = n % d;
+    if r == 0 {
+        return Some(q);
+    }
+    let rr = r.unsigned_abs();
+    let dd = d.unsigned_abs();
+    let doubled = rr.checked_mul(2);
+    let bump = match doubled {
+        // Ровно половина: округляем только если частное нечётное — чтобы
+        // результат оказался чётным.
+        Some(x) if x == dd => q % 2 != 0,
+        Some(x) => x > dd,
+        // Переполнение удвоения означает, что остаток заведомо больше
+        // половины делителя.
+        None => true,
+    };
+    if !bump {
+        return Some(q);
+    }
+    let neg = (n < 0) != (d < 0);
+    if neg {
+        q.checked_sub(1)
+    } else {
+        q.checked_add(1)
+    }
+}
+
+fn div_half_even_big(n: &BigInt, d: &BigInt) -> BigInt {
+    let q = n / d;
+    let r = n % d;
+    if r.is_zero() {
+        return q;
+    }
+    let doubled = r.abs() * 2u8;
+    let da = d.abs();
+    let bump = match doubled.cmp(&da) {
+        Ordering::Equal => !(&q % 2u8).is_zero(),
+        Ordering::Greater => true,
+        Ordering::Less => false,
+    };
     if !bump {
         return q;
     }
