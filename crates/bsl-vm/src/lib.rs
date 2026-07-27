@@ -63,7 +63,13 @@ impl Frame {
 /// Rust-коду.
 pub fn run_program(program: &Program) -> Result<BslValue, RtError> {
     let mut stack: Vec<BslValue> = Vec::new();
-    push_own_registers(&mut stack, &program.chunks[0]);
+    // Публичная точка входа — `Program` могли собрать и не нашим кодогеном
+    // (это `pub fn`), поэтому даже отсутствие `chunks[0]` — ошибка, а не
+    // паника.
+    push_own_registers(
+        &mut stack,
+        at(&program.chunks, 0, "в программе нет чанка верхнего уровня")?,
+    );
     let (value, _stack) = drive(program, 0, stack)?;
     Ok(value)
 }
@@ -146,6 +152,67 @@ enum Step {
     Done(BslValue),
 }
 
+// --- Доступ к байт-коду и регистрам ------------------------------------
+//
+// Ни одна паника в этом модуле не должна зависеть от ВХОДНЫХ ДАННЫХ. Всё,
+// что инструкция читает по индексу — номер регистра, номер чанка,
+// константы, формы, имени, аргумент builtin'а, — приходит из `Program`, а
+// `Program` VM получает не только от собственного кодогена: её собирает
+// `Выполнить`/`Вычислить` в рантайме, REPL `bsl-cli` по строке, и любой
+// внешний пользователь публичных `run_program`/`run_repl_chunk`. Поэтому
+// такие обращения дают `RtError::InvalidBytecode`, а не роняют процесс.
+//
+// Остаются ровно два `expect()` — на `frames.pop()` в
+// `do_return_with_value` и `unwind_to_handler`: это внутренние инварианты
+// самого цикла диспетчеризации (стек кадров непуст, пока мы исполняем
+// инструкцию), недостижимые никаким байт-кодом. Голых `unwrap()` вне
+// тестов нет ни одного.
+
+#[inline]
+fn at<'a, T>(xs: &'a [T], i: usize, what: &'static str) -> Result<&'a T, RtError> {
+    xs.get(i).ok_or(RtError::InvalidBytecode(what))
+}
+
+#[inline]
+fn reg_load(stack: &[BslValue], i: usize) -> Result<BslValue, RtError> {
+    stack
+        .get(i)
+        .cloned()
+        .ok_or(RtError::InvalidBytecode("чтение регистра за границей стека значений"))
+}
+
+#[inline]
+fn reg_store(stack: &mut [BslValue], i: usize, v: BslValue) -> Result<(), RtError> {
+    match stack.get_mut(i) {
+        Some(slot) => {
+            *slot = v;
+            Ok(())
+        }
+        None => Err(RtError::InvalidBytecode(
+            "запись регистра за границей стека значений",
+        )),
+    }
+}
+
+/// Ячейка инлайн-кэша, отведённая под инструкцию на позиции `pc`.
+/// `prop_cache` кодоген заводит длиной со всем `instrs`, но чанк мог
+/// прийти и не от него.
+#[inline]
+fn prop_cache(
+    chunk: &bsl_bytecode::Chunk,
+    pc: usize,
+) -> Result<&std::cell::RefCell<Option<(std::rc::Rc<bsl_rt::Shape>, u32)>>, RtError> {
+    at(&chunk.prop_cache, pc, "нет ячейки инлайн-кэша для инструкции")
+}
+
+/// Оригинальное написание имени поля — нужно строковому пути доступа
+/// (`СтрокаТаблицыЗначений`, `КлючИЗначение`), у которого нет формы.
+#[inline]
+fn field_name(program: &Program, name: bsl_rt::NameId) -> Result<&str, RtError> {
+    at(&program.names, name.index(), "идентификатор имени вне таблицы имён программы")
+        .map(|s| s.as_str())
+}
+
 /// Выполняет РОВНО одну инструкцию текущего (верхнего) кадра.
 fn step(
     frames: &mut Vec<Frame>,
@@ -157,50 +224,52 @@ fn step(
     let frame_idx = frames.len() - 1;
     let func_id = frames[frame_idx].func_id;
     let pc = frames[frame_idx].pc;
-    let chunk = &program.chunks[func_id];
+    let chunk = at(&program.chunks, func_id, "номер чанка вне таблицы функций")?;
 
     if pc >= chunk.instrs.len() {
         // Неявный возврат: тело кончилось без `Возврат` — результат
         // Неопределено, как и `Возврат;` без выражения.
-        return Ok(match do_return_with_value(frames, stack, BslValue::Undefined) {
+        return Ok(match do_return_with_value(frames, stack, BslValue::Undefined)? {
             Done(v) => Step::Done(v),
             Continuing => Step::Continue,
         });
     }
 
+    // `pc < chunk.instrs.len()` проверено сразу выше — индексация здесь
+    // уже не может выйти за границы.
     let instr = chunk.instrs[pc];
     match instr {
             Instr::Move { dst, src } => {
                 let s = frames[frame_idx].reg_index(src);
-                let v = stack[s].clone();
+                let v = reg_load(stack, s)?;
                 let d = frames[frame_idx].reg_index(dst);
-                stack[d] = v;
+                reg_store(stack, d, v)?;
                 frames[frame_idx].pc += 1;
             }
             Instr::LoadConst { dst, k } => {
-                let v = chunk.consts[k as usize].clone();
+                let v = at(&chunk.consts, k as usize, "номер константы вне таблицы констант чанка")?.clone();
                 let d = frames[frame_idx].reg_index(dst);
-                stack[d] = v;
+                reg_store(stack, d, v)?;
                 frames[frame_idx].pc += 1;
             }
             Instr::LoadBool { dst, val } => {
                 let d = frames[frame_idx].reg_index(dst);
-                stack[d] = BslValue::Boolean(val);
+                reg_store(stack, d, BslValue::Boolean(val))?;
                 frames[frame_idx].pc += 1;
             }
             Instr::LoadUndefined { dst } => {
                 let d = frames[frame_idx].reg_index(dst);
-                stack[d] = BslValue::Undefined;
+                reg_store(stack, d, BslValue::Undefined)?;
                 frames[frame_idx].pc += 1;
             }
             Instr::LoadNull { dst } => {
                 let d = frames[frame_idx].reg_index(dst);
-                stack[d] = BslValue::Null;
+                reg_store(stack, d, BslValue::Null)?;
                 frames[frame_idx].pc += 1;
             }
             Instr::LoadSkipped { dst } => {
                 let d = frames[frame_idx].reg_index(dst);
-                stack[d] = BslValue::Skipped;
+                reg_store(stack, d, BslValue::Skipped)?;
                 frames[frame_idx].pc += 1;
             }
             Instr::Add { dst, a, b } => {
@@ -221,30 +290,30 @@ fn step(
             }
             Instr::Neg { dst, src } => {
                 let s = frames[frame_idx].reg_index(src);
-                let v = stack[s].neg()?;
+                let v = reg_load(stack, s)?.neg()?;
                 let d = frames[frame_idx].reg_index(dst);
-                stack[d] = v;
+                reg_store(stack, d, v)?;
                 frames[frame_idx].pc += 1;
             }
             Instr::Not { dst, src } => {
                 let s = frames[frame_idx].reg_index(src);
-                let v = stack[s].not()?;
+                let v = reg_load(stack, s)?.not()?;
                 let d = frames[frame_idx].reg_index(dst);
-                stack[d] = v;
+                reg_store(stack, d, v)?;
                 frames[frame_idx].pc += 1;
             }
             Instr::Eq { dst, a, b } => {
-                let av = stack[frames[frame_idx].reg_index(a)].clone();
-                let bv = stack[frames[frame_idx].reg_index(b)].clone();
+                let av = reg_load(stack, frames[frame_idx].reg_index(a))?;
+                let bv = reg_load(stack, frames[frame_idx].reg_index(b))?;
                 let d = frames[frame_idx].reg_index(dst);
-                stack[d] = BslValue::Boolean(av.eq_value(&bv));
+                reg_store(stack, d, BslValue::Boolean(av.eq_value(&bv)))?;
                 frames[frame_idx].pc += 1;
             }
             Instr::NotEq { dst, a, b } => {
-                let av = stack[frames[frame_idx].reg_index(a)].clone();
-                let bv = stack[frames[frame_idx].reg_index(b)].clone();
+                let av = reg_load(stack, frames[frame_idx].reg_index(a))?;
+                let bv = reg_load(stack, frames[frame_idx].reg_index(b))?;
                 let d = frames[frame_idx].reg_index(dst);
-                stack[d] = BslValue::Boolean(!av.eq_value(&bv));
+                reg_store(stack, d, BslValue::Boolean(!av.eq_value(&bv)))?;
                 frames[frame_idx].pc += 1;
             }
             Instr::Lt { dst, a, b } => {
@@ -278,7 +347,7 @@ fn step(
                 let c = frames[frame_idx].reg_index(cond);
                 // Строгая булевость: не-`Булево` в условии — ошибка типа,
                 // а не приведение к истинности.
-                if stack[c].as_condition()? {
+                if reg_load(stack, c)?.as_condition()? {
                     frames[frame_idx].pc += 1;
                 } else {
                     frames[frame_idx].pc = target as usize;
@@ -286,7 +355,7 @@ fn step(
             }
             Instr::JumpIfTrue { cond, target } => {
                 let c = frames[frame_idx].reg_index(cond);
-                if stack[c].as_condition()? {
+                if reg_load(stack, c)?.as_condition()? {
                     frames[frame_idx].pc = target as usize;
                 } else {
                     frames[frame_idx].pc += 1;
@@ -298,7 +367,7 @@ fn step(
                 // пользовательского кода, а проверка внутреннего маркера
                 // (см. пролог параметров по умолчанию в
                 // `bsl-bytecode::compiler::compile_param_defaults`).
-                if matches!(stack[s], BslValue::Skipped) {
+                if matches!(reg_load(stack, s)?, BslValue::Skipped) {
                     frames[frame_idx].pc += 1;
                 } else {
                     frames[frame_idx].pc = target as usize;
@@ -314,7 +383,7 @@ fn step(
                 // callee вернётся, мы продолжим ровно со следующей.
                 frames[frame_idx].pc += 1;
 
-                let modes = &chunk.call_arg_modes[arg_modes as usize];
+                let modes = at(&chunk.call_arg_modes, arg_modes as usize, "номер набора режимов аргументов вне таблицы чанка")?;
                 let mut param_aliases = Vec::with_capacity(modes.len());
                 for (i, mode) in modes.iter().enumerate() {
                     let idx = match mode {
@@ -324,7 +393,7 @@ fn step(
                     param_aliases.push(idx);
                 }
 
-                let callee_chunk = &program.chunks[func as usize];
+                let callee_chunk = at(&program.chunks, func as usize, "номер вызываемого чанка вне таблицы функций")?;
                 let call_start = stack.len();
                 let own_base = stack.len();
                 push_own_registers(stack, callee_chunk);
@@ -342,32 +411,32 @@ fn step(
                 let value = match src {
                     Some(r) => {
                         let idx = frames[frame_idx].reg_index(r);
-                        stack[idx].clone()
+                        reg_load(stack, idx)?
                     }
                     None => BslValue::Undefined,
                 };
-                return Ok(match do_return_with_value(frames, stack, value) {
+                return Ok(match do_return_with_value(frames, stack, value)? {
                     Done(v) => Step::Done(v),
                     Continuing => Step::Continue,
                 });
             }
             Instr::GetIndex { dst, obj, idx } => {
-                let ov = stack[frames[frame_idx].reg_index(obj)].clone();
-                let iv = stack[frames[frame_idx].reg_index(idx)].clone();
+                let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
+                let iv = reg_load(stack, frames[frame_idx].reg_index(idx))?;
                 let v = ov.get_index(&iv, &runtime_shapes.names)?;
                 let d = frames[frame_idx].reg_index(dst);
-                stack[d] = v;
+                reg_store(stack, d, v)?;
                 frames[frame_idx].pc += 1;
             }
             Instr::SetIndex { obj, idx, src } => {
-                let ov = stack[frames[frame_idx].reg_index(obj)].clone();
-                let iv = stack[frames[frame_idx].reg_index(idx)].clone();
-                let sv = stack[frames[frame_idx].reg_index(src)].clone();
+                let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
+                let iv = reg_load(stack, frames[frame_idx].reg_index(idx))?;
+                let sv = reg_load(stack, frames[frame_idx].reg_index(src))?;
                 ov.set_index(&iv, sv)?;
                 frames[frame_idx].pc += 1;
             }
             Instr::GetProp { dst, obj, name } => {
-                let ov = stack[frames[frame_idx].reg_index(obj)].clone();
+                let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
                 // Структура резолвится через инлайн-кэш этой ИНСТРУКЦИИ
                 // (см. Chunk::prop_cache): мономорфный сайт вызова после
                 // первого попадания читает слот напрямую, без HashMap-
@@ -376,20 +445,20 @@ fn step(
                 // этапе компиляции — для неё (и только когда кэш-путь
                 // говорит "это не такой объект") VM резолвит имя в текст
                 // через Program::names и идёт по строковому пути.
-                let v = match ov.get_field_cached(name, &chunk.prop_cache[pc]) {
-                    Err(RtError::NotAnObject) => ov.get_field_by_name(&program.names[name.index()])?,
+                let v = match ov.get_field_cached(name, prop_cache(chunk, pc)?) {
+                    Err(RtError::NotAnObject) => ov.get_field_by_name(field_name(program, name)?)?,
                     other => other?,
                 };
                 let d = frames[frame_idx].reg_index(dst);
-                stack[d] = v;
+                reg_store(stack, d, v)?;
                 frames[frame_idx].pc += 1;
             }
             Instr::SetProp { obj, name, src } => {
-                let ov = stack[frames[frame_idx].reg_index(obj)].clone();
-                let sv = stack[frames[frame_idx].reg_index(src)].clone();
-                match ov.set_field_cached(name, sv.clone(), &chunk.prop_cache[pc]) {
+                let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
+                let sv = reg_load(stack, frames[frame_idx].reg_index(src))?;
+                match ov.set_field_cached(name, sv.clone(), prop_cache(chunk, pc)?) {
                     Err(RtError::NotAnObject) => {
-                        ov.set_field_by_name(&program.names[name.index()], sv)?
+                        ov.set_field_by_name(field_name(program, name)?, sv)?
                     }
                     other => other?,
                 }
@@ -398,12 +467,12 @@ fn step(
             Instr::NewArray { dst, base, count } => {
                 let mut dims = Vec::with_capacity(count as usize);
                 for i in 0..count {
-                    let v = stack[frames[frame_idx].reg_index(base + i)].clone();
+                    let v = reg_load(stack, frames[frame_idx].reg_index(base + i))?;
                     dims.push(dim_to_usize(&v)?);
                 }
                 let arr = build_nested_array(&dims);
                 let d = frames[frame_idx].reg_index(dst);
-                stack[d] = arr;
+                reg_store(stack, d, arr)?;
                 frames[frame_idx].pc += 1;
             }
             Instr::NewStructure {
@@ -412,36 +481,36 @@ fn step(
                 base,
                 count,
             } => {
-                let shape_rc = program.shapes[shape as usize].clone();
+                let shape_rc = at(&program.shapes, shape as usize, "номер формы вне таблицы форм программы")?.clone();
                 let mut slots = Vec::with_capacity(count as usize);
                 for i in 0..count {
-                    slots.push(stack[frames[frame_idx].reg_index(base + i)].clone());
+                    slots.push(reg_load(stack, frames[frame_idx].reg_index(base + i))?);
                 }
                 let v = BslValue::new_structure(shape_rc, slots);
                 let d = frames[frame_idx].reg_index(dst);
-                stack[d] = v;
+                reg_store(stack, d, v)?;
                 frames[frame_idx].pc += 1;
             }
             Instr::NewTable { dst } => {
                 let d = frames[frame_idx].reg_index(dst);
-                stack[d] = BslValue::new_table();
+                reg_store(stack, d, BslValue::new_table())?;
                 frames[frame_idx].pc += 1;
             }
             Instr::NewMap { dst } => {
                 let d = frames[frame_idx].reg_index(dst);
-                stack[d] = BslValue::new_map();
+                reg_store(stack, d, BslValue::new_map())?;
                 frames[frame_idx].pc += 1;
             }
             Instr::CollectionLen { dst, obj } => {
-                let ov = stack[frames[frame_idx].reg_index(obj)].clone();
+                let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
                 let len = ov.collection_len()?;
                 let d = frames[frame_idx].reg_index(dst);
-                stack[d] = BslValue::Number(bsl_number::BslNumber::from_i64(len as i64));
+                reg_store(stack, d, BslValue::Number(bsl_number::BslNumber::from_i64(len as i64)))?;
                 frames[frame_idx].pc += 1;
             }
             Instr::Raise { src } => {
                 let value = match src {
-                    Some(r) => stack[frames[frame_idx].reg_index(r)].clone(),
+                    Some(r) => reg_load(stack, frames[frame_idx].reg_index(r))?,
                     // Голая форма: повторно бросаем то, что сейчас поймано
                     // (или Неопределено, если бросить нечего — например,
                     // `ВызватьИсключение;` вне `Исключение`).
@@ -457,11 +526,11 @@ fn step(
             } => {
                 let mut args = Vec::with_capacity(count as usize);
                 for i in 0..count {
-                    args.push(stack[frames[frame_idx].reg_index(base + i)].clone());
+                    args.push(reg_load(stack, frames[frame_idx].reg_index(base + i))?);
                 }
                 let v = call_builtin_with_format(builtin, &args)?;
                 let d = frames[frame_idx].reg_index(dst);
-                stack[d] = v;
+                reg_store(stack, d, v)?;
                 frames[frame_idx].pc += 1;
             }
             Instr::CallMethod {
@@ -471,21 +540,21 @@ fn step(
                 base,
                 count,
             } => {
-                let ov = stack[frames[frame_idx].reg_index(obj)].clone();
+                let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
                 let mut args = Vec::with_capacity(count as usize);
                 for i in 0..count {
-                    args.push(stack[frames[frame_idx].reg_index(base + i)].clone());
+                    args.push(reg_load(stack, frames[frame_idx].reg_index(base + i))?);
                 }
                 let v = bsl_rt::call_builtin_method_ctx(method, &ov, &args, runtime_shapes)?;
                 let d = frames[frame_idx].reg_index(dst);
-                stack[d] = v;
+                reg_store(stack, d, v)?;
                 frames[frame_idx].pc += 1;
             }
             Instr::RunDynamic { src, dst, is_eval } => {
                 if frames.len() != 1 {
                     return Err(RtError::DynamicNotAtTopLevel);
                 }
-                let code = stack[frames[frame_idx].reg_index(src)].clone();
+                let code = reg_load(stack, frames[frame_idx].reg_index(src))?;
                 let code = match code {
                     BslValue::Str(s) => s.to_string(),
                     _ => {
@@ -497,7 +566,7 @@ fn step(
                 };
                 let value = run_dynamic_snippet(&code, is_eval, program, stack, &frames[frame_idx])?;
                 let d = frames[frame_idx].reg_index(dst);
-                stack[d] = value;
+                reg_store(stack, d, value)?;
                 frames[frame_idx].pc += 1;
             }
         }
@@ -561,8 +630,8 @@ fn run_dynamic_snippet(
 
     let old_count = program.top_level_locals.len();
     let mut snippet_stack: Vec<BslValue> = (0..old_count)
-        .map(|i| stack[top_frame.reg_index(i as u8)].clone())
-        .collect();
+        .map(|i| reg_load(stack, top_frame.reg_index(i as u8)))
+        .collect::<Result<_, _>>()?;
     snippet_stack.resize(chunk.n_regs as usize, BslValue::Undefined);
 
     let snippet_program = Program {
@@ -576,7 +645,7 @@ fn run_dynamic_snippet(
 
     for i in 0..old_count {
         let d = top_frame.reg_index(i as u8);
-        stack[d] = final_stack[i].clone();
+        reg_store(stack, d, reg_load(&final_stack, i)?)?;
     }
 
     Ok(value)
@@ -621,8 +690,13 @@ fn build_nested_array(dims: &[usize]) -> BslValue {
 
 /// Заводит "собственные" регистры чанка (сверх параметров) в конце стека —
 /// используется и для верхнего уровня (0 параметров), и для вызовов.
+/// `n_regs < n_params` кодоген не порождает (пиковое число регистров
+/// включает параметры), но вычитание `u8` на таком чанке паниковало бы в
+/// debug и молча заворачивалось в release — берём насыщающее, а промах по
+/// регистру дальше поймает `reg_load`/`reg_store` уже как
+/// `InvalidBytecode`.
 fn push_own_registers(stack: &mut Vec<BslValue>, chunk: &bsl_bytecode::Chunk) {
-    let n_own = (chunk.n_regs - chunk.n_params) as usize;
+    let n_own = chunk.n_regs.saturating_sub(chunk.n_params) as usize;
     stack.resize(stack.len() + n_own, BslValue::Undefined);
 }
 
@@ -632,21 +706,19 @@ enum ReturnOutcome {
 }
 use ReturnOutcome::{Continuing, Done};
 
-/// `frames.pop().expect(...)` ниже — внутренний инвариант VM, не входные
-/// данные: аудит ревью (задача 5) нашёл 12 `unwrap`/`expect`/`panic!` во
-/// всём `bsl-vm/src/lib.rs`, из которых 10 — в `#[cfg(test)] mod tests`
-/// (тестовые хелперы вроде `run_src`, падение там и есть смысл теста, не
-/// риск для прод-кода), а эти два — единственные вне тестов (второй — в
-/// `unwind_to_handler` ниже). `step`/`drive` вызывают эту функцию, только
-/// пока `frames` не пуст (сам факт исполнения инструкции это гарантирует),
-/// так что кривой, но синтаксически валидный BSL-скрипт сюда никогда не
-/// приведёт — он получит `RtError` раньше, из самой инструкции.
+/// `frames.pop().expect(...)` ниже — ВНУТРЕННИЙ ИНВАРИАНТ VM, а не входные
+/// данные (см. классификацию в шапке модуля): `step`/`drive` вызывают эту
+/// функцию только пока `frames` не пуст — сам факт того, что мы исполняем
+/// инструкцию, это гарантирует. Никакой байт-код, корректный или нет, сюда
+/// с пустым стеком кадров не приведёт.
 fn do_return_with_value(
     frames: &mut Vec<Frame>,
     stack: &mut Vec<BslValue>,
     value: BslValue,
-) -> ReturnOutcome {
-    let frame = frames.pop().expect("VM: возврат без активного кадра");
+) -> Result<ReturnOutcome, RtError> {
+    let frame = frames
+        .pop()
+        .expect("инвариант VM: возврат исполняется только при непустом стеке кадров");
     match frames.last() {
         None => {
             // Самый верхний кадр завершился: НЕ усекаем стек — `drive`
@@ -654,13 +726,13 @@ fn do_return_with_value(
             // чтобы прочитать финальные значения регистров после
             // `Выполнить`/`Вычислить`, а обычному `run_program` разницы
             // нет — он этот стек всё равно не читает после возврата).
-            Done(value)
+            Ok(Done(value))
         }
         Some(caller) => {
             stack.truncate(frame.call_start);
             let dst = caller.reg_index(frame.return_reg);
-            stack[dst] = value;
-            Continuing
+            reg_store(stack, dst, value)?;
+            Ok(Continuing)
         }
     }
 }
@@ -698,11 +770,19 @@ fn unwind_to_handler(
     let mut first = true;
     loop {
         let frame_idx = frames.len() - 1;
-        let chunk = &program.chunks[frames[frame_idx].func_id];
+        let chunk = match program.chunks.get(frames[frame_idx].func_id) {
+            Some(c) => c,
+            // Кадр с несуществующим чанком — не наше дело здесь: ошибку
+            // уже несут наружу, обработчик в нём всё равно не найти.
+            None => return false,
+        };
         let check_pc = if first {
             frames[frame_idx].pc
         } else {
-            frames[frame_idx].pc - 1
+            // Кадр выше по стеку всегда стоит ЗА своей инструкцией `Call`,
+            // так что `pc >= 1`; насыщение — страховка от того, что кадр
+            // собрали не мы (см. классификацию паник в шапке модуля).
+            frames[frame_idx].pc.saturating_sub(1)
         };
         first = false;
 
@@ -715,9 +795,9 @@ fn unwind_to_handler(
         if frames.len() == 1 {
             return false;
         }
-        // `frames.len() >= 2` только что проверено выше — `pop` не может
-        // вернуть `None`.
-        let frame = frames.pop().expect("frames.len() >= 2 проверено выше");
+        let frame = frames
+            .pop()
+            .expect("инвариант VM: `frames.len() >= 2` проверено строкой выше");
         stack.truncate(frame.call_start);
     }
 }
@@ -739,11 +819,22 @@ fn err_to_value(err: &RtError) -> BslValue {
 /// `bsl_rt::call_builtin_fn`: форматирование живёт в `bsl-format`, которое
 /// зависит от `bsl-rt` (не наоборот) — `bsl-rt` физически не может
 /// отформатировать число сам. Всё остальное уходит в `bsl-rt` как обычно.
+///
+/// Арность проверена в `bsl-sema` — но проверена для того байт-кода,
+/// который родился из резолвинга. Здесь она перепроверяется один раз на
+/// вызов, чтобы ни эта функция, ни `bsl_rt::call_builtin_fn` (тоже
+/// индексирующая `args` напрямую) не паниковали на чанке, собранном мимо
+/// резолвера.
 fn call_builtin_with_format(
     builtin: bsl_rt::BuiltinFn,
     args: &[BslValue],
 ) -> Result<BslValue, RtError> {
     use bsl_rt::BuiltinFn;
+    if args.len() < builtin.arity() {
+        return Err(RtError::InvalidBytecode(
+            "встроенной функции передано меньше аргументов, чем требует её арность",
+        ));
+    }
     match builtin {
         BuiltinFn::Message => {
             println!("{}", bsl_format::format_value(&args[0], None));
@@ -793,11 +884,11 @@ fn binop(
     b: u8,
     f: impl Fn(&BslValue, &BslValue) -> Result<BslValue, RtError>,
 ) -> Result<(), RtError> {
-    let av = stack[frames[frame_idx].reg_index(a)].clone();
-    let bv = stack[frames[frame_idx].reg_index(b)].clone();
+    let av = reg_load(stack, frames[frame_idx].reg_index(a))?;
+    let bv = reg_load(stack, frames[frame_idx].reg_index(b))?;
     let result = f(&av, &bv)?;
     let d = frames[frame_idx].reg_index(dst);
-    stack[d] = result;
+    reg_store(stack, d, result)?;
     Ok(())
 }
 
@@ -812,11 +903,11 @@ fn cmp(
     op: &'static str,
     f: impl Fn(std::cmp::Ordering) -> bool,
 ) -> Result<(), RtError> {
-    let av = stack[frames[frame_idx].reg_index(a)].clone();
-    let bv = stack[frames[frame_idx].reg_index(b)].clone();
+    let av = reg_load(stack, frames[frame_idx].reg_index(a))?;
+    let bv = reg_load(stack, frames[frame_idx].reg_index(b))?;
     let ord = av.compare(&bv, op)?;
     let d = frames[frame_idx].reg_index(dst);
-    stack[d] = BslValue::Boolean(f(ord));
+    reg_store(stack, d, BslValue::Boolean(f(ord)))?;
     Ok(())
 }
 
@@ -1219,6 +1310,88 @@ mod tests {
              Возврат сумма;",
         );
         assert_eq!(v, num("110"));
+    }
+
+    /// Чанк, собранный мимо кодогена, — ровно тот вход, ради которого
+    /// индексация в `step` возвращает `InvalidBytecode` вместо паники.
+    fn corrupt_program(instrs: Vec<Instr>) -> Program {
+        Program {
+            chunks: vec![bsl_bytecode::Chunk {
+                instrs,
+                consts: Vec::new(),
+                call_arg_modes: Vec::new(),
+                exception_ranges: Vec::new(),
+                n_params: 0,
+                n_locals: 1,
+                n_regs: 1,
+                prop_cache: vec![std::cell::RefCell::new(None)],
+            }],
+            names: Vec::new(),
+            shapes: Vec::new(),
+            top_level_locals: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn corrupt_bytecode_is_an_error_not_a_panic() {
+        // Регистр за границей кадра.
+        assert!(matches!(
+            run_program(&corrupt_program(vec![Instr::Move { dst: 200, src: 0 }])),
+            Err(RtError::InvalidBytecode(_))
+        ));
+        // Номер константы за границей таблицы констант.
+        assert!(matches!(
+            run_program(&corrupt_program(vec![Instr::LoadConst { dst: 0, k: 42 }])),
+            Err(RtError::InvalidBytecode(_))
+        ));
+        // Номер вызываемого чанка за границей таблицы функций.
+        assert!(matches!(
+            run_program(&corrupt_program(vec![Instr::Call {
+                func: 99,
+                base: 0,
+                arg_modes: 0,
+                ret: 0,
+            }])),
+            Err(RtError::InvalidBytecode(_))
+        ));
+        // Номер формы за границей таблицы форм.
+        assert!(matches!(
+            run_program(&corrupt_program(vec![Instr::NewStructure {
+                dst: 0,
+                shape: 7,
+                base: 0,
+                count: 0,
+            }])),
+            Err(RtError::InvalidBytecode(_))
+        ));
+        // Программа вообще без чанка верхнего уровня.
+        let mut empty = corrupt_program(Vec::new());
+        empty.chunks.clear();
+        assert!(matches!(
+            run_program(&empty),
+            Err(RtError::InvalidBytecode(_))
+        ));
+    }
+
+    #[test]
+    fn corrupt_bytecode_inside_a_call_unwinds_to_an_error_not_a_panic() {
+        // Ошибка байт-кода внутри вызванного кадра проходит тем же путём
+        // размотки, что и обычная `RtError`, и не роняет процесс на
+        // `unwind_to_handler`.
+        let mut program = corrupt_program(vec![
+            Instr::Call { func: 1, base: 0, arg_modes: 0, ret: 0 },
+            Instr::Return { src: Some(0) },
+        ]);
+        program.chunks[0].call_arg_modes = vec![Vec::new()];
+        program.chunks[0].prop_cache = vec![std::cell::RefCell::new(None); 2];
+        let mut callee = program.chunks[0].clone();
+        callee.instrs = vec![Instr::Move { dst: 250, src: 0 }];
+        program.chunks.push(callee);
+
+        assert!(matches!(
+            run_program(&program),
+            Err(RtError::InvalidBytecode(_))
+        ));
     }
 
     #[test]
