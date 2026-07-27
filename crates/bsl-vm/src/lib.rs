@@ -2924,6 +2924,232 @@ mod tests {
         assert!(matches!(err, RtError::UnknownColumn(_)));
     }
 
+    // --- ТаблицаЗначений, волна 3 ----------------------------------------
+
+    #[test]
+    fn table_copy_makes_an_independent_table() {
+        // Копия — ДРУГАЯ таблица: правка её ячейки не видна в оригинале.
+        let v = run_src(&format!(
+            "{GOODS}к = т.Скопировать();\n\
+             к[0].цена = 999;\n\
+             Возврат т[0].цена;"
+        ));
+        assert_eq!(v, num("30"));
+        let v = run_src(&format!("{GOODS}Возврат т.Скопировать().Количество();"));
+        assert_eq!(v, num("3"));
+    }
+
+    #[test]
+    fn table_copy_takes_only_the_listed_rows_and_columns() {
+        let v = run_src(&format!(
+            "{GOODS}строки = Новый Массив;\n\
+             строки.Добавить(с3);\n\
+             строки.Добавить(с1);\n\
+             к = т.Скопировать(строки, \"имя\");\n\
+             Возврат к[0].имя + \",\" + к[1].имя + \",\" + Строка(к.Колонки.Количество());"
+        ));
+        // Порядок строк копии — порядок МАССИВА, а не таблицы.
+        assert_eq!(str_val(&v), "дыня,груша,1");
+        // Колонки, не попавшей в список, в копии нет.
+        let err = run_src_err(&format!(
+            "{GOODS}к = т.Скопировать(Неопределено, \"имя\");\n\
+             Возврат к[0].цена;"
+        ));
+        assert!(matches!(err, RtError::UnknownColumn(_)));
+    }
+
+    #[test]
+    fn table_copy_columns_keeps_the_structure_and_drops_the_rows() {
+        let v = run_src(&format!(
+            "{GOODS}к = т.СкопироватьКолонки();\n\
+             Возврат Строка(к.Количество()) + \",\" + Строка(к.Колонки.Количество());"
+        ));
+        assert_eq!(str_val(&v), "0,2");
+        // Строку в пустую копию добавить можно — колонки на месте.
+        let v = run_src(&format!(
+            "{GOODS}к = т.СкопироватьКолонки(\"цена\");\n\
+             к.Добавить().цена = 7;\n\
+             Возврат к[0].цена;"
+        ));
+        assert_eq!(v, num("7"));
+    }
+
+    #[test]
+    fn table_unload_and_load_column_round_trip() {
+        let v = run_src(&format!(
+            "{GOODS}м = т.ВыгрузитьКолонку(\"цена\");\n\
+             Возврат Строка(м.Количество()) + \",\" + Строка(м[0]) + \",\" + Строка(м[2]);"
+        ));
+        assert_eq!(str_val(&v), "3,30,20");
+
+        let v = run_src(&format!(
+            "{GOODS}м = Новый Массив;\n\
+             м.Добавить(1); м.Добавить(2); м.Добавить(3);\n\
+             т.ЗагрузитьКолонку(м, \"цена\");\n\
+             Возврат т.Итог(\"цена\");"
+        ));
+        assert_eq!(v, num("6"));
+    }
+
+    #[test]
+    fn table_load_column_ignores_the_length_mismatch() {
+        // НЕ ИЗМЕРЕНО(TABLE.LOAD_COLUMN.LENGTH_MISMATCH): фиксируем
+        // ВЫБРАННОЕ — короткий массив меняет только начало колонки, длинный
+        // не добавляет строк, число строк не меняется ни там, ни там.
+        let v = run_src(&format!(
+            "{GOODS}м = Новый Массив;\n\
+             м.Добавить(1);\n\
+             т.ЗагрузитьКолонку(м, \"цена\");\n\
+             Возврат Строка(т.Количество()) + \",\" + Строка(т[0].цена) + \",\" + Строка(т[1].цена);"
+        ));
+        assert_eq!(str_val(&v), "3,1,10");
+
+        let v = run_src(&format!(
+            "{GOODS}м = Новый Массив;\n\
+             Для i = 1 По 10 Цикл м.Добавить(i); КонецЦикла;\n\
+             т.ЗагрузитьКолонку(м, \"цена\");\n\
+             Возврат т.Количество();"
+        ));
+        assert_eq!(v, num("3"));
+    }
+
+    #[test]
+    fn table_move_keeps_live_rows_valid() {
+        // Инвариант 12: сдвиг переставляет строку, но живой объект строки
+        // продолжает указывать на СВОИ данные, а не на чужие.
+        let v = run_src(&format!(
+            "{GOODS}т.Сдвинуть(с1, 2);\n\
+             Возврат т[0].имя + \",\" + т[2].имя + \",\" + с1.имя;"
+        ));
+        assert_eq!(str_val(&v), "яблоко,груша,груша");
+        // Индекс отражает новую позицию.
+        let v = run_src(&format!(
+            "{GOODS}т.Сдвинуть(0, 1);\n\
+             Возврат т.Индекс(с1);"
+        ));
+        assert_eq!(v, num("1"));
+    }
+
+    #[test]
+    fn table_move_past_the_edge_is_an_error() {
+        // НЕ ИЗМЕРЕНО(TABLE.MOVE.OUT_OF_RANGE): взята ошибка, не зажатие.
+        let err = run_src_err(&format!("{GOODS}т.Сдвинуть(с1, -1);"));
+        assert!(matches!(err, RtError::IndexOutOfBounds { .. }));
+        let err = run_src_err(&format!("{GOODS}т.Сдвинуть(2, 1);"));
+        assert!(matches!(err, RtError::IndexOutOfBounds { .. }));
+    }
+
+    #[test]
+    fn table_index_of_a_deleted_row_is_an_error() {
+        let v = run_src(&format!("{GOODS}Возврат т.Индекс(с3);"));
+        assert_eq!(v, num("2"));
+        let err = run_src_err(&format!("{GOODS}т.Удалить(2);\nВозврат т.Индекс(с3);"));
+        assert!(matches!(err, RtError::RowInvalidated));
+        // Строка ЧУЖОЙ таблицы — ошибка метода, а не молчаливое «не нашли».
+        let err = run_src_err(&format!(
+            "{GOODS}другая = Новый ТаблицаЗначений();\n\
+             другая.Колонки.Добавить(\"x\");\n\
+             чужая = другая.Добавить();\n\
+             Возврат т.Индекс(чужая);"
+        ));
+        assert!(matches!(err, RtError::MethodNotApplicable { .. }));
+    }
+
+    const COLLAPSE: &str = "т = Новый ТаблицаЗначений();\n\
+         т.Колонки.Добавить(\"группа\");\n\
+         т.Колонки.Добавить(\"сумма\");\n\
+         т.Колонки.Добавить(\"прочее\");\n\
+         а = т.Добавить(); а.группа = \"б\"; а.сумма = 10; а.прочее = \"x\";\n\
+         б = т.Добавить(); б.группа = \"а\"; б.сумма = 1; б.прочее = \"y\";\n\
+         в = т.Добавить(); в.группа = \"б\"; в.сумма = 20; в.прочее = \"z\";\n";
+
+    #[test]
+    fn table_collapse_groups_and_sums() {
+        let v = run_src(&format!(
+            "{COLLAPSE}т.Свернуть(\"группа\", \"сумма\");\n\
+             рез = \"\";\n\
+             Для Каждого с Из т Цикл рез = рез + с.группа + \"=\" + Строка(с.сумма) + \";\"; КонецЦикла;\n\
+             Возврат рез;"
+        ));
+        // НЕ ИЗМЕРЕНО(TABLE.COLLAPSE.ROW_ORDER): порядок ПЕРВОГО ВХОЖДЕНИЯ,
+        // поэтому «б» впереди «а», хотя по ключу было бы наоборот.
+        assert_eq!(str_val(&v), "б=30;а=1;");
+    }
+
+    #[test]
+    fn table_collapse_drops_the_columns_outside_both_lists() {
+        // НЕ ИЗМЕРЕНО(TABLE.COLLAPSE.OTHER_COLUMNS): фиксируем ВЫБРАННОЕ —
+        // колонка, не попавшая ни в группировку, ни в суммирование,
+        // исчезает вместе со своими значениями.
+        let v = run_src(&format!(
+            "{COLLAPSE}т.Свернуть(\"группа\", \"сумма\");\n\
+             Возврат т.Колонки.Количество();"
+        ));
+        assert_eq!(v, num("2"));
+        let err = run_src_err(&format!(
+            "{COLLAPSE}т.Свернуть(\"группа\", \"сумма\");\n\
+             Возврат т[0].прочее;"
+        ));
+        assert!(matches!(err, RtError::UnknownColumn(_)));
+    }
+
+    #[test]
+    fn table_collapse_without_summing_columns_leaves_unique_keys() {
+        let v = run_src(&format!(
+            "{COLLAPSE}т.Свернуть(\"группа\");\n\
+             Возврат Строка(т.Количество()) + \",\" + Строка(т.Колонки.Количество());"
+        ));
+        assert_eq!(str_val(&v), "2,1");
+    }
+
+    #[test]
+    fn table_collapse_ignores_non_numeric_values_when_summing() {
+        // НЕ ИЗМЕРЕНО(TABLE.COLLAPSE.NON_NUMERIC): то же решение, что у
+        // `Итог` — нечисловое значение просто не входит в сумму.
+        let v = run_src(
+            "т = Новый ТаблицаЗначений();\n\
+             т.Колонки.Добавить(\"г\");\n\
+             т.Колонки.Добавить(\"с\");\n\
+             а = т.Добавить(); а.г = \"к\"; а.с = 5;\n\
+             б = т.Добавить(); б.г = \"к\"; б.с = \"текст\";\n\
+             т.Свернуть(\"г\", \"с\");\n\
+             Возврат т[0].с;",
+        );
+        assert_eq!(v, num("5"));
+    }
+
+    #[test]
+    fn table_collapse_keeps_the_first_row_of_each_group_alive() {
+        // Свёрнутая строка сохраняет row_id ПЕРВОЙ строки группы, поэтому
+        // взятый до свёртки объект продолжает работать; строки, слитые в
+        // неё, ведут себя как удалённые.
+        let v = run_src(&format!(
+            "{COLLAPSE}т.Свернуть(\"группа\", \"сумма\");\n\
+             Возврат а.сумма;"
+        ));
+        assert_eq!(v, num("30"));
+        let err = run_src_err(&format!(
+            "{COLLAPSE}т.Свернуть(\"группа\", \"сумма\");\n\
+             Возврат в.сумма;"
+        ));
+        assert!(matches!(err, RtError::RowInvalidated));
+    }
+
+    #[test]
+    fn table_wave3_methods_reject_unknown_columns() {
+        for src in [
+            "Возврат т.ВыгрузитьКолонку(\"опечатка\");",
+            "т.Свернуть(\"опечатка\");",
+            "к = т.Скопировать(Неопределено, \"опечатка\");",
+        ] {
+            let err = run_src_err(&format!("{GOODS}{src}"));
+            assert!(
+                matches!(err, RtError::UnknownColumn(_)),
+                "ожидалась UnknownColumn на {src}, получено {err:?}"
+            );
+        }
+    }
+
     #[test]
     fn value_table_clear_resets_row_count() {
         let v = run_src(

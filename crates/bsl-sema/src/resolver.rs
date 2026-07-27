@@ -634,12 +634,19 @@ impl<'a> Resolver<'a> {
                     | bsl_rt::BuiltinMethod::Sort
                     | bsl_rt::BuiltinMethod::Total => Some(1),
                     bsl_rt::BuiltinMethod::Write => Some(1),
+                    bsl_rt::BuiltinMethod::UnloadColumn | bsl_rt::BuiltinMethod::IndexOf => Some(1),
+                    bsl_rt::BuiltinMethod::LoadColumn | bsl_rt::BuiltinMethod::Move => Some(2),
                     // `Свойство` — 1 или 2 (см. `BslValue::structure_property`),
                     // `Найти` — 1 или 2 (список колонок необязателен), как и
-                    // у `Добавить` арность решает рантайм.
+                    // у `Добавить` арность решает рантайм. Из волны 3 так же
+                    // устроены `Скопировать` (0..2), `СкопироватьКолонки`
+                    // (0..1) и `Свернуть` (1..2).
                     bsl_rt::BuiltinMethod::Add
                     | bsl_rt::BuiltinMethod::Property
-                    | bsl_rt::BuiltinMethod::Find => None,
+                    | bsl_rt::BuiltinMethod::Find
+                    | bsl_rt::BuiltinMethod::Copy
+                    | bsl_rt::BuiltinMethod::CopyColumns
+                    | bsl_rt::BuiltinMethod::Collapse => None,
                 };
                 if let Some(expected) = expected {
                     if args.len() != expected {

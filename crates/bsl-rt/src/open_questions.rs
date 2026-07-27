@@ -158,6 +158,40 @@ pub const OPEN_QUESTIONS: &[OpenQuestion] = &[
         blocks: "bsl_rt::table::type_rank; фикстура table-wave2",
     },
     OpenQuestion {
+        id: "TABLE.COLLAPSE.OTHER_COLUMNS",
+        what: "что `Свернуть` делает с колонками, не попавшими ни в группировку, \
+               ни в суммирование, и в каком порядке остаются оставшиеся",
+        chosen: "удаляются; порядок — сначала группировочные, потом суммируемые",
+        blocks: "bsl_rt::ValueTableData::collapse; фикстура table-wave3",
+    },
+    OpenQuestion {
+        id: "TABLE.COLLAPSE.ROW_ORDER",
+        what: "порядок строк результата `Свернуть`: первое вхождение группы или \
+               сортировка по ключам группировки",
+        chosen: "порядок первого вхождения — исходная сортировка не затирается",
+        blocks: "bsl_rt::ValueTableData::collapse; фикстура table-wave3",
+    },
+    OpenQuestion {
+        id: "TABLE.COLLAPSE.NON_NUMERIC",
+        what: "суммирование колонки с нечисловыми значениями в `Свернуть`",
+        chosen: "нечисловые игнорируются — то же решение, что у `Итог`",
+        blocks: "bsl_rt::ValueTableData::collapse; фикстура table-wave3",
+    },
+    OpenQuestion {
+        id: "TABLE.LOAD_COLUMN.LENGTH_MISMATCH",
+        what: "что делает `ЗагрузитьКолонку`, когда длина массива не равна числу \
+               строк таблицы",
+        chosen: "лишние значения игнорируются, недостающие оставляют ячейку прежней; \
+                 число строк не меняется",
+        blocks: "bsl_rt::ValueTableData::load_column; фикстура table-wave3",
+    },
+    OpenQuestion {
+        id: "TABLE.MOVE.OUT_OF_RANGE",
+        what: "`Сдвинуть` за границы таблицы — ошибка или зажатие в границы",
+        chosen: "ошибка `IndexOutOfBounds`",
+        blocks: "bsl_rt::BslValue::table_move; фикстура table-wave3",
+    },
+    OpenQuestion {
         id: "EXEC.NEW_VARIABLE_SCOPE",
         what: "переживает ли вызов переменная, впервые созданная ВНУТРИ `Выполнить`",
         chosen: "не переживает — расширить статически размеченный кадр нечем",

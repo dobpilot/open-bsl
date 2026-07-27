@@ -1617,6 +1617,216 @@ impl BslValue {
         Ok(BslValue::Number(d.total(col)?))
     }
 
+    // --- ТаблицаЗначений, волна 3 ----------------------------------------
+
+    /// Строка ЭТОЙ таблицы: разворачивает объект `СтрокаТаблицыЗначений` в
+    /// текущую позицию. Строка чужой таблицы — ошибка метода, а не «не
+    /// найдено»: спутать таблицы легко, и молчаливый `-1` в ответ прятал бы
+    /// эту ошибку до самого конца.
+    fn row_position(
+        data: &Rc<std::cell::RefCell<ValueTableData>>,
+        row: &BslValue,
+        method: &'static str,
+    ) -> RtResult<usize> {
+        let BslValue::Object(o) = row else {
+            return Err(RtError::TypeError {
+                expected: "СтрокаТаблицыЗначений",
+                op: method,
+            });
+        };
+        let BslObject::TableRow(owner, row_id) = &**o else {
+            return Err(RtError::TypeError {
+                expected: "СтрокаТаблицыЗначений",
+                op: method,
+            });
+        };
+        if !Rc::ptr_eq(owner, data) {
+            return Err(RtError::MethodNotApplicable {
+                method,
+                receiver: "СтрокаТаблицыЗначений другой таблицы",
+            });
+        }
+        data.borrow().pos_of(*row_id).ok_or(RtError::RowInvalidated)
+    }
+
+    /// Список колонок `"Кол1, Кол2"` -> индексы; `Неопределено` или пустая
+    /// строка -> ВСЕ колонки в их порядке. Разворачивать «все» здесь, а не
+    /// в `ValueTableData`, нарочно: слой данных не должен знать, что пустой
+    /// список для `Скопировать` значит «все», а для `Найти` — «любая».
+    fn columns_or_all(
+        data: &ValueTableData,
+        spec: &BslValue,
+        method: &'static str,
+    ) -> RtResult<Vec<usize>> {
+        let all = || (0..data.column_names.len()).collect::<Vec<usize>>();
+        match spec {
+            BslValue::Undefined => Ok(all()),
+            other => {
+                let spec = other.as_str(method)?.to_string();
+                if spec.trim().is_empty() {
+                    return Ok(all());
+                }
+                Self::column_indices(data, &spec)
+            }
+        }
+    }
+
+    /// `Скопировать([Строки], [Колонки])` -> новая `ТаблицаЗначений`.
+    ///
+    /// `Строки` — `Массив` строк ЭТОЙ таблицы (порядок массива и есть
+    /// порядок строк копии) либо `Неопределено` — тогда все строки в
+    /// текущем порядке.
+    pub fn table_copy(&self, rows: &BslValue, columns: &BslValue) -> RtResult<BslValue> {
+        let data = self.as_table("Скопировать")?;
+        let cols = Self::columns_or_all(&data.borrow(), columns, "Скопировать")?;
+        let positions: Vec<usize> = match rows {
+            BslValue::Undefined => (0..data.borrow().row_count()).collect(),
+            BslValue::Object(o) => match &**o {
+                BslObject::Array(items) => {
+                    let items = items.borrow();
+                    let mut out = Vec::with_capacity(items.len());
+                    for row in items.iter() {
+                        out.push(Self::row_position(data, row, "Скопировать")?);
+                    }
+                    out
+                }
+                _ => {
+                    return Err(RtError::TypeError {
+                        expected: "Массив",
+                        op: "Скопировать",
+                    })
+                }
+            },
+            _ => {
+                return Err(RtError::TypeError {
+                    expected: "Массив",
+                    op: "Скопировать",
+                })
+            }
+        };
+        let copy = data.borrow().copy_of(&positions, &cols);
+        Ok(BslValue::Object(Rc::new(BslObject::ValueTable(Rc::new(
+            std::cell::RefCell::new(copy),
+        )))))
+    }
+
+    /// `СкопироватьКолонки([Колонки])` -> пустая таблица той же структуры.
+    /// Это `Скопировать` без единой строки, а не отдельный алгоритм.
+    pub fn table_copy_columns(&self, columns: &BslValue) -> RtResult<BslValue> {
+        let data = self.as_table("СкопироватьКолонки")?;
+        let cols = Self::columns_or_all(&data.borrow(), columns, "СкопироватьКолонки")?;
+        let copy = data.borrow().copy_of(&[], &cols);
+        Ok(BslValue::Object(Rc::new(BslObject::ValueTable(Rc::new(
+            std::cell::RefCell::new(copy),
+        )))))
+    }
+
+    /// `ВыгрузитьКолонку(Колонка)` -> `Массив` значений в текущем порядке
+    /// строк.
+    pub fn table_unload_column(&self, column: &BslValue) -> RtResult<BslValue> {
+        let data = self.as_table("ВыгрузитьКолонку")?;
+        let name = column.as_str("ВыгрузитьКолонку")?.to_string();
+        let d = data.borrow();
+        let col = d
+            .column_index(&name)
+            .ok_or_else(|| RtError::UnknownColumn(name.clone()))?;
+        Ok(BslValue::new_array(d.unload_column(col)))
+    }
+
+    /// `ЗагрузитьКолонку(Массив, Колонка)`. Про несовпадение длин — см.
+    /// `ValueTableData::load_column`
+    /// (НЕ ИЗМЕРЕНО(TABLE.LOAD_COLUMN.LENGTH_MISMATCH)).
+    pub fn table_load_column(&self, values: &BslValue, column: &BslValue) -> RtResult<()> {
+        let data = self.as_table("ЗагрузитьКолонку")?;
+        let name = column.as_str("ЗагрузитьКолонку")?.to_string();
+        let BslValue::Object(o) = values else {
+            return Err(RtError::TypeError {
+                expected: "Массив",
+                op: "ЗагрузитьКолонку",
+            });
+        };
+        let BslObject::Array(items) = &**o else {
+            return Err(RtError::TypeError {
+                expected: "Массив",
+                op: "ЗагрузитьКолонку",
+            });
+        };
+        let col = data
+            .borrow()
+            .column_index(&name)
+            .ok_or_else(|| RtError::UnknownColumn(name.clone()))?;
+        let values = items.borrow().clone();
+        data.borrow_mut().load_column(col, &values);
+        Ok(())
+    }
+
+    /// `Сдвинуть(Строка, Смещение)` — `Строка` это либо объект строки, либо
+    /// её индекс. Целевая позиция вне таблицы — `IndexOutOfBounds`, а не
+    /// зажатие в границы.
+    ///
+    /// НЕ ИЗМЕРЕНО(TABLE.MOVE.OUT_OF_RANGE): падает ли платформа или молча
+    /// зажимает. Взята ошибка: `Сдвинуть(ПерваяСтрока, -1)`, тихо ничего не
+    /// сделавший, — та же категория беды, что и `Сортировать("Опечатка")`,
+    /// молча ничего не отсортировавшая.
+    pub fn table_move(&self, row: &BslValue, offset: &BslValue) -> RtResult<()> {
+        let data = self.as_table("Сдвинуть")?;
+        let from = match row {
+            BslValue::Number(_) => {
+                let i = Self::index_as_usize(row)?;
+                let len = data.borrow().row_count();
+                if i >= len {
+                    return Err(RtError::IndexOutOfBounds {
+                        index: i as i64,
+                        len,
+                    });
+                }
+                i
+            }
+            other => Self::row_position(data, other, "Сдвинуть")?,
+        };
+        let BslValue::Number(n) = offset else {
+            return Err(RtError::TypeError {
+                expected: "Число",
+                op: "Сдвинуть",
+            });
+        };
+        let offset = n.to_i64_exact().ok_or(RtError::BadIndex)?;
+        let len = data.borrow().row_count();
+        data.borrow_mut()
+            .move_row(from, offset)
+            .map(|_| ())
+            .ok_or(RtError::IndexOutOfBounds {
+                index: from as i64 + offset,
+                len,
+            })
+    }
+
+    /// `Индекс(Строка)` -> `Число`, позиция строки (с нуля, как у
+    /// `Получить`/`Удалить`).
+    pub fn table_index_of(&self, row: &BslValue) -> RtResult<BslValue> {
+        let data = self.as_table("Индекс")?;
+        let pos = Self::row_position(data, row, "Индекс")?;
+        Ok(BslValue::Number(BslNumber::from_i64(pos as i64)))
+    }
+
+    /// `Свернуть(КолонкиГруппировки[, КолонкиСуммирования])` — группировка
+    /// на месте. Три неизмеренных решения (судьба прочих колонок, порядок
+    /// строк, нечисловые значения) описаны у `ValueTableData::collapse`.
+    pub fn table_collapse(&self, group: &BslValue, sum: &BslValue) -> RtResult<()> {
+        let data = self.as_table("Свернуть")?;
+        let (group_cols, sum_cols) = {
+            let d = data.borrow();
+            let group_cols = Self::column_indices(&d, &group.as_str("Свернуть")?.to_string())?;
+            let sum_cols = match sum {
+                BslValue::Undefined => Vec::new(),
+                other => Self::column_indices(&d, &other.as_str("Свернуть")?.to_string())?,
+            };
+            (group_cols, sum_cols)
+        };
+        data.borrow_mut().collapse(&group_cols, &sum_cols)?;
+        Ok(())
+    }
+
     /// `Массив.Очистить()` / `ТаблицаЗначений.Очистить()` /
     /// `Соответствие.Очистить()`.
     pub fn clear_collection(&self) -> RtResult<()> {

@@ -206,12 +206,192 @@ impl ValueTableData {
             *col = order.iter().map(|&i| col[i].clone()).collect();
         }
         self.row_ids = order.iter().map(|&i| self.row_ids[i]).collect();
+        self.reindex();
+    }
+
+    /// Пересборка карты `id -> позиция` после любой перестановки строк.
+    /// Вынесено отдельно, потому что этим кончаются `sort`, `move_row` и
+    /// `collapse` — и любая забытая пересборка тихо ломает инвариант живых
+    /// строк, а не падает.
+    fn reindex(&mut self) {
         self.id_to_pos = self
             .row_ids
             .iter()
             .enumerate()
             .map(|(pos, &id)| (id, pos))
             .collect();
+    }
+
+    // --- ТаблицаЗначений, волна 3 ----------------------------------------
+
+    /// Текущая позиция строки; `None` — строка удалена (`Удалить`,
+    /// `Очистить`, `Свернуть`) либо принадлежит другой таблице.
+    pub fn pos_of(&self, row_id: u64) -> Option<usize> {
+        self.id_to_pos.get(&row_id).copied()
+    }
+
+    /// `Скопировать([Строки], [Колонки])` — НОВАЯ таблица с выбранными
+    /// строками и колонками.
+    ///
+    /// `rows` — позиции в текущем порядке (пусто у вызывающего не бывает:
+    /// «все строки» он разворачивает сам, см. `BslValue::table_copy`);
+    /// `cols` — индексы колонок в нужном порядке.
+    ///
+    /// Строки копии получают СВОИ `row_id`, начиная с нуля: копия — другая
+    /// таблица, и живой объект строки оригинала обязан продолжать указывать
+    /// в оригинал, а не начать резолвиться ещё и в копии.
+    pub fn copy_of(&self, rows: &[usize], cols: &[usize]) -> ValueTableData {
+        let mut out = ValueTableData {
+            column_names: cols
+                .iter()
+                .filter_map(|&c| self.column_names.get(c).cloned())
+                .collect(),
+            columns: Vec::with_capacity(cols.len()),
+            row_ids: Vec::with_capacity(rows.len()),
+            id_to_pos: HashMap::with_capacity(rows.len()),
+            next_id: 0,
+        };
+        for &c in cols {
+            let src = &self.columns[c];
+            out.columns
+                .push(rows.iter().map(|&pos| src[pos].clone()).collect());
+        }
+        for pos in 0..rows.len() {
+            out.row_ids.push(pos as u64);
+            out.id_to_pos.insert(pos as u64, pos);
+        }
+        out.next_id = rows.len() as u64;
+        out
+    }
+
+    /// `ВыгрузитьКолонку(Колонка)` — значения колонки в ТЕКУЩЕМ порядке
+    /// строк.
+    pub fn unload_column(&self, col: usize) -> Vec<BslValue> {
+        self.columns.get(col).cloned().unwrap_or_default()
+    }
+
+    /// `ЗагрузитьКолонку(Массив, Колонка)`.
+    ///
+    /// НЕ ИЗМЕРЕНО(TABLE.LOAD_COLUMN.LENGTH_MISMATCH): что делает платформа,
+    /// когда длина массива не совпадает с числом строк — падает, обрезает,
+    /// добивает строками или оставляет хвост как есть. Взято САМОЕ
+    /// БЕЗОБИДНОЕ: лишние значения массива игнорируются, недостающие
+    /// оставляют ячейку прежней. Число строк таблицы этот метод не меняет
+    /// ни при каком раскладе — иначе он молча инвалидировал бы живые строки.
+    pub fn load_column(&mut self, col: usize, values: &[BslValue]) {
+        let Some(column) = self.columns.get_mut(col) else {
+            return;
+        };
+        for (cell, v) in column.iter_mut().zip(values) {
+            *cell = v.clone();
+        }
+    }
+
+    /// `Сдвинуть(Строка, Смещение)` — перестановка строки на `offset`
+    /// позиций. Живые объекты строк переживают её: переезжают и значения
+    /// колонок, и `row_ids`, а карта пересобирается (инвариант 12).
+    ///
+    /// `None` — целевая позиция вне таблицы; что делать с этим, решает
+    /// вызывающий.
+    pub fn move_row(&mut self, from: usize, offset: i64) -> Option<usize> {
+        let len = self.row_count();
+        if from >= len {
+            return None;
+        }
+        let to = i64::try_from(from).ok()?.checked_add(offset)?;
+        if to < 0 || to as usize >= len {
+            return None;
+        }
+        let to = to as usize;
+        for col in &mut self.columns {
+            let v = col.remove(from);
+            col.insert(to, v);
+        }
+        let id = self.row_ids.remove(from);
+        self.row_ids.insert(to, id);
+        self.reindex();
+        Some(to)
+    }
+
+    /// `Свернуть(КолонкиГруппировки, КолонкиСуммирования)` — группировка НА
+    /// МЕСТЕ.
+    ///
+    /// НЕ ИЗМЕРЕНО(TABLE.COLLAPSE.OTHER_COLUMNS): что происходит с
+    /// колонками, не попавшими ни в группировку, ни в суммирование. Взято
+    /// УДАЛЕНИЕ — колонка, у которой в свёрнутой строке нет ни одного
+    /// осмысленного значения (в группе их было несколько разных), не
+    /// сохранима без произвольного выбора «какое из». Порядок колонок
+    /// результата — сначала группировочные, потом суммируемые, в порядке
+    /// перечисления; это часть того же вопроса.
+    ///
+    /// НЕ ИЗМЕРЕНО(TABLE.COLLAPSE.ROW_ORDER): порядок строк результата.
+    /// Взят порядок ПЕРВОГО ВХОЖДЕНИЯ группы — он сохраняет исходную
+    /// сортировку таблицы, тогда как сортировка по ключам её бы затёрла.
+    ///
+    /// НЕ ИЗМЕРЕНО(TABLE.COLLAPSE.NON_NUMERIC): суммирование колонки с
+    /// нечисловыми значениями. Взято ИГНОРИРОВАНИЕ — то же решение, что и в
+    /// `total`, и разъезжаться этим двум местам незачем.
+    ///
+    /// Идентичность строк: за каждой группой остаётся `row_id` её ПЕРВОЙ
+    /// строки, остальные исчезают вместе со строками. Это ровно то же, что
+    /// делает `Удалить`, и инвариант живых строк не нарушает: обращение к
+    /// пропавшей строке даёт `RowInvalidated`, а не чужие данные.
+    // `BslValue` в ключе — то же самое, что делает `Соответствие`
+    // (`MapData::values`): у ссылочных типов и хэш, и равенство берутся от
+    // АДРЕСА `Rc`, а он под мутацией содержимого не меняется. Ключ группы
+    // к тому же живёт только внутри этого вызова.
+    #[allow(clippy::mutable_key_type)]
+    pub fn collapse(&mut self, group: &[usize], sum: &[usize]) -> Result<(), NumError> {
+        let mut slot_of: HashMap<Vec<BslValue>, usize> = HashMap::new();
+        let mut keys: Vec<Vec<BslValue>> = Vec::new();
+        let mut sums: Vec<Vec<BslNumber>> = Vec::new();
+        let mut ids: Vec<u64> = Vec::new();
+
+        for pos in 0..self.row_count() {
+            let key: Vec<BslValue> = group
+                .iter()
+                .map(|&c| self.columns[c][pos].clone())
+                .collect();
+            let slot = match slot_of.get(&key) {
+                Some(&slot) => slot,
+                None => {
+                    let slot = keys.len();
+                    slot_of.insert(key.clone(), slot);
+                    keys.push(key);
+                    sums.push(vec![BslNumber::from_i64(0); sum.len()]);
+                    ids.push(self.row_ids[pos]);
+                    slot
+                }
+            };
+            for (k, &c) in sum.iter().enumerate() {
+                if let BslValue::Number(n) = &self.columns[c][pos] {
+                    let acc = sums[slot][k].add(n)?;
+                    sums[slot][k] = acc;
+                }
+            }
+        }
+
+        let mut columns: Vec<Vec<BslValue>> = Vec::with_capacity(group.len() + sum.len());
+        for g in 0..group.len() {
+            columns.push(keys.iter().map(|k| k[g].clone()).collect());
+        }
+        for s in 0..sum.len() {
+            columns.push(
+                sums.iter()
+                    .map(|row| BslValue::Number(row[s].clone()))
+                    .collect(),
+            );
+        }
+        let names: Vec<String> = group
+            .iter()
+            .chain(sum.iter())
+            .filter_map(|&c| self.column_names.get(c).cloned())
+            .collect();
+        self.column_names = names;
+        self.columns = columns;
+        self.row_ids = ids;
+        self.reindex();
+        Ok(())
     }
 }
 

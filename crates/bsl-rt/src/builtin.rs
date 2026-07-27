@@ -226,9 +226,10 @@ impl BuiltinFn {
 /// и соседние методы), а не резолвинг в `bsl-sema`, который не может знать
 /// заранее, каким объектом окажется получатель.
 ///
-/// Дальше идут волнами — `Найти`/`НайтиСтроки`/`Сортировать`/`Итог`,
-/// `Свернуть`/`Скопировать`/`Загрузить-ВыгрузитьКолонку`/`Сдвинуть`, как и
-/// описано в брифе — сюда пока не входят.
+/// Методы `ТаблицаЗначений` добавлялись волнами: волна 2 — `Найти`,
+/// `НайтиСтроки`, `Сортировать`, `Итог`; волна 3 — `Скопировать`,
+/// `СкопироватьКолонки`, `ВыгрузитьКолонку`, `ЗагрузитьКолонку`,
+/// `Сдвинуть`, `Индекс`, `Свернуть`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BuiltinMethod {
     Count,
@@ -257,6 +258,23 @@ pub enum BuiltinMethod {
     Sort,
     /// `Итог("Колонка")`.
     Total,
+
+    // --- ТаблицаЗначений, волна 3 -------------------------------------
+    /// `Скопировать([Строки], [Колонки])` -> новая таблица.
+    Copy,
+    /// `СкопироватьКолонки([Колонки])` -> пустая таблица той же структуры.
+    CopyColumns,
+    /// `ВыгрузитьКолонку(Колонка)` -> `Массив`.
+    UnloadColumn,
+    /// `ЗагрузитьКолонку(Массив, Колонка)`.
+    LoadColumn,
+    /// `Сдвинуть(Строка, Смещение)`.
+    Move,
+    /// `Индекс(Строка)` -> `Число`.
+    IndexOf,
+    /// `Свернуть(КолонкиГруппировки[, КолонкиСуммирования])`.
+    Collapse,
+
     /// `ЗаписьТекста.Записать(Текст)` — добавляет текст в буфер файла.
     Write,
     /// `ЗаписьТекста.Закрыть()` — сбрасывает буфер и закрывает файл.
@@ -277,6 +295,13 @@ impl BuiltinMethod {
             "FINDROWS" | "НАЙТИСТРОКИ" => BuiltinMethod::FindRows,
             "SORT" | "СОРТИРОВАТЬ" => BuiltinMethod::Sort,
             "TOTAL" | "ИТОГ" => BuiltinMethod::Total,
+            "COPY" | "СКОПИРОВАТЬ" => BuiltinMethod::Copy,
+            "COPYCOLUMNS" | "СКОПИРОВАТЬКОЛОНКИ" => BuiltinMethod::CopyColumns,
+            "UNLOADCOLUMN" | "ВЫГРУЗИТЬКОЛОНКУ" => BuiltinMethod::UnloadColumn,
+            "LOADCOLUMN" | "ЗАГРУЗИТЬКОЛОНКУ" => BuiltinMethod::LoadColumn,
+            "MOVE" | "СДВИНУТЬ" => BuiltinMethod::Move,
+            "INDEXOF" | "ИНДЕКС" => BuiltinMethod::IndexOf,
+            "GROUPBY" | "СВЕРНУТЬ" => BuiltinMethod::Collapse,
             "WRITE" | "ЗАПИСАТЬ" => BuiltinMethod::Write,
             "CLOSE" | "ЗАКРЫТЬ" => BuiltinMethod::Close,
             _ => return None,
@@ -341,6 +366,27 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         BuiltinFn::DateBoundaryOf(which) => args[0].date_boundary(which),
         BuiltinFn::AddMonth => args[0].add_month(&args[1]),
     }
+}
+
+/// Необязательный аргумент метода: отсутствующий читается как
+/// `Неопределено` — ровно так же, как резолвер выравнивает арность
+/// встроенных ФУНКЦИЙ (см. `BuiltinFn::arity_range`). У методов получатель
+/// динамический, поэтому выравнивать приходится здесь.
+fn arg(args: &[BslValue], i: usize) -> &BslValue {
+    args.get(i).unwrap_or(&BslValue::Undefined)
+}
+
+/// Лишние аргументы у метода с переменной арностью. Тихо игнорировать их
+/// нельзя: `Свернуть("а", "б", "в")` — почти наверняка опечатка, а не
+/// намерение.
+fn too_many(obj: &BslValue, method: &'static str, args: &[BslValue], max: usize) -> RtResult<()> {
+    if args.len() > max {
+        return Err(RtError::MethodNotApplicable {
+            method,
+            receiver: obj.type_name(),
+        });
+    }
+    Ok(())
 }
 
 /// Арность `Count`/`Delete`/`Clear` не зависит от получателя и уже
@@ -436,6 +482,39 @@ pub fn call_builtin_method(m: BuiltinMethod, obj: &BslValue, args: &[BslValue]) 
             Ok(BslValue::Undefined)
         }
         BuiltinMethod::Total => obj.table_total(&args[0]),
+
+        // Волна 3. У `Скопировать`/`СкопироватьКолонки`/`Свернуть` арность
+        // переменная, поэтому и здесь `args.get(...)`, а лишние аргументы
+        // ловятся тут же: резолвер для них проверку не делает.
+        BuiltinMethod::Copy => {
+            too_many(obj, "Скопировать", args, 2)?;
+            obj.table_copy(arg(args, 0), arg(args, 1))
+        }
+        BuiltinMethod::CopyColumns => {
+            too_many(obj, "СкопироватьКолонки", args, 1)?;
+            obj.table_copy_columns(arg(args, 0))
+        }
+        BuiltinMethod::UnloadColumn => obj.table_unload_column(&args[0]),
+        BuiltinMethod::LoadColumn => {
+            obj.table_load_column(&args[0], &args[1])?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::Move => {
+            obj.table_move(&args[0], &args[1])?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::IndexOf => obj.table_index_of(&args[0]),
+        BuiltinMethod::Collapse => {
+            too_many(obj, "Свернуть", args, 2)?;
+            let Some(group) = args.first() else {
+                return Err(RtError::MethodNotApplicable {
+                    method: "Свернуть",
+                    receiver: obj.type_name(),
+                });
+            };
+            obj.table_collapse(group, arg(args, 1))?;
+            Ok(BslValue::Undefined)
+        }
         BuiltinMethod::Write => obj.text_writer_write(&args[0]),
         BuiltinMethod::Close => obj.text_writer_close(),
     }
