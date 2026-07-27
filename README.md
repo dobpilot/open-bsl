@@ -82,8 +82,8 @@ cargo test -p bsl-cli -- --nocapture
 ```
 
 ```
-conformance: 2 проверено, 10 пропущено (нет .expected)
-  пропущены: dates, dynamic-execute, n-body-perf, ...
+conformance: 2 проверено, 11 пропущено (нет .expected)
+  пропущены: dates, dynamic-execute, n-body-perf, ..., table-wave3, measure-all
 ```
 
 Это и есть очередь на замер: прогон фикстуры целиком у платформы даёт
