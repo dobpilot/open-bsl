@@ -97,6 +97,9 @@ pub enum BuiltinFn {
     /// `ТекущаяДата`/`CurrentDate` — см. `BslValue::current_date` про то,
     /// почему момент берётся по UTC, а не по локальной зоне.
     CurrentDate,
+    /// Число миллисекунд с начала Unix-эпохи в UTC. Используется в BSL для
+    /// измерения длительности выполнения коротких участков кода.
+    CurrentUniversalDateInMilliseconds,
     /// `Год`/`Месяц`/`День`/`Час`/`Минута`/`Секунда`/`ДеньНедели` — семь
     /// имён на один вариант с селектором: тела у них отличаются одним
     /// полем разложения.
@@ -152,6 +155,10 @@ impl BuiltinFn {
 
             "DATE" | "ДАТА" => BuiltinFn::MakeDate,
             "CURRENTDATE" | "ТЕКУЩАЯДАТА" => BuiltinFn::CurrentDate,
+            "CURRENTUNIVERSALDATEINMILLISECONDS"
+            | "ТЕКУЩАЯУНИВЕРСАЛЬНАЯДАТАВМИЛЛИСЕКУНДАХ" => {
+                BuiltinFn::CurrentUniversalDateInMilliseconds
+            }
             "YEAR" | "ГОД" => BuiltinFn::DatePartOf(DatePart::Year),
             "MONTH" | "МЕСЯЦ" => BuiltinFn::DatePartOf(DatePart::Month),
             "DAY" | "ДЕНЬ" => BuiltinFn::DatePartOf(DatePart::Day),
@@ -206,7 +213,7 @@ impl BuiltinFn {
             // форм имелась в виду, решает тип первого аргумента в
             // `BslValue::make_date`.
             BuiltinFn::MakeDate => (1, 6),
-            BuiltinFn::CurrentDate => (0, 0),
+            BuiltinFn::CurrentDate | BuiltinFn::CurrentUniversalDateInMilliseconds => (0, 0),
             _ => (1, 1),
         }
     }
@@ -321,6 +328,9 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         BuiltinFn::TypeByName => args[0].type_by_name(),
         BuiltinFn::MakeDate => BslValue::make_date(args),
         BuiltinFn::CurrentDate => BslValue::current_date(),
+        BuiltinFn::CurrentUniversalDateInMilliseconds => {
+            BslValue::current_universal_date_in_milliseconds()
+        }
         BuiltinFn::DatePartOf(part) => args[0].date_component(part),
         BuiltinFn::DateBoundaryOf(which) => args[0].date_boundary(which),
         BuiltinFn::AddMonth => args[0].add_month(&args[1]),

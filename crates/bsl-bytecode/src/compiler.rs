@@ -619,7 +619,6 @@ impl<'a> Compiler<'a> {
                 let bound = self.alloc_temp()?;
                 self.compile_expr(to, bound)?;
 
-                let cond_pc = self.here();
                 let cmp = self.alloc_temp()?;
                 self.emit(Instr::Le {
                     dst: cmp,
@@ -633,21 +632,23 @@ impl<'a> Compiler<'a> {
                     break_patches: Vec::new(),
                     continue_patches: Vec::new(),
                 });
+                let body_pc = self.here();
                 self.compile_block(body)?;
 
                 let incr_pc = self.here();
-                let one = self.alloc_temp()?;
-                let k = self.add_const(BslValue::Number(bsl_number::BslNumber::from_i64(1)))?;
-                self.emit(Instr::LoadConst { dst: one, k });
-                self.emit(Instr::Add {
-                    dst: slot,
-                    a: slot,
-                    b: one,
-                });
-                self.free_temp(1);
-                self.emit(Instr::Jump {
-                    target: cond_pc as i16,
-                });
+                if body.is_empty() {
+                    self.emit(Instr::NumericForNextI64 {
+                        counter: slot,
+                        bound,
+                        target: body_pc as i16,
+                    });
+                } else {
+                    self.emit(Instr::NumericForNext {
+                        counter: slot,
+                        bound,
+                        target: body_pc as i16,
+                    });
+                }
 
                 let end = self.here();
                 self.patch_jump(jf, end);

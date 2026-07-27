@@ -37,6 +37,16 @@ struct Frame {
     /// Регистр РОДИТЕЛЬСКОГО кадра, куда положить результат при возврате
     /// (не используется для самого нижнего/верхнего кадра).
     return_reg: u8,
+    /// Активен только внутри доказанно пустого числового цикла. Его тело не
+    /// может наблюдать счётчик, поэтому обычный `BslValue` материализуется
+    /// лишь при выходе из цикла.
+    numeric_for_state: Option<NumericForState>,
+}
+
+struct NumericForState {
+    pc: usize,
+    current: i64,
+    bound: i64,
 }
 
 impl Frame {
@@ -123,6 +133,7 @@ fn drive(
         own_base: 0,
         call_start: 0,
         return_reg: 0,
+        numeric_for_state: None,
     }];
     let mut current_exception: Option<BslValue> = None;
     // Кэш скомпилированных фрагментов `Выполнить`/`Вычислить` на всё это
@@ -136,6 +147,32 @@ fn drive(
     let mut runtime_shapes = bsl_rt::RuntimeShapes::seeded(program.names.clone(), program.shapes.clone());
 
     loop {
+        // После инициализации пустой numeric-for не обращается к
+        // регистрам. Обслуживаем его back-edge в компактном внешнем цикле,
+        // не входя на каждой итерации в большой универсальный `step`.
+        // Логических итераций по-прежнему столько же: цикл не сворачивается
+        // в вычисление финального значения.
+        let fast_numeric_for = {
+            let frame = frames
+                .last_mut()
+                .expect("инвариант VM: drive всегда держит хотя бы один кадр");
+            match frame.numeric_for_state.as_mut() {
+                Some(state) if state.pc == frame.pc => {
+                    match state.current.checked_add(1) {
+                        Some(next) if next <= state.bound => {
+                            state.current = next;
+                            true
+                        }
+                        _ => false,
+                    }
+                }
+                _ => false,
+            }
+        };
+        if fast_numeric_for {
+            continue;
+        }
+
         match step(
             &mut frames,
             &mut stack,
@@ -202,6 +239,55 @@ fn reg_store(stack: &mut [BslValue], i: usize, v: BslValue) -> Result<(), RtErro
             "запись регистра за границей стека значений",
         )),
     }
+}
+
+/// Одновременно заимствует изменяемый счётчик и неизменяемую границу без
+/// клонирования `BslValue` на каждой итерации числового цикла.
+#[inline]
+fn reg_pair_mut(
+    stack: &mut [BslValue],
+    mutable: usize,
+    other: usize,
+) -> Result<(&mut BslValue, &BslValue), RtError> {
+    if mutable == other {
+        return Err(RtError::InvalidBytecode(
+            "счётчик и граница числового цикла используют один регистр",
+        ));
+    }
+    if mutable >= stack.len() {
+        return Err(RtError::InvalidBytecode(
+            "счётчик числового цикла вне стека значений",
+        ));
+    }
+    if other >= stack.len() {
+        return Err(RtError::InvalidBytecode(
+            "граница числового цикла вне стека значений",
+        ));
+    }
+    if mutable < other {
+        let (left, right) = stack.split_at_mut(other);
+        Ok((&mut left[mutable], &right[0]))
+    } else {
+        let (left, right) = stack.split_at_mut(mutable);
+        Ok((&mut right[0], &left[other]))
+    }
+}
+
+#[inline]
+fn numeric_for_next_regular(
+    stack: &mut [BslValue],
+    counter: usize,
+    bound: usize,
+    pc: &mut usize,
+    target: i16,
+) -> Result<(), RtError> {
+    let (counter, bound) = reg_pair_mut(stack, counter, bound)?;
+    if counter.increment_numeric_for_and_le(bound)? {
+        *pc = target as usize;
+    } else {
+        *pc += 1;
+    }
+    Ok(())
 }
 
 /// Ячейка инлайн-кэша, отведённая под инструкцию на позиции `pc`.
@@ -384,6 +470,88 @@ fn step(
                     frames[frame_idx].pc = target as usize;
                 }
             }
+            Instr::NumericForNext {
+                counter,
+                bound,
+                target,
+            } => {
+                let counter = frames[frame_idx].reg_index(counter);
+                let bound = frames[frame_idx].reg_index(bound);
+                numeric_for_next_regular(
+                    stack,
+                    counter,
+                    bound,
+                    &mut frames[frame_idx].pc,
+                    target,
+                )?;
+            }
+            Instr::NumericForNextI64 {
+                counter,
+                bound,
+                target,
+            } => {
+                let counter_idx = frames[frame_idx].reg_index(counter);
+                let bound_idx = frames[frame_idx].reg_index(bound);
+                let state = match frames[frame_idx].numeric_for_state.take() {
+                    Some(state) if state.pc == pc => state,
+                    Some(_) => {
+                        return Err(RtError::InvalidBytecode(
+                            "перекрывающиеся скрытые состояния числовых циклов",
+                        ))
+                    }
+                    None => {
+                        let counter_value = reg_load(stack, counter_idx)?;
+                        let bound_value = reg_load(stack, bound_idx)?;
+                        let pair = match (&counter_value, &bound_value) {
+                            (BslValue::Number(counter), BslValue::Number(bound)) => {
+                                counter.to_i64_exact().zip(bound.to_i64_exact())
+                            }
+                            _ => None,
+                        };
+                        let Some((current, bound)) = pair else {
+                            numeric_for_next_regular(
+                                stack,
+                                counter_idx,
+                                bound_idx,
+                                &mut frames[frame_idx].pc,
+                                target,
+                            )?;
+                            return Ok(Step::Continue);
+                        };
+                        NumericForState { pc, current, bound }
+                    }
+                };
+
+                let Some(next) = state.current.checked_add(1) else {
+                    reg_store(
+                        stack,
+                        counter_idx,
+                        BslValue::Number(bsl_number::BslNumber::from_i64(state.current)),
+                    )?;
+                    numeric_for_next_regular(
+                        stack,
+                        counter_idx,
+                        bound_idx,
+                        &mut frames[frame_idx].pc,
+                        target,
+                    )?;
+                    return Ok(Step::Continue);
+                };
+                if next <= state.bound {
+                    frames[frame_idx].numeric_for_state = Some(NumericForState {
+                        current: next,
+                        ..state
+                    });
+                    frames[frame_idx].pc = target as usize;
+                } else {
+                    reg_store(
+                        stack,
+                        counter_idx,
+                        BslValue::Number(bsl_number::BslNumber::from_i64(next)),
+                    )?;
+                    frames[frame_idx].pc += 1;
+                }
+            }
             Instr::Call {
                 func,
                 base,
@@ -416,6 +584,7 @@ fn step(
                     own_base,
                     call_start,
                     return_reg: ret,
+                    numeric_for_state: None,
                 });
             }
             Instr::Return { src } => {
@@ -1177,6 +1346,38 @@ mod tests {
              Возврат sum;",
         );
         assert_eq!(v, num("55"));
+    }
+
+    #[test]
+    fn numeric_for_specialization_preserves_counter_assignment_and_final_value() {
+        let v = run_src(
+            "sum = 0;\n\
+             Для i = 0 По 10 Цикл\n\
+             sum = sum + i;\n\
+             Если i = 2 Тогда i = 8; КонецЕсли;\n\
+             КонецЦикла\n\
+             Возврат sum * 100 + i;",
+        );
+        // Посещены 0, 1, 2, 9, 10; после последнего шага счётчик равен 11.
+        assert_eq!(v, num("2211"));
+
+        let v = run_src("Для i = 5 По 3 Цикл КонецЦикла; Возврат i;");
+        assert_eq!(v, num("5"));
+
+        // Пустое тело использует скрытый i64-счётчик, но наружу обязано
+        // материализовать то же финальное BSL-значение.
+        let v = run_src("Для i = 0 По 10 Цикл КонецЦикла; Возврат i;");
+        assert_eq!(v, num("11"));
+
+        // Значения, которые нельзя представить скрытым i64, автоматически
+        // остаются на общем decimal/BigInt-пути.
+        let v = run_src("Для i = 0.5 По 2.5 Цикл КонецЦикла; Возврат i;");
+        assert_eq!(v, num("3.5"));
+        let v = run_src(
+            "Для i = 100000000000000000000 По 100000000000000000000 Цикл \
+             КонецЦикла; Возврат i;",
+        );
+        assert_eq!(v, num("100000000000000000001"));
     }
 
     #[test]
@@ -2353,6 +2554,28 @@ mod tests {
             other => panic!("ожидалось число, получено {other:?}"),
         };
         assert!((2020..=2200).contains(&year), "получен год {year}");
+    }
+
+    #[test]
+    fn current_universal_date_in_milliseconds_runs_benchmark_style_script() {
+        let v = run_src(
+            "Процедура CalcНаСервере()\n\
+             sum = 0.0;\n\
+             flip = -1.0;\n\
+             Для i = 1 По 100 Цикл\n\
+             flip = -flip;\n\
+             sum = sum + flip / (2 * i - 1);\n\
+             КонецЦикла;\n\
+             КонецПроцедуры\n\
+             Т1 = ТекущаяУниверсальнаяДатаВМиллисекундах();\n\
+             CalcНаСервере();\n\
+             Возврат ТекущаяУниверсальнаяДатаВМиллисекундах() - Т1;",
+        );
+        let elapsed = match v {
+            BslValue::Number(n) => n.to_i64_exact().unwrap(),
+            other => panic!("ожидалось число миллисекунд, получено {other:?}"),
+        };
+        assert!(elapsed >= 0, "часы пошли назад: {elapsed} мс");
     }
 
     #[test]

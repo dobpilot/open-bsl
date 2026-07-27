@@ -281,6 +281,20 @@ impl BslValue {
         ))
     }
 
+    /// Специализированный шаг числового `Для`, сохраняющий проверку типов,
+    /// если тело цикла переприсвоило переменную-счётчик.
+    #[inline]
+    pub fn increment_numeric_for_and_le(&mut self, bound: &Self) -> RtResult<bool> {
+        let bound = bound.as_number("Для")?;
+        match self {
+            BslValue::Number(counter) => Ok(counter.increment_and_le(bound)?),
+            _ => Err(RtError::TypeError {
+                expected: "Число",
+                op: "Для",
+            }),
+        }
+    }
+
     pub fn neg(&self) -> RtResult<Self> {
         Ok(BslValue::Number(self.as_number("унарный -")?.neg()))
     }
@@ -688,6 +702,19 @@ impl BslValue {
         BslDate::from_seconds(secs + date::UNIX_EPOCH_SECONDS)
             .map(BslValue::Date)
             .ok_or(RtError::DateOutOfRange { op: "ТекущаяДата" })
+    }
+
+    /// `ТекущаяУниверсальнаяДатаВМиллисекундах()` — целое число
+    /// миллисекунд от Unix-эпохи в UTC.
+    pub fn current_universal_date_in_milliseconds() -> RtResult<Self> {
+        let millis = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        let millis = i64::try_from(millis).map_err(|_| RtError::DateOutOfRange {
+            op: "ТекущаяУниверсальнаяДатаВМиллисекундах",
+        })?;
+        Ok(BslValue::Number(BslNumber::from_i64(millis)))
     }
 
     /// `Год`/`Месяц`/`День`/`Час`/`Минута`/`Секунда`/`ДеньНедели` — все
@@ -1881,6 +1908,14 @@ mod tests {
         assert_eq!(BuiltinFn::lookup("sqrt"), Some(BuiltinFn::Sqrt));
         assert_eq!(BuiltinFn::lookup("Sqrt"), Some(BuiltinFn::Sqrt));
         assert_eq!(BuiltinFn::lookup("СООБЩИТЬ"), Some(BuiltinFn::Message));
+        assert_eq!(
+            BuiltinFn::lookup("ТекущаяУниверсальнаяДатаВМиллисекундах"),
+            Some(BuiltinFn::CurrentUniversalDateInMilliseconds)
+        );
+        assert_eq!(
+            BuiltinFn::CurrentUniversalDateInMilliseconds.arity_range(),
+            (0, 0)
+        );
         assert_eq!(BuiltinFn::lookup("НетТакойФункции"), None);
         assert_eq!(BuiltinFn::Pow.arity_range(), (2, 2));
         assert_eq!(BuiltinFn::Sqrt.arity_range(), (1, 1));
