@@ -110,6 +110,12 @@ impl BslNumber {
         demote(normalize_big(m, scale))
     }
 
+    /// Строит число из уже нормализованных частей. Вызывающий обязан
+    /// доказать, что `m` не оканчивается десятичным нулём при `scale > 0`.
+    fn normalized_big(m: BigInt, scale: i32) -> Self {
+        demote(BigDec { m, scale })
+    }
+
     pub fn is_zero(&self) -> bool {
         match self {
             BslNumber::Small { m, .. } => m.get() == 0,
@@ -165,6 +171,19 @@ impl BslNumber {
             BslNumber::Small { m: bm, scale: bsc },
         ) = (self, other)
         {
+            // Самый частый путь (целые счётчики, значения одного масштаба):
+            // не умножаем обе мантиссы на 10^0. У i128 даже такое
+            // checked_mul компилируется в заметно дорогую широкую операцию.
+            if asc == bsc {
+                let r = if negate {
+                    am.get().checked_sub(bm.get())
+                } else {
+                    am.get().checked_add(bm.get())
+                };
+                if let Some(r) = r {
+                    return Ok(BslNumber::small(r, *asc));
+                }
+            }
             if let (Some(a), Some(b)) =
                 (scale_up_i128(am.get(), s - asc), scale_up_i128(bm.get(), s - bsc))
             {
@@ -200,7 +219,17 @@ impl BslNumber {
 
         let a = self.to_big();
         let b = other.to_big();
-        Ok(BslNumber::big(a.m * b.m, s))
+        let already_normalized = mantissa_coprime_to_ten(self)
+            || mantissa_coprime_to_ten(other);
+        let product = a.m * b.m;
+        if already_normalized {
+            // Нормализованные мантиссы сами не кратны 10. Если хотя бы
+            // одна из них не кратна ни 2, ни 5, произведение также не
+            // кратно 10, поэтому полный BigInt remainder/division не нужен.
+            Ok(BslNumber::normalized_big(product, s))
+        } else {
+            Ok(BslNumber::big(product, s))
+        }
     }
 
     pub fn neg(&self) -> Self {
@@ -394,6 +423,20 @@ impl BslNumber {
 // Хвостовые нули срезаются: измерено `1.10 * 1.00` = `1.1`. Это удерживает
 // значения в быстром ярусе и делает хеш независимым от представления.
 // Масштаб ниже нуля не опускаем: `100` остаётся мантиссой 100, а не 1e2.
+
+#[inline]
+fn mantissa_coprime_to_ten(n: &BslNumber) -> bool {
+    match n {
+        BslNumber::Small { m, .. } => {
+            let m = m.get();
+            m % 2 != 0 && m % 5 != 0
+        }
+        // Проверять растущую BigInt-мантиссу здесь было бы не дешевле
+        // нормализации результата. Быстрый путь ориентирован в том числе
+        // на частый случай Big * малая константа, оканчивающаяся на 1/3/7/9.
+        BslNumber::Big(_) => false,
+    }
+}
 
 fn normalize_small(mut m: i128, mut scale: i32) -> BslNumber {
     if m == 0 {

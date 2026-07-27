@@ -13,3 +13,6 @@ bsl-number = { path = "../bsl-number" }
 # теперь зависит от всего фронтенда, не только от bsl-bytecode.
 bsl-sema = { path = "../bsl-sema" }
 bsl-syntax = { path = "../bsl-syntax" }
+
+[dev-dependencies]
+pprof = { version = "0.13", default-features = false, features = ["flamegraph"] }
