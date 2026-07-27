@@ -137,3 +137,32 @@ fn round_to_scale_half_even_differs_from_half_up_only_on_exact_ties() {
         "25000000000000000000000000000000000000001"
     );
 }
+
+/// Нормализация не опускает масштаб ниже нуля, поэтому ЦЕЛОЕ число вполне
+/// может иметь мантиссу, кратную 10 (`100` — это мантисса 100). Значит
+/// «одна мантисса взаимно проста с 10» НЕ доказывает, что произведение не
+/// кратно 10, и пропускать нормализацию на этом основании нельзя.
+///
+/// Тест бьёт именно по большому пути умножения: малый путь нормализует сам,
+/// поэтому операнд взят такой, что `i128`-умножение переполняется.
+#[test]
+fn mul_normalizes_when_one_operand_goes_big() {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let ten_pow_38 = n(&format!("1{}", "0".repeat(38)));
+    let product = ten_pow_38.mul(&n("0.3")).unwrap();
+    let expected = n(&format!("3{}", "0".repeat(37)));
+
+    assert_eq!(c(&product), format!("3{}", "0".repeat(37)));
+
+    // Главное следствие ненормализованного представления: от него зависят
+    // равенство и хеш, а на них держится `Соответствие` с числовыми ключами.
+    let hash = |x: &bsl_number::BslNumber| {
+        let mut h = DefaultHasher::new();
+        x.hash(&mut h);
+        h.finish()
+    };
+    assert_eq!(product, expected, "равенство зависит от представления");
+    assert_eq!(hash(&product), hash(&expected), "хеш зависит от представления");
+}
