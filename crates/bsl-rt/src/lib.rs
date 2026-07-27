@@ -894,7 +894,15 @@ impl BslValue {
         BslValue::Object(Rc::new(BslObject::Map(std::cell::RefCell::new(MapData::new()))))
     }
 
-    /// Открывает (или обрезает) текстовый файл для буферизованной записи UTF-8.
+    /// Создаёт объект `ЗаписьТекста` и открывает файл для буферизованной
+    /// записи UTF-8.
+    ///
+    /// Существующий файл обрезается до нулевой длины.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает [`RtError::TypeError`], если путь не является строкой,
+    /// или [`RtError::IoError`], если файл невозможно создать.
     pub fn new_text_writer(path: &BslValue) -> RtResult<Self> {
         let path = path.as_str("Новый ЗаписьТекста")?.to_string();
         let file = std::fs::File::create(&path)
@@ -904,6 +912,16 @@ impl BslValue {
         ))))
     }
 
+    /// Записывает строку в буфер объекта `ЗаписьТекста`.
+    ///
+    /// UTF-16-представление [`BslString`] кодируется непосредственно в
+    /// UTF-8 без промежуточного [`String`].
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку типа для нестрокового аргумента, ошибку
+    /// применимости для другого объекта либо [`RtError::IoError`] при
+    /// записи в закрытый файл или ошибке файловой системы.
     pub fn text_writer_write(&self, text: &BslValue) -> RtResult<Self> {
         let text = text.as_str("Записать")?;
         match self {
@@ -930,6 +948,14 @@ impl BslValue {
         }
     }
 
+    /// Сбрасывает буфер и закрывает `ЗаписьТекста`.
+    ///
+    /// Повторный вызов безопасен и возвращает `Неопределено`.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку применимости для другого объекта либо
+    /// [`RtError::IoError`], если буфер не удалось сбросить.
     pub fn text_writer_close(&self) -> RtResult<Self> {
         match self {
             BslValue::Object(obj) => match &**obj {

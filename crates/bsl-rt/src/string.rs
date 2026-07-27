@@ -39,6 +39,10 @@ impl BslString {
     /// Кодирует внутренние UTF-16 код-юниты прямо в переданный UTF-8
     /// поток. Промежуточный `String` не создаётся; некорректные суррогаты,
     /// как и в `Display`, заменяются на U+FFFD.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку, полученную от [`Write::write_all`].
     pub fn write_utf8(&self, writer: &mut impl Write) -> io::Result<()> {
         let mut out = [0u8; 1024];
 
