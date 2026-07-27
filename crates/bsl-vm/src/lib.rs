@@ -1097,6 +1097,22 @@ mod tests {
 
         let err = run_src_err("Возврат Ложь ИЛИ 1;");
         assert!(matches!(err, RtError::TypeError { expected: "Булево", .. }));
+
+        // ЛЕВЫЙ операнд идёт другим путём: он не «вычисляется по ходу», а
+        // сам становится условием перехода (`JumpIfFalse`/`JumpIfTrue`,
+        // см. кодоген `И`/`ИЛИ`), — и строгая булевость обязана держаться
+        // и там, иначе `1 И Истина` тихо считалось бы истиной.
+        let err = run_src_err("Возврат 1 И Истина;");
+        assert!(matches!(err, RtError::TypeError { expected: "Булево", .. }));
+
+        let err = run_src_err("Возврат 1 ИЛИ Истина;");
+        assert!(matches!(err, RtError::TypeError { expected: "Булево", .. }));
+
+        // И правый операнд не должен успеть вычислиться до этой ошибки:
+        // если бы `1` привёлся к истине, `ИЛИ` замкнулось бы накоротко и
+        // ошибки не было бы вовсе.
+        let err = run_src_err("Возврат 1 ИЛИ Неопределено.Свойство;");
+        assert!(matches!(err, RtError::TypeError { expected: "Булево", .. }));
     }
 
     #[test]
