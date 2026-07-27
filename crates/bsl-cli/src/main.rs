@@ -3,6 +3,10 @@
 //! накопленных за сессию переменных/имён полей и исполняется как
 //! отдельный чанк (`bsl_vm::run_repl_chunk`), значение (если `Возврат`
 //! был) печатается.
+//! `bsl-cli --ingest-measurements <файл> [measure-all.bsl]` — приём вывода
+//! сеанса замеров у платформы, см. модуль `ingest`.
+
+mod ingest;
 
 use std::io::{self, Write};
 
@@ -10,7 +14,18 @@ use bsl_rt::BslValue;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    match args.get(1) {
+    match args.get(1).map(String::as_str) {
+        Some("--ingest-measurements") => {
+            let Some(input) = args.get(2) else {
+                eprintln!(
+                    "--ingest-measurements ждёт файл с выводом платформы:\n  \
+                     bsl-cli --ingest-measurements platform-output.txt [measure-all.bsl]"
+                );
+                std::process::exit(1);
+            };
+            let code = ingest::run(input, args.get(3).map(String::as_str));
+            std::process::exit(code);
+        }
         Some(path) => run_file(path),
         None => repl(),
     }

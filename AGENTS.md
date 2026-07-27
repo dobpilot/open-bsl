@@ -32,7 +32,9 @@ Use standard `rustfmt` output and four-space indentation. Follow Rust convention
 
 ## Testing Guidelines
 
-Use Rust's built-in test framework. Add focused unit tests near changed logic and integration tests in a crate's `tests/` directory. Conformance fixtures use matching `name.bsl` and `name.expected` files. An absent `.expected` intentionally marks an unmeasured case; never generate oracle output from this interpreter. Preserve `// НЕ ИЗМЕРЕНО` markers until behavior is measured against real 1C.
+Use Rust's built-in test framework. Add focused unit tests near changed logic and integration tests in a crate's `tests/` directory. Conformance fixtures use matching `name.bsl` and `name.expected` files. An absent `.expected` intentionally marks an unmeasured case; never generate oracle output from this interpreter. Preserve `// НЕ ИЗМЕРЕНО(ID)` markers until behavior is measured against real 1C.
+
+Every decision made by reasoning rather than by checking against the platform needs all three of: a `// НЕ ИЗМЕРЕНО(AREA.QUESTION)` marker at the code site, an entry in `crates/bsl-rt/src/open_questions.rs`, and one line in `tests/conformance/measure/measure-all.bsl`. The test `open_questions_registry_matches_source_markers` fails if any of the three is missing. Platform results come back through `bsl-cli --ingest-measurements`, which never edits code.
 
 ## Commit & Pull Request Guidelines
 

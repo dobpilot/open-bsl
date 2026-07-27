@@ -179,6 +179,10 @@ pub fn resolve_script(stmts: &[AStmt]) -> Result<Resolved, SemaError> {
 /// Вызовы пользовательских процедур/функций фрагмент делать не может —
 /// `funcs` здесь всегда пуст: сигнатуры уже откомпилированных функций
 /// сюда не передаются (see `bsl-vm` doc comment для обоснования).
+/// НЕ ИЗМЕРЕНО(EXEC.USER_FUNCTION_CALL): в 1С фрагмент, скорее всего,
+/// видит модульные процедуры и функции — тогда `funcs` придётся протянуть
+/// сюда из уже скомпилированной программы. Замер в
+/// `tests/conformance/measure/measure-unsupported.bsl`.
 pub fn resolve_snippet_stmts(
     existing_locals: &[String],
     stmts: &[AStmt],
@@ -541,7 +545,7 @@ impl<'a> Resolver<'a> {
                 // `BuiltinFn::Round` в рантайме всегда видит ровно 3
                 // аргумента. `0` для режима означает "умолчание" (см.
                 // `BslValue::round`), не конкретную схему — какая схема
-                // за ним стоит, НЕ ИЗМЕРЕНО.
+                // за ним стоит, НЕ ИЗМЕРЕНО(NUM.ROUND.DEFAULT_MODE).
                 if name.eq_ignore_ascii_case("Округл") || name.eq_ignore_ascii_case("Round") {
                     const ROUND_ARITY: usize = 3;
                     if args.is_empty() || args.len() > ROUND_ARITY {

@@ -9,16 +9,43 @@
 //! `CARGO_BIN_EXE_bsl-cli` cargo выставляет сам для интеграционных тестов
 //! пакета, который собирает этот бинарник.
 //!
-//! Фикстура без пары `.expected` молча пропускается — это не ошибка, а
-//! способ держать в репозитории заготовки (`n-body-precision.bsl` и
-//! `n-body-smoke.bsl` сейчас), для которых пока нет платформенного оракула.
+//! Фикстура без пары `.expected` пропускается — это не ошибка, а способ
+//! держать в репозитории заготовки, для которых пока нет платформенного
+//! оракула. Раньше пропуск был невидим; теперь в конце прогона печатается
+//! сводка «столько проверено, столько пропущено и каких именно» (видна при
+//! `cargo test -p bsl-cli -- --nocapture`), чтобы отсутствие покрытия не
+//! забывалось само собой.
+//!
+//! Скрипты замеров (`tests/conformance/measure/`) обходятся тем же
+//! раннером: `.expected` у них тоже нет, но исполняться они обязаны — иначе
+//! сеанс у платформы начнётся с падения на первой же строке (см.
+//! `measure_script_runs_under_this_interpreter` ниже).
 
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+fn conformance_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/conformance")
+}
+
 fn fixtures_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/conformance/fixtures")
+    conformance_dir().join("fixtures")
+}
+
+fn measure_dir() -> PathBuf {
+    conformance_dir().join("measure")
+}
+
+/// Все `*.bsl` каталога, отсортированные по имени.
+fn scripts_in(dir: &Path) -> Vec<PathBuf> {
+    let mut entries: Vec<PathBuf> = fs::read_dir(dir)
+        .unwrap_or_else(|e| panic!("не удалось прочитать {}: {e}", dir.display()))
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("bsl"))
+        .collect();
+    entries.sort();
+    entries
 }
 
 /// Построчный дифф, показывающий первую точку расхождения (плюс контекст),
@@ -59,18 +86,14 @@ fn conformance_fixtures_match_oracle_output() {
     let mut skipped = Vec::new();
     let mut failures = Vec::new();
 
-    let mut entries: Vec<PathBuf> = fs::read_dir(&dir)
-        .unwrap_or_else(|e| panic!("не удалось прочитать {}: {e}", dir.display()))
-        .map(|e| e.unwrap().path())
-        .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("bsl"))
-        .collect();
-    entries.sort();
+    let mut entries = scripts_in(&dir);
+    entries.extend(scripts_in(&measure_dir()));
 
     for fixture in entries {
         let expected_path = fixture.with_extension("expected");
         let name = fixture.file_name().unwrap().to_string_lossy().into_owned();
         if !expected_path.exists() {
-            skipped.push(name);
+            skipped.push(fixture.file_stem().unwrap().to_string_lossy().into_owned());
             continue;
         }
         checked.push(name.clone());
@@ -104,8 +127,17 @@ fn conformance_fixtures_match_oracle_output() {
         "ни одной фикстуры с парой .expected не найдено в {}",
         dir.display()
     );
+
+    // Сводка в конце прогона: пропуск фикстуры — это ОТСУТСТВИЕ покрытия, и
+    // видеть его нужно каждый раз, а не вспоминать о нём. Пропущенные — та
+    // самая очередь на сеанс замеров.
+    eprintln!(
+        "conformance: {} проверено, {} пропущено (нет .expected)",
+        checked.len(),
+        skipped.len()
+    );
     if !skipped.is_empty() {
-        eprintln!("пропущено (нет .expected): {}", skipped.join(", "));
+        eprintln!("  пропущены: {}", skipped.join(", "));
     }
 
     assert!(
@@ -113,5 +145,66 @@ fn conformance_fixtures_match_oracle_output() {
         "{} фикстур(а) разошлись с оракулом:\n\n{}",
         failures.len(),
         failures.join("\n")
+    );
+}
+
+/// `measure-all.bsl` — единственный файл, который человек прогоняет у
+/// платформы, и падение на середине стоит целого сеанса. Поэтому он
+/// проверяется не как «фикстура без оракула» (такие раннер выше просто
+/// пропускает), а отдельно: исполняется целиком, и его вывод обязан быть
+/// машинным — `ИД<таб>ЗНАЧЕНИЕ`, ровно по строке на каждый ИД из самого
+/// скрипта.
+///
+/// Что этот тест НЕ проверяет и проверять не может: сами значения. Их
+/// эталон приходит только с платформы (`bsl-cli --ingest-measurements`).
+#[test]
+fn measure_script_runs_under_this_interpreter() {
+    let script = measure_dir().join("measure-all.bsl");
+    let output = Command::new(env!("CARGO_BIN_EXE_bsl-cli"))
+        .arg(&script)
+        .output()
+        .unwrap_or_else(|e| panic!("не удалось запустить bsl-cli на measure-all.bsl: {e}"));
+    assert!(
+        output.status.success(),
+        "measure-all.bsl не исполнился: {}\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    let mut printed = Vec::new();
+    for line in stdout.lines() {
+        let (id, _value) = line.split_once('\t').unwrap_or_else(|| {
+            panic!("строка вывода без табуляции: {line:?} — печатать замер обязана процедура М()")
+        });
+        assert!(
+            !id.is_empty() && !id.contains(' '),
+            "неопрятный ИД в выводе: {id:?}"
+        );
+        printed.push(id.to_string());
+    }
+
+    let mut sorted = printed.clone();
+    sorted.sort();
+    let before = sorted.len();
+    sorted.dedup();
+    assert_eq!(before, sorted.len(), "ИД напечатан дважды: {printed:?}");
+
+    // Сверка с реестром — на стороне bsl-rt
+    // (`open_questions_registry.rs`); здесь достаточно того, что каждый ИД
+    // из ИСХОДНИКА скрипта действительно дошёл до вывода: строка,
+    // пропущенная из-за ветвления или упавшая молча, — ровно та ошибка,
+    // которая обнаружилась бы уже у платформы.
+    let src = fs::read_to_string(&script).expect("measure-all.bsl не читается");
+    let in_source: Vec<String> = src
+        .lines()
+        .filter_map(|l| l.trim_start().strip_prefix("М(\""))
+        .filter_map(|rest| rest.split('"').next().map(str::to_string))
+        .collect();
+    assert!(!in_source.is_empty(), "в measure-all.bsl не нашлось вызовов М()");
+    let missing: Vec<&String> = in_source.iter().filter(|id| !printed.contains(id)).collect();
+    assert!(
+        missing.is_empty(),
+        "ИД есть в скрипте, но не дошли до вывода: {missing:?}"
     );
 }

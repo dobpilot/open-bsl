@@ -43,8 +43,9 @@ impl Default for NumberFormat {
 }
 
 /// Форматирование ДАТЫ: `ДФ` (шаблон) и `ДЛФ` (длинный локальный формат).
-/// `None` в обоих полях — формат по умолчанию (`bsl_rt` решает, какой
-/// именно; он НЕ ИЗМЕРЕН, см. `bsl_rt::date::DEFAULT_PATTERN`).
+/// `None` в обоих полях — формат по умолчанию: его выбирает `bsl_rt`, и он
+/// сам открытый вопрос — НЕ ИЗМЕРЕНО(FMT.DATE.DEFAULT), см.
+/// `bsl_rt::date::DEFAULT_PATTERN`.
 ///
 /// Оба ключа сразу — `ДФ` выигрывает: явный шаблон конкретнее готового
 /// локального формата.
@@ -215,7 +216,8 @@ pub fn format_value(v: &BslValue, spec: Option<&str>) -> String {
                 (Some(p), _) => bsl_rt::format_date_pattern(*d, p),
                 (None, Some(code)) => bsl_rt::format_date_long(*d, code),
                 // Без ключей даты — представление по умолчанию, то же, что
-                // даёт `Строка()` (оно НЕ ИЗМЕРЕНО, см. `bsl_rt::date`).
+                // даёт `Строка()` (оно НЕ ИЗМЕРЕНО(FMT.DATE.DEFAULT), см.
+                // `bsl_rt::date`).
                 (None, None) => d.to_string(),
             }
         }
