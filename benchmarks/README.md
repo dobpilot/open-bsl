@@ -38,3 +38,27 @@ lua benchmarks/empty_for.lua
 ```
 
 Both loops execute exactly 1,000,001 iterations.
+
+## CSV output
+
+`csv_write.bsl` and `csv_write.lua` each write 300,001 rows with 21
+semicolon-separated fields to `test.csv` in the current directory:
+
+```bash
+mkdir -p /tmp/onec-csv-bench
+cd /tmp/onec-csv-bench
+target/release/bsl-cli /path/to/onec_llvm/benchmarks/csv_write.bsl
+lua /path/to/onec_llvm/benchmarks/csv_write.lua
+```
+
+Build `bsl-cli` with `cargo build --release -p bsl-cli` first. The BSL
+version uses buffered `ЗаписьТекста`; Lua uses its default output stream.
+The repeated `d13` field is intentional. Run both on the same filesystem
+and alternate their order because filesystem and page-cache behavior can
+dominate the result. BSL reports wall-clock time; Lua's `os.clock()` reports
+process CPU time, so use an external timer for a strict comparison.
+
+`csv_write_batched.bsl` is the application-level optimized variant. It
+builds the invariant CSV row before the loop and performs one buffered
+write per row. Keep using `csv_write.bsl` when comparing the original
+42-call workload with Lua.
