@@ -17,6 +17,10 @@ use std::rc::Rc;
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BslString(Rc<[u16]>);
 
+/// Сколько значений принимает `СтрШаблон`: `%1`..`%10`. Ограничение самой
+/// 1С, а не этой реализации — поэтому константа, а не «сколько передали».
+pub const MAX_TEMPLATE_ARGS: usize = 10;
+
 impl BslString {
     pub fn from_str(s: &str) -> Self {
         let units: Vec<u16> = s.encode_utf16().collect();
@@ -77,6 +81,232 @@ impl BslString {
     pub fn trim(&self) -> Self {
         BslString::from_str(self.to_string().trim())
     }
+
+    /// `СокрЛ`/`TrimL` — обрезка только слева.
+    pub fn trim_start(&self) -> Self {
+        BslString::from_str(self.to_string().trim_start())
+    }
+
+    /// `СокрП`/`TrimR` — обрезка только справа.
+    pub fn trim_end(&self) -> Self {
+        BslString::from_str(self.to_string().trim_end())
+    }
+
+    /// `СтрНайти`/`StrFind` — позиция первого вхождения, 1-based, `0` если
+    /// не найдено. Поиск и позиция — В КОД-ЮНИТАХ UTF-16, тех же, что
+    /// считает `len_utf16`: `СтрНайти` обязан возвращать число, которое
+    /// можно без пересчёта скормить в `Сред`/`Лев` (инвариант индексации).
+    /// Поэтому сравнение идёт по срезам `[u16]`, а не по UTF-8 `str`, где
+    /// байтовая позиция не совпала бы с юнитной для кириллицы.
+    ///
+    /// Пустая подстрока — `0` (не найдено), а не `1`: у 1С поиск пустой
+    /// строки ничего не находит.
+    pub fn find(&self, needle: &Self) -> usize {
+        let (hay, need) = (&self.0, &needle.0);
+        if need.is_empty() || need.len() > hay.len() {
+            return 0;
+        }
+        for start in 0..=(hay.len() - need.len()) {
+            if hay[start..start + need.len()] == need[..] {
+                return start + 1;
+            }
+        }
+        0
+    }
+
+    /// `СтрЗаменить`/`StrReplace` — все вхождения. Пустой `from` —
+    /// возврат исходной строки без изменений (иначе замена вставляла бы
+    /// `to` между каждой парой символов бесконечно).
+    pub fn replace(&self, from: &Self, to: &Self) -> Self {
+        if from.0.is_empty() {
+            return self.clone();
+        }
+        let mut out: Vec<u16> = Vec::with_capacity(self.0.len());
+        let mut i = 0;
+        while i < self.0.len() {
+            if i + from.0.len() <= self.0.len() && self.0[i..i + from.0.len()] == from.0[..] {
+                out.extend_from_slice(&to.0);
+                i += from.0.len();
+            } else {
+                out.push(self.0[i]);
+                i += 1;
+            }
+        }
+        BslString(out.into())
+    }
+
+    /// `СтрРазделить`/`StrSplit` — по разделителю, пустые куски
+    /// СОХРАНЯЮТСЯ (у 1С третий аргумент `ВключатьПустые` по умолчанию
+    /// `Истина`; самого аргумента здесь пока нет). Пустой разделитель —
+    /// вся строка одним элементом.
+    pub fn split(&self, sep: &Self) -> Vec<Self> {
+        if sep.0.is_empty() {
+            return vec![self.clone()];
+        }
+        let mut parts = Vec::new();
+        let mut start = 0;
+        let mut i = 0;
+        while i + sep.0.len() <= self.0.len() {
+            if self.0[i..i + sep.0.len()] == sep.0[..] {
+                parts.push(BslString(self.0[start..i].to_vec().into()));
+                i += sep.0.len();
+                start = i;
+            } else {
+                i += 1;
+            }
+        }
+        parts.push(BslString(self.0[start..].to_vec().into()));
+        parts
+    }
+
+    /// `СтрСоединить`/`StrConcat`.
+    pub fn join(parts: &[Self], sep: &Self) -> Self {
+        let mut out: Vec<u16> = Vec::new();
+        for (i, p) in parts.iter().enumerate() {
+            if i > 0 {
+                out.extend_from_slice(&sep.0);
+            }
+            out.extend_from_slice(&p.0);
+        }
+        BslString(out.into())
+    }
+
+    /// Разбиение на СТРОКИ (в смысле "строк текста"): разделитель — `LF`,
+    /// предшествующий ему `CR` съедается вместе с ним (`CRLF` — один
+    /// перевод, не два). Одинокий `CR` разделителем НЕ считается — иначе
+    /// строка с `CR` внутри давала бы разное число строк на разных
+    /// платформах, а исходники BSL приходят и с той, и с другой
+    /// разметкой.
+    fn lines(&self) -> Vec<&[u16]> {
+        const LF: u16 = 0x000A;
+        const CR: u16 = 0x000D;
+        let mut out = Vec::new();
+        let mut start = 0;
+        for i in 0..self.0.len() {
+            if self.0[i] == LF {
+                let end = if i > start && self.0[i - 1] == CR { i - 1 } else { i };
+                out.push(&self.0[start..end]);
+                start = i + 1;
+            }
+        }
+        out.push(&self.0[start..]);
+        out
+    }
+
+    /// `СтрЧислоСтрок`/`StrLineCount` — пустая строка это ОДНА строка
+    /// (не ноль): текст без переводов строки состоит из одной строки.
+    pub fn line_count(&self) -> usize {
+        self.lines().len()
+    }
+
+    /// `СтрПолучитьСтроку`/`StrGetLine` — 1-based; номер вне диапазона
+    /// даёт пустую строку (как `Сред` за границей), а не ошибку.
+    pub fn line_at(&self, n_1based: usize) -> Self {
+        if n_1based == 0 {
+            return BslString(Vec::new().into());
+        }
+        match self.lines().get(n_1based - 1) {
+            Some(l) => BslString(l.to_vec().into()),
+            None => BslString(Vec::new().into()),
+        }
+    }
+
+    /// `Символ`/`Char` — код -> строка. Код за пределами BMP даёт ДВА
+    /// код-юнита (суррогатную пару), то есть `СтрДлина(Символ(128512)) = 2`
+    /// — прямое следствие инварианта "длина в код-юнитах".
+    pub fn from_char_code(code: u32) -> Option<Self> {
+        let ch = char::from_u32(code)?;
+        let mut buf = [0u16; 2];
+        Some(BslString(ch.encode_utf16(&mut buf).to_vec().into()))
+    }
+
+    /// `КодСимвола`/`CharCode` — код символа на позиции `pos_1based`
+    /// (позиция — в код-юнитах, как везде). `None` — позиция вне строки.
+    ///
+    /// НЕ ИЗМЕРЕНО: что именно возвращает платформа на суррогатной паре —
+    /// код-юнит (`55357` для первой половины эмодзи) или полную кодовую
+    /// точку (`128512`). Здесь взята КОДОВАЯ ТОЧКА, если на позиции стоит
+    /// начало корректной пары: так `КодСимвола(Символ(к)) = к` работает
+    /// туда-обратно для любого `к`. Позиция при этом всё равно юнитная,
+    /// то есть у эмодзи есть и вторая позиция — на ней возвращается уже
+    /// сам код-юнит низкого суррогата. Замер в README.
+    pub fn char_code_at(&self, pos_1based: usize) -> Option<u32> {
+        if pos_1based == 0 {
+            return None;
+        }
+        let i = pos_1based - 1;
+        let unit = *self.0.get(i)? as u32;
+        const HIGH: std::ops::Range<u32> = 0xD800..0xDC00;
+        const LOW: std::ops::Range<u32> = 0xDC00..0xE000;
+        if HIGH.contains(&unit) {
+            if let Some(&next) = self.0.get(i + 1) {
+                if LOW.contains(&(next as u32)) {
+                    return Some(0x10000 + ((unit - 0xD800) << 10) + (next as u32 - 0xDC00));
+                }
+            }
+        }
+        Some(unit)
+    }
+
+    /// `СтрШаблон`/`StrTemplate` — подстановка `%1`..`%10`. `%%` — literal
+    /// `%`. Номер читается ЖАДНО до двух цифр, поэтому `%10` это десятый
+    /// параметр, а не первый со следующей за ним нулём.
+    ///
+    /// Номер вне `1..=values.len()` подставляется пустой строкой, а не
+    /// падает: у шаблона и списка значений разные места происхождения
+    /// (часто — конфигурация и код), и рассинхрон не повод ронять скрипт.
+    pub fn template(&self, values: &[Self]) -> Self {
+        const PERCENT: u16 = b'%' as u16;
+        let src = &self.0;
+        let mut out: Vec<u16> = Vec::with_capacity(src.len());
+        let mut i = 0;
+        while i < src.len() {
+            if src[i] != PERCENT {
+                out.push(src[i]);
+                i += 1;
+                continue;
+            }
+            match src.get(i + 1) {
+                Some(&PERCENT) => {
+                    out.push(PERCENT);
+                    i += 2;
+                }
+                Some(&d) if digit(d).is_some() => {
+                    let mut n = digit(d).unwrap() as usize;
+                    let mut used = 2;
+                    if let Some(&d2) = src.get(i + 2) {
+                        if let Some(v) = digit(d2) {
+                            // Только до `%10`: у 1С шаблон принимает ровно
+                            // десять значений, `%11` это `%1` и текст `1`.
+                            let wide = n * 10 + v as usize;
+                            if wide <= MAX_TEMPLATE_ARGS {
+                                n = wide;
+                                used = 3;
+                            }
+                        }
+                    }
+                    if n >= 1 {
+                        if let Some(v) = values.get(n - 1) {
+                            out.extend_from_slice(&v.0);
+                        }
+                    }
+                    i += used;
+                }
+                // `%` не перед цифрой и не перед `%` — сам по себе символ.
+                _ => {
+                    out.push(PERCENT);
+                    i += 1;
+                }
+            }
+        }
+        BslString(out.into())
+    }
+}
+
+fn digit(unit: u16) -> Option<u32> {
+    (0x0030..=0x0039)
+        .contains(&unit)
+        .then(|| unit as u32 - 0x0030)
 }
 
 impl fmt::Display for BslString {
@@ -136,5 +366,100 @@ mod tests {
     fn case_conversion_does_not_break_on_non_ascii() {
         assert_eq!(BslString::from_str("привет").to_uppercase().to_string(), "ПРИВЕТ");
         assert_eq!(BslString::from_str("ПРИВЕТ").to_lowercase().to_string(), "привет");
+    }
+
+    fn s(t: &str) -> BslString {
+        BslString::from_str(t)
+    }
+
+    #[test]
+    fn find_is_1_based_in_utf16_units_not_utf8_bytes() {
+        // Ключевое: у кириллицы байтовая позиция вдвое больше юнитной —
+        // "вг" в "абвгд" начинается с 3-го СИМВОЛА и 5-го БАЙТА.
+        assert_eq!(s("абвгд").find(&s("вг")), 3);
+        assert_eq!(s("абвгд").find(&s("а")), 1);
+        assert_eq!(s("абвгд").find(&s("д")), 5);
+        assert_eq!(s("абвгд").find(&s("яя")), 0);
+        assert_eq!(s("абв").find(&s("")), 0);
+        assert_eq!(s("").find(&s("а")), 0);
+    }
+
+    #[test]
+    fn find_agrees_with_mid_on_the_position_it_returns() {
+        // Смысл единиц измерения: результат `СтрНайти` можно скормить в
+        // `Сред` без пересчёта.
+        let hay = s("а😀бвг");
+        let pos = hay.find(&s("бв"));
+        assert_eq!(hay.substring(pos, 2).to_string(), "бв");
+    }
+
+    #[test]
+    fn replace_handles_all_occurrences_and_empty_needle() {
+        assert_eq!(s("а-б-в").replace(&s("-"), &s("+")).to_string(), "а+б+в");
+        assert_eq!(s("ааа").replace(&s("аа"), &s("б")).to_string(), "ба");
+        assert_eq!(s("абв").replace(&s(""), &s("x")).to_string(), "абв");
+        assert_eq!(s("абв").replace(&s("б"), &s("")).to_string(), "ав");
+    }
+
+    #[test]
+    fn split_keeps_empty_pieces_and_round_trips_through_join() {
+        let parts = s("а,,б").split(&s(","));
+        let texts: Vec<String> = parts.iter().map(|p| p.to_string()).collect();
+        assert_eq!(texts, vec!["а", "", "б"]);
+        assert_eq!(BslString::join(&parts, &s(",")).to_string(), "а,,б");
+
+        // Пустой разделитель — вся строка одним куском.
+        assert_eq!(s("абв").split(&s("")).len(), 1);
+        // Строка без разделителя — тоже один кусок, а не ноль.
+        assert_eq!(s("абв").split(&s(",")).len(), 1);
+        assert_eq!(s("").split(&s(",")).len(), 1);
+    }
+
+    #[test]
+    fn line_helpers_treat_crlf_as_one_break_and_empty_text_as_one_line() {
+        assert_eq!(s("а\r\nб\nв").line_count(), 3);
+        assert_eq!(s("а\r\nб\nв").line_at(1).to_string(), "а");
+        assert_eq!(s("а\r\nб\nв").line_at(2).to_string(), "б");
+        assert_eq!(s("а\r\nб\nв").line_at(3).to_string(), "в");
+        assert_eq!(s("").line_count(), 1);
+        // Вне диапазона — пустая строка, не паника.
+        assert_eq!(s("а").line_at(0).to_string(), "");
+        assert_eq!(s("а").line_at(9).to_string(), "");
+    }
+
+    #[test]
+    fn char_and_char_code_round_trip_including_outside_bmp() {
+        assert_eq!(BslString::from_char_code(160).unwrap().len_utf16(), 1);
+        assert_eq!(s("абв").char_code_at(2), Some('б' as u32));
+        assert_eq!(s("абв").char_code_at(9), None);
+        assert_eq!(s("абв").char_code_at(0), None);
+
+        // Суррогатная пара: длина 2 (инвариант), но код — полная кодовая
+        // точка, чтобы Символ/КодСимвола сходились туда-обратно.
+        let emoji = BslString::from_char_code(128512).unwrap();
+        assert_eq!(emoji.len_utf16(), 2);
+        assert_eq!(emoji.char_code_at(1), Some(128512));
+    }
+
+    #[test]
+    fn template_substitutes_by_number_and_escapes_double_percent() {
+        let vals = vec![s("раз"), s("два")];
+        assert_eq!(s("%1 и %2").template(&vals).to_string(), "раз и два");
+        assert_eq!(s("100%%").template(&vals).to_string(), "100%");
+        // Номер без значения — пусто, не паника.
+        assert_eq!(s("[%9]").template(&vals).to_string(), "[]");
+        // `%` не перед цифрой остаётся собой.
+        assert_eq!(s("%а").template(&vals).to_string(), "%а");
+        // Двузначный номер читается жадно только до %10.
+        let ten: Vec<BslString> = (1..=10).map(|i| s(&i.to_string())).collect();
+        assert_eq!(s("%10").template(&ten).to_string(), "10");
+        assert_eq!(s("%11").template(&ten).to_string(), "11");
+    }
+
+    #[test]
+    fn one_sided_trims_do_not_touch_the_other_side() {
+        assert_eq!(s("  а  ").trim_start().to_string(), "а  ");
+        assert_eq!(s("  а  ").trim_end().to_string(), "  а");
+        assert_eq!(s("  а  ").trim().to_string(), "а");
     }
 }

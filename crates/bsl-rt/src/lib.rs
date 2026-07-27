@@ -11,6 +11,7 @@ mod runtime_shapes;
 mod shape;
 mod string;
 mod table;
+mod types;
 
 use std::cmp::Ordering;
 use std::fmt;
@@ -25,8 +26,9 @@ pub use map::MapData;
 pub use object::{BslObject, StructureStorage};
 pub use runtime_shapes::RuntimeShapes;
 pub use shape::{Shape, ShapeTable, MAX_SHAPE_TRANSITIONS};
-pub use string::BslString;
+pub use string::{BslString, MAX_TEMPLATE_ARGS};
 pub use table::ValueTableData;
+pub use types::TypeId;
 
 #[derive(Debug, Clone)]
 pub enum BslValue {
@@ -35,6 +37,12 @@ pub enum BslValue {
     Boolean(bool),
     Number(BslNumber),
     Str(BslString),
+    /// Тип как ЗНАЧЕНИЕ (`ТипЗнч(х)`, `Тип("Массив")`) — не тег этого
+    /// перечисления, а полноценное значение, которое можно сравнить,
+    /// положить в переменную и напечатать (`Строка(ТипЗнч(1))` -> `Число`).
+    /// `TypeId` — `Copy` в один байт, поэтому вариант ничего не добавляет
+    /// к размеру `BslValue`.
+    Type(TypeId),
     Object(Rc<BslObject>),
     /// Пропущенный позиционный аргумент (`Ф(1, , 3)`) — ТОЛЬКО как
     /// временное значение параметра сразу при входе в функцию/процедуру, до
@@ -78,6 +86,8 @@ pub enum RtError {
     RowInvalidated,
     /// Обращение к несуществующей колонке `ТаблицыЗначений`/`СтрокиТаблицы`.
     UnknownColumn(String),
+    /// `Тип("ОпечаткаВИмени")` — такого типа в реестре нет.
+    UnknownType(String),
     /// Метод объекта существует, но не для этого типа получателя, либо
     /// вызван не с тем числом аргументов для этого типа (некоторые методы,
     /// например `Добавить`, полиморфны: означают разное в зависимости от
@@ -130,6 +140,7 @@ impl fmt::Display for RtError {
             RtError::Raised(v) => write!(f, "{v}"),
             RtError::RowInvalidated => write!(f, "строка таблицы значений больше не существует"),
             RtError::UnknownColumn(name) => write!(f, "колонка «{name}» не найдена"),
+            RtError::UnknownType(name) => write!(f, "тип «{name}» не определён"),
             RtError::MethodNotApplicable { method, receiver } => {
                 write!(f, "метод «{method}» не применим к «{receiver}»")
             }
@@ -155,6 +166,7 @@ impl BslValue {
             BslValue::Boolean(_) => "Булево",
             BslValue::Number(_) => "Число",
             BslValue::Str(_) => "Строка",
+            BslValue::Type(_) => "Тип",
             BslValue::Object(o) => match &**o {
                 BslObject::Array(_) => "Массив",
                 BslObject::Structure(_) => "Структура",
@@ -384,10 +396,16 @@ impl BslValue {
         Ok(BslValue::Str(self.as_str("Прав")?.right(len.as_usize("Прав")?)))
     }
 
+    /// `Сред(Строка, Начало[, Длина])` — `Неопределено` на месте длины
+    /// (аргумент опущен, см. `BuiltinFn::arity_range`) значит "до конца
+    /// строки".
     pub fn str_mid(&self, start: &Self, len: &Self) -> RtResult<Self> {
         let s = self.as_str("Сред")?;
         let start = start.as_usize("Сред")?;
-        let len = len.as_usize("Сред")?;
+        let len = match len {
+            BslValue::Undefined => s.len_utf16(),
+            other => other.as_usize("Сред")?,
+        };
         Ok(BslValue::Str(s.substring(start, len)))
     }
 
@@ -401,6 +419,220 @@ impl BslValue {
 
     pub fn str_trim_all(&self) -> RtResult<Self> {
         Ok(BslValue::Str(self.as_str("СокрЛП")?.trim()))
+    }
+
+    pub fn str_trim_left(&self) -> RtResult<Self> {
+        Ok(BslValue::Str(self.as_str("СокрЛ")?.trim_start()))
+    }
+
+    pub fn str_trim_right(&self) -> RtResult<Self> {
+        Ok(BslValue::Str(self.as_str("СокрП")?.trim_end()))
+    }
+
+    /// `СтрНайти(Строка, Подстрока)` — позиция в КОД-ЮНИТАХ UTF-16, 1-based,
+    /// `0` если не найдено. Те же единицы, что считает `СтрДлина`, чтобы
+    /// результат можно было передать в `Сред`/`Лев` без пересчёта.
+    pub fn str_find(&self, needle: &Self) -> RtResult<Self> {
+        let pos = self.as_str("СтрНайти")?.find(needle.as_str("СтрНайти")?);
+        Ok(BslValue::Number(BslNumber::from_i64(pos as i64)))
+    }
+
+    pub fn str_replace(&self, from: &Self, to: &Self) -> RtResult<Self> {
+        Ok(BslValue::Str(self.as_str("СтрЗаменить")?.replace(
+            from.as_str("СтрЗаменить")?,
+            to.as_str("СтрЗаменить")?,
+        )))
+    }
+
+    /// `СтрРазделить(Строка, Разделитель)` -> `Массив` строк.
+    pub fn str_split(&self, sep: &Self) -> RtResult<Self> {
+        let parts = self.as_str("СтрРазделить")?.split(sep.as_str("СтрРазделить")?);
+        Ok(BslValue::new_array(parts.into_iter().map(BslValue::Str).collect()))
+    }
+
+    /// `СтрСоединить(Массив, Разделитель)`. Не-строковые элементы массива
+    /// приводятся к строке через `Display` — у 1С `СтрСоединить` тоже
+    /// принимает массив любых значений, а не только строк. ВНИМАНИЕ:
+    /// приведение здесь идёт МИМО `bsl-format` (этот крейт ниже него
+    /// слоем), поэтому число получает каноническую форму, а не
+    /// локализованную с NBSP-группировкой — см. `Display for BslNumber`.
+    /// Это осознанное расхождение уровня слоёв, а не забытая локализация:
+    /// массив строк (обычный случай) оно не затрагивает вовсе.
+    pub fn str_join(&self, sep: &Self) -> RtResult<Self> {
+        let sep = sep.as_str("СтрСоединить")?;
+        match self {
+            BslValue::Object(o) => match &**o {
+                BslObject::Array(items) => {
+                    let parts: Vec<BslString> = items
+                        .borrow()
+                        .iter()
+                        .map(|v| match v {
+                            BslValue::Str(s) => s.clone(),
+                            other => BslString::from_str(&other.to_string()),
+                        })
+                        .collect();
+                    Ok(BslValue::Str(BslString::join(&parts, sep)))
+                }
+                _ => Err(RtError::TypeError {
+                    expected: "Массив",
+                    op: "СтрСоединить",
+                }),
+            },
+            _ => Err(RtError::TypeError {
+                expected: "Массив",
+                op: "СтрСоединить",
+            }),
+        }
+    }
+
+    pub fn str_line_count(&self) -> RtResult<Self> {
+        let n = self.as_str("СтрЧислоСтрок")?.line_count();
+        Ok(BslValue::Number(BslNumber::from_i64(n as i64)))
+    }
+
+    pub fn str_get_line(&self, n: &Self) -> RtResult<Self> {
+        let s = self.as_str("СтрПолучитьСтроку")?;
+        let n = n.as_usize("СтрПолучитьСтроку")?;
+        Ok(BslValue::Str(s.line_at(n)))
+    }
+
+    /// `СтрШаблон(Шаблон, З1, ..., З10)` — значения уже дополнены до
+    /// `MAX_TEMPLATE_ARGS` штук `Неопределено` резолвером (см.
+    /// `BuiltinFn::arity_range`); хвостовые `Неопределено` отбрасываются
+    /// здесь, чтобы `%3` при двух реально переданных значениях дал пусто, а
+    /// не строковое представление `Неопределено` (оно, впрочем, тоже
+    /// пустое — но полагаться на это совпадение не нужно).
+    pub fn str_template(&self, values: &[Self]) -> RtResult<Self> {
+        let tmpl = self.as_str("СтрШаблон")?;
+        let end = values
+            .iter()
+            .rposition(|v| !matches!(v, BslValue::Undefined))
+            .map(|i| i + 1)
+            .unwrap_or(0);
+        let vals: Vec<BslString> = values[..end]
+            .iter()
+            .map(|v| match v {
+                BslValue::Str(s) => s.clone(),
+                other => BslString::from_str(&other.to_string()),
+            })
+            .collect();
+        Ok(BslValue::Str(tmpl.template(&vals)))
+    }
+
+    /// `Символ(Код)`.
+    pub fn char_from_code(&self) -> RtResult<Self> {
+        let code = self.as_number("Символ")?;
+        let code = code
+            .to_i64_exact()
+            .and_then(|c| u32::try_from(c).ok())
+            .and_then(BslString::from_char_code)
+            .ok_or(RtError::TypeError {
+                expected: "Код символа (целое в диапазоне Unicode)",
+                op: "Символ",
+            })?;
+        Ok(BslValue::Str(code))
+    }
+
+    /// `КодСимвола(Строка[, Позиция])` — позиция по умолчанию `1`.
+    pub fn char_code(&self, pos: &Self) -> RtResult<Self> {
+        let s = self.as_str("КодСимвола")?;
+        let pos = match pos {
+            BslValue::Undefined => 1,
+            other => other.as_usize("КодСимвола")?,
+        };
+        let code = s.char_code_at(pos).ok_or(RtError::IndexOutOfBounds {
+            index: pos as i64,
+            len: s.len_utf16(),
+        })?;
+        Ok(BslValue::Number(BslNumber::from_i64(code as i64)))
+    }
+
+    // --- Проверки значения и типа ----------------------------------------
+
+    /// `ЗначениеЗаполнено(Значение)`.
+    ///
+    /// ИЗМЕРЕНО (из брифа): `Ложь` для `Неопределено`, `Null`, пустой
+    /// строки, нуля и пустой даты.
+    ///
+    /// Всё остальное — НЕ ИЗМЕРЕНО, см. пометки по веткам ниже и список
+    /// замеров в README. Ошибиться здесь дорого: это главный потребитель
+    /// короткозамкнутых `И`/`ИЛИ` (`Если ЗначениеЗаполнено(Х) И Х.Поле = 1`),
+    /// поэтому спорные ветки помечены поимённо, а не «примерно так».
+    pub fn is_filled(&self) -> RtResult<bool> {
+        Ok(match self {
+            BslValue::Undefined | BslValue::Null => false,
+            // НЕ ИЗМЕРЕНО: считается ли `Ложь` незаполненным. Взято
+            // «булево заполнено всегда» — иначе `ЗначениеЗаполнено(Флаг)`
+            // нельзя было бы отличить от «флага нет вовсе», а именно ради
+            // этого различия функция и существует.
+            BslValue::Boolean(_) => true,
+            BslValue::Number(n) => !n.is_zero(),
+            // НЕ ИЗМЕРЕНО: пусты ли строки из одних пробелов. Взято «да,
+            // пусты» (сравнение после `СокрЛП`) — это поведение, которого
+            // ждут от защитной проверки введённого пользователем текста.
+            BslValue::Str(s) => s.trim().len_utf16() > 0,
+            // Тип — всегда значение, «пустого типа» не существует.
+            BslValue::Type(_) => true,
+            BslValue::Object(o) => match &**o {
+                // НЕ ИЗМЕРЕНО: пустая коллекция. Взято «пустая — не
+                // заполнена» (по числу элементов), потому что для
+                // коллекций это единственное содержательное прочтение;
+                // альтернатива («объект есть — значит заполнено») делает
+                // проверку тождественно истинной и бесполезной.
+                BslObject::Array(_)
+                | BslObject::Structure(_)
+                | BslObject::Map(_)
+                | BslObject::ValueTable(_)
+                | BslObject::TableColumns(_) => self.collection_len()? > 0,
+                // У строки таблицы и пары ключ-значение «длины» нет: сам
+                // факт существования объекта и есть заполненность.
+                BslObject::TableRow(..) | BslObject::KeyValuePair(..) => true,
+            },
+            BslValue::Skipped => {
+                return Err(RtError::TypeError {
+                    expected: "Значение",
+                    op: "ЗначениеЗаполнено",
+                })
+            }
+        })
+    }
+
+    /// `ТипЗнч(Значение)` -> `Тип`.
+    pub fn type_of(&self) -> RtResult<Self> {
+        let id = match self {
+            BslValue::Undefined => TypeId::Undefined,
+            BslValue::Null => TypeId::Null,
+            BslValue::Boolean(_) => TypeId::Boolean,
+            BslValue::Number(_) => TypeId::Number,
+            BslValue::Str(_) => TypeId::String,
+            BslValue::Type(_) => TypeId::Type,
+            BslValue::Object(o) => match &**o {
+                BslObject::Array(_) => TypeId::Array,
+                BslObject::Structure(_) => TypeId::Structure,
+                BslObject::Map(_) => TypeId::Map,
+                BslObject::ValueTable(_) => TypeId::ValueTable,
+                BslObject::TableColumns(_) => TypeId::ValueTableColumns,
+                BslObject::TableRow(..) => TypeId::ValueTableRow,
+                BslObject::KeyValuePair(..) => TypeId::KeyAndValue,
+            },
+            BslValue::Skipped => {
+                return Err(RtError::TypeError {
+                    expected: "Значение",
+                    op: "ТипЗнч",
+                })
+            }
+        };
+        Ok(BslValue::Type(id))
+    }
+
+    /// `Тип("ИмяТипа")` -> `Тип`. Неизвестное имя — ошибка (в 1С тоже
+    /// исключение, а не `Неопределено`: опечатка в имени типа обязана
+    /// падать сразу, а не молча делать сравнение вечно ложным).
+    pub fn type_by_name(&self) -> RtResult<Self> {
+        let name = self.as_str("Тип")?.to_string();
+        TypeId::lookup(&name)
+            .map(BslValue::Type)
+            .ok_or(RtError::UnknownType(name))
     }
 
     // --- Коллекции ----------------------------------------------------
@@ -979,6 +1211,10 @@ impl PartialEq for BslValue {
             (BslValue::Boolean(a), BslValue::Boolean(b)) => a == b,
             (BslValue::Number(a), BslValue::Number(b)) => a == b,
             (BslValue::Str(a), BslValue::Str(b)) => a == b,
+            // Тип — значение, а не объект: два `ТипЗнч(...)` от разных
+            // значений одного типа равны (`ТипЗнч(1) = ТипЗнч(2)`), иначе
+            // проверка типа была бы бесполезна.
+            (BslValue::Type(a), BslValue::Type(b)) => a == b,
             (BslValue::Object(a), BslValue::Object(b)) => Rc::ptr_eq(a, b),
             _ => false,
         }
@@ -1005,6 +1241,7 @@ impl Hash for BslValue {
             BslValue::Boolean(b) => b.hash(state),
             BslValue::Number(n) => n.hash(state),
             BslValue::Str(s) => s.hash(state),
+            BslValue::Type(t) => t.hash(state),
             BslValue::Object(o) => Rc::as_ptr(o).hash(state),
             BslValue::Skipped => {}
         }
@@ -1020,6 +1257,9 @@ impl fmt::Display for BslValue {
             BslValue::Boolean(false) => write!(f, "Нет"),
             BslValue::Number(n) => write!(f, "{n}"),
             BslValue::Str(s) => write!(f, "{s}"),
+            // Локализованное имя типа: `Строка(ТипЗнч(Новый Массив))` даёт
+            // то же `Массив`, что и `Строка(Новый Массив)`.
+            BslValue::Type(t) => write!(f, "{t}"),
             BslValue::Object(o) => match &**o {
                 BslObject::Array(_) => write!(f, "Массив"),
                 BslObject::Structure(_) => write!(f, "Структура"),
@@ -1312,8 +1552,11 @@ mod tests {
         assert_eq!(BuiltinFn::lookup("Sqrt"), Some(BuiltinFn::Sqrt));
         assert_eq!(BuiltinFn::lookup("СООБЩИТЬ"), Some(BuiltinFn::Message));
         assert_eq!(BuiltinFn::lookup("НетТакойФункции"), None);
-        assert_eq!(BuiltinFn::Pow.arity(), 2);
-        assert_eq!(BuiltinFn::Sqrt.arity(), 1);
+        assert_eq!(BuiltinFn::Pow.arity_range(), (2, 2));
+        assert_eq!(BuiltinFn::Sqrt.arity_range(), (1, 1));
+        // Необязательный аргумент — диапазон, а не одно число.
+        assert_eq!(BuiltinFn::Mid.arity_range(), (2, 3));
+        assert_eq!(BuiltinFn::StrTemplate.arity_range(), (1, 11));
 
         let v = call_builtin_fn(BuiltinFn::Sqrt, &[num("2")]).unwrap();
         assert_eq!(v, num("1.4142135623731"));

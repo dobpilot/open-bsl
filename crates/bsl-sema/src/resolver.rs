@@ -547,15 +547,25 @@ impl<'a> Resolver<'a> {
                     });
                 }
                 if let Some(builtin) = bsl_rt::BuiltinFn::lookup(name) {
-                    let arity = builtin.arity();
-                    if args.len() != arity {
+                    let (min, max) = builtin.arity_range();
+                    if args.len() < min || args.len() > max {
                         return Err(SemaError::ArgumentCountMismatch {
                             name: name.clone(),
-                            expected: arity,
+                            expected: max,
                             found: args.len(),
                         });
                     }
-                    let rargs = self.resolve_required_args(args)?;
+                    // Недостающие необязательные позиции добиваются
+                    // `Неопределено` ЗДЕСЬ, а не вариативной арностью в
+                    // рантайме: `call_builtin_fn` тогда всегда индексирует
+                    // фиксированный набор аргументов, а «аргумент опущен»
+                    // становится обычным значением, которое сама функция и
+                    // трактует (`Сред` — до конца строки, `КодСимвола` —
+                    // позиция 1, `СтрШаблон` — пустая подстановка).
+                    let mut rargs = self.resolve_required_args(args)?;
+                    while rargs.len() < max {
+                        rargs.push(RExpr::Undefined);
+                    }
                     return Ok(RExpr::CallBuiltinFn {
                         builtin,
                         args: rargs,

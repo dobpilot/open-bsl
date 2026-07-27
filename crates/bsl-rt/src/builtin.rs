@@ -49,14 +49,45 @@ pub enum BuiltinFn {
     Left,
     /// `Прав`/`Right(строка, длина)`.
     Right,
-    /// `Сред`/`Mid(строка, начало, длина)` — пока только с тремя
-    /// аргументами (без опускания длины до конца строки): необязательные
-    /// аргументы появятся вместе со значениями по умолчанию в вызовах.
+    /// `Сред`/`Mid(строка, начало[, длина])` — длину можно опустить, тогда
+    /// берётся всё до конца строки (см. `arity_range`, который и делает
+    /// третий аргумент необязательным).
     Mid,
     Upper,
     Lower,
     /// `СокрЛП`/`TrimAll` — обрезка пробелов с обеих сторон.
     TrimAll,
+    /// `СокрЛ`/`TrimL` — только слева.
+    TrimLeft,
+    /// `СокрП`/`TrimR` — только справа.
+    TrimRight,
+    /// `СтрНайти`/`StrFind(строка, подстрока)` -> позиция 1-based в
+    /// код-юнитах UTF-16, `0` если не найдено.
+    StrFind,
+    /// `СтрЗаменить`/`StrReplace(строка, что, чем)`.
+    StrReplace,
+    /// `СтрРазделить`/`StrSplit(строка, разделитель)` -> `Массив`.
+    StrSplit,
+    /// `СтрСоединить`/`StrConcat(массив, разделитель)` -> `Строка`.
+    StrConcat,
+    /// `СтрЧислоСтрок`/`StrLineCount`.
+    StrLineCount,
+    /// `СтрПолучитьСтроку`/`StrGetLine(строка, номер)`.
+    StrGetLine,
+    /// `СтрШаблон`/`StrTemplate(шаблон[, З1..З10])` — единственная
+    /// по-настоящему вариативная встроенная функция (см. `arity_range`).
+    StrTemplate,
+    /// `Символ`/`Char(код)`.
+    Char,
+    /// `КодСимвола`/`CharCode(строка[, позиция])`.
+    CharCode,
+    /// `ЗначениеЗаполнено`/`ValueIsFilled` — см. `BslValue::is_filled`,
+    /// там же про то, какие ветки НЕ ИЗМЕРЕНЫ.
+    ValueIsFilled,
+    /// `ТипЗнч`/`TypeOf(значение)` -> `Тип`.
+    TypeOf,
+    /// `Тип`/`Type("ИмяТипа")` -> `Тип`.
+    TypeByName,
 }
 
 impl BuiltinFn {
@@ -86,15 +117,53 @@ impl BuiltinFn {
             "UPPER" | "ВРЕГ" => BuiltinFn::Upper,
             "LOWER" | "НРЕГ" => BuiltinFn::Lower,
             "TRIMALL" | "СОКРЛП" => BuiltinFn::TrimAll,
+            "TRIML" | "СОКРЛ" => BuiltinFn::TrimLeft,
+            "TRIMR" | "СОКРП" => BuiltinFn::TrimRight,
+            "STRFIND" | "СТРНАЙТИ" => BuiltinFn::StrFind,
+            "STRREPLACE" | "СТРЗАМЕНИТЬ" => BuiltinFn::StrReplace,
+            "STRSPLIT" | "СТРРАЗДЕЛИТЬ" => BuiltinFn::StrSplit,
+            "STRCONCAT" | "СТРСОЕДИНИТЬ" => BuiltinFn::StrConcat,
+            "STRLINECOUNT" | "СТРЧИСЛОСТРОК" => BuiltinFn::StrLineCount,
+            "STRGETLINE" | "СТРПОЛУЧИТЬСТРОКУ" => BuiltinFn::StrGetLine,
+            "STRTEMPLATE" | "СТРШАБЛОН" => BuiltinFn::StrTemplate,
+            "CHAR" | "СИМВОЛ" => BuiltinFn::Char,
+            "CHARCODE" | "КОДСИМВОЛА" => BuiltinFn::CharCode,
+            "VALUEISFILLED" | "ЗНАЧЕНИЕЗАПОЛНЕНО" => BuiltinFn::ValueIsFilled,
+            "TYPEOF" | "ТИПЗНЧ" => BuiltinFn::TypeOf,
+            "TYPE" | "ТИП" => BuiltinFn::TypeByName,
             _ => return None,
         })
     }
 
-    pub fn arity(self) -> usize {
+    /// `(минимум, максимум)` аргументов. У большинства встроенных они
+    /// совпадают — необязательные аргументы есть у меньшинства, и раньше
+    /// их не было вовсе (`arity()` возвращала одно число).
+    ///
+    /// Недостающие до МАКСИМУМА позиции дополняются `Неопределено` на
+    /// этапе резолвинга (`bsl-sema::resolver::resolve_call`), так что в
+    /// рантайме `call_builtin_fn` всегда видит ровно `max` аргументов и
+    /// сам решает, что значит `Неопределено` на этой позиции. Единственное
+    /// исключение — `Округл`, у которого резолвер подставляет литеральные
+    /// `0`, а не `Неопределено` (см. там же, почему).
+    pub fn arity_range(self) -> (usize, usize) {
         match self {
-            BuiltinFn::Pow | BuiltinFn::Format | BuiltinFn::Left | BuiltinFn::Right => 2,
-            BuiltinFn::Mid | BuiltinFn::Round => 3,
-            _ => 1,
+            BuiltinFn::Pow
+            | BuiltinFn::Format
+            | BuiltinFn::Left
+            | BuiltinFn::Right
+            | BuiltinFn::StrFind
+            | BuiltinFn::StrSplit
+            | BuiltinFn::StrConcat
+            | BuiltinFn::StrGetLine => (2, 2),
+            BuiltinFn::StrReplace => (3, 3),
+            BuiltinFn::Round => (3, 3),
+            // Длину можно не указывать — до конца строки.
+            BuiltinFn::Mid => (2, 3),
+            // Позиция по умолчанию — первая.
+            BuiltinFn::CharCode => (1, 2),
+            // Шаблон плюс до десяти значений.
+            BuiltinFn::StrTemplate => (1, 1 + crate::string::MAX_TEMPLATE_ARGS),
+            _ => (1, 1),
         }
     }
 }
@@ -178,6 +247,20 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         BuiltinFn::Upper => args[0].str_upper(),
         BuiltinFn::Lower => args[0].str_lower(),
         BuiltinFn::TrimAll => args[0].str_trim_all(),
+        BuiltinFn::TrimLeft => args[0].str_trim_left(),
+        BuiltinFn::TrimRight => args[0].str_trim_right(),
+        BuiltinFn::StrFind => args[0].str_find(&args[1]),
+        BuiltinFn::StrReplace => args[0].str_replace(&args[1], &args[2]),
+        BuiltinFn::StrSplit => args[0].str_split(&args[1]),
+        BuiltinFn::StrConcat => args[0].str_join(&args[1]),
+        BuiltinFn::StrLineCount => args[0].str_line_count(),
+        BuiltinFn::StrGetLine => args[0].str_get_line(&args[1]),
+        BuiltinFn::StrTemplate => args[0].str_template(&args[1..]),
+        BuiltinFn::Char => args[0].char_from_code(),
+        BuiltinFn::CharCode => args[0].char_code(&args[1]),
+        BuiltinFn::ValueIsFilled => Ok(BslValue::Boolean(args[0].is_filled()?)),
+        BuiltinFn::TypeOf => args[0].type_of(),
+        BuiltinFn::TypeByName => args[0].type_by_name(),
     }
 }
 

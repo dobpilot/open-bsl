@@ -830,7 +830,12 @@ fn call_builtin_with_format(
     args: &[BslValue],
 ) -> Result<BslValue, RtError> {
     use bsl_rt::BuiltinFn;
-    if args.len() < builtin.arity() {
+    // Проверка по МАКСИМУМУ, а не по минимуму: резолвер добивает
+    // необязательные позиции `Неопределено` (см.
+    // `BuiltinFn::arity_range`), так что корректный байт-код всегда
+    // приносит полный набор — и `call_builtin_fn` может индексировать
+    // `args[1]`/`args[2]` без проверок на каждой ветке.
+    if args.len() < builtin.arity_range().1 {
         return Err(RtError::InvalidBytecode(
             "встроенной функции передано меньше аргументов, чем требует её арность",
         ));
@@ -1914,6 +1919,150 @@ mod tests {
         assert_eq!(str_val(&v), "привет");
         let v = run_src("Возврат СокрЛП(\"  привет  \");");
         assert_eq!(str_val(&v), "привет");
+    }
+
+    #[test]
+    fn mid_without_length_runs_to_the_end_of_the_string() {
+        // Третий аргумент необязателен (`BuiltinFn::arity_range`): резолвер
+        // подставляет `Неопределено`, `Сред` читает его как "до конца".
+        let v = run_src(r#"Возврат Сред("Привет", 4);"#);
+        assert_eq!(str_val(&v), "вет");
+    }
+
+    #[test]
+    fn strnaiti_returns_a_position_usable_by_sred_without_conversion() {
+        let v = run_src(r#"Возврат СтрНайти("абвгд", "вг");"#);
+        assert_eq!(v, num("3"));
+        let v = run_src(r#"Возврат СтрНайти("абвгд", "яя");"#);
+        assert_eq!(v, num("0"));
+        // Позиция — в тех же код-юнитах, что считает СтрДлина: строка с
+        // суррогатной парой сдвигает всё дальше на 2, не на 1.
+        let v = run_src("Возврат СтрНайти(\"a\u{1F600}бв\", \"бв\");");
+        assert_eq!(v, num("4"));
+        // И этой позицией можно прямо резать строку.
+        let v = run_src("Возврат Сред(\"a\u{1F600}бв\", СтрНайти(\"a\u{1F600}бв\", \"бв\"), 2);");
+        assert_eq!(str_val(&v), "бв");
+    }
+
+    #[test]
+    fn strzamenit_replaces_every_occurrence() {
+        let v = run_src(r#"Возврат СтрЗаменить("а-б-в", "-", "+");"#);
+        assert_eq!(str_val(&v), "а+б+в");
+    }
+
+    #[test]
+    fn strrazdelit_and_strsoedinit_round_trip_through_an_array() {
+        let v = run_src(r#"Возврат СтрРазделить("а,б,в", ",").Количество();"#);
+        assert_eq!(v, num("3"));
+        let v = run_src(r#"Возврат СтрРазделить("а,б,в", ",")[1];"#);
+        assert_eq!(str_val(&v), "б");
+        let v = run_src(r#"Возврат СтрСоединить(СтрРазделить("а,,б", ","), ",");"#);
+        assert_eq!(str_val(&v), "а,,б");
+    }
+
+    #[test]
+    fn one_sided_trims_and_line_helpers() {
+        let v = run_src("Возврат СокрЛ(\"  а  \") + \"|\";");
+        assert_eq!(str_val(&v), "а  |");
+        let v = run_src("Возврат \"|\" + СокрП(\"  а  \");");
+        assert_eq!(str_val(&v), "|  а");
+
+        // Перевод строки внутри литерала лексер требует оформлять
+        // продолжением через `|`, поэтому текст собирается из `Символ(10)` —
+        // так же, как это пишут в реальном коде 1С.
+        let v = run_src("пс = Символ(10);\nВозврат СтрЧислоСтрок(\"а\" + пс + \"б\" + пс + \"в\");");
+        assert_eq!(v, num("3"));
+        let v = run_src(
+            "пс = Символ(10);\nВозврат СтрПолучитьСтроку(\"а\" + пс + \"б\" + пс + \"в\", 2);",
+        );
+        assert_eq!(str_val(&v), "б");
+    }
+
+    #[test]
+    fn strshablon_substitutes_positional_values() {
+        let v = run_src(r#"Возврат СтрШаблон("%1 и %2", "раз", "два");"#);
+        assert_eq!(str_val(&v), "раз и два");
+        // Меньше значений, чем позиций в шаблоне — пустая подстановка, не
+        // ошибка резолвинга: арность у СтрШаблон вариативная.
+        let v = run_src(r#"Возврат СтрШаблон("[%2]", "раз");"#);
+        assert_eq!(str_val(&v), "[]");
+        // Число подставляется своим строковым представлением.
+        let v = run_src(r#"Возврат СтрШаблон("№%1", 7);"#);
+        assert_eq!(str_val(&v), "№7");
+    }
+
+    #[test]
+    fn simvol_and_kodsimvola_round_trip_and_agree_with_the_nbsp_measurement() {
+        // Замер с платформы: разделитель групп разрядов — NBSP, код 160.
+        let v = run_src(r#"Возврат КодСимвола(Символ(160));"#);
+        assert_eq!(v, num("160"));
+        // Позиция по умолчанию — первая.
+        let v = run_src(r#"Возврат КодСимвола("абв");"#);
+        assert_eq!(v, num(&(('а' as u32).to_string())));
+        let v = run_src(r#"Возврат КодСимвола("абв", 2);"#);
+        assert_eq!(v, num(&(('б' as u32).to_string())));
+    }
+
+    #[test]
+    fn znachenie_zapolneno_covers_the_measured_cases() {
+        // Измеренная часть: Неопределено/Null/пустая строка/ноль — Ложь.
+        for src in [
+            "Возврат ЗначениеЗаполнено(Неопределено);",
+            "Возврат ЗначениеЗаполнено(NULL);",
+            "Возврат ЗначениеЗаполнено(\"\");",
+            "Возврат ЗначениеЗаполнено(0);",
+        ] {
+            assert_eq!(run_src(src), BslValue::Boolean(false), "{src}");
+        }
+        for src in [
+            "Возврат ЗначениеЗаполнено(1);",
+            "Возврат ЗначениеЗаполнено(\"а\");",
+        ] {
+            assert_eq!(run_src(src), BslValue::Boolean(true), "{src}");
+        }
+    }
+
+    #[test]
+    fn znachenie_zapolneno_enables_the_short_circuit_guard_idiom() {
+        // Ради чего функция и нужна: правый операнд не должен вычисляться,
+        // когда левый уже сказал "значения нет" (см. кодоген `И`).
+        let v = run_src(
+            "х = Неопределено;\n\
+             Возврат ЗначениеЗаполнено(х) И х.Поле = 1;",
+        );
+        assert_eq!(v, BslValue::Boolean(false));
+    }
+
+    #[test]
+    fn tipznch_compares_equal_across_different_values_of_one_type() {
+        let v = run_src("Возврат ТипЗнч(1) = ТипЗнч(2);");
+        assert_eq!(v, BslValue::Boolean(true));
+        let v = run_src("Возврат ТипЗнч(1) = ТипЗнч(\"а\");");
+        assert_eq!(v, BslValue::Boolean(false));
+        // Именно та форма, ради которой заведён `Тип(...)`.
+        let v = run_src("Возврат ТипЗнч(Новый Массив) = Тип(\"Массив\");");
+        assert_eq!(v, BslValue::Boolean(true));
+    }
+
+    #[test]
+    fn type_name_printed_by_stroka_matches_the_value_it_came_from() {
+        // `Строка(Новый Массив)` -> "Массив" измерено на платформе; имя
+        // типа обязано совпасть с ним, а не быть латинским `Array`.
+        let v = run_src("Возврат Строка(ТипЗнч(Новый Массив));");
+        assert_eq!(str_val(&v), "Массив");
+        let v = run_src("Возврат Строка(ТипЗнч(1));");
+        assert_eq!(str_val(&v), "Число");
+        let v = run_src("Возврат Строка(ТипЗнч(\"а\"));");
+        assert_eq!(str_val(&v), "Строка");
+        // Английское имя на входе принимается, на выходе — всё равно русское.
+        let v = run_src("Возврат Строка(Тип(\"Structure\"));");
+        assert_eq!(str_val(&v), "Структура");
+    }
+
+    #[test]
+    fn unknown_type_name_is_a_runtime_error_not_undefined() {
+        let err = run_src_err("Возврат Тип(\"НетТакогоТипа\");");
+        assert!(matches!(err, RtError::UnknownType(_)));
     }
 
     #[test]
