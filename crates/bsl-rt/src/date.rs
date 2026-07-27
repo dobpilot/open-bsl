@@ -24,6 +24,8 @@
 
 use std::fmt;
 
+use crate::locale::Locale;
+
 /// Секунд в сутках.
 pub const SECONDS_PER_DAY: i64 = 86_400;
 
@@ -308,7 +310,7 @@ pub const DEFAULT_PATTERN: &str = "дд.ММ.гггг ЧЧ:мм:сс";
 
 impl fmt::Display for BslDate {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", format_pattern(*self, DEFAULT_PATTERN))
+        write!(f, "{}", format_pattern(*self, DEFAULT_PATTERN, Locale::default()))
     }
 }
 
@@ -356,7 +358,7 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
     (if m <= 2 { y + 1 } else { y }, m as u32, d as u32)
 }
 
-const MONTHS_FULL: [&str; 12] = [
+const MONTHS_FULL_RU: [&str; 12] = [
     "января",
     "февраля",
     "марта",
@@ -371,11 +373,11 @@ const MONTHS_FULL: [&str; 12] = [
     "декабря",
 ];
 
-const MONTHS_SHORT: [&str; 12] = [
+const MONTHS_SHORT_RU: [&str; 12] = [
     "янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек",
 ];
 
-const WEEKDAYS_FULL: [&str; 7] = [
+const WEEKDAYS_FULL_RU: [&str; 7] = [
     "понедельник",
     "вторник",
     "среда",
@@ -385,7 +387,69 @@ const WEEKDAYS_FULL: [&str; 7] = [
     "воскресенье",
 ];
 
-const WEEKDAYS_SHORT: [&str; 7] = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"];
+const WEEKDAYS_SHORT_RU: [&str; 7] = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"];
+
+/// Английские имена — часть ключа `Л` (см. `Locale`). Русские формы стоят
+/// в РОДИТЕЛЬНОМ падеже («15 января»), английские — в именительном:
+/// падежей у них нет, и брать для `MMMM` что-то кроме «January» негде.
+const MONTHS_FULL_EN: [&str; 12] = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+];
+
+const MONTHS_SHORT_EN: [&str; 12] = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+const WEEKDAYS_FULL_EN: [&str; 7] = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+];
+
+const WEEKDAYS_SHORT_EN: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+fn months_full(locale: Locale) -> &'static [&'static str; 12] {
+    match locale {
+        Locale::Ru => &MONTHS_FULL_RU,
+        Locale::En => &MONTHS_FULL_EN,
+    }
+}
+
+fn months_short(locale: Locale) -> &'static [&'static str; 12] {
+    match locale {
+        Locale::Ru => &MONTHS_SHORT_RU,
+        Locale::En => &MONTHS_SHORT_EN,
+    }
+}
+
+fn weekdays_full(locale: Locale) -> &'static [&'static str; 7] {
+    match locale {
+        Locale::Ru => &WEEKDAYS_FULL_RU,
+        Locale::En => &WEEKDAYS_FULL_EN,
+    }
+}
+
+fn weekdays_short(locale: Locale) -> &'static [&'static str; 7] {
+    match locale {
+        Locale::Ru => &WEEKDAYS_SHORT_RU,
+        Locale::En => &WEEKDAYS_SHORT_EN,
+    }
+}
 
 /// Форматирование даты по шаблону `ДФ` (`дд.ММ.гггг`, `d MMMM yyyy`, ...).
 ///
@@ -400,7 +464,7 @@ const WEEKDAYS_SHORT: [&str; 7] = ["пн", "вт", "ср", "чт", "пт", "сб
 /// НЕ ИЗМЕРЕНО(DATE.PATTERN_LETTERS): точный набор букв и их значения
 /// сверх перечисленных (`К` — квартал, `в` — до/после полудня и т.п.).
 /// Реализовано то, что нужно перечисленным в брифе шаблонам.
-pub fn format_pattern(date: BslDate, pattern: &str) -> String {
+pub fn format_pattern(date: BslDate, pattern: &str, locale: Locale) -> String {
     let c = date.to_civil();
     let chars: Vec<char> = pattern.chars().collect();
     let mut out = String::with_capacity(pattern.len() + 8);
@@ -426,8 +490,8 @@ pub fn format_pattern(date: BslDate, pattern: &str) -> String {
                 match run {
                     1 => out.push_str(&c.day.to_string()),
                     2 => out.push_str(&format!("{:02}", c.day)),
-                    3 => out.push_str(WEEKDAYS_SHORT[(date.weekday() - 1) as usize]),
-                    _ => out.push_str(WEEKDAYS_FULL[(date.weekday() - 1) as usize]),
+                    3 => out.push_str(weekdays_short(locale)[(date.weekday() - 1) as usize]),
+                    _ => out.push_str(weekdays_full(locale)[(date.weekday() - 1) as usize]),
                 }
                 run.min(4)
             }
@@ -435,8 +499,8 @@ pub fn format_pattern(date: BslDate, pattern: &str) -> String {
                 match run {
                     1 => out.push_str(&c.month.to_string()),
                     2 => out.push_str(&format!("{:02}", c.month)),
-                    3 => out.push_str(MONTHS_SHORT[(c.month - 1) as usize]),
-                    _ => out.push_str(MONTHS_FULL[(c.month - 1) as usize]),
+                    3 => out.push_str(months_short(locale)[(c.month - 1) as usize]),
+                    _ => out.push_str(months_full(locale)[(c.month - 1) as usize]),
                 }
                 run.min(4)
             }
@@ -493,26 +557,26 @@ fn push_number(out: &mut String, value: u32, width: usize) {
 /// русской локали. Реализованы четыре, названные в брифе, плюс `ДВ` как
 /// очевидная комбинация. Неизвестный код отдаёт формат по умолчанию, а не
 /// падает — форматная строка в 1С вообще прощает неизвестные ключи.
-pub fn format_long(date: BslDate, code: &str) -> String {
+pub fn format_long(date: BslDate, code: &str, locale: Locale) -> String {
     let c = date.to_civil();
     match code.trim().to_uppercase().as_str() {
-        "Д" | "D" => format_pattern(date, "дд.ММ.гггг"),
+        "Д" | "D" => format_pattern(date, "дд.ММ.гггг", locale),
         "ДД" | "DD" => format!(
             "{} {} {} г.",
             c.day,
-            MONTHS_FULL[(c.month - 1) as usize],
+            months_full(locale)[(c.month - 1) as usize],
             c.year
         ),
         "ДДД" | "DDD" => format!(
             "{}, {} {} {} г.",
-            WEEKDAYS_FULL[(date.weekday() - 1) as usize],
+            weekdays_full(locale)[(date.weekday() - 1) as usize],
             c.day,
-            MONTHS_FULL[(c.month - 1) as usize],
+            months_full(locale)[(c.month - 1) as usize],
             c.year
         ),
-        "В" | "T" => format_pattern(date, "ЧЧ:мм:сс"),
-        "ДВ" | "DT" => format_pattern(date, "дд.ММ.гггг ЧЧ:мм:сс"),
-        _ => format_pattern(date, DEFAULT_PATTERN),
+        "В" | "T" => format_pattern(date, "ЧЧ:мм:сс", locale),
+        "ДВ" | "DT" => format_pattern(date, "дд.ММ.гггг ЧЧ:мм:сс", locale),
+        _ => format_pattern(date, DEFAULT_PATTERN, locale),
     }
 }
 
@@ -661,24 +725,24 @@ mod tests {
     #[test]
     fn pattern_formatting_distinguishes_month_from_minute_by_case() {
         let dt = BslDate::from_civil(2024, 1, 15, 9, 5, 3).unwrap();
-        assert_eq!(format_pattern(dt, "дд.ММ.гггг"), "15.01.2024");
+        assert_eq!(format_pattern(dt, "дд.ММ.гггг", Locale::Ru), "15.01.2024");
         // `ММ` — месяц, `мм` — минута: разный регистр, разное значение.
-        assert_eq!(format_pattern(dt, "ММ мм"), "01 05");
-        assert_eq!(format_pattern(dt, "ЧЧ:мм:сс"), "09:05:03");
+        assert_eq!(format_pattern(dt, "ММ мм", Locale::Ru), "01 05");
+        assert_eq!(format_pattern(dt, "ЧЧ:мм:сс", Locale::Ru), "09:05:03");
         // `ч` — 12-часовой: 9 утра остаётся 9, полночь становится 12.
-        assert_eq!(format_pattern(dt, "чч"), "09");
+        assert_eq!(format_pattern(dt, "чч", Locale::Ru), "09");
         let midnight = BslDate::from_civil(2024, 1, 15, 0, 0, 0).unwrap();
-        assert_eq!(format_pattern(midnight, "чч"), "12");
-        assert_eq!(format_pattern(midnight, "ЧЧ"), "00");
+        assert_eq!(format_pattern(midnight, "чч", Locale::Ru), "12");
+        assert_eq!(format_pattern(midnight, "ЧЧ", Locale::Ru), "00");
         // Латинский шаблон принимается наравне с русским.
-        assert_eq!(format_pattern(dt, "dd.MM.yyyy"), "15.01.2024");
-        assert_eq!(format_pattern(dt, "yy"), "24");
+        assert_eq!(format_pattern(dt, "dd.MM.yyyy", Locale::Ru), "15.01.2024");
+        assert_eq!(format_pattern(dt, "yy", Locale::Ru), "24");
         // Имена месяца и дня недели.
-        assert_eq!(format_pattern(dt, "д МММ гггг"), "15 янв 2024");
-        assert_eq!(format_pattern(dt, "д ММММ гггг"), "15 января 2024");
-        assert_eq!(format_pattern(dt, "дддд"), "понедельник");
+        assert_eq!(format_pattern(dt, "д МММ гггг", Locale::Ru), "15 янв 2024");
+        assert_eq!(format_pattern(dt, "д ММММ гггг", Locale::Ru), "15 января 2024");
+        assert_eq!(format_pattern(dt, "дддд", Locale::Ru), "понедельник");
         // Кавычки защищают буквы шаблона от подстановки.
-        assert_eq!(format_pattern(dt, "гггг 'год'"), "2024 год");
+        assert_eq!(format_pattern(dt, "гггг 'год'", Locale::Ru), "2024 год");
     }
 
     #[test]

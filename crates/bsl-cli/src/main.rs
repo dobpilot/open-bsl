@@ -63,11 +63,25 @@ fn run_file(path: &str) {
     };
     match bsl_vm::run_program(&compiled) {
         Ok(BslValue::Undefined) => {}
-        Ok(v) => println!("{}", bsl_format::format_value(&v, None)),
+        Ok(v) => print_value(&v),
         Err(e) => {
             eprintln!("ошибка выполнения: {e}");
             std::process::exit(1);
         }
+    }
+}
+
+/// Печать значения, которым завершился скрипт или строка REPL.
+///
+/// `format_value` возвращает `Result` из-за одного-единственного случая —
+/// незнакомой локали в ключе `Л`; здесь форматная строка не передаётся
+/// вовсе, поэтому ветка ошибки недостижима. Молча её глотать всё равно
+/// нельзя: если недостижимое случится, пусть будет видно, а не пустая
+/// строка на месте результата.
+fn print_value(v: &BslValue) {
+    match bsl_format::format_value(v, None) {
+        Ok(s) => println!("{s}"),
+        Err(e) => eprintln!("ошибка форматирования результата: {e}"),
     }
 }
 
@@ -116,7 +130,7 @@ fn repl() {
 
         match eval_repl_line(line, &mut session) {
             Ok(BslValue::Undefined) => {}
-            Ok(v) => println!("{}", bsl_format::format_value(&v, None)),
+            Ok(v) => print_value(&v),
             Err(msg) => eprintln!("Ошибка: {msg}"),
         }
     }

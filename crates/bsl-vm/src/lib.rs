@@ -1193,11 +1193,11 @@ fn call_builtin_with_format(
     }
     match builtin {
         BuiltinFn::Message => {
-            println!("{}", bsl_format::format_value(&args[0], None));
+            println!("{}", bsl_format::format_value(&args[0], None)?);
             Ok(BslValue::Undefined)
         }
         BuiltinFn::ToString => {
-            let s = bsl_format::format_value(&args[0], None);
+            let s = bsl_format::format_value(&args[0], None)?;
             Ok(BslValue::Str(bsl_rt::BslString::from_str(&s)))
         }
         BuiltinFn::Format => {
@@ -1210,7 +1210,7 @@ fn call_builtin_with_format(
                     })
                 }
             };
-            let s = bsl_format::format_value(&args[0], Some(&spec));
+            let s = bsl_format::format_value(&args[0], Some(&spec))?;
             Ok(BslValue::Str(bsl_rt::BslString::from_str(&s)))
         }
         BuiltinFn::ToNumber => {
@@ -2255,6 +2255,43 @@ mod tests {
     fn format_with_explicit_spec_suppresses_grouping() {
         let v = run_src(r#"Возврат Формат(1000000, "ЧГ=0; ЧРД=.");"#);
         assert_eq!(str_val(&v), "1000000");
+    }
+
+    #[test]
+    fn format_specifiers_beyond_the_measured_four_reach_the_formatter() {
+        // Все ВЫБРАННЫЕ (не измеренные) значения проверены в bsl-format;
+        // здесь — что ключи доходят до него через вызов из BSL и что
+        // локаль действует на все три типа сразу.
+        let v = run_src(r#"Возврат Формат(42, "ЧГ=0; ЧЦ=5; ЧВН=1");"#);
+        assert_eq!(str_val(&v), "00042");
+        let v = run_src(r#"Возврат Формат(0, "ЧН=пусто");"#);
+        assert_eq!(str_val(&v), "пусто");
+        let v = run_src(r#"Возврат Формат(1234, "ЧГ=0; ЧРД=.; ЧС=3");"#);
+        assert_eq!(str_val(&v), "1.234");
+        let v = run_src(r#"Возврат Формат(Ложь, "БЛ=неа");"#);
+        assert_eq!(str_val(&v), "неа");
+        let v = run_src(r#"Возврат Формат(1234.5, "Л=en");"#);
+        assert_eq!(str_val(&v), "1,234.5");
+        let v = run_src(r#"Возврат Формат(Дата(2024,1,15), "Л=en; ДФ='ММММ'");"#);
+        assert_eq!(str_val(&v), "January");
+    }
+
+    #[test]
+    fn unsupported_locale_is_a_catchable_error() {
+        // НЕ ИЗМЕРЕНО(FMT.LOCALE.COVERAGE): незнакомая локаль — обычное
+        // исключение времени исполнения, значит ловится Попыткой и не
+        // роняет скрипт целиком.
+        let err = run_src_err(r#"Возврат Формат(1, "Л=de_DE");"#);
+        assert!(matches!(err, RtError::UnsupportedLocale(code) if code == "de_DE"));
+        let v = run_src(
+            "Попытка\n\
+             р = Формат(1, \"Л=de_DE\");\n\
+             Исключение\n\
+             р = \"поймано\";\n\
+             КонецПопытки;\n\
+             Возврат р;",
+        );
+        assert_eq!(str_val(&v), "поймано");
     }
 
     #[test]

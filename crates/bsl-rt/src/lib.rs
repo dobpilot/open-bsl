@@ -7,6 +7,7 @@
 mod builtin;
 mod date;
 mod interner;
+mod locale;
 mod map;
 mod object;
 pub mod open_questions;
@@ -27,9 +28,10 @@ use bsl_number::{BslNumber, NumError};
 pub use builtin::{call_builtin_method_ctx, call_builtin_fn, call_builtin_method, BuiltinFn, BuiltinMethod};
 pub use date::{
     format_long as format_date_long, format_pattern as format_date_pattern, BslDate, DateBoundary,
-    DatePart,
+    DatePart, DEFAULT_PATTERN as DEFAULT_DATE_PATTERN,
 };
 pub use interner::{NameId, NameInterner};
+pub use locale::{Locale, NBSP};
 pub use map::MapData;
 pub use object::{BslObject, StructureStorage};
 pub use runtime_shapes::RuntimeShapes;
@@ -132,6 +134,10 @@ pub enum RtError {
     InvalidBytecode(&'static str),
     /// Ошибка открытия, записи или закрытия файла.
     IoError(String),
+    /// `Формат(x, "Л=de_DE")` — локаль, которой здесь нет. Поддержаны
+    /// русская и английская, см. `Locale` (там же метка о том, что набор
+    /// кодов НЕ ИЗМЕРЕН).
+    UnsupportedLocale(String),
 }
 
 impl From<NumError> for RtError {
@@ -168,6 +174,10 @@ impl fmt::Display for RtError {
             RtError::DynamicError(msg) => write!(f, "{msg}"),
             RtError::InvalidBytecode(what) => write!(f, "некорректный байт-код: {what}"),
             RtError::IoError(msg) => write!(f, "ошибка файлового ввода-вывода: {msg}"),
+            RtError::UnsupportedLocale(code) => write!(
+                f,
+                "локаль «{code}» не поддержана: есть только ru и en"
+            ),
         }
     }
 }

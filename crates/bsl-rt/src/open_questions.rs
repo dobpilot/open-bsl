@@ -112,6 +112,65 @@ pub const OPEN_QUESTIONS: &[OpenQuestion] = &[
         blocks: "bsl_rt::date::DEFAULT_PATTERN; фикстура dates",
     },
     OpenQuestion {
+        id: "FMT.NUM.TOTAL_DIGITS",
+        what: "что считает `ЧЦ` — все разряды или только целые — и что делает \
+               платформа, когда одна целая часть уже длиннее `ЧЦ`",
+        chosen: "все разряды вместе; целая часть при переполнении печатается как есть",
+        blocks: "bsl_format::NumberFormat::total_digits",
+    },
+    OpenQuestion {
+        id: "FMT.NUM.ZERO_TEXT",
+        what: "`ЧН` — применяется ли к значению, ставшему нулём после округления, \
+               и что значит `ЧН=` без значения",
+        chosen: "применяется после округления; `ЧН=` — пустая строка",
+        blocks: "bsl_format::NumberFormat::zero_text",
+    },
+    OpenQuestion {
+        id: "FMT.NUM.LEADING_ZEROS",
+        what: "`ЧВН` — до какой ширины дополнять ведущими нулями",
+        chosen: "до `ЧЦ` минус дробные разряды; без `ЧЦ` ключ не делает ничего",
+        blocks: "bsl_format::NumberFormat::leading_zeros",
+    },
+    OpenQuestion {
+        id: "FMT.NUM.SHIFT",
+        what: "`ЧС` — в какую сторону сдвигает разряды и что значит отрицательное \
+               значение",
+        chosen: "`ЧС=n` делит на 10^n (точным умножением), отрицательное умножает; \
+                 |n| > 30 — ошибка",
+        blocks: "bsl_format::shift_digits",
+    },
+    OpenQuestion {
+        id: "FMT.BOOLEAN.TRUE_TEXT",
+        what: "`БИ` — текст для `Истина`, и что происходит, когда задан только он",
+        chosen: "`БИ` переопределяет только истину; ложь остаётся локальной",
+        blocks: "bsl_format::BooleanFormat",
+    },
+    OpenQuestion {
+        id: "FMT.BOOLEAN.FALSE_TEXT",
+        what: "`БЛ` — текст для `Ложь`, и что происходит, когда задан только он",
+        chosen: "`БЛ` переопределяет только ложь; истина остаётся локальной",
+        blocks: "bsl_format::BooleanFormat",
+    },
+    OpenQuestion {
+        id: "FMT.LOCALE.KEY",
+        what: "имя ключа локали (`Л`/`L`) и что значит пустое значение",
+        chosen: "`Л=<код>`; без ключа — русская локаль",
+        blocks: "bsl_format::parse_locale",
+    },
+    OpenQuestion {
+        id: "FMT.LOCALE.COVERAGE",
+        what: "какие коды локалей платформа понимает и что делает с незнакомым",
+        chosen: "поддержаны только `ru`/`en` (с любым регионом), остальное — \
+                 внятная ошибка вместо молчаливого отката к русской",
+        blocks: "bsl_rt::Locale::parse",
+    },
+    OpenQuestion {
+        id: "FMT.LOCALE.BOOLEAN",
+        what: "как выглядит `Истина` в английской локали — `Yes`, `True` или `1`",
+        chosen: "`Yes`/`No` — зеркало измеренного русского `Да`/`Нет`",
+        blocks: "bsl_rt::Locale::boolean_text",
+    },
+    OpenQuestion {
         id: "STR.CHAR_CODE_SURROGATE",
         what: "что возвращает `КодСимвола` на первой половине суррогатной пары — \
                код-юнит (55357) или кодовую точку (128512)",
