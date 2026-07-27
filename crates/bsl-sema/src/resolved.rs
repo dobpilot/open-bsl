@@ -186,6 +186,15 @@ pub struct ResolvedFunction {
     /// остальные локальные переменные в порядке первого появления.
     pub locals: Vec<String>,
     pub body: Vec<RStmt>,
+    /// Содержит ли тело `Выполнить`/`Вычислить`.
+    ///
+    /// Такая функция не может быть скомпилирована «наглухо»: фрагмент
+    /// видит её область видимости по ИМЕНАМ и может читать и менять её
+    /// локальные, а имена после резолвинга исчезают — остаются номера
+    /// слотов. Поэтому чанк такой функции обязан унести с собой таблицу
+    /// «имя -> слот» (`Chunk::local_names`), а все остальные (99% кода)
+    /// компилируются как раньше и ничего лишнего не несут.
+    pub uses_dynamic: bool,
 }
 
 /// Результат резолвинга скрипта верхнего уровня (без объявлений функций).
@@ -193,6 +202,9 @@ pub struct ResolvedFunction {
 pub struct Resolved {
     pub locals: Vec<String>,
     pub body: Vec<RStmt>,
+    /// См. `ResolvedFunction::uses_dynamic` — то же самое для кода
+    /// верхнего уровня.
+    pub uses_dynamic: bool,
 }
 
 /// Результат резолвинга целого модуля: все объявления процедур/функций
@@ -202,4 +214,83 @@ pub struct Resolved {
 pub struct ResolvedProgram {
     pub functions: Vec<ResolvedFunction>,
     pub top_level: Resolved,
+}
+
+/// Есть ли в теле `Выполнить`/`Вычислить` — обход по резолвнутому дереву,
+/// а не по AST: `Вычислить` к этому моменту уже стал `RExpr::DynEval`, а
+/// `Выполнить` — `RStmt::Execute`, и различать их по имени функции больше
+/// не нужно.
+///
+/// Ищет на ЛЮБОЙ глубине вложенности: `Выполнить` внутри `Если` внутри
+/// цикла — такой же повод материализовать имена, как и на верхнем уровне
+/// тела.
+pub fn block_uses_dynamic(body: &[RStmt]) -> bool {
+    body.iter().any(stmt_uses_dynamic)
+}
+
+fn stmt_uses_dynamic(s: &RStmt) -> bool {
+    match s {
+        RStmt::Execute(_) => true,
+        RStmt::AssignLocal { value, .. } => expr_uses_dynamic(value),
+        RStmt::AssignIndex { obj, index, value } => {
+            expr_uses_dynamic(obj) || expr_uses_dynamic(index) || expr_uses_dynamic(value)
+        }
+        RStmt::AssignField { obj, value, .. } => {
+            expr_uses_dynamic(obj) || expr_uses_dynamic(value)
+        }
+        RStmt::ExprStmt(e) => expr_uses_dynamic(e),
+        RStmt::If {
+            cond,
+            then_branch,
+            elsif_branches,
+            else_branch,
+        } => {
+            expr_uses_dynamic(cond)
+                || block_uses_dynamic(then_branch)
+                || elsif_branches
+                    .iter()
+                    .any(|(c, b)| expr_uses_dynamic(c) || block_uses_dynamic(b))
+                || else_branch.as_deref().is_some_and(block_uses_dynamic)
+        }
+        RStmt::While { cond, body } => expr_uses_dynamic(cond) || block_uses_dynamic(body),
+        RStmt::ForNumeric { from, to, body, .. } => {
+            expr_uses_dynamic(from) || expr_uses_dynamic(to) || block_uses_dynamic(body)
+        }
+        RStmt::ForEach { iter, body, .. } => {
+            expr_uses_dynamic(iter) || block_uses_dynamic(body)
+        }
+        RStmt::Return(e) | RStmt::Raise(e) => e.as_ref().is_some_and(expr_uses_dynamic),
+        RStmt::Try { body, except_body } => {
+            block_uses_dynamic(body) || block_uses_dynamic(except_body)
+        }
+        RStmt::Break | RStmt::Continue => false,
+    }
+}
+
+fn expr_uses_dynamic(e: &RExpr) -> bool {
+    match e {
+        RExpr::DynEval(_) => true,
+        RExpr::Unary { expr, .. } => expr_uses_dynamic(expr),
+        RExpr::Binary { lhs, rhs, .. } => expr_uses_dynamic(lhs) || expr_uses_dynamic(rhs),
+        RExpr::Call { args, .. } | RExpr::CallBuiltinFn { args, .. } => {
+            args.iter().any(expr_uses_dynamic)
+        }
+        RExpr::CallMethod { obj, args, .. } => {
+            expr_uses_dynamic(obj) || args.iter().any(expr_uses_dynamic)
+        }
+        RExpr::Index { obj, index } => expr_uses_dynamic(obj) || expr_uses_dynamic(index),
+        RExpr::Field { obj, .. } => expr_uses_dynamic(obj),
+        RExpr::NewArray { dims } => dims.iter().any(expr_uses_dynamic),
+        RExpr::NewStructure { values, .. } => values.iter().any(expr_uses_dynamic),
+        RExpr::Number(_)
+        | RExpr::Date(_)
+        | RExpr::Bool(_)
+        | RExpr::Undefined
+        | RExpr::Null
+        | RExpr::Skipped
+        | RExpr::Local(_)
+        | RExpr::Str(_)
+        | RExpr::NewTable
+        | RExpr::NewMap => false,
+    }
 }

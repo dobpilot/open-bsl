@@ -125,6 +125,9 @@ fn drive(
         return_reg: 0,
     }];
     let mut current_exception: Option<BslValue> = None;
+    // Кэш скомпилированных фрагментов `Выполнить`/`Вычислить` на всё это
+    // исполнение — см. `SnippetCache`.
+    let mut snippets: SnippetCache = SnippetCache::new();
     // Затравлена формами/именами ЭТОЙ программы — см. `bsl_rt::RuntimeShapes`
     // doc comment про то, почему не общий на процесс синглтон: у вложенного
     // `Program` (см. `run_dynamic_snippet`) свои `names`/`shapes`, и рантайм-
@@ -133,7 +136,14 @@ fn drive(
     let mut runtime_shapes = bsl_rt::RuntimeShapes::seeded(program.names.clone(), program.shapes.clone());
 
     loop {
-        match step(&mut frames, &mut stack, program, &mut current_exception, &mut runtime_shapes) {
+        match step(
+            &mut frames,
+            &mut stack,
+            program,
+            &mut current_exception,
+            &mut runtime_shapes,
+            &mut snippets,
+        ) {
             Ok(Step::Continue) => continue,
             Ok(Step::Done(v)) => return Ok((v, stack)),
             Err(e) => {
@@ -220,6 +230,7 @@ fn step(
     program: &Program,
     current_exception: &mut Option<BslValue>,
     runtime_shapes: &mut bsl_rt::RuntimeShapes,
+    snippets: &mut SnippetCache,
 ) -> Result<Step, RtError> {
     let frame_idx = frames.len() - 1;
     let func_id = frames[frame_idx].func_id;
@@ -551,9 +562,6 @@ fn step(
                 frames[frame_idx].pc += 1;
             }
             Instr::RunDynamic { src, dst, is_eval } => {
-                if frames.len() != 1 {
-                    return Err(RtError::DynamicNotAtTopLevel);
-                }
                 let code = reg_load(stack, frames[frame_idx].reg_index(src))?;
                 let code = match code {
                     BslValue::Str(s) => s.to_string(),
@@ -564,7 +572,23 @@ fn step(
                         })
                     }
                 };
-                let value = run_dynamic_snippet(&code, is_eval, program, stack, &frames[frame_idx])?;
+                // Область видимости фрагмента — материализованная таблица
+                // имён ЭТОГО кадра (`Chunk::local_names`), а не только
+                // верхнего уровня: `Выполнить` внутри процедуры видит её
+                // локальные. Таблица есть у всех чанков, помеченных
+                // `uses_dynamic` в `bsl-sema`, а `RunDynamic` эмитится
+                // только в них — так что пустой она здесь быть не может,
+                // кроме как у кадра вообще без локальных переменных.
+                let value = run_dynamic_snippet(
+                    &code,
+                    is_eval,
+                    program,
+                    &chunk.local_names,
+                    func_id,
+                    stack,
+                    &frames[frame_idx],
+                    snippets,
+                )?;
                 let d = frames[frame_idx].reg_index(dst);
                 reg_store(stack, d, value)?;
                 frames[frame_idx].pc += 1;
@@ -589,13 +613,120 @@ fn step(
 /// сделать, статический код вокруг пришлось бы компилировать в режиме
 /// материализованного кадра с именной таблицей (см. бриф) — это
 /// отдельная, ещё не сделанная работа.
+#[allow(clippy::too_many_arguments)]
 fn run_dynamic_snippet(
     code: &str,
     is_eval: bool,
     program: &Program,
+    scope_locals: &[String],
+    scope_id: usize,
     stack: &mut [BslValue],
-    top_frame: &Frame,
+    frame: &Frame,
+    snippets: &mut SnippetCache,
 ) -> Result<BslValue, RtError> {
+    let compiled = snippets.get_or_compile(code, is_eval, scope_id, scope_locals, program)?;
+
+    // Значения существующих переменных кадра переезжают во фрагмент по
+    // НОМЕРУ СЛОТА: раскладка совпадает, потому что фрагмент резолвился
+    // поверх ровно этого `scope_locals` (см. `resolve_snippet_stmts`).
+    // `reg_index` здесь обязателен, а не голое `stack[i]`: у кадра функции
+    // параметры — алиасы на слоты ВЫЗЫВАЮЩЕГО, и параметр по ссылке
+    // обязан быть виден фрагменту тем же, чем он виден статическому коду.
+    let old_count = scope_locals.len();
+    let mut snippet_stack: Vec<BslValue> = (0..old_count)
+        .map(|i| reg_load(stack, frame.reg_index(i as u8)))
+        .collect::<Result<_, _>>()?;
+    snippet_stack.resize(compiled.chunk.n_regs as usize, BslValue::Undefined);
+
+    let snippet_program = Program {
+        chunks: vec![compiled.chunk.clone()],
+        names: program.names.clone(),
+        shapes: compiled.shapes.clone(),
+        top_level_locals: Vec::new(),
+    };
+
+    let (value, final_stack) = drive(&snippet_program, 0, snippet_stack)?;
+
+    // Обратно переносятся ТОЛЬКО уже существовавшие слоты: их номера
+    // совпадают с теми, что использует окружающий скомпилированный код.
+    // Имена, объявленные самим фрагментом, получили слоты ЗА `old_count` и
+    // никуда не переносятся — расширить статически размеченный кадр
+    // нечем.
+    for i in 0..old_count {
+        let d = frame.reg_index(i as u8);
+        reg_store(stack, d, reg_load(&final_stack, i)?)?;
+    }
+
+    Ok(value)
+}
+
+/// Один скомпилированный фрагмент. `shapes` — СОБСТВЕННЫЙ список форм
+/// фрагмента: индексы `shape` внутри `chunk` ссылаются именно на него, а
+/// не на `program.shapes` (был баг ровно на этом — `NewStructure` попадал
+/// по чужому индексу).
+struct CompiledSnippet {
+    chunk: bsl_bytecode::Chunk,
+    shapes: Vec<std::rc::Rc<bsl_rt::Shape>>,
+}
+
+/// Кэш «текст фрагмента -> скомпилированный чанк» на одно исполнение
+/// (`drive`). Без него `Выполнить(...)` в цикле заново лексирует, парсит,
+/// резолвит и компилирует одну и ту же строку на каждой итерации.
+///
+/// Ключ — пара (ОБЛАСТЬ ВИДИМОСТИ, текст), а не один текст: один и тот же
+/// исходник, выполненный в разных кадрах, резолвится в РАЗНЫЕ номера
+/// слотов, и переиспользовать чанк между ними нельзя. Область
+/// идентифицируется номером чанка (`func_id`), потому что таблица имён
+/// (`Chunk::local_names`) у чанка одна и та же на всех его вызовах.
+/// `is_eval` тоже входит в ключ — от него зависит сам компилируемый текст
+/// (`Возврат (...)` вместо операторов).
+struct SnippetCache {
+    entries: std::collections::HashMap<(usize, bool, String), std::rc::Rc<CompiledSnippet>>,
+}
+
+impl SnippetCache {
+    fn new() -> Self {
+        SnippetCache {
+            entries: std::collections::HashMap::new(),
+        }
+    }
+
+    fn get_or_compile(
+        &mut self,
+        code: &str,
+        is_eval: bool,
+        scope_id: usize,
+        scope_locals: &[String],
+        program: &Program,
+    ) -> Result<std::rc::Rc<CompiledSnippet>, RtError> {
+        let key = (scope_id, is_eval, code.to_string());
+        if let Some(hit) = self.entries.get(&key) {
+            return Ok(hit.clone());
+        }
+        let compiled = std::rc::Rc::new(compile_dynamic_snippet(
+            code,
+            is_eval,
+            scope_locals,
+            program,
+        )?);
+        self.entries.insert(key, compiled.clone());
+        Ok(compiled)
+    }
+}
+
+/// Лексика/парсинг/резолвинг/кодоген фрагмента. Любая ошибка на этом пути
+/// — `RtError::DynamicError` В МОМЕНТ ИСПОЛНЕНИЯ, а не паника и не ошибка
+/// сборки: текст фрагмента становится известен только сейчас, и кривой
+/// текст обязан ловиться обычной `Попытка`.
+fn compile_dynamic_snippet(
+    code: &str,
+    is_eval: bool,
+    scope_locals: &[String],
+    program: &Program,
+) -> Result<CompiledSnippet, RtError> {
+    // `is_eval` заворачивает выражение в `Возврат (...)`, чтобы получить
+    // значение тем же путём, что и обычный `Возврат` — один движок на
+    // `Выполнить` и `Вычислить`, без раздвоения семантики.
     let src = if is_eval {
         format!("Возврат ({code});")
     } else {
@@ -616,39 +747,12 @@ fn run_dynamic_snippet(
         }
     }
 
-    let (all_locals, body) = bsl_sema::resolve_snippet_stmts(&program.top_level_locals, &stmts)
+    let (all_locals, body) = bsl_sema::resolve_snippet_stmts(scope_locals, &stmts)
         .map_err(|e| RtError::DynamicError(format!("{e:?}")))?;
-    // ВАЖНО: `compile_snippet` возвращает СВОЙ, локальный список форм — не
-    // `program.shapes`. Индексы `shape` внутри `chunk` ссылаются именно на
-    // него, так что именно его (а не `program.shapes`) нужно передать в
-    // `Program`, с которым чанк будет исполняться — иначе `NewStructure`
-    // попадёт по чужому индексу (был баг: `shapes: program.shapes.clone()`
-    // давало пустой список форм для любого фрагмента, создающего новую
-    // структуру, и падало с индексом за границами).
     let (chunk, _names, shapes) = bsl_bytecode::compile_snippet(&all_locals, &body, &program.names)
         .map_err(|e| RtError::DynamicError(format!("{e:?}")))?;
 
-    let old_count = program.top_level_locals.len();
-    let mut snippet_stack: Vec<BslValue> = (0..old_count)
-        .map(|i| reg_load(stack, top_frame.reg_index(i as u8)))
-        .collect::<Result<_, _>>()?;
-    snippet_stack.resize(chunk.n_regs as usize, BslValue::Undefined);
-
-    let snippet_program = Program {
-        chunks: vec![chunk],
-        names: program.names.clone(),
-        shapes,
-        top_level_locals: Vec::new(),
-    };
-
-    let (value, final_stack) = drive(&snippet_program, 0, snippet_stack)?;
-
-    for i in 0..old_count {
-        let d = top_frame.reg_index(i as u8);
-        reg_store(stack, d, reg_load(&final_stack, i)?)?;
-    }
-
-    Ok(value)
+    Ok(CompiledSnippet { chunk, shapes })
 }
 
 /// Размерность в `Новый Массив(d1, d2, ...)` обязана быть целым
@@ -1345,6 +1449,7 @@ mod tests {
                 n_params: 0,
                 n_locals: 1,
                 n_regs: 1,
+                local_names: Vec::new(),
                 prop_cache: vec![std::cell::RefCell::new(None)],
             }],
             names: Vec::new(),
@@ -2615,15 +2720,162 @@ mod tests {
     }
 
     #[test]
-    fn vypolnit_inside_a_function_is_not_supported_yet() {
-        let err = run_src_err(
+    fn vypolnit_inside_a_function_sees_and_changes_its_locals() {
+        // Раньше это была `DynamicNotAtTopLevel`. Теперь чанк функции,
+        // помеченной `uses_dynamic`, несёт таблицу «имя -> слот», и
+        // фрагмент работает в области видимости ЭТОЙ функции.
+        let v = run_src(
             "Функция Ф()\n\
-             Выполнить(\"x = 1\");\n\
-             Возврат 0;\n\
+             х = 1;\n\
+             Выполнить(\"х = х + 41\");\n\
+             Возврат х;\n\
              КонецФункции\n\
              Возврат Ф();",
         );
-        assert!(matches!(err, RtError::DynamicNotAtTopLevel));
+        assert_eq!(v, num("42"));
+    }
+
+    #[test]
+    fn vychislit_inside_a_function_reads_its_locals() {
+        let v = run_src(
+            "Функция Ф()\n\
+             а = 6;\n\
+             б = 7;\n\
+             Возврат Вычислить(\"а * б\");\n\
+             КонецФункции\n\
+             Возврат Ф();",
+        );
+        assert_eq!(v, num("42"));
+    }
+
+    #[test]
+    fn dynamic_scope_is_the_frame_not_the_top_level() {
+        // У функции и у верхнего уровня переменные с ОДНИМ именем — разные.
+        // Фрагмент внутри функции обязан видеть её `х`, а не внешний.
+        let v = run_src(
+            "Функция Ф()\n\
+             х = 5;\n\
+             Возврат Вычислить(\"х\");\n\
+             КонецФункции\n\
+             х = 100;\n\
+             Возврат Ф() * 1000 + х;",
+        );
+        assert_eq!(v, num("5100"));
+    }
+
+    #[test]
+    fn dynamic_code_sees_parameters_including_by_reference_ones() {
+        // Параметр по значению виден фрагменту как обычный слот.
+        let v = run_src(
+            "Функция Ф(Знач а)\n\
+             Возврат Вычислить(\"а * 2\");\n\
+             КонецФункции\n\
+             Возврат Ф(21);",
+        );
+        assert_eq!(v, num("42"));
+
+        // Параметр БЕЗ `Знач` — алиас на слот вызывающего (см.
+        // `Frame::reg_index`): запись из фрагмента обязана быть видна
+        // снаружи так же, как запись из обычного кода функции.
+        let v = run_src(
+            "Процедура П(а)\n\
+             Выполнить(\"а = а + 1\");\n\
+             КонецПроцедуры\n\
+             х = 41;\n\
+             П(х);\n\
+             Возврат х;",
+        );
+        assert_eq!(v, num("42"));
+    }
+
+    #[test]
+    fn dynamic_code_inside_a_loop_reuses_the_compiled_chunk() {
+        // Кэш фрагментов — оптимизация, наблюдаемая только по времени, но
+        // проверить можно то, что она не ломает семантику: одна и та же
+        // строка, исполненная много раз, каждый раз работает с текущим
+        // состоянием кадра, а не с запомненным при компиляции.
+        let v = run_src(
+            "сумма = 0;\n\
+             Для ном = 1 По 5 Цикл\n\
+             Выполнить(\"сумма = сумма + ном\");\n\
+             КонецЦикла;\n\
+             Возврат сумма;",
+        );
+        assert_eq!(v, num("15"));
+    }
+
+    #[test]
+    fn dynamic_compile_error_is_catchable_at_runtime() {
+        // Ошибка компиляции фрагмента — обычное исключение в момент
+        // исполнения, а не паника: её можно поймать `Попытка`.
+        let v = run_src(
+            "рез = \"ок\";\n\
+             Попытка\n\
+             Выполнить(\"это ((( не код\");\n\
+             рез = \"не сработало\";\n\
+             Исключение\n\
+             рез = \"поймано\";\n\
+             КонецПопытки;\n\
+             Возврат рез;",
+        );
+        assert_eq!(str_val(&v), "поймано");
+    }
+
+    #[test]
+    fn dynamic_scope_marking_only_touches_functions_that_need_it() {
+        // Таблица имён кадра materialized только у помеченных чанков —
+        // остальные несут пустой список и ничего лишнего.
+        let prog = parse(
+            "Функция СВыполнить()\n\
+             х = 1;\n\
+             Выполнить(\"х = 2\");\n\
+             Возврат х;\n\
+             КонецФункции\n\
+             Функция Обычная()\n\
+             у = 1;\n\
+             Возврат у;\n\
+             КонецФункции\n\
+             Возврат Обычная();",
+        )
+        .unwrap();
+        let resolved = resolve_program(&prog.items).unwrap();
+        assert!(resolved.functions[0].uses_dynamic);
+        assert!(!resolved.functions[1].uses_dynamic);
+        assert!(!resolved.top_level.uses_dynamic);
+
+        let program = compile_program(&resolved).unwrap();
+        assert!(!program.chunks[1].local_names.is_empty(), "помеченная функция");
+        assert!(program.chunks[2].local_names.is_empty(), "обычная функция");
+    }
+
+    #[test]
+    fn dynamic_marking_reaches_nested_statements() {
+        // `Выполнить` под циклом под `Если` — такой же повод
+        // материализовать имена, как и на верхнем уровне тела.
+        let prog = parse(
+            "Функция Ф(н)\n\
+             Если н > 0 Тогда\n\
+             Пока н > 0 Цикл\n\
+             Выполнить(\"н = н - 1\");\n\
+             КонецЦикла;\n\
+             КонецЕсли;\n\
+             Возврат н;\n\
+             КонецФункции\n\
+             Возврат Ф(3);",
+        )
+        .unwrap();
+        let resolved = resolve_program(&prog.items).unwrap();
+        assert!(resolved.functions[0].uses_dynamic);
+        // И оно действительно работает насквозь.
+        assert_eq!(run_src(
+            "Функция Ф(Знач н)\n\
+             Пока н > 0 Цикл\n\
+             Выполнить(\"н = н - 1\");\n\
+             КонецЦикла;\n\
+             Возврат н;\n\
+             КонецФункции\n\
+             Возврат Ф(3);",
+        ), num("0"));
     }
 
     #[test]

@@ -35,6 +35,7 @@ pub fn compile_program(resolved: &ResolvedProgram) -> Result<Program, CompileErr
         &[],
         &resolved.top_level.body,
         &resolved.functions,
+        resolved.top_level.uses_dynamic,
         &mut names,
         &mut shapes,
     )?);
@@ -44,6 +45,7 @@ pub fn compile_program(resolved: &ResolvedProgram) -> Result<Program, CompileErr
             &f.params,
             &f.body,
             &resolved.functions,
+            f.uses_dynamic,
             &mut names,
             &mut shapes,
         )?);
@@ -91,7 +93,9 @@ pub fn compile_snippet(
         names.intern(n);
     }
     let mut shapes = ShapeTable::new();
-    let chunk = compile_chunk(all_locals, &[], body, &[], &mut names, &mut shapes)?;
+    // Фрагмент всегда получает таблицу имён: он и сам может содержать
+    // вложенный `Выполнить`, а стоимость на одноразовом чанке никакая.
+    let chunk = compile_chunk(all_locals, &[], body, &[], true, &mut names, &mut shapes)?;
     Ok((chunk, names.into_names(), shapes.into_shapes()))
 }
 
@@ -100,6 +104,7 @@ fn compile_chunk(
     params: &[ResolvedParam],
     body: &[RStmt],
     functions: &[ResolvedFunction],
+    materialize_locals: bool,
     names: &mut NameInterner,
     shapes: &mut ShapeTable,
 ) -> Result<Chunk, CompileError> {
@@ -134,6 +139,11 @@ fn compile_chunk(
         n_params,
         n_locals,
         n_regs: c.max_reg,
+        local_names: if materialize_locals {
+            locals.to_vec()
+        } else {
+            Vec::new()
+        },
         prop_cache,
     })
 }

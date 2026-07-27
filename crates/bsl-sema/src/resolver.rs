@@ -110,6 +110,7 @@ pub fn resolve_program(items: &[Item]) -> Result<ResolvedProgram, SemaError> {
         }
         functions.push(ResolvedFunction {
             name: name.clone(),
+            uses_dynamic: crate::resolved::block_uses_dynamic(&resolved_body),
             params: resolved_params,
             locals: r.locals,
             body: resolved_body,
@@ -123,6 +124,7 @@ pub fn resolve_program(items: &[Item]) -> Result<ResolvedProgram, SemaError> {
     };
     let top_body = r.resolve_block(&top_stmts)?;
     let top_level = Resolved {
+        uses_dynamic: crate::resolved::block_uses_dynamic(&top_body),
         locals: r.locals,
         body: top_body,
     };
@@ -158,6 +160,7 @@ pub fn resolve_script(stmts: &[AStmt]) -> Result<Resolved, SemaError> {
     };
     let body = r.resolve_block(stmts)?;
     Ok(Resolved {
+        uses_dynamic: crate::resolved::block_uses_dynamic(&body),
         locals: r.locals,
         body,
     })
