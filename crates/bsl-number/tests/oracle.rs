@@ -37,6 +37,19 @@ fn multiplication_is_exact() {
 }
 
 #[test]
+fn numeric_for_step_has_integer_fast_path_and_decimal_fallback() {
+    let mut integer = n("10");
+    assert!(integer.increment_and_le(&n("11")).unwrap());
+    assert_eq!(c(&integer), "11");
+    assert!(!integer.increment_and_le(&n("11")).unwrap());
+    assert_eq!(c(&integer), "12");
+
+    let mut decimal = n("0.5");
+    assert!(decimal.increment_and_le(&n("2.5")).unwrap());
+    assert_eq!(c(&decimal), "1.5");
+}
+
+#[test]
 fn pow_integer_exponent_is_exact() {
     // Через f64 вышло бы 1000000000000000019884624838656.
     assert_eq!(c(&n("10").pow(&n("30")).unwrap()), "1000000000000000000000000000000");

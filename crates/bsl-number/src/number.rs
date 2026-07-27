@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
@@ -41,6 +42,25 @@ const fn pow10_table() -> [i128; 39] {
 }
 static POW10: [i128; 39] = pow10_table();
 
+const fn pow10_i64_table() -> [i64; 19] {
+    let mut table = [1i64; 19];
+    let mut i = 1;
+    while i < table.len() {
+        table[i] = table[i - 1] * 10;
+        i += 1;
+    }
+    table
+}
+static POW10_I64: [i64; 19] = pow10_i64_table();
+
+#[inline]
+fn scale_up_i64(m: i64, delta: i32) -> Option<i64> {
+    if !(0..=18).contains(&delta) {
+        return None;
+    }
+    m.checked_mul(POW10_I64[delta as usize])
+}
+
 #[inline]
 fn scale_up_i128(m: i128, delta: i32) -> Option<i128> {
     // Ранний выход на РАВНЫХ масштабах. Профилирование флейм-графом
@@ -61,11 +81,11 @@ fn scale_up_i128(m: i128, delta: i32) -> Option<i128> {
 /// То же для большого яруса; здесь ранний выход был с самого начала —
 /// `delta <= 0` покрывает и ноль, — но `m.clone()` для `BigInt` не
 /// бесплатен, а без него не обойтись: возвращается значение, а не ссылка.
-fn scale_up_big(m: &BigInt, delta: i32) -> BigInt {
+fn scale_up_big(m: &BigInt, delta: i32) -> Cow<'_, BigInt> {
     if delta <= 0 {
-        return m.clone();
+        return Cow::Borrowed(m);
     }
-    m * BigInt::from(10u8).pow(delta as u32)
+    Cow::Owned(m * BigInt::from(10u8).pow(delta as u32))
 }
 
 // --- Большой ярус ---------------------------------------------------------
@@ -122,6 +142,16 @@ impl BslNumber {
         demote(normalize_big(m, scale))
     }
 
+    #[inline]
+    fn fast64_parts(&self) -> Option<(i64, i32)> {
+        match self {
+            BslNumber::Small { m, scale } if *scale <= 15 => {
+                i64::try_from(m.get()).ok().map(|m| (m, *scale))
+            }
+            _ => None,
+        }
+    }
+
     pub fn is_zero(&self) -> bool {
         match self {
             BslNumber::Small { m, .. } => m.get() == 0,
@@ -148,13 +178,10 @@ impl BslNumber {
         }
     }
 
-    pub(crate) fn to_big(&self) -> BigDec {
+    fn big_parts(&self) -> (Cow<'_, BigInt>, i32) {
         match self {
-            BslNumber::Small { m, scale } => BigDec {
-                m: BigInt::from(m.get()),
-                scale: *scale,
-            },
-            BslNumber::Big(b) => (**b).clone(),
+            BslNumber::Small { m, scale } => (Cow::Owned(BigInt::from(m.get())), *scale),
+            BslNumber::Big(b) => (Cow::Borrowed(&b.m), b.scale),
         }
     }
 
@@ -171,6 +198,21 @@ impl BslNumber {
     fn add_sub(&self, other: &Self, negate: bool) -> Result<Self, NumError> {
         let s = self.scale().max(other.scale());
         check_scale(s)?;
+
+        if let (Some((a, asc)), Some((b, bsc))) =
+            (self.fast64_parts(), other.fast64_parts())
+        {
+            if let (Some(a), Some(b)) = (scale_up_i64(a, s - asc), scale_up_i64(b, s - bsc)) {
+                let result = if negate {
+                    a.checked_sub(b)
+                } else {
+                    a.checked_add(b)
+                };
+                if let Some(result) = result {
+                    return Ok(BslNumber::small(result as i128, s));
+                }
+            }
+        }
 
         if let (
             BslNumber::Small { m: am, scale: asc },
@@ -200,11 +242,14 @@ impl BslNumber {
             }
         }
 
-        let a = self.to_big();
-        let b = other.to_big();
-        let am = scale_up_big(&a.m, s - a.scale);
-        let bm = scale_up_big(&b.m, s - b.scale);
-        Ok(BslNumber::big(if negate { am - bm } else { am + bm }, s))
+        let (a, a_scale) = self.big_parts();
+        let (b, b_scale) = other.big_parts();
+        let am = scale_up_big(&a, s - a_scale);
+        let bm = scale_up_big(&b, s - b_scale);
+        Ok(BslNumber::big(
+            if negate { &*am - &*bm } else { &*am + &*bm },
+            s,
+        ))
     }
 
     /// Умножение точное: масштаб результата — сумма масштабов операндов.
@@ -212,6 +257,12 @@ impl BslNumber {
     pub fn mul(&self, other: &Self) -> Result<Self, NumError> {
         let s = self.scale() + other.scale();
         check_scale(s)?;
+
+        if let (Some((a, _)), Some((b, _))) = (self.fast64_parts(), other.fast64_parts()) {
+            if let Some(result) = a.checked_mul(b) {
+                return Ok(BslNumber::small(result as i128, s));
+            }
+        }
 
         if let (
             BslNumber::Small { m: am, scale: _ },
@@ -232,9 +283,36 @@ impl BslNumber {
         // ненормализованное представление, от которого зависят и хеш, и
         // равенство, а на них — `Соответствие` с числовыми ключами.
         // Регрессионный тест: `mul_normalizes_when_one_operand_goes_big`.
-        let a = self.to_big();
-        let b = other.to_big();
-        Ok(BslNumber::big(a.m * b.m, s))
+        let (a, _) = self.big_parts();
+        let (b, _) = other.big_parts();
+        Ok(BslNumber::big(&*a * &*b, s))
+    }
+
+    /// Горячий шаг числового `Для`: увеличить счётчик на единицу и сразу
+    /// сравнить с заранее вычисленной верхней границей.
+    #[inline]
+    pub fn increment_and_le(&mut self, bound: &Self) -> Result<bool, NumError> {
+        if let (
+            BslNumber::Small {
+                m: counter,
+                scale: 0,
+            },
+            BslNumber::Small {
+                m: limit,
+                scale: 0,
+            },
+        ) = (&mut *self, bound)
+        {
+            if let Some(next) = counter.get().checked_add(1) {
+                *counter = M128::new(next);
+                return Ok(next <= limit.get());
+            }
+        }
+
+        let next = self.add(&BslNumber::from_i64(1))?;
+        let keep_going = next <= *bound;
+        *self = next;
+        Ok(keep_going)
     }
 
     pub fn neg(&self) -> Self {
@@ -282,12 +360,12 @@ impl BslNumber {
             }
         }
 
-        let a = self.to_big();
-        let b = other.to_big();
+        let (a, _) = self.big_parts();
+        let (b, _) = other.big_parts();
         let (n, d) = if k >= 0 {
-            (scale_up_big(&a.m, k), b.m.clone())
+            (scale_up_big(&a, k), b)
         } else {
-            (a.m.clone(), scale_up_big(&b.m, -k))
+            (a, scale_up_big(&b, -k))
         };
         Ok(BslNumber::big(div_half_up_big(&n, &d), target))
     }
@@ -364,9 +442,9 @@ impl BslNumber {
             }
         }
 
-        let b = self.to_big();
+        let (m, _) = self.big_parts();
         let divisor = BigInt::from(10u8).pow(delta as u32);
-        let q = div_half_up_big(&b.m, &divisor);
+        let q = div_half_up_big(&m, &divisor);
         BslNumber::big(q, target_scale)
     }
 
@@ -390,9 +468,9 @@ impl BslNumber {
             }
         }
 
-        let b = self.to_big();
+        let (m, _) = self.big_parts();
         let divisor = BigInt::from(10u8).pow(delta as u32);
-        let q = div_half_even_big(&b.m, &divisor);
+        let q = div_half_even_big(&m, &divisor);
         BslNumber::big(q, target_scale)
     }
 
@@ -416,9 +494,9 @@ impl BslNumber {
             }
         }
 
-        let b = self.to_big();
+        let (m, _) = self.big_parts();
         let divisor = BigInt::from(10u8).pow(delta as u32);
-        let q = &b.m / &divisor;
+        let q = &*m / &divisor;
         BslNumber::big(q, target_scale)
     }
 }
@@ -436,7 +514,7 @@ fn normalize_small(mut m: i128, mut scale: i32) -> BslNumber {
             scale: 0,
         };
     }
-    while scale > 0 && m % 10 == 0 {
+    while scale > 0 && i128_is_divisible_by_10(m) {
         m /= 10;
         scale -= 1;
     }
@@ -444,6 +522,20 @@ fn normalize_small(mut m: i128, mut scale: i32) -> BslNumber {
         m: M128::new(m),
         scale,
     }
+}
+
+#[inline]
+fn i128_is_divisible_by_10(value: i128) -> bool {
+    let magnitude = value.unsigned_abs();
+    let low = magnitude as u64;
+    let high = (magnitude >> 64) as u64;
+
+    // 2^64 mod 10 = 6, therefore the decimal remainder of the full
+    // 128-bit value can be computed with two constant 64-bit remainders.
+    // This avoids compiler-rt's substantially more expensive `__modti3`
+    // on the overwhelmingly common path where normalization stops after
+    // the first check.
+    ((high % 10) * 6 + low % 10).is_multiple_of(10)
 }
 
 fn normalize_big(mut m: BigInt, mut scale: i32) -> BigDec {
@@ -454,11 +546,27 @@ fn normalize_big(mut m: BigInt, mut scale: i32) -> BigDec {
         };
     }
     let ten = BigInt::from(10u8);
-    while scale > 0 && (&m % &ten).is_zero() {
+    while scale > 0 && bigint_is_divisible_by_10(&m) {
         m /= &ten;
         scale -= 1;
     }
     BigDec { m, scale }
+}
+
+#[inline]
+fn bigint_is_divisible_by_10(value: &BigInt) -> bool {
+    let mut digits = value.iter_u64_digits();
+    let Some(low) = digits.next() else {
+        return true;
+    };
+
+    // BigInt uses base 2^64 limbs. Since 2^64 mod 10 = 6 and
+    // 6^n mod 10 = 6 for every n >= 1, every limb above the lowest has
+    // the same coefficient in the decimal remainder.
+    let remainder = digits.fold(low % 10, |remainder, limb| {
+        (remainder + (limb % 10) * 6) % 10
+    });
+    remainder == 0
 }
 
 /// Попытка вернуться в быстрый ярус после операции на BigInt.
@@ -605,6 +713,16 @@ impl PartialOrd for BslNumber {
 
 impl Ord for BslNumber {
     fn cmp(&self, other: &Self) -> Ordering {
+        if let (Some((a, asc)), Some((b, bsc))) =
+            (self.fast64_parts(), other.fast64_parts())
+        {
+            let scale = asc.max(bsc);
+            if let (Some(a), Some(b)) =
+                (scale_up_i64(a, scale - asc), scale_up_i64(b, scale - bsc))
+            {
+                return a.cmp(&b);
+            }
+        }
         if let (
             BslNumber::Small { m: a, scale: asc },
             BslNumber::Small { m: b, scale: bsc },
@@ -620,10 +738,10 @@ impl Ord for BslNumber {
                 return x.cmp(&y);
             }
         }
-        let a = self.to_big();
-        let b = other.to_big();
-        let s = a.scale.max(b.scale);
-        scale_up_big(&a.m, s - a.scale).cmp(&scale_up_big(&b.m, s - b.scale))
+        let (a, a_scale) = self.big_parts();
+        let (b, b_scale) = other.big_parts();
+        let s = a_scale.max(b_scale);
+        scale_up_big(&a, s - a_scale).cmp(&scale_up_big(&b, s - b_scale))
     }
 }
 
@@ -648,4 +766,72 @@ impl std::fmt::Debug for BslNumber {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.to_canonical())
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use num_bigint::BigInt;
+    use num_traits::Zero;
+
+    use super::{bigint_is_divisible_by_10, i128_is_divisible_by_10, BslNumber};
+
+    #[test]
+    fn fast_divisibility_by_ten_matches_i128_remainder() {
+        let values = [
+            i128::MIN,
+            i128::MIN + 1,
+            -(1i128 << 100),
+            -10,
+            -1,
+            0,
+            1,
+            10,
+            (1i128 << 64) - 6,
+            1i128 << 100,
+            i128::MAX - 7,
+            i128::MAX,
+        ];
+
+        for value in values {
+            assert_eq!(
+                i128_is_divisible_by_10(value),
+                value % 10 == 0,
+                "value = {value}"
+            );
+        }
+    }
+
+    #[test]
+    fn fast_i64_paths_promote_without_losing_decimal_exactness() {
+        let max = BslNumber::from_i64(i64::MAX);
+        let promoted = max.add(&BslNumber::from_i64(1)).unwrap();
+        assert!(matches!(promoted, BslNumber::Small { .. }));
+        assert_eq!(promoted.to_canonical(), "9223372036854775808");
+
+        let sum = BslNumber::from_parts(1, 1)
+            .add(&BslNumber::from_parts(2, 1))
+            .unwrap();
+        assert_eq!(sum.to_canonical(), "0.3");
+    }
+
+    #[test]
+    fn limb_divisibility_by_ten_matches_bigint_remainder() {
+        let ten = BigInt::from(10);
+        for text in [
+            "0",
+            "1",
+            "-10",
+            "18446744073709551616",
+            "340282366920938463463374607431768211450",
+            "-99999999999999999999999999999999999999999999999999",
+        ] {
+            let value = text.parse::<BigInt>().unwrap();
+            assert_eq!(
+                bigint_is_divisible_by_10(&value),
+                (&value % &ten).is_zero(),
+                "value = {value}"
+            );
+        }
+    }
+
 }
