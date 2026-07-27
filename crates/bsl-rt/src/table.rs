@@ -1,7 +1,11 @@
 use std::cell::RefCell;
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use bsl_number::{BslNumber, NumError};
+
+use crate::string::BslString;
 use crate::BslValue;
 
 /// `ТаблицаЗначений` — колоночное хранение: каждая колонка своя
@@ -121,4 +125,194 @@ impl ValueTableData {
         *self.columns.get_mut(col)?.get_mut(pos)? = value;
         Some(())
     }
+
+    /// `Найти(Значение[, Колонки])` — первый `row_id`, у которого в одной
+    /// из `cols` (или в любой, если список пуст) лежит равное значение.
+    /// Равенство — то же `eq_value`, что и у оператора `=`: у ссылочных
+    /// типов это тождество объекта, а не структурное сравнение.
+    pub fn find(&self, value: &BslValue, cols: &[usize]) -> Option<u64> {
+        let all: Vec<usize> = (0..self.columns.len()).collect();
+        let cols = if cols.is_empty() { &all[..] } else { cols };
+        for pos in 0..self.row_count() {
+            for &c in cols {
+                if self.columns.get(c).and_then(|col| col.get(pos)) == Some(value) {
+                    return self.row_ids.get(pos).copied();
+                }
+            }
+        }
+        None
+    }
+
+    /// `НайтиСтроки(СтруктураПоиска)` — все `row_id`, у которых КАЖДАЯ
+    /// пара `(колонка, значение)` совпала. Порядок результата — порядок
+    /// строк в таблице.
+    pub fn find_rows(&self, criteria: &[(usize, BslValue)]) -> Vec<u64> {
+        (0..self.row_count())
+            .filter(|&pos| {
+                criteria.iter().all(|(c, want)| {
+                    self.columns.get(*c).and_then(|col| col.get(pos)) == Some(want)
+                })
+            })
+            .filter_map(|pos| self.row_ids.get(pos).copied())
+            .collect()
+    }
+
+    /// `Итог("Колонка")` — сумма числовых значений колонки.
+    ///
+    /// НЕ ИЗМЕРЕНО: что делает платформа с нечисловыми значениями в
+    /// колонке — игнорирует, падает или считает их нулём. Взято
+    /// ИГНОРИРОВАНИЕ (нечисловые просто не входят в сумму): это
+    /// единственный вариант, при котором `Итог` по колонке со смешанным
+    /// содержимым остаётся вызываемым, а колонка из одних нечисловых даёт
+    /// `0`, а не ошибку. Замер в README.
+    pub fn total(&self, col: usize) -> Result<BslNumber, NumError> {
+        let mut sum = BslNumber::from_i64(0);
+        let Some(values) = self.columns.get(col) else {
+            return Ok(sum);
+        };
+        for v in values {
+            if let BslValue::Number(n) = v {
+                sum = sum.add(n)?;
+            }
+        }
+        Ok(sum)
+    }
+
+    /// `Сортировать("Кол1 Возр, Кол2 Убыв")`.
+    ///
+    /// Сортировка УСТОЙЧИВАЯ (`sort_by` в Rust таков) — при равных ключах
+    /// исходный порядок строк сохраняется. И, что важнее, переставляются
+    /// не только колонки, но и `row_ids` вместе с ними, после чего
+    /// `id_to_pos` пересобирается целиком: живой объект
+    /// `СтрокаТаблицыЗначений`, взятый ДО сортировки, после неё продолжает
+    /// указывать на ту же строку, просто стоящую в другом месте.
+    pub fn sort(&mut self, keys: &[SortKey]) {
+        let mut order: Vec<usize> = (0..self.row_count()).collect();
+        order.sort_by(|&a, &b| {
+            for key in keys {
+                let Some(col) = self.columns.get(key.column) else {
+                    continue;
+                };
+                let ord = compare_for_sort(&col[a], &col[b]);
+                let ord = if key.descending { ord.reverse() } else { ord };
+                if ord != Ordering::Equal {
+                    return ord;
+                }
+            }
+            Ordering::Equal
+        });
+
+        for col in &mut self.columns {
+            *col = order.iter().map(|&i| col[i].clone()).collect();
+        }
+        self.row_ids = order.iter().map(|&i| self.row_ids[i]).collect();
+        self.id_to_pos = self
+            .row_ids
+            .iter()
+            .enumerate()
+            .map(|(pos, &id)| (id, pos))
+            .collect();
+    }
+}
+
+/// Одна колонка в задании сортировки.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SortKey {
+    pub column: usize,
+    /// `Убыв`/`Desc`; по умолчанию (`Возр`/`Asc` или ничего) — по возрастанию.
+    pub descending: bool,
+}
+
+/// Сравнение СТРОК для сортировки — вынесено в отдельную функцию нарочно,
+/// чтобы замену на настоящую коллацию можно было сделать в одном месте.
+///
+/// НЕ ИЗМЕРЕНО, и это заведомое приближение. 1С сортирует строки ПО
+/// ЛОКАЛИ, а не по кодовым точкам: `ё` стоит после `е`, а не в конце
+/// алфавита; регистр обычно игнорируется либо работает вторичным ключом;
+/// кириллица и латиница упорядочены не по номерам символов. Здесь сделан
+/// самый дешёвый вариант, дающий хотя бы регистронезависимость: сначала
+/// сравнение приведённых к верхнему регистру строк, затем — исходных как
+/// вторичный ключ (чтобы `а` и `А` не считались одним и тем же и порядок
+/// оставался детерминированным).
+///
+/// Что НЕ делается и делаться должно после замера: `ё`/`е`, взаимный
+/// порядок алфавитов, порядок цифр относительно букв. Если замер покажет,
+/// что приближения не хватает, сюда встаёт полная UCA (`feruca`,
+/// `icu_collator`) — заменяется ровно эта функция. Скрипт замера в README.
+pub fn collate(a: &BslString, b: &BslString) -> Ordering {
+    a.to_uppercase()
+        .cmp(&b.to_uppercase())
+        .then_with(|| a.cmp(b))
+}
+
+/// Порядок РАЗНОТИПНЫХ значений в сортировке. Нужен только затем, чтобы
+/// сортировка колонки со смешанным содержимым была тотальной и
+/// детерминированной, а не зависела от того, какие два элемента алгоритм
+/// сравнил первыми.
+///
+/// НЕ ИЗМЕРЕНО: в каком порядке платформа ставит типы между собой. Взято
+/// «пустые значения вперёд, дальше числа, даты, булево, строки, объекты» —
+/// произвольно, но устойчиво.
+fn type_rank(v: &BslValue) -> u8 {
+    match v {
+        BslValue::Undefined => 0,
+        BslValue::Null => 1,
+        BslValue::Number(_) => 2,
+        BslValue::Date(_) => 3,
+        BslValue::Boolean(_) => 4,
+        BslValue::Str(_) => 5,
+        BslValue::Type(_) => 6,
+        BslValue::Object(_) => 7,
+        BslValue::Skipped => 8,
+    }
+}
+
+/// Сравнение двух значений колонки. Одинаковые типы сравниваются по
+/// существу (строки — через `collate`), разные — по рангу типа.
+fn compare_for_sort(a: &BslValue, b: &BslValue) -> Ordering {
+    match (a, b) {
+        (BslValue::Number(x), BslValue::Number(y)) => x.cmp(y),
+        (BslValue::Str(x), BslValue::Str(y)) => collate(x, y),
+        (BslValue::Date(x), BslValue::Date(y)) => x.cmp(y),
+        (BslValue::Boolean(x), BslValue::Boolean(y)) => x.cmp(y),
+        // Объекты между собой не упорядочиваются осмысленно (у них нет
+        // ни значения, ни стабильного ключа) — считаем равными, и
+        // устойчивость сортировки сохранит их исходный порядок.
+        _ => type_rank(a).cmp(&type_rank(b)),
+    }
+}
+
+/// Разбор задания сортировки `"Кол1 Возр, Кол2 Убыв"`.
+///
+/// Неизвестное имя колонки — ошибка вызывающего, поэтому здесь
+/// возвращается имя, а не тихо пропускается: `Сортировать("Опечатка")`,
+/// молча ничего не отсортировавшая, — худший из возможных исходов.
+pub fn parse_sort_spec(
+    spec: &str,
+    resolve: impl Fn(&str) -> Option<usize>,
+) -> Result<Vec<SortKey>, String> {
+    let mut keys = Vec::new();
+    for part in spec.split(',') {
+        let part = part.trim();
+        if part.is_empty() {
+            continue;
+        }
+        let mut words = part.split_whitespace();
+        let Some(name) = words.next() else {
+            continue;
+        };
+        let descending = match words.next() {
+            None => false,
+            Some(dir) if dir.eq_ignore_ascii_case("Возр") || dir.eq_ignore_ascii_case("Asc") => {
+                false
+            }
+            Some(dir) if dir.eq_ignore_ascii_case("Убыв") || dir.eq_ignore_ascii_case("Desc") => {
+                true
+            }
+            Some(dir) => return Err(dir.to_string()),
+        };
+        let column = resolve(name).ok_or_else(|| name.to_string())?;
+        keys.push(SortKey { column, descending });
+    }
+    Ok(keys)
 }

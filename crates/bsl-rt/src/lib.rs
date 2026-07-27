@@ -1370,6 +1370,130 @@ impl BslValue {
         }
     }
 
+    // --- ТаблицаЗначений, волна 2 ----------------------------------------
+
+    /// Общий доступ к данным таблицы для методов волны 2 — все они
+    /// применимы только к самой `ТаблицаЗначений`, не к строке и не к
+    /// коллекции колонок.
+    fn as_table(&self, method: &'static str) -> RtResult<&Rc<std::cell::RefCell<ValueTableData>>> {
+        match self {
+            BslValue::Object(o) => match &**o {
+                BslObject::ValueTable(data) => Ok(data),
+                _ => Err(RtError::MethodNotApplicable {
+                    method,
+                    receiver: self.type_name(),
+                }),
+            },
+            _ => Err(RtError::MethodNotApplicable {
+                method,
+                receiver: self.type_name(),
+            }),
+        }
+    }
+
+    /// Разбор списка колонок `"Кол1, Кол2"` в индексы. Пустая строка (или
+    /// отсутствующий аргумент) — пустой список, что для `Найти` значит
+    /// «искать во всех колонках».
+    fn column_indices(data: &ValueTableData, spec: &str) -> RtResult<Vec<usize>> {
+        spec.split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(|name| {
+                data.column_index(name)
+                    .ok_or_else(|| RtError::UnknownColumn(name.to_string()))
+            })
+            .collect()
+    }
+
+    /// `Найти(Значение[, Колонки])` -> `СтрокаТаблицыЗначений` либо
+    /// `Неопределено`, если ничего не нашлось (не ошибка — это штатный
+    /// способ проверить наличие).
+    pub fn table_find(&self, value: &BslValue, columns: &BslValue) -> RtResult<BslValue> {
+        let data = self.as_table("Найти")?;
+        let cols = match columns {
+            BslValue::Undefined => Vec::new(),
+            other => {
+                let spec = other.as_str("Найти")?.to_string();
+                Self::column_indices(&data.borrow(), &spec)?
+            }
+        };
+        let found = data.borrow().find(value, &cols);
+        Ok(match found {
+            Some(row_id) => BslValue::Object(Rc::new(BslObject::TableRow(data.clone(), row_id))),
+            None => BslValue::Undefined,
+        })
+    }
+
+    /// `НайтиСтроки(СтруктураПоиска)` -> `Массив` строк таблицы.
+    ///
+    /// Имена полей структуры — это имена колонок, поэтому нужен интернер:
+    /// поля хранятся `NameId`, а колонки — строками (они заведены в
+    /// рантайме через `.Колонки.Добавить`, см. `get_field_by_name`).
+    pub fn table_find_rows(&self, criteria: &BslValue, names: &NameInterner) -> RtResult<BslValue> {
+        let data = self.as_table("НайтиСтроки")?;
+        let BslValue::Object(o) = criteria else {
+            return Err(RtError::TypeError {
+                expected: "Структура",
+                op: "НайтиСтроки",
+            });
+        };
+        let BslObject::Structure(s) = &**o else {
+            return Err(RtError::TypeError {
+                expected: "Структура",
+                op: "НайтиСтроки",
+            });
+        };
+
+        let pairs = {
+            let s = s.borrow();
+            let d = data.borrow();
+            let mut pairs = Vec::with_capacity(s.len());
+            for i in 0..s.len() {
+                let (field, want) = s.entry_at(i).ok_or(RtError::NotAnObject)?;
+                let name = names.name(field).ok_or(RtError::UnknownField(field))?;
+                let col = d
+                    .column_index(name)
+                    .ok_or_else(|| RtError::UnknownColumn(name.to_string()))?;
+                pairs.push((col, want));
+            }
+            pairs
+        };
+
+        let ids = data.borrow().find_rows(&pairs);
+        Ok(BslValue::new_array(
+            ids.into_iter()
+                .map(|id| BslValue::Object(Rc::new(BslObject::TableRow(data.clone(), id))))
+                .collect(),
+        ))
+    }
+
+    /// `Сортировать("Кол1 Возр, Кол2 Убыв")`. Живые объекты
+    /// `СтрокаТаблицыЗначений` переживают сортировку — см.
+    /// `ValueTableData::sort`.
+    pub fn table_sort(&self, spec: &BslValue) -> RtResult<()> {
+        let data = self.as_table("Сортировать")?;
+        let spec = spec.as_str("Сортировать")?.to_string();
+        let keys = {
+            let d = data.borrow();
+            table::parse_sort_spec(&spec, |name| d.column_index(name))
+                .map_err(RtError::UnknownColumn)?
+        };
+        data.borrow_mut().sort(&keys);
+        Ok(())
+    }
+
+    /// `Итог("Колонка")` -> `Число`. Про нечисловые значения см.
+    /// `ValueTableData::total` (НЕ ИЗМЕРЕНО).
+    pub fn table_total(&self, column: &BslValue) -> RtResult<BslValue> {
+        let data = self.as_table("Итог")?;
+        let name = column.as_str("Итог")?.to_string();
+        let d = data.borrow();
+        let col = d
+            .column_index(&name)
+            .ok_or_else(|| RtError::UnknownColumn(name.clone()))?;
+        Ok(BslValue::Number(d.total(col)?))
+    }
+
     /// `Массив.Очистить()` / `ТаблицаЗначений.Очистить()` /
     /// `Соответствие.Очистить()`.
     pub fn clear_collection(&self) -> RtResult<()> {

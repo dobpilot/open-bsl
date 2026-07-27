@@ -240,6 +240,16 @@ pub enum BuiltinMethod {
     /// сигнатуры (там `Значение` — выходной параметр, здесь — значение по
     /// умолчанию).
     Property,
+
+    // --- ТаблицаЗначений, волна 2 -------------------------------------
+    /// `Найти(Значение[, Колонки])`.
+    Find,
+    /// `НайтиСтроки(СтруктураПоиска)`.
+    FindRows,
+    /// `Сортировать("Кол1 Возр, Кол2 Убыв")`.
+    Sort,
+    /// `Итог("Колонка")`.
+    Total,
 }
 
 impl BuiltinMethod {
@@ -252,6 +262,10 @@ impl BuiltinMethod {
             "INSERT" | "ВСТАВИТЬ" => BuiltinMethod::Insert,
             "GET" | "ПОЛУЧИТЬ" => BuiltinMethod::Get,
             "PROPERTY" | "СВОЙСТВО" => BuiltinMethod::Property,
+            "FIND" | "НАЙТИ" => BuiltinMethod::Find,
+            "FINDROWS" | "НАЙТИСТРОКИ" => BuiltinMethod::FindRows,
+            "SORT" | "СОРТИРОВАТЬ" => BuiltinMethod::Sort,
+            "TOTAL" | "ИТОГ" => BuiltinMethod::Total,
             _ => return None,
         })
     }
@@ -372,6 +386,40 @@ pub fn call_builtin_method(m: BuiltinMethod, obj: &BslValue, args: &[BslValue]) 
             method: "Свойство",
             receiver: obj.type_name(),
         }),
+        // Второй аргумент `Найти` необязателен: `args.get(1)` вместо
+        // `args[1]`, потому что арность метода не выравнивается резолвером
+        // (в отличие от встроенных ФУНКЦИЙ — см. `BuiltinFn::arity_range`:
+        // у методов получатель динамический, и арность проверяет рантайм).
+        BuiltinMethod::Find => {
+            // Арность `Найти` резолвер не проверяет (1 или 2 — список
+            // колонок необязателен), поэтому нулевой вызов обязан стать
+            // понятной ошибкой, а не паникой на `args[0]` — ровно как у
+            // `Свойство` ниже.
+            let Some(value) = args.first() else {
+                return Err(RtError::MethodNotApplicable {
+                    method: "Найти",
+                    receiver: obj.type_name(),
+                });
+            };
+            if args.len() > 2 {
+                return Err(RtError::MethodNotApplicable {
+                    method: "Найти",
+                    receiver: obj.type_name(),
+                });
+            }
+            obj.table_find(value, args.get(1).unwrap_or(&BslValue::Undefined))
+        }
+        // `НайтиСтроки` перехвачен в `call_builtin_method_ctx` — ему нужен
+        // интернер имён, чтобы прочитать поля структуры поиска.
+        BuiltinMethod::FindRows => Err(RtError::MethodNotApplicable {
+            method: "НайтиСтроки",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::Sort => {
+            obj.table_sort(&args[0])?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::Total => obj.table_total(&args[0]),
     }
 }
 
@@ -443,6 +491,18 @@ pub fn call_builtin_method_ctx(
             }
             _ => {}
         }
+    }
+    // `НайтиСтроки` читает ИМЕНА полей структуры поиска (они хранятся
+    // `NameId`) и сопоставляет их с именами колонок — единственный метод
+    // таблицы, которому нужен интернер.
+    if m == BuiltinMethod::FindRows {
+        let Some(criteria) = args.first() else {
+            return Err(RtError::MethodNotApplicable {
+                method: "НайтиСтроки",
+                receiver: obj.type_name(),
+            });
+        };
+        return obj.table_find_rows(criteria, &rt.names);
     }
     call_builtin_method(m, obj, args)
 }

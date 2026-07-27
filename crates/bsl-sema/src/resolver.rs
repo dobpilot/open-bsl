@@ -609,9 +609,15 @@ impl<'a> Resolver<'a> {
                     bsl_rt::BuiltinMethod::Count | bsl_rt::BuiltinMethod::Clear => Some(0),
                     bsl_rt::BuiltinMethod::Delete | bsl_rt::BuiltinMethod::Get => Some(1),
                     bsl_rt::BuiltinMethod::Insert => Some(2),
+                    bsl_rt::BuiltinMethod::FindRows
+                    | bsl_rt::BuiltinMethod::Sort
+                    | bsl_rt::BuiltinMethod::Total => Some(1),
                     // `Свойство` — 1 или 2 (см. `BslValue::structure_property`),
-                    // как и `Добавить` арность решает рантайм.
-                    bsl_rt::BuiltinMethod::Add | bsl_rt::BuiltinMethod::Property => None,
+                    // `Найти` — 1 или 2 (список колонок необязателен), как и
+                    // у `Добавить` арность решает рантайм.
+                    bsl_rt::BuiltinMethod::Add
+                    | bsl_rt::BuiltinMethod::Property
+                    | bsl_rt::BuiltinMethod::Find => None,
                 };
                 if let Some(expected) = expected {
                     if args.len() != expected {
