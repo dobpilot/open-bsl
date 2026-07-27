@@ -487,6 +487,18 @@ impl<'a> Resolver<'a> {
                 }
                 Ok(RExpr::NewMap)
             }
+            "ЗАПИСЬТЕКСТА" | "TEXTWRITER" => {
+                if args.len() != 1 {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый ЗаписьТекста".to_string(),
+                        expected: 1,
+                        found: args.len(),
+                    });
+                }
+                Ok(RExpr::NewTextWriter {
+                    path: Box::new(self.resolve_expr(&args[0])?),
+                })
+            }
             _ => Err(SemaError::Unsupported(
                 "Новый поддержан только для Массив/Структура/ТаблицаЗначений/Соответствие пока",
             )),
@@ -613,12 +625,15 @@ impl<'a> Resolver<'a> {
                 // `bsl_rt::call_builtin_method`). Для остальных методов
                 // арность фиксирована и проверяется сразу.
                 let expected: Option<usize> = match method {
-                    bsl_rt::BuiltinMethod::Count | bsl_rt::BuiltinMethod::Clear => Some(0),
+                    bsl_rt::BuiltinMethod::Count
+                    | bsl_rt::BuiltinMethod::Clear
+                    | bsl_rt::BuiltinMethod::Close => Some(0),
                     bsl_rt::BuiltinMethod::Delete | bsl_rt::BuiltinMethod::Get => Some(1),
                     bsl_rt::BuiltinMethod::Insert => Some(2),
                     bsl_rt::BuiltinMethod::FindRows
                     | bsl_rt::BuiltinMethod::Sort
                     | bsl_rt::BuiltinMethod::Total => Some(1),
+                    bsl_rt::BuiltinMethod::Write => Some(1),
                     // `Свойство` — 1 или 2 (см. `BslValue::structure_property`),
                     // `Найти` — 1 или 2 (список колонок необязателен), как и
                     // у `Добавить` арность решает рантайм.

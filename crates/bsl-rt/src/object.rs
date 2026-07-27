@@ -1,5 +1,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::BufWriter;
 use std::rc::Rc;
 
 use crate::interner::NameId;
@@ -41,6 +43,8 @@ pub enum BslObject {
     /// через `get_field_by_name` — тем же путём, что и колонки
     /// `СтрокаТаблицыЗначений`, а не через `Shape`/`NameId`.
     KeyValuePair(BslValue, BslValue),
+    /// Буферизованный `ЗаписьТекста`; `None` после `Закрыть()`.
+    TextWriter(RefCell<Option<BufWriter<File>>>),
 }
 
 /// Хранение полей `Структура` — двухрежимное, как в V8.

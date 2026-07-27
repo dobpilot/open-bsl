@@ -358,13 +358,23 @@ impl<'a> Compiler<'a> {
                     .try_into()
                     .map_err(|_| CompileError::TooManyRegisters)?;
                 self.free_temp(count);
-                self.emit(Instr::CallMethod {
-                    dst,
-                    obj: o,
-                    method: *method,
-                    base,
-                    count,
-                });
+                match (*method, args.len()) {
+                    (bsl_rt::BuiltinMethod::Write, 1) => {
+                        self.emit(Instr::WriteText { dst, obj: o, src: base });
+                    }
+                    (bsl_rt::BuiltinMethod::Close, 0) => {
+                        self.emit(Instr::CloseText { dst, obj: o });
+                    }
+                    _ => {
+                        self.emit(Instr::CallMethod {
+                            dst,
+                            obj: o,
+                            method: *method,
+                            base,
+                            count,
+                        });
+                    }
+                }
                 self.free_temp(1);
             }
             RExpr::Str(s) => {
@@ -433,6 +443,15 @@ impl<'a> Compiler<'a> {
             }
             RExpr::NewMap => {
                 self.emit(Instr::NewMap { dst });
+            }
+            RExpr::NewTextWriter { path } => {
+                let path_reg = self.alloc_temp()?;
+                self.compile_expr(path, path_reg)?;
+                self.emit(Instr::NewTextWriter {
+                    dst,
+                    path: path_reg,
+                });
+                self.free_temp(1);
             }
             RExpr::DynEval(e) => {
                 let s = self.alloc_temp()?;

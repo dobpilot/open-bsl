@@ -19,6 +19,7 @@ mod types;
 use std::cmp::Ordering;
 use std::fmt;
 use std::hash::{Hash, Hasher};
+use std::io::Write;
 use std::rc::Rc;
 
 use bsl_number::{BslNumber, NumError};
@@ -129,6 +130,8 @@ pub enum RtError {
     /// извне через публичный `run_program`/`run_repl_chunk`, поэтому это
     /// ошибка, а не паника: уронить процесс на кривом входе — не вариант.
     InvalidBytecode(&'static str),
+    /// Ошибка открытия, записи или закрытия файла.
+    IoError(String),
 }
 
 impl From<NumError> for RtError {
@@ -164,6 +167,7 @@ impl fmt::Display for RtError {
             }
             RtError::DynamicError(msg) => write!(f, "{msg}"),
             RtError::InvalidBytecode(what) => write!(f, "некорректный байт-код: {what}"),
+            RtError::IoError(msg) => write!(f, "ошибка файлового ввода-вывода: {msg}"),
         }
     }
 }
@@ -190,6 +194,7 @@ impl BslValue {
                 BslObject::TableRow(_, _) => "СтрокаТаблицыЗначений",
                 BslObject::Map(_) => "Соответствие",
                 BslObject::KeyValuePair(_, _) => "КлючИЗначение",
+                BslObject::TextWriter(_) => "ЗаписьТекста",
             },
             BslValue::Skipped => "Skipped",
         }
@@ -811,7 +816,9 @@ impl BslValue {
                 | BslObject::TableColumns(_) => self.collection_len()? > 0,
                 // У строки таблицы и пары ключ-значение «длины» нет: сам
                 // факт существования объекта и есть заполненность.
-                BslObject::TableRow(..) | BslObject::KeyValuePair(..) => true,
+                BslObject::TableRow(..)
+                | BslObject::KeyValuePair(..)
+                | BslObject::TextWriter(..) => true,
             },
             BslValue::Skipped => {
                 return Err(RtError::TypeError {
@@ -840,6 +847,12 @@ impl BslValue {
                 BslObject::TableColumns(_) => TypeId::ValueTableColumns,
                 BslObject::TableRow(..) => TypeId::ValueTableRow,
                 BslObject::KeyValuePair(..) => TypeId::KeyAndValue,
+                BslObject::TextWriter(..) => {
+                    return Err(RtError::TypeError {
+                        expected: "Зарегистрированный тип",
+                        op: "ТипЗнч",
+                    })
+                }
             },
             BslValue::Skipped => {
                 return Err(RtError::TypeError {
@@ -879,6 +892,63 @@ impl BslValue {
 
     pub fn new_map() -> Self {
         BslValue::Object(Rc::new(BslObject::Map(std::cell::RefCell::new(MapData::new()))))
+    }
+
+    /// Открывает (или обрезает) текстовый файл для буферизованной записи UTF-8.
+    pub fn new_text_writer(path: &BslValue) -> RtResult<Self> {
+        let path = path.as_str("Новый ЗаписьТекста")?.to_string();
+        let file = std::fs::File::create(&path)
+            .map_err(|e| RtError::IoError(format!("{path}: {e}")))?;
+        Ok(BslValue::Object(Rc::new(BslObject::TextWriter(
+            std::cell::RefCell::new(Some(std::io::BufWriter::new(file))),
+        ))))
+    }
+
+    pub fn text_writer_write(&self, text: &BslValue) -> RtResult<Self> {
+        let text = text.as_str("Записать")?;
+        match self {
+            BslValue::Object(obj) => match &**obj {
+                BslObject::TextWriter(writer) => {
+                    let mut writer = writer.borrow_mut();
+                    text.write_utf8(
+                        writer
+                        .as_mut()
+                        .ok_or_else(|| RtError::IoError("файл уже закрыт".to_string()))?,
+                    )
+                        .map_err(|e| RtError::IoError(e.to_string()))?;
+                    Ok(BslValue::Undefined)
+                }
+                _ => Err(RtError::MethodNotApplicable {
+                    method: "Записать",
+                    receiver: self.type_name(),
+                }),
+            },
+            _ => Err(RtError::MethodNotApplicable {
+                method: "Записать",
+                receiver: self.type_name(),
+            }),
+        }
+    }
+
+    pub fn text_writer_close(&self) -> RtResult<Self> {
+        match self {
+            BslValue::Object(obj) => match &**obj {
+                BslObject::TextWriter(writer) => {
+                    if let Some(mut writer) = writer.borrow_mut().take() {
+                        writer.flush().map_err(|e| RtError::IoError(e.to_string()))?;
+                    }
+                    Ok(BslValue::Undefined)
+                }
+                _ => Err(RtError::MethodNotApplicable {
+                    method: "Закрыть",
+                    receiver: self.type_name(),
+                }),
+            },
+            _ => Err(RtError::MethodNotApplicable {
+                method: "Закрыть",
+                receiver: self.type_name(),
+            }),
+        }
     }
 
     /// Индекс должен быть целым неотрицательным числом — `1С` использует
@@ -985,6 +1055,7 @@ impl BslValue {
                 BslObject::TableRow(..) => Err(RtError::NotIndexable),
                 BslObject::Map(data) => Ok(data.borrow().len()),
                 BslObject::KeyValuePair(..) => Err(RtError::NotIndexable),
+                BslObject::TextWriter(..) => Err(RtError::NotIndexable),
             },
             _ => Err(RtError::NotIndexable),
         }
@@ -1625,6 +1696,7 @@ impl fmt::Display for BslValue {
                 BslObject::TableRow(_, _) => write!(f, "СтрокаТаблицыЗначений"),
                 BslObject::Map(_) => write!(f, "Соответствие"),
                 BslObject::KeyValuePair(_, _) => write!(f, "КлючИЗначение"),
+                BslObject::TextWriter(_) => write!(f, "ЗаписьТекста"),
             },
             // Никогда не должно реально дойти до печати (см. doc comment
             // на варианте) — но `Display` обязан быть тотальным.

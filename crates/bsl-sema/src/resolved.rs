@@ -90,6 +90,9 @@ pub enum RExpr {
     /// `.Вставить(Ключ, Значение)`, не в конструкторе (как и `ТаблицаЗначений`
     /// выше).
     NewMap,
+    NewTextWriter {
+        path: Box<RExpr>,
+    },
     /// `Вычислить(<строка>)` — компилирует строку как ОДНО выражение (через
     /// внутреннюю обёртку `Возврат (<строка>);`, см. `bsl-vm`) и исполняет
     /// его в текущей области видимости верхнего уровня, возвращая значение.
@@ -282,6 +285,7 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
         RExpr::Field { obj, .. } => expr_uses_dynamic(obj),
         RExpr::NewArray { dims } => dims.iter().any(expr_uses_dynamic),
         RExpr::NewStructure { values, .. } => values.iter().any(expr_uses_dynamic),
+        RExpr::NewTextWriter { path } => expr_uses_dynamic(path),
         RExpr::Number(_)
         | RExpr::Date(_)
         | RExpr::Bool(_)

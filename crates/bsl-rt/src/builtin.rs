@@ -257,6 +257,8 @@ pub enum BuiltinMethod {
     Sort,
     /// `Итог("Колонка")`.
     Total,
+    Write,
+    Close,
 }
 
 impl BuiltinMethod {
@@ -273,6 +275,8 @@ impl BuiltinMethod {
             "FINDROWS" | "НАЙТИСТРОКИ" => BuiltinMethod::FindRows,
             "SORT" | "СОРТИРОВАТЬ" => BuiltinMethod::Sort,
             "TOTAL" | "ИТОГ" => BuiltinMethod::Total,
+            "WRITE" | "ЗАПИСАТЬ" => BuiltinMethod::Write,
+            "CLOSE" | "ЗАКРЫТЬ" => BuiltinMethod::Close,
             _ => return None,
         })
     }
@@ -430,6 +434,8 @@ pub fn call_builtin_method(m: BuiltinMethod, obj: &BslValue, args: &[BslValue]) 
             Ok(BslValue::Undefined)
         }
         BuiltinMethod::Total => obj.table_total(&args[0]),
+        BuiltinMethod::Write => obj.text_writer_write(&args[0]),
+        BuiltinMethod::Close => obj.text_writer_close(),
     }
 }
 

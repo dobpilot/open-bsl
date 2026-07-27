@@ -61,6 +61,54 @@ impl Frame {
     }
 }
 
+/// Аргументы подавляющего большинства встроенных вызовов помещаются сюда
+/// без heap-аллокации. Более длинные вариативные вызовы используют `Vec`.
+enum CallArgs {
+    Inline {
+        values: [BslValue; 3],
+        len: usize,
+    },
+    Heap(Vec<BslValue>),
+}
+
+impl CallArgs {
+    fn load(stack: &[BslValue], frame: &Frame, base: u8, count: u8) -> Result<Self, RtError> {
+        if count <= 3 {
+            let mut values = [
+                BslValue::Undefined,
+                BslValue::Undefined,
+                BslValue::Undefined,
+            ];
+            for i in 0..count {
+                let reg = base.checked_add(i).ok_or(RtError::InvalidBytecode(
+                    "переполнение номера регистра аргумента",
+                ))?;
+                values[i as usize] = reg_load(stack, frame.reg_index(reg))?;
+            }
+            Ok(CallArgs::Inline {
+                values,
+                len: count as usize,
+            })
+        } else {
+            let mut values = Vec::with_capacity(count as usize);
+            for i in 0..count {
+                let reg = base.checked_add(i).ok_or(RtError::InvalidBytecode(
+                    "переполнение номера регистра аргумента",
+                ))?;
+                values.push(reg_load(stack, frame.reg_index(reg))?);
+            }
+            Ok(CallArgs::Heap(values))
+        }
+    }
+
+    fn as_slice(&self) -> &[BslValue] {
+        match self {
+            CallArgs::Inline { values, len } => &values[..*len],
+            CallArgs::Heap(values) => values,
+        }
+    }
+}
+
 /// Выполняет модуль с точки входа — операторов верхнего уровня (`chunks[0]`)
 /// — и возвращает значение, которым он завершился (через `Возврат` на
 /// верхнем уровне, что нетипично, но не запрещено; обычно — `Неопределено`).
@@ -681,6 +729,13 @@ fn step(
                 reg_store(stack, d, BslValue::new_map())?;
                 frames[frame_idx].pc += 1;
             }
+            Instr::NewTextWriter { dst, path } => {
+                let path = reg_load(stack, frames[frame_idx].reg_index(path))?;
+                let writer = BslValue::new_text_writer(&path)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, writer)?;
+                frames[frame_idx].pc += 1;
+            }
             Instr::CollectionLen { dst, obj } => {
                 let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
                 let len = ov.collection_len()?;
@@ -704,11 +759,8 @@ fn step(
                 base,
                 count,
             } => {
-                let mut args = Vec::with_capacity(count as usize);
-                for i in 0..count {
-                    args.push(reg_load(stack, frames[frame_idx].reg_index(base + i))?);
-                }
-                let v = call_builtin_with_format(builtin, &args)?;
+                let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
+                let v = call_builtin_with_format(builtin, args.as_slice())?;
                 let d = frames[frame_idx].reg_index(dst);
                 reg_store(stack, d, v)?;
                 frames[frame_idx].pc += 1;
@@ -721,11 +773,29 @@ fn step(
                 count,
             } => {
                 let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
-                let mut args = Vec::with_capacity(count as usize);
-                for i in 0..count {
-                    args.push(reg_load(stack, frames[frame_idx].reg_index(base + i))?);
-                }
-                let v = bsl_rt::call_builtin_method_ctx(method, &ov, &args, runtime_shapes)?;
+                let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
+                let v =
+                    bsl_rt::call_builtin_method_ctx(method, &ov, args.as_slice(), runtime_shapes)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, v)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::WriteText { dst, obj, src } => {
+                let obj_idx = frames[frame_idx].reg_index(obj);
+                let src_idx = frames[frame_idx].reg_index(src);
+                let v = {
+                    let ov = at(stack, obj_idx, "чтение объекта за границей стека значений")?;
+                    let sv = at(stack, src_idx, "чтение аргумента за границей стека значений")?;
+                    ov.text_writer_write(sv)?
+                };
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, v)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::CloseText { dst, obj } => {
+                let obj_idx = frames[frame_idx].reg_index(obj);
+                let v = at(stack, obj_idx, "чтение объекта за границей стека значений")?
+                    .text_writer_close()?;
                 let d = frames[frame_idx].reg_index(dst);
                 reg_store(stack, d, v)?;
                 frames[frame_idx].pc += 1;
@@ -3118,5 +3188,28 @@ mod tests {
     fn vypolnit_declaring_procedures_is_rejected() {
         let err = run_src_err(r#"Выполнить("Процедура П() КонецПроцедуры");"#);
         assert!(matches!(err, RtError::DynamicError(_)));
+    }
+
+    #[test]
+    fn text_writer_writes_utf8_and_flushes_on_close() {
+        let path = std::env::temp_dir().join(format!(
+            "onec-llvm-text-writer-{}-{}.txt",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let src = format!(
+            "Файл = Новый ЗаписьТекста(\"{}\");\n\
+             Файл.Записать(\"Привет\");\n\
+             Файл.Записать(Символ(10));\n\
+             Файл.Закрыть();",
+            path.display()
+        );
+
+        run_src(&src);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "Привет\n");
+        std::fs::remove_file(path).unwrap();
     }
 }

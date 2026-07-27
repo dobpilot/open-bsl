@@ -1,4 +1,5 @@
 use std::fmt;
+use std::io::{self, Write};
 use std::rc::Rc;
 
 /// Строка BSL — код-юниты UTF-16, как в самой 1С (COM/Windows-строки), не
@@ -24,11 +25,46 @@ pub const MAX_TEMPLATE_ARGS: usize = 10;
 impl BslString {
     pub fn from_str(s: &str) -> Self {
         let units: Vec<u16> = s.encode_utf16().collect();
+        Self::from_units(units)
+    }
+
+    fn from_units(units: Vec<u16>) -> Self {
         BslString(units.into())
     }
 
     pub fn units(&self) -> &[u16] {
         &self.0
+    }
+
+    /// Кодирует внутренние UTF-16 код-юниты прямо в переданный UTF-8
+    /// поток. Промежуточный `String` не создаётся; некорректные суррогаты,
+    /// как и в `Display`, заменяются на U+FFFD.
+    pub fn write_utf8(&self, writer: &mut impl Write) -> io::Result<()> {
+        let mut out = [0u8; 1024];
+
+        // CSV/JSON и большинство служебных строк состоят из ASCII. Для
+        // них декодирование UTF-16 и проверка суррогатных пар не нужны.
+        if self.0.iter().all(|unit| *unit <= 0x7f) {
+            for units in self.0.chunks(out.len()) {
+                for (dst, unit) in out.iter_mut().zip(units) {
+                    *dst = *unit as u8;
+                }
+                writer.write_all(&out[..units.len()])?;
+            }
+            return Ok(());
+        }
+
+        let mut used = 0;
+        for decoded in char::decode_utf16(self.0.iter().copied()) {
+            let ch = decoded.unwrap_or(char::REPLACEMENT_CHARACTER);
+            let needed = ch.len_utf8();
+            if used + needed > out.len() {
+                writer.write_all(&out[..used])?;
+                used = 0;
+            }
+            used += ch.encode_utf8(&mut out[used..]).len();
+        }
+        writer.write_all(&out[..used])
     }
 
     /// `СтрДлина`/`StrLen` — число код-юнитов UTF-16, НЕ кодовых точек.
@@ -40,7 +76,7 @@ impl BslString {
         let mut v = Vec::with_capacity(self.0.len() + other.0.len());
         v.extend_from_slice(&self.0);
         v.extend_from_slice(&other.0);
-        BslString(v.into())
+        BslString::from_units(v)
     }
 
     /// `Сред`/`Mid`: `start_1based` — позиция первого символа (1 = начало
@@ -51,11 +87,11 @@ impl BslString {
     pub fn substring(&self, start_1based: usize, len: usize) -> Self {
         let n = self.0.len();
         if start_1based == 0 || start_1based > n {
-            return BslString(Vec::new().into());
+            return BslString::from_units(Vec::new());
         }
         let start = start_1based - 1;
         let end = (start + len).min(n);
-        BslString(self.0[start..end].to_vec().into())
+        BslString::from_units(self.0[start..end].to_vec())
     }
 
     pub fn left(&self, len: usize) -> Self {
@@ -65,7 +101,7 @@ impl BslString {
     pub fn right(&self, len: usize) -> Self {
         let n = self.0.len();
         let take = len.min(n);
-        BslString(self.0[n - take..].to_vec().into())
+        BslString::from_units(self.0[n - take..].to_vec())
     }
 
     /// Через `char` (декодируя код-юниты), не по код-юниту напрямую —
@@ -132,7 +168,7 @@ impl BslString {
                 i += 1;
             }
         }
-        BslString(out.into())
+        BslString::from_units(out)
     }
 
     /// `СтрРазделить`/`StrSplit` — по разделителю, пустые куски
@@ -148,14 +184,14 @@ impl BslString {
         let mut i = 0;
         while i + sep.0.len() <= self.0.len() {
             if self.0[i..i + sep.0.len()] == sep.0[..] {
-                parts.push(BslString(self.0[start..i].to_vec().into()));
+                parts.push(BslString::from_units(self.0[start..i].to_vec()));
                 i += sep.0.len();
                 start = i;
             } else {
                 i += 1;
             }
         }
-        parts.push(BslString(self.0[start..].to_vec().into()));
+        parts.push(BslString::from_units(self.0[start..].to_vec()));
         parts
     }
 
@@ -168,7 +204,7 @@ impl BslString {
             }
             out.extend_from_slice(&p.0);
         }
-        BslString(out.into())
+        BslString::from_units(out)
     }
 
     /// Разбиение на СТРОКИ (в смысле "строк текста"): разделитель — `LF`,
@@ -203,11 +239,11 @@ impl BslString {
     /// даёт пустую строку (как `Сред` за границей), а не ошибку.
     pub fn line_at(&self, n_1based: usize) -> Self {
         if n_1based == 0 {
-            return BslString(Vec::new().into());
+            return BslString::from_units(Vec::new());
         }
         match self.lines().get(n_1based - 1) {
-            Some(l) => BslString(l.to_vec().into()),
-            None => BslString(Vec::new().into()),
+            Some(l) => BslString::from_units(l.to_vec()),
+            None => BslString::from_units(Vec::new()),
         }
     }
 
@@ -217,7 +253,7 @@ impl BslString {
     pub fn from_char_code(code: u32) -> Option<Self> {
         let ch = char::from_u32(code)?;
         let mut buf = [0u16; 2];
-        Some(BslString(ch.encode_utf16(&mut buf).to_vec().into()))
+        Some(BslString::from_units(ch.encode_utf16(&mut buf).to_vec()))
     }
 
     /// `КодСимвола`/`CharCode` — код символа на позиции `pos_1based`
@@ -300,7 +336,7 @@ impl BslString {
                 }
             }
         }
-        BslString(out.into())
+        BslString::from_units(out)
     }
 }
 
@@ -339,6 +375,19 @@ mod tests {
     fn bmp_characters_count_one_per_code_unit() {
         assert_eq!(BslString::from_str("привет").len_utf16(), 6);
         assert_eq!(BslString::from_str("").len_utf16(), 0);
+    }
+
+    #[test]
+    fn direct_utf8_write_matches_lossy_conversion_without_allocating_a_string() {
+        let source = format!("{}😀конец", "я".repeat(600));
+        let mut bytes = Vec::new();
+        BslString::from_str(&source).write_utf8(&mut bytes).unwrap();
+        assert_eq!(bytes, source.as_bytes());
+
+        let malformed = BslString::from_units(vec![0xD800, b'x' as u16]);
+        bytes.clear();
+        malformed.write_utf8(&mut bytes).unwrap();
+        assert_eq!(String::from_utf8(bytes).unwrap(), "\u{FFFD}x");
     }
 
     #[test]
