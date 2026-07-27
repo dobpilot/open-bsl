@@ -1,8 +1,10 @@
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 
+use crate::interner::NameId;
 use crate::map::MapData;
-use crate::shape::Shape;
+use crate::shape::{Shape, ShapeTable};
 use crate::table::ValueTableData;
 use crate::BslValue;
 
@@ -19,7 +21,7 @@ use crate::BslValue;
 #[derive(Debug)]
 pub enum BslObject {
     Array(RefCell<Vec<BslValue>>),
-    Structure(RefCell<StructureData>),
+    Structure(RefCell<StructureStorage>),
     ValueTable(Rc<RefCell<ValueTableData>>),
     /// `Таблица.Колонки` — отдельный объект-обёртка над теми же данными
     /// (тот же `Rc<RefCell<...>>`), только чтобы `.Добавить(имя)` на нём
@@ -41,8 +43,179 @@ pub enum BslObject {
     KeyValuePair(BslValue, BslValue),
 }
 
+/// Хранение полей `Структура` — двухрежимное, как в V8.
+///
+/// `Shaped` — быстрый путь: имя поля резолвится в номер слота через
+/// разделяемую `Rc<Shape>`, а инлайн-кэш на месте вызова (`GetProp`/
+/// `SetProp`) сравнивает форму указателем и читает слот напрямую.
+///
+/// `Dictionary` — путь деградации: объект, чья форма ушла глубже
+/// `MAX_SHAPE_TRANSITIONS` шагов по цепочке переходов, перестаёт заводить
+/// формы совсем (см. doc comment на константе — там же про то, почему
+/// выселять формы нельзя). Платит поиском по `HashMap` и промахом
+/// инлайн-кэша, зато `Вставить` в цикле с динамическими именами больше не
+/// растит `ShapeTable`.
+///
+/// Переход ТОЛЬКО в одну сторону, `Shaped` -> `Dictionary`. Обратная
+/// деградация после `Удалить` выглядит соблазнительно (набор полей ведь
+/// снова короткий), но сделала бы поведение инлайн-кэша непредсказуемым:
+/// один и тот же сайт вызова то попадал бы, то нет, в зависимости от
+/// истории мутаций конкретного объекта.
 #[derive(Debug)]
-pub struct StructureData {
-    pub shape: Rc<Shape>,
-    pub slots: Vec<BslValue>,
+pub enum StructureStorage {
+    Shaped {
+        shape: Rc<Shape>,
+        slots: Vec<BslValue>,
+    },
+    /// Порядок вставки хранится отдельно от таблицы поиска — ровно как
+    /// в `MapData`, и по той же причине: `Для Каждого` обязан быть
+    /// детерминированным.
+    Dictionary {
+        order: Vec<NameId>,
+        values: HashMap<NameId, BslValue>,
+    },
+}
+
+impl StructureStorage {
+    pub fn new(shape: Rc<Shape>, slots: Vec<BslValue>) -> Self {
+        StructureStorage::Shaped { shape, slots }
+    }
+
+    pub fn len(&self) -> usize {
+        match self {
+            StructureStorage::Shaped { slots, .. } => slots.len(),
+            StructureStorage::Dictionary { order, .. } => order.len(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn get(&self, field: NameId) -> Option<BslValue> {
+        match self {
+            StructureStorage::Shaped { shape, slots } => {
+                shape.index.get(&field).map(|&s| slots[s as usize].clone())
+            }
+            StructureStorage::Dictionary { values, .. } => values.get(&field).cloned(),
+        }
+    }
+
+    /// `false` — поля нет; заводить его здесь нельзя (это `а.Поле = ...`,
+    /// а не `Вставить`: в 1С присваивание несуществующему полю структуры
+    /// ошибка, а не создание поля).
+    pub fn set(&mut self, field: NameId, val: BslValue) -> bool {
+        match self {
+            StructureStorage::Shaped { shape, slots } => match shape.index.get(&field) {
+                Some(&s) => {
+                    slots[s as usize] = val;
+                    true
+                }
+                None => false,
+            },
+            StructureStorage::Dictionary { values, .. } => match values.get_mut(&field) {
+                Some(slot) => {
+                    *slot = val;
+                    true
+                }
+                None => false,
+            },
+        }
+    }
+
+    /// `Вставить`: поле уже есть — перезапись значения, нет — расширение
+    /// набора полей (сменой формы либо, если порог переходов исчерпан,
+    /// с переключением объекта в словарный режим).
+    pub fn insert(&mut self, field: NameId, val: BslValue, shapes: &mut ShapeTable) {
+        match self {
+            StructureStorage::Shaped { shape, slots } => {
+                if let Some(&slot) = shape.index.get(&field) {
+                    slots[slot as usize] = val;
+                    return;
+                }
+                if let Some(next) = shapes.add_field(shape, field) {
+                    slots.push(val);
+                    *shape = next;
+                    return;
+                }
+            }
+            StructureStorage::Dictionary { order, values } => {
+                if values.insert(field, val).is_none() {
+                    order.push(field);
+                }
+                return;
+            }
+        }
+        // Сюда доходит только `Shaped`, которому `add_field` отказал:
+        // порог переходов исчерпан. Переключаемся на словарь и повторяем
+        // вставку уже в нём — рекурсия ровно на один уровень, `degrade`
+        // гарантированно оставляет `Dictionary`.
+        self.degrade();
+        self.insert(field, val, shapes);
+    }
+
+    /// `Удалить`: поля нет — no-op (см. `BslValue::structure_delete`).
+    /// В словарном режиме порядок ОСТАЛЬНЫХ полей сохраняется — `order`
+    /// теряет ровно один элемент, как `slots` в шейповом режиме.
+    pub fn remove(&mut self, field: NameId, shapes: &mut ShapeTable) {
+        match self {
+            StructureStorage::Shaped { shape, slots } => {
+                if let Some(&slot) = shape.index.get(&field) {
+                    slots.remove(slot as usize);
+                    *shape = shapes.remove_field(shape, field);
+                }
+            }
+            StructureStorage::Dictionary { order, values } => {
+                if values.remove(&field).is_some() {
+                    order.retain(|&n| n != field);
+                }
+            }
+        }
+    }
+
+    /// `Очистить()` — сбрасывает НАБОР полей, не только значения.
+    /// Словарный объект остаётся словарным: деградация в одну сторону (см.
+    /// doc comment на типе), даже когда полей снова ноль.
+    pub fn clear(&mut self, shapes: &mut ShapeTable) {
+        match self {
+            StructureStorage::Shaped { shape, slots } => {
+                slots.clear();
+                *shape = shapes.empty();
+            }
+            StructureStorage::Dictionary { order, values } => {
+                order.clear();
+                values.clear();
+            }
+        }
+    }
+
+    /// i-я по порядку вставки пара (имя поля, значение) — протокол `Для
+    /// Каждого`, тот же позиционный обход, что и у `MapData::entry_at`.
+    pub fn entry_at(&self, i: usize) -> Option<(NameId, BslValue)> {
+        match self {
+            StructureStorage::Shaped { shape, slots } => {
+                Some((*shape.names.get(i)?, slots.get(i)?.clone()))
+            }
+            StructureStorage::Dictionary { order, values } => {
+                let n = *order.get(i)?;
+                Some((n, values.get(&n)?.clone()))
+            }
+        }
+    }
+
+    /// Переключение на словарное хранение с сохранением порядка полей.
+    fn degrade(&mut self) {
+        let StructureStorage::Shaped { shape, slots } = std::mem::replace(
+            self,
+            StructureStorage::Dictionary {
+                order: Vec::new(),
+                values: HashMap::new(),
+            },
+        ) else {
+            return;
+        };
+        let order = shape.names.clone();
+        let values = order.iter().copied().zip(slots).collect();
+        *self = StructureStorage::Dictionary { order, values };
+    }
 }

@@ -22,9 +22,9 @@ use bsl_number::{BslNumber, NumError};
 pub use builtin::{call_builtin_method_ctx, call_builtin_fn, call_builtin_method, BuiltinFn, BuiltinMethod};
 pub use interner::{NameId, NameInterner};
 pub use map::MapData;
-pub use object::{BslObject, StructureData};
+pub use object::{BslObject, StructureStorage};
 pub use runtime_shapes::RuntimeShapes;
-pub use shape::{Shape, ShapeTable};
+pub use shape::{Shape, ShapeTable, MAX_SHAPE_TRANSITIONS};
 pub use string::BslString;
 pub use table::ValueTableData;
 
@@ -382,7 +382,7 @@ impl BslValue {
 
     pub fn new_structure(shape: Rc<Shape>, slots: Vec<BslValue>) -> Self {
         BslValue::Object(Rc::new(BslObject::Structure(std::cell::RefCell::new(
-            StructureData { shape, slots },
+            StructureStorage::new(shape, slots),
         ))))
     }
 
@@ -402,7 +402,12 @@ impl BslValue {
         usize::try_from(i).map_err(|_| RtError::BadIndex)
     }
 
-    pub fn get_index(&self, idx: &BslValue) -> RtResult<BslValue> {
+    /// `names` нужен единственной ветке — `Структура`: её поля хранятся
+    /// идентификаторами (`NameId`), а `Для Каждого` обязан отдать ключ
+    /// пользовательскому коду СТРОКОЙ (`КлючИЗначение.Ключ`). Тащить сюда
+    /// интернер целиком дешевле, чем держать в каждой структуре ещё и
+    /// строковые имена рядом с формой.
+    pub fn get_index(&self, idx: &BslValue, names: &NameInterner) -> RtResult<BslValue> {
         match self {
             BslValue::Object(o) => match &**o {
                 BslObject::Array(v) => {
@@ -440,6 +445,22 @@ impl BslValue {
                         .ok_or(RtError::IndexOutOfBounds { index: i as i64, len: data.len() })?;
                     Ok(BslValue::Object(Rc::new(BslObject::KeyValuePair(k, v))))
                 }
+                // `Для Каждого КиЗ Из Структура` — тот же протокол, что и у
+                // `Соответствие` (`CollectionLen` + позиционный обход), и та
+                // же пара `Ключ`/`Значение` на выходе. Порядок — вставки, в
+                // обоих режимах хранения (`StructureStorage::entry_at`).
+                BslObject::Structure(s) => {
+                    let i = Self::index_as_usize(idx)?;
+                    let s = s.borrow();
+                    let (n, v) = s
+                        .entry_at(i)
+                        .ok_or(RtError::IndexOutOfBounds { index: i as i64, len: s.len() })?;
+                    let key = names.name(n).ok_or(RtError::UnknownField(n))?;
+                    Ok(BslValue::Object(Rc::new(BslObject::KeyValuePair(
+                        BslValue::Str(BslString::from_str(key)),
+                        v,
+                    ))))
+                }
                 _ => Err(RtError::NotIndexable),
             },
             _ => Err(RtError::NotIndexable),
@@ -471,7 +492,7 @@ impl BslValue {
         match self {
             BslValue::Object(o) => match &**o {
                 BslObject::Array(v) => Ok(v.borrow().len()),
-                BslObject::Structure(s) => Ok(s.borrow().slots.len()),
+                BslObject::Structure(s) => Ok(s.borrow().len()),
                 BslObject::ValueTable(data) => Ok(data.borrow().row_count()),
                 BslObject::TableColumns(data) => Ok(data.borrow().column_names.len()),
                 BslObject::TableRow(..) => Err(RtError::NotIndexable),
@@ -486,11 +507,7 @@ impl BslValue {
         match self {
             BslValue::Object(o) => match &**o {
                 BslObject::Structure(s) => {
-                    let s = s.borrow();
-                    match s.shape.index.get(&name) {
-                        Some(&slot) => Ok(s.slots[slot as usize].clone()),
-                        None => Err(RtError::UnknownField(name)),
-                    }
+                    s.borrow().get(name).ok_or(RtError::UnknownField(name))
                 }
                 _ => Err(RtError::NotAnObject),
             },
@@ -502,13 +519,10 @@ impl BslValue {
         match self {
             BslValue::Object(o) => match &**o {
                 BslObject::Structure(s) => {
-                    let mut s = s.borrow_mut();
-                    match s.shape.index.get(&name).copied() {
-                        Some(slot) => {
-                            s.slots[slot as usize] = val;
-                            Ok(())
-                        }
-                        None => Err(RtError::UnknownField(name)),
+                    if s.borrow_mut().set(name, val) {
+                        Ok(())
+                    } else {
+                        Err(RtError::UnknownField(name))
                     }
                 }
                 _ => Err(RtError::NotAnObject),
@@ -535,14 +549,7 @@ impl BslValue {
         match self {
             BslValue::Object(o) => match &**o {
                 BslObject::Structure(s) => {
-                    let mut s = s.borrow_mut();
-                    match s.shape.index.get(&field).copied() {
-                        Some(slot) => s.slots[slot as usize] = val,
-                        None => {
-                            s.slots.push(val);
-                            s.shape = shapes.add_field(&s.shape, field);
-                        }
-                    }
+                    s.borrow_mut().insert(field, val, shapes);
                     Ok(())
                 }
                 _ => Err(RtError::NotAnObject),
@@ -558,11 +565,7 @@ impl BslValue {
         match self {
             BslValue::Object(o) => match &**o {
                 BslObject::Structure(s) => {
-                    let mut s = s.borrow_mut();
-                    if let Some(&slot) = s.shape.index.get(&field) {
-                        s.slots.remove(slot as usize);
-                        s.shape = shapes.remove_field(&s.shape, field);
-                    }
+                    s.borrow_mut().remove(field, shapes);
                     Ok(())
                 }
                 _ => Err(RtError::NotAnObject),
@@ -587,13 +590,10 @@ impl BslValue {
     pub fn structure_property(&self, field: NameId, default: Option<BslValue>) -> RtResult<BslValue> {
         match self {
             BslValue::Object(o) => match &**o {
-                BslObject::Structure(s) => {
-                    let s = s.borrow();
-                    match s.shape.index.get(&field) {
-                        Some(&slot) => Ok(s.slots[slot as usize].clone()),
-                        None => Ok(default.unwrap_or(BslValue::Undefined)),
-                    }
-                }
+                BslObject::Structure(s) => Ok(s
+                    .borrow()
+                    .get(field)
+                    .unwrap_or_else(|| default.unwrap_or(BslValue::Undefined))),
                 _ => Err(RtError::NotAnObject),
             },
             _ => Err(RtError::NotAnObject),
@@ -608,9 +608,7 @@ impl BslValue {
         match self {
             BslValue::Object(o) => match &**o {
                 BslObject::Structure(s) => {
-                    let mut s = s.borrow_mut();
-                    s.slots.clear();
-                    s.shape = shapes.empty();
+                    s.borrow_mut().clear(shapes);
                     Ok(())
                 }
                 _ => Err(RtError::NotAnObject),
@@ -656,6 +654,13 @@ impl BslValue {
     /// Держим `Rc<Shape>` целиком, а не голый указатель: так кэш не может
     /// протухнуть на чужой адрес, если форма где-то освободится — он сам
     /// продлевает ей жизнь, пока висит в кэше.
+    ///
+    /// Словарная структура (`StructureStorage::Dictionary`) формы не имеет
+    /// вообще, поэтому ВСЕГДА промахивается мимо кэша и идёт в `HashMap` —
+    /// и, что важнее, НЕ ТРОГАЕТ ячейку кэша. Если бы словарный объект
+    /// затирал её (хоть чем — своим отсутствием формы, `None`), то шейповые
+    /// объекты на том же сайте вызова теряли бы быстрый путь после каждого
+    /// прохода словарного, то есть навсегда в смешанном цикле.
     pub fn get_field_cached(
         &self,
         name: NameId,
@@ -663,21 +668,25 @@ impl BslValue {
     ) -> RtResult<BslValue> {
         match self {
             BslValue::Object(o) => match &**o {
-                BslObject::Structure(s) => {
-                    let s = s.borrow();
-                    if let Some((cached_shape, slot)) = cache.borrow().as_ref() {
-                        if Rc::ptr_eq(cached_shape, &s.shape) {
-                            return Ok(s.slots[*slot as usize].clone());
+                BslObject::Structure(s) => match &*s.borrow() {
+                    StructureStorage::Shaped { shape, slots } => {
+                        if let Some((cached_shape, slot)) = cache.borrow().as_ref() {
+                            if Rc::ptr_eq(cached_shape, shape) {
+                                return Ok(slots[*slot as usize].clone());
+                            }
+                        }
+                        match shape.index.get(&name) {
+                            Some(&slot) => {
+                                *cache.borrow_mut() = Some((shape.clone(), slot));
+                                Ok(slots[slot as usize].clone())
+                            }
+                            None => Err(RtError::UnknownField(name)),
                         }
                     }
-                    match s.shape.index.get(&name) {
-                        Some(&slot) => {
-                            *cache.borrow_mut() = Some((s.shape.clone(), slot));
-                            Ok(s.slots[slot as usize].clone())
-                        }
-                        None => Err(RtError::UnknownField(name)),
+                    StructureStorage::Dictionary { values, .. } => {
+                        values.get(&name).cloned().ok_or(RtError::UnknownField(name))
                     }
-                }
+                },
                 _ => Err(RtError::NotAnObject),
             },
             _ => Err(RtError::NotAnObject),
@@ -693,23 +702,32 @@ impl BslValue {
     ) -> RtResult<()> {
         match self {
             BslValue::Object(o) => match &**o {
-                BslObject::Structure(s) => {
-                    let mut s = s.borrow_mut();
-                    if let Some((cached_shape, slot)) = cache.borrow().as_ref() {
-                        if Rc::ptr_eq(cached_shape, &s.shape) {
-                            s.slots[*slot as usize] = val;
-                            return Ok(());
+                BslObject::Structure(s) => match &mut *s.borrow_mut() {
+                    StructureStorage::Shaped { shape, slots } => {
+                        if let Some((cached_shape, slot)) = cache.borrow().as_ref() {
+                            if Rc::ptr_eq(cached_shape, shape) {
+                                slots[*slot as usize] = val;
+                                return Ok(());
+                            }
+                        }
+                        match shape.index.get(&name).copied() {
+                            Some(slot) => {
+                                *cache.borrow_mut() = Some((shape.clone(), slot));
+                                slots[slot as usize] = val;
+                                Ok(())
+                            }
+                            None => Err(RtError::UnknownField(name)),
                         }
                     }
-                    match s.shape.index.get(&name).copied() {
+                    // Кэш не трогаем — см. `get_field_cached`.
+                    StructureStorage::Dictionary { values, .. } => match values.get_mut(&name) {
                         Some(slot) => {
-                            *cache.borrow_mut() = Some((s.shape.clone(), slot));
-                            s.slots[slot as usize] = val;
+                            *slot = val;
                             Ok(())
                         }
                         None => Err(RtError::UnknownField(name)),
-                    }
-                }
+                    },
+                },
                 _ => Err(RtError::NotAnObject),
             },
             _ => Err(RtError::NotAnObject),
@@ -1019,9 +1037,9 @@ mod tests {
     #[test]
     fn array_index_get_set_roundtrip() {
         let arr = BslValue::new_array(vec![num("1"), num("2"), num("3")]);
-        assert_eq!(arr.get_index(&num("1")).unwrap(), num("2"));
+        assert_eq!(arr.get_index(&num("1"), &NameInterner::new()).unwrap(), num("2"));
         arr.set_index(&num("1"), num("99")).unwrap();
-        assert_eq!(arr.get_index(&num("1")).unwrap(), num("99"));
+        assert_eq!(arr.get_index(&num("1"), &NameInterner::new()).unwrap(), num("99"));
         assert_eq!(arr.collection_len().unwrap(), 3);
     }
 
@@ -1029,7 +1047,7 @@ mod tests {
     fn array_out_of_bounds_is_an_error() {
         let arr = BslValue::new_array(vec![num("1")]);
         assert!(matches!(
-            arr.get_index(&num("5")).unwrap_err(),
+            arr.get_index(&num("5"), &NameInterner::new()).unwrap_err(),
             RtError::IndexOutOfBounds { .. }
         ));
     }
@@ -1041,7 +1059,7 @@ mod tests {
         let a = BslValue::new_array(vec![num("1")]);
         let b = a.clone();
         b.set_index(&num("0"), num("42")).unwrap();
-        assert_eq!(a.get_index(&num("0")).unwrap(), num("42"));
+        assert_eq!(a.get_index(&num("0"), &NameInterner::new()).unwrap(), num("42"));
         assert!(a.eq_value(&b));
 
         let c = BslValue::new_array(vec![num("42")]);
@@ -1076,6 +1094,181 @@ mod tests {
 
         let s = BslValue::new_structure(shape, vec![num("1")]);
         assert!(matches!(s.get_field(z).unwrap_err(), RtError::UnknownField(_)));
+    }
+
+    // --- Словарный режим структуры ------------------------------------
+    //
+    // Порог `MAX_SHAPE_TRANSITIONS` — единственная защита от того, что
+    // `Вставить` с динамическим именем в цикле навсегда интернирует форму
+    // на каждой итерации (см. doc comment на константе). Тесты ниже
+    // фиксируют и сам переход, и то, ради чего он затеян: таблица форм
+    // после него перестаёт расти.
+
+    /// Пустая структура плюс рантайм-контекст форм — общая затравка для
+    /// тестов деградации.
+    fn fresh_structure() -> (BslValue, RuntimeShapes) {
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let empty = rt.shapes.empty();
+        (BslValue::new_structure(empty, Vec::new()), rt)
+    }
+
+    fn is_dictionary(v: &BslValue) -> bool {
+        match v {
+            BslValue::Object(o) => match &**o {
+                BslObject::Structure(s) => {
+                    matches!(&*s.borrow(), StructureStorage::Dictionary { .. })
+                }
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
+    /// `Вставить("Поле<i>", i)` — ровно тот путь, на котором форма уходит
+    /// вглубь: каждый ключ новый, так что каждый переход заводил бы форму.
+    fn insert_generated_fields(s: &BslValue, rt: &mut RuntimeShapes, count: u32) {
+        for i in 0..count {
+            let f = rt.names.intern(&format!("Поле{i}"));
+            s.structure_insert(f, num(&i.to_string()), &mut rt.shapes).unwrap();
+        }
+    }
+
+    #[test]
+    fn structure_degrades_to_dictionary_after_threshold_inserts() {
+        let (s, mut rt) = fresh_structure();
+
+        insert_generated_fields(&s, &mut rt, MAX_SHAPE_TRANSITIONS);
+        assert!(
+            !is_dictionary(&s),
+            "ровно {MAX_SHAPE_TRANSITIONS} переходов должны укладываться в порог"
+        );
+
+        insert_generated_fields(&s, &mut rt, MAX_SHAPE_TRANSITIONS + 1);
+        assert!(is_dictionary(&s), "переход за порог обязан деградировать объект");
+    }
+
+    #[test]
+    fn dictionary_structure_field_get_set_roundtrip() {
+        let (s, mut rt) = fresh_structure();
+        insert_generated_fields(&s, &mut rt, MAX_SHAPE_TRANSITIONS + 5);
+        assert!(is_dictionary(&s));
+
+        // Поля, заведённые ДО деградации (перенесённые из слотов), и после
+        // неё — читаются и пишутся одинаково.
+        let first = rt.names.intern("Поле0");
+        let last = rt.names.intern(&format!("Поле{}", MAX_SHAPE_TRANSITIONS + 4));
+        assert_eq!(s.get_field(first).unwrap(), num("0"));
+        assert_eq!(
+            s.get_field(last).unwrap(),
+            num(&(MAX_SHAPE_TRANSITIONS + 4).to_string())
+        );
+
+        s.set_field(first, num("777")).unwrap();
+        s.set_field(last, num("888")).unwrap();
+        assert_eq!(s.get_field(first).unwrap(), num("777"));
+        assert_eq!(s.get_field(last).unwrap(), num("888"));
+
+        let missing = rt.names.intern("НетТакогоПоля");
+        assert!(matches!(s.get_field(missing).unwrap_err(), RtError::UnknownField(_)));
+        assert!(matches!(
+            s.set_field(missing, num("1")).unwrap_err(),
+            RtError::UnknownField(_)
+        ));
+    }
+
+    #[test]
+    fn dictionary_structure_delete_keeps_order_of_the_rest() {
+        let total = MAX_SHAPE_TRANSITIONS + 3;
+        let (s, mut rt) = fresh_structure();
+        insert_generated_fields(&s, &mut rt, total);
+        assert!(is_dictionary(&s));
+
+        let victim = rt.names.intern("Поле1");
+        s.structure_delete(victim, &mut rt.shapes).unwrap();
+        assert_eq!(s.collection_len().unwrap(), total as usize - 1);
+
+        // Ожидаемый порядок — исходный без удалённого: `order` теряет ровно
+        // один элемент, остальные не переставляются.
+        let expected: Vec<String> = (0..total)
+            .filter(|i| *i != 1)
+            .map(|i| format!("Поле{i}"))
+            .collect();
+        let actual: Vec<String> = (0..expected.len())
+            .map(|i| match s.get_index(&num(&i.to_string()), &rt.names).unwrap() {
+                BslValue::Object(o) => match &*o {
+                    BslObject::KeyValuePair(k, _) => k.to_string(),
+                    other => panic!("ожидался КлючИЗначение, получено {other:?}"),
+                },
+                other => panic!("ожидался объект, получено {other:?}"),
+            })
+            .collect();
+        assert_eq!(actual, expected);
+
+        // Удаление отсутствующего — no-op и в словарном режиме тоже.
+        let missing = rt.names.intern("НетТакогоПоля");
+        s.structure_delete(missing, &mut rt.shapes).unwrap();
+        assert_eq!(s.collection_len().unwrap(), total as usize - 1);
+    }
+
+    #[test]
+    fn shape_table_stops_growing_after_degradation() {
+        // Суть всей задачи: без порога здесь было бы 10_000 бессмертных
+        // форм со списками имён нарастающей длины — квадратичная память.
+        let (s, mut rt) = fresh_structure();
+        insert_generated_fields(&s, &mut rt, 10_000);
+
+        assert!(is_dictionary(&s));
+        assert_eq!(s.collection_len().unwrap(), 10_000);
+        // Пустая форма + по одной на каждый разрешённый переход, и ни одной
+        // сверх того.
+        assert_eq!(rt.shapes.len(), MAX_SHAPE_TRANSITIONS as usize + 1);
+    }
+
+    #[test]
+    fn dictionary_structure_does_not_poison_inline_cache_for_shaped_objects() {
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        // `Поле0` — первое имя и у `shaped`, и у сгенерированной серии, так
+        // что оба объекта проходят через одну и ту же форму `[Поле0]`.
+        let x = rt.names.intern("Поле0");
+
+        let shaped = BslValue::new_structure(rt.shapes.empty(), Vec::new());
+        shaped.structure_insert(x, num("1"), &mut rt.shapes).unwrap();
+
+        let dict = BslValue::new_structure(rt.shapes.empty(), Vec::new());
+        insert_generated_fields(&dict, &mut rt, MAX_SHAPE_TRANSITIONS + 2);
+        assert!(is_dictionary(&dict));
+        assert!(!is_dictionary(&shaped));
+        assert_eq!(dict.get_field(x).unwrap(), num("0"));
+
+        // Один и тот же сайт вызова (одна ячейка кэша) видит оба объекта.
+        let cache: std::cell::RefCell<Option<(Rc<Shape>, u32)>> = std::cell::RefCell::new(None);
+
+        assert_eq!(shaped.get_field_cached(x, &cache).unwrap(), num("1"));
+        let filled = cache.borrow().clone();
+        assert!(filled.is_some(), "шейповый объект обязан заполнить кэш");
+
+        assert_eq!(dict.get_field_cached(x, &cache).unwrap(), num("0"));
+        let after_dict = cache.borrow().clone();
+        match (&filled, &after_dict) {
+            (Some((a, ai)), Some((b, bi))) => {
+                assert!(Rc::ptr_eq(a, b), "словарный объект затёр форму в кэше");
+                assert_eq!(ai, bi, "словарный объект затёр слот в кэше");
+            }
+            _ => panic!("словарный объект обнулил ячейку кэша"),
+        }
+
+        // И быстрый путь для шейпового объекта по-прежнему работает.
+        shaped.set_field_cached(x, num("42"), &cache).unwrap();
+        assert_eq!(shaped.get_field_cached(x, &cache).unwrap(), num("42"));
+        // Запись через тот же сайт в словарный объект тоже не портит кэш.
+        dict.set_field_cached(x, num("43"), &cache).unwrap();
+        assert_eq!(dict.get_field_cached(x, &cache).unwrap(), num("43"));
+        let after_dict_set = cache.borrow().clone();
+        match (&filled, &after_dict_set) {
+            (Some((a, _)), Some((b, _))) => assert!(Rc::ptr_eq(a, b)),
+            _ => panic!("словарный объект обнулил ячейку кэша при записи"),
+        }
+        assert_eq!(shaped.get_field_cached(x, &cache).unwrap(), num("42"));
     }
 
     #[test]

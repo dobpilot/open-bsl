@@ -354,7 +354,7 @@ fn step(
             Instr::GetIndex { dst, obj, idx } => {
                 let ov = stack[frames[frame_idx].reg_index(obj)].clone();
                 let iv = stack[frames[frame_idx].reg_index(idx)].clone();
-                let v = ov.get_index(&iv)?;
+                let v = ov.get_index(&iv, &runtime_shapes.names)?;
                 let d = frames[frame_idx].reg_index(dst);
                 stack[d] = v;
                 frames[frame_idx].pc += 1;
@@ -1219,6 +1219,61 @@ mod tests {
              Возврат сумма;",
         );
         assert_eq!(v, num("110"));
+    }
+
+    #[test]
+    fn for_each_over_structure_yields_key_value_pairs_in_insertion_order() {
+        let v = run_src(
+            "с = Новый Структура(\"б,а,в\", 1, 2, 3);\n\
+             рез = \"\";\n\
+             Для Каждого киз Из с Цикл\n\
+             рез = рез + киз.Ключ + Строка(киз.Значение);\n\
+             КонецЦикла\n\
+             Возврат рез;",
+        );
+        // Порядок — объявления, а не алфавитный и не хэшевый.
+        assert_eq!(v, BslValue::Str(bsl_rt::BslString::from_str("б1а2в3")));
+    }
+
+    #[test]
+    fn dictionary_structure_preserves_insertion_order_in_for_each() {
+        // Больше `MAX_SHAPE_TRANSITIONS` вставок с динамическими именами —
+        // структура заведомо ушла в словарный режим (см.
+        // `bsl_rt::StructureStorage`), и `Для Каждого` по ней обязан
+        // остаться детерминированным и совпасть с порядком вставки.
+        let n = bsl_rt::MAX_SHAPE_TRANSITIONS + 10;
+        let src = format!(
+            "с = Новый Структура;\n\
+             Для ном = 1 По {n} Цикл\n\
+             с.Вставить(\"Поле\" + Строка(ном), ном);\n\
+             КонецЦикла;\n\
+             рез = \"\";\n\
+             Для Каждого киз Из с Цикл\n\
+             рез = рез + киз.Ключ + \"=\" + Строка(киз.Значение) + \";\";\n\
+             КонецЦикла\n\
+             Возврат рез;"
+        );
+        let expected: String = (1..=n).map(|i| format!("Поле{i}={i};")).collect();
+        assert_eq!(
+            run_src(&src),
+            BslValue::Str(bsl_rt::BslString::from_str(&expected))
+        );
+    }
+
+    #[test]
+    fn dictionary_structure_still_answers_field_access_and_delete_from_script() {
+        let n = bsl_rt::MAX_SHAPE_TRANSITIONS + 10;
+        let src = format!(
+            "с = Новый Структура;\n\
+             Для ном = 1 По {n} Цикл\n\
+             с.Вставить(\"Поле\" + Строка(ном), ном);\n\
+             КонецЦикла;\n\
+             с.Удалить(\"Поле1\");\n\
+             с.Вставить(\"Поле2\", 200);\n\
+             Возврат с.Количество() * 1000 + с.Поле2 + с.Свойство(\"Поле1\", 7);"
+        );
+        let expected = (n as i64 - 1) * 1000 + 200 + 7;
+        assert_eq!(run_src(&src), num(&expected.to_string()));
     }
 
     #[test]
