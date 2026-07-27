@@ -8,6 +8,10 @@ use bsl_syntax::{BinaryOp, UnaryOp};
 #[derive(Debug, Clone, PartialEq)]
 pub enum RExpr {
     Number(BslNumber),
+    /// Литерал даты `'ГГГГММДД[ЧЧММСС]'`, уже разобранный в момент
+    /// времени: дальше по конвейеру это обычная константа чанка, как и
+    /// число.
+    Date(bsl_rt::BslDate),
     Bool(bool),
     Undefined,
     Null,

@@ -1,3 +1,4 @@
+use crate::date::{DateBoundary, DatePart};
 use crate::runtime_shapes::RuntimeShapes;
 use crate::{BslObject, BslValue, NameId, RtError, RtResult};
 
@@ -88,6 +89,23 @@ pub enum BuiltinFn {
     TypeOf,
     /// `Тип`/`Type("ИмяТипа")` -> `Тип`.
     TypeByName,
+
+    /// `Дата(Год, Месяц, День[, Час, Минута, Секунда])` либо
+    /// `Дата("ГГГГММДДЧЧММСС")` — одна встроенная функция с перегрузкой по
+    /// типу первого аргумента, как и в самой 1С (см. `BslValue::make_date`).
+    MakeDate,
+    /// `ТекущаяДата`/`CurrentDate` — см. `BslValue::current_date` про то,
+    /// почему момент берётся по UTC, а не по локальной зоне.
+    CurrentDate,
+    /// `Год`/`Месяц`/`День`/`Час`/`Минута`/`Секунда`/`ДеньНедели` — семь
+    /// имён на один вариант с селектором: тела у них отличаются одним
+    /// полем разложения.
+    DatePartOf(DatePart),
+    /// `НачалоДня`/`КонецДня`/`НачалоМесяца`/`КонецМесяца`/`НачалоГода`/
+    /// `КонецГода`/`НачалоНедели` — так же одним вариантом с селектором.
+    DateBoundaryOf(DateBoundary),
+    /// `ДобавитьМесяц(Дата, Количество)`.
+    AddMonth,
 }
 
 impl BuiltinFn {
@@ -131,6 +149,24 @@ impl BuiltinFn {
             "VALUEISFILLED" | "ЗНАЧЕНИЕЗАПОЛНЕНО" => BuiltinFn::ValueIsFilled,
             "TYPEOF" | "ТИПЗНЧ" => BuiltinFn::TypeOf,
             "TYPE" | "ТИП" => BuiltinFn::TypeByName,
+
+            "DATE" | "ДАТА" => BuiltinFn::MakeDate,
+            "CURRENTDATE" | "ТЕКУЩАЯДАТА" => BuiltinFn::CurrentDate,
+            "YEAR" | "ГОД" => BuiltinFn::DatePartOf(DatePart::Year),
+            "MONTH" | "МЕСЯЦ" => BuiltinFn::DatePartOf(DatePart::Month),
+            "DAY" | "ДЕНЬ" => BuiltinFn::DatePartOf(DatePart::Day),
+            "HOUR" | "ЧАС" => BuiltinFn::DatePartOf(DatePart::Hour),
+            "MINUTE" | "МИНУТА" => BuiltinFn::DatePartOf(DatePart::Minute),
+            "SECOND" | "СЕКУНДА" => BuiltinFn::DatePartOf(DatePart::Second),
+            "WEEKDAY" | "ДЕНЬНЕДЕЛИ" => BuiltinFn::DatePartOf(DatePart::Weekday),
+            "BEGOFDAY" | "НАЧАЛОДНЯ" => BuiltinFn::DateBoundaryOf(DateBoundary::StartOfDay),
+            "ENDOFDAY" | "КОНЕЦДНЯ" => BuiltinFn::DateBoundaryOf(DateBoundary::EndOfDay),
+            "BEGOFMONTH" | "НАЧАЛОМЕСЯЦА" => BuiltinFn::DateBoundaryOf(DateBoundary::StartOfMonth),
+            "ENDOFMONTH" | "КОНЕЦМЕСЯЦА" => BuiltinFn::DateBoundaryOf(DateBoundary::EndOfMonth),
+            "BEGOFYEAR" | "НАЧАЛОГОДА" => BuiltinFn::DateBoundaryOf(DateBoundary::StartOfYear),
+            "ENDOFYEAR" | "КОНЕЦГОДА" => BuiltinFn::DateBoundaryOf(DateBoundary::EndOfYear),
+            "BEGOFWEEK" | "НАЧАЛОНЕДЕЛИ" => BuiltinFn::DateBoundaryOf(DateBoundary::StartOfWeek),
+            "ADDMONTH" | "ДОБАВИТЬМЕСЯЦ" => BuiltinFn::AddMonth,
             _ => return None,
         })
     }
@@ -163,6 +199,14 @@ impl BuiltinFn {
             BuiltinFn::CharCode => (1, 2),
             // Шаблон плюс до десяти значений.
             BuiltinFn::StrTemplate => (1, 1 + crate::string::MAX_TEMPLATE_ARGS),
+            BuiltinFn::AddMonth => (2, 2),
+            // `Дата(Год, Месяц, День[, Час, Минута, Секунда])` —
+            // минимум три; строковая форма `Дата("...")` это один
+            // аргумент, поэтому нижняя граница всё-таки 1, а какая из двух
+            // форм имелась в виду, решает тип первого аргумента в
+            // `BslValue::make_date`.
+            BuiltinFn::MakeDate => (1, 6),
+            BuiltinFn::CurrentDate => (0, 0),
             _ => (1, 1),
         }
     }
@@ -261,6 +305,11 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         BuiltinFn::ValueIsFilled => Ok(BslValue::Boolean(args[0].is_filled()?)),
         BuiltinFn::TypeOf => args[0].type_of(),
         BuiltinFn::TypeByName => args[0].type_by_name(),
+        BuiltinFn::MakeDate => BslValue::make_date(args),
+        BuiltinFn::CurrentDate => BslValue::current_date(),
+        BuiltinFn::DatePartOf(part) => args[0].date_component(part),
+        BuiltinFn::DateBoundaryOf(which) => args[0].date_boundary(which),
+        BuiltinFn::AddMonth => args[0].add_month(&args[1]),
     }
 }
 

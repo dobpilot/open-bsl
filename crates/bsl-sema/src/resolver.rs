@@ -24,6 +24,9 @@ pub enum SemaError {
         name: String,
         position: usize,
     },
+    /// `'20240230'` — литерал прошёл лексер (цифры, верная длина), но
+    /// такой календарной даты не существует.
+    BadDateLiteral(String),
     /// Конструкция языка, для которой ещё нет резолвинга (коллекции,
     /// `Выполнить`/`Вычислить`, значения по умолчанию/пропуски аргументов,
     /// ... — приходят в последующих milestone'ах).
@@ -368,7 +371,15 @@ impl<'a> Resolver<'a> {
             }),
             AExpr::Call { callee, args } => self.resolve_call(callee, args),
             AExpr::Str(s) => Ok(RExpr::Str(s.clone())),
-            AExpr::Date(_) => Err(SemaError::Unsupported("даты появятся позже")),
+            // Литерал `'ГГГГММДД'`/`'ГГГГММДДЧЧММСС'`. Лексер уже проверил,
+            // что внутри только цифры и их 8 или 14, — но НЕ проверил, что
+            // получившаяся дата существует (`'20240230'` пройдёт лексер),
+            // поэтому разбор может провалиться и здесь, и это ошибка
+            // резолвинга, а не рантайма: литерал известен на этапе
+            // компиляции, падать на нём во время исполнения незачем.
+            AExpr::Date(digits) => bsl_rt::BslDate::parse_digits(digits)
+                .map(RExpr::Date)
+                .ok_or(SemaError::BadDateLiteral(digits.clone())),
             AExpr::Index { obj, index } => Ok(RExpr::Index {
                 obj: Box::new(self.resolve_expr(obj)?),
                 index: Box::new(self.resolve_expr(index)?),

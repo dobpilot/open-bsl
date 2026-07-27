@@ -39,21 +39,80 @@ impl Default for NumberFormat {
     }
 }
 
+/// Форматирование ДАТЫ: `ДФ` (шаблон) и `ДЛФ` (длинный локальный формат).
+/// `None` в обоих полях — формат по умолчанию (`bsl_rt` решает, какой
+/// именно; он НЕ ИЗМЕРЕН, см. `bsl_rt::date::DEFAULT_PATTERN`).
+///
+/// Оба ключа сразу — `ДФ` выигрывает: явный шаблон конкретнее готового
+/// локального формата.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct DateFormat {
+    /// `ДФ='дд.ММ.гггг'`.
+    pub pattern: Option<String>,
+    /// `ДЛФ=Д`.
+    pub long: Option<String>,
+}
+
+/// Разбивает форматную строку на пары `ключ=значение` по `;`, НЕ разрезая
+/// внутри одинарных кавычек: `ДФ='дд.ММ.гггг'` кавычки нужны как раз
+/// потому, что шаблон может содержать что угодно, включая `;`.
+fn spec_parts(spec: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let mut current = String::new();
+    let mut in_quotes = false;
+    for ch in spec.chars() {
+        match ch {
+            '\'' => {
+                in_quotes = !in_quotes;
+                current.push(ch);
+            }
+            ';' if !in_quotes => {
+                out.push(std::mem::take(&mut current));
+            }
+            _ => current.push(ch),
+        }
+    }
+    out.push(current);
+
+    out.into_iter()
+        .filter_map(|part| {
+            let part = part.trim();
+            let (key, val) = part.split_once('=')?;
+            let val = val.trim();
+            // Значение может быть в одинарных кавычках — снимаем ровно
+            // одну пару, содержимое отдаём как есть.
+            let val = val
+                .strip_prefix('\'')
+                .and_then(|v| v.strip_suffix('\''))
+                .unwrap_or(val);
+            Some((key.trim().to_uppercase(), val.to_string()))
+        })
+        .collect()
+}
+
+/// Разбирает из форматной строки то, что относится к ДАТЕ. Ключи, не
+/// относящиеся к дате (`ЧГ`, `ЧРД`, ...), здесь игнорируются — ровно
+/// симметрично тому, как `parse_number_format` игнорирует `ДФ`.
+pub fn parse_date_format(spec: &str) -> DateFormat {
+    let mut fmt = DateFormat::default();
+    for (key, val) in spec_parts(spec) {
+        match key.as_str() {
+            "ДФ" | "DF" => fmt.pattern = Some(val),
+            "ДЛФ" | "DLF" => fmt.long = Some(val),
+            _ => {}
+        }
+    }
+    fmt
+}
+
 /// Разбирает форматную строку вида `"ЧГ=0; ЧРД=."` (регистр ключей и
 /// пробелы вокруг `;`/`=` не важны). Неизвестные/неприменимые к числу ключи
 /// (`ДФ`, `Л`, ...) молча игнорируются — как и в самой платформе.
 pub fn parse_number_format(spec: &str) -> NumberFormat {
     let mut fmt = NumberFormat::default();
-    for part in spec.split(';') {
-        let part = part.trim();
-        if part.is_empty() {
-            continue;
-        }
-        let Some((key, val)) = part.split_once('=') else {
-            continue;
-        };
-        let val = val.trim();
-        match key.trim().to_uppercase().as_str() {
+    for (key, val) in spec_parts(spec) {
+        let val = val.as_str();
+        match key.as_str() {
             "ЧГ" => fmt.group = val != "0",
             "ЧРД" => {
                 if let Some(c) = val.chars().next() {
@@ -144,6 +203,18 @@ pub fn format_value(v: &BslValue, spec: Option<&str>) -> String {
         BslValue::Number(n) => {
             let fmt = spec.map(parse_number_format).unwrap_or_default();
             format_number(n, &fmt)
+        }
+        BslValue::Date(d) => {
+            let fmt = spec.map(parse_date_format).unwrap_or_default();
+            match (&fmt.pattern, &fmt.long) {
+                // `ДФ` конкретнее `ДЛФ`, поэтому при обоих ключах
+                // выигрывает шаблон.
+                (Some(p), _) => bsl_rt::format_date_pattern(*d, p),
+                (None, Some(code)) => bsl_rt::format_date_long(*d, code),
+                // Без ключей даты — представление по умолчанию, то же, что
+                // даёт `Строка()` (оно НЕ ИЗМЕРЕНО, см. `bsl_rt::date`).
+                (None, None) => d.to_string(),
+            }
         }
         other => other.to_string(),
     }

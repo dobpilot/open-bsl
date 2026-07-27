@@ -4,6 +4,7 @@
 //! все типы из брифа.
 
 mod builtin;
+mod date;
 mod interner;
 mod map;
 mod object;
@@ -21,6 +22,10 @@ use std::rc::Rc;
 use bsl_number::{BslNumber, NumError};
 
 pub use builtin::{call_builtin_method_ctx, call_builtin_fn, call_builtin_method, BuiltinFn, BuiltinMethod};
+pub use date::{
+    format_long as format_date_long, format_pattern as format_date_pattern, BslDate, DateBoundary,
+    DatePart,
+};
 pub use interner::{NameId, NameInterner};
 pub use map::MapData;
 pub use object::{BslObject, StructureStorage};
@@ -37,6 +42,12 @@ pub enum BslValue {
     Boolean(bool),
     Number(BslNumber),
     Str(BslString),
+    /// Момент времени с разрешением 1 секунда. Отсчёт — от `0001-01-01`,
+    /// НЕ от Unix-эпохи: пустая дата (`'00010101'`) обязана быть нулём, а
+    /// не отрицательным числом, иначе `ЗначениеЗаполнено` и сравнения с
+    /// пустой датой пришлось бы писать через отдельную константу. Подробно
+    /// — в модуле `date`.
+    Date(BslDate),
     /// Тип как ЗНАЧЕНИЕ (`ТипЗнч(х)`, `Тип("Массив")`) — не тег этого
     /// перечисления, а полноценное значение, которое можно сравнить,
     /// положить в переменную и напечатать (`Строка(ТипЗнч(1))` -> `Число`).
@@ -88,6 +99,12 @@ pub enum RtError {
     UnknownColumn(String),
     /// `Тип("ОпечаткаВИмени")` — такого типа в реестре нет.
     UnknownType(String),
+    /// Дата вышла за `0001-01-01 .. 9999-12-31` — при построении
+    /// (`Дата(0, 1, 1)`), при сдвиге (`Дата + огромное число`) или при
+    /// `ДобавитьМесяц`. Заворачивать в другой конец диапазона нельзя:
+    /// молчаливое `9999-12-31 + 1 сутки = 0001-01-01` дало бы неверные
+    /// сравнения там, где ожидалась ошибка.
+    DateOutOfRange { op: &'static str },
     /// Метод объекта существует, но не для этого типа получателя, либо
     /// вызван не с тем числом аргументов для этого типа (некоторые методы,
     /// например `Добавить`, полиморфны: означают разное в зависимости от
@@ -141,6 +158,10 @@ impl fmt::Display for RtError {
             RtError::RowInvalidated => write!(f, "строка таблицы значений больше не существует"),
             RtError::UnknownColumn(name) => write!(f, "колонка «{name}» не найдена"),
             RtError::UnknownType(name) => write!(f, "тип «{name}» не определён"),
+            RtError::DateOutOfRange { op } => write!(
+                f,
+                "результат «{op}» вне диапазона дат (0001-01-01 .. 9999-12-31)"
+            ),
             RtError::MethodNotApplicable { method, receiver } => {
                 write!(f, "метод «{method}» не применим к «{receiver}»")
             }
@@ -166,6 +187,7 @@ impl BslValue {
             BslValue::Boolean(_) => "Булево",
             BslValue::Number(_) => "Число",
             BslValue::Str(_) => "Строка",
+            BslValue::Date(_) => "Дата",
             BslValue::Type(_) => "Тип",
             BslValue::Object(o) => match &**o {
                 BslObject::Array(_) => "Массив",
@@ -208,15 +230,50 @@ impl BslValue {
         if let (BslValue::Str(a), BslValue::Str(b)) = (self, other) {
             return Ok(BslValue::Str(a.concat(b)));
         }
+        // `Дата + Число` — сдвиг на N СЕКУНД (не дней: разрешение типа —
+        // секунда, и `Дата - Дата` симметрично отдаёт секунды).
+        if let BslValue::Date(d) = self {
+            let secs = Self::whole_seconds(other, "+")?;
+            return Self::shifted(*d, secs, "+");
+        }
         Ok(BslValue::Number(
             self.as_number("+")?.add(other.as_number("+")?)?,
         ))
     }
 
     pub fn sub(&self, other: &Self) -> RtResult<Self> {
+        if let BslValue::Date(a) = self {
+            return match other {
+                // `Дата - Дата` -> Число секунд между ними.
+                BslValue::Date(b) => Ok(BslValue::Number(BslNumber::from_i64(a.diff_seconds(*b)))),
+                // `Дата - Число` -> Дата.
+                _ => {
+                    let secs = Self::whole_seconds(other, "-")?;
+                    Self::shifted(*a, -secs, "-")
+                }
+            };
+        }
         Ok(BslValue::Number(
             self.as_number("-")?.sub(other.as_number("-")?)?,
         ))
+    }
+
+    /// Слагаемое к дате обязано быть ЦЕЛЫМ числом секунд: у типа нет
+    /// разрешения мельче секунды, и тихо отбрасывать дробную часть значит
+    /// делать `Дата + 0.4` неотличимым от `Дата + 0`.
+    fn whole_seconds(v: &Self, op: &'static str) -> RtResult<i64> {
+        v.as_number(op)?.to_i64_exact().ok_or(RtError::TypeError {
+            expected: "Число (целое количество секунд)",
+            op,
+        })
+    }
+
+    /// Выход за границы `0001-01-01 .. 9999-12-31` — ошибка, а не тихое
+    /// заворачивание в другой конец диапазона.
+    fn shifted(d: BslDate, secs: i64, op: &'static str) -> RtResult<Self> {
+        d.shift_seconds(secs)
+            .map(BslValue::Date)
+            .ok_or(RtError::DateOutOfRange { op })
     }
 
     pub fn mul(&self, other: &Self) -> RtResult<Self> {
@@ -359,8 +416,11 @@ impl BslValue {
         match (self, other) {
             (BslValue::Number(a), BslValue::Number(b)) => Ok(a.cmp(b)),
             (BslValue::Str(a), BslValue::Str(b)) => Ok(a.cmp(b)),
+            // Даты сравниваются по значению (моменту времени) — секунды от
+            // общей эпохи, поэтому это обычное сравнение `i64`.
+            (BslValue::Date(a), BslValue::Date(b)) => Ok(a.cmp(b)),
             _ => Err(RtError::TypeError {
-                expected: "Число или Строка",
+                expected: "Число, Строка или Дата",
                 op,
             }),
         }
@@ -547,6 +607,141 @@ impl BslValue {
         Ok(BslValue::Number(BslNumber::from_i64(code as i64)))
     }
 
+    // --- Даты -------------------------------------------------------------
+
+    fn as_date(&self, op: &'static str) -> RtResult<BslDate> {
+        match self {
+            BslValue::Date(d) => Ok(*d),
+            _ => Err(RtError::TypeError {
+                expected: "Дата",
+                op,
+            }),
+        }
+    }
+
+    /// Компонента `Дата(...)` — целое число, помещающееся в календарный
+    /// диапазон. Нецелое (`Дата(2024.5, 1, 1)`) — ошибка, а не усечение.
+    fn date_part(v: &Self, op: &'static str) -> RtResult<i64> {
+        v.as_number(op)?.to_i64_exact().ok_or(RtError::TypeError {
+            expected: "Число (целое)",
+            op,
+        })
+    }
+
+    /// `Дата(Год, Месяц, День[, Час, Минута, Секунда])` — шестиместная
+    /// форма, и `Дата("ГГГГММДД[ЧЧММСС]")` — строковая.
+    ///
+    /// Обе формы живут в одной функции, потому что в 1С это одна и та же
+    /// встроенная функция с перегрузкой по типу первого аргумента, а не две
+    /// разных. Опущенные `Час`/`Минута`/`Секунда` приходят сюда как
+    /// `Неопределено` (см. `BuiltinFn::arity_range`) и означают ноль.
+    pub fn make_date(args: &[BslValue]) -> RtResult<Self> {
+        // Строковая форма: `Дата("20240115103000")`. Остальные позиции при
+        // ней обязаны быть пустыми — `Дата("20240115", 2, 3)` бессмысленно.
+        if let BslValue::Str(s) = &args[0] {
+            if args[1..].iter().any(|a| !matches!(a, BslValue::Undefined)) {
+                return Err(RtError::TypeError {
+                    expected: "Дата(«ГГГГММДДЧЧММСС») без остальных аргументов",
+                    op: "Дата",
+                });
+            }
+            return BslDate::parse_digits(&s.to_string())
+                .map(BslValue::Date)
+                .ok_or(RtError::DateOutOfRange { op: "Дата" });
+        }
+
+        let year = Self::date_part(&args[0], "Дата")?;
+        let month = Self::date_part(&args[1], "Дата")?;
+        let day = Self::date_part(&args[2], "Дата")?;
+        // Час/минута/секунда необязательны — опущенные значат ноль.
+        let mut time = [0i64; 3];
+        for (i, slot) in time.iter_mut().enumerate() {
+            *slot = match &args[3 + i] {
+                BslValue::Undefined => 0,
+                other => Self::date_part(other, "Дата")?,
+            };
+        }
+        let fits = |v: i64| u32::try_from(v).ok();
+        let built = (|| {
+            BslDate::from_civil(
+                year,
+                fits(month)?,
+                fits(day)?,
+                fits(time[0])?,
+                fits(time[1])?,
+                fits(time[2])?,
+            )
+        })();
+        built
+            .map(BslValue::Date)
+            .ok_or(RtError::DateOutOfRange { op: "Дата" })
+    }
+
+    /// `ТекущаяДата()`.
+    ///
+    /// ОТКЛОНЕНИЕ, о котором надо знать: возвращается момент по UTC, а не
+    /// по локальной зоне машины. Дата в 1С — наивный локальный момент без
+    /// зоны (см. модуль `date`), а в `std` нет способа узнать смещение
+    /// локальной зоны; тащить ради этого `chrono`/`libc` значит тащить
+    /// целую модель времени с зонами, которой в типе всё равно нет.
+    /// Наблюдаемо это только как сдвиг на смещение зоны, и только у
+    /// `ТекущаяДата` — все остальные функции работают с датами, которые им
+    /// дали.
+    pub fn current_date() -> RtResult<Self> {
+        let secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        BslDate::from_seconds(secs + date::UNIX_EPOCH_SECONDS)
+            .map(BslValue::Date)
+            .ok_or(RtError::DateOutOfRange { op: "ТекущаяДата" })
+    }
+
+    /// `Год`/`Месяц`/`День`/`Час`/`Минута`/`Секунда`/`ДеньНедели` — все
+    /// возвращают `Число`, поэтому одна функция с селектором вместо шести
+    /// почти одинаковых.
+    pub fn date_component(&self, part: DatePart) -> RtResult<Self> {
+        let d = self.as_date(part.op())?;
+        let c = d.to_civil();
+        let n = match part {
+            DatePart::Year => c.year,
+            DatePart::Month => c.month as i64,
+            DatePart::Day => c.day as i64,
+            DatePart::Hour => c.hour as i64,
+            DatePart::Minute => c.minute as i64,
+            DatePart::Second => c.second as i64,
+            DatePart::Weekday => d.weekday() as i64,
+        };
+        Ok(BslValue::Number(BslNumber::from_i64(n)))
+    }
+
+    /// `НачалоДня`/`КонецДня`/`НачалоМесяца`/... — тоже один селектор:
+    /// все семь границ отличаются только тем, что округляют.
+    pub fn date_boundary(&self, which: DateBoundary) -> RtResult<Self> {
+        let d = self.as_date(which.op())?;
+        Ok(BslValue::Date(match which {
+            DateBoundary::StartOfDay => d.start_of_day(),
+            DateBoundary::EndOfDay => d.end_of_day(),
+            DateBoundary::StartOfMonth => d.start_of_month(),
+            DateBoundary::EndOfMonth => d.end_of_month(),
+            DateBoundary::StartOfYear => d.start_of_year(),
+            DateBoundary::EndOfYear => d.end_of_year(),
+            DateBoundary::StartOfWeek => d.start_of_week(),
+        }))
+    }
+
+    /// `ДобавитьМесяц(Дата, Количество)` — про зажатие дня см.
+    /// `BslDate::add_months` (там же пометка НЕ ИЗМЕРЕНО).
+    pub fn add_month(&self, count: &Self) -> RtResult<Self> {
+        let d = self.as_date("ДобавитьМесяц")?;
+        let n = Self::date_part(count, "ДобавитьМесяц")?;
+        d.add_months(n)
+            .map(BslValue::Date)
+            .ok_or(RtError::DateOutOfRange {
+                op: "ДобавитьМесяц",
+            })
+    }
+
     // --- Проверки значения и типа ----------------------------------------
 
     /// `ЗначениеЗаполнено(Значение)`.
@@ -571,6 +766,10 @@ impl BslValue {
             // пусты» (сравнение после `СокрЛП`) — это поведение, которого
             // ждут от защитной проверки введённого пользователем текста.
             BslValue::Str(s) => s.trim().len_utf16() > 0,
+            // ИЗМЕРЕНО (из брифа): пустая дата не заполнена. Ровно ради
+            // этой строчки эпоха и сдвинута на `0001-01-01` — «пусто» это
+            // просто ноль, без отдельной константы.
+            BslValue::Date(d) => !d.is_empty(),
             // Тип — всегда значение, «пустого типа» не существует.
             BslValue::Type(_) => true,
             BslValue::Object(o) => match &**o {
@@ -605,6 +804,7 @@ impl BslValue {
             BslValue::Boolean(_) => TypeId::Boolean,
             BslValue::Number(_) => TypeId::Number,
             BslValue::Str(_) => TypeId::String,
+            BslValue::Date(_) => TypeId::Date,
             BslValue::Type(_) => TypeId::Type,
             BslValue::Object(o) => match &**o {
                 BslObject::Array(_) => TypeId::Array,
@@ -1211,6 +1411,9 @@ impl PartialEq for BslValue {
             (BslValue::Boolean(a), BslValue::Boolean(b)) => a == b,
             (BslValue::Number(a), BslValue::Number(b)) => a == b,
             (BslValue::Str(a), BslValue::Str(b)) => a == b,
+            // Дата — тип ЗНАЧЕНИЯ, как число и строка: равенство по
+            // моменту времени, а не по тождеству объекта.
+            (BslValue::Date(a), BslValue::Date(b)) => a == b,
             // Тип — значение, а не объект: два `ТипЗнч(...)` от разных
             // значений одного типа равны (`ТипЗнч(1) = ТипЗнч(2)`), иначе
             // проверка типа была бы бесполезна.
@@ -1241,6 +1444,7 @@ impl Hash for BslValue {
             BslValue::Boolean(b) => b.hash(state),
             BslValue::Number(n) => n.hash(state),
             BslValue::Str(s) => s.hash(state),
+            BslValue::Date(d) => d.hash(state),
             BslValue::Type(t) => t.hash(state),
             BslValue::Object(o) => Rc::as_ptr(o).hash(state),
             BslValue::Skipped => {}
@@ -1257,6 +1461,9 @@ impl fmt::Display for BslValue {
             BslValue::Boolean(false) => write!(f, "Нет"),
             BslValue::Number(n) => write!(f, "{n}"),
             BslValue::Str(s) => write!(f, "{s}"),
+            // Формат по умолчанию (`date::DEFAULT_PATTERN`) — НЕ ИЗМЕРЕН,
+            // см. там же.
+            BslValue::Date(d) => write!(f, "{d}"),
             // Локализованное имя типа: `Строка(ТипЗнч(Новый Массив))` даёт
             // то же `Массив`, что и `Строка(Новый Массив)`.
             BslValue::Type(t) => write!(f, "{t}"),

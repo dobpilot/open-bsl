@@ -244,6 +244,10 @@ impl<'a> Compiler<'a> {
                 let k = self.add_const(BslValue::Number(n.clone()))?;
                 self.emit(Instr::LoadConst { dst, k });
             }
+            RExpr::Date(d) => {
+                let k = self.add_const(BslValue::Date(*d))?;
+                self.emit(Instr::LoadConst { dst, k });
+            }
             RExpr::Bool(val) => {
                 self.emit(Instr::LoadBool { dst, val: *val });
             }

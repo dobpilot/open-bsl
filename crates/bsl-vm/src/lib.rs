@@ -2065,6 +2065,180 @@ mod tests {
         assert!(matches!(err, RtError::UnknownType(_)));
     }
 
+    // --- Даты -----------------------------------------------------------
+
+    fn date_str(src: &str) -> String {
+        str_val(&run_src(src))
+    }
+
+    #[test]
+    fn empty_date_literal_is_the_zero_of_the_epoch() {
+        // Ради чего эпоха сдвинута на 0001-01-01: пустая дата — ноль, и
+        // ЗначениеЗаполнено на ней даёт Ложь без отдельной константы.
+        let v = run_src("Возврат ЗначениеЗаполнено('00010101');");
+        assert_eq!(v, BslValue::Boolean(false));
+        let v = run_src("Возврат ЗначениеЗаполнено('20240115');");
+        assert_eq!(v, BslValue::Boolean(true));
+        let v = run_src("Возврат '00010101' = Дата(1, 1, 1);");
+        assert_eq!(v, BslValue::Boolean(true));
+    }
+
+    #[test]
+    fn date_literal_and_constructor_agree_in_both_lengths() {
+        let v = run_src("Возврат '20240115103000' = Дата(2024, 1, 15, 10, 30, 0);");
+        assert_eq!(v, BslValue::Boolean(true));
+        // Опущенное время — полночь.
+        let v = run_src("Возврат '20240115' = Дата(2024, 1, 15);");
+        assert_eq!(v, BslValue::Boolean(true));
+        // Строковая форма конструктора.
+        let v = run_src("Возврат Дата(\"20240115103000\") = '20240115103000';");
+        assert_eq!(v, BslValue::Boolean(true));
+    }
+
+    #[test]
+    fn nonexistent_calendar_literal_is_rejected_at_resolve_time() {
+        // 30 февраля проходит лексер (цифры, длина 8), но не календарь —
+        // и это ошибка КОМПИЛЯЦИИ, а не рантайма: литерал известен заранее.
+        let prog = parse("Возврат '20240230';").unwrap();
+        let err = resolve_program(&prog.items).unwrap_err();
+        assert!(matches!(err, bsl_sema::SemaError::BadDateLiteral(_)));
+    }
+
+    #[test]
+    fn date_arithmetic_is_in_seconds_both_ways() {
+        // Дата - Дата -> число секунд.
+        let v = run_src("Возврат Дата(2024, 1, 15) - Дата(2024, 1, 14);");
+        assert_eq!(v, num("86400"));
+        // Дата + Число -> дата, сдвинутая на N секунд.
+        let v = run_src("Возврат Дата(2024, 1, 14) + 86400 = Дата(2024, 1, 15);");
+        assert_eq!(v, BslValue::Boolean(true));
+        // Дата - Число -> дата.
+        let v = run_src("Возврат Дата(2024, 1, 15) - 86400 = Дата(2024, 1, 14);");
+        assert_eq!(v, BslValue::Boolean(true));
+        // Тип результата разный у двух форм вычитания — проверяем прямо.
+        let v = run_src("Возврат Строка(ТипЗнч(Дата(2024,1,15) - Дата(2024,1,14)));");
+        assert_eq!(str_val(&v), "Число");
+        let v = run_src("Возврат Строка(ТипЗнч(Дата(2024,1,15) - 1));");
+        assert_eq!(str_val(&v), "Дата");
+    }
+
+    #[test]
+    fn dates_compare_by_moment_in_time() {
+        let v = run_src("Возврат Дата(2024, 1, 14) < Дата(2024, 1, 15);");
+        assert_eq!(v, BslValue::Boolean(true));
+        let v = run_src("Возврат Дата(2024, 1, 15, 10, 0, 0) > Дата(2024, 1, 15, 9, 59, 59);");
+        assert_eq!(v, BslValue::Boolean(true));
+        let v = run_src("Возврат Дата(2024, 1, 15) = Дата(2024, 1, 15);");
+        assert_eq!(v, BslValue::Boolean(true));
+    }
+
+    #[test]
+    fn date_components_are_readable_individually() {
+        let src = "д = Дата(2024, 2, 29, 13, 45, 30);\n";
+        assert_eq!(run_src(&format!("{src}Возврат Год(д);")), num("2024"));
+        assert_eq!(run_src(&format!("{src}Возврат Месяц(д);")), num("2"));
+        assert_eq!(run_src(&format!("{src}Возврат День(д);")), num("29"));
+        assert_eq!(run_src(&format!("{src}Возврат Час(д);")), num("13"));
+        assert_eq!(run_src(&format!("{src}Возврат Минута(д);")), num("45"));
+        assert_eq!(run_src(&format!("{src}Возврат Секунда(д);")), num("30"));
+    }
+
+    #[test]
+    fn period_boundaries_and_weekday_from_script() {
+        // 15 января 2024 — понедельник (НЕ ИЗМЕРЕНО, что пн = 1).
+        assert_eq!(run_src("Возврат ДеньНедели(Дата(2024, 1, 15));"), num("1"));
+        assert_eq!(
+            date_str("Возврат Строка(НачалоДня(Дата(2024, 2, 17, 13, 45, 30)));"),
+            "17.02.2024 00:00:00"
+        );
+        assert_eq!(
+            date_str("Возврат Строка(КонецДня(Дата(2024, 2, 17)));"),
+            "17.02.2024 23:59:59"
+        );
+        assert_eq!(
+            date_str("Возврат Строка(НачалоМесяца(Дата(2024, 2, 17)));"),
+            "01.02.2024 00:00:00"
+        );
+        // Високосный февраль — 29-е, не 28-е.
+        assert_eq!(
+            date_str("Возврат Строка(КонецМесяца(Дата(2024, 2, 17)));"),
+            "29.02.2024 23:59:59"
+        );
+        assert_eq!(
+            date_str("Возврат Строка(НачалоГода(Дата(2024, 7, 4)));"),
+            "01.01.2024 00:00:00"
+        );
+        assert_eq!(
+            date_str("Возврат Строка(КонецГода(Дата(2024, 7, 4)));"),
+            "31.12.2024 23:59:59"
+        );
+        // Среда 17 января -> понедельник 15-го.
+        assert_eq!(
+            date_str("Возврат Строка(НачалоНедели(Дата(2024, 1, 17)));"),
+            "15.01.2024 00:00:00"
+        );
+    }
+
+    #[test]
+    fn add_month_clamps_the_day_rather_than_failing() {
+        // 31 января + 1 месяц -> 29 февраля (НЕ ИЗМЕРЕНО, см. add_months).
+        assert_eq!(
+            date_str("Возврат Строка(ДобавитьМесяц(Дата(2024, 1, 31), 1));"),
+            "29.02.2024 00:00:00"
+        );
+        assert_eq!(
+            date_str("Возврат Строка(ДобавитьМесяц(Дата(2024, 1, 15), -1));"),
+            "15.12.2023 00:00:00"
+        );
+    }
+
+    #[test]
+    fn out_of_range_dates_are_errors_not_silent_wraparound() {
+        let err = run_src_err("Возврат Дата(2024, 2, 30);");
+        assert!(matches!(err, RtError::DateOutOfRange { .. }));
+        let err = run_src_err("Возврат Дата(9999, 12, 31, 23, 59, 59) + 1;");
+        assert!(matches!(err, RtError::DateOutOfRange { .. }));
+        let err = run_src_err("Возврат Дата(1, 1, 1) - 1;");
+        assert!(matches!(err, RtError::DateOutOfRange { .. }));
+    }
+
+    #[test]
+    fn format_understands_df_and_dlf_keys() {
+        let v = run_src("Возврат Формат(Дата(2024, 1, 15), \"ДФ='дд.ММ.гггг'\");");
+        assert_eq!(str_val(&v), "15.01.2024");
+        // Месяц и минута различаются регистром — обе в одном шаблоне.
+        let v = run_src("Возврат Формат(Дата(2024, 1, 15, 9, 5, 0), \"ДФ='ММ/мм'\");");
+        assert_eq!(str_val(&v), "01/05");
+        let v = run_src("Возврат Формат(Дата(2024, 1, 15), \"ДЛФ=Д\");");
+        assert_eq!(str_val(&v), "15.01.2024");
+        let v = run_src("Возврат Формат(Дата(2024, 1, 15, 10, 30, 0), \"ДЛФ=В\");");
+        assert_eq!(str_val(&v), "10:30:00");
+        // Числовые ключи на дате не мешают и наоборот.
+        let v = run_src("Возврат Формат(1000, \"ЧГ=0; ДФ='гггг'\");");
+        assert_eq!(str_val(&v), "1000");
+    }
+
+    #[test]
+    fn tipznch_of_a_date_is_the_localized_type_name() {
+        let v = run_src("Возврат Строка(ТипЗнч(Дата(2024, 1, 15)));");
+        assert_eq!(str_val(&v), "Дата");
+        let v = run_src("Возврат ТипЗнч('20240115') = Тип(\"Дата\");");
+        assert_eq!(v, BslValue::Boolean(true));
+    }
+
+    #[test]
+    fn current_date_lands_inside_the_supported_range() {
+        // Точное значение не проверить (оно зависит от часов машины), но
+        // год обязан быть правдоподобным — это ловит перепутанную эпоху,
+        // ради которой всё и затевалось.
+        let v = run_src("Возврат Год(ТекущаяДата());");
+        let year = match v {
+            BslValue::Number(n) => n.to_i64_exact().unwrap(),
+            other => panic!("ожидалось число, получено {other:?}"),
+        };
+        assert!((2020..=2200).contains(&year), "получен год {year}");
+    }
+
     #[test]
     fn string_comparison_is_lexicographic() {
         let v = run_src(r#"Возврат "а" < "б";"#);
