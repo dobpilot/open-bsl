@@ -10,3 +10,9 @@ bsl-syntax = { path = "../bsl-syntax" }
 bsl-sema = { path = "../bsl-sema" }
 bsl-rt = { path = "../bsl-rt" }
 bsl-format = { path = "../bsl-format" }
+# Единственная внешняя зависимость всего рабочего пространства сверх
+# num-bigint: сырой режим терминала, редактирование строки и история для
+# REPL. Подсветку и дополнение реализуем сами через её трейты Highlighter и
+# Completer — BSL-специфика остаётся нашей. `default-features = false`
+# отсекает то, что нам не нужно (история в файле, дополнение путей).
+rustyline = { version = "18", default-features = false }

@@ -9,7 +9,9 @@ This repository is a Rust 2021 workspace implementing a BSL interpreter. Crates 
 - `crates/bsl-bytecode`: bytecode instructions and compiler.
 - `crates/bsl-rt`, `bsl-number`, and `bsl-format`: runtime values, decimal arithmetic, and BSL formatting.
 - `crates/bsl-vm`: bytecode execution; examples live in `examples/`.
-- `crates/bsl-cli`: script runner, REPL, and end-to-end conformance runner.
+- `crates/bsl-cli`: script runner, REPL (syntax highlighting in `highlight.rs`, Tab completion in `complete.rs`), and end-to-end conformance runner.
+
+Everything except `bsl-cli` is dependency-free (`bsl-number` uses `num-bigint`/`num-traits`; `bsl-cli` uses `rustyline` for raw-mode line editing). Keep it that way: new external crates need a reason that cannot be met in-tree.
 
 Unit and integration tests sit beside each crate. Shared BSL programs and oracle outputs are under `tests/conformance/fixtures/`.
 

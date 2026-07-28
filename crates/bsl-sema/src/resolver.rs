@@ -202,6 +202,25 @@ pub fn resolve_snippet_stmts(
     Ok((r.locals, body))
 }
 
+/// Типы, которые умеет строить `Новый` — в каноническом написании, оба
+/// языка. Список нужен снаружи (автодополнение REPL предлагает их после
+/// `Новый`), а `resolve_new` разбирает каждый по-своему: у них разная
+/// арность и разный смысл аргументов, одной таблицей не обойтись. Что
+/// список не разъедется с `match`, проверяет
+/// `every_new_type_is_recognised_by_resolve_new`.
+pub const NEW_TYPES: &[&str] = &[
+    "Массив",
+    "Array",
+    "Структура",
+    "Structure",
+    "Соответствие",
+    "Map",
+    "ТаблицаЗначений",
+    "ValueTable",
+    "ЗаписьТекста",
+    "TextWriter",
+];
+
 struct Resolver<'a> {
     locals: Vec<String>,
     /// Ключ — имя в верхнем регистре: доступ к переменным регистронезависим.
@@ -718,6 +737,34 @@ mod tests {
     fn resolve_program_src(src: &str) -> ResolvedProgram {
         let prog = parse(src).unwrap_or_else(|e| panic!("parse error: {e:?}"));
         resolve_program(&prog.items).unwrap_or_else(|e| panic!("sema error: {e:?}"))
+    }
+
+    /// `NEW_TYPES` — список для автодополнения, а разбор `Новый` живёт в
+    /// `match` по имени типа. Разъехаться им нельзя: имя из списка,
+    /// которого `resolve_new` не знает, REPL предлагал бы вхолостую.
+    #[test]
+    fn every_new_type_is_recognised_by_resolve_new() {
+        for type_name in NEW_TYPES {
+            let prog = parse(&format!("x = Новый {type_name}();")).unwrap();
+            let stmts = items_to_stmts(prog.items);
+            // Арность у типов разная (`ЗаписьТекста` требует путь), поэтому
+            // ошибка числа аргументов здесь допустима — недопустимо
+            // «такой тип не поддержан».
+            match resolve_script(&stmts) {
+                Ok(_) | Err(SemaError::ArgumentCountMismatch { .. }) => {}
+                Err(other) => panic!("Новый {type_name}: {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn a_type_outside_the_list_is_not_constructible() {
+        let prog = parse("x = Новый СписокЗначений();").unwrap();
+        let stmts = items_to_stmts(prog.items);
+        assert!(matches!(
+            resolve_script(&stmts),
+            Err(SemaError::Unsupported(_))
+        ));
     }
 
     #[test]

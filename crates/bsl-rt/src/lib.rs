@@ -25,7 +25,10 @@ use std::rc::Rc;
 
 use bsl_number::{BslNumber, NumError};
 
-pub use builtin::{call_builtin_method_ctx, call_builtin_fn, call_builtin_method, BuiltinFn, BuiltinMethod};
+pub use builtin::{
+    call_builtin_fn, call_builtin_method, call_builtin_method_ctx, BuiltinFn, BuiltinMethod,
+    BUILTIN_FN_NAMES, BUILTIN_METHOD_NAMES,
+};
 pub use date::{
     format_long as format_date_long, format_pattern as format_date_pattern, BslDate, DateBoundary,
     DatePart, DEFAULT_PATTERN as DEFAULT_DATE_PATTERN,

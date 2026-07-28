@@ -111,71 +111,176 @@ pub enum BuiltinFn {
     AddMonth,
 }
 
-impl BuiltinFn {
-    pub fn lookup(name: &str) -> Option<Self> {
-        Some(match name.to_uppercase().as_str() {
-            "SQRT" => BuiltinFn::Sqrt,
-            "POW" => BuiltinFn::Pow,
-            "LOG" => BuiltinFn::Ln,
-            "LOG10" => BuiltinFn::Log10,
-            "EXP" => BuiltinFn::Exp,
-            "SIN" => BuiltinFn::Sin,
-            "COS" => BuiltinFn::Cos,
-            "TAN" => BuiltinFn::Tan,
-            "ASIN" => BuiltinFn::Asin,
-            "ACOS" => BuiltinFn::Acos,
-            "ATAN" => BuiltinFn::Atan,
-            "ROUND" | "ОКРУГЛ" => BuiltinFn::Round,
-            "INT" | "ЦЕЛ" => BuiltinFn::Trunc,
-            "MESSAGE" | "СООБЩИТЬ" => BuiltinFn::Message,
-            "STRING" | "СТРОКА" => BuiltinFn::ToString,
-            "FORMAT" | "ФОРМАТ" => BuiltinFn::Format,
-            "NUMBER" | "ЧИСЛО" => BuiltinFn::ToNumber,
-            "STRLEN" | "СТРДЛИНА" => BuiltinFn::StrLen,
-            "LEFT" | "ЛЕВ" => BuiltinFn::Left,
-            "RIGHT" | "ПРАВ" => BuiltinFn::Right,
-            "MID" | "СРЕД" => BuiltinFn::Mid,
-            "UPPER" | "ВРЕГ" => BuiltinFn::Upper,
-            "LOWER" | "НРЕГ" => BuiltinFn::Lower,
-            "TRIMALL" | "СОКРЛП" => BuiltinFn::TrimAll,
-            "TRIML" | "СОКРЛ" => BuiltinFn::TrimLeft,
-            "TRIMR" | "СОКРП" => BuiltinFn::TrimRight,
-            "STRFIND" | "СТРНАЙТИ" => BuiltinFn::StrFind,
-            "STRREPLACE" | "СТРЗАМЕНИТЬ" => BuiltinFn::StrReplace,
-            "STRSPLIT" | "СТРРАЗДЕЛИТЬ" => BuiltinFn::StrSplit,
-            "STRCONCAT" | "СТРСОЕДИНИТЬ" => BuiltinFn::StrConcat,
-            "STRLINECOUNT" | "СТРЧИСЛОСТРОК" => BuiltinFn::StrLineCount,
-            "STRGETLINE" | "СТРПОЛУЧИТЬСТРОКУ" => BuiltinFn::StrGetLine,
-            "STRTEMPLATE" | "СТРШАБЛОН" => BuiltinFn::StrTemplate,
-            "CHAR" | "СИМВОЛ" => BuiltinFn::Char,
-            "CHARCODE" | "КОДСИМВОЛА" => BuiltinFn::CharCode,
-            "VALUEISFILLED" | "ЗНАЧЕНИЕЗАПОЛНЕНО" => BuiltinFn::ValueIsFilled,
-            "TYPEOF" | "ТИПЗНЧ" => BuiltinFn::TypeOf,
-            "TYPE" | "ТИП" => BuiltinFn::TypeByName,
+/// Написания встроенных ФУНКЦИЙ: `(имя, вариант)` в каноническом
+/// регистре — том, который предлагает автодополнение REPL.
+///
+/// У математических функций русских синонимов НЕТ — в реальной 1С их тоже
+/// нет (в отличие от ключевых слов); это подтверждает и сам n-body, где
+/// `sqrt(...)` написан строчными прямо в «русском» файле. Поэтому у части
+/// вариантов здесь ровно одна строка, а не две.
+///
+/// Таблица — единственный источник: `lookup` ищет по ней же, второго
+/// списка, который мог бы разъехаться с первым, нет.
+pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
+    ("Sqrt", BuiltinFn::Sqrt),
+    ("Pow", BuiltinFn::Pow),
+    ("Log", BuiltinFn::Ln),
+    ("Log10", BuiltinFn::Log10),
+    ("Exp", BuiltinFn::Exp),
+    ("Sin", BuiltinFn::Sin),
+    ("Cos", BuiltinFn::Cos),
+    ("Tan", BuiltinFn::Tan),
+    ("ASin", BuiltinFn::Asin),
+    ("ACos", BuiltinFn::Acos),
+    ("ATan", BuiltinFn::Atan),
+    ("Округл", BuiltinFn::Round),
+    ("Round", BuiltinFn::Round),
+    ("Цел", BuiltinFn::Trunc),
+    ("Int", BuiltinFn::Trunc),
+    ("Сообщить", BuiltinFn::Message),
+    ("Message", BuiltinFn::Message),
+    ("Строка", BuiltinFn::ToString),
+    ("String", BuiltinFn::ToString),
+    ("Формат", BuiltinFn::Format),
+    ("Format", BuiltinFn::Format),
+    ("Число", BuiltinFn::ToNumber),
+    ("Number", BuiltinFn::ToNumber),
+    ("СтрДлина", BuiltinFn::StrLen),
+    ("StrLen", BuiltinFn::StrLen),
+    ("Лев", BuiltinFn::Left),
+    ("Left", BuiltinFn::Left),
+    ("Прав", BuiltinFn::Right),
+    ("Right", BuiltinFn::Right),
+    ("Сред", BuiltinFn::Mid),
+    ("Mid", BuiltinFn::Mid),
+    ("ВРег", BuiltinFn::Upper),
+    ("Upper", BuiltinFn::Upper),
+    ("НРег", BuiltinFn::Lower),
+    ("Lower", BuiltinFn::Lower),
+    ("СокрЛП", BuiltinFn::TrimAll),
+    ("TrimAll", BuiltinFn::TrimAll),
+    ("СокрЛ", BuiltinFn::TrimLeft),
+    ("TrimL", BuiltinFn::TrimLeft),
+    ("СокрП", BuiltinFn::TrimRight),
+    ("TrimR", BuiltinFn::TrimRight),
+    ("СтрНайти", BuiltinFn::StrFind),
+    ("StrFind", BuiltinFn::StrFind),
+    ("СтрЗаменить", BuiltinFn::StrReplace),
+    ("StrReplace", BuiltinFn::StrReplace),
+    ("СтрРазделить", BuiltinFn::StrSplit),
+    ("StrSplit", BuiltinFn::StrSplit),
+    ("СтрСоединить", BuiltinFn::StrConcat),
+    ("StrConcat", BuiltinFn::StrConcat),
+    ("СтрЧислоСтрок", BuiltinFn::StrLineCount),
+    ("StrLineCount", BuiltinFn::StrLineCount),
+    ("СтрПолучитьСтроку", BuiltinFn::StrGetLine),
+    ("StrGetLine", BuiltinFn::StrGetLine),
+    ("СтрШаблон", BuiltinFn::StrTemplate),
+    ("StrTemplate", BuiltinFn::StrTemplate),
+    ("Символ", BuiltinFn::Char),
+    ("Char", BuiltinFn::Char),
+    ("КодСимвола", BuiltinFn::CharCode),
+    ("CharCode", BuiltinFn::CharCode),
+    ("ЗначениеЗаполнено", BuiltinFn::ValueIsFilled),
+    ("ValueIsFilled", BuiltinFn::ValueIsFilled),
+    ("ТипЗнч", BuiltinFn::TypeOf),
+    ("TypeOf", BuiltinFn::TypeOf),
+    ("Тип", BuiltinFn::TypeByName),
+    ("Type", BuiltinFn::TypeByName),
+    ("Дата", BuiltinFn::MakeDate),
+    ("Date", BuiltinFn::MakeDate),
+    ("ТекущаяДата", BuiltinFn::CurrentDate),
+    ("CurrentDate", BuiltinFn::CurrentDate),
+    (
+        "ТекущаяУниверсальнаяДатаВМиллисекундах",
+        BuiltinFn::CurrentUniversalDateInMilliseconds,
+    ),
+    (
+        "CurrentUniversalDateInMilliseconds",
+        BuiltinFn::CurrentUniversalDateInMilliseconds,
+    ),
+    ("Год", BuiltinFn::DatePartOf(DatePart::Year)),
+    ("Year", BuiltinFn::DatePartOf(DatePart::Year)),
+    ("Месяц", BuiltinFn::DatePartOf(DatePart::Month)),
+    ("Month", BuiltinFn::DatePartOf(DatePart::Month)),
+    ("День", BuiltinFn::DatePartOf(DatePart::Day)),
+    ("Day", BuiltinFn::DatePartOf(DatePart::Day)),
+    ("Час", BuiltinFn::DatePartOf(DatePart::Hour)),
+    ("Hour", BuiltinFn::DatePartOf(DatePart::Hour)),
+    ("Минута", BuiltinFn::DatePartOf(DatePart::Minute)),
+    ("Minute", BuiltinFn::DatePartOf(DatePart::Minute)),
+    ("Секунда", BuiltinFn::DatePartOf(DatePart::Second)),
+    ("Second", BuiltinFn::DatePartOf(DatePart::Second)),
+    ("ДеньНедели", BuiltinFn::DatePartOf(DatePart::Weekday)),
+    ("WeekDay", BuiltinFn::DatePartOf(DatePart::Weekday)),
+    (
+        "НачалоДня",
+        BuiltinFn::DateBoundaryOf(DateBoundary::StartOfDay),
+    ),
+    (
+        "BegOfDay",
+        BuiltinFn::DateBoundaryOf(DateBoundary::StartOfDay),
+    ),
+    (
+        "КонецДня",
+        BuiltinFn::DateBoundaryOf(DateBoundary::EndOfDay),
+    ),
+    (
+        "EndOfDay",
+        BuiltinFn::DateBoundaryOf(DateBoundary::EndOfDay),
+    ),
+    (
+        "НачалоМесяца",
+        BuiltinFn::DateBoundaryOf(DateBoundary::StartOfMonth),
+    ),
+    (
+        "BegOfMonth",
+        BuiltinFn::DateBoundaryOf(DateBoundary::StartOfMonth),
+    ),
+    (
+        "КонецМесяца",
+        BuiltinFn::DateBoundaryOf(DateBoundary::EndOfMonth),
+    ),
+    (
+        "EndOfMonth",
+        BuiltinFn::DateBoundaryOf(DateBoundary::EndOfMonth),
+    ),
+    (
+        "НачалоГода",
+        BuiltinFn::DateBoundaryOf(DateBoundary::StartOfYear),
+    ),
+    (
+        "BegOfYear",
+        BuiltinFn::DateBoundaryOf(DateBoundary::StartOfYear),
+    ),
+    (
+        "КонецГода",
+        BuiltinFn::DateBoundaryOf(DateBoundary::EndOfYear),
+    ),
+    (
+        "EndOfYear",
+        BuiltinFn::DateBoundaryOf(DateBoundary::EndOfYear),
+    ),
+    (
+        "НачалоНедели",
+        BuiltinFn::DateBoundaryOf(DateBoundary::StartOfWeek),
+    ),
+    (
+        "BegOfWeek",
+        BuiltinFn::DateBoundaryOf(DateBoundary::StartOfWeek),
+    ),
+    ("ДобавитьМесяц", BuiltinFn::AddMonth),
+    ("AddMonth", BuiltinFn::AddMonth),
+];
 
-            "DATE" | "ДАТА" => BuiltinFn::MakeDate,
-            "CURRENTDATE" | "ТЕКУЩАЯДАТА" => BuiltinFn::CurrentDate,
-            "CURRENTUNIVERSALDATEINMILLISECONDS"
-            | "ТЕКУЩАЯУНИВЕРСАЛЬНАЯДАТАВМИЛЛИСЕКУНДАХ" => {
-                BuiltinFn::CurrentUniversalDateInMilliseconds
-            }
-            "YEAR" | "ГОД" => BuiltinFn::DatePartOf(DatePart::Year),
-            "MONTH" | "МЕСЯЦ" => BuiltinFn::DatePartOf(DatePart::Month),
-            "DAY" | "ДЕНЬ" => BuiltinFn::DatePartOf(DatePart::Day),
-            "HOUR" | "ЧАС" => BuiltinFn::DatePartOf(DatePart::Hour),
-            "MINUTE" | "МИНУТА" => BuiltinFn::DatePartOf(DatePart::Minute),
-            "SECOND" | "СЕКУНДА" => BuiltinFn::DatePartOf(DatePart::Second),
-            "WEEKDAY" | "ДЕНЬНЕДЕЛИ" => BuiltinFn::DatePartOf(DatePart::Weekday),
-            "BEGOFDAY" | "НАЧАЛОДНЯ" => BuiltinFn::DateBoundaryOf(DateBoundary::StartOfDay),
-            "ENDOFDAY" | "КОНЕЦДНЯ" => BuiltinFn::DateBoundaryOf(DateBoundary::EndOfDay),
-            "BEGOFMONTH" | "НАЧАЛОМЕСЯЦА" => BuiltinFn::DateBoundaryOf(DateBoundary::StartOfMonth),
-            "ENDOFMONTH" | "КОНЕЦМЕСЯЦА" => BuiltinFn::DateBoundaryOf(DateBoundary::EndOfMonth),
-            "BEGOFYEAR" | "НАЧАЛОГОДА" => BuiltinFn::DateBoundaryOf(DateBoundary::StartOfYear),
-            "ENDOFYEAR" | "КОНЕЦГОДА" => BuiltinFn::DateBoundaryOf(DateBoundary::EndOfYear),
-            "BEGOFWEEK" | "НАЧАЛОНЕДЕЛИ" => BuiltinFn::DateBoundaryOf(DateBoundary::StartOfWeek),
-            "ADDMONTH" | "ДОБАВИТЬМЕСЯЦ" => BuiltinFn::AddMonth,
-            _ => return None,
-        })
+impl BuiltinFn {
+    /// Регистронезависимый поиск по [`BUILTIN_FN_NAMES`].
+    pub fn lookup(name: &str) -> Option<Self> {
+        let upper = name.to_uppercase();
+        BUILTIN_FN_NAMES
+            .iter()
+            .find(|(n, _)| n.to_uppercase() == upper)
+            .map(|(_, f)| *f)
     }
 
     /// `(минимум, максимум)` аргументов. У большинства встроенных они
@@ -281,31 +386,60 @@ pub enum BuiltinMethod {
     Close,
 }
 
+/// Написания МЕТОДОВ объектов — тот же принцип, что и у
+/// [`BUILTIN_FN_NAMES`]: единственный источник и для поиска, и для
+/// автодополнения после точки.
+pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
+    ("Количество", BuiltinMethod::Count),
+    ("Count", BuiltinMethod::Count),
+    ("Добавить", BuiltinMethod::Add),
+    ("Add", BuiltinMethod::Add),
+    ("Удалить", BuiltinMethod::Delete),
+    ("Delete", BuiltinMethod::Delete),
+    ("Очистить", BuiltinMethod::Clear),
+    ("Clear", BuiltinMethod::Clear),
+    ("Вставить", BuiltinMethod::Insert),
+    ("Insert", BuiltinMethod::Insert),
+    ("Получить", BuiltinMethod::Get),
+    ("Get", BuiltinMethod::Get),
+    ("Свойство", BuiltinMethod::Property),
+    ("Property", BuiltinMethod::Property),
+    ("Найти", BuiltinMethod::Find),
+    ("Find", BuiltinMethod::Find),
+    ("НайтиСтроки", BuiltinMethod::FindRows),
+    ("FindRows", BuiltinMethod::FindRows),
+    ("Сортировать", BuiltinMethod::Sort),
+    ("Sort", BuiltinMethod::Sort),
+    ("Итог", BuiltinMethod::Total),
+    ("Total", BuiltinMethod::Total),
+    ("Скопировать", BuiltinMethod::Copy),
+    ("Copy", BuiltinMethod::Copy),
+    ("СкопироватьКолонки", BuiltinMethod::CopyColumns),
+    ("CopyColumns", BuiltinMethod::CopyColumns),
+    ("ВыгрузитьКолонку", BuiltinMethod::UnloadColumn),
+    ("UnloadColumn", BuiltinMethod::UnloadColumn),
+    ("ЗагрузитьКолонку", BuiltinMethod::LoadColumn),
+    ("LoadColumn", BuiltinMethod::LoadColumn),
+    ("Сдвинуть", BuiltinMethod::Move),
+    ("Move", BuiltinMethod::Move),
+    ("Индекс", BuiltinMethod::IndexOf),
+    ("IndexOf", BuiltinMethod::IndexOf),
+    ("Свернуть", BuiltinMethod::Collapse),
+    ("GroupBy", BuiltinMethod::Collapse),
+    ("Записать", BuiltinMethod::Write),
+    ("Write", BuiltinMethod::Write),
+    ("Закрыть", BuiltinMethod::Close),
+    ("Close", BuiltinMethod::Close),
+];
+
 impl BuiltinMethod {
+    /// Регистронезависимый поиск по [`BUILTIN_METHOD_NAMES`].
     pub fn lookup(name: &str) -> Option<Self> {
-        Some(match name.to_uppercase().as_str() {
-            "COUNT" | "КОЛИЧЕСТВО" => BuiltinMethod::Count,
-            "ADD" | "ДОБАВИТЬ" => BuiltinMethod::Add,
-            "DELETE" | "УДАЛИТЬ" => BuiltinMethod::Delete,
-            "CLEAR" | "ОЧИСТИТЬ" => BuiltinMethod::Clear,
-            "INSERT" | "ВСТАВИТЬ" => BuiltinMethod::Insert,
-            "GET" | "ПОЛУЧИТЬ" => BuiltinMethod::Get,
-            "PROPERTY" | "СВОЙСТВО" => BuiltinMethod::Property,
-            "FIND" | "НАЙТИ" => BuiltinMethod::Find,
-            "FINDROWS" | "НАЙТИСТРОКИ" => BuiltinMethod::FindRows,
-            "SORT" | "СОРТИРОВАТЬ" => BuiltinMethod::Sort,
-            "TOTAL" | "ИТОГ" => BuiltinMethod::Total,
-            "COPY" | "СКОПИРОВАТЬ" => BuiltinMethod::Copy,
-            "COPYCOLUMNS" | "СКОПИРОВАТЬКОЛОНКИ" => BuiltinMethod::CopyColumns,
-            "UNLOADCOLUMN" | "ВЫГРУЗИТЬКОЛОНКУ" => BuiltinMethod::UnloadColumn,
-            "LOADCOLUMN" | "ЗАГРУЗИТЬКОЛОНКУ" => BuiltinMethod::LoadColumn,
-            "MOVE" | "СДВИНУТЬ" => BuiltinMethod::Move,
-            "INDEXOF" | "ИНДЕКС" => BuiltinMethod::IndexOf,
-            "GROUPBY" | "СВЕРНУТЬ" => BuiltinMethod::Collapse,
-            "WRITE" | "ЗАПИСАТЬ" => BuiltinMethod::Write,
-            "CLOSE" | "ЗАКРЫТЬ" => BuiltinMethod::Close,
-            _ => return None,
-        })
+        let upper = name.to_uppercase();
+        BUILTIN_METHOD_NAMES
+            .iter()
+            .find(|(n, _)| n.to_uppercase() == upper)
+            .map(|(_, m)| *m)
     }
 }
 
@@ -393,11 +527,17 @@ fn too_many(obj: &BslValue, method: &'static str, args: &[BslValue], max: usize)
 /// проверена в `bsl-sema`; арность `Add` — зависит (0 для строки таблицы,
 /// 1 для элемента массива/колонки), поэтому здесь просто читаем
 /// `args.len()` и решаем сами, а не полагаемся на проверку выше по стеку.
-pub fn call_builtin_method(m: BuiltinMethod, obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn call_builtin_method(
+    m: BuiltinMethod,
+    obj: &BslValue,
+    args: &[BslValue],
+) -> RtResult<BslValue> {
     match m {
         BuiltinMethod::Count => {
             let len = obj.collection_len()?;
-            Ok(BslValue::Number(bsl_number::BslNumber::from_i64(len as i64)))
+            Ok(BslValue::Number(bsl_number::BslNumber::from_i64(
+                len as i64,
+            )))
         }
         BuiltinMethod::Add => match args {
             [] => obj.table_add_row(),
@@ -602,4 +742,56 @@ pub fn call_builtin_method_ctx(
         return obj.table_find_rows(criteria, &rt.names);
     }
     call_builtin_method(m, obj, args)
+}
+
+#[cfg(test)]
+mod name_table_tests {
+    use super::*;
+
+    /// Таблица имён — источник и для поиска, и для автодополнения REPL;
+    /// если она разъедется с реальностью, автодополнение начнёт предлагать
+    /// то, чего нет. Здесь проверяется ровно это: каждое имя резолвится в
+    /// заявленный вариант, регистр не значим, повторов нет.
+    #[test]
+    fn every_builtin_name_resolves_to_its_own_variant() {
+        for (name, expected) in BUILTIN_FN_NAMES {
+            assert_eq!(BuiltinFn::lookup(name), Some(*expected), "{name}");
+            assert_eq!(BuiltinFn::lookup(&name.to_uppercase()), Some(*expected));
+            assert_eq!(BuiltinFn::lookup(&name.to_lowercase()), Some(*expected));
+        }
+        for (name, expected) in BUILTIN_METHOD_NAMES {
+            assert_eq!(BuiltinMethod::lookup(name), Some(*expected), "{name}");
+            assert_eq!(BuiltinMethod::lookup(&name.to_uppercase()), Some(*expected));
+            assert_eq!(BuiltinMethod::lookup(&name.to_lowercase()), Some(*expected));
+        }
+    }
+
+    #[test]
+    fn builtin_names_are_unique() {
+        for names in [
+            BUILTIN_FN_NAMES
+                .iter()
+                .map(|(n, _)| n.to_uppercase())
+                .collect::<Vec<_>>(),
+            BUILTIN_METHOD_NAMES
+                .iter()
+                .map(|(n, _)| n.to_uppercase())
+                .collect::<Vec<_>>(),
+        ] {
+            let mut sorted = names.clone();
+            sorted.sort();
+            sorted.dedup();
+            assert_eq!(sorted.len(), names.len(), "повтор имени: {names:?}");
+        }
+    }
+
+    /// Обратная сторона: имя, которого в таблице нет, не должно
+    /// резолвиться. Иначе `lookup` где-то ловил бы лишнее.
+    #[test]
+    fn unknown_names_do_not_resolve() {
+        for name in ["Опечатка", "СтрНайтиИ", "", "Свернуть2"] {
+            assert_eq!(BuiltinFn::lookup(name), None, "{name}");
+        }
+        assert_eq!(BuiltinMethod::lookup("Опечатка"), None);
+    }
 }

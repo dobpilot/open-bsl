@@ -43,46 +43,93 @@ pub enum Keyword {
     Execute,
 }
 
+/// Написания каждого ключевого слова: `(русское, английское)` в
+/// КАНОНИЧЕСКОМ регистре — том, в котором их принято писать в коде и в
+/// котором их предлагает автодополнение REPL. Поиск (`lookup`) идёт по
+/// этой же таблице, так что второго списка, который мог бы разъехаться с
+/// первым, не существует.
+///
+/// У `Null` оба написания совпадают — как и в самом языке.
+pub const SPELLINGS: &[(&str, &str, Keyword)] = &[
+    ("Если", "If", Keyword::If),
+    ("Тогда", "Then", Keyword::Then),
+    ("ИначеЕсли", "ElsIf", Keyword::ElsIf),
+    ("Иначе", "Else", Keyword::Else),
+    ("КонецЕсли", "EndIf", Keyword::EndIf),
+    ("Для", "For", Keyword::For),
+    ("По", "To", Keyword::To),
+    ("Каждого", "Each", Keyword::Each),
+    ("Из", "In", Keyword::In),
+    ("Цикл", "Do", Keyword::Do),
+    ("КонецЦикла", "EndDo", Keyword::EndDo),
+    ("Пока", "While", Keyword::While),
+    ("Процедура", "Procedure", Keyword::Procedure),
+    ("КонецПроцедуры", "EndProcedure", Keyword::EndProcedure),
+    ("Функция", "Function", Keyword::Function),
+    ("КонецФункции", "EndFunction", Keyword::EndFunction),
+    ("Возврат", "Return", Keyword::Return),
+    ("Перем", "Var", Keyword::Var),
+    ("Знач", "Val", Keyword::Val),
+    ("Экспорт", "Export", Keyword::Export),
+    ("Прервать", "Break", Keyword::Break),
+    ("Продолжить", "Continue", Keyword::Continue),
+    ("Попытка", "Try", Keyword::Try),
+    ("Исключение", "Except", Keyword::Except),
+    ("КонецПопытки", "EndTry", Keyword::EndTry),
+    ("ВызватьИсключение", "Raise", Keyword::Raise),
+    ("Новый", "New", Keyword::New),
+    ("Не", "Not", Keyword::Not),
+    ("И", "And", Keyword::And),
+    ("Или", "Or", Keyword::Or),
+    ("Истина", "True", Keyword::True),
+    ("Ложь", "False", Keyword::False),
+    ("Неопределено", "Undefined", Keyword::Undefined),
+    ("Null", "Null", Keyword::Null),
+    ("Выполнить", "Execute", Keyword::Execute),
+];
+
 /// Регистронезависимый поиск ключевого слова по идентификатору.
 /// `None` значит, что это обычный идентификатор, а не ключевое слово.
 pub fn lookup(ident: &str) -> Option<Keyword> {
     let upper = ident.to_uppercase();
-    Some(match upper.as_str() {
-        "ЕСЛИ" | "IF" => Keyword::If,
-        "ТОГДА" | "THEN" => Keyword::Then,
-        "ИНАЧЕЕСЛИ" | "ELSIF" => Keyword::ElsIf,
-        "ИНАЧЕ" | "ELSE" => Keyword::Else,
-        "КОНЕЦЕСЛИ" | "ENDIF" => Keyword::EndIf,
-        "ДЛЯ" | "FOR" => Keyword::For,
-        "ПО" | "TO" => Keyword::To,
-        "КАЖДОГО" | "EACH" => Keyword::Each,
-        "ИЗ" | "IN" => Keyword::In,
-        "ЦИКЛ" | "DO" => Keyword::Do,
-        "КОНЕЦЦИКЛА" | "ENDDO" => Keyword::EndDo,
-        "ПОКА" | "WHILE" => Keyword::While,
-        "ПРОЦЕДУРА" | "PROCEDURE" => Keyword::Procedure,
-        "КОНЕЦПРОЦЕДУРЫ" | "ENDPROCEDURE" => Keyword::EndProcedure,
-        "ФУНКЦИЯ" | "FUNCTION" => Keyword::Function,
-        "КОНЕЦФУНКЦИИ" | "ENDFUNCTION" => Keyword::EndFunction,
-        "ВОЗВРАТ" | "RETURN" => Keyword::Return,
-        "ПЕРЕМ" | "VAR" => Keyword::Var,
-        "ЗНАЧ" | "VAL" => Keyword::Val,
-        "ЭКСПОРТ" | "EXPORT" => Keyword::Export,
-        "ПРЕРВАТЬ" | "BREAK" => Keyword::Break,
-        "ПРОДОЛЖИТЬ" | "CONTINUE" => Keyword::Continue,
-        "ПОПЫТКА" | "TRY" => Keyword::Try,
-        "ИСКЛЮЧЕНИЕ" | "EXCEPT" => Keyword::Except,
-        "КОНЕЦПОПЫТКИ" | "ENDTRY" => Keyword::EndTry,
-        "ВЫЗВАТЬИСКЛЮЧЕНИЕ" | "RAISE" => Keyword::Raise,
-        "НОВЫЙ" | "NEW" => Keyword::New,
-        "НЕ" | "NOT" => Keyword::Not,
-        "И" | "AND" => Keyword::And,
-        "ИЛИ" | "OR" => Keyword::Or,
-        "ИСТИНА" | "TRUE" => Keyword::True,
-        "ЛОЖЬ" | "FALSE" => Keyword::False,
-        "НЕОПРЕДЕЛЕНО" | "UNDEFINED" => Keyword::Undefined,
-        "NULL" => Keyword::Null,
-        "ВЫПОЛНИТЬ" | "EXECUTE" => Keyword::Execute,
-        _ => return None,
-    })
+    SPELLINGS
+        .iter()
+        .find(|(ru, en, _)| ru.to_uppercase() == upper || en.to_uppercase() == upper)
+        .map(|(_, _, kw)| *kw)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_spelling_resolves_to_its_own_keyword() {
+        for (ru, en, kw) in SPELLINGS {
+            assert_eq!(lookup(ru), Some(*kw), "русское написание {ru}");
+            assert_eq!(lookup(en), Some(*kw), "английское написание {en}");
+            // Регистр не значим ни в одном из двух языков.
+            assert_eq!(lookup(&ru.to_uppercase()), Some(*kw));
+            assert_eq!(lookup(&en.to_lowercase()), Some(*kw));
+        }
+    }
+
+    #[test]
+    fn spellings_are_unique() {
+        let mut all: Vec<String> = SPELLINGS
+            .iter()
+            .flat_map(|(ru, en, _)| [ru.to_uppercase(), en.to_uppercase()])
+            .collect();
+        all.sort();
+        all.dedup();
+        // `Null` даёт одно и то же написание дважды — оно и есть
+        // единственный законный повтор.
+        assert_eq!(all.len(), SPELLINGS.len() * 2 - 1);
+    }
+
+    #[test]
+    fn ordinary_identifiers_are_not_keywords() {
+        for ident in ["x", "СуммаИтого", "Массив", "Сообщить"] {
+            assert_eq!(lookup(ident), None, "{ident}");
+        }
+    }
 }
