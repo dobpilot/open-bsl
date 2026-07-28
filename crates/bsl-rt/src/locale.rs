@@ -18,15 +18,28 @@ use crate::RtError;
 /// именованная константа: замер `КодСимвола` на платформе дал 160, не 32.
 pub const NBSP: char = '\u{A0}';
 
-/// НЕ ИЗМЕРЕНО(FMT.LOCALE.COVERAGE): какие коды локалей платформа понимает
-/// в ключе `Л` и что делает с незнакомым. Здесь приняты `ru`/`ru_RU` и
-/// `en`/`en_US` (регистр и разделитель `-`/`_` не важны), всё остальное —
-/// ошибка.
+/// Разделители ИЗМЕРЕНЫ на 8.3.27 через `Формат(1234.5, "Л=<код>")`:
+///
+/// ```text
+/// ru_RU -> 1 234,5     (NBSP и запятая)
+/// en_US -> 1,234.5
+/// de_DE -> 1.234,5
+/// fr_FR -> 1 234,5
+/// ja_JP -> 1,234.5
+/// ```
+///
+/// НЕ ИЗМЕРЕНО(FMT.LOCALE.COVERAGE): что платформа делает с кодом, которого
+/// не существует. Проба на это подвесила прогон (модальное окно), и до
+/// повторного замера здесь остаётся ошибка — по крайней мере она не
+/// притворяется, что локаль применена.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Locale {
     #[default]
     Ru,
     En,
+    De,
+    Fr,
+    Ja,
 }
 
 impl Locale {
@@ -38,6 +51,9 @@ impl Locale {
         match code.split('_').next()? {
             "ru" => Some(Locale::Ru),
             "en" => Some(Locale::En),
+            "de" => Some(Locale::De),
+            "fr" => Some(Locale::Fr),
+            "ja" => Some(Locale::Ja),
             _ => None,
         }
     }
@@ -49,16 +65,19 @@ impl Locale {
     /// Разделитель целой и дробной части (`ЧРД` по умолчанию).
     pub fn decimal_sep(self) -> char {
         match self {
-            Locale::Ru => ',',
-            Locale::En => '.',
+            Locale::Ru | Locale::De | Locale::Fr => ',',
+            Locale::En | Locale::Ja => '.',
         }
     }
 
     /// Разделитель групп разрядов (`ЧРГ` по умолчанию).
     pub fn group_sep(self) -> char {
         match self {
-            Locale::Ru => NBSP,
-            Locale::En => ',',
+            // Французская группировка — тоже неразрывный пробел: замер дал
+            // `1 234,5`, как и у русской.
+            Locale::Ru | Locale::Fr => NBSP,
+            Locale::En | Locale::Ja => ',',
+            Locale::De => '.',
         }
     }
 
@@ -72,8 +91,11 @@ impl Locale {
         match (self, value) {
             (Locale::Ru, true) => "Да",
             (Locale::Ru, false) => "Нет",
-            (Locale::En, true) => "Yes",
-            (Locale::En, false) => "No",
+            // НЕ ИЗМЕРЕНО(FMT.LOCALE.BOOLEAN) для не-английских локалей:
+            // замерено только `Л=en_US` -> Yes/No. Остальные показывают
+            // английский текст, а не выдуманный перевод.
+            (_, true) => "Yes",
+            (_, false) => "No",
         }
     }
 }
@@ -94,11 +116,23 @@ mod tests {
 
     #[test]
     fn unsupported_locale_is_an_error_not_a_silent_fallback() {
-        assert_eq!(Locale::parse("de_DE"), None);
+        assert_eq!(Locale::parse("zz_ZZ"), None);
         assert!(matches!(
-            Locale::parse_or_error("de_DE"),
-            Err(RtError::UnsupportedLocale(code)) if code == "de_DE"
+            Locale::parse_or_error("zz_ZZ"),
+            Err(RtError::UnsupportedLocale(code)) if code == "zz_ZZ"
         ));
+    }
+
+    /// Пять локалей, чьи разделители сняты с платформы.
+    #[test]
+    fn measured_locales_parse() {
+        for (code, want) in [
+            ("de_DE", Locale::De),
+            ("fr_FR", Locale::Fr),
+            ("ja_JP", Locale::Ja),
+        ] {
+            assert_eq!(Locale::parse(code), Some(want), "{code}");
+        }
     }
 
     #[test]

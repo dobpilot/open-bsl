@@ -610,17 +610,22 @@ impl BslValue {
     }
 
     /// `Символ(Код)`.
+    /// ИЗМЕРЕНО на 8.3.27: `Символ(128512)` возвращает ПУСТУЮ строку, а не
+    /// суррогатную пару и не ошибку — платформа за пределы BMP не выходит.
+    /// `Символ(65535)` при этом даёт строку длины 1, а `Символ(65)` — «A».
     pub fn char_from_code(&self) -> RtResult<Self> {
         let code = self.as_number("Символ")?;
-        let code = code
-            .to_i64_exact()
-            .and_then(|c| u32::try_from(c).ok())
-            .and_then(BslString::from_char_code)
-            .ok_or(RtError::TypeError {
-                expected: "Код символа (целое в диапазоне Unicode)",
-                op: "Символ",
-            })?;
-        Ok(BslValue::Str(code))
+        let code = code.to_i64_exact().and_then(|c| u32::try_from(c).ok());
+        let text = match code {
+            Some(c) if c <= 0xFFFF => BslString::from_char_code(c),
+            // Астральный код — пустая строка, как на платформе.
+            Some(_) => Some(BslString::from_str("")),
+            None => None,
+        };
+        Ok(BslValue::Str(text.ok_or(RtError::TypeError {
+            expected: "Код символа (целое в диапазоне Unicode)",
+            op: "Символ",
+        })?))
     }
 
     /// `КодСимвола(Строка[, Позиция])` — позиция по умолчанию `1`.
@@ -630,11 +635,11 @@ impl BslValue {
             BslValue::Undefined => 1,
             other => other.as_usize("КодСимвола")?,
         };
-        let code = s.char_code_at(pos).ok_or(RtError::IndexOutOfBounds {
-            index: pos as i64,
-            len: s.len_utf16(),
-        })?;
-        Ok(BslValue::Number(BslNumber::from_i64(code as i64)))
+        // ИЗМЕРЕНО: `КодСимвола("")` даёт -1, а не ошибку. Позиция за
+        // границей непустой строки замером не покрыта — трактуем так же,
+        // потому что «за границей» тут ровно тот же случай.
+        let code = s.char_code_at(pos).map_or(-1, |c| c as i64);
+        Ok(BslValue::Number(BslNumber::from_i64(code)))
     }
 
     // --- Даты -------------------------------------------------------------

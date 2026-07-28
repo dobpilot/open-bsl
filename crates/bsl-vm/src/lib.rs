@@ -2285,11 +2285,11 @@ mod tests {
         // НЕ ИЗМЕРЕНО(FMT.LOCALE.COVERAGE): незнакомая локаль — обычное
         // исключение времени исполнения, значит ловится Попыткой и не
         // роняет скрипт целиком.
-        let err = run_src_err(r#"Возврат Формат(1, "Л=de_DE");"#);
-        assert!(matches!(err, RtError::UnsupportedLocale(code) if code == "de_DE"));
+        let err = run_src_err(r#"Возврат Формат(1, "Л=zz_ZZ");"#);
+        assert!(matches!(err, RtError::UnsupportedLocale(code) if code == "zz_ZZ"));
         let v = run_src(
             "Попытка\n\
-             р = Формат(1, \"Л=de_DE\");\n\
+             р = Формат(1, \"Л=zz_ZZ\");\n\
              Исключение\n\
              р = \"поймано\";\n\
              КонецПопытки;\n\

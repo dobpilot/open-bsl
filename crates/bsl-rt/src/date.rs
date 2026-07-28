@@ -433,28 +433,40 @@ const WEEKDAYS_SHORT_EN: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", 
 fn months_full(locale: Locale) -> &'static [&'static str; 12] {
     match locale {
         Locale::Ru => &MONTHS_FULL_RU,
-        Locale::En => &MONTHS_FULL_EN,
+        // НЕ ИЗМЕРЕНО(FMT.LOCALE.MONTH_NAMES): имена месяцев в de/fr/ja.
+        // Отдаём английские, а не выдуманный перевод — неверный ответ
+        // лучше выглядит чужим, чем правдоподобным.
+        _ => &MONTHS_FULL_EN,
     }
 }
 
 fn months_short(locale: Locale) -> &'static [&'static str; 12] {
     match locale {
         Locale::Ru => &MONTHS_SHORT_RU,
-        Locale::En => &MONTHS_SHORT_EN,
+        // НЕ ИЗМЕРЕНО(FMT.LOCALE.MONTH_NAMES): имена месяцев в de/fr/ja.
+        // Отдаём английские, а не выдуманный перевод — неверный ответ
+        // лучше выглядит чужим, чем правдоподобным.
+        _ => &MONTHS_SHORT_EN,
     }
 }
 
 fn weekdays_full(locale: Locale) -> &'static [&'static str; 7] {
     match locale {
         Locale::Ru => &WEEKDAYS_FULL_RU,
-        Locale::En => &WEEKDAYS_FULL_EN,
+        // НЕ ИЗМЕРЕНО(FMT.LOCALE.MONTH_NAMES): имена месяцев в de/fr/ja.
+        // Отдаём английские, а не выдуманный перевод — неверный ответ
+        // лучше выглядит чужим, чем правдоподобным.
+        _ => &WEEKDAYS_FULL_EN,
     }
 }
 
 fn weekdays_short(locale: Locale) -> &'static [&'static str; 7] {
     match locale {
         Locale::Ru => &WEEKDAYS_SHORT_RU,
-        Locale::En => &WEEKDAYS_SHORT_EN,
+        // НЕ ИЗМЕРЕНО(FMT.LOCALE.MONTH_NAMES): имена месяцев в de/fr/ja.
+        // Отдаём английские, а не выдуманный перевод — неверный ответ
+        // лучше выглядит чужим, чем правдоподобным.
+        _ => &WEEKDAYS_SHORT_EN,
     }
 }
 
@@ -468,9 +480,11 @@ fn weekdays_short(locale: Locale) -> &'static [&'static str; 7] {
 /// Всё, что не буква шаблона, копируется как есть; текст в одинарных
 /// кавычках копируется буквально даже если состоит из букв шаблона.
 ///
-/// НЕ ИЗМЕРЕНО(DATE.PATTERN_LETTERS): точный набор букв и их значения
-/// сверх перечисленных (`К` — квартал, `в` — до/после полудня и т.п.).
-/// Реализовано то, что нужно перечисленным в брифе шаблонам.
+/// ИЗМЕРЕНО на 8.3.27 по буквам сверх основных: `в` даёт `AM`/`PM`
+/// (латиницей, и `вв` то же самое), а `К` платформа НЕ считает буквой
+/// шаблона и печатает как есть — то же, что делаем мы. Остальные буквы не
+/// замерялись: неизвестная буква копируется, и это худшее, что может
+/// случиться.
 pub fn format_pattern(date: BslDate, pattern: &str, locale: Locale) -> String {
     let c = date.to_civil();
     let chars: Vec<char> = pattern.chars().collect();
@@ -539,6 +553,11 @@ pub fn format_pattern(date: BslDate, pattern: &str, locale: Locale) -> String {
                 push_number(&mut out, c.second, run);
                 run.min(2)
             }
+            // ИЗМЕРЕНО: `в` -> AM/PM ЛАТИНИЦЕЙ, независимо от числа букв.
+            'в' | 't' => {
+                out.push_str(if c.hour < 12 { "AM" } else { "PM" });
+                run
+            }
             _ => {
                 out.push(ch);
                 1
@@ -559,24 +578,36 @@ fn push_number(out: &mut String, value: u32, width: usize) {
 
 /// Длинные локальные форматы `ДЛФ`.
 ///
-/// НЕ ИЗМЕРЕНО(DATE.LONG_FORMAT_CODES) целиком: и набор кодов, и то, как
-/// каждый из них выглядит в
-/// русской локали. Реализованы четыре, названные в брифе, плюс `ДВ` как
-/// очевидная комбинация. Неизвестный код отдаёт формат по умолчанию, а не
-/// падает — форматная строка в 1С вообще прощает неизвестные ключи.
+/// ИЗМЕРЕНО на 8.3.27:
+///
+/// ```text
+/// ДЛФ=Д    -> 15.01.2024
+/// ДЛФ=ДД   -> 15 января 2024 г.
+/// ДЛФ=ДДД  -> 15 января 2024 г.     то же, что ДД
+/// ДЛФ=ДДДД -> 15 января 2024 г.     и это тоже
+/// ДЛФ=В    -> 10:30:00
+/// ДЛФ=ДВ   -> 15.01.2024 10:30:00
+/// ```
+///
+/// Дня недели в длинных форматах НЕТ ни при каком числе букв — у нас `ДДД`
+/// его печатал, и это было расхождение. Неизвестный код по-прежнему отдаёт
+/// формат по умолчанию, а не падает: форматная строка в 1С прощает
+/// неизвестные ключи.
 pub fn format_long(date: BslDate, code: &str, locale: Locale) -> String {
     let c = date.to_civil();
     match code.trim().to_uppercase().as_str() {
         "Д" | "D" => format_pattern(date, "дд.ММ.гггг", locale),
+        // NBSP перед «г.» — не опечатка: платформа ставит именно
+        // неразрывный (U+00A0), тот же, что и в разделителе групп разрядов.
         "ДД" | "DD" => format!(
-            "{} {} {} г.",
+            "{} {} {}\u{a0}г.",
             c.day,
             months_full(locale)[(c.month - 1) as usize],
             c.year
         ),
-        "ДДД" | "DDD" => format!(
-            "{}, {} {} {} г.",
-            weekdays_full(locale)[(date.weekday() - 1) as usize],
+        // ИЗМЕРЕНО: ДДД и ДДДД не отличаются от ДД — дня недели нет.
+        "ДДД" | "DDD" | "ДДДД" | "DDDD" => format!(
+            "{} {} {}\u{a0}г.",
             c.day,
             months_full(locale)[(c.month - 1) as usize],
             c.year

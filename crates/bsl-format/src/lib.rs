@@ -670,16 +670,23 @@ mod tests {
         assert_eq!(f("1234.5", "Л=en; ЧГ=0"), "1234.5");
     }
 
+    /// Разделители ИЗМЕРЕНЫ на 8.3.27 по всем пяти локалям.
     #[test]
-    fn unsupported_locale_is_an_error() {
-        // НЕ ИЗМЕРЕНО(FMT.LOCALE.COVERAGE): поддержаны только ru и en, всё
-        // остальное — внятная ошибка, а не молчаливый откат к русской.
+    fn measured_locales_use_their_measured_separators() {
+        assert_eq!(f("1234.5", "Л=ru_RU"), format!("1{NBSP}234,5"));
+        assert_eq!(f("1234.5", "Л=en_US"), "1,234.5");
+        assert_eq!(f("1234.5", "Л=de_DE"), "1.234,5");
+        assert_eq!(f("1234.5", "Л=fr_FR"), format!("1{NBSP}234,5"));
+        assert_eq!(f("1234.5", "Л=ja_JP"), "1,234.5");
+    }
+
+    #[test]
+    fn a_locale_outside_the_measured_set_is_still_an_error() {
+        // НЕ ИЗМЕРЕНО(FMT.LOCALE.COVERAGE): что платформа делает с
+        // несуществующим кодом. Ошибка хотя бы не притворяется, что локаль
+        // применена.
         assert!(matches!(
-            parse_number_format("Л=de_DE"),
-            Err(RtError::UnsupportedLocale(_))
-        ));
-        assert!(matches!(
-            format_value(&BslValue::Boolean(true), Some("Л=fr")),
+            parse_number_format("Л=zz_ZZ"),
             Err(RtError::UnsupportedLocale(_))
         ));
     }

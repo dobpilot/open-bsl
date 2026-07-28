@@ -82,19 +82,6 @@ pub const OPEN_QUESTIONS: &[OpenQuestion] = &[
         blocks: "bsl_rt::BslDate::add_months; фикстура dates",
     },
     OpenQuestion {
-        id: "DATE.PATTERN_LETTERS",
-        what: "полный набор букв шаблона `ДФ` сверх реализованных (`К` — квартал, \
-               `в` — до/после полудня и т.п.)",
-        chosen: "реализованы только буквы из брифа, остальные копируются как текст",
-        blocks: "bsl_rt::date::format_pattern; фикстура dates",
-    },
-    OpenQuestion {
-        id: "DATE.LONG_FORMAT_CODES",
-        what: "набор кодов `ДЛФ` и вид каждого в русской локали",
-        chosen: "Д/ДД/ДДД/В плюс ДВ; неизвестный код — формат по умолчанию, не ошибка",
-        blocks: "bsl_rt::date::format_long; фикстура dates",
-    },
-    OpenQuestion {
         id: "FMT.NUM.LEADING_ZEROS",
         what: "`ЧВН` — до какой ширины дополнять ведущими нулями",
         chosen: "до `ЧЦ` минус дробные разряды; без `ЧЦ` ключ не делает ничего",
@@ -140,11 +127,15 @@ pub const OPEN_QUESTIONS: &[OpenQuestion] = &[
         blocks: "bsl_rt::Locale::boolean_text",
     },
     OpenQuestion {
-        id: "STR.CHAR_CODE_SURROGATE",
-        what: "что возвращает `КодСимвола` на первой половине суррогатной пары — \
-               код-юнит (55357) или кодовую точку (128512)",
-        chosen: "кодовую точку, ради обратимости `КодСимвола(Символ(к)) = к`",
-        blocks: "bsl_rt::BslString::char_code_at; фикстура strings-and-types",
+        id: "FMT.LOCALE.MONTH_NAMES",
+        what: "как выглядят имена месяцев и дней недели в локалях сверх русской. \
+               Частично измерено: `Л=de_DE` даёт `Januar`, `Л=fr_FR` — `janvier`, \
+               то есть платформа локализует их полностью. Нужны все двенадцать \
+               месяцев и семь дней на каждую поддержанную локаль",
+        chosen: "английские имена для всех не-русских локалей — заведомо неверно, \
+                 но неверный ответ лучше выглядит чужим, чем правдоподобным \
+                 переводом",
+        blocks: "bsl_rt::date::months_full",
     },
     OpenQuestion {
         id: "TYPE.IS_FILLED.BOOLEAN",
@@ -248,6 +239,21 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
         id: "NUM.DIV.EXACT_TIE",
         expect: "0.000000003725290298461914063",
         note: "1/2^28 — точная ничья; ...063 доказывает half-up",
+    },
+    Anchor {
+        id: "DATE.PATTERN_LETTERS",
+        expect: "К|AM|10",
+        note: "`в` даёт AM/PM латиницей, `К` платформа буквой шаблона не считает; замер 8.3.27",
+    },
+    Anchor {
+        id: "DATE.LONG_FORMAT_CODES",
+        expect: "15.01.2024|15 января 2024\u{a0}г.|15 января 2024\u{a0}г.|10:30:00|15.01.2024 10:30:00",
+        note: "ДДД не отличается от ДД — дня недели в длинных форматах нет; замер 8.3.27",
+    },
+    Anchor {
+        id: "STR.CHAR_CODE_SURROGATE",
+        expect: "-1 ",
+        note: "Символ(128512) даёт пустую строку, КодСимвола от неё -1; замер 8.3.27",
     },
     Anchor {
         id: "TABLE.SORT.COLLATION",
