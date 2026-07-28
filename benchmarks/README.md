@@ -91,50 +91,100 @@ cargo build --release -p bsl-cli
 ./benchmarks/run.sh str_find 9   # one scenario, 9 runs
 ```
 
+The 1C column is not filled by that runner. The platform takes tens of
+seconds to come up (create an infobase, load an external data processor),
+so paying that per scenario is pointless when the scenario times itself.
+Instead every scenario is stitched into one script and run once:
+
+```bash
+python3 benchmarks/1c/build-combined.py 3
+ONEC_TIMEOUT=900 ./tests/conformance/measure/1c/run-on-1c.sh benchmarks/1c/combined.bsl
+```
+
+That writes `benchmarks/1c/combined.platform.txt`, from which `run.sh`
+takes the medians. No file — the column stays a dash. Edit a scenario and
+the file goes stale, so re-take it.
+
 The runner reports the **median**, not the mean: a single scheduler hiccup
 should not drag the number with it. Missing runtimes are printed as absent
 and their column stays blank — invented numbers are worse than missing ones.
 
 ## Results
 
-Median of 5 runs, milliseconds, lower is better. Intel i5-8250U, Linux
+Median of 7 runs, milliseconds, lower is better. Intel i5-8250U, Linux
 7.1.3, `--release`. Numbers are machine-specific; re-run before drawing
 conclusions on other hardware.
 
-| scenario        | bsl-cli | lua 5.4 | luajit | oscript 2.1 |
-|-----------------|--------:|--------:|-------:|------------:|
-| `empty_for`     |   **5** |       6 |      0 |         281 |
-| `pi_leibniz`    | **724** |      30 |      3 |        1618 |
-| `pi_leibniz_15` | **950** |       — |      — |        1893 |
-| `str_concat`    |     190 |     104 |     79 |         183 |
-| `str_find`      |     553 |     439 |     52 |      **49** |
-| `table_total`   | **377** |     345 |    149 |        1607 |
-| `table_sort`    |    1744 |     680 |    589 |    **1467** |
+| scenario        | bsl-cli  | lua 5.4 | luajit | oscript 2.1 | 1C 8.3.27 |
+|-----------------|---------:|--------:|-------:|------------:|----------:|
+| `empty_for`     |    **3** |       3 |      0 |         191 |       326 |
+| `pi_leibniz`    |  **491** |      21 |      1 |        1213 |      1194 |
+| `pi_leibniz_15` |  **688** |       — |      — |        1410 |      1351 |
+| `str_concat`    |      130 |      71 |     53 |         136 |    **17** |
+| `str_find`      |      532 |     297 |     35 |      **34** |       132 |
+| `table_total`   |  **273** |     246 |    128 |        1078 |      3205 |
+| `table_sort`    | **1565** |     549 |    492 |        1115 |      3289 |
 
-oscript is the only runtime here that implements the **same language with
-the same semantics** — exact decimal arithmetic, `ТаблицаЗначений`, UTF-16
-strings — so it is the only column where a gap means "we are slower at the
-same job" rather than "we do a different job". Lua and LuaJIT are the
-outside reference: what a mature dynamic-language VM costs when it is
-allowed to use hardware doubles and byte strings.
+Two of these columns run **the same language with the same semantics** —
+exact decimal arithmetic, `ТаблицаЗначений`, UTF-16 strings — and are the
+only ones where a gap means "slower at the same job" rather than "doing a
+different job": **1C**, which is what this project targets, and **oscript**,
+an independent implementation of it. Lua and LuaJIT are the outside
+reference: what a mature dynamic-language VM costs when it is allowed to
+use hardware doubles and byte strings.
 
-Against oscript we are **56x faster** on an empty loop, **2.2x** on decimal
-arithmetic and **4.3x** on filling a value table and summing a column — but
-**11x slower** on substring search and **1.2x slower** on sorting. Both of
-those have a known cause, see below.
+Against the platform we are ahead on five scenarios of seven — 100x on an
+empty loop, 2.4x on decimal arithmetic, 12x on filling a value table and
+summing a column, 2.1x on sorting — and behind on the two string ones:
+**7.6x slower on concatenation** and **4x slower on substring search**. Both
+gaps have a known cause, see below; both are the honest reading, since the
+platform is doing exactly our job on exactly our input.
+
+`pi_leibniz` is also an accuracy result and not only a speed one: the
+platform printed `3,141591653589793238712644144`, digit for digit what we
+print. A million exact decimal divisions landing on the same 27 places is
+independent confirmation of the division scale, which was chosen from
+documentation rather than measured.
+
+oscript is faster than the platform on almost everything (it runs on .NET
+with `decimal` and native strings) and slower than us on collections. Its
+one crushing win is `str_find`: 34 ms against our 532, and against the
+platform's 132 — a hand-written naive scan losing to a library search, in
+both directions.
 
 Running the suite against oscript is also what caught a naming bug:
 `pi_leibniz_15` used to fail there because this interpreter spelled the
 rounding builtin `Округл`, while OneScript — like 1C — spells it **`Окр`**.
 The function has since been renamed and `Округл` no longer resolves at all,
 which is the point: a name that does not exist on the platform must not
-compile here either. Both runtimes now print the same digits for the
-15-digit Leibniz sum.
+compile here either. All three BSL runtimes now print the same digits for
+the 15-digit Leibniz sum.
 
 `oscript` is discovered on `PATH`, in the usual install locations
 (`/opt/oscript/bin` among them), or wherever `OSCRIPT=/path/to/oscript`
 points. Its .NET start-up is not in the numbers: every script times itself
 after warm-up, per the scenario contract above.
+
+### Where we lose, and why
+
+* **`str_concat`, 7.6x behind the platform.** Our string is an immutable
+  `Rc<[u16]>`, so `Текст = Текст + Кусок` copies everything accumulated so
+  far: quadratic in the number of steps. 17 ms for 3000 steps says the
+  platform does not copy each time — some form of amortized growth or a
+  rope. This is the clearest optimization target in the project: the
+  pattern is the most common way application BSL builds text.
+* **`str_find`, 4x behind the platform and 15x behind oscript.**
+  `BslString::find` is a naive loop comparing slices, with no skip table
+  and no vectorization. Nothing about the semantics requires that.
+
+### Where the platform loses
+
+`table_total` and `table_sort` are 12x and 2.1x in our favour, and
+`empty_for` is 100x. The value-table gap is layout: we store a column as a
+contiguous vector, and `Итог` walks it without touching the other columns.
+The loop gap is dispatch — a register VM with the counter in a register,
+against whatever the platform does per iteration; both count in exact
+decimal, so the semantics are equal here.
 
 ## Comparability caveats
 

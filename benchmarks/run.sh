@@ -17,6 +17,18 @@
 # `.bsl` скармливается И нашему bsl-cli, И oscript — это один и тот же
 # язык. Если oscript в системе нет, строка так и печатается пропуском:
 # выдумывать его числа нельзя, как и любые другие неизмеренные.
+#
+# Колонка 1С заполняется не здесь: платформа поднимается десятки секунд, и
+# гонять её в цикле по сценариям бессмысленно. Числа берутся из
+# benchmarks/1c/combined.platform.txt — вывода реальной 8.3.27, снятого
+# так:
+#
+#   python3 benchmarks/1c/build-combined.py 3
+#   ONEC_TIMEOUT=900 ./tests/conformance/measure/1c/run-on-1c.sh \
+#       benchmarks/1c/combined.bsl
+#
+# Нет файла — в колонке прочерк. Пересняли сценарии — пересними и файл,
+# иначе колонка будет мерить старую редакцию бенчмарка.
 
 set -u
 
@@ -90,8 +102,40 @@ median_ms() {
     printf '%s\n' "${values[@]}" | sort -n | awk -v n="$RUNS" 'NR==int((n+1)/2) { printf "%.0f", $1 }'
 }
 
-printf '%-14s %10s %10s %10s %10s\n' сценарий bsl-cli lua luajit oscript
-printf '%-14s %10s %10s %10s %10s\n' -------------- ---------- ---------- ---------- ----------
+# Медианы платформы: разбор снятого файла. Сценарий помечен строкой
+# `#имя`, его миллисекунды — последнее число перед следующей меткой.
+ONEC_FILE=benchmarks/1c/combined.platform.txt
+onec_median() {
+    [ -f "$ONEC_FILE" ] || { echo "-"; return; }
+    awk -v want="$1" '
+        # Внутри блока сценария числовых строк бывает несколько (сначала
+        # результат вроде 3,14159..., потом миллисекунды) — берём
+        # ПОСЛЕДНЮЮ: таков контракт сценария.
+        function flush(   ) {
+            if (name == want && cand != "") vals[++n] = cand + 0
+            cand = ""
+        }
+        /^#/ { flush(); name = substr($0, 2); next }
+        {
+            v = $0
+            gsub(",", ".", v)
+            if (v ~ /^[0-9]+(\.[0-9]+)?$/) cand = v
+        }
+        END {
+            flush()
+            if (n == 0) { print "-"; exit }
+            # Медиана: сортировка вставками, значений единицы.
+            for (i = 2; i <= n; i++) {
+                x = vals[i]
+                for (j = i - 1; j >= 1 && vals[j] > x; j--) vals[j + 1] = vals[j]
+                vals[j + 1] = x
+            }
+            printf "%.0f", vals[int((n + 1) / 2)]
+        }' "$ONEC_FILE"
+}
+
+printf '%-14s %10s %10s %10s %10s %10s\n' сценарий bsl-cli lua luajit oscript 1С
+printf '%-14s %10s %10s %10s %10s %10s\n' -------------- ---------- ---------- ---------- ---------- ----------
 
 for bsl in benchmarks/*.bsl; do
     name=$(basename "$bsl" .bsl)
@@ -110,9 +154,14 @@ for bsl in benchmarks/*.bsl; do
     fi
     [ -n "$OSCRIPT" ] && { os_ms=$(median_ms "$OSCRIPT" "$bsl") || os_ms="ошибка"; }
 
-    printf '%-14s %10s %10s %10s %10s\n' "$name" "$ours" "$lua_ms" "$luajit_ms" "$os_ms"
+    onec_ms=$(onec_median "$name")
+    printf '%-14s %10s %10s %10s %10s %10s\n' "$name" "$ours" "$lua_ms" "$luajit_ms" "$os_ms" "$onec_ms"
 done
 
 echo
 echo "медиана $RUNS прогонов, миллисекунды. Прочерк — двойника на этом"
 echo "языке нет либо самого рантайма нет в системе."
+if [ -f "$ONEC_FILE" ]; then
+    echo "колонка 1С — медиана из $ONEC_FILE (снято отдельным прогоном"
+    echo "на платформе, см. шапку этого файла)."
+fi
