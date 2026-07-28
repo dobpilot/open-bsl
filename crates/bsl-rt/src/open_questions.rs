@@ -59,11 +59,15 @@ pub struct Anchor {
 pub const OPEN_QUESTIONS: &[OpenQuestion] = &[
     OpenQuestion {
         id: "SQRT.SMALL_ARG",
-        what: "как платформа округляет результат f64 при малом аргументе: \
-               модель «15 значащих» воспроизводит Sqrt(2), но не Sqrt(0.02)",
-        chosen: "15 значащих с округлением (`F64_SIG`), расхождение признано \
-                 неразрешённым",
-        blocks: "bsl-number/tests/oracle.rs::sqrt_small_argument_unresolved (#[ignore])",
+        what: "почему `Sqrt(0.02)` на платформе на один ulp меньше, чем даёт IEEE-\
+               sqrt: шестнадцатая значащая цифра точного double — `5` с хвостом \
+               `03445`, и любая схема округления к 15 значащим даёт `...310`, а \
+               платформа печатает `...309`",
+        chosen: "РАСХОЖДЕНИЕ ОСТАВЛЕНО СОЗНАТЕЛЬНО. Правило «15 значащих, half-up \
+                 от f64» подтверждено на 13 из 14 измеренных точек (разные \
+                 магнитуды, Exp, Log, Sin); воспроизвести четырнадцатую значит \
+                 эмулировать чужой квадратный корень вслепую",
+        blocks: "bsl-number/tests/oracle.rs::sqrt_of_002_differs_from_the_platform_by_one_ulp",
     },
     OpenQuestion {
         id: "DATE.WEEKDAY_NUMBERING",

@@ -133,9 +133,11 @@ if [ ! -s "$OUT_ABS" ]; then
     exit 1
 fi
 
-# BOM в начале файла: платформа пишет UTF-8 с сигнатурой, а разбор ждёт
-# первым символом идентификатор.
+# Платформа пишет UTF-8 С СИГНАТУРОЙ и переводы строк CRLF. Разбор ждёт
+# первым символом идентификатор, а сравнивать файл построчно с чужим
+# выводом проще без \r — снимаем и то, и другое здесь, один раз.
 sed -i '1s/^\xef\xbb\xbf//' "$OUT_ABS"
+sed -i 's/\r$//' "$OUT_ABS"
 
 if [ "$SCRIPT" = "tests/conformance/measure/measure-all.bsl" ]; then
     DEST=tests/conformance/measure/platform.tsv
