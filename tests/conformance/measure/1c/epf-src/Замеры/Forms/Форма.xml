@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MetaDataObject xmlns="http://v8.1c.ru/8.3/MDClasses" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="2.19">
+	<Form uuid="8081de47-60ab-4047-8c98-1e22e2725431">
+		<Properties>
+			<Name>Форма</Name>
+			<Synonym/>
+			<Comment/>
+			<FormType>Managed</FormType>
+			<IncludeHelpInContents>false</IncludeHelpInContents>
+		</Properties>
+	</Form>
+</MetaDataObject>
