@@ -51,17 +51,18 @@ struct FuncSig {
 /// один проход (чтобы вызовы работали независимо от порядка объявления и
 /// поддерживали рекурсию), затем резолвит каждое тело и операторы верхнего
 /// уровня.
-/// НЕ ИЗМЕРЕНО(SCOPE.MODULE_VARS) — точнее, измерено и НЕ РЕАЛИЗОВАНО:
-/// платформа даёт процедурам видеть переменные уровня модуля (`Перем` в
-/// начале файла), а здесь области модуля нет вовсе. Каждая функция
-/// получает свой пустой `Resolver`, поэтому чтение такой переменной внутри
-/// функции — `UndefinedVariable`, а запись молча заводит локальную. Чтобы
-/// это закрыть, нужна отдельная область имён модуля и хранилище под неё в
-/// VM (кадр верхнего уровня живёт не всё исполнение).
+/// `Перем` на уровне модуля образует ОБЛАСТЬ МОДУЛЯ: процедуры и функции
+/// видят такие переменные и пишут в них, и запись видна снаружи —
+/// ИЗМЕРЕНО на 8.3.27. Хранилище — первые слоты кадра верхнего уровня: он
+/// стоит в самом низу стека значений и живёт всё исполнение, поэтому
+/// доступ из любого кадра это прямая индексация (`Instr::GetModuleVar`).
 pub fn resolve_program(items: &[Item]) -> Result<ResolvedProgram, SemaError> {
     let mut sigs: HashMap<String, FuncSig> = HashMap::new();
     let mut func_items: Vec<&Item> = Vec::new();
     let mut top_stmts: Vec<AStmt> = Vec::new();
+    // `Перем` на уровне модуля — это ОБЛАСТЬ МОДУЛЯ, а не просто первые
+    // локальные тела: измерено, что процедуры их видят.
+    let mut module_vars: Vec<String> = Vec::new();
 
     for item in items {
         match item {
@@ -81,10 +82,29 @@ pub fn resolve_program(items: &[Item]) -> Result<ResolvedProgram, SemaError> {
                 )?;
                 func_items.push(item);
             }
-            Item::VarDecl(vd) => top_stmts.push(AStmt::VarDecl(vd.clone())),
+            Item::VarDecl(vd) => {
+                for name in &vd.names {
+                    if !module_vars
+                        .iter()
+                        .any(|n| n.eq_ignore_ascii_case(name))
+                    {
+                        module_vars.push(name.clone());
+                    }
+                }
+                top_stmts.push(AStmt::VarDecl(vd.clone()));
+            }
             Item::Stmt(s) => top_stmts.push(s.clone()),
         }
     }
+
+    // Номера слотов модульных переменных: они же — первые слоты кадра
+    // верхнего уровня (см. затравку резолвера тела ниже).
+    let module_index: HashMap<String, u32> = module_vars
+        .iter()
+        .enumerate()
+        .map(|(i, name)| (name.to_uppercase(), i as u32))
+        .collect();
+    let empty_module_index: HashMap<String, u32> = HashMap::new();
 
     let mut functions = Vec::with_capacity(func_items.len());
     for item in &func_items {
@@ -97,6 +117,7 @@ pub fn resolve_program(items: &[Item]) -> Result<ResolvedProgram, SemaError> {
             locals: Vec::new(),
             index: HashMap::new(),
             funcs: &sigs,
+            module_index: &module_index,
         };
         for p in params {
             r.declare(&p.name);
@@ -124,11 +145,18 @@ pub fn resolve_program(items: &[Item]) -> Result<ResolvedProgram, SemaError> {
         });
     }
 
+    // Тело модуля видит те же переменные как ОБЫЧНЫЕ локальные: его кадр и
+    // есть их хранилище, и номер слота совпадает с номером в `module_index`
+    // — на этом совпадении держится доступ из функций.
     let mut r = Resolver {
         locals: Vec::new(),
         index: HashMap::new(),
         funcs: &sigs,
+        module_index: &empty_module_index,
     };
+    for name in &module_vars {
+        r.declare(name);
+    }
     let top_body = r.resolve_block(&top_stmts)?;
     let top_level = Resolved {
         uses_dynamic: crate::resolved::block_uses_dynamic(&top_body),
@@ -139,6 +167,7 @@ pub fn resolve_program(items: &[Item]) -> Result<ResolvedProgram, SemaError> {
     Ok(ResolvedProgram {
         functions,
         top_level,
+        module_vars,
     })
 }
 
@@ -160,10 +189,12 @@ fn declare_sig(
 /// для тестов. Функции резолвятся только через [`resolve_program`].
 pub fn resolve_script(stmts: &[AStmt]) -> Result<Resolved, SemaError> {
     let empty_funcs = HashMap::new();
+    let empty_module = HashMap::new();
     let mut r = Resolver {
         locals: Vec::new(),
         index: HashMap::new(),
         funcs: &empty_funcs,
+        module_index: &empty_module,
     };
     let body = r.resolve_block(stmts)?;
     Ok(Resolved {
@@ -191,6 +222,7 @@ pub fn resolve_script(stmts: &[AStmt]) -> Result<Resolved, SemaError> {
 /// объявления), а не «вызывать нельзя».
 pub fn resolve_snippet_stmts(
     existing_locals: &[String],
+    module_vars: &[String],
     stmts: &[AStmt],
     signatures: &[(String, usize)],
 ) -> Result<(Vec<String>, Vec<RStmt>), SemaError> {
@@ -212,10 +244,25 @@ pub fn resolve_snippet_stmts(
         .enumerate()
         .map(|(i, name)| (name.to_uppercase(), i as u32))
         .collect();
+    // Фрагмент ВИДИТ переменные уровня модуля и пишет в них — ИЗМЕРЕНО на
+    // 8.3.27. Свой стек этому не мешает: модульные значения едут во
+    // фрагмент отдельным блоком, а `Program::module_base` говорит VM, с
+    // какого места он там лежит (см. `run_dynamic_snippet`).
+    //
+    // Имена из `existing_locals` по-прежнему выигрывают: `index` заполнен
+    // до `module_index`, а резолвер смотрит сначала в него. На верхнем
+    // уровне это важно — там модульные переменные И ЕСТЬ локальные кадра,
+    // и разрешать их как модульные значило бы писать в блок-копию.
+    let module_index: HashMap<String, u32> = module_vars
+        .iter()
+        .enumerate()
+        .map(|(i, name)| (name.to_uppercase(), i as u32))
+        .collect();
     let mut r = Resolver {
         locals: existing_locals.to_vec(),
         index,
         funcs: &empty_funcs,
+        module_index: &module_index,
     };
     let body = r.resolve_block(stmts)?;
     Ok((r.locals, body))
@@ -245,6 +292,14 @@ struct Resolver<'a> {
     /// Ключ — имя в верхнем регистре: доступ к переменным регистронезависим.
     index: HashMap<String, u32>,
     funcs: &'a HashMap<String, FuncSig>,
+    /// Переменные уровня модуля: имя -> номер слота в кадре верхнего
+    /// уровня. У резолвера ТЕЛА модуля пуста (там те же переменные уже
+    /// локальные), у резолвера каждой функции — заполнена.
+    ///
+    /// Локальное имя ЗАТЕНЯЕТ модульное — ИЗМЕРЕНО на 8.3.27: функция с
+    /// явной `Перем` того же имени работает со своей копией, а модульная
+    /// после вызова цела.
+    module_index: &'a HashMap<String, u32>,
 }
 
 impl<'a> Resolver<'a> {
@@ -277,6 +332,19 @@ impl<'a> Resolver<'a> {
         match s {
             AStmt::Assign { target, value } => match target {
                 AExpr::Ident(name) => {
+                    // Уже известное локальное имя — обычная запись. Иначе
+                    // ищем модульное: присваивание модульной переменной
+                    // ОБЯЗАНО писать в неё, а не заводить локальную копию,
+                    // иначе результат не увидит ни тело модуля, ни соседняя
+                    // функция.
+                    if let Some(slot) = self.lookup(name) {
+                        let value = self.resolve_expr(value)?;
+                        return Ok(Some(RStmt::AssignLocal { slot, value }));
+                    }
+                    if let Some(&slot) = self.module_index.get(&name.to_uppercase()) {
+                        let value = self.resolve_expr(value)?;
+                        return Ok(Some(RStmt::AssignModuleVar { slot, value }));
+                    }
                     let slot = self.declare(name);
                     let value = self.resolve_expr(value)?;
                     Ok(Some(RStmt::AssignLocal { slot, value }))
@@ -403,7 +471,10 @@ impl<'a> Resolver<'a> {
             AExpr::Null => Ok(RExpr::Null),
             AExpr::Ident(name) => match self.lookup(name) {
                 Some(slot) => Ok(RExpr::Local(slot)),
-                None => Err(SemaError::UndefinedVariable(name.clone())),
+                None => match self.module_index.get(&name.to_uppercase()) {
+                    Some(&slot) => Ok(RExpr::ModuleVar(slot)),
+                    None => Err(SemaError::UndefinedVariable(name.clone())),
+                },
             },
             AExpr::Unary { op, expr } => Ok(RExpr::Unary {
                 op: *op,
@@ -1112,7 +1183,7 @@ mod tests {
         let existing = vec!["x".to_string()];
         let prog = parse("x = x + 1;\ny = 2;").unwrap();
         let stmts = items_to_stmts(prog.items);
-        let (locals, body) = resolve_snippet_stmts(&existing, &stmts, &[]).unwrap();
+        let (locals, body) = resolve_snippet_stmts(&existing, &[], &stmts, &[]).unwrap();
         assert_eq!(locals, vec!["x".to_string(), "y".to_string()]);
         assert_eq!(
             body[0],

@@ -63,6 +63,8 @@ pub fn compile_program(resolved: &ResolvedProgram) -> Result<Program, CompileErr
         shapes: shapes.into_shapes(),
         top_level_locals: resolved.top_level.locals.clone(),
         function_names: resolved.functions.iter().map(|f| f.name.clone()).collect(),
+        module_vars: resolved.module_vars.clone(),
+        module_base: 0,
     })
 }
 
@@ -290,6 +292,12 @@ impl<'a> Compiler<'a> {
                 if src != dst {
                     self.emit(Instr::Move { dst, src });
                 }
+            }
+            RExpr::ModuleVar(slot) => {
+                self.emit(Instr::GetModuleVar {
+                    dst,
+                    slot: *slot as u16,
+                });
             }
             RExpr::Unary { op, expr } => {
                 self.compile_expr(expr, dst)?;
@@ -547,6 +555,17 @@ impl<'a> Compiler<'a> {
         match s {
             RStmt::AssignLocal { slot, value } => {
                 self.compile_expr(value, *slot as u8)?;
+            }
+            RStmt::AssignModuleVar { slot, value } => {
+                // Через временный регистр: у модульной переменной нет
+                // регистра в этом кадре, писать прямо некуда.
+                let v = self.alloc_temp()?;
+                self.compile_expr(value, v)?;
+                self.emit(Instr::SetModuleVar {
+                    slot: *slot as u16,
+                    src: v,
+                });
+                self.free_temp(1);
             }
             RStmt::AssignIndex { obj, index, value } => {
                 let o = self.alloc_temp()?;

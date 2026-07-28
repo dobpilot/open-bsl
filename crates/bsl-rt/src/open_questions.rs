@@ -108,16 +108,6 @@ pub const OPEN_QUESTIONS: &[OpenQuestion] = &[
         blocks: "bsl_format::BooleanFormat",
     },
     OpenQuestion {
-        id: "SCOPE.MODULE_VARS",
-        what: "ничего: ИЗМЕРЕНО, что процедура видит переменную уровня модуля \
-               (`Перем` в начале файла) и запись через неё видна снаружи",
-        chosen: "НЕ РЕАЛИЗОВАНО. У нас чтение такой переменной в функции — ошибка \
-                 компиляции, а запись в процедуре молча заводит локальную. Это \
-                 не выбор, а незакрытая дыра: нужна область модуля в резолвере и \
-                 хранилище под неё в VM",
-        blocks: "bsl_sema::resolve_program; фикстура measure-unsupported",
-    },
-    OpenQuestion {
         id: "TYPE.IS_FILLED.BOOLEAN",
         what: "считает ли `ЗначениеЗаполнено` значение `Ложь` незаполненным",
         chosen: "булево заполнено всегда, включая `Ложь`",
@@ -231,6 +221,21 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
         id: "FMT.LOCALE.MONTH_NAMES",
         expect: "Januar|janvier",
         note: "имена месяцев локализуются полностью; все 12 сняты, см. date.rs; замер 8.3.27",
+    },
+    Anchor {
+        id: "SCOPE.MODULE_VARS_IN_EXEC",
+        expect: "изменено фрагментом",
+        note: "фрагмент видит область модуля и пишет в неё; замер 8.3.27",
+    },
+    Anchor {
+        id: "SCOPE.MODULE_VAR_SHADOW",
+        expect: "локальная|изменено процедурой",
+        note: "явная локальная затеняет модульную, модульная уцелевает; замер 8.3.27",
+    },
+    Anchor {
+        id: "SCOPE.MODULE_VARS",
+        expect: "изменено процедурой|изменено процедурой",
+        note: "процедура видит переменную модуля и пишет в неё; замер 8.3.27",
     },
     Anchor {
         id: "EXEC.USER_FUNCTION_CALL",

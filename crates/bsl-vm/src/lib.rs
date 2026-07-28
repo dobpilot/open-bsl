@@ -161,8 +161,10 @@ pub fn run_repl_chunk(
         shapes,
         top_level_locals: locals,
         // В REPL объявления процедур пока не поддержаны, звать из
-        // фрагмента нечего.
+        // фрагмента нечего; модульных переменных там тоже нет.
         function_names: Vec::new(),
+        module_vars: Vec::new(),
+        module_base: 0,
     };
     drive(&program, 0, stack)
 }
@@ -387,6 +389,32 @@ fn step(
     // уже не может выйти за границы.
     let instr = chunk.instrs[pc];
     match instr {
+            Instr::GetModuleVar { dst, slot } => {
+                // АБСОЛЮТНЫЙ индекс: модульные переменные лежат подряд,
+                // начиная с `module_base`. У обычной программы база нулевая
+                // — это первые слоты кадра верхнего уровня, а он стоит в
+                // самом низу стека и живёт всё исполнение. Проверка границы
+                // обязательна — байт-код может прийти и не от кодогена.
+                if (slot as usize) >= program.module_vars.len() {
+                    return Err(RtError::InvalidBytecode(
+                        "номер переменной модуля вне таблицы",
+                    ));
+                }
+                let v = reg_load(stack, program.module_base as usize + slot as usize)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, v)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::SetModuleVar { slot, src } => {
+                if (slot as usize) >= program.module_vars.len() {
+                    return Err(RtError::InvalidBytecode(
+                        "номер переменной модуля вне таблицы",
+                    ));
+                }
+                let v = reg_load(stack, frames[frame_idx].reg_index(src))?;
+                reg_store(stack, program.module_base as usize + slot as usize, v)?;
+                frames[frame_idx].pc += 1;
+            }
             Instr::Move { dst, src } => {
                 let s = frames[frame_idx].reg_index(src);
                 let v = reg_load(stack, s)?;
@@ -880,6 +908,17 @@ fn run_dynamic_snippet(
         .collect::<Result<_, _>>()?;
     snippet_stack.resize(compiled.chunk.n_regs as usize, BslValue::Undefined);
 
+    // Модульные переменные едут отдельным блоком ЗА регистрами фрагмента:
+    // их номера в его коде абсолютные, а раскладку слотов 0..n занимают
+    // локальные окружающего кадра. Вызовы внутри фрагмента кладут свои
+    // кадры за блоком (кадр начинается с текущей длины стека) и обратно
+    // усекают стек только до своей базы, так что блок стоит неподвижно.
+    let module_base = snippet_stack.len();
+    let n_module = program.module_vars.len();
+    for i in 0..n_module {
+        snippet_stack.push(reg_load(stack, i)?);
+    }
+
     // Чанки функций едут во фрагмент КАК ЕСТЬ, только нулевой заменён на
     // сам фрагмент: измерено, что `Вычислить("Удвоить(21)")` на платформе
     // работает, а `Call func=N` у нас индексирует ровно `chunks[N]`.
@@ -896,6 +935,8 @@ fn run_dynamic_snippet(
         shapes: compiled.shapes.clone(),
         top_level_locals: Vec::new(),
         function_names: program.function_names.clone(),
+        module_vars: program.module_vars.clone(),
+        module_base: module_base as u32,
     };
 
     let (value, final_stack) = drive(&snippet_program, 0, snippet_stack)?;
@@ -908,6 +949,15 @@ fn run_dynamic_snippet(
     // ИЗМЕРЕНО на 8.3.27: платформа ведёт себя ТАК ЖЕ — имя, впервые
     // созданное внутри `Выполнить`, вызов не переживает. Выбор оказался
     // верным, кадр с именной таблицей не нужен.
+    // Модульный блок возвращается ПЕРВЫМ, локальные — вторыми, и порядок
+    // тут существенный. На верхнем уровне модульная переменная И ЕСТЬ
+    // локальная кадра: резолвер фрагмента разрешил её как локальную (имя
+    // затеняет), значит свежее значение лежит в слоте локальной, а в блоке
+    // — то, что было до фрагмента. Запиши блок вторым — он затёр бы
+    // результат.
+    for i in 0..n_module {
+        reg_store(stack, i, reg_load(&final_stack, module_base + i)?)?;
+    }
     for i in 0..old_count {
         let d = frame.reg_index(i as u8);
         reg_store(stack, d, reg_load(&final_stack, i)?)?;
@@ -1020,7 +1070,7 @@ fn compile_dynamic_snippet(
             (name.clone(), arity)
         })
         .collect();
-    let (all_locals, body) = bsl_sema::resolve_snippet_stmts(scope_locals, &stmts, &signatures)
+    let (all_locals, body) = bsl_sema::resolve_snippet_stmts(scope_locals, &program.module_vars, &stmts, &signatures)
         .map_err(|e| RtError::DynamicError(format!("{e:?}")))?;
     // Режимы параметров каждой функции модуля: фрагмент может её звать, и
     // компилятору надо знать, какой аргумент идёт по ссылке.
@@ -1756,6 +1806,8 @@ mod tests {
     fn corrupt_program(instrs: Vec<Instr>) -> Program {
         Program {
             function_names: Vec::new(),
+            module_vars: Vec::new(),
+            module_base: 0,
             chunks: vec![bsl_bytecode::Chunk {
                 param_by_val: Vec::new(),
                 instrs,

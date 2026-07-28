@@ -44,6 +44,8 @@ pub const FORMAT_VERSION: u32 = 1;
 /// расхождение печати и разбора обнаружится не здесь, а у пользователя.
 pub const OPCODES: &[&str] = &[
     "Move",
+    "GetModuleVar",
+    "SetModuleVar",
     "LoadConst",
     "LoadBool",
     "LoadUndefined",
@@ -147,6 +149,11 @@ pub fn write_program(program: &Program, source: Option<&str>) -> Result<String> 
         writeln!(out, "  {i} {}", quote(name)).unwrap();
     }
 
+    writeln!(out, "\n.module-vars {}", program.module_vars.len()).unwrap();
+    for (i, name) in program.module_vars.iter().enumerate() {
+        writeln!(out, "  {i} {}", quote(name)).unwrap();
+    }
+
     writeln!(out, "\n.functions {}", program.function_names.len()).unwrap();
     for (i, name) in program.function_names.iter().enumerate() {
         // `i` -> chunks[i+1]; номер чанка в комментарии, чтобы не считать
@@ -242,6 +249,10 @@ fn instr_comment(instr: &Instr, chunk: &Chunk, program: &Program) -> Option<Stri
             .shapes
             .get(*shape as usize)
             .map(|s| format!("поля: {}", field_names(&s.names, program))),
+        Instr::GetModuleVar { slot, .. } | Instr::SetModuleVar { slot, .. } => program
+            .module_vars
+            .get(*slot as usize)
+            .map(|n| format!("модульная {n}")),
         Instr::Call { func, .. } => Some(match program.function_names.get(*func as usize - 1) {
             Some(name) => format!("-> {name} (.chunk {func})"),
             None => format!("-> .chunk {func}"),
@@ -294,6 +305,8 @@ fn write_const(v: &BslValue) -> Result<String> {
 fn write_instr(instr: &Instr) -> String {
     match instr {
         Instr::Move { dst, src } => format!("Move dst={dst} src={src}"),
+        Instr::GetModuleVar { dst, slot } => format!("GetModuleVar dst={dst} slot={slot}"),
+        Instr::SetModuleVar { slot, src } => format!("SetModuleVar slot={slot} src={src}"),
         Instr::LoadConst { dst, k } => format!("LoadConst dst={dst} k={k}"),
         Instr::LoadBool { dst, val } => format!("LoadBool dst={dst} val={val}"),
         Instr::LoadUndefined { dst } => format!("LoadUndefined dst={dst}"),
@@ -623,6 +636,18 @@ pub fn parse_program(src: &str) -> Result<Program> {
         top_level_locals.push(name);
     }
 
+    let n = r.directive(".module-vars")?;
+    let mut module_vars = Vec::with_capacity(n);
+    for i in 0..n {
+        let (no, text) = r.expect("имя переменной модуля")?;
+        let (idx, rest) = text
+            .split_once(char::is_whitespace)
+            .ok_or_else(|| TextError::At(no, "ожидалось «N \"имя\"»".to_string()))?;
+        parse_index(no, idx, i)?;
+        let (name, _) = unquote(no, rest.trim())?;
+        module_vars.push(name);
+    }
+
     let n = r.directive(".functions")?;
     let mut function_names = Vec::with_capacity(n);
     for i in 0..n {
@@ -650,6 +675,8 @@ pub fn parse_program(src: &str) -> Result<Program> {
         shapes,
         top_level_locals,
         function_names,
+        module_vars,
+        module_base: 0,
     })
 }
 
@@ -920,6 +947,14 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
             dst: dst(&f)?,
             src: src(&f)?,
         },
+        "GetModuleVar" => Instr::GetModuleVar {
+            dst: dst(&f)?,
+            slot: field_u16(&f, no, "slot")?,
+        },
+        "SetModuleVar" => Instr::SetModuleVar {
+            slot: field_u16(&f, no, "slot")?,
+            src: src(&f)?,
+        },
         "LoadConst" => Instr::LoadConst {
             dst: dst(&f)?,
             k: field_u16(&f, no, "k")?,
@@ -1151,6 +1186,11 @@ mod tests {
          т = Новый ТаблицаЗначений;\nт.Колонки.Добавить(\"ц\");\nт.Свернуть(\"ц\");\n",
         // Динамическое исполнение — обе формы.
         "х = 1;\nВыполнить(\"х = 2\");\nу = Вычислить(\"х + 1\");\n",
+        // Переменные уровня модуля: чтение и запись из процедуры.
+        "Перем Общая;\n\
+         Процедура Пишет()\n  Общая = 1;\nКонецПроцедуры\n\
+         Функция Читает()\n  Возврат Общая;\nКонецФункции\n\
+         Общая = 0;\nПишет();\nх = Читает();\n",
         // Запись текста: NewTextWriter и оба горячих пути.
         "з = Новый ЗаписьТекста(\"/dev/null\");\nз.Записать(\"строка\");\nз.Закрыть();\n",
     ];

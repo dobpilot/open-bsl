@@ -26,6 +26,10 @@ pub enum RExpr {
     Skipped,
     /// Слот в кадре текущей функции/скрипта.
     Local(u32),
+    /// Переменная уровня модуля (`Перем` в начале файла). Отдельный вариант,
+    /// а не `Local`: она живёт в кадре ВЕРХНЕГО УРОВНЯ, общем для всех
+    /// функций, а не в кадре текущего вызова.
+    ModuleVar(u32),
     Unary {
         op: UnaryOp,
         expr: Box<RExpr>,
@@ -103,6 +107,11 @@ pub enum RExpr {
 #[derive(Debug, Clone, PartialEq)]
 pub enum RStmt {
     AssignLocal {
+        slot: u32,
+        value: RExpr,
+    },
+    /// Запись в переменную модуля — видна всем функциям и телу модуля.
+    AssignModuleVar {
         slot: u32,
         value: RExpr,
     },
@@ -218,6 +227,11 @@ pub struct Resolved {
 pub struct ResolvedProgram {
     pub functions: Vec<ResolvedFunction>,
     pub top_level: Resolved,
+    /// Имена переменных уровня модуля, в порядке объявления. Они же —
+    /// ПЕРВЫЕ слоты `top_level.locals`: тело модуля обращается к ним как к
+    /// обычным локальным, функции — через `RExpr::ModuleVar` с тем же
+    /// номером, и совпадение номеров тут не совпадение, а инвариант.
+    pub module_vars: Vec<String>,
 }
 
 /// Есть ли в теле `Выполнить`/`Вычислить` — обход по резолвнутому дереву,
@@ -236,6 +250,7 @@ fn stmt_uses_dynamic(s: &RStmt) -> bool {
     match s {
         RStmt::Execute(_) => true,
         RStmt::AssignLocal { value, .. } => expr_uses_dynamic(value),
+        RStmt::AssignModuleVar { value, .. } => expr_uses_dynamic(value),
         RStmt::AssignIndex { obj, index, value } => {
             expr_uses_dynamic(obj) || expr_uses_dynamic(index) || expr_uses_dynamic(value)
         }
@@ -274,6 +289,7 @@ fn stmt_uses_dynamic(s: &RStmt) -> bool {
 fn expr_uses_dynamic(e: &RExpr) -> bool {
     match e {
         RExpr::DynEval(_) => true,
+        RExpr::ModuleVar(_) => false,
         RExpr::Unary { expr, .. } => expr_uses_dynamic(expr),
         RExpr::Binary { lhs, rhs, .. } => expr_uses_dynamic(lhs) || expr_uses_dynamic(rhs),
         RExpr::Call { args, .. } | RExpr::CallBuiltinFn { args, .. } => {
