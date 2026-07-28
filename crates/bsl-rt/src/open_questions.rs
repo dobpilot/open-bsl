@@ -168,20 +168,6 @@ pub const OPEN_QUESTIONS: &[OpenQuestion] = &[
         blocks: "bsl_rt::ValueTableData::total; фикстура table-wave2",
     },
     OpenQuestion {
-        id: "TABLE.SORT.COLLATION",
-        what: "как платформа упорядочивает строки: место `ё` относительно `е`, \
-               роль регистра, взаимный порядок кириллицы, латиницы и цифр",
-        chosen: "приближение «сначала ВРег, затем исходный вид» — заведомо неточное",
-        blocks: "bsl_rt::table::collate; фикстура table-wave2",
-    },
-    OpenQuestion {
-        id: "TABLE.SORT.TYPE_ORDER",
-        what: "в каком порядке платформа ставит РАЗНОТИПНЫЕ значения одной колонки",
-        chosen: "пустые, числа, даты, булево, строки, типы, объекты — произвольно, \
-                 но устойчиво",
-        blocks: "bsl_rt::table::type_rank; фикстура table-wave2",
-    },
-    OpenQuestion {
         id: "TABLE.COLLAPSE.OTHER_COLUMNS",
         what: "что `Свернуть` делает с колонками, не попавшими ни в группировку, \
                ни в суммирование, и в каком порядке остаются оставшиеся",
@@ -258,6 +244,16 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
         id: "NUM.DIV.EXACT_TIE",
         expect: "0.000000003725290298461914063",
         note: "1/2^28 — точная ничья; ...063 доказывает half-up",
+    },
+    Anchor {
+        id: "TABLE.SORT.COLLATION",
+        expect: "10,2,zebra,Апельсин,ёлка,Ель,яблоко,Яблоко,",
+        note: "ё сравнивается как е, строчная перед прописной; замер 8.3.27",
+    },
+    Anchor {
+        id: "TABLE.SORT.TYPE_ORDER",
+        expect: "Не определено,Булево,Число,Строка,Дата,",
+        note: "строка ПЕРЕД датой; и имя типа — «Не определено» с пробелом; замер 8.3.27",
     },
     Anchor {
         id: "FMT.NUM.TOTAL_DIGITS",
