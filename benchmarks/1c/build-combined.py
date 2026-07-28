@@ -19,9 +19,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 BENCH = ROOT / "benchmarks"
 
-# csv_write* меряют файловый ввод-вывод, а не интерпретатор — их и run.sh
-# пропускает.
-SKIP = ("csv_write",)
+# Сценарии с файловым выводом открывают "test.csv" ОТНОСИТЕЛЬНО текущего
+# каталога, а у платформы он свой и не наш. Путь поэтому переписывается на
+# тот же каталог, куда пишет run.sh: работа от этого не меняется, а
+# получившийся файл можно сличить с нашим — 1С и мы обязаны положить на
+# диск одни и те же байты.
+RELATIVE_OUTPUT = '"test.csv"'
+SCRATCH_OUTPUT = '"/tmp/onec-bench-scratch/csv_write.1c.out"'
 
 DECL = re.compile(
     r"^(Процедура|Функция)\s+([A-Za-zА-Яа-яЁё_][\w]*)", re.MULTILINE
@@ -50,15 +54,17 @@ def split_declarations(text):
 
 
 def main():
+    only = set(sys.argv[2].split(",")) if len(sys.argv) > 2 else None
     out = []
     scenarios = []
     for path in sorted(BENCH.glob("*.bsl")):
         name = path.stem
-        if name.startswith(SKIP):
+        if only and name not in only:
             continue
-        decls, body, names = split_declarations(
-            path.read_text(encoding="utf-8")
+        text = path.read_text(encoding="utf-8").replace(
+            RELATIVE_OUTPUT, SCRATCH_OUTPUT
         )
+        decls, body, names = split_declarations(text)
         # Уникализируем имена бенчмарка: два сценария объявляют
         # `CalcНаСервере`, и на уровне модуля они бы столкнулись.
         suffix = "_" + re.sub(r"\W", "_", name)

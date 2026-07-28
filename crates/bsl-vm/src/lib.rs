@@ -3553,7 +3553,14 @@ mod tests {
         );
 
         run_src(&src);
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), "Привет\n");
+        // BOM и CRLF — не наша выдумка, а ИЗМЕРЕННЫЙ вывод 8.3.27:
+        // `Новый ЗаписьТекста(Путь)` без прочих аргументов даёт файл,
+        // начинающийся с EF BB BF, и разворачивает ПС в CRLF. Проверяем
+        // байты, а не строку: именно они и расходились с платформой.
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            b"\xef\xbb\xbf\xd0\x9f\xd1\x80\xd0\xb8\xd0\xb2\xd0\xb5\xd1\x82\r\n"
+        );
         std::fs::remove_file(path).unwrap();
     }
 }

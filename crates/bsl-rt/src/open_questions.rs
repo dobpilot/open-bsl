@@ -222,6 +222,32 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
         expect: "Januar|janvier",
         note: "имена месяцев локализуются полностью; все 12 сняты, см. date.rs; замер 8.3.27",
     },
+    // --- ЗаписьТекста: что именно ложится на диск --------------------
+    // Снято 29.07.2026 пробами из measure-unsupported.bsl (нужны
+    // ДвоичныеДанные, у нас их нет). Все четыре складываются в одну
+    // модель: файл открывается в UTF-8 С BOM; разделителем строк
+    // ВХОДНОГО текста считается ПС, разделителем строк ФАЙЛА — CRLF, и
+    // при записи первый заменяется вторым; CR под замену не подпадает.
+    Anchor {
+        id: "FILE.WRITER.BOM_AND_CRLF",
+        expect: "EFBBBF410D0A42",
+        note: "Записать(\"A\" + Символ(10) + \"B\") -> BOM, A, CRLF, B",
+    },
+    Anchor {
+        id: "FILE.WRITER.CR_IN",
+        expect: "EFBBBF410D42",
+        note: "одиночный CR проходит на диск как есть",
+    },
+    Anchor {
+        id: "FILE.WRITER.CRLF_IN",
+        expect: "EFBBBF410D0D0A42",
+        note: "явный CRLF: CR прошёл, LF развернулся — три байта, не два",
+    },
+    Anchor {
+        id: "FILE.WRITER.CYRILLIC",
+        expect: "EFBBBFD090D18F",
+        note: "кодировка по умолчанию — UTF-8",
+    },
     Anchor {
         id: "SCOPE.MODULE_VARS_IN_EXEC",
         expect: "изменено фрагментом",

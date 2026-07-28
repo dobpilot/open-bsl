@@ -918,7 +918,11 @@ impl BslValue {
     }
 
     /// Создаёт объект `ЗаписьТекста` и открывает файл для буферизованной
-    /// записи UTF-8.
+    /// записи UTF-8 С МЕТКОЙ ПОРЯДКА БАЙТОВ.
+    ///
+    /// BOM — ИЗМЕРЕНО на 8.3.27: файл, созданный `Новый ЗаписьТекста(Путь)`
+    /// без прочих аргументов, начинается с `EF BB BF`. Отключается он
+    /// шестым аргументом конструктора, которого здесь пока нет.
     ///
     /// Существующий файл обрезается до нулевой длины.
     ///
@@ -930,15 +934,19 @@ impl BslValue {
         let path = path.as_str("Новый ЗаписьТекста")?.to_string();
         let file = std::fs::File::create(&path)
             .map_err(|e| RtError::IoError(format!("{path}: {e}")))?;
+        let mut buffered = std::io::BufWriter::new(file);
+        std::io::Write::write_all(&mut buffered, &[0xef, 0xbb, 0xbf])
+            .map_err(|e| RtError::IoError(format!("{path}: {e}")))?;
         Ok(BslValue::Object(Rc::new(BslObject::TextWriter(
-            std::cell::RefCell::new(Some(std::io::BufWriter::new(file))),
+            std::cell::RefCell::new(Some(buffered)),
         ))))
     }
 
     /// Записывает строку в буфер объекта `ЗаписьТекста`.
     ///
     /// UTF-16-представление [`BslString`] кодируется непосредственно в
-    /// UTF-8 без промежуточного [`String`].
+    /// UTF-8 без промежуточного [`String`], а перевод строки разворачивается
+    /// в CRLF — см. [`BslString::write_utf8_crlf`].
     ///
     /// # Errors
     ///
@@ -951,7 +959,7 @@ impl BslValue {
             BslValue::Object(obj) => match &**obj {
                 BslObject::TextWriter(writer) => {
                     let mut writer = writer.borrow_mut();
-                    text.write_utf8(
+                    text.write_utf8_crlf(
                         writer
                         .as_mut()
                         .ok_or_else(|| RtError::IoError("файл уже закрыт".to_string()))?,

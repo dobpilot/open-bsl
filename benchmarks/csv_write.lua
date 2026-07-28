@@ -27,6 +27,12 @@ local data = {
 
 io.output(file)
 
+-- BSL-двойник пишет UTF-8 с BOM и разворачивает перевод строки в CRLF:
+-- так делает `ЗаписьТекста` реальной 1С (измерено на 8.3.27). Чтобы
+-- сравнивались рантаймы, а не форматы файла, Lua кладёт те же байты —
+-- итог у обоих совпадает побайтно, это и проверяет run.sh.
+io.write("\239\187\191")
+
 for _ = 0, 300000 do
     io.write(data.d1)
     io.write(";")
@@ -69,9 +75,11 @@ for _ = 0, 300000 do
     io.write(data.d19)
     io.write(";")
     io.write(data.d20)
-    io.write("\n")
+    io.write("\r\n")
 end
 
 io.close(file)
 
-print(string.format("elapsed time: %.2f seconds", os.clock() - started))
+io.output(io.stdout)
+-- Контракт сценария: последняя строка — миллисекунды числом.
+print(string.format("%.0f", (os.clock() - started) * 1000))

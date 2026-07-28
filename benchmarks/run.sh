@@ -36,8 +36,24 @@ cd "$(dirname "$0")/.." || exit 1
 
 RUNS=${2:-5}
 ONLY=${1:-}
+ROOT=$(pwd)
 
-BSL_CLI=target/release/bsl-cli
+# Сценарии, которые пишут на диск, меряются меньшим числом прогонов: один
+# проход csv_write кладёт 15 МБ, и пять проходов на четыре рантайма — это
+# 300 МБ записи ради одного числа. Переопределяется: HEAVY_RUNS=5 ...
+HEAVY_RUNS=${HEAVY_RUNS:-3}
+HEAVY_SEEN=""
+
+# Пишут они в отдельный каталог, а не в дерево проекта: сценарий открывает
+# "test.csv" относительно текущего каталога.
+SCRATCH=${TMPDIR:-/tmp}/onec-bench-scratch
+
+is_heavy() {
+    case $1 in csv_write*) return 0 ;; *) return 1 ;; esac
+}
+
+# Абсолютный: сценарии с файловым выводом гоняются из другого каталога.
+BSL_CLI=$ROOT/target/release/bsl-cli
 if [ ! -x "$BSL_CLI" ]; then
     echo "нет $BSL_CLI — соберите: cargo build --release -p bsl-cli" >&2
     exit 1
@@ -85,12 +101,15 @@ echo "  bsl-cli   $($BSL_CLI --help | head -1)"
 echo
 
 # Медиана последних строк N прогонов. Печатает `-`, если рантайм не смог.
+# Третий аргумент — рабочий каталог: сценарии с файловым выводом гоняются
+# не в дереве проекта. Путь к скрипту поэтому абсолютный.
 median_ms() {
-    local cmd=$1 script=$2
+    local cmd=$1 script=$2 workdir=${3:-.} runs=$RUNS
+    is_heavy "$(basename "$script")" && runs=$HEAVY_RUNS
     local values=()
-    for _ in $(seq "$RUNS"); do
+    for _ in $(seq "$runs"); do
         local out
-        out=$($cmd "$script" 2>/dev/null | tail -1) || return 1
+        out=$(cd "$workdir" && $cmd "$ROOT/$script" 2>/dev/null | tail -1) || return 1
         # Запятая как разделитель дробной части — это русская локаль нашего
         # `Формат`, у Lua всегда точка.
         out=${out//,/.}
@@ -99,7 +118,16 @@ median_ms() {
         esac
         values+=("$out")
     done
-    printf '%s\n' "${values[@]}" | sort -n | awk -v n="$RUNS" 'NR==int((n+1)/2) { printf "%.0f", $1 }'
+    printf '%s\n' "${values[@]}" | sort -n | awk -v n="$runs" 'NR==int((n+1)/2) { printf "%.0f", $1 }'
+}
+
+# Файл, оставленный сценарием, откладывается под именем рантайма — в конце
+# они сверяются между собой. Для файлового сценария это и есть проверка,
+# что все посчитали одно и то же: печатать ему, кроме миллисекунд, нечего.
+keep_output() {
+    local name=$1 runtime=$2
+    [ -f "$SCRATCH/test.csv" ] || return 0
+    mv "$SCRATCH/test.csv" "$SCRATCH/$name.$runtime.out"
 }
 
 # Медианы платформы: разбор снятого файла. Сценарий помечен строкой
@@ -134,33 +162,74 @@ onec_median() {
         }' "$ONEC_FILE"
 }
 
-printf '%-14s %10s %10s %10s %10s %10s\n' сценарий bsl-cli lua luajit oscript 1С
-printf '%-14s %10s %10s %10s %10s %10s\n' -------------- ---------- ---------- ---------- ---------- ----------
+printf '%-18s %10s %10s %10s %10s %10s\n' сценарий bsl-cli lua luajit oscript 1С
+printf '%-18s %10s %10s %10s %10s %10s\n' ------------------ ---------- ---------- ---------- ---------- ----------
 
 for bsl in benchmarks/*.bsl; do
     name=$(basename "$bsl" .bsl)
     [ -n "$ONLY" ] && [ "$ONLY" != "$name" ] && continue
     # csv_write* пишут на диск сотни мегабайт и меряют файловый ввод-вывод,
     # а не интерпретатор — в общий прогон не входят, запускаются руками.
-    case $name in csv_write*) continue ;; esac
+    workdir=$ROOT
+    if is_heavy "$name"; then
+        mkdir -p "$SCRATCH"
+        # Только СВОИ файлы: `$name.1c.out` кладёт отдельный прогон на
+        # платформе, и стирать его здесь значило бы каждый раз терять
+        # эталон, с которым сличаемся.
+        for rt in bsl-cli lua luajit oscript; do
+            rm -f "$SCRATCH/$name.$rt.out"
+        done
+        rm -f "$SCRATCH/test.csv"
+        workdir=$SCRATCH
+        HEAVY_SEEN=yes
+    fi
 
-    ours=$(median_ms "$BSL_CLI" "$bsl") || ours="ошибка"
+    ours=$(median_ms "$BSL_CLI" "$bsl" "$workdir") || ours="ошибка"
+    is_heavy "$name" && keep_output "$name" bsl-cli
     lua_ms="-"
     luajit_ms="-"
     os_ms="-"
     if [ -f "benchmarks/$name.lua" ]; then
-        [ -n "$LUA" ] && { lua_ms=$(median_ms "$LUA" "benchmarks/$name.lua") || lua_ms="ошибка"; }
-        [ -n "$LUAJIT" ] && { luajit_ms=$(median_ms "$LUAJIT" "benchmarks/$name.lua") || luajit_ms="ошибка"; }
+        if [ -n "$LUA" ]; then
+            lua_ms=$(median_ms "$LUA" "benchmarks/$name.lua" "$workdir") || lua_ms="ошибка"
+            is_heavy "$name" && keep_output "$name" lua
+        fi
+        if [ -n "$LUAJIT" ]; then
+            luajit_ms=$(median_ms "$LUAJIT" "benchmarks/$name.lua" "$workdir") || luajit_ms="ошибка"
+            is_heavy "$name" && keep_output "$name" luajit
+        fi
     fi
-    [ -n "$OSCRIPT" ] && { os_ms=$(median_ms "$OSCRIPT" "$bsl") || os_ms="ошибка"; }
+    if [ -n "$OSCRIPT" ]; then
+        os_ms=$(median_ms "$OSCRIPT" "$bsl" "$workdir") || os_ms="ошибка"
+        is_heavy "$name" && keep_output "$name" oscript
+    fi
 
     onec_ms=$(onec_median "$name")
-    printf '%-14s %10s %10s %10s %10s %10s\n' "$name" "$ours" "$lua_ms" "$luajit_ms" "$os_ms" "$onec_ms"
+    printf '%-18s %10s %10s %10s %10s %10s\n' "$name" "$ours" "$lua_ms" "$luajit_ms" "$os_ms" "$onec_ms"
 done
 
 echo
 echo "медиана $RUNS прогонов, миллисекунды. Прочерк — двойника на этом"
 echo "языке нет либо самого рантайма нет в системе."
+if [ -n "$HEAVY_SEEN" ]; then
+    echo "csv_write* — $HEAVY_RUNS прогона (каждый пишет 15 МБ) в $SCRATCH."
+    # Сверка: сценарий с файловым выводом сам ничего не печатает, кроме
+    # миллисекунд, поэтому "все посчитали одно и то же" проверяется
+    # СЛИЧЕНИЕМ ФАЙЛОВ, а не строкой в выводе.
+    for produced in "$SCRATCH"/*.bsl-cli.out; do
+        [ -f "$produced" ] || continue
+        base=$(basename "$produced" .bsl-cli.out)
+        for other in "$SCRATCH/$base".*.out; do
+            [ "$other" = "$produced" ] && continue
+            rt=$(basename "$other" .out); rt=${rt#"$base."}
+            if cmp -s "$produced" "$other"; then
+                echo "  $base: вывод $rt совпал с нашим побайтно"
+            else
+                echo "  $base: ВЫВОД $rt РАСХОДИТСЯ С НАШИМ — числа несравнимы"
+            fi
+        done
+    done
+fi
 if [ -f "$ONEC_FILE" ]; then
     echo "колонка 1С — медиана из $ONEC_FILE (снято отдельным прогоном"
     echo "на платформе, см. шапку этого файла)."

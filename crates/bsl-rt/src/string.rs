@@ -22,6 +22,37 @@ pub struct BslString(Rc<[u16]>);
 /// 1С, а не этой реализации — поэтому константа, а не «сколько передали».
 pub const MAX_TEMPLATE_ARGS: usize = 10;
 
+/// Кодирует код-юниты UTF-16 в UTF-8 прямо в поток, без промежуточного
+/// `String`. Некорректные суррогаты заменяются на U+FFFD — как в
+/// `Display`.
+fn encode_utf8(units: &[u16], writer: &mut impl Write) -> io::Result<()> {
+    let mut out = [0u8; 1024];
+
+    // CSV/JSON и большинство служебных строк состоят из ASCII. Для них
+    // декодирование UTF-16 и проверка суррогатных пар не нужны.
+    if units.iter().all(|unit| *unit <= 0x7f) {
+        for chunk in units.chunks(out.len()) {
+            for (dst, unit) in out.iter_mut().zip(chunk) {
+                *dst = *unit as u8;
+            }
+            writer.write_all(&out[..chunk.len()])?;
+        }
+        return Ok(());
+    }
+
+    let mut used = 0;
+    for decoded in char::decode_utf16(units.iter().copied()) {
+        let ch = decoded.unwrap_or(char::REPLACEMENT_CHARACTER);
+        let needed = ch.len_utf8();
+        if used + needed > out.len() {
+            writer.write_all(&out[..used])?;
+            used = 0;
+        }
+        used += ch.encode_utf8(&mut out[used..]).len();
+    }
+    writer.write_all(&out[..used])
+}
+
 impl BslString {
     pub fn from_str(s: &str) -> Self {
         let units: Vec<u16> = s.encode_utf16().collect();
@@ -44,31 +75,32 @@ impl BslString {
     ///
     /// Возвращает ошибку, полученную от [`Write::write_all`].
     pub fn write_utf8(&self, writer: &mut impl Write) -> io::Result<()> {
-        let mut out = [0u8; 1024];
+        encode_utf8(&self.0, writer)
+    }
 
-        // CSV/JSON и большинство служебных строк состоят из ASCII. Для
-        // них декодирование UTF-16 и проверка суррогатных пар не нужны.
-        if self.0.iter().all(|unit| *unit <= 0x7f) {
-            for units in self.0.chunks(out.len()) {
-                for (dst, unit) in out.iter_mut().zip(units) {
-                    *dst = *unit as u8;
-                }
-                writer.write_all(&out[..units.len()])?;
-            }
-            return Ok(());
+    /// То же, но каждый перевод строки (U+000A) выходит парой CRLF.
+    ///
+    /// ИЗМЕРЕНО на 8.3.27: `ЗаписьТекста.Записать("A" + Символ(10) + "B")`
+    /// кладёт на диск `41 0D0A 42`. Разделителем строк ВХОДНОГО текста у
+    /// объекта по умолчанию считается ПС, разделителем строк ФАЙЛА —
+    /// CRLF, и при записи первый заменяется вторым. Одиночный CR под это
+    /// правило не подпадает и проходит как есть (`41 0D 42`), а явный
+    /// CRLF даёт `41 0D 0D0A 42`: CR прошёл, LF развернулся.
+    ///
+    /// Отдельным методом, а не флагом в `write_utf8`: в поток вывода
+    /// (`Сообщить`) никакой замены быть не должно.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку, полученную от [`Write::write_all`].
+    pub fn write_utf8_crlf(&self, writer: &mut impl Write) -> io::Result<()> {
+        let mut rest: &[u16] = &self.0;
+        while let Some(at) = rest.iter().position(|u| *u == 0x000a) {
+            encode_utf8(&rest[..at], writer)?;
+            writer.write_all(b"\r\n")?;
+            rest = &rest[at + 1..];
         }
-
-        let mut used = 0;
-        for decoded in char::decode_utf16(self.0.iter().copied()) {
-            let ch = decoded.unwrap_or(char::REPLACEMENT_CHARACTER);
-            let needed = ch.len_utf8();
-            if used + needed > out.len() {
-                writer.write_all(&out[..used])?;
-                used = 0;
-            }
-            used += ch.encode_utf8(&mut out[used..]).len();
-        }
-        writer.write_all(&out[..used])
+        encode_utf8(rest, writer)
     }
 
     /// `СтрДлина`/`StrLen` — число код-юнитов UTF-16, НЕ кодовых точек.

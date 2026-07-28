@@ -41,27 +41,48 @@ Both loops execute exactly 1,000,001 iterations.
 
 ## CSV output
 
-`csv_write.bsl` and `csv_write.lua` each write 300,001 rows with 21
-semicolon-separated fields to `test.csv` in the current directory:
+`csv_write.bsl` and `csv_write.lua` each write 300,001 rows of 21
+semicolon-separated fields to `test.csv` in the current directory — 16.5 MB.
+The repeated `d13` field is intentional. `csv_write_batched.bsl` is the
+application-level optimized variant: it builds the invariant row once before
+the loop and does one buffered write per row instead of 42.
 
-```bash
-mkdir -p /tmp/onec-csv-bench
-cd /tmp/onec-csv-bench
-target/release/bsl-cli /path/to/onec_llvm/benchmarks/csv_write.bsl
-lua /path/to/onec_llvm/benchmarks/csv_write.lua
+These scenarios are part of `run.sh` and need no special handling, but they
+are treated as **heavy**: they run in a scratch directory outside the source
+tree (they open a relative path) and default to 3 passes instead of 5, since
+one pass writes 16.5 MB per runtime. `HEAVY_RUNS=5 ./benchmarks/run.sh`
+overrides that.
+
+They are also the one group whose scenarios print nothing but the elapsed
+milliseconds — there is no result line to compare. The cross-check is
+therefore the **produced file**: the runner keeps each runtime's output and
+compares them byte for byte, and the platform's own output is compared too
+when a 1C run has left one. All five agree, including real 1C:
+
+```
+csv_write: вывод 1c совпал с нашим побайтно
+csv_write: вывод lua совпал с нашим побайтно
+csv_write: вывод luajit совпал с нашим побайтно
+csv_write: вывод oscript совпал с нашим побайтно
 ```
 
-Build `bsl-cli` with `cargo build --release -p bsl-cli` first. The BSL
-version uses buffered `ЗаписьТекста`; Lua uses its default output stream.
-The repeated `d13` field is intentional. Run both on the same filesystem
-and alternate their order because filesystem and page-cache behavior can
-dominate the result. BSL reports wall-clock time; Lua's `os.clock()` reports
-process CPU time, so use an external timer for a strict comparison.
+That check is not decoration. It is what caught this interpreter writing
+the file wrong: `ЗаписьТекста` emitted raw UTF-8 with LF line endings,
+while the platform writes a **UTF-8 BOM** and expands a line feed inside a
+written string into **CRLF**. Four probes on 8.3.27 pinned the rule (they
+need `ДвоичныеДанные`, so they live in
+`tests/conformance/measure/measure-unsupported.bsl` and are anchored in
+`bsl_rt::open_questions`):
 
-`csv_write_batched.bsl` is the application-level optimized variant. It
-builds the invariant CSV row before the loop and performs one buffered
-write per row. Keep using `csv_write.bsl` when comparing the original
-42-call workload with Lua.
+| written | bytes on disk | reading |
+|---------|---------------|---------|
+| `"A" + Символ(10) + "B"` | `EFBBBF 41 0D0A 42` | BOM, and LF becomes CRLF |
+| `"A" + Символ(13) + "B"` | `EFBBBF 41 0D 42` | a lone CR passes through |
+| `"A" + Символ(13) + Символ(10) + "B"` | `EFBBBF 41 0D 0D0A 42` | CR passes, LF expands |
+| `"Ая"` | `EFBBBF D090 D18F` | the default encoding is UTF-8 |
+
+The Lua twin was changed to emit the same bytes, so the column compares
+runtimes rather than file formats.
 
 ## String and table scenarios
 
@@ -111,19 +132,21 @@ and their column stays blank — invented numbers are worse than missing ones.
 
 ## Results
 
-Median of 7 runs, milliseconds, lower is better. Intel i5-8250U, Linux
-7.1.3, `--release`. Numbers are machine-specific; re-run before drawing
-conclusions on other hardware.
+Median of 5 runs, milliseconds, lower is better (`csv_write*`: 3 runs).
+Intel i5-8250U, Linux 7.1.3, `--release`. Numbers are machine-specific;
+re-run before drawing conclusions on other hardware.
 
-| scenario        | bsl-cli  | lua 5.4 | luajit | oscript 2.1 | 1C 8.3.27 |
-|-----------------|---------:|--------:|-------:|------------:|----------:|
-| `empty_for`     |    **3** |       3 |      0 |         191 |       326 |
-| `pi_leibniz`    |  **491** |      21 |      1 |        1213 |      1194 |
-| `pi_leibniz_15` |  **688** |       — |      — |        1410 |      1351 |
-| `str_concat`    |      130 |      71 |     53 |         136 |    **17** |
-| `str_find`      |      532 |     297 |     35 |      **34** |       132 |
-| `table_total`   |  **273** |     246 |    128 |        1078 |      3205 |
-| `table_sort`    | **1565** |     549 |    492 |        1115 |      3289 |
+| scenario            |  bsl-cli | lua 5.4 | luajit | oscript 2.1 | 1C 8.3.27 |
+|---------------------|---------:|--------:|-------:|------------:|----------:|
+| `csv_write`         |     1710 |     962 |    113 |       23136 |      4479 |
+| `csv_write_batched` |   **64** |       — |      — |        1147 |       224 |
+| `empty_for`         |    **3** |       3 |      0 |         209 |       303 |
+| `pi_leibniz`        |  **521** |      19 |      1 |        1279 |      1142 |
+| `pi_leibniz_15`     |  **675** |       — |      — |        1513 |      1304 |
+| `str_concat`        |      134 |      76 |     64 |         139 |    **17** |
+| `str_find`          |      573 |     336 |     37 |      **35** |       131 |
+| `table_total`       |  **293** |     252 |    134 |        1136 |      3223 |
+| `table_sort`        | **1672** |     612 |    513 |        1179 |      3246 |
 
 Two of these columns run **the same language with the same semantics** —
 exact decimal arithmetic, `ТаблицаЗначений`, UTF-16 strings — and are the
@@ -133,12 +156,20 @@ an independent implementation of it. Lua and LuaJIT are the outside
 reference: what a mature dynamic-language VM costs when it is allowed to
 use hardware doubles and byte strings.
 
-Against the platform we are ahead on five scenarios of seven — 100x on an
+Against the platform we are ahead on seven scenarios of nine — 100x on an
 empty loop, 2.4x on decimal arithmetic, 12x on filling a value table and
 summing a column, 2.1x on sorting — and behind on the two string ones:
-**7.6x slower on concatenation** and **4x slower on substring search**. Both
-gaps have a known cause, see below; both are the honest reading, since the
-platform is doing exactly our job on exactly our input.
+**7.6x slower on concatenation** and **4.4x slower on substring search**.
+Both gaps have a known cause, see below; both are the honest reading, since
+the platform is doing exactly our job on exactly our input — for
+`csv_write` that is literally true, the two files are byte-identical.
+
+The two CSV scenarios say the same thing in three runtimes at once. Going
+from 42 writer calls per row to one costs 1710 -> 64 ms for us, 4479 -> 224
+on the platform, 23136 -> 1147 on oscript: a 20-27x drop everywhere. What
+that measures is per-call overhead, not I/O — the bytes written are
+identical in all three. oscript's absolute number is the outlier: 23
+seconds, 13x the platform, for the same 12.6M method calls.
 
 `pi_leibniz` is also an accuracy result and not only a speed one: the
 platform printed `3,141591653589793238712644144`, digit for digit what we
