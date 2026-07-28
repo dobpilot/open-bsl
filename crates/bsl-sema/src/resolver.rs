@@ -567,7 +567,7 @@ impl<'a> Resolver<'a> {
                         args: rargs,
                     });
                 }
-                // `Округл(x[, ЧислоРазрядов[, Режим]])` — единственный
+                // `Окр(x[, ЧислоРазрядов[, Режим]])` — единственный
                 // builtin с необязательными аргументами, до генерального
                 // механизма умолчаний builtin'ов (которого нет — см.
                 // `bsl_rt::BuiltinFn::arity`, всегда фиксированная арность).
@@ -577,7 +577,7 @@ impl<'a> Resolver<'a> {
                 // аргумента. `0` для режима означает "умолчание" (см.
                 // `BslValue::round`), не конкретную схему — какая схема
                 // за ним стоит, НЕ ИЗМЕРЕНО(NUM.ROUND.DEFAULT_MODE).
-                if name.eq_ignore_ascii_case("Округл") || name.eq_ignore_ascii_case("Round") {
+                if name.eq_ignore_ascii_case("Окр") || name.eq_ignore_ascii_case("Round") {
                     const ROUND_ARITY: usize = 3;
                     if args.is_empty() || args.len() > ROUND_ARITY {
                         return Err(SemaError::ArgumentCountMismatch {

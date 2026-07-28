@@ -113,7 +113,7 @@ fn round_to_scale_is_half_up() {
 #[test]
 fn trunc_to_scale_is_toward_zero_not_half_up() {
     // `Цел` отбрасывает дробную часть в СТОРОНУ НУЛЯ — не half-up, как
-    // `round_to_scale`/`Округл`: 2.9 -> 2, а не 3, и симметрично для
+    // `round_to_scale`/`Окр`: 2.9 -> 2, а не 3, и симметрично для
     // отрицательных: -2.9 -> -2, а не -3.
     assert_eq!(c(&n("2.9").trunc_to_scale(0)), "2");
     assert_eq!(c(&n("-2.9").trunc_to_scale(0)), "-2");
@@ -124,7 +124,7 @@ fn trunc_to_scale_is_toward_zero_not_half_up() {
 #[test]
 fn round_to_scale_half_even_differs_from_half_up_only_on_exact_ties() {
     // НЕ ИЗМЕРЕНО(NUM.ROUND.MODE_CODES) — этот режим существует только под явно
-    // запрошенный третий аргумент `Округл` (см. `bsl_number::RoundMode`);
+    // запрошенный третий аргумент `Окр` (см. `bsl_number::RoundMode`);
     // тест фиксирует саму схему, не то, что 1С её так называет.
     assert_eq!(c(&n("2.5").round_to_scale_half_even(0)), "2");
     assert_eq!(c(&n("3.5").round_to_scale_half_even(0)), "4");

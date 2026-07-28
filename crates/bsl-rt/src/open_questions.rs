@@ -59,13 +59,13 @@ pub struct Anchor {
 pub const OPEN_QUESTIONS: &[OpenQuestion] = &[
     OpenQuestion {
         id: "NUM.ROUND.DEFAULT_MODE",
-        what: "схема округления `Округл` без третьего аргумента",
+        what: "схема округления `Окр` без третьего аргумента",
         chosen: "half-up — та же схема, что у подтверждённого замером деления",
         blocks: "bsl_number::DEFAULT_ROUND_MODE; bsl-vm::tests::round_takes_an_explicit_mode",
     },
     OpenQuestion {
         id: "NUM.ROUND.MODE_CODES",
-        what: "какими числами платформа кодирует режимы `Округл` и что такое \
+        what: "какими числами платформа кодирует режимы `Окр` и что такое \
                «Окр15как10» — half-even или половина ВНИЗ",
         chosen: "0 -> умолчание, 1 -> half-even; прочие коды — ошибка типа",
         blocks: "bsl_number::RoundMode; bsl-number/tests/oracle.rs::\

@@ -20,7 +20,7 @@ pub enum BuiltinFn {
     Asin,
     Acos,
     Atan,
-    /// `Округл(x, ЧислоРазрядов, Режим)` — арность у самой функции в 1С
+    /// `Окр(x, ЧислоРазрядов, Режим)` — арность у самой функции в 1С
     /// переменная (второй и третий аргументы необязательны, оба по
     /// умолчанию `0`), но здесь всегда 3:
     /// `bsl-sema::resolver::resolve_call` подставляет недостающие `0`
@@ -133,7 +133,7 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("ASin", BuiltinFn::Asin),
     ("ACos", BuiltinFn::Acos),
     ("ATan", BuiltinFn::Atan),
-    ("Округл", BuiltinFn::Round),
+    ("Окр", BuiltinFn::Round),
     ("Round", BuiltinFn::Round),
     ("Цел", BuiltinFn::Trunc),
     ("Int", BuiltinFn::Trunc),
@@ -291,7 +291,7 @@ impl BuiltinFn {
     /// этапе резолвинга (`bsl-sema::resolver::resolve_call`), так что в
     /// рантайме `call_builtin_fn` всегда видит ровно `max` аргументов и
     /// сам решает, что значит `Неопределено` на этой позиции. Единственное
-    /// исключение — `Округл`, у которого резолвер подставляет литеральные
+    /// исключение — `Окр`, у которого резолвер подставляет литеральные
     /// `0`, а не `Неопределено` (см. там же, почему).
     pub fn arity_range(self) -> (usize, usize) {
         match self {

@@ -105,7 +105,7 @@ conclusions on other hardware.
 |-----------------|--------:|--------:|-------:|------------:|
 | `empty_for`     |   **5** |       6 |      0 |         281 |
 | `pi_leibniz`    | **724** |      30 |      3 |        1618 |
-| `pi_leibniz_15` |    1064 |       — |      — |       error |
+| `pi_leibniz_15` | **950** |       — |      — |        1893 |
 | `str_concat`    |     190 |     104 |     79 |         183 |
 | `str_find`      |     553 |     439 |     52 |      **49** |
 | `table_total`   | **377** |     345 |    149 |        1607 |
@@ -123,11 +123,13 @@ arithmetic and **4.3x** on filling a value table and summing a column — but
 **11x slower** on substring search and **1.2x slower** on sorting. Both of
 those have a known cause, see below.
 
-`pi_leibniz_15` fails under oscript because it calls `Округл`, and
-OneScript — like 1C — spells that function **`Окр`**. Our interpreter
-currently accepts `Округл`/`Round` only. The cell says `error` rather than
-being silently dropped: a scenario one runtime cannot run is a fact about
-the scenario, not a gap in the table.
+Running the suite against oscript is also what caught a naming bug:
+`pi_leibniz_15` used to fail there because this interpreter spelled the
+rounding builtin `Округл`, while OneScript — like 1C — spells it **`Окр`**.
+The function has since been renamed and `Округл` no longer resolves at all,
+which is the point: a name that does not exist on the platform must not
+compile here either. Both runtimes now print the same digits for the
+15-digit Leibniz sum.
 
 `oscript` is discovered on `PATH`, in the usual install locations
 (`/opt/oscript/bin` among them), or wherever `OSCRIPT=/path/to/oscript`

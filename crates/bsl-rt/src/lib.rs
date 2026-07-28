@@ -343,8 +343,8 @@ impl BslValue {
         Ok(BslValue::Number(self.as_number("Exp")?.exp()?))
     }
 
-    /// `Округл(Число, ЧислоРазрядов, Режим)` — decimal, НЕ через `f64`:
-    /// `Округл(2.675, 2)` обязан дать `2.68`, а не `2.67` (ближайший `f64` к
+    /// `Окр(Число, ЧислоРазрядов, Режим)` — decimal, НЕ через `f64`:
+    /// `Окр(2.675, 2)` обязан дать `2.68`, а не `2.67` (ближайший `f64` к
     /// `2.675` чуть меньше самого числа).
     ///
     /// Все три аргумента здесь всегда есть: недостающие подставляет
@@ -358,7 +358,7 @@ impl BslValue {
     /// умолчание (half-up, схема деления), `1` -> half-even; это
     /// ПРЕДПОЛОЖЕНИЕ, помеченное как таковое, а не снятый с платформы факт.
     pub fn round(&self, digits: &Self, mode: &Self) -> RtResult<Self> {
-        let n = self.as_number("Округл")?;
+        let n = self.as_number("Окр")?;
         let scale = Self::round_arg_as_i32(digits)?;
         let mode = match Self::round_arg_as_i32(mode)? {
             0 => bsl_number::DEFAULT_ROUND_MODE,
@@ -366,7 +366,7 @@ impl BslValue {
             _ => {
                 return Err(RtError::TypeError {
                     expected: "РежимОкругления (0 или 1)",
-                    op: "Округл",
+                    op: "Окр",
                 })
             }
         };
@@ -377,17 +377,17 @@ impl BslValue {
     }
 
     fn round_arg_as_i32(v: &Self) -> RtResult<i32> {
-        v.as_number("Округл")?
+        v.as_number("Окр")?
             .to_i64_exact()
             .and_then(|s| i32::try_from(s).ok())
             .ok_or(RtError::TypeError {
                 expected: "Число (целое)",
-                op: "Округл",
+                op: "Окр",
             })
     }
 
     /// `Цел(Число)` — отбрасывание дробной части К НУЛЮ (не half-up, в
-    /// отличие от `Округл` выше): `Цел(2.9) = 2`, `Цел(-2.9) = -2`.
+    /// отличие от `Окр` выше): `Цел(2.9) = 2`, `Цел(-2.9) = -2`.
     pub fn trunc(&self) -> RtResult<Self> {
         Ok(BslValue::Number(self.as_number("Цел")?.trunc_to_scale(0)))
     }
