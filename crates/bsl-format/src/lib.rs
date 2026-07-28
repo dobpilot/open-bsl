@@ -127,9 +127,8 @@ impl BooleanFormat {
 }
 
 /// Форматирование ДАТЫ: `ДФ` (шаблон) и `ДЛФ` (длинный локальный формат).
-/// `None` в обоих полях — формат по умолчанию: его выбирает `bsl_rt`, и он
-/// сам открытый вопрос — НЕ ИЗМЕРЕНО(FMT.DATE.DEFAULT), см.
-/// `bsl_rt::date::DEFAULT_PATTERN`.
+/// `None` в обоих полях — формат по умолчанию, он ИЗМЕРЕН и зафиксирован
+/// в `bsl_rt::date::DEFAULT_PATTERN`.
 ///
 /// Оба ключа сразу — `ДФ` выигрывает: явный шаблон конкретнее готового
 /// локального формата.
@@ -434,8 +433,7 @@ pub fn format_value(v: &BslValue, spec: Option<&str>) -> RtResult<String> {
                 (Some(p), _) => bsl_rt::format_date_pattern(*d, p, fmt.locale),
                 (None, Some(code)) => bsl_rt::format_date_long(*d, code, fmt.locale),
                 // Без ключей даты — представление по умолчанию, то же, что
-                // даёт `Строка()` (оно НЕ ИЗМЕРЕНО(FMT.DATE.DEFAULT), см.
-                // `bsl_rt::date`).
+                // даёт `Строка()` (измерено, см. `bsl_rt::date`).
                 (None, None) => {
                     bsl_rt::format_date_pattern(*d, bsl_rt::DEFAULT_DATE_PATTERN, fmt.locale)
                 }

@@ -91,13 +91,6 @@ pub const OPEN_QUESTIONS: &[OpenQuestion] = &[
         blocks: "bsl_rt::date::format_long; фикстура dates",
     },
     OpenQuestion {
-        id: "FMT.DATE.DEFAULT",
-        what: "представление даты по умолчанию: печатается ли время у полуночной \
-               даты, есть ли ведущий ноль в часах, как выглядит пустая дата",
-        chosen: "всегда `дд.ММ.гггг ЧЧ:мм:сс`, пустая дата — `01.01.0001 00:00:00`",
-        blocks: "bsl_rt::date::DEFAULT_PATTERN; фикстура dates",
-    },
-    OpenQuestion {
         id: "FMT.NUM.TOTAL_DIGITS",
         what: "что считает `ЧЦ` — все разряды или только целые — и что делает \
                платформа, когда одна целая часть уже длиннее `ЧЦ`",
@@ -279,6 +272,11 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
         id: "NUM.DIV.EXACT_TIE",
         expect: "0.000000003725290298461914063",
         note: "1/2^28 — точная ничья; ...063 доказывает half-up",
+    },
+    Anchor {
+        id: "FMT.DATE.DEFAULT",
+        expect: "15.01.2024 10:30:00|15.01.2024 0:00:00|01.01.0001 0:00:00",
+        note: "время печатается всегда, но час БЕЗ ведущего нуля; замер 8.3.27",
     },
     Anchor {
         id: "NUM.ROUND.DEFAULT_MODE",
