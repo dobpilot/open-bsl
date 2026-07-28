@@ -208,3 +208,63 @@ fn measure_script_runs_under_this_interpreter() {
         "ИД есть в скрипте, но не дошли до вывода: {missing:?}"
     );
 }
+
+/// Байт-код, напечатанный `--emit-bytecode`, обязан исполняться
+/// `--run-bytecode` с тем же выводом, что и исходник. Проверяется на всех
+/// фикстурах с оракулом: это единственное место, где путь «печать ->
+/// разбор -> VM» проходит целиком, на настоящих программах, а не на
+/// корпусе round-trip внутри bsl-bytecode.
+#[test]
+fn fixtures_produce_the_same_output_when_run_from_printed_bytecode() {
+    let bsl_cli = env!("CARGO_BIN_EXE_bsl-cli");
+    let tmp = std::env::temp_dir().join(format!("bslc-{}", std::process::id()));
+    fs::create_dir_all(&tmp).expect("не создаётся временный каталог");
+
+    let mut checked = 0;
+    for fixture in scripts_in(&fixtures_dir()) {
+        let expected_path = fixture.with_extension("expected");
+        if !expected_path.exists() {
+            continue;
+        }
+        let name = fixture.file_stem().unwrap().to_string_lossy().into_owned();
+        let out = tmp.join(format!("{name}.bslc"));
+
+        let emit = Command::new(bsl_cli)
+            .arg("--emit-bytecode")
+            .arg(&fixture)
+            .arg(&out)
+            .output()
+            .unwrap_or_else(|e| panic!("не удалось напечатать байт-код {name}: {e}"));
+        assert!(
+            emit.status.success(),
+            "{name}: --emit-bytecode завершился с {}\n{}",
+            emit.status,
+            String::from_utf8_lossy(&emit.stderr)
+        );
+
+        let run = Command::new(bsl_cli)
+            .arg("--run-bytecode")
+            .arg(&out)
+            .output()
+            .unwrap_or_else(|e| panic!("не удалось исполнить байт-код {name}: {e}"));
+        assert!(
+            run.status.success(),
+            "{name}: --run-bytecode завершился с {}\n{}",
+            run.status,
+            String::from_utf8_lossy(&run.stderr)
+        );
+
+        let expected = fs::read_to_string(&expected_path).unwrap();
+        let actual = String::from_utf8_lossy(&run.stdout).into_owned();
+        assert_eq!(
+            actual.trim_end_matches('\n'),
+            expected.trim_end_matches('\n'),
+            "{name}: вывод из байт-кода разошёлся с оракулом\n{}",
+            line_diff(&expected, &actual)
+        );
+        checked += 1;
+    }
+
+    let _ = fs::remove_dir_all(&tmp);
+    assert!(checked > 0, "не нашлось ни одной фикстуры с .expected");
+}

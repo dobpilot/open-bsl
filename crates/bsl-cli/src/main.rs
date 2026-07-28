@@ -3,9 +3,13 @@
 //! модуль `repl`): каждая строка резолвится поверх уже накопленных за
 //! сессию переменных/имён полей и исполняется как отдельный чанк
 //! (`bsl_vm::run_repl_chunk`), значение (если `Возврат` был) печатается.
+//! `bsl-cli --emit-bytecode <файл.bsl> [выход.bslc]` — вместо исполнения
+//! напечатать байт-код; `bsl-cli --run-bytecode <файл.bslc>` — исполнить
+//! напечатанное. Формат один и тот же, см. `bsl_bytecode::text`.
 //! `bsl-cli --ingest-measurements <файл> [measure-all.bsl]` — приём вывода
 //! сеанса замеров у платформы, см. модуль `ingest`.
 
+mod bytecode;
 mod complete;
 mod highlight;
 mod ingest;
@@ -16,6 +20,26 @@ use bsl_rt::BslValue;
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     match args.get(1).map(String::as_str) {
+        Some("--emit-bytecode") => {
+            let Some(path) = args.get(2) else {
+                eprintln!(
+                    "--emit-bytecode ждёт файл со скриптом:\n  \
+                     bsl-cli --emit-bytecode script.bsl [out.bslc]"
+                );
+                std::process::exit(1);
+            };
+            std::process::exit(bytecode::emit(path, args.get(3).map(String::as_str)));
+        }
+        Some("--run-bytecode") => {
+            let Some(path) = args.get(2) else {
+                eprintln!(
+                    "--run-bytecode ждёт файл с байт-кодом:\n  \
+                     bsl-cli --run-bytecode out.bslc"
+                );
+                std::process::exit(1);
+            };
+            std::process::exit(bytecode::run(path));
+        }
         Some("--ingest-measurements") => {
             let Some(input) = args.get(2) else {
                 eprintln!(

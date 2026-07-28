@@ -6,7 +6,7 @@ This repository is a Rust 2021 workspace implementing a BSL interpreter. Crates 
 
 - `crates/bsl-syntax`: lexer, parser, AST, and diagnostics.
 - `crates/bsl-sema`: name resolution and semantic representation.
-- `crates/bsl-bytecode`: bytecode instructions and compiler.
+- `crates/bsl-bytecode`: bytecode instructions, compiler, and the textual bytecode format (`text.rs`) used by both `--emit-bytecode` and `--run-bytecode` — printing and parsing share one format, so adding an instruction means touching `write_instr`, `parse_instr`, `OPCODES`, and the round-trip corpus together.
 - `crates/bsl-rt`, `bsl-number`, and `bsl-format`: runtime values, decimal arithmetic, and BSL formatting.
 - `crates/bsl-vm`: bytecode execution; examples live in `examples/`.
 - `crates/bsl-cli`: script runner, REPL (syntax highlighting in `highlight.rs`, Tab completion in `complete.rs`), and end-to-end conformance runner.
