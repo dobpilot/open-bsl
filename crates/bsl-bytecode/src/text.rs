@@ -147,6 +147,13 @@ pub fn write_program(program: &Program, source: Option<&str>) -> Result<String> 
         writeln!(out, "  {i} {}", quote(name)).unwrap();
     }
 
+    writeln!(out, "\n.functions {}", program.function_names.len()).unwrap();
+    for (i, name) in program.function_names.iter().enumerate() {
+        // `i` -> chunks[i+1]; номер чанка в комментарии, чтобы не считать
+        // в уме при чтении `Call func=N`.
+        writeln!(out, "  {i} {}  ; .chunk {}", quote(name), i + 1).unwrap();
+    }
+
     for (i, chunk) in program.chunks.iter().enumerate() {
         write_chunk(&mut out, i, chunk, program)?;
     }
@@ -155,14 +162,25 @@ pub fn write_program(program: &Program, source: Option<&str>) -> Result<String> 
 
 fn write_chunk(out: &mut String, index: usize, chunk: &Chunk, program: &Program) -> Result<()> {
     let what = if index == 0 {
-        "верхний уровень"
+        "верхний уровень".to_string()
     } else {
-        "процедура/функция"
+        match program.function_names.get(index - 1) {
+            Some(name) => name.clone(),
+            None => "процедура/функция".to_string(),
+        }
     };
+    let modes: Vec<&str> = chunk
+        .param_by_val
+        .iter()
+        .map(|by_val| if *by_val { "value" } else { "byref" })
+        .collect();
     writeln!(
         out,
-        "\n.chunk {index} params={} locals={} regs={}  ; {what}",
-        chunk.n_params, chunk.n_locals, chunk.n_regs
+        "\n.chunk {index} params={} locals={} regs={} argmodes=[{}]  ; {what}",
+        chunk.n_params,
+        chunk.n_locals,
+        chunk.n_regs,
+        modes.join(",")
     )
     .unwrap();
 
@@ -224,7 +242,10 @@ fn instr_comment(instr: &Instr, chunk: &Chunk, program: &Program) -> Option<Stri
             .shapes
             .get(*shape as usize)
             .map(|s| format!("поля: {}", field_names(&s.names, program))),
-        Instr::Call { func, .. } => Some(format!("-> .chunk {func}")),
+        Instr::Call { func, .. } => Some(match program.function_names.get(*func as usize - 1) {
+            Some(name) => format!("-> {name} (.chunk {func})"),
+            None => format!("-> .chunk {func}"),
+        }),
         _ => None,
     }
 }
@@ -602,6 +623,18 @@ pub fn parse_program(src: &str) -> Result<Program> {
         top_level_locals.push(name);
     }
 
+    let n = r.directive(".functions")?;
+    let mut function_names = Vec::with_capacity(n);
+    for i in 0..n {
+        let (no, text) = r.expect("имя функции")?;
+        let (idx, rest) = text
+            .split_once(char::is_whitespace)
+            .ok_or_else(|| TextError::At(no, "ожидалось «N \"имя\"»".to_string()))?;
+        parse_index(no, idx, i)?;
+        let (name, _) = unquote(no, rest.trim())?;
+        function_names.push(name);
+    }
+
     // Чанки — до конца файла.
     let mut chunks = Vec::new();
     while r.pos < r.lines.len() {
@@ -616,6 +649,7 @@ pub fn parse_program(src: &str) -> Result<Program> {
         names,
         shapes,
         top_level_locals,
+        function_names,
     })
 }
 
@@ -647,6 +681,26 @@ fn parse_chunk(r: &mut Reader, expected_index: usize) -> Result<Chunk> {
     let n_params = field_u8(&fields, no, "params")?;
     let n_locals = field_u8(&fields, no, "locals")?;
     let n_regs = field_u8(&fields, no, "regs")?;
+    // `argmodes=[value byref]` — режимы ПАРАМЕТРОВ этой функции (не
+    // аргументов её вызовов, те в `.argmodes` ниже).
+    let param_by_val: Vec<bool> = match field(&fields, no, "argmodes") {
+        Ok(list) => {
+            let inner = list
+                .strip_prefix('[')
+                .and_then(|t| t.strip_suffix(']'))
+                .ok_or_else(|| TextError::At(no, format!("ожидался список: «{list}»")))?;
+            inner
+                .split(',')
+                .filter(|t| !t.is_empty())
+                .map(|t| match t {
+                    "value" => Ok(true),
+                    "byref" => Ok(false),
+                    other => Err(TextError::At(no, format!("режим параметра «{other}»"))),
+                })
+                .collect::<Result<_>>()?
+        }
+        Err(_) => Vec::new(),
+    };
 
     let n = r.directive(".consts")?;
     let mut consts = Vec::with_capacity(n);
@@ -740,6 +794,7 @@ fn parse_chunk(r: &mut Reader, expected_index: usize) -> Result<Chunk> {
     }
 
     Ok(Chunk {
+        param_by_val,
         prop_cache: (0..instrs.len()).map(|_| RefCell::new(None)).collect(),
         instrs,
         consts,

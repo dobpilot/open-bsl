@@ -108,34 +108,22 @@ pub const OPEN_QUESTIONS: &[OpenQuestion] = &[
         blocks: "bsl_format::BooleanFormat",
     },
     OpenQuestion {
-        id: "FMT.LOCALE.KEY",
-        what: "имя ключа локали (`Л`/`L`) и что значит пустое значение",
-        chosen: "`Л=<код>`; без ключа — русская локаль",
-        blocks: "bsl_format::parse_locale",
+        id: "FMT.LOCALE.SHORT_NAMES",
+        what: "короткие формы имён месяцев и дней (`МММ`, `ддд`) в de/fr/ja — \
+               полные измерены, короткие нет",
+        chosen: "английские сокращения; выводить их из полных нельзя — немецкое \
+                 «Mär» против «Mrz» не угадывается",
+        blocks: "bsl_rt::date::months_short",
     },
     OpenQuestion {
-        id: "FMT.LOCALE.COVERAGE",
-        what: "какие коды локалей платформа понимает и что делает с незнакомым",
-        chosen: "поддержаны только `ru`/`en` (с любым регионом), остальное — \
-                 внятная ошибка вместо молчаливого отката к русской",
-        blocks: "bsl_rt::Locale::parse",
-    },
-    OpenQuestion {
-        id: "FMT.LOCALE.BOOLEAN",
-        what: "как выглядит `Истина` в английской локали — `Yes`, `True` или `1`",
-        chosen: "`Yes`/`No` — зеркало измеренного русского `Да`/`Нет`",
-        blocks: "bsl_rt::Locale::boolean_text",
-    },
-    OpenQuestion {
-        id: "FMT.LOCALE.MONTH_NAMES",
-        what: "как выглядят имена месяцев и дней недели в локалях сверх русской. \
-               Частично измерено: `Л=de_DE` даёт `Januar`, `Л=fr_FR` — `janvier`, \
-               то есть платформа локализует их полностью. Нужны все двенадцать \
-               месяцев и семь дней на каждую поддержанную локаль",
-        chosen: "английские имена для всех не-русских локалей — заведомо неверно, \
-                 но неверный ответ лучше выглядит чужим, чем правдоподобным \
-                 переводом",
-        blocks: "bsl_rt::date::months_full",
+        id: "SCOPE.MODULE_VARS",
+        what: "ничего: ИЗМЕРЕНО, что процедура видит переменную уровня модуля \
+               (`Перем` в начале файла) и запись через неё видна снаружи",
+        chosen: "НЕ РЕАЛИЗОВАНО. У нас чтение такой переменной в функции — ошибка \
+                 компиляции, а запись в процедуре молча заводит локальную. Это \
+                 не выбор, а незакрытая дыра: нужна область модуля в резолвере и \
+                 хранилище под неё в VM",
+        blocks: "bsl_sema::resolve_program; фикстура measure-unsupported",
     },
     OpenQuestion {
         id: "TYPE.IS_FILLED.BOOLEAN",
@@ -197,19 +185,6 @@ pub const OPEN_QUESTIONS: &[OpenQuestion] = &[
         blocks: "bsl_rt::BslValue::table_move; фикстура table-wave3",
     },
     OpenQuestion {
-        id: "EXEC.NEW_VARIABLE_SCOPE",
-        what: "переживает ли вызов переменная, впервые созданная ВНУТРИ `Выполнить`",
-        chosen: "не переживает — расширить статически размеченный кадр нечем",
-        blocks: "bsl-vm::run_dynamic_snippet; фикстура dynamic-execute",
-    },
-    OpenQuestion {
-        id: "EXEC.USER_FUNCTION_CALL",
-        what: "видит ли фрагмент `Выполнить` пользовательские процедуры и функции \
-               окружающего модуля",
-        chosen: "не видит — таблица сигнатур во фрагмент не передаётся",
-        blocks: "bsl_sema::resolve_snippet_stmts; фикстура dynamic-execute",
-    },
-    OpenQuestion {
         id: "EXEC.PROC_DECLARATION",
         what: "может ли фрагмент `Выполнить` объявлять процедуры и функции",
         chosen: "нет — объявление во фрагменте это `DynamicError`",
@@ -239,6 +214,36 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
         id: "NUM.DIV.EXACT_TIE",
         expect: "0.000000003725290298461914063",
         note: "1/2^28 — точная ничья; ...063 доказывает half-up",
+    },
+    Anchor {
+        id: "FMT.LOCALE.COVERAGE",
+        expect: "1,234.5|1.234,5",
+        note: "de_DE даёт немецкий формат; незнакомый код молча откатывается к русской; замер 8.3.27",
+    },
+    Anchor {
+        id: "FMT.LOCALE.KEY",
+        expect: "1\u{a0}234,5|1\u{a0}234,5",
+        note: "ключ Л понимается, ru и ru_RU эквивалентны; замер 8.3.27",
+    },
+    Anchor {
+        id: "FMT.LOCALE.BOOLEAN",
+        expect: "Yes|No",
+        note: "английская локаль печатает булево как Yes/No; замер 8.3.27",
+    },
+    Anchor {
+        id: "FMT.LOCALE.MONTH_NAMES",
+        expect: "Januar|janvier",
+        note: "имена месяцев локализуются полностью; все 12 сняты, см. date.rs; замер 8.3.27",
+    },
+    Anchor {
+        id: "EXEC.USER_FUNCTION_CALL",
+        expect: "42",
+        note: "фрагмент Выполнить ВИДИТ функции модуля; замер 8.3.27",
+    },
+    Anchor {
+        id: "EXEC.NEW_VARIABLE_SCOPE",
+        expect: "<ошибка: имя не пережило Выполнить>",
+        note: "имя, созданное внутри Выполнить, НЕ переживает вызов — наш выбор совпал; замер 8.3.27",
     },
     Anchor {
         id: "DATE.PATTERN_LETTERS",

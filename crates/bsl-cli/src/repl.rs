@@ -251,14 +251,14 @@ fn eval_repl_line(line: &str, session: &mut Session) -> Result<BslValue, String>
     }
 
     let (new_locals, body) =
-        bsl_sema::resolve_snippet_stmts(&session.locals, &stmts).map_err(|e| format!("{e:?}"))?;
+        bsl_sema::resolve_snippet_stmts(&session.locals, &stmts, &[]).map_err(|e| format!("{e:?}"))?;
     // Формы — ВСЕГДА свежие для этой строки (см. doc comment на
     // `compile_snippet`): shape-индексы внутри `chunk` ссылаются на них, а
     // не на что-то накопленное в сессии. Раньше здесь передавался
     // `session.shapes` (всегда пустой) — падало на первой же строке,
     // создающей `Новый Структура(...)`, с индексом за границами.
     let (chunk, new_names, shapes) =
-        bsl_bytecode::compile_snippet(&new_locals, &body, &session.names)
+        bsl_bytecode::compile_snippet(&new_locals, &body, &session.names, &[])
             .map_err(|e| format!("{e:?}"))?;
 
     let mut stack = session.values.clone();

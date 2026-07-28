@@ -14,6 +14,11 @@ pub enum CompileError {
     TooManyShapes,
     BreakOutsideLoop,
     ContinueOutsideLoop,
+    /// Фрагмент `Выполнить` зовёт функцию с номером, которого нет ни среди
+    /// его собственных объявлений, ни среди функций окружающей программы.
+    /// Корректный резолвинг такого не даёт — но текст фрагмента приходит из
+    /// рантайма, поэтому это ошибка, а не паника.
+    UnknownFunction,
 }
 
 /// Компилирует весь модуль: чанк верхнего уровня плюс чанк на каждую
@@ -35,6 +40,7 @@ pub fn compile_program(resolved: &ResolvedProgram) -> Result<Program, CompileErr
         &[],
         &resolved.top_level.body,
         &resolved.functions,
+        &[],
         resolved.top_level.uses_dynamic,
         &mut names,
         &mut shapes,
@@ -45,6 +51,7 @@ pub fn compile_program(resolved: &ResolvedProgram) -> Result<Program, CompileErr
             &f.params,
             &f.body,
             &resolved.functions,
+            &[],
             f.uses_dynamic,
             &mut names,
             &mut shapes,
@@ -55,6 +62,7 @@ pub fn compile_program(resolved: &ResolvedProgram) -> Result<Program, CompileErr
         names: names.into_names(),
         shapes: shapes.into_shapes(),
         top_level_locals: resolved.top_level.locals.clone(),
+        function_names: resolved.functions.iter().map(|f| f.name.clone()).collect(),
     })
 }
 
@@ -87,6 +95,7 @@ pub fn compile_snippet(
     all_locals: &[String],
     body: &[RStmt],
     program_names: &[String],
+    callee_params: &[Vec<bool>],
 ) -> Result<(Chunk, Vec<String>, Vec<std::rc::Rc<bsl_rt::Shape>>), CompileError> {
     let mut names = NameInterner::new();
     for n in program_names {
@@ -95,7 +104,7 @@ pub fn compile_snippet(
     let mut shapes = ShapeTable::new();
     // Фрагмент всегда получает таблицу имён: он и сам может содержать
     // вложенный `Выполнить`, а стоимость на одноразовом чанке никакая.
-    let chunk = compile_chunk(all_locals, &[], body, &[], true, &mut names, &mut shapes)?;
+    let chunk = compile_chunk(all_locals, &[], body, &[], callee_params, true, &mut names, &mut shapes)?;
     Ok((chunk, names.into_names(), shapes.into_shapes()))
 }
 
@@ -104,6 +113,7 @@ fn compile_chunk(
     params: &[ResolvedParam],
     body: &[RStmt],
     functions: &[ResolvedFunction],
+    callee_params: &[Vec<bool>],
     materialize_locals: bool,
     names: &mut NameInterner,
     shapes: &mut ShapeTable,
@@ -125,6 +135,7 @@ fn compile_chunk(
         max_reg: n_locals,
         loop_stack: Vec::new(),
         functions,
+        callee_params: callee_params.to_vec(),
         names,
         shapes,
     };
@@ -132,6 +143,7 @@ fn compile_chunk(
     c.compile_block(body)?;
     let prop_cache = c.instrs.iter().map(|_| std::cell::RefCell::new(None)).collect();
     Ok(Chunk {
+        param_by_val: params.iter().map(|p| p.by_val).collect(),
         instrs: c.instrs,
         consts: c.consts,
         call_arg_modes: c.call_arg_modes,
@@ -172,6 +184,9 @@ struct Compiler<'a> {
     /// решить режим передачи каждого аргумента (`Знач` смотрится у
     /// вызываемой функции, а не у самого вызова).
     functions: &'a [ResolvedFunction],
+    /// Режимы параметров вызываемых функций по их номеру — заполняется
+    /// только для фрагментов `Выполнить`, где `functions` пуст.
+    callee_params: Vec<Vec<bool>>,
     /// Общие на весь модуль — см. `compile_program`.
     names: &'a mut NameInterner,
     shapes: &'a mut ShapeTable,
@@ -473,11 +488,23 @@ impl<'a> Compiler<'a> {
     /// регистре `base + i`. Само решение "по ссылке или нет" статично и
     /// целиком принимается здесь, в компиляторе.
     fn compile_call(&mut self, func: u32, args: &[RExpr], dst: u8) -> Result<(), CompileError> {
-        let params = &self.functions[func as usize].params;
+        // Индекс приходит из резолвинга, но во ФРАГМЕНТЕ (`Выполнить`) он
+        // указывает на функцию окружающей программы, которой у компилятора
+        // фрагмента в `functions` нет. Поэтому режимы параметров берутся из
+        // отдельной таблицы, а выход за её границу — ошибка компиляции, не
+        // паника: текст фрагмента приходит из рантайма.
+        let by_val: Vec<bool> = match self.functions.get(func as usize) {
+            Some(f) => f.params.iter().map(|p| p.by_val).collect(),
+            None => self
+                .callee_params
+                .get(func as usize)
+                .cloned()
+                .ok_or(CompileError::UnknownFunction)?,
+        };
         let base = self.next_reg;
         let mut modes = Vec::with_capacity(args.len());
         for (i, arg) in args.iter().enumerate() {
-            let by_val = params[i].by_val;
+            let by_val = *by_val.get(i).unwrap_or(&true);
             if !by_val {
                 if let RExpr::Local(slot) = arg {
                     self.alloc_temp()?; // держим диапазон [base,base+argc) непрерывным

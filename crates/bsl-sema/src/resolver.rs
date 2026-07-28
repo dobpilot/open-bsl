@@ -51,6 +51,13 @@ struct FuncSig {
 /// один проход (чтобы вызовы работали независимо от порядка объявления и
 /// поддерживали рекурсию), затем резолвит каждое тело и операторы верхнего
 /// уровня.
+/// НЕ ИЗМЕРЕНО(SCOPE.MODULE_VARS) — точнее, измерено и НЕ РЕАЛИЗОВАНО:
+/// платформа даёт процедурам видеть переменные уровня модуля (`Перем` в
+/// начале файла), а здесь области модуля нет вовсе. Каждая функция
+/// получает свой пустой `Resolver`, поэтому чтение такой переменной внутри
+/// функции — `UndefinedVariable`, а запись молча заводит локальную. Чтобы
+/// это закрыть, нужна отдельная область имён модуля и хранилище под неё в
+/// VM (кадр верхнего уровня живёт не всё исполнение).
 pub fn resolve_program(items: &[Item]) -> Result<ResolvedProgram, SemaError> {
     let mut sigs: HashMap<String, FuncSig> = HashMap::new();
     let mut func_items: Vec<&Item> = Vec::new();
@@ -176,18 +183,30 @@ pub fn resolve_script(stmts: &[AStmt]) -> Result<Resolved, SemaError> {
 /// себе расширять статически размеченный кадр; REPL — персистит, у него
 /// кадр и так растёт от строки к строке).
 ///
-/// Вызовы пользовательских процедур/функций фрагмент делать не может —
-/// `funcs` здесь всегда пуст: сигнатуры уже откомпилированных функций
-/// сюда не передаются (see `bsl-vm` doc comment для обоснования).
-/// НЕ ИЗМЕРЕНО(EXEC.USER_FUNCTION_CALL): в 1С фрагмент, скорее всего,
-/// видит модульные процедуры и функции — тогда `funcs` придётся протянуть
-/// сюда из уже скомпилированной программы. Замер в
-/// `tests/conformance/measure/measure-unsupported.bsl`.
+/// ИЗМЕРЕНО на 8.3.27: фрагмент ВИДИТ процедуры и функции модуля —
+/// `Вычислить("Удвоить(21)")` возвращает 42. Поэтому `signatures` тянется
+/// сюда из уже скомпилированной программы: пара «имя -> (номер, арность)»
+/// в том же порядке, в каком функции лежат в `Program::chunks[1..]`.
+/// Пустой список означает «функций нет» (так зовёт REPL до первого
+/// объявления), а не «вызывать нельзя».
 pub fn resolve_snippet_stmts(
     existing_locals: &[String],
     stmts: &[AStmt],
+    signatures: &[(String, usize)],
 ) -> Result<(Vec<String>, Vec<RStmt>), SemaError> {
-    let empty_funcs = HashMap::new();
+    let empty_funcs: HashMap<String, FuncSig> = signatures
+        .iter()
+        .enumerate()
+        .map(|(index, (name, arity))| {
+            (
+                name.to_uppercase(),
+                FuncSig {
+                    index: index as u32,
+                    has_default: vec![false; *arity],
+                },
+            )
+        })
+        .collect();
     let index = existing_locals
         .iter()
         .enumerate()
@@ -1093,7 +1112,7 @@ mod tests {
         let existing = vec!["x".to_string()];
         let prog = parse("x = x + 1;\ny = 2;").unwrap();
         let stmts = items_to_stmts(prog.items);
-        let (locals, body) = resolve_snippet_stmts(&existing, &stmts).unwrap();
+        let (locals, body) = resolve_snippet_stmts(&existing, &stmts, &[]).unwrap();
         assert_eq!(locals, vec!["x".to_string(), "y".to_string()]);
         assert_eq!(
             body[0],

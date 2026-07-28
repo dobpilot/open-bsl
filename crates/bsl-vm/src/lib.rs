@@ -160,6 +160,9 @@ pub fn run_repl_chunk(
         names,
         shapes,
         top_level_locals: locals,
+        // В REPL объявления процедур пока не поддержаны, звать из
+        // фрагмента нечего.
+        function_names: Vec::new(),
     };
     drive(&program, 0, stack)
 }
@@ -877,11 +880,22 @@ fn run_dynamic_snippet(
         .collect::<Result<_, _>>()?;
     snippet_stack.resize(compiled.chunk.n_regs as usize, BslValue::Undefined);
 
+    // Чанки функций едут во фрагмент КАК ЕСТЬ, только нулевой заменён на
+    // сам фрагмент: измерено, что `Вычислить("Удвоить(21)")` на платформе
+    // работает, а `Call func=N` у нас индексирует ровно `chunks[N]`.
+    // Поэтому нумерация обязана совпасть с исходной программой.
+    let mut chunks = program.chunks.clone();
+    if chunks.is_empty() {
+        chunks.push(compiled.chunk.clone());
+    } else {
+        chunks[0] = compiled.chunk.clone();
+    }
     let snippet_program = Program {
-        chunks: vec![compiled.chunk.clone()],
+        chunks,
         names: program.names.clone(),
         shapes: compiled.shapes.clone(),
         top_level_locals: Vec::new(),
+        function_names: program.function_names.clone(),
     };
 
     let (value, final_stack) = drive(&snippet_program, 0, snippet_stack)?;
@@ -891,10 +905,9 @@ fn run_dynamic_snippet(
     // Имена, объявленные самим фрагментом, получили слоты ЗА `old_count` и
     // никуда не переносятся — расширить статически размеченный кадр нечем.
     //
-    // НЕ ИЗМЕРЕНО(EXEC.NEW_VARIABLE_SCOPE): `Выполнить` в 1С исполняется в
-    // контексте текущей области видимости, так что новое имя, возможно, в
-    // ней и остаётся. Если замер это подтвердит, потребуется кадр с именной
-    // таблицей, а не эта перекладка по номерам слотов.
+    // ИЗМЕРЕНО на 8.3.27: платформа ведёт себя ТАК ЖЕ — имя, впервые
+    // созданное внутри `Выполнить`, вызов не переживает. Выбор оказался
+    // верным, кадр с именной таблицей не нужен.
     for i in 0..old_count {
         let d = frame.reg_index(i as u8);
         reg_store(stack, d, reg_load(&final_stack, i)?)?;
@@ -994,9 +1007,31 @@ fn compile_dynamic_snippet(
         }
     }
 
-    let (all_locals, body) = bsl_sema::resolve_snippet_stmts(scope_locals, &stmts)
+    // Имя + арность каждой функции модуля, в порядке `chunks[1..]`.
+    let signatures: Vec<(String, usize)> = program
+        .function_names
+        .iter()
+        .enumerate()
+        .map(|(i, name)| {
+            let arity = program
+                .chunks
+                .get(i + 1)
+                .map_or(0, |c| c.n_params as usize);
+            (name.clone(), arity)
+        })
+        .collect();
+    let (all_locals, body) = bsl_sema::resolve_snippet_stmts(scope_locals, &stmts, &signatures)
         .map_err(|e| RtError::DynamicError(format!("{e:?}")))?;
-    let (chunk, _names, shapes) = bsl_bytecode::compile_snippet(&all_locals, &body, &program.names)
+    // Режимы параметров каждой функции модуля: фрагмент может её звать, и
+    // компилятору надо знать, какой аргумент идёт по ссылке.
+    let callee_params: Vec<Vec<bool>> = program
+        .chunks
+        .iter()
+        .skip(1)
+        .map(|c| c.param_by_val.clone())
+        .collect();
+    let (chunk, _names, shapes) =
+        bsl_bytecode::compile_snippet(&all_locals, &body, &program.names, &callee_params)
         .map_err(|e| RtError::DynamicError(format!("{e:?}")))?;
 
     Ok(CompiledSnippet { chunk, shapes })
@@ -1720,7 +1755,9 @@ mod tests {
     /// индексация в `step` возвращает `InvalidBytecode` вместо паники.
     fn corrupt_program(instrs: Vec<Instr>) -> Program {
         Program {
+            function_names: Vec::new(),
             chunks: vec![bsl_bytecode::Chunk {
+                param_by_val: Vec::new(),
                 instrs,
                 consts: Vec::new(),
                 call_arg_modes: Vec::new(),
@@ -2281,21 +2318,11 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_locale_is_a_catchable_error() {
-        // НЕ ИЗМЕРЕНО(FMT.LOCALE.COVERAGE): незнакомая локаль — обычное
-        // исключение времени исполнения, значит ловится Попыткой и не
-        // роняет скрипт целиком.
-        let err = run_src_err(r#"Возврат Формат(1, "Л=zz_ZZ");"#);
-        assert!(matches!(err, RtError::UnsupportedLocale(code) if code == "zz_ZZ"));
-        let v = run_src(
-            "Попытка\n\
-             р = Формат(1, \"Л=zz_ZZ\");\n\
-             Исключение\n\
-             р = \"поймано\";\n\
-             КонецПопытки;\n\
-             Возврат р;",
-        );
-        assert_eq!(str_val(&v), "поймано");
+    fn an_unknown_locale_falls_back_to_russian() {
+        // ИЗМЕРЕНО: незнакомый код локали — НЕ ошибка, платформа молча
+        // форматирует по-русски. Раньше здесь было исключение.
+        let v = run_src(r#"Возврат Формат(1234.5, "Л=zz_ZZ");"#);
+        assert_eq!(str_val(&v), "1\u{a0}234,5");
     }
 
     #[test]

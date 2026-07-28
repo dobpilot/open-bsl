@@ -430,22 +430,48 @@ const WEEKDAYS_FULL_EN: [&str; 7] = [
 
 const WEEKDAYS_SHORT_EN: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+
+/// Имена месяцев и дней недели ИЗМЕРЕНЫ на 8.3.27 прогоном
+/// `Формат(Дата(2024, N, 15), "Л=<код>; ДФ=ММММ")` по всем двенадцати
+/// месяцам и семи дням каждой локали. Японские месяцы — числовые с
+/// иероглифом 月, и это не заглушка, а то, что вернула платформа.
+const MONTHS_FULL_DE: [&str; 12] = [
+    "Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober",
+    "November", "Dezember",
+];
+const MONTHS_FULL_FR: [&str; 12] = [
+    "janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre",
+    "octobre", "novembre", "décembre",
+];
+const MONTHS_FULL_JA: [&str; 12] = [
+    "1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月",
+];
+const WEEKDAYS_FULL_DE: [&str; 7] = [
+    "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag",
+];
+const WEEKDAYS_FULL_FR: [&str; 7] = [
+    "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche",
+];
+const WEEKDAYS_FULL_JA: [&str; 7] = [
+    "月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日", "日曜日",
+];
+
 fn months_full(locale: Locale) -> &'static [&'static str; 12] {
     match locale {
         Locale::Ru => &MONTHS_FULL_RU,
-        // НЕ ИЗМЕРЕНО(FMT.LOCALE.MONTH_NAMES): имена месяцев в de/fr/ja.
-        // Отдаём английские, а не выдуманный перевод — неверный ответ
-        // лучше выглядит чужим, чем правдоподобным.
-        _ => &MONTHS_FULL_EN,
+        Locale::En => &MONTHS_FULL_EN,
+        Locale::De => &MONTHS_FULL_DE,
+        Locale::Fr => &MONTHS_FULL_FR,
+        Locale::Ja => &MONTHS_FULL_JA,
     }
 }
 
 fn months_short(locale: Locale) -> &'static [&'static str; 12] {
     match locale {
         Locale::Ru => &MONTHS_SHORT_RU,
-        // НЕ ИЗМЕРЕНО(FMT.LOCALE.MONTH_NAMES): имена месяцев в de/fr/ja.
-        // Отдаём английские, а не выдуманный перевод — неверный ответ
-        // лучше выглядит чужим, чем правдоподобным.
+        // НЕ ИЗМЕРЕНО(FMT.LOCALE.SHORT_NAMES): КОРОТКИЕ формы (`МММ`,
+        // `ддд`) в de/fr/ja. Полные — измерены и стоят выше; сокращать их
+        // самостоятельно нельзя (немецкое «Mär» против «Mrz» не угадать).
         _ => &MONTHS_SHORT_EN,
     }
 }
@@ -453,19 +479,17 @@ fn months_short(locale: Locale) -> &'static [&'static str; 12] {
 fn weekdays_full(locale: Locale) -> &'static [&'static str; 7] {
     match locale {
         Locale::Ru => &WEEKDAYS_FULL_RU,
-        // НЕ ИЗМЕРЕНО(FMT.LOCALE.MONTH_NAMES): имена месяцев в de/fr/ja.
-        // Отдаём английские, а не выдуманный перевод — неверный ответ
-        // лучше выглядит чужим, чем правдоподобным.
-        _ => &WEEKDAYS_FULL_EN,
+        Locale::En => &WEEKDAYS_FULL_EN,
+        Locale::De => &WEEKDAYS_FULL_DE,
+        Locale::Fr => &WEEKDAYS_FULL_FR,
+        Locale::Ja => &WEEKDAYS_FULL_JA,
     }
 }
 
 fn weekdays_short(locale: Locale) -> &'static [&'static str; 7] {
     match locale {
         Locale::Ru => &WEEKDAYS_SHORT_RU,
-        // НЕ ИЗМЕРЕНО(FMT.LOCALE.MONTH_NAMES): имена месяцев в de/fr/ja.
-        // Отдаём английские, а не выдуманный перевод — неверный ответ
-        // лучше выглядит чужим, чем правдоподобным.
+        // НЕ ИЗМЕРЕНО(FMT.LOCALE.SHORT_NAMES), см. выше.
         _ => &WEEKDAYS_SHORT_EN,
     }
 }

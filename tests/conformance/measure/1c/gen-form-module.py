@@ -12,13 +12,19 @@
 """
 import re, sys, pathlib
 
+nl = chr(10)
+
 src_path, out_module, out_file = sys.argv[1], sys.argv[2], sys.argv[3]
 text = pathlib.Path(src_path).read_text(encoding="utf-8")
 text = re.sub(r'\bСообщить\s*\(', 'СообщитьВФайл(', text)
 
-decls, body, depth = [], [], 0
+decls, body, module_vars, depth = [], [], [], 0
 start = re.compile(r'^\s*(Процедура|Функция)\b', re.I)
 end = re.compile(r'^\s*(КонецПроцедуры|КонецФункции)\b', re.I)
+# `Перем` на верхнем уровне — объявление переменной МОДУЛЯ, и переносить
+# его в тело процедуры нельзя: оно стало бы локальным, а это ровно та
+# разница, которую мы и хотим замерить.
+var_decl = re.compile(r'^\s*Перем\b', re.I)
 for line in text.splitlines():
     if depth == 0 and start.match(line):
         depth = 1
@@ -28,12 +34,14 @@ for line in text.splitlines():
         if end.match(line):
             depth = 0
             decls.append("")
+    elif var_decl.match(line):
+        module_vars.append(line)
     else:
         body.append(line)
 
-nl = chr(10)
 indented = nl.join("	" + l if l.strip() else l for l in body)
-module = f'''&НаКлиенте
+module = f'''{nl.join(module_vars)}
+&НаКлиенте
 Процедура ПриОткрытии(Отказ)
 	ВыполнитьТестНаСервере();
 	ЗавершитьРаботуСистемы(Ложь);

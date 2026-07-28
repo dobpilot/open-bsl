@@ -207,16 +207,15 @@ fn spec_parts(spec: &str) -> Vec<(String, String)> {
 /// Локаль форматной строки: ключ `Л`. Разбирается ПЕРВЫМ проходом, до
 /// остальных ключей — она задаёт умолчания, поверх которых те ложатся.
 ///
-/// НЕ ИЗМЕРЕНО(FMT.LOCALE.KEY): понимает ли платформа этот ключ под именем
-/// `Л`/`L` и что означает пустое значение. Взято: `Л=<код>` — локаль,
-/// отсутствие ключа — русская.
-fn parse_locale(parts: &[(String, String)]) -> RtResult<Locale> {
+/// Ключ и откат ИЗМЕРЕНЫ: `Л=<код>` задаёт локаль, отсутствие ключа и
+/// незнакомый код — русская.
+fn parse_locale(parts: &[(String, String)]) -> Locale {
     for (key, val) in parts {
         if key == "Л" || key == "L" {
-            return Locale::parse_or_error(val);
+            return Locale::parse_or_default(val);
         }
     }
-    Ok(Locale::default())
+    Locale::default()
 }
 
 /// Разбирает из форматной строки то, что относится к ДАТЕ. Ключи, не
@@ -226,7 +225,7 @@ fn parse_locale(parts: &[(String, String)]) -> RtResult<Locale> {
 pub fn parse_date_format(spec: &str) -> RtResult<DateFormat> {
     let parts = spec_parts(spec);
     let mut fmt = DateFormat {
-        locale: parse_locale(&parts)?,
+        locale: parse_locale(&parts),
         ..DateFormat::default()
     };
     for (key, val) in parts {
@@ -243,7 +242,7 @@ pub fn parse_date_format(spec: &str) -> RtResult<DateFormat> {
 pub fn parse_boolean_format(spec: &str) -> RtResult<BooleanFormat> {
     let parts = spec_parts(spec);
     let mut fmt = BooleanFormat {
-        locale: parse_locale(&parts)?,
+        locale: parse_locale(&parts),
         true_text: None,
         false_text: None,
     };
@@ -264,7 +263,7 @@ pub fn parse_boolean_format(spec: &str) -> RtResult<BooleanFormat> {
 /// Ошибка возможна ровно одна — незнакомая локаль в `Л`.
 pub fn parse_number_format(spec: &str) -> RtResult<NumberFormat> {
     let parts = spec_parts(spec);
-    let mut fmt = NumberFormat::for_locale(parse_locale(&parts)?);
+    let mut fmt = NumberFormat::for_locale(parse_locale(&parts));
     fmt.blank_zero = true;
     for (key, val) in &parts {
         let val = val.as_str();
@@ -680,15 +679,12 @@ mod tests {
         assert_eq!(f("1234.5", "Л=ja_JP"), "1,234.5");
     }
 
+    /// ИЗМЕРЕНО: несуществующий код — не ошибка, а откат к русской
+    /// (`Формат(1234.5, "Л=zz_ZZ")` даёт `1 234,5`). До замера здесь была
+    /// ошибка «чтобы не притворяться» — платформа притворяется.
     #[test]
-    fn a_locale_outside_the_measured_set_is_still_an_error() {
-        // НЕ ИЗМЕРЕНО(FMT.LOCALE.COVERAGE): что платформа делает с
-        // несуществующим кодом. Ошибка хотя бы не притворяется, что локаль
-        // применена.
-        assert!(matches!(
-            parse_number_format("Л=zz_ZZ"),
-            Err(RtError::UnsupportedLocale(_))
-        ));
+    fn an_unknown_locale_falls_back_to_russian() {
+        assert_eq!(f("1234.5", "Л=zz_ZZ"), format!("1{NBSP}234,5"));
     }
 
     #[test]
