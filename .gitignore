@@ -1,3 +1,5 @@
 /target
 *.svg
 perf.data
+# напечатанный байт-код (--emit-bytecode) — артефакт, не исходник
+*.bslc
