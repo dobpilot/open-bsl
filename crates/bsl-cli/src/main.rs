@@ -1,13 +1,13 @@
-//! `bsl-cli <файл.bsl>` — компилирует и исполняет файл целиком.
-//! `bsl-cli` без аргументов — REPL с подсветкой и дополнением по Tab (см.
-//! модуль `repl`): каждая строка резолвится поверх уже накопленных за
-//! сессию переменных/имён полей и исполняется как отдельный чанк
-//! (`bsl_vm::run_repl_chunk`), значение (если `Возврат` был) печатается.
-//! `bsl-cli --emit-bytecode <файл.bsl> [выход.bslc]` — вместо исполнения
-//! напечатать байт-код; `bsl-cli --run-bytecode <файл.bslc>` — исполнить
-//! напечатанное. Формат один и тот же, см. `bsl_bytecode::text`.
-//! `bsl-cli --ingest-measurements <файл> [measure-all.bsl]` — приём вывода
-//! сеанса замеров у платформы, см. модуль `ingest`.
+//! Точка входа CLI. Разбор аргументов идёт ЧЕРЕЗ ТАБЛИЦУ [`COMMANDS`], а
+//! не через `match` по строковым литералам: та же таблица печатается в
+//! `--help`, поэтому команда не может быть реализована и не описана (её
+//! просто не найдёт разбор) или описана и не реализована (`match` по
+//! `Kind` исчерпывающий).
+//!
+//! Формы вызова описаны в самой таблице; здесь — только то, чего в ней не
+//! видно: без аргументов запускается REPL (модуль `repl` — подсветка,
+//! дополнение по Tab), а аргумент, не похожий на флаг, считается путём к
+//! скрипту и исполняется целиком.
 
 mod bytecode;
 mod complete;
@@ -17,43 +17,177 @@ mod repl;
 
 use bsl_rt::BslValue;
 
+/// Что делает команда. Отдельно от флага, потому что у команды бывает
+/// сокращение (`--help`/`-h`), а поведение одно.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    Help,
+    EmitBytecode,
+    RunBytecode,
+    IngestMeasurements,
+}
+
+struct Command {
+    flag: &'static str,
+    /// Сокращённая форма, если есть.
+    alias: Option<&'static str>,
+    kind: Kind,
+    /// Аргументы для строки использования; `[в квадратных]` — необязательные.
+    args: &'static str,
+    /// Одна строка о том, что команда делает.
+    what: &'static str,
+    /// Подробности под списком — то, чего в одну строку не сказать.
+    details: &'static [&'static str],
+}
+
+const COMMANDS: &[Command] = &[
+    Command {
+        flag: "--emit-bytecode",
+        alias: None,
+        kind: Kind::EmitBytecode,
+        args: "<файл.bsl> [выход.bslc]",
+        what: "напечатать байт-код вместо исполнения",
+        details: &[
+            "Без файла-выхода печатает в stdout. Формат печати и формат исполнения —",
+            "один и тот же: напечатанное можно прочитать, поправить руками и запустить",
+            "через --run-bytecode. Всё от `;` до конца строки — комментарий.",
+        ],
+    },
+    Command {
+        flag: "--run-bytecode",
+        alias: None,
+        kind: Kind::RunBytecode,
+        args: "<файл.bslc>",
+        what: "исполнить напечатанный байт-код",
+        details: &[
+            "Разобранная программа исполняется тем же путём, что и только что",
+            "скомпилированная. Номер формата в заголовке сверяется, чужой отвергается.",
+        ],
+    },
+    Command {
+        flag: "--ingest-measurements",
+        alias: None,
+        kind: Kind::IngestMeasurements,
+        args: "<вывод-платформы> [measure-all.bsl]",
+        what: "принять результат сеанса замеров у реальной 1С",
+        details: &[
+            "Раскладывает вывод в tests/conformance/measure/platform.tsv, сравнивает с",
+            "нашим на том же скрипте и печатает расхождения. В КОДЕ НЕ ПРАВИТ НИЧЕГО:",
+            "решение по каждому расхождению принимает человек.",
+        ],
+    },
+    Command {
+        flag: "--help",
+        alias: Some("-h"),
+        kind: Kind::Help,
+        args: "",
+        what: "эта подсказка",
+        details: &[],
+    },
+];
+
+/// Текст `--help`. Собирается из таблицы команд, поэтому описать команду и
+/// забыть — нельзя.
+fn help() -> String {
+    let mut out = format!(
+        "bsl-cli {} — интерпретатор BSL (встроенный язык 1С:Предприятие)\n\n",
+        env!("CARGO_PKG_VERSION")
+    );
+    out.push_str("ИСПОЛЬЗОВАНИЕ:\n");
+    // Форма вызова строкой, описание — под ней с отступом. Ровные колонки
+    // тут не выходят: `--ingest-measurements <вывод-платформы>` длиннее
+    // половины терминала, и описание уехало бы к правому краю.
+    let mut entry = |call: &str, what: &str| {
+        out.push_str(&format!(
+            "  {}\n      {what}\n",
+            format!("bsl-cli {call}").trim_end()
+        ));
+    };
+    entry("", "REPL: подсветка, дополнение по Tab, история");
+    entry("<файл.bsl>", "исполнить скрипт целиком");
+    for c in COMMANDS {
+        let flag = match c.alias {
+            Some(a) => format!("{}, {a}", c.flag),
+            None => c.flag.to_string(),
+        };
+        let call = if c.args.is_empty() {
+            flag
+        } else {
+            format!("{flag} {}", c.args)
+        };
+        entry(&call, c.what);
+    }
+
+    out.push_str("\nПОДРОБНЕЕ:\n");
+    for c in COMMANDS.iter().filter(|c| !c.details.is_empty()) {
+        out.push_str(&format!("  {}\n", c.flag));
+        for line in c.details {
+            out.push_str(&format!("    {line}\n"));
+        }
+    }
+
+    out.push_str("\nОКРУЖЕНИЕ:\n");
+    out.push_str("  NO_COLOR      отключает цвет в REPL (как и TERM=dumb)\n");
+    out
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    match args.get(1).map(String::as_str) {
-        Some("--emit-bytecode") => {
-            let Some(path) = args.get(2) else {
-                eprintln!(
-                    "--emit-bytecode ждёт файл со скриптом:\n  \
-                     bsl-cli --emit-bytecode script.bsl [out.bslc]"
-                );
-                std::process::exit(1);
-            };
-            std::process::exit(bytecode::emit(path, args.get(3).map(String::as_str)));
+    let code = match args.get(1).map(String::as_str) {
+        None => {
+            repl::run();
+            0
         }
-        Some("--run-bytecode") => {
-            let Some(path) = args.get(2) else {
-                eprintln!(
-                    "--run-bytecode ждёт файл с байт-кодом:\n  \
-                     bsl-cli --run-bytecode out.bslc"
-                );
-                std::process::exit(1);
+        // Всё, что начинается с дефиса, — команда, а не имя файла: молча
+        // пытаться прочитать «--emitbytecode» как скрипт хуже, чем сказать,
+        // что такой команды нет.
+        Some(arg) if arg.starts_with('-') => {
+            let Some(cmd) = COMMANDS
+                .iter()
+                .find(|c| c.flag == arg || c.alias == Some(arg))
+            else {
+                eprintln!("неизвестная команда «{arg}». Список команд: bsl-cli --help");
+                std::process::exit(2);
             };
-            std::process::exit(bytecode::run(path));
+            run_command(cmd, &args)
         }
-        Some("--ingest-measurements") => {
-            let Some(input) = args.get(2) else {
-                eprintln!(
-                    "--ingest-measurements ждёт файл с выводом платформы:\n  \
-                     bsl-cli --ingest-measurements platform-output.txt [measure-all.bsl]"
-                );
-                std::process::exit(1);
-            };
-            let code = ingest::run(input, args.get(3).map(String::as_str));
-            std::process::exit(code);
+        Some(path) => {
+            run_file(path);
+            0
         }
-        Some(path) => run_file(path),
-        None => repl::run(),
+    };
+    std::process::exit(code);
+}
+
+fn run_command(cmd: &Command, args: &[String]) -> i32 {
+    match cmd.kind {
+        Kind::Help => {
+            print!("{}", help());
+            0
+        }
+        Kind::EmitBytecode => match args.get(2) {
+            Some(path) => bytecode::emit(path, args.get(3).map(String::as_str)),
+            None => missing_argument(cmd),
+        },
+        Kind::RunBytecode => match args.get(2) {
+            Some(path) => bytecode::run(path),
+            None => missing_argument(cmd),
+        },
+        Kind::IngestMeasurements => match args.get(2) {
+            Some(input) => ingest::run(input, args.get(3).map(String::as_str)),
+            None => missing_argument(cmd),
+        },
     }
+}
+
+/// Обязательный аргумент не передан — показываем форму вызова ИМЕННО этой
+/// команды, а не весь --help: человек уже знает, чего хочет.
+fn missing_argument(cmd: &Command) -> i32 {
+    eprintln!(
+        "{}: не хватает аргумента\n  bsl-cli {} {}",
+        cmd.flag, cmd.flag, cmd.args
+    );
+    2
 }
 
 fn run_file(path: &str) {
@@ -107,5 +241,79 @@ pub fn print_value(v: &BslValue) {
     match bsl_format::format_value(v, None) {
         Ok(s) => println!("{s}"),
         Err(e) => eprintln!("ошибка форматирования результата: {e}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Подсказка собирается из таблицы, но проверить, что в неё попала
+    /// КАЖДАЯ команда, всё равно стоит: рендер легко сломать так, что
+    /// часть таблицы просто не напечатается.
+    #[test]
+    fn help_mentions_every_command() {
+        let text = help();
+        for c in COMMANDS {
+            assert!(text.contains(c.flag), "в --help нет {}", c.flag);
+            assert!(text.contains(c.what), "в --help нет описания {}", c.flag);
+            if let Some(alias) = c.alias {
+                assert!(text.contains(alias), "в --help нет сокращения {alias}");
+            }
+            for line in c.details {
+                assert!(text.contains(line), "в --help нет подробностей {}", c.flag);
+            }
+        }
+        // Формы без флага — REPL и запуск скрипта — тоже описаны.
+        assert!(text.contains("<файл.bsl>"));
+        assert!(text.contains("REPL"));
+        // Версия — из Cargo.toml, а не переписанная руками.
+        assert!(text.contains(env!("CARGO_PKG_VERSION")));
+    }
+
+    #[test]
+    fn command_table_is_well_formed() {
+        for c in COMMANDS {
+            assert!(
+                c.flag.starts_with("--"),
+                "{}: флаг без двух дефисов",
+                c.flag
+            );
+            assert!(!c.what.is_empty(), "{}: нет описания", c.flag);
+            if let Some(alias) = c.alias {
+                assert!(alias.starts_with('-'), "{alias}: сокращение без дефиса");
+            }
+        }
+        // Флаги и сокращения не повторяются — иначе разбор нашёл бы первый,
+        // а человек читал бы второй.
+        let mut all: Vec<&str> = COMMANDS
+            .iter()
+            .flat_map(|c| std::iter::once(c.flag).chain(c.alias))
+            .collect();
+        let before = all.len();
+        all.sort_unstable();
+        all.dedup();
+        assert_eq!(before, all.len(), "повтор флага в таблице команд");
+    }
+
+    /// Разбор аргументов и подсказка ходят по одной таблице — значит, поиск
+    /// по ней обязан находить ровно то, что напечатано в подсказке.
+    #[test]
+    fn every_advertised_flag_resolves_to_a_command() {
+        for c in COMMANDS {
+            for flag in std::iter::once(c.flag).chain(c.alias) {
+                let found = COMMANDS
+                    .iter()
+                    .find(|x| x.flag == flag || x.alias == Some(flag));
+                assert_eq!(
+                    found.map(|x| x.kind),
+                    Some(c.kind),
+                    "{flag} не резолвится в свою команду"
+                );
+            }
+        }
+        assert!(COMMANDS
+            .iter()
+            .all(|c| c.flag != "--нет-такой" && c.alias != Some("--нет-такой")));
     }
 }

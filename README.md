@@ -12,6 +12,7 @@ REPL).
 
 ```bash
 cargo test --workspace
+cargo run -p bsl-cli -- --help   # список команд
 ```
 
 ## REPL
