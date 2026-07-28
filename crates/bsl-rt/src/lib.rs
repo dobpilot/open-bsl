@@ -351,28 +351,33 @@ impl BslValue {
     /// `bsl-sema::resolver::resolve_call` литеральным `0` (см. там же, почему
     /// не вариативная арность).
     ///
-    /// Режим — параметр, а не зашитая схема, потому что не измерена ни
-    /// кодировка режимов числами — НЕ ИЗМЕРЕНО(NUM.ROUND.MODE_CODES), — ни
-    /// умолчание, НЕ ИЗМЕРЕНО(NUM.ROUND.DEFAULT_MODE); см.
-    /// `bsl_number::RoundMode`/`DEFAULT_ROUND_MODE`. Здесь принято `0` ->
-    /// умолчание (half-up, схема деления), `1` -> half-even; это
-    /// ПРЕДПОЛОЖЕНИЕ, помеченное как таковое, а не снятый с платформы факт.
+    /// Кодировка режимов ИЗМЕРЕНА на платформе: `0` — половина к нулю,
+    /// `1` — половина от нуля, опущенный аргумент — как `1`, а НЕ как `0`.
+    ///
+    /// Неизвестный код (`Окр(2.5, 0, 7)`) платформа не считает ошибкой и
+    /// округляет по умолчанию — измерено, поэтому здесь тоже не ошибка.
+    /// Раньше тут стояло исключение, и это было расхождение.
     pub fn round(&self, digits: &Self, mode: &Self) -> RtResult<Self> {
         let n = self.as_number("Окр")?;
-        let scale = Self::round_arg_as_i32(digits)?;
-        let mode = match Self::round_arg_as_i32(mode)? {
-            0 => bsl_number::DEFAULT_ROUND_MODE,
-            1 => bsl_number::RoundMode::HalfEven,
-            _ => {
-                return Err(RtError::TypeError {
-                    expected: "РежимОкругления (0 или 1)",
-                    op: "Окр",
-                })
-            }
+        // Опущенное число разрядов — ноль (`Окр(2.5)` округляет до целого).
+        let scale = match digits {
+            BslValue::Undefined => 0,
+            other => Self::round_arg_as_i32(other)?,
+        };
+        // Опущенный третий аргумент приходит `Неопределено` (см.
+        // `bsl-sema::resolver::resolve_call`): подставлять вместо него `0`
+        // нельзя — это ДРУГОЙ режим.
+        let mode = match mode {
+            BslValue::Undefined => bsl_number::DEFAULT_ROUND_MODE,
+            other => match Self::round_arg_as_i32(other)? {
+                0 => bsl_number::RoundMode::HalfDown,
+                1 => bsl_number::RoundMode::HalfUp,
+                _ => bsl_number::DEFAULT_ROUND_MODE,
+            },
         };
         Ok(BslValue::Number(match mode {
             bsl_number::RoundMode::HalfUp => n.round_to_scale(scale),
-            bsl_number::RoundMode::HalfEven => n.round_to_scale_half_even(scale),
+            bsl_number::RoundMode::HalfDown => n.round_to_scale_half_down(scale),
         }))
     }
 

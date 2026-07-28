@@ -575,8 +575,7 @@ impl<'a> Resolver<'a> {
                 // заводим вариативную арность ради одной функции:
                 // `BuiltinFn::Round` в рантайме всегда видит ровно 3
                 // аргумента. `0` для режима означает "умолчание" (см.
-                // `BslValue::round`), не конкретную схему — какая схема
-                // за ним стоит, НЕ ИЗМЕРЕНО(NUM.ROUND.DEFAULT_MODE).
+                // `BslValue::round`).
                 if name.eq_ignore_ascii_case("Окр") || name.eq_ignore_ascii_case("Round") {
                     const ROUND_ARITY: usize = 3;
                     if args.is_empty() || args.len() > ROUND_ARITY {
@@ -588,7 +587,10 @@ impl<'a> Resolver<'a> {
                     }
                     let mut rargs = self.resolve_required_args(args)?;
                     while rargs.len() < ROUND_ARITY {
-                        rargs.push(RExpr::Number(BslNumber::from_i64(0)));
+                        // ИМЕННО `Неопределено`, а не `0`: измерено, что
+                        // умолчание платформы совпадает с режимом 1, а не с
+                        // режимом 0, — подстановка нуля меняла бы семантику.
+                        rargs.push(RExpr::Undefined);
                     }
                     return Ok(RExpr::CallBuiltinFn {
                         builtin: bsl_rt::BuiltinFn::Round,

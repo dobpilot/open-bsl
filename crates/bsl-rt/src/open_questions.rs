@@ -58,20 +58,6 @@ pub struct Anchor {
 
 pub const OPEN_QUESTIONS: &[OpenQuestion] = &[
     OpenQuestion {
-        id: "NUM.ROUND.DEFAULT_MODE",
-        what: "схема округления `Окр` без третьего аргумента",
-        chosen: "half-up — та же схема, что у подтверждённого замером деления",
-        blocks: "bsl_number::DEFAULT_ROUND_MODE; bsl-vm::tests::round_takes_an_explicit_mode",
-    },
-    OpenQuestion {
-        id: "NUM.ROUND.MODE_CODES",
-        what: "какими числами платформа кодирует режимы `Окр` и что такое \
-               «Окр15как10» — half-even или половина ВНИЗ",
-        chosen: "0 -> умолчание, 1 -> half-even; прочие коды — ошибка типа",
-        blocks: "bsl_number::RoundMode; bsl-number/tests/oracle.rs::\
-                 round_to_scale_half_even_differs_from_half_up_only_on_exact_ties",
-    },
-    OpenQuestion {
         id: "SQRT.SMALL_ARG",
         what: "как платформа округляет результат f64 при малом аргументе: \
                модель «15 значащих» воспроизводит Sqrt(2), но не Sqrt(0.02)",
@@ -293,6 +279,16 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
         id: "NUM.DIV.EXACT_TIE",
         expect: "0.000000003725290298461914063",
         note: "1/2^28 — точная ничья; ...063 доказывает half-up",
+    },
+    Anchor {
+        id: "NUM.ROUND.DEFAULT_MODE",
+        expect: "3 4 -3",
+        note: "умолчание `Окр` — половина ОТ нуля; замер 8.3.27, совпадает с режимом 1",
+    },
+    Anchor {
+        id: "NUM.ROUND.MODE_CODES",
+        expect: "2 3 3 4",
+        note: "режим 0 — половина К нулю (3,5 -> 3, а не 4), режим 1 — от нуля; замер 8.3.27",
     },
     Anchor {
         id: "SQRT.TWO",

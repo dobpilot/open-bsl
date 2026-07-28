@@ -121,31 +121,36 @@ fn trunc_to_scale_is_toward_zero_not_half_up() {
     assert_eq!(c(&n("123").trunc_to_scale(0)), "123");
 }
 
+/// ИЗМЕРЕНО на платформе 8.3.27 через `Окр(х, 0, 0)`: половина уходит К
+/// НУЛЮ, а не к чётному. Решающая точка — 3,5: к чётному дало бы 4.
 #[test]
-fn round_to_scale_half_even_differs_from_half_up_only_on_exact_ties() {
-    // НЕ ИЗМЕРЕНО(NUM.ROUND.MODE_CODES) — этот режим существует только под явно
-    // запрошенный третий аргумент `Окр` (см. `bsl_number::RoundMode`);
-    // тест фиксирует саму схему, не то, что 1С её так называет.
-    assert_eq!(c(&n("2.5").round_to_scale_half_even(0)), "2");
-    assert_eq!(c(&n("3.5").round_to_scale_half_even(0)), "4");
-    assert_eq!(c(&n("-2.5").round_to_scale_half_even(0)), "-2");
-    assert_eq!(c(&n("-3.5").round_to_scale_half_even(0)), "-4");
-    assert_eq!(c(&n("0.5").round_to_scale_half_even(0)), "0");
-    assert_eq!(c(&n("1.5").round_to_scale_half_even(0)), "2");
+fn round_to_scale_half_down_keeps_the_tie_closer_to_zero() {
+    assert_eq!(c(&n("2.5").round_to_scale_half_down(0)), "2");
+    assert_eq!(c(&n("3.5").round_to_scale_half_down(0)), "3");
+    assert_eq!(c(&n("1.5").round_to_scale_half_down(0)), "1");
+    assert_eq!(c(&n("0.5").round_to_scale_half_down(0)), "0");
+    assert_eq!(c(&n("-2.5").round_to_scale_half_down(0)), "-2");
+    assert_eq!(c(&n("-3.5").round_to_scale_half_down(0)), "-3");
 
-    // Мимо ничьей обе схемы совпадают.
-    for s in ["2.4", "2.6", "-2.4", "-2.6", "2.675", "123"] {
+    // Мимо ничьей обе схемы совпадают — тоже измерено:
+    // Окр(2.4,0,0) = 2, Окр(2.6,0,0) = 3.
+    for s in ["2.4", "2.6", "-2.4", "-2.6", "123"] {
         assert_eq!(
-            c(&n(s).round_to_scale_half_even(2)),
-            c(&n(s).round_to_scale(2)),
-            "не на ничьей half-even обязан совпасть с half-up: {s}"
+            c(&n(s).round_to_scale_half_down(0)),
+            c(&n(s).round_to_scale(0)),
+            "не на ничьей режимы обязаны совпасть: {s}"
         );
     }
 
-    // И на большом ярусе (BigInt) тоже: 2.5 с мантиссой за пределами i128.
+    // Ничья не только на нуле разрядов: Окр(2.675, 2, 0) = 2,67 против
+    // 2,68 у half-up — тоже с платформы.
+    assert_eq!(c(&n("2.675").round_to_scale_half_down(2)), "2.67");
+    assert_eq!(c(&n("2.675").round_to_scale(2)), "2.68");
+
+    // И на большом ярусе (мантисса за пределами i128).
     let big = n("25000000000000000000000000000000000000000.5");
     assert_eq!(
-        c(&big.round_to_scale_half_even(0)),
+        c(&big.round_to_scale_half_down(0)),
         "25000000000000000000000000000000000000000"
     );
     assert_eq!(

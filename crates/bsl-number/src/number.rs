@@ -448,12 +448,13 @@ impl BslNumber {
         BslNumber::big(q, target_scale)
     }
 
-    /// Округление к заданному масштабу, ПОЛОВИНА-К-ЧЁТНОМУ. Отдельная
-    /// функция, а не параметр `round_to_scale`: half-up снят с платформы
-    /// точной ничьей (см. `div_half_up_i128`) и трогать его нельзя, а
-    /// half-even ничем не подтверждён и существует только под явно
-    /// запрошенный третий аргумент `Окр` (см. `BslValue::round`).
-    pub fn round_to_scale_half_even(&self, target_scale: i32) -> Self {
+    /// Округление к заданному масштабу, ПОЛОВИНА К НУЛЮ.
+    ///
+    /// ИЗМЕРЕНО на платформе 8.3.27: `Окр(2.5,0,0)` -> 2, `Окр(3.5,0,0)` ->
+    /// 3, `Окр(1.5,0,0)` -> 1, `Окр(-2.5,0,0)` -> -2. Тройка на 3,5 и
+    /// отличает эту схему от половины-к-чётному, которая дала бы 4 — до
+    /// замера здесь стояла именно она, и это было неверно.
+    pub fn round_to_scale_half_down(&self, target_scale: i32) -> Self {
         let cur_scale = self.scale();
         if target_scale >= cur_scale {
             return self.clone();
@@ -462,7 +463,7 @@ impl BslNumber {
 
         if let BslNumber::Small { m, .. } = self {
             if delta <= 38 {
-                if let Some(q) = div_half_even_i128(m.get(), POW10[delta as usize]) {
+                if let Some(q) = div_half_down_i128(m.get(), POW10[delta as usize]) {
                     return BslNumber::small(q, target_scale);
                 }
             }
@@ -470,7 +471,7 @@ impl BslNumber {
 
         let (m, _) = self.big_parts();
         let divisor = BigInt::from(10u8).pow(delta as u32);
-        let q = div_half_even_big(&m, &divisor);
+        let q = div_half_down_big(&m, &divisor);
         BslNumber::big(q, target_scale)
     }
 
@@ -632,14 +633,13 @@ fn div_half_up_big(n: &BigInt, d: &BigInt) -> BigInt {
     }
 }
 
-// --- Округление half-even (к чётному на ничьей) ---------------------------
+// --- Округление half-down (половина к нулю на ничьей) ---------------------
 //
-// НЕ ИЗМЕРЕНО(NUM.ROUND.MODE_CODES) — существует только как ЯВНО ЗАПРОШЕННЫЙ третий
-// аргумент `Окр`, никогда как умолчание и никогда для деления (там
-// half-up подтверждён точной ничьей, см. выше). Отличается от half-up
-// ровно на точной ничьей: 2,5 -> 2 и 3,5 -> 4 вместо 3 и 4.
+// ИЗМЕРЕНО: третий аргумент `Окр` со значением 0. Никогда не умолчание (там
+// half-up, тоже измерено) и никогда для деления. Отличается от half-up
+// ровно на точной ничьей: 2,5 -> 2 и 3,5 -> 3 вместо 3 и 4.
 
-fn div_half_even_i128(n: i128, d: i128) -> Option<i128> {
+fn div_half_down_i128(n: i128, d: i128) -> Option<i128> {
     let q = n.checked_div(d)?;
     let r = n % d;
     if r == 0 {
@@ -649,9 +649,8 @@ fn div_half_even_i128(n: i128, d: i128) -> Option<i128> {
     let dd = d.unsigned_abs();
     let doubled = rr.checked_mul(2);
     let bump = match doubled {
-        // Ровно половина: округляем только если частное нечётное — чтобы
-        // результат оказался чётным.
-        Some(x) if x == dd => q % 2 != 0,
+        // Ровно половина: не двигаем — остаёмся ближе к нулю.
+        Some(x) if x == dd => false,
         Some(x) => x > dd,
         // Переполнение удвоения означает, что остаток заведомо больше
         // половины делителя.
@@ -668,7 +667,7 @@ fn div_half_even_i128(n: i128, d: i128) -> Option<i128> {
     }
 }
 
-fn div_half_even_big(n: &BigInt, d: &BigInt) -> BigInt {
+fn div_half_down_big(n: &BigInt, d: &BigInt) -> BigInt {
     let q = n / d;
     let r = n % d;
     if r.is_zero() {
@@ -677,7 +676,7 @@ fn div_half_even_big(n: &BigInt, d: &BigInt) -> BigInt {
     let doubled = r.abs() * 2u8;
     let da = d.abs();
     let bump = match doubled.cmp(&da) {
-        Ordering::Equal => !(&q % 2u8).is_zero(),
+        Ordering::Equal => false,
         Ordering::Greater => true,
         Ordering::Less => false,
     };
