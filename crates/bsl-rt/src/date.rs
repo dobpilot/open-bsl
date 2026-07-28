@@ -380,8 +380,12 @@ const MONTHS_FULL_RU: [&str; 12] = [
     "декабря",
 ];
 
+/// ИЗМЕРЕНО (`ДФ=МММ` по всем двенадцати месяцам): у части месяцев точка,
+/// у части — полная форма без неё, и это не опечатка платформы, а её
+/// данные. До замера здесь стояли выдуманные «янв, фев, мар» без точек.
 const MONTHS_SHORT_RU: [&str; 12] = [
-    "янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек",
+    "янв.", "февр.", "март", "апр.", "май", "июнь", "июль", "авг.", "сент.", "окт.", "нояб.",
+    "дек.",
 ];
 
 const WEEKDAYS_FULL_RU: [&str; 7] = [
@@ -394,7 +398,8 @@ const WEEKDAYS_FULL_RU: [&str; 7] = [
     "воскресенье",
 ];
 
-const WEEKDAYS_SHORT_RU: [&str; 7] = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"];
+/// ИЗМЕРЕНО (`ДФ=ддд`): С ЗАГЛАВНОЙ. У нас были строчные.
+const WEEKDAYS_SHORT_RU: [&str; 7] = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
 /// Английские имена — часть ключа `Л` (см. `Locale`). Русские формы стоят
 /// в РОДИТЕЛЬНОМ падеже («15 января»), английские — в именительном:
@@ -456,6 +461,21 @@ const WEEKDAYS_FULL_JA: [&str; 7] = [
     "月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日", "日曜日",
 ];
 
+
+/// Короткие формы ИЗМЕРЕНЫ так же, как полные, — прогоном по всем месяцам
+/// и дням каждой локали. Французские и немецкие идут с точкой, японские
+/// совпадают с полными у месяцев и сокращаются до одного иероглифа у дней.
+const MONTHS_SHORT_DE: [&str; 12] = [
+    "Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez",
+];
+const MONTHS_SHORT_FR: [&str; 12] = [
+    "janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.",
+    "déc.",
+];
+const WEEKDAYS_SHORT_DE: [&str; 7] = ["Mo.", "Di.", "Mi.", "Do.", "Fr.", "Sa.", "So."];
+const WEEKDAYS_SHORT_FR: [&str; 7] = ["lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim."];
+const WEEKDAYS_SHORT_JA: [&str; 7] = ["月", "火", "水", "木", "金", "土", "日"];
+
 fn months_full(locale: Locale) -> &'static [&'static str; 12] {
     match locale {
         Locale::Ru => &MONTHS_FULL_RU,
@@ -469,10 +489,11 @@ fn months_full(locale: Locale) -> &'static [&'static str; 12] {
 fn months_short(locale: Locale) -> &'static [&'static str; 12] {
     match locale {
         Locale::Ru => &MONTHS_SHORT_RU,
-        // НЕ ИЗМЕРЕНО(FMT.LOCALE.SHORT_NAMES): КОРОТКИЕ формы (`МММ`,
-        // `ддд`) в de/fr/ja. Полные — измерены и стоят выше; сокращать их
-        // самостоятельно нельзя (немецкое «Mär» против «Mrz» не угадать).
-        _ => &MONTHS_SHORT_EN,
+        Locale::En => &MONTHS_SHORT_EN,
+        Locale::De => &MONTHS_SHORT_DE,
+        Locale::Fr => &MONTHS_SHORT_FR,
+        // Японские короткие месяцы совпадают с полными — измерено.
+        Locale::Ja => &MONTHS_FULL_JA,
     }
 }
 
@@ -489,8 +510,10 @@ fn weekdays_full(locale: Locale) -> &'static [&'static str; 7] {
 fn weekdays_short(locale: Locale) -> &'static [&'static str; 7] {
     match locale {
         Locale::Ru => &WEEKDAYS_SHORT_RU,
-        // НЕ ИЗМЕРЕНО(FMT.LOCALE.SHORT_NAMES), см. выше.
-        _ => &WEEKDAYS_SHORT_EN,
+        Locale::En => &WEEKDAYS_SHORT_EN,
+        Locale::De => &WEEKDAYS_SHORT_DE,
+        Locale::Fr => &WEEKDAYS_SHORT_FR,
+        Locale::Ja => &WEEKDAYS_SHORT_JA,
     }
 }
 
@@ -800,7 +823,8 @@ mod tests {
         assert_eq!(format_pattern(dt, "dd.MM.yyyy", Locale::Ru), "15.01.2024");
         assert_eq!(format_pattern(dt, "yy", Locale::Ru), "24");
         // Имена месяца и дня недели.
-        assert_eq!(format_pattern(dt, "д МММ гггг", Locale::Ru), "15 янв 2024");
+        // ИЗМЕРЕНО: короткий месяц идёт С ТОЧКОЙ.
+        assert_eq!(format_pattern(dt, "д МММ гггг", Locale::Ru), "15 янв. 2024");
         assert_eq!(format_pattern(dt, "д ММММ гггг", Locale::Ru), "15 января 2024");
         assert_eq!(format_pattern(dt, "дддд", Locale::Ru), "понедельник");
         // Кавычки защищают буквы шаблона от подстановки.

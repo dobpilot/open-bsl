@@ -108,14 +108,6 @@ pub const OPEN_QUESTIONS: &[OpenQuestion] = &[
         blocks: "bsl_format::BooleanFormat",
     },
     OpenQuestion {
-        id: "FMT.LOCALE.SHORT_NAMES",
-        what: "короткие формы имён месяцев и дней (`МММ`, `ддд`) в de/fr/ja — \
-               полные измерены, короткие нет",
-        chosen: "английские сокращения; выводить их из полных нельзя — немецкое \
-                 «Mär» против «Mrz» не угадывается",
-        blocks: "bsl_rt::date::months_short",
-    },
-    OpenQuestion {
         id: "SCOPE.MODULE_VARS",
         what: "ничего: ИЗМЕРЕНО, что процедура видит переменную уровня модуля \
                (`Перем` в начале файла) и запись через неё видна снаружи",
@@ -229,6 +221,11 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
         id: "FMT.LOCALE.BOOLEAN",
         expect: "Yes|No",
         note: "английская локаль печатает булево как Yes/No; замер 8.3.27",
+    },
+    Anchor {
+        id: "FMT.LOCALE.SHORT_NAMES",
+        expect: "Jan|lun.",
+        note: "короткие формы сняты по всем локалям целиком, см. date.rs; замер 8.3.27",
     },
     Anchor {
         id: "FMT.LOCALE.MONTH_NAMES",
