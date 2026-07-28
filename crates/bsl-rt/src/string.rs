@@ -16,11 +16,39 @@ use std::rc::Rc;
 /// сравнением ниже, и, как остальные оптимизации в этом проекте, ждёт
 /// профилирования (см. план M10), а не добавляется заранее "на всякий".
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct BslString(Rc<[u16]>);
+pub struct BslString(Rc<Vec<u16>>);
 
 /// Сколько значений принимает `СтрШаблон`: `%1`..`%10`. Ограничение самой
 /// 1С, а не этой реализации — поэтому константа, а не «сколько передали».
 pub const MAX_TEMPLATE_ARGS: usize = 10;
+
+/// Позиция первого вхождения `needle` в `hay`, начиная с `from`, или
+/// `None`. Общий движок для `find`, `replace` и `split`: все трое раньше
+/// разворачивали свой посимвольный цикл и одинаково платили за сравнение
+/// срезов на каждой позиции.
+///
+/// Сначала быстрый пропуск до совпадения по ПЕРВОМУ код-юниту — простой
+/// цикл поиска равного значения, который LLVM векторизует сам. Потом
+/// дешёвая отсечка по ПОСЛЕДНЕМУ юниту: у неудачных кандидатов он не
+/// совпадает почти всегда. Полное сравнение — только после обеих.
+///
+/// Пустая игла — `None`: у 1С поиск пустой строки ничего не находит.
+fn find_from(hay: &[u16], needle: &[u16], from: usize) -> Option<usize> {
+    if needle.is_empty() || needle.len() > hay.len() || from > hay.len() - needle.len() {
+        return None;
+    }
+    let (first, last) = (needle[0], needle[needle.len() - 1]);
+    let limit = hay.len() - needle.len();
+    let mut start = from;
+    while start <= limit {
+        start += hay[start..=limit].iter().position(|u| *u == first)?;
+        if hay[start + needle.len() - 1] == last && hay[start..start + needle.len()] == needle[..] {
+            return Some(start);
+        }
+        start += 1;
+    }
+    None
+}
 
 /// Кодирует код-юниты UTF-16 в UTF-8 прямо в поток, без промежуточного
 /// `String`. Некорректные суррогаты заменяются на U+FFFD — как в
@@ -60,7 +88,7 @@ impl BslString {
     }
 
     fn from_units(units: Vec<u16>) -> Self {
-        BslString(units.into())
+        BslString(Rc::new(units))
     }
 
     pub fn units(&self) -> &[u16] {
@@ -113,6 +141,32 @@ impl BslString {
         v.extend_from_slice(&self.0);
         v.extend_from_slice(&other.0);
         BslString::from_units(v)
+    }
+
+    /// `self + other`, но с правом ДОПИСАТЬ НА МЕСТЕ, если на буфер
+    /// `self` больше никто не смотрит.
+    ///
+    /// Ради этого строка и хранится как `Rc<Vec<u16>>`, а не `Rc<[u16]>`:
+    /// у вектора есть ёмкость, и рост амортизируется. Сборка текста в
+    /// цикле (`Текст = Текст + Кусок` — самый частый способ строить текст
+    /// в прикладном BSL) из квадратичной становится линейной.
+    ///
+    /// Изменение чужого значения этим не вводится: `Rc::get_mut` отдаёт
+    /// буфер, только когда счётчик ссылок равен единице, то есть ни одна
+    /// другая переменная его не видит. `Х = Х + Х` под это не подпадает
+    /// (счётчик 2) и уходит на копирующий путь.
+    ///
+    /// Владение сюда приходит из VM: инструкция `Add` с совпадающими
+    /// приёмником и левым операндом ЗАБИРАЕТ значение из регистра, а не
+    /// копирует — регистр всё равно будет перезаписан результатом.
+    pub fn append(mut self, other: &Self) -> Self {
+        match Rc::get_mut(&mut self.0) {
+            Some(buf) => {
+                buf.extend_from_slice(&other.0);
+                self
+            }
+            None => self.concat(other),
+        }
     }
 
     /// `Сред`/`Mid`: `start_1based` — позиция первого символа (1 = начало
@@ -174,16 +228,10 @@ impl BslString {
     /// Пустая подстрока — `0` (не найдено), а не `1`: у 1С поиск пустой
     /// строки ничего не находит.
     pub fn find(&self, needle: &Self) -> usize {
-        let (hay, need) = (&self.0, &needle.0);
-        if need.is_empty() || need.len() > hay.len() {
-            return 0;
+        match find_from(&self.0, &needle.0, 0) {
+            Some(at) => at + 1,
+            None => 0,
         }
-        for start in 0..=(hay.len() - need.len()) {
-            if hay[start..start + need.len()] == need[..] {
-                return start + 1;
-            }
-        }
-        0
     }
 
     /// `СтрЗаменить`/`StrReplace` — все вхождения. Пустой `from` —
@@ -195,15 +243,12 @@ impl BslString {
         }
         let mut out: Vec<u16> = Vec::with_capacity(self.0.len());
         let mut i = 0;
-        while i < self.0.len() {
-            if i + from.0.len() <= self.0.len() && self.0[i..i + from.0.len()] == from.0[..] {
-                out.extend_from_slice(&to.0);
-                i += from.0.len();
-            } else {
-                out.push(self.0[i]);
-                i += 1;
-            }
+        while let Some(at) = find_from(&self.0, &from.0, i) {
+            out.extend_from_slice(&self.0[i..at]);
+            out.extend_from_slice(&to.0);
+            i = at + from.0.len();
         }
+        out.extend_from_slice(&self.0[i..]);
         BslString::from_units(out)
     }
 
@@ -217,15 +262,9 @@ impl BslString {
         }
         let mut parts = Vec::new();
         let mut start = 0;
-        let mut i = 0;
-        while i + sep.0.len() <= self.0.len() {
-            if self.0[i..i + sep.0.len()] == sep.0[..] {
-                parts.push(BslString::from_units(self.0[start..i].to_vec()));
-                i += sep.0.len();
-                start = i;
-            } else {
-                i += 1;
-            }
+        while let Some(at) = find_from(&self.0, &sep.0, start) {
+            parts.push(BslString::from_units(self.0[start..at].to_vec()));
+            start = at + sep.0.len();
         }
         parts.push(BslString::from_units(self.0[start..].to_vec()));
         parts

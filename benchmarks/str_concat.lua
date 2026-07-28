@@ -5,10 +5,15 @@
 
 local piece = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя0123456789"
 
+-- Десять сборок с нуля, как в .bsl-двойнике: у BSL-рантайма работа стала
+-- линейной, и на одной сборке его число падает ниже разрешения таймера.
 local started = os.clock()
 local text = ""
-for _ = 1, 3000 do
-    text = text .. piece
+for _ = 1, 10 do
+    text = ""
+    for _ = 1, 3000 do
+        text = text .. piece
+    end
 end
 local elapsed_ms = (os.clock() - started) * 1000
 

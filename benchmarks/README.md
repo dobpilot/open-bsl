@@ -93,7 +93,7 @@ language, so there is nothing to port.
 | scenario      | what it measures                                            |
 |---------------|-------------------------------------------------------------|
 | `str_find`    | `СтрНайти` over a 215K-code-unit haystack, needle at the end |
-| `str_concat`  | building a string by repeated concatenation (quadratic copy) |
+| `str_concat`  | building a string by repeated concatenation, ten times over  |
 | `table_total` | filling 200K rows, then `Итог` over a column 50 times        |
 | `table_sort`  | three `Сортировать` passes plus a linear `Найти` over 100K rows |
 
@@ -138,15 +138,15 @@ re-run before drawing conclusions on other hardware.
 
 | scenario            |  bsl-cli | lua 5.4 | luajit | oscript 2.1 | 1C 8.3.27 |
 |---------------------|---------:|--------:|-------:|------------:|----------:|
-| `csv_write`         |     1710 |     962 |    113 |       23136 |      4479 |
-| `csv_write_batched` |   **64** |       — |      — |        1147 |       224 |
-| `empty_for`         |    **3** |       3 |      0 |         209 |       303 |
-| `pi_leibniz`        |  **521** |      19 |      1 |        1279 |      1142 |
-| `pi_leibniz_15`     |  **675** |       — |      — |        1513 |      1304 |
-| `str_concat`        |      134 |      76 |     64 |         139 |    **17** |
-| `str_find`          |      573 |     336 |     37 |      **35** |       131 |
-| `table_total`       |  **293** |     252 |    134 |        1136 |      3223 |
-| `table_sort`        | **1672** |     612 |    513 |        1179 |      3246 |
+| `csv_write`         |     1720 |     945 |    118 |       23512 |      4709 |
+| `csv_write_batched` |   **68** |       — |      — |        1166 |       224 |
+| `empty_for`         |    **2** |       3 |      0 |         212 |       307 |
+| `pi_leibniz`        |  **510** |      21 |      1 |        1266 |      1249 |
+| `pi_leibniz_15`     |  **727** |       — |      — |        1485 |      1425 |
+| `str_concat`        |    **2** |     563 |    527 |        1256 |       171 |
+| `str_find`          |       75 |     332 |     37 |      **36** |       134 |
+| `table_total`       |  **284** |     253 |    133 |        1117 |      3266 |
+| `table_sort`        | **1666** |     584 |    514 |        1183 |      3343 |
 
 Two of these columns run **the same language with the same semantics** —
 exact decimal arithmetic, `ТаблицаЗначений`, UTF-16 strings — and are the
@@ -156,20 +156,21 @@ an independent implementation of it. Lua and LuaJIT are the outside
 reference: what a mature dynamic-language VM costs when it is allowed to
 use hardware doubles and byte strings.
 
-Against the platform we are ahead on seven scenarios of nine — 100x on an
+Against the platform we are ahead on eight scenarios of nine — 100x on an
 empty loop, 2.4x on decimal arithmetic, 12x on filling a value table and
 summing a column, 2.1x on sorting — and behind on the two string ones:
-**7.6x slower on concatenation** and **4.4x slower on substring search**.
-Both gaps have a known cause, see below; both are the honest reading, since
-the platform is doing exactly our job on exactly our input — for
-`csv_write` that is literally true, the two files are byte-identical.
+and behind only on `csv_write`, at 2.7x. Both string scenarios used to be
+losses — 7.6x on concatenation, 4.4x on search — and both were fixed after
+this table first showed them; see "Where we lose" below for what they cost
+now.
 
 The two CSV scenarios say the same thing in three runtimes at once. Going
-from 42 writer calls per row to one costs 1710 -> 64 ms for us, 4479 -> 224
-on the platform, 23136 -> 1147 on oscript: a 20-27x drop everywhere. What
+from 42 writer calls per row to one costs 1720 -> 68 ms for us, 4709 -> 224
+on the platform, 23512 -> 1166 on oscript: a 20-25x drop everywhere. What
 that measures is per-call overhead, not I/O — the bytes written are
-identical in all three. oscript's absolute number is the outlier: 23
-seconds, 13x the platform, for the same 12.6M method calls.
+identical in all three, and `csv_write` is the one scenario where the
+platform still beats us end to end. oscript's absolute number is the
+outlier: 23 seconds, 5x the platform, for the same 12.6M method calls.
 
 `pi_leibniz` is also an accuracy result and not only a speed one: the
 platform printed `3,141591653589793238712644144`, digit for digit what we
@@ -196,17 +197,32 @@ the 15-digit Leibniz sum.
 points. Its .NET start-up is not in the numbers: every script times itself
 after warm-up, per the scenario contract above.
 
-### Where we lose, and why
+### Where the string scenarios went
 
-* **`str_concat`, 7.6x behind the platform.** Our string is an immutable
-  `Rc<[u16]>`, so `Текст = Текст + Кусок` copies everything accumulated so
-  far: quadratic in the number of steps. 17 ms for 3000 steps says the
-  platform does not copy each time — some form of amortized growth or a
-  rope. This is the clearest optimization target in the project: the
-  pattern is the most common way application BSL builds text.
-* **`str_find`, 4x behind the platform and 15x behind oscript.**
-  `BslString::find` is a naive loop comparing slices, with no skip table
-  and no vectorization. Nothing about the semantics requires that.
+Both string losses in the first version of this table were implementation,
+not semantics, and both are now the other way round.
+
+* **`str_concat`: 134 -> 2 ms, against 171 on the platform.** The string
+  was an immutable `Rc<[u16]>`, so `Текст = Текст + Кусок` copied
+  everything accumulated so far — quadratic in the number of steps. It is
+  now `Rc<Vec<u16>>`, and `Add` appends in place when the reference count
+  is one, which makes the loop linear. Getting the buffer into sole
+  ownership took a codegen change too: an operand that is already a plain
+  variable is no longer copied into a temporary register, so the
+  accumulating assignment compiles to `Add dst=2 a=2 b=0` and the VM can
+  take the value out of the register it is about to overwrite. Value
+  semantics are unaffected — `Rc::get_mut` hands over the buffer only when
+  nobody else holds it — and four tests pin that: a copy in a variable, in
+  an array, in a structure, `Х = Х + Х`, and a byref parameter.
+  *The scenario was rescaled to 10 builds at this point: one build now
+  finishes below the resolution of a millisecond timer.*
+* **`str_find`: 573 -> 75 ms, against 134 on the platform.** The search was
+  a slice comparison at every position. It now skips to the first matching
+  code unit with a scan LLVM vectorizes, then rejects on the last unit
+  before comparing at all. `СтрЗаменить` and `СтрРазделить` had their own
+  copies of the same naive loop and now share this one engine.
+  LuaJIT and oscript are still ~2x ahead here; both hand the job to a
+  library routine.
 
 ### Where the platform loses
 
