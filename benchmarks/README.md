@@ -101,47 +101,38 @@ Median of 5 runs, milliseconds, lower is better. Intel i5-8250U, Linux
 7.1.3, `--release`. Numbers are machine-specific; re-run before drawing
 conclusions on other hardware.
 
-| scenario        | bsl-cli | lua 5.4 | luajit | oscript |
-|-----------------|--------:|--------:|-------:|--------:|
-| `empty_for`     |       5 |       7 |      1 |       — |
-| `pi_leibniz`    |     751 |      30 |      2 |       — |
-| `pi_leibniz_15` |    1049 |       — |      — |       — |
-| `str_concat`    |     198 |     109 |     91 |       — |
-| `str_find`      |     561 |     422 |     63 |       — |
-| `table_total`   |     402 |     382 |    187 |       — |
-| `table_sort`    |    1666 |     700 |    825 |       — |
+| scenario        | bsl-cli | lua 5.4 | luajit | oscript 2.1 |
+|-----------------|--------:|--------:|-------:|------------:|
+| `empty_for`     |   **5** |       6 |      0 |         281 |
+| `pi_leibniz`    | **724** |      30 |      3 |        1618 |
+| `pi_leibniz_15` |    1064 |       — |      — |       error |
+| `str_concat`    |     190 |     104 |     79 |         183 |
+| `str_find`      |     553 |     439 |     52 |      **49** |
+| `table_total`   | **377** |     345 |    149 |        1607 |
+| `table_sort`    |    1744 |     680 |    589 |    **1467** |
 
-**oscript was not measured**: OneScript is not installed in this environment
-(neither is mono/dotnet), so its column is empty by fact, not by omission.
-The scripts are ready for it — `oscript benchmarks/<name>.bsl` — and
-`run.sh` picks it up automatically as soon as the binary is on `PATH`.
+oscript is the only runtime here that implements the **same language with
+the same semantics** — exact decimal arithmetic, `ТаблицаЗначений`, UTF-16
+strings — so it is the only column where a gap means "we are slower at the
+same job" rather than "we do a different job". Lua and LuaJIT are the
+outside reference: what a mature dynamic-language VM costs when it is
+allowed to use hardware doubles and byte strings.
 
-## What the profile says
+Against oscript we are **56x faster** on an empty loop, **2.2x** on decimal
+arithmetic and **4.3x** on filling a value table and summing a column — but
+**11x slower** on substring search and **1.2x slower** on sorting. Both of
+those have a known cause, see below.
 
-`cargo run --profile profiling --example profile -p bsl-vm` writes a
-flamegraph per scenario and prints the five heaviest stacks as text.
+`pi_leibniz_15` fails under oscript because it calls `Округл`, and
+OneScript — like 1C — spells that function **`Окр`**. Our interpreter
+currently accepts `Округл`/`Round` only. The cell says `error` rather than
+being silently dropped: a scenario one runtime cannot run is a fact about
+the scenario, not a gap in the table.
 
-* `str_find` — **98% of the scenario sits in `BslString::find`**, all of it
-  in slice comparison. The search is a naive O(n·m) scan: ~192M code units
-  per second, roughly 384 MB/s. This is the one place where a better
-  algorithm (or vectorization) has an order of magnitude of headroom.
-* `str_concat` — everything is in copying `Rc<[u16]>`. Quadratic by
-  construction, exactly as in Lua, which is why the two are within 2x.
-* `table_total` — `Итог` is ~45% of the scenario. Measured directly,
-  `ValueTableData::total` costs **71 ms for 3M cells, i.e. ~24 ns per
-  cell**: a `match` on a 24-byte tagged value plus a decimal addition.
-  BigInt is *not* involved (the sum stays `Small`; an earlier flamegraph
-  attributing 24% to `BigInt::add` was a symbolization artifact of
-  inlining — checked by calling `total` directly).
-* `table_sort` — ~27% goes into `collate` and the Unicode `to_upper` tables
-  it calls. The collation approximation converts BOTH strings to upper case
-  on EVERY comparison, i.e. two allocations per comparison. Note this is an
-  unmeasured behavior (`TABLE.SORT.COLLATION`): it must not be optimized
-  into a different ordering.
-* `empty_for` — we beat Lua 5.4 here (5 ms vs 7 ms for a million
-  iterations). Dispatch is not the bottleneck anywhere in this set; the
-  `NumericForNextI64` superinstruction already does what a superinstruction
-  can.
+`oscript` is discovered on `PATH`, in the usual install locations
+(`/opt/oscript/bin` among them), or wherever `OSCRIPT=/path/to/oscript`
+points. Its .NET start-up is not in the numbers: every script times itself
+after warm-up, per the scenario contract above.
 
 ## Comparability caveats
 
@@ -162,3 +153,8 @@ cause in semantics rather than in implementation quality:
   locale-approximating collation rather than byte order.
 * **LuaJIT** is a JIT compiler and is listed separately for exactly that
   reason: comparing it with interpreters in one column would be misleading.
+* **oscript** runs the very same `.bsl` file, so its column is the only
+  like-for-like one. It is still not an oracle for *semantics*: this project
+  targets 1C, and documented divergences from OneScript are expected
+  (`pi_leibniz` prints 28 decimal digits there, 27 here, because C#
+  `decimal` and `BslNumber` have different precision models).

@@ -43,14 +43,33 @@ for candidate in lua5.4 lua5.3 lua; do
 done
 LUAJIT=""
 command -v luajit >/dev/null 2>&1 && LUAJIT=luajit
-OSCRIPT=""
-command -v oscript >/dev/null 2>&1 && OSCRIPT=oscript
+
+# OneScript ставится куда угодно и в PATH попадает не всегда, поэтому
+# кроме PATH смотрим типовые места. Переопределить всё — переменной
+# окружения: OSCRIPT=/путь/к/oscript ./benchmarks/run.sh
+OSCRIPT=${OSCRIPT:-}
+if [ -z "$OSCRIPT" ]; then
+    if command -v oscript >/dev/null 2>&1; then
+        OSCRIPT=oscript
+    else
+        for candidate in \
+            /opt/oscript/bin/oscript \
+            /opt/onescript/bin/oscript \
+            /usr/local/oscript/bin/oscript \
+            "$HOME/.local/share/oscript/bin/oscript"; do
+            if [ -x "$candidate" ]; then
+                OSCRIPT=$candidate
+                break
+            fi
+        done
+    fi
+fi
 
 echo "рантаймы:"
 echo "  bsl-cli   $($BSL_CLI --help | head -1)"
 [ -n "$LUA" ] && echo "  lua       $($LUA -v 2>&1 | head -1)" || echo "  lua       НЕТ"
 [ -n "$LUAJIT" ] && echo "  luajit    $($LUAJIT -v 2>&1 | head -1)" || echo "  luajit    НЕТ"
-[ -n "$OSCRIPT" ] && echo "  oscript   $($OSCRIPT -version 2>&1 | head -1)" || echo "  oscript   НЕТ (нужен OneScript)"
+[ -n "$OSCRIPT" ] && echo "  oscript   $($OSCRIPT -version 2>&1 | head -1)  ($OSCRIPT)" || echo "  oscript   НЕТ (нужен OneScript; путь можно задать в OSCRIPT=...)"
 echo
 
 # Медиана последних строк N прогонов. Печатает `-`, если рантайм не смог.
