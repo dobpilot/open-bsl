@@ -91,20 +91,6 @@ pub const OPEN_QUESTIONS: &[OpenQuestion] = &[
         blocks: "bsl_rt::date::format_long; фикстура dates",
     },
     OpenQuestion {
-        id: "FMT.NUM.TOTAL_DIGITS",
-        what: "что считает `ЧЦ` — все разряды или только целые — и что делает \
-               платформа, когда одна целая часть уже длиннее `ЧЦ`",
-        chosen: "все разряды вместе; целая часть при переполнении печатается как есть",
-        blocks: "bsl_format::NumberFormat::total_digits",
-    },
-    OpenQuestion {
-        id: "FMT.NUM.ZERO_TEXT",
-        what: "`ЧН` — применяется ли к значению, ставшему нулём после округления, \
-               и что значит `ЧН=` без значения",
-        chosen: "применяется после округления; `ЧН=` — пустая строка",
-        blocks: "bsl_format::NumberFormat::zero_text",
-    },
-    OpenQuestion {
         id: "FMT.NUM.LEADING_ZEROS",
         what: "`ЧВН` — до какой ширины дополнять ведущими нулями",
         chosen: "до `ЧЦ` минус дробные разряды; без `ЧЦ` ключ не делает ничего",
@@ -272,6 +258,16 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
         id: "NUM.DIV.EXACT_TIE",
         expect: "0.000000003725290298461914063",
         note: "1/2^28 — точная ничья; ...063 доказывает half-up",
+    },
+    Anchor {
+        id: "FMT.NUM.TOTAL_DIGITS",
+        expect: "123|123|999",
+        note: "ЧЦ — ширина ПОЛЯ: дробных ровно ЧДЦ (по умолчанию 0), переполнение — девятки; замер 8.3.27",
+    },
+    Anchor {
+        id: "FMT.NUM.ZERO_TEXT",
+        expect: "пусто|0|0,00|",
+        note: "Формат печатает ноль пустым, `ЧН=` без значения — как обычно; замер 8.3.27",
     },
     Anchor {
         id: "FMT.DATE.DEFAULT",

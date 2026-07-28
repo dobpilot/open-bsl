@@ -45,21 +45,40 @@ pub struct NumberFormat {
     /// `ЧДЦ` — число дробных разрядов. `None` — не заданы: дробные разряды
     /// не обрезаются (измерено: по умолчанию `ЧДЦ` не задан).
     pub frac_digits: Option<u32>,
-    /// `ЧЦ` — общее число разрядов.
+    /// `ЧЦ` — общее число разрядов (целые вместе с дробными).
     ///
-    /// НЕ ИЗМЕРЕНО(FMT.NUM.TOTAL_DIGITS): считает ли платформа разряды
-    /// целой части вместе с дробными (взято ДА), и что она делает, когда
-    /// одна целая часть уже длиннее `ЧЦ` — печатает как есть (взято),
-    /// заполняет поле звёздочками или обрезает старшие разряды. Здесь `ЧЦ`
-    /// работает как потолок дробной части: `Формат(123.456, "ЧЦ=5")` даёт
-    /// `123,46`, а `Формат(123456, "ЧЦ=3")` — целое без изменений.
+    /// ИЗМЕРЕНО на 8.3.27, и модель оказалась совсем не той, что была
+    /// выбрана до замера:
+    ///
+    /// ```text
+    /// Формат(123.456, "ЧЦ=5") -> 123      дробных 0, не 123,46
+    /// Формат(123.456, "ЧЦ=7") -> 123      ЧЦ дробную часть НЕ возвращает
+    /// Формат(1.5,     "ЧЦ=1") -> 2        округление до целого
+    /// Формат(123456,  "ЧЦ=3") -> 999      переполнение поля — все девятки
+    /// Формат(1.5, "ЧЦ=5; ЧДЦ=2") -> 1,50  дробных ровно ЧДЦ
+    /// ```
+    ///
+    /// То есть: дробных разрядов ровно `ЧДЦ` (по умолчанию НОЛЬ, если задан
+    /// `ЧЦ`), остальные разряды достаются целой части, а если она туда не
+    /// влезает — поле заполняется девятками. До замера здесь стоял
+    /// «потолок дробной части», и он не совпадал ни в одной точке.
     pub total_digits: Option<u32>,
     /// `ЧН` — что печатать вместо нуля.
     ///
-    /// НЕ ИЗМЕРЕНО(FMT.NUM.ZERO_TEXT): применяется ли `ЧН` к значению,
-    /// ставшему нулём ПОСЛЕ округления по `ЧДЦ` (взято ДА: проверка идёт по
-    /// уже отформатированному числу), и что значит `ЧН=` без значения
-    /// (взята пустая строка).
+    /// ИЗМЕРЕНО на 8.3.27:
+    ///
+    /// ```text
+    /// Формат(0, "ЧГ=0")            -> ""        ноль по умолчанию ПУСТОЙ
+    /// Формат(0)                    -> ""
+    /// Строка(0)                    -> "0"       а вот Строка печатает ноль
+    /// Формат(0, "ЧН=X")            -> "X"
+    /// Формат(0, "ЧН=")             -> "0"       пустое значение ключа
+    /// Формат(0.004, "ЧДЦ=2; ЧН=X") -> "0,00"    к округлённому нулю НЕ применяется
+    /// ```
+    ///
+    /// Отсюда две неожиданности, обе были у нас неверны: `Формат` без `ЧН`
+    /// печатает ноль ПУСТОЙ СТРОКОЙ (а `Строка` — нет), и `ЧН=` с пустым
+    /// значением означает «печатать как обычно», а не «печатать пусто».
     pub zero_text: Option<String>,
     /// `ЧВН` — выводить ведущие нули.
     ///
@@ -67,6 +86,11 @@ pub struct NumberFormat {
     /// Взято «до `ЧЦ` минус дробные разряды», то есть без `ЧЦ` ключ не
     /// делает ничего; альтернатива — своя ширина у самого `ЧВН`.
     pub leading_zeros: bool,
+    /// Печатать ли ноль пустой строкой. ИЗМЕРЕНО, что это свойство самой
+    /// ФУНКЦИИ, а не форматной строки: `Формат(0, "ЧГ=0")` даёт пустую
+    /// строку, а `Строка(0)` — «0». Поэтому флаг ставится не ключом, а тем,
+    /// кто строит формат: `Формат` — да, `Строка` — нет.
+    pub blank_zero: bool,
     /// `ЧС` — сдвиг разрядов.
     ///
     /// НЕ ИЗМЕРЕНО(FMT.NUM.SHIFT): направление сдвига и знак. Взято
@@ -93,6 +117,7 @@ impl NumberFormat {
             frac_digits: None,
             total_digits: None,
             zero_text: None,
+            blank_zero: false,
             leading_zeros: false,
             shift: 0,
         }
@@ -240,6 +265,7 @@ pub fn parse_boolean_format(spec: &str) -> RtResult<BooleanFormat> {
 pub fn parse_number_format(spec: &str) -> RtResult<NumberFormat> {
     let parts = spec_parts(spec);
     let mut fmt = NumberFormat::for_locale(parse_locale(&parts)?);
+    fmt.blank_zero = true;
     for (key, val) in &parts {
         let val = val.as_str();
         match key.as_str() {
@@ -304,19 +330,29 @@ fn shift_digits(n: &BslNumber, shift: i32) -> RtResult<BslNumber> {
     Ok(n.mul(&factor)?)
 }
 
-/// `ЧЦ` как потолок ОБЩЕГО числа разрядов: сколько остаётся дробной части
-/// после того, как целая заняла своё. Целая часть не обрезается — см.
-/// метку на `NumberFormat::total_digits`.
-fn limit_total_digits(n: &BslNumber, total: u32) -> BslNumber {
-    let canonical = n.to_canonical();
-    let body = canonical.strip_prefix('-').unwrap_or(&canonical);
-    let int_len = body.split('.').next().unwrap_or("0").len() as u32;
-    let allowed_frac = total.saturating_sub(int_len);
-    let scale = n.scale().max(0) as u32;
-    if allowed_frac >= scale {
-        return n.clone();
+/// Сколько дробных разрядов останется в итоге: `ЧДЦ`, если задан; ноль,
+/// если задан `ЧЦ` (измерено: `Формат(123.456, "ЧЦ=7")` -> `123`, дробная
+/// часть при `ЧЦ` без `ЧДЦ` не печатается вовсе); иначе — сколько есть.
+fn effective_frac_digits(n: &BslNumber, fmt: &NumberFormat) -> Option<u32> {
+    match (fmt.frac_digits, fmt.total_digits) {
+        (Some(d), _) => Some(d),
+        (None, Some(_)) => Some(0),
+        (None, None) => {
+            let _ = n;
+            None
+        }
     }
-    n.round_to_scale(allowed_frac as i32)
+}
+
+/// Влезает ли целая часть в поле шириной `ЧЦ` минус дробные разряды.
+/// Не влезает — платформа заполняет ВСЁ поле девятками (`Формат(123456,
+/// "ЧЦ=3")` -> `999`), а не печатает число как есть.
+fn overflow_nines(int_digits: usize, total: u32, frac: u32) -> Option<String> {
+    let room = total.saturating_sub(frac) as usize;
+    if int_digits <= room {
+        return None;
+    }
+    Some("9".repeat(room.max(1)))
 }
 
 /// Форматирует число по заданным правилам. Порядок операций важен и
@@ -325,22 +361,30 @@ fn limit_total_digits(n: &BslNumber, total: u32) -> BslNumber {
 /// Округление — половина-вверх в decimal (`BslNumber::round_to_scale`), не
 /// через f64.
 pub fn format_number(n: &BslNumber, fmt: &NumberFormat) -> RtResult<String> {
-    let mut n = shift_digits(n, fmt.shift)?;
-    if let Some(d) = fmt.frac_digits {
-        n = n.round_to_scale(d as i32);
-    }
-    if let Some(total) = fmt.total_digits {
-        n = limit_total_digits(&n, total);
-    }
-    // `ЧН` проверяется по ЗНАЧЕНИЮ после округления: `Формат(0.004,
-    // "ЧДЦ=2; ЧН=пусто")` печатает `пусто`, а не `0,00`.
-    if n.is_zero() {
-        if let Some(text) = &fmt.zero_text {
-            return Ok(text.clone());
+    let shifted = shift_digits(n, fmt.shift)?;
+
+    // Подстановка вместо нуля смотрит на ИСХОДНОЕ значение, а не на
+    // округлённое: измерено, что `Формат(0.004, "ЧДЦ=2; ЧН=X")` печатает
+    // `0,00`, то есть ноль после округления заменой не считается.
+    if shifted.is_zero() {
+        match &fmt.zero_text {
+            // `ЧН=X` — печатаем X.
+            Some(text) if !text.is_empty() => return Ok(text.clone()),
+            // `ЧН=` без значения — печатаем ноль как обычно (измерено).
+            Some(_) => {}
+            // Без `ЧН`: у `Формат` ноль пустой, у `Строка` — нет.
+            None if fmt.blank_zero => return Ok(String::new()),
+            None => {}
         }
     }
 
-    let canonical = n.to_canonical();
+    let frac_digits = effective_frac_digits(&shifted, fmt);
+    let rounded = match frac_digits {
+        Some(d) => shifted.round_to_scale(d as i32),
+        None => shifted,
+    };
+
+    let canonical = rounded.to_canonical();
     let (sign, body): (&str, &str) = match canonical.strip_prefix('-') {
         Some(rest) => ("-", rest),
         None => ("", canonical.as_str()),
@@ -350,7 +394,21 @@ pub fn format_number(n: &BslNumber, fmt: &NumberFormat) -> RtResult<String> {
         None => (body, None),
     };
 
-    let frac_part = match (frac_part, fmt.frac_digits) {
+    if let Some(total) = fmt.total_digits {
+        if let Some(nines) = overflow_nines(int_part.len(), total, frac_digits.unwrap_or(0)) {
+            let frac = frac_digits.unwrap_or(0) as usize;
+            let mut out = String::new();
+            out.push_str(sign);
+            out.push_str(&nines);
+            if frac > 0 {
+                out.push(fmt.decimal_sep);
+                out.push_str(&"9".repeat(frac));
+            }
+            return Ok(out);
+        }
+    }
+
+    let frac_part = match (frac_part, frac_digits) {
         (Some(f), Some(d)) => {
             let mut f = f.to_string();
             while (f.len() as u32) < d {
@@ -547,29 +605,31 @@ mod tests {
         );
     }
 
+    /// ИЗМЕРЕНО на 8.3.27, и обе неожиданности здесь: `Формат` печатает
+    /// ноль ПУСТОЙ строкой, а `ЧН=` с пустым значением означает «печатать
+    /// как обычно».
     #[test]
-    fn total_digits_caps_the_fraction_and_leaves_the_integer_alone() {
-        // НЕ ИЗМЕРЕНО(FMT.NUM.TOTAL_DIGITS): фиксируем ВЫБРАННОЕ — `ЧЦ`
-        // считает все разряды вместе, лишние уходят из дробной части.
-        assert_eq!(f("123.456", "ЧГ=0; ЧЦ=5"), "123,46");
-        assert_eq!(f("123.456", "ЧГ=0; ЧЦ=3"), "123");
-        // Целая часть длиннее `ЧЦ` — печатается как есть, а не обрезается.
-        assert_eq!(f("123456", "ЧГ=0; ЧЦ=3"), "123456");
-        // `ЧДЦ` применяется раньше `ЧЦ`, поэтому более жёсткий из двух и
-        // побеждает.
-        assert_eq!(f("123.456", "ЧГ=0; ЧДЦ=1; ЧЦ=5"), "123,5");
+    fn zero_prints_empty_from_format_and_zero_from_string() {
+        assert_eq!(f("0", "ЧГ=0"), "");
+        assert_eq!(f("0", "ЧН=пусто"), "пусто");
+        assert_eq!(f("0", "ЧН="), "0");
+        assert_eq!(f("1", "ЧН=пусто"), "1");
+        // Ноль ПОСЛЕ округления заменой не считается — смотрим на исходное.
+        assert_eq!(f("0.004", "ЧДЦ=2; ЧН=пусто"), "0,00");
+        // А `Строка()` печатает ноль как ноль.
+        assert_eq!(fv(&BslValue::Number(n("0")), None), "0");
     }
 
+    /// ИЗМЕРЕНО. `ЧЦ` — ОБЩЕЕ число разрядов: дробных ровно `ЧДЦ` (по
+    /// умолчанию ноль), остальное целой части, переполнение — девятки на
+    /// всё поле.
     #[test]
-    fn zero_text_replaces_the_whole_number() {
-        // НЕ ИЗМЕРЕНО(FMT.NUM.ZERO_TEXT).
-        assert_eq!(f("0", "ЧН=пусто"), "пусто");
-        assert_eq!(f("0", "ЧН="), "");
-        assert_eq!(f("1", "ЧН=пусто"), "1");
-        // Ноль ПОСЛЕ округления — тоже ноль.
-        assert_eq!(f("0.004", "ЧДЦ=2; ЧН=пусто"), "пусто");
-        // Без `ЧН` ноль печатается как ноль.
-        assert_eq!(f("0", "ЧГ=0"), "0");
+    fn total_digits_is_a_field_width_and_overflow_fills_it_with_nines() {
+        assert_eq!(f("123.456", "ЧГ=0; ЧЦ=5"), "123");
+        assert_eq!(f("123.456", "ЧГ=0; ЧЦ=7"), "123");
+        assert_eq!(f("1.5", "ЧГ=0; ЧЦ=1"), "2");
+        assert_eq!(f("123456", "ЧГ=0; ЧЦ=3"), "999");
+        assert_eq!(f("1.5", "ЧГ=0; ЧЦ=5; ЧДЦ=2"), "1,50");
     }
 
     #[test]
