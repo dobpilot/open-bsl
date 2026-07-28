@@ -104,8 +104,25 @@ if [ ! -f "$WORK/Замеры.epf" ]; then
 fi
 
 # --- прогон -------------------------------------------------------------
-onec ENTERPRISE /F"$IB" /Execute "$WORK/Замеры.epf" \
-    /DisableStartupDialogs /DisableStartupMessages /Out "$WORK/run.log" >/dev/null 2>&1
+# ЖЁСТКИЙ ТАЙМАУТ обязателен: необработанное исключение в модуле платформа
+# показывает МОДАЛЬНЫМ окном, а `/DisableStartupDialogs` гасит только
+# стартовые диалоги. Без таймаута такой прогон висит вечно (проверено).
+# Отсюда же правило для самих скриптов замеров: каждую пробу, способную
+# бросить, заворачивать в Попытка — иначе замер не падает, а зависает.
+ONEC_TIMEOUT=${ONEC_TIMEOUT:-180}
+timeout --kill-after=10 "$ONEC_TIMEOUT" \
+    env -u WAYLAND_DISPLAY GDK_BACKEND=x11 DISPLAY="${DISPLAY:-:1}" \
+        XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" \
+        LD_LIBRARY_PATH="$SHIM:/usr/lib" \
+        "$PLATFORM" ENTERPRISE /F"$IB" /Execute "$WORK/Замеры.epf" \
+        /DisableStartupDialogs /DisableStartupMessages /Out "$WORK/run.log" >/dev/null 2>&1
+RC=$?
+if [ "$RC" -ge 124 ]; then
+    echo "платформа не завершилась за ${ONEC_TIMEOUT}с и была снята." >&2
+    echo "Типовая причина: необработанное исключение показало модальное окно." >&2
+    echo "Заверните пробы в Попытка/Исключение." >&2
+    exit 1
+fi
 
 # Пустой вывод при коде 0 — самый опасный исход: модуль не скомпилировался,
 # а платформа промолчала. Поэтому проверяем результат, а не код возврата.
