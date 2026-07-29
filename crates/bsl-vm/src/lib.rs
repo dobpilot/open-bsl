@@ -9,6 +9,36 @@
 //! `Vec`, а времени жизни хватает, потому что в BSL нельзя сохранить ссылку
 //! на переменную за пределы вызова.
 
+/// Компиляция байт-кода в машинный код x86-64. Включается ТОЛЬКО ключом
+/// `--jit`: по умолчанию исполнение идёт интерпретатором, и любой отказ
+/// JIT-а (неподдержанная инструкция, ядро не дало исполняемую страницу,
+/// другая архитектура) молча возвращает на него же.
+#[cfg(all(target_arch = "x86_64", target_os = "linux"))]
+pub(crate) mod jit;
+
+/// На всех прочих платформах JIT-а нет, и `--jit` там просто ничего не
+/// меняет. Заглушка, а не `cfg` на каждом месте использования: условная
+/// компиляция, размазанная по циклу диспетчеризации, читается хуже.
+#[cfg(not(all(target_arch = "x86_64", target_os = "linux")))]
+pub(crate) mod jit {
+    pub const AVAILABLE: bool = false;
+    pub struct CompiledChunk;
+    impl CompiledChunk {
+        pub(crate) fn run(
+            &self,
+            _pc: usize,
+            _frames: &mut Vec<crate::Frame>,
+            _stack: &mut Vec<bsl_rt::BslValue>,
+            _program: &bsl_bytecode::Program,
+        ) -> Option<Result<usize, bsl_rt::RtError>> {
+            None
+        }
+    }
+    pub fn compile(_chunk: &bsl_bytecode::Chunk) -> Option<CompiledChunk> {
+        None
+    }
+}
+
 use bsl_bytecode::{ArgMode, Instr, Program};
 use bsl_rt::{BslValue, RtError};
 
@@ -132,6 +162,26 @@ pub fn run_program(program: &Program) -> Result<BslValue, RtError> {
     Ok(value)
 }
 
+/// То же, что [`run_program`], но с включённым JIT.
+///
+/// Отдельная функция, а не аргумент: обычный режим — это обычный режим, и
+/// ни одна его строка не должна начинаться с проверки «а не JIT ли у нас».
+/// Ключ `--jit` у `bsl-cli` зовёт именно её.
+///
+/// # Errors
+///
+/// Те же ошибки, что и у [`run_program`]. JIT своих не добавляет: он либо
+/// исполняет инструкцию так же, как интерпретатор, либо отдаёт её ему.
+pub fn run_program_jit(program: &Program) -> Result<BslValue, RtError> {
+    let mut stack: Vec<BslValue> = Vec::new();
+    push_own_registers(
+        &mut stack,
+        at(&program.chunks, 0, "в программе нет чанка верхнего уровня")?,
+    );
+    let (value, _stack) = drive_with(program, 0, stack, JitMode::On)?;
+    Ok(value)
+}
+
 /// Для REPL (`bsl-cli`): исполняет один чанк с готовым стеком (уже
 /// дополненным под `chunk.n_regs`) и возвращает и значение (`Возврат` в
 /// строке, если был), и финальный стек — REPL сохраняет его целиком как
@@ -177,7 +227,24 @@ pub fn run_repl_chunk(
 fn drive(
     program: &Program,
     func_id: usize,
+    stack: Vec<BslValue>,
+) -> Result<(BslValue, Vec<BslValue>), RtError> {
+    drive_with(program, func_id, stack, JitMode::Off)
+}
+
+/// Включён ли JIT. Отдельный тип, а не `bool`: у вызова `drive(.., true)`
+/// на месте вызова не видно, что именно включается.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum JitMode {
+    Off,
+    On,
+}
+
+fn drive_with(
+    program: &Program,
+    func_id: usize,
     mut stack: Vec<BslValue>,
+    jit_mode: JitMode,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
     let mut frames = vec![Frame {
         func_id,
@@ -198,6 +265,15 @@ fn drive(
     // расширения этой таблицы (`Вставить`/`Удалить` на структуре, меняющие
     // её форму) актуальны только для объектов внутри ОДНОГО такого вызова.
     let mut runtime_shapes = bsl_rt::RuntimeShapes::seeded(program.names.clone(), program.shapes.clone());
+    // Скомпилированные чанки. Внешний `None` — «ещё не пробовали»,
+    // внутренний — «пробовали, JIT отказался»: компилировать чанк заново
+    // на каждом входе в него стоило бы дороже любого выигрыша.
+    let mut native: Vec<Option<Option<jit::CompiledChunk>>> =
+        if jit_mode == JitMode::On && jit::AVAILABLE {
+            (0..program.chunks.len()).map(|_| None).collect()
+        } else {
+            Vec::new()
+        };
 
     loop {
         // После инициализации пустой numeric-for не обращается к
@@ -224,6 +300,48 @@ fn drive(
         };
         if fast_numeric_for {
             continue;
+        }
+
+        // Нативный путь. Он не обязан ничего исполнить: если на текущей
+        // позиции входа нет, управление просто идёт в `step`, и это же
+        // происходит при любом отказе JIT-а.
+        if !native.is_empty() {
+            let (fid, pc) = {
+                let frame = frames
+                    .last()
+                    .expect("инвариант VM: drive всегда держит хотя бы один кадр");
+                (frame.func_id, frame.pc)
+            };
+            if let Some(slot) = native.get_mut(fid) {
+                if slot.is_none() {
+                    *slot = Some(program.chunks.get(fid).and_then(jit::compile));
+                }
+                // Три слоя: есть ли такой чанк, пробовали ли его, вышло ли.
+                if let Some(Some(Some(code))) = native.get(fid) {
+                    if let Some(outcome) = code.run(pc, &mut frames, &mut stack, program) {
+                        match outcome {
+                            Ok(next_pc) => {
+                                if let Some(frame) = frames.last_mut() {
+                                    frame.pc = next_pc;
+                                }
+                                continue;
+                            }
+                            Err(e) => {
+                                if !unwind_to_handler(
+                                    &mut frames,
+                                    &mut stack,
+                                    program,
+                                    &e,
+                                    &mut current_exception,
+                                ) {
+                                    return Err(e);
+                                }
+                                continue;
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         match step(
@@ -449,34 +567,7 @@ fn step(
                 frames[frame_idx].pc += 1;
             }
             Instr::Add { dst, a, b } => {
-                // Накопление строки в саму себя (`Текст = Текст + Кусок`
-                // — приёмник и левый операнд один регистр) идёт особым
-                // путём: значение ЗАБИРАЕТСЯ из регистра, а не копируется.
-                // Регистр всё равно будет перезаписан результатом, зато
-                // счётчик ссылок падает до единицы, и буфер дописывается
-                // на месте вместо копирования всего накопленного.
-                //
-                // Условие на ОБЕ строки проверяется ДО того, как регистр
-                // опустошён: иначе ошибка типа оставила бы переменную
-                // затёртой, а её мог бы поймать `Попытка` и поехать
-                // дальше с потерянным значением.
-                let d = frames[frame_idx].reg_index(dst);
-                let ia = frames[frame_idx].reg_index(a);
-                let bv = reg_load(stack, frames[frame_idx].reg_index(b))?;
-                let both_strings = matches!(
-                    (stack.get(ia), &bv),
-                    (Some(BslValue::Str(_)), BslValue::Str(_))
-                );
-                if d == ia && both_strings {
-                    let av = std::mem::replace(&mut stack[ia], BslValue::Undefined);
-                    let (BslValue::Str(left), BslValue::Str(right)) = (av, &bv) else {
-                        unreachable!("типы проверены выше")
-                    };
-                    stack[d] = BslValue::Str(left.append(right));
-                } else {
-                    let av = reg_load(stack, ia)?;
-                    reg_store(stack, d, av.add(&bv)?)?;
-                }
+                add_op(frames, stack, frame_idx, dst, a, b)?;
                 frames[frame_idx].pc += 1;
             }
             Instr::Sub { dst, a, b } => {
@@ -1340,6 +1431,51 @@ fn call_builtin_with_format(
         }
         other => bsl_rt::call_builtin_fn(other, args),
     }
+}
+
+/// Тело инструкции `Add`.
+///
+/// Отдельной функцией, потому что её зовут ДВОЕ: ветка `step`
+/// интерпретатора и шим JIT-а. Второй реализации сложения строк в
+/// проекте быть не должно — при расхождении режимов `--jit` и обычного
+/// не сработал бы ни один существующий тест.
+fn add_op(
+    frames: &mut [Frame],
+    stack: &mut [BslValue],
+    frame_idx: usize,
+    dst: u8,
+    a: u8,
+    b: u8,
+) -> Result<(), RtError> {
+                // Накопление строки в саму себя (`Текст = Текст + Кусок`
+        // — приёмник и левый операнд один регистр) идёт особым
+        // путём: значение ЗАБИРАЕТСЯ из регистра, а не копируется.
+        // Регистр всё равно будет перезаписан результатом, зато
+        // счётчик ссылок падает до единицы, и буфер дописывается
+        // на месте вместо копирования всего накопленного.
+        //
+        // Условие на ОБЕ строки проверяется ДО того, как регистр
+        // опустошён: иначе ошибка типа оставила бы переменную
+        // затёртой, а её мог бы поймать `Попытка` и поехать
+        // дальше с потерянным значением.
+        let d = frames[frame_idx].reg_index(dst);
+        let ia = frames[frame_idx].reg_index(a);
+        let bv = reg_load(stack, frames[frame_idx].reg_index(b))?;
+        let both_strings = matches!(
+            (stack.get(ia), &bv),
+            (Some(BslValue::Str(_)), BslValue::Str(_))
+        );
+        if d == ia && both_strings {
+            let av = std::mem::replace(&mut stack[ia], BslValue::Undefined);
+            let (BslValue::Str(left), BslValue::Str(right)) = (av, &bv) else {
+                unreachable!("типы проверены выше")
+            };
+            stack[d] = BslValue::Str(left.append(right));
+        } else {
+            let av = reg_load(stack, ia)?;
+            reg_store(stack, d, av.add(&bv)?)?;
+        }
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]

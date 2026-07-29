@@ -25,6 +25,7 @@ enum Kind {
     EmitBytecode,
     RunBytecode,
     IngestMeasurements,
+    Jit,
 }
 
 struct Command {
@@ -74,6 +75,21 @@ const COMMANDS: &[Command] = &[
             "Раскладывает вывод в tests/conformance/measure/platform.tsv, сравнивает с",
             "нашим на том же скрипте и печатает расхождения. В КОДЕ НЕ ПРАВИТ НИЧЕГО:",
             "решение по каждому расхождению принимает человек.",
+        ],
+    },
+    Command {
+        flag: "--jit",
+        alias: None,
+        kind: Kind::Jit,
+        args: "<файл.bsl>",
+        what: "исполнить скрипт, компилируя байт-код в машинный код",
+        details: &[
+            "Только x86-64 Linux; на других платформах ключ принимается и ничего не",
+            "меняет. Компилируются не все инструкции: чего JIT не умеет (вызовы,",
+            "возвраты, Выполнить, работа с объектами) — исполняет интерпретатор, и",
+            "переключение туда-обратно происходит само. Семантика у обоих режимов",
+            "ОДНА: нативный код зовёт те же функции, что и ветки интерпретатора,",
+            "и это проверяется прогоном всего корпуса фикстур обоими путями.",
         ],
     },
     Command {
@@ -152,7 +168,7 @@ fn main() {
             run_command(cmd, &args)
         }
         Some(path) => {
-            run_file(path);
+            run_file(path, Engine::Interpreter);
             0
         }
     };
@@ -177,6 +193,13 @@ fn run_command(cmd: &Command, args: &[String]) -> i32 {
             Some(input) => ingest::run(input, args.get(3).map(String::as_str)),
             None => missing_argument(cmd),
         },
+        Kind::Jit => match args.get(2) {
+            Some(path) => {
+                run_file(path, Engine::Jit);
+                0
+            }
+            None => missing_argument(cmd),
+        },
     }
 }
 
@@ -190,7 +213,15 @@ fn missing_argument(cmd: &Command) -> i32 {
     2
 }
 
-fn run_file(path: &str) {
+/// Чем исполнять скрипт. По умолчанию — интерпретатором; JIT включается
+/// только ключом, и никогда сам.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Engine {
+    Interpreter,
+    Jit,
+}
+
+fn run_file(path: &str, engine: Engine) {
     let src = match std::fs::read_to_string(path) {
         Ok(s) => s,
         Err(e) => {
@@ -220,7 +251,11 @@ fn run_file(path: &str) {
             std::process::exit(1);
         }
     };
-    match bsl_vm::run_program(&compiled) {
+    let outcome = match engine {
+        Engine::Interpreter => bsl_vm::run_program(&compiled),
+        Engine::Jit => bsl_vm::run_program_jit(&compiled),
+    };
+    match outcome {
         Ok(BslValue::Undefined) => {}
         Ok(v) => print_value(&v),
         Err(e) => {

@@ -268,3 +268,65 @@ fn fixtures_produce_the_same_output_when_run_from_printed_bytecode() {
     let _ = fs::remove_dir_all(&tmp);
     assert!(checked > 0, "не нашлось ни одной фикстуры с .expected");
 }
+
+/// Оба режима исполнения обязаны давать ОДИН И ТОТ ЖЕ вывод на всём
+/// корпусе.
+///
+/// Это главная гарантия JIT-а. Он не пишет своей семантики — нативный код
+/// зовёт те же функции, что и ветки интерпретатора, — но проверить это
+/// утверждением в комментарии нельзя. Сверяются оба каталога, включая
+/// фикстуры без `.expected`: здесь эталоном служит не платформа, а второй
+/// режим, и «система сама с собой» тут уместна ровно потому, что вопрос
+/// именно в их совпадении.
+///
+/// На платформах без JIT-а `--jit` ничего не меняет, и тест просто
+/// сравнивает интерпретатор с самим собой — пусть лучше так, чем `cfg`,
+/// из-за которого на этих платформах он молча не запускался бы.
+#[test]
+fn the_jit_agrees_with_the_interpreter_on_every_script() {
+    let mut checked = 0;
+    for dir in [fixtures_dir(), measure_dir()] {
+        for script in scripts_in(&dir) {
+            let name = script.file_name().unwrap().to_string_lossy().to_string();
+            if SLOW_TO_COMPARE.contains(&name.as_str()) {
+                continue;
+            }
+            let plain = run_script(&script, &[]);
+            let jitted = run_script(&script, &["--jit"]);
+            assert_eq!(
+                plain, jitted,
+                "{name}: вывод под --jit отличается от вывода интерпретатора"
+            );
+            checked += 1;
+        }
+    }
+    assert!(checked > 0, "не нашлось ни одного скрипта для сверки режимов");
+    println!("режимы сверены на {checked} скриптах");
+}
+
+/// Фикстуры, которые в этой сверке не участвуют — не потому, что режимы
+/// на них расходятся, а потому, что каждая считается минутами (тест
+/// собирается в debug, где всё в разы медленнее), и гонять их ДВАЖДЫ
+/// незачем. Их численную семантику покрывают соседние фикстуры того же
+/// семейства: `n-body-smoke` проходит те же ветки за 32 мс.
+///
+/// `n-body-pow-variant` не завершается и в release: это исследование
+/// сходимости, а не тест.
+const SLOW_TO_COMPARE: &[&str] = &[
+    "n-body-perf.bsl",
+    "n-body-precision.bsl",
+    "n-body-pow-variant.bsl",
+];
+
+/// stdout скрипта плюс код возврата: расходиться режимы могут и падением.
+fn run_script(script: &Path, flags: &[&str]) -> (String, Option<i32>) {
+    let out = Command::new(env!("CARGO_BIN_EXE_bsl-cli"))
+        .args(flags)
+        .arg(script)
+        .output()
+        .unwrap_or_else(|e| panic!("не удалось запустить {}: {e}", script.display()));
+    (
+        String::from_utf8_lossy(&out.stdout).into_owned(),
+        out.status.code(),
+    )
+}
