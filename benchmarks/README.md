@@ -144,15 +144,15 @@ below were all taken with the CPU at 2.4-2.9 GHz.
 
 | scenario            |  bsl-cli | `--jit` | lua 5.4 | luajit | oscript 2.1 | 1C 8.3.27 |
 |---------------------|---------:|--------:|--------:|-------:|------------:|----------:|
-| `csv_write`         |     1580 |    1519 |     892 |    108 |       22912 |      4566 |
-| `csv_write_batched` |       63 |  **61** |       — |      — |        1160 |       218 |
-| `empty_for`         |    **2** |   **2** |       3 |      0 |         189 |       309 |
-| `pi_leibniz`        |      492 | **371** |      19 |      1 |        1203 |      1186 |
-| `pi_leibniz_15`     |      670 | **552** |       — |      — |        1427 |      1336 |
-| `str_concat`        |    **2** |   **2** |     569 |    565 |        1197 |       162 |
-| `str_find`          |       46 |      46 |     305 |     35 |      **34** |       130 |
-| `table_total`       |      283 | **259** |     242 |    130 |        1087 |      3202 |
-| `table_sort`        |     1478 |    1499 |     553 |    492 |        1155 |      3266 |
+| `csv_write`         |     1611 |    1628 |     936 |    115 |       22866 |      4566 |
+| `csv_write_batched` |       60 |      60 |       — |      — |        1141 |       218 |
+| `empty_for`         |    **2** |   **2** |       4 |      0 |         203 |       309 |
+| `pi_leibniz`        |      505 | **375** |      20 |      1 |        1265 |      1186 |
+| `pi_leibniz_15`     |      660 | **575** |       — |      — |        1445 |      1336 |
+| `str_concat`        |    **2** |   **2** |     581 |    550 |        1272 |       162 |
+| `str_find`          |       47 |      47 |     323 |     35 |      **35** |       130 |
+| `table_total`       |      288 | **274** |     259 |    134 |        1104 |      3202 |
+| `table_sort`        |     1589 |    1592 |     583 |    507 |        1171 |      3266 |
 
 `--jit` is the same binary with the flag of the same name: bytecode
 compiled to x86-64 machine code (see the JIT section in the root README).
@@ -212,29 +212,31 @@ after warm-up, per the scenario contract above.
 
 | scenario | interpreter | `--jit` | |
 |---|---:|---:|---:|
-| `pi_leibniz` | 492 | 371 | 1.33x |
-| `pi_leibniz_15` | 670 | 552 | 1.21x |
-| `table_total` | 283 | 259 | 1.09x |
-| `csv_write` | 1580 | 1519 | 1.04x |
-| `str_find`, `str_concat`, `empty_for` | | | 1.00x |
-| `table_sort` | 1478 | 1499 | 0.99x |
+| `pi_leibniz` | 505 | 375 | 1.35x |
+| `pi_leibniz_15` | 660 | 575 | 1.15x |
+| `table_total` | 288 | 274 | 1.05x |
+| everything else | | | 1.00x |
 
 The gain is confined to loops made of arithmetic and comparisons — the
-only instructions compiled so far. Everything else still runs
-interpreted, and the JIT merely hands control back, which is why the
-string and collection scenarios do not move at all. `table_sort` at 0.99x
-is not a regression to chase: repeated medians of that scenario vary by
-more than that between runs.
+only instructions compiled. Everything else still runs interpreted, and
+the JIT hands control straight back, which is why the string, collection
+and file scenarios do not move.
 
 `pi_leibniz` is the clearest case, and it moves the comparison with the
-platform too: **371 ms against 1186**, 3.2x rather than 2.4x. A million
-exact decimal divisions are dispatch-bound, and removing the dispatch is
-exactly what a template JIT does.
+platform too: **375 ms against 1186**, 3.2x rather than 2.4x.
 
-`empty_for` staying at 2 ms is the informative failure. Its loop *is* a
-single `NumericForNextI64` instruction, which is not compiled, so there is
-nothing for native code to run — compiling the loop counter is the obvious
-next step and would be worth more than anything else on this list.
+What unlocked most of that was compiling the instruction that CLOSES a
+numeric loop (`NumericForNext`). Without it the loop body compiled fine
+but the counter step did not, so native code left for the interpreter on
+every single iteration and the native jumps bought nothing. With it the
+whole body of `pi_leibniz` — eleven instructions — stays native, and the
+scenario went 378 -> 354 ms in a direct A/B of the two builds.
+
+`empty_for` staying at 2 ms is not waiting for the same fix, contrary to
+what this file said before it was measured. Its loop is a single
+`NumericForNextI64`, and the interpreter already services that in a
+compact loop inside `drive_with` that never enters the dispatcher at all
+— there is no dispatch left there for a JIT to remove.
 
 The `csv_write` cross-check covers the JIT as well: the file it produces
 under `--jit` is compared byte for byte with the interpreter's, alongside

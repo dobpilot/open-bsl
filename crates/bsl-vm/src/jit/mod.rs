@@ -41,7 +41,7 @@
 mod mem;
 mod x64;
 
-use crate::{add_op, at, binop, cmp, reg_load, reg_store, Frame};
+use crate::{add_op, at, binop, cmp, numeric_for_next_regular, reg_load, reg_store, Frame};
 use bsl_bytecode::{Chunk, Instr, Program};
 use bsl_rt::{BslValue, RtError};
 use mem::ExecutableBuffer;
@@ -316,6 +316,19 @@ fn compile_instr(instr: &Instr) -> Option<Compiled> {
             args: [cond as u32, 0, 0],
             target: target as usize,
         }),
+        // Инструкция, ЗАМЫКАЮЩАЯ числовой цикл. Без неё тело цикла
+        // компилировалось, а шаг счётчика — нет, и нативный код выходил в
+        // интерпретатор на КАЖДОЙ итерации: весь смысл нативных переходов
+        // при этом пропадал.
+        Instr::NumericForNext {
+            counter,
+            bound,
+            target,
+        } => Some(Compiled::Branch {
+            func: shim_numeric_for_next,
+            args: [counter as u32, bound as u32, target as u32],
+            target: target as usize,
+        }),
         Instr::Move { dst, src } => s(shim_move, [dst as u32, src as u32, 0]),
         Instr::LoadConst { dst, k } => s(shim_load_const, [dst as u32, k as u32, 0]),
         Instr::LoadBool { dst, val } => s(shim_load_bool, [dst as u32, val as u32, 0]),
@@ -512,6 +525,20 @@ shim!(shim_jump_if_false, |frames, stack, program, idx, cond, _b, _c| {
     } else {
         JUMPED
     })
+});
+
+// Шаг счётчика делает та же `numeric_for_next_regular`, что и ветка
+// интерпретатора: она сама решает, куда поставить pc — на цель или на
+// следующую инструкцию. Мы отдаём ей ЛОКАЛЬНЫЙ pc и по нему же узнаём,
+// прыгнули или вышли из цикла; сравнение именно с «шагом вперёд», а не с
+// целью, потому что цель у пустого цикла может совпасть с pc + 1.
+shim!(shim_numeric_for_next, |frames, stack, program, idx, counter, bound, target| {
+    let counter_idx = frames[idx].reg_index(counter as u8);
+    let bound_idx = frames[idx].reg_index(bound as u8);
+    let here = frames[idx].pc;
+    let mut pc = here;
+    numeric_for_next_regular(stack, counter_idx, bound_idx, &mut pc, target as i16)?;
+    Ok(if pc == here + 1 { OK } else { JUMPED })
 });
 
 shim!(shim_jump_if_true, |frames, stack, program, idx, cond, _b, _c| {
