@@ -136,6 +136,15 @@ Median of 7 runs, milliseconds, lower is better (`csv_write*`: 3 runs).
 Intel i5-8250U, Linux 7.1.3, `--release`. Numbers are machine-specific;
 re-run before drawing conclusions on other hardware.
 
+**Function alignment is a build flag, not a detail.** `.cargo/config.toml`
+passes `-align-all-functions=5`. It went in after adding shims to the JIT
+module slowed `str_find` by 45% — with the search code untouched and
+`--jit` not even in play. `perf stat` showed identical instruction counts
+in both binaries (651M) and 50% more cycles: the hot loop had simply moved
+off a favourable boundary. Without the flag, an edit anywhere can shift an
+unrelated benchmark by tens of percent, and a real regression cannot be
+told from layout luck.
+
 **Take every column from one session.** An earlier draft of this table
 mixed a 1C column measured hours before with the rest, and the machine had
 meanwhile dropped to its minimum 800 MHz — every other runtime was 30-40%
@@ -144,15 +153,15 @@ below were all taken with the CPU at 2.4-2.9 GHz.
 
 | scenario            |  bsl-cli | `--jit` | lua 5.4 | luajit | oscript 2.1 | 1C 8.3.27 |
 |---------------------|---------:|--------:|--------:|-------:|------------:|----------:|
-| `csv_write`         |     1611 |    1628 |     936 |    115 |       22866 |      4566 |
-| `csv_write_batched` |       60 |      60 |       — |      — |        1141 |       218 |
-| `empty_for`         |    **2** |   **2** |       4 |      0 |         203 |       309 |
-| `pi_leibniz`        |      505 | **375** |      20 |      1 |        1265 |      1186 |
-| `pi_leibniz_15`     |      660 | **575** |       — |      — |        1445 |      1336 |
-| `str_concat`        |    **2** |   **2** |     581 |    550 |        1272 |       162 |
-| `str_find`          |       47 |      47 |     323 |     35 |      **35** |       130 |
-| `table_total`       |      288 | **274** |     259 |    134 |        1104 |      3202 |
-| `table_sort`        |     1589 |    1592 |     583 |    507 |        1171 |      3266 |
+| `csv_write`         |     1617 |    1598 |     985 |    122 |       22598 |      4588 |
+| `csv_write_batched` |       61 |  **57** |       — |      — |        1149 |       225 |
+| `empty_for`         |    **2** |   **2** |       3 |      1 |         206 |       309 |
+| `pi_leibniz`        |      510 | **378** |      19 |      1 |        1230 |      1167 |
+| `pi_leibniz_15`     |      701 | **539** |       — |      — |        1376 |      1326 |
+| `str_concat`        |    **2** |   **2** |     550 |    619 |        1236 |       165 |
+| `str_find`          |       47 |      45 |     298 |     35 |      **34** |       130 |
+| `table_total`       |      281 | **275** |     254 |    132 |        1096 |      3217 |
+| `table_sort`        |     1631 |    1655 |     579 |    496 |        1164 |      3276 |
 
 `--jit` is the same binary with the flag of the same name: bytecode
 compiled to x86-64 machine code (see the JIT section in the root README).
@@ -212,9 +221,9 @@ after warm-up, per the scenario contract above.
 
 | scenario | interpreter | `--jit` | |
 |---|---:|---:|---:|
-| `pi_leibniz` | 505 | 375 | 1.35x |
-| `pi_leibniz_15` | 660 | 575 | 1.15x |
-| `table_total` | 288 | 274 | 1.05x |
+| `pi_leibniz` | 510 | 378 | 1.35x |
+| `pi_leibniz_15` | 701 | 539 | 1.30x |
+| `table_total` | 281 | 275 | 1.02x |
 | everything else | | | 1.00x |
 
 The gain is confined to loops made of arithmetic and comparisons — the
@@ -237,6 +246,12 @@ what this file said before it was measured. Its loop is a single
 `NumericForNextI64`, and the interpreter already services that in a
 compact loop inside `drive_with` that never enters the dispatcher at all
 — there is no dispatch left there for a JIT to remove.
+
+`GetIndex`, `SetIndex` and `CallBuiltin` are compiled too, and moved no
+benchmark measurably. They are kept because more of a chunk staying native
+is worth having and the equivalence test covers the risk — but the honest
+reading is that in these scenarios the work inside the builtin or the
+collection dominates, and removing the dispatch around it changes nothing.
 
 The `csv_write` cross-check covers the JIT as well: the file it produces
 under `--jit` is compared byte for byte with the interpreter's, alongside

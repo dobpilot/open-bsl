@@ -318,7 +318,9 @@ fn drive_with(
                 }
                 // Три слоя: есть ли такой чанк, пробовали ли его, вышло ли.
                 if let Some(Some(Some(code))) = native.get(fid) {
-                    if let Some(outcome) = code.run(pc, &mut frames, &mut stack, program) {
+                    if let Some(outcome) =
+                        code.run(pc, &mut frames, &mut stack, program, &mut runtime_shapes)
+                    {
                         match outcome {
                             Ok(next_pc) => {
                                 if let Some(frame) = frames.last_mut() {
