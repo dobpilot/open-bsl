@@ -92,6 +92,7 @@ language, so there is nothing to port.
 
 | scenario      | what it measures                                            |
 |---------------|-------------------------------------------------------------|
+| `call_overhead` | a million calls to a user function whose body is one addition |
 | `str_find`    | `СтрНайти` over a 215K-code-unit haystack, needle at the end |
 | `str_concat`  | building a string by repeated concatenation, ten times over  |
 | `table_total` | filling 200K rows, then `Итог` over a column 50 times        |
@@ -153,6 +154,7 @@ below were all taken with the CPU at 2.4-2.9 GHz.
 
 | scenario            |  bsl-cli | `--jit` | lua 5.4 | luajit | oscript 2.1 | 1C 8.3.27 |
 |---------------------|---------:|--------:|--------:|-------:|------------:|----------:|
+| `call_overhead`     |      134 |     138 |      27 |      1 |         912 |      1758 |
 | `csv_write`         |     1674 |    1604 |     965 |    111 |       22993 |      4554 |
 | `csv_write_batched` |       64 |  **60** |       — |      — |        1145 |       217 |
 | `empty_for`         |    **2** |   **2** |       4 |      0 |         197 |       298 |
@@ -228,6 +230,7 @@ after warm-up, per the scenario contract above.
 | `csv_write` | 1674 | 1604 | 1.04x |
 | `table_sort` | 1591 | 1555 | 1.02x |
 | `str_find`, `str_concat`, `empty_for` | | | 1.00x |
+| `call_overhead` | 134 | 138 | **0.97x** |
 
 The gain is confined to loops made of arithmetic and comparisons — the
 only instructions compiled. Everything else still runs interpreted, and
@@ -266,6 +269,21 @@ costs nothing next to the opcode dispatch they replace. `GetProp` and
 `SetProp` use the inline cache cell of THAT instruction, the same one the
 interpreter uses: a separate cache for the JIT would warm a monomorphic
 site twice and differently.
+
+**`call_overhead` is the one scenario where `--jit` LOSES**, 134 -> 138 ms.
+Its loop leaves native code at every `Call` and again at every `Возврат`,
+because an instruction that changes the frame stack cannot be compiled —
+execution continues in a different chunk. So each call pays two native
+exits and two native entries on top of the two dispatches the interpreter
+would have done anyway. Nothing else in the baseline shows this because
+nothing else calls anything in a loop.
+
+Making the entry cheaper does not fix it. Hoisting the JIT context out of
+the dispatch loop and looking the compiled chunk up once instead of twice
+removed 8M instructions from a 1.48G run — and the same build spent 20M
+MORE cycles and measured 4% slower. That is layout again, below the floor
+this machine can resolve even with function alignment pinned. The real fix
+is native transfer between chunks, which is a different piece of work.
 
 The `csv_write` cross-check covers the JIT as well: the file it produces
 under `--jit` is compared byte for byte with the interpreter's, alongside

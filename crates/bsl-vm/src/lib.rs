@@ -316,8 +316,9 @@ fn drive_with(
                 if slot.is_none() {
                     *slot = Some(program.chunks.get(fid).and_then(jit::compile));
                 }
-                // Три слоя: есть ли такой чанк, пробовали ли его, вышло ли.
-                if let Some(Some(Some(code))) = native.get(fid) {
+                // Два слоя внутри уже найденной ячейки: пробовали ли этот
+                // чанк и вышло ли. Повторно искать его в таблице незачем.
+                if let Some(Some(code)) = slot.as_ref() {
                     if let Some(outcome) =
                         code.run(pc, &mut frames, &mut stack, program, &mut runtime_shapes)
                     {
