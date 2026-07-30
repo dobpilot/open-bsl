@@ -3770,7 +3770,7 @@ mod tests {
     #[test]
     fn text_writer_writes_utf8_and_flushes_on_close() {
         let path = std::env::temp_dir().join(format!(
-            "onec-llvm-text-writer-{}-{}.txt",
+            "open-bsl-text-writer-{}-{}.txt",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
