@@ -516,13 +516,40 @@ fn normalize_small(mut m: i128, mut scale: i32) -> BslNumber {
         };
     }
     while scale > 0 && i128_is_divisible_by_10(m) {
-        m /= 10;
+        m = exact_div_by_10(m);
         scale -= 1;
     }
     BslNumber::Small {
         m: M128::new(m),
         scale,
     }
+}
+
+/// Обратное к пяти по модулю 2^128. Считается один раз и на бумаге:
+/// `5 * INV5 = 1 (mod 2^128)`.
+const INV5: i128 = 0xcccc_cccc_cccc_cccc_cccc_cccc_cccc_cccdu128 as i128;
+
+/// Деление на десять для значения, про которое УЖЕ известно, что оно на
+/// десять делится (это проверяет `i128_is_divisible_by_10` строкой выше в
+/// единственном вызывающем).
+///
+/// Никакого деления здесь нет. Десятка раскладывается на два и пять:
+/// делить на два — арифметический сдвиг (у чётного значения он точен и
+/// для отрицательных), а на пять — умножение на обратное по модулю
+/// 2^128. Умножение в дополнительном коде это умножение в кольце вычетов,
+/// поэтому знак разбирать не нужно: если частное представимо, оно и
+/// получится.
+///
+/// Зачем: `normalize_small` снимает хвостовые нули по одному, и КАЖДЫЙ шаг
+/// раньше был `__divti3` из compiler-rt — программное 128-битное деление
+/// в десятки тактов. Здесь сдвиг и одно умножение.
+///
+/// Работает только при делимости: на 11 эта формула даст мусор, а не
+/// частное с остатком. Отсюда и `debug_assert`.
+#[inline]
+fn exact_div_by_10(m: i128) -> i128 {
+    debug_assert!(i128_is_divisible_by_10(m), "точное деление применено к неделящемуся");
+    (m >> 1).wrapping_mul(INV5)
 }
 
 #[inline]
@@ -595,23 +622,95 @@ fn check_scale(s: i32) -> Result<(), NumError> {
 // с пятёркой на конце. Платформа дала ...063, то есть вверх.
 // Half-even и truncate дали бы ...062.
 
-fn div_half_up_i128(n: i128, d: i128) -> Option<i128> {
-    let q = n.checked_div(d)?;
-    let r = n % d;
-    if r == 0 {
-        return Some(q);
+/// Деление 128 на 64 аппаратной инструкцией `div`.
+///
+/// # Safety
+///
+/// `d != 0` и `hi < d`. Нарушение любого из двух — исключение #DE, то
+/// есть немедленная смерть процесса, а не ошибка: `div` не насыщается.
+/// Оба условия обеспечивает единственный вызывающий ниже.
+#[cfg(target_arch = "x86_64")]
+#[inline]
+unsafe fn divq(hi: u64, lo: u64, d: u64) -> (u64, u64) {
+    let (quotient, remainder): (u64, u64);
+    unsafe {
+        std::arch::asm!(
+            "div {d}",
+            d = in(reg) d,
+            inlateout("rax") lo => quotient,
+            inlateout("rdx") hi => remainder,
+            options(pure, nomem, nostack),
+        );
     }
-    let rr = (r.unsigned_abs()) as u128;
-    let dd = (d.unsigned_abs()) as u128;
-    let bump = rr.checked_mul(2).map(|x| x >= dd).unwrap_or(true);
-    if !bump {
-        return Some(q);
-    }
-    let neg = (n < 0) != (d < 0);
-    if neg {
-        q.checked_sub(1)
+    (quotient, remainder)
+}
+
+/// Частное и остаток от деления 128-битного на 64-битное.
+///
+/// Зачем своё, когда есть `/` и `%`: у compiler-rt эта операция общая —
+/// её `u128_div_rem` разбирает все случаи и занимает 73 инструкции с
+/// ветвлениями вокруг пяти аппаратных `div`. Здесь случай известен
+/// заранее (делитель влезает в 64 бита), и хватает одного или двух `div`
+/// без разбора.
+#[cfg(target_arch = "x86_64")]
+#[inline]
+fn div_rem_u128_by_u64(n: u128, d: u64) -> (u128, u64) {
+    let hi = (n >> 64) as u64;
+    let lo = n as u64;
+    if hi < d {
+        // Частное влезает в 64 бита — одна инструкция.
+        let (q, r) = unsafe { divq(hi, lo, d) };
+        (q as u128, r)
     } else {
-        q.checked_add(1)
+        // Школьное деление в две цифры: сначала старшая половина, остаток
+        // от неё заведомо меньше делителя, поэтому второй `div` безопасен.
+        let (q_hi, r) = unsafe { divq(0, hi, d) };
+        let (q_lo, r2) = unsafe { divq(r, lo, d) };
+        (((q_hi as u128) << 64) | q_lo as u128, r2)
+    }
+}
+
+/// Деление с округлением half-up — тем самым, что у платформы.
+///
+/// `None` означает «не поместилось», и вызывающий уходит на большой ярус.
+fn div_half_up_i128(n: i128, d: i128) -> Option<i128> {
+    if d == 0 {
+        return None;
+    }
+    // `unsigned_abs`, а не `abs`: у `i128::MIN` модуль в знаковый тип не
+    // помещается.
+    let dd = d.unsigned_abs();
+    let nn = n.unsigned_abs();
+    let negative = (n < 0) != (d < 0);
+
+    let (q, r) = {
+        #[cfg(target_arch = "x86_64")]
+        {
+            match u64::try_from(dd) {
+                Ok(d64) => {
+                    let (q, r) = div_rem_u128_by_u64(nn, d64);
+                    (q, r as u128)
+                }
+                Err(_) => (nn / dd, nn % dd),
+            }
+        }
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            (nn / dd, nn % dd)
+        }
+    };
+
+    // Half-up считается по МОДУЛЯМ и означает «от нуля», а не «вверх»:
+    // -0.5 даёт -1, как на платформе.
+    let magnitude = if r != 0 && r * 2 >= dd { q.checked_add(1)? } else { q };
+    if negative {
+        // -2^127 представимо, 2^127 — нет, поэтому через беззнаковое.
+        if magnitude > (1u128 << 127) {
+            return None;
+        }
+        Some((magnitude as i128).wrapping_neg())
+    } else {
+        i128::try_from(magnitude).ok()
     }
 }
 
@@ -833,4 +932,110 @@ mod tests {
         }
     }
 
+}
+
+#[cfg(test)]
+mod exact_division_tests {
+    use super::*;
+
+    /// Точное деление обязано совпадать с обычным ВЕЗДЕ, где применимо.
+    /// Проверяется не образцами, а перебором: границы диапазона, обе
+    /// стороны нуля, все степени десятки и псевдослучайные величины.
+    #[test]
+    fn exact_division_by_ten_matches_ordinary_division() {
+        let mut checked = 0;
+        let mut sample = |m: i128| {
+            if m % 10 == 0 {
+                assert_eq!(exact_div_by_10(m), m / 10, "не сошлось на {m}");
+                checked += 1;
+            }
+        };
+        for k in 0..38u32 {
+            let p = 10i128.pow(k);
+            sample(p);
+            sample(-p);
+            sample(p * 10);
+        }
+        // Линейный конгруэнтный генератор: воспроизводимо и без зависимостей.
+        let mut x: u128 = 0x2545_f491_4f6c_dd1d;
+        for _ in 0..20000 {
+            x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            let v = (x >> 1) as i128;
+            sample(v - v % 10);
+            sample(-(v - v % 10));
+        }
+        // Наибольшее кратное десяти, влезающее в i128, и наименьшее.
+        sample(i128::MAX - i128::MAX % 10);
+        sample(i128::MIN + (-(i128::MIN % 10)));
+        assert!(checked > 20000, "перебор не набрал значений: {checked}");
+    }
+}
+
+#[cfg(test)]
+mod division_tests {
+    use super::*;
+
+    /// Эталон — прежняя реализация, слово в слово: частное и остаток
+    /// обычными операторами, округление от нуля при |r| * 2 >= |d|.
+    /// Новая версия отличается только СПОСОБОМ получить частное с
+    /// остатком (аппаратный `div` вместо разбора случаев в compiler-rt),
+    /// и обязана совпадать с ней всюду.
+    fn reference(n: i128, d: i128) -> Option<i128> {
+        let q = n.checked_div(d)?;
+        let r = n % d;
+        if r == 0 {
+            return Some(q);
+        }
+        let rr = r.unsigned_abs();
+        let dd = d.unsigned_abs();
+        let bump = rr.checked_mul(2).map(|x| x >= dd).unwrap_or(true);
+        if !bump {
+            return Some(q);
+        }
+        if (n < 0) != (d < 0) {
+            q.checked_sub(1)
+        } else {
+            q.checked_add(1)
+        }
+    }
+
+    #[test]
+    fn hardware_division_matches_the_previous_implementation() {
+        let mut cases = 0;
+        let mut check = |n: i128, d: i128| {
+            assert_eq!(div_half_up_i128(n, d), reference(n, d), "разошлись на {n} / {d}");
+            cases += 1;
+        };
+
+        // Границы, знаки, нули, деление на единицу и само на себя.
+        for &n in &[0i128, 1, -1, 5, -5, i128::MAX, i128::MIN, i128::MIN + 1] {
+            for &d in &[1i128, -1, 2, -2, 3, 10, -10, i128::MAX, i128::MIN] {
+                check(n, d);
+            }
+        }
+        // Ровно на границе half-up: остаток строго в половину делителя.
+        for &d in &[2i128, 4, 10, 100, 1 << 40] {
+            for &sn in &[1i128, -1] {
+                for k in 0..5i128 {
+                    check(sn * (k * d + d / 2), d);
+                    check(sn * (k * d + d / 2 - 1), d);
+                    check(sn * (k * d + d / 2 + 1), d);
+                }
+            }
+        }
+        // Делитель В 64 бита и ЗА 64 бита — это разные ветви новой функции.
+        let mut x: u128 = 0x9e37_79b9_7f4a_7c15;
+        for _ in 0..20000 {
+            x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            let n = (x as i128).wrapping_mul(3);
+            let small = ((x >> 64) as u64 | 1) as i128;
+            check(n, small);
+            check(n, -small);
+            let big = (x | (1 << 100)) as i128;
+            if big != 0 {
+                check(n, big);
+            }
+        }
+        assert!(cases > 50000, "перебор не набрал случаев: {cases}");
+    }
 }

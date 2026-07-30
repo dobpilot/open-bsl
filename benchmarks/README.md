@@ -154,16 +154,19 @@ below were all taken with the CPU at 2.4-2.9 GHz.
 
 | scenario            |  bsl-cli | `--jit` | lua 5.4 | luajit | oscript 2.1 | 1C 8.3.27 |
 |---------------------|---------:|--------:|--------:|-------:|------------:|----------:|
-| `call_overhead`     |      134 |     138 |      27 |      1 |         912 |      1758 |
-| `csv_write`         |     1674 |    1604 |     965 |    111 |       22993 |      4554 |
-| `csv_write_batched` |       64 |  **60** |       — |      — |        1145 |       217 |
-| `empty_for`         |    **2** |   **2** |       4 |      0 |         197 |       298 |
-| `pi_leibniz`        |      509 | **368** |      20 |      1 |        1217 |      1160 |
-| `pi_leibniz_15`     |      703 | **522** |       — |      — |        1451 |      1318 |
-| `str_concat`        |    **2** |   **2** |     554 |    592 |        1173 |       162 |
-| `str_find`          |       46 |      46 |     314 |     37 |      **35** |       131 |
-| `table_total`       |      265 | **241** |     225 |    116 |        1036 |      3205 |
-| `table_sort`        |     1591 |    1555 |     715 |    463 |        1092 |      3251 |
+| `call_overhead`     |      146 |     149 |      27 |      1 |         928 |      1868 |
+| `csv_write`         |     1833 |    1699 |    1022 |    120 |       23636 |      5033 |
+| `csv_write_batched` |       65 |  **58** |       — |      — |        1169 |       237 |
+| `empty_for`         |    **2** |   **2** |       4 |      1 |         203 |       319 |
+| `pi_leibniz`        |      520 | **351** |      21 |      1 |        1294 |      1282 |
+| `pi_leibniz_15`     |      714 | **545** |       — |      — |        1486 |      1388 |
+| `str_concat`        |        2 |   **1** |     576 |    619 |        1255 |       164 |
+| `str_find`          |       49 |      45 |     329 |     37 |      **35** |       134 |
+| `table_total`       |      299 | **280** |     252 |    126 |        1140 |      3272 |
+| `table_sort`        |     1658 |    1636 |     560 |    467 |        1112 |      3356 |
+
+*This session ran about 8% slower across every runtime than the one before
+it — compare within the table, not with an older copy of it.*
 
 `--jit` is the same binary with the flag of the same name: bytecode
 compiled to x86-64 machine code (see the JIT section in the root README).
@@ -288,6 +291,43 @@ is native transfer between chunks, which is a different piece of work.
 The `csv_write` cross-check covers the JIT as well: the file it produces
 under `--jit` is compared byte for byte with the interpreter's, alongside
 the other runtimes.
+
+### What BMI2 and ADX turned out to be worth
+
+The question was whether the decimal arithmetic should use ADX (ADCX/ADOX)
+and BMI2 (MULX). Measured answers, in the order they were found:
+
+* **Simply enabling them is a regression.** `-C target-feature=+bmi2,+adx`
+  put 159 adcx/adox/mulx instructions in the binary against 45, and
+  `pi_leibniz` went 465 -> 480 ms. `-C target-cpu=native` made it 535. LLVM
+  will use the instructions; using them is not the same as being faster.
+* **The bottleneck they would address is not the bottleneck.** The hot
+  arithmetic is 128-bit DIVISION — `u128_div_rem` was 6.45% of the profile.
+  Neither ADX nor MULX divides anything.
+
+Two things did help, and neither needed the extensions:
+
+* **Exact division by ten, by modular inverse.** `normalize_small` strips
+  trailing zeros one at a time, and each strip was a software `__divti3`.
+  But divisibility is already known at that point, and an exact division
+  needs no division: ten is two times five, dividing by two is an
+  arithmetic shift, and dividing by five is multiplication by 5⁻¹ mod 2¹²⁸.
+  `u128_div_rem` fell from 6.45% to 5.26%. Worth about 1%, because the
+  normalization loop usually exits on the first divisibility check and
+  never divides at all.
+* **Hardware 128-by-64 division.** compiler-rt's `u128_div_rem` is generic:
+  73 instructions of case analysis around five hardware `div`s. When the
+  divisor fits in 64 bits — which a decimal divisor mantissa usually does —
+  one or two `div` instructions are the whole algorithm. Worth about 2%.
+
+And then the profile said what the remaining cost is. `u128_div_rem`
+disappeared from it entirely, and `BslNumber::div` grew by exactly its
+share, 5.81% -> 11.63%: the division is now inline, and **what is left is
+the latency of the `div` instruction itself**, not the dispatch around it.
+No arrangement of ADX or BMI2 changes that. Going faster would mean not
+dividing — reciprocal multiplication, which is where MULX would genuinely
+pay — and that only amortizes when the same divisor repeats. Here every
+division has a different one.
 
 ### Where the string scenarios went
 
