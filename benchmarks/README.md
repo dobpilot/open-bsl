@@ -132,21 +132,32 @@ and their column stays blank — invented numbers are worse than missing ones.
 
 ## Results
 
-Median of 5 runs, milliseconds, lower is better (`csv_write*`: 3 runs).
+Median of 7 runs, milliseconds, lower is better (`csv_write*`: 3 runs).
 Intel i5-8250U, Linux 7.1.3, `--release`. Numbers are machine-specific;
 re-run before drawing conclusions on other hardware.
 
-| scenario            |  bsl-cli | lua 5.4 | luajit | oscript 2.1 | 1C 8.3.27 |
-|---------------------|---------:|--------:|-------:|------------:|----------:|
-| `csv_write`         |     1720 |     945 |    118 |       23512 |      4709 |
-| `csv_write_batched` |   **68** |       — |      — |        1166 |       224 |
-| `empty_for`         |    **2** |       3 |      0 |         212 |       307 |
-| `pi_leibniz`        |  **510** |      21 |      1 |        1266 |      1249 |
-| `pi_leibniz_15`     |  **727** |       — |      — |        1485 |      1425 |
-| `str_concat`        |    **2** |     563 |    527 |        1256 |       171 |
-| `str_find`          |       75 |     332 |     37 |      **36** |       134 |
-| `table_total`       |  **284** |     253 |    133 |        1117 |      3266 |
-| `table_sort`        | **1666** |     584 |    514 |        1183 |      3343 |
+**Take every column from one session.** An earlier draft of this table
+mixed a 1C column measured hours before with the rest, and the machine had
+meanwhile dropped to its minimum 800 MHz — every other runtime was 30-40%
+slower, which reads exactly like a regression and is not one. The numbers
+below were all taken with the CPU at 2.4-2.9 GHz.
+
+| scenario            |  bsl-cli | `--jit` | lua 5.4 | luajit | oscript 2.1 | 1C 8.3.27 |
+|---------------------|---------:|--------:|--------:|-------:|------------:|----------:|
+| `csv_write`         |     1580 |    1519 |     892 |    108 |       22912 |      4566 |
+| `csv_write_batched` |       63 |  **61** |       — |      — |        1160 |       218 |
+| `empty_for`         |    **2** |   **2** |       3 |      0 |         189 |       309 |
+| `pi_leibniz`        |      492 | **371** |      19 |      1 |        1203 |      1186 |
+| `pi_leibniz_15`     |      670 | **552** |       — |      — |        1427 |      1336 |
+| `str_concat`        |    **2** |   **2** |     569 |    565 |        1197 |       162 |
+| `str_find`          |       46 |      46 |     305 |     35 |      **34** |       130 |
+| `table_total`       |      283 | **259** |     242 |    130 |        1087 |      3202 |
+| `table_sort`        |     1478 |    1499 |     553 |    492 |        1155 |      3266 |
+
+`--jit` is the same binary with the flag of the same name: bytecode
+compiled to x86-64 machine code (see the JIT section in the root README).
+It is a separate column rather than a replacement because the JIT is
+opt-in, and the interpreter number has to stay visible.
 
 Two of these columns run **the same language with the same semantics** —
 exact decimal arithmetic, `ТаблицаЗначений`, UTF-16 strings — and are the
@@ -196,6 +207,38 @@ the 15-digit Leibniz sum.
 (`/opt/oscript/bin` among them), or wherever `OSCRIPT=/path/to/oscript`
 points. Its .NET start-up is not in the numbers: every script times itself
 after warm-up, per the scenario contract above.
+
+### What the JIT is worth
+
+| scenario | interpreter | `--jit` | |
+|---|---:|---:|---:|
+| `pi_leibniz` | 492 | 371 | 1.33x |
+| `pi_leibniz_15` | 670 | 552 | 1.21x |
+| `table_total` | 283 | 259 | 1.09x |
+| `csv_write` | 1580 | 1519 | 1.04x |
+| `str_find`, `str_concat`, `empty_for` | | | 1.00x |
+| `table_sort` | 1478 | 1499 | 0.99x |
+
+The gain is confined to loops made of arithmetic and comparisons — the
+only instructions compiled so far. Everything else still runs
+interpreted, and the JIT merely hands control back, which is why the
+string and collection scenarios do not move at all. `table_sort` at 0.99x
+is not a regression to chase: repeated medians of that scenario vary by
+more than that between runs.
+
+`pi_leibniz` is the clearest case, and it moves the comparison with the
+platform too: **371 ms against 1186**, 3.2x rather than 2.4x. A million
+exact decimal divisions are dispatch-bound, and removing the dispatch is
+exactly what a template JIT does.
+
+`empty_for` staying at 2 ms is the informative failure. Its loop *is* a
+single `NumericForNextI64` instruction, which is not compiled, so there is
+nothing for native code to run — compiling the loop counter is the obvious
+next step and would be worth more than anything else on this list.
+
+The `csv_write` cross-check covers the JIT as well: the file it produces
+under `--jit` is compared byte for byte with the interpreter's, alongside
+the other runtimes.
 
 ### Where the string scenarios went
 
