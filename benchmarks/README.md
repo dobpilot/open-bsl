@@ -153,15 +153,15 @@ below were all taken with the CPU at 2.4-2.9 GHz.
 
 | scenario            |  bsl-cli | `--jit` | lua 5.4 | luajit | oscript 2.1 | 1C 8.3.27 |
 |---------------------|---------:|--------:|--------:|-------:|------------:|----------:|
-| `csv_write`         |     1617 |    1598 |     985 |    122 |       22598 |      4588 |
-| `csv_write_batched` |       61 |  **57** |       — |      — |        1149 |       225 |
-| `empty_for`         |    **2** |   **2** |       3 |      1 |         206 |       309 |
-| `pi_leibniz`        |      510 | **378** |      19 |      1 |        1230 |      1167 |
-| `pi_leibniz_15`     |      701 | **539** |       — |      — |        1376 |      1326 |
-| `str_concat`        |    **2** |   **2** |     550 |    619 |        1236 |       165 |
-| `str_find`          |       47 |      45 |     298 |     35 |      **34** |       130 |
-| `table_total`       |      281 | **275** |     254 |    132 |        1096 |      3217 |
-| `table_sort`        |     1631 |    1655 |     579 |    496 |        1164 |      3276 |
+| `csv_write`         |     1674 |    1604 |     965 |    111 |       22993 |      4554 |
+| `csv_write_batched` |       64 |  **60** |       — |      — |        1145 |       217 |
+| `empty_for`         |    **2** |   **2** |       4 |      0 |         197 |       298 |
+| `pi_leibniz`        |      509 | **368** |      20 |      1 |        1217 |      1160 |
+| `pi_leibniz_15`     |      703 | **522** |       — |      — |        1451 |      1318 |
+| `str_concat`        |    **2** |   **2** |     554 |    592 |        1173 |       162 |
+| `str_find`          |       46 |      46 |     314 |     37 |      **35** |       131 |
+| `table_total`       |      265 | **241** |     225 |    116 |        1036 |      3205 |
+| `table_sort`        |     1591 |    1555 |     715 |    463 |        1092 |      3251 |
 
 `--jit` is the same binary with the flag of the same name: bytecode
 compiled to x86-64 machine code (see the JIT section in the root README).
@@ -221,10 +221,13 @@ after warm-up, per the scenario contract above.
 
 | scenario | interpreter | `--jit` | |
 |---|---:|---:|---:|
-| `pi_leibniz` | 510 | 378 | 1.35x |
-| `pi_leibniz_15` | 701 | 539 | 1.30x |
-| `table_total` | 281 | 275 | 1.02x |
-| everything else | | | 1.00x |
+| `pi_leibniz` | 509 | 368 | 1.38x |
+| `pi_leibniz_15` | 703 | 522 | 1.35x |
+| `table_total` | 265 | 241 | 1.10x |
+| `csv_write_batched` | 64 | 60 | 1.07x |
+| `csv_write` | 1674 | 1604 | 1.04x |
+| `table_sort` | 1591 | 1555 | 1.02x |
+| `str_find`, `str_concat`, `empty_for` | | | 1.00x |
 
 The gain is confined to loops made of arithmetic and comparisons — the
 only instructions compiled. Everything else still runs interpreted, and
@@ -247,11 +250,22 @@ what this file said before it was measured. Its loop is a single
 compact loop inside `drive_with` that never enters the dispatcher at all
 — there is no dispatch left there for a JIT to remove.
 
-`GetIndex`, `SetIndex` and `CallBuiltin` are compiled too, and moved no
-benchmark measurably. They are kept because more of a chunk staying native
-is worth having and the equivalence test covers the risk — but the honest
-reading is that in these scenarios the work inside the builtin or the
-collection dominates, and removing the dispatch around it changes nothing.
+`GetIndex`, `SetIndex`, `CallBuiltin`, `GetProp`, `SetProp` and
+`CallMethod` are compiled as well. Adding the last three is what moved
+`table_total`: its fill loop is nine instructions, of which `CallMethod`
+and two `SetProp` were not compiled, so native code left for the
+interpreter twice per row across 200 000 rows. With them the loop stays
+native end to end — 251 -> 238 ms in a direct A/B, 1.10x against the
+interpreter overall.
+
+Those six share a trait worth noting: they have more operands than the
+three the shim call passes, or an operand that is not a number (a name id,
+a builtin or method code). They therefore read their own instruction out
+of the chunk — by `pc` they find it anyway, and matching one known variant
+costs nothing next to the opcode dispatch they replace. `GetProp` and
+`SetProp` use the inline cache cell of THAT instruction, the same one the
+interpreter uses: a separate cache for the JIT would warm a monomorphic
+site twice and differently.
 
 The `csv_write` cross-check covers the JIT as well: the file it produces
 under `--jit` is compared byte for byte with the interpreter's, alongside

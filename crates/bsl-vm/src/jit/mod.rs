@@ -42,8 +42,8 @@ mod mem;
 mod x64;
 
 use crate::{
-    add_op, at, binop, call_builtin_with_format, cmp, numeric_for_next_regular, reg_load,
-    reg_store, CallArgs, Frame,
+    add_op, at, binop, call_builtin_with_format, cmp, field_name, numeric_for_next_regular,
+    prop_cache, reg_load, reg_store, CallArgs, Frame,
 };
 use bsl_bytecode::{Chunk, Instr, Program};
 use bsl_rt::{BslValue, RtError};
@@ -368,6 +368,12 @@ fn compile_instr(instr: &Instr) -> Option<Compiled> {
         // известному варианту стоит несравнимо дешевле, чем разбор всей
         // таблицы кодов операций в `step`.
         Instr::CallBuiltin { .. } => s(shim_call_builtin, [0, 0, 0]),
+        // У этих троих операндов тоже больше трёх либо среди них есть не
+        // число (`NameId`, номер метода), поэтому они, как и CallBuiltin,
+        // читают свою инструкцию сами.
+        Instr::GetProp { .. } => s(shim_get_prop, [0, 0, 0]),
+        Instr::SetProp { .. } => s(shim_set_prop, [0, 0, 0]),
+        Instr::CallMethod { .. } => s(shim_call_method, [0, 0, 0]),
         _ => None,
     }
 }
@@ -582,18 +588,13 @@ shim!(shim_set_index, |frames, stack, program, idx, shapes, obj, index, src| {
 });
 
 shim!(shim_call_builtin, |frames, stack, program, idx, shapes, _a, _b, _c| {
-    let pc = frames[idx].pc;
-    let chunk = at(
-        &program.chunks,
-        frames[idx].func_id,
-        "номер чанка вне таблицы функций",
-    )?;
+    let (_chunk, _pc, instr) = own_instr(frames, program, idx)?;
     let Instr::CallBuiltin {
         dst,
         builtin,
         base,
         count,
-    } = *at(&chunk.instrs, pc, "инструкция вне чанка")?
+    } = instr
     else {
         return Err(RtError::InvalidBytecode(
             "шим встроенной функции вызван не на своей инструкции",
@@ -601,6 +602,74 @@ shim!(shim_call_builtin, |frames, stack, program, idx, shapes, _a, _b, _c| {
     };
     let args = CallArgs::load(stack, &frames[idx], base, count)?;
     let v = call_builtin_with_format(builtin, args.as_slice())?;
+    let d = frames[idx].reg_index(dst);
+    reg_store(stack, d, v)?;
+    Ok(OK)
+});
+
+/// Своя инструкция шима: та, на которой стоит `pc` кадра. Возвращает и
+/// чанк — он нужен и под инлайн-кэш свойства, и под таблицу констант.
+fn own_instr<'a>(
+    frames: &[Frame],
+    program: &'a Program,
+    idx: usize,
+) -> Result<(&'a bsl_bytecode::Chunk, usize, Instr), RtError> {
+    let pc = frames[idx].pc;
+    let chunk = at(
+        &program.chunks,
+        frames[idx].func_id,
+        "номер чанка вне таблицы функций",
+    )?;
+    Ok((chunk, pc, *at(&chunk.instrs, pc, "инструкция вне чанка")?))
+}
+
+shim!(shim_get_prop, |frames, stack, program, idx, shapes, _a, _b, _c| {
+    let (chunk, pc, instr) = own_instr(frames, program, idx)?;
+    let Instr::GetProp { dst, obj, name } = instr else {
+        return Err(RtError::InvalidBytecode("шим свойства вызван не на своей инструкции"));
+    };
+    let ov = reg_load(stack, frames[idx].reg_index(obj))?;
+    // Инлайн-кэш — ячейка ЭТОЙ инструкции, ровно как у интерпретатора:
+    // отдельного кэша у JIT-а нет и быть не должно, иначе мономорфный
+    // сайт грелся бы дважды и по-разному.
+    let v = match ov.get_field_cached(name, prop_cache(chunk, pc)?) {
+        Err(RtError::NotAnObject) => ov.get_field_by_name(field_name(program, name)?)?,
+        other => other?,
+    };
+    let d = frames[idx].reg_index(dst);
+    reg_store(stack, d, v)?;
+    Ok(OK)
+});
+
+shim!(shim_set_prop, |frames, stack, program, idx, shapes, _a, _b, _c| {
+    let (chunk, pc, instr) = own_instr(frames, program, idx)?;
+    let Instr::SetProp { obj, name, src } = instr else {
+        return Err(RtError::InvalidBytecode("шим свойства вызван не на своей инструкции"));
+    };
+    let ov = reg_load(stack, frames[idx].reg_index(obj))?;
+    let sv = reg_load(stack, frames[idx].reg_index(src))?;
+    match ov.set_field_cached(name, sv.clone(), prop_cache(chunk, pc)?) {
+        Err(RtError::NotAnObject) => ov.set_field_by_name(field_name(program, name)?, sv)?,
+        other => other?,
+    }
+    Ok(OK)
+});
+
+shim!(shim_call_method, |frames, stack, program, idx, shapes, _a, _b, _c| {
+    let (_chunk, _pc, instr) = own_instr(frames, program, idx)?;
+    let Instr::CallMethod {
+        dst,
+        obj,
+        method,
+        base,
+        count,
+    } = instr
+    else {
+        return Err(RtError::InvalidBytecode("шим метода вызван не на своей инструкции"));
+    };
+    let ov = reg_load(stack, frames[idx].reg_index(obj))?;
+    let args = CallArgs::load(stack, &frames[idx], base, count)?;
+    let v = bsl_rt::call_builtin_method_ctx(method, &ov, args.as_slice(), shapes)?;
     let d = frames[idx].reg_index(dst);
     reg_store(stack, d, v)?;
     Ok(OK)
