@@ -922,7 +922,7 @@ fn step(
                 count,
             } => {
                 let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
-                let v = call_builtin_with_format(builtin, args.as_slice())?;
+                let v = call_builtin_with_format(builtin, args.as_slice(), runtime_shapes)?;
                 let d = frames[frame_idx].reg_index(dst);
                 reg_store(stack, d, v)?;
                 frames[frame_idx].pc += 1;
@@ -1395,6 +1395,7 @@ fn err_to_value(err: &RtError) -> BslValue {
 fn call_builtin_with_format(
     builtin: bsl_rt::BuiltinFn,
     args: &[BslValue],
+    runtime_shapes: &mut bsl_rt::RuntimeShapes,
 ) -> Result<BslValue, RtError> {
     use bsl_rt::BuiltinFn;
     // Проверка по МАКСИМУМУ, а не по минимуму: резолвер добивает
@@ -1442,7 +1443,9 @@ fn call_builtin_with_format(
             let n = bsl_format::parse_number(&s.to_string(), &bsl_format::NumberFormat::default())?;
             Ok(BslValue::Number(n))
         }
-        other => bsl_rt::call_builtin_fn(other, args),
+        // Не `call_builtin_fn`: `ЗаполнитьЗначенияСвойств` читает таблицу
+        // имён, и путь без контекста для неё кончается ошибкой.
+        other => bsl_rt::call_builtin_fn_ctx(other, args, runtime_shapes),
     }
 }
 
