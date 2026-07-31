@@ -496,6 +496,30 @@ impl<'a> Compiler<'a> {
             RExpr::NewMap => {
                 self.emit(Instr::NewMap { dst });
             }
+            // Член перечисления — обычная константа чанка: значение
+            // известно на этапе компиляции целиком.
+            RExpr::EnumMember(v) => {
+                let k = self.add_const(BslValue::Enum(*v))?;
+                self.emit(Instr::LoadConst { dst, k });
+            }
+            RExpr::NewJsonReader => {
+                self.emit(Instr::NewJsonReader { dst });
+            }
+            RExpr::NewJsonWriter => {
+                self.emit(Instr::NewJsonWriter { dst });
+            }
+            RExpr::NewJsonWriterSettings { line_break, indent } => {
+                let lb = self.alloc_temp()?;
+                self.compile_expr(line_break, lb)?;
+                let ind = self.alloc_temp()?;
+                self.compile_expr(indent, ind)?;
+                self.emit(Instr::NewJsonWriterSettings {
+                    dst,
+                    line_break: lb,
+                    indent: ind,
+                });
+                self.free_temp(2);
+            }
             RExpr::NewTextWriter { path } => {
                 let path_reg = self.alloc_temp()?;
                 self.compile_expr(path, path_reg)?;

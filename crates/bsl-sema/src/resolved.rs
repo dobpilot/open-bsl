@@ -95,6 +95,16 @@ pub enum RExpr {
     /// выше).
     NewMap,
     /// `Новый ЗаписьТекста(Путь)` — путь вычисляется во время исполнения.
+    /// Член платформенного перечисления — КОНСТАНТА времени компиляции.
+    /// У платформы перечисление тоже не объект с полями: опечатка в имени
+    /// члена там ошибка компиляции, а не рантайма.
+    EnumMember(bsl_rt::EnumValue),
+    NewJsonReader,
+    NewJsonWriter,
+    NewJsonWriterSettings {
+        line_break: Box<RExpr>,
+        indent: Box<RExpr>,
+    },
     NewTextWriter {
         path: Box<RExpr>,
     },
@@ -302,6 +312,10 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
         RExpr::Field { obj, .. } => expr_uses_dynamic(obj),
         RExpr::NewArray { dims } => dims.iter().any(expr_uses_dynamic),
         RExpr::NewStructure { values, .. } => values.iter().any(expr_uses_dynamic),
+        RExpr::EnumMember(_) | RExpr::NewJsonReader | RExpr::NewJsonWriter => false,
+        RExpr::NewJsonWriterSettings { line_break, indent } => {
+            expr_uses_dynamic(line_break) || expr_uses_dynamic(indent)
+        }
         RExpr::NewTextWriter { path } => expr_uses_dynamic(path),
         RExpr::Number(_)
         | RExpr::Date(_)

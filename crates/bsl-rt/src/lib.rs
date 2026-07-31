@@ -6,8 +6,10 @@
 
 mod builtin;
 mod date;
+mod enums;
 mod fill;
 mod interner;
+mod json;
 mod locale;
 mod map;
 mod object;
@@ -29,6 +31,12 @@ use bsl_number::{BslNumber, NumError};
 pub use builtin::{
     call_builtin_fn, call_builtin_fn_ctx, call_builtin_method, call_builtin_method_ctx, BuiltinFn,
     BuiltinMethod, BUILTIN_FN_NAMES, BUILTIN_METHOD_NAMES,
+};
+pub use enums::{
+    lookup_enum, lookup_member, members_of, EnumKind, EnumValue, ENUM_NAMES,
+};
+pub use json::{
+    JsonEvent, JsonLineBreak, JsonParser, JsonWriter, JsonWriterSettings,
 };
 pub use date::{
     format_long as format_date_long, format_pattern as format_date_pattern, BslDate, DateBoundary,
@@ -63,6 +71,11 @@ pub enum BslValue {
     /// `TypeId` — `Copy` в один байт, поэтому вариант ничего не добавляет
     /// к размеру `BslValue`.
     Type(TypeId),
+    /// Член платформенного перечисления (`ТипЗначенияJSON.Строка`). Как и
+    /// `Type`, это ЗНАЧЕНИЕ, а не тег: его можно сравнить, положить в
+    /// переменную и напечатать. `Copy` в один байт — размер `BslValue` не
+    /// растёт (см. модуль `enums`).
+    Enum(EnumValue),
     Object(Rc<BslObject>),
     /// Пропущенный позиционный аргумент (`Ф(1, , 3)`) — ТОЛЬКО как
     /// временное значение параметра сразу при входе в функцию/процедуру, до
@@ -106,6 +119,12 @@ pub enum RtError {
     RowInvalidated,
     /// Обращение к несуществующей колонке `ТаблицыЗначений`/`СтрокиТаблицы`.
     UnknownColumn(String),
+    /// Разбор или запись JSON: битый входной текст либо нарушение
+    /// структуры документа при записи (`ЗаписатьКонецОбъекта` без
+    /// открытого объекта). Отдельно от [`RtError::DynamicError`], у
+    /// которого смысл другой — ошибка ЧУЖОГО слоя, пришедшая готовым
+    /// текстом.
+    Json(String),
     /// Имя из `СписокСвойств` в `ЗаполнитьЗначенияСвойств`, которого нет у
     /// источника или у приёмника. Отдельно от [`RtError::UnknownField`] и
     /// [`RtError::UnknownColumn`], потому что имя тут пришло СТРОКОЙ из
@@ -175,6 +194,7 @@ impl fmt::Display for RtError {
             RtError::RowInvalidated => write!(f, "строка таблицы значений больше не существует"),
             RtError::UnknownColumn(name) => write!(f, "колонка «{name}» не найдена"),
             RtError::UnknownProperty(name) => write!(f, "свойство «{name}» не найдено"),
+            RtError::Json(msg) => write!(f, "{msg}"),
             RtError::UnknownType(name) => write!(f, "тип «{name}» не определён"),
             RtError::DateOutOfRange { op } => write!(
                 f,
@@ -208,6 +228,7 @@ impl BslValue {
             BslValue::Str(_) => "Строка",
             BslValue::Date(_) => "Дата",
             BslValue::Type(_) => "Тип",
+            BslValue::Enum(e) => e.enum_name(),
             BslValue::Object(o) => match &**o {
                 BslObject::Array(_) => "Массив",
                 BslObject::Structure(_) => "Структура",
@@ -217,6 +238,12 @@ impl BslValue {
                 BslObject::Map(_) => "Соответствие",
                 BslObject::KeyValuePair(_, _) => "КлючИЗначение",
                 BslObject::TextWriter(_) => "ЗаписьТекста",
+                // Имя ЗНАЧЕНИЯ — без пробелов; имя ТИПА («Чтение JSON») в
+                // `types.rs`. Измерено: `Строка(Новый ЧтениеJSON)` даёт
+                // «ЧтениеJSON», а `Строка(ТипЗнч(...))` — «Чтение JSON».
+                BslObject::JsonReader(_) => "ЧтениеJSON",
+                BslObject::JsonWriter(_) => "ЗаписьJSON",
+                BslObject::JsonWriterSettings(_) => "ПараметрыЗаписиJSON",
             },
             BslValue::Skipped => "Skipped",
         }
@@ -834,6 +861,8 @@ impl BslValue {
             BslValue::Date(d) => !d.is_empty(),
             // Тип — всегда значение, «пустого типа» не существует.
             BslValue::Type(_) => true,
+            // Член перечисления — тоже всегда значение.
+            BslValue::Enum(_) => true,
             BslValue::Object(o) => match &**o {
                 // НЕ ИЗМЕРЕНО(TYPE.IS_FILLED.EMPTY_COLLECTION): пустая
                 // коллекция. Взято «пустая — не
@@ -850,7 +879,12 @@ impl BslValue {
                 // факт существования объекта и есть заполненность.
                 BslObject::TableRow(..)
                 | BslObject::KeyValuePair(..)
-                | BslObject::TextWriter(..) => true,
+                | BslObject::TextWriter(..)
+                // Объекты JSON — не коллекции: заполненность у них та же,
+                // что у ЗаписьТекста, — объект есть, значит заполнен.
+                | BslObject::JsonReader(..)
+                | BslObject::JsonWriter(..)
+                | BslObject::JsonWriterSettings(..) => true,
             },
             BslValue::Skipped => {
                 return Err(RtError::TypeError {
@@ -871,6 +905,12 @@ impl BslValue {
             BslValue::Str(_) => TypeId::String,
             BslValue::Date(_) => TypeId::Date,
             BslValue::Type(_) => TypeId::Type,
+            // Тип члена перечисления — само перечисление.
+            BslValue::Enum(e) => match e.kind() {
+                EnumKind::JsonValueType => TypeId::JsonValueType,
+                EnumKind::JsonLineBreak => TypeId::JsonLineBreak,
+                EnumKind::JsonDateFormat => TypeId::JsonDateFormat,
+            },
             BslValue::Object(o) => match &**o {
                 BslObject::Array(_) => TypeId::Array,
                 BslObject::Structure(_) => TypeId::Structure,
@@ -885,6 +925,9 @@ impl BslValue {
                         op: "ТипЗнч",
                     })
                 }
+                BslObject::JsonReader(..) => TypeId::JsonReader,
+                BslObject::JsonWriter(..) => TypeId::JsonWriter,
+                BslObject::JsonWriterSettings(..) => TypeId::JsonWriterSettings,
             },
             BslValue::Skipped => {
                 return Err(RtError::TypeError {
@@ -924,6 +967,74 @@ impl BslValue {
 
     pub fn new_map() -> Self {
         BslValue::Object(Rc::new(BslObject::Map(std::cell::RefCell::new(MapData::new()))))
+    }
+
+    /// `Закрыть()` — полиморфен по получателю: `ЗаписьТекста` сбрасывает
+    /// буфер и ничего не возвращает, `ЗаписьJSON` отдаёт накопленный
+    /// текст.
+    ///
+    /// Отдельным методом, потому что зовут его ДВОЕ: ветка
+    /// `call_builtin_method` и горячий путь `Instr::CloseText`, который
+    /// компилятор ставит на любой `.Закрыть()` без аргументов. Разъедься
+    /// они — `ЗаписьJSON.Закрыть()` работал бы только в одном из режимов.
+    ///
+    /// # Errors
+    ///
+    /// Ошибку ввода-вывода либо неприменимость метода к получателю.
+    pub fn close_object(&self) -> RtResult<BslValue> {
+        if json::is_json_writer(self) {
+            json::close_writer(self)
+        } else {
+            self.text_writer_close()
+        }
+    }
+
+    pub fn new_json_reader() -> Self {
+        BslValue::Object(Rc::new(BslObject::JsonReader(std::cell::RefCell::new(
+            crate::object::JsonReaderState::default(),
+        ))))
+    }
+
+    pub fn new_json_writer() -> Self {
+        BslValue::Object(Rc::new(BslObject::JsonWriter(std::cell::RefCell::new(None))))
+    }
+
+    /// `Новый ПараметрыЗаписиJSON([ПереносСтрок][, СимволыОтступа])`.
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::TypeError`], если аргумент не того типа: перенос строк —
+    /// член `ПереносСтрокJSON`, отступ — строка.
+    pub fn new_json_writer_settings(line_break: &BslValue, indent: &BslValue) -> RtResult<Self> {
+        let lb = match line_break {
+            BslValue::Undefined => json::JsonLineBreak::Auto,
+            BslValue::Enum(EnumValue::LineBreakNone) => json::JsonLineBreak::None,
+            BslValue::Enum(EnumValue::LineBreakAuto) => json::JsonLineBreak::Auto,
+            BslValue::Enum(EnumValue::LineBreakWindows) => json::JsonLineBreak::Windows,
+            BslValue::Enum(EnumValue::LineBreakUnix) => json::JsonLineBreak::Unix,
+            _ => {
+                return Err(RtError::TypeError {
+                    expected: "ПереносСтрокJSON",
+                    op: "Новый ПараметрыЗаписиJSON",
+                })
+            }
+        };
+        let indent = match indent {
+            BslValue::Undefined => String::new(),
+            BslValue::Str(s) => s.to_string(),
+            _ => {
+                return Err(RtError::TypeError {
+                    expected: "Строка",
+                    op: "Новый ПараметрыЗаписиJSON",
+                })
+            }
+        };
+        Ok(BslValue::Object(Rc::new(BslObject::JsonWriterSettings(
+            json::JsonWriterSettings {
+                line_break: lb,
+                indent,
+            },
+        ))))
     }
 
     /// Создаёт объект `ЗаписьТекста` и открывает файл для буферизованной
@@ -1121,7 +1232,10 @@ impl BslValue {
                 BslObject::TableRow(..) => Err(RtError::NotIndexable),
                 BslObject::Map(data) => Ok(data.borrow().len()),
                 BslObject::KeyValuePair(..) => Err(RtError::NotIndexable),
-                BslObject::TextWriter(..) => Err(RtError::NotIndexable),
+                BslObject::TextWriter(..)
+                | BslObject::JsonReader(..)
+                | BslObject::JsonWriter(..)
+                | BslObject::JsonWriterSettings(..) => Err(RtError::NotIndexable),
             },
             _ => Err(RtError::NotIndexable),
         }
@@ -1388,6 +1502,24 @@ impl BslValue {
                 // что этот объект заводится ЦЕЛИКОМ в рантайме
                 // (`get_index` на `Соответствие`, см. `map.rs`), а не
                 // компилируется из литерала полей.
+                // `ЧтениеJSON.ТипТекущегоЗначения`/`.ТекущееЗначение` —
+                // СВОЙСТВА, а не методы: читатель помнит, где он стоит,
+                // между обращениями. Резолвятся строкой по той же причине,
+                // что и колонки строки таблицы: набор имён известен только
+                // рантайму.
+                BslObject::JsonReader(_) => {
+                    if name.eq_ignore_ascii_case("ТипТекущегоЗначения")
+                        || name.eq_ignore_ascii_case("CurrentValueType")
+                    {
+                        json::current_value_type(self)
+                    } else if name.eq_ignore_ascii_case("ТекущееЗначение")
+                        || name.eq_ignore_ascii_case("CurrentValue")
+                    {
+                        json::current_value(self)
+                    } else {
+                        Err(RtError::UnknownColumn(name.to_string()))
+                    }
+                }
                 BslObject::KeyValuePair(k, v) => {
                     if name.eq_ignore_ascii_case("Ключ") || name.eq_ignore_ascii_case("Key") {
                         Ok(k.clone())
@@ -1915,6 +2047,10 @@ impl PartialEq for BslValue {
             // значений одного типа равны (`ТипЗнч(1) = ТипЗнч(2)`), иначе
             // проверка типа была бы бесполезна.
             (BslValue::Type(a), BslValue::Type(b)) => a == b,
+            // Члены перечисления сравниваются как значения — на этом
+            // держится весь потоковый разбор JSON (`Если Т =
+            // ТипЗначенияJSON.ИмяСвойства Тогда`).
+            (BslValue::Enum(a), BslValue::Enum(b)) => a == b,
             (BslValue::Object(a), BslValue::Object(b)) => Rc::ptr_eq(a, b),
             _ => false,
         }
@@ -1943,6 +2079,7 @@ impl Hash for BslValue {
             BslValue::Str(s) => s.hash(state),
             BslValue::Date(d) => d.hash(state),
             BslValue::Type(t) => t.hash(state),
+            BslValue::Enum(e) => e.hash(state),
             BslValue::Object(o) => Rc::as_ptr(o).hash(state),
             BslValue::Skipped => {}
         }
@@ -1964,6 +2101,7 @@ impl fmt::Display for BslValue {
             // Локализованное имя типа: `Строка(ТипЗнч(Новый Массив))` даёт
             // то же `Массив`, что и `Строка(Новый Массив)`.
             BslValue::Type(t) => write!(f, "{t}"),
+            BslValue::Enum(e) => write!(f, "{}", e.display_text()),
             BslValue::Object(o) => match &**o {
                 BslObject::Array(_) => write!(f, "Массив"),
                 BslObject::Structure(_) => write!(f, "Структура"),
@@ -1973,6 +2111,9 @@ impl fmt::Display for BslValue {
                 BslObject::Map(_) => write!(f, "Соответствие"),
                 BslObject::KeyValuePair(_, _) => write!(f, "КлючИЗначение"),
                 BslObject::TextWriter(_) => write!(f, "ЗаписьТекста"),
+                BslObject::JsonReader(_) => write!(f, "ЧтениеJSON"),
+                BslObject::JsonWriter(_) => write!(f, "ЗаписьJSON"),
+                BslObject::JsonWriterSettings(_) => write!(f, "ПараметрыЗаписиJSON"),
             },
             // Никогда не должно реально дойти до печати (см. doc comment
             // на варианте) — но `Display` обязан быть тотальным.

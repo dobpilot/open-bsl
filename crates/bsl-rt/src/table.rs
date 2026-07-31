@@ -466,8 +466,13 @@ fn type_rank(v: &BslValue) -> u8 {
         BslValue::Str(_) => 4,
         BslValue::Date(_) => 5,
         BslValue::Type(_) => 6,
-        BslValue::Object(_) => 7,
-        BslValue::Skipped => 8,
+        // Член перечисления рядом с типом: оба — служебные значения, ни
+        // одно из двух в колонке замера не участвовало. Соседство с `Тип`
+        // наименее произвольное из возможных, как и `Null` рядом с
+        // `Неопределено` выше.
+        BslValue::Enum(_) => 7,
+        BslValue::Object(_) => 8,
+        BslValue::Skipped => 9,
     }
 }
 

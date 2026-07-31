@@ -80,6 +80,9 @@ pub const OPCODES: &[&str] = &[
     "NewTable",
     "NewMap",
     "NewTextWriter",
+    "NewJsonReader",
+    "NewJsonWriter",
+    "NewJsonWriterSettings",
     "CollectionLen",
     "Raise",
     "CallBuiltin",
@@ -302,6 +305,11 @@ fn write_const(v: &BslValue) -> Result<String> {
         // байт-код не должен от него зависеть.
         BslValue::Date(d) => format!("Дата {}", d.seconds()),
         BslValue::Type(_) => return Err(TextError::Unrepresentable("Тип")),
+        // Член перечисления — константа времени компиляции
+        // (`ТипЗначенияJSON.ИмяСвойства` резолвится в `LoadConst`), значит
+        // и в текстовом формате он обязан быть представим, иначе
+        // напечатанный байт-код перестал бы исполняться.
+        BslValue::Enum(e) => format!("Перечисление {}.{}", e.enum_name(), e.member_name()),
         BslValue::Object(_) => return Err(TextError::Unrepresentable("объект")),
         BslValue::Skipped => "Пропущено".to_string(),
     })
@@ -375,6 +383,13 @@ fn write_instr(instr: &Instr) -> String {
         Instr::NewTable { dst } => format!("NewTable dst={dst}"),
         Instr::NewMap { dst } => format!("NewMap dst={dst}"),
         Instr::NewTextWriter { dst, path } => format!("NewTextWriter dst={dst} path={path}"),
+        Instr::NewJsonReader { dst } => format!("NewJsonReader dst={dst}"),
+        Instr::NewJsonWriter { dst } => format!("NewJsonWriter dst={dst}"),
+        Instr::NewJsonWriterSettings {
+            dst,
+            line_break,
+            indent,
+        } => format!("NewJsonWriterSettings dst={dst} break={line_break} indent={indent}"),
         Instr::CollectionLen { dst, obj } => format!("CollectionLen dst={dst} obj={obj}"),
         Instr::Raise { src } => match src {
             Some(src) => format!("Raise src={src}"),
@@ -873,6 +888,17 @@ fn parse_const(no: usize, text: &str) -> Result<BslValue> {
                     .ok_or_else(|| TextError::At(no, format!("дата вне диапазона: {secs}")))?,
             )
         }
+        "Перечисление" => {
+            let (enum_name, member) = rest.split_once('.').ok_or_else(|| {
+                TextError::At(no, format!("«{rest}» не вида Перечисление.Член"))
+            })?;
+            let kind = bsl_rt::lookup_enum(enum_name)
+                .ok_or_else(|| TextError::At(no, format!("нет перечисления «{enum_name}»")))?;
+            let value = bsl_rt::lookup_member(kind, member).ok_or_else(|| {
+                TextError::At(no, format!("нет члена «{member}» у «{enum_name}»"))
+            })?;
+            BslValue::Enum(value)
+        }
         other => return Err(TextError::At(no, format!("неизвестный тип «{other}»"))),
     })
 }
@@ -1105,6 +1131,13 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
         },
         "NewTable" => Instr::NewTable { dst: dst(&f)? },
         "NewMap" => Instr::NewMap { dst: dst(&f)? },
+        "NewJsonReader" => Instr::NewJsonReader { dst: dst(&f)? },
+        "NewJsonWriter" => Instr::NewJsonWriter { dst: dst(&f)? },
+        "NewJsonWriterSettings" => Instr::NewJsonWriterSettings {
+            dst: dst(&f)?,
+            line_break: field_u8(&f, no, "break")?,
+            indent: field_u8(&f, no, "indent")?,
+        },
         "NewTextWriter" => Instr::NewTextWriter {
             dst: dst(&f)?,
             path: field_u8(&f, no, "path")?,
@@ -1204,6 +1237,14 @@ mod tests {
          Общая = 0;\nПишет();\nх = Читает();\n",
         // Запись текста: NewTextWriter и оба горячих пути.
         "з = Новый ЗаписьТекста(\"/dev/null\");\nз.Записать(\"строка\");\nз.Закрыть();\n",
+        // JSON: все три конструктора плюс член перечисления константой
+        // (`Перечисление ...` в таблице констант тоже обязан пережить
+        // печать и разбор).
+        "ч = Новый ЧтениеJSON;\nч.УстановитьСтроку(\"[1]\");\n\
+         н = Новый ПараметрыЗаписиJSON(ПереносСтрокJSON.Нет, \"  \");\n\
+         з = Новый ЗаписьJSON;\nз.УстановитьСтроку(н);\n\
+         з.ЗаписатьНачалоМассива();\nз.ЗаписатьЗначение(1);\nз.ЗаписатьКонецМассива();\n\
+         т = ч.ТипТекущегоЗначения;\n",
     ];
 
     fn compile(src: &str) -> Program {
