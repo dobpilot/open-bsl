@@ -690,7 +690,7 @@ impl<'a> Resolver<'a> {
                             found: args.len(),
                         });
                     }
-                    let mut rargs = self.resolve_required_args(args)?;
+                    let mut rargs = self.resolve_builtin_args(args)?;
                     while rargs.len() < ROUND_ARITY {
                         // ИМЕННО `Неопределено`, а не `0`: измерено, что
                         // умолчание платформы совпадает с режимом 1, а не с
@@ -718,7 +718,7 @@ impl<'a> Resolver<'a> {
                     // становится обычным значением, которое сама функция и
                     // трактует (`Сред` — до конца строки, `КодСимвола` —
                     // позиция 1, `СтрШаблон` — пустая подстановка).
-                    let mut rargs = self.resolve_required_args(args)?;
+                    let mut rargs = self.resolve_builtin_args(args)?;
                     while rargs.len() < max {
                         rargs.push(RExpr::Undefined);
                     }
@@ -797,9 +797,37 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    /// Пока не поддержаны пропущенные аргументы (`Ф(1, , 3)`) ни для
-    /// пользовательских функций, ни для встроенных — они появятся вместе
-    /// со значениями по умолчанию.
+    /// Аргументы ВСТРОЕННОЙ функции: пропущенная позиция (`Ф(1, , 3)`) —
+    /// то же `Неопределено`, которым добиваются недостающие хвостовые
+    /// позиции (см. вызывающие ветки). Без этого
+    /// `ЗаполнитьЗначенияСвойств(П, И, , "Б")` — обычная для этой функции
+    /// форма записи, когда нужен только последний параметр, — не
+    /// компилировалась бы вовсе.
+    ///
+    /// У ПОЛЬЗОВАТЕЛЬСКИХ функций правило другое (`RExpr::Skipped` и
+    /// пролог умолчаний, см. `resolve_call`): там пропуск значит «взять
+    /// объявленное значение по умолчанию», а объявить его встроенной
+    /// функции негде. Пропуск ОБЯЗАТЕЛЬНОЙ позиции здесь не ловится: как и
+    /// в 1С, это ошибка времени исполнения у той функции, которой достался
+    /// `Неопределено`, а не ошибка компиляции.
+    fn resolve_builtin_args(&mut self, args: &[Option<AExpr>]) -> Result<Vec<RExpr>, SemaError> {
+        let mut rargs = Vec::with_capacity(args.len());
+        for a in args {
+            rargs.push(match a {
+                Some(e) => self.resolve_expr(e)?,
+                None => RExpr::Undefined,
+            });
+        }
+        Ok(rargs)
+    }
+
+    /// Аргументы там, где пропуск позиции подставить нечем: методы
+    /// объектов и `Вычислить`. У метода нет ни объявленных умолчаний (он
+    /// не пользовательский), ни фиксированной арности, по которой можно
+    /// было бы отличить пропущенный необязательный аргумент от
+    /// пропущенного обязательного, — тип получателя в BSL известен только
+    /// в рантайме. Поэтому здесь `Ф(1, , 3)` остаётся ошибкой резолвинга,
+    /// в отличие от [`resolve_builtin_args`](Self::resolve_builtin_args).
     fn resolve_required_args(&mut self, args: &[Option<AExpr>]) -> Result<Vec<RExpr>, SemaError> {
         let mut rargs = Vec::with_capacity(args.len());
         for a in args {
@@ -1052,6 +1080,24 @@ mod tests {
             }
             other => panic!("expected AssignLocal(Call), got {other:?}"),
         }
+    }
+
+    /// У ВСТРОЕННОЙ функции объявленных умолчаний нет, поэтому пропуск —
+    /// не `RExpr::Skipped`, а `Неопределено`: ровно то же, чем добиваются
+    /// недостающие хвостовые позиции. Ради этой формы записи
+    /// (`ЗаполнитьЗначенияСвойств(П, И, , "Б")`) правило и заведено.
+    #[test]
+    fn skipping_a_builtin_argument_resolves_to_undefined() {
+        let resolved = resolve_src(
+            "П = Новый Структура(\"А\", 1);\nЗаполнитьЗначенияСвойств(П, П, , \"Б\");",
+        );
+        let RStmt::ExprStmt(RExpr::CallBuiltinFn { builtin, args }) = &resolved.body[1] else {
+            panic!("ожидался вызов встроенной функции, получено {:?}", resolved.body[1]);
+        };
+        assert_eq!(*builtin, bsl_rt::BuiltinFn::FillPropertyValues);
+        assert_eq!(args.len(), 4);
+        assert_eq!(args[2], RExpr::Undefined, "пропущенная позиция");
+        assert!(matches!(args[3], RExpr::Str(_)), "последняя позиция на месте");
     }
 
     #[test]

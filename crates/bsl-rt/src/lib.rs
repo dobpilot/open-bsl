@@ -6,6 +6,7 @@
 
 mod builtin;
 mod date;
+mod fill;
 mod interner;
 mod locale;
 mod map;
@@ -26,8 +27,8 @@ use std::rc::Rc;
 use bsl_number::{BslNumber, NumError};
 
 pub use builtin::{
-    call_builtin_fn, call_builtin_method, call_builtin_method_ctx, BuiltinFn, BuiltinMethod,
-    BUILTIN_FN_NAMES, BUILTIN_METHOD_NAMES,
+    call_builtin_fn, call_builtin_fn_ctx, call_builtin_method, call_builtin_method_ctx, BuiltinFn,
+    BuiltinMethod, BUILTIN_FN_NAMES, BUILTIN_METHOD_NAMES,
 };
 pub use date::{
     format_long as format_date_long, format_pattern as format_date_pattern, BslDate, DateBoundary,
@@ -105,6 +106,13 @@ pub enum RtError {
     RowInvalidated,
     /// Обращение к несуществующей колонке `ТаблицыЗначений`/`СтрокиТаблицы`.
     UnknownColumn(String),
+    /// Имя из `СписокСвойств` в `ЗаполнитьЗначенияСвойств`, которого нет у
+    /// источника или у приёмника. Отдельно от [`RtError::UnknownField`] и
+    /// [`RtError::UnknownColumn`], потому что имя тут пришло СТРОКОЙ из
+    /// списка (интернировать его незачем — оно может не быть полем ничего)
+    /// и одинаково относится к обеим сторонам, а не к конкретному
+    /// носителю.
+    UnknownProperty(String),
     /// `Тип("ОпечаткаВИмени")` — такого типа в реестре нет.
     UnknownType(String),
     /// Дата вышла за `0001-01-01 .. 9999-12-31` — при построении
@@ -166,6 +174,7 @@ impl fmt::Display for RtError {
             RtError::Raised(v) => write!(f, "{v}"),
             RtError::RowInvalidated => write!(f, "строка таблицы значений больше не существует"),
             RtError::UnknownColumn(name) => write!(f, "колонка «{name}» не найдена"),
+            RtError::UnknownProperty(name) => write!(f, "свойство «{name}» не найдено"),
             RtError::UnknownType(name) => write!(f, "тип «{name}» не определён"),
             RtError::DateOutOfRange { op } => write!(
                 f,

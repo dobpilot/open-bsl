@@ -601,7 +601,7 @@ shim!(shim_call_builtin, |frames, stack, program, idx, shapes, _a, _b, _c| {
         ));
     };
     let args = CallArgs::load(stack, &frames[idx], base, count)?;
-    let v = call_builtin_with_format(builtin, args.as_slice())?;
+    let v = call_builtin_with_format(builtin, args.as_slice(), shapes)?;
     let d = frames[idx].reg_index(dst);
     reg_store(stack, d, v)?;
     Ok(OK)

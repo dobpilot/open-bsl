@@ -109,6 +109,13 @@ pub enum BuiltinFn {
     DateBoundaryOf(DateBoundary),
     /// `ДобавитьМесяц(Дата, Количество)`.
     AddMonth,
+
+    /// `ЗаполнитьЗначенияСвойств(Приемник, Источник[, СписокСвойств[,
+    /// ИсключаяСвойства]])` — единственная встроенная ФУНКЦИЯ, которой
+    /// нужен рантайм-контекст имён (набор полей приёмника резолвится по
+    /// `NameId`), поэтому её тело живёт в модуле `fill` и вызывается через
+    /// [`call_builtin_fn_ctx`], а не через [`call_builtin_fn`].
+    FillPropertyValues,
 }
 
 /// Написания встроенных ФУНКЦИЙ: `(имя, вариант)` в каноническом
@@ -271,6 +278,8 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ),
     ("ДобавитьМесяц", BuiltinFn::AddMonth),
     ("AddMonth", BuiltinFn::AddMonth),
+    ("ЗаполнитьЗначенияСвойств", BuiltinFn::FillPropertyValues),
+    ("FillPropertyValues", BuiltinFn::FillPropertyValues),
 ];
 
 impl BuiltinFn {
@@ -319,6 +328,9 @@ impl BuiltinFn {
             // `BslValue::make_date`.
             BuiltinFn::MakeDate => (1, 6),
             BuiltinFn::CurrentDate | BuiltinFn::CurrentUniversalDateInMilliseconds => (0, 0),
+            // Оба списка свойств необязательны; недостающие позиции
+            // резолвер добьёт `Неопределено`, что и значит «не задан».
+            BuiltinFn::FillPropertyValues => (2, 4),
             _ => (1, 1),
         }
     }
@@ -499,7 +511,45 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         BuiltinFn::DatePartOf(part) => args[0].date_component(part),
         BuiltinFn::DateBoundaryOf(which) => args[0].date_boundary(which),
         BuiltinFn::AddMonth => args[0].add_month(&args[1]),
+        // Перехвачена в `call_builtin_fn_ctx` — без таблицы имён набор
+        // полей приёмника не прочитать. Ошибка, а не `unreachable!`: эта
+        // функция публична, и ронять процесс на прямом вызове из
+        // встраивающего приложения незачем (то же соображение, что и у
+        // `RtError::InvalidBytecode`).
+        BuiltinFn::FillPropertyValues => Err(RtError::InvalidBytecode(
+            "ЗаполнитьЗначенияСвойств требует контекста имён: вызывайте call_builtin_fn_ctx",
+        )),
     }
+}
+
+/// Обёртка над [`call_builtin_fn`] с доступом к рантайм-контексту форм —
+/// ровно тот же приём, что и [`call_builtin_method_ctx`] для методов
+/// структуры, и по той же причине: единственной встроенной функции
+/// (`ЗаполнитьЗначенияСвойств`) нужна таблица имён, чтобы сопоставить
+/// свойства двух объектов. Всё остальное делегируется как есть.
+///
+/// # Errors
+///
+/// Ошибку самой встроенной функции; [`RtError::InvalidBytecode`], если
+/// аргументов пришло не столько, сколько требует арность.
+pub fn call_builtin_fn_ctx(
+    f: BuiltinFn,
+    args: &[BslValue],
+    rt: &mut RuntimeShapes,
+) -> RtResult<BslValue> {
+    if f == BuiltinFn::FillPropertyValues {
+        let [target, source, list, exclude] = args else {
+            return Err(RtError::InvalidBytecode(
+                "ЗаполнитьЗначенияСвойств вызвана не с четырьмя аргументами",
+            ));
+        };
+        // Только чтение таблицы имён: набор полей приёмника не растёт
+        // (измерено, см. обзор модуля `fill`), а значит и новых `NameId`
+        // заводить не нужно.
+        crate::fill::fill_property_values(target, source, list, exclude, &rt.names)?;
+        return Ok(BslValue::Undefined);
+    }
+    call_builtin_fn(f, args)
 }
 
 /// Необязательный аргумент метода: отсутствующий читается как
