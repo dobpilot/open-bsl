@@ -31,6 +31,19 @@ pub enum TypeId {
     KeyAndValue,
     /// Тип самого типа: `ТипЗнч(Тип("Число"))` -> `Тип`.
     Type,
+
+    // --- JSON ---------------------------------------------------------
+    // Имена ТИПОВ у этих шести — с пробелами («Чтение JSON»), а имена
+    // ЗНАЧЕНИЙ — без («ЧтениеJSON»). Это не описка, а та же пара, что у
+    // `Неопределено`/`Не определено` выше: значение и его тип печатаются
+    // по-разному. Измерено на 8.3.27.
+    JsonReader,
+    JsonWriter,
+    JsonWriterSettings,
+    /// Перечисления платформы. Тип члена — само перечисление.
+    JsonValueType,
+    JsonLineBreak,
+    JsonDateFormat,
 }
 
 /// `(русское, английское)`. Русское — каноническое: именно оно уходит в
@@ -58,6 +71,16 @@ const NAMES: &[(TypeId, &str, &str)] = &[
     (TypeId::ValueTableRow, "СтрокаТаблицыЗначений", "ValueTableRow"),
     (TypeId::KeyAndValue, "КлючИЗначение", "KeyAndValue"),
     (TypeId::Type, "Тип", "Type"),
+    (TypeId::JsonReader, "Чтение JSON", "JSONReader"),
+    (TypeId::JsonWriter, "Запись JSON", "JSONWriter"),
+    (
+        TypeId::JsonWriterSettings,
+        "Параметры записи JSON",
+        "JSONWriterSettings",
+    ),
+    (TypeId::JsonValueType, "ТипЗначенияJSON", "JSONValueType"),
+    (TypeId::JsonLineBreak, "ПереносСтрокJSON", "JSONLineBreak"),
+    (TypeId::JsonDateFormat, "ФорматДатыJSON", "JSONDateFormat"),
 ];
 
 impl TypeId {

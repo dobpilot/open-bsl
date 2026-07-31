@@ -116,6 +116,15 @@ pub enum BuiltinFn {
     /// `NameId`), поэтому её тело живёт в модуле `fill` и вызывается через
     /// [`call_builtin_fn_ctx`], а не через [`call_builtin_fn`].
     FillPropertyValues,
+
+    /// `ПрочитатьJSON(Чтение[, ВозвращатьСоответствие[,
+    /// ИменаСвойствСоЗначениямиДата]])`. Как и
+    /// `ЗаполнитьЗначенияСвойств`, требует контекста форм: объект JSON
+    /// превращается в `Структура`, а её поля надо интернировать.
+    ReadJson,
+    /// `ЗаписатьJSON(Запись, Значение)` — тот же контекст нужен, чтобы
+    /// прочитать ИМЕНА полей сериализуемой структуры.
+    WriteJson,
 }
 
 /// Написания встроенных ФУНКЦИЙ: `(имя, вариант)` в каноническом
@@ -280,6 +289,10 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("AddMonth", BuiltinFn::AddMonth),
     ("ЗаполнитьЗначенияСвойств", BuiltinFn::FillPropertyValues),
     ("FillPropertyValues", BuiltinFn::FillPropertyValues),
+    ("ПрочитатьJSON", BuiltinFn::ReadJson),
+    ("ReadJSON", BuiltinFn::ReadJson),
+    ("ЗаписатьJSON", BuiltinFn::WriteJson),
+    ("WriteJSON", BuiltinFn::WriteJson),
 ];
 
 impl BuiltinFn {
@@ -331,6 +344,12 @@ impl BuiltinFn {
             // Оба списка свойств необязательны; недостающие позиции
             // резолвер добьёт `Неопределено`, что и значит «не задан».
             BuiltinFn::FillPropertyValues => (2, 4),
+            // Функции восстановления и преобразования (последние три
+            // параметра каждой у платформы) не поддержаны: встроенная
+            // функция не умеет позвать пользовательскую — см. обзор
+            // модуля `json`.
+            BuiltinFn::ReadJson => (1, 3),
+            BuiltinFn::WriteJson => (2, 2),
             _ => (1, 1),
         }
     }
@@ -395,7 +414,30 @@ pub enum BuiltinMethod {
     /// `ЗаписьТекста.Записать(Текст)` — добавляет текст в буфер файла.
     Write,
     /// `ЗаписьТекста.Закрыть()` — сбрасывает буфер и закрывает файл.
+    /// У `ЗаписьJSON` тот же метод ОТДАЁТ накопленный текст, поэтому
+    /// поведение выбирается по типу получателя, как у `Добавить`.
     Close,
+
+    // --- JSON ----------------------------------------------------------
+    /// `ЧтениеJSON.УстановитьСтроку(Текст)` и
+    /// `ЗаписьJSON.УстановитьСтроку([Параметры])` — одно имя на два
+    /// объекта, как в платформе.
+    SetString,
+    /// `ОткрытьФайл(Имя[, Параметры])` у обоих объектов JSON.
+    OpenFile,
+    /// `ЧтениеJSON.Прочитать()` -> `Булево`.
+    JsonRead,
+    /// `ЧтениеJSON.Пропустить()`. Имя именно такое: `ПропуститьЗначение`
+    /// платформа не знает — измерено.
+    JsonSkip,
+    WriteStartObject,
+    WriteEndObject,
+    WriteStartArray,
+    WriteEndArray,
+    WritePropertyName,
+    /// `ЗаписьJSON.ЗаписатьЗначение(Значение)` — отдельный метод от
+    /// `Записать` у `ЗаписьТекста`.
+    WriteJsonValue,
 }
 
 /// Написания МЕТОДОВ объектов — тот же принцип, что и у
@@ -442,6 +484,26 @@ pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
     ("Write", BuiltinMethod::Write),
     ("Закрыть", BuiltinMethod::Close),
     ("Close", BuiltinMethod::Close),
+    ("УстановитьСтроку", BuiltinMethod::SetString),
+    ("SetString", BuiltinMethod::SetString),
+    ("ОткрытьФайл", BuiltinMethod::OpenFile),
+    ("OpenFile", BuiltinMethod::OpenFile),
+    ("Прочитать", BuiltinMethod::JsonRead),
+    ("Read", BuiltinMethod::JsonRead),
+    ("Пропустить", BuiltinMethod::JsonSkip),
+    ("Skip", BuiltinMethod::JsonSkip),
+    ("ЗаписатьНачалоОбъекта", BuiltinMethod::WriteStartObject),
+    ("WriteStartObject", BuiltinMethod::WriteStartObject),
+    ("ЗаписатьКонецОбъекта", BuiltinMethod::WriteEndObject),
+    ("WriteEndObject", BuiltinMethod::WriteEndObject),
+    ("ЗаписатьНачалоМассива", BuiltinMethod::WriteStartArray),
+    ("WriteStartArray", BuiltinMethod::WriteStartArray),
+    ("ЗаписатьКонецМассива", BuiltinMethod::WriteEndArray),
+    ("WriteEndArray", BuiltinMethod::WriteEndArray),
+    ("ЗаписатьИмяСвойства", BuiltinMethod::WritePropertyName),
+    ("WritePropertyName", BuiltinMethod::WritePropertyName),
+    ("ЗаписатьЗначение", BuiltinMethod::WriteJsonValue),
+    ("WriteValue", BuiltinMethod::WriteJsonValue),
 ];
 
 impl BuiltinMethod {
@@ -516,6 +578,9 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         // функция публична, и ронять процесс на прямом вызове из
         // встраивающего приложения незачем (то же соображение, что и у
         // `RtError::InvalidBytecode`).
+        BuiltinFn::ReadJson | BuiltinFn::WriteJson => Err(RtError::InvalidBytecode(
+            "функции JSON требуют контекста имён: вызывайте call_builtin_fn_ctx",
+        )),
         BuiltinFn::FillPropertyValues => Err(RtError::InvalidBytecode(
             "ЗаполнитьЗначенияСвойств требует контекста имён: вызывайте call_builtin_fn_ctx",
         )),
@@ -547,6 +612,43 @@ pub fn call_builtin_fn_ctx(
         // (измерено, см. обзор модуля `fill`), а значит и новых `NameId`
         // заводить не нужно.
         crate::fill::fill_property_values(target, source, list, exclude, &rt.names)?;
+        return Ok(BslValue::Undefined);
+    }
+    if f == BuiltinFn::ReadJson {
+        let as_map = match args.get(1) {
+            None | Some(BslValue::Undefined) => false,
+            Some(BslValue::Boolean(b)) => *b,
+            Some(_) => {
+                return Err(RtError::TypeError {
+                    expected: "Булево",
+                    op: "ПрочитатьJSON(ВозвращатьСоответствие)",
+                })
+            }
+        };
+        // Имена свойств с датами приходят массивом строк.
+        let mut date_names: Vec<String> = Vec::new();
+        match args.get(2) {
+            None | Some(BslValue::Undefined) => {}
+            Some(list) => {
+                let len = list.collection_len().map_err(|_| RtError::TypeError {
+                    expected: "Массив",
+                    op: "ПрочитатьJSON(ИменаСвойствСоЗначениямиДата)",
+                })?;
+                for i in 0..len {
+                    let item = list.get_index(
+                        &BslValue::Number(bsl_number::BslNumber::from_i64(i as i64)),
+                        &rt.names,
+                    )?;
+                    if let BslValue::Str(s) = item {
+                        date_names.push(s.to_string());
+                    }
+                }
+            }
+        }
+        return crate::json::read_json(&args[0], as_map, &date_names, rt);
+    }
+    if f == BuiltinFn::WriteJson {
+        crate::json::write_json(&args[0], &args[1], rt)?;
         return Ok(BslValue::Undefined);
     }
     call_builtin_fn(f, args)
@@ -706,7 +808,47 @@ pub fn call_builtin_method(
             Ok(BslValue::Undefined)
         }
         BuiltinMethod::Write => obj.text_writer_write(&args[0]),
-        BuiltinMethod::Close => obj.text_writer_close(),
+        // `Закрыть` полиморфен: у `ЗаписьТекста` он ничего не возвращает,
+        // у `ЗаписьJSON` — отдаёт накопленный текст.
+        BuiltinMethod::Close => obj.close_object(),
+
+        BuiltinMethod::SetString => {
+            crate::json::set_string(obj, args)?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::OpenFile => {
+            crate::json::open_file(obj, args)?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::JsonRead => Ok(BslValue::Boolean(crate::json::read(obj)?)),
+        BuiltinMethod::JsonSkip => {
+            crate::json::skip(obj)?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::WriteStartObject => {
+            crate::json::write_start_object(obj)?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::WriteEndObject => {
+            crate::json::write_end_object(obj)?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::WriteStartArray => {
+            crate::json::write_start_array(obj)?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::WriteEndArray => {
+            crate::json::write_end_array(obj)?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::WritePropertyName => {
+            crate::json::write_property_name(obj, args)?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::WriteJsonValue => {
+            crate::json::write_value(obj, args)?;
+            Ok(BslValue::Undefined)
+        }
     }
 }
 

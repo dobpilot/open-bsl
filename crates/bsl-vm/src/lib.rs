@@ -891,6 +891,28 @@ fn step(
                 reg_store(stack, d, BslValue::new_map())?;
                 frames[frame_idx].pc += 1;
             }
+            Instr::NewJsonReader { dst } => {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, BslValue::new_json_reader())?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::NewJsonWriter { dst } => {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, BslValue::new_json_writer())?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::NewJsonWriterSettings {
+                dst,
+                line_break,
+                indent,
+            } => {
+                let lb = reg_load(stack, frames[frame_idx].reg_index(line_break))?;
+                let ind = reg_load(stack, frames[frame_idx].reg_index(indent))?;
+                let settings = BslValue::new_json_writer_settings(&lb, &ind)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, settings)?;
+                frames[frame_idx].pc += 1;
+            }
             Instr::NewTextWriter { dst, path } => {
                 let path = reg_load(stack, frames[frame_idx].reg_index(path))?;
                 let writer = BslValue::new_text_writer(&path)?;
@@ -957,7 +979,7 @@ fn step(
             Instr::CloseText { dst, obj } => {
                 let obj_idx = frames[frame_idx].reg_index(obj);
                 let v = at(stack, obj_idx, "чтение объекта за границей стека значений")?
-                    .text_writer_close()?;
+                    .close_object()?;
                 let d = frames[frame_idx].reg_index(dst);
                 reg_store(stack, d, v)?;
                 frames[frame_idx].pc += 1;

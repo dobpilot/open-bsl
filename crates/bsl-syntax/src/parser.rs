@@ -123,6 +123,24 @@ impl<'src> Parser<'src> {
         }
     }
 
+    /// Имя ЧЛЕНА после точки. В отличие от [`expect_ident`](Self::expect_ident)
+    /// принимает и ключевое слово: `ТипЗначенияJSON.Null`,
+    /// `Соответствие.Значение` — законные обращения, а `Null`/`Значение`
+    /// одновременно ключевые слова языка. Лексер их уже пометил как
+    /// `Keyword`, поэтому решение принимается здесь, по позиции: после
+    /// точки идёт ИМЯ, и ничем другим оно быть не может.
+    fn expect_member_name(&mut self) -> Result<String, ParseError> {
+        if matches!(self.peek().kind, TokenKind::Ident | TokenKind::Keyword(_)) {
+            let tok = self.bump();
+            Ok(self.text(tok.span).to_string())
+        } else {
+            Err(self.error_here(format!(
+                "ожидалось имя после точки, найден {:?}",
+                self.peek().kind
+            )))
+        }
+    }
+
     fn expect_ident(&mut self) -> Result<String, ParseError> {
         if matches!(self.peek().kind, TokenKind::Ident) {
             let tok = self.bump();
@@ -508,7 +526,7 @@ impl<'src> Parser<'src> {
         let mut expr = self.parse_primary()?;
         loop {
             if self.eat(&TokenKind::Dot) {
-                let name = self.expect_ident()?;
+                let name = self.expect_member_name()?;
                 expr = Expr::Field {
                     obj: Box::new(expr),
                     name,

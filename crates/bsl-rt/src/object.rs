@@ -45,6 +45,27 @@ pub enum BslObject {
     KeyValuePair(BslValue, BslValue),
     /// Буферизованный `ЗаписьТекста`; `None` после `Закрыть()`.
     TextWriter(RefCell<Option<BufWriter<File>>>),
+
+    /// `ЧтениеJSON`. Разборщик появляется только после
+    /// `УстановитьСтроку`/`ОткрытьФайл` — до этого читать нечего, и
+    /// платформа на попытку тоже отвечает ошибкой.
+    JsonReader(RefCell<JsonReaderState>),
+    /// `ЗаписьJSON`. Так же: приёмник назначается отдельным вызовом.
+    JsonWriter(RefCell<Option<crate::json::JsonWriter>>),
+    /// `ПараметрыЗаписиJSON` — простой набор значений, менять его после
+    /// создания незачем, поэтому без `RefCell`.
+    JsonWriterSettings(crate::json::JsonWriterSettings),
+}
+
+/// Состояние `ЧтениеJSON`: сам разборщик и последнее прочитанное событие.
+///
+/// Событие хранится, потому что `ТипТекущегоЗначения` и `ТекущееЗначение`
+/// — СВОЙСТВА, а не результат `Прочитать()`: читатель обязан помнить, где
+/// он стоит, между двумя обращениями к нему.
+#[derive(Debug, Default)]
+pub struct JsonReaderState {
+    pub parser: Option<crate::json::JsonParser>,
+    pub current: Option<crate::json::JsonEvent>,
 }
 
 /// Хранение полей `Структура` — двухрежимное, как в V8.

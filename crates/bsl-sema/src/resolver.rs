@@ -300,6 +300,12 @@ pub const NEW_TYPES: &[&str] = &[
     "ValueTable",
     "ЗаписьТекста",
     "TextWriter",
+    "ЧтениеJSON",
+    "JSONReader",
+    "ЗаписьJSON",
+    "JSONWriter",
+    "ПараметрыЗаписиJSON",
+    "JSONWriterSettings",
 ];
 
 struct Resolver<'a> {
@@ -515,10 +521,26 @@ impl<'a> Resolver<'a> {
                 obj: Box::new(self.resolve_expr(obj)?),
                 index: Box::new(self.resolve_expr(index)?),
             }),
-            AExpr::Field { obj, name } => Ok(RExpr::Field {
-                obj: Box::new(self.resolve_expr(obj)?),
-                name: name.clone(),
-            }),
+            AExpr::Field { obj, name } => {
+                // `ТипЗначенияJSON.ИмяСвойства` — не чтение поля объекта, а
+                // КОНСТАНТА: у платформы перечисление тоже не объект, и
+                // несуществующий член она ловит на компиляции, а не в
+                // рантайме (проверено `Вычислить`). Проверка идёт до
+                // резолвинга левой части — иначе имя перечисления сначала
+                // не нашлось бы среди переменных.
+                if let AExpr::Ident(base) = obj.as_ref() {
+                    if let Some(kind) = bsl_rt::lookup_enum(base) {
+                        let member = bsl_rt::lookup_member(kind, name).ok_or_else(|| {
+                            SemaError::UndefinedVariable(format!("{base}.{name}"))
+                        })?;
+                        return Ok(RExpr::EnumMember(member));
+                    }
+                }
+                Ok(RExpr::Field {
+                    obj: Box::new(self.resolve_expr(obj)?),
+                    name: name.clone(),
+                })
+            }
             AExpr::New { type_name, args } => self.resolve_new(type_name, args),
             AExpr::Ternary { .. } => Err(SemaError::Unsupported(
                 "тернарный ?() появится позже",
@@ -621,6 +643,50 @@ impl<'a> Resolver<'a> {
                 }
                 Ok(RExpr::NewTextWriter {
                     path: Box::new(self.resolve_expr(&args[0])?),
+                })
+            }
+            "ЧТЕНИЕJSON" | "JSONREADER" => {
+                if !args.is_empty() {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый ЧтениеJSON".to_string(),
+                        expected: 0,
+                        found: args.len(),
+                    });
+                }
+                Ok(RExpr::NewJsonReader)
+            }
+            "ЗАПИСЬJSON" | "JSONWRITER" => {
+                if !args.is_empty() {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый ЗаписьJSON".to_string(),
+                        expected: 0,
+                        found: args.len(),
+                    });
+                }
+                Ok(RExpr::NewJsonWriter)
+            }
+            // Оба аргумента необязательны, недостающие — `Неопределено`,
+            // как и хвостовые аргументы встроенных функций.
+            "ПАРАМЕТРЫЗАПИСИJSON" | "JSONWRITERSETTINGS" => {
+                if args.len() > 2 {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый ПараметрыЗаписиJSON".to_string(),
+                        expected: 2,
+                        found: args.len(),
+                    });
+                }
+                let mut parts = Vec::with_capacity(2);
+                for a in args {
+                    parts.push(self.resolve_expr(a)?);
+                }
+                while parts.len() < 2 {
+                    parts.push(RExpr::Undefined);
+                }
+                let indent = parts.pop().expect("две позиции только что заполнены");
+                let line_break = parts.pop().expect("две позиции только что заполнены");
+                Ok(RExpr::NewJsonWriterSettings {
+                    line_break: Box::new(line_break),
+                    indent: Box::new(indent),
                 })
             }
             _ => Err(SemaError::Unsupported(
@@ -773,6 +839,21 @@ impl<'a> Resolver<'a> {
                     | bsl_rt::BuiltinMethod::Copy
                     | bsl_rt::BuiltinMethod::CopyColumns
                     | bsl_rt::BuiltinMethod::Collapse => None,
+                    // JSON. Без аргументов — обход читателя и открытие/
+                    // закрытие контейнеров записи.
+                    bsl_rt::BuiltinMethod::JsonRead
+                    | bsl_rt::BuiltinMethod::JsonSkip
+                    | bsl_rt::BuiltinMethod::WriteStartObject
+                    | bsl_rt::BuiltinMethod::WriteEndObject
+                    | bsl_rt::BuiltinMethod::WriteStartArray
+                    | bsl_rt::BuiltinMethod::WriteEndArray => Some(0),
+                    bsl_rt::BuiltinMethod::WritePropertyName
+                    | bsl_rt::BuiltinMethod::WriteJsonValue => Some(1),
+                    // `УстановитьСтроку` — 1 у читателя (текст) и 0..1 у
+                    // писателя (параметры), `ОткрытьФайл` — 1..2. Тип
+                    // получателя здесь ещё не известен, поэтому арность,
+                    // как у `Добавить`, решает рантайм.
+                    bsl_rt::BuiltinMethod::SetString | bsl_rt::BuiltinMethod::OpenFile => None,
                 };
                 if let Some(expected) = expected {
                     if args.len() != expected {

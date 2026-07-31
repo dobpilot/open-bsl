@@ -442,6 +442,210 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
         expect: "принято|",
         note: "Соответствие приёмником принято, ключей не прибавилось (Ч(0) — пусто)",
     },
+    // --- JSON ----------------------------------------------------------
+    // Снято на 8.3.27 в несколько заходов; скрипт замеров исполняется и
+    // нашим интерпретатором, поэтому весь блок сверяется построчно, а не
+    // глазами. Разбор модели — в обзоре модуля `bsl_rt::json`.
+    Anchor {
+        id: "JSON.WRITE.DEFAULT_FORMAT",
+        expect: "{<ПС>\"а\": 1,<ПС>\"б\": \"текст\"<ПС>}",
+        note: "умолчание: переносы строк есть, отступа нет, после двоеточия пробел",
+    },
+    Anchor {
+        id: "JSON.WRITE.NESTED",
+        expect: "[<ПС>1,<ПС>{<ПС>\"к\": true<ПС>}<ПС>]",
+        note: "массив верхнего уровня и вложенный объект",
+    },
+    Anchor {
+        id: "JSON.WRITE.NO_LINE_BREAKS",
+        expect: "{\"а\":1}",
+        note: "без переносов пробела после двоеточия тоже нет",
+    },
+    Anchor {
+        id: "JSON.WRITE.INDENT_NESTED",
+        expect: "{<ПС>__\"а\": {<ПС>____\"б\": 1<ПС>__}<ПС>}",
+        note: "отступ повторяется по глубине, закрывающая скобка на уровне родителя",
+    },
+    Anchor {
+        id: "JSON.WRITE.BREAK_WINDOWS",
+        expect: "{<ВК><ПС> \"а\": 1<ВК><ПС>}",
+        note: "Windows -> ВК+ПС",
+    },
+    Anchor {
+        id: "JSON.WRITE.BREAK_UNIX",
+        expect: "{<ПС> \"а\": 1<ПС>}",
+        note: "Unix -> ПС; Авто на Linux даёт то же самое",
+    },
+    Anchor {
+        id: "JSON.WRITE.NUMBERS",
+        expect: "[1.5,-2,1000000,0,0.333333333333333333333333333]",
+        note: "точная десятичная запись с точкой, без группировки; 1/3 всеми 27 знаками",
+    },
+    Anchor {
+        id: "JSON.WRITE.ESCAPES",
+        expect: "\"\\\"\\\\/\\n\\u0009Ёж\\u0001\"",
+        note: "прямая косая НЕ экранируется, табуляция уходит \\\\u0009, кириллица как есть",
+    },
+    Anchor {
+        id: "JSON.WRITE.CONTROL_CHARS",
+        expect: "\"\\r\\u0008\\u000C\\u000B\"",
+        note: "ВК сокращается до \\\\r, остальные управляющие — \\\\uXXXX ЗАГЛАВНЫМИ",
+    },
+    Anchor {
+        id: "JSON.WRITE.VALUE_BOOLEAN",
+        expect: "true",
+        note: "булево принимается",
+    },
+    Anchor {
+        id: "JSON.WRITE.VALUE_NULL",
+        expect: "<ошибка>",
+        note: "Null ОТВЕРГАЕТСЯ несоответствием типов",
+    },
+    Anchor {
+        id: "JSON.WRITE.VALUE_DATE",
+        expect: "<ошибка>",
+        note: "дата отвергается: сериализовать её умеет только ЗаписатьJSON",
+    },
+    Anchor {
+        id: "JSON.WRITE.VALUE_UNDEFINED",
+        expect: "null",
+        note: "а вот Неопределено ПИШЕТСЯ как null — в отличие от Null",
+    },
+    Anchor {
+        id: "JSON.WRITE.VALUE_WITHOUT_NAME",
+        expect: "<ошибка>",
+        note: "значение в объекте без имени свойства — ошибка структуры",
+    },
+    Anchor {
+        id: "JSON.SERIALIZE.STRUCTURE",
+        expect: "{\"Фамилия\":\"Петров\",\"Имя\":\"Иван\",\"Возраст\":30}",
+        note: "ключи в порядке вставки",
+    },
+    Anchor {
+        id: "JSON.SERIALIZE.NESTED",
+        expect: "[1,\"два\",{\"к\":1}]",
+        note: "массив, строка и соответствие вложенно",
+    },
+    Anchor {
+        id: "JSON.SERIALIZE.DATE_DEFAULT",
+        expect: "{\"д\":\"2024-03-04T05:06:07\"}",
+        note: "дата уходит строкой ISO БЕЗ указания зоны",
+    },
+    Anchor {
+        id: "JSON.SERIALIZE.DATE_EMPTY",
+        expect: "{\"д\":\"0001-01-01T00:00:00\"}",
+        note: "пустая дата — тоже строка, не null",
+    },
+    Anchor {
+        id: "JSON.SERIALIZE.UNSUPPORTED_TYPE",
+        expect: "<ошибка>",
+        note: "ТаблицаЗначений сериализовать нечем — ошибка",
+    },
+    Anchor {
+        id: "JSON.READ.EVENT_SEQUENCE",
+        expect: "Начало объекта Имя свойства  Число Имя свойства  Начало массива Булево Значение Null Конец массива  Конец объекта ",
+        note: "последовательность типов; хвостовые пробелы в именах членов не описка",
+    },
+    Anchor {
+        id: "JSON.READ.CURRENT_VALUE",
+        expect: "[а][1,5][б][с][в][Да]",
+        note: "значения там, где они есть; число печатается по локали, запятой",
+    },
+    Anchor {
+        id: "JSON.READ.VALUE_ON_BRACE",
+        expect: "<ошибка>",
+        note: "ТекущееЗначение на скобке — ошибка, а не Неопределено",
+    },
+    Anchor {
+        id: "JSON.READ.SKIP",
+        expect: "Начало объекта Имя свойства  Число Конец объекта ",
+        note: "после Пропустить читатель стоит на СЛЕДУЮЩЕМ элементе, не на скобке",
+    },
+    Anchor {
+        id: "JSON.READ.UNESCAPE",
+        expect: "Ё<Т>\"\\/",
+        note: "снятие экранирования при чтении",
+    },
+    Anchor {
+        id: "JSON.READ.MALFORMED_NO_VALUE",
+        expect: "3",
+        note: "{\"а\":} принимается, три события",
+    },
+    Anchor {
+        id: "JSON.READ.MALFORMED_TRAILING_COMMA",
+        expect: "3",
+        note: "висячая запятая принимается",
+    },
+    Anchor {
+        id: "JSON.READ.MALFORMED_NO_COLON",
+        expect: "4",
+        note: "отсутствующее двоеточие принимается",
+    },
+    Anchor {
+        id: "JSON.READ.MALFORMED_UNCLOSED",
+        expect: "3",
+        note: "незакрытый объект принимается",
+    },
+    Anchor {
+        id: "JSON.READ.MALFORMED_GARBAGE",
+        expect: "<ошибка>",
+        note: "а вот мусор на месте значения — ошибка",
+    },
+    Anchor {
+        id: "JSON.DESERIALIZE.DEFAULT_TYPE",
+        expect: "Структура",
+        note: "по умолчанию объект JSON становится Структурой, не Соответствием",
+    },
+    Anchor {
+        id: "JSON.DESERIALIZE.AS_MAP",
+        expect: "Соответствие|1",
+        note: "второй параметр переключает на Соответствие",
+    },
+    Anchor {
+        id: "JSON.DESERIALIZE.VALUE_TYPES",
+        expect: "Массив: Число Булево Не определено Строка Число",
+        note: "null становится Неопределено, а НЕ Null",
+    },
+    Anchor {
+        id: "JSON.DESERIALIZE.NESTED",
+        expect: "Структура|1|Массив",
+        note: "вложенный объект — тоже Структура, массив — Массив",
+    },
+    Anchor {
+        id: "JSON.DESERIALIZE.BAD_KEY",
+        expect: "<ошибка>",
+        note: "ключ, не являющийся идентификатором, в структуру не ложится",
+    },
+    Anchor {
+        id: "JSON.DESERIALIZE.DATE_NO_ZONE",
+        expect: "Дата|04.03.2024 5:06:07",
+        note: "ISO без зоны берётся как есть",
+    },
+    Anchor {
+        id: "JSON.ROUND_TRIP",
+        expect: "{\"а\":1,\"б\":\"текст\"} -> 1|текст",
+        note: "запись и чтение обратно",
+    },
+    Anchor {
+        id: "JSON.ENUM.VALUE_TYPES",
+        expect: "Строка|Число|Булево|Значение Null|Начало объекта|Конец объекта|Начало массива|Конец массива |Имя свойства |Нет|Комментарий",
+        note: "все члены ТипЗначенияJSON строкой; у КонецМассива и ИмяСвойства ЗНАЧАЩИЙ хвостовой пробел",
+    },
+    Anchor {
+        id: "JSON.ENUM.LINE_BREAKS",
+        expect: "Нет|Автоматически|Windows|Unix",
+        note: "члены ПереносСтрокJSON; Авто печатается как «Автоматически»",
+    },
+    Anchor {
+        id: "JSON.TYPE.NAMES",
+        expect: "Чтение JSON|Запись JSON|Параметры записи JSON",
+        note: "имена ТИПОВ — С ПРОБЕЛАМИ",
+    },
+    Anchor {
+        id: "JSON.VALUE.NAMES",
+        expect: "ЧтениеJSON|ЗаписьJSON|ПараметрыЗаписиJSON",
+        note: "имена ЗНАЧЕНИЙ — без пробелов, в отличие от имён типов",
+    },
 ];
 
 /// Поиск вопроса по ID — нужен `bsl-cli --ingest-measurements`, чтобы
