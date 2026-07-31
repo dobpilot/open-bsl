@@ -32,6 +32,14 @@ Run formatting, Clippy, and workspace tests before submitting changes.
 
 Use standard `rustfmt` output and four-space indentation. Follow Rust conventions: `snake_case` for modules, functions, variables, and tests; `CamelCase` for types and traits; `SCREAMING_SNAKE_CASE` for constants. Keep functionality in the narrowest relevant crate and expose it through `lib.rs`. Prefer descriptive test names such as `division_half_up_on_exact_tie`.
 
+### Comments and Rustdoc
+
+Write comments and rustdoc in clear Russian technical prose. Explain intent, invariants, compatibility constraints, and non-obvious tradeoffs rather than restating the code. Use complete sentences and normal sentence case; avoid conversational emphasis in all capitals. Prefer natural Russian wording over unnecessary calques such as «персистить», `see`, `literal`, or `top-level`; established project terms such as «чанк» and JIT are acceptable when they are clearer. Write «X — это Y» with an em dash.
+
+Use `//` for implementation notes, `///` for API documentation, and `//!` for crate or module overviews. Enclose Rust identifiers, opcodes, commands, code fragments, and marker IDs in backticks. Public functions returning `Result` should document failure conditions under `# Errors`; document genuine panic conditions under `# Panics`. Keep rustdoc links resolvable and ensure `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps` succeeds.
+
+Preserve compatibility markers exactly as `` `НЕ ИЗМЕРЕНО(AREA.QUESTION)` `` so both rustdoc and the registry scanner recognize them. Do not reword or remove a marker without the corresponding measurement and registry updates described below.
+
 ## Testing Guidelines
 
 Use Rust's built-in test framework. Add focused unit tests near changed logic and integration tests in a crate's `tests/` directory. Conformance fixtures use matching `name.bsl` and `name.expected` files. An absent `.expected` intentionally marks an unmeasured case; never generate oracle output from this interpreter. Preserve `// НЕ ИЗМЕРЕНО(ID)` markers until behavior is measured against real 1C.
