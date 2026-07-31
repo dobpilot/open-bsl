@@ -126,7 +126,7 @@ fn main() {
     let nbody_src = include_str!("../tests/nbody_smoke.bsl");
     time_it("nbody (3 шага Advance)", nbody_src);
 
-    // 6. n-body, 200 шагов Advance — see tests/conformance/fixtures/
+    // 6. n-body, 200 шагов Advance — см. tests/conformance/fixtures/
     // n-body-perf.bsl для того, почему не брифовские 100000 (масштаб растёт
     // быстрее квадратично; 1000 шагов уже падает через ~98с на MAX_SCALE).
     // Только здесь, не в cargo test — растущий масштаб делает каждый шаг

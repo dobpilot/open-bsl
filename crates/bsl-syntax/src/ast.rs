@@ -47,7 +47,7 @@ pub struct VarDecl {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
-    /// LValue — путь (`bodies[0].vx`), а не просто имя, поэтому `target` это
+    /// `LValue` — путь (`bodies[0].vx`), а не просто имя, поэтому `target` — это
     /// `Expr`, ограниченный постфиксной цепочкой (проверяется парсером, не
     /// типом: сама цепочка строится тем же кодом, что и обычные постфиксы).
     Assign {

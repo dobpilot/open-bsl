@@ -120,6 +120,11 @@ type Result<T> = std::result::Result<T, TextError>;
 
 /// Печатает программу. `source` — путь исходника, уходит в комментарий
 /// заголовка (на разбор не влияет).
+///
+/// # Errors
+///
+/// Возвращает [`TextError::Unrepresentable`], если константа программы не имеет текстового
+/// представления в формате байт-кода.
 pub fn write_program(program: &Program, source: Option<&str>) -> Result<String> {
     let mut out = String::with_capacity(4096);
     writeln!(out, "bslc {FORMAT_VERSION}").unwrap();
@@ -563,6 +568,12 @@ fn unquote(no: usize, text: &str) -> Result<(String, String)> {
     Err(TextError::At(no, "незакрытая строка".to_string()))
 }
 
+/// Разбирает текстовое представление программы байт-кода.
+///
+/// # Errors
+///
+/// Возвращает [`TextError`], если заголовок, секция, опкод, операнд или индекс не соответствует
+/// текстовому формату.
 pub fn parse_program(src: &str) -> Result<Program> {
     let lines = significant_lines(src);
     let mut r = Reader { lines, pos: 0 };

@@ -18,6 +18,12 @@ const BLOCK_ENDERS: &[Keyword] = &[
     Keyword::EndTry,
 ];
 
+/// Разбирает исходный текст BSL в AST.
+///
+/// # Errors
+///
+/// Возвращает [`Diagnostic`], если лексер встретил недопустимый токен или текст не
+/// соответствует грамматике BSL.
 pub fn parse(src: &str) -> Result<Program, Diagnostic> {
     let tokens = tokenize_all(src).map_err(Diagnostic::Lex)?;
     let mut parser = Parser { tokens, pos: 0, src };

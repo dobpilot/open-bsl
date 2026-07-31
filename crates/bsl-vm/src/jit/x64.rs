@@ -76,7 +76,7 @@ impl Assembler {
         self.code.extend_from_slice(&value.to_le_bytes());
     }
 
-    /// `mov r8d, imm32` — 0x41 0xB8. r8 в ModRM не кодируется без REX.B,
+    /// `mov r8d, imm32` — 0x41 0xB8. `r8` в `ModRM` не кодируется без `REX.B`,
     /// поэтому форма отдельная, а не через `mov_r_imm32`.
     pub fn mov_r8d_imm32(&mut self, value: u32) {
         self.code.extend_from_slice(&[0x41, 0xb8]);
@@ -150,12 +150,12 @@ pub enum Cond {
     Zero = 0x4,
 }
 
-/// ModRM для формы «регистр-регистр»: mod = 11, reg = поле /r, rm = второй.
+/// `ModRM` для формы «регистр-регистр»: `mod = 11`, `reg` = поле `/r`, `rm` = второй.
 fn modrm_reg(reg: Reg, rm: Reg) -> u8 {
     0xc0 | ((reg as u8) << 3) | rm as u8
 }
 
-/// ModRM, где поле /r — не регистр, а цифра расширения кода операции.
+/// `ModRM`, где поле `/r` — не регистр, а цифра расширения кода операции.
 fn modrm_digit(digit: u8, rm: Reg) -> u8 {
     0xc0 | (digit << 3) | rm as u8
 }

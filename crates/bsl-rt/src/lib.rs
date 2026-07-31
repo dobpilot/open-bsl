@@ -779,7 +779,7 @@ impl BslValue {
     }
 
     /// `ДобавитьМесяц(Дата, Количество)` — про зажатие дня см.
-    /// `BslDate::add_months` (там же пометка НЕ ИЗМЕРЕНО(DATE.ADD_MONTH_CLAMP)).
+    /// `BslDate::add_months` (там же пометка `НЕ ИЗМЕРЕНО(DATE.ADD_MONTH_CLAMP)`).
     pub fn add_month(&self, count: &Self) -> RtResult<Self> {
         let d = self.as_date("ДобавитьМесяц")?;
         let n = Self::date_part(count, "ДобавитьМесяц")?;
@@ -798,9 +798,9 @@ impl BslValue {
     /// строки, нуля и пустой даты.
     ///
     /// Всё остальное — три открытых вопроса,
-    /// НЕ ИЗМЕРЕНО(TYPE.IS_FILLED.BOOLEAN),
-    /// НЕ ИЗМЕРЕНО(TYPE.IS_FILLED.BLANK_STRING) и
-    /// НЕ ИЗМЕРЕНО(TYPE.IS_FILLED.EMPTY_COLLECTION), каждый со своей веткой
+    /// `НЕ ИЗМЕРЕНО(TYPE.IS_FILLED.BOOLEAN)`,
+    /// `НЕ ИЗМЕРЕНО(TYPE.IS_FILLED.BLANK_STRING)` и
+    /// `НЕ ИЗМЕРЕНО(TYPE.IS_FILLED.EMPTY_COLLECTION)`, каждый со своей веткой
     /// ниже. Ошибиться здесь дорого: это главный потребитель
     /// короткозамкнутых `И`/`ИЛИ` (`Если ЗначениеЗаполнено(Х) И Х.Поле = 1`),
     /// поэтому спорные ветки помечены поимённо, а не «примерно так».
@@ -1258,8 +1258,8 @@ impl BslValue {
         }
     }
 
-    /// Инлайн-кэш для `GetProp` (см. брифовский план оптимизаций: "слот
-    /// хранит (shape_ptr, slot_idx)"). `cache` — одна ячейка НА КОНКРЕТНУЮ
+    /// Инлайн-кэш для `GetProp` (см. брифовский план оптимизаций: «слот
+    /// хранит (`shape_ptr`, `slot_idx`)»). `cache` — одна ячейка на конкретную
     /// инструкцию в чанке (см. `Chunk::prop_cache` в `bsl-bytecode`),
     /// живёт между исполнениями этой инструкции. Промах — обычный поиск
     /// по `Shape::index` плюс запись в кэш; форма меняется редко (обычно
@@ -1637,7 +1637,7 @@ impl BslValue {
     }
 
     /// `Итог("Колонка")` -> `Число`. Про нечисловые значения см.
-    /// `ValueTableData::total` (НЕ ИЗМЕРЕНО(TABLE.TOTAL.NON_NUMERIC)).
+    /// `ValueTableData::total` (`НЕ ИЗМЕРЕНО(TABLE.TOTAL.NON_NUMERIC)`).
     pub fn table_total(&self, column: &BslValue) -> RtResult<BslValue> {
         let data = self.as_table("Итог")?;
         let name = column.as_str("Итог")?.to_string();
@@ -1766,7 +1766,7 @@ impl BslValue {
 
     /// `ЗагрузитьКолонку(Массив, Колонка)`. Про несовпадение длин — см.
     /// `ValueTableData::load_column`
-    /// (НЕ ИЗМЕРЕНО(TABLE.LOAD_COLUMN.LENGTH_MISMATCH)).
+    /// (`НЕ ИЗМЕРЕНО(TABLE.LOAD_COLUMN.LENGTH_MISMATCH)`).
     pub fn table_load_column(&self, values: &BslValue, column: &BslValue) -> RtResult<()> {
         let data = self.as_table("ЗагрузитьКолонку")?;
         let name = column.as_str("ЗагрузитьКолонку")?.to_string();
@@ -1791,11 +1791,11 @@ impl BslValue {
         Ok(())
     }
 
-    /// `Сдвинуть(Строка, Смещение)` — `Строка` это либо объект строки, либо
+    /// `Сдвинуть(Строка, Смещение)` — `Строка` — это либо объект строки, либо
     /// её индекс. Целевая позиция вне таблицы — `IndexOutOfBounds`, а не
     /// зажатие в границы.
     ///
-    /// НЕ ИЗМЕРЕНО(TABLE.MOVE.OUT_OF_RANGE): падает ли платформа или молча
+    /// `НЕ ИЗМЕРЕНО(TABLE.MOVE.OUT_OF_RANGE)`: падает ли платформа или молча
     /// зажимает. Взята ошибка: `Сдвинуть(ПерваяСтрока, -1)`, тихо ничего не
     /// сделавший, — та же категория беды, что и `Сортировать("Опечатка")`,
     /// молча ничего не отсортировавшая.

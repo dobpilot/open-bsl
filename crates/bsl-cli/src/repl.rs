@@ -237,7 +237,7 @@ fn eval_and_print(line: &str, session: &mut Session) {
 
 /// Разбирает+резолвит+компилирует+исполняет одну строку REPL, ЗАСЕВАЯ
 /// резолвер и интернер именами, накопленными за сессию, и обновляя
-/// `session` результатами — новые переменные/значения персистят для
+/// `session` результатами — новые переменные и значения сохраняются для
 /// следующей строки (в отличие от изолированного `Выполнить`).
 fn eval_repl_line(line: &str, session: &mut Session) -> Result<BslValue, String> {
     let parsed = bsl_syntax::parse(line).map_err(|e| format!("{e:?}"))?;

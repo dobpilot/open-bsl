@@ -1,3 +1,9 @@
+//! Байт-код, компилятор и текстовый формат программ BSL.
+//!
+//! [`compile_program`] преобразует семантическое представление в [`Program`].
+//! [`write_program`] и [`parse_program`] задают единый текстовый формат для
+//! `bsl-cli --emit-bytecode` и `bsl-cli --run-bytecode`.
+
 mod chunk;
 mod compiler;
 mod instr;
