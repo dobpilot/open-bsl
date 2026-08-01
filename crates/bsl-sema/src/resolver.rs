@@ -306,6 +306,12 @@ pub const NEW_TYPES: &[&str] = &[
     "JSONWriter",
     "ПараметрыЗаписиJSON",
     "JSONWriterSettings",
+    "ЧтениеXML",
+    "XMLReader",
+    "ЗаписьXML",
+    "XMLWriter",
+    "ПараметрыЗаписиXML",
+    "XMLWriterSettings",
 ];
 
 struct Resolver<'a> {
@@ -689,6 +695,53 @@ impl<'a> Resolver<'a> {
                     indent: Box::new(indent),
                 })
             }
+            "ЧТЕНИЕXML" | "XMLREADER" => {
+                if !args.is_empty() {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый ЧтениеXML".to_string(),
+                        expected: 0,
+                        found: args.len(),
+                    });
+                }
+                Ok(RExpr::NewXmlReader)
+            }
+            "ЗАПИСЬXML" | "XMLWRITER" => {
+                if !args.is_empty() {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый ЗаписьXML".to_string(),
+                        expected: 0,
+                        found: args.len(),
+                    });
+                }
+                Ok(RExpr::NewXmlWriter)
+            }
+            // Три необязательных параметра — кодировка, версия и признак
+            // отступа; недостающие уходят `Неопределено`, как и у
+            // `ПараметрыЗаписиJSON`.
+            "ПАРАМЕТРЫЗАПИСИXML" | "XMLWRITERSETTINGS" => {
+                if args.len() > 3 {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый ПараметрыЗаписиXML".to_string(),
+                        expected: 3,
+                        found: args.len(),
+                    });
+                }
+                let mut parts = Vec::with_capacity(3);
+                for a in args {
+                    parts.push(self.resolve_expr(a)?);
+                }
+                while parts.len() < 3 {
+                    parts.push(RExpr::Undefined);
+                }
+                let indent = parts.pop().expect("три позиции только что заполнены");
+                let version = parts.pop().expect("три позиции только что заполнены");
+                let encoding = parts.pop().expect("три позиции только что заполнены");
+                Ok(RExpr::NewXmlWriterSettings {
+                    encoding: Box::new(encoding),
+                    version: Box::new(version),
+                    indent: Box::new(indent),
+                })
+            }
             _ => Err(SemaError::Unsupported(
                 "Новый поддержан только для Массив/Структура/ТаблицаЗначений/Соответствие пока",
             )),
@@ -841,8 +894,8 @@ impl<'a> Resolver<'a> {
                     | bsl_rt::BuiltinMethod::Collapse => None,
                     // JSON. Без аргументов — обход читателя и открытие/
                     // закрытие контейнеров записи.
-                    bsl_rt::BuiltinMethod::JsonRead
-                    | bsl_rt::BuiltinMethod::JsonSkip
+                    bsl_rt::BuiltinMethod::ReadNext
+                    | bsl_rt::BuiltinMethod::SkipNode
                     | bsl_rt::BuiltinMethod::WriteStartObject
                     | bsl_rt::BuiltinMethod::WriteEndObject
                     | bsl_rt::BuiltinMethod::WriteStartArray
@@ -854,6 +907,23 @@ impl<'a> Resolver<'a> {
                     // получателя здесь ещё не известен, поэтому арность,
                     // как у `Добавить`, решает рантайм.
                     bsl_rt::BuiltinMethod::SetString | bsl_rt::BuiltinMethod::OpenFile => None,
+                    // XML. Обход читателя и закрытие элемента — без
+                    // аргументов, остальное — по числу измеренных
+                    // параметров.
+                    bsl_rt::BuiltinMethod::XmlReadAttribute
+                    | bsl_rt::BuiltinMethod::XmlAttributeCount
+                    | bsl_rt::BuiltinMethod::XmlMoveToContent
+                    | bsl_rt::BuiltinMethod::WriteXmlDeclaration
+                    | bsl_rt::BuiltinMethod::WriteEndElement => Some(0),
+                    bsl_rt::BuiltinMethod::XmlAttributeName
+                    | bsl_rt::BuiltinMethod::XmlAttributeValue
+                    | bsl_rt::BuiltinMethod::WriteStartElement
+                    | bsl_rt::BuiltinMethod::WriteXmlText
+                    | bsl_rt::BuiltinMethod::WriteXmlComment
+                    | bsl_rt::BuiltinMethod::WriteCdataSection
+                    | bsl_rt::BuiltinMethod::WriteXmlRaw => Some(1),
+                    bsl_rt::BuiltinMethod::WriteXmlAttribute
+                    | bsl_rt::BuiltinMethod::WriteXmlProcessingInstruction => Some(2),
                 };
                 if let Some(expected) = expected {
                     if args.len() != expected {

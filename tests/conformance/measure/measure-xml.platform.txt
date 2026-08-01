@@ -1,0 +1,97 @@
+XML.ENUM.NODE_TYPE.NOTHING	Ничего
+XML.ENUM.NODE_TYPE.ELEMENT_START	Начало элемента
+XML.ENUM.NODE_TYPE.ELEMENT_END	Конец элемента
+XML.ENUM.NODE_TYPE.TEXT	Текст
+XML.ENUM.NODE_TYPE.CDATA_SECTION	Секция CDATA
+XML.ENUM.NODE_TYPE.COMMENT	Комментарий
+XML.ENUM.NODE_TYPE.PROCESSING_INSTRUCTION	Инструкция обработки
+XML.ENUM.NODE_TYPE.XML_DECLARATION	Объявление XML
+XML.ENUM.NODE_TYPE.ATTRIBUTE	Атрибут
+XML.ENUM.NODE_TYPE.ENTITY_START	<ошибка>
+XML.ENUM.NODE_TYPE.ENTITY_END	Конец сущности
+XML.ENUM.NODE_TYPE.ENTITY_REFERENCE	Ссылка на сущность
+XML.ENUM.NODE_TYPE.DOCUMENT_TYPE	Определение типа документа
+XML.ENUM.NODE_TYPE.NOTATION	Нотация
+XML.ENUM.NODE_TYPE.WHITESPACE	<ошибка>
+XML.ENUM.NODE_TYPE.SIGNIFICANT_WHITESPACE	<ошибка>
+XML.TYPE.READER	Чтение XML
+XML.TYPE.WRITER	Запись XML
+XML.TYPE.WRITER_SETTINGS	Параметры записи XML
+XML.TYPE.READER_SETTINGS	Параметры чтения XML
+XML.VALUE.READER	ЧтениеXML
+XML.VALUE.WRITER	ЗаписьXML
+XML.VALUE.WRITER_SETTINGS	ПараметрыЗаписиXML
+XML.READ.SIMPLE	Начало элемента имя=[к] знач=[] | Текст имя=[#text] знач=[текст] | Конец элемента имя=[к] знач=[]
+XML.READ.NESTED	Начало элемента имя=[а] знач=[] | Начало элемента имя=[б] знач=[] | Текст имя=[#text] знач=[1] | Конец элемента имя=[б] знач=[] | Начало элемента имя=[в] знач=[] | Текст имя=[#text] знач=[2] | Конец элемента имя=[в] знач=[] | Конец элемента имя=[а] знач=[]
+XML.READ.EMPTY_ELEMENT	Начало элемента имя=[а] знач=[] | Конец элемента имя=[а] знач=[]
+XML.READ.EMPTY_PAIR	Начало элемента имя=[а] знач=[] | Конец элемента имя=[а] знач=[]
+XML.READ.ATTRS	Начало элемента имя=[а] знач=[] | Текст имя=[#text] знач=[т] | Конец элемента имя=[а] знач=[]
+XML.READ.DECLARATION	Начало элемента имя=[а] знач=[] | Конец элемента имя=[а] знач=[]
+XML.READ.COMMENT	Начало элемента имя=[а] знач=[] | Конец элемента имя=[а] знач=[]
+XML.READ.CDATA	Начало элемента имя=[а] знач=[] | Текст имя=[#text] знач=[<не разметка>] | Конец элемента имя=[а] знач=[]
+XML.READ.PI	Начало элемента имя=[а] знач=[] | Инструкция обработки имя=[целевой] знач=[данные] | Конец элемента имя=[а] знач=[]
+XML.READ.ENTITIES	Начало элемента имя=[а] знач=[] | Текст имя=[#text] знач=[&<>"'] | Конец элемента имя=[а] знач=[]
+XML.READ.CHAR_REF	Начало элемента имя=[а] знач=[] | Текст имя=[#text] знач=[AB] | Конец элемента имя=[а] знач=[]
+XML.READ.WHITESPACE_BETWEEN	Начало элемента имя=[а] знач=[] | Начало элемента имя=[б] знач=[] | Конец элемента имя=[б] знач=[] | Конец элемента имя=[а] знач=[]
+XML.READ.WHITESPACE_ONLY_TEXT	Начало элемента имя=[а] знач=[] | Конец элемента имя=[а] знач=[]
+XML.READ.NEWLINE_BETWEEN	Начало элемента имя=[а] знач=[] | Начало элемента имя=[б] знач=[] | Конец элемента имя=[б] знач=[] | Конец элемента имя=[а] знач=[]
+XML.READ.NAMESPACE	Начало элемента имя=[п:а] знач=[] | Текст имя=[#text] знач=[т] | Конец элемента имя=[п:а] знач=[]
+XML.READ.TEXT_SPLIT_BY_COMMENT	Начало элемента имя=[а] знач=[] | Текст имя=[#text] знач=[раз] | Текст имя=[#text] знач=[два] | Конец элемента имя=[а] знач=[]
+XML.READ.CYRILLIC	Начало элемента имя=[тег] знач=[] | Текст имя=[#text] знач=[значение] | Конец элемента имя=[тег] знач=[]
+XML.READ.UNCLOSED	<ошибка>
+XML.READ.GARBAGE	<ошибка>
+XML.READ.EMPTY_STRING	<ошибка>
+XML.READ.TWO_ROOTS	<ошибка>
+XML.READ.NAME_PARTS_PLAIN	имя=[а] локальное=[а] префикс=[] ури=[]
+XML.READ.NAME_PARTS_NS	имя=[п:а] локальное=[а] префикс=[п] ури=[http://прим]
+XML.READ.ATTR_ACCESS	количество=2 имя0=[х] знач0=[1] поимени=[1] нет=[] типнет=Не определено
+XML.READ.ATTR_NONE	количество=0 имя0=[] знач0=[] поимени=[] нет=[] типнет=Не определено
+XML.READ.ATTR_ESCAPED	количество=1 имя0=[х] знач0=[&<"] поимени=[&<"] нет=[] типнет=Не определено
+XML.READ.ATTR_CURSOR	Атрибут [х]=[1] | Атрибут [у]=[два]
+XML.READ.SKIP	после=Конец элемента имя=[б]
+XML.WRITE.DEFAULT_FORMAT	<а><ПС><Т><б>т</б><ПС></а>
+XML.WRITE.DECLARATION	<?xml version="1.0"?><ПС><а/>
+XML.WRITE.EMPTY_ELEMENT	<а/>
+XML.WRITE.ATTRS	<а х="1" у="два">т</а>
+XML.WRITE.ESCAPE_TEXT	<а>&amp;&lt;&gt;"'<Т><ПС></а>
+XML.WRITE.ESCAPE_ATTR	<а х="&amp;&lt;&gt;&quot;'<Т><ПС>"/>
+XML.WRITE.CYRILLIC	<тег атр="значение">текст</тег>
+XML.WRITE.TEXT_NUMBER	<ошибка>
+XML.WRITE.ATTR_NUMBER	<ошибка>
+XML.WRITE.COMMENT	<а><ПС><Т><!--к--><ПС></а>
+XML.WRITE.PI	<а><ПС><Т><?целевой данные?><ПС></а>
+XML.WRITE.RAW	<а><сырое/><ПС></а>
+XML.WRITE.UNBALANCED_END	<ошибка>
+XML.WRITE.UNCLOSED	<а>
+XML.WRITE.ATTR_AFTER_TEXT	<ошибка>
+XML.WRITE.CLOSE_TWICE	первый=[<а/>] второй=[]
+XML.ROUND_TRIP	<а х="1">т&amp;т</а> -> Начало элемента имя=[а] знач=[] | Текст имя=[#text] знач=[т&т] | Конец элемента имя=[а] знач=[]
+XML.WRITE.CDATA_SECTION	<а><ПС><Т><![CDATA[<не разметка>]]></а>
+XML.WRITE.SETTINGS_NO_INDENT	<а><б/></а>
+XML.WRITE.SETTINGS_DECL	<?xml version="1.0" encoding="UTF-8"?><ПС><а/>
+XML.FILE.WRITE_OK	записан
+XML.FILE.READ_BACK	Начало элемента [книги] | Начало элемента [книга] | Текст [#text] | Конец элемента [книга] | Конец элемента [книги]
+XML.FILE.MISSING	<ошибка>
+XML.READ.PAST_END	третье=Нет четвёртое=Нет
+XML.READ.BEFORE_FIRST	Ничего
+XML.READ.ATTR_OUT_OF_RANGE	[]
+XML.READ.SKIP_ON_TEXT	Конец элемента имя=[а]
+XML.READ.MOVE_TO_CONTENT	Начало элемента
+XML.READ.TEXT_PADDED	Начало элемента имя=[а] знач=[] | Текст имя=[#text] знач=[ т ] | Конец элемента имя=[а] знач=[]
+XML.READ.TEXT_THEN_ELEMENT	Начало элемента имя=[а] знач=[] | Текст имя=[#text] знач=[т ] | Начало элемента имя=[б] знач=[] | Конец элемента имя=[б] знач=[] | Текст имя=[#text] знач=[ у] | Конец элемента имя=[а] знач=[]
+XML.READ.TEXT_TWICE_SPLIT	Начало элемента имя=[а] знач=[] | Текст имя=[#text] знач=[раздватри] | Конец элемента имя=[а] знач=[]
+XML.READ.NEWLINE_IN_TEXT	Начало элемента имя=[а] знач=[] | Текст имя=[#text] знач=[раз<ПС>два] | Конец элемента имя=[а] знач=[]
+XML.WRITE.MIXED	<а>т<ПС><Т><б/>у</а>
+XML.WRITE.TEXT_TWICE	<а>раздва</а>
+XML.WRITE.TEXT_EMPTY	<а/>
+XML.WRITE.TWO_ROOTS	<ошибка>
+XML.WRITE.DEEP_INDENT	<а><ПС><Т><б><ПС><Т><Т><в/><ПС><Т></б><ПС></а>
+XML.WRITE.DECL_NO_INDENT	<?xml version="1.0" encoding="UTF-8"?><а/>
+XML.READ.NS_ATTR_COUNT	количество=2 имя0=[xmlns:п] имя1=[х]
+XML.WRITE.DECL_LATE	<ошибка>
+XML.WRITE.NAME_NUMBER	<ошибка>
+XML.READ.SKIP_ROOT	тип=Конец элемента имя=[а] дальше=Нет
+XML.READ.UNKNOWN_ENTITY	<ошибка>
+XML.READ.CDATA_WHITESPACE	Начало элемента имя=[а] знач=[] | Конец элемента имя=[а] знач=[]
+XML.READ.DOCTYPE	Начало элемента имя=[а] знач=[] | Конец элемента имя=[а] знач=[]
+XML.READ.ATTR_NAME_OUT_OF_RANGE	Не определено

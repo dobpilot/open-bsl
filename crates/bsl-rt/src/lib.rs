@@ -19,6 +19,7 @@ mod shape;
 mod string;
 mod table;
 mod types;
+mod xml;
 
 use std::cmp::Ordering;
 use std::fmt;
@@ -38,6 +39,7 @@ pub use enums::{
 pub use json::{
     JsonEvent, JsonLineBreak, JsonParser, JsonWriter, JsonWriterSettings,
 };
+pub use xml::{XmlAttr, XmlEvent, XmlParser, XmlWriter, XmlWriterSettings};
 pub use date::{
     format_long as format_date_long, format_pattern as format_date_pattern, BslDate, DateBoundary,
     DatePart, DEFAULT_PATTERN as DEFAULT_DATE_PATTERN,
@@ -125,6 +127,10 @@ pub enum RtError {
     /// которого смысл другой — ошибка ЧУЖОГО слоя, пришедшая готовым
     /// текстом.
     Json(String),
+    /// Разбор или запись XML: битая разметка либо нарушение структуры
+    /// документа при записи (атрибут после текста). Отдельно от
+    /// [`RtError::Json`] — чтобы по типу ошибки было видно, чей это слой.
+    Xml(String),
     /// Имя из `СписокСвойств` в `ЗаполнитьЗначенияСвойств`, которого нет у
     /// источника или у приёмника. Отдельно от [`RtError::UnknownField`] и
     /// [`RtError::UnknownColumn`], потому что имя тут пришло СТРОКОЙ из
@@ -195,6 +201,7 @@ impl fmt::Display for RtError {
             RtError::UnknownColumn(name) => write!(f, "колонка «{name}» не найдена"),
             RtError::UnknownProperty(name) => write!(f, "свойство «{name}» не найдено"),
             RtError::Json(msg) => write!(f, "{msg}"),
+            RtError::Xml(msg) => write!(f, "{msg}"),
             RtError::UnknownType(name) => write!(f, "тип «{name}» не определён"),
             RtError::DateOutOfRange { op } => write!(
                 f,
@@ -244,6 +251,9 @@ impl BslValue {
                 BslObject::JsonReader(_) => "ЧтениеJSON",
                 BslObject::JsonWriter(_) => "ЗаписьJSON",
                 BslObject::JsonWriterSettings(_) => "ПараметрыЗаписиJSON",
+                BslObject::XmlReader(_) => "ЧтениеXML",
+                BslObject::XmlWriter(_) => "ЗаписьXML",
+                BslObject::XmlWriterSettings(_) => "ПараметрыЗаписиXML",
             },
             BslValue::Skipped => "Skipped",
         }
@@ -884,7 +894,10 @@ impl BslValue {
                 // что у ЗаписьТекста, — объект есть, значит заполнен.
                 | BslObject::JsonReader(..)
                 | BslObject::JsonWriter(..)
-                | BslObject::JsonWriterSettings(..) => true,
+                | BslObject::JsonWriterSettings(..)
+                | BslObject::XmlReader(..)
+                | BslObject::XmlWriter(..)
+                | BslObject::XmlWriterSettings(..) => true,
             },
             BslValue::Skipped => {
                 return Err(RtError::TypeError {
@@ -910,6 +923,7 @@ impl BslValue {
                 EnumKind::JsonValueType => TypeId::JsonValueType,
                 EnumKind::JsonLineBreak => TypeId::JsonLineBreak,
                 EnumKind::JsonDateFormat => TypeId::JsonDateFormat,
+                EnumKind::XmlNodeType => TypeId::XmlNodeType,
             },
             BslValue::Object(o) => match &**o {
                 BslObject::Array(_) => TypeId::Array,
@@ -928,6 +942,9 @@ impl BslValue {
                 BslObject::JsonReader(..) => TypeId::JsonReader,
                 BslObject::JsonWriter(..) => TypeId::JsonWriter,
                 BslObject::JsonWriterSettings(..) => TypeId::JsonWriterSettings,
+                BslObject::XmlReader(..) => TypeId::XmlReader,
+                BslObject::XmlWriter(..) => TypeId::XmlWriter,
+                BslObject::XmlWriterSettings(..) => TypeId::XmlWriterSettings,
             },
             BslValue::Skipped => {
                 return Err(RtError::TypeError {
@@ -984,9 +1001,73 @@ impl BslValue {
     pub fn close_object(&self) -> RtResult<BslValue> {
         if json::is_json_writer(self) {
             json::close_writer(self)
+        } else if xml::is_xml_writer(self) {
+            xml::close_writer(self)
+        } else if xml::is_xml_reader(self) {
+            // У ЧтениеXML `Закрыть` ничего не отдаёт: это отпускание
+            // источника, а не выемка результата.
+            xml::close_reader(self)
         } else {
             self.text_writer_close()
         }
+    }
+
+    pub fn new_xml_reader() -> Self {
+        BslValue::Object(Rc::new(BslObject::XmlReader(std::cell::RefCell::new(
+            crate::object::XmlReaderState::default(),
+        ))))
+    }
+
+    pub fn new_xml_writer() -> Self {
+        BslValue::Object(Rc::new(BslObject::XmlWriter(std::cell::RefCell::new(None))))
+    }
+
+    /// `Новый ПараметрыЗаписиXML([Кодировка][, Версия][, ИспользоватьОтступ])`.
+    ///
+    /// Третий параметр гасит и перевод строки, и отступ разом — измерено.
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::TypeError`], если аргумент не того типа.
+    pub fn new_xml_writer_settings(
+        encoding: &BslValue,
+        version: &BslValue,
+        indent: &BslValue,
+    ) -> RtResult<Self> {
+        let mut settings = xml::XmlWriterSettings::default();
+        match encoding {
+            BslValue::Undefined => {}
+            BslValue::Str(s) => settings.encoding = Some(s.to_string()),
+            _ => {
+                return Err(RtError::TypeError {
+                    expected: "Строка",
+                    op: "Новый ПараметрыЗаписиXML",
+                })
+            }
+        }
+        match version {
+            BslValue::Undefined => {}
+            BslValue::Str(s) => settings.version = s.to_string(),
+            _ => {
+                return Err(RtError::TypeError {
+                    expected: "Строка",
+                    op: "Новый ПараметрыЗаписиXML",
+                })
+            }
+        }
+        match indent {
+            BslValue::Undefined => {}
+            BslValue::Boolean(b) => settings.indent = *b,
+            _ => {
+                return Err(RtError::TypeError {
+                    expected: "Булево",
+                    op: "Новый ПараметрыЗаписиXML",
+                })
+            }
+        }
+        Ok(BslValue::Object(Rc::new(BslObject::XmlWriterSettings(
+            settings,
+        ))))
     }
 
     pub fn new_json_reader() -> Self {
@@ -1235,7 +1316,10 @@ impl BslValue {
                 BslObject::TextWriter(..)
                 | BslObject::JsonReader(..)
                 | BslObject::JsonWriter(..)
-                | BslObject::JsonWriterSettings(..) => Err(RtError::NotIndexable),
+                | BslObject::JsonWriterSettings(..)
+                | BslObject::XmlReader(..)
+                | BslObject::XmlWriter(..)
+                | BslObject::XmlWriterSettings(..) => Err(RtError::NotIndexable),
             },
             _ => Err(RtError::NotIndexable),
         }
@@ -1516,6 +1600,35 @@ impl BslValue {
                         || name.eq_ignore_ascii_case("CurrentValue")
                     {
                         json::current_value(self)
+                    } else {
+                        Err(RtError::UnknownColumn(name.to_string()))
+                    }
+                }
+                // У `ЧтениеXML` свойств больше, но природа та же: читатель
+                // помнит текущий узел, а `ТипУзла`/`Имя`/`Значение` только
+                // показывают его с разных сторон.
+                BslObject::XmlReader(_) => {
+                    if name.eq_ignore_ascii_case("ТипУзла") || name.eq_ignore_ascii_case("NodeType")
+                    {
+                        xml::node_type(self)
+                    } else if name.eq_ignore_ascii_case("Имя") || name.eq_ignore_ascii_case("Name") {
+                        xml::name(self)
+                    } else if name.eq_ignore_ascii_case("Значение")
+                        || name.eq_ignore_ascii_case("Value")
+                    {
+                        xml::value(self)
+                    } else if name.eq_ignore_ascii_case("ЛокальноеИмя")
+                        || name.eq_ignore_ascii_case("LocalName")
+                    {
+                        xml::local_name(self)
+                    } else if name.eq_ignore_ascii_case("Префикс")
+                        || name.eq_ignore_ascii_case("Prefix")
+                    {
+                        xml::prefix(self)
+                    } else if name.eq_ignore_ascii_case("URIПространстваИмен")
+                        || name.eq_ignore_ascii_case("NamespaceURI")
+                    {
+                        xml::namespace_uri(self)
                     } else {
                         Err(RtError::UnknownColumn(name.to_string()))
                     }
@@ -2114,6 +2227,9 @@ impl fmt::Display for BslValue {
                 BslObject::JsonReader(_) => write!(f, "ЧтениеJSON"),
                 BslObject::JsonWriter(_) => write!(f, "ЗаписьJSON"),
                 BslObject::JsonWriterSettings(_) => write!(f, "ПараметрыЗаписиJSON"),
+                BslObject::XmlReader(_) => write!(f, "ЧтениеXML"),
+                BslObject::XmlWriter(_) => write!(f, "ЗаписьXML"),
+                BslObject::XmlWriterSettings(_) => write!(f, "ПараметрыЗаписиXML"),
             },
             // Никогда не должно реально дойти до печати (см. doc comment
             // на варианте) — но `Display` обязан быть тотальным.

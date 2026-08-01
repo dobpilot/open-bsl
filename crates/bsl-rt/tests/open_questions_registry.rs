@@ -97,11 +97,14 @@ fn markers_in(text: &str, path_for_msg: &str) -> Vec<(String, usize)> {
 }
 
 /// ИД-строки скрипта замеров: строковый литерал целиком состоящий из
-/// заглавной латиницы, цифр, точек и подчёркиваний и содержащий хотя бы
-/// одну точку. Под это правило подходят и `М("DATE.ADD_MONTH_CLAMP", ...)`,
-/// и ручные `Сообщить("EXEC...." + Символ(9) + ...)` без обёртки, а
-/// форматные строки (`"ЧГ=0; ЧРД=."`, `"ДЛФ=Д"`)
-/// — нет: они на кириллице и со знаком `=`.
+/// заглавной латиницы, цифр, точек и подчёркиваний, содержащий хотя бы одну
+/// точку И хотя бы одну букву. Под это правило подходят и
+/// `М("DATE.ADD_MONTH_CLAMP", ...)`, и ручные
+/// `Сообщить("EXEC...." + Символ(9) + ...)` без обёртки, а форматные строки
+/// (`"ЧГ=0; ЧРД=."`, `"ДЛФ=Д"`) — нет: они на кириллице и со знаком `=`.
+///
+/// Буква требуется не для красоты: без неё под правило попадает номер
+/// версии XML («1.0») — обычный аргумент, а не идентификатор.
 fn script_ids(text: &str) -> Vec<String> {
     let mut out = Vec::new();
     for line in text.lines() {
@@ -109,19 +112,52 @@ fn script_ids(text: &str) -> Vec<String> {
         if line.starts_with("//") {
             continue;
         }
-        for (i, piece) in line.split('"').enumerate() {
-            if i % 2 == 0 {
-                continue; // вне кавычек
-            }
+        for piece in string_literals(line) {
+            let segments_filled = piece.split('.').all(|s| !s.is_empty());
             if piece.contains('.')
-                && !piece.is_empty()
+                && segments_filled
+                && piece.chars().any(|c| c.is_ascii_uppercase())
                 && piece
                     .chars()
                     .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '.' || c == '_')
             {
-                out.push(piece.to_string());
+                out.push(piece);
             }
         }
+    }
+    out
+}
+
+/// Строковые литералы строки исходника. Разбор именно посимвольный, а не
+/// `split('"')`: в BSL кавычка внутри строки удваивается, и наивное
+/// разбиение рвёт такой литерал на куски. До XML это было незаметно —
+/// удвоенных кавычек в замерах просто не встречалось, — а разметка состоит
+/// из них целиком (`"<а х=""1""/>"`), и обломок вроде `1.0` уходил в ИД.
+fn string_literals(line: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let chars: Vec<char> = line.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] != '"' {
+            i += 1;
+            continue;
+        }
+        i += 1;
+        let mut lit = String::new();
+        while i < chars.len() {
+            if chars[i] == '"' {
+                if chars.get(i + 1) == Some(&'"') {
+                    lit.push('"');
+                    i += 2;
+                    continue;
+                }
+                i += 1;
+                break;
+            }
+            lit.push(chars[i]);
+            i += 1;
+        }
+        out.push(lit);
     }
     out
 }

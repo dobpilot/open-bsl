@@ -520,6 +520,31 @@ impl<'a> Compiler<'a> {
                 });
                 self.free_temp(2);
             }
+            RExpr::NewXmlReader => {
+                self.emit(Instr::NewXmlReader { dst });
+            }
+            RExpr::NewXmlWriter => {
+                self.emit(Instr::NewXmlWriter { dst });
+            }
+            RExpr::NewXmlWriterSettings {
+                encoding,
+                version,
+                indent,
+            } => {
+                let enc = self.alloc_temp()?;
+                self.compile_expr(encoding, enc)?;
+                let ver = self.alloc_temp()?;
+                self.compile_expr(version, ver)?;
+                let ind = self.alloc_temp()?;
+                self.compile_expr(indent, ind)?;
+                self.emit(Instr::NewXmlWriterSettings {
+                    dst,
+                    encoding: enc,
+                    version: ver,
+                    indent: ind,
+                });
+                self.free_temp(3);
+            }
             RExpr::NewTextWriter { path } => {
                 let path_reg = self.alloc_temp()?;
                 self.compile_expr(path, path_reg)?;

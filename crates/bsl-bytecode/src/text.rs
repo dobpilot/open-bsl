@@ -83,6 +83,9 @@ pub const OPCODES: &[&str] = &[
     "NewJsonReader",
     "NewJsonWriter",
     "NewJsonWriterSettings",
+    "NewXmlReader",
+    "NewXmlWriter",
+    "NewXmlWriterSettings",
     "CollectionLen",
     "Raise",
     "CallBuiltin",
@@ -390,6 +393,14 @@ fn write_instr(instr: &Instr) -> String {
             line_break,
             indent,
         } => format!("NewJsonWriterSettings dst={dst} break={line_break} indent={indent}"),
+        Instr::NewXmlReader { dst } => format!("NewXmlReader dst={dst}"),
+        Instr::NewXmlWriter { dst } => format!("NewXmlWriter dst={dst}"),
+        Instr::NewXmlWriterSettings {
+            dst,
+            encoding,
+            version,
+            indent,
+        } => format!("NewXmlWriterSettings dst={dst} enc={encoding} ver={version} indent={indent}"),
         Instr::CollectionLen { dst, obj } => format!("CollectionLen dst={dst} obj={obj}"),
         Instr::Raise { src } => match src {
             Some(src) => format!("Raise src={src}"),
@@ -1138,6 +1149,14 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
             line_break: field_u8(&f, no, "break")?,
             indent: field_u8(&f, no, "indent")?,
         },
+        "NewXmlReader" => Instr::NewXmlReader { dst: dst(&f)? },
+        "NewXmlWriter" => Instr::NewXmlWriter { dst: dst(&f)? },
+        "NewXmlWriterSettings" => Instr::NewXmlWriterSettings {
+            dst: dst(&f)?,
+            encoding: field_u8(&f, no, "enc")?,
+            version: field_u8(&f, no, "ver")?,
+            indent: field_u8(&f, no, "indent")?,
+        },
         "NewTextWriter" => Instr::NewTextWriter {
             dst: dst(&f)?,
             path: field_u8(&f, no, "path")?,
@@ -1245,6 +1264,15 @@ mod tests {
          з = Новый ЗаписьJSON;\nз.УстановитьСтроку(н);\n\
          з.ЗаписатьНачалоМассива();\nз.ЗаписатьЗначение(1);\nз.ЗаписатьКонецМассива();\n\
          т = ч.ТипТекущегоЗначения;\n",
+        // XML: те же три конструктора. `ПараметрыЗаписиXML` берёт три
+        // аргумента, а не два, поэтому своя строка корпуса, а не довесок
+        // к JSON.
+        "ч = Новый ЧтениеXML;\nч.УстановитьСтроку(\"<а/>\");\n\
+         н = Новый ПараметрыЗаписиXML(\"UTF-8\", \"1.0\", Ложь);\n\
+         з = Новый ЗаписьXML;\nз.УстановитьСтроку(н);\n\
+         з.ЗаписатьНачалоЭлемента(\"а\");\nз.ЗаписатьАтрибут(\"х\", \"1\");\n\
+         з.ЗаписатьКонецЭлемента();\n\
+         т = ч.ТипУзла;\n",
     ];
 
     fn compile(src: &str) -> Program {

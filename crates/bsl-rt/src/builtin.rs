@@ -425,11 +425,14 @@ pub enum BuiltinMethod {
     SetString,
     /// `ОткрытьФайл(Имя[, Параметры])` у обоих объектов JSON.
     OpenFile,
-    /// `ЧтениеJSON.Прочитать()` -> `Булево`.
-    JsonRead,
-    /// `ЧтениеJSON.Пропустить()`. Имя именно такое: `ПропуститьЗначение`
-    /// платформа не знает — измерено.
-    JsonSkip,
+    /// `ЧтениеJSON.Прочитать()` / `ЧтениеXML.Прочитать()` -> `Булево`.
+    /// Один вариант на два объекта: имя у платформы общее, а смысл
+    /// («следующее значение» против «следующий узел») выбирается по
+    /// получателю — как у `Закрыть` и `УстановитьСтроку`.
+    ReadNext,
+    /// `ЧтениеJSON.Пропустить()` / `ЧтениеXML.Пропустить()`. Имя именно
+    /// такое: `ПропуститьЗначение` платформа не знает — измерено.
+    SkipNode,
     WriteStartObject,
     WriteEndObject,
     WriteStartArray,
@@ -438,6 +441,32 @@ pub enum BuiltinMethod {
     /// `ЗаписьJSON.ЗаписатьЗначение(Значение)` — отдельный метод от
     /// `Записать` у `ЗаписьТекста`.
     WriteJsonValue,
+
+    // --- XML -----------------------------------------------------------
+    // `УстановитьСтроку`, `ОткрытьФайл` и `Закрыть` переиспользуются от
+    // JSON: у платформы это те же имена, а смысл и там, и там выбирается
+    // по получателю. `Прочитать` — НЕТ: у `ЧтениеJSON` он отдаёт следующее
+    // ЗНАЧЕНИЕ, у `ЧтениеXML` — следующий УЗЕЛ, и получатель у них разный,
+    // так что разделение проходит по типу объекта в одном варианте.
+    /// `ЧтениеXML.ПрочитатьАтрибут()` -> `Булево` — курсор по атрибутам.
+    XmlReadAttribute,
+    /// `ЧтениеXML.КоличествоАтрибутов()`.
+    XmlAttributeCount,
+    /// `ЧтениеXML.ИмяАтрибута(Индекс)`.
+    XmlAttributeName,
+    /// `ЧтениеXML.ЗначениеАтрибута(ИмяЛибоИндекс)`.
+    XmlAttributeValue,
+    /// `ЧтениеXML.ПерейтиКСодержимому()` -> член `ТипУзлаXML`.
+    XmlMoveToContent,
+    WriteXmlDeclaration,
+    WriteStartElement,
+    WriteEndElement,
+    WriteXmlAttribute,
+    WriteXmlText,
+    WriteXmlComment,
+    WriteCdataSection,
+    WriteXmlProcessingInstruction,
+    WriteXmlRaw,
 }
 
 /// Написания МЕТОДОВ объектов — тот же принцип, что и у
@@ -488,10 +517,10 @@ pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
     ("SetString", BuiltinMethod::SetString),
     ("ОткрытьФайл", BuiltinMethod::OpenFile),
     ("OpenFile", BuiltinMethod::OpenFile),
-    ("Прочитать", BuiltinMethod::JsonRead),
-    ("Read", BuiltinMethod::JsonRead),
-    ("Пропустить", BuiltinMethod::JsonSkip),
-    ("Skip", BuiltinMethod::JsonSkip),
+    ("Прочитать", BuiltinMethod::ReadNext),
+    ("Read", BuiltinMethod::ReadNext),
+    ("Пропустить", BuiltinMethod::SkipNode),
+    ("Skip", BuiltinMethod::SkipNode),
     ("ЗаписатьНачалоОбъекта", BuiltinMethod::WriteStartObject),
     ("WriteStartObject", BuiltinMethod::WriteStartObject),
     ("ЗаписатьКонецОбъекта", BuiltinMethod::WriteEndObject),
@@ -504,6 +533,40 @@ pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
     ("WritePropertyName", BuiltinMethod::WritePropertyName),
     ("ЗаписатьЗначение", BuiltinMethod::WriteJsonValue),
     ("WriteValue", BuiltinMethod::WriteJsonValue),
+    ("ПрочитатьАтрибут", BuiltinMethod::XmlReadAttribute),
+    ("ReadAttribute", BuiltinMethod::XmlReadAttribute),
+    ("КоличествоАтрибутов", BuiltinMethod::XmlAttributeCount),
+    ("AttributeCount", BuiltinMethod::XmlAttributeCount),
+    ("ИмяАтрибута", BuiltinMethod::XmlAttributeName),
+    ("AttributeName", BuiltinMethod::XmlAttributeName),
+    ("ЗначениеАтрибута", BuiltinMethod::XmlAttributeValue),
+    ("AttributeValue", BuiltinMethod::XmlAttributeValue),
+    ("ПерейтиКСодержимому", BuiltinMethod::XmlMoveToContent),
+    ("MoveToContent", BuiltinMethod::XmlMoveToContent),
+    ("ЗаписатьОбъявлениеXML", BuiltinMethod::WriteXmlDeclaration),
+    ("WriteXMLDeclaration", BuiltinMethod::WriteXmlDeclaration),
+    ("ЗаписатьНачалоЭлемента", BuiltinMethod::WriteStartElement),
+    ("WriteStartElement", BuiltinMethod::WriteStartElement),
+    ("ЗаписатьКонецЭлемента", BuiltinMethod::WriteEndElement),
+    ("WriteEndElement", BuiltinMethod::WriteEndElement),
+    ("ЗаписатьАтрибут", BuiltinMethod::WriteXmlAttribute),
+    ("WriteAttribute", BuiltinMethod::WriteXmlAttribute),
+    ("ЗаписатьТекст", BuiltinMethod::WriteXmlText),
+    ("WriteText", BuiltinMethod::WriteXmlText),
+    ("ЗаписатьКомментарий", BuiltinMethod::WriteXmlComment),
+    ("WriteComment", BuiltinMethod::WriteXmlComment),
+    ("ЗаписатьСекциюCDATA", BuiltinMethod::WriteCdataSection),
+    ("WriteCDATASection", BuiltinMethod::WriteCdataSection),
+    (
+        "ЗаписатьИнструкциюОбработки",
+        BuiltinMethod::WriteXmlProcessingInstruction,
+    ),
+    (
+        "WriteProcessingInstruction",
+        BuiltinMethod::WriteXmlProcessingInstruction,
+    ),
+    ("ЗаписатьБезОбработки", BuiltinMethod::WriteXmlRaw),
+    ("WriteRaw", BuiltinMethod::WriteXmlRaw),
 ];
 
 impl BuiltinMethod {
@@ -812,17 +875,78 @@ pub fn call_builtin_method(
         // у `ЗаписьJSON` — отдаёт накопленный текст.
         BuiltinMethod::Close => obj.close_object(),
 
+        // Имя метода общее для JSON и XML — ветвление по получателю, а не
+        // по имени: у платформы это ровно один метод.
         BuiltinMethod::SetString => {
-            crate::json::set_string(obj, args)?;
+            if crate::xml::is_xml_reader(obj) || crate::xml::is_xml_writer(obj) {
+                crate::xml::set_string(obj, args)?;
+            } else {
+                crate::json::set_string(obj, args)?;
+            }
             Ok(BslValue::Undefined)
         }
         BuiltinMethod::OpenFile => {
-            crate::json::open_file(obj, args)?;
+            if crate::xml::is_xml_reader(obj) || crate::xml::is_xml_writer(obj) {
+                crate::xml::open_file(obj, args)?;
+            } else {
+                crate::json::open_file(obj, args)?;
+            }
             Ok(BslValue::Undefined)
         }
-        BuiltinMethod::JsonRead => Ok(BslValue::Boolean(crate::json::read(obj)?)),
-        BuiltinMethod::JsonSkip => {
-            crate::json::skip(obj)?;
+        BuiltinMethod::ReadNext => {
+            if crate::xml::is_xml_reader(obj) {
+                crate::xml::read(obj)
+            } else {
+                Ok(BslValue::Boolean(crate::json::read(obj)?))
+            }
+        }
+        BuiltinMethod::SkipNode => {
+            if crate::xml::is_xml_reader(obj) {
+                crate::xml::skip(obj)?;
+            } else {
+                crate::json::skip(obj)?;
+            }
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::XmlReadAttribute => crate::xml::read_attribute(obj),
+        BuiltinMethod::XmlAttributeCount => crate::xml::attribute_count(obj),
+        BuiltinMethod::XmlAttributeName => crate::xml::attribute_name(obj, args),
+        BuiltinMethod::XmlAttributeValue => crate::xml::attribute_value(obj, args),
+        BuiltinMethod::XmlMoveToContent => crate::xml::move_to_content(obj),
+        BuiltinMethod::WriteXmlDeclaration => {
+            crate::xml::write_declaration(obj)?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::WriteStartElement => {
+            crate::xml::write_start_element(obj, args)?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::WriteEndElement => {
+            crate::xml::write_end_element(obj)?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::WriteXmlAttribute => {
+            crate::xml::write_attribute(obj, args)?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::WriteXmlText => {
+            crate::xml::write_text(obj, args)?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::WriteXmlComment => {
+            crate::xml::write_comment(obj, args)?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::WriteCdataSection => {
+            crate::xml::write_cdata(obj, args)?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::WriteXmlProcessingInstruction => {
+            crate::xml::write_processing_instruction(obj, args)?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::WriteXmlRaw => {
+            crate::xml::write_raw(obj, args)?;
             Ok(BslValue::Undefined)
         }
         BuiltinMethod::WriteStartObject => {

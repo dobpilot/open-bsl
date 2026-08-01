@@ -913,6 +913,30 @@ fn step(
                 reg_store(stack, d, settings)?;
                 frames[frame_idx].pc += 1;
             }
+            Instr::NewXmlReader { dst } => {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, BslValue::new_xml_reader())?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::NewXmlWriter { dst } => {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, BslValue::new_xml_writer())?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::NewXmlWriterSettings {
+                dst,
+                encoding,
+                version,
+                indent,
+            } => {
+                let enc = reg_load(stack, frames[frame_idx].reg_index(encoding))?;
+                let ver = reg_load(stack, frames[frame_idx].reg_index(version))?;
+                let ind = reg_load(stack, frames[frame_idx].reg_index(indent))?;
+                let settings = BslValue::new_xml_writer_settings(&enc, &ver, &ind)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, settings)?;
+                frames[frame_idx].pc += 1;
+            }
             Instr::NewTextWriter { dst, path } => {
                 let path = reg_load(stack, frames[frame_idx].reg_index(path))?;
                 let writer = BslValue::new_text_writer(&path)?;

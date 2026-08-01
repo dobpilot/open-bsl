@@ -101,6 +101,13 @@ pub enum RExpr {
     EnumMember(bsl_rt::EnumValue),
     NewJsonReader,
     NewJsonWriter,
+    NewXmlReader,
+    NewXmlWriter,
+    NewXmlWriterSettings {
+        encoding: Box<RExpr>,
+        version: Box<RExpr>,
+        indent: Box<RExpr>,
+    },
     NewJsonWriterSettings {
         line_break: Box<RExpr>,
         indent: Box<RExpr>,
@@ -312,7 +319,16 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
         RExpr::Field { obj, .. } => expr_uses_dynamic(obj),
         RExpr::NewArray { dims } => dims.iter().any(expr_uses_dynamic),
         RExpr::NewStructure { values, .. } => values.iter().any(expr_uses_dynamic),
-        RExpr::EnumMember(_) | RExpr::NewJsonReader | RExpr::NewJsonWriter => false,
+        RExpr::EnumMember(_)
+        | RExpr::NewJsonReader
+        | RExpr::NewJsonWriter
+        | RExpr::NewXmlReader
+        | RExpr::NewXmlWriter => false,
+        RExpr::NewXmlWriterSettings {
+            encoding,
+            version,
+            indent,
+        } => expr_uses_dynamic(encoding) || expr_uses_dynamic(version) || expr_uses_dynamic(indent),
         RExpr::NewJsonWriterSettings { line_break, indent } => {
             expr_uses_dynamic(line_break) || expr_uses_dynamic(indent)
         }

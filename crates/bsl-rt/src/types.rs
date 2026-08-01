@@ -44,6 +44,14 @@ pub enum TypeId {
     JsonValueType,
     JsonLineBreak,
     JsonDateFormat,
+
+    // --- XML ----------------------------------------------------------
+    // Та же пара написаний, что и у JSON: тип печатается с пробелом
+    // («Чтение XML»), значение — без («ЧтениеXML»). Измерено на 8.3.27.
+    XmlReader,
+    XmlWriter,
+    XmlWriterSettings,
+    XmlNodeType,
 }
 
 /// `(русское, английское)`. Русское — каноническое: именно оно уходит в
@@ -81,6 +89,14 @@ const NAMES: &[(TypeId, &str, &str)] = &[
     (TypeId::JsonValueType, "ТипЗначенияJSON", "JSONValueType"),
     (TypeId::JsonLineBreak, "ПереносСтрокJSON", "JSONLineBreak"),
     (TypeId::JsonDateFormat, "ФорматДатыJSON", "JSONDateFormat"),
+    (TypeId::XmlReader, "Чтение XML", "XMLReader"),
+    (TypeId::XmlWriter, "Запись XML", "XMLWriter"),
+    (
+        TypeId::XmlWriterSettings,
+        "Параметры записи XML",
+        "XMLWriterSettings",
+    ),
+    (TypeId::XmlNodeType, "ТипУзлаXML", "XMLNodeType"),
 ];
 
 impl TypeId {

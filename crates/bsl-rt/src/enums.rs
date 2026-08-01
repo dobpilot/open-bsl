@@ -42,6 +42,24 @@ pub enum EnumValue {
     DateFormatIso,
     DateFormatJavaScript,
     DateFormatMicrosoft,
+
+    // --- ТипУзлаXML ----------------------------------------------------
+    // Состав ВЫЯСНЕН перебором на 8.3.27, а не взят из документации:
+    // `НачалоСущности`, `Пробелы` и `ЗначащиеПробелы` платформа не знает,
+    // хотя `КонецСущности` у неё есть. Отсюда и несимметричный список.
+    XmlNothing,
+    XmlElementStart,
+    XmlElementEnd,
+    XmlText,
+    XmlCdataSection,
+    XmlComment,
+    XmlProcessingInstruction,
+    XmlDeclaration,
+    XmlAttribute,
+    XmlEntityEnd,
+    XmlEntityReference,
+    XmlDocumentType,
+    XmlNotation,
 }
 
 /// К какому перечислению принадлежит член — это же имя стоит слева от
@@ -51,6 +69,7 @@ pub enum EnumKind {
     JsonValueType,
     JsonLineBreak,
     JsonDateFormat,
+    XmlNodeType,
 }
 
 impl EnumKind {
@@ -60,6 +79,7 @@ impl EnumKind {
             EnumKind::JsonValueType => ("ТипЗначенияJSON", "JSONValueType"),
             EnumKind::JsonLineBreak => ("ПереносСтрокJSON", "JSONLineBreak"),
             EnumKind::JsonDateFormat => ("ФорматДатыJSON", "JSONDateFormat"),
+            EnumKind::XmlNodeType => ("ТипУзлаXML", "XMLNodeType"),
         }
     }
 }
@@ -192,6 +212,99 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "JavaScript",
         "JavaScript",
     ),
+    // Пятая колонка снова не производная от третьей: платформа печатает
+    // «Начало элемента», а не «НачалоЭлемента». Всё измерено.
+    (
+        EnumKind::XmlNodeType,
+        EnumValue::XmlNothing,
+        "Ничего",
+        "None",
+        "Ничего",
+    ),
+    (
+        EnumKind::XmlNodeType,
+        EnumValue::XmlElementStart,
+        "НачалоЭлемента",
+        "StartElement",
+        "Начало элемента",
+    ),
+    (
+        EnumKind::XmlNodeType,
+        EnumValue::XmlElementEnd,
+        "КонецЭлемента",
+        "EndElement",
+        "Конец элемента",
+    ),
+    (
+        EnumKind::XmlNodeType,
+        EnumValue::XmlText,
+        "Текст",
+        "Text",
+        "Текст",
+    ),
+    (
+        EnumKind::XmlNodeType,
+        EnumValue::XmlCdataSection,
+        "СекцияCDATA",
+        "CDATASection",
+        "Секция CDATA",
+    ),
+    (
+        EnumKind::XmlNodeType,
+        EnumValue::XmlComment,
+        "Комментарий",
+        "Comment",
+        "Комментарий",
+    ),
+    (
+        EnumKind::XmlNodeType,
+        EnumValue::XmlProcessingInstruction,
+        "ИнструкцияОбработки",
+        "ProcessingInstruction",
+        "Инструкция обработки",
+    ),
+    (
+        EnumKind::XmlNodeType,
+        EnumValue::XmlDeclaration,
+        "ОбъявлениеXML",
+        "XMLDeclaration",
+        "Объявление XML",
+    ),
+    (
+        EnumKind::XmlNodeType,
+        EnumValue::XmlAttribute,
+        "Атрибут",
+        "Attribute",
+        "Атрибут",
+    ),
+    (
+        EnumKind::XmlNodeType,
+        EnumValue::XmlEntityEnd,
+        "КонецСущности",
+        "EndEntity",
+        "Конец сущности",
+    ),
+    (
+        EnumKind::XmlNodeType,
+        EnumValue::XmlEntityReference,
+        "СсылкаНаСущность",
+        "EntityReference",
+        "Ссылка на сущность",
+    ),
+    (
+        EnumKind::XmlNodeType,
+        EnumValue::XmlDocumentType,
+        "ОпределениеТипаДокумента",
+        "DocumentType",
+        "Определение типа документа",
+    ),
+    (
+        EnumKind::XmlNodeType,
+        EnumValue::XmlNotation,
+        "Нотация",
+        "Notation",
+        "Нотация",
+    ),
     (
         EnumKind::JsonDateFormat,
         EnumValue::DateFormatMicrosoft,
@@ -210,6 +323,8 @@ pub const ENUM_NAMES: &[(&str, EnumKind)] = &[
     ("JSONLineBreak", EnumKind::JsonLineBreak),
     ("ФорматДатыJSON", EnumKind::JsonDateFormat),
     ("JSONDateFormat", EnumKind::JsonDateFormat),
+    ("ТипУзлаXML", EnumKind::XmlNodeType),
+    ("XMLNodeType", EnumKind::XmlNodeType),
 ];
 
 /// Перечисление по имени слева от точки. Регистронезависимо и на обоих

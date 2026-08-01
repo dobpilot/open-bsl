@@ -55,6 +55,56 @@ pub enum BslObject {
     /// `ПараметрыЗаписиJSON` — простой набор значений, менять его после
     /// создания незачем, поэтому без `RefCell`.
     JsonWriterSettings(crate::json::JsonWriterSettings),
+
+    /// `ЧтениеXML`. Как и у JSON, разборщик появляется только после
+    /// `УстановитьСтроку`/`ОткрытьФайл`.
+    XmlReader(RefCell<XmlReaderState>),
+    /// `ЗаписьXML`.
+    XmlWriter(RefCell<Option<crate::xml::XmlWriter>>),
+    /// `ПараметрыЗаписиXML`.
+    XmlWriterSettings(crate::xml::XmlWriterSettings),
+}
+
+/// Состояние `ЧтениеXML`.
+///
+/// Кроме текущего события хранится ещё две вещи, и обе — из-за того, что у
+/// платформы курсор один на две сущности. `attr_cursor` — позиция обхода
+/// `ПрочитатьАтрибут`: пока он стоит на атрибуте, `ТипУзла`, `Имя` и
+/// `Значение` показывают АТРИБУТ, а не сам элемент (измерено). `depth` —
+/// глубина открытых элементов на момент текущего события: по ней
+/// `Пропустить` понимает, до какого закрывающего тега глотать, и она обязана
+/// быть снята ДО того, как разборщик уйдёт вперёд.
+#[derive(Debug, Default)]
+pub struct XmlReaderState {
+    pub parser: Option<crate::xml::XmlParser>,
+    pub current: Option<crate::xml::XmlEvent>,
+    pub attr_cursor: Option<usize>,
+    pub depth: usize,
+}
+
+impl XmlReaderState {
+    /// Свежее состояние над готовым разборщиком.
+    pub fn over(parser: crate::xml::XmlParser) -> Self {
+        XmlReaderState {
+            parser: Some(parser),
+            current: None,
+            attr_cursor: None,
+            depth: 0,
+        }
+    }
+
+    /// Атрибуты текущего узла; у неэлементного узла их нет.
+    pub fn attrs(&self) -> &[crate::xml::XmlAttr] {
+        match &self.current {
+            Some(crate::xml::XmlEvent::ElementStart { attrs, .. }) => attrs,
+            _ => &[],
+        }
+    }
+
+    /// Атрибут, на котором стоит курсор `ПрочитатьАтрибут`.
+    pub fn current_attr(&self) -> Option<&crate::xml::XmlAttr> {
+        self.attr_cursor.and_then(|i| self.attrs().get(i))
+    }
 }
 
 /// Состояние `ЧтениеJSON`: сам разборщик и последнее прочитанное событие.
