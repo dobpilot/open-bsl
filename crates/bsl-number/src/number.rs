@@ -339,6 +339,54 @@ impl BslNumber {
         self.div_to_scale(other, DIV_SCALE)
     }
 
+    /// Остаток от деления (`%`).
+    ///
+    /// Считается ТОЧНО, на общей шкале мантисс, а не через `div`: деление
+    /// здесь округляет на 27-м знаке, и усечённое частное могло бы
+    /// промахнуться на единицу там, где точное частное лежит к целому
+    /// ближе, чем на этот знак. С общей шкалой ни округления, ни поправок
+    /// не нужно вовсе: `a % b` целых мантисс и есть ответ.
+    ///
+    /// Знак результата — по ДЕЛИМОМУ, и это ИЗМЕРЕНО на 8.3.27 (замеры
+    /// `MOD.NEGATIVE_LEFT`, `MOD.NEGATIVE_RIGHT`, `MOD.BOTH_NEGATIVE`):
+    /// `-7 % 2` даёт -1, `7 % -2` даёт 1. Ровно так же ведёт себя `%` у
+    /// целых в Rust, поэтому мантиссы делятся напрямую.
+    ///
+    /// Дробные операнды допустимы: `7.5 % 2` даёт 1.5, `7 % 2.5` — 2
+    /// (замеры `MOD.FRACTIONAL_LEFT`/`MOD.FRACTIONAL_RIGHT`).
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::DivideByZero`], если делитель ноль (измерено: платформа
+    /// тоже отказывает), либо [`NumError::ScaleOverflow`] при выходе
+    /// общей шкалы за предел.
+    pub fn rem(&self, other: &Self) -> Result<Self, NumError> {
+        if other.is_zero() {
+            return Err(NumError::DivideByZero);
+        }
+        let s = self.scale().max(other.scale());
+        check_scale(s)?;
+
+        if let (
+            BslNumber::Small { m: am, scale: asc },
+            BslNumber::Small { m: bm, scale: bsc },
+        ) = (self, other)
+        {
+            if let (Some(a), Some(b)) = (
+                scale_up_i128(am.get(), s - asc),
+                scale_up_i128(bm.get(), s - bsc),
+            ) {
+                return Ok(BslNumber::small(a % b, s));
+            }
+        }
+
+        let (a, a_scale) = self.big_parts();
+        let (b, b_scale) = other.big_parts();
+        let am = scale_up_big(&a, s - a_scale);
+        let bm = scale_up_big(&b, s - b_scale);
+        Ok(BslNumber::big(&*am % &*bm, s))
+    }
+
     fn div_to_scale(&self, other: &Self, target: i32) -> Result<Self, NumError> {
         // value = a.m * 10^(target + b.scale - a.scale) / b.m, округлить half-up
         let k = target + other.scale() - self.scale();
@@ -872,6 +920,57 @@ mod tests {
     use num_traits::Zero;
 
     use super::{bigint_is_divisible_by_10, i128_is_divisible_by_10, BslNumber};
+
+    /// Знак остатка — по ДЕЛИМОМУ, дробные операнды допустимы. Всё
+    /// перечисленное измерено на 8.3.27, замеры `MOD.*`.
+    #[test]
+    fn remainder_takes_the_sign_of_the_dividend() {
+        let cases = [
+            ("7", "2", "1"),
+            ("-7", "2", "-1"),
+            ("7", "-2", "1"),
+            ("-7", "-2", "-1"),
+            ("7.5", "2", "1.5"),
+            ("7", "2.5", "2"),
+            ("0", "5", "0"),
+            // Точная арифметика: 10^30 не помещается в i128, и остаток
+            // обязан считаться на больших числах без потери разрядов.
+            ("1000000000000000000000000000000", "7", "1"),
+        ];
+        for (a, b, want) in cases {
+            let a = BslNumber::parse_canonical(a).expect("делимое");
+            let b = BslNumber::parse_canonical(b).expect("делитель");
+            assert_eq!(a.rem(&b).expect("остаток").to_canonical(), want);
+        }
+    }
+
+    /// Остаток от деления на ноль — ошибка, а не ноль и не паника
+    /// (измерено: платформа тоже отказывает).
+    #[test]
+    fn remainder_by_zero_is_an_error() {
+        let a = BslNumber::parse_canonical("7").unwrap();
+        let z = BslNumber::parse_canonical("0").unwrap();
+        assert!(a.rem(&z).is_err());
+    }
+
+    /// Тождество `a = (a / b) * b + (a % b)` при усечении частного к нулю.
+    /// Проверяется перебором, а не тремя примерами: именно здесь вылезла бы
+    /// ошибка выравнивания масштабов.
+    #[test]
+    fn remainder_agrees_with_truncated_division() {
+        for a in -25i64..=25 {
+            for b in -7i64..=7 {
+                if b == 0 {
+                    continue;
+                }
+                let an = BslNumber::from_i64(a);
+                let bn = BslNumber::from_i64(b);
+                let r = an.rem(&bn).expect("остаток");
+                let expected = BslNumber::from_i64(a % b);
+                assert_eq!(r.to_canonical(), expected.to_canonical(), "{a} % {b}");
+            }
+        }
+    }
 
     #[test]
     fn fast_divisibility_by_ten_matches_i128_remainder() {

@@ -657,6 +657,422 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
     // платформы есть, у нас его нет — что он делает, не измерено, а
     // заводить объект по догадке значило бы нарушить то самое правило,
     // ради которого этот файл существует.
+    // --- Приведение типов, арифметика и равенство ----------------------
+    // Снято на 8.3.27 в шесть заходов. Правило вышло несимметричным, и
+    // именно поэтому оно измерялось, а не выводилось: СТРОКА СЛЕВА тянет
+    // правый операнд к себе через `Строка()` (вместе с разделителями
+    // групп), а во всех остальных случаях арифметика тянет операнды к
+    // ЧИСЛУ — и строку, и булево.
+    //
+    // Равенство — третье, ОТДЕЛЬНОЕ отношение: булево оно с числом
+    // сравнивает, строку — нет, а ключи `Соответствие` не уравнивает вовсе
+    // (см. `EQ.MAP.*`). Сравнение «больше/меньше» не приводит ничего.
+    Anchor {
+        id: "CONCAT.RIGHT.INT",
+        expect: "[5]",
+        note: "строка слева тянет правый операнд к себе",
+    },
+    Anchor {
+        id: "CONCAT.RIGHT.THOUSANDS",
+        expect: "[1<НП>000,5] | [1<НП>000,5]",
+        note: "приведение — ровно Строка(): с РАЗДЕЛИТЕЛЕМ ГРУПП, неразрывным пробелом",
+    },
+    Anchor {
+        id: "CONCAT.RIGHT.MILLION",
+        expect: "[1<НП>000<НП>000] | [1<НП>000<НП>000]",
+        note: "и в целом числе группы тоже расставляются",
+    },
+    Anchor {
+        id: "CONCAT.RIGHT.THIRD",
+        expect: "[0,333333333333333333333333333] | [0,333333333333333333333333333]",
+        note: "дробь уходит всеми 27 знаками, с запятой",
+    },
+    Anchor {
+        id: "CONCAT.RIGHT.NEGATIVE",
+        expect: "[-2,5] | [-2,5]",
+        note: "минус на месте, разделитель дробной части — запятая",
+    },
+    Anchor {
+        id: "CONCAT.RIGHT.ZERO",
+        expect: "[0] | [0]",
+        note: "ноль без хвоста",
+    },
+    Anchor {
+        id: "CONCAT.RIGHT.TRUE",
+        expect: "[Да] | [Да]",
+        note: "булево печатается как Да, а не true",
+    },
+    Anchor {
+        id: "CONCAT.RIGHT.FALSE",
+        expect: "[Нет] | [Нет]",
+        note: "и как Нет",
+    },
+    Anchor {
+        id: "CONCAT.RIGHT.UNDEFINED",
+        expect: "[] | []",
+        note: "Неопределено даёт ПУСТУЮ строку, а не слово",
+    },
+    Anchor {
+        id: "CONCAT.RIGHT.NULL",
+        expect: "[] | []",
+        note: "и Null тоже пустую — отладочное «Null» сюда попадать не должно",
+    },
+    Anchor {
+        id: "CONCAT.RIGHT.DATE",
+        expect: "[15.01.2024 10:30:00] | [15.01.2024 10:30:00]",
+        note: "дата в представлении по умолчанию",
+    },
+    Anchor {
+        id: "CONCAT.RIGHT.EMPTY_DATE",
+        expect: "[01.01.0001 0:00:00] | [01.01.0001 0:00:00]",
+        note: "пустая дата печатается целиком, а не пустой строкой",
+    },
+    Anchor {
+        id: "CONCAT.RIGHT.ARRAY",
+        expect: "[Массив] | [Массив]",
+        note: "коллекция даёт имя своего типа",
+    },
+    Anchor {
+        id: "CONCAT.RIGHT.STRUCTURE",
+        expect: "[Структура] | [Структура]",
+        note: "и структура тоже",
+    },
+    Anchor {
+        id: "CONCAT.RIGHT.TYPE",
+        expect: "[Число] | [Число]",
+        note: "значение-тип печатается своим именем",
+    },
+    Anchor {
+        id: "CONCAT.RIGHT.ENUM",
+        expect: "[Строка] | [Строка]",
+        note: "член перечисления — своим представлением",
+    },
+    Anchor {
+        id: "CONCAT.LEFT.INT",
+        expect: "<ошибка>",
+        note: "число слева НЕ приводит строку справа: это арифметика и отказ",
+    },
+    Anchor {
+        id: "CONCAT.LEFT.TRUE",
+        expect: "<ошибка>",
+        note: "булево слева — то же самое",
+    },
+    Anchor {
+        id: "CONCAT.LEFT.UNDEFINED",
+        expect: "<ошибка>",
+        note: "Неопределено в арифметике не участвует вовсе",
+    },
+    Anchor {
+        id: "CONCAT.LEFT.DATE",
+        expect: "<ошибка>",
+        note: "дата плюс нечисловая строка — отказ",
+    },
+    Anchor {
+        id: "CONCAT.LEFT.NUMERIC_STRING",
+        expect: "51",
+        note: "строка слева побеждает даже когда похожа на число: 5 и 1 склеиваются",
+    },
+    Anchor {
+        id: "CONCAT.ORDER.NUM_NUM_STR",
+        expect: "<ошибка>",
+        note: "левоассоциативность: 1+2 сначала складываются, и 3 + строка уже отказ",
+    },
+    Anchor {
+        id: "CONCAT.ORDER.STR_NUM_NUM",
+        expect: "х12",
+        note: "а слева направо от строки склейка идёт до конца",
+    },
+    Anchor {
+        id: "CONCAT.OTHER.MINUS",
+        expect: "4",
+        note: "у вычитания приведение ОБРАТНОЕ: строка идёт в число",
+    },
+    Anchor {
+        id: "CONCAT.OTHER.TIMES",
+        expect: "10",
+        note: "у умножения так же",
+    },
+    Anchor {
+        id: "CONCAT.OTHER.CONCAT_THEN_MINUS",
+        expect: "4",
+        note: "склейка, затем разбор обратно в число — оба приведения в одной строке",
+    },
+    Anchor {
+        id: "CONCAT.IDIOM.EMPTY_LEFT",
+        expect: "[1<НП>000,5]",
+        note: "«пустая строка плюс значение» — обычный способ привести к строке",
+    },
+    Anchor {
+        id: "CONCAT.IDIOM.RESULT_TYPE",
+        expect: "Строка",
+        note: "и результат действительно Строка",
+    },
+    Anchor {
+        id: "ARITH.STR.DIVIDE",
+        expect: "2,5",
+        note: "деление приводит строку так же",
+    },
+    Anchor {
+        id: "ARITH.STR.RIGHT_SIDE",
+        expect: "-4",
+        note: "и справа от оператора тоже",
+    },
+    Anchor {
+        id: "ARITH.STR.NOT_A_NUMBER",
+        expect: "<ошибка>",
+        note: "нечисловая строка — отказ, молчаливого нуля нет",
+    },
+    Anchor {
+        id: "ARITH.STR.EMPTY",
+        expect: "<ошибка>",
+        note: "пустая строка числом не считается",
+    },
+    Anchor {
+        id: "ARITH.STR.PADDED",
+        expect: "4",
+        note: "пробелы по краям обрезаются",
+    },
+    Anchor {
+        id: "ARITH.STR.DOT_DECIMAL",
+        expect: "4,5",
+        note: "точка как разделитель дробной части принимается",
+    },
+    Anchor {
+        id: "ARITH.STR.COMMA_DECIMAL",
+        expect: "4,5",
+        note: "и запятая тоже",
+    },
+    Anchor {
+        id: "ARITH.STR.ROUND_TRIP",
+        expect: "1<НП>000",
+        note: "напечатанное платформой число разбирается обратно — вместе с разделителями групп",
+    },
+    Anchor {
+        id: "ARITH.STR.UNARY_MINUS",
+        expect: "-5",
+        note: "унарный минус строку тоже приводит",
+    },
+    Anchor {
+        id: "ARITH.BOOL.PLUS",
+        expect: "2",
+        note: "Истина в арифметике — единица",
+    },
+    Anchor {
+        id: "ARITH.UNDEFINED.PLUS",
+        expect: "<ошибка>",
+        note: "а Неопределено — отказ, нулём оно не притворяется",
+    },
+    Anchor {
+        id: "ARITH.DATE.PLUS_STRING",
+        expect: "15.01.2024 10:31:00",
+        note: "дата плюс ЧИСЛОВАЯ строка — сдвиг на секунды",
+    },
+    Anchor {
+        id: "ARITH.NUM.PLUS_NUMERIC_STRING",
+        expect: "8",
+        note: "число плюс числовая строка — арифметика, а не склейка",
+    },
+    Anchor {
+        id: "ARITH.BOOL.PLUS_NUMERIC_STRING",
+        expect: "4",
+        note: "оба операнда приводятся к числу разом",
+    },
+    Anchor {
+        id: "ARITH.STR.PLUS_BOOL",
+        expect: "5Да",
+        note: "строка слева побеждает и булево: получается 5Да",
+    },
+    Anchor {
+        id: "ARITH.BOOL.MINUS",
+        expect: "0",
+        note: "приведение булева — свойство всей арифметики, не одного сложения",
+    },
+    Anchor {
+        id: "ARITH.BOOL.TIMES",
+        expect: "2",
+        note: "и умножения",
+    },
+    Anchor {
+        id: "ARITH.BOOL.FALSE_PLUS",
+        expect: "1",
+        note: "Ложь — ноль",
+    },
+    Anchor {
+        id: "ARITH.BOOL.UNARY_MINUS",
+        expect: "-1",
+        note: "унарный минус от Истина даёт минус единицу",
+    },
+    Anchor {
+        id: "ARITH.STR.MODULO",
+        expect: "1",
+        note: "остаток приводит строку так же, как остальная арифметика",
+    },
+    Anchor {
+        id: "ARITH.STR.COMPARE_GREATER",
+        expect: "<ошибка>",
+        note: "СРАВНЕНИЕ приведения НЕ делает: строка против числа — отказ",
+    },
+    Anchor {
+        id: "ARITH.STR.COMPARE_EQUAL",
+        expect: "Нет",
+        note: "а равенство со строкой просто ложно, без отказа",
+    },
+    Anchor {
+        id: "ARITH.BOOL.COMPARE_EQUAL",
+        expect: "Да",
+        note: "а вот булево с числом равенство сравнивает ЧИСЛЕННО — отсюда расщепление отношений",
+    },
+    Anchor {
+        id: "MOD.POSITIVE",
+        expect: "1",
+        note: "обычный случай",
+    },
+    Anchor {
+        id: "MOD.NEGATIVE_LEFT",
+        expect: "-1",
+        note: "знак результата — по ДЕЛИМОМУ, как у % в Rust и C",
+    },
+    Anchor {
+        id: "MOD.NEGATIVE_RIGHT",
+        expect: "1",
+        note: "знак делителя на результат не влияет",
+    },
+    Anchor {
+        id: "MOD.BOTH_NEGATIVE",
+        expect: "-1",
+        note: "и здесь знак берётся у делимого",
+    },
+    Anchor {
+        id: "MOD.FRACTIONAL_LEFT",
+        expect: "1,5",
+        note: "дробное делимое допустимо, остаток тоже дробный",
+    },
+    Anchor {
+        id: "MOD.FRACTIONAL_RIGHT",
+        expect: "2",
+        note: "дробный делитель тоже: 7 = 2*2,5 + 2",
+    },
+    Anchor {
+        id: "MOD.BY_ZERO",
+        expect: "<ошибка>",
+        note: "деление на ноль — отказ",
+    },
+    Anchor {
+        id: "MOD.ZERO_LEFT",
+        expect: "0",
+        note: "ноль по модулю чего угодно — ноль",
+    },
+    Anchor {
+        id: "MOD.PRECEDENCE_PLUS",
+        expect: "4",
+        note: "приоритет выше сложения: 2 + (6 % 4)",
+    },
+    Anchor {
+        id: "MOD.PRECEDENCE_TIMES",
+        expect: "2",
+        note: "наравне с умножением и левоассоциативен: (10 % 3) * 2",
+    },
+    Anchor {
+        id: "MOD.PRECEDENCE_DIVIDE",
+        expect: "1",
+        note: "и наравне с делением: (100 / 10) % 3",
+    },
+    Anchor {
+        id: "MOD.BIG_NUMBER",
+        expect: "1",
+        note: "точная арифметика: остаток от 10^30 считается без потери разрядов",
+    },
+    Anchor {
+        id: "EQ.BOOL.TRUE_ONE",
+        expect: "Да",
+        note: "булево с числом сравнивается ЧИСЛЕННО: Истина это единица",
+    },
+    Anchor {
+        id: "EQ.BOOL.FALSE_ZERO",
+        expect: "Да",
+        note: "а Ложь — ноль",
+    },
+    Anchor {
+        id: "EQ.BOOL.TRUE_TWO",
+        expect: "Нет",
+        note: "именно численно, а не «по истинности»: двойке Истина НЕ равна",
+    },
+    Anchor {
+        id: "EQ.BOOL.TRUE_ONE_FLOAT",
+        expect: "Да",
+        note: "масштаб записи числа роли не играет",
+    },
+    Anchor {
+        id: "EQ.BOOL.TRUE_NOT_ZERO",
+        expect: "Да",
+        note: "и <> работает согласованно",
+    },
+    Anchor {
+        id: "EQ.BOOL.ONE_TRUE",
+        expect: "Да",
+        note: "порядок операндов ничего не меняет",
+    },
+    Anchor {
+        id: "EQ.STRING.NUMBER",
+        expect: "Нет",
+        note: "строка при этом НЕ приводится: числу она не равна",
+    },
+    Anchor {
+        id: "EQ.STRING.BOOL",
+        expect: "Нет",
+        note: "и булеву тоже, даже когда написана его же словом",
+    },
+    Anchor {
+        id: "EQ.STRING.UNDEFINED",
+        expect: "Нет",
+        note: "пустая строка не равна Неопределено",
+    },
+    Anchor {
+        id: "EQ.NULL.UNDEFINED",
+        expect: "Нет",
+        note: "Null и Неопределено — разные значения",
+    },
+    Anchor {
+        id: "EQ.NUMBER.UNDEFINED",
+        expect: "Нет",
+        note: "ноль не равен Неопределено",
+    },
+    Anchor {
+        id: "EQ.DATE.NUMBER",
+        expect: "Нет",
+        note: "пустая дата нулю не равна, хотя внутри отсчёт и нулевой",
+    },
+    Anchor {
+        id: "EQ.NUMBER.SAME_VALUE",
+        expect: "Да",
+        note: "числа равны по значению, а не по записи",
+    },
+    Anchor {
+        id: "EQ.ARRAY.IDENTITY",
+        expect: "Нет|Да",
+        note: "у коллекций равенство — ТОЖДЕСТВО объекта: два пустых массива не равны",
+    },
+    Anchor {
+        id: "EQ.MAP.BOOL_KEY_BY_NUMBER",
+        expect: "1|",
+        note: "РЕШАЮЩИЙ замер: по единице булев ключ НЕ находится",
+    },
+    Anchor {
+        id: "EQ.MAP.BOTH_KEYS",
+        expect: "2|по булеву|по числу",
+        note: "и лежат они как ДВА разных ключа — равенство и тождество ключей разные отношения",
+    },
+    Anchor {
+        id: "EQ.MAP.STRING_AND_NUMBER",
+        expect: "2|по строке|по числу",
+        note: "строка и число — тоже разные ключи",
+    },
+    Anchor {
+        id: "EQ.ARRAY.FIND_BOOL_BY_NUMBER",
+        expect: "",
+        note: "поиск идёт по строгому отношению: булево единицей не находится (у нас Массив.Найти пока нет)",
+    },
+
     Anchor {
         id: "XML.ENUM.NODE_TYPE.NOTHING",
         expect: "Ничего",

@@ -55,6 +55,7 @@ pub const OPCODES: &[&str] = &[
     "Sub",
     "Mul",
     "Div",
+    "Mod",
     "Neg",
     "Not",
     "Eq",
@@ -332,6 +333,7 @@ fn write_instr(instr: &Instr) -> String {
         Instr::Sub { dst, a, b } => format!("Sub dst={dst} a={a} b={b}"),
         Instr::Mul { dst, a, b } => format!("Mul dst={dst} a={a} b={b}"),
         Instr::Div { dst, a, b } => format!("Div dst={dst} a={a} b={b}"),
+        Instr::Mod { dst, a, b } => format!("Mod dst={dst} a={a} b={b}"),
         Instr::Neg { dst, src } => format!("Neg dst={dst} src={src}"),
         Instr::Not { dst, src } => format!("Not dst={dst} src={src}"),
         Instr::Eq { dst, a, b } => format!("Eq dst={dst} a={a} b={b}"),
@@ -1034,6 +1036,11 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
             a: a(&f)?,
             b: b(&f)?,
         },
+        "Mod" => Instr::Mod {
+            dst: dst(&f)?,
+            a: a(&f)?,
+            b: b(&f)?,
+        },
         "Neg" => Instr::Neg {
             dst: dst(&f)?,
             src: src(&f)?,
@@ -1226,6 +1233,8 @@ mod tests {
         // Литералы всех видов, включая дату и строку с кавычками.
         "а = Истина; б = Ложь; в = Неопределено; г = Null;\n\
          д = '20240115103000'; е = \"строка с \"\"кавычками\"\" и ;\";\n",
+        // Остаток от деления — свой опкод, и в корпусе он обязан быть.
+        "х = 7 % 2;\nу = -7 % 2 + 10 % 3 * 2;\n",
         // Ветвление и оба вида короткого замыкания.
         "Если 1 > 0 Тогда х = 1; ИначеЕсли 2 > 0 Тогда х = 2; Иначе х = 3; КонецЕсли;\n",
         // Числовой цикл с телом и заведомо пустой (для NumericForNextI64).

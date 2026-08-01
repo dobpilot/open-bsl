@@ -507,6 +507,11 @@ pub fn format_value(v: &BslValue, spec: Option<&str>) -> RtResult<String> {
             };
             Ok(fmt.text(*b))
         }
+        // `Строка(Null)` — ПУСТАЯ строка, как и `Строка(Неопределено)`
+        // (измерено, `CONCAT.RIGHT.NULL`). Через `Display` сюда попадало бы
+        // отладочное «Null»: он для человека за отладчиком, а не для
+        // пользовательского вывода.
+        BslValue::Null => Ok(String::new()),
         other => Ok(other.to_string()),
     }
 }

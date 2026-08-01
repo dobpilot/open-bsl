@@ -32,6 +32,8 @@ pub enum TokenKind {
     Minus,
     Star,
     Slash,
+    /// `%` — остаток от деления.
+    Percent,
     Eq,
     NotEq,
     Lt,

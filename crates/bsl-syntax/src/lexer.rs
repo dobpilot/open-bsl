@@ -133,6 +133,10 @@ impl<'src> Lexer<'src> {
                 self.bump();
                 Ok(self.tok(TokenKind::Slash, start))
             }
+            '%' => {
+                self.bump();
+                Ok(self.tok(TokenKind::Percent, start))
+            }
             '=' => {
                 self.bump();
                 Ok(self.tok(TokenKind::Eq, start))

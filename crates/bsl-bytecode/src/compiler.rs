@@ -937,6 +937,7 @@ fn binop_instr(op: BinaryOp, dst: u8, a: u8, b: u8) -> Instr {
         BinaryOp::Sub => Instr::Sub { dst, a, b },
         BinaryOp::Mul => Instr::Mul { dst, a, b },
         BinaryOp::Div => Instr::Div { dst, a, b },
+        BinaryOp::Mod => Instr::Mod { dst, a, b },
         BinaryOp::Eq => Instr::Eq { dst, a, b },
         BinaryOp::NotEq => Instr::NotEq { dst, a, b },
         BinaryOp::Lt => Instr::Lt { dst, a, b },

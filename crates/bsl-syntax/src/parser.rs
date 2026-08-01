@@ -497,6 +497,7 @@ impl<'src> Parser<'src> {
             let op = match self.peek().kind {
                 TokenKind::Star => BinaryOp::Mul,
                 TokenKind::Slash => BinaryOp::Div,
+                TokenKind::Percent => BinaryOp::Mod,
                 _ => break,
             };
             self.bump();

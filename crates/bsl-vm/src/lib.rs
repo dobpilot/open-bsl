@@ -591,13 +591,17 @@ fn step(
                 binop(frames, stack, frame_idx, dst, a, b, BslValue::mul)?;
                 frames[frame_idx].pc += 1;
             }
+            Instr::Mod { dst, a, b } => {
+                binop(frames, stack, frame_idx, dst, a, b, BslValue::rem)?;
+                frames[frame_idx].pc += 1;
+            }
             Instr::Div { dst, a, b } => {
                 binop(frames, stack, frame_idx, dst, a, b, BslValue::div)?;
                 frames[frame_idx].pc += 1;
             }
             Instr::Neg { dst, src } => {
                 let s = frames[frame_idx].reg_index(src);
-                let v = reg_load(stack, s)?.neg()?;
+                let v = neg_op(&reg_load(stack, s)?)?;
                 let d = frames[frame_idx].reg_index(dst);
                 reg_store(stack, d, v)?;
                 frames[frame_idx].pc += 1;
@@ -1533,11 +1537,84 @@ fn add_op(
                 unreachable!("типы проверены выше")
             };
             stack[d] = BslValue::Str(left.append(right));
-        } else {
+        } else if matches!(stack.get(ia), Some(BslValue::Str(_))) {
+            // Строка СЛЕВА решает исход: правый операнд приводится к строке
+            // и приклеивается, каким бы он ни был. Измерено на 8.3.27 по
+            // всем типам сразу — и приведение оказалось ровно `Строка()`,
+            // вместе с разделителями групп («Сумма: » + 1000.5 даёт
+            // «Сумма: 1 000,5» с НЕРАЗРЫВНЫМ пробелом внутри). Поэтому
+            // здесь именно `format_value`, а не своё представление числа.
             let av = reg_load(stack, ia)?;
-            reg_store(stack, d, av.add(&bv)?)?;
+            let BslValue::Str(left) = av else {
+                unreachable!("тип проверен выше")
+            };
+            let right = bsl_format::format_value(&bv, None)?;
+            let joined = left.append(&bsl_rt::BslString::from_str(&right));
+            reg_store(stack, d, BslValue::Str(joined))?;
+        } else {
+            // Тот же порядок, что и в `binop`: сначала как есть, приведение
+            // — только после отказа. Строка слева сюда уже не попадает (её
+            // разобрала ветка выше), поэтому подменить склейку арифметикой
+            // этот повтор не может.
+            let av = reg_load(stack, ia)?;
+            let sum = match av.add(&bv) {
+                Ok(v) => v,
+                Err(first) => {
+                    if needs_arith_coercion(&av) || needs_arith_coercion(&bv) {
+                        arith(&av)?.add(arith(&bv)?.as_ref())?
+                    } else {
+                        return Err(first);
+                    }
+                }
+            };
+            reg_store(stack, d, sum)?;
         }
     Ok(())
+}
+
+/// Операнд арифметики после приведения.
+///
+/// Платформа тянет к числу и строку, и булево: `5 + "3"` даёт 8,
+/// `Истина + 1` — 2, `-Истина` — минус единицу (всё измерено). Разбор
+/// строки — тот же, что у `Число()`: с обрезкой пробелов, точкой ИЛИ
+/// запятой и разделителями групп, так что `("" + 1000.5) - 0.5` честно
+/// возвращает 1000.
+///
+/// `Cow` здесь не украшение: приведение нужно РЕДКО, а сложение чисел
+/// лежит на самом горячем пути, и лишней копии значения на нём быть не
+/// должно.
+#[inline]
+fn arith(v: &BslValue) -> Result<std::borrow::Cow<'_, BslValue>, RtError> {
+    match v {
+        BslValue::Str(s) => {
+            let n = bsl_format::parse_number(&s.to_string(), &bsl_format::NumberFormat::default())
+                .map_err(RtError::Num)?;
+            Ok(std::borrow::Cow::Owned(BslValue::Number(n)))
+        }
+        // Истина — единица, Ложь — ноль.
+        BslValue::Boolean(b) => Ok(std::borrow::Cow::Owned(BslValue::Number(
+            bsl_number::BslNumber::from_i64(i64::from(*b)),
+        ))),
+        _ => Ok(std::borrow::Cow::Borrowed(v)),
+    }
+}
+
+/// Тело инструкции `Neg`. Отдельной функцией по той же причине, что и
+/// [`add_op`]: её зовут и интерпретатор, и шим JIT-а.
+fn neg_op(v: &BslValue) -> Result<BslValue, RtError> {
+    // Тот же порядок, что в `binop`: сначала как есть. Унарный минус лежит
+    // на горячем пути не меньше сложения (`flip = -flip` в цикле), и
+    // строить `Cow` ради заведомого числа он не должен.
+    match v.neg() {
+        Ok(r) => Ok(r),
+        Err(first) => {
+            if needs_arith_coercion(v) {
+                arith(v)?.neg()
+            } else {
+                Err(first)
+            }
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1552,10 +1629,35 @@ fn binop(
 ) -> Result<(), RtError> {
     let av = reg_load(stack, frames[frame_idx].reg_index(a))?;
     let bv = reg_load(stack, frames[frame_idx].reg_index(b))?;
-    let result = f(&av, &bv)?;
+    // Приведение строк и булевых к числу — свойство ВСЕЙ арифметики, а не
+    // одного сложения: измерены `"5" - 1`, `"5" * 2`, `"5" / 2`,
+    // `Истина - 1` и `Истина * 2`.
+    //
+    // Порядок здесь ради ЦЕНЫ: сначала операция пробуется как есть, и
+    // только её отказ включает приведение. Пара чисел — подавляющее
+    // большинство вызовов — не платит за приведение вообще ничего, даже
+    // проверки тега. Повтор безопасен, потому что операции над значениями
+    // чистые: неудачная попытка ничего не меняет.
+    let result = match f(&av, &bv) {
+        Ok(v) => v,
+        Err(first) => {
+            if needs_arith_coercion(&av) || needs_arith_coercion(&bv) {
+                f(arith(&av)?.as_ref(), arith(&bv)?.as_ref())?
+            } else {
+                return Err(first);
+            }
+        }
+    };
     let d = frames[frame_idx].reg_index(dst);
     reg_store(stack, d, result)?;
     Ok(())
+}
+
+/// Нужно ли значению приведение перед арифметикой. Вынесено, чтобы горячий
+/// путь не звал [`arith`] ради заведомо чисел.
+#[inline(always)]
+fn needs_arith_coercion(v: &BslValue) -> bool {
+    matches!(v, BslValue::Str(_) | BslValue::Boolean(_))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1590,6 +1692,92 @@ mod tests {
         let resolved = resolve_program(&prog.items).unwrap_or_else(|e| panic!("sema error: {e:?}"));
         let program = compile_program(&resolved).unwrap_or_else(|e| panic!("compile error: {e:?}"));
         run_program(&program).unwrap_or_else(|e| panic!("runtime error: {e:?}"))
+    }
+
+    /// Строка СЛЕВА тянет правый операнд к себе, и приведение это ровно
+    /// `Строка()` — вместе с разделителем групп. Замеры `CONCAT.RIGHT.*`.
+    #[test]
+    fn a_string_on_the_left_pulls_the_right_operand_into_itself() {
+        let cases = [
+            (r#"Возврат "[" + 5 + "]";"#, "[5]"),
+            // Неразрывный пробел, а не обычный: платформа печатает группы
+            // именно им, и склейка наследует это целиком.
+            (r#"Возврат "[" + 1000.5 + "]";"#, "[1\u{a0}000,5]"),
+            (r#"Возврат "[" + Истина + "]";"#, "[Да]"),
+            (r#"Возврат "[" + Ложь + "]";"#, "[Нет]"),
+            (r#"Возврат "[" + Неопределено + "]";"#, "[]"),
+            (r#"Возврат "[" + Null + "]";"#, "[]"),
+            (r#"Возврат "[" + Новый Массив + "]";"#, "[Массив]"),
+            (
+                r#"Возврат "[" + '20240115103000' + "]";"#,
+                "[15.01.2024 10:30:00]",
+            ),
+            // Склейка побеждает арифметику даже когда обе стороны похожи на
+            // числа, и даже когда справа булево.
+            (r#"Возврат "5" + 1;"#, "51"),
+            (r#"Возврат "5" + Истина;"#, "5Да"),
+            // Левоассоциативность: от строки склейка идёт до конца.
+            (r#"Возврат "х" + 1 + 2;"#, "х12"),
+        ];
+        for (src, want) in cases {
+            let got = run_src(src);
+            assert_eq!(str_val(&got), want, "{src}");
+        }
+    }
+
+    /// Обратное направление: где слева не строка, к числу тянутся ОБА
+    /// операнда — и строка, и булево. Замеры `ARITH.*`.
+    #[test]
+    fn arithmetic_pulls_strings_and_booleans_to_numbers() {
+        let cases = [
+            (r#"Возврат "5" - 1;"#, "4"),
+            (r#"Возврат "5" * 2;"#, "10"),
+            (r#"Возврат "5" / 2;"#, "2.5"),
+            (r#"Возврат 1 - "5";"#, "-4"),
+            (r#"Возврат 5 + "3";"#, "8"),
+            // Разбор строки — тот же, что у `Число()`: пробелы по краям,
+            // точка ИЛИ запятая, разделители групп.
+            (r#"Возврат " 5 " - 1;"#, "4"),
+            (r#"Возврат "5.5" - 1;"#, "4.5"),
+            (r#"Возврат "5,5" - 1;"#, "4.5"),
+            // Круговой прогон: напечатанное платформой число разбирается
+            // обратно вместе с неразрывными пробелами.
+            (r#"Возврат ("" + 1000.5) - 0.5;"#, "1000"),
+            (r#"Возврат -"5";"#, "-5"),
+            (r#"Возврат Истина + 1;"#, "2"),
+            (r#"Возврат Ложь + 1;"#, "1"),
+            (r#"Возврат Истина - 1;"#, "0"),
+            (r#"Возврат Истина * 2;"#, "2"),
+            (r#"Возврат -Истина;"#, "-1"),
+            (r#"Возврат Истина + "3";"#, "4"),
+        ];
+        for (src, want) in cases {
+            let BslValue::Number(n) = run_src(src) else {
+                panic!("ожидалось число: {src}");
+            };
+            assert_eq!(n.to_canonical(), want, "{src}");
+        }
+        // Дата плюс ЧИСЛОВАЯ строка — сдвиг на секунды.
+        let v = run_src(r#"Возврат Строка('20240115103000' + "60");"#);
+        assert_eq!(str_val(&v), "15.01.2024 10:31:00");
+    }
+
+    /// Приведение не безгранично: нечисловая и пустая строка отвергаются, а
+    /// `Неопределено` нулём не притворяется. Замеры `ARITH.STR.NOT_A_NUMBER`,
+    /// `ARITH.STR.EMPTY`, `ARITH.UNDEFINED.PLUS`, `CONCAT.ORDER.NUM_NUM_STR`.
+    #[test]
+    fn coercion_has_limits() {
+        for src in [
+            r#"Возврат "абв" - 1;"#,
+            r#"Возврат "" - 1;"#,
+            r#"Возврат Неопределено + 1;"#,
+            r#"Возврат 5 + "]";"#,
+            r#"Возврат Неопределено + "]";"#,
+            // Слева направо: 1 + 2 складываются, и уже 3 + строка отказывает.
+            r#"Возврат 1 + 2 + "х";"#,
+        ] {
+            let _ = run_src_err(src);
+        }
     }
 
     fn run_src_err(src: &str) -> RtError {
@@ -3001,10 +3189,17 @@ mod tests {
         assert_eq!(v, BslValue::Boolean(true));
     }
 
+    /// Число слева тянет правый операнд к ЧИСЛУ, поэтому нечисловая строка
+    /// — ошибка (замер `CONCAT.LEFT.INT`). Ошибка при этом приходит от
+    /// разбора числа, а не от несоответствия типов: строка сама по себе
+    /// операнду арифметики не противопоказана, противопоказано её
+    /// СОДЕРЖИМОЕ.
     #[test]
-    fn adding_number_and_string_is_a_type_error() {
+    fn a_non_numeric_string_in_arithmetic_is_an_error() {
         let err = run_src_err(r#"Возврат 1 + "a";"#);
-        assert!(matches!(err, RtError::TypeError { .. }));
+        assert!(matches!(err, RtError::Num(_)), "{err:?}");
+        // А числовая строка на том же месте проходит.
+        assert_eq!(run_src(r#"Возврат 1 + "2";"#), BslValue::Number(bsl_number::BslNumber::from_i64(3)));
     }
 
     #[test]
@@ -3811,19 +4006,28 @@ mod tests {
 
     #[test]
     fn adding_a_non_string_to_a_string_leaves_the_variable_intact() {
-        // Ошибка типа не должна оставлять переменную затёртой: значение
+        // Ошибка не должна оставлять переменную затёртой: значение
         // забирается из регистра ТОЛЬКО когда обе стороны — строки.
+        //
+        // Пара «строка плюс массив» для этого больше не годится — по
+        // измеренному правилу строка слева склеивается с чем угодно
+        // (получилось бы «текстМассив»). Отказывает теперь обратный
+        // случай: число слева и строка, числом не являющаяся.
         let v = run_src(
-            r#"Х = "текст";
+            r#"Х = 5;
                Р = "";
                Попытка
-                   Х = Х + Новый Массив;
+                   Х = Х + "абв";
                Исключение
                    Р = "поймано";
                КонецПопытки;
                Возврат Р + "|" + Х;"#,
         );
-        assert_eq!(str_val(&v), "поймано|текст");
+        assert_eq!(str_val(&v), "поймано|5");
+
+        // А сама склейка строки с нестрокой теперь именно склейка.
+        let v = run_src(r#"Х = "текст"; Х = Х + Новый Массив; Возврат Х;"#);
+        assert_eq!(str_val(&v), "текстМассив");
     }
 
     #[test]

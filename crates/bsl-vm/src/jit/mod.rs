@@ -42,7 +42,7 @@ mod mem;
 mod x64;
 
 use crate::{
-    add_op, at, binop, call_builtin_with_format, cmp, field_name, numeric_for_next_regular,
+    add_op, at, binop, call_builtin_with_format, cmp, field_name, neg_op, numeric_for_next_regular,
     prop_cache, reg_load, reg_store, CallArgs, Frame,
 };
 use bsl_bytecode::{Chunk, Instr, Program};
@@ -347,6 +347,7 @@ fn compile_instr(instr: &Instr) -> Option<Compiled> {
         Instr::Sub { dst, a, b } => s(shim_sub, [dst as u32, a as u32, b as u32]),
         Instr::Mul { dst, a, b } => s(shim_mul, [dst as u32, a as u32, b as u32]),
         Instr::Div { dst, a, b } => s(shim_div, [dst as u32, a as u32, b as u32]),
+        Instr::Mod { dst, a, b } => s(shim_rem, [dst as u32, a as u32, b as u32]),
         Instr::Neg { dst, src } => s(shim_neg, [dst as u32, src as u32, 0]),
         Instr::Not { dst, src } => s(shim_not, [dst as u32, src as u32, 0]),
         Instr::Eq { dst, a, b } => s(shim_eq, [dst as u32, a as u32, b as u32]),
@@ -499,6 +500,7 @@ macro_rules! binop_shim {
 binop_shim!(shim_sub, BslValue::sub);
 binop_shim!(shim_mul, BslValue::mul);
 binop_shim!(shim_div, BslValue::div);
+binop_shim!(shim_rem, BslValue::rem);
 
 macro_rules! cmp_shim {
     ($name:ident, $op:literal, $f:expr) => {
@@ -542,7 +544,7 @@ cmp_shim!(shim_ge, ">=", std::cmp::Ordering::is_ge);
 shim!(shim_neg, |frames, stack, program, idx, shapes, dst, src, _c| {
     let v = reg_load(stack, frames[idx].reg_index(src as u8))?;
     let d = frames[idx].reg_index(dst as u8);
-    reg_store(stack, d, v.neg()?)?;
+    reg_store(stack, d, neg_op(&v)?)?;
     Ok(OK)
 });
 

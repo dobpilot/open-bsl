@@ -29,6 +29,8 @@ pub enum Instr {
     Sub { dst: u8, a: u8, b: u8 },
     Mul { dst: u8, a: u8, b: u8 },
     Div { dst: u8, a: u8, b: u8 },
+    /// Остаток от деления, знак — по ДЕЛИМОМУ (измерено).
+    Mod { dst: u8, a: u8, b: u8 },
     Neg { dst: u8, src: u8 },
 
     Not { dst: u8, src: u8 },
