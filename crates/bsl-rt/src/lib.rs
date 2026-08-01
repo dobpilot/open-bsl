@@ -269,16 +269,6 @@ impl BslValue {
         }
     }
 
-    fn as_bool(&self, op: &'static str) -> RtResult<bool> {
-        match self {
-            BslValue::Boolean(b) => Ok(*b),
-            _ => Err(RtError::TypeError {
-                expected: "Булево",
-                op,
-            }),
-        }
-    }
-
     /// `+` между двумя строками — конкатенация (реальная 1С считает это
     /// перегрузкой того же оператора, не отдельной функцией). Любая другая
     /// комбинация типов идёт по числовому пути и получает его же ошибку
@@ -377,8 +367,15 @@ impl BslValue {
         Ok(BslValue::Number(self.as_number("унарный -")?.neg()))
     }
 
+    /// `Не` приводит операнд по тем же правилам, что и любое другое
+    /// условие: `Не 1` даёт «Нет», а `Не "Ложь"` — «Да» (измерено,
+    /// `COND.NOT_NUMBER` и `COND.NOT_STRING`).
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::TypeError`], если операнд к условию не приводится.
     pub fn not(&self) -> RtResult<Self> {
-        Ok(BslValue::Boolean(!self.as_bool("Не")?))
+        Ok(BslValue::Boolean(!self.as_condition()?))
     }
 
     // --- Трансцендентные функции (через f64 в bsl-number) ------------------
@@ -486,8 +483,39 @@ impl BslValue {
     /// (`Instr::JumpIfFalse`/`JumpIfTrue` в `bsl-bytecode::compiler`), а не
     /// здесь, — правый операнд физически не вычисляется, если левый уже
     /// решил результат.
+    /// Условие приводится к булеву, и это ИЗМЕРЕНО, а не выведено: до
+    /// замеров здесь стояла строгая булевость с комментарием «никакой
+    /// truthiness», и она оказалась неверной. Платформа принимает
+    ///
+    /// * булево — как есть;
+    /// * ЧИСЛО: ноль — ложь, любое другое (в том числе отрицательное и
+    ///   дробное) — истина (замеры `TERNARY.CONDITION_ZERO`,
+    ///   `TERNARY.CONDITION_NEGATIVE`, `COND.IF_NUMBER_ONE`);
+    /// * СТРОКУ — но только словами, и это не «непустая строка истинна»:
+    ///   «абв», «0» и «1» отвергаются наравне с пустой (замеры
+    ///   `TERNARY.CONDITION_WORD_OTHER`, `..._STRING_ZERO`, `..._STRING_ONE`).
+    ///
+    /// Всё остальное — `Неопределено`, `Null`, дата, коллекция — ошибка.
+    /// Правило одно на все условия языка: `Если`, `Пока`, `И`, `ИЛИ`, `Не`
+    /// и `?()` идут сюда же, и на платформе они тоже ведут себя одинаково
+    /// (замеры `COND.*`).
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::TypeError`], если значение к условию не приводится.
     pub fn as_condition(&self) -> RtResult<bool> {
-        self.as_bool("Условие")
+        match self {
+            BslValue::Boolean(b) => Ok(*b),
+            BslValue::Number(n) => Ok(!n.is_zero()),
+            BslValue::Str(s) => condition_word(&s.to_string()).ok_or(RtError::TypeError {
+                expected: "Булево",
+                op: "Условие",
+            }),
+            _ => Err(RtError::TypeError {
+                expected: "Булево",
+                op: "Условие",
+            }),
+        }
     }
 
     /// Сравнение по значению для `=`/`<>`. Разнотипные значения просто не
@@ -2179,6 +2207,20 @@ impl BslValue {
 /// Ручная реализация вместо `derive`: `Массив`/`Структура` — ссылочные
 /// типы, `=` для них — тождество объекта (`Rc::ptr_eq`), а не структурное
 /// сравнение содержимого (в отличие от `Число`/`Строка`/`Булево`).
+/// Строка как условие: набор слов ИЗМЕРЕН перебором на 8.3.27, а не взят
+/// из документации. Принимаются ровно шесть написаний, регистр не важен, а
+/// пробелы по краям обрезаются («" Истина "» проходит). «yes», «no» и «Y`»
+/// платформа НЕ принимает — то есть это не «любое разумное слово», а
+/// закрытый список; `None` здесь и означает отказ.
+fn condition_word(s: &str) -> Option<bool> {
+    let w = s.trim().to_uppercase();
+    match w.as_str() {
+        "ИСТИНА" | "ДА" | "TRUE" => Some(true),
+        "ЛОЖЬ" | "НЕТ" | "FALSE" => Some(false),
+        _ => None,
+    }
+}
+
 impl PartialEq for BslValue {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -2280,11 +2322,45 @@ mod tests {
         BslValue::Number(BslNumber::parse_canonical(s).unwrap())
     }
 
+    /// Условие приводится, и правило измерено, а не выведено. Здесь стоял
+    /// обратный тест — `Если 1 Тогда` считалось ошибкой, — и платформа с
+    /// ним разошлась: единица там истина, ноль ложь. Замеры `COND.*` и
+    /// `TERNARY.CONDITION_*`.
     #[test]
-    fn strict_boolean_condition_rejects_numbers() {
-        // Если 1 Тогда — ошибка, не приведение.
-        let err = num("1").as_condition().unwrap_err();
-        assert!(matches!(err, RtError::TypeError { expected: "Булево", .. }));
+    fn condition_converts_numbers_and_boolean_words() {
+        assert!(num("1").as_condition().expect("единица — истина"));
+        assert!(!num("0").as_condition().expect("ноль — ложь"));
+        assert!(num("-1").as_condition().expect("минус единица — истина"));
+        assert!(num("0.5").as_condition().expect("дробь — истина"));
+
+        // Строка принимается ТОЛЬКО словами, регистр не важен, пробелы по
+        // краям обрезаются.
+        for (word, want) in [
+            ("Истина", true),
+            ("истина", true),
+            ("ИСТИНА", true),
+            (" Истина ", true),
+            ("Да", true),
+            ("True", true),
+            ("Ложь", false),
+            ("нет", false),
+            ("False", false),
+        ] {
+            let v = BslValue::Str(BslString::from_str(word));
+            assert_eq!(v.as_condition().expect(word), want, "{word}");
+        }
+
+        // «Непустая строка истинна» — НЕ то правило: цифры и мусор
+        // отвергаются наравне с пустой строкой.
+        for word in ["абв", "", "0", "1", "yes", "no"] {
+            let v = BslValue::Str(BslString::from_str(word));
+            assert!(v.as_condition().is_err(), "{word} обязано быть ошибкой");
+        }
+
+        // Всё, что не булево, не число и не строка, — ошибка.
+        for v in [BslValue::Undefined, BslValue::Null] {
+            assert!(v.as_condition().is_err());
+        }
     }
 
     #[test]

@@ -331,23 +331,39 @@ impl<'a> Compiler<'a> {
             // существует не ради ветвления — обе его ветки сходятся в одной
             // точке — а ради строгой проверки булевости правого операнда:
             // без него `Ложь ИЛИ 1` тихо вернул бы `1` вместо ошибки типа.
+            // `И`/`ИЛИ` отдают БУЛЕВО, а не последний вычисленный операнд:
+            // `1 И 1` на платформе даёт «Да», а не единицу (измерено,
+            // `COND.AND_BOTH_NUMBERS`). Поэтому результат материализуется
+            // `LoadBool`, а не остаётся в регистре от операнда. Короткое
+            // замыкание при этом сохраняется: правый операнд не исполняется,
+            // если левый уже решил исход.
             RExpr::Binary { op: BinaryOp::And, lhs, rhs } => {
                 self.compile_expr(lhs, dst)?;
                 let short = self.emit(Instr::JumpIfFalse { cond: dst, target: 0 });
                 self.compile_expr(rhs, dst)?;
                 let checked = self.emit(Instr::JumpIfFalse { cond: dst, target: 0 });
+                self.emit(Instr::LoadBool { dst, val: true });
+                let to_end = self.emit(Instr::Jump { target: 0 });
+                let on_false = self.here();
+                self.emit(Instr::LoadBool { dst, val: false });
                 let end = self.here();
-                self.patch_jump(short, end);
-                self.patch_jump(checked, end);
+                self.patch_jump(short, on_false);
+                self.patch_jump(checked, on_false);
+                self.patch_jump(to_end, end);
             }
             RExpr::Binary { op: BinaryOp::Or, lhs, rhs } => {
                 self.compile_expr(lhs, dst)?;
                 let short = self.emit(Instr::JumpIfTrue { cond: dst, target: 0 });
                 self.compile_expr(rhs, dst)?;
                 let checked = self.emit(Instr::JumpIfTrue { cond: dst, target: 0 });
+                self.emit(Instr::LoadBool { dst, val: false });
+                let to_end = self.emit(Instr::Jump { target: 0 });
+                let on_true = self.here();
+                self.emit(Instr::LoadBool { dst, val: true });
                 let end = self.here();
-                self.patch_jump(short, end);
-                self.patch_jump(checked, end);
+                self.patch_jump(short, on_true);
+                self.patch_jump(checked, on_true);
+                self.patch_jump(to_end, end);
             }
             RExpr::Binary { op, lhs, rhs } => {
                 // Оба операнда — просто переменные: копировать их во
@@ -519,6 +535,28 @@ impl<'a> Compiler<'a> {
                     indent: ind,
                 });
                 self.free_temp(2);
+            }
+            // Тернарный оператор — короткое замыкание, как `И`/`ИЛИ`, и
+            // компилируется так же: переходами, а не тремя вычисленными
+            // регистрами. Невыбранная ветвь ФИЗИЧЕСКИ не исполняется —
+            // измерено на `?(Истина, "ок", 1 / Число("0"))`, где деление на
+            // ноль не срабатывает. Отдельного опкода поэтому не нужно.
+            RExpr::Ternary {
+                cond,
+                then_expr,
+                else_expr,
+            } => {
+                let c = self.alloc_temp()?;
+                self.compile_expr(cond, c)?;
+                let to_else = self.emit(Instr::JumpIfFalse { cond: c, target: 0 });
+                self.free_temp(1);
+                self.compile_expr(then_expr, dst)?;
+                let to_end = self.emit(Instr::Jump { target: 0 });
+                let else_at = self.here();
+                self.compile_expr(else_expr, dst)?;
+                let end = self.here();
+                self.patch_jump(to_else, else_at);
+                self.patch_jump(to_end, end);
             }
             RExpr::NewXmlReader => {
                 self.emit(Instr::NewXmlReader { dst });

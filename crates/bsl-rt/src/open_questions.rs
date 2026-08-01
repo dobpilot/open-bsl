@@ -647,6 +647,298 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
         note: "имена ЗНАЧЕНИЙ — без пробелов, в отличие от имён типов",
     },
 
+    // --- Тернарный оператор и условия ------------------------------------
+    // Снято на 8.3.27 в четыре захода. Два вывода, ради которых замер и
+    // делался, оба против ожидания:
+    //
+    //   * `?()` ЛЕНИВ — невыбранная ветвь физически не исполняется, поэтому
+    //     компилируется он переходами, а не тремя вычисленными регистрами;
+    //   * условие НЕ строго булево, и это правило одно на весь язык — `Если`,
+    //     `Пока`, `И`, `ИЛИ`, `Не` и `?()`. Ноль ложен, любое другое число
+    //     истинно, строка принимается ТОЛЬКО шестью словами. До этих замеров
+    //     в коде стояло обратное утверждение с комментарием «никакой
+    //     truthiness», и оно было неверным.
+    Anchor {
+        id: "TERNARY.LAZY_TRUE",
+        expect: "ок",
+        note: "невыбранная ветвь НЕ вычисляется: деление на ноль в ней не срабатывает",
+    },
+    Anchor {
+        id: "TERNARY.LAZY_FALSE",
+        expect: "ок",
+        note: "и в другую сторону тоже — это короткое замыкание, а не три значения",
+    },
+    Anchor {
+        id: "TERNARY.PLAIN_TRUE",
+        expect: "да",
+        note: "обычный случай для сверки с ленивыми",
+    },
+    Anchor {
+        id: "TERNARY.PLAIN_FALSE",
+        expect: "нет",
+        note: "то же для ложного условия",
+    },
+    Anchor {
+        id: "TERNARY.CONDITION_NUMBER",
+        expect: "да",
+        note: "условие НЕ строго булево: единица истинна",
+    },
+    Anchor {
+        id: "TERNARY.CONDITION_ZERO",
+        expect: "нет",
+        note: "а ноль ложен",
+    },
+    Anchor {
+        id: "TERNARY.CONDITION_STRING",
+        expect: "да",
+        note: "строка условием тоже принимается",
+    },
+    Anchor {
+        id: "TERNARY.CONDITION_UNDEFINED",
+        expect: "<ошибка>",
+        note: "Неопределено — уже отказ",
+    },
+    Anchor {
+        id: "TERNARY.CONDITION_EXPR",
+        expect: "да",
+        note: "обычное сравнение в условии",
+    },
+    Anchor {
+        id: "TERNARY.TYPE_OF_RESULT",
+        expect: "Число",
+        note: "тип результата — у выбранной ветви",
+    },
+    Anchor {
+        id: "TERNARY.TYPE_OF_RESULT_ELSE",
+        expect: "Строка",
+        note: "ветви могут быть разных типов",
+    },
+    Anchor {
+        id: "TERNARY.NESTED_IN_THEN",
+        expect: "б",
+        note: "вложение в первую ветвь",
+    },
+    Anchor {
+        id: "TERNARY.NESTED_IN_ELSE",
+        expect: "б",
+        note: "во вторую",
+    },
+    Anchor {
+        id: "TERNARY.NESTED_IN_CONDITION",
+        expect: "да",
+        note: "и в само условие",
+    },
+    Anchor {
+        id: "TERNARY.INSIDE_EXPRESSION",
+        expect: "[1]",
+        note: "результат склеивается дальше как обычное значение",
+    },
+    Anchor {
+        id: "TERNARY.AS_ARGUMENT",
+        expect: "4",
+        note: "и уходит аргументом встроенной функции",
+    },
+    Anchor {
+        id: "TERNARY.CALL_IN_BRANCH",
+        expect: "3",
+        note: "вызов в ветви — ещё одна проверка ленивости, теперь по значению",
+    },
+    Anchor {
+        id: "TERNARY.ARITY_TWO",
+        expect: "<ошибка>",
+        note: "два аргумента — ошибка компиляции",
+    },
+    Anchor {
+        id: "TERNARY.ARITY_FOUR",
+        expect: "<ошибка>",
+        note: "четыре — тоже",
+    },
+    Anchor {
+        id: "TERNARY.ARITY_ONE",
+        expect: "<ошибка>",
+        note: "и один",
+    },
+    Anchor {
+        id: "TERNARY.CONDITION_FALSE_WORD",
+        expect: "нет",
+        note: "слово «Ложь» условием читается как ложь",
+    },
+    Anchor {
+        id: "TERNARY.CONDITION_WORD_OTHER",
+        expect: "<ошибка>",
+        note: "а мусор — отказ: это НЕ «непустая строка истинна»",
+    },
+    Anchor {
+        id: "TERNARY.CONDITION_EMPTY_STRING",
+        expect: "<ошибка>",
+        note: "пустая строка — отказ",
+    },
+    Anchor {
+        id: "TERNARY.CONDITION_STRING_ZERO",
+        expect: "<ошибка>",
+        note: "и «0» тоже: строка числом не притворяется",
+    },
+    Anchor {
+        id: "TERNARY.CONDITION_STRING_ONE",
+        expect: "<ошибка>",
+        note: "и «1»",
+    },
+    Anchor {
+        id: "TERNARY.CONDITION_NEGATIVE",
+        expect: "да",
+        note: "отрицательное число истинно",
+    },
+    Anchor {
+        id: "TERNARY.CONDITION_FRACTION",
+        expect: "да",
+        note: "и дробное",
+    },
+    Anchor {
+        id: "TERNARY.CONDITION_DATE",
+        expect: "<ошибка>",
+        note: "дата условием не принимается",
+    },
+    Anchor {
+        id: "TERNARY.CONDITION_EMPTY_DATE",
+        expect: "<ошибка>",
+        note: "и пустая дата тоже",
+    },
+    Anchor {
+        id: "TERNARY.CONDITION_ARRAY",
+        expect: "<ошибка>",
+        note: "коллекция — отказ",
+    },
+    Anchor {
+        id: "TERNARY.CONDITION_NULL",
+        expect: "<ошибка>",
+        note: "Null — отказ",
+    },
+    Anchor {
+        id: "COND.IF_NUMBER_ONE",
+        expect: "да",
+        note: "правило условия одно на весь язык: Если 1 Тогда работает",
+    },
+    Anchor {
+        id: "COND.IF_NUMBER_ZERO",
+        expect: "нет",
+        note: "и ноль в Если ложен",
+    },
+    Anchor {
+        id: "COND.IF_STRING",
+        expect: "<ошибка>",
+        note: "мусорная строка в Если — тот же отказ, что и в ?()",
+    },
+    Anchor {
+        id: "COND.IF_UNDEFINED",
+        expect: "<ошибка>",
+        note: "и Неопределено",
+    },
+    Anchor {
+        id: "COND.NOT_NUMBER",
+        expect: "Нет",
+        note: "Не приводит операнд так же",
+    },
+    Anchor {
+        id: "COND.AND_NUMBER",
+        expect: "Да",
+        note: "И приводит операнды",
+    },
+    Anchor {
+        id: "COND.OR_NUMBER",
+        expect: "Да",
+        note: "и ИЛИ",
+    },
+    Anchor {
+        id: "COND.WHILE_NORMAL",
+        expect: "3",
+        note: "цикл Пока — третье место с условием, обычный случай",
+    },
+    Anchor {
+        id: "TERNARY.CONDITION_LOWER",
+        expect: "да",
+        note: "регистр слова не важен",
+    },
+    Anchor {
+        id: "TERNARY.CONDITION_UPPER",
+        expect: "да",
+        note: "и верхний тоже",
+    },
+    Anchor {
+        id: "TERNARY.CONDITION_PADDED",
+        expect: "да",
+        note: "пробелы по краям обрезаются",
+    },
+    Anchor {
+        id: "TERNARY.CONDITION_YES_WORD",
+        expect: "да",
+        note: "«Да» принимается наравне с «Истина»",
+    },
+    Anchor {
+        id: "TERNARY.CONDITION_TRUE_WORD",
+        expect: "да",
+        note: "и английское «True»",
+    },
+    Anchor {
+        id: "COND.IF_STRING_TRUE",
+        expect: "да",
+        note: "а слово «Истина» в Если принимается",
+    },
+    Anchor {
+        id: "COND.NOT_STRING",
+        expect: "Да",
+        note: "и строку-слово тоже",
+    },
+    Anchor {
+        id: "TERNARY.WORD_NO",
+        expect: "нет",
+        note: "«Нет» — ложь",
+    },
+    Anchor {
+        id: "TERNARY.WORD_FALSE_EN",
+        expect: "нет",
+        note: "«False» — ложь",
+    },
+    Anchor {
+        id: "TERNARY.WORD_LOZH_LOWER",
+        expect: "нет",
+        note: "регистр не важен и здесь",
+    },
+    Anchor {
+        id: "TERNARY.WORD_NO_LOWER",
+        expect: "нет",
+        note: "и здесь",
+    },
+    Anchor {
+        id: "TERNARY.WORD_YES_EN",
+        expect: "<ошибка>",
+        note: "«yes» платформа НЕ принимает — список закрытый",
+    },
+    Anchor {
+        id: "TERNARY.WORD_NO_EN",
+        expect: "<ошибка>",
+        note: "и «no» тоже",
+    },
+    Anchor {
+        id: "TERNARY.WORD_Y",
+        expect: "<ошибка>",
+        note: "и односимвольные сокращения",
+    },
+    Anchor {
+        id: "TERNARY.WORD_TRUE_LOWER",
+        expect: "да",
+        note: "«true» строчными — принимается",
+    },
+    Anchor {
+        id: "COND.AND_BOTH_NUMBERS",
+        expect: "Да",
+        note: "результат И — БУЛЕВО, а не последний операнд: 1 И 1 даёт Да, не единицу",
+    },
+    Anchor {
+        id: "COND.AND_BOOL_NUMBER",
+        expect: "Да",
+        note: "и здесь тоже булево",
+    },
+
     // --- XML -----------------------------------------------------------
     // Снято на 8.3.27 в пять заходов; как и у JSON, скрипт замеров
     // исполняется и нашим интерпретатором, поэтому весь блок сверяется

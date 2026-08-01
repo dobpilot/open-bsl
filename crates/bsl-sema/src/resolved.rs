@@ -101,6 +101,15 @@ pub enum RExpr {
     EnumMember(bsl_rt::EnumValue),
     NewJsonReader,
     NewJsonWriter,
+    /// `?(Условие, Тогда, Иначе)`. Хранится тремя выражениями, а не
+    /// вызовом с тремя аргументами: оператор ЛЕНИВ (измерено), и
+    /// кодогену нужно вкомпилировать переходы между ветвями, а не
+    /// вычислить три значения.
+    Ternary {
+        cond: Box<RExpr>,
+        then_expr: Box<RExpr>,
+        else_expr: Box<RExpr>,
+    },
     NewXmlReader,
     NewXmlWriter,
     NewXmlWriterSettings {
@@ -329,6 +338,13 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
             version,
             indent,
         } => expr_uses_dynamic(encoding) || expr_uses_dynamic(version) || expr_uses_dynamic(indent),
+        RExpr::Ternary {
+            cond,
+            then_expr,
+            else_expr,
+        } => {
+            expr_uses_dynamic(cond) || expr_uses_dynamic(then_expr) || expr_uses_dynamic(else_expr)
+        }
         RExpr::NewJsonWriterSettings { line_break, indent } => {
             expr_uses_dynamic(line_break) || expr_uses_dynamic(indent)
         }

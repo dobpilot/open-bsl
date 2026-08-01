@@ -548,9 +548,15 @@ impl<'a> Resolver<'a> {
                 })
             }
             AExpr::New { type_name, args } => self.resolve_new(type_name, args),
-            AExpr::Ternary { .. } => Err(SemaError::Unsupported(
-                "тернарный ?() появится позже",
-            )),
+            AExpr::Ternary {
+                cond,
+                then_expr,
+                else_expr,
+            } => Ok(RExpr::Ternary {
+                cond: Box::new(self.resolve_expr(cond)?),
+                then_expr: Box::new(self.resolve_expr(then_expr)?),
+                else_expr: Box::new(self.resolve_expr(else_expr)?),
+            }),
         }
     }
 
