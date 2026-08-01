@@ -135,8 +135,8 @@ local function parse_json(s)
     return parse_value()
 end
 
-local RECORDS = 1000
-local PASSES = 10
+local RECORDS = 10000
+local PASSES = 3
 
 -- --- сборка документа (вне замера) ---------------------------------------
 -- У Lua нет ни ЗаписьJSON, ни какого-либо сериализатора, поэтому документ
