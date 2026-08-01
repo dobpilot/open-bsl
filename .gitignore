@@ -3,3 +3,5 @@
 perf.data
 # напечатанный байт-код (--emit-bytecode) — артефакт, не исходник
 *.bslc
+# личные настройки Claude Code для этого проекта — не общекомандные
+/.claude/settings.local.json
