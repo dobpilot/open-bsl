@@ -143,6 +143,8 @@ pub enum Instr {
     NewJsonWriterSettings { dst: u8, line_break: u8, indent: u8 },
     /// `Новый ЧтениеXML` / `Новый ЗаписьXML` — как и у JSON, без
     /// аргументов: источник и приёмник назначаются отдельным вызовом.
+    /// `Новый ТекстовыйДокумент` — без аргументов.
+    NewTextDocument { dst: u8 },
     NewXmlReader { dst: u8 },
     NewXmlWriter { dst: u8 },
     /// `Новый ПараметрыЗаписиXML([Кодировка][, Версия][, ИспользоватьОтступ])`.

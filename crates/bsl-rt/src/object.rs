@@ -63,6 +63,13 @@ pub enum BslObject {
     XmlWriter(RefCell<Option<crate::xml::XmlWriter>>),
     /// `ПараметрыЗаписиXML`.
     XmlWriterSettings(crate::xml::XmlWriterSettings),
+
+    /// `ТекстовыйДокумент`.
+    TextDocument(Rc<RefCell<crate::textdoc::TextDocData>>),
+    /// `Документ.Параметры` — отдельный объект-обёртка над ТЕМИ ЖЕ данными
+    /// (тот же `Rc`), как `Таблица.Колонки`: присваивание в его поле
+    /// означает «задать параметр макета», а не «положить поле объекта».
+    TextDocParams(Rc<RefCell<crate::textdoc::TextDocData>>),
 }
 
 /// Состояние `ЧтениеXML`.

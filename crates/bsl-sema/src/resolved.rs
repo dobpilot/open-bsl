@@ -110,6 +110,7 @@ pub enum RExpr {
         then_expr: Box<RExpr>,
         else_expr: Box<RExpr>,
     },
+    NewTextDocument,
     NewXmlReader,
     NewXmlWriter,
     NewXmlWriterSettings {
@@ -331,6 +332,7 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
         RExpr::EnumMember(_)
         | RExpr::NewJsonReader
         | RExpr::NewJsonWriter
+        | RExpr::NewTextDocument
         | RExpr::NewXmlReader
         | RExpr::NewXmlWriter => false,
         RExpr::NewXmlWriterSettings {

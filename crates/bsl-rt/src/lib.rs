@@ -18,6 +18,7 @@ mod runtime_shapes;
 mod shape;
 mod string;
 mod table;
+mod textdoc;
 mod types;
 mod xml;
 
@@ -38,6 +39,10 @@ pub use enums::{
 };
 pub use json::{
     JsonEvent, JsonLineBreak, JsonParser, JsonWriter, JsonWriterSettings,
+};
+pub use textdoc::{
+    append_rendered as textdoc_append_rendered, area_for_output as textdoc_area_for_output,
+    is_text_document as textdoc_is_document, write_file as textdoc_write_file, TextDocData,
 };
 pub use xml::{XmlAttr, XmlEvent, XmlParser, XmlWriter, XmlWriterSettings};
 pub use date::{
@@ -131,6 +136,10 @@ pub enum RtError {
     /// документа при записи (атрибут после текста). Отдельно от
     /// [`RtError::Json`] — чтобы по типу ошибки было видно, чей это слой.
     Xml(String),
+    /// `ТекстовыйДокумент`: области макета и его параметры. Отдельно от
+    /// [`RtError::Xml`] — слой другой, и по типу ошибки это должно быть
+    /// видно.
+    TextDoc(String),
     /// Имя из `СписокСвойств` в `ЗаполнитьЗначенияСвойств`, которого нет у
     /// источника или у приёмника. Отдельно от [`RtError::UnknownField`] и
     /// [`RtError::UnknownColumn`], потому что имя тут пришло СТРОКОЙ из
@@ -202,6 +211,7 @@ impl fmt::Display for RtError {
             RtError::UnknownProperty(name) => write!(f, "свойство «{name}» не найдено"),
             RtError::Json(msg) => write!(f, "{msg}"),
             RtError::Xml(msg) => write!(f, "{msg}"),
+            RtError::TextDoc(msg) => write!(f, "{msg}"),
             RtError::UnknownType(name) => write!(f, "тип «{name}» не определён"),
             RtError::DateOutOfRange { op } => write!(
                 f,
@@ -254,6 +264,8 @@ impl BslValue {
                 BslObject::XmlReader(_) => "ЧтениеXML",
                 BslObject::XmlWriter(_) => "ЗаписьXML",
                 BslObject::XmlWriterSettings(_) => "ПараметрыЗаписиXML",
+                BslObject::TextDocument(_) => "ТекстовыйДокумент",
+                BslObject::TextDocParams(_) => "ПараметрыМакетаТекстовогоДокумента",
             },
             BslValue::Skipped => "Skipped",
         }
@@ -959,7 +971,9 @@ impl BslValue {
                 | BslObject::JsonWriterSettings(..)
                 | BslObject::XmlReader(..)
                 | BslObject::XmlWriter(..)
-                | BslObject::XmlWriterSettings(..) => true,
+                | BslObject::XmlWriterSettings(..)
+                | BslObject::TextDocument(..)
+                | BslObject::TextDocParams(..) => true,
             },
             BslValue::Skipped => {
                 return Err(RtError::TypeError {
@@ -1007,6 +1021,8 @@ impl BslValue {
                 BslObject::XmlReader(..) => TypeId::XmlReader,
                 BslObject::XmlWriter(..) => TypeId::XmlWriter,
                 BslObject::XmlWriterSettings(..) => TypeId::XmlWriterSettings,
+                BslObject::TextDocument(..) => TypeId::TextDocument,
+                BslObject::TextDocParams(..) => TypeId::TextDocParams,
             },
             BslValue::Skipped => {
                 return Err(RtError::TypeError {
@@ -1072,6 +1088,12 @@ impl BslValue {
         } else {
             self.text_writer_close()
         }
+    }
+
+    pub fn new_text_document() -> Self {
+        BslValue::Object(Rc::new(BslObject::TextDocument(Rc::new(
+            std::cell::RefCell::new(textdoc::TextDocData::default()),
+        ))))
     }
 
     pub fn new_xml_reader() -> Self {
@@ -1381,7 +1403,9 @@ impl BslValue {
                 | BslObject::JsonWriterSettings(..)
                 | BslObject::XmlReader(..)
                 | BslObject::XmlWriter(..)
-                | BslObject::XmlWriterSettings(..) => Err(RtError::NotIndexable),
+                | BslObject::XmlWriterSettings(..)
+                | BslObject::TextDocument(..)
+                | BslObject::TextDocParams(..) => Err(RtError::NotIndexable),
             },
             _ => Err(RtError::NotIndexable),
         }
@@ -1695,6 +1719,21 @@ impl BslValue {
                         Err(RtError::UnknownColumn(name.to_string()))
                     }
                 }
+                // `Документ.Параметры` — обёртка над ТЕМИ ЖЕ данными, как
+                // `Таблица.Колонки`; `Параметры.Имя` уже читает значение
+                // параметра.
+                BslObject::TextDocument(data) => {
+                    if name.eq_ignore_ascii_case("Параметры")
+                        || name.eq_ignore_ascii_case("Parameters")
+                    {
+                        Ok(BslValue::Object(Rc::new(BslObject::TextDocParams(
+                            data.clone(),
+                        ))))
+                    } else {
+                        Err(RtError::UnknownColumn(name.to_string()))
+                    }
+                }
+                BslObject::TextDocParams(_) => textdoc::get_parameter(self, name),
                 BslObject::KeyValuePair(k, v) => {
                     if name.eq_ignore_ascii_case("Ключ") || name.eq_ignore_ascii_case("Key") {
                         Ok(k.clone())
@@ -1714,6 +1753,10 @@ impl BslValue {
     pub fn set_field_by_name(&self, name: &str, val: BslValue) -> RtResult<()> {
         match self {
             BslValue::Object(o) => match &**o {
+                // `Параметры.Имя = Значение` — это задание параметра
+                // макета, а не заведение поля объекта. Имя, которого в
+                // тексте нет, платформа отвергает (измерено).
+                BslObject::TextDocParams(_) => textdoc::set_parameter(self, name, val),
                 BslObject::TableRow(data, row_id) => {
                     let mut data = data.borrow_mut();
                     let col = data
@@ -2306,6 +2349,8 @@ impl fmt::Display for BslValue {
                 BslObject::XmlReader(_) => write!(f, "ЧтениеXML"),
                 BslObject::XmlWriter(_) => write!(f, "ЗаписьXML"),
                 BslObject::XmlWriterSettings(_) => write!(f, "ПараметрыЗаписиXML"),
+                BslObject::TextDocument(_) => write!(f, "ТекстовыйДокумент"),
+                BslObject::TextDocParams(_) => write!(f, "ПараметрыМакетаТекстовогоДокумента"),
             },
             // Никогда не должно реально дойти до печати (см. doc comment
             // на варианте) — но `Display` обязан быть тотальным.

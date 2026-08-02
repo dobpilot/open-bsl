@@ -671,7 +671,14 @@ shim!(shim_call_method, |frames, stack, program, idx, shapes, _a, _b, _c| {
     };
     let ov = reg_load(stack, frames[idx].reg_index(obj))?;
     let args = CallArgs::load(stack, &frames[idx], base, count)?;
-    let v = bsl_rt::call_builtin_method_ctx(method, &ov, args.as_slice(), shapes)?;
+    // `Вывести` перехватывается ТАК ЖЕ, как в ветке интерпретатора: ему
+    // нужно форматирование из `bsl-format`. Иначе режимы разъедутся —
+    // ровно это и поймал `the_jit_agrees_with_the_interpreter_on_every_script`.
+    let v = if method == bsl_rt::BuiltinMethod::OutputArea {
+        crate::output_area(&ov, args.as_slice())?
+    } else {
+        bsl_rt::call_builtin_method_ctx(method, &ov, args.as_slice(), shapes)?
+    };
     let d = frames[idx].reg_index(dst);
     reg_store(stack, d, v)?;
     Ok(OK)

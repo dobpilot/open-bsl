@@ -467,6 +467,24 @@ pub enum BuiltinMethod {
     WriteCdataSection,
     WriteXmlProcessingInstruction,
     WriteXmlRaw,
+
+    // --- ТекстовыйДокумент ---------------------------------------------
+    // `Прочитать`, `Записать` и `Очистить` переиспользуются: у платформы
+    // это те же имена, что у JSON/XML/ЗаписьТекста, а смысл выбирается по
+    // получателю.
+    SetText,
+    GetText,
+    LineCount,
+    GetLine,
+    AddLine,
+    InsertLine,
+    ReplaceLine,
+    DeleteLine,
+    GetArea,
+    /// `Вывести(Область)` — перехватывается в `bsl-vm`: подстановка
+    /// параметров форматирует значения, а форматирование живёт в
+    /// `bsl-format`, который зависит от этого крейта, не наоборот.
+    OutputArea,
 }
 
 /// Написания МЕТОДОВ объектов — тот же принцип, что и у
@@ -567,6 +585,26 @@ pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
     ),
     ("ЗаписатьБезОбработки", BuiltinMethod::WriteXmlRaw),
     ("WriteRaw", BuiltinMethod::WriteXmlRaw),
+    ("УстановитьТекст", BuiltinMethod::SetText),
+    ("SetText", BuiltinMethod::SetText),
+    ("ПолучитьТекст", BuiltinMethod::GetText),
+    ("GetText", BuiltinMethod::GetText),
+    ("КоличествоСтрок", BuiltinMethod::LineCount),
+    ("LineCount", BuiltinMethod::LineCount),
+    ("ПолучитьСтроку", BuiltinMethod::GetLine),
+    ("GetLine", BuiltinMethod::GetLine),
+    ("ДобавитьСтроку", BuiltinMethod::AddLine),
+    ("AddLine", BuiltinMethod::AddLine),
+    ("ВставитьСтроку", BuiltinMethod::InsertLine),
+    ("InsertLine", BuiltinMethod::InsertLine),
+    ("ЗаменитьСтроку", BuiltinMethod::ReplaceLine),
+    ("ReplaceLine", BuiltinMethod::ReplaceLine),
+    ("УдалитьСтроку", BuiltinMethod::DeleteLine),
+    ("DeleteLine", BuiltinMethod::DeleteLine),
+    ("ПолучитьОбласть", BuiltinMethod::GetArea),
+    ("GetArea", BuiltinMethod::GetArea),
+    ("Вывести", BuiltinMethod::OutputArea),
+    ("Output", BuiltinMethod::OutputArea),
 ];
 
 impl BuiltinMethod {
@@ -774,7 +812,11 @@ pub fn call_builtin_method(
             Ok(BslValue::Undefined)
         }
         BuiltinMethod::Clear => {
-            obj.clear_collection()?;
+            if crate::textdoc::is_text_document(obj) {
+                crate::textdoc::clear(obj)?;
+            } else {
+                obj.clear_collection()?;
+            }
             Ok(BslValue::Undefined)
         }
         BuiltinMethod::Insert => match obj {
@@ -870,7 +912,17 @@ pub fn call_builtin_method(
             obj.table_collapse(group, arg(args, 1))?;
             Ok(BslValue::Undefined)
         }
-        BuiltinMethod::Write => obj.text_writer_write(&args[0]),
+        // `Записать` у `ЗаписьТекста` — дописать кусок, у
+        // `ТекстовыйДокумент` — сохранить файл. Одно имя, разный смысл по
+        // получателю, как и у `Закрыть`.
+        BuiltinMethod::Write => {
+            if crate::textdoc::is_text_document(obj) {
+                crate::textdoc::write_file(obj, args)?;
+                Ok(BslValue::Undefined)
+            } else {
+                obj.text_writer_write(&args[0])
+            }
+        }
         // `Закрыть` полиморфен: у `ЗаписьТекста` он ничего не возвращает,
         // у `ЗаписьJSON` — отдаёт накопленный текст.
         BuiltinMethod::Close => obj.close_object(),
@@ -894,7 +946,12 @@ pub fn call_builtin_method(
             Ok(BslValue::Undefined)
         }
         BuiltinMethod::ReadNext => {
-            if crate::xml::is_xml_reader(obj) {
+            if crate::textdoc::is_text_document(obj) {
+                // У документа `Прочитать(Путь)` — загрузка файла, а не шаг
+                // по потоку.
+                crate::textdoc::read_file(obj, args)?;
+                Ok(BslValue::Undefined)
+            } else if crate::xml::is_xml_reader(obj) {
                 crate::xml::read(obj)
             } else {
                 Ok(BslValue::Boolean(crate::json::read(obj)?))
@@ -908,6 +965,34 @@ pub fn call_builtin_method(
             }
             Ok(BslValue::Undefined)
         }
+        BuiltinMethod::SetText => {
+            crate::textdoc::set_text(obj, args)?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::GetText => crate::textdoc::get_text(obj),
+        BuiltinMethod::LineCount => crate::textdoc::line_count(obj),
+        BuiltinMethod::GetLine => crate::textdoc::get_line(obj, args),
+        BuiltinMethod::AddLine => {
+            crate::textdoc::add_line(obj, args)?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::InsertLine => {
+            crate::textdoc::insert_line(obj, args)?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::ReplaceLine => {
+            crate::textdoc::replace_line(obj, args)?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::DeleteLine => {
+            crate::textdoc::delete_line(obj, args)?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::GetArea => crate::textdoc::get_area(obj, args),
+        BuiltinMethod::OutputArea => Err(RtError::MethodNotApplicable {
+            method: "Вывести",
+            receiver: obj.type_name(),
+        }),
         BuiltinMethod::XmlReadAttribute => crate::xml::read_attribute(obj),
         BuiltinMethod::XmlAttributeCount => crate::xml::attribute_count(obj),
         BuiltinMethod::XmlAttributeName => crate::xml::attribute_name(obj, args),

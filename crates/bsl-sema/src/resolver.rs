@@ -312,6 +312,8 @@ pub const NEW_TYPES: &[&str] = &[
     "XMLWriter",
     "ПараметрыЗаписиXML",
     "XMLWriterSettings",
+    "ТекстовыйДокумент",
+    "TextDocument",
 ];
 
 struct Resolver<'a> {
@@ -701,6 +703,16 @@ impl<'a> Resolver<'a> {
                     indent: Box::new(indent),
                 })
             }
+            "ТЕКСТОВЫЙДОКУМЕНТ" | "TEXTDOCUMENT" => {
+                if !args.is_empty() {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый ТекстовыйДокумент".to_string(),
+                        expected: 0,
+                        found: args.len(),
+                    });
+                }
+                Ok(RExpr::NewTextDocument)
+            }
             "ЧТЕНИЕXML" | "XMLREADER" => {
                 if !args.is_empty() {
                     return Err(SemaError::ArgumentCountMismatch {
@@ -884,7 +896,10 @@ impl<'a> Resolver<'a> {
                     bsl_rt::BuiltinMethod::FindRows
                     | bsl_rt::BuiltinMethod::Sort
                     | bsl_rt::BuiltinMethod::Total => Some(1),
-                    bsl_rt::BuiltinMethod::Write => Some(1),
+                    // `Записать` — 1 у `ЗаписьТекста` (кусок текста) и 1..2 у
+                    // `ТекстовыйДокумент` (путь и кодировка). Как и у
+                    // `Прочитать`, арность решает рантайм.
+                    bsl_rt::BuiltinMethod::Write => None,
                     bsl_rt::BuiltinMethod::UnloadColumn | bsl_rt::BuiltinMethod::IndexOf => Some(1),
                     bsl_rt::BuiltinMethod::LoadColumn | bsl_rt::BuiltinMethod::Move => Some(2),
                     // `Свойство` — 1 или 2 (см. `BslValue::structure_property`),
@@ -900,8 +915,7 @@ impl<'a> Resolver<'a> {
                     | bsl_rt::BuiltinMethod::Collapse => None,
                     // JSON. Без аргументов — обход читателя и открытие/
                     // закрытие контейнеров записи.
-                    bsl_rt::BuiltinMethod::ReadNext
-                    | bsl_rt::BuiltinMethod::SkipNode
+                    bsl_rt::BuiltinMethod::SkipNode
                     | bsl_rt::BuiltinMethod::WriteStartObject
                     | bsl_rt::BuiltinMethod::WriteEndObject
                     | bsl_rt::BuiltinMethod::WriteStartArray
@@ -912,10 +926,29 @@ impl<'a> Resolver<'a> {
                     // писателя (параметры), `ОткрытьФайл` — 1..2. Тип
                     // получателя здесь ещё не известен, поэтому арность,
                     // как у `Добавить`, решает рантайм.
-                    bsl_rt::BuiltinMethod::SetString | bsl_rt::BuiltinMethod::OpenFile => None,
+                    // `Прочитать` — 0 у читателей JSON/XML (шаг по потоку) и 1 у
+                    // `ТекстовыйДокумент` (путь к файлу). Тип получателя здесь
+                    // ещё не известен, поэтому арность решает рантайм.
+                    bsl_rt::BuiltinMethod::SetString
+                    | bsl_rt::BuiltinMethod::OpenFile
+                    | bsl_rt::BuiltinMethod::ReadNext => None,
                     // XML. Обход читателя и закрытие элемента — без
                     // аргументов, остальное — по числу измеренных
                     // параметров.
+                    bsl_rt::BuiltinMethod::GetText
+                    | bsl_rt::BuiltinMethod::LineCount => Some(0),
+                    bsl_rt::BuiltinMethod::SetText
+                    | bsl_rt::BuiltinMethod::GetLine
+                    | bsl_rt::BuiltinMethod::AddLine
+                    | bsl_rt::BuiltinMethod::DeleteLine
+                    | bsl_rt::BuiltinMethod::OutputArea => Some(1),
+                    // `ПолучитьОбласть` у платформы проверяет число
+                    // аргументов в РАНТАЙМЕ: `ПолучитьОбласть(2, 3)` — не
+                    // ошибка компиляции, а ловимое исключение.
+                    bsl_rt::BuiltinMethod::GetArea => None,
+                    bsl_rt::BuiltinMethod::InsertLine | bsl_rt::BuiltinMethod::ReplaceLine => {
+                        Some(2)
+                    }
                     bsl_rt::BuiltinMethod::XmlReadAttribute
                     | bsl_rt::BuiltinMethod::XmlAttributeCount
                     | bsl_rt::BuiltinMethod::XmlMoveToContent

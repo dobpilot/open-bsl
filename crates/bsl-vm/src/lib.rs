@@ -917,6 +917,11 @@ fn step(
                 reg_store(stack, d, settings)?;
                 frames[frame_idx].pc += 1;
             }
+            Instr::NewTextDocument { dst } => {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, BslValue::new_text_document())?;
+                frames[frame_idx].pc += 1;
+            }
             Instr::NewXmlReader { dst } => {
                 let d = frames[frame_idx].reg_index(dst);
                 reg_store(stack, d, BslValue::new_xml_reader())?;
@@ -986,8 +991,16 @@ fn step(
             } => {
                 let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
                 let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
-                let v =
-                    bsl_rt::call_builtin_method_ctx(method, &ov, args.as_slice(), runtime_shapes)?;
+                // `Вывести` перехватывается здесь, а не в `bsl-rt`: подстановка
+                // параметров макета форматирует значение так же, как `Строка()`
+                // (измерено — число уходит с разделителями групп), а
+                // форматирование живёт в `bsl-format`, который зависит от
+                // `bsl-rt`, не наоборот. Тот же приём, что у `Строка`/`Формат`.
+                let v = if method == bsl_rt::BuiltinMethod::OutputArea {
+                    output_area(&ov, args.as_slice())?
+                } else {
+                    bsl_rt::call_builtin_method_ctx(method, &ov, args.as_slice(), runtime_shapes)?
+                };
                 let d = frames[frame_idx].reg_index(dst);
                 reg_store(stack, d, v)?;
                 frames[frame_idx].pc += 1;
@@ -998,7 +1011,17 @@ fn step(
                 let v = {
                     let ov = at(stack, obj_idx, "чтение объекта за границей стека значений")?;
                     let sv = at(stack, src_idx, "чтение аргумента за границей стека значений")?;
-                    ov.text_writer_write(sv)?
+                    // `Записать` полиморфен по получателю, а эта инструкция —
+                    // быстрый путь `ЗаписьТекста` в обход вызова метода.
+                    // Значит развести получателей надо и здесь, иначе
+                    // `ТекстовыйДокумент.Записать(путь)` попадёт в чужую
+                    // ветку и получит «метод не применим».
+                    if bsl_rt::textdoc_is_document(ov) {
+                        bsl_rt::textdoc_write_file(ov, std::slice::from_ref(sv))?;
+                        BslValue::Undefined
+                    } else {
+                        ov.text_writer_write(sv)?
+                    }
                 };
                 let d = frames[frame_idx].reg_index(dst);
                 reg_store(stack, d, v)?;
@@ -1497,6 +1520,27 @@ fn call_builtin_with_format(
         // имён, и путь без контекста для неё кончается ошибкой.
         other => bsl_rt::call_builtin_fn_ctx(other, args, runtime_shapes),
     }
+}
+
+
+/// `Документ.Вывести(Область)` — тело инструкции, вынесенное сюда ради
+/// доступа к `bsl-format`.
+pub(crate) fn output_area(target: &BslValue, args: &[BslValue]) -> Result<BslValue, RtError> {
+    let Some(source) = args.first() else {
+        return Err(RtError::MethodNotApplicable {
+            method: "Вывести",
+            receiver: target.type_name(),
+        });
+    };
+    let (area, params) = bsl_rt::textdoc_area_for_output(source)?;
+    // Значения параметров печатаются ровно как `Строка()`: измерено, что
+    // 1000.5 уходит в макет как «1 000,5», с разделителем групп.
+    let mut formatted = Vec::with_capacity(params.len());
+    for (name, value) in params {
+        formatted.push((name, bsl_format::format_value(&value, None)?));
+    }
+    bsl_rt::textdoc_append_rendered(target, &area.render(&formatted))?;
+    Ok(BslValue::Undefined)
 }
 
 /// Тело инструкции `Add`.

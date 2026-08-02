@@ -558,6 +558,9 @@ impl<'a> Compiler<'a> {
                 self.patch_jump(to_else, else_at);
                 self.patch_jump(to_end, end);
             }
+            RExpr::NewTextDocument => {
+                self.emit(Instr::NewTextDocument { dst });
+            }
             RExpr::NewXmlReader => {
                 self.emit(Instr::NewXmlReader { dst });
             }

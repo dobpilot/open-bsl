@@ -52,6 +52,13 @@ pub enum TypeId {
     XmlWriter,
     XmlWriterSettings,
     XmlNodeType,
+
+    // --- ТекстовыйДокумент ---------------------------------------------
+    // Та же пара написаний: тип с пробелом («Текстовый документ»),
+    // значение без. Имя типа параметров — «Параметры макета текстового
+    // документа», измерено.
+    TextDocument,
+    TextDocParams,
 }
 
 /// `(русское, английское)`. Русское — каноническое: именно оно уходит в
@@ -97,6 +104,12 @@ const NAMES: &[(TypeId, &str, &str)] = &[
         "XMLWriterSettings",
     ),
     (TypeId::XmlNodeType, "ТипУзлаXML", "XMLNodeType"),
+    (TypeId::TextDocument, "Текстовый документ", "TextDocument"),
+    (
+        TypeId::TextDocParams,
+        "Параметры макета текстового документа",
+        "TextTemplateParameters",
+    ),
 ];
 
 impl TypeId {

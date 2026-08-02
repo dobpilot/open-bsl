@@ -84,6 +84,7 @@ pub const OPCODES: &[&str] = &[
     "NewJsonReader",
     "NewJsonWriter",
     "NewJsonWriterSettings",
+    "NewTextDocument",
     "NewXmlReader",
     "NewXmlWriter",
     "NewXmlWriterSettings",
@@ -395,6 +396,7 @@ fn write_instr(instr: &Instr) -> String {
             line_break,
             indent,
         } => format!("NewJsonWriterSettings dst={dst} break={line_break} indent={indent}"),
+        Instr::NewTextDocument { dst } => format!("NewTextDocument dst={dst}"),
         Instr::NewXmlReader { dst } => format!("NewXmlReader dst={dst}"),
         Instr::NewXmlWriter { dst } => format!("NewXmlWriter dst={dst}"),
         Instr::NewXmlWriterSettings {
@@ -1156,6 +1158,7 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
             line_break: field_u8(&f, no, "break")?,
             indent: field_u8(&f, no, "indent")?,
         },
+        "NewTextDocument" => Instr::NewTextDocument { dst: dst(&f)? },
         "NewXmlReader" => Instr::NewXmlReader { dst: dst(&f)? },
         "NewXmlWriter" => Instr::NewXmlWriter { dst: dst(&f)? },
         "NewXmlWriterSettings" => Instr::NewXmlWriterSettings {
@@ -1233,6 +1236,11 @@ mod tests {
         // Литералы всех видов, включая дату и строку с кавычками.
         "а = Истина; б = Ложь; в = Неопределено; г = Null;\n\
          д = '20240115103000'; е = \"строка с \"\"кавычками\"\" и ;\";\n",
+        // Текстовый документ: конструктор плюс макетная часть — область,
+        // параметр и вывод.
+        "д = Новый ТекстовыйДокумент;\nд.УстановитьТекст(\"#Область Т\");\n\
+         о = д.ПолучитьОбласть(\"Т\");\nр = Новый ТекстовыйДокумент;\nр.Вывести(о);\n\
+         н = д.КоличествоСтрок();\n",
         // Тернарный оператор: своего опкода у него нет (компилируется
         // переходами), но переходы эти в корпусе должны быть — вместе с
         // булевым результатом `И`/`ИЛИ`.

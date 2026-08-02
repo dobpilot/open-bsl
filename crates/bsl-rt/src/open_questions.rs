@@ -939,6 +939,350 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
         note: "и здесь тоже булево",
     },
 
+    // --- ТекстовыйДокумент и его макеты ---------------------------------
+    // Снято на 8.3.27 в семь заходов. Модель строк у платформы своя (пустой
+    // текст — ноль строк, а один перевод строки — одна), а макетная часть
+    // держится на трёх правилах: `ПолучитьОбласть` отдаёт текст ВМЕСТЕ с
+    // маркерами, `Вывести` их срезает и подставляет параметры, а подстановка
+    // идёт в поле ШИРИНОЙ с сам плейсхолдер — значение либо дополняется
+    // пробелами, либо обрезается.
+    //
+    // Два вывода пришлось отменить по ходу, и оба раза ошибку нашла
+    // построчная сверка с нашим интерпретатором, а не платформа:
+    //
+    //   * «`Вывести` не принимает обычный документ» — на деле проба была
+    //     написана с переменной `И`, ключевым словом, и отказ приходил от
+    //     разбора. На самом деле вывод обычного документа даёт ПУСТО;
+    //   * «после `ПолучитьОбласть` текст переустановить нельзя» — проба
+    //     делала два действия разом, и отказ приходил от ВТОРОГО. На самом
+    //     деле текст меняется, но разметка областей заморожена первым
+    //     `ПолучитьОбласть`.
+    Anchor {
+        id: "TEXTDOC.TYPE_NAME",
+        expect: "Текстовый документ",
+        note: "имя ТИПА с пробелом, как у JSON и XML",
+    },
+    Anchor {
+        id: "TEXTDOC.VALUE_NAME",
+        expect: "ТекстовыйДокумент",
+        note: "имя ЗНАЧЕНИЯ — без пробела",
+    },
+    Anchor {
+        id: "TEXTDOC.SET_GET",
+        expect: "раз<ПС>два",
+        note: "текст переживает круговой прогон",
+    },
+    Anchor {
+        id: "TEXTDOC.EMPTY_TEXT",
+        expect: "[]",
+        note: "у нового документа текст пуст",
+    },
+    Anchor {
+        id: "TEXTDOC.EMPTY_COUNT",
+        expect: "0",
+        note: "и строк в нём НОЛЬ",
+    },
+    Anchor {
+        id: "TEXTDOC.COUNT_TWO_LINES",
+        expect: "2",
+        note: "перевод строки разделяет строки",
+    },
+    Anchor {
+        id: "TEXTDOC.COUNT_TRAILING_NEWLINE",
+        expect: "1",
+        note: "хвостовой перевод лишней строки НЕ создаёт",
+    },
+    Anchor {
+        id: "TEXTDOC.COUNT_ONLY_NEWLINE",
+        expect: "1",
+        note: "а один только перевод — это одна строка",
+    },
+    Anchor {
+        id: "TEXTDOC.COUNT_EMPTY_STRING",
+        expect: "0",
+        note: "пустой текст — ноль строк, особый случай",
+    },
+    Anchor {
+        id: "TEXTDOC.CRLF_ROUND_TRIP",
+        expect: "раз<ВК><ПС>два",
+        note: "ВК сохраняется в тексте как есть",
+    },
+    Anchor {
+        id: "TEXTDOC.CRLF_COUNT",
+        expect: "2",
+        note: "и на счёт строк не влияет",
+    },
+    Anchor {
+        id: "TEXTDOC.GET_LINE_FIRST",
+        expect: "раз",
+        note: "номера строк 1-based",
+    },
+    Anchor {
+        id: "TEXTDOC.GET_LINE_SECOND",
+        expect: "два",
+        note: "вторая строка",
+    },
+    Anchor {
+        id: "TEXTDOC.GET_LINE_ZERO",
+        expect: "[]",
+        note: "номер 0 — пустая строка, а не ошибка",
+    },
+    Anchor {
+        id: "TEXTDOC.GET_LINE_BEYOND",
+        expect: "[]",
+        note: "и за концом тоже",
+    },
+    Anchor {
+        id: "TEXTDOC.ADD_LINE",
+        expect: "раз<ПС>два<ПС>",
+        note: "ДобавитьСтроку ставит перевод строки ПОСЛЕ себя",
+    },
+    Anchor {
+        id: "TEXTDOC.ADD_LINE_COUNT",
+        expect: "2",
+        note: "и хвостовой перевод строку не удваивает",
+    },
+    Anchor {
+        id: "TEXTDOC.ADD_LINE_WITH_NEWLINE",
+        expect: "2",
+        note: "перевод ВНУТРИ добавляемой строки её разделяет",
+    },
+    Anchor {
+        id: "TEXTDOC.INSERT_LINE",
+        expect: "раз<ПС>два<ПС>три",
+        note: "вставка перед указанным номером",
+    },
+    Anchor {
+        id: "TEXTDOC.REPLACE_LINE",
+        expect: "ноль<ПС>два",
+        note: "замена по номеру",
+    },
+    Anchor {
+        id: "TEXTDOC.DELETE_LINE",
+        expect: "два",
+        note: "удаление по номеру",
+    },
+    Anchor {
+        id: "TEXTDOC.CLEAR",
+        expect: "[] 0",
+        note: "Очистить обнуляет и текст, и счётчик",
+    },
+    Anchor {
+        id: "TEXTDOC.INSERT_BEYOND",
+        expect: "раз<ПС>девять<ПС>",
+        note: "вставка за концом ведёт себя как ДобавитьСтроку",
+    },
+    Anchor {
+        id: "TEXTDOC.DELETE_BEYOND",
+        expect: "раз",
+        note: "удаление за концом молча ничего не делает",
+    },
+    Anchor {
+        id: "TEXTDOC.GET_AREA",
+        expect: "Текстовый документ: #Область Шапка<ПС>привет<ПС>#КонецОбласти",
+        note: "ПолучитьОбласть отдаёт документ ВМЕСТЕ с маркерами",
+    },
+    Anchor {
+        id: "TEXTDOC.GET_AREA_EN",
+        expect: "<ошибка>",
+        note: "английской разметки #Region платформа не знает",
+    },
+    Anchor {
+        id: "TEXTDOC.GET_AREA_MISSING",
+        expect: "<ошибка>",
+        note: "несуществующая область — ошибка",
+    },
+    Anchor {
+        id: "TEXTDOC.GET_AREA_BY_LINES",
+        expect: "<ошибка>",
+        note: "формы «по номерам строк» у текстового документа нет",
+    },
+    Anchor {
+        id: "TEXTDOC.PARAMETERS",
+        expect: "привет, [Имя]",
+        note: "ПолучитьТекст параметры НЕ подставляет",
+    },
+    Anchor {
+        id: "TEXTDOC.PARAMETERS_TYPE",
+        expect: "Параметры макета текстового документа",
+        note: "у набора параметров свой тип",
+    },
+    Anchor {
+        id: "TEXTDOC.OUTPUT_AREA",
+        expect: "",
+        note: "Вывести обычного документа даёт ПУСТО, а не ошибку",
+    },
+    Anchor {
+        id: "TEXTDOC.AREA_SUBSET",
+        expect: "[#Область Тело<ПС>внутри<ПС>#КонецОбласти<ПС>]",
+        note: "область — подмножество, с маркерами и переводом строки в конце",
+    },
+    Anchor {
+        id: "TEXTDOC.AREA_TWO",
+        expect: "[#Область Б<ПС>вторая<ПС>#КонецОбласти]",
+        note: "последняя область перевода строки в конце не получает",
+    },
+    Anchor {
+        id: "TEXTDOC.AREA_CASE",
+        expect: "[#Область Шапка<ПС>привет<ПС>#КонецОбласти]",
+        note: "имя области ищется без учёта регистра",
+    },
+    Anchor {
+        id: "TEXTDOC.AREA_COUNT",
+        expect: "3",
+        note: "в области три строки: маркер, тело, маркер",
+    },
+    Anchor {
+        id: "TEXTDOC.OUTPUT_OF_AREA",
+        expect: "[строка<ПС>]",
+        note: "Вывести СРЕЗАЕТ маркеры и оставляет только тело",
+    },
+    Anchor {
+        id: "TEXTDOC.OUTPUT_TWICE",
+        expect: "[строка<ПС>строка<ПС>]",
+        note: "повторный вывод дописывает",
+    },
+    Anchor {
+        id: "TEXTDOC.PARAM_ON_OUTPUT",
+        expect: "[привет, мир  <ПС>]",
+        note: "подстановка идёт в поле ШИРИНОЙ с плейсхолдер: «мир» дополнено пробелами",
+    },
+    Anchor {
+        id: "TEXTDOC.PARAM_MISSING",
+        expect: "[привет,      <ПС>]",
+        note: "незаданный параметр превращается в пробелы",
+    },
+    Anchor {
+        id: "TEXTDOC.PARAM_UNKNOWN_NAME",
+        expect: "<ошибка>",
+        note: "имя, которого в макете нет, задать нельзя",
+    },
+    Anchor {
+        id: "TEXTDOC.PARAM_NUMBER",
+        expect: "[итого 1 000,5<ПС>]",
+        note: "число печатается как Строка() — с разделителем групп",
+    },
+    Anchor {
+        id: "TEXTDOC.PARAM_LONGER",
+        expect: "[очень|<ПС>]",
+        note: "значение длиннее поля ОБРЕЗАЕТСЯ по его ширине",
+    },
+    Anchor {
+        id: "TEXTDOC.PARAM_TWO",
+        expect: "[раз и два<ПС>]",
+        note: "два параметра в одной строке",
+    },
+    Anchor {
+        id: "TEXTDOC.PARAM_REPEATED",
+        expect: "[х  -х  <ПС>]",
+        note: "одно имя подставляется в каждое вхождение",
+    },
+    Anchor {
+        id: "TEXTDOC.PARAM_IN_AREA_TEXT",
+        expect: "[#Область Т<ПС>привет, [Имя]<ПС>#КонецОбласти]",
+        note: "у самой области ПолучитьТекст тоже не подставляет",
+    },
+    Anchor {
+        id: "TEXTDOC.OUTPUT_PLAIN_DOC",
+        expect: "[]",
+        note: "документ не из ПолучитьОбласть выводится пустотой",
+    },
+    Anchor {
+        id: "TEXTDOC.AREA_NESTED",
+        expect: "[#Область Внутренняя<ПС>б<ПС>#КонецОбласти<ПС>]",
+        note: "вложенная область достаётся по имени",
+    },
+    Anchor {
+        id: "TEXTDOC.AREA_NESTED_OUTER",
+        expect: "[#Область Внешняя<ПС>а<ПС>]",
+        note: "а ВНЕШНЯЯ обрывается перед внутренней: вложения нет",
+    },
+    Anchor {
+        id: "TEXTDOC.AREA_DIRECTIVE_CASE",
+        expect: "[#область Т<ПС>тело<ПС>#конецобласти]",
+        note: "регистр самой директивы не важен",
+    },
+    Anchor {
+        id: "TEXTDOC.AREA_INDENTED",
+        expect: "[  #Область Т<ПС>тело<ПС>  #КонецОбласти]",
+        note: "отступ перед директивой допустим и сохраняется",
+    },
+    Anchor {
+        id: "TEXTDOC.OUTPUT_KEEPS_LINES",
+        expect: "[первая<ПС>вторая<ПС>] 2",
+        note: "строк в выводе столько же, сколько в теле области",
+    },
+    Anchor {
+        id: "TEXTDOC.GET_LINE_CRLF",
+        expect: "[раз]",
+        note: "ПолучитьСтроку ВК не показывает",
+    },
+    Anchor {
+        id: "TEXTDOC.ADD_AFTER_SET",
+        expect: "[раз<ПС>два<ПС>] 2",
+        note: "добавление к тексту без хвостового перевода ставит его сам",
+    },
+    Anchor {
+        id: "TEXTDOC.REPLACE_BEYOND",
+        expect: "[раз]",
+        note: "замена за концом молча ничего не делает",
+    },
+    Anchor {
+        id: "TEXTDOC.ANGLE_LINE_EMPTY",
+        expect: "[раз<ПС>    ><ПС>]",
+        note: "ведущая угловая скобка гасится пробелом; условности строки в рантайме НЕТ",
+    },
+    Anchor {
+        id: "TEXTDOC.ANGLE_LINE_FILLED",
+        expect: "[раз<ПС> два><ПС>]",
+        note: "то же с заполненным параметром — строка выводится в обоих случаях",
+    },
+    Anchor {
+        id: "TEXTDOC.EMPTY_BRACKETS",
+        expect: "<ошибка>",
+        note: "поле «[ ]имя» из конфигуратора в рантайме не распознаётся",
+    },
+    Anchor {
+        id: "TEXTDOC.EMPTY_BRACKETS_UNKNOWN",
+        expect: "<ошибка>",
+        note: "и имя такого поля задать нельзя",
+    },
+    Anchor {
+        id: "TEXTDOC.SET_TEXT_AFTER_GET_AREA",
+        expect: "[другое]",
+        note: "переустановить текст после взятия области МОЖНО",
+    },
+    Anchor {
+        id: "TEXTDOC.GET_AREA_AFTER_SET_TEXT",
+        expect: "<ошибка>",
+        note: "но разметка областей заморожена: новая область не найдётся",
+    },
+    Anchor {
+        id: "TEXTDOC.GET_AREA_AFTER_SET_TEXT_NO_AREA_TAKEN",
+        expect: "[#Область Б<ПС>другое<ПС>#КонецОбласти]",
+        note: "а без предварительного взятия та же переустановка работает",
+    },
+    Anchor {
+        id: "TEXTDOC.GET_AREA_TWICE",
+        expect: "[#Область А<ПС>тело<ПС>#КонецОбласти]",
+        note: "одну область можно брать сколько угодно раз",
+    },
+    Anchor {
+        id: "TEXTDOC.SET_TEXT_TWICE",
+        expect: "[второй]",
+        note: "обычная переустановка текста",
+    },
+    Anchor {
+        id: "TEXTDOC.WRITE_READ",
+        expect: "[раз<ПС>два] 2",
+        note: "круговой прогон через файл",
+    },
+    Anchor {
+        id: "TEXTDOC.READ_MISSING",
+        expect: "<ошибка>",
+        note: "несуществующий файл — ошибка",
+    },
+
     // --- XML -----------------------------------------------------------
     // Снято на 8.3.27 в пять заходов; как и у JSON, скрипт замеров
     // исполняется и нашим интерпретатором, поэтому весь блок сверяется

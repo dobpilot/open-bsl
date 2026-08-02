@@ -1,0 +1,65 @@
+TEXTDOC.TYPE_NAME	Текстовый документ
+TEXTDOC.VALUE_NAME	ТекстовыйДокумент
+TEXTDOC.SET_GET	раз<ПС>два
+TEXTDOC.EMPTY_TEXT	[]
+TEXTDOC.EMPTY_COUNT	0
+TEXTDOC.COUNT_TWO_LINES	2
+TEXTDOC.COUNT_TRAILING_NEWLINE	1
+TEXTDOC.COUNT_ONLY_NEWLINE	1
+TEXTDOC.COUNT_EMPTY_STRING	0
+TEXTDOC.CRLF_ROUND_TRIP	раз<ВК><ПС>два
+TEXTDOC.CRLF_COUNT	2
+TEXTDOC.GET_LINE_FIRST	раз
+TEXTDOC.GET_LINE_SECOND	два
+TEXTDOC.GET_LINE_ZERO	[]
+TEXTDOC.GET_LINE_BEYOND	[]
+TEXTDOC.ADD_LINE	раз<ПС>два<ПС>
+TEXTDOC.ADD_LINE_COUNT	2
+TEXTDOC.ADD_LINE_WITH_NEWLINE	2
+TEXTDOC.INSERT_LINE	раз<ПС>два<ПС>три
+TEXTDOC.REPLACE_LINE	ноль<ПС>два
+TEXTDOC.DELETE_LINE	два
+TEXTDOC.CLEAR	[] 0
+TEXTDOC.INSERT_BEYOND	раз<ПС>девять<ПС>
+TEXTDOC.DELETE_BEYOND	раз
+TEXTDOC.GET_AREA	Текстовый документ: #Область Шапка<ПС>привет<ПС>#КонецОбласти
+TEXTDOC.GET_AREA_EN	<ошибка>
+TEXTDOC.GET_AREA_MISSING	<ошибка>
+TEXTDOC.GET_AREA_BY_LINES	<ошибка>
+TEXTDOC.PARAMETERS	привет, [Имя]
+TEXTDOC.PARAMETERS_TYPE	Параметры макета текстового документа
+TEXTDOC.OUTPUT_AREA	
+TEXTDOC.AREA_SUBSET	[#Область Тело<ПС>внутри<ПС>#КонецОбласти<ПС>]
+TEXTDOC.AREA_TWO	[#Область Б<ПС>вторая<ПС>#КонецОбласти]
+TEXTDOC.AREA_CASE	[#Область Шапка<ПС>привет<ПС>#КонецОбласти]
+TEXTDOC.AREA_COUNT	3
+TEXTDOC.OUTPUT_OF_AREA	[строка<ПС>]
+TEXTDOC.OUTPUT_TWICE	[строка<ПС>строка<ПС>]
+TEXTDOC.PARAM_ON_OUTPUT	[привет, мир  <ПС>]
+TEXTDOC.PARAM_MISSING	[привет,      <ПС>]
+TEXTDOC.PARAM_UNKNOWN_NAME	<ошибка>
+TEXTDOC.PARAM_NUMBER	[итого 1 000,5<ПС>]
+TEXTDOC.PARAM_LONGER	[очень|<ПС>]
+TEXTDOC.PARAM_TWO	[раз и два<ПС>]
+TEXTDOC.PARAM_REPEATED	[х  -х  <ПС>]
+TEXTDOC.PARAM_IN_AREA_TEXT	[#Область Т<ПС>привет, [Имя]<ПС>#КонецОбласти]
+TEXTDOC.OUTPUT_PLAIN_DOC	[]
+TEXTDOC.AREA_NESTED	[#Область Внутренняя<ПС>б<ПС>#КонецОбласти<ПС>]
+TEXTDOC.AREA_NESTED_OUTER	[#Область Внешняя<ПС>а<ПС>]
+TEXTDOC.AREA_DIRECTIVE_CASE	[#область Т<ПС>тело<ПС>#конецобласти]
+TEXTDOC.AREA_INDENTED	[  #Область Т<ПС>тело<ПС>  #КонецОбласти]
+TEXTDOC.OUTPUT_KEEPS_LINES	[первая<ПС>вторая<ПС>] 2
+TEXTDOC.GET_LINE_CRLF	[раз]
+TEXTDOC.ADD_AFTER_SET	[раз<ПС>два<ПС>] 2
+TEXTDOC.REPLACE_BEYOND	[раз]
+TEXTDOC.ANGLE_LINE_EMPTY	[раз<ПС>    ><ПС>]
+TEXTDOC.ANGLE_LINE_FILLED	[раз<ПС> два><ПС>]
+TEXTDOC.EMPTY_BRACKETS	<ошибка>
+TEXTDOC.EMPTY_BRACKETS_UNKNOWN	<ошибка>
+TEXTDOC.SET_TEXT_AFTER_GET_AREA	[другое]
+TEXTDOC.GET_AREA_AFTER_SET_TEXT	<ошибка>
+TEXTDOC.GET_AREA_AFTER_SET_TEXT_NO_AREA_TAKEN	[#Область Б<ПС>другое<ПС>#КонецОбласти]
+TEXTDOC.GET_AREA_TWICE	[#Область А<ПС>тело<ПС>#КонецОбласти]
+TEXTDOC.SET_TEXT_TWICE	[второй]
+TEXTDOC.WRITE_READ	[раз<ПС>два] 2
+TEXTDOC.READ_MISSING	<ошибка>
