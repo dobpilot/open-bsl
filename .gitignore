@@ -5,3 +5,6 @@ perf.data
 *.bslc
 # личные настройки Claude Code для этого проекта — не общекомандные
 /.claude/settings.local.json
+# памятка для Claude Code — тоже личная, а не общекомандная: конвенции
+# проекта живут в AGENTS.md
+/CLAUDE.md
