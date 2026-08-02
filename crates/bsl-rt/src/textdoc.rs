@@ -266,7 +266,11 @@ impl TextDocData {
                 break;
             };
             let end = i + 1 + close;
-            let name: String = chars[i + 1..end].iter().collect();
+            let name: String = chars[i + 1..end]
+                .iter()
+                .collect::<String>()
+                .trim()
+                .to_string();
             // Перевод строки внутри скобок — это не плейсхолдер.
             if name.is_empty() || name.contains('\n') {
                 i += 1;
@@ -608,12 +612,10 @@ pub fn area_for_output(source: &BslValue) -> RtResult<(TextDocData, Vec<(String,
 pub fn append_rendered(target: &BslValue, rendered: &str) -> RtResult<()> {
     let doc = as_doc(target)?;
     let mut doc = doc.borrow_mut();
-    let mut text = doc.text().to_string();
-    if !text.is_empty() && !text.ends_with('\n') {
-        text.push('\n');
+    if !doc.text.is_empty() && !doc.text.ends_with('\n') {
+        doc.text.push('\n');
     }
-    text.push_str(rendered);
-    doc.set_text(&text);
+    doc.text.push_str(rendered);
     Ok(())
 }
 
@@ -787,5 +789,19 @@ mod tests {
         assert_eq!(d.parameter_names(), vec!["Имя".to_string()]);
         assert!(d.set_parameter("Имя", BslValue::Undefined).is_ok());
         assert!(d.set_parameter("НетТакого", BslValue::Undefined).is_err());
+    }
+
+    /// Пробелы внутри поля задают ширину, а не входят в имя параметра.
+    #[test]
+    fn parameter_names_ignore_padding_spaces() {
+        let mut d = doc("#Область Т\n[Сумма       ]|\n#КонецОбласти")
+            .area("Т")
+            .unwrap();
+        assert_eq!(d.parameter_names(), vec!["Сумма".to_string()]);
+        d.set_parameter("Сумма", BslValue::Undefined).unwrap();
+        assert_eq!(
+            d.render(&[("Сумма".to_string(), "123".to_string())]),
+            "123           |\n"
+        );
     }
 }

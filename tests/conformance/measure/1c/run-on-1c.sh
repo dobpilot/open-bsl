@@ -116,6 +116,7 @@ trap 'rm -rf "$WORK"' EXIT
 cp -r tests/conformance/measure/1c/epf-src "$WORK/src"
 
 OUT_ABS="$WORK/platform-output.tsv"
+mkdir -p "$WORK/src/Замеры/Forms/Форма/Ext/Form"
 python3 tests/conformance/measure/1c/gen-form-module.py \
     "$SCRIPT" \
     "$WORK/src/Замеры/Forms/Форма/Ext/Form/Module.bsl" \
