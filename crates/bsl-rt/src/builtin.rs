@@ -485,6 +485,17 @@ pub enum BuiltinMethod {
     /// параметров форматирует значения, а форматирование живёт в
     /// `bsl-format`, который зависит от этого крейта, не наоборот.
     OutputArea,
+
+    // --- ТабличныйДокумент ----------------------------------------------
+    /// `Область(...)` — ССЫЛКА на прямоугольник документа.
+    Region,
+    /// `Объединить()` у области ячеек.
+    MergeCells,
+    /// `Разъединить()` у области ячеек.
+    UnmergeCells,
+    /// `НачатьГруппуСтрок` / `ЗакончитьГруппуСтрок`.
+    BeginRowGroup,
+    EndRowGroup,
 }
 
 /// Написания МЕТОДОВ объектов — тот же принцип, что и у
@@ -605,6 +616,16 @@ pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
     ("GetArea", BuiltinMethod::GetArea),
     ("Вывести", BuiltinMethod::OutputArea),
     ("Output", BuiltinMethod::OutputArea),
+    ("Область", BuiltinMethod::Region),
+    ("Area", BuiltinMethod::Region),
+    ("Объединить", BuiltinMethod::MergeCells),
+    ("Merge", BuiltinMethod::MergeCells),
+    ("Разъединить", BuiltinMethod::UnmergeCells),
+    ("Unmerge", BuiltinMethod::UnmergeCells),
+    ("НачатьГруппуСтрок", BuiltinMethod::BeginRowGroup),
+    ("StartRowGroup", BuiltinMethod::BeginRowGroup),
+    ("ЗакончитьГруппуСтрок", BuiltinMethod::EndRowGroup),
+    ("EndRowGroup", BuiltinMethod::EndRowGroup),
 ];
 
 impl BuiltinMethod {
@@ -793,6 +814,7 @@ pub fn call_builtin_method(
             )))
         }
         BuiltinMethod::Add => match args {
+            _ if crate::spreadsheet::is_drawings(obj) => crate::spreadsheet::drawings_add(obj, args),
             [] => obj.table_add_row(),
             [v] => match obj.push_element(v.clone()) {
                 Ok(()) => Ok(BslValue::Undefined),
@@ -812,7 +834,9 @@ pub fn call_builtin_method(
             Ok(BslValue::Undefined)
         }
         BuiltinMethod::Clear => {
-            if crate::textdoc::is_text_document(obj) {
+            if crate::spreadsheet::is_spread_document(obj) {
+                crate::spreadsheet::clear(obj)?;
+            } else if crate::textdoc::is_text_document(obj) {
                 crate::textdoc::clear(obj)?;
             } else {
                 obj.clear_collection()?;
@@ -916,7 +940,10 @@ pub fn call_builtin_method(
         // `ТекстовыйДокумент` — сохранить файл. Одно имя, разный смысл по
         // получателю, как и у `Закрыть`.
         BuiltinMethod::Write => {
-            if crate::textdoc::is_text_document(obj) {
+            if crate::spreadsheet::is_spread_document(obj) {
+                crate::spreadsheet::write(obj, args)?;
+                Ok(BslValue::Undefined)
+            } else if crate::textdoc::is_text_document(obj) {
                 crate::textdoc::write_file(obj, args)?;
                 Ok(BslValue::Undefined)
             } else {
@@ -946,7 +973,10 @@ pub fn call_builtin_method(
             Ok(BslValue::Undefined)
         }
         BuiltinMethod::ReadNext => {
-            if crate::textdoc::is_text_document(obj) {
+            if crate::spreadsheet::is_spread_document(obj) {
+                crate::spreadsheet::read(obj, args)?;
+                Ok(BslValue::Undefined)
+            } else if crate::textdoc::is_text_document(obj) {
                 // У документа `Прочитать(Путь)` — загрузка файла, а не шаг
                 // по потоку.
                 crate::textdoc::read_file(obj, args)?;
@@ -988,7 +1018,30 @@ pub fn call_builtin_method(
             crate::textdoc::delete_line(obj, args)?;
             Ok(BslValue::Undefined)
         }
-        BuiltinMethod::GetArea => crate::textdoc::get_area(obj, args),
+        BuiltinMethod::GetArea => {
+            if crate::spreadsheet::is_spread_document(obj) {
+                crate::spreadsheet::get_area(obj, args)
+            } else {
+                crate::textdoc::get_area(obj, args)
+            }
+        }
+        BuiltinMethod::Region => crate::spreadsheet::region(obj, args),
+        BuiltinMethod::MergeCells => {
+            crate::spreadsheet::merge_cells(obj)?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::UnmergeCells => {
+            crate::spreadsheet::unmerge_cells(obj)?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::BeginRowGroup => {
+            crate::spreadsheet::begin_row_group(obj, args)?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::EndRowGroup => {
+            crate::spreadsheet::end_row_group(obj)?;
+            Ok(BslValue::Undefined)
+        }
         BuiltinMethod::OutputArea => Err(RtError::MethodNotApplicable {
             method: "Вывести",
             receiver: obj.type_name(),

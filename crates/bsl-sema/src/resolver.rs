@@ -314,6 +314,8 @@ pub const NEW_TYPES: &[&str] = &[
     "XMLWriterSettings",
     "ТекстовыйДокумент",
     "TextDocument",
+    "ТабличныйДокумент",
+    "SpreadsheetDocument",
 ];
 
 struct Resolver<'a> {
@@ -703,6 +705,16 @@ impl<'a> Resolver<'a> {
                     indent: Box::new(indent),
                 })
             }
+            "ТАБЛИЧНЫЙДОКУМЕНТ" | "SPREADSHEETDOCUMENT" => {
+                if !args.is_empty() {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый ТабличныйДокумент".to_string(),
+                        expected: 0,
+                        found: args.len(),
+                    });
+                }
+                Ok(RExpr::NewSpreadDocument)
+            }
             "ТЕКСТОВЫЙДОКУМЕНТ" | "TEXTDOCUMENT" => {
                 if !args.is_empty() {
                     return Err(SemaError::ArgumentCountMismatch {
@@ -946,6 +958,14 @@ impl<'a> Resolver<'a> {
                     // аргументов в РАНТАЙМЕ: `ПолучитьОбласть(2, 3)` — не
                     // ошибка компиляции, а ловимое исключение.
                     bsl_rt::BuiltinMethod::GetArea => None,
+                    // `Область` — 1 аргумент (адрес строкой) либо 4
+                    // (координаты), поэтому арность решает рантайм.
+                    bsl_rt::BuiltinMethod::Region => None,
+                    bsl_rt::BuiltinMethod::MergeCells
+                    | bsl_rt::BuiltinMethod::UnmergeCells
+                    | bsl_rt::BuiltinMethod::EndRowGroup => Some(0),
+                    // `НачатьГруппуСтрок` — от нуля до двух аргументов.
+                    bsl_rt::BuiltinMethod::BeginRowGroup => None,
                     bsl_rt::BuiltinMethod::InsertLine | bsl_rt::BuiltinMethod::ReplaceLine => {
                         Some(2)
                     }

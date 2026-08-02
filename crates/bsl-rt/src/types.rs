@@ -53,6 +53,16 @@ pub enum TypeId {
     XmlWriterSettings,
     XmlNodeType,
 
+    // --- ТабличныйДокумент ---------------------------------------------
+    // Та же пара написаний, что у остальных: тип печатается с пробелом
+    // («Табличный документ»), значение — без. Измерено на 8.3.27.
+    SpreadDocument,
+    SpreadArea,
+    SpreadDrawings,
+    SpreadDrawing,
+    SpreadFileType,
+    DrawingKind,
+
     // --- ТекстовыйДокумент ---------------------------------------------
     // Та же пара написаний: тип с пробелом («Текстовый документ»),
     // значение без. Имя типа параметров — «Параметры макета текстового
@@ -105,6 +115,36 @@ const NAMES: &[(TypeId, &str, &str)] = &[
         "XMLWriterSettings",
     ),
     (TypeId::XmlNodeType, "ТипУзлаXML", "XMLNodeType"),
+    (
+        TypeId::SpreadFileType,
+        "ТипФайлаТабличногоДокумента",
+        "SpreadsheetDocumentFileType",
+    ),
+    (
+        TypeId::DrawingKind,
+        "ТипРисункаТабличногоДокумента",
+        "SpreadsheetDocumentDrawingType",
+    ),
+    (
+        TypeId::SpreadDocument,
+        "Табличный документ",
+        "SpreadsheetDocument",
+    ),
+    (
+        TypeId::SpreadArea,
+        "Область ячеек табличного документа",
+        "SpreadsheetDocumentRange",
+    ),
+    (
+        TypeId::SpreadDrawings,
+        "Коллекция рисунков табличного документа",
+        "SpreadsheetDocumentDrawingCollection",
+    ),
+    (
+        TypeId::SpreadDrawing,
+        "Рисунок табличного документа",
+        "SpreadsheetDocumentDrawing",
+    ),
     (TypeId::TextDocument, "Текстовый документ", "TextDocument"),
     (
         TypeId::TextDocParams,

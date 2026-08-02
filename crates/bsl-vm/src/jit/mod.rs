@@ -650,9 +650,13 @@ shim!(shim_set_prop, |frames, stack, program, idx, shapes, _a, _b, _c| {
     };
     let ov = reg_load(stack, frames[idx].reg_index(obj))?;
     let sv = reg_load(stack, frames[idx].reg_index(src))?;
-    match ov.set_field_cached(name, sv.clone(), prop_cache(chunk, pc)?) {
-        Err(RtError::NotAnObject) => ov.set_field_by_name(field_name(program, name)?, sv)?,
-        other => other?,
+    // `Значение` перехватывается ТАК ЖЕ, как в ветке интерпретатора: ему
+    // нужно форматирование из `bsl-format`.
+    if !crate::set_spread_value(&ov, field_name(program, name)?, &sv)? {
+        match ov.set_field_cached(name, sv.clone(), prop_cache(chunk, pc)?) {
+            Err(RtError::NotAnObject) => ov.set_field_by_name(field_name(program, name)?, sv)?,
+            other => other?,
+        }
     }
     Ok(OK)
 });

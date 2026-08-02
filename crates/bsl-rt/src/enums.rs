@@ -43,6 +43,17 @@ pub enum EnumValue {
     DateFormatJavaScript,
     DateFormatMicrosoft,
 
+    // --- ТипФайлаТабличногоДокумента -----------------------------------
+    // Членов у платформы четырнадцать (MXL, MXL7, XLS, XLS95, XLSX, ODS,
+    // TXT, ANSITXT, HTML, HTML3, HTML4, HTML5, PDF, DOCX; `MXLX` НЕТ —
+    // измерено перебором). Здесь заведены только те, в которые мы умеем
+    // писать: остальные лучше не знать вовсе, чем принять и записать не то.
+    SpreadFileMxl,
+    SpreadFileTxt,
+    SpreadFileXlsx,
+    /// Единственный поддержанный вид рисунка.
+    DrawingRectangle,
+
     // --- ТипУзлаXML ----------------------------------------------------
     // Состав ВЫЯСНЕН перебором на 8.3.27, а не взят из документации:
     // `НачалоСущности`, `Пробелы` и `ЗначащиеПробелы` платформа не знает,
@@ -78,6 +89,8 @@ pub enum EnumKind {
     JsonLineBreak,
     JsonDateFormat,
     XmlNodeType,
+    SpreadFileType,
+    DrawingKind,
     TextEncoding,
 }
 
@@ -89,6 +102,14 @@ impl EnumKind {
             EnumKind::JsonLineBreak => ("ПереносСтрокJSON", "JSONLineBreak"),
             EnumKind::JsonDateFormat => ("ФорматДатыJSON", "JSONDateFormat"),
             EnumKind::XmlNodeType => ("ТипУзлаXML", "XMLNodeType"),
+            EnumKind::SpreadFileType => (
+                "ТипФайлаТабличногоДокумента",
+                "SpreadsheetDocumentFileType",
+            ),
+            EnumKind::DrawingKind => (
+                "ТипРисункаТабличногоДокумента",
+                "SpreadsheetDocumentDrawingType",
+            ),
             EnumKind::TextEncoding => ("КодировкаТекста", "TextEncoding"),
         }
     }
@@ -221,6 +242,34 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "JavaScript",
         "JavaScript",
         "JavaScript",
+    ),
+    (
+        EnumKind::SpreadFileType,
+        EnumValue::SpreadFileMxl,
+        "MXL",
+        "MXL",
+        "MXL",
+    ),
+    (
+        EnumKind::SpreadFileType,
+        EnumValue::SpreadFileTxt,
+        "TXT",
+        "TXT",
+        "TXT",
+    ),
+    (
+        EnumKind::SpreadFileType,
+        EnumValue::SpreadFileXlsx,
+        "XLSX",
+        "XLSX",
+        "XLSX",
+    ),
+    (
+        EnumKind::DrawingKind,
+        EnumValue::DrawingRectangle,
+        "Прямоугольник",
+        "Rectangle",
+        "Прямоугольник",
     ),
     // Пятая колонка снова не производная от третьей: платформа печатает
     // «Начало элемента», а не «НачалоЭлемента». Всё измерено.
@@ -373,6 +422,10 @@ pub const ENUM_NAMES: &[(&str, EnumKind)] = &[
     ("XMLNodeType", EnumKind::XmlNodeType),
     ("КодировкаТекста", EnumKind::TextEncoding),
     ("TextEncoding", EnumKind::TextEncoding),
+    ("ТипФайлаТабличногоДокумента", EnumKind::SpreadFileType),
+    ("SpreadsheetDocumentFileType", EnumKind::SpreadFileType),
+    ("ТипРисункаТабличногоДокумента", EnumKind::DrawingKind),
+    ("SpreadsheetDocumentDrawingType", EnumKind::DrawingKind),
 ];
 
 /// Перечисление по имени слева от точки. Регистронезависимо и на обоих

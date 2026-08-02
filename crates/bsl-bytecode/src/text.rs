@@ -36,7 +36,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 1;
+pub const FORMAT_VERSION: u32 = 2;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -85,6 +85,7 @@ pub const OPCODES: &[&str] = &[
     "NewJsonWriter",
     "NewJsonWriterSettings",
     "NewTextDocument",
+    "NewSpreadDocument",
     "NewXmlReader",
     "NewXmlWriter",
     "NewXmlWriterSettings",
@@ -397,6 +398,7 @@ fn write_instr(instr: &Instr) -> String {
             indent,
         } => format!("NewJsonWriterSettings dst={dst} break={line_break} indent={indent}"),
         Instr::NewTextDocument { dst } => format!("NewTextDocument dst={dst}"),
+        Instr::NewSpreadDocument { dst } => format!("NewSpreadDocument dst={dst}"),
         Instr::NewXmlReader { dst } => format!("NewXmlReader dst={dst}"),
         Instr::NewXmlWriter { dst } => format!("NewXmlWriter dst={dst}"),
         Instr::NewXmlWriterSettings {
@@ -1159,6 +1161,7 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
             indent: field_u8(&f, no, "indent")?,
         },
         "NewTextDocument" => Instr::NewTextDocument { dst: dst(&f)? },
+        "NewSpreadDocument" => Instr::NewSpreadDocument { dst: dst(&f)? },
         "NewXmlReader" => Instr::NewXmlReader { dst: dst(&f)? },
         "NewXmlWriter" => Instr::NewXmlWriter { dst: dst(&f)? },
         "NewXmlWriterSettings" => Instr::NewXmlWriterSettings {
@@ -1238,6 +1241,9 @@ mod tests {
          д = '20240115103000'; е = \"строка с \"\"кавычками\"\" и ;\";\n",
         // Текстовый документ: конструктор плюс макетная часть — область,
         // параметр и вывод.
+        "т = Новый ТабличныйДокумент;\nт.Область(1, 1, 1, 2).Текст = \"шапка\";\n\
+         т.Область(1, 1, 1, 2).Объединить();\nо = т.ПолучитьОбласть(1, 1, 1, 2);\n\
+         п = Новый ТабличныйДокумент;\nп.Вывести(о);\nп.Очистить();\n",
         "д = Новый ТекстовыйДокумент;\nд.УстановитьТекст(\"#Область Т\");\n\
          о = д.ПолучитьОбласть(\"Т\");\nр = Новый ТекстовыйДокумент;\nр.Вывести(о);\n\
          н = д.КоличествоСтрок();\n",

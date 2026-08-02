@@ -850,11 +850,12 @@ fn step(
             Instr::SetProp { obj, name, src } => {
                 let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
                 let sv = reg_load(stack, frames[frame_idx].reg_index(src))?;
-                match ov.set_field_cached(name, sv.clone(), prop_cache(chunk, pc)?) {
-                    Err(RtError::NotAnObject) => {
-                        ov.set_field_by_name(field_name(program, name)?, sv)?
+                let имя = field_name(program, name)?;
+                if !set_spread_value(&ov, имя, &sv)? {
+                    match ov.set_field_cached(name, sv.clone(), prop_cache(chunk, pc)?) {
+                        Err(RtError::NotAnObject) => ov.set_field_by_name(имя, sv)?,
+                        other => other?,
                     }
-                    other => other?,
                 }
                 frames[frame_idx].pc += 1;
             }
@@ -915,6 +916,11 @@ fn step(
                 let settings = BslValue::new_json_writer_settings(&lb, &ind)?;
                 let d = frames[frame_idx].reg_index(dst);
                 reg_store(stack, d, settings)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::NewSpreadDocument { dst } => {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, bsl_rt::new_spread_document())?;
                 frames[frame_idx].pc += 1;
             }
             Instr::NewTextDocument { dst } => {
@@ -1016,7 +1022,10 @@ fn step(
                     // Значит развести получателей надо и здесь, иначе
                     // `ТекстовыйДокумент.Записать(путь)` попадёт в чужую
                     // ветку и получит «метод не применим».
-                    if bsl_rt::textdoc_is_document(ov) {
+                    if bsl_rt::spread_is_document(ov) {
+                        bsl_rt::spread_write(ov, std::slice::from_ref(sv))?;
+                        BslValue::Undefined
+                    } else if bsl_rt::textdoc_is_document(ov) {
                         bsl_rt::textdoc_write_file(ov, std::slice::from_ref(sv))?;
                         BslValue::Undefined
                     } else {
@@ -1525,6 +1534,37 @@ fn call_builtin_with_format(
 
 /// `Документ.Вывести(Область)` — тело инструкции, вынесенное сюда ради
 /// доступа к `bsl-format`.
+/// `ОбластьЯчеек.Значение = ...` — перехват присваивания.
+///
+/// Отдельной функцией, потому что её зовут ДВОЕ: ветка `SetProp` в
+/// интерпретаторе и одноимённый шим JIT. Разъехаться им нельзя — за этим
+/// следит `the_jit_agrees_with_the_interpreter_on_every_script`, и он же
+/// поймал это место, когда перехват стоял только в интерпретаторе.
+///
+/// В файл уходит ПРЕДСТАВЛЕНИЕ значения, а форматирование живёт в
+/// `bsl-format`, который зависит от `bsl-rt`, не наоборот, — потому это и не
+/// может быть сделано этажом ниже.
+pub(crate) fn set_spread_value(
+    obj: &BslValue,
+    name: &str,
+    value: &BslValue,
+) -> Result<bool, RtError> {
+    if !bsl_rt::spread_is_area(obj) {
+        return Ok(false);
+    }
+    // `Расшифровка` — тоже ЗНАЧЕНИЕ любого типа, и в файл она уходит своим
+    // представлением, ровно как `Значение`.
+    if name.eq_ignore_ascii_case("Значение") || name.eq_ignore_ascii_case("Value") {
+        bsl_rt::spread_set_value(obj, &bsl_format::format_value(value, None)?)?;
+        return Ok(true);
+    }
+    if name.eq_ignore_ascii_case("Расшифровка") || name.eq_ignore_ascii_case("Details") {
+        bsl_rt::spread_set_detail(obj, &bsl_format::format_value(value, None)?)?;
+        return Ok(true);
+    }
+    Ok(false)
+}
+
 pub(crate) fn output_area(target: &BslValue, args: &[BslValue]) -> Result<BslValue, RtError> {
     let Some(source) = args.first() else {
         return Err(RtError::MethodNotApplicable {
@@ -1532,6 +1572,12 @@ pub(crate) fn output_area(target: &BslValue, args: &[BslValue]) -> Result<BslVal
             receiver: target.type_name(),
         });
     };
+    // `Вывести` полиморфен: у табличного документа он приписывает другой
+    // ДОКУМЕНТ снизу, у текстового — подставляет параметры макета.
+    if bsl_rt::spread_is_document(target) {
+        bsl_rt::spread_output(target, args)?;
+        return Ok(BslValue::Undefined);
+    }
     let (area, params) = bsl_rt::textdoc_area_for_output(source)?;
     // Значения параметров печатаются ровно как `Строка()`: измерено, что
     // 1000.5 уходит в макет как «1 000,5», с разделителем групп.

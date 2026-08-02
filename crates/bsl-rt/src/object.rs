@@ -64,6 +64,22 @@ pub enum BslObject {
     /// `ПараметрыЗаписиXML`.
     XmlWriterSettings(crate::xml::XmlWriterSettings),
 
+    /// `ТабличныйДокумент`.
+    SpreadDocument(Rc<RefCell<crate::spreadsheet::SpreadDocData>>),
+    /// `ОбластьЯчеекТабличногоДокумента` — ССЫЛКА на прямоугольник в том же
+    /// документе, а не копия: `Область(1,1,1,1).Текст = "A"` меняет сам
+    /// документ (измерено). Копию отдаёт только `ПолучитьОбласть`.
+    SpreadArea(
+        Rc<RefCell<crate::spreadsheet::SpreadDocData>>,
+        crate::spreadsheet::Rect,
+    ),
+
+    /// `КоллекцияРисунковТабличногоДокумента` — обёртка над теми же
+    /// данными, как `Таблица.Колонки`.
+    SpreadDrawings(Rc<RefCell<crate::spreadsheet::SpreadDocData>>),
+    /// `РисунокТабличногоДокумента` — документ и НОМЕР рисунка в нём.
+    SpreadDrawing(Rc<RefCell<crate::spreadsheet::SpreadDocData>>, usize),
+
     /// `ТекстовыйДокумент`.
     TextDocument(Rc<RefCell<crate::textdoc::TextDocData>>),
     /// `Документ.Параметры` — отдельный объект-обёртка над ТЕМИ ЖЕ данными

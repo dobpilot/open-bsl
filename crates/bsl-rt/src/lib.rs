@@ -6,6 +6,7 @@
 
 mod builtin;
 mod date;
+mod deflate;
 mod enums;
 mod fill;
 mod interner;
@@ -16,6 +17,10 @@ mod object;
 pub mod open_questions;
 mod runtime_shapes;
 mod shape;
+mod spreadsheet;
+mod spreadsheet_template;
+mod xlsx;
+mod zip;
 mod string;
 mod table;
 pub mod encoding;
@@ -45,6 +50,15 @@ pub use textdoc::{
     append_rendered as textdoc_append_rendered, area_for_output as textdoc_area_for_output,
     is_text_document as textdoc_is_document, write_file as textdoc_write_file, TextDocData,
 };
+pub use spreadsheet::{
+    from_mxl_bytes, is_area as spread_is_area, is_spread_document as spread_is_document,
+    set_detail as spread_set_detail, set_value as spread_set_value, read as spread_read, new_document as new_spread_document,
+    output as spread_output, to_mxl_bytes, to_txt_bytes, write as spread_write,
+    write_file as spread_write_file, AreaKind, Color, FileKind, Line, LineStyle, Font, HAlign, Merge,
+    NamedArea, Rect, SpreadDocData, VAlign,
+};
+pub use spreadsheet_template::from_template_xml;
+pub use xlsx::to_xlsx_bytes;
 pub use xml::{XmlAttr, XmlEvent, XmlParser, XmlWriter, XmlWriterSettings};
 pub use date::{
     format_long as format_date_long, format_pattern as format_date_pattern, BslDate, DateBoundary,
@@ -141,6 +155,10 @@ pub enum RtError {
     /// [`RtError::Xml`] — слой другой, и по типу ошибки это должно быть
     /// видно.
     TextDoc(String),
+    /// `ТабличныйДокумент`: адресация областей, запись и чтение файлов.
+    /// Отдельно от [`RtError::TextDoc`] по той же причине — это другой
+    /// слой с другим форматом файла.
+    Spread(String),
     /// Имя из `СписокСвойств` в `ЗаполнитьЗначенияСвойств`, которого нет у
     /// источника или у приёмника. Отдельно от [`RtError::UnknownField`] и
     /// [`RtError::UnknownColumn`], потому что имя тут пришло СТРОКОЙ из
@@ -213,6 +231,7 @@ impl fmt::Display for RtError {
             RtError::Json(msg) => write!(f, "{msg}"),
             RtError::Xml(msg) => write!(f, "{msg}"),
             RtError::TextDoc(msg) => write!(f, "{msg}"),
+            RtError::Spread(msg) => write!(f, "{msg}"),
             RtError::UnknownType(name) => write!(f, "тип «{name}» не определён"),
             RtError::DateOutOfRange { op } => write!(
                 f,
@@ -265,6 +284,10 @@ impl BslValue {
                 BslObject::XmlReader(_) => "ЧтениеXML",
                 BslObject::XmlWriter(_) => "ЗаписьXML",
                 BslObject::XmlWriterSettings(_) => "ПараметрыЗаписиXML",
+                BslObject::SpreadDocument(_) => "ТабличныйДокумент",
+                BslObject::SpreadDrawings(_) => "КоллекцияРисунковТабличногоДокумента",
+                BslObject::SpreadDrawing(..) => "РисунокТабличногоДокумента",
+                BslObject::SpreadArea(..) => "ОбластьЯчеекТабличногоДокумента",
                 BslObject::TextDocument(_) => "ТекстовыйДокумент",
                 BslObject::TextDocParams(_) => "ПараметрыМакетаТекстовогоДокумента",
             },
@@ -973,6 +996,10 @@ impl BslValue {
                 | BslObject::XmlReader(..)
                 | BslObject::XmlWriter(..)
                 | BslObject::XmlWriterSettings(..)
+                | BslObject::SpreadDocument(..)
+                | BslObject::SpreadArea(..)
+                | BslObject::SpreadDrawing(..)
+                | BslObject::SpreadDrawings(..)
                 | BslObject::TextDocument(..)
                 | BslObject::TextDocParams(..) => true,
             },
@@ -1001,6 +1028,8 @@ impl BslValue {
                 EnumKind::JsonLineBreak => TypeId::JsonLineBreak,
                 EnumKind::JsonDateFormat => TypeId::JsonDateFormat,
                 EnumKind::XmlNodeType => TypeId::XmlNodeType,
+                EnumKind::SpreadFileType => TypeId::SpreadFileType,
+                EnumKind::DrawingKind => TypeId::DrawingKind,
                 EnumKind::TextEncoding => TypeId::TextEncoding,
             },
             BslValue::Object(o) => match &**o {
@@ -1023,6 +1052,10 @@ impl BslValue {
                 BslObject::XmlReader(..) => TypeId::XmlReader,
                 BslObject::XmlWriter(..) => TypeId::XmlWriter,
                 BslObject::XmlWriterSettings(..) => TypeId::XmlWriterSettings,
+                BslObject::SpreadDocument(..) => TypeId::SpreadDocument,
+                BslObject::SpreadDrawings(..) => TypeId::SpreadDrawings,
+                BslObject::SpreadDrawing(..) => TypeId::SpreadDrawing,
+                BslObject::SpreadArea(..) => TypeId::SpreadArea,
                 BslObject::TextDocument(..) => TypeId::TextDocument,
                 BslObject::TextDocParams(..) => TypeId::TextDocParams,
             },
@@ -1406,8 +1439,13 @@ impl BslValue {
                 | BslObject::XmlReader(..)
                 | BslObject::XmlWriter(..)
                 | BslObject::XmlWriterSettings(..)
+                | BslObject::SpreadDocument(..)
+                | BslObject::SpreadArea(..)
+                | BslObject::SpreadDrawing(..)
                 | BslObject::TextDocument(..)
                 | BslObject::TextDocParams(..) => Err(RtError::NotIndexable),
+                // У коллекции рисунков длина есть — это её `Количество`.
+                BslObject::SpreadDrawings(doc) => Ok(doc.borrow().drawings().len()),
             },
             _ => Err(RtError::NotIndexable),
         }
@@ -1735,6 +1773,21 @@ impl BslValue {
                         Err(RtError::UnknownColumn(name.to_string()))
                     }
                 }
+                BslObject::SpreadDocument(data) => {
+                    if name.eq_ignore_ascii_case("Рисунки")
+                        || name.eq_ignore_ascii_case("Drawings")
+                    {
+                        Ok(BslValue::Object(Rc::new(BslObject::SpreadDrawings(
+                            data.clone(),
+                        ))))
+                    } else {
+                        spreadsheet::get_property(self, name)
+                    }
+                }
+                BslObject::SpreadArea(..) => spreadsheet::get_property(self, name),
+                BslObject::SpreadDrawing(data, i) => {
+                    spreadsheet::drawing_property(data, *i, name)
+                }
                 BslObject::TextDocParams(_) => textdoc::get_parameter(self, name),
                 BslObject::KeyValuePair(k, v) => {
                     if name.eq_ignore_ascii_case("Ключ") || name.eq_ignore_ascii_case("Key") {
@@ -1758,6 +1811,12 @@ impl BslValue {
                 // `Параметры.Имя = Значение` — это задание параметра
                 // макета, а не заведение поля объекта. Имя, которого в
                 // тексте нет, платформа отвергает (измерено).
+                BslObject::SpreadDocument(..) | BslObject::SpreadArea(..) => {
+                    spreadsheet::set_property(self, name, val)
+                }
+                BslObject::SpreadDrawing(data, i) => {
+                    spreadsheet::set_drawing_property(data, *i, name, &val)
+                }
                 BslObject::TextDocParams(_) => textdoc::set_parameter(self, name, val),
                 BslObject::TableRow(data, row_id) => {
                     let mut data = data.borrow_mut();
@@ -2351,6 +2410,10 @@ impl fmt::Display for BslValue {
                 BslObject::XmlReader(_) => write!(f, "ЧтениеXML"),
                 BslObject::XmlWriter(_) => write!(f, "ЗаписьXML"),
                 BslObject::XmlWriterSettings(_) => write!(f, "ПараметрыЗаписиXML"),
+                BslObject::SpreadDocument(_) => write!(f, "ТабличныйДокумент"),
+                BslObject::SpreadDrawings(_) => write!(f, "КоллекцияРисунковТабличногоДокумента"),
+                BslObject::SpreadDrawing(..) => write!(f, "РисунокТабличногоДокумента"),
+                BslObject::SpreadArea(..) => write!(f, "ОбластьЯчеекТабличногоДокумента"),
                 BslObject::TextDocument(_) => write!(f, "ТекстовыйДокумент"),
                 BslObject::TextDocParams(_) => write!(f, "ПараметрыМакетаТекстовогоДокумента"),
             },
