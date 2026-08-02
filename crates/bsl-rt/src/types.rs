@@ -59,6 +59,7 @@ pub enum TypeId {
     // документа», измерено.
     TextDocument,
     TextDocParams,
+    TextEncoding,
 }
 
 /// `(русское, английское)`. Русское — каноническое: именно оно уходит в
@@ -110,6 +111,7 @@ const NAMES: &[(TypeId, &str, &str)] = &[
         "Параметры макета текстового документа",
         "TextTemplateParameters",
     ),
+    (TypeId::TextEncoding, "КодировкаТекста", "TextEncoding"),
 ];
 
 impl TypeId {

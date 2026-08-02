@@ -498,28 +498,66 @@ pub fn clear(obj: &BslValue) -> RtResult<()> {
     Ok(())
 }
 
-/// `Прочитать(Путь)`.
+/// Кодировка из второго аргумента: член `КодировкаТекста` либо строка с
+/// названием. Без аргумента — UTF-8, как у платформы.
+///
+/// # Errors
+///
+/// [`RtError::TextDoc`], если название не поддержано;
+/// [`RtError::TypeError`], если аргумент не строка и не член перечисления.
+fn encoding_arg(arg: Option<&BslValue>) -> RtResult<crate::encoding::Encoding> {
+    use crate::encoding::Encoding;
+    match arg {
+        None | Some(BslValue::Undefined) => Ok(Encoding::Utf8),
+        Some(BslValue::Str(s)) => Encoding::by_name(&s.to_string()),
+        Some(BslValue::Enum(e)) => match e {
+            // ANSI и «Системная» — кодовая страница системы. На машине
+            // замеров это windows-1251 (проверено дампом записанного
+            // файла); на системе с другой локалью платформа взяла бы
+            // другую, и вот эта зависимость у нас не воспроизведена.
+            crate::EnumValue::TextEncodingAnsi | crate::EnumValue::TextEncodingSystem => {
+                Ok(Encoding::Windows1251)
+            }
+            crate::EnumValue::TextEncodingOem => Ok(Encoding::Cp866),
+            crate::EnumValue::TextEncodingUtf16 => Ok(Encoding::Utf16Le),
+            crate::EnumValue::TextEncodingUtf8 => Ok(Encoding::Utf8),
+            _ => Err(RtError::TypeError {
+                expected: "КодировкаТекста",
+                op: "кодировка файла",
+            }),
+        },
+        Some(_) => Err(RtError::TypeError {
+            expected: "КодировкаТекста либо Строка",
+            op: "кодировка файла",
+        }),
+    }
+}
+
+/// `Прочитать(Путь[, Кодировка])`.
 ///
 /// # Errors
 ///
 /// [`RtError::IoError`], если файл не читается.
 pub fn read_file(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
     let path = need_str(args.first(), "Прочитать")?;
-    let text = std::fs::read_to_string(&path).map_err(|e| RtError::IoError(e.to_string()))?;
-    let text = text.strip_prefix('\u{feff}').unwrap_or(&text).to_string();
-    as_doc(obj)?.borrow_mut().set_text(&text);
+    let encoding = encoding_arg(args.get(1))?;
+    let bytes = std::fs::read(&path).map_err(|e| RtError::IoError(e.to_string()))?;
+    as_doc(obj)?.borrow_mut().set_text(&encoding.decode(&bytes));
     Ok(())
 }
 
-/// `Записать(Путь)`.
+/// `Записать(Путь[, Кодировка])`.
 ///
 /// # Errors
 ///
-/// [`RtError::IoError`], если файл не записывается.
+/// [`RtError::IoError`], если файл не записывается;
+/// [`RtError::TextDoc`], если кодировка не поддержана.
 pub fn write_file(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
     let path = need_str(args.first(), "Записать")?;
+    let encoding = encoding_arg(args.get(1))?;
     let doc = as_doc(obj)?.borrow();
-    std::fs::write(&path, doc.text().as_bytes()).map_err(|e| RtError::IoError(e.to_string()))?;
+    std::fs::write(&path, encoding.encode(doc.text()))
+        .map_err(|e| RtError::IoError(e.to_string()))?;
     Ok(())
 }
 

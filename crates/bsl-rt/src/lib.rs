@@ -18,6 +18,7 @@ mod runtime_shapes;
 mod shape;
 mod string;
 mod table;
+pub mod encoding;
 mod textdoc;
 mod types;
 mod xml;
@@ -1000,6 +1001,7 @@ impl BslValue {
                 EnumKind::JsonLineBreak => TypeId::JsonLineBreak,
                 EnumKind::JsonDateFormat => TypeId::JsonDateFormat,
                 EnumKind::XmlNodeType => TypeId::XmlNodeType,
+                EnumKind::TextEncoding => TypeId::TextEncoding,
             },
             BslValue::Object(o) => match &**o {
                 BslObject::Array(_) => TypeId::Array,

@@ -60,6 +60,14 @@ pub enum EnumValue {
     XmlEntityReference,
     XmlDocumentType,
     XmlNotation,
+
+    // --- КодировкаТекста ------------------------------------------------
+    // Ровно пять членов, состав проверен перебором.
+    TextEncodingAnsi,
+    TextEncodingOem,
+    TextEncodingUtf16,
+    TextEncodingUtf8,
+    TextEncodingSystem,
 }
 
 /// К какому перечислению принадлежит член — это же имя стоит слева от
@@ -70,6 +78,7 @@ pub enum EnumKind {
     JsonLineBreak,
     JsonDateFormat,
     XmlNodeType,
+    TextEncoding,
 }
 
 impl EnumKind {
@@ -80,6 +89,7 @@ impl EnumKind {
             EnumKind::JsonLineBreak => ("ПереносСтрокJSON", "JSONLineBreak"),
             EnumKind::JsonDateFormat => ("ФорматДатыJSON", "JSONDateFormat"),
             EnumKind::XmlNodeType => ("ТипУзлаXML", "XMLNodeType"),
+            EnumKind::TextEncoding => ("КодировкаТекста", "TextEncoding"),
         }
     }
 }
@@ -305,6 +315,42 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "Notation",
         "Нотация",
     ),
+    // Печатаются идентификатором, без «человеческого» варианта — измерено.
+    (
+        EnumKind::TextEncoding,
+        EnumValue::TextEncodingAnsi,
+        "ANSI",
+        "ANSI",
+        "ANSI",
+    ),
+    (
+        EnumKind::TextEncoding,
+        EnumValue::TextEncodingOem,
+        "OEM",
+        "OEM",
+        "OEM",
+    ),
+    (
+        EnumKind::TextEncoding,
+        EnumValue::TextEncodingUtf16,
+        "UTF16",
+        "UTF16",
+        "UTF16",
+    ),
+    (
+        EnumKind::TextEncoding,
+        EnumValue::TextEncodingUtf8,
+        "UTF8",
+        "UTF8",
+        "UTF8",
+    ),
+    (
+        EnumKind::TextEncoding,
+        EnumValue::TextEncodingSystem,
+        "Системная",
+        "System",
+        "Системная",
+    ),
     (
         EnumKind::JsonDateFormat,
         EnumValue::DateFormatMicrosoft,
@@ -325,6 +371,8 @@ pub const ENUM_NAMES: &[(&str, EnumKind)] = &[
     ("JSONDateFormat", EnumKind::JsonDateFormat),
     ("ТипУзлаXML", EnumKind::XmlNodeType),
     ("XMLNodeType", EnumKind::XmlNodeType),
+    ("КодировкаТекста", EnumKind::TextEncoding),
+    ("TextEncoding", EnumKind::TextEncoding),
 ];
 
 /// Перечисление по имени слева от точки. Регистронезависимо и на обоих

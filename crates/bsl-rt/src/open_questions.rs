@@ -940,7 +940,7 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
     },
 
     // --- ТекстовыйДокумент и его макеты ---------------------------------
-    // Снято на 8.3.27 в семь заходов. Модель строк у платформы своя (пустой
+    // Снято на 8.3.27 в девять заходов. Модель строк у платформы своя (пустой
     // текст — ноль строк, а один перевод строки — одна), а макетная часть
     // держится на трёх правилах: `ПолучитьОбласть` отдаёт текст ВМЕСТЕ с
     // маркерами, `Вывести` их срезает и подставляет параметры, а подстановка
@@ -957,6 +957,10 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
     //     делала два действия разом, и отказ приходил от ВТОРОГО. На самом
     //     деле текст меняется, но разметка областей заморожена первым
     //     `ПолучитьОбласть`.
+    //
+    // Кодировки снимались не выводом, а ДАМПОМ БАЙТОВ файлов, которые
+    // записала сама платформа: иначе «UTF-8» и «UTF-8 с сигнатурой»
+    // неразличимы, а разница именно в ней.
     Anchor {
         id: "TEXTDOC.TYPE_NAME",
         expect: "Текстовый документ",
@@ -1271,6 +1275,116 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
         id: "TEXTDOC.SET_TEXT_TWICE",
         expect: "[второй]",
         note: "обычная переустановка текста",
+    },
+    Anchor {
+        id: "ENC.MEMBER.UTF8",
+        expect: "UTF8",
+        note: "член перечисления печатается идентификатором",
+    },
+    Anchor {
+        id: "ENC.MEMBER.UTF16",
+        expect: "UTF16",
+        note: "то же",
+    },
+    Anchor {
+        id: "ENC.MEMBER.ANSI",
+        expect: "ANSI",
+        note: "то же",
+    },
+    Anchor {
+        id: "ENC.MEMBER.OEM",
+        expect: "OEM",
+        note: "то же",
+    },
+    Anchor {
+        id: "ENC.MEMBER.SYSTEM",
+        expect: "Системная",
+        note: "и «Системная» — пятый и последний член",
+    },
+    Anchor {
+        id: "ENC.MEMBER.UTF16LE",
+        expect: "<ошибка>",
+        note: "отдельных членов под порядок байт НЕТ",
+    },
+    Anchor {
+        id: "ENC.MEMBER.UTF16BE",
+        expect: "<ошибка>",
+        note: "и здесь тоже",
+    },
+    Anchor {
+        id: "ENC.MEMBER.KOI8R",
+        expect: "<ошибка>",
+        note: "однобайтовые кодировки задаются только строкой",
+    },
+    Anchor {
+        id: "ENC.MEMBER.WINDOWS1251",
+        expect: "<ошибка>",
+        note: "и эта тоже",
+    },
+    Anchor {
+        id: "ENC.WRITE.DEFAULT",
+        expect: "записан",
+        note: "без кодировки пишется UTF-8 С СИГНАТУРОЙ (EF BB BF), проверено дампом",
+    },
+    Anchor {
+        id: "ENC.WRITE.UTF8",
+        expect: "записан",
+        note: "то же самое явным членом",
+    },
+    Anchor {
+        id: "ENC.WRITE.UTF16",
+        expect: "записан",
+        note: "UTF-16 little-endian с сигнатурой FF FE",
+    },
+    Anchor {
+        id: "ENC.WRITE.ANSI",
+        expect: "записан",
+        note: "ANSI на машине замеров — windows-1251 (C0 E1)",
+    },
+    Anchor {
+        id: "ENC.WRITE.OEM",
+        expect: "записан",
+        note: "OEM — cp866 (80 A1)",
+    },
+    Anchor {
+        id: "ENC.WRITE.STR_UTF8",
+        expect: "записан",
+        note: "строковое имя даёт тот же байтовый результат",
+    },
+    Anchor {
+        id: "ENC.WRITE.STR_1251",
+        expect: "записан",
+        note: "windows-1251 строкой",
+    },
+    Anchor {
+        id: "ENC.WRITE.STR_866",
+        expect: "записан",
+        note: "cp866 строкой",
+    },
+    Anchor {
+        id: "ENC.WRITE.STR_KOI8",
+        expect: "записан",
+        note: "KOI8-R строкой (E1 C2)",
+    },
+    Anchor {
+        id: "ENC.WRITE.STR_UTF16LE",
+        expect: "записан",
+        note: "явный LE тоже пишется с сигнатурой",
+    },
+    Anchor {
+        id: "ENC.WRITE.STR_BAD",
+        expect: "<ошибка>",
+        note: "неизвестное имя — ошибка, а не тихий откат к UTF-8",
+    },
+    Anchor {
+        id: "ENC.ROUND_TRIP_1251",
+        expect: "Аб",
+        note: "запись и чтение одной кодировкой",
+    },
+    Anchor {
+        id: "ENC.READ_WRONG",
+        expect: "[��]",
+        note: "чтение чужой кодировкой даёт U+FFFD, а не отказ",
     },
     Anchor {
         id: "TEXTDOC.WRITE_READ",
