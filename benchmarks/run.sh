@@ -72,6 +72,19 @@ done
 LUAJIT=""
 command -v luajit >/dev/null 2>&1 && LUAJIT=luajit
 
+# Python-двойники используют только стандартную библиотеку. Путь можно
+# переопределить так же, как для OneScript: PYTHON=/путь/python3 ...
+PYTHON=${PYTHON:-}
+if [ -z "$PYTHON" ]; then
+    for candidate in python3 python; do
+        if command -v "$candidate" >/dev/null 2>&1 \
+            && "$candidate" -c 'import sys; raise SystemExit(sys.version_info.major != 3)' 2>/dev/null; then
+            PYTHON=$candidate
+            break
+        fi
+    done
+fi
+
 # OneScript ставится куда угодно и в PATH попадает не всегда, поэтому
 # кроме PATH смотрим типовые места. Переопределить всё — переменной
 # окружения: OSCRIPT=/путь/к/oscript ./benchmarks/run.sh
@@ -97,6 +110,7 @@ echo "рантаймы:"
 echo "  bsl-cli   $($BSL_CLI --help | head -1)"
 [ -n "$LUA" ] && echo "  lua       $($LUA -v 2>&1 | head -1)" || echo "  lua       НЕТ"
 [ -n "$LUAJIT" ] && echo "  luajit    $($LUAJIT -v 2>&1 | head -1)" || echo "  luajit    НЕТ"
+[ -n "$PYTHON" ] && echo "  python    $($PYTHON --version 2>&1 | head -1)" || echo "  python    НЕТ"
 [ -n "$OSCRIPT" ] && echo "  oscript   $($OSCRIPT -version 2>&1 | head -1)  ($OSCRIPT)" || echo "  oscript   НЕТ (нужен OneScript; путь можно задать в OSCRIPT=...)"
 echo
 
@@ -162,8 +176,8 @@ onec_median() {
         }' "$ONEC_FILE"
 }
 
-printf '%-18s %10s %10s %10s %10s %10s %10s\n' сценарий bsl-cli bsl-cli+jit lua luajit oscript 1С
-printf '%-18s %10s %10s %10s %10s %10s %10s\n' ------------------ ---------- ---------- ---------- ---------- ---------- ----------
+printf '%-18s %10s %10s %10s %10s %10s %10s %10s\n' сценарий bsl-cli bsl-cli+jit lua luajit python oscript 1С
+printf '%-18s %10s %10s %10s %10s %10s %10s %10s\n' ------------------ ---------- ---------- ---------- ---------- ---------- ---------- ----------
 
 for bsl in benchmarks/*.bsl; do
     name=$(basename "$bsl" .bsl)
@@ -176,7 +190,7 @@ for bsl in benchmarks/*.bsl; do
         # Только СВОИ файлы: `$name.1c.out` кладёт отдельный прогон на
         # платформе, и стирать его здесь значило бы каждый раз терять
         # эталон, с которым сличаемся.
-        for rt in bsl-cli bsl-cli-jit lua luajit oscript; do
+        for rt in bsl-cli bsl-cli-jit lua luajit python oscript; do
             rm -f "$SCRATCH/$name.$rt.out"
         done
         rm -f "$SCRATCH/test.csv"
@@ -193,6 +207,7 @@ for bsl in benchmarks/*.bsl; do
     is_heavy "$name" && keep_output "$name" bsl-cli-jit
     lua_ms="-"
     luajit_ms="-"
+    python_ms="-"
     os_ms="-"
     if [ -f "benchmarks/$name.lua" ]; then
         if [ -n "$LUA" ]; then
@@ -204,13 +219,17 @@ for bsl in benchmarks/*.bsl; do
             is_heavy "$name" && keep_output "$name" luajit
         fi
     fi
+    if [ -n "$PYTHON" ] && [ -f "benchmarks/$name.py" ]; then
+        python_ms=$(median_ms "$PYTHON" "benchmarks/$name.py" "$workdir") || python_ms="ошибка"
+        is_heavy "$name" && keep_output "$name" python
+    fi
     if [ -n "$OSCRIPT" ]; then
         os_ms=$(median_ms "$OSCRIPT" "$bsl" "$workdir") || os_ms="ошибка"
         is_heavy "$name" && keep_output "$name" oscript
     fi
 
     onec_ms=$(onec_median "$name")
-    printf '%-18s %10s %10s %10s %10s %10s %10s\n' "$name" "$ours" "$jit_ms" "$lua_ms" "$luajit_ms" "$os_ms" "$onec_ms"
+    printf '%-18s %10s %10s %10s %10s %10s %10s %10s\n' "$name" "$ours" "$jit_ms" "$lua_ms" "$luajit_ms" "$python_ms" "$os_ms" "$onec_ms"
 done
 
 echo
