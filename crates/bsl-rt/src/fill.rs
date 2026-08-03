@@ -31,16 +31,53 @@
 //! в ней есть: набор полей объекта пишет не человек, а список свойств —
 //! человек, и опечатка в нём должна быть слышна.
 
+use std::cell::{OnceCell, RefCell};
+use std::rc::{Rc, Weak};
+
 use crate::interner::NameInterner;
 use crate::object::BslObject;
-use crate::{BslValue, RtError, RtResult};
+use crate::{BslString, BslValue, RtError, RtResult, ValueTableData};
+
+/// Разрешённые индексы прямого переноса и, если список ошибочен, имя, на
+/// котором обход с конца должен остановиться после записи корректного хвоста.
+struct RowCopyPlan {
+    cells: Vec<(usize, usize)>,
+    rejected: Option<String>,
+}
+
+/// Последний план достаточно держать одним: прикладной код переносит строки
+/// длинными сериями между одной парой таблиц. `Weak` не продлевает жизнь
+/// таблиц, а ревизии схем защищают от `Добавить`/`Свернуть` между вызовами.
+struct CachedRowCopyPlan {
+    source: Weak<RefCell<ValueTableData>>,
+    target: Weak<RefCell<ValueTableData>>,
+    source_schema_revision: u64,
+    target_schema_revision: u64,
+    list: Option<BslString>,
+    exclude: Option<BslString>,
+    plan: Rc<RowCopyPlan>,
+}
+
+thread_local! {
+    static LAST_ROW_COPY_PLAN: RefCell<Option<CachedRowCopyPlan>> = const { RefCell::new(None) };
+}
 
 /// Имя свойства из `СписокСвойств`/`ИсключаяСвойства`: как написано (для
 /// сообщения об ошибке) и в верхнем регистре (для сравнения — имена
 /// свойств регистронезависимы, как и всё остальное в BSL).
 struct Name {
     written: String,
-    upper: String,
+    /// Нормализованное написание нужно только общему пути. При точном
+    /// совпадении колонок таблицы Unicode-преобразование не выполняется.
+    upper: OnceCell<String>,
+}
+
+impl Name {
+    fn upper(&self) -> &str {
+        self.upper
+            .get_or_init(|| self.written.to_uppercase())
+            .as_str()
+    }
 }
 
 /// Разбор списка имён: `Неопределено` — параметр не задан, строка — имена
@@ -63,10 +100,23 @@ fn parse_name_list(v: &BslValue, op: &'static str) -> RtResult<Option<Vec<Name>>
                 .filter(|n| !n.is_empty())
                 .map(|n| Name {
                     written: n.to_string(),
-                    upper: n.to_uppercase(),
+                    upper: OnceCell::new(),
                 })
                 .collect(),
         )),
+        _ => Err(RtError::TypeError {
+            expected: "Строка",
+            op,
+        }),
+    }
+}
+
+/// Ключ списка без разбора имён. Клонирование `BslString` клонирует `Rc`,
+/// поэтому попадание в кэш не создаёт ни UTF-8-строку, ни отдельные имена.
+fn name_list_key(v: &BslValue, op: &'static str) -> RtResult<Option<BslString>> {
+    match v {
+        BslValue::Undefined => Ok(None),
+        BslValue::Str(s) => Ok(Some(s.clone())),
         _ => Err(RtError::TypeError {
             expected: "Строка",
             op,
@@ -95,6 +145,9 @@ pub fn fill_property_values(
     exclude: &BslValue,
     names: &NameInterner,
 ) -> RtResult<()> {
+    if let Some(result) = fill_table_rows(target, source, list, exclude) {
+        return result;
+    }
     let only = parse_name_list(list, "ЗаполнитьЗначенияСвойств(СписокСвойств)")?;
     let except = parse_name_list(exclude, "ЗаполнитьЗначенияСвойств(ИсключаяСвойства)")?;
     // Свойства источника снимаются ЦЕЛИКОМ и заранее, а не читаются по
@@ -109,7 +162,7 @@ pub fn fill_property_values(
         for (name, value) in available {
             let upper = name.to_uppercase();
             if let Some(except) = &except {
-                if except.iter().any(|n| n.upper == upper) {
+                if except.iter().any(|n| n.upper() == upper) {
                     continue;
                 }
             }
@@ -134,7 +187,7 @@ pub fn fill_property_values(
     for wanted in only.iter().rev() {
         let Some((name, value)) = available
             .iter()
-            .find(|(name, _)| name.to_uppercase() == wanted.upper)
+            .find(|(name, _)| name.to_uppercase() == wanted.upper())
         else {
             return Err(RtError::UnknownProperty(wanted.written.clone()));
         };
@@ -144,6 +197,206 @@ pub fn fill_property_values(
         write_property(target, name, value.clone(), names)?;
     }
     Ok(())
+}
+
+/// Прямой перенос между двумя живыми строками таблиц.
+///
+/// План заранее разрешает соответствие индексов колонок. Между разными
+/// таблицами ячейки копируются напрямую под одним заимствованием источника и
+/// приёмника; для одной таблицы значения сначала снимаются во временный
+/// вектор. Это сохраняет корректность копирования строки в саму себя и
+/// убирает из горячего цикла создание пар `(имя, значение)`, повторный поиск
+/// имён и вызов `set_field_by_name` для каждой ячейки.
+///
+/// `None` означает, что общий путь обязан обработать вызов: один из объектов
+/// не строка таблицы либо строка уже инвалидирована. Последний случай важен
+/// для точного порядка ошибок и частичных записей измеренной семантики.
+fn fill_table_rows(
+    target: &BslValue,
+    source: &BslValue,
+    list: &BslValue,
+    exclude: &BslValue,
+) -> Option<RtResult<()>> {
+    let BslValue::Object(target_object) = target else {
+        return None;
+    };
+    let BslObject::TableRow(target_data, target_row_id) = &**target_object else {
+        return None;
+    };
+    let BslValue::Object(source_object) = source else {
+        return None;
+    };
+    let BslObject::TableRow(source_data, source_row_id) = &**source_object else {
+        return None;
+    };
+
+    // Типы списков проверяются ДО валидности строк — так же, как на общем
+    // пути. Для инвалидированной строки затем отступаем к нему: там точный
+    // порядок `UnknownProperty`/`RowInvalidated` зависит от наличия колонок.
+    let list_key = match name_list_key(list, "ЗаполнитьЗначенияСвойств(СписокСвойств)")
+    {
+        Ok(key) => key,
+        Err(error) => return Some(Err(error)),
+    };
+    let exclude_key = match name_list_key(exclude, "ЗаполнитьЗначенияСвойств(ИсключаяСвойства)")
+    {
+        Ok(key) => key,
+        Err(error) => return Some(Err(error)),
+    };
+
+    // Два неизменяемых `borrow` допустимы и для одной таблицы. Перед её
+    // `borrow_mut` значения снимаются отдельно, поэтому строка может
+    // копироваться в себя.
+    let source_data_ref = source_data.borrow();
+    let target_data_ref = target_data.borrow();
+    let source_pos = source_data_ref.pos_of(*source_row_id)?;
+    let target_pos = target_data_ref.pos_of(*target_row_id)?;
+    let source_schema_revision = source_data_ref.schema_revision();
+    let target_schema_revision = target_data_ref.schema_revision();
+    // При заданном списке исключения семантически игнорируются. Тип выше всё
+    // равно проверен, а из ключа лишнее значение можно убрать.
+    let cached_exclude = if list_key.is_none() {
+        exclude_key.as_ref()
+    } else {
+        None
+    };
+
+    let cached_plan = LAST_ROW_COPY_PLAN.with(|slot| {
+        let slot = slot.borrow();
+        let cached = slot.as_ref()?;
+        let source_matches = cached
+            .source
+            .upgrade()
+            .is_some_and(|data| Rc::ptr_eq(&data, source_data));
+        let target_matches = cached
+            .target
+            .upgrade()
+            .is_some_and(|data| Rc::ptr_eq(&data, target_data));
+        (source_matches
+            && target_matches
+            && cached.source_schema_revision == source_schema_revision
+            && cached.target_schema_revision == target_schema_revision
+            && cached.list.as_ref() == list_key.as_ref()
+            && cached.exclude.as_ref() == cached_exclude)
+            .then(|| cached.plan.clone())
+    });
+
+    let plan = if let Some(plan) = cached_plan {
+        plan
+    } else {
+        let only = match parse_name_list(list, "ЗаполнитьЗначенияСвойств(СписокСвойств)")
+        {
+            Ok(names) => names,
+            Err(error) => return Some(Err(error)),
+        };
+        let except = match parse_name_list(exclude, "ЗаполнитьЗначенияСвойств(ИсключаяСвойства)")
+        {
+            Ok(names) => names,
+            Err(error) => return Some(Err(error)),
+        };
+        let plan = Rc::new(resolve_row_copy_plan(
+            &source_data_ref,
+            &target_data_ref,
+            only.as_deref(),
+            except.as_deref(),
+        ));
+        LAST_ROW_COPY_PLAN.with(|slot| {
+            *slot.borrow_mut() = Some(CachedRowCopyPlan {
+                source: Rc::downgrade(source_data),
+                target: Rc::downgrade(target_data),
+                source_schema_revision,
+                target_schema_revision,
+                list: list_key.clone(),
+                exclude: cached_exclude.cloned(),
+                plan: plan.clone(),
+            });
+        });
+        plan
+    };
+
+    if Rc::ptr_eq(source_data, target_data) {
+        let values: Vec<BslValue> = plan
+            .cells
+            .iter()
+            .map(|(source_col, _)| source_data_ref.columns[*source_col][source_pos].clone())
+            .collect();
+        drop(target_data_ref);
+        drop(source_data_ref);
+        let mut target_data_ref = target_data.borrow_mut();
+        for ((_, target_col), value) in plan.cells.iter().zip(values) {
+            target_data_ref.columns[*target_col][target_pos] = value;
+        }
+    } else {
+        drop(target_data_ref);
+        let mut target_data_ref = target_data.borrow_mut();
+        for (source_col, target_col) in &plan.cells {
+            target_data_ref.columns[*target_col][target_pos] =
+                source_data_ref.columns[*source_col][source_pos].clone();
+        }
+    }
+
+    Some(match &plan.rejected {
+        Some(name) => Err(RtError::UnknownProperty(name.clone())),
+        None => Ok(()),
+    })
+}
+
+fn resolve_row_copy_plan(
+    source: &ValueTableData,
+    target: &ValueTableData,
+    only: Option<&[Name]>,
+    except: Option<&[Name]>,
+) -> RowCopyPlan {
+    let mut cells = Vec::new();
+    let mut rejected = None;
+    if let Some(only) = only {
+        // Порядок с конца измерен на платформе: до ошибочного имени должны
+        // успеть записаться корректные имена, стоящие после него.
+        for wanted in only.iter().rev() {
+            let source_col = source
+                .column_names
+                .iter()
+                .position(|name| name == &wanted.written)
+                .or_else(|| {
+                    source
+                        .column_names
+                        .iter()
+                        .position(|name| name.to_uppercase() == wanted.upper())
+                });
+            let Some(source_col) = source_col else {
+                rejected = Some(wanted.written.clone());
+                break;
+            };
+            let source_name = &source.column_names[source_col];
+            let Some(target_col) = target
+                .column_names
+                .iter()
+                .position(|name| name.eq_ignore_ascii_case(source_name))
+            else {
+                rejected = Some(wanted.written.clone());
+                break;
+            };
+            cells.push((source_col, target_col));
+        }
+    } else {
+        for (source_col, source_name) in source.column_names.iter().enumerate() {
+            if except.is_some_and(|except| {
+                except.iter().any(|name| {
+                    source_name == &name.written || source_name.to_uppercase() == name.upper()
+                })
+            }) {
+                continue;
+            }
+            if let Some(target_col) = target
+                .column_names
+                .iter()
+                .position(|name| name.eq_ignore_ascii_case(source_name))
+            {
+                cells.push((source_col, target_col));
+            }
+        }
+    }
+    RowCopyPlan { cells, rejected }
 }
 
 /// Пары «имя свойства — значение» в порядке объявления полей (для
@@ -288,6 +541,16 @@ mod tests {
             d.add_row()
         };
         BslValue::Object(Rc::new(BslObject::TableRow(data, row_id)))
+    }
+
+    fn add_table_column(row: &BslValue, name: &str) {
+        let BslValue::Object(object) = row else {
+            panic!("ожидалась строка таблицы");
+        };
+        let BslObject::TableRow(data, _) = &**object else {
+            panic!("ожидалась строка таблицы");
+        };
+        data.borrow_mut().add_column(name);
     }
 
     /// Вызов без обоих списков.
@@ -485,6 +748,138 @@ mod tests {
         let back = structure(&[("Цена", BslValue::Undefined)], &mut rt);
         fill(&back, &row, &rt).unwrap();
         assert_eq!(field(&back, "Цена", &rt), num(10));
+    }
+
+    #[test]
+    fn table_rows_copy_by_column_name_instead_of_position() {
+        let rt = rt();
+        let source = table_row(&["А", "Б"]);
+        source.set_field_by_name("А", num(1)).unwrap();
+        source.set_field_by_name("Б", num(2)).unwrap();
+        let target = table_row(&["Б", "А"]);
+        target.set_field_by_name("А", num(9)).unwrap();
+        target.set_field_by_name("Б", num(9)).unwrap();
+
+        fill_property_values(
+            &target,
+            &source,
+            &str_val("А, Б"),
+            // При заданном списке исключение по измеренной семантике не
+            // действует; fast path обязан сохранить это правило.
+            &str_val("Б"),
+            &rt.names,
+        )
+        .unwrap();
+
+        assert_eq!(target.get_field_by_name("А").unwrap(), num(1));
+        assert_eq!(target.get_field_by_name("Б").unwrap(), num(2));
+    }
+
+    #[test]
+    fn table_rows_without_a_list_copy_intersection_and_honor_exclusion() {
+        let rt = rt();
+        let source = table_row(&["А", "Б", "Лишнее"]);
+        source.set_field_by_name("А", num(1)).unwrap();
+        source.set_field_by_name("Б", num(2)).unwrap();
+        source.set_field_by_name("Лишнее", num(3)).unwrap();
+        let target = table_row(&["Б", "А", "ТолькоПриемник"]);
+        target.set_field_by_name("А", num(9)).unwrap();
+        target.set_field_by_name("Б", num(9)).unwrap();
+        target.set_field_by_name("ТолькоПриемник", num(9)).unwrap();
+
+        fill_property_values(
+            &target,
+            &source,
+            &BslValue::Undefined,
+            &str_val("б"),
+            &rt.names,
+        )
+        .unwrap();
+
+        assert_eq!(target.get_field_by_name("А").unwrap(), num(1));
+        assert_eq!(target.get_field_by_name("Б").unwrap(), num(9));
+        assert_eq!(target.get_field_by_name("ТолькоПриемник").unwrap(), num(9));
+    }
+
+    #[test]
+    fn table_row_fast_path_preserves_partial_write_before_list_error() {
+        let rt = rt();
+        let source = table_row(&["А", "Б"]);
+        source.set_field_by_name("А", num(1)).unwrap();
+        source.set_field_by_name("Б", num(2)).unwrap();
+        let target = table_row(&["А", "Б"]);
+        target.set_field_by_name("А", num(9)).unwrap();
+        target.set_field_by_name("Б", num(9)).unwrap();
+
+        let error = fill_property_values(
+            &target,
+            &source,
+            &str_val("А, ТакогоНет, Б"),
+            &BslValue::Undefined,
+            &rt.names,
+        )
+        .unwrap_err();
+
+        assert_eq!(error, RtError::UnknownProperty("ТакогоНет".to_string()));
+        assert_eq!(target.get_field_by_name("А").unwrap(), num(9));
+        assert_eq!(target.get_field_by_name("Б").unwrap(), num(2));
+    }
+
+    #[test]
+    fn table_row_fast_path_can_copy_a_row_into_itself() {
+        let rt = rt();
+        let row = table_row(&["А", "Б"]);
+        row.set_field_by_name("А", num(1)).unwrap();
+        row.set_field_by_name("Б", num(2)).unwrap();
+
+        fill(&row, &row, &rt).unwrap();
+
+        assert_eq!(row.get_field_by_name("А").unwrap(), num(1));
+        assert_eq!(row.get_field_by_name("Б").unwrap(), num(2));
+    }
+
+    #[test]
+    fn table_row_copy_plan_is_reused_and_invalidated_by_schema_change() {
+        let rt = rt();
+        let source = table_row(&["А"]);
+        let target = table_row(&["А"]);
+        source.set_field_by_name("А", num(1)).unwrap();
+
+        fill(&target, &source, &rt).unwrap();
+        let first_plan = LAST_ROW_COPY_PLAN.with(|slot| {
+            slot.borrow()
+                .as_ref()
+                .expect("план не помещён в кэш")
+                .plan
+                .clone()
+        });
+
+        source.set_field_by_name("А", num(2)).unwrap();
+        fill(&target, &source, &rt).unwrap();
+        let reused_plan = LAST_ROW_COPY_PLAN.with(|slot| {
+            slot.borrow()
+                .as_ref()
+                .expect("план пропал из кэша")
+                .plan
+                .clone()
+        });
+        assert!(Rc::ptr_eq(&first_plan, &reused_plan));
+        assert_eq!(target.get_field_by_name("А").unwrap(), num(2));
+
+        add_table_column(&source, "Б");
+        add_table_column(&target, "Б");
+        source.set_field_by_name("Б", num(3)).unwrap();
+        fill(&target, &source, &rt).unwrap();
+        let rebuilt_plan = LAST_ROW_COPY_PLAN.with(|slot| {
+            slot.borrow()
+                .as_ref()
+                .expect("план не перестроен")
+                .plan
+                .clone()
+        });
+
+        assert!(!Rc::ptr_eq(&reused_plan, &rebuilt_plan));
+        assert_eq!(target.get_field_by_name("Б").unwrap(), num(3));
     }
 
     /// Приёмник и источник — один объект: `borrow_mut` под удерживаемым

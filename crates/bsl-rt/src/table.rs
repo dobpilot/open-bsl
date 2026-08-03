@@ -37,6 +37,10 @@ pub struct ValueTableData {
     /// "строка удалена".
     pub id_to_pos: HashMap<u64, usize>,
     next_id: u64,
+    /// Меняется при каждой перестройке набора или порядка колонок. Нужна
+    /// кэшу прямого переноса строк: один и тот же объект таблицы после
+    /// `Свернуть` уже имеет другую схему и старый план индексов неприменим.
+    schema_revision: u64,
 }
 
 impl ValueTableData {
@@ -47,6 +51,7 @@ impl ValueTableData {
             row_ids: Vec::new(),
             id_to_pos: HashMap::new(),
             next_id: 0,
+            schema_revision: 0,
         }))
     }
 
@@ -65,7 +70,14 @@ impl ValueTableData {
             return; // колонка с таким именем уже есть — не дублируем.
         }
         self.column_names.push(name.to_string());
-        self.columns.push(vec![BslValue::Undefined; self.row_count()]);
+        self.columns
+            .push(vec![BslValue::Undefined; self.row_count()]);
+        self.schema_revision = self.schema_revision.wrapping_add(1);
+    }
+
+    /// Текущая версия порядка колонок для инвалидизации внешних планов.
+    pub(crate) fn schema_revision(&self) -> u64 {
+        self.schema_revision
     }
 
     /// Добавляет строку (все колонки — `Неопределено`) и возвращает её
@@ -252,6 +264,7 @@ impl ValueTableData {
             row_ids: Vec::with_capacity(rows.len()),
             id_to_pos: HashMap::with_capacity(rows.len()),
             next_id: 0,
+            schema_revision: 0,
         };
         for &c in cols {
             let src = &self.columns[c];
@@ -392,6 +405,7 @@ impl ValueTableData {
         self.column_names = names;
         self.columns = columns;
         self.row_ids = ids;
+        self.schema_revision = self.schema_revision.wrapping_add(1);
         self.reindex();
         Ok(())
     }
