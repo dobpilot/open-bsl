@@ -610,16 +610,19 @@ impl JsonWriter {
         Ok(())
     }
 
-    /// # Errors
-    ///
-    /// [`RtError::Json`], если мы не внутри объекта.
-    pub fn property_name(&mut self, name: &str) -> RtResult<()> {
+    /// Открывает имя свойства и ставит начальную кавычку.
+    fn begin_property_name(&mut self) -> RtResult<()> {
         if self.stack.last() != Some(&WCtx::Object) {
             return Err(RtError::Json("ЗаписатьИмяСвойства вне объекта".to_string()));
         }
         self.before_member();
         self.out.push('"');
-        escape_into(&mut self.out, name);
+        Ok(())
+    }
+
+    /// Закрывает имя свойства и переводит автомат в режим ожидания
+    /// значения.
+    fn finish_property_name(&mut self) {
         self.out.push('"');
         self.out.push(':');
         // Пробел после двоеточия ставится ТОЛЬКО в форматированном режиме:
@@ -629,6 +632,23 @@ impl JsonWriter {
             self.out.push(' ');
         }
         self.awaiting_value = true;
+    }
+
+    /// # Errors
+    ///
+    /// [`RtError::Json`], если мы не внутри объекта.
+    pub fn property_name(&mut self, name: &str) -> RtResult<()> {
+        self.begin_property_name()?;
+        escape_into(&mut self.out, name);
+        self.finish_property_name();
+        Ok(())
+    }
+
+    /// То же имя свойства, но прямо из внутреннего UTF-16 `BslString`.
+    fn property_name_bsl(&mut self, name: &crate::BslString) -> RtResult<()> {
+        self.begin_property_name()?;
+        escape_bsl_string_into(&mut self.out, name);
+        self.finish_property_name();
         Ok(())
     }
 
@@ -656,24 +676,30 @@ impl JsonWriter {
         // Логику в этом искать не стоит: `Null` в 1С — значение из базы
         // данных, а не «пусто» языка, и в JSON его отображение платформа,
         // видимо, считает неоднозначным.
-        let text = match v {
-            BslValue::Undefined => "null".to_string(),
+        if !matches!(
+            v,
+            BslValue::Undefined | BslValue::Str(_) | BslValue::Number(_) | BslValue::Boolean(_)
+        ) {
+            return Err(RtError::TypeError {
+                expected: "Строка, Число или Булево",
+                op: "ЗаписатьЗначение",
+            });
+        }
+
+        self.before_member();
+        match v {
+            BslValue::Undefined => self.out.push_str("null"),
             BslValue::Str(s) => {
-                let mut t = String::from('"');
-                escape_into(&mut t, &s.to_string());
-                t.push('"');
-                t
+                self.out.push('"');
+                escape_bsl_string_into(&mut self.out, s);
+                self.out.push('"');
             }
-            BslValue::Number(n) => n.to_canonical(),
-            BslValue::Boolean(b) => (if *b { "true" } else { "false" }).to_string(),
-            _ => {
-                return Err(RtError::TypeError {
-                    expected: "Строка, Число или Булево",
-                    op: "ЗаписатьЗначение",
-                })
-            }
-        };
-        self.raw_value(&text);
+            BslValue::Number(n) => self.out.push_str(&n.to_canonical()),
+            BslValue::Boolean(true) => self.out.push_str("true"),
+            BslValue::Boolean(false) => self.out.push_str("false"),
+            _ => unreachable!("типы проверены выше"),
+        }
+        self.awaiting_value = false;
         Ok(())
     }
 
@@ -713,17 +739,28 @@ impl JsonWriter {
 /// Экранирование по измеренному набору правил (см. обзор модуля).
 fn escape_into(out: &mut String, s: &str) {
     for ch in s.chars() {
-        match ch {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            c if (c as u32) < 0x20 => {
-                // ЗАГЛАВНЫЕ шестнадцатеричные: измерено `\u000C`, не `\u000c`.
-                let _ = write!(out, "\\u{:04X}", c as u32);
-            }
-            c => out.push(c),
+        escape_char_into(out, ch);
+    }
+}
+
+/// Экранирует `BslString` без промежуточного UTF-8 `String`.
+fn escape_bsl_string_into(out: &mut String, s: &crate::BslString) {
+    for decoded in char::decode_utf16(s.units().iter().copied()) {
+        escape_char_into(out, decoded.unwrap_or(char::REPLACEMENT_CHARACTER));
+    }
+}
+
+fn escape_char_into(out: &mut String, ch: char) {
+    match ch {
+        '"' => out.push_str("\\\""),
+        '\\' => out.push_str("\\\\"),
+        '\n' => out.push_str("\\n"),
+        '\r' => out.push_str("\\r"),
+        c if (c as u32) < 0x20 => {
+            // ЗАГЛАВНЫЕ шестнадцатеричные: измерено `\u000C`, не `\u000c`.
+            let _ = write!(out, "\\u{:04X}", c as u32);
         }
+        c => out.push(c),
     }
 }
 
@@ -1008,8 +1045,7 @@ pub fn write_property_name(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
             op: "ЗаписатьИмяСвойства",
         });
     };
-    let name = name.to_string();
-    with_writer(obj, |w| w.property_name(&name))
+    with_writer(obj, |w| w.property_name_bsl(name))
 }
 
 /// # Errors
@@ -1741,6 +1777,19 @@ mod tests {
             )))
         });
         assert_eq!(s, "\"\\r\\u0008\\u000C\\u000B\"");
+    }
+
+    #[test]
+    fn bsl_property_name_uses_the_same_escaping_rules() {
+        let name = crate::BslString::from_str("имя\"\t😀");
+        let s = write_compact(|w| {
+            w.begin_object()?;
+            w.property_name_bsl(&name)?;
+            w.value(&BslValue::Number(num("1")))?;
+            w.end_object()
+        });
+
+        assert_eq!(s, "{\"имя\\\"\\u0009😀\":1}");
     }
 
     #[test]
