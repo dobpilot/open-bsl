@@ -22,7 +22,9 @@
 //!   висячая запятая, отсутствующее двоеточие и незакрытый объект
 //!   принимаются молча, ошибку даёт только мусор на месте самого значения.
 
+use std::collections::HashMap;
 use std::fmt::Write as _;
+use std::rc::Rc;
 
 use bsl_number::BslNumber;
 
@@ -66,7 +68,10 @@ enum Ctx {
 
 #[derive(Debug)]
 pub struct JsonParser {
-    src: Vec<char>,
+    src: Rc<str>,
+    /// Байтовая позиция в `src`. Синтакс JSON размечен ASCII-байтами,
+    /// а переход по Unicode-пробелам всегда учитывает `len_utf8`, поэтому
+    /// позиция остаётся на границе символа.
     pos: usize,
     stack: Vec<Ctx>,
     /// Верхнеуровневое значение уже прочитано — дальше только `Ничего`.
@@ -75,18 +80,34 @@ pub struct JsonParser {
 
 impl JsonParser {
     pub fn new(text: &str) -> Self {
+        Self::from_utf8(Rc::from(text))
+    }
+
+    fn from_string(src: String) -> Self {
+        Self::from_utf8(Rc::from(src))
+    }
+
+    fn from_bsl_string(src: &crate::BslString) -> Self {
+        Self::from_utf8(src.shared_utf8())
+    }
+
+    fn from_utf8(src: Rc<str>) -> Self {
         JsonParser {
-            src: text.chars().collect(),
+            src,
             pos: 0,
             stack: Vec::new(),
             finished: false,
         }
     }
 
+    fn current_char(&self) -> Option<char> {
+        self.src.get(self.pos..)?.chars().next()
+    }
+
     fn skip_ws(&mut self) {
-        while let Some(c) = self.src.get(self.pos) {
+        while let Some(c) = self.current_char() {
             if c.is_whitespace() {
-                self.pos += 1;
+                self.pos += c.len_utf8();
             } else {
                 break;
             }
@@ -95,7 +116,7 @@ impl JsonParser {
 
     fn peek(&mut self) -> Option<char> {
         self.skip_ws();
-        self.src.get(self.pos).copied()
+        self.current_char()
     }
 
     /// Запятые и двоеточия ПРОГЛАТЫВАЮТСЯ как необязательные разделители, а
@@ -227,40 +248,60 @@ impl JsonParser {
     }
 
     fn read_word(&mut self) -> String {
-        let mut out = String::new();
-        while let Some(&c) = self.src.get(self.pos) {
-            if c.is_ascii_alphabetic() {
-                out.push(c);
-                self.pos += 1;
-            } else {
-                break;
-            }
+        let start = self.pos;
+        while matches!(self.src.as_bytes().get(self.pos), Some(c) if c.is_ascii_alphabetic()) {
+            self.pos += 1;
         }
-        out
+        self.src[start..self.pos].to_string()
     }
 
-    /// Строка вместе со снятием экранирования. `\uXXXX` собирается через
-    /// UTF-16: суррогатная пара двух подряд идущих escape'ов обязана дать
-    /// один символ, иначе эмодзи из чужого JSON превратился бы в два
-    /// «непечатаемых».
+    /// Строка вместе со снятием экранирования.
+    ///
+    /// Обычная строка без `\` уже является готовым UTF-8-срезом: её
+    /// незачем перегонять через `Vec<u16>` и обратно. На первом escape
+    /// включается медленный UTF-16-путь: он сохраняет прежнюю семантику
+    /// `\uXXXX`, включая суррогатные пары и замену одиночного суррогата.
     fn read_string(&mut self) -> RtResult<String> {
-        if self.src.get(self.pos) != Some(&'"') {
+        if self.src.as_bytes().get(self.pos) != Some(&b'"') {
             return Err(bad("ожидалась строка"));
         }
         self.pos += 1;
+        let start = self.pos;
+        let mut scan = start;
+        while let Some(&byte) = self.src.as_bytes().get(scan) {
+            match byte {
+                b'"' => {
+                    let out = self.src[start..scan].to_string();
+                    self.pos = scan + 1;
+                    return Ok(out);
+                }
+                b'\\' => {
+                    self.pos = start;
+                    return self.read_escaped_string();
+                }
+                _ => scan += 1,
+            }
+        }
+        // Незакрытая строка обрывом ввода и заканчивается: измерено.
+        self.pos = self.src.len();
+        Ok(self.src[start..].to_string())
+    }
+
+    /// Медленный путь строки, в которой встретилось экранирование.
+    fn read_escaped_string(&mut self) -> RtResult<String> {
         let mut units: Vec<u16> = Vec::new();
         // Незакрытая строка обрывом ввода и заканчивается: разборщик
         // платформы к этому снисходителен, поэтому цикл просто кончается,
         // а не жалуется.
-        while let Some(&c) = self.src.get(self.pos) {
-            self.pos += 1;
+        while let Some(c) = self.current_char() {
+            self.pos += c.len_utf8();
             match c {
                 '"' => break,
                 '\\' => {
-                    let Some(&esc) = self.src.get(self.pos) else {
+                    let Some(esc) = self.current_char() else {
                         break;
                     };
-                    self.pos += 1;
+                    self.pos += esc.len_utf8();
                     match esc {
                         '"' => units.push(u16::from(b'"')),
                         '\\' => units.push(u16::from(b'\\')),
@@ -273,14 +314,14 @@ impl JsonParser {
                         'u' => {
                             let mut v: u16 = 0;
                             for _ in 0..4 {
-                                let Some(&h) = self.src.get(self.pos) else {
+                                let Some(h) = self.current_char() else {
                                     return Err(bad("оборванная последовательность \\u"));
                                 };
                                 let d = h
                                     .to_digit(16)
                                     .ok_or_else(|| bad("в \\u не шестнадцатеричная цифра"))?;
                                 v = v.wrapping_mul(16).wrapping_add(d as u16);
-                                self.pos += 1;
+                                self.pos += h.len_utf8();
                             }
                             units.push(v);
                         }
@@ -304,49 +345,53 @@ impl JsonParser {
     /// весь смысл `bsl-number` в том, что `1e-3` это ровно `0.001`.
     fn read_number(&mut self) -> RtResult<BslNumber> {
         let start = self.pos;
-        if matches!(self.src.get(self.pos), Some('-') | Some('+')) {
+        if matches!(self.src.as_bytes().get(self.pos), Some(b'-') | Some(b'+')) {
             self.pos += 1;
         }
-        while matches!(self.src.get(self.pos), Some(c) if c.is_ascii_digit() || *c == '.') {
+        while matches!(self.src.as_bytes().get(self.pos), Some(c) if c.is_ascii_digit() || *c == b'.')
+        {
             self.pos += 1;
         }
         // Текст МАНТИССЫ снимается до разбора экспоненты: иначе `1e3`
         // уехало бы в `parse_canonical` целиком, вместе с показателем.
         let mantissa_end = self.pos;
         let mut exponent: i32 = 0;
-        if matches!(self.src.get(self.pos), Some('e') | Some('E')) {
+        if matches!(self.src.as_bytes().get(self.pos), Some(b'e') | Some(b'E')) {
             let save = self.pos;
             self.pos += 1;
-            let neg = match self.src.get(self.pos) {
-                Some('-') => {
+            let neg = match self.src.as_bytes().get(self.pos) {
+                Some(b'-') => {
                     self.pos += 1;
                     true
                 }
-                Some('+') => {
+                Some(b'+') => {
                     self.pos += 1;
                     false
                 }
                 _ => false,
             };
-            let mut digits = String::new();
-            while matches!(self.src.get(self.pos), Some(c) if c.is_ascii_digit()) {
-                digits.push(self.src[self.pos]);
+            let digits_start = self.pos;
+            while matches!(self.src.as_bytes().get(self.pos), Some(c) if c.is_ascii_digit()) {
                 self.pos += 1;
             }
-            if digits.is_empty() {
+            if self.pos == digits_start {
                 // `1e` без цифр — не экспонента; откатываемся и оставляем
                 // `e` следующему токену.
                 self.pos = save;
             } else {
-                let v: i32 = digits
+                let v: i32 = self.src[digits_start..self.pos]
                     .parse()
                     .map_err(|_| bad("слишком большая экспонента"))?;
                 exponent = if neg { -v } else { v };
             }
         }
-        let text: String = self.src[start..mantissa_end].iter().collect();
-        let base = shift_decimal_point(&text, exponent)?;
-        BslNumber::parse_canonical(&base).map_err(|_| bad(&format!("число «{text}»")))
+        let text = &self.src[start..mantissa_end];
+        if exponent == 0 {
+            BslNumber::parse_canonical(text).map_err(|_| bad(&format!("число «{text}»")))
+        } else {
+            let base = shift_decimal_point(text, exponent)?;
+            BslNumber::parse_canonical(&base).map_err(|_| bad(&format!("число «{text}»")))
+        }
     }
 }
 
@@ -689,7 +734,7 @@ fn escape_into(out: &mut String, s: &str) {
 // принадлежит этому модулю. Наружу они уходят через `builtin.rs`, как и
 // методы таблицы значений через `table.rs`.
 
-use crate::object::{BslObject, JsonReaderState};
+use crate::object::{BslObject, JsonReaderState, StructureStorage};
 use crate::EnumValue;
 
 fn as_reader(v: &BslValue) -> RtResult<&std::cell::RefCell<JsonReaderState>> {
@@ -756,7 +801,7 @@ pub fn set_string(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
             });
         };
         *reader.borrow_mut() = JsonReaderState {
-            parser: Some(JsonParser::new(&text.to_string())),
+            parser: Some(JsonParser::from_bsl_string(text)),
             current: None,
         };
         return Ok(());
@@ -788,7 +833,7 @@ pub fn open_file(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
         // Метка порядка байтов в начале файла — не часть документа.
         let text = text.strip_prefix('\u{feff}').unwrap_or(&text).to_string();
         *reader.borrow_mut() = JsonReaderState {
-            parser: Some(JsonParser::new(&text)),
+            parser: Some(JsonParser::from_string(text)),
             current: None,
         };
         return Ok(());
@@ -990,7 +1035,7 @@ pub fn close_writer(obj: &BslValue) -> RtResult<BslValue> {
     };
     let text = writer.finish()?;
     *slot = None;
-    Ok(BslValue::Str(crate::BslString::from_str(&text)))
+    Ok(BslValue::Str(crate::BslString::from_utf8_string(text)))
 }
 
 /// Получатель — `ЗаписьJSON`? Нужно `BslValue::close_object`, чтобы
@@ -1002,6 +1047,28 @@ pub fn is_json_writer(v: &BslValue) -> bool {
 // --- ПрочитатьJSON / ЗаписатьJSON ---------------------------------------
 
 use crate::runtime_shapes::RuntimeShapes;
+
+/// Подготовленные имена свойств в пределах одного `ПрочитатьJSON`.
+///
+/// Ключ хранит точное написание из JSON: разный регистр может дать
+/// две записи в этом кэше, но `NameInterner` всё равно вернёт им один
+/// регистронезависимый `NameId`. Это сохраняет семантику и не требует
+/// Unicode-нормализации на каждом повторе одной и той же схемы.
+type JsonKeyCache = HashMap<Box<str>, crate::NameId>;
+
+/// Итоговые формы объектов, уже встреченные в текущем документе.
+///
+/// Первый объект каждой схемы строится обычными `structure_insert`: так
+/// сохраняются порог переходов и деградация в словарь. Повторный объект
+/// получает ту же форму и готовые слоты сразу, без прохода по цепочке
+/// промежуточных форм для каждого поля.
+type JsonShapeCache = HashMap<Vec<crate::NameId>, Rc<crate::Shape>>;
+
+#[derive(Default)]
+struct JsonBuildCache {
+    keys: JsonKeyCache,
+    shapes: JsonShapeCache,
+}
 
 /// Имя свойства годится в поле структуры? Платформа отвергает ключ,
 /// который не является идентификатором (измерено: `{"не имя":1}` при
@@ -1083,7 +1150,101 @@ pub fn read_json(
         return Ok(BslValue::Undefined);
     };
     let parser = state.parser.as_mut().expect("наличие проверено выше");
-    build_value(first, parser, as_map, date_names, None, rt)
+    let mut cache = JsonBuildCache::default();
+    build_value(first, parser, as_map, date_names, None, rt, &mut cache)
+}
+
+/// Проверяет и интернирует имя один раз за разбор документа.
+fn json_field_id(
+    name: &str,
+    rt: &mut RuntimeShapes,
+    cache: &mut JsonKeyCache,
+) -> RtResult<crate::NameId> {
+    if let Some(&id) = cache.get(name) {
+        return Ok(id);
+    }
+    if !is_identifier(name) {
+        return Err(RtError::Json(format!(
+            "ключ «{name}» не может быть именем свойства структуры"
+        )));
+    }
+    let id = rt.names.intern(name);
+    cache.insert(name.into(), id);
+    Ok(id)
+}
+
+/// Собирает JSON-объект в `Структура`.
+///
+/// Дублирующееся имя перезаписывает прежний слот, но не меняет
+/// его позицию. Это та же семантика, что у последовательных
+/// `Структура.Вставить`.
+fn build_json_structure(
+    keys: Vec<String>,
+    values: Vec<BslValue>,
+    rt: &mut RuntimeShapes,
+    cache: &mut JsonBuildCache,
+) -> RtResult<BslValue> {
+    // На типовых коротких схемах линейный поиск дешевле ещё
+    // одной таблицы и её хэширования. Длинная схема переходит на
+    // индекс, чтобы дубликаты не превратили большой объект в O(n²).
+    const LINEAR_LOOKUP_LIMIT: usize = 16;
+
+    let mut names = Vec::with_capacity(keys.len());
+    let mut slots = Vec::with_capacity(values.len());
+    let mut positions: Option<HashMap<crate::NameId, usize>> = None;
+    for (key, value) in keys.into_iter().zip(values) {
+        let id = json_field_id(&key, rt, &mut cache.keys)?;
+        let old_slot = match &positions {
+            Some(index) => index.get(&id).copied(),
+            None => names.iter().position(|&known| known == id),
+        };
+        if let Some(slot) = old_slot {
+            slots[slot] = value;
+        } else {
+            let slot = names.len();
+            names.push(id);
+            slots.push(value);
+            if let Some(index) = positions.as_mut() {
+                index.insert(id, slot);
+            } else if names.len() == LINEAR_LOOKUP_LIMIT + 1 {
+                positions = Some(
+                    names
+                        .iter()
+                        .copied()
+                        .enumerate()
+                        .map(|(slot, name)| (name, slot))
+                        .collect(),
+                );
+            }
+        }
+    }
+
+    if let Some(shape) = cache.shapes.get(names.as_slice()) {
+        return Ok(BslValue::new_structure(shape.clone(), slots));
+    }
+
+    let empty = rt.shapes.empty();
+    let object = BslValue::new_structure(empty, Vec::new());
+    for (&id, value) in names.iter().zip(slots) {
+        object.structure_insert(id, value, &mut rt.shapes)?;
+    }
+
+    // Словарную структуру не кэшируем: прямое создание с
+    // произвольными именами вернуло бы её в таблицу бессрочных форм.
+    let built_shape = match &object {
+        BslValue::Object(value) => match &**value {
+            BslObject::Structure(storage) => match &*storage.borrow() {
+                StructureStorage::Shaped { shape, .. } => Some(shape.clone()),
+                StructureStorage::Dictionary { .. } => None,
+            },
+            _ => None,
+        },
+        _ => None,
+    };
+    if let Some(shape) = built_shape {
+        cache.shapes.insert(names, shape);
+    }
+    Ok(object)
 }
 
 /// Сборка значения из события и продолжения потока.
@@ -1098,6 +1259,7 @@ fn build_value(
     date_names: &[String],
     property: Option<&str>,
     rt: &mut RuntimeShapes,
+    cache: &mut JsonBuildCache,
 ) -> RtResult<BslValue> {
     match event {
         JsonEvent::ObjectStart => {
@@ -1119,8 +1281,15 @@ fn build_value(
                         if value_event == JsonEvent::ObjectEnd {
                             break;
                         }
-                        let v =
-                            build_value(value_event, parser, as_map, date_names, Some(&name), rt)?;
+                        let v = build_value(
+                            value_event,
+                            parser,
+                            as_map,
+                            date_names,
+                            Some(&name),
+                            rt,
+                            cache,
+                        )?;
                         keys.push(name);
                         values.push(v);
                     }
@@ -1134,18 +1303,7 @@ fn build_value(
                 }
                 Ok(map)
             } else {
-                let empty = rt.shapes.empty();
-                let obj = BslValue::new_structure(empty, Vec::new());
-                for (k, v) in keys.into_iter().zip(values) {
-                    if !is_identifier(&k) {
-                        return Err(RtError::Json(format!(
-                            "ключ «{k}» не может быть именем свойства структуры"
-                        )));
-                    }
-                    let id = rt.names.intern(&k);
-                    obj.structure_insert(id, v, &mut rt.shapes)?;
-                }
-                Ok(obj)
+                build_json_structure(keys, values, rt, cache)
             }
         }
         JsonEvent::ArrayStart => {
@@ -1157,7 +1315,7 @@ fn build_value(
                 if next == JsonEvent::ArrayEnd {
                     break;
                 }
-                let v = build_value(next, parser, as_map, date_names, None, rt)?;
+                let v = build_value(next, parser, as_map, date_names, None, rt, cache)?;
                 items.push_element(v)?;
             }
             Ok(items)
@@ -1310,6 +1468,109 @@ mod tests {
     }
 
     #[test]
+    fn json_key_cache_reuses_exact_spelling_and_preserves_case_insensitivity() {
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut cache = JsonKeyCache::new();
+
+        let first = json_field_id("Поле", &mut rt, &mut cache).unwrap();
+        let repeated = json_field_id("Поле", &mut rt, &mut cache).unwrap();
+        let other_case = json_field_id("поле", &mut rt, &mut cache).unwrap();
+
+        assert_eq!(first, repeated);
+        assert_eq!(first, other_case);
+        assert_eq!(cache.len(), 2, "кэш различает точные написания");
+    }
+
+    #[test]
+    fn invalid_json_key_is_not_cached() {
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut cache = JsonKeyCache::new();
+
+        let error = json_field_id("не имя", &mut rt, &mut cache).unwrap_err();
+
+        assert!(matches!(error, RtError::Json(_)));
+        assert!(cache.is_empty());
+    }
+
+    #[test]
+    fn repeated_json_schema_reuses_shape_and_duplicate_overwrites_slot() {
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut cache = JsonBuildCache::default();
+
+        let first = build_json_structure(
+            vec!["Поле".into(), "поле".into(), "Второе".into()],
+            vec![
+                BslValue::Number(num("1")),
+                BslValue::Number(num("2")),
+                BslValue::Number(num("3")),
+            ],
+            &mut rt,
+            &mut cache,
+        )
+        .unwrap();
+        let (first_shape, first_slots) = match &first {
+            BslValue::Object(value) => match &**value {
+                BslObject::Structure(storage) => match &*storage.borrow() {
+                    StructureStorage::Shaped { shape, slots } => (shape.clone(), slots.clone()),
+                    StructureStorage::Dictionary { .. } => panic!("ожидалась форма"),
+                },
+                _ => panic!("ожидалась структура"),
+            },
+            _ => panic!("ожидался объект"),
+        };
+        assert_eq!(first_shape.names.len(), 2);
+        assert_eq!(
+            first_slots,
+            vec![BslValue::Number(num("2")), BslValue::Number(num("3"))]
+        );
+        assert_eq!(cache.shapes.len(), 1);
+
+        let second = build_json_structure(
+            vec!["поле".into(), "ВТОРОЕ".into()],
+            vec![BslValue::Number(num("4")), BslValue::Number(num("5"))],
+            &mut rt,
+            &mut cache,
+        )
+        .unwrap();
+        let second_shape = match &second {
+            BslValue::Object(value) => match &**value {
+                BslObject::Structure(storage) => match &*storage.borrow() {
+                    StructureStorage::Shaped { shape, .. } => shape.clone(),
+                    StructureStorage::Dictionary { .. } => panic!("ожидалась форма"),
+                },
+                _ => panic!("ожидалась структура"),
+            },
+            _ => panic!("ожидался объект"),
+        };
+        assert!(Rc::ptr_eq(&first_shape, &second_shape));
+    }
+
+    #[test]
+    fn oversized_json_schema_stays_dictionary_and_is_not_cached() {
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut cache = JsonBuildCache::default();
+        let field_count = crate::MAX_SHAPE_TRANSITIONS as usize + 1;
+        let keys = (0..field_count).map(|i| format!("f{i}")).collect();
+        let values = (0..field_count)
+            .map(|i| BslValue::Number(num(&i.to_string())))
+            .collect();
+
+        let object = build_json_structure(keys, values, &mut rt, &mut cache).unwrap();
+
+        let BslValue::Object(value) = &object else {
+            panic!("ожидался объект");
+        };
+        let BslObject::Structure(storage) = &**value else {
+            panic!("ожидалась структура");
+        };
+        assert!(matches!(
+            &*storage.borrow(),
+            StructureStorage::Dictionary { .. }
+        ));
+        assert!(cache.shapes.is_empty());
+    }
+
+    #[test]
     fn event_sequence_matches_the_platform() {
         // Замер JSON.READ.EVENT_SEQUENCE.
         assert_eq!(
@@ -1348,11 +1609,55 @@ mod tests {
         };
         assert_eq!(s, "Ё\t\"\\/");
 
-        // U+1F600 суррогатной парой обязан собраться в один символ.
-        let JsonEvent::Str(s) = &events(r#"["😀"]"#)[1] else {
+        // U+1F600, записанный двумя `\u`, обязан собраться в один символ.
+        let JsonEvent::Str(s) = &events(r#"["\uD83D\uDE00"]"#)[1] else {
             panic!("ожидалась строка");
         };
-        assert_eq!(s.chars().count(), 1);
+        assert_eq!(s, "😀");
+
+        let JsonEvent::Str(s) = &events(r#"["\uD83D"]"#)[1] else {
+            panic!("ожидалась строка");
+        };
+        assert_eq!(s, "\u{fffd}", "одиночный суррогат заменяется");
+    }
+
+    #[test]
+    fn unescaped_utf8_and_tolerated_truncation_use_the_fast_path() {
+        assert_eq!(
+            events(r#"["Кириллица 😀"]"#)[1],
+            JsonEvent::Str("Кириллица 😀".into())
+        );
+        assert_eq!(
+            events(" \"незакрытая"),
+            vec![JsonEvent::Str("незакрытая".into())]
+        );
+        assert_eq!(
+            events("\"abc\\"),
+            vec![JsonEvent::Str("abc".into())],
+            "оборванный escape проглатывается как и прежде"
+        );
+    }
+
+    #[test]
+    fn parser_keeps_the_bsl_string_snapshot_assigned_to_it() {
+        let source = crate::BslString::from_str("[1]");
+        let mut parser = JsonParser::from_bsl_string(&source);
+
+        let changed = source.append(&crate::BslString::from_str("мусор"));
+        assert_eq!(&*changed.shared_utf8(), "[1]мусор");
+
+        let mut parsed = Vec::new();
+        while let Some(event) = parser.next_event().unwrap() {
+            parsed.push(event);
+        }
+        assert_eq!(
+            parsed,
+            vec![
+                JsonEvent::ArrayStart,
+                JsonEvent::Number(num("1")),
+                JsonEvent::ArrayEnd,
+            ]
+        );
     }
 
     #[test]

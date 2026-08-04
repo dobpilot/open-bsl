@@ -26,6 +26,9 @@ struct BslStringData {
     units: Vec<u16>,
     /// Нижний регистр в кодовых точках для многократных сравнений строк.
     lowercase_chars: OnceCell<Vec<char>>,
+    /// UTF-8-представление для потребителей, удерживающих длинный текст.
+    /// Ленивый: обычные короткие BSL-строки вторую копию не хранят.
+    utf8: OnceCell<Rc<str>>,
 }
 
 impl Deref for BslStringData {
@@ -164,10 +167,29 @@ impl BslString {
         Self::from_units(units)
     }
 
+    /// Принимает во владение уже готовую UTF-8-строку и сохраняет её в кэше.
+    ///
+    /// Нужен внутренним писателям JSON: после сборки документа у них уже
+    /// есть `String`, и выкидывать его ради немедленного обратного декодирования
+    /// в `ЧтениеJSON` незачем. Обычный [`from_str`](Self::from_str) остаётся ленивым и
+    /// не удваивает память каждой короткой строки.
+    pub(crate) fn from_utf8_string(s: String) -> Self {
+        let units: Vec<u16> = s.encode_utf16().collect();
+        let utf8 = OnceCell::new();
+        let inserted = utf8.set(Rc::from(s));
+        debug_assert!(inserted.is_ok(), "новый `OnceCell` был пуст");
+        BslString(Rc::new(BslStringData {
+            units,
+            lowercase_chars: OnceCell::new(),
+            utf8,
+        }))
+    }
+
     fn from_units(units: Vec<u16>) -> Self {
         BslString(Rc::new(BslStringData {
             units,
             lowercase_chars: OnceCell::new(),
+            utf8: OnceCell::new(),
         }))
     }
 
@@ -184,13 +206,22 @@ impl BslString {
         self.0.lowercase_chars.get_or_init(|| {
             let mut chars = Vec::with_capacity(self.units().len());
             for decoded in char::decode_utf16(self.units().iter().copied()) {
-                push_lowercase(
-                    &mut chars,
-                    decoded.unwrap_or(char::REPLACEMENT_CHARACTER),
-                );
+                push_lowercase(&mut chars, decoded.unwrap_or(char::REPLACEMENT_CHARACTER));
             }
             chars
         })
+    }
+
+    /// Возвращает разделяемый UTF-8-снимок текущего значения.
+    ///
+    /// Снимок не связан с последующей конкатенацией: `append` инвалидирует
+    /// кэш в мутируемом `BslStringData`, а уже выданный `Rc<str>` остаётся
+    /// неизменным снимком старого значения.
+    pub(crate) fn shared_utf8(&self) -> Rc<str> {
+        self.0
+            .utf8
+            .get_or_init(|| Rc::from(String::from_utf16_lossy(self.units())))
+            .clone()
     }
 
     /// Кодирует внутренние UTF-16 код-юниты прямо в переданный UTF-8
@@ -262,6 +293,7 @@ impl BslString {
             Some(data) => {
                 data.units.extend_from_slice(other.units());
                 data.lowercase_chars.take();
+                data.utf8.take();
                 self
             }
             None => self.concat(other),
@@ -394,7 +426,11 @@ impl BslString {
         let mut start = 0;
         for i in 0..self.0.len() {
             if self.0[i] == LF {
-                let end = if i > start && self.0[i - 1] == CR { i - 1 } else { i };
+                let end = if i > start && self.0[i - 1] == CR {
+                    i - 1
+                } else {
+                    i
+                };
                 out.push(&self.0[start..end]);
                 start = i + 1;
             }
@@ -552,6 +588,17 @@ mod tests {
     }
 
     #[test]
+    fn owned_utf8_constructor_seeds_only_its_own_cache() {
+        let cached = BslString::from_utf8_string("текст 😀".to_string());
+        let lazy = BslString::from_str("текст 😀");
+
+        assert!(cached.0.utf8.get().is_some());
+        assert!(lazy.0.utf8.get().is_none());
+        assert_eq!(&*cached.shared_utf8(), "текст 😀");
+        assert_eq!(cached, lazy);
+    }
+
+    #[test]
     fn direct_utf8_write_matches_lossy_conversion_without_allocating_a_string() {
         let source = format!("{}😀конец", "я".repeat(600));
         let mut bytes = Vec::new();
@@ -588,17 +635,29 @@ mod tests {
 
     #[test]
     fn case_conversion_does_not_break_on_non_ascii() {
-        assert_eq!(BslString::from_str("привет").to_uppercase().to_string(), "ПРИВЕТ");
-        assert_eq!(BslString::from_str("ПРИВЕТ").to_lowercase().to_string(), "привет");
+        assert_eq!(
+            BslString::from_str("привет").to_uppercase().to_string(),
+            "ПРИВЕТ"
+        );
+        assert_eq!(
+            BslString::from_str("ПРИВЕТ").to_lowercase().to_string(),
+            "привет"
+        );
     }
 
     #[test]
-    fn append_invalidates_the_cached_lowercase_characters() {
+    fn append_invalidates_cached_derived_forms() {
         let text = s("Ё");
         assert_eq!(text.lowercase_chars(), &['ё']);
+        let old_utf8 = text.shared_utf8();
+        assert!(Rc::ptr_eq(&old_utf8, &text.shared_utf8()));
 
         let text = text.append(&s("Ж"));
         assert_eq!(text.lowercase_chars(), &['ё', 'ж']);
+        let new_utf8 = text.shared_utf8();
+        assert_eq!(&*old_utf8, "Ё", "выданный снимок не меняется");
+        assert_eq!(&*new_utf8, "ЁЖ");
+        assert!(!Rc::ptr_eq(&old_utf8, &new_utf8));
     }
 
     #[test]
