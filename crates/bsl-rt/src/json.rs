@@ -23,7 +23,6 @@
 //!   принимаются молча, ошибку даёт только мусор на месте самого значения.
 
 use std::collections::HashMap;
-use std::fmt::Write as _;
 use std::rc::Rc;
 
 use bsl_number::BslNumber;
@@ -745,23 +744,54 @@ fn escape_into(out: &mut String, s: &str) {
 
 /// Экранирует `BslString` без промежуточного UTF-8 `String`.
 fn escape_bsl_string_into(out: &mut String, s: &crate::BslString) {
-    for decoded in char::decode_utf16(s.units().iter().copied()) {
-        escape_char_into(out, decoded.unwrap_or(char::REPLACEMENT_CHARACTER));
+    let units = s.units();
+    let mut pos = 0;
+    while let Some(&unit) = units.get(pos) {
+        match unit {
+            0x22 => out.push_str("\\\""),
+            0x5c => out.push_str("\\\\"),
+            0x0a => out.push_str("\\n"),
+            0x0d => out.push_str("\\r"),
+            0x00..=0x1f => escape_control_into(out, unit as u8),
+            0x20..=0x7f => out.push(unit as u8 as char),
+            0xd800..=0xdbff => {
+                let Some(&low @ 0xdc00..=0xdfff) = units.get(pos + 1) else {
+                    out.push(char::REPLACEMENT_CHARACTER);
+                    pos += 1;
+                    continue;
+                };
+                let scalar =
+                    0x1_0000 + ((u32::from(unit) - 0xd800) << 10) + (u32::from(low) - 0xdc00);
+                out.push(char::from_u32(scalar).expect("суррогатная пара всегда валидна"));
+                pos += 2;
+                continue;
+            }
+            0xdc00..=0xdfff => out.push(char::REPLACEMENT_CHARACTER),
+            _ => out.push(char::from_u32(u32::from(unit)).expect("BMP-юнит вне суррогатов")),
+        }
+        pos += 1;
     }
 }
 
+#[inline(always)]
 fn escape_char_into(out: &mut String, ch: char) {
     match ch {
         '"' => out.push_str("\\\""),
         '\\' => out.push_str("\\\\"),
         '\n' => out.push_str("\\n"),
         '\r' => out.push_str("\\r"),
-        c if (c as u32) < 0x20 => {
-            // ЗАГЛАВНЫЕ шестнадцатеричные: измерено `\u000C`, не `\u000c`.
-            let _ = write!(out, "\\u{:04X}", c as u32);
-        }
+        c if (c as u32) < 0x20 => escape_control_into(out, c as u8),
         c => out.push(c),
     }
+}
+
+/// У всех экранируемых здесь символов старшие два hex-разряда нулевые.
+#[inline(always)]
+fn escape_control_into(out: &mut String, byte: u8) {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    out.push_str("\\u00");
+    out.push(HEX[usize::from(byte >> 4)] as char);
+    out.push(HEX[usize::from(byte & 0x0f)] as char);
 }
 
 // --- Склейка с объектами BSL --------------------------------------------
@@ -1777,6 +1807,10 @@ mod tests {
             )))
         });
         assert_eq!(s, "\"\\r\\u0008\\u000C\\u000B\"");
+
+        let isolated_surrogate = crate::BslString::from_str("😀").left(1);
+        let s = write_compact(|w| w.value(&BslValue::Str(isolated_surrogate)));
+        assert_eq!(s, "\"�\"");
     }
 
     #[test]
