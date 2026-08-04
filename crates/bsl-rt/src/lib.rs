@@ -137,7 +137,7 @@ pub enum RtError {
     /// `ВызватьИсключение <значение>;` — значение, с которым бросили.
     Raised(BslValue),
     /// Обращение к `СтрокаТаблицы`, чья строка уже удалена (`row_id` не
-    /// резолвится в `id_to_pos`) — не тихое чтение чужих данных.
+    /// не резолвится обратным индексом) — не тихое чтение чужих данных.
     RowInvalidated,
     /// Обращение к несуществующей колонке `ТаблицыЗначений`/`СтрокиТаблицы`.
     UnknownColumn(String),
@@ -271,7 +271,10 @@ impl BslValue {
                 BslObject::Structure(_) => "Структура",
                 BslObject::ValueTable(_) => "ТаблицаЗначений",
                 BslObject::TableColumns(_) => "КоллекцияКолонокТаблицыЗначений",
+                BslObject::TableColumn(..) => "КолонкаТаблицыЗначений",
                 BslObject::TableRow(_, _) => "СтрокаТаблицыЗначений",
+                BslObject::TypeDescription(_) => "ОписаниеТипов",
+                BslObject::ValueComparison => "СравнениеЗначений",
                 BslObject::Map(_) => "Соответствие",
                 BslObject::KeyValuePair(_, _) => "КлючИЗначение",
                 BslObject::TextWriter(_) => "ЗаписьТекста",
@@ -986,6 +989,9 @@ impl BslValue {
                 // У строки таблицы и пары ключ-значение «длины» нет: сам
                 // факт существования объекта и есть заполненность.
                 BslObject::TableRow(..)
+                | BslObject::TableColumn(..)
+                | BslObject::TypeDescription(..)
+                | BslObject::ValueComparison
                 | BslObject::KeyValuePair(..)
                 | BslObject::TextWriter(..)
                 // Объекты JSON — не коллекции: заполненность у них та же,
@@ -1038,7 +1044,10 @@ impl BslValue {
                 BslObject::Map(_) => TypeId::Map,
                 BslObject::ValueTable(_) => TypeId::ValueTable,
                 BslObject::TableColumns(_) => TypeId::ValueTableColumns,
+                BslObject::TableColumn(..) => TypeId::ValueTableColumn,
                 BslObject::TableRow(..) => TypeId::ValueTableRow,
+                BslObject::TypeDescription(_) => TypeId::TypeDescription,
+                BslObject::ValueComparison => TypeId::ValueComparison,
                 BslObject::KeyValuePair(..) => TypeId::KeyAndValue,
                 BslObject::TextWriter(..) => {
                     return Err(RtError::TypeError {
@@ -1093,6 +1102,28 @@ impl BslValue {
 
     pub fn new_table() -> Self {
         BslValue::Object(Rc::new(BslObject::ValueTable(ValueTableData::new())))
+    }
+
+    /// `Новый ОписаниеТипов("Тип1, Тип2")`.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку, если аргумент не строка либо содержит имя
+    /// незарегистрированного типа.
+    pub fn new_type_description(names: &BslValue) -> RtResult<Self> {
+        let names = names.as_str("Новый ОписаниеТипов")?.to_string();
+        let mut types = Vec::new();
+        for name in names.split(',').map(str::trim).filter(|name| !name.is_empty()) {
+            let ty = TypeId::lookup(name).ok_or_else(|| RtError::UnknownType(name.to_string()))?;
+            if !types.contains(&ty) {
+                types.push(ty);
+            }
+        }
+        Ok(BslValue::Object(Rc::new(BslObject::TypeDescription(types))))
+    }
+
+    pub fn new_value_comparison() -> Self {
+        BslValue::Object(Rc::new(BslObject::ValueComparison))
     }
 
     pub fn new_map() -> Self {
@@ -1360,6 +1391,23 @@ impl BslValue {
                     };
                     Ok(BslValue::Object(Rc::new(BslObject::TableRow(data.clone(), row_id))))
                 }
+                BslObject::TableColumns(data) => {
+                    let i = Self::index_as_usize(idx)?;
+                    let name = {
+                        let d = data.borrow();
+                        d.column_names
+                            .get(i)
+                            .cloned()
+                            .ok_or(RtError::IndexOutOfBounds {
+                                index: i as i64,
+                                len: d.column_names.len(),
+                            })?
+                    };
+                    Ok(BslValue::Object(Rc::new(BslObject::TableColumn(
+                        data.clone(),
+                        name,
+                    ))))
+                }
                 // ПОЗИЦИОННЫЙ, не по ключу: `Для Каждого` компилируется в
                 // общий для всех коллекций протокол `CollectionLen` + рост
                 // числового индекса `0..len` через эту же функцию (см.
@@ -1429,6 +1477,9 @@ impl BslValue {
                 BslObject::Structure(s) => Ok(s.borrow().len()),
                 BslObject::ValueTable(data) => Ok(data.borrow().row_count()),
                 BslObject::TableColumns(data) => Ok(data.borrow().column_names.len()),
+                BslObject::TableColumn(..)
+                | BslObject::TypeDescription(_)
+                | BslObject::ValueComparison => Err(RtError::NotIndexable),
                 BslObject::TableRow(..) => Err(RtError::NotIndexable),
                 BslObject::Map(data) => Ok(data.borrow().len()),
                 BslObject::KeyValuePair(..) => Err(RtError::NotIndexable),
@@ -1707,6 +1758,28 @@ impl BslValue {
                         .ok_or_else(|| RtError::UnknownColumn(name.to_string()))?;
                     data.get_cell(*row_id, col).ok_or(RtError::RowInvalidated)
                 }
+                BslObject::TableColumn(data, column_name) => {
+                    let column = data
+                        .borrow()
+                        .column_index(column_name)
+                        .ok_or_else(|| RtError::UnknownColumn(column_name.clone()))?;
+                    if name.eq_ignore_ascii_case("Имя") || name.eq_ignore_ascii_case("Name") {
+                        Ok(BslValue::Str(BslString::from_str(column_name)))
+                    } else if name.eq_ignore_ascii_case("ТипЗначения")
+                        || name.eq_ignore_ascii_case("ValueType")
+                    {
+                        let types = data
+                            .borrow()
+                            .column_types
+                            .get(column)
+                            .cloned()
+                            .flatten()
+                            .unwrap_or_default();
+                        Ok(BslValue::Object(Rc::new(BslObject::TypeDescription(types))))
+                    } else {
+                        Err(RtError::UnknownColumn(name.to_string()))
+                    }
+                }
                 // `КлючИЗначение.Ключ`/`.Значение` — те же два имени всегда,
                 // ни разу не интернированные как `Shape`/`NameId`, потому
                 // что этот объект заводится ЦЕЛИКОМ в рантайме
@@ -1881,13 +1954,31 @@ impl BslValue {
         }
     }
 
-    /// `Таблица.Колонки.Добавить(имя)`.
-    pub fn table_add_column(&self, name: &BslValue) -> RtResult<()> {
+    /// `Таблица.Колонки.Добавить(Имя[, ТипЗначения])`.
+    pub fn table_add_column(&self, name: &BslValue, value_type: &BslValue) -> RtResult<()> {
         match self {
             BslValue::Object(o) => match &**o {
                 BslObject::TableColumns(data) => {
                     let name = name.as_str("Колонки.Добавить")?.to_string();
-                    data.borrow_mut().add_column(&name);
+                    let value_types = match value_type {
+                        BslValue::Undefined => None,
+                        BslValue::Object(value) => match &**value {
+                            BslObject::TypeDescription(types) => Some(types.clone()),
+                            _ => {
+                                return Err(RtError::TypeError {
+                                    expected: "ОписаниеТипов",
+                                    op: "Колонки.Добавить",
+                                })
+                            }
+                        },
+                        _ => {
+                            return Err(RtError::TypeError {
+                                expected: "ОписаниеТипов",
+                                op: "Колонки.Добавить",
+                            })
+                        }
+                    };
+                    data.borrow_mut().add_typed_column(&name, value_types);
                     Ok(())
                 }
                 _ => Err(RtError::MethodNotApplicable {
@@ -2044,8 +2135,19 @@ impl BslValue {
     /// `Сортировать("Кол1 Возр, Кол2 Убыв")`. Живые объекты
     /// `СтрокаТаблицыЗначений` переживают сортировку — см.
     /// `ValueTableData::sort`.
-    pub fn table_sort(&self, spec: &BslValue) -> RtResult<()> {
+    pub fn table_sort(&self, spec: &BslValue, comparison: &BslValue) -> RtResult<()> {
         let data = self.as_table("Сортировать")?;
+        if !matches!(comparison, BslValue::Undefined)
+            && !matches!(
+                comparison,
+                BslValue::Object(value) if matches!(&**value, BslObject::ValueComparison)
+            )
+        {
+            return Err(RtError::TypeError {
+                expected: "СравнениеЗначений",
+                op: "Сортировать",
+            });
+        }
         let spec = spec.as_str("Сортировать")?.to_string();
         let keys = {
             let d = data.borrow();
@@ -2053,6 +2155,20 @@ impl BslValue {
                 .map_err(RtError::UnknownColumn)?
         };
         data.borrow_mut().sort(&keys);
+        Ok(())
+    }
+
+    /// `ЗаполнитьЗначения(Значение[, Колонки])`.
+    pub fn table_fill_values(&self, value: &BslValue, columns: &BslValue) -> RtResult<()> {
+        let data = self.as_table("ЗаполнитьЗначения")?;
+        let cols = match columns {
+            BslValue::Undefined => Vec::new(),
+            other => {
+                let spec = other.as_str("ЗаполнитьЗначения")?.to_string();
+                Self::column_indices(&data.borrow(), &spec)?
+            }
+        };
+        data.borrow_mut().fill_values(value, &cols);
         Ok(())
     }
 
@@ -2154,6 +2270,61 @@ impl BslValue {
                     op: "Скопировать",
                 })
             }
+        };
+        let copy = data.borrow().copy_of(&positions, &cols);
+        Ok(BslValue::Object(Rc::new(BslObject::ValueTable(Rc::new(
+            std::cell::RefCell::new(copy),
+        )))))
+    }
+
+    /// Перегрузка `Скопировать(Отбор, Колонки)`, где `Отбор` — структура
+    /// с именами колонок и требуемыми значениями.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку при неверном типе отбора или неизвестной колонке.
+    pub fn table_copy_by_filter(
+        &self,
+        criteria: &BslValue,
+        columns: &BslValue,
+        names: &NameInterner,
+    ) -> RtResult<BslValue> {
+        let data = self.as_table("Скопировать")?;
+        let cols = Self::columns_or_all(&data.borrow(), columns, "Скопировать")?;
+        let BslValue::Object(criteria_object) = criteria else {
+            return Err(RtError::TypeError {
+                expected: "Структура",
+                op: "Скопировать",
+            });
+        };
+        let BslObject::Structure(criteria_data) = &**criteria_object else {
+            return Err(RtError::TypeError {
+                expected: "Структура",
+                op: "Скопировать",
+            });
+        };
+
+        let pairs = {
+            let criteria_data = criteria_data.borrow();
+            let table_data = data.borrow();
+            let mut pairs = Vec::with_capacity(criteria_data.len());
+            for i in 0..criteria_data.len() {
+                let (field, value) = criteria_data.entry_at(i).ok_or(RtError::NotAnObject)?;
+                let name = names.name(field).ok_or(RtError::UnknownField(field))?;
+                let col = table_data
+                    .column_index(name)
+                    .ok_or_else(|| RtError::UnknownColumn(name.to_string()))?;
+                pairs.push((col, value));
+            }
+            pairs
+        };
+        let positions: Vec<usize> = {
+            let table_data = data.borrow();
+            table_data
+                .find_rows(&pairs)
+                .into_iter()
+                .filter_map(|row_id| table_data.pos_of(row_id))
+                .collect()
         };
         let copy = data.borrow().copy_of(&positions, &cols);
         Ok(BslValue::Object(Rc::new(BslObject::ValueTable(Rc::new(
@@ -2400,7 +2571,10 @@ impl fmt::Display for BslValue {
                 BslObject::Structure(_) => write!(f, "Структура"),
                 BslObject::ValueTable(_) => write!(f, "ТаблицаЗначений"),
                 BslObject::TableColumns(_) => write!(f, "КоллекцияКолонокТаблицыЗначений"),
+                BslObject::TableColumn(..) => write!(f, "КолонкаТаблицыЗначений"),
                 BslObject::TableRow(_, _) => write!(f, "СтрокаТаблицыЗначений"),
+                BslObject::TypeDescription(_) => write!(f, "ОписаниеТипов"),
+                BslObject::ValueComparison => write!(f, "СравнениеЗначений"),
                 BslObject::Map(_) => write!(f, "Соответствие"),
                 BslObject::KeyValuePair(_, _) => write!(f, "КлючИЗначение"),
                 BslObject::TextWriter(_) => write!(f, "ЗаписьТекста"),

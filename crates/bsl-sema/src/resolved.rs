@@ -90,6 +90,8 @@ pub enum RExpr {
     /// `Новый ТаблицаЗначений()` — колонки заводятся отдельно, через
     /// `.Колонки.Добавить(имя)` (см. `CallMethod`), не в конструкторе.
     NewTable,
+    NewTypeDescription(Box<RExpr>),
+    NewValueComparison,
     /// `Новый Соответствие()` — пары ключ-значение заводятся отдельно, через
     /// `.Вставить(Ключ, Значение)`, не в конструкторе (как и `ТаблицаЗначений`
     /// выше).
@@ -353,6 +355,7 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
             expr_uses_dynamic(line_break) || expr_uses_dynamic(indent)
         }
         RExpr::NewTextWriter { path } => expr_uses_dynamic(path),
+        RExpr::NewTypeDescription(names) => expr_uses_dynamic(names),
         RExpr::Number(_)
         | RExpr::Date(_)
         | RExpr::Bool(_)
@@ -362,6 +365,7 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
         | RExpr::Local(_)
         | RExpr::Str(_)
         | RExpr::NewTable
+        | RExpr::NewValueComparison
         | RExpr::NewMap => false,
     }
 }

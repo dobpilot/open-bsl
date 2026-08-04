@@ -298,6 +298,10 @@ pub const NEW_TYPES: &[&str] = &[
     "Map",
     "ТаблицаЗначений",
     "ValueTable",
+    "ОписаниеТипов",
+    "TypeDescription",
+    "СравнениеЗначений",
+    "ValueComparison",
     "ЗаписьТекста",
     "TextWriter",
     "ЧтениеJSON",
@@ -564,10 +568,8 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    /// `Новый Массив(...)`/`Новый Структура(...)`/`Новый
-    /// ТаблицаЗначений()`/`Новый Соответствие()` — единственные формы
-    /// `Новый`, которые пока распознаются (случай общих пользовательских
-    /// типов отложен, объектов кроме коллекций ещё нет).
+    /// Разбирает известные платформенные типы из [`NEW_TYPES`]. Общие
+    /// пользовательские типы пока не поддержаны.
     fn resolve_new(&mut self, type_name: &str, args: &[AExpr]) -> Result<RExpr, SemaError> {
         match type_name.to_uppercase().as_str() {
             "МАССИВ" | "ARRAY" => {
@@ -638,6 +640,28 @@ impl<'a> Resolver<'a> {
                     });
                 }
                 Ok(RExpr::NewTable)
+            }
+            "ОПИСАНИЕТИПОВ" | "TYPEDESCRIPTION" => {
+                if args.len() != 1 {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый ОписаниеТипов".to_string(),
+                        expected: 1,
+                        found: args.len(),
+                    });
+                }
+                Ok(RExpr::NewTypeDescription(Box::new(
+                    self.resolve_expr(&args[0])?,
+                )))
+            }
+            "СРАВНЕНИЕЗНАЧЕНИЙ" | "VALUECOMPARISON" => {
+                if !args.is_empty() {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый СравнениеЗначений".to_string(),
+                        expected: 0,
+                        found: args.len(),
+                    });
+                }
+                Ok(RExpr::NewValueComparison)
             }
             "СООТВЕТСТВИЕ" | "MAP" => {
                 if !args.is_empty() {
@@ -773,7 +797,7 @@ impl<'a> Resolver<'a> {
                 })
             }
             _ => Err(SemaError::Unsupported(
-                "Новый поддержан только для Массив/Структура/ТаблицаЗначений/Соответствие пока",
+                "этот тип в выражении Новый пока не поддержан",
             )),
         }
     }
@@ -905,9 +929,7 @@ impl<'a> Resolver<'a> {
                     | bsl_rt::BuiltinMethod::Close => Some(0),
                     bsl_rt::BuiltinMethod::Delete | bsl_rt::BuiltinMethod::Get => Some(1),
                     bsl_rt::BuiltinMethod::Insert => Some(2),
-                    bsl_rt::BuiltinMethod::FindRows
-                    | bsl_rt::BuiltinMethod::Sort
-                    | bsl_rt::BuiltinMethod::Total => Some(1),
+                    bsl_rt::BuiltinMethod::FindRows | bsl_rt::BuiltinMethod::Total => Some(1),
                     // `Записать` — 1 у `ЗаписьТекста` (кусок текста) и 1..2 у
                     // `ТекстовыйДокумент` (путь и кодировка). Как и у
                     // `Прочитать`, арность решает рантайм.
@@ -922,6 +944,8 @@ impl<'a> Resolver<'a> {
                     bsl_rt::BuiltinMethod::Add
                     | bsl_rt::BuiltinMethod::Property
                     | bsl_rt::BuiltinMethod::Find
+                    | bsl_rt::BuiltinMethod::Sort
+                    | bsl_rt::BuiltinMethod::FillValues
                     | bsl_rt::BuiltinMethod::Copy
                     | bsl_rt::BuiltinMethod::CopyColumns
                     | bsl_rt::BuiltinMethod::Collapse => None,

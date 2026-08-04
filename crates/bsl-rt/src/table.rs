@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{hash_map::RandomState, HashMap};
+use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 use std::rc::Rc;
 
 use bsl_number::{BslNumber, NumError};
@@ -18,14 +19,17 @@ use crate::BslValue;
 /// пережить сортировку/удаление СОСЕДНИХ строк, а физическая позиция
 /// строки в колонках как раз меняется при таких операциях. Решение — то
 /// же, что описано в брифе: строка хранит не позицию, а стабильный
-/// `row_id`; таблица держит обратную карту `row_id -> текущая позиция`.
-/// Удалённая строка выпадает из карты — обращение к ней после этого
+/// `row_id`; таблица держит обратный индекс `row_id -> текущая позиция`.
+/// Удалённая строка выпадает из индекса — обращение к ней после этого
 /// возвращает `RtError::RowInvalidated`, а не тихо читает чужие данные.
 #[derive(Debug)]
 pub struct ValueTableData {
     /// Имена колонок сравниваются регистронезависимо снаружи (см.
     /// `column_index`), но хранятся с оригинальным написанием.
     pub column_names: Vec<String>,
+    /// Ограничение типа каждой колонки. `None` означает составной тип без
+    /// явного ограничения, как у `Колонки.Добавить(Имя)`.
+    pub column_types: Vec<Option<Vec<crate::TypeId>>>,
     /// `columns[col][pos]` — значение колонки `col` в строке на текущей
     /// физической позиции `pos`. Все колонки всегда одной длины — длины
     /// строк таблицы.
@@ -33,9 +37,9 @@ pub struct ValueTableData {
     /// `row_ids[pos]` — стабильный id строки, сейчас стоящей на позиции
     /// `pos`.
     pub row_ids: Vec<u64>,
-    /// Обратная карта: id -> текущая позиция. Отсутствие ключа значит
-    /// "строка удалена".
-    pub id_to_pos: HashMap<u64, usize>,
+    /// Обратный индекс выбирает плотное или разреженное представление в
+    /// зависимости от заполненности пространства `row_id`.
+    row_positions: RowPositions,
     next_id: u64,
     /// Меняется при каждой перестройке набора или порядка колонок. Нужна
     /// кэшу прямого переноса строк: один и тот же объект таблицы после
@@ -43,13 +47,196 @@ pub struct ValueTableData {
     schema_revision: u64,
 }
 
+const MISSING_POSITION: usize = usize::MAX;
+
+/// Обратный индекс стабильных идентификаторов строк.
+///
+/// Последовательная таблица обходится пустым `Sparse`: `pos_of` сначала
+/// проверяет прямое равенство `row_id == position`. После сортировки id
+/// остаются плотными, но меняют порядок — тогда `Dense` занимает один
+/// `usize` на строку вместо полного бакета `HashMap`. После массовых
+/// удалений выгоднее снова разреженная карта.
+#[derive(Debug)]
+enum RowPositions {
+    Sparse(HashMap<u64, usize>),
+    Dense(Vec<usize>),
+}
+
+impl RowPositions {
+    fn identity() -> Self {
+        Self::Sparse(HashMap::new())
+    }
+
+    fn get(&self, row_id: u64) -> Option<usize> {
+        match self {
+            Self::Sparse(positions) => positions.get(&row_id).copied(),
+            Self::Dense(positions) => positions
+                .get(usize::try_from(row_id).ok()?)
+                .copied()
+                .filter(|position| *position != MISSING_POSITION),
+        }
+    }
+
+    fn insert(&mut self, row_id: u64, position: usize) {
+        match self {
+            Self::Sparse(positions) => {
+                positions.insert(row_id, position);
+            }
+            Self::Dense(positions) => {
+                let Ok(index) = usize::try_from(row_id) else {
+                    let mut sparse = HashMap::with_capacity(positions.len());
+                    for (id, &position) in positions.iter().enumerate() {
+                        if position != MISSING_POSITION {
+                            sparse.insert(id as u64, position);
+                        }
+                    }
+                    sparse.insert(row_id, position);
+                    *self = Self::Sparse(sparse);
+                    return;
+                };
+                if index >= positions.len() {
+                    positions.resize(index + 1, MISSING_POSITION);
+                }
+                positions[index] = position;
+            }
+        }
+    }
+
+    fn remove(&mut self, row_id: u64) {
+        match self {
+            Self::Sparse(positions) => {
+                positions.remove(&row_id);
+            }
+            Self::Dense(positions) => {
+                if let Ok(index) = usize::try_from(row_id) {
+                    if let Some(position) = positions.get_mut(index) {
+                        *position = MISSING_POSITION;
+                    }
+                }
+            }
+        }
+    }
+
+    fn rebuild(row_ids: &[u64], next_id: u64) -> Self {
+        if row_ids
+            .iter()
+            .enumerate()
+            .all(|(position, row_id)| usize::try_from(*row_id).ok() == Some(position))
+        {
+            return Self::identity();
+        }
+
+        if let Ok(dense_len) = usize::try_from(next_id) {
+            if dense_len <= row_ids.len().saturating_mul(2) {
+                let mut positions = vec![MISSING_POSITION; dense_len];
+                for (position, &row_id) in row_ids.iter().enumerate() {
+                    positions[row_id as usize] = position;
+                }
+                return Self::Dense(positions);
+            }
+        }
+
+        Self::Sparse(
+            row_ids
+                .iter()
+                .enumerate()
+                .filter(|(position, row_id)| {
+                    usize::try_from(**row_id).ok() != Some(*position)
+                })
+                .map(|(position, &row_id)| (row_id, position))
+                .collect(),
+        )
+    }
+}
+
+/// Быстрый хэшер для временного отпечатка строки группировки.
+///
+/// Начальное состояние случайно для каждого вызова `collapse`, поэтому
+/// входные данные не могут заранее подобрать длинную цепочку коллизий.
+/// Сама коллизия безопасна: перед объединением строки полный ключ всё
+/// равно сравнивается по значениям.
+struct GroupHasher(u64);
+
+impl GroupHasher {
+    fn new(seed: u64) -> Self {
+        Self(seed)
+    }
+
+    fn mix(&mut self, value: u64) {
+        const MULTIPLIER: u64 = 0x517c_c1b7_2722_0a95;
+        self.0 = (self.0.rotate_left(5) ^ value).wrapping_mul(MULTIPLIER);
+    }
+}
+
+impl Hasher for GroupHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, mut bytes: &[u8]) {
+        while bytes.len() >= 8 {
+            let (word, rest) = bytes.split_at(8);
+            let mut array = [0_u8; 8];
+            array.copy_from_slice(word);
+            self.mix(u64::from_ne_bytes(array));
+            bytes = rest;
+        }
+        if !bytes.is_empty() {
+            let mut tail = [0_u8; 8];
+            tail[..bytes.len()].copy_from_slice(bytes);
+            self.mix(u64::from_ne_bytes(tail) ^ ((bytes.len() as u64) << 56));
+        }
+    }
+
+    fn write_u16(&mut self, value: u16) {
+        self.mix(u64::from(value));
+    }
+
+    fn write_u64(&mut self, value: u64) {
+        self.mix(value);
+    }
+
+    fn write_usize(&mut self, value: usize) {
+        self.mix(value as u64);
+    }
+}
+
+/// `HashMap` для уже готовых отпечатков не должна повторно считать SipHash.
+/// Сам отпечаток засолен случайным состоянием `collapse`, а совпадения всё
+/// равно подтверждаются полным сравнением ключа.
+#[derive(Default)]
+struct FingerprintHasher(u64);
+
+impl Hasher for FingerprintHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        // В этой карте ключ всегда `u64`; реализация нужна только для
+        // полноты контракта `Hasher` и сохраняет все байты при ином вызове.
+        let mut value = 0_u64;
+        for (shift, byte) in bytes.iter().take(8).enumerate() {
+            value |= u64::from(*byte) << (shift * 8);
+        }
+        self.0 = value;
+    }
+
+    fn write_u64(&mut self, value: u64) {
+        self.0 = value;
+    }
+}
+
+type FingerprintMap = HashMap<u64, usize, BuildHasherDefault<FingerprintHasher>>;
+
 impl ValueTableData {
     pub fn new() -> Rc<RefCell<Self>> {
         Rc::new(RefCell::new(ValueTableData {
             column_names: Vec::new(),
+            column_types: Vec::new(),
             columns: Vec::new(),
             row_ids: Vec::new(),
-            id_to_pos: HashMap::new(),
+            row_positions: RowPositions::identity(),
             next_id: 0,
             schema_revision: 0,
         }))
@@ -66,10 +253,15 @@ impl ValueTableData {
     }
 
     pub fn add_column(&mut self, name: &str) {
+        self.add_typed_column(name, None);
+    }
+
+    pub fn add_typed_column(&mut self, name: &str, value_types: Option<Vec<crate::TypeId>>) {
         if self.column_index(name).is_some() {
             return; // колонка с таким именем уже есть — не дублируем.
         }
         self.column_names.push(name.to_string());
+        self.column_types.push(value_types);
         self.columns
             .push(vec![BslValue::Undefined; self.row_count()]);
         self.schema_revision = self.schema_revision.wrapping_add(1);
@@ -90,12 +282,14 @@ impl ValueTableData {
         self.next_id += 1;
         let pos = self.row_ids.len();
         self.row_ids.push(id);
-        self.id_to_pos.insert(id, pos);
+        if usize::try_from(id).ok() != Some(pos) {
+            self.row_positions.insert(id, pos);
+        }
         id
     }
 
     /// Удаляет строку по ТЕКУЩЕЙ физической позиции. Позиции строк после
-    /// неё сдвигаются — карта `id_to_pos` чинится под них тут же, поэтому
+    /// неё сдвигаются — обратный индекс чинится под них тут же, поэтому
     /// снаружи это не видно: только что действовавшие id продолжают
     /// указывать на верные (сдвинутые) позиции.
     pub fn delete_row_at(&mut self, pos: usize) -> Option<()> {
@@ -106,9 +300,9 @@ impl ValueTableData {
             col.remove(pos);
         }
         let removed_id = self.row_ids.remove(pos);
-        self.id_to_pos.remove(&removed_id);
+        self.row_positions.remove(removed_id);
         for (i, &id) in self.row_ids.iter().enumerate().skip(pos) {
-            self.id_to_pos.insert(id, i);
+            self.row_positions.insert(id, i);
         }
         Some(())
     }
@@ -118,7 +312,7 @@ impl ValueTableData {
             col.clear();
         }
         self.row_ids.clear();
-        self.id_to_pos.clear();
+        self.row_positions = RowPositions::identity();
         // next_id НЕ сбрасывается: старые id не должны воскресать и
         // случайно совпасть с новыми после Очистить().
     }
@@ -128,14 +322,31 @@ impl ValueTableData {
     }
 
     pub fn get_cell(&self, row_id: u64, col: usize) -> Option<BslValue> {
-        let pos = *self.id_to_pos.get(&row_id)?;
+        let pos = self.pos_of(row_id)?;
         self.columns.get(col)?.get(pos).cloned()
     }
 
     pub fn set_cell(&mut self, row_id: u64, col: usize, value: BslValue) -> Option<()> {
-        let pos = *self.id_to_pos.get(&row_id)?;
+        let pos = self.pos_of(row_id)?;
         *self.columns.get_mut(col)?.get_mut(pos)? = value;
         Some(())
+    }
+
+    /// `ЗаполнитьЗначения(Значение, Колонки)` — записывает одно значение
+    /// во все строки перечисленных колонок. Пустой список колонок означает
+    /// все колонки таблицы.
+    pub fn fill_values(&mut self, value: &BslValue, cols: &[usize]) {
+        if cols.is_empty() {
+            for column in &mut self.columns {
+                column.fill(value.clone());
+            }
+            return;
+        }
+        for &col in cols {
+            if let Some(column) = self.columns.get_mut(col) {
+                column.fill(value.clone());
+            }
+        }
     }
 
     /// `Найти(Значение[, Колонки])` — первый `row_id`, у которого в одной
@@ -186,7 +397,7 @@ impl ValueTableData {
         };
         for v in values {
             if let BslValue::Number(n) = v {
-                sum = sum.add(n)?;
+                sum.add_assign(n)?;
             }
         }
         Ok(sum)
@@ -197,7 +408,7 @@ impl ValueTableData {
     /// Сортировка УСТОЙЧИВАЯ (`sort_by` в Rust таков) — при равных ключах
     /// исходный порядок строк сохраняется. И, что важнее, переставляются
     /// не только колонки, но и `row_ids` вместе с ними, после чего
-    /// `id_to_pos` пересобирается целиком: живой объект
+    /// обратный индекс пересобирается целиком: живой объект
     /// `СтрокаТаблицыЗначений`, взятый ДО сортировки, после неё продолжает
     /// указывать на ту же строку, просто стоящую в другом месте.
     pub fn sort(&mut self, keys: &[SortKey]) {
@@ -216,24 +427,40 @@ impl ValueTableData {
             Ordering::Equal
         });
 
-        for col in &mut self.columns {
-            *col = order.iter().map(|&i| col[i].clone()).collect();
+        // `order[new] = old`. Обратная перестановка показывает, в какую
+        // новую позицию должен попасть каждый старый элемент. Разлагаем её
+        // один раз на обмены и применяем ко всем колонкам: так сортировка
+        // не клонирует десятки миллионов `BslValue` и не меняет счётчики
+        // ссылок вложенных строк.
+        let mut destination = vec![0_usize; order.len()];
+        for (new_position, &old_position) in order.iter().enumerate() {
+            destination[old_position] = new_position;
         }
-        self.row_ids = order.iter().map(|&i| self.row_ids[i]).collect();
+        let mut swaps = Vec::with_capacity(order.len());
+        for position in 0..destination.len() {
+            while destination[position] != position {
+                let target = destination[position];
+                swaps.push((position, target));
+                destination.swap(position, target);
+            }
+        }
+        for col in &mut self.columns {
+            for &(left, right) in &swaps {
+                col.swap(left, right);
+            }
+        }
+        for &(left, right) in &swaps {
+            self.row_ids.swap(left, right);
+        }
         self.reindex();
     }
 
-    /// Пересборка карты `id -> позиция` после любой перестановки строк.
+    /// Пересборка индекса `id -> позиция` после любой перестановки строк.
     /// Вынесено отдельно, потому что этим кончаются `sort`, `move_row` и
     /// `collapse` — и любая забытая пересборка тихо ломает инвариант живых
     /// строк, а не падает.
     fn reindex(&mut self) {
-        self.id_to_pos = self
-            .row_ids
-            .iter()
-            .enumerate()
-            .map(|(pos, &id)| (id, pos))
-            .collect();
+        self.row_positions = RowPositions::rebuild(&self.row_ids, self.next_id);
     }
 
     // --- ТаблицаЗначений, волна 3 ----------------------------------------
@@ -241,7 +468,12 @@ impl ValueTableData {
     /// Текущая позиция строки; `None` — строка удалена (`Удалить`,
     /// `Очистить`, `Свернуть`) либо принадлежит другой таблице.
     pub fn pos_of(&self, row_id: u64) -> Option<usize> {
-        self.id_to_pos.get(&row_id).copied()
+        if let Ok(pos) = usize::try_from(row_id) {
+            if self.row_ids.get(pos) == Some(&row_id) {
+                return Some(pos);
+            }
+        }
+        self.row_positions.get(row_id)
     }
 
     /// `Скопировать([Строки], [Колонки])` — НОВАЯ таблица с выбранными
@@ -260,9 +492,13 @@ impl ValueTableData {
                 .iter()
                 .filter_map(|&c| self.column_names.get(c).cloned())
                 .collect(),
+            column_types: cols
+                .iter()
+                .filter_map(|&c| self.column_types.get(c).cloned())
+                .collect(),
             columns: Vec::with_capacity(cols.len()),
             row_ids: Vec::with_capacity(rows.len()),
-            id_to_pos: HashMap::with_capacity(rows.len()),
+            row_positions: RowPositions::identity(),
             next_id: 0,
             schema_revision: 0,
         };
@@ -273,7 +509,6 @@ impl ValueTableData {
         }
         for pos in 0..rows.len() {
             out.row_ids.push(pos as u64);
-            out.id_to_pos.insert(pos as u64, pos);
         }
         out.next_id = rows.len() as u64;
         out
@@ -304,7 +539,7 @@ impl ValueTableData {
 
     /// `Сдвинуть(Строка, Смещение)` — перестановка строки на `offset`
     /// позиций. Живые объекты строк переживают её: переезжают и значения
-    /// колонок, и `row_ids`, а карта пересобирается (инвариант 12).
+    /// колонок, и `row_ids`, а индекс пересобирается (инвариант 12).
     ///
     /// `None` — целевая позиция вне таблицы; что делать с этим, решает
     /// вызывающий.
@@ -351,58 +586,139 @@ impl ValueTableData {
     /// строки, остальные исчезают вместе со строками. Это ровно то же, что
     /// делает `Удалить`, и инвариант живых строк не нарушает: обращение к
     /// пропавшей строке даёт `RowInvalidated`, а не чужие данные.
-    // `BslValue` в ключе — то же самое, что делает `Соответствие`
-    // (`MapData::values`): у ссылочных типов и хэш, и равенство берутся от
-    // АДРЕСА `Rc`, а он под мутацией содержимого не меняется. Ключ группы
-    // к тому же живёт только внутри этого вызова.
-    #[allow(clippy::mutable_key_type)]
+    // Равенство значений ключа — то же самое, что у `Соответствие`: для
+    // ссылочных типов сравнивается адрес `Rc`, для типов-значений — само
+    // значение. Отпечаток служит только индексом кандидатов; коллизии
+    // разрешаются полным сравнением и не влияют на результат.
     pub fn collapse(&mut self, group: &[usize], sum: &[usize]) -> Result<(), NumError> {
-        let mut slot_of: HashMap<Vec<BslValue>, usize> = HashMap::new();
-        let mut keys: Vec<Vec<BslValue>> = Vec::new();
-        let mut sums: Vec<Vec<BslNumber>> = Vec::new();
+        let random_state = RandomState::new();
+        let seed = random_state.build_hasher().finish();
+        self.collapse_with_fingerprint(group, sum, |table, pos, group| {
+            let mut hasher = GroupHasher::new(seed);
+            group.len().hash(&mut hasher);
+            for &column in group {
+                table.columns[column][pos].hash(&mut hasher);
+            }
+            hasher.finish()
+        })
+    }
+
+    fn collapse_with_fingerprint(
+        &mut self,
+        group: &[usize],
+        sum: &[usize],
+        mut fingerprint: impl FnMut(&Self, usize, &[usize]) -> u64,
+    ) -> Result<(), NumError> {
+        let original_row_count = self.row_count();
+        // Значение карты — голова цепочки групп с одинаковым отпечатком.
+        // Обычно цепочка состоит из одного элемента; `collision_next`
+        // делает редкие настоящие коллизии корректными без `Vec` в каждом
+        // бакете карты.
+        let mut head_by_fingerprint = FingerprintMap::default();
+        let mut collision_next: Vec<Option<usize>> = Vec::new();
+        // Ключ группы представлен позицией её первой строки. Значения
+        // остаются в исходных колонках до конца группировки и не
+        // клонируются в отдельное построчное хранилище.
+        let mut representatives: Vec<usize> = Vec::new();
+        // Суммы лежат одним буфером: отдельный `Vec` на каждую группу на
+        // больших уникальных таблицах превращался в миллионы аллокаций.
+        let mut sums: Vec<BslNumber> = Vec::new();
         let mut ids: Vec<u64> = Vec::new();
 
         for pos in 0..self.row_count() {
-            let key: Vec<BslValue> = group
-                .iter()
-                .map(|&c| self.columns[c][pos].clone())
-                .collect();
-            let slot = match slot_of.get(&key) {
-                Some(&slot) => slot,
+            const RESERVE_SAMPLE: usize = 4096;
+            if pos == RESERVE_SAMPLE && ids.len() * 20 >= RESERVE_SAMPLE * 19 {
+                // Почти уникальная выборка означает, что буферы, скорее
+                // всего, вырастут до размера исходной таблицы. Один точный
+                // резерв дешевле повторных копирований и не оставляет
+                // ёмкость на следующей степени двойки. Для обычной
+                // агрегации с множеством повторов эта ветка не срабатывает.
+                let remaining_groups = self.row_count().saturating_sub(ids.len());
+                head_by_fingerprint.reserve(remaining_groups);
+                collision_next.reserve(remaining_groups);
+                representatives.reserve(remaining_groups);
+                ids.reserve(remaining_groups);
+                sums.reserve(remaining_groups.saturating_mul(sum.len()));
+            }
+
+            let row_fingerprint = fingerprint(self, pos, group);
+            let mut candidate = head_by_fingerprint.get(&row_fingerprint).copied();
+            let mut matching_slot = None;
+            while let Some(slot) = candidate {
+                let representative = representatives[slot];
+                let equal = group.iter().all(|&input| {
+                    self.columns[input][representative] == self.columns[input][pos]
+                });
+                if equal {
+                    matching_slot = Some(slot);
+                    break;
+                }
+                candidate = collision_next[slot];
+            }
+
+            let slot = match matching_slot {
+                Some(slot) => slot,
                 None => {
-                    let slot = keys.len();
-                    slot_of.insert(key.clone(), slot);
-                    keys.push(key);
-                    sums.push(vec![BslNumber::from_i64(0); sum.len()]);
+                    let slot = ids.len();
+                    let previous = head_by_fingerprint.insert(row_fingerprint, slot);
+                    collision_next.push(previous);
+                    representatives.push(pos);
+                    sums.extend((0..sum.len()).map(|_| BslNumber::from_i64(0)));
                     ids.push(self.row_ids[pos]);
                     slot
                 }
             };
             for (k, &c) in sum.iter().enumerate() {
                 if let BslValue::Number(n) = &self.columns[c][pos] {
-                    let acc = sums[slot][k].add(n)?;
-                    sums[slot][k] = acc;
+                    let offset = slot * sum.len() + k;
+                    sums[offset].add_assign(n)?;
                 }
             }
         }
 
+        let group_count = ids.len();
         let mut columns: Vec<Vec<BslValue>> = Vec::with_capacity(group.len() + sum.len());
-        for g in 0..group.len() {
-            columns.push(keys.iter().map(|k| k[g].clone()).collect());
+        if group_count == original_row_count {
+            // Ни одна строка не слилась с другой: группировочные колонки
+            // уже имеют точный итоговый порядок. Переносим их буферы без
+            // клонирования десятков миллионов `BslValue`.
+            let mut original_columns = std::mem::take(&mut self.columns);
+            for (output, &input) in group.iter().enumerate() {
+                if let Some(previous) = group[..output].iter().position(|&col| col == input) {
+                    columns.push(columns[previous].clone());
+                } else {
+                    columns.push(std::mem::take(&mut original_columns[input]));
+                }
+            }
+        } else {
+            for &input in group {
+                columns.push(
+                    representatives
+                        .iter()
+                        .map(|&position| self.columns[input][position].clone())
+                        .collect(),
+                );
+            }
         }
         for s in 0..sum.len() {
-            columns.push(
-                sums.iter()
-                    .map(|row| BslValue::Number(row[s].clone()))
-                    .collect(),
-            );
+            let mut column = Vec::with_capacity(group_count);
+            for slot in 0..group_count {
+                column.push(BslValue::Number(sums[slot * sum.len() + s].clone()));
+            }
+            columns.push(column);
         }
         let names: Vec<String> = group
             .iter()
             .chain(sum.iter())
             .filter_map(|&c| self.column_names.get(c).cloned())
             .collect();
+        let value_types: Vec<Option<Vec<crate::TypeId>>> = group
+            .iter()
+            .chain(sum.iter())
+            .filter_map(|&c| self.column_types.get(c).cloned())
+            .collect();
         self.column_names = names;
+        self.column_types = value_types;
         self.columns = columns;
         self.row_ids = ids;
         self.schema_revision = self.schema_revision.wrapping_add(1);
@@ -445,7 +761,7 @@ pub struct SortKey {
 /// ключу) и диакритика прочих алфавитов. Полная UCA по-прежнему заменяет
 /// ровно эту функцию.
 pub fn collate(a: &BslString, b: &BslString) -> Ordering {
-    match collation_key(a).cmp(&collation_key(b)) {
+    match collation_key(a).cmp(collation_key(b)) {
         Ordering::Equal => {}
         other => return other,
     }
@@ -455,12 +771,11 @@ pub fn collate(a: &BslString, b: &BslString) -> Ordering {
 }
 
 /// Первичный ключ сравнения: нижний регистр, `ё` сведена к `е`.
-fn collation_key(s: &BslString) -> Vec<char> {
-    s.to_string()
-        .to_lowercase()
-        .chars()
+fn collation_key(s: &BslString) -> impl Iterator<Item = char> + '_ {
+    s.lowercase_chars()
+        .iter()
+        .copied()
         .map(|c| if c == 'ё' { 'е' } else { c })
-        .collect()
 }
 
 /// Порядок РАЗНОТИПНЫХ значений в сортировке.
@@ -540,4 +855,121 @@ pub fn parse_sort_spec(
         keys.push(SortKey { column, descending });
     }
     Ok(keys)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sequential_row_ids_need_no_reverse_map_and_fallback_after_delete() {
+        let table = ValueTableData::new();
+        let mut table = table.borrow_mut();
+        table.add_column("к");
+        let first = table.add_row();
+        let second = table.add_row();
+        let third = table.add_row();
+
+        assert!(matches!(
+            &table.row_positions,
+            RowPositions::Sparse(positions) if positions.is_empty()
+        ));
+        assert_eq!(table.pos_of(first), Some(0));
+        assert_eq!(table.pos_of(second), Some(1));
+        assert_eq!(table.pos_of(third), Some(2));
+
+        table.delete_row_at(0).unwrap();
+        assert_eq!(table.pos_of(first), None);
+        assert_eq!(table.pos_of(second), Some(0));
+        assert_eq!(table.pos_of(third), Some(1));
+    }
+
+    #[test]
+    fn reordered_dense_row_ids_use_a_dense_reverse_index() {
+        let table = ValueTableData::new();
+        let mut table = table.borrow_mut();
+        table.add_column("к");
+        let first = table.add_row();
+        let second = table.add_row();
+        let third = table.add_row();
+
+        table.move_row(0, 2).unwrap();
+
+        assert!(matches!(
+            &table.row_positions,
+            RowPositions::Dense(positions) if positions.len() == 3
+        ));
+        assert_eq!(table.pos_of(first), Some(2));
+        assert_eq!(table.pos_of(second), Some(0));
+        assert_eq!(table.pos_of(third), Some(1));
+    }
+
+    #[test]
+    fn collapse_reuses_unique_group_columns_and_keeps_duplicate_specs() {
+        let table = ValueTableData::new();
+        let mut table = table.borrow_mut();
+        table.add_column("к");
+        for value in ["а", "б"] {
+            let row = table.add_row();
+            table.set_cell(row, 0, BslValue::Str(BslString::from_str(value)));
+        }
+        let original_buffer = table.columns[0].as_ptr();
+
+        table
+            .collapse_with_fingerprint(&[0, 0], &[], |_, position, _| position as u64)
+            .unwrap();
+
+        assert_eq!(table.columns.len(), 2);
+        assert_eq!(table.columns[0].as_ptr(), original_buffer);
+        assert_eq!(table.columns[0], table.columns[1]);
+    }
+
+    #[test]
+    fn collapse_resolves_fingerprint_collisions_by_the_full_key() {
+        let table = ValueTableData::new();
+        let mut table = table.borrow_mut();
+        table.add_column("г");
+        table.add_column("с");
+
+        for (key, value) in [("а", 1), ("б", 2), ("а", 3)] {
+            let row = table.add_row();
+            table.set_cell(row, 0, BslValue::Str(BslString::from_str(key)));
+            table.set_cell(row, 1, BslValue::Number(BslNumber::from_i64(value)));
+        }
+
+        // Все строки намеренно получают один отпечаток. Разные ключи не
+        // должны слиться, а повторный ключ обязан попасть в свою группу.
+        table
+            .collapse_with_fingerprint(&[0], &[1], |_, _, _| 0)
+            .unwrap();
+
+        assert_eq!(table.row_count(), 2);
+        assert_eq!(table.columns[0][0], BslValue::Str(BslString::from_str("а")));
+        assert_eq!(table.columns[0][1], BslValue::Str(BslString::from_str("б")));
+        assert_eq!(table.columns[1][0], BslValue::Number(BslNumber::from_i64(4)));
+        assert_eq!(table.columns[1][1], BslValue::Number(BslNumber::from_i64(2)));
+    }
+
+    #[test]
+    fn sort_reorders_columns_in_place() {
+        let table = ValueTableData::new();
+        let mut table = table.borrow_mut();
+        table.add_column("к");
+        for value in [3, 1, 2] {
+            let row = table.add_row();
+            table.set_cell(row, 0, BslValue::Number(BslNumber::from_i64(value)));
+        }
+        let original_buffer = table.columns[0].as_ptr();
+
+        table.sort(&[SortKey {
+            column: 0,
+            descending: false,
+        }]);
+
+        assert_eq!(table.columns[0].as_ptr(), original_buffer);
+        assert_eq!(
+            table.columns[0],
+            [1, 2, 3].map(|value| BslValue::Number(BslNumber::from_i64(value)))
+        );
+    }
 }

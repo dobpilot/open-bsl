@@ -79,6 +79,8 @@ pub const OPCODES: &[&str] = &[
     "NewArray",
     "NewStructure",
     "NewTable",
+    "NewTypeDescription",
+    "NewValueComparison",
     "NewMap",
     "NewTextWriter",
     "NewJsonReader",
@@ -388,6 +390,10 @@ fn write_instr(instr: &Instr) -> String {
             count,
         } => format!("NewStructure dst={dst} shape={shape} base={base} count={count}"),
         Instr::NewTable { dst } => format!("NewTable dst={dst}"),
+        Instr::NewTypeDescription { dst, names } => {
+            format!("NewTypeDescription dst={dst} names={names}")
+        }
+        Instr::NewValueComparison { dst } => format!("NewValueComparison dst={dst}"),
         Instr::NewMap { dst } => format!("NewMap dst={dst}"),
         Instr::NewTextWriter { dst, path } => format!("NewTextWriter dst={dst} path={path}"),
         Instr::NewJsonReader { dst } => format!("NewJsonReader dst={dst}"),
@@ -1152,6 +1158,11 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
             count: count(&f)?,
         },
         "NewTable" => Instr::NewTable { dst: dst(&f)? },
+        "NewTypeDescription" => Instr::NewTypeDescription {
+            dst: dst(&f)?,
+            names: field_u8(&f, no, "names")?,
+        },
+        "NewValueComparison" => Instr::NewValueComparison { dst: dst(&f)? },
         "NewMap" => Instr::NewMap { dst: dst(&f)? },
         "NewJsonReader" => Instr::NewJsonReader { dst: dst(&f)? },
         "NewJsonWriter" => Instr::NewJsonWriter { dst: dst(&f)? },
@@ -1262,7 +1273,8 @@ mod tests {
         // Коллекции: NewArray/NewStructure/NewTable/NewMap, Get/SetIndex, Get/SetProp.
         "м = Новый Массив(3);\nм[0] = 5;\nз = м[0];\n\
          с = Новый Структура(\"поле,ещё\", 1, 2);\nс.поле = с.ещё;\n\
-         т = Новый ТаблицаЗначений;\nсо = Новый Соответствие;\n\
+         т = Новый ТаблицаЗначений;\nо = Новый ОписаниеТипов(\"Число\");\n\
+         ср = Новый СравнениеЗначений;\nсо = Новый Соответствие;\n\
          со.Вставить(\"к\", 1);\nн = м.Количество();\n",
         // Пользовательские функции: Call, Return, параметры по ссылке и
         // по значению, значение по умолчанию и пропущенный аргумент.

@@ -1,5 +1,9 @@
+use std::cell::OnceCell;
+use std::cmp::Ordering;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::io::{self, Write};
+use std::ops::Deref;
 use std::rc::Rc;
 
 /// Строка BSL — код-юниты UTF-16, как в самой 1С (COM/Windows-строки), не
@@ -15,8 +19,66 @@ use std::rc::Rc;
 /// чисто оптимизационная надстройка над уже корректным посимвольным
 /// сравнением ниже, и, как остальные оптимизации в этом проекте, ждёт
 /// профилирования (см. план M10), а не добавляется заранее "на всякий".
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct BslString(Rc<Vec<u16>>);
+#[derive(Clone)]
+pub struct BslString(Rc<BslStringData>);
+
+struct BslStringData {
+    units: Vec<u16>,
+    /// Нижний регистр в кодовых точках для многократных сравнений строк.
+    lowercase_chars: OnceCell<Vec<char>>,
+}
+
+impl Deref for BslStringData {
+    type Target = [u16];
+
+    fn deref(&self) -> &Self::Target {
+        &self.units
+    }
+}
+
+impl PartialEq for BslString {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0) || self.units() == other.units()
+    }
+}
+
+impl Eq for BslString {}
+
+impl PartialOrd for BslString {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for BslString {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.units().cmp(other.units())
+    }
+}
+
+impl Hash for BslString {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let units = self.units();
+        units.len().hash(state);
+
+        // `Hash for [u16]` передаёт хэшеру каждый код-юнит отдельно. Для
+        // длинных строк это означает одно смешивание на два байта. Четыре
+        // соседних юнита безопасно упаковываются в `u64`: длина уже вошла
+        // в хэш, а порядок и все биты исходной строки сохраняются.
+        let mut chunks = units.chunks_exact(4);
+        for chunk in &mut chunks {
+            state.write_u64(
+                u64::from(chunk[0])
+                    | (u64::from(chunk[1]) << 16)
+                    | (u64::from(chunk[2]) << 32)
+                    | (u64::from(chunk[3]) << 48),
+            );
+        }
+        for &unit in chunks.remainder() {
+            state.write_u16(unit);
+        }
+    }
+}
 
 /// Сколько значений принимает `СтрШаблон`: `%1`..`%10`. Ограничение самой
 /// 1С, а не этой реализации — поэтому константа, а не «сколько передали».
@@ -81,6 +143,21 @@ fn encode_utf8(units: &[u16], writer: &mut impl Write) -> io::Result<()> {
     writer.write_all(&out[..used])
 }
 
+/// Добавляет символ в нижнем регистре, минуя таблицы Unicode для наиболее
+/// частых в BSL ASCII-символов и русских букв. Для остальных символов нужен
+/// полный `to_lowercase`: он сохраняет многосимвольные преобразования.
+fn push_lowercase(out: &mut Vec<char>, ch: char) {
+    match ch {
+        'A'..='Z' => out.push(((ch as u8) + (b'a' - b'A')) as char),
+        'А'..='Я' => {
+            out.push(char::from_u32(ch as u32 + 0x20).unwrap_or(ch));
+        }
+        'Ё' => out.push('ё'),
+        '\0'..='\u{7f}' | 'а'..='я' | 'ё' => out.push(ch),
+        _ => out.extend(ch.to_lowercase()),
+    }
+}
+
 impl BslString {
     pub fn from_str(s: &str) -> Self {
         let units: Vec<u16> = s.encode_utf16().collect();
@@ -88,11 +165,32 @@ impl BslString {
     }
 
     fn from_units(units: Vec<u16>) -> Self {
-        BslString(Rc::new(units))
+        BslString(Rc::new(BslStringData {
+            units,
+            lowercase_chars: OnceCell::new(),
+        }))
     }
 
     pub fn units(&self) -> &[u16] {
-        &self.0
+        &self.0.units
+    }
+
+    /// Возвращает закэшированный нижний регистр в кодовых точках.
+    ///
+    /// Кэш нужен сортировке таблиц: компаратор обращается к одной строке
+    /// много раз, а повторное декодирование UTF-16 и смена регистра на
+    /// каждом сравнении заметно дороже самого сопоставления ключей.
+    pub(crate) fn lowercase_chars(&self) -> &[char] {
+        self.0.lowercase_chars.get_or_init(|| {
+            let mut chars = Vec::with_capacity(self.units().len());
+            for decoded in char::decode_utf16(self.units().iter().copied()) {
+                push_lowercase(
+                    &mut chars,
+                    decoded.unwrap_or(char::REPLACEMENT_CHARACTER),
+                );
+            }
+            chars
+        })
     }
 
     /// Кодирует внутренние UTF-16 код-юниты прямо в переданный UTF-8
@@ -161,8 +259,9 @@ impl BslString {
     /// копирует — регистр всё равно будет перезаписан результатом.
     pub fn append(mut self, other: &Self) -> Self {
         match Rc::get_mut(&mut self.0) {
-            Some(buf) => {
-                buf.extend_from_slice(&other.0);
+            Some(data) => {
+                data.units.extend_from_slice(other.units());
+                data.lowercase_chars.take();
                 self
             }
             None => self.concat(other),
@@ -491,6 +590,22 @@ mod tests {
     fn case_conversion_does_not_break_on_non_ascii() {
         assert_eq!(BslString::from_str("привет").to_uppercase().to_string(), "ПРИВЕТ");
         assert_eq!(BslString::from_str("ПРИВЕТ").to_lowercase().to_string(), "привет");
+    }
+
+    #[test]
+    fn append_invalidates_the_cached_lowercase_characters() {
+        let text = s("Ё");
+        assert_eq!(text.lowercase_chars(), &['ё']);
+
+        let text = text.append(&s("Ж"));
+        assert_eq!(text.lowercase_chars(), &['ё', 'ж']);
+    }
+
+    #[test]
+    fn cached_lowercase_preserves_full_unicode_conversion() {
+        let source = "ABCЁЖ Привет İΣẞ😀";
+        let expected: Vec<char> = source.chars().flat_map(char::to_lowercase).collect();
+        assert_eq!(BslString::from_str(source).lowercase_chars(), expected);
     }
 
     fn s(t: &str) -> BslString {

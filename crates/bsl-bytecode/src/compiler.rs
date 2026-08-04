@@ -509,6 +509,18 @@ impl<'a> Compiler<'a> {
             RExpr::NewTable => {
                 self.emit(Instr::NewTable { dst });
             }
+            RExpr::NewTypeDescription(names) => {
+                let names_reg = self.alloc_temp()?;
+                self.compile_expr(names, names_reg)?;
+                self.emit(Instr::NewTypeDescription {
+                    dst,
+                    names: names_reg,
+                });
+                self.free_temp(1);
+            }
+            RExpr::NewValueComparison => {
+                self.emit(Instr::NewValueComparison { dst });
+            }
             RExpr::NewMap => {
                 self.emit(Instr::NewMap { dst });
             }

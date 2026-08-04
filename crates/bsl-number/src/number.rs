@@ -191,6 +191,33 @@ impl BslNumber {
         self.add_sub(other, false)
     }
 
+    /// Прибавляет `other` к числу на месте.
+    ///
+    /// Целые счётчики меняются без создания и последующего уничтожения
+    /// промежуточного `BslNumber`. Остальные представления проходят через
+    /// обычное сложение, поэтому нормализация десятичного числа сохраняется.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает [`NumError::ScaleOverflow`], если общий масштаб операндов
+    /// превышает защитный предел.
+    #[inline]
+    pub fn add_assign(&mut self, other: &Self) -> Result<(), NumError> {
+        if let (
+            BslNumber::Small { m: left, scale: 0 },
+            BslNumber::Small { m: right, scale: 0 },
+        ) = (&mut *self, other)
+        {
+            if let Some(sum) = left.get().checked_add(right.get()) {
+                *left = M128::new(sum);
+                return Ok(());
+            }
+        }
+
+        *self = self.add(other)?;
+        Ok(())
+    }
+
     pub fn sub(&self, other: &Self) -> Result<Self, NumError> {
         self.add_sub(other, true)
     }
@@ -1009,6 +1036,21 @@ mod tests {
             .add(&BslNumber::from_parts(2, 1))
             .unwrap();
         assert_eq!(sum.to_canonical(), "0.3");
+    }
+
+    #[test]
+    fn in_place_addition_matches_normal_addition_and_normalizes_decimals() {
+        for (left, right) in [
+            ("41", "1"),
+            ("0.1", "0.9"),
+            ("170141183460469231731687303715884105727", "1"),
+        ] {
+            let mut actual = BslNumber::parse_canonical(left).unwrap();
+            let right = BslNumber::parse_canonical(right).unwrap();
+            let expected = actual.add(&right).unwrap();
+            actual.add_assign(&right).unwrap();
+            assert_eq!(actual.to_canonical(), expected.to_canonical());
+        }
     }
 
     #[test]

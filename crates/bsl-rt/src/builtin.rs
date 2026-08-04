@@ -392,6 +392,8 @@ pub enum BuiltinMethod {
     FindRows,
     /// `Сортировать("Кол1 Возр, Кол2 Убыв")`.
     Sort,
+    /// `ЗаполнитьЗначения(Значение[, Колонки])`.
+    FillValues,
     /// `Итог("Колонка")`.
     Total,
 
@@ -522,6 +524,8 @@ pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
     ("FindRows", BuiltinMethod::FindRows),
     ("Сортировать", BuiltinMethod::Sort),
     ("Sort", BuiltinMethod::Sort),
+    ("ЗаполнитьЗначения", BuiltinMethod::FillValues),
+    ("FillValues", BuiltinMethod::FillValues),
     ("Итог", BuiltinMethod::Total),
     ("Total", BuiltinMethod::Total),
     ("Скопировать", BuiltinMethod::Copy),
@@ -819,11 +823,15 @@ pub fn call_builtin_method(
             [v] => match obj.push_element(v.clone()) {
                 Ok(()) => Ok(BslValue::Undefined),
                 Err(crate::RtError::MethodNotApplicable { .. }) => {
-                    obj.table_add_column(v)?;
+                    obj.table_add_column(v, &BslValue::Undefined)?;
                     Ok(BslValue::Undefined)
                 }
                 Err(e) => Err(e),
             },
+            [name, value_type] => {
+                obj.table_add_column(name, value_type)?;
+                Ok(BslValue::Undefined)
+            }
             _ => Err(crate::RtError::MethodNotApplicable {
                 method: "Добавить",
                 receiver: obj.type_name(),
@@ -899,7 +907,25 @@ pub fn call_builtin_method(
             receiver: obj.type_name(),
         }),
         BuiltinMethod::Sort => {
-            obj.table_sort(&args[0])?;
+            too_many(obj, "Сортировать", args, 2)?;
+            let Some(spec) = args.first() else {
+                return Err(RtError::MethodNotApplicable {
+                    method: "Сортировать",
+                    receiver: obj.type_name(),
+                });
+            };
+            obj.table_sort(spec, arg(args, 1))?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::FillValues => {
+            too_many(obj, "ЗаполнитьЗначения", args, 2)?;
+            let Some(value) = args.first() else {
+                return Err(RtError::MethodNotApplicable {
+                    method: "ЗаполнитьЗначения",
+                    receiver: obj.type_name(),
+                });
+            };
+            obj.table_fill_values(value, arg(args, 1))?;
             Ok(BslValue::Undefined)
         }
         BuiltinMethod::Total => obj.table_total(&args[0]),
@@ -1183,9 +1209,9 @@ pub fn call_builtin_method_ctx(
             _ => {}
         }
     }
-    // `НайтиСтроки` читает ИМЕНА полей структуры поиска (они хранятся
-    // `NameId`) и сопоставляет их с именами колонок — единственный метод
-    // таблицы, которому нужен интернер.
+    // `НайтиСтроки` и перегрузка `Скопировать(Отбор, ...)` читают ИМЕНА
+    // полей структуры (они хранятся `NameId`) и сопоставляют их с именами
+    // колонок таблицы.
     if m == BuiltinMethod::FindRows {
         let Some(criteria) = args.first() else {
             return Err(RtError::MethodNotApplicable {
@@ -1194,6 +1220,16 @@ pub fn call_builtin_method_ctx(
             });
         };
         return obj.table_find_rows(criteria, &rt.names);
+    }
+    if m == BuiltinMethod::Copy
+        && matches!(
+            args.first(),
+            Some(BslValue::Object(value))
+                if matches!(&**value, BslObject::Structure(_))
+        )
+    {
+        too_many(obj, "Скопировать", args, 2)?;
+        return obj.table_copy_by_filter(&args[0], arg(args, 1), &rt.names);
     }
     call_builtin_method(m, obj, args)
 }
