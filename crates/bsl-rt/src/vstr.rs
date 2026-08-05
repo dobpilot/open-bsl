@@ -661,9 +661,11 @@ pub fn value_to_file(path: &str, v: &BslValue, rt: &RuntimeShapes) -> RtResult<(
 
 /// `ЗначениеИзФайла(ИмяФайла)`.
 ///
-/// BOM срезается, пары `\r\n` нормализуются в `\n` до разбора — так
-/// строковые значения возвращаются в исходный вид (измерено: платформа
-/// из своего же файла читает строку БЕЗ `\r`). Одиночный `\r` в данных
+/// BOM срезается, пары `\r\n` внутри строковых лексем нормализуются в
+/// `\n` прямо при сканировании — так строковые значения возвращаются в
+/// исходный вид (измерено: платформа из своего же файла читает строку
+/// БЕЗ `\r`), а полная копия текста ради `replace` не нужна. Между
+/// лексемами `\r` — обычный пробельный символ. Одиночный `\r` в данных
 /// не трогается.
 // НЕ ИЗМЕРЕНО(VSTR.FORMAT) — поведение платформенной пары на одиночном
 // `\r` внутри строкового значения; здесь он проходит как есть.
@@ -675,8 +677,7 @@ pub fn value_from_file(path: &str, rt: &mut RuntimeShapes) -> RtResult<BslValue>
     let raw = std::fs::read_to_string(path)
         .map_err(|e| RtError::IoError(format!("ЗначениеИзФайла: {e}")))?;
     let text = raw.strip_prefix('\u{feff}').unwrap_or(&raw);
-    let normalized = text.replace("\r\n", "\n");
-    value_from_string_internal(normalized.trim_end_matches(['\r', '\n']), rt)
+    parse_and_convert(text, true, rt)
 }
 
 // --- Чтение ----------------------------------------------------------------
@@ -692,13 +693,21 @@ pub fn value_from_file(path: &str, rt: &mut RuntimeShapes) -> RtResult<BslValue>
 /// [`RtError::Vstr`] на тексте, не являющемся внутренним форматом, и на
 /// видах объектов, которых в этой реализации нет.
 pub fn value_from_string_internal(text: &str, rt: &mut RuntimeShapes) -> RtResult<BslValue> {
+    // В отличие от файловой пары, строка из памяти разбирается как есть:
+    // нормализация `\r\n` внутри строковых лексем на платформе для этого
+    // пути не измерена.
+    parse_and_convert(text, false, rt)
+}
+
+fn parse_and_convert(text: &str, crlf_to_lf: bool, rt: &mut RuntimeShapes) -> RtResult<BslValue> {
     let mut p = Parser {
-        chars: text.chars().collect(),
+        text,
         pos: 0,
+        crlf_to_lf,
     };
     let node = p.parse_node(0)?;
     p.skip_ws();
-    if p.pos != p.chars.len() {
+    if p.pos != p.text.len() {
         return Err(err("лишний текст после значения во внутреннем формате"));
     }
     convert(&node, rt, 0)
@@ -717,18 +726,28 @@ enum Node {
     Bare(String),
 }
 
-struct Parser {
-    chars: Vec<char>,
+/// Курсор по байтам исходного текста. Вся структура формата — скобки,
+/// запятые, кавычки, пробельные символы — это ASCII, поэтому разбор идёт
+/// по байтам без посимвольного декодирования, а содержимое лексем
+/// вырезается срезами `&str`: граница лексемы всегда ASCII-байт, то есть
+/// граница символа. Раньше здесь был `Vec<char>` — на файле в 130 МБ он
+/// стоил полгигабайта пиковой памяти и отдельного прохода декодирования.
+struct Parser<'a> {
+    text: &'a str,
     pos: usize,
+    /// Нормализовать `\r\n` в `\n` внутри строковых лексем — режим
+    /// файловой пары (см. [`value_from_file`]); `ЗначениеИзСтрокиВнутр`
+    /// оставляет строку как есть.
+    crlf_to_lf: bool,
 }
 
-impl Parser {
-    fn peek(&self) -> Option<char> {
-        self.chars.get(self.pos).copied()
+impl Parser<'_> {
+    fn peek(&self) -> Option<u8> {
+        self.text.as_bytes().get(self.pos).copied()
     }
 
     fn skip_ws(&mut self) {
-        while matches!(self.peek(), Some(' ' | '\n' | '\r' | '\t')) {
+        while matches!(self.peek(), Some(b' ' | b'\n' | b'\r' | b'\t')) {
             self.pos += 1;
         }
     }
@@ -741,11 +760,11 @@ impl Parser {
         }
         self.skip_ws();
         match self.peek() {
-            Some('{') => {
+            Some(b'{') => {
                 self.pos += 1;
                 let mut items = Vec::new();
                 self.skip_ws();
-                if self.peek() == Some('}') {
+                if self.peek() == Some(b'}') {
                     self.pos += 1;
                     return Ok(Node::List(items));
                 }
@@ -753,8 +772,8 @@ impl Parser {
                     items.push(self.parse_node(depth + 1)?);
                     self.skip_ws();
                     match self.peek() {
-                        Some(',') => self.pos += 1,
-                        Some('}') => {
+                        Some(b',') => self.pos += 1,
+                        Some(b'}') => {
                             self.pos += 1;
                             return Ok(Node::List(items));
                         }
@@ -762,34 +781,49 @@ impl Parser {
                     }
                 }
             }
-            Some('"') => {
+            Some(b'"') => {
                 self.pos += 1;
                 let mut s = String::new();
                 loop {
+                    // Ровный кусок до ближайшего особого байта уходит в
+                    // строку одним `push_str`, без обхода по символам.
+                    let start = self.pos;
+                    while let Some(c) = self.peek() {
+                        if c == b'"' || (self.crlf_to_lf && c == b'\r') {
+                            break;
+                        }
+                        self.pos += 1;
+                    }
+                    s.push_str(&self.text[start..self.pos]);
                     match self.peek() {
-                        Some('"') => {
+                        Some(b'"') => {
                             self.pos += 1;
                             // Удвоенная кавычка — экранированная; одиночная
                             // закрывает строку.
-                            if self.peek() == Some('"') {
+                            if self.peek() == Some(b'"') {
                                 s.push('"');
                                 self.pos += 1;
                             } else {
                                 return Ok(Node::Str(s));
                             }
                         }
-                        Some(c) => {
-                            s.push(c);
+                        Some(b'\r') => {
                             self.pos += 1;
+                            // Пара `\r\n` схлопывается в `\n`, одиночный
+                            // `\r` остаётся — та же семантика, что была у
+                            // предварительного `replace("\r\n", "\n")`.
+                            if self.peek() != Some(b'\n') {
+                                s.push('\r');
+                            }
                         }
-                        None => return Err(err("незакрытая строка во внутреннем формате")),
+                        _ => return Err(err("незакрытая строка во внутреннем формате")),
                     }
                 }
             }
             Some(_) => {
                 let start = self.pos;
                 while let Some(c) = self.peek() {
-                    if matches!(c, '{' | '}' | ',' | '"' | ' ' | '\n' | '\r' | '\t') {
+                    if matches!(c, b'{' | b'}' | b',' | b'"' | b' ' | b'\n' | b'\r' | b'\t') {
                         break;
                     }
                     self.pos += 1;
@@ -797,7 +831,7 @@ impl Parser {
                 if self.pos == start {
                     return Err(err("неожиданный символ во внутреннем формате"));
                 }
-                Ok(Node::Bare(self.chars[start..self.pos].iter().collect()))
+                Ok(Node::Bare(self.text[start..self.pos].to_string()))
             }
             None => Err(err("неожиданный конец текста во внутреннем формате")),
         }
