@@ -30,6 +30,7 @@ pub(crate) mod jit {
             _frames: &mut Vec<crate::Frame>,
             _stack: &mut Vec<bsl_rt::BslValue>,
             _program: &bsl_bytecode::Program,
+            _runtime_shapes: &mut bsl_rt::RuntimeShapes,
         ) -> Option<Result<usize, bsl_rt::RtError>> {
             None
         }
