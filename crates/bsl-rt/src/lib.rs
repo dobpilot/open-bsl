@@ -1434,7 +1434,28 @@ impl BslValue {
                         name,
                     ))))
                 }
-                BslObject::TableRow(..) => Err(RtError::NotIndexable),
+                // `СтрокаТаблицы[Ключ]` — значение ячейки: строковый ключ —
+                // имя колонки (тот же путь, что `Строка.Имя` через
+                // `get_field_by_name`), числовой — её номер.
+                BslObject::TableRow(..) => match idx {
+                    BslValue::Str(name) => self.get_field_by_name(&name.to_string()),
+                    _ => {
+                        let i = Self::index_as_usize(idx)?;
+                        let name = match &**o {
+                            BslObject::TableRow(data, _) => {
+                                let d = data.borrow();
+                                d.column_names.get(i).cloned().ok_or(
+                                    RtError::IndexOutOfBounds {
+                                        index: i as i64,
+                                        len: d.column_names.len(),
+                                    },
+                                )?
+                            }
+                            _ => unreachable!("вариант проверен объемлющим match"),
+                        };
+                        self.get_field_by_name(&name)
+                    }
+                },
                 // ПОЗИЦИОННЫЙ, не по ключу: `Для Каждого` компилируется в
                 // общий для всех коллекций протокол `CollectionLen` + рост
                 // числового индекса `0..len` через эту же функцию (см.
