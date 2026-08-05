@@ -508,6 +508,18 @@ impl<'a> Resolver<'a> {
                 Some(slot) => Ok(RExpr::Local(slot)),
                 None => match self.module_index.get(&name.to_uppercase()) {
                     Some(&slot) => Ok(RExpr::ModuleVar(slot)),
+                    // `АргументыКоманднойСтроки` пишется и без скобок — как
+                    // свойство глобального контекста в OneScript, откуда
+                    // это расширение и взято. Переменная с тем же именем
+                    // побеждает: проверки выше.
+                    None if bsl_rt::BuiltinFn::lookup(name)
+                        == Some(bsl_rt::BuiltinFn::CommandLineArguments) =>
+                    {
+                        Ok(RExpr::CallBuiltinFn {
+                            builtin: bsl_rt::BuiltinFn::CommandLineArguments,
+                            args: Vec::new(),
+                        })
+                    }
                     None => Err(SemaError::UndefinedVariable(name.clone())),
                 },
             },
@@ -1501,6 +1513,41 @@ mod tests {
             RStmt::AssignLocal {
                 slot: 1,
                 value: RExpr::Number(BslNumber::from_i64(2))
+            }
+        );
+    }
+
+    #[test]
+    fn command_line_arguments_reads_bare_and_a_local_shadows_it() {
+        // Голое имя без объявления — чтение встроенной функции, а не
+        // UndefinedVariable; регистр и английский синоним не важны.
+        for name in [
+            "АргументыКоманднойСтроки",
+            "аргументыкоманднойстроки",
+            "CommandLineArguments",
+        ] {
+            let r = resolve_src(&format!("А = {name};"));
+            assert_eq!(
+                r.body[0],
+                RStmt::AssignLocal {
+                    slot: 0,
+                    value: RExpr::CallBuiltinFn {
+                        builtin: bsl_rt::BuiltinFn::CommandLineArguments,
+                        args: Vec::new(),
+                    },
+                },
+                "{name}"
+            );
+        }
+
+        // Присваивание объявляет обычную локальную переменную, и дальше
+        // имя читается из неё, а не из встроенной функции.
+        let r = resolve_src("АргументыКоманднойСтроки = 1;\nБ = АргументыКоманднойСтроки;");
+        assert_eq!(
+            r.body[1],
+            RStmt::AssignLocal {
+                slot: 1,
+                value: RExpr::Local(0),
             }
         );
     }

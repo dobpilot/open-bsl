@@ -2,6 +2,25 @@ use crate::date::{DateBoundary, DatePart};
 use crate::runtime_shapes::RuntimeShapes;
 use crate::{BslObject, BslString, BslValue, NameId, RtError, RtResult};
 
+/// Аргументы командной строки, переданные скрипту после его имени.
+/// Процессно-глобальное неизменяемое состояние: командная строка у
+/// процесса одна, поэтому `bsl-cli` выставляет её один раз при старте, а
+/// REPL и `Выполнить`/`Вычислить` видят те же аргументы без протаскивания
+/// через `Program` — компилированная программа про своё окружение знать
+/// не должна.
+static COMMAND_LINE_ARGS: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+
+/// Выставляет аргументы для [`BuiltinFn::CommandLineArguments`]. Зовётся
+/// встраивающим приложением один раз до исполнения; повторный вызов
+/// игнорируется — командная строка за время жизни процесса не меняется.
+pub fn set_command_line_args(args: Vec<String>) {
+    let _ = COMMAND_LINE_ARGS.set(args);
+}
+
+fn command_line_args() -> &'static [String] {
+    COMMAND_LINE_ARGS.get().map_or(&[], Vec::as_slice)
+}
+
 /// Встроенные функции, вызываемые по голому имени (`Sqrt(x)`, `Pow(x,y)`,
 /// ...). Разрешаются регистронезависимо (`sqrt` == `Sqrt`), без перевода на
 /// русский — в реальной 1С у математических функций нет русских синонимов
@@ -140,6 +159,15 @@ pub enum BuiltinFn {
     ValueToFile,
     /// `ЗначениеИзФайла(ИмяФайла)` — обратное чтение того же файла.
     ValueFromFile,
+
+    /// `АргументыКоманднойСтроки` — массив строк, переданных скрипту после
+    /// его имени в командной строке. В 1С такой глобальной функции нет —
+    /// это расширение по образцу OneScript, мерить его не на чем; резолвер
+    /// принимает и запись без скобок, как у свойства глобального контекста
+    /// oscript. В отличие от его `ФиксированногоМассива` возвращается
+    /// обычный `Массив`, построенный заново на каждое чтение, — правки не
+    /// переживают следующее обращение.
+    CommandLineArguments,
 }
 
 /// Написания встроенных ФУНКЦИЙ: `(имя, вариант)` в каноническом
@@ -319,6 +347,8 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("ValueToFile", BuiltinFn::ValueToFile),
     ("ЗначениеИзФайла", BuiltinFn::ValueFromFile),
     ("ValueFromFile", BuiltinFn::ValueFromFile),
+    ("АргументыКоманднойСтроки", BuiltinFn::CommandLineArguments),
+    ("CommandLineArguments", BuiltinFn::CommandLineArguments),
 ];
 
 impl BuiltinFn {
@@ -366,7 +396,9 @@ impl BuiltinFn {
             // форм имелась в виду, решает тип первого аргумента в
             // `BslValue::make_date`.
             BuiltinFn::MakeDate => (1, 6),
-            BuiltinFn::CurrentDate | BuiltinFn::CurrentUniversalDateInMilliseconds => (0, 0),
+            BuiltinFn::CurrentDate
+            | BuiltinFn::CurrentUniversalDateInMilliseconds
+            | BuiltinFn::CommandLineArguments => (0, 0),
             // Оба списка свойств необязательны; недостающие позиции
             // резолвер добьёт `Неопределено`, что и значит «не задан».
             BuiltinFn::FillPropertyValues => (2, 4),
@@ -725,6 +757,12 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         BuiltinFn::CurrentUniversalDateInMilliseconds => {
             BslValue::current_universal_date_in_milliseconds()
         }
+        BuiltinFn::CommandLineArguments => Ok(BslValue::new_array(
+            command_line_args()
+                .iter()
+                .map(|a| BslValue::Str(BslString::from_str(a)))
+                .collect(),
+        )),
         BuiltinFn::DatePartOf(part) => args[0].date_component(part),
         BuiltinFn::DateBoundaryOf(which) => args[0].date_boundary(which),
         BuiltinFn::AddMonth => args[0].add_month(&args[1]),

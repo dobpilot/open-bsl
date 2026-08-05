@@ -76,6 +76,42 @@ fn a_command_without_its_argument_shows_that_commands_usage() {
     }
 }
 
+#[test]
+fn script_arguments_land_in_the_command_line_arguments_array() {
+    let path = std::env::temp_dir().join("bsl-cli-test-args.bsl");
+    std::fs::write(
+        &path,
+        "Сообщить(АргументыКоманднойСтроки.Количество());\n\
+         Для Каждого Арг Из АргументыКоманднойСтроки Цикл\n\
+         \tСообщить(Арг);\n\
+         КонецЦикла;\n\
+         Сообщить(CommandLineArguments.Количество());\n",
+    )
+    .unwrap();
+    let script = path.to_str().unwrap();
+
+    // Аргумент с пробелом обязан дойти одной строкой — за это отвечает
+    // разбиение args[2..], а не повторный разбор по пробелам.
+    let out = run(&[script, "раз", "два три"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&out.stdout), "2\nраз\nдва три\n2\n");
+
+    // Без аргументов — пустой массив, а не ошибка.
+    let out = run(&[script]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&out.stdout), "0\n0\n");
+
+    let _ = std::fs::remove_file(&path);
+}
+
 /// Регрессия на разбор аргументов: путь к скрипту не должен спутаться с
 /// командой, а команда — с путём.
 #[test]

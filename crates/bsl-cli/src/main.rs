@@ -58,7 +58,7 @@ const COMMANDS: &[Command] = &[
         flag: "--run-bytecode",
         alias: None,
         kind: Kind::RunBytecode,
-        args: "<файл.bslc>",
+        args: "<файл.bslc> [аргументы...]",
         what: "исполнить напечатанный байт-код",
         details: &[
             "Разобранная программа исполняется тем же путём, что и только что",
@@ -81,7 +81,7 @@ const COMMANDS: &[Command] = &[
         flag: "--jit",
         alias: None,
         kind: Kind::Jit,
-        args: "<файл.bsl>",
+        args: "<файл.bsl> [аргументы...]",
         what: "исполнить скрипт, компилируя байт-код в машинный код",
         details: &[
             "Только x86-64 Linux; на других платформах ключ принимается и ничего не",
@@ -120,7 +120,10 @@ fn help() -> String {
         ));
     };
     entry("", "REPL: подсветка, дополнение по Tab, история");
-    entry("<файл.bsl>", "исполнить скрипт целиком");
+    entry(
+        "<файл.bsl> [аргументы...]",
+        "исполнить скрипт целиком; аргументы — в массиве АргументыКоманднойСтроки",
+    );
     for c in COMMANDS {
         let flag = match c.alias {
             Some(a) => format!("{}, {a}", c.flag),
@@ -168,6 +171,9 @@ fn main() {
             run_command(cmd, &args)
         }
         Some(path) => {
+            // Всё после имени скрипта — его собственные аргументы: скрипт
+            // читает их массивом АргументыКоманднойСтроки.
+            bsl_rt::set_command_line_args(args[2..].to_vec());
             run_file(path, Engine::Interpreter);
             0
         }
@@ -186,7 +192,10 @@ fn run_command(cmd: &Command, args: &[String]) -> i32 {
             None => missing_argument(cmd),
         },
         Kind::RunBytecode => match args.get(2) {
-            Some(path) => bytecode::run(path),
+            Some(path) => {
+                bsl_rt::set_command_line_args(args[3..].to_vec());
+                bytecode::run(path)
+            }
             None => missing_argument(cmd),
         },
         Kind::IngestMeasurements => match args.get(2) {
@@ -195,6 +204,7 @@ fn run_command(cmd: &Command, args: &[String]) -> i32 {
         },
         Kind::Jit => match args.get(2) {
             Some(path) => {
+                bsl_rt::set_command_line_args(args[3..].to_vec());
                 run_file(path, Engine::Jit);
                 0
             }

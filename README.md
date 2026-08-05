@@ -24,6 +24,14 @@ cargo run -p bsl-cli -- path/to/script.bsl
 cargo run -p bsl-cli
 ```
 
+Всё, что идёт после имени скрипта, доступно из кода массивом строк
+`АргументыКоманднойСтроки` (синоним — `CommandLineArguments`; скобки
+необязательны, как в OneScript):
+
+```bash
+cargo run -p bsl-cli -- path/to/script.bsl арг1 "арг 2"
+```
+
 Список параметров командной строки:
 
 ```bash
