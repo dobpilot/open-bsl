@@ -32,6 +32,9 @@ pub enum TypeId {
     TypeDescription,
     ValueComparison,
     KeyAndValue,
+    /// Непрозрачное значение внутреннего формата — служебный тип этой
+    /// реализации (см. `BslObject::VstrOpaque`); в 1С не существует.
+    VstrOpaque,
     /// Тип самого типа: `ТипЗнч(Тип("Число"))` -> `Тип`.
     Type,
 
@@ -105,6 +108,7 @@ const NAMES: &[(TypeId, &str, &str)] = &[
     (TypeId::ValueTableRow, "СтрокаТаблицыЗначений", "ValueTableRow"),
     (TypeId::TypeDescription, "ОписаниеТипов", "TypeDescription"),
     (TypeId::ValueComparison, "СравнениеЗначений", "ValueComparison"),
+    (TypeId::VstrOpaque, "НепрозрачноеЗначение", "OpaqueValue"),
     (TypeId::KeyAndValue, "КлючИЗначение", "KeyAndValue"),
     (TypeId::Type, "Тип", "Type"),
     (TypeId::JsonReader, "Чтение JSON", "JSONReader"),

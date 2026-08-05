@@ -29,7 +29,16 @@ pub struct ValueTableData {
     pub column_names: Vec<String>,
     /// Ограничение типа каждой колонки. `None` означает составной тип без
     /// явного ограничения, как у `Колонки.Добавить(Имя)`.
-    pub column_types: Vec<Option<Vec<crate::TypeId>>>,
+    pub column_types: Vec<Option<Vec<ColumnType>>>,
+    /// Транзитные атрибуты каждой колонки для внутреннего формата — по
+    /// одному на колонку, всегда той же длины, что `column_names`.
+    pub column_vstr: Vec<ColumnVstr>,
+    /// Сырая предпоследняя лексема хвоста блока строк внутреннего формата
+    /// (`…,X,Y}`), сохранённая при чтении ради тождественного транзита.
+    /// Смысл не реверсирован: на свежих таблицах и после удаления колонок
+    /// она равна максимальному идентификатору колонки, но у таблиц,
+    /// полученных `Скопировать` со списком колонок, платформа пишет `-1`.
+    pub vstr_tail_x: Option<String>,
     /// `columns[col][pos]` — значение колонки `col` в строке на текущей
     /// физической позиции `pos`. Все колонки всегда одной длины — длины
     /// строк таблицы.
@@ -48,6 +57,45 @@ pub struct ValueTableData {
 }
 
 const MISSING_POSITION: usize = usize::MAX;
+
+/// Один тип из `ОписаниеТипов` колонки вместе с квалификаторами — сырыми
+/// лексемами внутреннего формата (`{"N",10,2,0}` несёт `["10","2","0"]`).
+/// Семантика квалификаторов применяется приведением значений
+/// ([`ValueTableData::adjust_to_column_type`]); написание — транзитом.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ColumnType {
+    pub id: crate::TypeId,
+    pub quals: Vec<String>,
+}
+
+impl ColumnType {
+    pub fn plain(id: crate::TypeId) -> Self {
+        ColumnType { id, quals: Vec::new() }
+    }
+}
+
+/// Транзитные атрибуты колонки для внутреннего формата
+/// (`ЗначениеВСтрокуВнутр`): сырое описание типов с квалификаторами и
+/// оформление. Живут только ради тождественного транзита — колонка,
+/// прочитанная из строки платформы, обязана записаться обратно байт в
+/// байт, — а сама таблица заголовок, ширину и квалификаторы пока не
+/// использует.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ColumnVstr {
+    /// Стабильный идентификатор колонки из исходной строки: у платформы
+    /// колонки, как и строки, несут внутренние номера, и после удаления
+    /// колонок номера разрежены (видно на реальных выгрузках). `None` —
+    /// колонка создана кодом, идентификатором служит её позиция.
+    pub id: Option<String>,
+    /// Канонически отрисованное `{"Pattern",…}` из исходной строки;
+    /// `None` — колонка создана кодом, и описание строится из
+    /// `column_types`.
+    pub raw_pattern: Option<String>,
+    /// Заголовок колонки; пустая строка — по умолчанию.
+    pub title: String,
+    /// Ширина колонки сырой лексемой; пустая строка — «0» по умолчанию.
+    pub width: String,
+}
 
 /// Обратный индекс стабильных идентификаторов строк.
 ///
@@ -149,6 +197,7 @@ impl RowPositions {
     }
 }
 
+
 /// Быстрый хэшер для временного отпечатка строки группировки.
 ///
 /// Начальное состояние случайно для каждого вызова `collapse`, поэтому
@@ -234,6 +283,8 @@ impl ValueTableData {
         Rc::new(RefCell::new(ValueTableData {
             column_names: Vec::new(),
             column_types: Vec::new(),
+            column_vstr: Vec::new(),
+            vstr_tail_x: None,
             columns: Vec::new(),
             row_ids: Vec::new(),
             row_positions: RowPositions::identity(),
@@ -257,11 +308,19 @@ impl ValueTableData {
     }
 
     pub fn add_typed_column(&mut self, name: &str, value_types: Option<Vec<crate::TypeId>>) {
+        self.add_constrained_column(
+            name,
+            value_types.map(|ids| ids.into_iter().map(ColumnType::plain).collect()),
+        );
+    }
+
+    pub fn add_constrained_column(&mut self, name: &str, value_types: Option<Vec<ColumnType>>) {
         if self.column_index(name).is_some() {
             return; // колонка с таким именем уже есть — не дублируем.
         }
         self.column_names.push(name.to_string());
         self.column_types.push(value_types);
+        self.column_vstr.push(ColumnVstr::default());
         self.columns
             .push(vec![BslValue::Undefined; self.row_count()]);
         self.schema_revision = self.schema_revision.wrapping_add(1);
@@ -270,6 +329,20 @@ impl ValueTableData {
     /// Текущая версия порядка колонок для инвалидизации внешних планов.
     pub(crate) fn schema_revision(&self) -> u64 {
         self.schema_revision
+    }
+
+    /// Назначает строкам СТАБИЛЬНЫЕ идентификаторы, пришедшие извне, —
+    /// нужен чтению внутреннего формата (`ЗначениеИзСтрокиВнутр`): у
+    /// платформы вторая лексема узла строки — именно её внутренний номер,
+    /// и после `Свернуть`/`Скопировать` номера разрежены, а не 0..n-1.
+    /// Терять их при транзите нельзя. Длина обязана совпасть с текущим
+    /// числом строк; дубликаты — ошибка вызывающего (здесь не проверяются:
+    /// формат платформы их не порождает).
+    pub fn set_row_ids(&mut self, ids: Vec<u64>) {
+        debug_assert_eq!(ids.len(), self.row_ids.len());
+        self.next_id = ids.iter().max().map_or(0, |m| m + 1);
+        self.row_positions = RowPositions::rebuild(&ids, self.next_id);
+        self.row_ids = ids;
     }
 
     /// Добавляет строку (все колонки — `Неопределено`) и возвращает её
@@ -496,6 +569,14 @@ impl ValueTableData {
                 .iter()
                 .filter_map(|&c| self.column_types.get(c).cloned())
                 .collect(),
+            column_vstr: cols
+                .iter()
+                .filter_map(|&c| self.column_vstr.get(c).cloned())
+                // Копия — новая таблица: идентификаторы колонок платформа
+                // выдаёт заново, унаследованные из чтения сбрасываются.
+                .map(|extra| ColumnVstr { id: None, ..extra })
+                .collect(),
+            vstr_tail_x: None,
             columns: Vec::with_capacity(cols.len()),
             row_ids: Vec::with_capacity(rows.len()),
             row_positions: RowPositions::identity(),
@@ -712,13 +793,21 @@ impl ValueTableData {
             .chain(sum.iter())
             .filter_map(|&c| self.column_names.get(c).cloned())
             .collect();
-        let value_types: Vec<Option<Vec<crate::TypeId>>> = group
+        let value_types: Vec<Option<Vec<ColumnType>>> = group
             .iter()
             .chain(sum.iter())
             .filter_map(|&c| self.column_types.get(c).cloned())
             .collect();
+        let vstr: Vec<ColumnVstr> = group
+            .iter()
+            .chain(sum.iter())
+            .filter_map(|&c| self.column_vstr.get(c).cloned())
+            .map(|extra| ColumnVstr { id: None, ..extra })
+            .collect();
         self.column_names = names;
         self.column_types = value_types;
+        self.column_vstr = vstr;
+        self.vstr_tail_x = None;
         self.columns = columns;
         self.row_ids = ids;
         self.schema_revision = self.schema_revision.wrapping_add(1);
@@ -972,4 +1061,5 @@ mod tests {
             [1, 2, 3].map(|value| BslValue::Number(BslNumber::from_i64(value)))
         );
     }
+
 }

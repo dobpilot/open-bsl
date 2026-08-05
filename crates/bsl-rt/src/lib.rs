@@ -26,6 +26,7 @@ mod table;
 pub mod encoding;
 mod textdoc;
 mod types;
+mod vstr;
 mod xml;
 
 use std::cmp::Ordering;
@@ -71,7 +72,8 @@ pub use object::{BslObject, StructureStorage};
 pub use runtime_shapes::RuntimeShapes;
 pub use shape::{Shape, ShapeTable, MAX_SHAPE_TRANSITIONS};
 pub use string::{BslString, MAX_TEMPLATE_ARGS};
-pub use table::ValueTableData;
+pub use table::{ColumnVstr, ValueTableData};
+pub use vstr::{value_from_string_internal, value_to_string_internal};
 pub use types::TypeId;
 
 #[derive(Debug, Clone)]
@@ -159,6 +161,11 @@ pub enum RtError {
     /// Отдельно от [`RtError::TextDoc`] по той же причине — это другой
     /// слой с другим форматом файла.
     Spread(String),
+    /// Внутренний строковый формат значений (`ЗначениеВСтрокуВнутр` /
+    /// `ЗначениеИзСтрокиВнутр`): текст не является форматом либо несёт
+    /// вид объекта, которого в этой реализации нет. Отдельно от соседей
+    /// по той же причине, что и они: свой слой — свой тип ошибки.
+    Vstr(String),
     /// Имя из `СписокСвойств` в `ЗаполнитьЗначенияСвойств`, которого нет у
     /// источника или у приёмника. Отдельно от [`RtError::UnknownField`] и
     /// [`RtError::UnknownColumn`], потому что имя тут пришло СТРОКОЙ из
@@ -239,6 +246,7 @@ impl fmt::Display for RtError {
             RtError::Xml(msg) => write!(f, "{msg}"),
             RtError::TextDoc(msg) => write!(f, "{msg}"),
             RtError::Spread(msg) => write!(f, "{msg}"),
+            RtError::Vstr(msg) => write!(f, "{msg}"),
             RtError::UnknownType(name) => write!(f, "тип «{name}» не определён"),
             RtError::DateOutOfRange { op } => write!(
                 f,
@@ -279,6 +287,10 @@ impl BslValue {
             BslValue::Object(o) => match &**o {
                 BslObject::Array(_) => "Массив",
                 BslObject::Structure(_) => "Структура",
+                // Служебное имя ЭТОЙ реализации: в 1С такое значение всегда
+                // имеет настоящий тип (ссылка, список значений, ...), но
+                // без базы и без реверса разметки материализовать его нечем.
+                BslObject::VstrOpaque(_) => "НепрозрачноеЗначение",
                 BslObject::ValueTable(_) => "ТаблицаЗначений",
                 BslObject::TableColumns(_) => "КоллекцияКолонокТаблицыЗначений",
                 BslObject::TableColumn(..) => "КолонкаТаблицыЗначений",
@@ -985,6 +997,9 @@ impl BslValue {
             // Член перечисления — тоже всегда значение.
             BslValue::Enum(_) => true,
             BslValue::Object(o) => match &**o {
+                // Непрозрачное значение — всегда «что-то»: судить о его
+                // заполненности, не материализуя вид, нечем.
+                BslObject::VstrOpaque(_) => true,
                 // НЕ ИЗМЕРЕНО(TYPE.IS_FILLED.EMPTY_COLLECTION): пустая
                 // коллекция. Взято «пустая — не
                 // заполнена» (по числу элементов), потому что для
@@ -1049,6 +1064,7 @@ impl BslValue {
                 EnumKind::TextEncoding => TypeId::TextEncoding,
             },
             BslValue::Object(o) => match &**o {
+                BslObject::VstrOpaque(_) => TypeId::VstrOpaque,
                 BslObject::Array(_) => TypeId::Array,
                 BslObject::Structure(_) => TypeId::Structure,
                 BslObject::Map(_) => TypeId::Map,
@@ -1418,6 +1434,7 @@ impl BslValue {
                         name,
                     ))))
                 }
+                BslObject::TableRow(..) => Err(RtError::NotIndexable),
                 // ПОЗИЦИОННЫЙ, не по ключу: `Для Каждого` компилируется в
                 // общий для всех коллекций протокол `CollectionLen` + рост
                 // числового индекса `0..len` через эту же функцию (см.
@@ -1493,6 +1510,7 @@ impl BslValue {
                 BslObject::TableRow(..) => Err(RtError::NotIndexable),
                 BslObject::Map(data) => Ok(data.borrow().len()),
                 BslObject::KeyValuePair(..) => Err(RtError::NotIndexable),
+                BslObject::VstrOpaque(_) => Err(RtError::NotIndexable),
                 BslObject::TextWriter(..)
                 | BslObject::JsonReader(..)
                 | BslObject::JsonWriter(..)
@@ -1778,13 +1796,16 @@ impl BslValue {
                     } else if name.eq_ignore_ascii_case("ТипЗначения")
                         || name.eq_ignore_ascii_case("ValueType")
                     {
-                        let types = data
+                        let types: Vec<TypeId> = data
                             .borrow()
                             .column_types
                             .get(column)
                             .cloned()
                             .flatten()
-                            .unwrap_or_default();
+                            .unwrap_or_default()
+                            .into_iter()
+                            .map(|t| t.id)
+                            .collect();
                         Ok(BslValue::Object(Rc::new(BslObject::TypeDescription(types))))
                     } else {
                         Err(RtError::UnknownColumn(name.to_string()))
@@ -2525,7 +2546,14 @@ impl PartialEq for BslValue {
             // держится весь потоковый разбор JSON (`Если Т =
             // ТипЗначенияJSON.ИмяСвойства Тогда`).
             (BslValue::Enum(a), BslValue::Enum(b)) => a == b,
-            (BslValue::Object(a), BslValue::Object(b)) => Rc::ptr_eq(a, b),
+            (BslValue::Object(a), BslValue::Object(b)) => match (&**a, &**b) {
+                // Непрозрачные значения внутреннего формата равны ПО
+                // ТЕКСТУ: две ссылки на один объект базы, прочитанные из
+                // разных строк, равны — так ведёт себя платформа
+                // (измерено, проба `REF.CAT.RT`).
+                (BslObject::VstrOpaque(x), BslObject::VstrOpaque(y)) => x == y,
+                _ => Rc::ptr_eq(a, b),
+            },
             _ => false,
         }
     }
@@ -2554,7 +2582,12 @@ impl Hash for BslValue {
             BslValue::Date(d) => d.hash(state),
             BslValue::Type(t) => t.hash(state),
             BslValue::Enum(e) => e.hash(state),
-            BslValue::Object(o) => Rc::as_ptr(o).hash(state),
+            // Непрозрачное значение хэширует текст — согласовано с его
+            // равенством по тексту в `PartialEq` выше.
+            BslValue::Object(o) => match &**o {
+                BslObject::VstrOpaque(text) => text.hash(state),
+                _ => Rc::as_ptr(o).hash(state),
+            },
             BslValue::Skipped => {}
         }
     }
@@ -2577,6 +2610,7 @@ impl fmt::Display for BslValue {
             BslValue::Type(t) => write!(f, "{t}"),
             BslValue::Enum(e) => write!(f, "{}", e.display_text()),
             BslValue::Object(o) => match &**o {
+                BslObject::VstrOpaque(_) => write!(f, "НепрозрачноеЗначение"),
                 BslObject::Array(_) => write!(f, "Массив"),
                 BslObject::Structure(_) => write!(f, "Структура"),
                 BslObject::ValueTable(_) => write!(f, "ТаблицаЗначений"),

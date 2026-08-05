@@ -1,6 +1,6 @@
 use crate::date::{DateBoundary, DatePart};
 use crate::runtime_shapes::RuntimeShapes;
-use crate::{BslObject, BslValue, NameId, RtError, RtResult};
+use crate::{BslObject, BslString, BslValue, NameId, RtError, RtResult};
 
 /// Встроенные функции, вызываемые по голому имени (`Sqrt(x)`, `Pow(x,y)`,
 /// ...). Разрешаются регистронезависимо (`sqrt` == `Sqrt`), без перевода на
@@ -125,6 +125,14 @@ pub enum BuiltinFn {
     /// `ЗаписатьJSON(Запись, Значение)` — тот же контекст нужен, чтобы
     /// прочитать ИМЕНА полей сериализуемой структуры.
     WriteJson,
+
+    /// `ЗначениеВСтрокуВнутр(Значение)` — внутренний строковый формат
+    /// платформы (см. модуль `vstr`). Контекст имён нужен затем же, зачем
+    /// `ЗаписатьJSON`: прочитать имена полей структуры.
+    ValueToStringInternal,
+    /// `ЗначениеИзСтрокиВнутр(Строка)` — обратный разбор; контекст нужен
+    /// на запись: поля структур интернируются, формы растут.
+    ValueFromStringInternal,
 }
 
 /// Написания встроенных ФУНКЦИЙ: `(имя, вариант)` в каноническом
@@ -293,6 +301,10 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("ReadJSON", BuiltinFn::ReadJson),
     ("ЗаписатьJSON", BuiltinFn::WriteJson),
     ("WriteJSON", BuiltinFn::WriteJson),
+    ("ЗначениеВСтрокуВнутр", BuiltinFn::ValueToStringInternal),
+    ("ValueToStringInternal", BuiltinFn::ValueToStringInternal),
+    ("ЗначениеИзСтрокиВнутр", BuiltinFn::ValueFromStringInternal),
+    ("ValueFromStringInternal", BuiltinFn::ValueFromStringInternal),
 ];
 
 impl BuiltinFn {
@@ -350,6 +362,7 @@ impl BuiltinFn {
             // модуля `json`.
             BuiltinFn::ReadJson => (1, 3),
             BuiltinFn::WriteJson => (2, 2),
+            BuiltinFn::ValueToStringInternal | BuiltinFn::ValueFromStringInternal => (1, 1),
             _ => (1, 1),
         }
     }
@@ -707,6 +720,11 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         BuiltinFn::ReadJson | BuiltinFn::WriteJson => Err(RtError::InvalidBytecode(
             "функции JSON требуют контекста имён: вызывайте call_builtin_fn_ctx",
         )),
+        BuiltinFn::ValueToStringInternal | BuiltinFn::ValueFromStringInternal => {
+            Err(RtError::InvalidBytecode(
+                "функции внутреннего формата требуют контекста имён: вызывайте call_builtin_fn_ctx",
+            ))
+        }
         BuiltinFn::FillPropertyValues => Err(RtError::InvalidBytecode(
             "ЗаполнитьЗначенияСвойств требует контекста имён: вызывайте call_builtin_fn_ctx",
         )),
@@ -776,6 +794,19 @@ pub fn call_builtin_fn_ctx(
     if f == BuiltinFn::WriteJson {
         crate::json::write_json(&args[0], &args[1], rt)?;
         return Ok(BslValue::Undefined);
+    }
+    if f == BuiltinFn::ValueToStringInternal {
+        let text = crate::vstr::value_to_string_internal(&args[0], rt)?;
+        return Ok(BslValue::Str(BslString::from_str(&text)));
+    }
+    if f == BuiltinFn::ValueFromStringInternal {
+        let BslValue::Str(text) = &args[0] else {
+            return Err(RtError::TypeError {
+                expected: "Строка",
+                op: "ЗначениеИзСтрокиВнутр",
+            });
+        };
+        return crate::vstr::value_from_string_internal(&text.to_string(), rt);
     }
     call_builtin_fn(f, args)
 }

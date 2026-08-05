@@ -1,0 +1,1467 @@
+//! Внутренний строковый формат платформы: `ЗначениеВСтрокуВнутр` и
+//! `ЗначениеИзСтрокиВнутр`.
+//!
+//! Формат недокументирован и целиком ИЗМЕРЕН на 8.3.27 (разведочная
+//! батарея, затем контракт `tests/conformance/measure/measure-vstr.bsl`):
+//!
+//! * скаляры — `{"N",0.1}`, `{"S","а""б"}` (кавычка удваивается, переводы
+//!   строк и табуляция лежат сырыми), `{"B",1}`/`{"B",0}`,
+//!   `{"D",ГГГГММДДччммсс}` (всегда 14 цифр, без кавычек), `{"U"}` —
+//!   `Неопределено`, `{"L"}` — `NULL`, `{"T",<uuid типа>}`;
+//! * коллекции — `{"#",<uuid вида>,` перевод строки, `{<число элементов>`,
+//!   затем перед КАЖДЫМ элементом `,` и перевод строки, после последнего —
+//!   перевод строки, `}`, перевод строки, `}`. Пустая коллекция несёт
+//!   `{0}` без внутренних переводов. Элемент `Структуры` — тройка строк
+//!   `{`, `{"S","Имя"},`, `<значение>`, `}`; элемент `Соответствия` — то
+//!   же с произвольным ключом на месте имени.
+//!
+//! Число печатается ровно тем же видом, что `Формат(x, "ЧГ=0; ЧРД=.")` —
+//! на `1/2^28` платформа выдала в сериализации в точности строку якоря
+//! `NUM.DIV.EXACT_TIE`, поэтому здесь используется тот же канонический
+//! вывод `BslNumber::to_canonical`.
+//!
+//! Ссылочная целостность: ИЗМЕРЕНО, что платформа её НЕ сохраняет.
+//! Повторные вхождения одного объекта разворачиваются в независимые копии
+//! (проба `REF.TWICE`), и обратное чтение на самой платформе возвращает
+//! копии (`RT.IDENTITY`); циклическое значение роняет клиент 1С
+//! переполнением стека. Здесь повторы сериализуются так же — копиями, —
+//! а цикл и сверхглубокая вложенность дают перехватываемую
+//! [`RtError::StackOverflow`] вместо падения процесса: краш платформы —
+//! не то поведение, которое стоит воспроизводить.
+
+use std::rc::Rc;
+
+use bsl_number::BslNumber;
+
+use crate::date::BslDate;
+use crate::object::BslObject;
+use crate::runtime_shapes::RuntimeShapes;
+use crate::types::TypeId;
+use crate::{BslString, BslValue, RtError, RtResult};
+
+/// Идентификаторы видов сериализуемых объектов — измерены на 8.3.27.
+const ARRAY_ID: &str = "51e7a0d2-530b-11d4-b98a-008048da3034";
+/// `ФиксированныйМассив` — полезная нагрузка та же, что у массива.
+const FIXED_ARRAY_ID: &str = "4500381b-db30-4a10-9db4-990038032acf";
+const STRUCTURE_ID: &str = "4238019d-7e49-4fc9-91db-b6b951d5cf8e";
+const MAP_ID: &str = "3d48feae-a9c6-4c5a-a099-9eb6477630c6";
+const VALUE_TABLE_ID: &str = "acf6192e-81ca-46ef-93a6-5a6968b78663";
+/// `СписокЗначений` и `УникальныйИдентификатор` не материализуются:
+/// разбор их идентификаторы не сверяет — любой незнакомый вид уходит в
+/// непрозрачное значение целиком. Константы документируют измеренные
+/// GUID и используются транзитными тестами, поэтому вне тестовой сборки
+/// они законно «не нужны».
+#[cfg_attr(not(test), allow(dead_code))]
+const VALUE_LIST_ID: &str = "4772b3b4-f4a3-49c0-a1a5-8cb5961511a3";
+#[cfg_attr(not(test), allow(dead_code))]
+const UUID_VALUE_ID: &str = "fc01b5df-97fe-449b-83d4-218a090e681e";
+const TYPE_DESCRIPTION_ID: &str = "f5c65050-3bbb-11d5-b988-0050bae0a95d";
+
+/// UUID ТИПОВ для `{"T",…}` — измерены на 8.3.27 поимённой батареей.
+/// У коллекций UUID типа СОВПАДАЕТ с UUID вида объекта в `{"#",…}` —
+/// это наблюдение платформы, а не наше упрощение.
+const TYPE_UUIDS: &[(TypeId, &str)] = &[
+    (TypeId::String, "9b6abf8b-0173-48e5-b0a0-83b21fcf63c5"),
+    (TypeId::Number, "b0be78f2-0ee6-4d31-a3bb-77dd32ba5bec"),
+    (TypeId::Date, "aae38c48-a877-411c-a6d3-fbaa1f83c4bd"),
+    (TypeId::Boolean, "5d4125ad-f6e7-4313-be32-f71d0ab60915"),
+    (TypeId::Undefined, "ee8d3e7c-f930-4a76-8aad-4ff9083a6ea6"),
+    (TypeId::Null, "af40a278-63bc-478e-91a8-19e0d16b10b5"),
+    (TypeId::Type, "d47d59f8-73f0-481c-8b5e-f6384c0a4804"),
+    (TypeId::Array, ARRAY_ID),
+    (TypeId::Structure, STRUCTURE_ID),
+    (TypeId::Map, MAP_ID),
+    (TypeId::ValueTable, VALUE_TABLE_ID),
+    (TypeId::TypeDescription, TYPE_DESCRIPTION_ID),
+];
+
+/// Предел вложенности при записи и чтении — той же природы, что
+/// `MAX_JSON_DEPTH`: обе стороны рекурсивны, и глубина входа напрямую
+/// расходует стек Rust. Платформа предела не имеет и на цикле падает
+/// (измерено); здесь вместо этого перехватываемая ошибка.
+const MAX_VSTR_DEPTH: usize = 500;
+
+fn err(msg: impl Into<String>) -> RtError {
+    RtError::Vstr(msg.into())
+}
+
+// --- Запись ----------------------------------------------------------------
+
+/// `ЗначениеВСтрокуВнутр(Значение)`.
+///
+/// Сериализация строит то же дерево [`Node`], которым пользуется разбор, и
+/// печатает его одним правилом переводов строк (см. [`render`]).
+///
+/// # Errors
+///
+/// [`RtError::Vstr`] на значении, которого во внутреннем формате нет
+/// (объекты с состоянием вроде `ЧтениеJSON`), и
+/// [`RtError::StackOverflow`] на циклической или сверхглубокой структуре.
+pub fn value_to_string_internal(v: &BslValue, rt: &RuntimeShapes) -> RtResult<String> {
+    let mut path: Vec<*const BslObject> = Vec::new();
+    let node = value_to_node(v, rt, &mut path)?;
+    let mut out = String::new();
+    render(&node, &mut out);
+    Ok(out)
+}
+
+/// Печать дерева. Правило переводов строк ИЗМЕРЕНО и одно на весь формат:
+/// внутри списка перевод строки ставится перед каждым элементом-СПИСКОМ, и
+/// перед закрывающей скобкой, если последний элемент — список; лексемы и
+/// строки идут через запятую без переводов. Это правило воспроизводит все
+/// снятые образцы — от `{"N",42}` до разметки `ТаблицыЗначений`.
+fn render(node: &Node, out: &mut String) {
+    match node {
+        Node::Bare(b) => out.push_str(b),
+        Node::Str(s) => write_quoted(out, s),
+        // Непрозрачное поддерево всегда начинается со скобки, поэтому в
+        // правиле переводов строк ведёт себя как список.
+        Node::Raw(text) => out.push_str(text),
+        Node::List(items) => {
+            out.push('{');
+            let mut last_was_list = false;
+            for (i, item) in items.iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                last_was_list = matches!(item, Node::List(_) | Node::Raw(_));
+                if last_was_list {
+                    out.push('\n');
+                }
+                render(item, out);
+            }
+            if last_was_list {
+                out.push('\n');
+            }
+            out.push('}');
+        }
+    }
+}
+
+fn bare(text: impl Into<String>) -> Node {
+    Node::Bare(text.into())
+}
+
+fn tagged(tag: &str, rest: Vec<Node>) -> Node {
+    let mut items = vec![Node::Str(tag.to_string())];
+    items.extend(rest);
+    Node::List(items)
+}
+
+fn value_to_node(
+    v: &BslValue,
+    rt: &RuntimeShapes,
+    path: &mut Vec<*const BslObject>,
+) -> RtResult<Node> {
+    Ok(match v {
+        BslValue::Undefined => tagged("U", Vec::new()),
+        BslValue::Null => tagged("L", Vec::new()),
+        BslValue::Boolean(b) => tagged("B", vec![bare(if *b { "1" } else { "0" })]),
+        BslValue::Number(n) => tagged("N", vec![bare(n.to_canonical())]),
+        BslValue::Str(s) => tagged("S", vec![Node::Str(s.to_string())]),
+        BslValue::Date(d) => {
+            let c = d.to_civil();
+            tagged(
+                "D",
+                vec![bare(format!(
+                    "{:04}{:02}{:02}{:02}{:02}{:02}",
+                    c.year, c.month, c.day, c.hour, c.minute, c.second
+                ))],
+            )
+        }
+        BslValue::Type(t) => {
+            let uuid = TYPE_UUIDS
+                .iter()
+                .find(|(known, _)| known == t)
+                .map(|(_, uuid)| *uuid)
+                .ok_or_else(|| {
+                    err(format!(
+                        "UUID типа «{}» во внутреннем формате не измерен",
+                        v.type_name()
+                    ))
+                })?;
+            tagged("T", vec![bare(uuid)])
+        }
+        BslValue::Object(o) => {
+            // Повтор объекта НА ТЕКУЩЕМ ПУТИ — цикл: платформа на нём
+            // падает, здесь — ошибка. Повтор в разных ветках (не на пути)
+            // законен и разворачивается в копию, как делает платформа.
+            let ptr = Rc::as_ptr(o);
+            if path.contains(&ptr) {
+                return Err(RtError::StackOverflow {
+                    what: "циклическое значение в ЗначениеВСтрокуВнутр",
+                });
+            }
+            if path.len() >= MAX_VSTR_DEPTH {
+                return Err(RtError::StackOverflow {
+                    what: "слишком глубокая вложенность в ЗначениеВСтрокуВнутр",
+                });
+            }
+            path.push(ptr);
+            let node = object_to_node(o, v.type_name(), rt, path)?;
+            path.pop();
+            node
+        }
+        other => {
+            return Err(err(format!(
+                "значение типа «{}» не представимо во внутреннем формате",
+                other.type_name()
+            )))
+        }
+    })
+}
+
+/// Полезная нагрузка коллекции: `{<число элементов>, <эл>, …}`.
+fn counted(elems: Vec<Node>) -> Node {
+    let mut items = vec![bare(elems.len().to_string())];
+    items.extend(elems);
+    Node::List(items)
+}
+
+fn object_to_node(
+    o: &Rc<BslObject>,
+    type_name: &'static str,
+    rt: &RuntimeShapes,
+    path: &mut Vec<*const BslObject>,
+) -> RtResult<Node> {
+    Ok(match &**o {
+        BslObject::Array(items) => {
+            // Снимок до записи — по той же причине, что в `json.rs`:
+            // элемент может оказаться тем же массивом, и вложенное
+            // заимствование `RefCell` этого не переживёт.
+            let snapshot: Vec<BslValue> = items.borrow().clone();
+            let elems = snapshot
+                .iter()
+                .map(|item| value_to_node(item, rt, path))
+                .collect::<RtResult<Vec<_>>>()?;
+            tagged("#", vec![bare(ARRAY_ID), counted(elems)])
+        }
+        BslObject::Structure(s) => {
+            let entries: Vec<(String, BslValue)> = {
+                let s = s.borrow();
+                (0..s.len())
+                    .filter_map(|i| s.entry_at(i))
+                    .filter_map(|(id, v)| rt.names.name(id).map(|n| (n.to_string(), v)))
+                    .collect()
+            };
+            let elems = entries
+                .iter()
+                .map(|(name, value)| {
+                    Ok(Node::List(vec![
+                        tagged("S", vec![Node::Str(name.clone())]),
+                        value_to_node(value, rt, path)?,
+                    ]))
+                })
+                .collect::<RtResult<Vec<_>>>()?;
+            tagged("#", vec![bare(STRUCTURE_ID), counted(elems)])
+        }
+        BslObject::Map(data) => {
+            // Порядок пар у платформы — внутренний порядок её хеш-таблицы:
+            // на трёх ключах он совпал с обратным порядком вставки, на
+            // четырёх — уже нет. Точного правила нет, а семантика
+            // `Соответствия` неупорядоченная, поэтому здесь ПРЯМОЙ порядок
+            // вставки: чтение вставляет пары в порядке текста, и повторная
+            // сериализация возвращает строку платформы байт в байт —
+            // транзитная стабильность важнее похожести на её хеш-порядок.
+            // Строка `VSTR.FORMAT.MAP.ORDER` контракта сходиться не обязана
+            // (см. шапку measure-vstr.bsl).
+            let entries: Vec<(BslValue, BslValue)> = {
+                let d = data.borrow();
+                (0..d.len()).filter_map(|i| d.entry_at(i)).collect()
+            };
+            let elems = entries
+                .iter()
+                .map(|(key, value)| {
+                    Ok(Node::List(vec![
+                        value_to_node(key, rt, path)?,
+                        value_to_node(value, rt, path)?,
+                    ]))
+                })
+                .collect::<RtResult<Vec<_>>>()?;
+            tagged("#", vec![bare(MAP_ID), counted(elems)])
+        }
+        BslObject::ValueTable(data) => table_to_node(data, rt, path)?,
+        // `ОписаниеТипов` — тот же `{"Pattern",…}`, что у колонок таблицы,
+        // под своим видом объекта (измерено, пробы `CMP.VALUE*`).
+        BslObject::TypeDescription(type_ids) => {
+            let mut pattern = vec![Node::Str("Pattern".to_string())];
+            for letter in canonical_letters(type_ids)? {
+                pattern.push(tagged(letter, Vec::new()));
+            }
+            tagged("#", vec![bare(TYPE_DESCRIPTION_ID), Node::List(pattern)])
+        }
+        // Непрозрачное значение возвращается в текст ровно тем поддеревом,
+        // из которого было прочитано, — транзит без потерь.
+        BslObject::VstrOpaque(text) => Node::Raw(text.clone()),
+        _ => {
+            return Err(err(format!(
+                "значение типа «{type_name}» не представимо во внутреннем формате"
+            )))
+        }
+    })
+}
+
+fn write_quoted(out: &mut String, s: &str) {
+    // Кавычка удваивается; всё остальное, включая переводы строк и
+    // табуляцию, платформа держит в строке сырым (измерено).
+    out.push('"');
+    for ch in s.chars() {
+        if ch == '"' {
+            out.push('"');
+        }
+        out.push(ch);
+    }
+    out.push('"');
+}
+
+// --- ТаблицаЗначений --------------------------------------------------------
+//
+// Разметка ИЗМЕРЕНА двумя батареями (16 проб: пустая таблица, разные
+// прямоугольники, типы и квалификаторы колонок, пропуски `Неопределено`):
+//
+//   {9, <колонки>, <блок строк>, {0,0}}
+//   колонка:    {<индекс>, "Имя", <ОписаниеТипов>, "Заголовок", <Ширина>}
+//   ОписаниеТипов: {"Pattern"} без ограничения; {"Pattern",{"N"},…} с
+//               типами (буква как у скаляров; после буквы могут идти
+//               квалификаторы: {"N",10,2,0}, {"S",20,1})
+//   блок строк: {2, <n колонок>, <к,к на каждую колонку>,
+//               {1, <n строк>, <строка>…}, <n колонок - 1>, <n строк - 1>}
+//   строка:     {2, <индекс>, <n значений>, <значение>…, 0} — хвостовые
+//               `Неопределено` отброшены, внутренние пишутся явным {"U"};
+//               `0` и `Ложь` сохраняются.
+
+/// Буквы типов в `{"Pattern",…}` — те же теги, что у скалярных значений,
+/// В КАНОНИЧЕСКОМ ПОРЯДКЕ ПЛАТФОРМЫ: измерено на всех перестановках
+/// (`CMP.*` разведочной батареи), что порядок задания в `ОписаниеТипов`
+/// не влияет — платформа всегда пишет `B`, `S`, `D`, `N`.
+const COLUMN_TYPE_LETTERS: &[(TypeId, &str)] = &[
+    (TypeId::Boolean, "B"),
+    (TypeId::String, "S"),
+    (TypeId::Date, "D"),
+    // Позиция `Null` в каноне видна из реальных выгрузок: `B,L`, `S,…,L`,
+    // `D,…,L`, но `L,N` — между датой и числом.
+    (TypeId::Null, "L"),
+    (TypeId::Number, "N"),
+];
+
+fn letter_of(id: TypeId) -> Option<&'static str> {
+    COLUMN_TYPE_LETTERS
+        .iter()
+        .find(|(known, _)| *known == id)
+        .map(|(_, letter)| *letter)
+}
+
+/// Буквы описания типов в каноническом порядке платформы; дубликаты
+/// схлопываются самим обходом канона.
+fn canonical_letters(type_ids: &[TypeId]) -> RtResult<Vec<&'static str>> {
+    for type_id in type_ids {
+        if !COLUMN_TYPE_LETTERS.iter().any(|(known, _)| known == type_id) {
+            return Err(err(format!(
+                "тип «{:?}» в описании типов не представим во внутреннем формате",
+                type_id
+            )));
+        }
+    }
+    Ok(COLUMN_TYPE_LETTERS
+        .iter()
+        .filter(|(known, _)| type_ids.contains(known))
+        .map(|(_, letter)| *letter)
+        .collect())
+}
+
+fn table_to_node(
+    data: &Rc<std::cell::RefCell<crate::ValueTableData>>,
+    rt: &RuntimeShapes,
+    path: &mut Vec<*const BslObject>,
+) -> RtResult<Node> {
+    // Снимок — по той же причине, что у массива: ячейка может ссылаться
+    // на объект, чья запись снова заглянет в таблицу.
+    let (names, types, extras, columns) = {
+        let t = data.borrow();
+        (
+            t.column_names.clone(),
+            t.column_types.clone(),
+            t.column_vstr.clone(),
+            t.columns.clone(),
+        )
+    };
+    let ncols = names.len();
+    let nrows = columns.first().map_or(0, |c| c.len());
+
+    let mut col_nodes = Vec::with_capacity(ncols);
+    for (idx, name) in names.iter().enumerate() {
+        let extra = extras.get(idx).cloned().unwrap_or_default();
+        // Колонка, прочитанная из строки платформы, несёт сырое описание
+        // типов (включая квалификаторы, которых модель колонок не хранит)
+        // — оно возвращается в текст как есть ради тождественного
+        // транзита. Колонка, созданная кодом, строит описание из типов.
+        let pattern_node = if let Some(raw) = &extra.raw_pattern {
+            Node::Raw(raw.clone())
+        } else {
+            let mut pattern = vec![Node::Str("Pattern".to_string())];
+            if let Some(Some(column_types)) = types.get(idx) {
+                let ids: Vec<crate::TypeId> = column_types.iter().map(|t| t.id).collect();
+                for letter in canonical_letters(&ids)
+                    .map_err(|_| err(format!("тип колонки «{name}» не представим во внутреннем формате")))?
+                {
+                    let quals = column_types
+                        .iter()
+                        .find(|t| letter_of(t.id) == Some(letter))
+                        .map(|t| t.quals.as_slice())
+                        .unwrap_or(&[]);
+                    let mut node = vec![Node::Str(letter.to_string())];
+                    node.extend(quals.iter().map(|q| bare(q.clone())));
+                    pattern.push(Node::List(node));
+                }
+            }
+            Node::List(pattern)
+        };
+        let width = if extra.width.is_empty() {
+            "0".to_string()
+        } else {
+            extra.width.clone()
+        };
+        // Идентификатор колонки: прочитанный из исходной строки или
+        // позиция — у свежей таблицы платформы они совпадают.
+        col_nodes.push(Node::List(vec![
+            bare(extra.id.clone().unwrap_or_else(|| idx.to_string())),
+            Node::Str(name.clone()),
+            pattern_node,
+            Node::Str(extra.title.clone()),
+            bare(width),
+        ]));
+    }
+
+    let row_ids = data.borrow().row_ids.clone();
+    let mut row_nodes = Vec::with_capacity(nrows);
+    for row in 0..nrows {
+        let mut values: Vec<&BslValue> = columns.iter().map(|c| &c[row]).collect();
+        while matches!(values.last(), Some(BslValue::Undefined)) {
+            values.pop();
+        }
+        // Вторая лексема — СТАБИЛЬНЫЙ идентификатор строки, не порядковый
+        // номер: на свежей таблице они совпадают, но после
+        // `Свернуть`/`Скопировать` платформа сохраняет исходные номера
+        // (видно на реальных выгрузках), и транзит обязан их вернуть.
+        let mut row_items = vec![
+            bare("2"),
+            bare(row_ids.get(row).copied().unwrap_or(row as u64).to_string()),
+            bare(values.len().to_string()),
+        ];
+        for value in values {
+            row_items.push(value_to_node(value, rt, path)?);
+        }
+        row_items.push(bare("0"));
+        row_nodes.push(Node::List(row_items));
+    }
+
+    // Пары заголовка — (позиция, идентификатор колонки): на свежей
+    // таблице это (к, к), после удаления колонок идентификаторы разрежены
+    // (измерено на реальных выгрузках).
+    let col_id_of = |k: usize| -> String {
+        extras
+            .get(k)
+            .and_then(|e| e.id.clone())
+            .unwrap_or_else(|| k.to_string())
+    };
+    let mut rows_block = vec![bare("2"), bare(ncols.to_string())];
+    for k in 0..ncols {
+        rows_block.push(bare(k.to_string()));
+        rows_block.push(bare(col_id_of(k)));
+    }
+    let mut inner = vec![bare("1"), bare(nrows.to_string())];
+    inner.extend(row_nodes);
+    rows_block.push(Node::List(inner));
+    // `X` — прочитанное сырьё, если таблица пришла из внутреннего формата;
+    // иначе максимальный идентификатор колонки (так пишет платформа для
+    // таблиц, не проходивших `Скопировать` со списком колонок).
+    let tail_x = data.borrow().vstr_tail_x.clone().unwrap_or_else(|| {
+        (0..ncols)
+            .map(|k| col_id_of(k).parse::<i64>().unwrap_or(k as i64))
+            .max()
+            .unwrap_or(-1)
+            .to_string()
+    });
+    rows_block.push(bare(tail_x));
+    // `Y` — максимальный идентификатор строки: совпадает с платформой на
+    // всех девяти реальных выгрузках и на всех свежих таблицах.
+    let tail_y = row_ids.iter().max().map_or(-1, |m| *m as i64);
+    rows_block.push(bare(tail_y.to_string()));
+
+    let payload = Node::List(vec![
+        bare("9"),
+        counted(col_nodes),
+        Node::List(rows_block),
+        Node::List(vec![bare("0"), bare("0")]),
+    ]);
+    Ok(tagged("#", vec![bare(VALUE_TABLE_ID), payload]))
+}
+
+
+// --- Чтение ----------------------------------------------------------------
+
+/// `ЗначениеИзСтрокиВнутр(Строка)`.
+///
+/// Разбор терпим к пробелам и переводам строк между лексемами: платформа
+/// принимает и «плотную» запись без переводов (измерено), поэтому решает
+/// только структура скобок и запятых.
+///
+/// # Errors
+///
+/// [`RtError::Vstr`] на тексте, не являющемся внутренним форматом, и на
+/// видах объектов, которых в этой реализации нет.
+pub fn value_from_string_internal(text: &str, rt: &mut RuntimeShapes) -> RtResult<BslValue> {
+    let mut p = Parser {
+        chars: text.chars().collect(),
+        pos: 0,
+    };
+    let node = p.parse_node(0)?;
+    p.skip_ws();
+    if p.pos != p.chars.len() {
+        return Err(err("лишний текст после значения во внутреннем формате"));
+    }
+    convert(&node, rt, 0)
+}
+
+/// Синтаксическое дерево формата: до интерпретации тегов текст — это
+/// просто вложенные списки из строковых и «голых» лексем. Отдельный слой
+/// нужен, потому что смысл лексемы зависит от вида объекта: в `{"D",…}`
+/// голая лексема — дата с ведущими нулями, в теле `ТаблицыЗначений` —
+/// служебное число.
+#[derive(Clone)]
+enum Node {
+    List(Vec<Node>),
+    Str(String),
+    Bare(String),
+    /// Уже отрисованное поддерево — сериализация непрозрачного значения
+    /// ([`crate::BslObject::VstrOpaque`]) вставляет исходный текст как
+    /// есть. Разбор таких узлов не порождает.
+    Raw(String),
+}
+
+struct Parser {
+    chars: Vec<char>,
+    pos: usize,
+}
+
+impl Parser {
+    fn peek(&self) -> Option<char> {
+        self.chars.get(self.pos).copied()
+    }
+
+    fn skip_ws(&mut self) {
+        while matches!(self.peek(), Some(' ' | '\n' | '\r' | '\t')) {
+            self.pos += 1;
+        }
+    }
+
+    fn parse_node(&mut self, depth: usize) -> RtResult<Node> {
+        if depth > MAX_VSTR_DEPTH {
+            return Err(RtError::StackOverflow {
+                what: "слишком глубокая вложенность в ЗначениеИзСтрокиВнутр",
+            });
+        }
+        self.skip_ws();
+        match self.peek() {
+            Some('{') => {
+                self.pos += 1;
+                let mut items = Vec::new();
+                self.skip_ws();
+                if self.peek() == Some('}') {
+                    self.pos += 1;
+                    return Ok(Node::List(items));
+                }
+                loop {
+                    items.push(self.parse_node(depth + 1)?);
+                    self.skip_ws();
+                    match self.peek() {
+                        Some(',') => self.pos += 1,
+                        Some('}') => {
+                            self.pos += 1;
+                            return Ok(Node::List(items));
+                        }
+                        _ => return Err(err("ожидалась «,» или «}» во внутреннем формате")),
+                    }
+                }
+            }
+            Some('"') => {
+                self.pos += 1;
+                let mut s = String::new();
+                loop {
+                    match self.peek() {
+                        Some('"') => {
+                            self.pos += 1;
+                            // Удвоенная кавычка — экранированная; одиночная
+                            // закрывает строку.
+                            if self.peek() == Some('"') {
+                                s.push('"');
+                                self.pos += 1;
+                            } else {
+                                return Ok(Node::Str(s));
+                            }
+                        }
+                        Some(c) => {
+                            s.push(c);
+                            self.pos += 1;
+                        }
+                        None => return Err(err("незакрытая строка во внутреннем формате")),
+                    }
+                }
+            }
+            Some(_) => {
+                let start = self.pos;
+                while let Some(c) = self.peek() {
+                    if matches!(c, '{' | '}' | ',' | '"' | ' ' | '\n' | '\r' | '\t') {
+                        break;
+                    }
+                    self.pos += 1;
+                }
+                if self.pos == start {
+                    return Err(err("неожиданный символ во внутреннем формате"));
+                }
+                Ok(Node::Bare(self.chars[start..self.pos].iter().collect()))
+            }
+            None => Err(err("неожиданный конец текста во внутреннем формате")),
+        }
+    }
+}
+
+fn convert(node: &Node, rt: &mut RuntimeShapes, depth: usize) -> RtResult<BslValue> {
+    if depth > MAX_VSTR_DEPTH {
+        return Err(RtError::StackOverflow {
+            what: "слишком глубокая вложенность в ЗначениеИзСтрокиВнутр",
+        });
+    }
+    let Node::List(items) = node else {
+        return Err(err("значение во внутреннем формате начинается со скобки"));
+    };
+    let tag = items.first().ok_or_else(|| err("пустой список во внутреннем формате"))?;
+    let Node::Str(tag) = tag else {
+        return Err(err("первый элемент списка — строковый тег вида значения"));
+    };
+    match tag.as_str() {
+        "U" => Ok(BslValue::Undefined),
+        "L" => Ok(BslValue::Null),
+        "B" => match one_bare(items, "B")? {
+            "0" => Ok(BslValue::Boolean(false)),
+            "1" => Ok(BslValue::Boolean(true)),
+            other => Err(err(format!("«{other}» не булево во внутреннем формате"))),
+        },
+        "N" => {
+            let text = one_bare(items, "N")?;
+            let n = BslNumber::parse_canonical(text)
+                .map_err(|_| err(format!("«{text}» не число во внутреннем формате")))?;
+            Ok(BslValue::Number(n))
+        }
+        "S" => match items.as_slice() {
+            [_, Node::Str(s)] => Ok(BslValue::Str(BslString::from_str(s))),
+            _ => Err(err("у строкового значения ровно один строковый аргумент")),
+        },
+        "D" => {
+            let digits = one_bare(items, "D")?;
+            parse_date(digits)
+        }
+        "T" => {
+            let uuid = one_bare(items, "T")?;
+            match TYPE_UUIDS
+                .iter()
+                .find(|(_, known)| known.eq_ignore_ascii_case(uuid))
+            {
+                Some((t, _)) => Ok(BslValue::Type(*t)),
+                // Неизвестный UUID — тип из конфигурации базы (например,
+                // `СправочникСсылка.Имя`): материализовать нечем, но
+                // транзит обязан его сохранить.
+                None => Ok(opaque(node)),
+            }
+        }
+        "#" => convert_object(node, items, rt, depth),
+        other => Err(err(format!(
+            "вид значения «{other}» во внутреннем формате не поддержан"
+        ))),
+    }
+}
+
+/// Единственный аргумент-лексема тега (`{"B",1}`, `{"N",0.1}`, `{"D",…}`).
+fn one_bare<'n>(items: &'n [Node], tag: &str) -> RtResult<&'n str> {
+    match items {
+        [_, Node::Bare(b)] => Ok(b),
+        _ => Err(err(format!("у значения вида «{tag}» ровно один аргумент"))),
+    }
+}
+
+fn parse_date(digits: &str) -> RtResult<BslValue> {
+    if digits.len() != 14 || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(err("дата во внутреннем формате — ровно 14 цифр"));
+    }
+    let part = |from: usize, to: usize| digits[from..to].parse::<i64>().unwrap_or(0);
+    // Пустая дата платформы — `00010101000000`, это `0001-01-01`.
+    BslDate::from_civil(
+        part(0, 4),
+        part(4, 6) as u32,
+        part(6, 8) as u32,
+        part(8, 10) as u32,
+        part(10, 12) as u32,
+        part(12, 14) as u32,
+    )
+    .map(BslValue::Date)
+    .ok_or_else(|| err(format!("«{digits}» не дата во внутреннем формате")))
+}
+
+/// Непрозрачное значение: канонически отрисованное поддерево, которое
+/// обратная сериализация вернёт байт в байт.
+fn opaque(node: &Node) -> BslValue {
+    let mut text = String::new();
+    render(node, &mut text);
+    BslValue::Object(Rc::new(BslObject::VstrOpaque(text)))
+}
+
+fn convert_object(
+    node: &Node,
+    items: &[Node],
+    rt: &mut RuntimeShapes,
+    depth: usize,
+) -> RtResult<BslValue> {
+    let Some(Node::Bare(kind)) = items.get(1) else {
+        return Err(err("у объекта во внутреннем формате вид и полезная нагрузка"));
+    };
+    // Виды, которые эта реализация не материализует, — ссылки объектов
+    // базы, СписокЗначений, УникальныйИдентификатор и любой незнакомый
+    // UUID — сохраняются непрозрачно, С ЛЮБОЙ формой полезной нагрузки:
+    // у УникальногоИдентификатора она, например, голая лексема, а не
+    // список. Материализуемые виды дальше требуют список строгой формы.
+    // НЕ ИЗМЕРЕНО(VSTR.FORMAT) — разметка СпискаЗначений и ссылок объектов
+    // базы не реверсирована (см. вопрос в реестре); непрозрачное хранение
+    // гарантирует только транзит байт в байт, не материализацию.
+    let known_kind = matches!(
+        kind.as_str(),
+        ARRAY_ID | FIXED_ARRAY_ID | STRUCTURE_ID | MAP_ID | VALUE_TABLE_ID | TYPE_DESCRIPTION_ID
+    );
+    if !known_kind {
+        return Ok(opaque(node));
+    }
+    let [_, _, payload] = items else {
+        return Err(err("у объекта во внутреннем формате вид и полезная нагрузка"));
+    };
+    let Node::List(payload) = payload else {
+        return Err(err("полезная нагрузка объекта — список"));
+    };
+    match kind.as_str() {
+        // `ФиксированныйМассив` читается ОБЫЧНЫМ массивом: своего
+        // неизменяемого вида здесь нет, а терять данные хуже, чем терять
+        // неизменяемость.
+        ARRAY_ID | FIXED_ARRAY_ID => {
+            let elems = counted_elements(payload)?;
+            let items = BslValue::new_array(Vec::new());
+            for node in elems {
+                items.push_element(convert(node, rt, depth + 1)?)?;
+            }
+            Ok(items)
+        }
+        STRUCTURE_ID => {
+            let elems = counted_elements(payload)?;
+            let object = {
+                let empty = rt.shapes.empty();
+                BslValue::new_structure(empty, Vec::new())
+            };
+            for node in elems {
+                let Node::List(pair) = node else {
+                    return Err(err("элемент структуры — пара «имя, значение»"));
+                };
+                let [name, value] = pair.as_slice() else {
+                    return Err(err("элемент структуры — пара «имя, значение»"));
+                };
+                let name = match convert(name, rt, depth + 1)? {
+                    BslValue::Str(s) => s.to_string(),
+                    _ => return Err(err("имя поля структуры — строка")),
+                };
+                let id = rt.names.intern(&name);
+                let value = convert(value, rt, depth + 1)?;
+                object.structure_insert(id, value, &mut rt.shapes)?;
+            }
+            Ok(object)
+        }
+        MAP_ID => {
+            let elems = counted_elements(payload)?;
+            let map = BslValue::new_map();
+            for node in elems {
+                let Node::List(pair) = node else {
+                    return Err(err("элемент соответствия — пара «ключ, значение»"));
+                };
+                let [key, value] = pair.as_slice() else {
+                    return Err(err("элемент соответствия — пара «ключ, значение»"));
+                };
+                let key = convert(key, rt, depth + 1)?;
+                let value = convert(value, rt, depth + 1)?;
+                map.map_insert(key, value)?;
+            }
+            Ok(map)
+        }
+        VALUE_TABLE_ID => table_from_payload(payload, rt, depth),
+        TYPE_DESCRIPTION_ID => {
+            // Полезная нагрузка — сам `{"Pattern",…}`. Материализуется
+            // только чисто-буквенное описание; квалификаторы и ссылочные
+            // типы внутри уходят в непрозрачное значение — терять их при
+            // транзите нельзя, а модель `ОписаниеТипов` их не хранит.
+            let [Node::Str(tag), type_nodes @ ..] = payload.as_slice() else {
+                return Ok(opaque(node));
+            };
+            if tag != "Pattern" {
+                return Err(err(format!(
+                    "описание типов начинается с «Pattern», не «{tag}»"
+                )));
+            }
+            let mut ids = Vec::with_capacity(type_nodes.len());
+            for type_node in type_nodes {
+                let Node::List(t) = type_node else {
+                    return Ok(opaque(node));
+                };
+                let [Node::Str(letter)] = t.as_slice() else {
+                    return Ok(opaque(node));
+                };
+                let Some((id, _)) = COLUMN_TYPE_LETTERS
+                    .iter()
+                    .find(|(_, known)| known == letter)
+                else {
+                    return Ok(opaque(node));
+                };
+                ids.push(*id);
+            }
+            Ok(BslValue::Object(Rc::new(BslObject::TypeDescription(ids))))
+        }
+        // Недостижимо: незнакомые виды ушли в непрозрачное значение выше.
+        other => Err(err(format!(
+            "вид объекта {other} во внутреннем формате не поддержан"
+        ))),
+    }
+}
+
+/// Разбор `ТаблицыЗначений` — разметка описана над [`table_to_node`].
+/// Служебные индексы (номер колонки, номер строки, пары в блоке строк)
+/// принимаются, но не проверяются: физический порядок узлов и есть
+/// порядок таблицы. Заголовок, ширина и квалификаторы типов колонок
+/// в этой реализации не хранятся и отбрасываются при чтении.
+fn table_from_payload(
+    payload: &[Node],
+    rt: &mut RuntimeShapes,
+    depth: usize,
+) -> RtResult<BslValue> {
+    let [Node::Bare(version), Node::List(cols), Node::List(rows_block), _indexes] = payload else {
+        return Err(err("разметка ТаблицыЗначений — версия, колонки, строки, индексы"));
+    };
+    if version != "9" {
+        return Err(err(format!(
+            "версия разметки ТаблицыЗначений «{version}» не поддержана (измерена 9)"
+        )));
+    }
+
+    let table = crate::ValueTableData::new();
+    {
+        let mut t = table.borrow_mut();
+
+        for col in counted_elements(cols)? {
+            let Node::List(col) = col else {
+                return Err(err("колонка ТаблицыЗначений — список"));
+            };
+            let [Node::Bare(col_id), Node::Str(name), Node::List(pattern), Node::Str(title), Node::Bare(width)] =
+                col.as_slice()
+            else {
+                return Err(err("колонка ТаблицыЗначений — идентификатор, имя, типы, заголовок, ширина"));
+            };
+            let [Node::Str(tag), type_nodes @ ..] = pattern.as_slice() else {
+                return Err(err("описание типов колонки начинается с «Pattern»"));
+            };
+            if tag != "Pattern" {
+                return Err(err(format!("описание типов колонки — «Pattern», не «{tag}»")));
+            }
+            // Буквы собираются в типы колонки «насколько возможно»: после
+            // буквы могут идти квалификаторы ({"N",10,2,0}) — они
+            // отбрасываются, — а ссылочный компонент ({"#",<uuid>}) или
+            // незнакомая буква обнуляют ограничение целиком: ложно сузить
+            // тип хуже, чем не ограничить. Точный исходник в любом случае
+            // сохраняет `raw_pattern` ниже — транзит от этого не страдает.
+            let mut ids = Vec::with_capacity(type_nodes.len());
+            let mut representable = true;
+            for node in type_nodes {
+                let parts = match node {
+                    Node::List(t) => Some(t),
+                    _ => None,
+                };
+                let letter = parts.and_then(|t| match t.first() {
+                    Some(Node::Str(letter)) => Some(letter),
+                    _ => None,
+                });
+                match letter.and_then(|letter| {
+                    COLUMN_TYPE_LETTERS
+                        .iter()
+                        .find(|(_, known)| known == letter)
+                        .map(|(id, _)| *id)
+                }) {
+                    Some(id) => {
+                        // Квалификаторы за буквой: семантика — приведению
+                        // значений, написание транзиту хранит raw_pattern.
+                        let quals = parts
+                            .map(|t| {
+                                t[1..]
+                                    .iter()
+                                    .filter_map(|q| match q {
+                                        Node::Bare(b) => Some(b.clone()),
+                                        Node::Str(s) => Some(s.clone()),
+                                        _ => None,
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        ids.push(crate::table::ColumnType { id, quals });
+                    }
+                    None => {
+                        representable = false;
+                        break;
+                    }
+                }
+            }
+            let types = if type_nodes.is_empty() || !representable {
+                None
+            } else {
+                Some(ids)
+            };
+            t.add_column(name);
+            let slot = t.column_types.len() - 1;
+            t.column_types[slot] = types;
+            // Сырое описание типов и оформление сохраняются целиком —
+            // обратная сериализация вернёт их байт в байт (квалификаторы
+            // и заголовки сама модель колонок пока не использует).
+            let mut raw = String::new();
+            render(&Node::List(pattern.to_vec()), &mut raw);
+            t.column_vstr[slot] = crate::table::ColumnVstr {
+                id: Some(col_id.clone()),
+                raw_pattern: Some(raw),
+                title: title.clone(),
+                width: width.clone(),
+            };
+        }
+        let ncols = t.column_names.len();
+
+        // Внутри блока строк ровно один вложенный список — {1, n, строки};
+        // сразу за ним идут две служебные лексемы `X,Y`. `Y` на всех
+        // измеренных данных равен максимальному идентификатору строки и
+        // вычисляется заново; `X` не реверсирован и хранится сырым.
+        let inner_at = rows_block
+            .iter()
+            .position(|n| matches!(n, Node::List(_)))
+            .ok_or_else(|| err("в блоке строк ТаблицыЗначений нет списка строк"))?;
+        let Node::List(inner) = &rows_block[inner_at] else {
+            unreachable!("позиция найдена по этому же условию");
+        };
+        if let Some(Node::Bare(x)) = rows_block.get(inner_at + 1) {
+            t.vstr_tail_x = Some(x.clone());
+        }
+        let [Node::Bare(_), Node::Bare(declared), rows @ ..] = inner.as_slice() else {
+            return Err(err("список строк ТаблицыЗначений начинается с числа строк"));
+        };
+        if declared.parse::<usize>() != Ok(rows.len()) {
+            return Err(err(format!(
+                "ТаблицаЗначений объявляет {declared} строк, а несёт {}",
+                rows.len()
+            )));
+        }
+        let mut file_row_ids = Vec::with_capacity(rows.len());
+        for row in rows {
+            let Node::List(row) = row else {
+                return Err(err("строка ТаблицыЗначений — список"));
+            };
+            // {2, <идентификатор строки>, <n значений>, <значения>, 0}
+            if row.len() < 4 {
+                return Err(err("строка ТаблицыЗначений короче служебной обвязки"));
+            }
+            let Node::Bare(row_id) = &row[1] else {
+                return Err(err("второй элемент строки ТаблицыЗначений — её идентификатор"));
+            };
+            let row_id: u64 = row_id
+                .parse()
+                .map_err(|_| err("идентификатор строки ТаблицыЗначений — целое"))?;
+            file_row_ids.push(row_id);
+            let Node::Bare(stored) = &row[2] else {
+                return Err(err("третий элемент строки ТаблицыЗначений — число значений"));
+            };
+            let stored: usize = stored
+                .parse()
+                .map_err(|_| err("число значений строки ТаблицыЗначений — целое"))?;
+            let values = &row[3..row.len() - 1];
+            if values.len() != stored || stored > ncols {
+                return Err(err(format!(
+                    "строка ТаблицыЗначений объявляет {stored} значений, а несёт {}",
+                    values.len()
+                )));
+            }
+            let _ = t.add_row();
+            let pos = t.row_ids.len() - 1;
+            for (k, node) in values.iter().enumerate() {
+                t.columns[k][pos] = convert(node, rt, depth + 1)?;
+            }
+            // Хвост до `ncols` остаётся `Неопределено` — так платформа
+            // кодирует пропуски (измерено: хвостовые не пишутся).
+        }
+        t.set_row_ids(file_row_ids);
+    }
+    Ok(BslValue::Object(Rc::new(BslObject::ValueTable(table))))
+}
+
+/// Полезная нагрузка коллекции: `{<число элементов>, <эл>, …}`. Счёт
+/// платформа пишет всегда; расхождение счёта с фактическим числом
+/// элементов — ошибка формата, а не повод угадывать.
+fn counted_elements(payload: &[Node]) -> RtResult<&[Node]> {
+    let [Node::Bare(count), elems @ ..] = payload else {
+        return Err(err("коллекция начинается с числа элементов"));
+    };
+    let declared: usize = count
+        .parse()
+        .map_err(|_| err("число элементов коллекции — целое"))?;
+    if declared != elems.len() {
+        return Err(err(format!(
+            "коллекция объявляет {declared} элементов, а несёт {}",
+            elems.len()
+        )));
+    }
+    Ok(elems)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rt() -> RuntimeShapes {
+        RuntimeShapes::seeded(Vec::new(), Vec::new())
+    }
+
+    fn num(s: &str) -> BslValue {
+        BslValue::Number(BslNumber::parse_canonical(s).unwrap())
+    }
+
+    fn s(text: &str) -> BslValue {
+        BslValue::Str(BslString::from_str(text))
+    }
+
+    fn write(v: &BslValue) -> String {
+        value_to_string_internal(v, &rt()).expect("сериализация")
+    }
+
+    fn read(text: &str) -> BslValue {
+        value_from_string_internal(text, &mut rt()).expect("разбор")
+    }
+
+    // Эталонные строки ниже сняты с платформы 8.3.27 разведочной батареей
+    // (см. обзор модуля) — их нельзя «поправить красивее», они байт в байт.
+
+    #[test]
+    fn scalars_match_the_platform_byte_for_byte() {
+        assert_eq!(write(&num("0")), r#"{"N",0}"#);
+        assert_eq!(write(&num("-42")), r#"{"N",-42}"#);
+        assert_eq!(write(&num("0.1")), r#"{"N",0.1}"#);
+        assert_eq!(write(&s("а\"б")), "{\"S\",\"а\"\"б\"}");
+        assert_eq!(write(&s("а\nб")), "{\"S\",\"а\nб\"}");
+        assert_eq!(write(&BslValue::Boolean(true)), r#"{"B",1}"#);
+        assert_eq!(write(&BslValue::Boolean(false)), r#"{"B",0}"#);
+        assert_eq!(write(&BslValue::Undefined), r#"{"U"}"#);
+        assert_eq!(write(&BslValue::Null), r#"{"L"}"#);
+        let d = BslDate::from_civil(2024, 5, 6, 7, 8, 9).unwrap();
+        assert_eq!(write(&BslValue::Date(d)), r#"{"D",20240506070809}"#);
+        let empty = BslDate::from_civil(1, 1, 1, 0, 0, 0).unwrap();
+        assert_eq!(write(&BslValue::Date(empty)), r#"{"D",00010101000000}"#);
+    }
+
+    #[test]
+    fn types_round_trip_and_match_measured_uuids() {
+        let t = BslValue::Type(TypeId::String);
+        let text = write(&t);
+        assert_eq!(text, r#"{"T",9b6abf8b-0173-48e5-b0a0-83b21fcf63c5}"#);
+        assert_eq!(read(&text), t);
+        // Тип, UUID которого не измерен, — ошибка, а не выдуманный UUID.
+        let e = value_to_string_internal(&BslValue::Type(TypeId::JsonReader), &rt()).unwrap_err();
+        assert!(matches!(e, RtError::Vstr(_)), "{e:?}");
+    }
+
+    #[test]
+    fn simple_array_matches_the_platform_byte_for_byte() {
+        let arr = BslValue::new_array(vec![num("1"), s("а")]);
+        assert_eq!(
+            write(&arr),
+            "{\"#\",51e7a0d2-530b-11d4-b98a-008048da3034,\n{2,\n{\"N\",1},\n{\"S\",\"а\"}\n}\n}"
+        );
+        let empty = BslValue::new_array(Vec::new());
+        assert_eq!(
+            write(&empty),
+            "{\"#\",51e7a0d2-530b-11d4-b98a-008048da3034,\n{0}\n}"
+        );
+    }
+
+    #[test]
+    fn structure_matches_the_platform_byte_for_byte() {
+        let mut context = rt();
+        let object = BslValue::new_structure(context.shapes.empty(), Vec::new());
+        let id_a = context.names.intern("Азбука");
+        let id_b = context.names.intern("Б");
+        object.structure_insert(id_a, num("1"), &mut context.shapes).unwrap();
+        object.structure_insert(id_b, s("х"), &mut context.shapes).unwrap();
+        let text = value_to_string_internal(&object, &context).unwrap();
+        assert_eq!(
+            text,
+            "{\"#\",4238019d-7e49-4fc9-91db-b6b951d5cf8e,\n{2,\n{\n{\"S\",\"Азбука\"},\n{\"N\",1}\n},\n{\n{\"S\",\"Б\"},\n{\"S\",\"х\"}\n}\n}\n}"
+        );
+    }
+
+    #[test]
+    fn repeated_object_unfolds_into_copies_like_the_platform() {
+        // ИЗМЕРЕНО (`REF.TWICE`): платформа не сохраняет ссылочную
+        // целостность — повтор разворачивается в копию.
+        let inner = BslValue::new_array(vec![num("7")]);
+        let outer = BslValue::new_array(vec![inner.clone(), inner]);
+        let text = write(&outer);
+        let inner_text = "{\"#\",51e7a0d2-530b-11d4-b98a-008048da3034,\n{1,\n{\"N\",7}\n}\n}";
+        assert_eq!(
+            text,
+            format!(
+                "{{\"#\",51e7a0d2-530b-11d4-b98a-008048da3034,\n{{2,\n{inner_text},\n{inner_text}\n}}\n}}"
+            )
+        );
+        // И обратно повторы читаются НЕЗАВИСИМЫМИ объектами, как на
+        // платформе (`RT.IDENTITY`).
+        let back = read(&text);
+        let first = back
+            .get_index(&num("0"), &rt().names)
+            .unwrap();
+        first.push_element(num("99")).unwrap();
+        let second = back.get_index(&num("1"), &rt().names).unwrap();
+        assert_eq!(second.collection_len().unwrap(), 1);
+    }
+
+    #[test]
+    fn round_trip_preserves_types_and_content() {
+        // Соответствие здесь ОДНОКЛЮЧЕВОЕ: при нескольких ключах повторная
+        // сериализация не идемпотентна и у платформы — пары пишутся в
+        // обратном порядке вставки, а чтение вставляет их в порядке текста.
+        let mut context = rt();
+        let map = BslValue::new_map();
+        map.map_insert(s("с"), num("1")).unwrap();
+        let arr = BslValue::new_array(vec![
+            num("0.1"),
+            s("а\"б\nв"),
+            BslValue::Date(BslDate::from_civil(2024, 5, 6, 7, 8, 9).unwrap()),
+            BslValue::Null,
+            BslValue::Type(TypeId::Date),
+            map,
+        ]);
+        let text = value_to_string_internal(&arr, &context).unwrap();
+        let back = value_from_string_internal(&text, &mut context).unwrap();
+        let again = value_to_string_internal(&back, &context).unwrap();
+        assert_eq!(text, again, "повторная сериализация обязана совпасть");
+    }
+
+    #[test]
+    fn map_pairs_serialize_in_insertion_order_for_transit_stability() {
+        // Прямой порядок вставки: строка платформы после чтения и
+        // повторной записи возвращается байт в байт (порядок пар в тексте
+        // = порядок вставки при чтении = порядок записи).
+        let map = BslValue::new_map();
+        map.map_insert(s("первый"), num("1")).unwrap();
+        map.map_insert(s("второй"), num("2")).unwrap();
+        let text = write(&map);
+        let a = text.find("первый").expect("есть первый");
+        let b = text.find("второй").expect("есть второй");
+        assert!(a < b, "пары обязаны идти в порядке вставки: {text}");
+    }
+
+    #[test]
+    fn platform_map_text_survives_the_transit_byte_for_byte() {
+        // РЕАЛЬНАЯ строка платформы (проба `MAP.MIXED` разведочной
+        // батареи): её хеш-порядок пар обязан пережить транзит
+        // чтение→запись без изменений.
+        let text = "{\"#\",3d48feae-a9c6-4c5a-a099-9eb6477630c6,\n{3,\n{\n{\"B\",1},\n{\"U\"}\n},\n{\n{\"N\",2},\n{\"S\",\"д\"}\n},\n{\n{\"S\",\"с\"},\n{\"N\",1}\n}\n}\n}";
+        let mut context = rt();
+        let back = value_from_string_internal(text, &mut context).unwrap();
+        let again = value_to_string_internal(&back, &context).unwrap();
+        assert_eq!(text, again);
+    }
+
+    #[test]
+    fn parser_accepts_dense_text_without_newlines() {
+        // Платформа принимает запись без переводов строк — разбор решает
+        // только структура скобок и запятых.
+        let v = read("{\"#\",51e7a0d2-530b-11d4-b98a-008048da3034,{2,{\"N\",1},{\"S\",\"а\"}}}");
+        assert_eq!(v.collection_len().unwrap(), 2);
+    }
+
+    #[test]
+    fn fixed_array_reads_as_a_plain_array() {
+        let v = read("{\"#\",4500381b-db30-4a10-9db4-990038032acf,\n{1,\n{\"N\",1}\n}\n}");
+        assert_eq!(v.collection_len().unwrap(), 1);
+    }
+
+    fn table_value(t: Rc<std::cell::RefCell<crate::ValueTableData>>) -> BslValue {
+        BslValue::Object(Rc::new(BslObject::ValueTable(t)))
+    }
+
+    #[test]
+    fn empty_value_table_matches_the_platform_byte_for_byte() {
+        // Эталон `VT.EMPTY` разведочной батареи.
+        let v = table_value(crate::ValueTableData::new());
+        assert_eq!(
+            write(&v),
+            "{\"#\",acf6192e-81ca-46ef-93a6-5a6968b78663,\n{9,\n{0},\n{2,0,\n{1,0},-1,-1},\n{0,0}\n}\n}"
+        );
+    }
+
+    #[test]
+    fn one_cell_value_table_matches_the_platform_byte_for_byte() {
+        // Эталон `VT.COL1ROW1`.
+        let t = crate::ValueTableData::new();
+        {
+            let mut t = t.borrow_mut();
+            t.add_column("А");
+            t.add_row();
+            t.columns[0][0] = num("5");
+        }
+        assert_eq!(
+            write(&table_value(t)),
+            "{\"#\",acf6192e-81ca-46ef-93a6-5a6968b78663,\n{9,\n{1,\n{0,\"А\",\n{\"Pattern\"},\"\",0}\n},\n{2,1,0,0,\n{1,1,\n{2,0,1,\n{\"N\",5},0}\n},0,0},\n{0,0}\n}\n}"
+        );
+    }
+
+    #[test]
+    fn typed_column_matches_the_platform_byte_for_byte() {
+        // Эталон `VT.TYPE.S`.
+        let t = crate::ValueTableData::new();
+        {
+            let mut t = t.borrow_mut();
+            t.add_column("С");
+            t.column_types[0] = Some(vec![crate::table::ColumnType::plain(TypeId::String)]);
+        }
+        assert_eq!(
+            write(&table_value(t)),
+            "{\"#\",acf6192e-81ca-46ef-93a6-5a6968b78663,\n{9,\n{1,\n{0,\"С\",\n{\"Pattern\",\n{\"S\"}\n},\"\",0}\n},\n{2,1,0,0,\n{1,0},0,-1},\n{0,0}\n}\n}"
+        );
+    }
+
+    #[test]
+    fn composite_column_types_serialize_in_the_canonical_platform_order() {
+        // Эталоны `CMP.NS`/`CMP.SN`: порядок задания типов не влияет —
+        // платформа всегда пишет буквы в порядке B, S, D, N.
+        let expected = "{\"#\",acf6192e-81ca-46ef-93a6-5a6968b78663,\n{9,\n{1,\n{0,\"К\",\n{\"Pattern\",\n{\"S\"},\n{\"N\"}\n},\"\",0}\n},\n{2,1,0,0,\n{1,0},0,-1},\n{0,0}\n}\n}";
+        for order in [
+            vec![TypeId::Number, TypeId::String],
+            vec![TypeId::String, TypeId::Number],
+        ]
+        .map(|ids| ids.into_iter().map(crate::table::ColumnType::plain).collect::<Vec<_>>())
+        {
+            let t = crate::ValueTableData::new();
+            {
+                let mut t = t.borrow_mut();
+                t.add_column("К");
+                t.column_types[0] = Some(order);
+            }
+            assert_eq!(write(&table_value(t)), expected);
+        }
+    }
+
+    #[test]
+    fn type_description_value_matches_the_platform_and_round_trips() {
+        // Эталоны `CMP.VALUE`/`CMP.VALUE.EMPTY`: значение `ОписаниеТипов`
+        // — тот же {"Pattern",…} под своим видом объекта.
+        let td = BslValue::Object(Rc::new(BslObject::TypeDescription(vec![
+            TypeId::Number,
+            TypeId::String,
+        ])));
+        let text = write(&td);
+        assert_eq!(
+            text,
+            "{\"#\",f5c65050-3bbb-11d5-b988-0050bae0a95d,\n{\"Pattern\",\n{\"S\"},\n{\"N\"}\n}\n}"
+        );
+        let back = assert_transit(&text);
+        assert_eq!(back.type_name(), "ОписаниеТипов");
+        let empty = BslValue::Object(Rc::new(BslObject::TypeDescription(Vec::new())));
+        assert_eq!(
+            write(&empty),
+            "{\"#\",f5c65050-3bbb-11d5-b988-0050bae0a95d,\n{\"Pattern\"}\n}"
+        );
+    }
+
+    #[test]
+    fn composite_type_with_a_reference_survives_the_transit() {
+        // РЕАЛЬНАЯ строка платформы (`CMP.REF`): составной тип колонки со
+        // ссылочным типом из конфигурации — сырое описание сохраняется.
+        let text = "{\"#\",acf6192e-81ca-46ef-93a6-5a6968b78663,\n{9,\n{1,\n{0,\"К\",\n{\"Pattern\",\n{\"N\"},\n{\"#\",c0c2cbee-990e-410d-9c63-b5222c1dacba}\n},\"\",0}\n},\n{2,1,0,0,\n{1,0},0,-1},\n{0,0}\n}\n}";
+        assert_transit(text);
+        // То же — для самостоятельного значения ОписаниеТипов со ссылкой:
+        // материализовать нечем, но транзит непрозрачным значением обязан
+        // быть тождественным.
+        let value = "{\"#\",f5c65050-3bbb-11d5-b988-0050bae0a95d,\n{\"Pattern\",\n{\"N\"},\n{\"#\",c0c2cbee-990e-410d-9c63-b5222c1dacba}\n}\n}";
+        let v = assert_transit(value);
+        assert_eq!(v.type_name(), "НепрозрачноеЗначение");
+    }
+
+    #[test]
+    fn undefined_in_the_middle_survives_the_round_trip() {
+        // Эталоны `VT2.U_MID`/`VT2.RT_MID`: хвостовые `Неопределено`
+        // отброшены, внутреннее — явным `{"U"}`, чтение восстанавливает.
+        let t = crate::ValueTableData::new();
+        {
+            let mut t = t.borrow_mut();
+            t.add_column("А");
+            t.add_column("Б");
+            t.add_column("В");
+            t.add_row();
+            t.columns[0][0] = num("1");
+            t.columns[2][0] = num("3");
+        }
+        let v = table_value(t);
+        let text = write(&v);
+        assert_eq!(
+            text,
+            "{\"#\",acf6192e-81ca-46ef-93a6-5a6968b78663,\n{9,\n{3,\n{0,\"А\",\n{\"Pattern\"},\"\",0},\n{1,\"Б\",\n{\"Pattern\"},\"\",0},\n{2,\"В\",\n{\"Pattern\"},\"\",0}\n},\n{2,3,0,0,1,1,2,2,\n{1,1,\n{2,0,3,\n{\"N\",1},\n{\"U\"},\n{\"N\",3},0}\n},2,0},\n{0,0}\n}\n}"
+        );
+        let mut context = rt();
+        let back = value_from_string_internal(&text, &mut context).unwrap();
+        let again = value_to_string_internal(&back, &context).unwrap();
+        assert_eq!(text, again, "повторная сериализация ТЗ обязана совпасть");
+    }
+
+    /// Транзит: чтение и обратная запись обязаны вернуть строку байт в
+    /// байт — это контракт обмена 1С -> open-bsl -> 1С.
+    fn assert_transit(text: &str) -> BslValue {
+        let mut context = rt();
+        let back = value_from_string_internal(text, &mut context).unwrap();
+        let again = value_to_string_internal(&back, &context).unwrap();
+        assert_eq!(text, again, "транзит обязан быть тождественным");
+        back
+    }
+
+    #[test]
+    fn uuid_value_survives_the_transit_as_opaque() {
+        // РЕАЛЬНАЯ строка платформы (проба `UUID` разведочной батареи).
+        let text = format!(
+            "{{\"#\",{UUID_VALUE_ID},12345678-9abc-def0-1234-56789abcdef0}}"
+        );
+        let v = assert_transit(&text);
+        assert_eq!(v.type_name(), "НепрозрачноеЗначение");
+    }
+
+    #[test]
+    fn value_list_survives_the_transit_as_opaque() {
+        // РЕАЛЬНАЯ строка платформы (проба `VL.ONE`): разметка не
+        // материализуется, но транзит тождественен.
+        let text = format!(
+            "{{\"#\",{VALUE_LIST_ID},\n{{6,1e512aab-1b41-4ef6-9375-f0137be9dd91,0,0,\n{{1,\n{{1e512aab-1b41-4ef6-9375-f0137be9dd91,\n{{\"первый\",0,\n{{\"N\",1}},\n{{4,0,\n{{0}},\"\",-1,-1,0,0,\"\"}},0,0,\"\"}}\n}}\n}},\n{{\"Pattern\"}},0,0}}\n}}"
+        );
+        assert_transit(&text);
+    }
+
+    #[test]
+    fn database_reference_shape_survives_the_transit_inside_a_container() {
+        // Ссылка объекта базы — незнакомый UUID вида: хранится непрозрачно
+        // и переживает транзит и сама по себе, и внутри коллекции.
+        let ref_text = "{\"#\",aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee,bbbbbbbb-cccc-dddd-eeee-ffffffffffff}";
+        assert_transit(ref_text);
+        let in_array = format!(
+            "{{\"#\",{ARRAY_ID},\n{{2,\n{ref_text},\n{ref_text}\n}}\n}}"
+        );
+        assert_transit(&in_array);
+    }
+
+    #[test]
+    fn database_references_survive_the_transit_and_compare_by_value() {
+        // РЕАЛЬНЫЕ строки платформы (батарея `REF.*` на конфигурации с
+        // справочником/документом/перечислением): вид ссылки —
+        // `{"#",<uuid типа>,<код класса>:<32 hex>}`, полезная нагрузка —
+        // голая лексема с двоеточием.
+        let cat = "{\"#\",c0c2cbee-990e-410d-9c63-b5222c1dacba,53:866e48f17f20bbba11f190e0bddf9004}";
+        let enum_ref = "{\"#\",67ca3817-4032-4140-ba35-d1324b0d84ed,55:8e402318585c2355415dbf5d499c83fe}";
+        let empty = "{\"#\",c0c2cbee-990e-410d-9c63-b5222c1dacba,53:00000000000000000000000000000000}";
+        assert_transit(cat);
+        assert_transit(enum_ref);
+        assert_transit(empty);
+
+        // Платформа: перечитанная ссылка РАВНА исходной (`REF.CAT.RT`).
+        // Непрозрачные значения сравниваются по тексту — то же поведение.
+        let mut context = rt();
+        let a = value_from_string_internal(cat, &mut context).unwrap();
+        let b = value_from_string_internal(cat, &mut context).unwrap();
+        assert!(a.eq_value(&b), "одинаковые ссылки обязаны быть равны");
+        let other = value_from_string_internal(enum_ref, &mut context).unwrap();
+        assert!(!a.eq_value(&other), "разные ссылки равны быть не обязаны");
+    }
+
+    #[test]
+    fn unknown_type_uuid_survives_the_transit_as_opaque() {
+        // `{"T",…}` с UUID типа из чужой конфигурации.
+        let v = assert_transit("{\"T\",aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee}");
+        assert_eq!(v.type_name(), "НепрозрачноеЗначение");
+    }
+
+    #[test]
+    fn sparse_row_and_column_ids_survive_the_transit() {
+        // Синтетическая таблица «со следами жизни»: колонки с разреженными
+        // идентификаторами (0, 2 — вторая и третья удалены), строки с
+        // идентификаторами 5 и 9 не по порядку, служебный `X` хвоста не
+        // равен ни числу колонок, ни максимальному идентификатору. Такие
+        // строки порождают реальные выгрузки платформы после
+        // `Свернуть`/`Скопировать`/удалений — транзит обязан вернуть всё
+        // байт в байт, а не перенумеровать.
+        let text = "{\"#\",acf6192e-81ca-46ef-93a6-5a6968b78663,\n{9,\n{2,\n{0,\"А\",\n{\"Pattern\"},\"\",0},\n{2,\"Б\",\n{\"Pattern\"},\"\",0}\n},\n{2,2,0,0,1,2,\n{1,2,\n{2,9,1,\n{\"N\",1},0},\n{2,5,2,\n{\"N\",2},\n{\"N\",3},0}\n},7,9},\n{0,0}\n}\n}";
+        let back = assert_transit(text);
+        // Идентификаторы строк легли в `row_ids`, а не только в текст.
+        let BslValue::Object(o) = &back else { panic!("ожидался объект") };
+        let BslObject::ValueTable(data) = &**o else { panic!("ожидалась таблица") };
+        assert_eq!(data.borrow().row_ids, vec![9, 5]);
+    }
+
+    #[test]
+    fn column_title_width_and_qualifiers_survive_the_transit() {
+        // РЕАЛЬНЫЕ строки платформы: `VT.TITLE` (заголовок и ширина) и
+        // `VT.TYPE.NQ` (квалификаторы числа) — модель колонок этого не
+        // хранит семантически, но транзит обязан вернуть байт в байт.
+        let title = "{\"#\",acf6192e-81ca-46ef-93a6-5a6968b78663,\n{9,\n{1,\n{0,\"А\",\n{\"Pattern\"},\"Заголовок А\",15}\n},\n{2,1,0,0,\n{1,0},0,-1},\n{0,0}\n}\n}";
+        assert_transit(title);
+        let qualifiers = "{\"#\",acf6192e-81ca-46ef-93a6-5a6968b78663,\n{9,\n{1,\n{0,\"Ч\",\n{\"Pattern\",\n{\"N\",10,2,0}\n},\"\",0}\n},\n{2,1,0,0,\n{1,0},0,-1},\n{0,0}\n}\n}";
+        assert_transit(qualifiers);
+    }
+
+
+
+    #[test]
+    fn cyclic_value_is_a_catchable_error_not_a_crash() {
+        // ИЗМЕРЕНО: платформа на этом значении ПАДАЕТ (сегфолт клиента).
+        // Здесь — перехватываемая ошибка; краш не воспроизводим сознательно.
+        let arr = BslValue::new_array(Vec::new());
+        arr.push_element(arr.clone()).unwrap();
+        let e = value_to_string_internal(&arr, &rt()).unwrap_err();
+        assert!(matches!(e, RtError::StackOverflow { .. }), "{e:?}");
+    }
+
+    #[test]
+    fn garbage_and_count_mismatch_are_errors() {
+        let mut context = rt();
+        assert!(matches!(
+            value_from_string_internal("не формат", &mut context),
+            Err(RtError::Vstr(_))
+        ));
+        assert!(matches!(
+            value_from_string_internal(
+                "{\"#\",51e7a0d2-530b-11d4-b98a-008048da3034,{2,{\"N\",1}}}",
+                &mut context
+            ),
+            Err(RtError::Vstr(_))
+        ));
+        assert!(matches!(
+            value_from_string_internal("{\"S\",\"незакрытая}", &mut context),
+            Err(RtError::Vstr(_))
+        ));
+    }
+
+    #[test]
+    fn double_serialization_escapes_like_the_platform() {
+        // Эталон `VSTR.NESTED`: сериализация строки, которая сама является
+        // сериализацией, — обычное строковое экранирование кавычек.
+        let once = write(&s("а\"б"));
+        let twice = write(&s(&once));
+        assert_eq!(twice, "{\"S\",\"{\"\"S\"\",\"\"а\"\"\"\"б\"\"}\"}");
+    }
+}
