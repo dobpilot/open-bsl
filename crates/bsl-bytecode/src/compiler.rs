@@ -73,6 +73,10 @@ pub fn compile_program(resolved: &ResolvedProgram) -> Result<Program, CompileErr
     })
 }
 
+/// Результат компиляции фрагмента: чанк, полная таблица имён полей и
+/// полная таблица форм (подробности — в doc comment `compile_snippet`).
+pub type SnippetOutput = (Chunk, Vec<String>, Vec<std::rc::Rc<bsl_rt::Shape>>);
+
 /// Компилирует фрагмент для `Выполнить`/`Вычислить`: `all_locals` — уже
 /// расширенный список (существующие переменные верхнего уровня + новые,
 /// объявленные во фрагменте, см. `bsl_sema::resolve_snippet_stmts`),
@@ -108,7 +112,7 @@ pub fn compile_snippet(
     body: &[RStmt],
     program_names: &[String],
     callee_params: &[Vec<bool>],
-) -> Result<(Chunk, Vec<String>, Vec<std::rc::Rc<bsl_rt::Shape>>), CompileError> {
+) -> Result<SnippetOutput, CompileError> {
     let mut names = NameInterner::new();
     for n in program_names {
         names.intern(n);
@@ -120,6 +124,9 @@ pub fn compile_snippet(
     Ok((chunk, names.into_names(), shapes.into_shapes()))
 }
 
+// Восемь аргументов — это и есть весь входной контекст чанка; структура
+// из тех же восьми полей ничего не упростила бы.
+#[allow(clippy::too_many_arguments)]
 fn compile_chunk(
     locals: &[String],
     params: &[ResolvedParam],

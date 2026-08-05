@@ -453,7 +453,7 @@ fn group_digits(digits: &str, sep: char) -> String {
     let n = bytes.len();
     let mut out = String::with_capacity(n + n / 3);
     for (i, b) in bytes.iter().enumerate() {
-        if i > 0 && (n - i) % 3 == 0 {
+        if i > 0 && (n - i).is_multiple_of(3) {
             out.push(sep);
         }
         out.push(*b as char);

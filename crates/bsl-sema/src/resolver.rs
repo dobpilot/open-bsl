@@ -1275,8 +1275,8 @@ mod tests {
         let f = &rp.functions[0];
         assert_eq!(f.locals[0], "а");
         assert_eq!(f.locals[1], "б");
-        assert_eq!(f.params[0].by_val, true);
-        assert_eq!(f.params[1].by_val, false);
+        assert!(f.params[0].by_val);
+        assert!(!f.params[1].by_val);
     }
 
     #[test]

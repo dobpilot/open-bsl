@@ -162,6 +162,10 @@ fn push_lowercase(out: &mut Vec<char>, ch: char) {
 }
 
 impl BslString {
+    // Не `std::str::FromStr`: тот обязывает возвращать `Result`, а эта
+    // конвертация безошибочная, и вызывающим нужен обычный конструктор,
+    // а не `parse()`.
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         let units: Vec<u16> = s.encode_utf16().collect();
         Self::from_units(units)

@@ -534,7 +534,7 @@ fn numeric_for_next_regular(
 fn prop_cache(
     chunk: &bsl_bytecode::Chunk,
     pc: usize,
-) -> Result<&std::cell::RefCell<Option<(std::rc::Rc<bsl_rt::Shape>, u32)>>, RtError> {
+) -> Result<&bsl_bytecode::PropCacheSlot, RtError> {
     at(&chunk.prop_cache, pc, "нет ячейки инлайн-кэша для инструкции")
 }
 

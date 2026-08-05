@@ -45,6 +45,10 @@ impl MapData {
         self.order.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.order.is_empty()
+    }
+
     pub fn clear(&mut self) {
         self.order.clear();
         self.values.clear();

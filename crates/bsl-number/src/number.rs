@@ -72,7 +72,7 @@ fn scale_up_i128(m: i128, delta: i32) -> Option<i128> {
     if delta == 0 {
         return Some(m);
     }
-    if delta < 0 || delta > 38 {
+    if !(0..=38).contains(&delta) {
         return None;
     }
     m.checked_mul(POW10[delta as usize])
@@ -674,7 +674,7 @@ fn bigint_is_divisible_by_10(value: &BigInt) -> bool {
 
 /// Попытка вернуться в быстрый ярус после операции на `BigInt`.
 fn demote(b: BigDec) -> BslNumber {
-    match (&b.m).to_i128() {
+    match b.m.to_i128() {
         Some(v) => BslNumber::Small {
             m: M128::new(v),
             scale: b.scale,
@@ -1107,7 +1107,11 @@ mod exact_division_tests {
         }
         // Наибольшее кратное десяти, влезающее в i128, и наименьшее.
         sample(i128::MAX - i128::MAX % 10);
-        sample(i128::MIN + (-(i128::MIN % 10)));
+        // `identity_op` clippy 1.97 ошибочно считает `i128::MIN % 10`
+        // равным `i128::MIN` (на самом деле −8; соседняя строка с `MAX`
+        // линтер не смущает) — подсказке следовать нельзя.
+        #[allow(clippy::identity_op)]
+        sample(i128::MIN - i128::MIN % 10);
         assert!(checked > 20000, "перебор не набрал значений: {checked}");
     }
 }

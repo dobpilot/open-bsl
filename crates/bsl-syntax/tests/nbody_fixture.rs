@@ -21,7 +21,7 @@ fn nbody_fixture_tokenizes_without_errors() {
     let toks = tokenize(src);
     assert!(toks.len() > 500, "expected a substantial token stream, got {}", toks.len());
 
-    let has = |kw: Keyword| toks.iter().any(|t| *t == TokenKind::Keyword(kw));
+    let has = |kw: Keyword| toks.contains(&TokenKind::Keyword(kw));
     assert!(has(Keyword::Function));
     assert!(has(Keyword::EndFunction));
     assert!(has(Keyword::For));
