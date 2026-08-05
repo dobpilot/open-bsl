@@ -440,7 +440,14 @@ macro_rules! shim {
     };
 }
 
-shim!(shim_move, |frames, stack, program, idx, shapes, dst, src, _c| {
+shim!(shim_move, |frames,
+                  stack,
+                  program,
+                  idx,
+                  shapes,
+                  dst,
+                  src,
+                  _c| {
     let s = frames[idx].reg_index(src as u8);
     let v = reg_load(stack, s)?;
     let d = frames[idx].reg_index(dst as u8);
@@ -448,7 +455,14 @@ shim!(shim_move, |frames, stack, program, idx, shapes, dst, src, _c| {
     Ok(OK)
 });
 
-shim!(shim_load_const, |frames, stack, program, idx, shapes, dst, k, _c| {
+shim!(shim_load_const, |frames,
+                        stack,
+                        program,
+                        idx,
+                        shapes,
+                        dst,
+                        k,
+                        _c| {
     let chunk = at(
         &program.chunks,
         frames[idx].func_id,
@@ -465,25 +479,53 @@ shim!(shim_load_const, |frames, stack, program, idx, shapes, dst, k, _c| {
     Ok(OK)
 });
 
-shim!(shim_load_bool, |frames, stack, program, idx, shapes, dst, val, _c| {
+shim!(shim_load_bool, |frames,
+                       stack,
+                       program,
+                       idx,
+                       shapes,
+                       dst,
+                       val,
+                       _c| {
     let d = frames[idx].reg_index(dst as u8);
     reg_store(stack, d, BslValue::Boolean(val != 0))?;
     Ok(OK)
 });
 
-shim!(shim_load_undefined, |frames, stack, program, idx, shapes, dst, _b, _c| {
+shim!(shim_load_undefined, |frames,
+                            stack,
+                            program,
+                            idx,
+                            shapes,
+                            dst,
+                            _b,
+                            _c| {
     let d = frames[idx].reg_index(dst as u8);
     reg_store(stack, d, BslValue::Undefined)?;
     Ok(OK)
 });
 
-shim!(shim_load_null, |frames, stack, program, idx, shapes, dst, _b, _c| {
+shim!(shim_load_null, |frames,
+                       stack,
+                       program,
+                       idx,
+                       shapes,
+                       dst,
+                       _b,
+                       _c| {
     let d = frames[idx].reg_index(dst as u8);
     reg_store(stack, d, BslValue::Null)?;
     Ok(OK)
 });
 
-shim!(shim_add, |frames, stack, program, idx, shapes, dst, a, b| {
+shim!(shim_add, |frames,
+                 stack,
+                 program,
+                 idx,
+                 shapes,
+                 dst,
+                 a,
+                 b| {
     add_op(frames, stack, idx, dst as u8, a as u8, b as u8)?;
     Ok(OK)
 });
@@ -526,7 +568,14 @@ shim!(shim_eq, |frames, stack, program, idx, shapes, dst, a, b| {
     Ok(OK)
 });
 
-shim!(shim_not_eq, |frames, stack, program, idx, shapes, dst, a, b| {
+shim!(shim_not_eq, |frames,
+                    stack,
+                    program,
+                    idx,
+                    shapes,
+                    dst,
+                    a,
+                    b| {
     let av = reg_load(stack, frames[idx].reg_index(a as u8))?;
     let bv = reg_load(stack, frames[idx].reg_index(b as u8))?;
     let d = frames[idx].reg_index(dst as u8);
@@ -541,14 +590,28 @@ cmp_shim!(shim_gt, ">", std::cmp::Ordering::is_gt);
 cmp_shim!(shim_le, "<=", std::cmp::Ordering::is_le);
 cmp_shim!(shim_ge, ">=", std::cmp::Ordering::is_ge);
 
-shim!(shim_neg, |frames, stack, program, idx, shapes, dst, src, _c| {
+shim!(shim_neg, |frames,
+                 stack,
+                 program,
+                 idx,
+                 shapes,
+                 dst,
+                 src,
+                 _c| {
     let v = reg_load(stack, frames[idx].reg_index(src as u8))?;
     let d = frames[idx].reg_index(dst as u8);
     reg_store(stack, d, neg_op(&v)?)?;
     Ok(OK)
 });
 
-shim!(shim_not, |frames, stack, program, idx, shapes, dst, src, _c| {
+shim!(shim_not, |frames,
+                 stack,
+                 program,
+                 idx,
+                 shapes,
+                 dst,
+                 src,
+                 _c| {
     let v = reg_load(stack, frames[idx].reg_index(src as u8))?;
     let d = frames[idx].reg_index(dst as u8);
     reg_store(stack, d, v.not()?)?;
@@ -558,7 +621,14 @@ shim!(shim_not, |frames, stack, program, idx, shapes, dst, src, _c| {
 // Условие читается через `as_condition`, а не «всё, что не ложь, —
 // истина»: у 1С не-`Булево` в условии это ОШИБКА ТИПА, и приведения к
 // истинности нет. Тем же вызовом это делает и интерпретатор.
-shim!(shim_jump_if_false, |frames, stack, program, idx, shapes, cond, _b, _c| {
+shim!(shim_jump_if_false, |frames,
+                           stack,
+                           program,
+                           idx,
+                           shapes,
+                           cond,
+                           _b,
+                           _c| {
     let c = frames[idx].reg_index(cond as u8);
     Ok(if reg_load(stack, c)?.as_condition()? {
         OK
@@ -572,7 +642,14 @@ shim!(shim_jump_if_false, |frames, stack, program, idx, shapes, cond, _b, _c| {
 // следующую инструкцию. Мы отдаём ей ЛОКАЛЬНЫЙ pc и по нему же узнаём,
 // прыгнули или вышли из цикла; сравнение именно с «шагом вперёд», а не с
 // целью, потому что цель у пустого цикла может совпасть с pc + 1.
-shim!(shim_get_index, |frames, stack, program, idx, shapes, dst, obj, index| {
+shim!(shim_get_index, |frames,
+                       stack,
+                       program,
+                       idx,
+                       shapes,
+                       dst,
+                       obj,
+                       index| {
     let ov = reg_load(stack, frames[idx].reg_index(obj as u8))?;
     let iv = reg_load(stack, frames[idx].reg_index(index as u8))?;
     let v = ov.get_index(&iv, &shapes.names)?;
@@ -581,7 +658,14 @@ shim!(shim_get_index, |frames, stack, program, idx, shapes, dst, obj, index| {
     Ok(OK)
 });
 
-shim!(shim_set_index, |frames, stack, program, idx, shapes, obj, index, src| {
+shim!(shim_set_index, |frames,
+                       stack,
+                       program,
+                       idx,
+                       shapes,
+                       obj,
+                       index,
+                       src| {
     let ov = reg_load(stack, frames[idx].reg_index(obj as u8))?;
     let iv = reg_load(stack, frames[idx].reg_index(index as u8))?;
     let sv = reg_load(stack, frames[idx].reg_index(src as u8))?;
@@ -589,7 +673,14 @@ shim!(shim_set_index, |frames, stack, program, idx, shapes, obj, index, src| {
     Ok(OK)
 });
 
-shim!(shim_call_builtin, |frames, stack, program, idx, shapes, _a, _b, _c| {
+shim!(shim_call_builtin, |frames,
+                          stack,
+                          program,
+                          idx,
+                          shapes,
+                          _a,
+                          _b,
+                          _c| {
     let (_chunk, _pc, instr) = own_instr(frames, program, idx)?;
     let Instr::CallBuiltin {
         dst,
@@ -625,10 +716,19 @@ fn own_instr<'a>(
     Ok((chunk, pc, *at(&chunk.instrs, pc, "инструкция вне чанка")?))
 }
 
-shim!(shim_get_prop, |frames, stack, program, idx, shapes, _a, _b, _c| {
+shim!(shim_get_prop, |frames,
+                      stack,
+                      program,
+                      idx,
+                      shapes,
+                      _a,
+                      _b,
+                      _c| {
     let (chunk, pc, instr) = own_instr(frames, program, idx)?;
     let Instr::GetProp { dst, obj, name } = instr else {
-        return Err(RtError::InvalidBytecode("шим свойства вызван не на своей инструкции"));
+        return Err(RtError::InvalidBytecode(
+            "шим свойства вызван не на своей инструкции",
+        ));
     };
     let ov = reg_load(stack, frames[idx].reg_index(obj))?;
     // Инлайн-кэш — ячейка ЭТОЙ инструкции, ровно как у интерпретатора:
@@ -643,10 +743,19 @@ shim!(shim_get_prop, |frames, stack, program, idx, shapes, _a, _b, _c| {
     Ok(OK)
 });
 
-shim!(shim_set_prop, |frames, stack, program, idx, shapes, _a, _b, _c| {
+shim!(shim_set_prop, |frames,
+                      stack,
+                      program,
+                      idx,
+                      shapes,
+                      _a,
+                      _b,
+                      _c| {
     let (chunk, pc, instr) = own_instr(frames, program, idx)?;
     let Instr::SetProp { obj, name, src } = instr else {
-        return Err(RtError::InvalidBytecode("шим свойства вызван не на своей инструкции"));
+        return Err(RtError::InvalidBytecode(
+            "шим свойства вызван не на своей инструкции",
+        ));
     };
     let ov = reg_load(stack, frames[idx].reg_index(obj))?;
     let sv = reg_load(stack, frames[idx].reg_index(src))?;
@@ -661,7 +770,14 @@ shim!(shim_set_prop, |frames, stack, program, idx, shapes, _a, _b, _c| {
     Ok(OK)
 });
 
-shim!(shim_call_method, |frames, stack, program, idx, shapes, _a, _b, _c| {
+shim!(shim_call_method, |frames,
+                         stack,
+                         program,
+                         idx,
+                         shapes,
+                         _a,
+                         _b,
+                         _c| {
     let (_chunk, _pc, instr) = own_instr(frames, program, idx)?;
     let Instr::CallMethod {
         dst,
@@ -671,7 +787,9 @@ shim!(shim_call_method, |frames, stack, program, idx, shapes, _a, _b, _c| {
         count,
     } = instr
     else {
-        return Err(RtError::InvalidBytecode("шим метода вызван не на своей инструкции"));
+        return Err(RtError::InvalidBytecode(
+            "шим метода вызван не на своей инструкции",
+        ));
     };
     let ov = reg_load(stack, frames[idx].reg_index(obj))?;
     let args = CallArgs::load(stack, &frames[idx], base, count)?;
@@ -688,16 +806,26 @@ shim!(shim_call_method, |frames, stack, program, idx, shapes, _a, _b, _c| {
     Ok(OK)
 });
 
-shim!(shim_numeric_for_next, |frames, stack, program, idx, shapes, counter, bound, target| {
-    let counter_idx = frames[idx].reg_index(counter as u8);
-    let bound_idx = frames[idx].reg_index(bound as u8);
-    let here = frames[idx].pc;
-    let mut pc = here;
-    numeric_for_next_regular(stack, counter_idx, bound_idx, &mut pc, target as i16)?;
-    Ok(if pc == here + 1 { OK } else { JUMPED })
-});
+shim!(
+    shim_numeric_for_next,
+    |frames, stack, program, idx, shapes, counter, bound, target| {
+        let counter_idx = frames[idx].reg_index(counter as u8);
+        let bound_idx = frames[idx].reg_index(bound as u8);
+        let here = frames[idx].pc;
+        let mut pc = here;
+        numeric_for_next_regular(stack, counter_idx, bound_idx, &mut pc, target as i16)?;
+        Ok(if pc == here + 1 { OK } else { JUMPED })
+    }
+);
 
-shim!(shim_jump_if_true, |frames, stack, program, idx, shapes, cond, _b, _c| {
+shim!(shim_jump_if_true, |frames,
+                          stack,
+                          program,
+                          idx,
+                          shapes,
+                          cond,
+                          _b,
+                          _c| {
     let c = frames[idx].reg_index(cond as u8);
     Ok(if reg_load(stack, c)?.as_condition()? {
         JUMPED

@@ -1331,9 +1331,7 @@ fn build_value(
 ) -> RtResult<BslValue> {
     // Как и в `serialize`: рекурсия возможна только на контейнерах, на
     // скалярных событиях предел не срабатывает никогда.
-    if depth > MAX_JSON_DEPTH
-        && matches!(event, JsonEvent::ObjectStart | JsonEvent::ArrayStart)
-    {
+    if depth > MAX_JSON_DEPTH && matches!(event, JsonEvent::ObjectStart | JsonEvent::ArrayStart) {
         return Err(RtError::StackOverflow {
             what: "слишком глубокая вложенность документа при чтении JSON",
         });
@@ -1393,8 +1391,7 @@ fn build_value(
                 if next == JsonEvent::ArrayEnd {
                     break;
                 }
-                let v =
-                    build_value(next, parser, as_map, date_names, None, rt, cache, depth + 1)?;
+                let v = build_value(next, parser, as_map, date_names, None, rt, cache, depth + 1)?;
                 items.push_element(v)?;
             }
             Ok(items)
@@ -1582,8 +1579,8 @@ mod tests {
         let mut cache = JsonBuildCache::default();
         let mut parser = JsonParser::new(&text);
         let first = parser.next_event().unwrap().unwrap();
-        let e = build_value(first, &mut parser, false, &[], None, &mut rt, &mut cache, 0)
-            .unwrap_err();
+        let e =
+            build_value(first, &mut parser, false, &[], None, &mut rt, &mut cache, 0).unwrap_err();
         assert!(matches!(e, RtError::StackOverflow { .. }), "{e:?}");
     }
 

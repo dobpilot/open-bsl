@@ -133,7 +133,11 @@ impl ShapeTable {
             return id;
         }
         let id = self.shapes.len() as u32;
-        let index = names.iter().enumerate().map(|(i, &n)| (n, i as u32)).collect();
+        let index = names
+            .iter()
+            .enumerate()
+            .map(|(i, &n)| (n, i as u32))
+            .collect();
         let shape = Rc::new(Shape {
             names: names.to_vec(),
             index,
@@ -207,7 +211,12 @@ impl ShapeTable {
         if let Some(next) = current.remove_transitions.borrow().get(&field) {
             return next.clone();
         }
-        let names: Vec<NameId> = current.names.iter().copied().filter(|&n| n != field).collect();
+        let names: Vec<NameId> = current
+            .names
+            .iter()
+            .copied()
+            .filter(|&n| n != field)
+            .collect();
         // Глубина НЕ растёт: `Удалить` не удлиняет цепочку переходов, а
         // укорачивает набор полей, и последующий `Вставить` должен
         // продолжить счёт с того же места, а не получить полный запас
@@ -254,7 +263,9 @@ mod tests {
         let base_id = t.intern(&[a]);
         let base = t.shapes[base_id as usize].clone();
 
-        let via_transition = t.add_field(&base, b).expect("порог не исчерпан одним переходом");
+        let via_transition = t
+            .add_field(&base, b)
+            .expect("порог не исчерпан одним переходом");
         let direct_id = t.intern(&[a, b]);
         let direct = t.shapes[direct_id as usize].clone();
 
@@ -272,7 +283,9 @@ mod tests {
         let without_b = t.remove_field(&start, b);
         assert_eq!(without_b.names, vec![a]);
 
-        let back = t.add_field(&without_b, b).expect("возврат к уже интернированной форме");
+        let back = t
+            .add_field(&without_b, b)
+            .expect("возврат к уже интернированной форме");
         assert!(Rc::ptr_eq(&back, &start));
     }
 
@@ -288,7 +301,9 @@ mod tests {
         let mut runtime = ShapeTable::from_existing(shapes);
         // Тот же переход, что уже проверен в первом тесте, но теперь через
         // ЗАТРАВЛЕННУЮ (не свежую) таблицу — базовая форма пришла снаружи.
-        let extended = runtime.add_field(&seed_shape, b).expect("порог не исчерпан");
+        let extended = runtime
+            .add_field(&seed_shape, b)
+            .expect("порог не исчерпан");
         let direct_id = runtime.intern(&[a, b]);
         assert!(Rc::ptr_eq(&extended, &runtime.shapes[direct_id as usize]));
     }

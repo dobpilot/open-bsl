@@ -284,9 +284,7 @@ fn stmt_uses_dynamic(s: &RStmt) -> bool {
         RStmt::AssignIndex { obj, index, value } => {
             expr_uses_dynamic(obj) || expr_uses_dynamic(index) || expr_uses_dynamic(value)
         }
-        RStmt::AssignField { obj, value, .. } => {
-            expr_uses_dynamic(obj) || expr_uses_dynamic(value)
-        }
+        RStmt::AssignField { obj, value, .. } => expr_uses_dynamic(obj) || expr_uses_dynamic(value),
         RStmt::ExprStmt(e) => expr_uses_dynamic(e),
         RStmt::If {
             cond,
@@ -305,9 +303,7 @@ fn stmt_uses_dynamic(s: &RStmt) -> bool {
         RStmt::ForNumeric { from, to, body, .. } => {
             expr_uses_dynamic(from) || expr_uses_dynamic(to) || block_uses_dynamic(body)
         }
-        RStmt::ForEach { iter, body, .. } => {
-            expr_uses_dynamic(iter) || block_uses_dynamic(body)
-        }
+        RStmt::ForEach { iter, body, .. } => expr_uses_dynamic(iter) || block_uses_dynamic(body),
         RStmt::Return(e) | RStmt::Raise(e) => e.as_ref().is_some_and(expr_uses_dynamic),
         RStmt::Try { body, except_body } => {
             block_uses_dynamic(body) || block_uses_dynamic(except_body)

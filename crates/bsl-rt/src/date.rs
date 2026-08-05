@@ -143,7 +143,9 @@ impl BslDate {
     /// Секунды от эпохи — с проверкой диапазона. `None` — вне
     /// `0001-01-01 .. 9999-12-31 23:59:59`.
     pub fn from_seconds(secs: i64) -> Option<Self> {
-        (EMPTY..=MAX_SECONDS).contains(&secs).then_some(BslDate(secs))
+        (EMPTY..=MAX_SECONDS)
+            .contains(&secs)
+            .then_some(BslDate(secs))
     }
 
     /// `Дата(Год, Месяц, День[, Час, Минута, Секунда])`. `None` — любая
@@ -167,10 +169,7 @@ impl BslDate {
             return None;
         }
         let days = days_from_civil(year, month, day) + DAYS_FROM_0001_TO_1970;
-        let secs = days * SECONDS_PER_DAY
-            + hour as i64 * 3600
-            + minute as i64 * 60
-            + second as i64;
+        let secs = days * SECONDS_PER_DAY + hour as i64 * 3600 + minute as i64 * 60 + second as i64;
         BslDate::from_seconds(secs)
     }
 
@@ -317,7 +316,11 @@ pub const DEFAULT_PATTERN: &str = "дд.ММ.гггг Ч:мм:сс";
 
 impl fmt::Display for BslDate {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", format_pattern(*self, DEFAULT_PATTERN, Locale::default()))
+        write!(
+            f,
+            "{}",
+            format_pattern(*self, DEFAULT_PATTERN, Locale::default())
+        )
     }
 }
 
@@ -384,7 +387,17 @@ const MONTHS_FULL_RU: [&str; 12] = [
 /// у части — полная форма без неё, и это не опечатка платформы, а её
 /// данные. До замера здесь стояли выдуманные «янв, фев, мар» без точек.
 const MONTHS_SHORT_RU: [&str; 12] = [
-    "янв.", "февр.", "март", "апр.", "май", "июнь", "июль", "авг.", "сент.", "окт.", "нояб.",
+    "янв.",
+    "февр.",
+    "март",
+    "апр.",
+    "май",
+    "июнь",
+    "июль",
+    "авг.",
+    "сент.",
+    "окт.",
+    "нояб.",
     "дек.",
 ];
 
@@ -435,32 +448,62 @@ const WEEKDAYS_FULL_EN: [&str; 7] = [
 
 const WEEKDAYS_SHORT_EN: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-
 /// Имена месяцев и дней недели ИЗМЕРЕНЫ на 8.3.27 прогоном
 /// `Формат(Дата(2024, N, 15), "Л=<код>; ДФ=ММММ")` по всем двенадцати
 /// месяцам и семи дням каждой локали. Японские месяцы — числовые с
 /// иероглифом 月, и это не заглушка, а то, что вернула платформа.
 const MONTHS_FULL_DE: [&str; 12] = [
-    "Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober",
-    "November", "Dezember",
+    "Januar",
+    "Februar",
+    "März",
+    "April",
+    "Mai",
+    "Juni",
+    "Juli",
+    "August",
+    "September",
+    "Oktober",
+    "November",
+    "Dezember",
 ];
 const MONTHS_FULL_FR: [&str; 12] = [
-    "janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre",
-    "octobre", "novembre", "décembre",
+    "janvier",
+    "février",
+    "mars",
+    "avril",
+    "mai",
+    "juin",
+    "juillet",
+    "août",
+    "septembre",
+    "octobre",
+    "novembre",
+    "décembre",
 ];
 const MONTHS_FULL_JA: [&str; 12] = [
     "1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月",
 ];
 const WEEKDAYS_FULL_DE: [&str; 7] = [
-    "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag",
+    "Montag",
+    "Dienstag",
+    "Mittwoch",
+    "Donnerstag",
+    "Freitag",
+    "Samstag",
+    "Sonntag",
 ];
 const WEEKDAYS_FULL_FR: [&str; 7] = [
     "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche",
 ];
 const WEEKDAYS_FULL_JA: [&str; 7] = [
-    "月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日", "日曜日",
+    "月曜日",
+    "火曜日",
+    "水曜日",
+    "木曜日",
+    "金曜日",
+    "土曜日",
+    "日曜日",
 ];
-
 
 /// Короткие формы ИЗМЕРЕНЫ так же, как полные, — прогоном по всем месяцам
 /// и дням каждой локали. Французские и немецкие идут с точкой, японские
@@ -708,7 +751,14 @@ mod tests {
         assert_eq!(BslDate::from_seconds(MAX_SECONDS + 1), None);
         let last = BslDate::from_seconds(MAX_SECONDS).unwrap().to_civil();
         assert_eq!(
-            (last.year, last.month, last.day, last.hour, last.minute, last.second),
+            (
+                last.year,
+                last.month,
+                last.day,
+                last.hour,
+                last.minute,
+                last.second
+            ),
             (9999, 12, 31, 23, 59, 59)
         );
         assert_eq!(BslDate::from_civil(10000, 1, 1, 0, 0, 0), None);
@@ -825,7 +875,10 @@ mod tests {
         // Имена месяца и дня недели.
         // ИЗМЕРЕНО: короткий месяц идёт С ТОЧКОЙ.
         assert_eq!(format_pattern(dt, "д МММ гггг", Locale::Ru), "15 янв. 2024");
-        assert_eq!(format_pattern(dt, "д ММММ гггг", Locale::Ru), "15 января 2024");
+        assert_eq!(
+            format_pattern(dt, "д ММММ гггг", Locale::Ru),
+            "15 января 2024"
+        );
         assert_eq!(format_pattern(dt, "дддд", Locale::Ru), "понедельник");
         // Кавычки защищают буквы шаблона от подстановки.
         assert_eq!(format_pattern(dt, "гггг 'год'", Locale::Ru), "2024 год");

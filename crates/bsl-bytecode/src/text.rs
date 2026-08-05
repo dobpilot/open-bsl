@@ -912,9 +912,9 @@ fn parse_const(no: usize, text: &str) -> Result<BslValue> {
             )
         }
         "Перечисление" => {
-            let (enum_name, member) = rest.split_once('.').ok_or_else(|| {
-                TextError::At(no, format!("«{rest}» не вида Перечисление.Член"))
-            })?;
+            let (enum_name, member) = rest
+                .split_once('.')
+                .ok_or_else(|| TextError::At(no, format!("«{rest}» не вида Перечисление.Член")))?;
             let kind = bsl_rt::lookup_enum(enum_name)
                 .ok_or_else(|| TextError::At(no, format!("нет перечисления «{enum_name}»")))?;
             let value = bsl_rt::lookup_member(kind, member).ok_or_else(|| {

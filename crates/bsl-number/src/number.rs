@@ -122,7 +122,6 @@ impl BslNumber {
         BslNumber::small(v as i128, 0)
     }
 
-
     /// Из BigInt-мантиссы и масштаба (используется парсером длинных литералов).
     pub fn from_big_parts(m: BigInt, scale: i32) -> Self {
         BslNumber::big(m, scale)
@@ -203,10 +202,8 @@ impl BslNumber {
     /// превышает защитный предел.
     #[inline]
     pub fn add_assign(&mut self, other: &Self) -> Result<(), NumError> {
-        if let (
-            BslNumber::Small { m: left, scale: 0 },
-            BslNumber::Small { m: right, scale: 0 },
-        ) = (&mut *self, other)
+        if let (BslNumber::Small { m: left, scale: 0 }, BslNumber::Small { m: right, scale: 0 }) =
+            (&mut *self, other)
         {
             if let Some(sum) = left.get().checked_add(right.get()) {
                 *left = M128::new(sum);
@@ -226,9 +223,7 @@ impl BslNumber {
         let s = self.scale().max(other.scale());
         check_scale(s)?;
 
-        if let (Some((a, asc)), Some((b, bsc))) =
-            (self.fast64_parts(), other.fast64_parts())
-        {
+        if let (Some((a, asc)), Some((b, bsc))) = (self.fast64_parts(), other.fast64_parts()) {
             if let (Some(a), Some(b)) = (scale_up_i64(a, s - asc), scale_up_i64(b, s - bsc)) {
                 let result = if negate {
                     a.checked_sub(b)
@@ -241,10 +236,8 @@ impl BslNumber {
             }
         }
 
-        if let (
-            BslNumber::Small { m: am, scale: asc },
-            BslNumber::Small { m: bm, scale: bsc },
-        ) = (self, other)
+        if let (BslNumber::Small { m: am, scale: asc }, BslNumber::Small { m: bm, scale: bsc }) =
+            (self, other)
         {
             // Самый частый путь (целые счётчики, значения одного масштаба):
             // не умножаем обе мантиссы на 10^0. У i128 даже такое
@@ -259,10 +252,15 @@ impl BslNumber {
                     return Ok(BslNumber::small(r, *asc));
                 }
             }
-            if let (Some(a), Some(b)) =
-                (scale_up_i128(am.get(), s - asc), scale_up_i128(bm.get(), s - bsc))
-            {
-                let r = if negate { a.checked_sub(b) } else { a.checked_add(b) };
+            if let (Some(a), Some(b)) = (
+                scale_up_i128(am.get(), s - asc),
+                scale_up_i128(bm.get(), s - bsc),
+            ) {
+                let r = if negate {
+                    a.checked_sub(b)
+                } else {
+                    a.checked_add(b)
+                };
                 if let Some(r) = r {
                     return Ok(BslNumber::small(r, s));
                 }
@@ -291,10 +289,8 @@ impl BslNumber {
             }
         }
 
-        if let (
-            BslNumber::Small { m: am, scale: _ },
-            BslNumber::Small { m: bm, scale: _ },
-        ) = (self, other)
+        if let (BslNumber::Small { m: am, scale: _ }, BslNumber::Small { m: bm, scale: _ }) =
+            (self, other)
         {
             if let Some(r) = am.get().checked_mul(bm.get()) {
                 return Ok(BslNumber::small(r, s));
@@ -324,10 +320,7 @@ impl BslNumber {
                 m: counter,
                 scale: 0,
             },
-            BslNumber::Small {
-                m: limit,
-                scale: 0,
-            },
+            BslNumber::Small { m: limit, scale: 0 },
         ) = (&mut *self, bound)
         {
             if let Some(next) = counter.get().checked_add(1) {
@@ -394,10 +387,8 @@ impl BslNumber {
         let s = self.scale().max(other.scale());
         check_scale(s)?;
 
-        if let (
-            BslNumber::Small { m: am, scale: asc },
-            BslNumber::Small { m: bm, scale: bsc },
-        ) = (self, other)
+        if let (BslNumber::Small { m: am, scale: asc }, BslNumber::Small { m: bm, scale: bsc }) =
+            (self, other)
         {
             if let (Some(a), Some(b)) = (
                 scale_up_i128(am.get(), s - asc),
@@ -418,11 +409,7 @@ impl BslNumber {
         // value = a.m * 10^(target + b.scale - a.scale) / b.m, округлить half-up
         let k = target + other.scale() - self.scale();
 
-        if let (
-            BslNumber::Small { m: am, .. },
-            BslNumber::Small { m: bm, .. },
-        ) = (self, other)
-        {
+        if let (BslNumber::Small { m: am, .. }, BslNumber::Small { m: bm, .. }) = (self, other) {
             let (n, d) = if k >= 0 {
                 (scale_up_i128(am.get(), k), Some(bm.get()))
             } else {
@@ -623,7 +610,10 @@ const INV5: i128 = 0xcccc_cccc_cccc_cccc_cccc_cccc_cccc_cccdu128 as i128;
 /// частное с остатком. Отсюда и `debug_assert`.
 #[inline]
 fn exact_div_by_10(m: i128) -> i128 {
-    debug_assert!(i128_is_divisible_by_10(m), "точное деление применено к неделящемуся");
+    debug_assert!(
+        i128_is_divisible_by_10(m),
+        "точное деление применено к неделящемуся"
+    );
     (m >> 1).wrapping_mul(INV5)
 }
 
@@ -777,7 +767,11 @@ fn div_half_up_i128(n: i128, d: i128) -> Option<i128> {
 
     // Half-up считается по МОДУЛЯМ и означает «от нуля», а не «вверх»:
     // -0.5 даёт -1, как на платформе.
-    let magnitude = if r != 0 && r * 2 >= dd { q.checked_add(1)? } else { q };
+    let magnitude = if r != 0 && r * 2 >= dd {
+        q.checked_add(1)?
+    } else {
+        q
+    };
     if negative {
         // -2^127 представимо, 2^127 — нет, поэтому через беззнаковое.
         if magnitude > (1u128 << 127) {
@@ -886,28 +880,24 @@ impl PartialOrd for BslNumber {
 
 impl Ord for BslNumber {
     fn cmp(&self, other: &Self) -> Ordering {
-        if let (Some((a, asc)), Some((b, bsc))) =
-            (self.fast64_parts(), other.fast64_parts())
-        {
+        if let (Some((a, asc)), Some((b, bsc))) = (self.fast64_parts(), other.fast64_parts()) {
             let scale = asc.max(bsc);
-            if let (Some(a), Some(b)) =
-                (scale_up_i64(a, scale - asc), scale_up_i64(b, scale - bsc))
+            if let (Some(a), Some(b)) = (scale_up_i64(a, scale - asc), scale_up_i64(b, scale - bsc))
             {
                 return a.cmp(&b);
             }
         }
-        if let (
-            BslNumber::Small { m: a, scale: asc },
-            BslNumber::Small { m: b, scale: bsc },
-        ) = (self, other)
+        if let (BslNumber::Small { m: a, scale: asc }, BslNumber::Small { m: b, scale: bsc }) =
+            (self, other)
         {
             if asc == bsc {
                 return a.get().cmp(&b.get());
             }
             let s = (*asc).max(*bsc);
-            if let (Some(x), Some(y)) =
-                (scale_up_i128(a.get(), s - asc), scale_up_i128(b.get(), s - bsc))
-            {
+            if let (Some(x), Some(y)) = (
+                scale_up_i128(a.get(), s - asc),
+                scale_up_i128(b.get(), s - bsc),
+            ) {
                 return x.cmp(&y);
             }
         }
@@ -1072,7 +1062,6 @@ mod tests {
             );
         }
     }
-
 }
 
 #[cfg(test)]
@@ -1100,7 +1089,9 @@ mod exact_division_tests {
         // Линейный конгруэнтный генератор: воспроизводимо и без зависимостей.
         let mut x: u128 = 0x2545_f491_4f6c_dd1d;
         for _ in 0..20000 {
-            x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            x = x
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let v = (x >> 1) as i128;
             sample(v - v % 10);
             sample(-(v - v % 10));
@@ -1148,7 +1139,11 @@ mod division_tests {
     fn hardware_division_matches_the_previous_implementation() {
         let mut cases = 0;
         let mut check = |n: i128, d: i128| {
-            assert_eq!(div_half_up_i128(n, d), reference(n, d), "разошлись на {n} / {d}");
+            assert_eq!(
+                div_half_up_i128(n, d),
+                reference(n, d),
+                "разошлись на {n} / {d}"
+            );
             cases += 1;
         };
 
@@ -1171,7 +1166,9 @@ mod division_tests {
         // Делитель В 64 бита и ЗА 64 бита — это разные ветви новой функции.
         let mut x: u128 = 0x9e37_79b9_7f4a_7c15;
         for _ in 0..20000 {
-            x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            x = x
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let n = (x as i128).wrapping_mul(3);
             let small = ((x >> 64) as u64 | 1) as i128;
             check(n, small);

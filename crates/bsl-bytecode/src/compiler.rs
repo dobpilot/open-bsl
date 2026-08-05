@@ -1,5 +1,5 @@
 use bsl_rt::{BslValue, NameInterner, ShapeTable};
-use bsl_sema::{RExpr, ResolvedParam, RStmt, ResolvedFunction, ResolvedProgram};
+use bsl_sema::{RExpr, RStmt, ResolvedFunction, ResolvedParam, ResolvedProgram};
 use bsl_syntax::{BinaryOp, UnaryOp};
 
 use crate::chunk::{Chunk, ExceptionRange, Program};
@@ -120,7 +120,16 @@ pub fn compile_snippet(
     let mut shapes = ShapeTable::new();
     // Фрагмент всегда получает таблицу имён: он и сам может содержать
     // вложенный `Выполнить`, а стоимость на одноразовом чанке никакая.
-    let chunk = compile_chunk(all_locals, &[], body, &[], callee_params, true, &mut names, &mut shapes)?;
+    let chunk = compile_chunk(
+        all_locals,
+        &[],
+        body,
+        &[],
+        callee_params,
+        true,
+        &mut names,
+        &mut shapes,
+    )?;
     Ok((chunk, names.into_names(), shapes.into_shapes()))
 }
 
@@ -160,7 +169,11 @@ fn compile_chunk(
     };
     c.compile_param_defaults(params)?;
     c.compile_block(body)?;
-    let prop_cache = c.instrs.iter().map(|_| std::cell::RefCell::new(None)).collect();
+    let prop_cache = c
+        .instrs
+        .iter()
+        .map(|_| std::cell::RefCell::new(None))
+        .collect();
     Ok(Chunk {
         param_by_val: params.iter().map(|p| p.by_val).collect(),
         instrs: c.instrs,
@@ -271,7 +284,10 @@ impl<'a> Compiler<'a> {
         for (i, p) in params.iter().enumerate() {
             if let Some(default) = &p.default {
                 let slot = i as u8;
-                let j = self.emit(Instr::JumpIfNotSkipped { src: slot, target: 0 });
+                let j = self.emit(Instr::JumpIfNotSkipped {
+                    src: slot,
+                    target: 0,
+                });
                 self.compile_expr(default, slot)?;
                 let end = self.here();
                 self.patch_jump(j, end);
@@ -344,11 +360,21 @@ impl<'a> Compiler<'a> {
             // `LoadBool`, а не остаётся в регистре от операнда. Короткое
             // замыкание при этом сохраняется: правый операнд не исполняется,
             // если левый уже решил исход.
-            RExpr::Binary { op: BinaryOp::And, lhs, rhs } => {
+            RExpr::Binary {
+                op: BinaryOp::And,
+                lhs,
+                rhs,
+            } => {
                 self.compile_expr(lhs, dst)?;
-                let short = self.emit(Instr::JumpIfFalse { cond: dst, target: 0 });
+                let short = self.emit(Instr::JumpIfFalse {
+                    cond: dst,
+                    target: 0,
+                });
                 self.compile_expr(rhs, dst)?;
-                let checked = self.emit(Instr::JumpIfFalse { cond: dst, target: 0 });
+                let checked = self.emit(Instr::JumpIfFalse {
+                    cond: dst,
+                    target: 0,
+                });
                 self.emit(Instr::LoadBool { dst, val: true });
                 let to_end = self.emit(Instr::Jump { target: 0 });
                 let on_false = self.here();
@@ -358,11 +384,21 @@ impl<'a> Compiler<'a> {
                 self.patch_jump(checked, on_false);
                 self.patch_jump(to_end, end);
             }
-            RExpr::Binary { op: BinaryOp::Or, lhs, rhs } => {
+            RExpr::Binary {
+                op: BinaryOp::Or,
+                lhs,
+                rhs,
+            } => {
                 self.compile_expr(lhs, dst)?;
-                let short = self.emit(Instr::JumpIfTrue { cond: dst, target: 0 });
+                let short = self.emit(Instr::JumpIfTrue {
+                    cond: dst,
+                    target: 0,
+                });
                 self.compile_expr(rhs, dst)?;
-                let checked = self.emit(Instr::JumpIfTrue { cond: dst, target: 0 });
+                let checked = self.emit(Instr::JumpIfTrue {
+                    cond: dst,
+                    target: 0,
+                });
                 self.emit(Instr::LoadBool { dst, val: false });
                 let to_end = self.emit(Instr::Jump { target: 0 });
                 let on_true = self.here();
@@ -435,7 +471,11 @@ impl<'a> Compiler<'a> {
                 self.free_temp(count);
                 match (*method, args.len()) {
                     (bsl_rt::BuiltinMethod::Write, 1) => {
-                        self.emit(Instr::WriteText { dst, obj: o, src: base });
+                        self.emit(Instr::WriteText {
+                            dst,
+                            obj: o,
+                            src: base,
+                        });
                     }
                     (bsl_rt::BuiltinMethod::Close, 0) => {
                         self.emit(Instr::CloseText { dst, obj: o });
@@ -461,7 +501,11 @@ impl<'a> Compiler<'a> {
                 self.compile_expr(obj, o)?;
                 let i = self.alloc_temp()?;
                 self.compile_expr(index, i)?;
-                self.emit(Instr::GetIndex { dst, obj: o, idx: i });
+                self.emit(Instr::GetIndex {
+                    dst,
+                    obj: o,
+                    idx: i,
+                });
                 self.free_temp(2);
             }
             RExpr::Field { obj, name } => {
@@ -715,7 +759,11 @@ impl<'a> Compiler<'a> {
                 self.compile_expr(index, i)?;
                 let v = self.alloc_temp()?;
                 self.compile_expr(value, v)?;
-                self.emit(Instr::SetIndex { obj: o, idx: i, src: v });
+                self.emit(Instr::SetIndex {
+                    obj: o,
+                    idx: i,
+                    src: v,
+                });
                 self.free_temp(3);
             }
             RStmt::AssignField { obj, name, value } => {
@@ -832,7 +880,10 @@ impl<'a> Compiler<'a> {
                     b: bound,
                 });
                 self.free_temp(1);
-                let jf = self.emit(Instr::JumpIfFalse { cond: cmp, target: 0 });
+                let jf = self.emit(Instr::JumpIfFalse {
+                    cond: cmp,
+                    target: 0,
+                });
 
                 self.loop_stack.push(LoopCtx {
                     break_patches: Vec::new(),
@@ -879,7 +930,8 @@ impl<'a> Compiler<'a> {
                     obj: iter_reg,
                 });
                 let idx_reg = self.alloc_temp()?;
-                let zero_k = self.add_const(BslValue::Number(bsl_number::BslNumber::from_i64(0)))?;
+                let zero_k =
+                    self.add_const(BslValue::Number(bsl_number::BslNumber::from_i64(0)))?;
                 self.emit(Instr::LoadConst {
                     dst: idx_reg,
                     k: zero_k,
@@ -893,7 +945,10 @@ impl<'a> Compiler<'a> {
                     b: len_reg,
                 });
                 self.free_temp(1);
-                let jf = self.emit(Instr::JumpIfFalse { cond: cmp, target: 0 });
+                let jf = self.emit(Instr::JumpIfFalse {
+                    cond: cmp,
+                    target: 0,
+                });
 
                 self.emit(Instr::GetIndex {
                     dst: slot,

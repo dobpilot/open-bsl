@@ -70,7 +70,10 @@ pub struct ColumnType {
 
 impl ColumnType {
     pub fn plain(id: crate::TypeId) -> Self {
-        ColumnType { id, quals: Vec::new() }
+        ColumnType {
+            id,
+            quals: Vec::new(),
+        }
     }
 }
 
@@ -188,15 +191,12 @@ impl RowPositions {
             row_ids
                 .iter()
                 .enumerate()
-                .filter(|(position, row_id)| {
-                    usize::try_from(**row_id).ok() != Some(*position)
-                })
+                .filter(|(position, row_id)| usize::try_from(**row_id).ok() != Some(*position))
                 .map(|(position, &row_id)| (row_id, position))
                 .collect(),
         )
     }
 }
-
 
 /// Конверсия значения в целевой примитивный тип; `None` — не конвертится.
 /// Реализованы только измеренные пары (`ADJ.*`): всё прочее — «не
@@ -208,9 +208,13 @@ fn convert_to(value: &BslValue, target: crate::TypeId) -> Option<BslValue> {
         }
         // `Истина` в колонке строк — локализованное представление «Да»
         // (измерено `ADJ.S.BOOL`); тот же текст даёт `Display`.
-        (BslValue::Boolean(b), crate::TypeId::String) => Some(BslValue::Str(
-            BslString::from_str(if *b { "Да" } else { "Нет" }),
-        )),
+        (BslValue::Boolean(b), crate::TypeId::String) => {
+            Some(BslValue::Str(BslString::from_str(if *b {
+                "Да"
+            } else {
+                "Нет"
+            })))
+        }
         (BslValue::Str(s), crate::TypeId::Number) => BslNumber::parse_canonical(&s.to_string())
             .ok()
             .map(BslValue::Number),
@@ -260,8 +264,8 @@ fn apply_qualifiers(value: BslValue, t: &ColumnType) -> BslValue {
                 }
                 nines.push('9');
             }
-            let limit = BslNumber::parse_canonical(&nines)
-                .unwrap_or_else(|_| BslNumber::from_i64(0));
+            let limit =
+                BslNumber::parse_canonical(&nines).unwrap_or_else(|_| BslNumber::from_i64(0));
             let neg_limit = limit.neg();
             if rounded.cmp(&limit) == std::cmp::Ordering::Greater {
                 BslValue::Number(limit)
@@ -556,7 +560,11 @@ impl ValueTableData {
         // Порядок проб конверсии — Строка, Число, Булево: `5` в
         // `Булево,Строка` даёт `"5"`, а `1` в `Булево,Null` — `Истина`
         // (измерено `ADJ.BS.NUM` и `ADJ.BL.NUM`).
-        for probe in [crate::TypeId::String, crate::TypeId::Number, crate::TypeId::Boolean] {
+        for probe in [
+            crate::TypeId::String,
+            crate::TypeId::Number,
+            crate::TypeId::Boolean,
+        ] {
             let Some(t) = types.iter().find(|t| t.id == probe) else {
                 continue;
             };
@@ -896,9 +904,9 @@ impl ValueTableData {
             let mut matching_slot = None;
             while let Some(slot) = candidate {
                 let representative = representatives[slot];
-                let equal = group.iter().all(|&input| {
-                    self.columns[input][representative] == self.columns[input][pos]
-                });
+                let equal = group
+                    .iter()
+                    .all(|&input| self.columns[input][representative] == self.columns[input][pos]);
                 if equal {
                     matching_slot = Some(slot);
                     break;
@@ -1204,8 +1212,14 @@ mod tests {
         assert_eq!(table.row_count(), 2);
         assert_eq!(table.columns[0][0], BslValue::Str(BslString::from_str("а")));
         assert_eq!(table.columns[0][1], BslValue::Str(BslString::from_str("б")));
-        assert_eq!(table.columns[1][0], BslValue::Number(BslNumber::from_i64(4)));
-        assert_eq!(table.columns[1][1], BslValue::Number(BslNumber::from_i64(2)));
+        assert_eq!(
+            table.columns[1][0],
+            BslValue::Number(BslNumber::from_i64(4))
+        );
+        assert_eq!(
+            table.columns[1][1],
+            BslValue::Number(BslNumber::from_i64(2))
+        );
     }
 
     #[test]
@@ -1310,5 +1324,4 @@ mod tests {
             BslValue::Date(crate::date::BslDate::from_civil(1, 1, 1, 7, 8, 9).unwrap())
         );
     }
-
 }

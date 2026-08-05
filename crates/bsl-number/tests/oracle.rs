@@ -9,9 +9,18 @@ fn c(x: &BslNumber) -> String {
 
 #[test]
 fn division_27_digits() {
-    assert_eq!(c(&n("1").div(&n("3")).unwrap()), "0.333333333333333333333333333");
-    assert_eq!(c(&n("2").div(&n("3")).unwrap()), "0.666666666666666666666666667");
-    assert_eq!(c(&n("10").div(&n("3")).unwrap()), "3.333333333333333333333333333");
+    assert_eq!(
+        c(&n("1").div(&n("3")).unwrap()),
+        "0.333333333333333333333333333"
+    );
+    assert_eq!(
+        c(&n("2").div(&n("3")).unwrap()),
+        "0.666666666666666666666666667"
+    );
+    assert_eq!(
+        c(&n("10").div(&n("3")).unwrap()),
+        "3.333333333333333333333333333"
+    );
 }
 
 #[test]
@@ -32,7 +41,9 @@ fn multiplication_is_exact() {
     // ноль произведения; взаимно простая с 10 мантисса нуля не создаёт.
     assert_eq!(c(&n("0.2").mul(&n("0.5")).unwrap()), "0.1");
     assert_eq!(c(&n("0.3").mul(&n("0.5")).unwrap()), "0.15");
-    let big = n("123456789123456789").mul(&n("987654321987654321")).unwrap();
+    let big = n("123456789123456789")
+        .mul(&n("987654321987654321"))
+        .unwrap();
     assert_eq!(c(&big), "121932631356500531347203169112635269");
 }
 
@@ -52,7 +63,10 @@ fn numeric_for_step_has_integer_fast_path_and_decimal_fallback() {
 #[test]
 fn pow_integer_exponent_is_exact() {
     // Через f64 вышло бы 1000000000000000019884624838656.
-    assert_eq!(c(&n("10").pow(&n("30")).unwrap()), "1000000000000000000000000000000");
+    assert_eq!(
+        c(&n("10").pow(&n("30")).unwrap()),
+        "1000000000000000000000000000000"
+    );
 }
 
 #[test]
@@ -215,5 +229,9 @@ fn mul_normalizes_when_one_operand_goes_big() {
         h.finish()
     };
     assert_eq!(product, expected, "равенство зависит от представления");
-    assert_eq!(hash(&product), hash(&expected), "хеш зависит от представления");
+    assert_eq!(
+        hash(&product),
+        hash(&expected),
+        "хеш зависит от представления"
+    );
 }

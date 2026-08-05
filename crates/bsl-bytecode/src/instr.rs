@@ -6,56 +6,138 @@
 /// поэтому усложнять патчинг под относительные прыжки незачем.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Instr {
-    Move { dst: u8, src: u8 },
+    Move {
+        dst: u8,
+        src: u8,
+    },
     /// Чтение переменной уровня модуля (`Перем` в начале файла). `slot` —
     /// АБСОЛЮТНЫЙ индекс в стеке значений, а не номер регистра кадра:
     /// модульные переменные занимают первые слоты кадра верхнего уровня, а
     /// он живёт всё исполнение и стоит в самом низу стека. Поэтому доступ
     /// из любой функции — прямая индексация без `reg_index`.
-    GetModuleVar { dst: u8, slot: u16 },
+    GetModuleVar {
+        dst: u8,
+        slot: u16,
+    },
     /// Запись туда же. Видна и телу модуля, и всем остальным функциям —
     /// ради этого вариант и существует отдельно от `Move`.
-    SetModuleVar { slot: u16, src: u8 },
-    LoadConst { dst: u8, k: u16 },
-    LoadBool { dst: u8, val: bool },
-    LoadUndefined { dst: u8 },
-    LoadNull { dst: u8 },
+    SetModuleVar {
+        slot: u16,
+        src: u8,
+    },
+    LoadConst {
+        dst: u8,
+        k: u16,
+    },
+    LoadBool {
+        dst: u8,
+        val: bool,
+    },
+    LoadUndefined {
+        dst: u8,
+    },
+    LoadNull {
+        dst: u8,
+    },
     /// Пропущенный аргумент вызова (`Ф(1, , 3)`) на месте параметра со
     /// значением по умолчанию — см. `bsl_rt::BslValue::Skipped` и
     /// `JumpIfNotSkipped` ниже.
-    LoadSkipped { dst: u8 },
+    LoadSkipped {
+        dst: u8,
+    },
 
-    Add { dst: u8, a: u8, b: u8 },
-    Sub { dst: u8, a: u8, b: u8 },
-    Mul { dst: u8, a: u8, b: u8 },
-    Div { dst: u8, a: u8, b: u8 },
+    Add {
+        dst: u8,
+        a: u8,
+        b: u8,
+    },
+    Sub {
+        dst: u8,
+        a: u8,
+        b: u8,
+    },
+    Mul {
+        dst: u8,
+        a: u8,
+        b: u8,
+    },
+    Div {
+        dst: u8,
+        a: u8,
+        b: u8,
+    },
     /// Остаток от деления, знак — по ДЕЛИМОМУ (измерено).
-    Mod { dst: u8, a: u8, b: u8 },
-    Neg { dst: u8, src: u8 },
+    Mod {
+        dst: u8,
+        a: u8,
+        b: u8,
+    },
+    Neg {
+        dst: u8,
+        src: u8,
+    },
 
-    Not { dst: u8, src: u8 },
+    Not {
+        dst: u8,
+        src: u8,
+    },
 
-    Eq { dst: u8, a: u8, b: u8 },
-    NotEq { dst: u8, a: u8, b: u8 },
-    Lt { dst: u8, a: u8, b: u8 },
-    Gt { dst: u8, a: u8, b: u8 },
-    Le { dst: u8, a: u8, b: u8 },
-    Ge { dst: u8, a: u8, b: u8 },
+    Eq {
+        dst: u8,
+        a: u8,
+        b: u8,
+    },
+    NotEq {
+        dst: u8,
+        a: u8,
+        b: u8,
+    },
+    Lt {
+        dst: u8,
+        a: u8,
+        b: u8,
+    },
+    Gt {
+        dst: u8,
+        a: u8,
+        b: u8,
+    },
+    Le {
+        dst: u8,
+        a: u8,
+        b: u8,
+    },
+    Ge {
+        dst: u8,
+        a: u8,
+        b: u8,
+    },
 
-    Jump { target: i16 },
+    Jump {
+        target: i16,
+    },
     /// Условие обязано быть `Булево` — VM бросает ошибку типа, если нет
     /// (строгая булевость: `Если 1 Тогда` не приводится, а падает).
-    JumpIfFalse { cond: u8, target: i16 },
+    JumpIfFalse {
+        cond: u8,
+        target: i16,
+    },
     /// Симметрична `JumpIfFalse`: прыгает, когда `cond` — `Истина`. Нужна
     /// для короткого замыкания `ИЛИ` (см. `compiler.rs`) — та же строгая
     /// проверка на `Булево`, что и у `JumpIfFalse`.
-    JumpIfTrue { cond: u8, target: i16 },
+    JumpIfTrue {
+        cond: u8,
+        target: i16,
+    },
     /// Пролог параметров по умолчанию (см. `compiler.rs`, `compile_chunk`):
     /// прыгает, если `src` НЕ `BslValue::Skipped` (аргумент был передан по-
     /// настоящему — пропускаем код, вычисляющий значение по умолчанию).
     /// Падает через, если `src` — Skipped, и следующая инструкция(и)
     /// вычисляет значение по умолчанию прямо в тот же регистр.
-    JumpIfNotSkipped { src: u8, target: i16 },
+    JumpIfNotSkipped {
+        src: u8,
+        target: i16,
+    },
     /// Back-edge числового `Для`: инкремент, сравнение с границей и
     /// условный переход к началу тела выполняются за один dispatch.
     NumericForNext {
@@ -89,10 +171,20 @@ pub enum Instr {
     },
     /// `None` — неявный возврат (нет `Возврат` или он без выражения):
     /// значение результата — `Неопределено`.
-    Return { src: Option<u8> },
+    Return {
+        src: Option<u8>,
+    },
 
-    GetIndex { dst: u8, obj: u8, idx: u8 },
-    SetIndex { obj: u8, idx: u8, src: u8 },
+    GetIndex {
+        dst: u8,
+        obj: u8,
+        idx: u8,
+    },
+    SetIndex {
+        obj: u8,
+        idx: u8,
+        src: u8,
+    },
     /// `name` — интернированное имя поля, индекс в `Program::names`.
     /// Инлайн-кэш здесь есть, но не в самой инструкции: `Chunk::prop_cache`
     /// держит по ячейке на каждую позицию байт-кода, и `get_field_cached`/
@@ -106,14 +198,26 @@ pub enum Instr {
     /// могли быть интернированы на этапе компиляции) VM сама разрешает
     /// `NameId` обратно в текст через `Program::names` и идёт по
     /// `get_field_by_name` — см. `bsl-vm`, инструкция об этом не знает.
-    GetProp { dst: u8, obj: u8, name: bsl_rt::NameId },
-    SetProp { obj: u8, name: bsl_rt::NameId, src: u8 },
+    GetProp {
+        dst: u8,
+        obj: u8,
+        name: bsl_rt::NameId,
+    },
+    SetProp {
+        obj: u8,
+        name: bsl_rt::NameId,
+        src: u8,
+    },
 
     /// `Новый Массив(d1, d2, ...)`: регистры `base..base+count` держат
     /// размеры измерений (числа), а не готовые элементы — VM строит
     /// вложенные массивы из них (`Новый Массив(3, 4)` — массив из 3
     /// массивов по 4).
-    NewArray { dst: u8, base: u8, count: u8 },
+    NewArray {
+        dst: u8,
+        base: u8,
+        count: u8,
+    },
     /// `shape` — индекс в `Program::shapes` (форма интернирована на
     /// этапе компиляции по списку полей константной строки конструктора,
     /// см. `bsl-sema`). Регистры `base..base+count` — значения полей в
@@ -125,31 +229,59 @@ pub enum Instr {
         count: u8,
     },
     /// `Новый ТаблицаЗначений()` — колонки заводятся отдельно.
-    NewTable { dst: u8 },
-    NewTypeDescription { dst: u8, names: u8 },
-    NewValueComparison { dst: u8 },
+    NewTable {
+        dst: u8,
+    },
+    NewTypeDescription {
+        dst: u8,
+        names: u8,
+    },
+    NewValueComparison {
+        dst: u8,
+    },
     /// `Новый Соответствие()` — пары заводятся отдельно, через `Вставить`.
-    NewMap { dst: u8 },
+    NewMap {
+        dst: u8,
+    },
     /// `Новый ЗаписьТекста(Путь)`: `path` содержит строковый путь, а `dst`
     /// получает созданный объект записи.
-    NewTextWriter { dst: u8, path: u8 },
+    NewTextWriter {
+        dst: u8,
+        path: u8,
+    },
     /// `Новый ЧтениеJSON` / `Новый ЗаписьJSON` — аргументов у обоих нет:
     /// источник и приёмник назначаются отдельным вызовом
     /// (`УстановитьСтроку`/`ОткрытьФайл`), ровно как в платформе.
-    NewJsonReader { dst: u8 },
-    NewJsonWriter { dst: u8 },
+    NewJsonReader {
+        dst: u8,
+    },
+    NewJsonWriter {
+        dst: u8,
+    },
     /// `Новый ПараметрыЗаписиJSON([ПереносСтрок][, СимволыОтступа])`.
     /// Пропущенные позиции приходят регистрами со значением
     /// `Неопределено` — резолвер добивает их так же, как хвостовые
     /// аргументы встроенных функций.
-    NewJsonWriterSettings { dst: u8, line_break: u8, indent: u8 },
+    NewJsonWriterSettings {
+        dst: u8,
+        line_break: u8,
+        indent: u8,
+    },
     /// `Новый ЧтениеXML` / `Новый ЗаписьXML` — как и у JSON, без
     /// аргументов: источник и приёмник назначаются отдельным вызовом.
     /// `Новый ТекстовыйДокумент` — без аргументов.
-    NewTextDocument { dst: u8 },
-    NewSpreadDocument { dst: u8 },
-    NewXmlReader { dst: u8 },
-    NewXmlWriter { dst: u8 },
+    NewTextDocument {
+        dst: u8,
+    },
+    NewSpreadDocument {
+        dst: u8,
+    },
+    NewXmlReader {
+        dst: u8,
+    },
+    NewXmlWriter {
+        dst: u8,
+    },
     /// `Новый ПараметрыЗаписиXML([Кодировка][, Версия][, ИспользоватьОтступ])`.
     NewXmlWriterSettings {
         dst: u8,
@@ -159,14 +291,19 @@ pub enum Instr {
     },
     /// Длина коллекции — используется компиляцией `Для Каждого` (индексный
     /// цикл поверх этой длины) и `Количество()`.
-    CollectionLen { dst: u8, obj: u8 },
+    CollectionLen {
+        dst: u8,
+        obj: u8,
+    },
 
     /// `ВызватьИсключение <выражение>;`. `None` — голая форма (повторно
     /// бросить пойманное исключение); VM подставляет текущее пойманное
     /// значение, а не какое-то конкретное здесь — решается в рантайме, не
     /// в компиляторе, потому что это зависит от того, что поймано ВЫШЕ по
     /// стеку кадров, а не от места, где стоит `ВызватьИсключение`.
-    Raise { src: Option<u8> },
+    Raise {
+        src: Option<u8>,
+    },
 
     /// Встроенная функция (`Sqrt`, `Pow`, `Message`, ...) — всегда по
     /// значению, аргументы в регистрах `base..base+count`.
@@ -189,9 +326,16 @@ pub enum Instr {
     },
     /// Горячий путь `ЗаписьТекста.Записать(строка)`: без упаковки
     /// аргумента в `Vec` и общей диспетчеризации методов.
-    WriteText { dst: u8, obj: u8, src: u8 },
+    WriteText {
+        dst: u8,
+        obj: u8,
+        src: u8,
+    },
     /// Горячий путь `ЗаписьТекста.Закрыть()`.
-    CloseText { dst: u8, obj: u8 },
+    CloseText {
+        dst: u8,
+        obj: u8,
+    },
 
     /// `Выполнить(<строка в src>)` (`is_eval = false`, `dst` не используется
     /// осмысленно — результат всегда `Неопределено`) или
@@ -202,7 +346,11 @@ pub enum Instr {
     /// новые имена, объявленные во фрагменте, не переживают вызов —
     /// материализованный кадр с растущей таблицей имён (как в брифе)
     /// для процедур/функций пока не сделан, это дальнейшая работа.
-    RunDynamic { src: u8, dst: u8, is_eval: bool },
+    RunDynamic {
+        src: u8,
+        dst: u8,
+        is_eval: bool,
+    },
 }
 
 /// Режим передачи одного аргумента вызова — статическое свойство и

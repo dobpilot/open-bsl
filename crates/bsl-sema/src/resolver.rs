@@ -89,10 +89,7 @@ pub fn resolve_program(items: &[Item]) -> Result<ResolvedProgram, SemaError> {
             }
             Item::VarDecl(vd) => {
                 for name in &vd.names {
-                    if !module_vars
-                        .iter()
-                        .any(|n| n.eq_ignore_ascii_case(name))
-                    {
+                    if !module_vars.iter().any(|n| n.eq_ignore_ascii_case(name)) {
                         module_vars.push(name.clone());
                     }
                 }
@@ -139,7 +136,10 @@ pub fn resolve_program(items: &[Item]) -> Result<ResolvedProgram, SemaError> {
                 Some(e) => Some(r.resolve_expr(e)?),
                 None => None,
             };
-            resolved_params.push(ResolvedParam { by_val: p.by_val, default });
+            resolved_params.push(ResolvedParam {
+                by_val: p.by_val,
+                default,
+            });
         }
         functions.push(ResolvedFunction {
             name: name.clone(),
@@ -802,11 +802,7 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn resolve_call(
-        &mut self,
-        callee: &AExpr,
-        args: &[Option<AExpr>],
-    ) -> Result<RExpr, SemaError> {
+    fn resolve_call(&mut self, callee: &AExpr, args: &[Option<AExpr>]) -> Result<RExpr, SemaError> {
         match callee {
             AExpr::Ident(name) => {
                 if let Some((index, has_default)) = self
@@ -900,7 +896,8 @@ impl<'a> Resolver<'a> {
                         args: rargs,
                     });
                 }
-                if name.eq_ignore_ascii_case("Вычислить") || name.eq_ignore_ascii_case("Eval") {
+                if name.eq_ignore_ascii_case("Вычислить") || name.eq_ignore_ascii_case("Eval")
+                {
                     if args.len() != 1 {
                         return Err(SemaError::ArgumentCountMismatch {
                             name: name.clone(),
@@ -971,8 +968,7 @@ impl<'a> Resolver<'a> {
                     // XML. Обход читателя и закрытие элемента — без
                     // аргументов, остальное — по числу измеренных
                     // параметров.
-                    bsl_rt::BuiltinMethod::GetText
-                    | bsl_rt::BuiltinMethod::LineCount => Some(0),
+                    bsl_rt::BuiltinMethod::GetText | bsl_rt::BuiltinMethod::LineCount => Some(0),
                     bsl_rt::BuiltinMethod::SetText
                     | bsl_rt::BuiltinMethod::GetLine
                     | bsl_rt::BuiltinMethod::AddLine
@@ -1309,7 +1305,10 @@ mod tests {
         let prog = parse("Функция Ф(а, б = 100)\nВозврат а;\nКонецФункции\nx = Ф(1, );").unwrap();
         let resolved = resolve_program(&prog.items).unwrap();
         match &resolved.top_level.body[0] {
-            RStmt::AssignLocal { value: RExpr::Call { args, .. }, .. } => {
+            RStmt::AssignLocal {
+                value: RExpr::Call { args, .. },
+                ..
+            } => {
                 assert_eq!(args[1], RExpr::Skipped);
             }
             other => panic!("expected AssignLocal(Call), got {other:?}"),
@@ -1322,16 +1321,21 @@ mod tests {
     /// (`ЗаполнитьЗначенияСвойств(П, И, , "Б")`) правило и заведено.
     #[test]
     fn skipping_a_builtin_argument_resolves_to_undefined() {
-        let resolved = resolve_src(
-            "П = Новый Структура(\"А\", 1);\nЗаполнитьЗначенияСвойств(П, П, , \"Б\");",
-        );
+        let resolved =
+            resolve_src("П = Новый Структура(\"А\", 1);\nЗаполнитьЗначенияСвойств(П, П, , \"Б\");");
         let RStmt::ExprStmt(RExpr::CallBuiltinFn { builtin, args }) = &resolved.body[1] else {
-            panic!("ожидался вызов встроенной функции, получено {:?}", resolved.body[1]);
+            panic!(
+                "ожидался вызов встроенной функции, получено {:?}",
+                resolved.body[1]
+            );
         };
         assert_eq!(*builtin, bsl_rt::BuiltinFn::FillPropertyValues);
         assert_eq!(args.len(), 4);
         assert_eq!(args[2], RExpr::Undefined, "пропущенная позиция");
-        assert!(matches!(args[3], RExpr::Str(_)), "последняя позиция на месте");
+        assert!(
+            matches!(args[3], RExpr::Str(_)),
+            "последняя позиция на месте"
+        );
     }
 
     #[test]
@@ -1420,9 +1424,8 @@ mod tests {
 
     #[test]
     fn index_and_field_assignment_targets() {
-        let r = resolve_src(
-            "a = Новый Массив(1);\ns = Новый Структура(\"x\");\na[0] = 1;\ns.x = 2;",
-        );
+        let r =
+            resolve_src("a = Новый Массив(1);\ns = Новый Структура(\"x\");\na[0] = 1;\ns.x = 2;");
         assert!(matches!(r.body[2], RStmt::AssignIndex { .. }));
         assert!(matches!(r.body[3], RStmt::AssignField { .. }));
     }
@@ -1442,10 +1445,15 @@ mod tests {
 
     #[test]
     fn raise_with_and_without_expression() {
-        let r = resolve_src("Попытка\nВызватьИсключение \"ошибка\";\nИсключение\nВызватьИсключение;\nКонецПопытки");
+        let r = resolve_src(
+            "Попытка\nВызватьИсключение \"ошибка\";\nИсключение\nВызватьИсключение;\nКонецПопытки",
+        );
         match &r.body[0] {
             RStmt::Try { body, except_body } => {
-                assert_eq!(body[0], RStmt::Raise(Some(RExpr::Str("ошибка".to_string()))));
+                assert_eq!(
+                    body[0],
+                    RStmt::Raise(Some(RExpr::Str("ошибка".to_string())))
+                );
                 assert_eq!(except_body[0], RStmt::Raise(None));
             }
             other => panic!("expected Try, got {other:?}"),
@@ -1455,10 +1463,7 @@ mod tests {
     #[test]
     fn execute_resolves_to_rstmt_execute() {
         let r = resolve_src(r#"Выполнить("x = 1");"#);
-        assert_eq!(
-            r.body[0],
-            RStmt::Execute(RExpr::Str("x = 1".to_string()))
-        );
+        assert_eq!(r.body[0], RStmt::Execute(RExpr::Str("x = 1".to_string())));
     }
 
     #[test]
@@ -1491,6 +1496,12 @@ mod tests {
                 },
             }
         );
-        assert_eq!(body[1], RStmt::AssignLocal { slot: 1, value: RExpr::Number(BslNumber::from_i64(2)) });
+        assert_eq!(
+            body[1],
+            RStmt::AssignLocal {
+                slot: 1,
+                value: RExpr::Number(BslNumber::from_i64(2))
+            }
+        );
     }
 }

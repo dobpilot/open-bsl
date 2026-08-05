@@ -132,7 +132,6 @@ fn main() {
     // Только здесь, не в cargo test — растущий масштаб делает каждый шаг
     // медленнее предыдущего, так что абсолютное время мало что говорит без
     // сравнения с `nbody (3 шага Advance)` выше на той же машине.
-    let nbody_perf_src =
-        include_str!("../../../tests/conformance/fixtures/n-body-perf.bsl");
+    let nbody_perf_src = include_str!("../../../tests/conformance/fixtures/n-body-perf.bsl");
     time_it("nbody (200 шагов Advance)", nbody_perf_src);
 }

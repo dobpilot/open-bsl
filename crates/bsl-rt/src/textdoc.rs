@@ -207,9 +207,9 @@ impl TextDocData {
         drop(index);
         let lines = Self::split_lines(&source);
         let wanted = name.trim().to_uppercase();
-        let start = lines.iter().position(|l| {
-            Self::area_name(l).is_some_and(|n| n.to_uppercase() == wanted)
-        });
+        let start = lines
+            .iter()
+            .position(|l| Self::area_name(l).is_some_and(|n| n.to_uppercase() == wanted));
         let Some(start) = start else {
             return Err(bad(format!("область «{name}» в тексте не найдена")));
         };
@@ -772,7 +772,9 @@ mod tests {
         // Один и тот же параметр подставляется в каждое вхождение.
         let d = doc("#Область Т\n[А]-[А]\n#КонецОбласти");
         assert_eq!(
-            d.area("Т").unwrap().render(&[("А".to_string(), "х".to_string())]),
+            d.area("Т")
+                .unwrap()
+                .render(&[("А".to_string(), "х".to_string())]),
             "х  -х  \n"
         );
 

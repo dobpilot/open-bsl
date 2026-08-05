@@ -4,7 +4,9 @@ fn tokenize(src: &str) -> Vec<TokenKind> {
     let mut lexer = Lexer::new(src);
     let mut out = Vec::new();
     loop {
-        let tok = lexer.next_token().unwrap_or_else(|e| panic!("lex error: {e:?}"));
+        let tok = lexer
+            .next_token()
+            .unwrap_or_else(|e| panic!("lex error: {e:?}"));
         let done = tok.kind == TokenKind::Eof;
         out.push(tok.kind);
         if done {
@@ -19,7 +21,11 @@ fn nbody_fixture_tokenizes_without_errors() {
     // 2 ревью, n-body-precision.bsl несёт ту же грамматику.
     let src = include_str!("../../../tests/conformance/fixtures/n-body-precision.bsl");
     let toks = tokenize(src);
-    assert!(toks.len() > 500, "expected a substantial token stream, got {}", toks.len());
+    assert!(
+        toks.len() > 500,
+        "expected a substantial token stream, got {}",
+        toks.len()
+    );
 
     let has = |kw: Keyword| toks.contains(&TokenKind::Keyword(kw));
     assert!(has(Keyword::Function));

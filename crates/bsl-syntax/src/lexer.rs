@@ -357,7 +357,10 @@ mod tests {
     #[test]
     fn string_literal_with_escaped_quote() {
         let toks = lex_all(r#""a""b""#).unwrap();
-        assert_eq!(toks, vec![TokenKind::String("a\"b".to_string()), TokenKind::Eof]);
+        assert_eq!(
+            toks,
+            vec![TokenKind::String("a\"b".to_string()), TokenKind::Eof]
+        );
     }
 
     #[test]

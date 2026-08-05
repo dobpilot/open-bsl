@@ -102,10 +102,9 @@ impl EnumKind {
             EnumKind::JsonLineBreak => ("ПереносСтрокJSON", "JSONLineBreak"),
             EnumKind::JsonDateFormat => ("ФорматДатыJSON", "JSONDateFormat"),
             EnumKind::XmlNodeType => ("ТипУзлаXML", "XMLNodeType"),
-            EnumKind::SpreadFileType => (
-                "ТипФайлаТабличногоДокумента",
-                "SpreadsheetDocumentFileType",
-            ),
+            EnumKind::SpreadFileType => {
+                ("ТипФайлаТабличногоДокумента", "SpreadsheetDocumentFileType")
+            }
             EnumKind::DrawingKind => (
                 "ТипРисункаТабличногоДокумента",
                 "SpreadsheetDocumentDrawingType",

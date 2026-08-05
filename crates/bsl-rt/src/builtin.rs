@@ -311,7 +311,10 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("ЗначениеВСтрокуВнутр", BuiltinFn::ValueToStringInternal),
     ("ValueToStringInternal", BuiltinFn::ValueToStringInternal),
     ("ЗначениеИзСтрокиВнутр", BuiltinFn::ValueFromStringInternal),
-    ("ValueFromStringInternal", BuiltinFn::ValueFromStringInternal),
+    (
+        "ValueFromStringInternal",
+        BuiltinFn::ValueFromStringInternal,
+    ),
     ("ЗначениеВФайл", BuiltinFn::ValueToFile),
     ("ValueToFile", BuiltinFn::ValueToFile),
     ("ЗначениеИзФайла", BuiltinFn::ValueFromFile),
@@ -882,7 +885,9 @@ pub fn call_builtin_method(
             )))
         }
         BuiltinMethod::Add => match args {
-            _ if crate::spreadsheet::is_drawings(obj) => crate::spreadsheet::drawings_add(obj, args),
+            _ if crate::spreadsheet::is_drawings(obj) => {
+                crate::spreadsheet::drawings_add(obj, args)
+            }
             [] => obj.table_add_row(),
             [v] => match obj.push_element(v.clone()) {
                 Ok(()) => Ok(BslValue::Undefined),

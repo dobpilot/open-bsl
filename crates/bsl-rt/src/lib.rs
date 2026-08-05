@@ -7,6 +7,7 @@
 mod builtin;
 mod date;
 mod deflate;
+pub mod encoding;
 mod enums;
 mod fill;
 mod interner;
@@ -19,15 +20,14 @@ mod runtime_shapes;
 mod shape;
 mod spreadsheet;
 mod spreadsheet_template;
-mod xlsx;
-mod zip;
 mod string;
 mod table;
-pub mod encoding;
 mod textdoc;
 mod types;
 mod vstr;
+mod xlsx;
 mod xml;
+mod zip;
 
 use std::cmp::Ordering;
 use std::fmt;
@@ -41,40 +41,36 @@ pub use builtin::{
     call_builtin_fn, call_builtin_fn_ctx, call_builtin_method, call_builtin_method_ctx, BuiltinFn,
     BuiltinMethod, BUILTIN_FN_NAMES, BUILTIN_METHOD_NAMES,
 };
-pub use enums::{
-    lookup_enum, lookup_member, members_of, EnumKind, EnumValue, ENUM_NAMES,
-};
-pub use json::{
-    JsonEvent, JsonLineBreak, JsonParser, JsonWriter, JsonWriterSettings,
-};
-pub use textdoc::{
-    append_rendered as textdoc_append_rendered, area_for_output as textdoc_area_for_output,
-    is_text_document as textdoc_is_document, write_file as textdoc_write_file, TextDocData,
-};
-pub use spreadsheet::{
-    from_mxl_bytes, is_area as spread_is_area, is_spread_document as spread_is_document,
-    set_detail as spread_set_detail, set_value as spread_set_value, read as spread_read, new_document as new_spread_document,
-    output as spread_output, to_mxl_bytes, to_txt_bytes, write as spread_write,
-    write_file as spread_write_file, AreaKind, Color, FileKind, Line, LineStyle, Font, HAlign, Merge,
-    NamedArea, Rect, SpreadDocData, VAlign,
-};
-pub use spreadsheet_template::from_template_xml;
-pub use xlsx::to_xlsx_bytes;
-pub use xml::{XmlAttr, XmlEvent, XmlParser, XmlWriter, XmlWriterSettings};
 pub use date::{
     format_long as format_date_long, format_pattern as format_date_pattern, BslDate, DateBoundary,
     DatePart, DEFAULT_PATTERN as DEFAULT_DATE_PATTERN,
 };
+pub use enums::{lookup_enum, lookup_member, members_of, EnumKind, EnumValue, ENUM_NAMES};
 pub use interner::{NameId, NameInterner};
+pub use json::{JsonEvent, JsonLineBreak, JsonParser, JsonWriter, JsonWriterSettings};
 pub use locale::{Locale, NBSP};
 pub use map::MapData;
 pub use object::{BslObject, StructureStorage};
 pub use runtime_shapes::RuntimeShapes;
 pub use shape::{Shape, ShapeTable, MAX_SHAPE_TRANSITIONS};
+pub use spreadsheet::{
+    from_mxl_bytes, is_area as spread_is_area, is_spread_document as spread_is_document,
+    new_document as new_spread_document, output as spread_output, read as spread_read,
+    set_detail as spread_set_detail, set_value as spread_set_value, to_mxl_bytes, to_txt_bytes,
+    write as spread_write, write_file as spread_write_file, AreaKind, Color, FileKind, Font,
+    HAlign, Line, LineStyle, Merge, NamedArea, Rect, SpreadDocData, VAlign,
+};
+pub use spreadsheet_template::from_template_xml;
 pub use string::{BslString, MAX_TEMPLATE_ARGS};
 pub use table::{ColumnVstr, ValueTableData};
-pub use vstr::{value_from_string_internal, value_to_string_internal};
+pub use textdoc::{
+    append_rendered as textdoc_append_rendered, area_for_output as textdoc_area_for_output,
+    is_text_document as textdoc_is_document, write_file as textdoc_write_file, TextDocData,
+};
 pub use types::TypeId;
+pub use vstr::{value_from_string_internal, value_to_string_internal};
+pub use xlsx::to_xlsx_bytes;
+pub use xml::{XmlAttr, XmlEvent, XmlParser, XmlWriter, XmlWriterSettings};
 
 #[derive(Debug, Clone)]
 pub enum BslValue {
@@ -180,7 +176,9 @@ pub enum RtError {
     /// `ДобавитьМесяц`. Заворачивать в другой конец диапазона нельзя:
     /// молчаливое `9999-12-31 + 1 сутки = 0001-01-01` дало бы неверные
     /// сравнения там, где ожидалась ошибка.
-    DateOutOfRange { op: &'static str },
+    DateOutOfRange {
+        op: &'static str,
+    },
     /// Метод объекта существует, но не для этого типа получателя, либо
     /// вызван не с тем числом аргументов для этого типа (некоторые методы,
     /// например `Добавить`, полиморфны: означают разное в зависимости от
@@ -211,7 +209,9 @@ pub enum RtError {
     /// перехватываемая `Попыткой` ошибка, а не паника: одно из мест, где
     /// вход пользователя (сколь угодно глубокая рекурсия или циклическая
     /// структура) не имеет права ронять процесс.
-    StackOverflow { what: &'static str },
+    StackOverflow {
+        what: &'static str,
+    },
     /// `Формат(x, "Л=de_DE")` — локаль, которой здесь нет. Поддержаны
     /// русская и английская, см. `Locale` (там же метка о том, что набор
     /// кодов НЕ ИЗМЕРЕН).
@@ -258,10 +258,9 @@ impl fmt::Display for RtError {
             RtError::DynamicError(msg) => write!(f, "{msg}"),
             RtError::InvalidBytecode(what) => write!(f, "некорректный байт-код: {what}"),
             RtError::IoError(msg) => write!(f, "ошибка файлового ввода-вывода: {msg}"),
-            RtError::UnsupportedLocale(code) => write!(
-                f,
-                "локаль «{code}» не поддержана: есть только ru и en"
-            ),
+            RtError::UnsupportedLocale(code) => {
+                write!(f, "локаль «{code}» не поддержана: есть только ru и en")
+            }
             RtError::StackOverflow { what } => {
                 write!(f, "превышена глубина стека: {what}")
             }
@@ -446,7 +445,9 @@ impl BslValue {
     }
 
     pub fn pow(&self, exp: &Self) -> RtResult<Self> {
-        Ok(BslValue::Number(self.as_number("Pow")?.pow(exp.as_number("Pow")?)?))
+        Ok(BslValue::Number(
+            self.as_number("Pow")?.pow(exp.as_number("Pow")?)?,
+        ))
     }
 
     pub fn ln(&self) -> RtResult<Self> {
@@ -648,11 +649,15 @@ impl BslValue {
     }
 
     pub fn str_left(&self, len: &Self) -> RtResult<Self> {
-        Ok(BslValue::Str(self.as_str("Лев")?.left(len.as_usize("Лев")?)))
+        Ok(BslValue::Str(
+            self.as_str("Лев")?.left(len.as_usize("Лев")?),
+        ))
     }
 
     pub fn str_right(&self, len: &Self) -> RtResult<Self> {
-        Ok(BslValue::Str(self.as_str("Прав")?.right(len.as_usize("Прав")?)))
+        Ok(BslValue::Str(
+            self.as_str("Прав")?.right(len.as_usize("Прав")?),
+        ))
     }
 
     /// `Сред(Строка, Начало[, Длина])` — `Неопределено` на месте длины
@@ -705,8 +710,12 @@ impl BslValue {
 
     /// `СтрРазделить(Строка, Разделитель)` -> `Массив` строк.
     pub fn str_split(&self, sep: &Self) -> RtResult<Self> {
-        let parts = self.as_str("СтрРазделить")?.split(sep.as_str("СтрРазделить")?);
-        Ok(BslValue::new_array(parts.into_iter().map(BslValue::Str).collect()))
+        let parts = self
+            .as_str("СтрРазделить")?
+            .split(sep.as_str("СтрРазделить")?);
+        Ok(BslValue::new_array(
+            parts.into_iter().map(BslValue::Str).collect(),
+        ))
     }
 
     /// `СтрСоединить(Массив, Разделитель)`. Не-строковые элементы массива
@@ -898,7 +907,9 @@ impl BslValue {
             .unwrap_or(0);
         BslDate::from_seconds(secs + date::UNIX_EPOCH_SECONDS)
             .map(BslValue::Date)
-            .ok_or(RtError::DateOutOfRange { op: "ТекущаяДата" })
+            .ok_or(RtError::DateOutOfRange {
+                op: "ТекущаяДата"
+            })
     }
 
     /// `ТекущаяУниверсальнаяДатаВМиллисекундах()` — целое число
@@ -1143,7 +1154,11 @@ impl BslValue {
     pub fn new_type_description(names: &BslValue) -> RtResult<Self> {
         let names = names.as_str("Новый ОписаниеТипов")?.to_string();
         let mut types = Vec::new();
-        for name in names.split(',').map(str::trim).filter(|name| !name.is_empty()) {
+        for name in names
+            .split(',')
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+        {
             let ty = TypeId::lookup(name).ok_or_else(|| RtError::UnknownType(name.to_string()))?;
             if !types.contains(&ty) {
                 types.push(ty);
@@ -1157,7 +1172,9 @@ impl BslValue {
     }
 
     pub fn new_map() -> Self {
-        BslValue::Object(Rc::new(BslObject::Map(std::cell::RefCell::new(MapData::new()))))
+        BslValue::Object(Rc::new(BslObject::Map(std::cell::RefCell::new(
+            MapData::new(),
+        ))))
     }
 
     /// `Закрыть()` — полиморфен по получателю: `ЗаписьТекста` сбрасывает
@@ -1257,7 +1274,9 @@ impl BslValue {
     }
 
     pub fn new_json_writer() -> Self {
-        BslValue::Object(Rc::new(BslObject::JsonWriter(std::cell::RefCell::new(None))))
+        BslValue::Object(Rc::new(BslObject::JsonWriter(std::cell::RefCell::new(
+            None,
+        ))))
     }
 
     /// `Новый ПараметрыЗаписиJSON([ПереносСтрок][, СимволыОтступа])`.
@@ -1313,8 +1332,8 @@ impl BslValue {
     /// или [`RtError::IoError`], если файл невозможно создать.
     pub fn new_text_writer(path: &BslValue) -> RtResult<Self> {
         let path = path.as_str("Новый ЗаписьТекста")?.to_string();
-        let file = std::fs::File::create(&path)
-            .map_err(|e| RtError::IoError(format!("{path}: {e}")))?;
+        let file =
+            std::fs::File::create(&path).map_err(|e| RtError::IoError(format!("{path}: {e}")))?;
         let mut buffered = std::io::BufWriter::new(file);
         std::io::Write::write_all(&mut buffered, &[0xef, 0xbb, 0xbf])
             .map_err(|e| RtError::IoError(format!("{path}: {e}")))?;
@@ -1342,10 +1361,10 @@ impl BslValue {
                     let mut writer = writer.borrow_mut();
                     text.write_utf8_crlf(
                         writer
-                        .as_mut()
-                        .ok_or_else(|| RtError::IoError("файл уже закрыт".to_string()))?,
+                            .as_mut()
+                            .ok_or_else(|| RtError::IoError("файл уже закрыт".to_string()))?,
                     )
-                        .map_err(|e| RtError::IoError(e.to_string()))?;
+                    .map_err(|e| RtError::IoError(e.to_string()))?;
                     Ok(BslValue::Undefined)
                 }
                 _ => Err(RtError::MethodNotApplicable {
@@ -1373,7 +1392,9 @@ impl BslValue {
             BslValue::Object(obj) => match &**obj {
                 BslObject::TextWriter(writer) => {
                     if let Some(mut writer) = writer.borrow_mut().take() {
-                        writer.flush().map_err(|e| RtError::IoError(e.to_string()))?;
+                        writer
+                            .flush()
+                            .map_err(|e| RtError::IoError(e.to_string()))?;
                     }
                     Ok(BslValue::Undefined)
                 }
@@ -1408,18 +1429,24 @@ impl BslValue {
                 BslObject::Array(v) => {
                     let v = v.borrow();
                     let i = Self::index_as_usize(idx)?;
-                    v.get(i)
-                        .cloned()
-                        .ok_or(RtError::IndexOutOfBounds { index: i as i64, len: v.len() })
+                    v.get(i).cloned().ok_or(RtError::IndexOutOfBounds {
+                        index: i as i64,
+                        len: v.len(),
+                    })
                 }
                 BslObject::ValueTable(data) => {
                     let i = Self::index_as_usize(idx)?;
                     let row_id = {
                         let d = data.borrow();
-                        d.row_id_at(i)
-                            .ok_or(RtError::IndexOutOfBounds { index: i as i64, len: d.row_count() })?
+                        d.row_id_at(i).ok_or(RtError::IndexOutOfBounds {
+                            index: i as i64,
+                            len: d.row_count(),
+                        })?
                     };
-                    Ok(BslValue::Object(Rc::new(BslObject::TableRow(data.clone(), row_id))))
+                    Ok(BslValue::Object(Rc::new(BslObject::TableRow(
+                        data.clone(),
+                        row_id,
+                    ))))
                 }
                 BslObject::TableColumns(data) => {
                     let i = Self::index_as_usize(idx)?;
@@ -1448,12 +1475,13 @@ impl BslValue {
                         let name = match &**o {
                             BslObject::TableRow(data, _) => {
                                 let d = data.borrow();
-                                d.column_names.get(i).cloned().ok_or(
-                                    RtError::IndexOutOfBounds {
+                                d.column_names
+                                    .get(i)
+                                    .cloned()
+                                    .ok_or(RtError::IndexOutOfBounds {
                                         index: i as i64,
                                         len: d.column_names.len(),
-                                    },
-                                )?
+                                    })?
                             }
                             _ => unreachable!("вариант проверен объемлющим match"),
                         };
@@ -1474,9 +1502,10 @@ impl BslValue {
                 BslObject::Map(data) => {
                     let i = Self::index_as_usize(idx)?;
                     let data = data.borrow();
-                    let (k, v) = data
-                        .entry_at(i)
-                        .ok_or(RtError::IndexOutOfBounds { index: i as i64, len: data.len() })?;
+                    let (k, v) = data.entry_at(i).ok_or(RtError::IndexOutOfBounds {
+                        index: i as i64,
+                        len: data.len(),
+                    })?;
                     Ok(BslValue::Object(Rc::new(BslObject::KeyValuePair(k, v))))
                 }
                 // `Для Каждого КиЗ Из Структура` — тот же протокол, что и у
@@ -1486,9 +1515,10 @@ impl BslValue {
                 BslObject::Structure(s) => {
                     let i = Self::index_as_usize(idx)?;
                     let s = s.borrow();
-                    let (n, v) = s
-                        .entry_at(i)
-                        .ok_or(RtError::IndexOutOfBounds { index: i as i64, len: s.len() })?;
+                    let (n, v) = s.entry_at(i).ok_or(RtError::IndexOutOfBounds {
+                        index: i as i64,
+                        len: s.len(),
+                    })?;
                     let key = names.name(n).ok_or(RtError::UnknownField(n))?;
                     Ok(BslValue::Object(Rc::new(BslObject::KeyValuePair(
                         BslValue::Str(BslString::from_str(key)),
@@ -1508,9 +1538,10 @@ impl BslValue {
                     let mut v = v.borrow_mut();
                     let i = Self::index_as_usize(idx)?;
                     let len = v.len();
-                    let slot = v
-                        .get_mut(i)
-                        .ok_or(RtError::IndexOutOfBounds { index: i as i64, len })?;
+                    let slot = v.get_mut(i).ok_or(RtError::IndexOutOfBounds {
+                        index: i as i64,
+                        len,
+                    })?;
                     *slot = val;
                     Ok(())
                 }
@@ -1558,9 +1589,7 @@ impl BslValue {
     pub fn get_field(&self, name: NameId) -> RtResult<BslValue> {
         match self {
             BslValue::Object(o) => match &**o {
-                BslObject::Structure(s) => {
-                    s.borrow().get(name).ok_or(RtError::UnknownField(name))
-                }
+                BslObject::Structure(s) => s.borrow().get(name).ok_or(RtError::UnknownField(name)),
                 _ => Err(RtError::NotAnObject),
             },
             _ => Err(RtError::NotAnObject),
@@ -1597,7 +1626,12 @@ impl BslValue {
     /// `Структура.Вставить(Ключ, Значение)`. Поле уже есть — просто новое
     /// значение на том же слоте, форма не меняется (у 1С `Вставить`
     /// повторного поля — это не ошибка и не дубликат, а перезапись).
-    pub fn structure_insert(&self, field: NameId, val: BslValue, shapes: &mut ShapeTable) -> RtResult<()> {
+    pub fn structure_insert(
+        &self,
+        field: NameId,
+        val: BslValue,
+        shapes: &mut ShapeTable,
+    ) -> RtResult<()> {
         match self {
             BslValue::Object(o) => match &**o {
                 BslObject::Structure(s) => {
@@ -1639,7 +1673,11 @@ impl BslValue {
     /// аргументы как значения. Ради одного метода вводить второй протокол
     /// аргументов не стали — вместо этого второй аргумент трактуется как
     /// значение по умолчанию (безопасный geттер: нет поля — нет и ошибки).
-    pub fn structure_property(&self, field: NameId, default: Option<BslValue>) -> RtResult<BslValue> {
+    pub fn structure_property(
+        &self,
+        field: NameId,
+        default: Option<BslValue>,
+    ) -> RtResult<BslValue> {
         match self {
             BslValue::Object(o) => match &**o {
                 BslObject::Structure(s) => Ok(s
@@ -1735,9 +1773,10 @@ impl BslValue {
                             None => Err(RtError::UnknownField(name)),
                         }
                     }
-                    StructureStorage::Dictionary { values, .. } => {
-                        values.get(&name).cloned().ok_or(RtError::UnknownField(name))
-                    }
+                    StructureStorage::Dictionary { values, .. } => values
+                        .get(&name)
+                        .cloned()
+                        .ok_or(RtError::UnknownField(name)),
                 },
                 _ => Err(RtError::NotAnObject),
             },
@@ -1799,7 +1838,9 @@ impl BslValue {
                 BslObject::ValueTable(data) => {
                     if name.eq_ignore_ascii_case("Колонки") || name.eq_ignore_ascii_case("Columns")
                     {
-                        Ok(BslValue::Object(Rc::new(BslObject::TableColumns(data.clone()))))
+                        Ok(BslValue::Object(Rc::new(BslObject::TableColumns(
+                            data.clone(),
+                        ))))
                     } else {
                         Err(RtError::UnknownColumn(name.to_string()))
                     }
@@ -1866,7 +1907,8 @@ impl BslValue {
                     if name.eq_ignore_ascii_case("ТипУзла") || name.eq_ignore_ascii_case("NodeType")
                     {
                         xml::node_type(self)
-                    } else if name.eq_ignore_ascii_case("Имя") || name.eq_ignore_ascii_case("Name") {
+                    } else if name.eq_ignore_ascii_case("Имя") || name.eq_ignore_ascii_case("Name")
+                    {
                         xml::name(self)
                     } else if name.eq_ignore_ascii_case("Значение")
                         || name.eq_ignore_ascii_case("Value")
@@ -1903,8 +1945,7 @@ impl BslValue {
                     }
                 }
                 BslObject::SpreadDocument(data) => {
-                    if name.eq_ignore_ascii_case("Рисунки")
-                        || name.eq_ignore_ascii_case("Drawings")
+                    if name.eq_ignore_ascii_case("Рисунки") || name.eq_ignore_ascii_case("Drawings")
                     {
                         Ok(BslValue::Object(Rc::new(BslObject::SpreadDrawings(
                             data.clone(),
@@ -1914,14 +1955,13 @@ impl BslValue {
                     }
                 }
                 BslObject::SpreadArea(..) => spreadsheet::get_property(self, name),
-                BslObject::SpreadDrawing(data, i) => {
-                    spreadsheet::drawing_property(data, *i, name)
-                }
+                BslObject::SpreadDrawing(data, i) => spreadsheet::drawing_property(data, *i, name),
                 BslObject::TextDocParams(_) => textdoc::get_parameter(self, name),
                 BslObject::KeyValuePair(k, v) => {
                     if name.eq_ignore_ascii_case("Ключ") || name.eq_ignore_ascii_case("Key") {
                         Ok(k.clone())
-                    } else if name.eq_ignore_ascii_case("Значение") || name.eq_ignore_ascii_case("Value")
+                    } else if name.eq_ignore_ascii_case("Значение")
+                        || name.eq_ignore_ascii_case("Value")
                     {
                         Ok(v.clone())
                     } else {
@@ -1952,7 +1992,8 @@ impl BslValue {
                     let col = data
                         .column_index(name)
                         .ok_or_else(|| RtError::UnknownColumn(name.to_string()))?;
-                    data.set_cell(*row_id, col, val).ok_or(RtError::RowInvalidated)
+                    data.set_cell(*row_id, col, val)
+                        .ok_or(RtError::RowInvalidated)
                 }
                 _ => Err(RtError::NotAnObject),
             },
@@ -1996,7 +2037,10 @@ impl BslValue {
             BslValue::Object(o) => match &**o {
                 BslObject::ValueTable(data) => {
                     let row_id = data.borrow_mut().add_row();
-                    Ok(BslValue::Object(Rc::new(BslObject::TableRow(data.clone(), row_id))))
+                    Ok(BslValue::Object(Rc::new(BslObject::TableRow(
+                        data.clone(),
+                        row_id,
+                    ))))
                 }
                 _ => Err(RtError::MethodNotApplicable {
                     method: "Добавить",
@@ -2058,7 +2102,10 @@ impl BslValue {
                     let i = Self::index_as_usize(idx)?;
                     let len = v.len();
                     if i >= len {
-                        return Err(RtError::IndexOutOfBounds { index: i as i64, len });
+                        return Err(RtError::IndexOutOfBounds {
+                            index: i as i64,
+                            len,
+                        });
                     }
                     v.remove(i);
                     Ok(())
@@ -2067,8 +2114,10 @@ impl BslValue {
                     let mut d = data.borrow_mut();
                     let i = Self::index_as_usize(idx)?;
                     let len = d.row_count();
-                    d.delete_row_at(i)
-                        .ok_or(RtError::IndexOutOfBounds { index: i as i64, len })
+                    d.delete_row_at(i).ok_or(RtError::IndexOutOfBounds {
+                        index: i as i64,
+                        len,
+                    })
                 }
                 // `Соответствие.Удалить(Ключ)` — по значению ключа, не по
                 // позиции (в отличие от Array/ValueTable выше): в этом
@@ -2731,9 +2780,15 @@ mod tests {
     #[test]
     fn array_index_get_set_roundtrip() {
         let arr = BslValue::new_array(vec![num("1"), num("2"), num("3")]);
-        assert_eq!(arr.get_index(&num("1"), &NameInterner::new()).unwrap(), num("2"));
+        assert_eq!(
+            arr.get_index(&num("1"), &NameInterner::new()).unwrap(),
+            num("2")
+        );
         arr.set_index(&num("1"), num("99")).unwrap();
-        assert_eq!(arr.get_index(&num("1"), &NameInterner::new()).unwrap(), num("99"));
+        assert_eq!(
+            arr.get_index(&num("1"), &NameInterner::new()).unwrap(),
+            num("99")
+        );
         assert_eq!(arr.collection_len().unwrap(), 3);
     }
 
@@ -2753,11 +2808,17 @@ mod tests {
         let a = BslValue::new_array(vec![num("1")]);
         let b = a.clone();
         b.set_index(&num("0"), num("42")).unwrap();
-        assert_eq!(a.get_index(&num("0"), &NameInterner::new()).unwrap(), num("42"));
+        assert_eq!(
+            a.get_index(&num("0"), &NameInterner::new()).unwrap(),
+            num("42")
+        );
         assert!(a.eq_value(&b));
 
         let c = BslValue::new_array(vec![num("42")]);
-        assert!(!a.eq_value(&c), "структурно равные, но разные объекты — не равны");
+        assert!(
+            !a.eq_value(&c),
+            "структурно равные, но разные объекты — не равны"
+        );
     }
 
     #[test]
@@ -2787,7 +2848,10 @@ mod tests {
         let shape = shapes[shape_id as usize].clone();
 
         let s = BslValue::new_structure(shape, vec![num("1")]);
-        assert!(matches!(s.get_field(z).unwrap_err(), RtError::UnknownField(_)));
+        assert!(matches!(
+            s.get_field(z).unwrap_err(),
+            RtError::UnknownField(_)
+        ));
     }
 
     // --- Словарный режим структуры ------------------------------------
@@ -2823,7 +2887,8 @@ mod tests {
     fn insert_generated_fields(s: &BslValue, rt: &mut RuntimeShapes, count: u32) {
         for i in 0..count {
             let f = rt.names.intern(&format!("Поле{i}"));
-            s.structure_insert(f, num(&i.to_string()), &mut rt.shapes).unwrap();
+            s.structure_insert(f, num(&i.to_string()), &mut rt.shapes)
+                .unwrap();
         }
     }
 
@@ -2838,7 +2903,10 @@ mod tests {
         );
 
         insert_generated_fields(&s, &mut rt, MAX_SHAPE_TRANSITIONS + 1);
-        assert!(is_dictionary(&s), "переход за порог обязан деградировать объект");
+        assert!(
+            is_dictionary(&s),
+            "переход за порог обязан деградировать объект"
+        );
     }
 
     #[test]
@@ -2850,7 +2918,9 @@ mod tests {
         // Поля, заведённые ДО деградации (перенесённые из слотов), и после
         // неё — читаются и пишутся одинаково.
         let first = rt.names.intern("Поле0");
-        let last = rt.names.intern(&format!("Поле{}", MAX_SHAPE_TRANSITIONS + 4));
+        let last = rt
+            .names
+            .intern(&format!("Поле{}", MAX_SHAPE_TRANSITIONS + 4));
         assert_eq!(s.get_field(first).unwrap(), num("0"));
         assert_eq!(
             s.get_field(last).unwrap(),
@@ -2863,7 +2933,10 @@ mod tests {
         assert_eq!(s.get_field(last).unwrap(), num("888"));
 
         let missing = rt.names.intern("НетТакогоПоля");
-        assert!(matches!(s.get_field(missing).unwrap_err(), RtError::UnknownField(_)));
+        assert!(matches!(
+            s.get_field(missing).unwrap_err(),
+            RtError::UnknownField(_)
+        ));
         assert!(matches!(
             s.set_field(missing, num("1")).unwrap_err(),
             RtError::UnknownField(_)
@@ -2888,13 +2961,15 @@ mod tests {
             .map(|i| format!("Поле{i}"))
             .collect();
         let actual: Vec<String> = (0..expected.len())
-            .map(|i| match s.get_index(&num(&i.to_string()), &rt.names).unwrap() {
-                BslValue::Object(o) => match &*o {
-                    BslObject::KeyValuePair(k, _) => k.to_string(),
-                    other => panic!("ожидался КлючИЗначение, получено {other:?}"),
+            .map(
+                |i| match s.get_index(&num(&i.to_string()), &rt.names).unwrap() {
+                    BslValue::Object(o) => match &*o {
+                        BslObject::KeyValuePair(k, _) => k.to_string(),
+                        other => panic!("ожидался КлючИЗначение, получено {other:?}"),
+                    },
+                    other => panic!("ожидался объект, получено {other:?}"),
                 },
-                other => panic!("ожидался объект, получено {other:?}"),
-            })
+            )
             .collect();
         assert_eq!(actual, expected);
 
@@ -2926,7 +3001,9 @@ mod tests {
         let x = rt.names.intern("Поле0");
 
         let shaped = BslValue::new_structure(rt.shapes.empty(), Vec::new());
-        shaped.structure_insert(x, num("1"), &mut rt.shapes).unwrap();
+        shaped
+            .structure_insert(x, num("1"), &mut rt.shapes)
+            .unwrap();
 
         let dict = BslValue::new_structure(rt.shapes.empty(), Vec::new());
         insert_generated_fields(&dict, &mut rt, MAX_SHAPE_TRANSITIONS + 2);

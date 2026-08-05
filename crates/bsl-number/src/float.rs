@@ -45,11 +45,7 @@ impl BslNumber {
         let digits = format!("{}{}", int_part, frac_part);
         // Значение = digits / 10^frac_len * 10^exp
         let scale = frac_part.len() as i32 - exp;
-        let s = if neg {
-            format!("-{}", digits)
-        } else {
-            digits
-        };
+        let s = if neg { format!("-{}", digits) } else { digits };
         let m: i128 = s.parse().map_err(|_| NumError::NotFinite)?;
         Ok(BslNumber::from_parts(m, scale))
     }

@@ -201,8 +201,14 @@ fn measure_script_runs_under_this_interpreter() {
         .filter_map(|l| l.trim_start().strip_prefix("М(\""))
         .filter_map(|rest| rest.split('"').next().map(str::to_string))
         .collect();
-    assert!(!in_source.is_empty(), "в measure-all.bsl не нашлось вызовов М()");
-    let missing: Vec<&String> = in_source.iter().filter(|id| !printed.contains(id)).collect();
+    assert!(
+        !in_source.is_empty(),
+        "в measure-all.bsl не нашлось вызовов М()"
+    );
+    let missing: Vec<&String> = in_source
+        .iter()
+        .filter(|id| !printed.contains(id))
+        .collect();
     assert!(
         missing.is_empty(),
         "ИД есть в скрипте, но не дошли до вывода: {missing:?}"
@@ -300,7 +306,10 @@ fn the_jit_agrees_with_the_interpreter_on_every_script() {
             checked += 1;
         }
     }
-    assert!(checked > 0, "не нашлось ни одного скрипта для сверки режимов");
+    assert!(
+        checked > 0,
+        "не нашлось ни одного скрипта для сверки режимов"
+    );
     println!("режимы сверены на {checked} скриптах");
 }
 

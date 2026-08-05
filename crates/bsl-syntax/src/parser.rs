@@ -167,7 +167,10 @@ impl<'src> Parser<'src> {
             let tok = self.bump();
             Ok(self.text(tok.span).to_string())
         } else {
-            Err(self.error_here(format!("ожидался идентификатор, найден {:?}", self.peek().kind)))
+            Err(self.error_here(format!(
+                "ожидался идентификатор, найден {:?}",
+                self.peek().kind
+            )))
         }
     }
 
@@ -440,7 +443,10 @@ impl<'src> Parser<'src> {
         let expr = self.parse_postfix()?;
         if self.eat(&TokenKind::Eq) {
             let value = self.parse_expr()?;
-            Ok(Stmt::Assign { target: expr, value })
+            Ok(Stmt::Assign {
+                target: expr,
+                value,
+            })
         } else {
             Ok(Stmt::ExprStmt(expr))
         }
@@ -823,9 +829,7 @@ mod tests {
 
     #[test]
     fn function_without_return_is_callable_as_statement() {
-        let prog = parse_ok(
-            "Функция Ф()\nКонецФункции\nФ();",
-        );
+        let prog = parse_ok("Функция Ф()\nКонецФункции\nФ();");
         assert!(matches!(prog.items[0], Item::Function(_)));
         assert_eq!(
             prog.items[1],
@@ -935,16 +939,10 @@ mod tests {
     #[test]
     fn for_each_and_numeric_for() {
         let prog = parse_ok("Для Каждого b Из bodies Цикл\nКонецЦикла;");
-        assert!(matches!(
-            prog.items[0],
-            Item::Stmt(Stmt::ForEach { .. })
-        ));
+        assert!(matches!(prog.items[0], Item::Stmt(Stmt::ForEach { .. })));
 
         let prog = parse_ok("Для i = 0 По 10 Цикл\nКонецЦикла");
-        assert!(matches!(
-            prog.items[0],
-            Item::Stmt(Stmt::ForNumeric { .. })
-        ));
+        assert!(matches!(prog.items[0], Item::Stmt(Stmt::ForNumeric { .. })));
     }
 
     #[test]
@@ -978,7 +976,9 @@ mod tests {
     fn ternary_operator() {
         let prog = parse_ok("a = ?(x > 0, 1, -1);");
         match &prog.items[0] {
-            Item::Stmt(Stmt::Assign { value, .. }) => assert!(matches!(value, Expr::Ternary { .. })),
+            Item::Stmt(Stmt::Assign { value, .. }) => {
+                assert!(matches!(value, Expr::Ternary { .. }))
+            }
             other => panic!("expected Assign, got {other:?}"),
         }
     }

@@ -59,7 +59,8 @@ impl Assembler {
 
     /// `mov r64, r64` — REX.W 0x89 /r, направление src -> dst.
     pub fn mov_rr(&mut self, dst: Reg, src: Reg) {
-        self.code.extend_from_slice(&[0x48, 0x89, modrm_reg(src, dst)]);
+        self.code
+            .extend_from_slice(&[0x48, 0x89, modrm_reg(src, dst)]);
     }
 
     /// `mov r64, imm64` — REX.W 0xB8+rd. Полные 8 байт: адреса шимов не
@@ -85,11 +86,13 @@ impl Assembler {
 
     /// `add rsp, imm8` / `sub rsp, imm8` — REX.W 0x83 /0 и /5.
     pub fn add_rsp(&mut self, value: i8) {
-        self.code.extend_from_slice(&[0x48, 0x83, 0xc4, value as u8]);
+        self.code
+            .extend_from_slice(&[0x48, 0x83, 0xc4, value as u8]);
     }
 
     pub fn sub_rsp(&mut self, value: i8) {
-        self.code.extend_from_slice(&[0x48, 0x83, 0xec, value as u8]);
+        self.code
+            .extend_from_slice(&[0x48, 0x83, 0xec, value as u8]);
     }
 
     /// `call r64` — 0xFF /2.
@@ -104,7 +107,8 @@ impl Assembler {
 
     /// `cmp rax, imm8` — REX.W 0x83 /7.
     pub fn cmp_rax_imm8(&mut self, value: i8) {
-        self.code.extend_from_slice(&[0x48, 0x83, 0xf8, value as u8]);
+        self.code
+            .extend_from_slice(&[0x48, 0x83, 0xf8, value as u8]);
     }
 
     pub fn ret(&mut self) {
