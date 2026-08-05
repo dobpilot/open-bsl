@@ -196,6 +196,21 @@ pub const OPEN_QUESTIONS: &[OpenQuestion] = &[
                  execute_nesting_below_the_limit_still_works",
     },
     OpenQuestion {
+        id: "JSON.MAX_DEPTH",
+        what: "какую глубину вложенности допускают `ЗаписатьJSON` и \
+               `ПрочитатьJSON` и что платформа делает с циклической \
+               структурой в `ЗаписатьJSON`",
+        chosen: "предел 500 уровней на запись и чтение; глубже (в том числе \
+                 циклическая структура — у неё глубина бесконечна) — \
+                 перехватываемая `StackOverflow`, а не переполнение стека \
+                 процесса. Циклический зонд намеренно не ставится: если \
+                 платформа на нём падает, он уносит весь сеанс замеров. \
+                 Замер даёт нижнюю границу: 400 уровней обязаны работать",
+        blocks: "bsl-rt/src/json.rs::MAX_JSON_DEPTH; тесты \
+                 too_deep_json_document_is_an_error_not_a_crash и \
+                 cyclic_value_in_write_json_is_an_error_not_a_crash",
+    },
+    OpenQuestion {
         id: "SYNTAX.MAX_NESTING",
         what: "какой предел вложенности выражений и операторов допускает \
                платформа и какой ошибкой отвечает на его превышение",

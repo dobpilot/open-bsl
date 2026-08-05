@@ -1217,7 +1217,7 @@ pub fn read_json(
     };
     let parser = state.parser.as_mut().expect("наличие проверено выше");
     let mut cache = JsonBuildCache::default();
-    build_value(first, parser, as_map, date_names, None, rt, &mut cache)
+    build_value(first, parser, as_map, date_names, None, rt, &mut cache, 0)
 }
 
 /// Проверяет и интернирует имя один раз за разбор документа.
@@ -1318,6 +1318,7 @@ fn build_json_structure(
 /// `property` — имя свойства, под которым это значение лежит у родителя:
 /// по нему решается, превращать ли строку в дату
 /// (`ИменаСвойствСоЗначениямиДата`).
+#[allow(clippy::too_many_arguments)]
 fn build_value(
     event: JsonEvent,
     parser: &mut JsonParser,
@@ -1326,7 +1327,17 @@ fn build_value(
     property: Option<&str>,
     rt: &mut RuntimeShapes,
     cache: &mut JsonBuildCache,
+    depth: usize,
 ) -> RtResult<BslValue> {
+    // Как и в `serialize`: рекурсия возможна только на контейнерах, на
+    // скалярных событиях предел не срабатывает никогда.
+    if depth > MAX_JSON_DEPTH
+        && matches!(event, JsonEvent::ObjectStart | JsonEvent::ArrayStart)
+    {
+        return Err(RtError::StackOverflow {
+            what: "слишком глубокая вложенность документа при чтении JSON",
+        });
+    }
     match event {
         JsonEvent::ObjectStart => {
             let mut keys: Vec<String> = Vec::new();
@@ -1355,6 +1366,7 @@ fn build_value(
                             Some(&name),
                             rt,
                             cache,
+                            depth + 1,
                         )?;
                         keys.push(name);
                         values.push(v);
@@ -1381,7 +1393,8 @@ fn build_value(
                 if next == JsonEvent::ArrayEnd {
                     break;
                 }
-                let v = build_value(next, parser, as_map, date_names, None, rt, cache)?;
+                let v =
+                    build_value(next, parser, as_map, date_names, None, rt, cache, depth + 1)?;
                 items.push_element(v)?;
             }
             Ok(items)
@@ -1418,6 +1431,18 @@ fn build_value(
 /// [`RtError::TypeError`] на значении, которое сериализовать нечем
 /// (`ТаблицаЗначений` и прочие объекты) — измерено, платформа тоже
 /// отвергает.
+/// Предел вложенности данных при записи и документа при чтении JSON.
+/// И `serialize`, и `build_value` рекурсивны, поэтому глубина входа
+/// напрямую расходует стек Rust; без предела циклическая структура в
+/// `ЗаписатьJSON` (массив, содержащий сам себя) и документ вида `[[[[…`
+/// в `ПрочитатьJSON` валят процесс переполнением стека вместо
+/// перехватываемой ошибки.
+// НЕ ИЗМЕРЕНО(JSON.MAX_DEPTH) — какую глубину допускает платформа и что
+// она делает с циклической структурой в `ЗаписатьJSON`; циклический зонд
+// намеренно не ставится — если платформа на нём падает, он уносит весь
+// сеанс замеров. Замер даёт нижнюю границу: 400 уровней обязаны работать.
+const MAX_JSON_DEPTH: usize = 500;
+
 pub fn write_json(writer: &BslValue, value: &BslValue, rt: &RuntimeShapes) -> RtResult<()> {
     let cell = as_writer(writer)?;
     let mut slot = cell.borrow_mut();
@@ -1427,10 +1452,23 @@ pub fn write_json(writer: &BslValue, value: &BslValue, rt: &RuntimeShapes) -> Rt
             op: "ЗаписатьJSON",
         });
     };
-    serialize(w, value, rt)
+    serialize(w, value, rt, 0)
 }
 
-fn serialize(w: &mut JsonWriter, value: &BslValue, rt: &RuntimeShapes) -> RtResult<()> {
+fn serialize(
+    w: &mut JsonWriter,
+    value: &BslValue,
+    rt: &RuntimeShapes,
+    depth: usize,
+) -> RtResult<()> {
+    // Рекурсия возможна только на контейнерах, поэтому на скалярах предел
+    // не срабатывает никогда; проверка стоит одного сравнения `depth`.
+    if depth > MAX_JSON_DEPTH && matches!(value, BslValue::Object(_)) {
+        return Err(RtError::StackOverflow {
+            what: "слишком глубокая вложенность данных при записи JSON \
+                   (возможна циклическая ссылка)",
+        });
+    }
     match value {
         BslValue::Str(_) | BslValue::Number(_) | BslValue::Boolean(_) => w.value(value),
         // `Неопределено` и `Null` отдельным ЗаписатьЗначение платформа не
@@ -1459,7 +1497,7 @@ fn serialize(w: &mut JsonWriter, value: &BslValue, rt: &RuntimeShapes) -> RtResu
                 let snapshot: Vec<BslValue> = items.borrow().clone();
                 w.begin_array()?;
                 for item in &snapshot {
-                    serialize(w, item, rt)?;
+                    serialize(w, item, rt, depth + 1)?;
                 }
                 w.end_array()
             }
@@ -1474,7 +1512,7 @@ fn serialize(w: &mut JsonWriter, value: &BslValue, rt: &RuntimeShapes) -> RtResu
                 w.begin_object()?;
                 for (name, v) in &entries {
                     w.property_name(name)?;
-                    serialize(w, v, rt)?;
+                    serialize(w, v, rt, depth + 1)?;
                 }
                 w.end_object()
             }
@@ -1500,7 +1538,7 @@ fn serialize(w: &mut JsonWriter, value: &BslValue, rt: &RuntimeShapes) -> RtResu
                         }
                     };
                     w.property_name(&name)?;
-                    serialize(w, v, rt)?;
+                    serialize(w, v, rt, depth + 1)?;
                 }
                 w.end_object()
             }
@@ -1531,6 +1569,47 @@ mod tests {
 
     fn num(s: &str) -> BslNumber {
         BslNumber::parse_canonical(s).unwrap()
+    }
+
+    // НЕ ИЗМЕРЕНО(JSON.MAX_DEPTH) — тесты фиксируют ВЫБРАННОЕ поведение:
+    // перехватываемая ошибка вместо переполнения стека процесса; предел
+    // платформы не замерен.
+    #[test]
+    fn too_deep_json_document_is_an_error_not_a_crash() {
+        let depth = MAX_JSON_DEPTH + 100;
+        let text = format!("{}1{}", "[".repeat(depth), "]".repeat(depth));
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut cache = JsonBuildCache::default();
+        let mut parser = JsonParser::new(&text);
+        let first = parser.next_event().unwrap().unwrap();
+        let e = build_value(first, &mut parser, false, &[], None, &mut rt, &mut cache, 0)
+            .unwrap_err();
+        assert!(matches!(e, RtError::StackOverflow { .. }), "{e:?}");
+    }
+
+    #[test]
+    fn json_document_below_the_depth_limit_still_reads() {
+        // 400 уровней — нижняя граница из замера: обязана работать.
+        let depth = 400;
+        let text = format!("{}1{}", "[".repeat(depth), "]".repeat(depth));
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut cache = JsonBuildCache::default();
+        let mut parser = JsonParser::new(&text);
+        let first = parser.next_event().unwrap().unwrap();
+        build_value(first, &mut parser, false, &[], None, &mut rt, &mut cache, 0)
+            .expect("глубина ниже предела обязана читаться");
+    }
+
+    #[test]
+    fn cyclic_value_in_write_json_is_an_error_not_a_crash() {
+        // Массив, содержащий сам себя, — бесконечная глубина: без предела
+        // `serialize` рекурсировал бы до переполнения стека процесса.
+        let arr = BslValue::new_array(Vec::new());
+        arr.push_element(arr.clone()).unwrap();
+        let rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut w = JsonWriter::to_string_target(settings_from(None).unwrap());
+        let e = serialize(&mut w, &arr, &rt, 0).unwrap_err();
+        assert!(matches!(e, RtError::StackOverflow { .. }), "{e:?}");
     }
 
     #[test]
