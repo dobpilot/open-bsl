@@ -173,6 +173,29 @@ pub const OPEN_QUESTIONS: &[OpenQuestion] = &[
         blocks: "bsl-vm::compile_dynamic_snippet; фикстура dynamic-execute",
     },
     OpenQuestion {
+        id: "EXEC.MAX_CALL_DEPTH",
+        what: "какую глубину рекурсии вызовов допускает платформа, какой \
+               ошибкой отвечает на превышение и ловится ли она `Попыткой`",
+        chosen: "предел 1000 одновременно активных кадров; превышение — \
+                 перехватываемая `StackOverflow`, а не рост памяти до OOM. \
+                 Замер даёт нижнюю границу: рекурсия глубиной 900 обязана \
+                 работать",
+        blocks: "bsl-vm `Instr::Call`; тесты \
+                 unbounded_recursion_is_a_catchable_error_not_oom и \
+                 recursion_well_below_the_limit_still_works",
+    },
+    OpenQuestion {
+        id: "EXEC.DYNAMIC_DEPTH",
+        what: "сколько уровней `Выполнить`/`Вычислить` друг в друге допускает \
+               платформа",
+        chosen: "предел 64: каждый уровень — вложенный `drive` на стеке Rust \
+                 плюс разбор фрагмента, предел защищает стек процесса. Замер \
+                 даёт нижнюю границу: 40 уровней обязаны работать",
+        blocks: "bsl-vm::run_dynamic_snippet; тесты \
+                 recursion_through_execute_is_a_catchable_error_not_a_crash и \
+                 execute_nesting_below_the_limit_still_works",
+    },
+    OpenQuestion {
         id: "SYNTAX.MAX_NESTING",
         what: "какой предел вложенности выражений и операторов допускает \
                платформа и какой ошибкой отвечает на его превышение",
