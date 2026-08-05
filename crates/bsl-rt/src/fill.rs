@@ -324,14 +324,20 @@ fn fill_table_rows(
         drop(source_data_ref);
         let mut target_data_ref = target_data.borrow_mut();
         for ((_, target_col), value) in plan.cells.iter().zip(values) {
+            // То же приведение к типу колонки, что у прямого присваивания
+            // (измерено, `ADJ.FILL.STR`).
+            let value = target_data_ref.adjust_to_column_type(*target_col, value);
             target_data_ref.columns[*target_col][target_pos] = value;
         }
     } else {
         drop(target_data_ref);
         let mut target_data_ref = target_data.borrow_mut();
         for (source_col, target_col) in &plan.cells {
-            target_data_ref.columns[*target_col][target_pos] =
-                source_data_ref.columns[*source_col][source_pos].clone();
+            let value = target_data_ref.adjust_to_column_type(
+                *target_col,
+                source_data_ref.columns[*source_col][source_pos].clone(),
+            );
+            target_data_ref.columns[*target_col][target_pos] = value;
         }
     }
 

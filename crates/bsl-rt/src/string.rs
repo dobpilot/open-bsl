@@ -185,7 +185,7 @@ impl BslString {
         }))
     }
 
-    fn from_units(units: Vec<u16>) -> Self {
+    pub(crate) fn from_units(units: Vec<u16>) -> Self {
         BslString(Rc::new(BslStringData {
             units,
             lowercase_chars: OnceCell::new(),

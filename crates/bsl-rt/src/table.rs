@@ -198,6 +198,113 @@ impl RowPositions {
 }
 
 
+/// Конверсия значения в целевой примитивный тип; `None` — не конвертится.
+/// Реализованы только измеренные пары (`ADJ.*`): всё прочее — «не
+/// конвертится», что уводит в значение по умолчанию либо `Неопределено`.
+fn convert_to(value: &BslValue, target: crate::TypeId) -> Option<BslValue> {
+    match (value, target) {
+        (BslValue::Number(n), crate::TypeId::String) => {
+            Some(BslValue::Str(BslString::from_str(&n.to_canonical())))
+        }
+        // `Истина` в колонке строк — локализованное представление «Да»
+        // (измерено `ADJ.S.BOOL`); тот же текст даёт `Display`.
+        (BslValue::Boolean(b), crate::TypeId::String) => Some(BslValue::Str(
+            BslString::from_str(if *b { "Да" } else { "Нет" }),
+        )),
+        (BslValue::Str(s), crate::TypeId::Number) => BslNumber::parse_canonical(&s.to_string())
+            .ok()
+            .map(BslValue::Number),
+        (BslValue::Boolean(b), crate::TypeId::Number) => {
+            Some(BslValue::Number(BslNumber::from_i64(i64::from(*b))))
+        }
+        (BslValue::Number(n), crate::TypeId::Boolean) => {
+            Some(BslValue::Boolean(*n != BslNumber::from_i64(0)))
+        }
+        _ => None,
+    }
+}
+
+/// Значение по умолчанию типа — им кончается неудачная конверсия в
+/// колонке с единственным типом (измерено: `ADJ.B.STR` — `Ложь`,
+/// `ADJ.N.UNDEF` — `0`).
+fn default_of(id: crate::TypeId) -> BslValue {
+    match id {
+        crate::TypeId::Boolean => BslValue::Boolean(false),
+        crate::TypeId::Number => BslValue::Number(BslNumber::from_i64(0)),
+        crate::TypeId::String => BslValue::Str(BslString::from_str("")),
+        crate::TypeId::Date => crate::date::BslDate::from_civil(1, 1, 1, 0, 0, 0)
+            .map(BslValue::Date)
+            .unwrap_or(BslValue::Undefined),
+        _ => BslValue::Undefined,
+    }
+}
+
+/// Квалификаторы типа: число — округление дробной части и насыщение целой,
+/// строка — обрезка по длине, дата — обнуление «чужих» частей.
+fn apply_qualifiers(value: BslValue, t: &ColumnType) -> BslValue {
+    match (&value, t.id) {
+        (BslValue::Number(n), crate::TypeId::Number) => {
+            let digits: u32 = t.quals.first().and_then(|q| q.parse().ok()).unwrap_or(0);
+            if digits == 0 {
+                return value;
+            }
+            let frac: u32 = t.quals.get(1).and_then(|q| q.parse().ok()).unwrap_or(0);
+            let rounded = n.round_to_scale(frac as i32);
+            // Насыщение границей разрядности: 123456.7 в `Число(5,2)` —
+            // 999.99 (измерено `ADJ.NQ.HUGE`); отрицательная граница
+            // принята симметричной.
+            let mut nines = String::new();
+            for i in 0..digits {
+                if i == digits - frac {
+                    nines.push('.');
+                }
+                nines.push('9');
+            }
+            let limit = BslNumber::parse_canonical(&nines)
+                .unwrap_or_else(|_| BslNumber::from_i64(0));
+            let neg_limit = limit.neg();
+            if rounded.cmp(&limit) == std::cmp::Ordering::Greater {
+                BslValue::Number(limit)
+            } else if rounded.cmp(&neg_limit) == std::cmp::Ordering::Less {
+                BslValue::Number(neg_limit)
+            } else {
+                BslValue::Number(rounded)
+            }
+        }
+        (BslValue::Str(s), crate::TypeId::String) => {
+            let len: usize = t.quals.first().and_then(|q| q.parse().ok()).unwrap_or(0);
+            if len == 0 {
+                return value;
+            }
+            let units = s.units();
+            if units.len() <= len {
+                value
+            } else {
+                BslValue::Str(BslString::from_units(units[..len].to_vec()))
+            }
+        }
+        (BslValue::Date(d), crate::TypeId::Date) => match t.quals.first().map(String::as_str) {
+            // `{"D","D"}` — только дата: время обнуляется (`ADJ.DD.DT`).
+            Some("D") => {
+                let c = d.to_civil();
+                crate::date::BslDate::from_civil(c.year, c.month, c.day, 0, 0, 0)
+                    .map(BslValue::Date)
+                    .unwrap_or(value)
+            }
+            // `{"D","T"}` — только время: дата сворачивается к пустой
+            // (`ADJ.DV.DT` — `0001-01-01` с исходным временем).
+            Some("T") => {
+                let c = d.to_civil();
+                crate::date::BslDate::from_civil(1, 1, 1, c.hour, c.minute, c.second)
+                    .map(BslValue::Date)
+                    .unwrap_or(value)
+            }
+            _ => value,
+        },
+        _ => value,
+    }
+}
+
 /// Быстрый хэшер для временного отпечатка строки группировки.
 ///
 /// Начальное состояние случайно для каждого вызова `collapse`, поэтому
@@ -401,23 +508,85 @@ impl ValueTableData {
 
     pub fn set_cell(&mut self, row_id: u64, col: usize, value: BslValue) -> Option<()> {
         let pos = self.pos_of(row_id)?;
+        let value = self.adjust_to_column_type(col, value);
         *self.columns.get_mut(col)?.get_mut(pos)? = value;
         Some(())
+    }
+
+    /// Приведение значения к `ОписаниеТипов` колонки — так делает
+    /// платформа при ЛЮБОЙ записи в ячейку (прямое присваивание,
+    /// `ЗаполнитьЗначенияСвойств`, `ЗаполнитьЗначения` — измерено, пробы
+    /// `ADJ.*`). Правила, снятые батареей из 23 проб:
+    ///
+    /// * колонка без ограничения — значение как есть;
+    /// * тип значения входит в список — как есть, но с применением
+    ///   квалификаторов: число округляется до разрядности дробной части и
+    ///   НАСЫЩАЕТСЯ границей целой (`123456.7` в `Число(5,2)` — `999.99`),
+    ///   строка обрезается по длине, дата обнуляет «чужие» части
+    ///   (`{"D","D"}` — только дата, `{"D","T"}` — только время);
+    /// * иначе — конверсия по порядку проб Строка, Число, Булево
+    ///   (`5` в `Булево,Строка` — `"5"`; `1` в `Булево,Null` — `Истина`);
+    /// * конверсия не удалась: единственный тип — его значение по
+    ///   умолчанию (`"х"` в `Булево` — `Ложь`), составной — `Неопределено`.
+    // НЕ ИЗМЕРЕНО(TABLE.ADJUST) — крайние ветки: `NULL` в колонке без
+    // `Null` в списке, дробное число в колонку `Строка` (локаль
+    // представления), конверсия строк в дату, значение новой строки
+    // `Добавить()` в типизированной колонке. Выбраны консервативные
+    // варианты — см. ветки ниже.
+    pub fn adjust_to_column_type(&self, col: usize, value: BslValue) -> BslValue {
+        let Some(Some(types)) = self.column_types.get(col) else {
+            return value;
+        };
+        if types.is_empty() {
+            return value;
+        }
+        let value_type = match value.type_of() {
+            Ok(BslValue::Type(id)) => id,
+            _ => return value,
+        };
+        if let Some(t) = types.iter().find(|t| t.id == value_type) {
+            return apply_qualifiers(value, t);
+        }
+        // `Неопределено` допустимо в любой колонке С СОСТАВНЫМ списком
+        // (измерено `ADJ.BL.UNDEF`); в колонке с единственным типом оно
+        // приводится к значению по умолчанию (`ADJ.B.UNDEF`, `ADJ.N.UNDEF`).
+        if matches!(value, BslValue::Undefined) && types.len() > 1 {
+            return BslValue::Undefined;
+        }
+        // Порядок проб конверсии — Строка, Число, Булево: `5` в
+        // `Булево,Строка` даёт `"5"`, а `1` в `Булево,Null` — `Истина`
+        // (измерено `ADJ.BS.NUM` и `ADJ.BL.NUM`).
+        for probe in [crate::TypeId::String, crate::TypeId::Number, crate::TypeId::Boolean] {
+            let Some(t) = types.iter().find(|t| t.id == probe) else {
+                continue;
+            };
+            if let Some(converted) = convert_to(&value, probe) {
+                return apply_qualifiers(converted, t);
+            }
+        }
+        if types.len() == 1 {
+            return apply_qualifiers(default_of(types[0].id), &types[0]);
+        }
+        BslValue::Undefined
     }
 
     /// `ЗаполнитьЗначения(Значение, Колонки)` — записывает одно значение
     /// во все строки перечисленных колонок. Пустой список колонок означает
     /// все колонки таблицы.
     pub fn fill_values(&mut self, value: &BslValue, cols: &[usize]) {
+        // Значение проходит то же приведение к типу колонки, что и прямое
+        // присваивание, — измерено (`ADJ.FILLALL.STR`).
         if cols.is_empty() {
-            for column in &mut self.columns {
-                column.fill(value.clone());
+            for col in 0..self.columns.len() {
+                let adjusted = self.adjust_to_column_type(col, value.clone());
+                self.columns[col].fill(adjusted);
             }
             return;
         }
         for &col in cols {
-            if let Some(column) = self.columns.get_mut(col) {
-                column.fill(value.clone());
+            if col < self.columns.len() {
+                let adjusted = self.adjust_to_column_type(col, value.clone());
+                self.columns[col].fill(adjusted);
             }
         }
     }
@@ -1059,6 +1228,86 @@ mod tests {
         assert_eq!(
             table.columns[0],
             [1, 2, 3].map(|value| BslValue::Number(BslNumber::from_i64(value)))
+        );
+    }
+
+    // НЕ ИЗМЕРЕНО(TABLE.ADJUST) — тесты фиксируют ИЗМЕРЕННУЮ часть правил
+    // (батарея ADJ.*) и выбранное поведение неснятых веток.
+    fn adjusted(types: &[(crate::TypeId, &[&str])], value: BslValue) -> BslValue {
+        let table = ValueTableData::new();
+        let mut t = table.borrow_mut();
+        t.add_constrained_column(
+            "К",
+            Some(
+                types
+                    .iter()
+                    .map(|(id, quals)| ColumnType {
+                        id: *id,
+                        quals: quals.iter().map(|q| q.to_string()).collect(),
+                    })
+                    .collect(),
+            ),
+        );
+        let id = t.add_row();
+        t.set_cell(id, 0, value);
+        t.columns[0][0].clone()
+    }
+
+    fn n(s: &str) -> BslValue {
+        BslValue::Number(BslNumber::parse_canonical(s).unwrap())
+    }
+
+    fn txt(s: &str) -> BslValue {
+        BslValue::Str(BslString::from_str(s))
+    }
+
+    #[test]
+    fn adjust_follows_the_measured_platform_rules() {
+        use crate::TypeId::*;
+        // Составной «Булево,Null»: строка и Неопределено — Неопределено,
+        // число конвертируется в Булево, NULL остаётся (ADJ.BL.*).
+        let bl: &[(crate::TypeId, &[&str])] = &[(Boolean, &[]), (Null, &[])];
+        assert_eq!(adjusted(bl, txt("х")), BslValue::Undefined);
+        assert_eq!(adjusted(bl, txt("")), BslValue::Undefined);
+        assert_eq!(adjusted(bl, n("1")), BslValue::Boolean(true));
+        assert_eq!(adjusted(bl, BslValue::Undefined), BslValue::Undefined);
+        assert_eq!(adjusted(bl, BslValue::Null), BslValue::Null);
+        // Единственный тип: неудача конверсии — значение по умолчанию
+        // (ADJ.B.STR, ADJ.B.UNDEF, ADJ.N.UNDEF), удача — конверсия
+        // (ADJ.N.STR, ADJ.N.TRUE, ADJ.S.NUM, ADJ.S.BOOL).
+        let b: &[(crate::TypeId, &[&str])] = &[(Boolean, &[])];
+        assert_eq!(adjusted(b, txt("х")), BslValue::Boolean(false));
+        assert_eq!(adjusted(b, BslValue::Undefined), BslValue::Boolean(false));
+        let num: &[(crate::TypeId, &[&str])] = &[(Number, &[])];
+        assert_eq!(adjusted(num, txt("5")), n("5"));
+        assert_eq!(adjusted(num, BslValue::Boolean(true)), n("1"));
+        assert_eq!(adjusted(num, BslValue::Undefined), n("0"));
+        let s: &[(crate::TypeId, &[&str])] = &[(String, &[])];
+        assert_eq!(adjusted(s, n("5")), txt("5"));
+        assert_eq!(adjusted(s, BslValue::Boolean(true)), txt("Да"));
+        // Порядок проб конверсии: Строка раньше Булево (ADJ.BS.NUM).
+        let bs: &[(crate::TypeId, &[&str])] = &[(Boolean, &[]), (String, &[])];
+        assert_eq!(adjusted(bs, n("5")), txt("5"));
+        // Квалификаторы: округление и насыщение числа (ADJ.NQ.*),
+        // обрезка строки (ADJ.SQ.LONG).
+        let nq: &[(crate::TypeId, &[&str])] = &[(Number, &["5", "2", "0"])];
+        assert_eq!(adjusted(nq, n("123.456")), n("123.46"));
+        assert_eq!(adjusted(nq, n("-7.891")), n("-7.89"));
+        assert_eq!(adjusted(nq, n("123456.7")), n("999.99"));
+        let sq: &[(crate::TypeId, &[&str])] = &[(String, &["3", "1"])];
+        assert_eq!(adjusted(sq, txt("абвгд")), txt("абв"));
+        // Части даты: «только дата» обнуляет время, «только время» — дату
+        // (ADJ.DD.DT, ADJ.DV.DT).
+        let date = BslValue::Date(crate::date::BslDate::from_civil(2024, 5, 6, 7, 8, 9).unwrap());
+        let dd: &[(crate::TypeId, &[&str])] = &[(Date, &["D"])];
+        assert_eq!(
+            adjusted(dd, date.clone()),
+            BslValue::Date(crate::date::BslDate::from_civil(2024, 5, 6, 0, 0, 0).unwrap())
+        );
+        let dv: &[(crate::TypeId, &[&str])] = &[(Date, &["T"])];
+        assert_eq!(
+            adjusted(dv, date),
+            BslValue::Date(crate::date::BslDate::from_civil(1, 1, 1, 7, 8, 9).unwrap())
         );
     }
 
