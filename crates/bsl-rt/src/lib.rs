@@ -911,7 +911,11 @@ impl BslValue {
         let millis = i64::try_from(millis).map_err(|_| RtError::DateOutOfRange {
             op: "ТекущаяУниверсальнаяДатаВМиллисекундах",
         })?;
-        Ok(BslValue::Number(BslNumber::from_i64(millis)))
+        // Отсчёт — от эпохи дат BSL (0001-01-01 UTC), не от 1970-го:
+        // ИЗМЕРЕНО на 8.3.27, платформа печатает ~63.9e12.
+        Ok(BslValue::Number(BslNumber::from_i64(
+            millis + crate::date::UNIX_EPOCH_SECONDS * 1000,
+        )))
     }
 
     /// `Год`/`Месяц`/`День`/`Час`/`Минута`/`Секунда`/`ДеньНедели` — все
