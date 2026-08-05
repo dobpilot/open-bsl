@@ -26,9 +26,27 @@ const BLOCK_ENDERS: &[Keyword] = &[
 /// соответствует грамматике BSL.
 pub fn parse(src: &str) -> Result<Program, Diagnostic> {
     let tokens = tokenize_all(src).map_err(Diagnostic::Lex)?;
-    let mut parser = Parser { tokens, pos: 0, src };
+    let mut parser = Parser {
+        tokens,
+        pos: 0,
+        src,
+        depth: 0,
+    };
     parser.parse_program().map_err(Diagnostic::Parse)
 }
+
+/// Максимальная глубина вложенности выражений и операторов.
+///
+/// Парсер — рекурсивный спуск, и глубина входного текста напрямую расходует
+/// стек Rust: без предела текст вида `((((…))))` валит процесс переполнением
+/// стека вместо диагностики. Предел заодно ограничивает и последующие
+/// рекурсивные проходы по AST (резолвер, компилятор, печать байт-кода) —
+/// глубже дерева, чем разрешил парсер, у них не бывает. Запас большой:
+/// реальный код глубже пары десятков уровней не встречается.
+// НЕ ИЗМЕРЕНО(SYNTAX.MAX_NESTING) — какой предел вложенности допускает сама
+// платформа и какой ошибкой отвечает на его превышение; здесь важно лишь
+// отвечать диагностикой, а не падением процесса.
+const MAX_NESTING: u32 = 500;
 
 fn tokenize_all(src: &str) -> Result<Vec<Token>, LexError> {
     let mut lexer = Lexer::new(src);
@@ -47,6 +65,9 @@ struct Parser<'src> {
     tokens: Vec<Token>,
     pos: usize,
     src: &'src str,
+    /// Текущая глубина вложенности (выражения и операторы одним счётчиком);
+    /// сверяется с [`MAX_NESTING`] в `enter_nesting`.
+    depth: u32,
 }
 
 impl<'src> Parser<'src> {
@@ -165,6 +186,20 @@ impl<'src> Parser<'src> {
         }
     }
 
+    /// Вход в очередной уровень вложенности (выражение или оператор) с
+    /// проверкой предела. Парный выход — простое `self.depth -= 1` у
+    /// вызывающего; на пути ошибки счётчик можно не восстанавливать,
+    /// потому что разбор при ошибке прекращается целиком.
+    fn enter_nesting(&mut self) -> Result<(), ParseError> {
+        self.depth += 1;
+        if self.depth > MAX_NESTING {
+            return Err(self.error_here(format!(
+                "превышена максимальная глубина вложенности ({MAX_NESTING})"
+            )));
+        }
+        Ok(())
+    }
+
     /// Верно ли, что текущая позиция — граница оператора (конец блока,
     /// точка с запятой, конец файла)? Используется, чтобы понять, есть ли
     /// выражение после `Возврат`/`ВызватьИсключение`.
@@ -274,6 +309,15 @@ impl<'src> Parser<'src> {
     }
 
     fn parse_stmt(&mut self) -> Result<Stmt, ParseError> {
+        // Вложенные операторы (`Если` в `Если`, …) разбираются рекурсией,
+        // поэтому и они учитываются в общем счётчике глубины.
+        self.enter_nesting()?;
+        let stmt = self.parse_stmt_inner();
+        self.depth -= 1;
+        stmt
+    }
+
+    fn parse_stmt_inner(&mut self) -> Result<Stmt, ParseError> {
         if self.at_keyword(Keyword::If) {
             self.parse_if()
         } else if self.at_keyword(Keyword::While) {
@@ -408,7 +452,13 @@ impl<'src> Parser<'src> {
     // унарный минус, постфиксная цепочка (`.`, `[]`, `()`), первичное.
 
     fn parse_expr(&mut self) -> Result<Expr, ParseError> {
-        self.parse_or()
+        // Единственная точка, через которую выражение уходит вглубь
+        // (скобки, индексы, аргументы вызова), — поэтому предел
+        // вложенности проверяется именно здесь.
+        self.enter_nesting()?;
+        let expr = self.parse_or();
+        self.depth -= 1;
+        expr
     }
 
     fn parse_or(&mut self) -> Result<Expr, ParseError> {
@@ -438,15 +488,22 @@ impl<'src> Parser<'src> {
     }
 
     fn parse_not(&mut self) -> Result<Expr, ParseError> {
-        if self.eat_keyword(Keyword::Not) {
-            let expr = self.parse_not()?;
-            Ok(Expr::Unary {
+        // Цепочка `Не Не …` собирается циклом, а не самовызовом: рекурсия
+        // здесь обходила бы счётчик вложенности из `parse_expr`, и длинная
+        // цепочка валила бы стек. Свёртка с конца сохраняет правую
+        // ассоциативность — дерево получается то же, что дала бы рекурсия.
+        let mut nots = 0usize;
+        while self.eat_keyword(Keyword::Not) {
+            nots += 1;
+        }
+        let mut expr = self.parse_comparison()?;
+        for _ in 0..nots {
+            expr = Expr::Unary {
                 op: UnaryOp::Not,
                 expr: Box::new(expr),
-            })
-        } else {
-            self.parse_comparison()
+            };
         }
+        Ok(expr)
     }
 
     fn parse_comparison(&mut self) -> Result<Expr, ParseError> {
@@ -512,15 +569,20 @@ impl<'src> Parser<'src> {
     }
 
     fn parse_unary(&mut self) -> Result<Expr, ParseError> {
-        if self.eat(&TokenKind::Minus) {
-            let expr = self.parse_unary()?;
-            Ok(Expr::Unary {
+        // Циклом по той же причине, что и `parse_not`: самовызов на
+        // цепочке `-----x` обходил бы счётчик вложенности.
+        let mut negs = 0usize;
+        while self.eat(&TokenKind::Minus) {
+            negs += 1;
+        }
+        let mut expr = self.parse_postfix()?;
+        for _ in 0..negs {
+            expr = Expr::Unary {
                 op: UnaryOp::Neg,
                 expr: Box::new(expr),
-            })
-        } else {
-            self.parse_postfix()
+            };
         }
+        Ok(expr)
     }
 
     fn parse_postfix(&mut self) -> Result<Expr, ParseError> {
@@ -662,6 +724,89 @@ mod tests {
 
     fn parse_ok(src: &str) -> Program {
         parse(src).unwrap_or_else(|e| panic!("parse error on {src:?}: {e:?}"))
+    }
+
+    /// Глубокие тесты гоняются в потоке со стеком главного потока (8 МиБ):
+    /// предел вложенности калиброван именно под него, а libtest по
+    /// умолчанию даёт тестовому потоку только 2 МиБ — там разбор на самом
+    /// пределе честно не помещается, и тест мерил бы не то.
+    fn on_main_sized_stack(body: impl FnOnce() + Send + 'static) {
+        std::thread::Builder::new()
+            .stack_size(8 * 1024 * 1024)
+            .spawn(body)
+            .expect("поток не создался")
+            .join()
+            .expect("тест в потоке упал");
+    }
+
+    // НЕ ИЗМЕРЕНО(SYNTAX.MAX_NESTING) — тесты фиксируют ВЫБРАННОЕ поведение:
+    // диагностика вместо переполнения стека процесса; сам предел платформы
+    // не замерен.
+    #[test]
+    fn deep_expression_nesting_is_a_parse_error_not_a_crash() {
+        on_main_sized_stack(|| {
+            let depth = MAX_NESTING as usize + 100;
+            let src = format!("А = {}1{};", "(".repeat(depth), ")".repeat(depth));
+            let err = parse(&src).expect_err("глубокая вложенность должна быть ошибкой");
+            let Diagnostic::Parse(e) = err else {
+                panic!("ожидалась синтаксическая ошибка, получено {err:?}");
+            };
+            assert!(e.message.contains("глубина вложенности"), "{}", e.message);
+        });
+    }
+
+    #[test]
+    fn allowed_expression_nesting_still_parses() {
+        // Глубина заметно меньше предела — обычный код не должен задеваться.
+        let depth = 100;
+        let src = format!("А = {}1{};", "(".repeat(depth), ")".repeat(depth));
+        parse_ok(&src);
+    }
+
+    #[test]
+    fn deep_statement_nesting_is_a_parse_error_not_a_crash() {
+        on_main_sized_stack(|| {
+            let depth = MAX_NESTING as usize + 100;
+            let mut src = String::new();
+            for _ in 0..depth {
+                src.push_str("Если Истина Тогда\n");
+            }
+            src.push_str("А = 1;\n");
+            for _ in 0..depth {
+                src.push_str("КонецЕсли;\n");
+            }
+            assert!(matches!(parse(&src), Err(Diagnostic::Parse(_))));
+        });
+    }
+
+    #[test]
+    fn long_not_and_minus_chains_do_not_recurse() {
+        // `Не` и унарный минус разбираются циклом: длина цепочки не
+        // расходует ни стек, ни счётчик вложенности.
+        let not_chain = format!("А = {}Истина;", "Не ".repeat(10_000));
+        parse_ok(&not_chain);
+        let minus_chain = format!("А = {}1;", "-".repeat(10_000));
+        parse_ok(&minus_chain);
+    }
+
+    #[test]
+    fn unary_chains_fold_right_associatively() {
+        // Дерево от цикла обязано совпадать с тем, что давала рекурсия:
+        // `- - 1` — это Neg(Neg(1)), `Не Не Истина` — Not(Not(Истина)).
+        let prog = parse_ok("А = - - 1;");
+        let Item::Stmt(Stmt::Assign { value, .. }) = &prog.items[0] else {
+            panic!("ожидалось присваивание");
+        };
+        assert_eq!(
+            *value,
+            Expr::Unary {
+                op: UnaryOp::Neg,
+                expr: Box::new(Expr::Unary {
+                    op: UnaryOp::Neg,
+                    expr: Box::new(Expr::Number("1".into())),
+                }),
+            }
+        );
     }
 
     #[test]

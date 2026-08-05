@@ -172,6 +172,19 @@ pub const OPEN_QUESTIONS: &[OpenQuestion] = &[
         chosen: "нет — объявление во фрагменте это `DynamicError`",
         blocks: "bsl-vm::compile_dynamic_snippet; фикстура dynamic-execute",
     },
+    OpenQuestion {
+        id: "SYNTAX.MAX_NESTING",
+        what: "какой предел вложенности выражений и операторов допускает \
+               платформа и какой ошибкой отвечает на его превышение",
+        chosen: "предел 500 уровней одним счётчиком на выражения и операторы; \
+                 глубже — синтаксическая ошибка, а не переполнение стека \
+                 процесса. Замер даёт только нижнюю границу (300 уровней \
+                 платформа обязана принять) — глубокий зонд рискует уронить \
+                 клиент платформы и весь сеанс замеров",
+        blocks: "bsl-syntax::Parser::enter_nesting; тесты \
+                 deep_expression_nesting_is_a_parse_error_not_a_crash и \
+                 deep_statement_nesting_is_a_parse_error_not_a_crash",
+    },
 ];
 
 /// Уже измеренные значения — якоря сеанса. Менять их можно только новым
