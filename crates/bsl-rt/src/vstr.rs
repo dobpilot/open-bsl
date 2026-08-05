@@ -498,6 +498,53 @@ fn table_to_node(
 }
 
 
+// --- Файловая пара ----------------------------------------------------------
+
+/// `ЗначениеВФайл(ИмяФайла, Значение)`.
+///
+/// Платформа пишет UTF-8 С BOM и переводами строк CRLF — включая переводы
+/// ВНУТРИ строковых значений (измерено побайтовым сравнением файлов обеих
+/// сторон); обратное чтение нормализует пары обратно, поэтому значение
+/// дорогу переживает. Одно сознательное расхождение: запись в
+/// несуществующий каталог у платформы МОЛЧА не делает ничего — здесь это
+/// ошибка, молчаливая потеря данных хуже несовместимости.
+///
+/// # Errors
+///
+/// Ошибки сериализации значения и файлового ввода-вывода.
+pub fn value_to_file(path: &str, v: &BslValue, rt: &RuntimeShapes) -> RtResult<()> {
+    let text = value_to_string_internal(v, rt)?;
+    let mut out = String::with_capacity(text.len() + text.len() / 8 + 3);
+    out.push('\u{feff}');
+    for ch in text.chars() {
+        if ch == '\n' {
+            out.push('\r');
+        }
+        out.push(ch);
+    }
+    std::fs::write(path, out).map_err(|e| RtError::IoError(format!("ЗначениеВФайл: {e}")))
+}
+
+/// `ЗначениеИзФайла(ИмяФайла)`.
+///
+/// BOM срезается, пары `\r\n` нормализуются в `\n` до разбора — так
+/// строковые значения возвращаются в исходный вид (измерено: платформа
+/// из своего же файла читает строку БЕЗ `\r`). Одиночный `\r` в данных
+/// не трогается.
+// НЕ ИЗМЕРЕНО(VSTR.FORMAT) — поведение платформенной пары на одиночном
+// `\r` внутри строкового значения; здесь он проходит как есть.
+///
+/// # Errors
+///
+/// Ошибки файлового ввода-вывода и разбора внутреннего формата.
+pub fn value_from_file(path: &str, rt: &mut RuntimeShapes) -> RtResult<BslValue> {
+    let raw = std::fs::read_to_string(path)
+        .map_err(|e| RtError::IoError(format!("ЗначениеИзФайла: {e}")))?;
+    let text = raw.strip_prefix('\u{feff}').unwrap_or(&raw);
+    let normalized = text.replace("\r\n", "\n");
+    value_from_string_internal(normalized.trim_end_matches(['\r', '\n']), rt)
+}
+
 // --- Чтение ----------------------------------------------------------------
 
 /// `ЗначениеИзСтрокиВнутр(Строка)`.
@@ -1424,7 +1471,34 @@ mod tests {
         assert_transit(qualifiers);
     }
 
+    #[test]
+    fn file_pair_matches_the_platform_byte_for_byte_and_round_trips() {
+        // Платформенный файл: UTF-8 с BOM и CRLF, включая перевод внутри
+        // строкового значения (измерено побайтово, серия vfile-*).
+        let dir = std::env::temp_dir().join(format!("open-bsl-vstr-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("проба.txt");
+        let path_str = path.to_str().unwrap();
 
+        let mut context = rt();
+        let value = s("а\"б\nв");
+        value_to_file(path_str, &value, &context).unwrap();
+        let bytes = std::fs::read(&path).unwrap();
+        assert_eq!(&bytes[..3], [0xEF, 0xBB, 0xBF], "BOM обязателен");
+        let body = String::from_utf8(bytes[3..].to_vec()).unwrap();
+        assert_eq!(body, "{\"S\",\"а\"\"б\r\nв\"}", "перевод строки — CRLF");
+
+        // Чтение нормализует пары обратно: значение равно исходному.
+        let back = value_from_file(path_str, &mut context).unwrap();
+        assert!(back.eq_value(&value), "строка обязана вернуться без \\r");
+
+        // Файл без BOM и с сырыми LF (как выгрузки внешних инструментов)
+        // читается так же.
+        std::fs::write(&path, "{\"N\",42}\n").unwrap();
+        let n = value_from_file(path_str, &mut context).unwrap();
+        assert_eq!(n, num("42"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn cyclic_value_is_a_catchable_error_not_a_crash() {

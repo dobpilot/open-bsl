@@ -133,6 +133,13 @@ pub enum BuiltinFn {
     /// `ЗначениеИзСтрокиВнутр(Строка)` — обратный разбор; контекст нужен
     /// на запись: поля структур интернируются, формы растут.
     ValueFromStringInternal,
+
+    /// `ЗначениеВФайл(ИмяФайла, Значение)` — строка `ЗначениеВСтрокуВнутр`
+    /// в UTF-8 С BOM и переводами строк CRLF (измерено побайтовым
+    /// сравнением с файлами платформы, см. `vstr::value_to_file`).
+    ValueToFile,
+    /// `ЗначениеИзФайла(ИмяФайла)` — обратное чтение того же файла.
+    ValueFromFile,
 }
 
 /// Написания встроенных ФУНКЦИЙ: `(имя, вариант)` в каноническом
@@ -305,6 +312,10 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("ValueToStringInternal", BuiltinFn::ValueToStringInternal),
     ("ЗначениеИзСтрокиВнутр", BuiltinFn::ValueFromStringInternal),
     ("ValueFromStringInternal", BuiltinFn::ValueFromStringInternal),
+    ("ЗначениеВФайл", BuiltinFn::ValueToFile),
+    ("ValueToFile", BuiltinFn::ValueToFile),
+    ("ЗначениеИзФайла", BuiltinFn::ValueFromFile),
+    ("ValueFromFile", BuiltinFn::ValueFromFile),
 ];
 
 impl BuiltinFn {
@@ -363,6 +374,8 @@ impl BuiltinFn {
             BuiltinFn::ReadJson => (1, 3),
             BuiltinFn::WriteJson => (2, 2),
             BuiltinFn::ValueToStringInternal | BuiltinFn::ValueFromStringInternal => (1, 1),
+            BuiltinFn::ValueToFile => (2, 2),
+            BuiltinFn::ValueFromFile => (1, 1),
             _ => (1, 1),
         }
     }
@@ -720,11 +733,12 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         BuiltinFn::ReadJson | BuiltinFn::WriteJson => Err(RtError::InvalidBytecode(
             "функции JSON требуют контекста имён: вызывайте call_builtin_fn_ctx",
         )),
-        BuiltinFn::ValueToStringInternal | BuiltinFn::ValueFromStringInternal => {
-            Err(RtError::InvalidBytecode(
-                "функции внутреннего формата требуют контекста имён: вызывайте call_builtin_fn_ctx",
-            ))
-        }
+        BuiltinFn::ValueToStringInternal
+        | BuiltinFn::ValueFromStringInternal
+        | BuiltinFn::ValueToFile
+        | BuiltinFn::ValueFromFile => Err(RtError::InvalidBytecode(
+            "функции внутреннего формата требуют контекста имён: вызывайте call_builtin_fn_ctx",
+        )),
         BuiltinFn::FillPropertyValues => Err(RtError::InvalidBytecode(
             "ЗаполнитьЗначенияСвойств требует контекста имён: вызывайте call_builtin_fn_ctx",
         )),
@@ -807,6 +821,25 @@ pub fn call_builtin_fn_ctx(
             });
         };
         return crate::vstr::value_from_string_internal(&text.to_string(), rt);
+    }
+    if f == BuiltinFn::ValueToFile {
+        let BslValue::Str(path) = &args[0] else {
+            return Err(RtError::TypeError {
+                expected: "Строка",
+                op: "ЗначениеВФайл(ИмяФайла)",
+            });
+        };
+        crate::vstr::value_to_file(&path.to_string(), &args[1], rt)?;
+        return Ok(BslValue::Undefined);
+    }
+    if f == BuiltinFn::ValueFromFile {
+        let BslValue::Str(path) = &args[0] else {
+            return Err(RtError::TypeError {
+                expected: "Строка",
+                op: "ЗначениеИзФайла(ИмяФайла)",
+            });
+        };
+        return crate::vstr::value_from_file(&path.to_string(), rt);
     }
     call_builtin_fn(f, args)
 }
