@@ -6,27 +6,42 @@ This repository is a Rust 2021 workspace implementing a BSL interpreter. Crates 
 
 - `crates/bsl-syntax`: lexer, parser, AST, and diagnostics.
 - `crates/bsl-sema`: name resolution and semantic representation.
-- `crates/bsl-bytecode`: bytecode instructions, compiler, and the textual bytecode format (`text.rs`) used by both `--emit-bytecode` and `--run-bytecode` — printing and parsing share one format, so adding an instruction means touching `write_instr`, `parse_instr`, `OPCODES`, and the round-trip corpus together.
+- `crates/bsl-bytecode`: bytecode instructions, compiler, and the textual bytecode format (`text.rs`) used by both `--emit-bytecode` and `--run-bytecode` — printing and parsing share one format, so adding an instruction means touching `write_instr`, `parse_instr`, `OPCODES`, and the round-trip corpus together, and bumping `FORMAT_VERSION` if the encoding changes.
 - `crates/bsl-rt`, `bsl-number`, and `bsl-format`: runtime values, decimal arithmetic, and BSL formatting.
 - `crates/bsl-vm`: bytecode execution; examples live in `examples/`.
 - `crates/bsl-cli`: script runner, REPL (syntax highlighting in `highlight.rs`, Tab completion in `complete.rs`), and end-to-end conformance runner.
 
-Everything except `bsl-cli` is dependency-free (`bsl-number` uses `num-bigint`/`num-traits`; `bsl-cli` uses `rustyline` for raw-mode line editing). Keep it that way: new external crates need a reason that cannot be met in-tree.
+Two more single-source tables work like `text.rs`. Builtins are one table in `crates/bsl-rt/src/builtin.rs`: a global function is a `BuiltinFn` variant plus a row in `BUILTIN_FN_NAMES` (the Russian name and the English alias map to the same variant), an arm in `arity_range`, and an arm in `call_builtin_fn` — or `call_builtin_fn_ctx` if it needs `RuntimeShapes` (the runtime name table, e.g. `ЗаполнитьЗначенияСвойств`). Methods work the same way through `BuiltinMethod`/`BUILTIN_METHOD_NAMES`. Everything downstream goes through `BuiltinFn::lookup`: sema resolves the call and checks arity there, `text.rs` prints and re-parses the name, and the REPL's highlighter and completer enumerate the same table — so a new builtin lights up in all of them, and a name added without an `arity_range` arm is a compile error rather than a runtime surprise. `bsl-cli` argument parsing is table-driven too: `COMMANDS` in `main.rs` is the single source for both dispatch and `--help`, and the `match` on `Kind` is exhaustive — a command cannot be implemented but undocumented, or documented but unimplemented. Add the row, then the arm.
 
-Unit and integration tests sit beside each crate. Shared BSL programs and oracle outputs are under `tests/conformance/fixtures/`.
+Everything except `bsl-cli` is dependency-free (`bsl-number` uses `num-bigint`/`num-traits`; `bsl-cli` uses `rustyline` for raw-mode line editing; dev-only `insta` takes the AST snapshots and `pprof` renders flamegraphs). Keep it that way: new external crates need a reason that cannot be met in-tree.
+
+Unit and integration tests sit beside each crate. Shared BSL programs and oracle outputs are under `tests/conformance/fixtures/`. Longer-form design notes live in `docs/`: `docs/mxl-format.md` is the measured reverse-engineering of the 1C MXL spreadsheet format, with its fixture corpus in `tests/conformance/mxl/`.
 
 ## Build, Test, and Development Commands
 
 - `cargo build --workspace` builds every crate.
 - `cargo test --workspace` runs the complete test suite.
-- `cargo test -p bsl-number` runs one crate's tests while iterating.
+- `cargo test -p bsl-number` runs one crate's tests while iterating; `cargo test -p bsl-number --test oracle` narrows to one integration test file, and `cargo test -p bsl-number division_half_up` to tests matching a name substring.
 - `cargo test -p bsl-number -- --ignored` includes unresolved, explicitly ignored tests.
-- `cargo run -p bsl-cli -- path/to/script.bsl` executes a BSL script.
-- `cargo run -p bsl-cli` starts the REPL.
+- `cargo test -p bsl-cli -- --nocapture` shows the conformance run together with the skipped-fixture summary.
+- `cargo run -p bsl-cli -- path/to/script.bsl` executes a BSL script; without a path it starts the REPL, and `--help` is generated from the `COMMANDS` table in `main.rs`.
+- `cargo run -p bsl-cli -- --emit-bytecode script.bsl [out.bslc]` prints the textual bytecode; `--run-bytecode out.bslc` executes it.
+- `cargo run -p bsl-cli --release -- --jit script.bsl` runs with the template JIT (x86-64 Linux only; elsewhere the flag is accepted and ignored).
 - `cargo fmt --all -- --check` verifies formatting.
 - `cargo clippy --workspace --all-targets -- -D warnings` performs lint checks.
+- `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps` verifies that rustdoc links resolve.
 
 Run formatting, Clippy, and workspace tests before submitting changes.
+
+### Benchmarks and profiling
+
+- `cargo build --release -p bsl-cli && ./benchmarks/run.sh` runs every scenario (median of 5); `./benchmarks/run.sh str_find 9` runs one scenario with 9 runs, `./benchmarks/run.sh "" 7` every scenario with 7 runs.
+- `cargo run --release --example bench -p bsl-vm` runs the in-process VM scenarios; `cargo run --profile profiling --example profile -p bsl-vm` writes one flamegraph SVG per scenario.
+- `run.sh` compares seven columns — `bsl-cli` interpreted, `bsl-cli --jit`, Lua, LuaJIT, CPython, OneScript, and the 1C platform — and skips any runtime it cannot find. OneScript is looked up in `PATH` and a few usual install prefixes; override with `OSCRIPT=/path/to/oscript`, and the Python interpreter with `PYTHON=`.
+- The heavy scenarios (`csv_write*`, `table_compare`, `table_compare2`, `table_save_load`) run `HEAVY_RUNS` passes each (default 3) with file output redirected into `${TMPDIR:-/tmp}/onec-bench-scratch`, and the script byte-compares the files the runtimes produced — a benchmark that computed something different is a failed benchmark, not a fast one.
+- The 1C column is *not* measured live: it is read from `benchmarks/1c/combined.platform.txt`, regenerated by building one combined script with `python3 benchmarks/1c/build-combined.py` and running it on the platform.
+- `benchmarks/lib/slaxml.lua` is the workspace's only vendored third-party code (MIT, used by the `xml_*` Lua twins, never built into the interpreter). It is deliberately not stock: five spots marked `ПРАВКА open-bsl` widen the element/attribute *name* character classes to UTF-8 high bytes, because upstream's `%a` is ASCII-only and returns zero nodes on the Cyrillic benchmark document. Do not "update" it from upstream or point the twins at the system copy — see `benchmarks/lib/README.md`.
+- `.cargo/config.toml` sets `-C llvm-args=-align-all-functions=5` for every build. This is measurement hygiene, not a micro-optimization: without it an unrelated edit can shift code layout and move a benchmark by tens of percent. Setting `RUSTFLAGS` overrides it, which is what profiling runs do.
 
 ## Coding Style & Naming Conventions
 
@@ -44,7 +59,34 @@ Preserve compatibility markers exactly as `` `НЕ ИЗМЕРЕНО(AREA.QUESTIO
 
 Use Rust's built-in test framework. Add focused unit tests near changed logic and integration tests in a crate's `tests/` directory. Conformance fixtures use matching `name.bsl` and `name.expected` files. An absent `.expected` intentionally marks an unmeasured case; never generate oracle output from this interpreter. Preserve `// НЕ ИЗМЕРЕНО(ID)` markers until behavior is measured against real 1C.
 
-Every decision made by reasoning rather than by checking against the platform needs all three of: a `// НЕ ИЗМЕРЕНО(AREA.QUESTION)` marker at the code site, an entry in `crates/bsl-rt/src/open_questions.rs`, and one line in `tests/conformance/measure/measure-all.bsl`. The test `open_questions_registry_matches_source_markers` fails if any of the three is missing. Platform results come back through `bsl-cli --ingest-measurements`, which never edits code.
+The only snapshot tests are the parser ones in `crates/bsl-syntax/tests/snapshots/`, taken over the n-body fixtures — a whole-AST shape check, so any grammar change shows up there first. `insta` writes `.snap.new` next to the stored snapshot; read the diff and accept it deliberately (`cargo insta review` if `cargo-insta` is installed, otherwise move the file yourself). Never accept it just to make the run green.
+
+One `bsl-cli` test is silently environment-gated: `tests/table_compare2.rs` replays the value-table diff on large confidential cases from the directory in `OPEN_BSL_TABLE_COMPARE2_CASES` (one subdirectory per case, four `ЗначениеВФайл` dumps each). Without the variable it skips with a note — a green run does not mean it ran.
+
+Divergence between the interpreter and the JIT is caught by `the_jit_agrees_with_the_interpreter_on_every_script`, which runs the whole fixture corpus both ways.
+
+### Measuring on the 1C platform
+
+1C behavior is measured on the real platform, never inferred from this implementation's output. Every decision made by reasoning rather than by checking against the platform needs all three of: a `// НЕ ИЗМЕРЕНО(AREA.QUESTION)` marker at the code site, an entry in `crates/bsl-rt/src/open_questions.rs`, and exactly one line with the same ID in `tests/conformance/measure/measure-all.bsl`. The test `open_questions_registry_matches_source_markers` fails if any of the three is missing or extra, in both directions. `MEASURED_ANCHORS` in the same file are known platform values used as session canaries — if an anchor comes back wrong, the whole measurement session is suspect.
+
+The measurement round trip:
+
+```bash
+./tests/conformance/measure/1c/run-on-1c.sh                                  # measure-all.bsl -> platform.tsv
+./tests/conformance/measure/1c/run-on-1c.sh tests/conformance/measure/measure-xml.bsl   # -> measure-xml.platform.txt
+cargo run -p bsl-cli -- --ingest-measurements tests/conformance/measure/platform.tsv
+```
+
+The runner takes an optional script path: `measure-all.bsl` lands in `platform.tsv` (the registry oracle), anything else in `<script>.platform.txt` next to it. Both are committed. It builds an external data processor around the script, runs it in a throwaway file infobase, and needs a display. Knobs: `ONEC_PLATFORM` (path to `1cv8`), `ONEC_IB` (infobase path — changing it brings the unsafe-action modal back, since the exemption in `conf.cfg` is keyed on the path), `ONEC_TIMEOUT` (default 180 s), `ONEC_SHIM`. Exit code 0 with an empty result file means the form module did not compile, not that the run passed; the runner checks the file rather than the exit code, and prints the platform log.
+
+`--ingest-measurements` records results and prints discrepancies. It never edits code — every discrepancy is a human decision. It always writes `platform.tsv` beside the file you hand it, so ingesting a `measure-*.platform.txt` from that same directory clobbers the `measure-all` oracle.
+
+Writing a new `measure-*.bsl` (the contract scripts next to `measure-all.bsl`) has four rules that each cost a wasted 40-second platform round trip to learn:
+
+- **It must run on both sides.** The script is executed by the platform *and* by this interpreter so the two outputs diff line by line. Anything unimplemented here — `ЧтениеТекста`, a type `Новый` does not know, a method name the resolver rejects at compile time — breaks the whole run, not one line. Probing something the platform might not have goes through `Вычислить` inside `Попытка`, where the failure is catchable on both sides.
+- **IDs must be literal.** The scanner in `open_questions_registry.rs` reads string literals as written, so `М("AREA." + Имя, ...)` registers a truncated ID. Unroll the loop.
+- **One `М()` per ID.** The rule is exactly one line per ID across all scripts, so the `Попытка`/`Исключение` pair must assign to a variable and report once, not call `М()` in both branches.
+- **A modal dialog on the platform reads as a timeout.** An unhandled exception and the unsafe-action prompt look identical from here: no output, 180 s, killed. Wrap every probe. A form module compiles lazily, so a syntax error — for instance a variable named `И`, which is a keyword — shows up the same way, with an empty log and a successfully built `.epf`.
 
 ## Commit & Pull Request Guidelines
 
