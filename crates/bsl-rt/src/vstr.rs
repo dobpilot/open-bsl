@@ -960,33 +960,7 @@ fn unquote(raw: &str, crlf_to_lf: bool) -> Option<String> {
     Some(s)
 }
 
-/// Хешер интерн-кэшей — FxHash: восемь байтов за шаг, умножение с
-/// поворотом. Ключи кэшей — срезы исходного текста, их миллионы, и
-/// стойкий к затравке SipHash стандартной таблицы на них заметен в
-/// профиле; кэш живёт не дольше одного вызова чтения, атак на затравку
-/// тут нет.
-#[derive(Default)]
-struct FxHasher(u64);
-
-impl std::hash::Hasher for FxHasher {
-    fn write(&mut self, bytes: &[u8]) {
-        const SEED: u64 = 0x51_7c_c1_b7_27_22_0a_95;
-        let mut chunks = bytes.chunks_exact(8);
-        for chunk in &mut chunks {
-            let word = u64::from_le_bytes(chunk.try_into().expect("ровно восемь байтов"));
-            self.0 = (self.0.rotate_left(5) ^ word).wrapping_mul(SEED);
-        }
-        let mut tail = 0u64;
-        for &b in chunks.remainder().iter().rev() {
-            tail = (tail << 8) | u64::from(b);
-        }
-        self.0 = (self.0.rotate_left(5) ^ tail).wrapping_mul(SEED);
-    }
-
-    fn finish(&self) -> u64 {
-        self.0
-    }
-}
+use crate::fold::FxHasher;
 
 /// Интерн-кэш чтения: срез исходника — готовое значение. Кэш
 /// самоотключается на данных без повторов: колонка уникальных ключей

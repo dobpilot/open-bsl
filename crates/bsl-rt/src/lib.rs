@@ -10,6 +10,7 @@ mod deflate;
 pub mod encoding;
 mod enums;
 mod fill;
+mod fold;
 mod interner;
 mod json;
 mod locale;

@@ -1253,7 +1253,7 @@ fn is_structure(obj: &BslValue) -> bool {
 
 fn key_name(key: &BslValue, rt: &mut RuntimeShapes) -> RtResult<NameId> {
     match key {
-        BslValue::Str(s) => Ok(rt.names.intern(&s.to_string())),
+        BslValue::Str(s) => Ok(rt.names.intern_bsl(s)),
         _ => Err(RtError::TypeError {
             expected: "Строка",
             op: "Ключ",

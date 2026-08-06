@@ -1,4 +1,4 @@
-use std::cell::OnceCell;
+use std::cell::{Cell, OnceCell};
 use std::cmp::Ordering;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -29,6 +29,12 @@ struct BslStringData {
     /// UTF-8-представление для потребителей, удерживающих длинный текст.
     /// Ленивый: обычные короткие BSL-строки вторую копию не хранят.
     utf8: OnceCell<Rc<str>>,
+    /// Идентификатор этой строки как ИМЕНИ ПОЛЯ вместе с поколением
+    /// интернера, который его выдал: `Вставить`/`Свойство` в цикле
+    /// получают один и тот же объект строки-ключа, и кэш превращает
+    /// повторное интернирование в чтение ячейки. Поколение защищает от
+    /// чужого интернера — у `Вычислить` он свой, с другой нумерацией.
+    name_id: Cell<Option<(u32, crate::interner::NameId)>>,
 }
 
 impl Deref for BslStringData {
@@ -186,6 +192,7 @@ impl BslString {
             units,
             lowercase_chars: OnceCell::new(),
             utf8,
+            name_id: Cell::new(None),
         }))
     }
 
@@ -194,7 +201,21 @@ impl BslString {
             units,
             lowercase_chars: OnceCell::new(),
             utf8: OnceCell::new(),
+            name_id: Cell::new(None),
         }))
+    }
+
+    /// Кэшированный `NameId` этой строки, если его выдал интернер того же
+    /// поколения; иначе кэш чужой и не действует.
+    pub(crate) fn cached_name_id(&self, generation: u32) -> Option<crate::interner::NameId> {
+        match self.0.name_id.get() {
+            Some((cached_generation, id)) if cached_generation == generation => Some(id),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn cache_name_id(&self, generation: u32, id: crate::interner::NameId) {
+        self.0.name_id.set(Some((generation, id)));
     }
 
     pub fn units(&self) -> &[u16] {

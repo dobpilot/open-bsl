@@ -54,6 +54,19 @@ pub struct ValueTableData {
     /// кэшу прямого переноса строк: один и тот же объект таблицы после
     /// `Свернуть` уже имеет другую схему и старый план индексов неприменим.
     schema_revision: u64,
+    /// Свёрнутые образы имён колонок для `column_index` — ленивые, с
+    /// ревизией схемы на момент сборки. Имена мутируют только методы
+    /// этой структуры, и каждый из них поднимает `schema_revision`,
+    /// поэтому устаревший кэш просто пересобирается при следующем
+    /// поиске, а ручной синхронизации по местам мутаций нет.
+    folded_names: RefCell<Option<FoldedNames>>,
+}
+
+/// Кэш свёрнутых имён колонок: ревизия схемы на момент сборки и образы.
+#[derive(Debug)]
+struct FoldedNames {
+    revision: u64,
+    names: Vec<Box<[u8]>>,
 }
 
 const MISSING_POSITION: usize = usize::MAX;
@@ -392,6 +405,7 @@ type FingerprintMap = HashMap<u64, usize, BuildHasherDefault<FingerprintHasher>>
 impl ValueTableData {
     pub fn new() -> Rc<RefCell<Self>> {
         Rc::new(RefCell::new(ValueTableData {
+            folded_names: RefCell::new(None),
             column_names: Vec::new(),
             column_types: Vec::new(),
             column_vstr: Vec::new(),
@@ -409,9 +423,43 @@ impl ValueTableData {
     }
 
     pub fn column_index(&self, name: &str) -> Option<usize> {
-        self.column_names
-            .iter()
-            .position(|c| c.eq_ignore_ascii_case(name))
+        // Свёрнутое сравнение, а не `eq_ignore_ascii_case`: регистр
+        // кириллицы платформа тоже не различает (измерено, фикстура
+        // `table-column-case`). Запрос сворачивается один раз в буфер на
+        // стеке и сравнивается memcmp с кэшем образов колонок — свёртка
+        // каждой колонки на каждый поиск была видна в профиле fill.
+        let folded = self.folded_column_names();
+        let mut stack = [0u8; 64];
+        match crate::fold::folded_bytes_into(name, &mut stack) {
+            Some(query) => folded.iter().position(|c| &**c == query),
+            None => {
+                let query = crate::fold::folded_bytes(name);
+                folded.iter().position(|c| **c == *query)
+            }
+        }
+    }
+
+    /// Кэш свёрнутых имён колонок; пересобирается, если схема менялась.
+    fn folded_column_names(&self) -> std::cell::Ref<'_, Vec<Box<[u8]>>> {
+        {
+            let mut slot = self.folded_names.borrow_mut();
+            let stale = !slot
+                .as_ref()
+                .is_some_and(|cache| cache.revision == self.schema_revision);
+            if stale {
+                *slot = Some(FoldedNames {
+                    revision: self.schema_revision,
+                    names: self
+                        .column_names
+                        .iter()
+                        .map(|n| crate::fold::folded_bytes(n).into_boxed_slice())
+                        .collect(),
+                });
+            }
+        }
+        std::cell::Ref::map(self.folded_names.borrow(), |slot| {
+            &slot.as_ref().expect("кэш только что построен").names
+        })
     }
 
     pub fn add_column(&mut self, name: &str) {
@@ -755,6 +803,7 @@ impl ValueTableData {
     /// в оригинал, а не начать резолвиться ещё и в копии.
     pub fn copy_of(&self, rows: &[usize], cols: &[usize]) -> ValueTableData {
         let mut out = ValueTableData {
+            folded_names: RefCell::new(None),
             column_names: cols
                 .iter()
                 .filter_map(|&c| self.column_names.get(c).cloned())

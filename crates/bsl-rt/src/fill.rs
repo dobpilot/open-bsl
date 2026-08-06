@@ -377,7 +377,7 @@ fn resolve_row_copy_plan(
             let Some(target_col) = target
                 .column_names
                 .iter()
-                .position(|name| name.eq_ignore_ascii_case(source_name))
+                .position(|name| crate::fold::folded_eq(name, source_name))
             else {
                 rejected = Some(wanted.written.clone());
                 break;
@@ -396,7 +396,7 @@ fn resolve_row_copy_plan(
             if let Some(target_col) = target
                 .column_names
                 .iter()
-                .position(|name| name.eq_ignore_ascii_case(source_name))
+                .position(|name| crate::fold::folded_eq(name, source_name))
             {
                 cells.push((source_col, target_col));
             }
