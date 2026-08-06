@@ -701,31 +701,24 @@ impl ValueTableData {
             Ordering::Equal
         });
 
-        // `order[new] = old`. Обратная перестановка показывает, в какую
-        // новую позицию должен попасть каждый старый элемент. Разлагаем её
-        // один раз на обмены и применяем ко всем колонкам: так сортировка
-        // не клонирует десятки миллионов `BslValue` и не меняет счётчики
-        // ссылок вложенных строк.
-        let mut destination = vec![0_usize; order.len()];
-        for (new_position, &old_position) in order.iter().enumerate() {
-            destination[old_position] = new_position;
-        }
-        let mut swaps = Vec::with_capacity(order.len());
-        for position in 0..destination.len() {
-            while destination[position] != position {
-                let target = destination[position];
-                swaps.push((position, target));
-                destination.swap(position, target);
-            }
-        }
+        // `order[new] = old` — готовая карта сборки: каждая колонка
+        // строится заново ПЕРЕНОСОМ значений в новом порядке, без клонов
+        // и счётчиков ссылок — на старом месте остаётся `Неопределено`,
+        // и старый вектор освобождается пустышками. Последовательная
+        // запись новой колонки заметно дружелюбнее к кэшу, чем прежние
+        // цепочки обменов со случайным доступом с обеих сторон, — на
+        // сортировке 1.8 млн строк × 19 колонок это видно в замере.
         for col in &mut self.columns {
-            for &(left, right) in &swaps {
-                col.swap(left, right);
-            }
+            let mut gathered = Vec::with_capacity(col.len());
+            gathered.extend(
+                order
+                    .iter()
+                    .map(|&old| std::mem::replace(&mut col[old], BslValue::Undefined)),
+            );
+            *col = gathered;
         }
-        for &(left, right) in &swaps {
-            self.row_ids.swap(left, right);
-        }
+        let row_ids = order.iter().map(|&old| self.row_ids[old]).collect();
+        self.row_ids = row_ids;
         self.reindex();
     }
 
@@ -1342,26 +1335,43 @@ mod tests {
     }
 
     #[test]
-    fn sort_reorders_columns_in_place() {
+    fn sort_moves_values_without_cloning() {
+        // Колонки после сортировки собираются в новые буферы, но значения
+        // ПЕРЕНОСЯТСЯ: объект в ячейке обязан остаться тем же самым `Rc`,
+        // а не копией — на этом держится и цена сортировки, и семантика
+        // ссылочных значений.
         let table = ValueTableData::new();
         let mut table = table.borrow_mut();
         table.add_column("к");
+        table.add_column("м");
+        let marker = BslValue::new_array(Vec::new());
+        let BslValue::Object(marker_rc) = &marker else {
+            panic!("массив — объект");
+        };
+        let marker_ptr = Rc::as_ptr(marker_rc);
         for value in [3, 1, 2] {
             let row = table.add_row();
             table.set_cell(row, 0, BslValue::Number(BslNumber::from_i64(value)));
+            if value == 3 {
+                table.set_cell(row, 1, marker.clone());
+            }
         }
-        let original_buffer = table.columns[0].as_ptr();
 
         table.sort(&[SortKey {
             column: 0,
             descending: false,
         }]);
 
-        assert_eq!(table.columns[0].as_ptr(), original_buffer);
         assert_eq!(
             table.columns[0],
             [1, 2, 3].map(|value| BslValue::Number(BslNumber::from_i64(value)))
         );
+        // Маркер уехал вместе со своей строкой в конец и остался тем же
+        // объектом.
+        let BslValue::Object(moved) = &table.columns[1][2] else {
+            panic!("маркер не переехал вместе со строкой");
+        };
+        assert_eq!(Rc::as_ptr(moved), marker_ptr);
     }
 
     // НЕ ИЗМЕРЕНО(TABLE.ADJUST) — тесты фиксируют ИЗМЕРЕННУЮ часть правил
