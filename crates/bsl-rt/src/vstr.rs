@@ -29,6 +29,7 @@
 //! [`RtError::StackOverflow`] вместо падения процесса: краш платформы —
 //! не то поведение, которое стоит воспроизводить.
 
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use bsl_number::BslNumber;
@@ -674,9 +675,11 @@ pub fn value_to_file(path: &str, v: &BslValue, rt: &RuntimeShapes) -> RtResult<(
 ///
 /// Ошибки файлового ввода-вывода и разбора внутреннего формата.
 pub fn value_from_file(path: &str, rt: &mut RuntimeShapes) -> RtResult<BslValue> {
-    let raw = std::fs::read_to_string(path)
-        .map_err(|e| RtError::IoError(format!("ЗначениеИзФайла: {e}")))?;
-    let text = raw.strip_prefix('\u{feff}').unwrap_or(&raw);
+    // Байты, а не `read_to_string`: валидация UTF-8 идёт лениво, по
+    // материализуемым лексемам, — не-UTF-8 в данных даёт ошибку разбора,
+    // а не чтения файла.
+    let raw = std::fs::read(path).map_err(|e| RtError::IoError(format!("ЗначениеИзФайла: {e}")))?;
+    let text = raw.strip_prefix("\u{feff}".as_bytes()).unwrap_or(&raw);
     parse_and_convert(text, true, rt)
 }
 
@@ -696,21 +699,28 @@ pub fn value_from_string_internal(text: &str, rt: &mut RuntimeShapes) -> RtResul
     // В отличие от файловой пары, строка из памяти разбирается как есть:
     // нормализация `\r\n` внутри строковых лексем на платформе для этого
     // пути не измерена.
-    parse_and_convert(text, false, rt)
+    parse_and_convert(text.as_bytes(), false, rt)
 }
 
-fn parse_and_convert(text: &str, crlf_to_lf: bool, rt: &mut RuntimeShapes) -> RtResult<BslValue> {
-    let mut p = Parser {
-        text,
-        pos: 0,
-        crlf_to_lf,
+fn parse_and_convert(text: &[u8], crlf_to_lf: bool, rt: &mut RuntimeShapes) -> RtResult<BslValue> {
+    let mut r = Reader {
+        p: Parser {
+            text,
+            pos: 0,
+            crlf_to_lf,
+        },
+        rt,
+        strings: ValueCache::new(),
+        numbers: ValueCache::new(),
+        dates: ValueCache::new(),
+        opaques: ValueCache::new(),
     };
-    let node = p.parse_node(0)?;
-    p.skip_ws();
-    if p.pos != p.text.len() {
+    let value = r.read_value(0)?;
+    r.p.skip_ws();
+    if r.p.pos != r.p.text.len() {
         return Err(err("лишний текст после значения во внутреннем формате"));
     }
-    convert(&node, rt, 0)
+    Ok(value)
 }
 
 /// Синтаксическое дерево РАЗБОРА: до интерпретации тегов текст — это
@@ -728,12 +738,14 @@ enum Node {
 
 /// Курсор по байтам исходного текста. Вся структура формата — скобки,
 /// запятые, кавычки, пробельные символы — это ASCII, поэтому разбор идёт
-/// по байтам без посимвольного декодирования, а содержимое лексем
-/// вырезается срезами `&str`: граница лексемы всегда ASCII-байт, то есть
-/// граница символа. Раньше здесь был `Vec<char>` — на файле в 130 МБ он
-/// стоил полгигабайта пиковой памяти и отдельного прохода декодирования.
+/// по байтам без посимвольного декодирования. Валидация UTF-8 ЛЕНИВАЯ:
+/// файл читается байтами, а в `&str` превращаются только материализуемые
+/// лексемы — вместе с интерн-кэшем [`Reader`] это значит, что валидируются
+/// только уникальные значения, а не все мегабайты входа. Раньше здесь был
+/// `Vec<char>` — на файле в 130 МБ он стоил полгигабайта пиковой памяти и
+/// отдельного прохода декодирования.
 struct Parser<'a> {
-    text: &'a str,
+    text: &'a [u8],
     pos: usize,
     /// Нормализовать `\r\n` в `\n` внутри строковых лексем — режим
     /// файловой пары (см. [`value_from_file`]); `ЗначениеИзСтрокиВнутр`
@@ -741,9 +753,14 @@ struct Parser<'a> {
     crlf_to_lf: bool,
 }
 
-impl Parser<'_> {
+/// Лексема как `&str`: единственная точка валидации UTF-8 при чтении.
+fn utf8(bytes: &[u8]) -> RtResult<&str> {
+    std::str::from_utf8(bytes).map_err(|_| err("текст во внутреннем формате не в UTF-8"))
+}
+
+impl<'a> Parser<'a> {
     fn peek(&self) -> Option<u8> {
-        self.text.as_bytes().get(self.pos).copied()
+        self.text.get(self.pos).copied()
     }
 
     fn skip_ws(&mut self) {
@@ -794,7 +811,7 @@ impl Parser<'_> {
                         }
                         self.pos += 1;
                     }
-                    s.push_str(&self.text[start..self.pos]);
+                    s.push_str(utf8(&self.text[start..self.pos])?);
                     match self.peek() {
                         Some(b'"') => {
                             self.pos += 1;
@@ -831,10 +848,818 @@ impl Parser<'_> {
                 if self.pos == start {
                     return Err(err("неожиданный символ во внутреннем формате"));
                 }
-                Ok(Node::Bare(self.text[start..self.pos].to_string()))
+                Ok(Node::Bare(utf8(&self.text[start..self.pos])?.to_string()))
             }
             None => Err(err("неожиданный конец текста во внутреннем формате")),
         }
+    }
+
+    /// Начинается ли на курсоре голая лексема (после `skip_ws`).
+    fn at_bare(&self) -> bool {
+        !matches!(
+            self.peek(),
+            Some(b'{' | b'}' | b',' | b'"' | b' ' | b'\n' | b'\r' | b'\t') | None
+        )
+    }
+
+    /// Голая лексема срезом исходника; пустая — ошибка, как в
+    /// [`Parser::parse_node`].
+    fn read_bare_tok(&mut self) -> RtResult<&'a [u8]> {
+        let start = self.pos;
+        while let Some(c) = self.peek() {
+            if matches!(c, b'{' | b'}' | b',' | b'"' | b' ' | b'\n' | b'\r' | b'\t') {
+                break;
+            }
+            self.pos += 1;
+        }
+        if self.pos == start {
+            return Err(err("неожиданный символ во внутреннем формате"));
+        }
+        Ok(&self.text[start..self.pos])
+    }
+
+    /// Строковая лексема СЫРЫМ срезом между кавычками: удвоение кавычек и
+    /// пары `\r\n` не развёрнуты — такой срез служит ключом кэша значений.
+    /// Курсор должен стоять на открывающей кавычке.
+    fn read_quoted_raw(&mut self) -> RtResult<&'a [u8]> {
+        self.pos += 1;
+        let start = self.pos;
+        loop {
+            match self.peek() {
+                Some(b'"') => {
+                    if self.text.get(self.pos + 1) == Some(&b'"') {
+                        self.pos += 2;
+                    } else {
+                        let end = self.pos;
+                        self.pos += 1;
+                        return Ok(&self.text[start..end]);
+                    }
+                }
+                Some(_) => self.pos += 1,
+                None => return Err(err("незакрытая строка во внутреннем формате")),
+            }
+        }
+    }
+
+    /// Конец поддерева, начинающегося на `start` со скобки `{`: чистый
+    /// байтовый скан со счётом скобок вне строковых лексем, без разбора и
+    /// аллокаций. Удвоенная кавычка переключает признак строки дважды и
+    /// потому учитывается сама собой. `None` — текст обрывается; ошибку
+    /// с точным сообщением тогда даёт настоящий разбор.
+    fn subtree_end(&self, start: usize) -> Option<usize> {
+        let mut depth = 0usize;
+        let mut in_string = false;
+        for (i, &b) in self.text[start..].iter().enumerate() {
+            match b {
+                b'"' => in_string = !in_string,
+                b'{' if !in_string => depth += 1,
+                b'}' if !in_string => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some(start + i + 1);
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+}
+
+/// Развёртка сырой строковой лексемы: `""` схлопывается в `"`, в файловом
+/// режиме пара `\r\n` — в `\n` (одиночный `\r` остаётся). `None` — правок
+/// не нужно, содержимое годится срезом как есть; это обычный случай.
+fn unquote(raw: &str, crlf_to_lf: bool) -> Option<String> {
+    if !raw.contains('"') && !(crlf_to_lf && raw.contains('\r')) {
+        return None;
+    }
+    let bytes = raw.as_bytes();
+    let mut s = String::with_capacity(raw.len());
+    let mut start = 0;
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            // Кусок вместе с первой кавычкой, вторая пропускается.
+            b'"' => {
+                s.push_str(&raw[start..=i]);
+                i += 2;
+                start = i;
+            }
+            b'\r' if crlf_to_lf => {
+                s.push_str(&raw[start..i]);
+                i += 1;
+                if bytes.get(i) != Some(&b'\n') {
+                    s.push('\r');
+                }
+                start = i;
+            }
+            _ => i += 1,
+        }
+    }
+    s.push_str(&raw[start..]);
+    Some(s)
+}
+
+/// Хешер интерн-кэшей — FxHash: восемь байтов за шаг, умножение с
+/// поворотом. Ключи кэшей — срезы исходного текста, их миллионы, и
+/// стойкий к затравке SipHash стандартной таблицы на них заметен в
+/// профиле; кэш живёт не дольше одного вызова чтения, атак на затравку
+/// тут нет.
+#[derive(Default)]
+struct FxHasher(u64);
+
+impl std::hash::Hasher for FxHasher {
+    fn write(&mut self, bytes: &[u8]) {
+        const SEED: u64 = 0x51_7c_c1_b7_27_22_0a_95;
+        let mut chunks = bytes.chunks_exact(8);
+        for chunk in &mut chunks {
+            let word = u64::from_le_bytes(chunk.try_into().expect("ровно восемь байтов"));
+            self.0 = (self.0.rotate_left(5) ^ word).wrapping_mul(SEED);
+        }
+        let mut tail = 0u64;
+        for &b in chunks.remainder().iter().rev() {
+            tail = (tail << 8) | u64::from(b);
+        }
+        self.0 = (self.0.rotate_left(5) ^ tail).wrapping_mul(SEED);
+    }
+
+    fn finish(&self) -> u64 {
+        self.0
+    }
+}
+
+/// Интерн-кэш чтения: срез исходника — готовое значение. Кэш
+/// самоотключается на данных без повторов: колонка уникальных ключей
+/// иначе оплачивает и хеш, и рехеш растущей таблицы, ничего не получая
+/// взамен, — а решить заранее, какие лексемы будут повторяться, нельзя.
+struct ValueCache<'a> {
+    map: HashMap<&'a [u8], BslValue, std::hash::BuildHasherDefault<FxHasher>>,
+    hits: u64,
+    misses: u64,
+}
+
+impl<'a> ValueCache<'a> {
+    fn new() -> Self {
+        ValueCache {
+            map: HashMap::default(),
+            hits: 0,
+            misses: 0,
+        }
+    }
+
+    /// Пока идёт разогрев, кэш работает всегда; после — только если
+    /// попадание хотя бы каждое четвёртое. Счётчики продолжают жить,
+    /// поэтому решение принимается по всей истории, а не по окну.
+    fn active(&self) -> bool {
+        self.misses < 65_536 || self.hits * 4 >= self.misses
+    }
+
+    fn get(&mut self, key: &[u8]) -> Option<BslValue> {
+        if !self.active() {
+            return None;
+        }
+        match self.map.get(key) {
+            Some(v) => {
+                self.hits += 1;
+                Some(v.clone())
+            }
+            None => {
+                self.misses += 1;
+                None
+            }
+        }
+    }
+
+    fn insert(&mut self, key: &'a [u8], value: BslValue) {
+        if self.active() {
+            self.map.insert(key, value);
+        }
+    }
+}
+
+/// Сообщение строгой формы `{"B",1}`/`{"N",…}`/`{"D",…}`/`{"T",…}`.
+fn one_arg_err(tag: &str) -> RtError {
+    err(format!("у значения вида «{tag}» ровно один аргумент"))
+}
+
+/// Потоковое чтение поверх [`Parser`]: горячие формы — скаляры, массивы,
+/// структуры, соответствия и разметка `ТаблицыЗначений` — превращаются в
+/// значения прямо с курсора, без промежуточного дерева: на выгрузке в
+/// сотни тысяч строк дерево [`Node`] стоило дороже самого чтения. Дерево
+/// осталось холодным случаям, где нужна каноническая перерисовка либо
+/// терпимость к незнакомой форме — непрозрачным значениям,
+/// `ОписаниеТипов` и описаниям типов колонок: такой случай читается
+/// откатом курсора к началу поддерева и старым [`convert`], поэтому его
+/// семантика не может разойтись с прежней. Тексты ошибок на заведомо
+/// битых строках таблиц могут отличаться от древесного разбора — сами
+/// ошибки остаются ошибками.
+///
+/// Повторяющиеся строковые, числовые и датовые значения интернируются по
+/// сырому срезу лексемы (раздельными таблицами — одинаковый текст в
+/// разных видах значения даёт разные значения): в реальных выгрузках
+/// значения массово повторяются, и кэш заменяет миллионы аллокаций и
+/// перекодировок UTF-8 → UTF-16 тысячами. Возврат из кэша — клон `Rc`,
+/// поэтому повторы ещё и разделяют память, а сравнение таких строк
+/// попадает в быстрый путь `Rc::ptr_eq`.
+struct Reader<'a, 'r> {
+    p: Parser<'a>,
+    rt: &'r mut RuntimeShapes,
+    strings: ValueCache<'a>,
+    numbers: ValueCache<'a>,
+    dates: ValueCache<'a>,
+    /// Целые холодные поддеревья по их сырому срезу: ссылки объектов базы
+    /// в ячейках реальных выгрузок повторяются так же массово, как строки,
+    /// и на повторе достаточно перескочить поддерево байтовым сканом.
+    opaques: ValueCache<'a>,
+}
+
+impl<'a> Reader<'a, '_> {
+    fn read_value(&mut self, depth: usize) -> RtResult<BslValue> {
+        if depth > MAX_VSTR_DEPTH {
+            return Err(RtError::StackOverflow {
+                what: "слишком глубокая вложенность в ЗначениеИзСтрокиВнутр",
+            });
+        }
+        self.p.skip_ws();
+        let start = self.p.pos;
+        if self.p.peek() != Some(b'{') {
+            return Err(err("значение во внутреннем формате начинается со скобки"));
+        }
+        self.p.pos += 1;
+        self.p.skip_ws();
+        match self.p.peek() {
+            Some(b'}') => return Err(err("пустой список во внутреннем формате")),
+            Some(b'"') => {}
+            _ => return Err(err("первый элемент списка — строковый тег вида значения")),
+        }
+        let tag = self.p.read_quoted_raw()?;
+        match tag {
+            b"U" => {
+                self.skip_list_tail(depth)?;
+                Ok(BslValue::Undefined)
+            }
+            b"L" => {
+                self.skip_list_tail(depth)?;
+                Ok(BslValue::Null)
+            }
+            b"B" => match self.one_bare_tok("B")? {
+                b"0" => Ok(BslValue::Boolean(false)),
+                b"1" => Ok(BslValue::Boolean(true)),
+                other => Err(err(format!(
+                    "«{}» не булево во внутреннем формате",
+                    String::from_utf8_lossy(other)
+                ))),
+            },
+            b"N" => {
+                let raw = self.one_bare_tok("N")?;
+                if let Some(v) = self.numbers.get(raw) {
+                    return Ok(v);
+                }
+                let text = utf8(raw)?;
+                let n = BslNumber::parse_canonical(text)
+                    .map_err(|_| err(format!("«{text}» не число во внутреннем формате")))?;
+                let v = BslValue::Number(n);
+                self.numbers.insert(raw, v.clone());
+                Ok(v)
+            }
+            b"S" => {
+                let shape = "у строкового значения ровно один строковый аргумент";
+                self.expect_comma(shape)?;
+                self.p.skip_ws();
+                if self.p.peek() != Some(b'"') {
+                    return Err(err(shape));
+                }
+                let raw = self.p.read_quoted_raw()?;
+                self.expect_close(shape)?;
+                if let Some(v) = self.strings.get(raw) {
+                    return Ok(v);
+                }
+                let text = utf8(raw)?;
+                let v = match unquote(text, self.p.crlf_to_lf) {
+                    Some(s) => BslValue::Str(BslString::from_str(&s)),
+                    None => BslValue::Str(BslString::from_str(text)),
+                };
+                self.strings.insert(raw, v.clone());
+                Ok(v)
+            }
+            b"D" => {
+                let raw = self.one_bare_tok("D")?;
+                if let Some(v) = self.dates.get(raw) {
+                    return Ok(v);
+                }
+                let v = parse_date(utf8(raw)?)?;
+                self.dates.insert(raw, v.clone());
+                Ok(v)
+            }
+            b"T" => {
+                let uuid = self.one_bare_tok("T")?;
+                let uuid = utf8(uuid)?;
+                match TYPE_UUIDS
+                    .iter()
+                    .find(|(_, known)| known.eq_ignore_ascii_case(uuid))
+                {
+                    Some((t, _)) => Ok(BslValue::Type(*t)),
+                    None => self.read_cold_interned(start, depth),
+                }
+            }
+            b"#" => self.read_object(start, depth),
+            other => {
+                let shown = String::from_utf8_lossy(other);
+                let shown =
+                    unquote(&shown, self.p.crlf_to_lf).unwrap_or_else(|| shown.into_owned());
+                Err(err(format!(
+                    "вид значения «{shown}» во внутреннем формате не поддержан"
+                )))
+            }
+        }
+    }
+
+    /// Холодный путь: курсор откатывается к началу поддерева, оно
+    /// разбирается деревом и уходит в [`convert`] — непрозрачные значения
+    /// и `ОписаниеТипов` получают ровно ту же канонизацию, что и раньше.
+    /// Результат интернируется по сырому срезу поддерева: ссылки объектов
+    /// базы в ячейках повторяются массово, и на повторе поддерево
+    /// перескакивается байтовым сканом без разбора. Кэшировать безопасно
+    /// всё, что отсюда выходит, — непрозрачные значения и `ОписаниеТипов`
+    /// неизменяемы.
+    fn read_cold_interned(&mut self, start: usize, depth: usize) -> RtResult<BslValue> {
+        if let Some(end) = self.p.subtree_end(start) {
+            let raw = &self.p.text[start..end];
+            if let Some(v) = self.opaques.get(raw) {
+                self.p.pos = end;
+                return Ok(v);
+            }
+            self.p.pos = start;
+            let node = self.p.parse_node(depth)?;
+            debug_assert_eq!(self.p.pos, end, "скан скобок разошёлся с разбором");
+            let v = convert(&node, self.rt, depth)?;
+            self.opaques.insert(raw, v.clone());
+            return Ok(v);
+        }
+        // Оборванный текст: настоящий разбор даст точную ошибку.
+        self.p.pos = start;
+        let node = self.p.parse_node(depth)?;
+        convert(&node, self.rt, depth)
+    }
+
+    /// Хвост списка после `{"U"`/`{"L"`: платформенные формы пусты, но
+    /// древесный разбор принимал и лишние элементы — они молча
+    /// выбрасываются, здесь так же.
+    fn skip_list_tail(&mut self, depth: usize) -> RtResult<()> {
+        loop {
+            self.p.skip_ws();
+            match self.p.peek() {
+                Some(b'}') => {
+                    self.p.pos += 1;
+                    return Ok(());
+                }
+                Some(b',') => {
+                    self.p.pos += 1;
+                    self.p.skip_ws();
+                    let _ = self.p.parse_node(depth + 1)?;
+                }
+                _ => return Err(err("ожидалась «,» или «}» во внутреннем формате")),
+            }
+        }
+    }
+
+    /// Один любой узел без материализации — служебные хвосты строк и
+    /// блока строк. Голая лексема читается без аллокации.
+    fn skip_any_token(&mut self, depth: usize) -> RtResult<()> {
+        self.p.skip_ws();
+        match self.p.peek() {
+            Some(b'"') => self.p.read_quoted_raw().map(|_| ()),
+            Some(b'{') => self.p.parse_node(depth + 1).map(|_| ()),
+            _ => self.p.read_bare_tok().map(|_| ()),
+        }
+    }
+
+    fn expect_comma(&mut self, shape_err: &'static str) -> RtResult<()> {
+        self.p.skip_ws();
+        if self.p.peek() == Some(b',') {
+            self.p.pos += 1;
+            Ok(())
+        } else {
+            Err(err(shape_err))
+        }
+    }
+
+    fn expect_close(&mut self, shape_err: &'static str) -> RtResult<()> {
+        self.p.skip_ws();
+        if self.p.peek() == Some(b'}') {
+            self.p.pos += 1;
+            Ok(())
+        } else {
+            Err(err(shape_err))
+        }
+    }
+
+    /// Строгая форма `{"<тег>",<лексема>}` — единственный голый аргумент.
+    fn one_bare_tok(&mut self, tag: &'static str) -> RtResult<&'a [u8]> {
+        self.p.skip_ws();
+        if self.p.peek() != Some(b',') {
+            return Err(one_arg_err(tag));
+        }
+        self.p.pos += 1;
+        self.p.skip_ws();
+        if !self.p.at_bare() {
+            return Err(one_arg_err(tag));
+        }
+        let tok = self.p.read_bare_tok()?;
+        self.p.skip_ws();
+        if self.p.peek() != Some(b'}') {
+            return Err(one_arg_err(tag));
+        }
+        self.p.pos += 1;
+        Ok(tok)
+    }
+
+    /// `{"#",<uuid вида>,<нагрузка>}`.
+    fn read_object(&mut self, start: usize, depth: usize) -> RtResult<BslValue> {
+        let shape = "у объекта во внутреннем формате вид и полезная нагрузка";
+        self.expect_comma(shape)?;
+        self.p.skip_ws();
+        if !self.p.at_bare() {
+            return Err(err(shape));
+        }
+        let kind = self.p.read_bare_tok()?;
+        // Незнакомый вид — непрозрачное значение с любой формой нагрузки;
+        // `ОписаниеТипов` тоже уходит в дерево: его нагрузка либо
+        // материализуется, либо канонически перерисовывается целиком.
+        let known = matches!(
+            utf8(kind).unwrap_or(""),
+            ARRAY_ID | FIXED_ARRAY_ID | STRUCTURE_ID | MAP_ID | VALUE_TABLE_ID
+        );
+        if !known {
+            return self.read_cold_interned(start, depth);
+        }
+        let kind = utf8(kind)?;
+        self.expect_comma(shape)?;
+        self.p.skip_ws();
+        if self.p.peek() != Some(b'{') {
+            return Err(err("полезная нагрузка объекта — список"));
+        }
+        self.p.pos += 1;
+        let value = match kind {
+            ARRAY_ID | FIXED_ARRAY_ID => self.read_array(depth)?,
+            STRUCTURE_ID => self.read_structure(depth)?,
+            MAP_ID => self.read_map(depth)?,
+            VALUE_TABLE_ID => self.read_table(depth)?,
+            _ => unreachable!("незнакомый вид ушёл в дерево выше"),
+        };
+        // Ровно три элемента: тег, вид, нагрузка.
+        self.expect_close(shape)?;
+        Ok(value)
+    }
+
+    /// Счёт элементов коллекции перед содержимым: `{<число>, …}`.
+    fn read_counted_prefix(&mut self) -> RtResult<usize> {
+        self.p.skip_ws();
+        if !self.p.at_bare() {
+            return Err(err("коллекция начинается с числа элементов"));
+        }
+        utf8(self.p.read_bare_tok()?)?
+            .parse()
+            .map_err(|_| err("число элементов коллекции — целое"))
+    }
+
+    /// Разделитель перед очередным элементом коллекции: `,` — элемент
+    /// есть, `}` — коллекция закончилась.
+    fn next_item(&mut self) -> RtResult<bool> {
+        self.p.skip_ws();
+        match self.p.peek() {
+            Some(b'}') => {
+                self.p.pos += 1;
+                Ok(false)
+            }
+            Some(b',') => {
+                self.p.pos += 1;
+                Ok(true)
+            }
+            _ => Err(err("ожидалась «,» или «}» во внутреннем формате")),
+        }
+    }
+
+    fn check_count(declared: usize, got: usize) -> RtResult<()> {
+        if declared != got {
+            return Err(err(format!(
+                "коллекция объявляет {declared} элементов, а несёт {got}"
+            )));
+        }
+        Ok(())
+    }
+
+    fn read_array(&mut self, depth: usize) -> RtResult<BslValue> {
+        let declared = self.read_counted_prefix()?;
+        let items = BslValue::new_array(Vec::new());
+        let mut got = 0;
+        while self.next_item()? {
+            items.push_element(self.read_value(depth + 1)?)?;
+            got += 1;
+        }
+        Self::check_count(declared, got)?;
+        Ok(items)
+    }
+
+    fn read_structure(&mut self, depth: usize) -> RtResult<BslValue> {
+        let pair_err = "элемент структуры — пара «имя, значение»";
+        let declared = self.read_counted_prefix()?;
+        let object = {
+            let empty = self.rt.shapes.empty();
+            BslValue::new_structure(empty, Vec::new())
+        };
+        let mut got = 0;
+        while self.next_item()? {
+            self.p.skip_ws();
+            if self.p.peek() != Some(b'{') {
+                return Err(err(pair_err));
+            }
+            self.p.pos += 1;
+            let name = match self.read_value(depth + 1)? {
+                BslValue::Str(s) => s.to_string(),
+                _ => return Err(err("имя поля структуры — строка")),
+            };
+            self.expect_comma(pair_err)?;
+            let id = self.rt.names.intern(&name);
+            let value = self.read_value(depth + 1)?;
+            self.expect_close(pair_err)?;
+            object.structure_insert(id, value, &mut self.rt.shapes)?;
+            got += 1;
+        }
+        Self::check_count(declared, got)?;
+        Ok(object)
+    }
+
+    fn read_map(&mut self, depth: usize) -> RtResult<BslValue> {
+        let pair_err = "элемент соответствия — пара «ключ, значение»";
+        let declared = self.read_counted_prefix()?;
+        let map = BslValue::new_map();
+        let mut got = 0;
+        while self.next_item()? {
+            self.p.skip_ws();
+            if self.p.peek() != Some(b'{') {
+                return Err(err(pair_err));
+            }
+            self.p.pos += 1;
+            let key = self.read_value(depth + 1)?;
+            self.expect_comma(pair_err)?;
+            let value = self.read_value(depth + 1)?;
+            self.expect_close(pair_err)?;
+            map.map_insert(key, value)?;
+            got += 1;
+        }
+        Self::check_count(declared, got)?;
+        Ok(map)
+    }
+
+    /// Разметка `ТаблицыЗначений` с курсора — структура описана над
+    /// [`table_to_writer`]. Открывающая скобка нагрузки уже прочитана.
+    fn read_table(&mut self, depth: usize) -> RtResult<BslValue> {
+        let shape = "разметка ТаблицыЗначений — версия, колонки, строки, индексы";
+        self.p.skip_ws();
+        if !self.p.at_bare() {
+            return Err(err(shape));
+        }
+        let version = self.p.read_bare_tok()?;
+        if version != b"9" {
+            return Err(err(format!(
+                "версия разметки ТаблицыЗначений «{}» не поддержана (измерена 9)",
+                String::from_utf8_lossy(version)
+            )));
+        }
+        self.expect_comma(shape)?;
+        self.p.skip_ws();
+        if self.p.peek() != Some(b'{') {
+            return Err(err(shape));
+        }
+        self.p.pos += 1;
+
+        let table = crate::ValueTableData::new();
+        {
+            let mut t = table.borrow_mut();
+
+            // Колонки: {<число>, {<колонка>}, …}.
+            let declared_cols = self.read_counted_prefix()?;
+            let col_shape = "колонка ТаблицыЗначений — идентификатор, имя, типы, заголовок, ширина";
+            let mut got_cols = 0;
+            while self.next_item()? {
+                self.p.skip_ws();
+                if self.p.peek() != Some(b'{') {
+                    return Err(err("колонка ТаблицыЗначений — список"));
+                }
+                self.p.pos += 1;
+                self.p.skip_ws();
+                if !self.p.at_bare() {
+                    return Err(err(col_shape));
+                }
+                let col_id = utf8(self.p.read_bare_tok()?)?;
+                self.expect_comma(col_shape)?;
+                self.p.skip_ws();
+                if self.p.peek() != Some(b'"') {
+                    return Err(err(col_shape));
+                }
+                let name_raw = utf8(self.p.read_quoted_raw()?)?;
+                let name = match unquote(name_raw, self.p.crlf_to_lf) {
+                    Some(s) => s,
+                    None => name_raw.to_string(),
+                };
+                self.expect_comma(col_shape)?;
+                self.p.skip_ws();
+                if self.p.peek() != Some(b'{') {
+                    return Err(err(col_shape));
+                }
+                // Описание типов — деревом: холодное место с канонической
+                // перерисовкой, общей с древесным разбором.
+                let pattern_node = self.p.parse_node(depth + 1)?;
+                let Node::List(pattern) = &pattern_node else {
+                    return Err(err(col_shape));
+                };
+                let (types, raw_pattern) = column_pattern(pattern)?;
+                self.expect_comma(col_shape)?;
+                self.p.skip_ws();
+                if self.p.peek() != Some(b'"') {
+                    return Err(err(col_shape));
+                }
+                let title_raw = utf8(self.p.read_quoted_raw()?)?;
+                let title = match unquote(title_raw, self.p.crlf_to_lf) {
+                    Some(s) => s,
+                    None => title_raw.to_string(),
+                };
+                self.expect_comma(col_shape)?;
+                self.p.skip_ws();
+                if !self.p.at_bare() {
+                    return Err(err(col_shape));
+                }
+                let width = utf8(self.p.read_bare_tok()?)?;
+                self.expect_close(col_shape)?;
+
+                t.add_column(&name);
+                let slot = t.column_types.len() - 1;
+                t.column_types[slot] = types;
+                t.column_vstr[slot] = crate::table::ColumnVstr {
+                    id: Some(col_id.to_string()),
+                    raw_pattern: Some(raw_pattern),
+                    title,
+                    width: width.to_string(),
+                };
+                got_cols += 1;
+            }
+            Self::check_count(declared_cols, got_cols)?;
+            let ncols = t.column_names.len();
+
+            // Блок строк: служебные пары до первого вложенного списка
+            // игнорируются, как и в древесном разборе.
+            self.expect_comma(shape)?;
+            self.p.skip_ws();
+            if self.p.peek() != Some(b'{') {
+                return Err(err(shape));
+            }
+            self.p.pos += 1;
+            let mut first = true;
+            loop {
+                if first {
+                    self.p.skip_ws();
+                    if self.p.peek() == Some(b'}') {
+                        return Err(err("в блоке строк ТаблицыЗначений нет списка строк"));
+                    }
+                } else if !self.next_item()? {
+                    return Err(err("в блоке строк ТаблицыЗначений нет списка строк"));
+                } else {
+                    self.p.skip_ws();
+                }
+                first = false;
+                match self.p.peek() {
+                    Some(b'{') => break,
+                    Some(b'"') => {
+                        let _ = self.p.read_quoted_raw()?;
+                    }
+                    _ => {
+                        let _ = self.p.read_bare_tok()?;
+                    }
+                }
+            }
+
+            // Внутренний список: {1, <число строк>, <строка>, …}.
+            let rows_shape = "список строк ТаблицыЗначений начинается с числа строк";
+            self.p.pos += 1;
+            self.p.skip_ws();
+            if !self.p.at_bare() {
+                return Err(err(rows_shape));
+            }
+            let _ = self.p.read_bare_tok()?;
+            self.expect_comma(rows_shape)?;
+            self.p.skip_ws();
+            if !self.p.at_bare() {
+                return Err(err(rows_shape));
+            }
+            let declared_rows = String::from_utf8_lossy(self.p.read_bare_tok()?).into_owned();
+            let expected_rows: Option<usize> = declared_rows.parse().ok();
+
+            let mut file_row_ids = Vec::with_capacity(expected_rows.unwrap_or(0));
+            while self.next_item()? {
+                self.p.skip_ws();
+                if self.p.peek() != Some(b'{') {
+                    return Err(err("строка ТаблицыЗначений — список"));
+                }
+                self.p.pos += 1;
+                // {2, <идентификатор строки>, <n значений>, <значения>, 0}
+                let short = "строка ТаблицыЗначений короче служебной обвязки";
+                self.p.skip_ws();
+                if matches!(self.p.peek(), Some(b'}' | b',') | None) {
+                    return Err(err(short));
+                }
+                self.skip_any_token(depth)?;
+                self.expect_comma(short)?;
+                self.p.skip_ws();
+                if !self.p.at_bare() {
+                    return Err(err(
+                        "второй элемент строки ТаблицыЗначений — её идентификатор",
+                    ));
+                }
+                let row_id: u64 = utf8(self.p.read_bare_tok()?)?
+                    .parse()
+                    .map_err(|_| err("идентификатор строки ТаблицыЗначений — целое"))?;
+                self.expect_comma(short)?;
+                self.p.skip_ws();
+                if !self.p.at_bare() {
+                    return Err(err(
+                        "третий элемент строки ТаблицыЗначений — число значений",
+                    ));
+                }
+                let stored: usize = utf8(self.p.read_bare_tok()?)?
+                    .parse()
+                    .map_err(|_| err("число значений строки ТаблицыЗначений — целое"))?;
+                if stored > ncols {
+                    return Err(err(format!(
+                        "строка ТаблицыЗначений объявляет {stored} значений, а несёт {stored}"
+                    )));
+                }
+                file_row_ids.push(row_id);
+                let _ = t.add_row();
+                let pos = t.row_ids.len() - 1;
+                for k in 0..stored {
+                    if self.expect_comma(short).is_err() {
+                        return Err(err(format!(
+                            "строка ТаблицыЗначений объявляет {stored} значений, а несёт {k}"
+                        )));
+                    }
+                    t.columns[k][pos] = self.read_value(depth + 1)?;
+                }
+                // Хвостовая служебная лексема — ровно одна, любая.
+                let mut extras = 0usize;
+                loop {
+                    self.p.skip_ws();
+                    match self.p.peek() {
+                        Some(b'}') => {
+                            self.p.pos += 1;
+                            break;
+                        }
+                        Some(b',') => {
+                            self.p.pos += 1;
+                            self.skip_any_token(depth)?;
+                            extras += 1;
+                        }
+                        _ => return Err(err("ожидалась «,» или «}» во внутреннем формате")),
+                    }
+                }
+                if extras != 1 {
+                    if stored == 0 && extras == 0 {
+                        return Err(err(short));
+                    }
+                    return Err(err(format!(
+                        "строка ТаблицыЗначений объявляет {stored} значений, а несёт {}",
+                        stored + extras - 1
+                    )));
+                }
+            }
+            if expected_rows != Some(file_row_ids.len()) {
+                return Err(err(format!(
+                    "ТаблицаЗначений объявляет {declared_rows} строк, а несёт {}",
+                    file_row_ids.len()
+                )));
+            }
+
+            // Хвост блока строк: первым может идти сырое `X`; остальное,
+            // включая `Y`, игнорируется — `Y` вычисляется при записи.
+            let mut first_after = true;
+            while self.next_item()? {
+                self.p.skip_ws();
+                if first_after && self.p.at_bare() {
+                    t.vstr_tail_x = Some(utf8(self.p.read_bare_tok()?)?.to_string());
+                } else {
+                    self.skip_any_token(depth)?;
+                }
+                first_after = false;
+            }
+            t.set_row_ids(file_row_ids);
+        }
+
+        // Индексы — один любой узел, затем конец нагрузки: ровно четыре
+        // элемента разметки.
+        self.expect_comma(shape)?;
+        self.skip_any_token(depth)?;
+        self.expect_close(shape)?;
+        Ok(BslValue::Object(Rc::new(BslObject::ValueTable(table))))
     }
 }
 
@@ -1082,7 +1907,8 @@ fn convert_object(
     }
 }
 
-/// Разбор `ТаблицыЗначений` — разметка описана над [`table_to_node`].
+/// Разбор `ТаблицыЗначений` из дерева — разметка описана над
+/// [`table_to_writer`]; потоковый двойник — [`Reader::read_table`].
 /// Служебные индексы (номер колонки, номер строки, пары в блоке строк)
 /// принимаются, но не проверяются: физический порядок узлов и есть
 /// порядок таблицы. Заголовок, ширина и квалификаторы типов колонок
@@ -1118,73 +1944,10 @@ fn table_from_payload(
                     "колонка ТаблицыЗначений — идентификатор, имя, типы, заголовок, ширина",
                 ));
             };
-            let [Node::Str(tag), type_nodes @ ..] = pattern.as_slice() else {
-                return Err(err("описание типов колонки начинается с «Pattern»"));
-            };
-            if tag != "Pattern" {
-                return Err(err(format!(
-                    "описание типов колонки — «Pattern», не «{tag}»"
-                )));
-            }
-            // Буквы собираются в типы колонки «насколько возможно»: после
-            // буквы могут идти квалификаторы ({"N",10,2,0}) — они
-            // отбрасываются, — а ссылочный компонент ({"#",<uuid>}) или
-            // незнакомая буква обнуляют ограничение целиком: ложно сузить
-            // тип хуже, чем не ограничить. Точный исходник в любом случае
-            // сохраняет `raw_pattern` ниже — транзит от этого не страдает.
-            let mut ids = Vec::with_capacity(type_nodes.len());
-            let mut representable = true;
-            for node in type_nodes {
-                let parts = match node {
-                    Node::List(t) => Some(t),
-                    _ => None,
-                };
-                let letter = parts.and_then(|t| match t.first() {
-                    Some(Node::Str(letter)) => Some(letter),
-                    _ => None,
-                });
-                match letter.and_then(|letter| {
-                    COLUMN_TYPE_LETTERS
-                        .iter()
-                        .find(|(_, known)| known == letter)
-                        .map(|(id, _)| *id)
-                }) {
-                    Some(id) => {
-                        // Квалификаторы за буквой: семантика — приведению
-                        // значений, написание транзиту хранит raw_pattern.
-                        let quals = parts
-                            .map(|t| {
-                                t[1..]
-                                    .iter()
-                                    .filter_map(|q| match q {
-                                        Node::Bare(b) => Some(b.clone()),
-                                        Node::Str(s) => Some(s.clone()),
-                                        _ => None,
-                                    })
-                                    .collect()
-                            })
-                            .unwrap_or_default();
-                        ids.push(crate::table::ColumnType { id, quals });
-                    }
-                    None => {
-                        representable = false;
-                        break;
-                    }
-                }
-            }
-            let types = if type_nodes.is_empty() || !representable {
-                None
-            } else {
-                Some(ids)
-            };
+            let (types, raw) = column_pattern(pattern)?;
             t.add_column(name);
             let slot = t.column_types.len() - 1;
             t.column_types[slot] = types;
-            // Сырое описание типов и оформление сохраняются целиком —
-            // обратная сериализация вернёт их байт в байт (квалификаторы
-            // и заголовки сама модель колонок пока не использует).
-            let mut raw = String::new();
-            render(&Node::List(pattern.to_vec()), &mut raw);
             t.column_vstr[slot] = crate::table::ColumnVstr {
                 id: Some(col_id.clone()),
                 raw_pattern: Some(raw),
@@ -1261,6 +2024,73 @@ fn table_from_payload(
         t.set_row_ids(file_row_ids);
     }
     Ok(BslValue::Object(Rc::new(BslObject::ValueTable(table))))
+}
+
+/// Описание типов колонки `{"Pattern",…}` из дерева: типы «насколько
+/// возможно» и каноническая перерисовка исходника для транзита. Общее
+/// место древесного и потокового чтения.
+///
+/// Буквы собираются в типы колонки не строже, чем можно: после буквы
+/// могут идти квалификаторы (`{"N",10,2,0}`) — они сохраняются при
+/// колонке, — а ссылочный компонент (`{"#",<uuid>}`) или незнакомая
+/// буква обнуляют ограничение целиком: ложно сузить тип хуже, чем не
+/// ограничить. Точный исходник в любом случае возвращается второй
+/// компонентой — транзит от обнуления не страдает.
+fn column_pattern(pattern: &[Node]) -> RtResult<(Option<Vec<crate::table::ColumnType>>, String)> {
+    let [Node::Str(tag), type_nodes @ ..] = pattern else {
+        return Err(err("описание типов колонки начинается с «Pattern»"));
+    };
+    if tag != "Pattern" {
+        return Err(err(format!(
+            "описание типов колонки — «Pattern», не «{tag}»"
+        )));
+    }
+    let mut ids = Vec::with_capacity(type_nodes.len());
+    let mut representable = true;
+    for node in type_nodes {
+        let parts = match node {
+            Node::List(t) => Some(t),
+            _ => None,
+        };
+        let letter = parts.and_then(|t| match t.first() {
+            Some(Node::Str(letter)) => Some(letter),
+            _ => None,
+        });
+        match letter.and_then(|letter| {
+            COLUMN_TYPE_LETTERS
+                .iter()
+                .find(|(_, known)| known == letter)
+                .map(|(id, _)| *id)
+        }) {
+            Some(id) => {
+                let quals = parts
+                    .map(|t| {
+                        t[1..]
+                            .iter()
+                            .filter_map(|q| match q {
+                                Node::Bare(b) => Some(b.clone()),
+                                Node::Str(s) => Some(s.clone()),
+                                _ => None,
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                ids.push(crate::table::ColumnType { id, quals });
+            }
+            None => {
+                representable = false;
+                break;
+            }
+        }
+    }
+    let types = if type_nodes.is_empty() || !representable {
+        None
+    } else {
+        Some(ids)
+    };
+    let mut raw = String::new();
+    render(&Node::List(pattern.to_vec()), &mut raw);
+    Ok((types, raw))
 }
 
 /// Полезная нагрузка коллекции: `{<число элементов>, <эл>, …}`. Счёт
