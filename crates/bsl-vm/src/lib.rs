@@ -335,6 +335,12 @@ fn drive_with(
         } else {
             Vec::new()
         };
+    // Без JIT `step` может сцеплять линейные цепочки бандлов, не
+    // возвращаясь сюда: единственная оставшаяся проба — fast numeric-for,
+    // а её `pc` достижим только взятым back-edge, на котором цепочка и так
+    // рвётся. С JIT-ом же возврат нужен после каждого бандла — иначе
+    // интерпретатор пробежит мимо позиции, где мог бы стартовать натив.
+    let merge_linear = native.is_empty();
 
     loop {
         // После инициализации пустой numeric-for не обращается к
@@ -406,6 +412,12 @@ fn drive_with(
             }
         }
 
+        // `step` исполняет целый VLIW-бандл (см. `bsl_bytecode::bundle`),
+        // так что проверки fast numeric-for и JIT-входа выше происходят на
+        // границах бандлов, а не на каждой инструкции. При ошибке члена
+        // `pc` стоит на нём самом, и `unwind_to_handler` находит обработчик
+        // как при поинструкционном исполнении; обработчик по построению
+        // разметки — начало бандла.
         match step(
             &mut frames,
             &mut stack,
@@ -413,6 +425,7 @@ fn drive_with(
             &mut current_exception,
             &mut runtime_shapes,
             &mut snippets,
+            merge_linear,
         ) {
             Ok(Step::Continue) => continue,
             Ok(Step::Done(v)) => return Ok((v, stack)),
@@ -550,7 +563,12 @@ fn field_name(program: &Program, name: bsl_rt::NameId) -> Result<&str, RtError> 
     .map(|s| s.as_str())
 }
 
-/// Выполняет РОВНО одну инструкцию текущего (верхнего) кадра.
+/// Выполняет один VLIW-бандл текущего (верхнего) кадра: от одной
+/// инструкции (одиночный бандл) до `Chunk::bundle_len[pc]` подряд — без
+/// возврата в `drive_with` между членами. При `merge_linear` (чисто
+/// интерпретаторный режим, без JIT) исполнение продолжается и через
+/// границу бандла, пока `pc` идёт линейно: пробы `drive_with` имеют смысл
+/// только там, куда `pc` попадает переходом, вызовом или разматыванием.
 fn step(
     frames: &mut Vec<Frame>,
     stack: &mut Vec<BslValue>,
@@ -558,10 +576,11 @@ fn step(
     current_exception: &mut Option<BslValue>,
     runtime_shapes: &mut bsl_rt::RuntimeShapes,
     snippets: &mut SnippetCache,
+    merge_linear: bool,
 ) -> Result<Step, RtError> {
     let frame_idx = frames.len() - 1;
     let func_id = frames[frame_idx].func_id;
-    let pc = frames[frame_idx].pc;
+    let mut pc = frames[frame_idx].pc;
     let chunk = at(&program.chunks, func_id, "номер чанка вне таблицы функций")?;
 
     if pc >= chunk.instrs.len() {
@@ -575,603 +594,660 @@ fn step(
         );
     }
 
-    // `pc < chunk.instrs.len()` проверено сразу выше — индексация здесь
-    // уже не может выйти за границы.
-    let instr = chunk.instrs[pc];
-    match instr {
-        Instr::GetModuleVar { dst, slot } => {
-            // АБСОЛЮТНЫЙ индекс: модульные переменные лежат подряд,
-            // начиная с `module_base`. У обычной программы база нулевая
-            // — это первые слоты кадра верхнего уровня, а он стоит в
-            // самом низу стека и живёт всё исполнение. Проверка границы
-            // обязательна — байт-код может прийти и не от кодогена.
-            if (slot as usize) >= program.module_vars.len() {
-                return Err(RtError::InvalidBytecode(
-                    "номер переменной модуля вне таблицы",
-                ));
-            }
-            let v = reg_load(stack, program.module_base as usize + slot as usize)?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, v)?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::SetModuleVar { slot, src } => {
-            if (slot as usize) >= program.module_vars.len() {
-                return Err(RtError::InvalidBytecode(
-                    "номер переменной модуля вне таблицы",
-                ));
-            }
-            let v = reg_load(stack, frames[frame_idx].reg_index(src))?;
-            reg_store(stack, program.module_base as usize + slot as usize, v)?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::Move { dst, src } => {
-            let s = frames[frame_idx].reg_index(src);
-            let v = reg_load(stack, s)?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, v)?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::LoadConst { dst, k } => {
-            let v = at(
-                &chunk.consts,
-                k as usize,
-                "номер константы вне таблицы констант чанка",
-            )?
-            .clone();
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, v)?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::LoadBool { dst, val } => {
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, BslValue::Boolean(val))?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::LoadUndefined { dst } => {
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, BslValue::Undefined)?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::LoadNull { dst } => {
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, BslValue::Null)?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::LoadSkipped { dst } => {
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, BslValue::Skipped)?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::Add { dst, a, b } => {
-            add_op(frames, stack, frame_idx, dst, a, b)?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::Sub { dst, a, b } => {
-            binop(frames, stack, frame_idx, dst, a, b, BslValue::sub)?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::Mul { dst, a, b } => {
-            binop(frames, stack, frame_idx, dst, a, b, BslValue::mul)?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::Mod { dst, a, b } => {
-            binop(frames, stack, frame_idx, dst, a, b, BslValue::rem)?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::Div { dst, a, b } => {
-            binop(frames, stack, frame_idx, dst, a, b, BslValue::div)?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::Neg { dst, src } => {
-            let s = frames[frame_idx].reg_index(src);
-            let v = neg_op(&reg_load(stack, s)?)?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, v)?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::Not { dst, src } => {
-            let s = frames[frame_idx].reg_index(src);
-            let v = reg_load(stack, s)?.not()?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, v)?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::Eq { dst, a, b } => {
-            let av = reg_load(stack, frames[frame_idx].reg_index(a))?;
-            let bv = reg_load(stack, frames[frame_idx].reg_index(b))?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, BslValue::Boolean(av.eq_value(&bv)))?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::NotEq { dst, a, b } => {
-            let av = reg_load(stack, frames[frame_idx].reg_index(a))?;
-            let bv = reg_load(stack, frames[frame_idx].reg_index(b))?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, BslValue::Boolean(!av.eq_value(&bv)))?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::Lt { dst, a, b } => {
-            cmp(frames, stack, frame_idx, dst, a, b, "<", |o| o.is_lt())?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::Gt { dst, a, b } => {
-            cmp(frames, stack, frame_idx, dst, a, b, ">", |o| o.is_gt())?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::Le { dst, a, b } => {
-            cmp(frames, stack, frame_idx, dst, a, b, "<=", |o| o.is_le())?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::Ge { dst, a, b } => {
-            cmp(frames, stack, frame_idx, dst, a, b, ">=", |o| o.is_ge())?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::Jump { target } => {
-            frames[frame_idx].pc = target as usize;
-        }
-        Instr::JumpIfFalse { cond, target } => {
-            let c = frames[frame_idx].reg_index(cond);
-            // Строгая булевость: не-`Булево` в условии — ошибка типа,
-            // а не приведение к истинности.
-            if reg_load(stack, c)?.as_condition()? {
-                frames[frame_idx].pc += 1;
-            } else {
-                frames[frame_idx].pc = target as usize;
-            }
-        }
-        Instr::JumpIfTrue { cond, target } => {
-            let c = frames[frame_idx].reg_index(cond);
-            if reg_load(stack, c)?.as_condition()? {
-                frames[frame_idx].pc = target as usize;
-            } else {
-                frames[frame_idx].pc += 1;
-            }
-        }
-        Instr::JumpIfNotSkipped { src, target } => {
-            let s = frames[frame_idx].reg_index(src);
-            // Не `as_condition`/строгая булевость — это не условие
-            // пользовательского кода, а проверка внутреннего маркера
-            // (см. пролог параметров по умолчанию в
-            // `bsl-bytecode::compiler::compile_param_defaults`).
-            if matches!(reg_load(stack, s)?, BslValue::Skipped) {
-                frames[frame_idx].pc += 1;
-            } else {
-                frames[frame_idx].pc = target as usize;
-            }
-        }
-        Instr::NumericForNext {
-            counter,
-            bound,
-            target,
-        } => {
-            let counter = frames[frame_idx].reg_index(counter);
-            let bound = frames[frame_idx].reg_index(bound);
-            numeric_for_next_regular(stack, counter, bound, &mut frames[frame_idx].pc, target)?;
-        }
-        Instr::NumericForNextI64 {
-            counter,
-            bound,
-            target,
-        } => {
-            let counter_idx = frames[frame_idx].reg_index(counter);
-            let bound_idx = frames[frame_idx].reg_index(bound);
-            let state = match frames[frame_idx].numeric_for_state.take() {
-                Some(state) if state.pc == pc => state,
-                Some(_) => {
+    // Ширина VLIW-бандла на этой позиции (см. `bsl_bytecode::bundle`).
+    // Члены бандла взаимно независимы, передача управления бывает только
+    // хвостовым членом, поэтому кадр и чанк между членами можно не
+    // перечитывать: `Call` и `Return` дальше хвоста не встречаются, а
+    // `Return` к тому же выходит из функции ранним `return`. Ноль
+    // (середина бандла — сюда возвращается JIT, отказавшийся от
+    // инструкции) и пустая таблица равнозначны одиночному исполнению.
+    // Разметке можно верить, потому что из файла она не читается — её
+    // всегда пересчитывает `bundle::compute`; ошибка члена оставляет `pc`
+    // на нём самом, и `Попытка` ищется ровно как при поинструкционном
+    // исполнении.
+    // «Сколько членов ЗА первым»: у одиночного бандла и в середине бандла
+    // ноль — путь обычной инструкции оплачивает ровно одну загрузку `u8`
+    // и вычитание, вся петлевая бухгалтерия лежит после исполнения члена.
+    let mut extra = chunk
+        .bundle_len
+        .get(pc)
+        .copied()
+        .unwrap_or(1)
+        .saturating_sub(1);
+    loop {
+        // `pc < chunk.instrs.len()` проверено выше (для последующих
+        // членов — перед переходом на них) — индексация здесь уже не
+        // может выйти за границы.
+        let instr = chunk.instrs[pc];
+        match instr {
+            Instr::GetModuleVar { dst, slot } => {
+                // АБСОЛЮТНЫЙ индекс: модульные переменные лежат подряд,
+                // начиная с `module_base`. У обычной программы база нулевая
+                // — это первые слоты кадра верхнего уровня, а он стоит в
+                // самом низу стека и живёт всё исполнение. Проверка границы
+                // обязательна — байт-код может прийти и не от кодогена.
+                if (slot as usize) >= program.module_vars.len() {
                     return Err(RtError::InvalidBytecode(
-                        "перекрывающиеся скрытые состояния числовых циклов",
-                    ))
+                        "номер переменной модуля вне таблицы",
+                    ));
                 }
-                None => {
-                    let counter_value = reg_load(stack, counter_idx)?;
-                    let bound_value = reg_load(stack, bound_idx)?;
-                    let pair = match (&counter_value, &bound_value) {
-                        (BslValue::Number(counter), BslValue::Number(bound)) => {
-                            counter.to_i64_exact().zip(bound.to_i64_exact())
-                        }
-                        _ => None,
-                    };
-                    let Some((current, bound)) = pair else {
-                        numeric_for_next_regular(
-                            stack,
-                            counter_idx,
-                            bound_idx,
-                            &mut frames[frame_idx].pc,
-                            target,
-                        )?;
-                        return Ok(Step::Continue);
-                    };
-                    NumericForState { pc, current, bound }
+                let v = reg_load(stack, program.module_base as usize + slot as usize)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, v)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::SetModuleVar { slot, src } => {
+                if (slot as usize) >= program.module_vars.len() {
+                    return Err(RtError::InvalidBytecode(
+                        "номер переменной модуля вне таблицы",
+                    ));
                 }
-            };
-
-            let Some(next) = state.current.checked_add(1) else {
-                reg_store(
-                    stack,
-                    counter_idx,
-                    BslValue::Number(bsl_number::BslNumber::from_i64(state.current)),
-                )?;
-                numeric_for_next_regular(
-                    stack,
-                    counter_idx,
-                    bound_idx,
-                    &mut frames[frame_idx].pc,
-                    target,
-                )?;
-                return Ok(Step::Continue);
-            };
-            if next <= state.bound {
-                frames[frame_idx].numeric_for_state = Some(NumericForState {
-                    current: next,
-                    ..state
-                });
+                let v = reg_load(stack, frames[frame_idx].reg_index(src))?;
+                reg_store(stack, program.module_base as usize + slot as usize, v)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::Move { dst, src } => {
+                let s = frames[frame_idx].reg_index(src);
+                let v = reg_load(stack, s)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, v)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::LoadConst { dst, k } => {
+                let v = at(
+                    &chunk.consts,
+                    k as usize,
+                    "номер константы вне таблицы констант чанка",
+                )?
+                .clone();
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, v)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::LoadBool { dst, val } => {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, BslValue::Boolean(val))?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::LoadUndefined { dst } => {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, BslValue::Undefined)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::LoadNull { dst } => {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, BslValue::Null)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::LoadSkipped { dst } => {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, BslValue::Skipped)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::Add { dst, a, b } => {
+                add_op(frames, stack, frame_idx, dst, a, b)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::Sub { dst, a, b } => {
+                binop(frames, stack, frame_idx, dst, a, b, BslValue::sub)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::Mul { dst, a, b } => {
+                binop(frames, stack, frame_idx, dst, a, b, BslValue::mul)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::Mod { dst, a, b } => {
+                binop(frames, stack, frame_idx, dst, a, b, BslValue::rem)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::Div { dst, a, b } => {
+                binop(frames, stack, frame_idx, dst, a, b, BslValue::div)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::Neg { dst, src } => {
+                let s = frames[frame_idx].reg_index(src);
+                let v = neg_op(&reg_load(stack, s)?)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, v)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::Not { dst, src } => {
+                let s = frames[frame_idx].reg_index(src);
+                let v = reg_load(stack, s)?.not()?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, v)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::Eq { dst, a, b } => {
+                let av = reg_load(stack, frames[frame_idx].reg_index(a))?;
+                let bv = reg_load(stack, frames[frame_idx].reg_index(b))?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, BslValue::Boolean(av.eq_value(&bv)))?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::NotEq { dst, a, b } => {
+                let av = reg_load(stack, frames[frame_idx].reg_index(a))?;
+                let bv = reg_load(stack, frames[frame_idx].reg_index(b))?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, BslValue::Boolean(!av.eq_value(&bv)))?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::Lt { dst, a, b } => {
+                cmp(frames, stack, frame_idx, dst, a, b, "<", |o| o.is_lt())?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::Gt { dst, a, b } => {
+                cmp(frames, stack, frame_idx, dst, a, b, ">", |o| o.is_gt())?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::Le { dst, a, b } => {
+                cmp(frames, stack, frame_idx, dst, a, b, "<=", |o| o.is_le())?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::Ge { dst, a, b } => {
+                cmp(frames, stack, frame_idx, dst, a, b, ">=", |o| o.is_ge())?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::Jump { target } => {
                 frames[frame_idx].pc = target as usize;
-            } else {
+            }
+            Instr::JumpIfFalse { cond, target } => {
+                let c = frames[frame_idx].reg_index(cond);
+                // Строгая булевость: не-`Булево` в условии — ошибка типа,
+                // а не приведение к истинности.
+                if reg_load(stack, c)?.as_condition()? {
+                    frames[frame_idx].pc += 1;
+                } else {
+                    frames[frame_idx].pc = target as usize;
+                }
+            }
+            Instr::JumpIfTrue { cond, target } => {
+                let c = frames[frame_idx].reg_index(cond);
+                if reg_load(stack, c)?.as_condition()? {
+                    frames[frame_idx].pc = target as usize;
+                } else {
+                    frames[frame_idx].pc += 1;
+                }
+            }
+            Instr::JumpIfNotSkipped { src, target } => {
+                let s = frames[frame_idx].reg_index(src);
+                // Не `as_condition`/строгая булевость — это не условие
+                // пользовательского кода, а проверка внутреннего маркера
+                // (см. пролог параметров по умолчанию в
+                // `bsl-bytecode::compiler::compile_param_defaults`).
+                if matches!(reg_load(stack, s)?, BslValue::Skipped) {
+                    frames[frame_idx].pc += 1;
+                } else {
+                    frames[frame_idx].pc = target as usize;
+                }
+            }
+            Instr::NumericForNext {
+                counter,
+                bound,
+                target,
+            } => {
+                let counter = frames[frame_idx].reg_index(counter);
+                let bound = frames[frame_idx].reg_index(bound);
+                numeric_for_next_regular(stack, counter, bound, &mut frames[frame_idx].pc, target)?;
+            }
+            Instr::NumericForNextI64 {
+                counter,
+                bound,
+                target,
+            } => {
+                let counter_idx = frames[frame_idx].reg_index(counter);
+                let bound_idx = frames[frame_idx].reg_index(bound);
+                let state = match frames[frame_idx].numeric_for_state.take() {
+                    Some(state) if state.pc == pc => state,
+                    Some(_) => {
+                        return Err(RtError::InvalidBytecode(
+                            "перекрывающиеся скрытые состояния числовых циклов",
+                        ))
+                    }
+                    None => {
+                        let counter_value = reg_load(stack, counter_idx)?;
+                        let bound_value = reg_load(stack, bound_idx)?;
+                        let pair = match (&counter_value, &bound_value) {
+                            (BslValue::Number(counter), BslValue::Number(bound)) => {
+                                counter.to_i64_exact().zip(bound.to_i64_exact())
+                            }
+                            _ => None,
+                        };
+                        let Some((current, bound)) = pair else {
+                            numeric_for_next_regular(
+                                stack,
+                                counter_idx,
+                                bound_idx,
+                                &mut frames[frame_idx].pc,
+                                target,
+                            )?;
+                            return Ok(Step::Continue);
+                        };
+                        NumericForState { pc, current, bound }
+                    }
+                };
+
+                let Some(next) = state.current.checked_add(1) else {
+                    reg_store(
+                        stack,
+                        counter_idx,
+                        BslValue::Number(bsl_number::BslNumber::from_i64(state.current)),
+                    )?;
+                    numeric_for_next_regular(
+                        stack,
+                        counter_idx,
+                        bound_idx,
+                        &mut frames[frame_idx].pc,
+                        target,
+                    )?;
+                    return Ok(Step::Continue);
+                };
+                if next <= state.bound {
+                    frames[frame_idx].numeric_for_state = Some(NumericForState {
+                        current: next,
+                        ..state
+                    });
+                    frames[frame_idx].pc = target as usize;
+                } else {
+                    reg_store(
+                        stack,
+                        counter_idx,
+                        BslValue::Number(bsl_number::BslNumber::from_i64(next)),
+                    )?;
+                    frames[frame_idx].pc += 1;
+                }
+            }
+            Instr::Call {
+                func,
+                base,
+                arg_modes,
+                ret,
+            } => {
+                // Проверка глубины — ДО продвижения `pc` и до любых записей
+                // в стек: в момент ошибки `pc` обязан стоять на сбойнувшей
+                // инструкции, иначе `Попытка`, у которой этот `Call` —
+                // последняя инструкция защищённого диапазона, его не поймает.
+                if frames.len() >= MAX_CALL_DEPTH {
+                    return Err(RtError::StackOverflow {
+                        what: "слишком глубокая рекурсия вызовов",
+                    });
+                }
+
+                // Caller продвигается ЗА инструкцию Call сейчас — так, когда
+                // callee вернётся, мы продолжим ровно со следующей.
+                frames[frame_idx].pc += 1;
+
+                let modes = at(
+                    &chunk.call_arg_modes,
+                    arg_modes as usize,
+                    "номер набора режимов аргументов вне таблицы чанка",
+                )?;
+                let mut param_aliases = Vec::with_capacity(modes.len());
+                for (i, mode) in modes.iter().enumerate() {
+                    let idx = match mode {
+                        ArgMode::Value => frames[frame_idx].reg_index(base + i as u8),
+                        ArgMode::ByRefLocal(slot) => frames[frame_idx].reg_index(*slot),
+                    };
+                    param_aliases.push(idx);
+                }
+
+                let callee_chunk = at(
+                    &program.chunks,
+                    func as usize,
+                    "номер вызываемого чанка вне таблицы функций",
+                )?;
+                let call_start = stack.len();
+                let own_base = stack.len();
+                push_own_registers(stack, callee_chunk);
+
+                frames.push(Frame {
+                    func_id: func as usize,
+                    pc: 0,
+                    param_aliases,
+                    own_base,
+                    call_start,
+                    return_reg: ret,
+                    numeric_for_state: None,
+                });
+            }
+            Instr::Return { src } => {
+                let value = match src {
+                    Some(r) => {
+                        let idx = frames[frame_idx].reg_index(r);
+                        reg_load(stack, idx)?
+                    }
+                    None => BslValue::Undefined,
+                };
+                return Ok(match do_return_with_value(frames, stack, value)? {
+                    Done(v) => Step::Done(v),
+                    Continuing => Step::Continue,
+                });
+            }
+            Instr::GetIndex { dst, obj, idx } => {
+                let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
+                let iv = reg_load(stack, frames[frame_idx].reg_index(idx))?;
+                let v = ov.get_index(&iv, &runtime_shapes.names)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, v)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::SetIndex { obj, idx, src } => {
+                let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
+                let iv = reg_load(stack, frames[frame_idx].reg_index(idx))?;
+                let sv = reg_load(stack, frames[frame_idx].reg_index(src))?;
+                ov.set_index(&iv, sv)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::GetProp { dst, obj, name } => {
+                let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
+                // Структура резолвится через инлайн-кэш этой ИНСТРУКЦИИ
+                // (см. Chunk::prop_cache): мономорфный сайт вызова после
+                // первого попадания читает слот напрямую, без HashMap-
+                // поиска в Shape::index. СтрокаТаблицыЗначений заводит
+                // колонки в рантайме и не могла быть интернирована на
+                // этапе компиляции — для неё (и только когда кэш-путь
+                // говорит "это не такой объект") VM резолвит имя в текст
+                // через Program::names и идёт по строковому пути.
+                let v = match ov.get_field_cached(name, prop_cache(chunk, pc)?) {
+                    Err(RtError::NotAnObject) => {
+                        ov.get_field_by_name(field_name(program, name)?)?
+                    }
+                    other => other?,
+                };
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, v)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::SetProp { obj, name, src } => {
+                let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
+                let sv = reg_load(stack, frames[frame_idx].reg_index(src))?;
+                let имя = field_name(program, name)?;
+                if !set_spread_value(&ov, имя, &sv)? {
+                    match ov.set_field_cached(name, sv.clone(), prop_cache(chunk, pc)?) {
+                        Err(RtError::NotAnObject) => ov.set_field_by_name(имя, sv)?,
+                        other => other?,
+                    }
+                }
+                frames[frame_idx].pc += 1;
+            }
+            Instr::NewArray { dst, base, count } => {
+                let mut dims = Vec::with_capacity(count as usize);
+                for i in 0..count {
+                    let v = reg_load(stack, frames[frame_idx].reg_index(base + i))?;
+                    dims.push(dim_to_usize(&v)?);
+                }
+                let arr = build_nested_array(&dims);
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, arr)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::NewStructure {
+                dst,
+                shape,
+                base,
+                count,
+            } => {
+                let shape_rc = at(
+                    &program.shapes,
+                    shape as usize,
+                    "номер формы вне таблицы форм программы",
+                )?
+                .clone();
+                let mut slots = Vec::with_capacity(count as usize);
+                for i in 0..count {
+                    slots.push(reg_load(stack, frames[frame_idx].reg_index(base + i))?);
+                }
+                let v = BslValue::new_structure(shape_rc, slots);
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, v)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::NewTable { dst } => {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, BslValue::new_table())?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::NewTypeDescription { dst, names } => {
+                let names = reg_load(stack, frames[frame_idx].reg_index(names))?;
+                let value = BslValue::new_type_description(&names)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, value)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::NewValueComparison { dst } => {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, BslValue::new_value_comparison())?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::NewMap { dst } => {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, BslValue::new_map())?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::NewJsonReader { dst } => {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, BslValue::new_json_reader())?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::NewJsonWriter { dst } => {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, BslValue::new_json_writer())?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::NewJsonWriterSettings {
+                dst,
+                line_break,
+                indent,
+            } => {
+                let lb = reg_load(stack, frames[frame_idx].reg_index(line_break))?;
+                let ind = reg_load(stack, frames[frame_idx].reg_index(indent))?;
+                let settings = BslValue::new_json_writer_settings(&lb, &ind)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, settings)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::NewSpreadDocument { dst } => {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, bsl_rt::new_spread_document())?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::NewTextDocument { dst } => {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, BslValue::new_text_document())?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::NewXmlReader { dst } => {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, BslValue::new_xml_reader())?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::NewXmlWriter { dst } => {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, BslValue::new_xml_writer())?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::NewXmlWriterSettings {
+                dst,
+                encoding,
+                version,
+                indent,
+            } => {
+                let enc = reg_load(stack, frames[frame_idx].reg_index(encoding))?;
+                let ver = reg_load(stack, frames[frame_idx].reg_index(version))?;
+                let ind = reg_load(stack, frames[frame_idx].reg_index(indent))?;
+                let settings = BslValue::new_xml_writer_settings(&enc, &ver, &ind)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, settings)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::NewTextWriter { dst, path } => {
+                let path = reg_load(stack, frames[frame_idx].reg_index(path))?;
+                let writer = BslValue::new_text_writer(&path)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, writer)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::CollectionLen { dst, obj } => {
+                let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
+                let len = ov.collection_len()?;
+                let d = frames[frame_idx].reg_index(dst);
                 reg_store(
                     stack,
-                    counter_idx,
-                    BslValue::Number(bsl_number::BslNumber::from_i64(next)),
+                    d,
+                    BslValue::Number(bsl_number::BslNumber::from_i64(len as i64)),
                 )?;
                 frames[frame_idx].pc += 1;
             }
-        }
-        Instr::Call {
-            func,
-            base,
-            arg_modes,
-            ret,
-        } => {
-            // Проверка глубины — ДО продвижения `pc` и до любых записей
-            // в стек: в момент ошибки `pc` обязан стоять на сбойнувшей
-            // инструкции, иначе `Попытка`, у которой этот `Call` —
-            // последняя инструкция защищённого диапазона, его не поймает.
-            if frames.len() >= MAX_CALL_DEPTH {
-                return Err(RtError::StackOverflow {
-                    what: "слишком глубокая рекурсия вызовов",
-                });
-            }
-
-            // Caller продвигается ЗА инструкцию Call сейчас — так, когда
-            // callee вернётся, мы продолжим ровно со следующей.
-            frames[frame_idx].pc += 1;
-
-            let modes = at(
-                &chunk.call_arg_modes,
-                arg_modes as usize,
-                "номер набора режимов аргументов вне таблицы чанка",
-            )?;
-            let mut param_aliases = Vec::with_capacity(modes.len());
-            for (i, mode) in modes.iter().enumerate() {
-                let idx = match mode {
-                    ArgMode::Value => frames[frame_idx].reg_index(base + i as u8),
-                    ArgMode::ByRefLocal(slot) => frames[frame_idx].reg_index(*slot),
+            Instr::Raise { src } => {
+                let value = match src {
+                    Some(r) => reg_load(stack, frames[frame_idx].reg_index(r))?,
+                    // Голая форма: повторно бросаем то, что сейчас поймано
+                    // (или Неопределено, если бросить нечего — например,
+                    // `ВызватьИсключение;` вне `Исключение`).
+                    None => current_exception.clone().unwrap_or(BslValue::Undefined),
                 };
-                param_aliases.push(idx);
+                return Err(RtError::Raised(value));
             }
-
-            let callee_chunk = at(
-                &program.chunks,
-                func as usize,
-                "номер вызываемого чанка вне таблицы функций",
-            )?;
-            let call_start = stack.len();
-            let own_base = stack.len();
-            push_own_registers(stack, callee_chunk);
-
-            frames.push(Frame {
-                func_id: func as usize,
-                pc: 0,
-                param_aliases,
-                own_base,
-                call_start,
-                return_reg: ret,
-                numeric_for_state: None,
-            });
-        }
-        Instr::Return { src } => {
-            let value = match src {
-                Some(r) => {
-                    let idx = frames[frame_idx].reg_index(r);
-                    reg_load(stack, idx)?
-                }
-                None => BslValue::Undefined,
-            };
-            return Ok(match do_return_with_value(frames, stack, value)? {
-                Done(v) => Step::Done(v),
-                Continuing => Step::Continue,
-            });
-        }
-        Instr::GetIndex { dst, obj, idx } => {
-            let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
-            let iv = reg_load(stack, frames[frame_idx].reg_index(idx))?;
-            let v = ov.get_index(&iv, &runtime_shapes.names)?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, v)?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::SetIndex { obj, idx, src } => {
-            let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
-            let iv = reg_load(stack, frames[frame_idx].reg_index(idx))?;
-            let sv = reg_load(stack, frames[frame_idx].reg_index(src))?;
-            ov.set_index(&iv, sv)?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::GetProp { dst, obj, name } => {
-            let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
-            // Структура резолвится через инлайн-кэш этой ИНСТРУКЦИИ
-            // (см. Chunk::prop_cache): мономорфный сайт вызова после
-            // первого попадания читает слот напрямую, без HashMap-
-            // поиска в Shape::index. СтрокаТаблицыЗначений заводит
-            // колонки в рантайме и не могла быть интернирована на
-            // этапе компиляции — для неё (и только когда кэш-путь
-            // говорит "это не такой объект") VM резолвит имя в текст
-            // через Program::names и идёт по строковому пути.
-            let v = match ov.get_field_cached(name, prop_cache(chunk, pc)?) {
-                Err(RtError::NotAnObject) => ov.get_field_by_name(field_name(program, name)?)?,
-                other => other?,
-            };
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, v)?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::SetProp { obj, name, src } => {
-            let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
-            let sv = reg_load(stack, frames[frame_idx].reg_index(src))?;
-            let имя = field_name(program, name)?;
-            if !set_spread_value(&ov, имя, &sv)? {
-                match ov.set_field_cached(name, sv.clone(), prop_cache(chunk, pc)?) {
-                    Err(RtError::NotAnObject) => ov.set_field_by_name(имя, sv)?,
-                    other => other?,
-                }
+            Instr::CallBuiltin {
+                dst,
+                builtin,
+                base,
+                count,
+            } => {
+                let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
+                let v = call_builtin_with_format(builtin, args.as_slice(), runtime_shapes)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, v)?;
+                frames[frame_idx].pc += 1;
             }
-            frames[frame_idx].pc += 1;
-        }
-        Instr::NewArray { dst, base, count } => {
-            let mut dims = Vec::with_capacity(count as usize);
-            for i in 0..count {
-                let v = reg_load(stack, frames[frame_idx].reg_index(base + i))?;
-                dims.push(dim_to_usize(&v)?);
-            }
-            let arr = build_nested_array(&dims);
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, arr)?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::NewStructure {
-            dst,
-            shape,
-            base,
-            count,
-        } => {
-            let shape_rc = at(
-                &program.shapes,
-                shape as usize,
-                "номер формы вне таблицы форм программы",
-            )?
-            .clone();
-            let mut slots = Vec::with_capacity(count as usize);
-            for i in 0..count {
-                slots.push(reg_load(stack, frames[frame_idx].reg_index(base + i))?);
-            }
-            let v = BslValue::new_structure(shape_rc, slots);
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, v)?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::NewTable { dst } => {
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, BslValue::new_table())?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::NewTypeDescription { dst, names } => {
-            let names = reg_load(stack, frames[frame_idx].reg_index(names))?;
-            let value = BslValue::new_type_description(&names)?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, value)?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::NewValueComparison { dst } => {
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, BslValue::new_value_comparison())?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::NewMap { dst } => {
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, BslValue::new_map())?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::NewJsonReader { dst } => {
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, BslValue::new_json_reader())?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::NewJsonWriter { dst } => {
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, BslValue::new_json_writer())?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::NewJsonWriterSettings {
-            dst,
-            line_break,
-            indent,
-        } => {
-            let lb = reg_load(stack, frames[frame_idx].reg_index(line_break))?;
-            let ind = reg_load(stack, frames[frame_idx].reg_index(indent))?;
-            let settings = BslValue::new_json_writer_settings(&lb, &ind)?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, settings)?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::NewSpreadDocument { dst } => {
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, bsl_rt::new_spread_document())?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::NewTextDocument { dst } => {
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, BslValue::new_text_document())?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::NewXmlReader { dst } => {
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, BslValue::new_xml_reader())?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::NewXmlWriter { dst } => {
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, BslValue::new_xml_writer())?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::NewXmlWriterSettings {
-            dst,
-            encoding,
-            version,
-            indent,
-        } => {
-            let enc = reg_load(stack, frames[frame_idx].reg_index(encoding))?;
-            let ver = reg_load(stack, frames[frame_idx].reg_index(version))?;
-            let ind = reg_load(stack, frames[frame_idx].reg_index(indent))?;
-            let settings = BslValue::new_xml_writer_settings(&enc, &ver, &ind)?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, settings)?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::NewTextWriter { dst, path } => {
-            let path = reg_load(stack, frames[frame_idx].reg_index(path))?;
-            let writer = BslValue::new_text_writer(&path)?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, writer)?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::CollectionLen { dst, obj } => {
-            let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
-            let len = ov.collection_len()?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(
-                stack,
-                d,
-                BslValue::Number(bsl_number::BslNumber::from_i64(len as i64)),
-            )?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::Raise { src } => {
-            let value = match src {
-                Some(r) => reg_load(stack, frames[frame_idx].reg_index(r))?,
-                // Голая форма: повторно бросаем то, что сейчас поймано
-                // (или Неопределено, если бросить нечего — например,
-                // `ВызватьИсключение;` вне `Исключение`).
-                None => current_exception.clone().unwrap_or(BslValue::Undefined),
-            };
-            return Err(RtError::Raised(value));
-        }
-        Instr::CallBuiltin {
-            dst,
-            builtin,
-            base,
-            count,
-        } => {
-            let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
-            let v = call_builtin_with_format(builtin, args.as_slice(), runtime_shapes)?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, v)?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::CallMethod {
-            dst,
-            obj,
-            method,
-            base,
-            count,
-        } => {
-            let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
-            let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
-            // `Вывести` перехватывается здесь, а не в `bsl-rt`: подстановка
-            // параметров макета форматирует значение так же, как `Строка()`
-            // (измерено — число уходит с разделителями групп), а
-            // форматирование живёт в `bsl-format`, который зависит от
-            // `bsl-rt`, не наоборот. Тот же приём, что у `Строка`/`Формат`.
-            let v = if method == bsl_rt::BuiltinMethod::OutputArea {
-                output_area(&ov, args.as_slice())?
-            } else {
-                bsl_rt::call_builtin_method_ctx(method, &ov, args.as_slice(), runtime_shapes)?
-            };
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, v)?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::WriteText { dst, obj, src } => {
-            let obj_idx = frames[frame_idx].reg_index(obj);
-            let src_idx = frames[frame_idx].reg_index(src);
-            let v = {
-                let ov = at(stack, obj_idx, "чтение объекта за границей стека значений")?;
-                let sv = at(
-                    stack,
-                    src_idx,
-                    "чтение аргумента за границей стека значений",
-                )?;
-                // `Записать` полиморфен по получателю, а эта инструкция —
-                // быстрый путь `ЗаписьТекста` в обход вызова метода.
-                // Значит развести получателей надо и здесь, иначе
-                // `ТекстовыйДокумент.Записать(путь)` попадёт в чужую
-                // ветку и получит «метод не применим».
-                if bsl_rt::spread_is_document(ov) {
-                    bsl_rt::spread_write(ov, std::slice::from_ref(sv))?;
-                    BslValue::Undefined
-                } else if bsl_rt::textdoc_is_document(ov) {
-                    bsl_rt::textdoc_write_file(ov, std::slice::from_ref(sv))?;
-                    BslValue::Undefined
+            Instr::CallMethod {
+                dst,
+                obj,
+                method,
+                base,
+                count,
+            } => {
+                let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
+                let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
+                // `Вывести` перехватывается здесь, а не в `bsl-rt`: подстановка
+                // параметров макета форматирует значение так же, как `Строка()`
+                // (измерено — число уходит с разделителями групп), а
+                // форматирование живёт в `bsl-format`, который зависит от
+                // `bsl-rt`, не наоборот. Тот же приём, что у `Строка`/`Формат`.
+                let v = if method == bsl_rt::BuiltinMethod::OutputArea {
+                    output_area(&ov, args.as_slice())?
                 } else {
-                    ov.text_writer_write(sv)?
-                }
-            };
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, v)?;
-            frames[frame_idx].pc += 1;
+                    bsl_rt::call_builtin_method_ctx(method, &ov, args.as_slice(), runtime_shapes)?
+                };
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, v)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::WriteText { dst, obj, src } => {
+                let obj_idx = frames[frame_idx].reg_index(obj);
+                let src_idx = frames[frame_idx].reg_index(src);
+                let v = {
+                    let ov = at(stack, obj_idx, "чтение объекта за границей стека значений")?;
+                    let sv = at(
+                        stack,
+                        src_idx,
+                        "чтение аргумента за границей стека значений",
+                    )?;
+                    // `Записать` полиморфен по получателю, а эта инструкция —
+                    // быстрый путь `ЗаписьТекста` в обход вызова метода.
+                    // Значит развести получателей надо и здесь, иначе
+                    // `ТекстовыйДокумент.Записать(путь)` попадёт в чужую
+                    // ветку и получит «метод не применим».
+                    if bsl_rt::spread_is_document(ov) {
+                        bsl_rt::spread_write(ov, std::slice::from_ref(sv))?;
+                        BslValue::Undefined
+                    } else if bsl_rt::textdoc_is_document(ov) {
+                        bsl_rt::textdoc_write_file(ov, std::slice::from_ref(sv))?;
+                        BslValue::Undefined
+                    } else {
+                        ov.text_writer_write(sv)?
+                    }
+                };
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, v)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::CloseText { dst, obj } => {
+                let obj_idx = frames[frame_idx].reg_index(obj);
+                let v = at(stack, obj_idx, "чтение объекта за границей стека значений")?
+                    .close_object()?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, v)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::RunDynamic { src, dst, is_eval } => {
+                let code = reg_load(stack, frames[frame_idx].reg_index(src))?;
+                let code = match code {
+                    BslValue::Str(s) => s.to_string(),
+                    _ => {
+                        return Err(RtError::TypeError {
+                            expected: "Строка",
+                            op: if is_eval {
+                                "Вычислить"
+                            } else {
+                                "Выполнить"
+                            },
+                        })
+                    }
+                };
+                // Область видимости фрагмента — материализованная таблица
+                // имён ЭТОГО кадра (`Chunk::local_names`), а не только
+                // верхнего уровня: `Выполнить` внутри процедуры видит её
+                // локальные. Таблица есть у всех чанков, помеченных
+                // `uses_dynamic` в `bsl-sema`, а `RunDynamic` эмитится
+                // только в них — так что пустой она здесь быть не может,
+                // кроме как у кадра вообще без локальных переменных.
+                let value = run_dynamic_snippet(
+                    &code,
+                    is_eval,
+                    program,
+                    &chunk.local_names,
+                    func_id,
+                    stack,
+                    &frames[frame_idx],
+                    snippets,
+                )?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, value)?;
+                frames[frame_idx].pc += 1;
+            }
         }
-        Instr::CloseText { dst, obj } => {
-            let obj_idx = frames[frame_idx].reg_index(obj);
-            let v =
-                at(stack, obj_idx, "чтение объекта за границей стека значений")?.close_object()?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, v)?;
-            frames[frame_idx].pc += 1;
+        if extra == 0 {
+            // Бандл кончился. Без JIT линейная цепочка бандлов
+            // продолжается прямо здесь: смену кадра (`Call`) ловит первая
+            // проверка, взятый переход — вторая, а `Return` вышел из
+            // функции ранним `return` ещё в своей ветке. Всё, что
+            // осталось, — обычный fallthrough, на котором пробам
+            // `drive_with` делать нечего.
+            if !merge_linear || frames.len() != frame_idx + 1 {
+                break;
+            }
+            let next = frames[frame_idx].pc;
+            if next != pc + 1 {
+                break;
+            }
+            pc = next;
+            if pc >= chunk.instrs.len() {
+                break;
+            }
+            extra = chunk
+                .bundle_len
+                .get(pc)
+                .copied()
+                .unwrap_or(1)
+                .saturating_sub(1);
+            continue;
         }
-        Instr::RunDynamic { src, dst, is_eval } => {
-            let code = reg_load(stack, frames[frame_idx].reg_index(src))?;
-            let code = match code {
-                BslValue::Str(s) => s.to_string(),
-                _ => {
-                    return Err(RtError::TypeError {
-                        expected: "Строка",
-                        op: if is_eval {
-                            "Вычислить"
-                        } else {
-                            "Выполнить"
-                        },
-                    })
-                }
-            };
-            // Область видимости фрагмента — материализованная таблица
-            // имён ЭТОГО кадра (`Chunk::local_names`), а не только
-            // верхнего уровня: `Выполнить` внутри процедуры видит её
-            // локальные. Таблица есть у всех чанков, помеченных
-            // `uses_dynamic` в `bsl-sema`, а `RunDynamic` эмитится
-            // только в них — так что пустой она здесь быть не может,
-            // кроме как у кадра вообще без локальных переменных.
-            let value = run_dynamic_snippet(
-                &code,
-                is_eval,
-                program,
-                &chunk.local_names,
-                func_id,
-                stack,
-                &frames[frame_idx],
-                snippets,
-            )?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, value)?;
-            frames[frame_idx].pc += 1;
+        extra -= 1;
+        // Предыдущий член сам продвинул `pc` кадра.
+        pc = frames[frame_idx].pc;
+        if pc >= chunk.instrs.len() {
+            break;
         }
     }
     Ok(Step::Continue)
@@ -1998,6 +2074,44 @@ mod tests {
         BslValue::Number(BslNumber::parse_canonical(s).unwrap())
     }
 
+    /// Ошибка на НЕ ПЕРВОМ члене VLIW-бандла: `pc` в момент ошибки обязан
+    /// стоять на сбойном члене, обработчик — поймать её, эффекты ранних
+    /// членов — быть видимыми, а остаток бандла — не исполниться. Тест
+    /// заодно проверяет свою предпосылку по разметке: деление действительно
+    /// лежит внутри бандла, а не начинает его.
+    #[test]
+    fn exception_on_a_non_first_bundle_member_lands_in_the_right_handler() {
+        let src = "а = 10;\n\
+             б = 0;\n\
+             рез = 0;\n\
+             Попытка\n\
+                 г = 7;\n\
+                 в = а / б;\n\
+                 г = 100;\n\
+             Исключение\n\
+                 рез = г;\n\
+             КонецПопытки;\n\
+             Возврат рез;";
+        let prog = parse(src).unwrap();
+        let resolved = resolve_program(&prog.items).unwrap();
+        let program = compile_program(&resolved).unwrap();
+        let chunk = &program.chunks[0];
+        let div_pc = chunk
+            .instrs
+            .iter()
+            .position(|i| matches!(i, Instr::Div { .. }))
+            .expect("в скрипте есть деление");
+        assert_eq!(
+            chunk.bundle_len[div_pc], 0,
+            "предпосылка теста: деление — внутри бандла (`г = 7` перед ним \
+             независимо); если компилятор стал раскладывать иначе — \
+             подберите скрипту новую пару"
+        );
+        let v = run_program(&program).unwrap();
+        // `г = 7` исполнилось, деление упало, `г = 100` не исполнялось.
+        assert_eq!(v, num("7"));
+    }
+
     // НЕ ИЗМЕРЕНО(EXEC.MAX_CALL_DEPTH) — тесты фиксируют ВЫБРАННОЕ
     // поведение: перехватываемая ошибка вместо роста памяти до OOM; сам
     // предел платформы не замерен.
@@ -2660,6 +2774,9 @@ mod tests {
                 n_regs: 1,
                 local_names: Vec::new(),
                 prop_cache: vec![std::cell::RefCell::new(None)],
+                // Пустая разметка = поинструкционное исполнение — ровно
+                // тот путь, на котором и проверяется `InvalidBytecode`.
+                bundle_len: Vec::new(),
             }],
             names: Vec::new(),
             shapes: Vec::new(),

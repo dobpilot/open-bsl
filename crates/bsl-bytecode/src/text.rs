@@ -241,6 +241,14 @@ fn write_chunk(out: &mut String, index: usize, chunk: &Chunk, program: &Program)
 
     writeln!(out, "  .code {}", chunk.instrs.len()).unwrap();
     for (pc, instr) in chunk.instrs.iter().enumerate() {
+        // Начало многочленного бандла помечается отдельной строкой-
+        // комментарием: для парсера её не существует, а при разборе
+        // разметка пересчитывается в ту же (см. `parse_program`).
+        if let Some(&w) = chunk.bundle_len.get(pc) {
+            if w >= 2 {
+                writeln!(out, "    ; бандл {w}").unwrap();
+            }
+        }
         let text = write_instr(instr);
         match instr_comment(instr, chunk, program) {
             Some(c) => writeln!(out, "    {pc:04} {text}  ; {c}").unwrap(),
@@ -717,6 +725,14 @@ pub fn parse_program(src: &str) -> Result<Program> {
     if chunks.is_empty() {
         return Err(TextError::At(0, "нет ни одного .chunk".to_string()));
     }
+    // Разметка бандлов — производная таблица (как `prop_cache`): из файла
+    // не читается, а пересчитывается из уже разобранного. Обязана дать то
+    // же, что у компилятора — это держит побайтовый round-trip вместе с
+    // пометками `; бандл N` в листинге.
+    for (i, chunk) in chunks.iter_mut().enumerate() {
+        chunk.bundle_len =
+            crate::bundle::compute(chunk, crate::bundle::module_overlap(i, module_vars.len()));
+    }
 
     Ok(Program {
         chunks,
@@ -880,6 +896,9 @@ fn parse_chunk(r: &mut Reader, expected_index: usize) -> Result<Chunk> {
         n_locals,
         n_regs,
         local_names,
+        // Пересчитывается в `parse_program`: разметке из файла VM не
+        // верит, единственный производитель — `bundle::compute`.
+        bundle_len: Vec::new(),
     })
 }
 
@@ -1364,6 +1383,11 @@ mod tests {
                 // Кэш инлайн-кэширования не сохраняется, но обязан быть
                 // размером с код — иначе VM промахнётся по индексу.
                 assert_eq!(y.prop_cache.len(), y.instrs.len(), "{src}");
+                // Разметка бандлов тоже не сохраняется, но пересчёт при
+                // разборе обязан дать в точности таблицу компилятора —
+                // иначе скомпилированный и загруженный байт-код разойдутся
+                // по диспетчеризации.
+                assert_eq!(x.bundle_len, y.bundle_len, "{src}");
             }
         }
     }

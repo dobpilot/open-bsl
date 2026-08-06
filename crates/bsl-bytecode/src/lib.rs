@@ -4,6 +4,7 @@
 //! [`write_program`] и [`parse_program`] задают единый текстовый формат для
 //! `bsl-cli --emit-bytecode` и `bsl-cli --run-bytecode`.
 
+pub mod bundle;
 mod chunk;
 mod compiler;
 mod instr;

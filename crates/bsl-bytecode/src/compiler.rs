@@ -62,6 +62,12 @@ pub fn compile_program(resolved: &ResolvedProgram) -> Result<Program, CompileErr
             &mut shapes,
         )?);
     }
+    for (i, chunk) in chunks.iter_mut().enumerate() {
+        chunk.bundle_len = crate::bundle::compute(
+            chunk,
+            crate::bundle::module_overlap(i, resolved.module_vars.len()),
+        );
+    }
     Ok(Program {
         chunks,
         names: names.into_names(),
@@ -120,7 +126,7 @@ pub fn compile_snippet(
     let mut shapes = ShapeTable::new();
     // Фрагмент всегда получает таблицу имён: он и сам может содержать
     // вложенный `Выполнить`, а стоимость на одноразовом чанке никакая.
-    let chunk = compile_chunk(
+    let mut chunk = compile_chunk(
         all_locals,
         &[],
         body,
@@ -130,6 +136,10 @@ pub fn compile_snippet(
         &mut names,
         &mut shapes,
     )?;
+    // У фрагмента блок модульных переменных лежит ЗА его регистрами
+    // (`module_base != 0`, см. `Program::module_base`), поэтому перекрытия
+    // модульных слотов с регистрами кадра нет.
+    chunk.bundle_len = crate::bundle::compute(&chunk, None);
     Ok((chunk, names.into_names(), shapes.into_shapes()))
 }
 
@@ -189,6 +199,11 @@ fn compile_chunk(
             Vec::new()
         },
         prop_cache,
+        // Заполняется вызывающим: ширина бандлов зависит от места чанка в
+        // программе (перекрытие модульных слотов с регистрами кадра 0),
+        // которого здесь не видно. Пустой вектор — легальное состояние
+        // «все бандлы одиночные».
+        bundle_len: Vec::new(),
     })
 }
 
