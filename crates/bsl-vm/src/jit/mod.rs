@@ -28,15 +28,19 @@
 //!
 //! # Как устроен вход и выход
 //!
-//! У чанка не одна точка входа, а по одной на каждую скомпилированную
-//! инструкцию: карта `entries[pc]` даёт смещение в машинном коде.
-//! Интерпретатор перед очередным шагом смотрит, есть ли вход для текущего
-//! `pc`, и если есть — прыгает туда. Нативный код исполняет столько
-//! инструкций, сколько умеет, и возвращает `pc`, на котором надо
-//! продолжить обычным путём: вызовы, возвраты, `Выполнить`, исключения и
-//! всё прочее, чего JIT не умеет, остаются интерпретатору. Отсюда и
-//! безопасность частичной поддержки: неизвестная инструкция — не ошибка,
-//! а выход.
+//! Точки входа лежат по началам VLIW-бандлов (см. `bsl_bytecode::bundle`):
+//! карта `entries[pc]` даёт смещение в машинном коде. Внутрь бандла
+//! интерпретатор войти не может — цели переходов и обработчики `Попытки`
+//! по построению разметки начинают бандл, — поэтому члены бандла не несут
+//! ни пролога, ни точки входа, а их тела лежат вплотную, без
+//! fallthrough-переходов. Интерпретатор перед очередным шагом смотрит,
+//! есть ли вход для текущего `pc`, и если есть — прыгает туда. Нативный
+//! код исполняет столько инструкций, сколько умеет, и возвращает `pc`, на
+//! котором надо продолжить обычным путём: вызовы, возвраты, `Выполнить`,
+//! исключения и всё прочее, чего JIT не умеет, остаются интерпретатору.
+//! Отсюда и безопасность частичной поддержки: неизвестная инструкция — не
+//! ошибка, а выход (в том числе в середину бандла — интерпретатор дошагает
+//! одиночными до следующего начала).
 
 mod mem;
 mod x64;
@@ -87,7 +91,8 @@ pub struct JitCtx {
 pub struct CompiledChunk {
     code: ExecutableBuffer,
     /// `entries[pc]` — смещение в машинном коде или `None`, если на эту
-    /// инструкцию входить нельзя (она не скомпилирована).
+    /// инструкцию входить нельзя: она не скомпилирована, лежит в середине
+    /// бандла или цепочка от неё короче `MIN_RUN`.
     entries: Vec<Option<usize>>,
 }
 
@@ -133,8 +138,9 @@ impl CompiledChunk {
 pub fn compile(chunk: &Chunk) -> Option<CompiledChunk> {
     let mut asm = Assembler::new();
     let mut entries: Vec<Option<usize>> = vec![None; chunk.instrs.len()];
-    // Смещения ВСЕХ скомпилированных инструкций: цели переходов внутри
-    // чанка, в отличие от точек входа, порогом не ограничены.
+    // Смещения ТЕЛА всех скомпилированных инструкций (за прологом, если
+    // он есть): цели переходов внутри чанка, в отличие от точек входа,
+    // порогом не ограничены.
     let mut offsets: Vec<Option<usize>> = vec![None; chunk.instrs.len()];
     // Переходы между инструкциями: (место патча, целевой pc). Патчатся
     // после того, как известны смещения всех инструкций.
@@ -154,34 +160,47 @@ pub fn compile(chunk: &Chunk) -> Option<CompiledChunk> {
         };
     }
 
+    // Начало бандла на этой позиции? Пустая таблица (чанк, собранный
+    // мимо кодогена) читается как «все бандлы одиночные» — прологи
+    // повсюду, прежнее поведение.
+    let is_bundle_start = |pc: usize| chunk.bundle_len.get(pc).is_none_or(|&w| w >= 1);
+
     for (pc, instr) in chunk.instrs.iter().enumerate() {
         let Some(op) = compile_instr(instr) else {
             continue;
         };
         compiled_any = true;
-        let offset = asm.here();
-        // Код порождаем всегда — на него могут прыгнуть изнутри чанка,
-        // и там цепочка уже неважна. Точкой ВХОДА из интерпретатора
-        // позиция становится, только если отсюда есть что исполнять.
-        if run_len[pc] >= MIN_RUN {
-            entries[pc] = Some(offset);
+        // Пролог и точка входа — только у НАЧАЛА бандла. Внутрь бандла
+        // интерпретатор не входит: цели переходов и обработчики `Попытки`
+        // начинают бандл по построению разметки, а после выхода нативного
+        // кода на середине бандла `step` дошагает одиночными до следующего
+        // начала. Переходы внутри чанка целятся в тело, минуя пролог, —
+        // членам бандла пролог не нужен вовсе.
+        if is_bundle_start(pc) {
+            if run_len[pc] >= MIN_RUN {
+                entries[pc] = Some(asm.here());
+            }
+            prologue(&mut asm);
         }
-        offsets[pc] = Some(offset);
-        // Пролог у КАЖДОЙ инструкции: войти в чанк можно на любой из них,
-        // а значит каждая обязана уметь оказаться первой. Платится он
-        // один раз на вход в нативный код: переходы внутри чанка целятся
-        // за пролог, в тело.
-        prologue(&mut asm);
+        offsets[pc] = Some(asm.here());
+        // Если следующая инструкция скомпилирована и НЕ начинает бандл, её
+        // тело ляжет вплотную за нашим — fallthrough-переход не нужен,
+        // падаем насквозь. Это главный машинный выигрыш разметки: внутри
+        // бандла код течёт линейно, без `jmp` между членами.
+        let next_is_inline = pc + 1 < chunk.instrs.len()
+            && !is_bundle_start(pc + 1)
+            && compile_instr(&chunk.instrs[pc + 1]).is_some();
         match op {
             Compiled::Call { func, args } => {
                 emit_call(&mut asm, func, pc as u32, args);
                 asm.test_rax_rax();
                 error_patches.push(asm.jcc(Cond::NotZero));
-                // На следующую инструкцию — переходом в её ТЕЛО, а не
-                // «просто дальше»: сразу за нами лежит её пролог, который
-                // повторно сохранил бы регистры.
-                let fallthrough = asm.jmp();
-                jumps.push((fallthrough, pc + 1));
+                if !next_is_inline {
+                    // На следующую инструкцию — переходом в её ТЕЛО: за
+                    // нами лежит либо её пролог, либо чужой код.
+                    let fallthrough = asm.jmp();
+                    jumps.push((fallthrough, pc + 1));
+                }
             }
             Compiled::Branch { func, args, target } => {
                 emit_call(&mut asm, func, pc as u32, args);
@@ -190,8 +209,10 @@ pub fn compile(chunk: &Chunk) -> Option<CompiledChunk> {
                 asm.cmp_rax_imm8(JUMPED as i8);
                 let taken = asm.jcc(Cond::Zero);
                 jumps.push((taken, target));
-                let fallthrough = asm.jmp();
-                jumps.push((fallthrough, pc + 1));
+                if !next_is_inline {
+                    let fallthrough = asm.jmp();
+                    jumps.push((fallthrough, pc + 1));
+                }
             }
             Compiled::Goto(target) => {
                 // Безусловный переход — без единого вызова: ради этого
@@ -215,12 +236,13 @@ pub fn compile(chunk: &Chunk) -> Option<CompiledChunk> {
     asm.mov_r_imm64(Reg::Rax, JIT_ERROR);
     epilogue(&mut asm);
 
-    // Цель перехода — ТЕЛО инструкции, то есть её вход БЕЗ пролога.
-    // Инструкция, которую мы не компилировали (и позиция за концом
-    // чанка), целью быть не может: туда ставится выход с нужным pc.
+    // Цель перехода — ТЕЛО инструкции: `offsets` хранит позицию сразу за
+    // прологом (у членов бандла пролога и нет). Инструкция, которую мы не
+    // компилировали (и позиция за концом чанка), целью быть не может: туда
+    // ставится выход с нужным pc.
     for (patch, target) in jumps {
         let to = match offsets.get(target).copied().flatten() {
-            Some(offset) => offset + PROLOGUE_LEN,
+            Some(offset) => offset,
             None => {
                 let exit = asm.here();
                 asm.mov_r_imm32(Reg::Rax, target as u32);
@@ -239,8 +261,6 @@ pub fn compile(chunk: &Chunk) -> Option<CompiledChunk> {
     Some(CompiledChunk { code, entries })
 }
 
-/// Длина пролога в байтах — переходы внутрь чанка целятся ЗА него.
-/// Проверяется тестом `the_prologue_length_matches_what_is_emitted`.
 /// Сколько инструкций подряд должно быть скомпилировано, чтобы на первую
 /// из них имело смысл входить из интерпретатора.
 ///
@@ -252,8 +272,6 @@ pub fn compile(chunk: &Chunk) -> Option<CompiledChunk> {
 /// удалось: разброс медиан у `table_sort` между повторами доходит до 37%,
 /// что больше любого ожидаемого здесь эффекта.
 const MIN_RUN: usize = 2;
-
-const PROLOGUE_LEN: usize = 9; // push+push+sub rsp,imm8+mov = 1+1+4+3
 
 /// push rbp; push rbx; sub rsp, 8; mov rbx, rdi
 ///
@@ -381,14 +399,18 @@ fn compile_instr(instr: &Instr) -> Option<Compiled> {
 
 // --- Шимы ---------------------------------------------------------------
 
-/// Обвязка, одинаковая у всех: развернуть контекст, зафиксировать `pc`,
-/// выполнить тело, превратить `Result` в код возврата.
+/// Обвязка, одинаковая у всех: развернуть контекст, выполнить тело,
+/// превратить `Result` в код возврата.
 ///
-/// `pc` ставится ДО работы и не увеличивается после. Так же ведёт себя и
-/// интерпретатор: он двигает `pc` уже после успеха, поэтому в момент
-/// ошибки там стоит позиция сбойнувшей инструкции — по ней обработчик
-/// исключений и ищет объемлющую `Попытка`. Ошибись здесь, и `Попытка`
-/// ловила бы не то, что ловит в обычном режиме.
+/// На пути успеха `frame.pc` не трогается вовсе: пока работает натив,
+/// его никто не читает — продолжение передаётся через `rax` на выходе, а
+/// шимы, которым нужна собственная позиция, получают точный `pc`
+/// аргументом. Единственный потребитель `frame.pc` во время нативного
+/// исполнения — поиск обработчика `Попытка` после ошибки, поэтому точный
+/// `pc` сбойнувшей инструкции пишется один раз в холодной ветке. Это тот
+/// же инвариант, что у интерпретатора: в момент ошибки `pc` стоит на
+/// сбойной инструкции — по нему и ищется объемлющая `Попытка`. Ошибись
+/// здесь, и `Попытка` ловила бы не то, что ловит в обычном режиме.
 ///
 /// # Safety
 ///
@@ -411,13 +433,10 @@ unsafe fn run_shim(
     let program = unsafe { &*ctx.program };
     let shapes = unsafe { &mut *ctx.runtime_shapes };
     let frame_idx = frames.len() - 1;
-    frames[frame_idx].pc = pc as usize;
     match body(frames, stack, program, frame_idx, shapes) {
-        Ok(code) => {
-            frames[frame_idx].pc = pc as usize + 1;
-            code
-        }
+        Ok(code) => code,
         Err(e) => {
+            frames[frame_idx].pc = pc as usize;
             unsafe { *ctx.error = Some(e) };
             FAILED
         }
@@ -425,14 +444,17 @@ unsafe fn run_shim(
 }
 
 macro_rules! shim {
-    ($name:ident, |$frames:ident, $stack:ident, $program:ident, $idx:ident, $shapes:ident, $a:ident, $b:ident, $c:ident| $body:block) => {
-        extern "C" fn $name(ctx: *mut JitCtx, pc: u32, $a: u32, $b: u32, $c: u32) -> u64 {
+    ($name:ident, |$frames:ident, $stack:ident, $program:ident, $idx:ident, $shapes:ident, $pc:ident, $a:ident, $b:ident, $c:ident| $body:block) => {
+        extern "C" fn $name(ctx: *mut JitCtx, pc_arg: u32, $a: u32, $b: u32, $c: u32) -> u64 {
             unsafe {
-                run_shim(ctx, pc, |$frames, $stack, $program, $idx, $shapes| {
+                run_shim(ctx, pc_arg, |$frames, $stack, $program, $idx, $shapes| {
+                    // Гигиена макроса не даёт телу видеть `pc_arg` — своя
+                    // позиция привязывается к имени с места вызова.
+                    let $pc: u32 = pc_arg;
                     // Глушим «не использовано» для шимов, которым часть
                     // параметров не нужна; ссылку на формы по значению брать
                     // нельзя — она не Copy.
-                    let _ = (&$shapes, $program, $a, $b, $c);
+                    let _ = (&$shapes, $program, $pc, $a, $b, $c);
                     $body
                 })
             }
@@ -445,6 +467,7 @@ shim!(shim_move, |frames,
                   program,
                   idx,
                   shapes,
+                  _pc,
                   dst,
                   src,
                   _c| {
@@ -460,6 +483,7 @@ shim!(shim_load_const, |frames,
                         program,
                         idx,
                         shapes,
+                        _pc,
                         dst,
                         k,
                         _c| {
@@ -484,6 +508,7 @@ shim!(shim_load_bool, |frames,
                        program,
                        idx,
                        shapes,
+                       _pc,
                        dst,
                        val,
                        _c| {
@@ -497,6 +522,7 @@ shim!(shim_load_undefined, |frames,
                             program,
                             idx,
                             shapes,
+                            _pc,
                             dst,
                             _b,
                             _c| {
@@ -510,6 +536,7 @@ shim!(shim_load_null, |frames,
                        program,
                        idx,
                        shapes,
+                       _pc,
                        dst,
                        _b,
                        _c| {
@@ -523,6 +550,7 @@ shim!(shim_add, |frames,
                  program,
                  idx,
                  shapes,
+                 _pc,
                  dst,
                  a,
                  b| {
@@ -532,7 +560,15 @@ shim!(shim_add, |frames,
 
 macro_rules! binop_shim {
     ($name:ident, $f:path) => {
-        shim!($name, |frames, stack, program, idx, shapes, dst, a, b| {
+        shim!($name, |frames,
+                      stack,
+                      program,
+                      idx,
+                      shapes,
+                      _pc,
+                      dst,
+                      a,
+                      b| {
             binop(frames, stack, idx, dst as u8, a as u8, b as u8, $f)?;
             Ok(OK)
         });
@@ -546,7 +582,15 @@ binop_shim!(shim_rem, BslValue::rem);
 
 macro_rules! cmp_shim {
     ($name:ident, $op:literal, $f:expr) => {
-        shim!($name, |frames, stack, program, idx, shapes, dst, a, b| {
+        shim!($name, |frames,
+                      stack,
+                      program,
+                      idx,
+                      shapes,
+                      _pc,
+                      dst,
+                      a,
+                      b| {
             cmp(frames, stack, idx, dst as u8, a as u8, b as u8, $op, $f)?;
             Ok(OK)
         });
@@ -560,7 +604,15 @@ macro_rules! cmp_shim {
 // падало ошибкой типа там, где интерпретатор печатал «Да». Поймал это
 // `the_jit_agrees_with_the_interpreter_on_every_script` на первом же
 // прогоне — ради этого он и написан.
-shim!(shim_eq, |frames, stack, program, idx, shapes, dst, a, b| {
+shim!(shim_eq, |frames,
+                stack,
+                program,
+                idx,
+                shapes,
+                _pc,
+                dst,
+                a,
+                b| {
     let av = reg_load(stack, frames[idx].reg_index(a as u8))?;
     let bv = reg_load(stack, frames[idx].reg_index(b as u8))?;
     let d = frames[idx].reg_index(dst as u8);
@@ -573,6 +625,7 @@ shim!(shim_not_eq, |frames,
                     program,
                     idx,
                     shapes,
+                    _pc,
                     dst,
                     a,
                     b| {
@@ -595,6 +648,7 @@ shim!(shim_neg, |frames,
                  program,
                  idx,
                  shapes,
+                 _pc,
                  dst,
                  src,
                  _c| {
@@ -609,6 +663,7 @@ shim!(shim_not, |frames,
                  program,
                  idx,
                  shapes,
+                 _pc,
                  dst,
                  src,
                  _c| {
@@ -626,6 +681,7 @@ shim!(shim_jump_if_false, |frames,
                            program,
                            idx,
                            shapes,
+                           _pc,
                            cond,
                            _b,
                            _c| {
@@ -647,6 +703,7 @@ shim!(shim_get_index, |frames,
                        program,
                        idx,
                        shapes,
+                       _pc,
                        dst,
                        obj,
                        index| {
@@ -663,6 +720,7 @@ shim!(shim_set_index, |frames,
                        program,
                        idx,
                        shapes,
+                       _pc,
                        obj,
                        index,
                        src| {
@@ -678,10 +736,11 @@ shim!(shim_call_builtin, |frames,
                           program,
                           idx,
                           shapes,
+                          pc,
                           _a,
                           _b,
                           _c| {
-    let (_chunk, _pc, instr) = own_instr(frames, program, idx)?;
+    let (_chunk, instr) = own_instr(frames, program, idx, pc as usize)?;
     let Instr::CallBuiltin {
         dst,
         builtin,
@@ -700,20 +759,22 @@ shim!(shim_call_builtin, |frames,
     Ok(OK)
 });
 
-/// Своя инструкция шима: та, на которой стоит `pc` кадра. Возвращает и
-/// чанк — он нужен и под инлайн-кэш свойства, и под таблицу констант.
+/// Своя инструкция шима — по точному `pc`, который нативный код передал
+/// аргументом (`frame.pc` на горячем пути не поддерживается — см.
+/// `run_shim`). Возвращает и чанк — он нужен и под инлайн-кэш свойства, и
+/// под таблицу констант.
 fn own_instr<'a>(
     frames: &[Frame],
     program: &'a Program,
     idx: usize,
-) -> Result<(&'a bsl_bytecode::Chunk, usize, Instr), RtError> {
-    let pc = frames[idx].pc;
+    pc: usize,
+) -> Result<(&'a bsl_bytecode::Chunk, Instr), RtError> {
     let chunk = at(
         &program.chunks,
         frames[idx].func_id,
         "номер чанка вне таблицы функций",
     )?;
-    Ok((chunk, pc, *at(&chunk.instrs, pc, "инструкция вне чанка")?))
+    Ok((chunk, *at(&chunk.instrs, pc, "инструкция вне чанка")?))
 }
 
 shim!(shim_get_prop, |frames,
@@ -721,10 +782,11 @@ shim!(shim_get_prop, |frames,
                       program,
                       idx,
                       shapes,
+                      pc,
                       _a,
                       _b,
                       _c| {
-    let (chunk, pc, instr) = own_instr(frames, program, idx)?;
+    let (chunk, instr) = own_instr(frames, program, idx, pc as usize)?;
     let Instr::GetProp { dst, obj, name } = instr else {
         return Err(RtError::InvalidBytecode(
             "шим свойства вызван не на своей инструкции",
@@ -734,7 +796,7 @@ shim!(shim_get_prop, |frames,
     // Инлайн-кэш — ячейка ЭТОЙ инструкции, ровно как у интерпретатора:
     // отдельного кэша у JIT-а нет и быть не должно, иначе мономорфный
     // сайт грелся бы дважды и по-разному.
-    let v = match ov.get_field_cached(name, prop_cache(chunk, pc)?) {
+    let v = match ov.get_field_cached(name, prop_cache(chunk, pc as usize)?) {
         Err(RtError::NotAnObject) => ov.get_field_by_name(field_name(program, name)?)?,
         other => other?,
     };
@@ -748,10 +810,11 @@ shim!(shim_set_prop, |frames,
                       program,
                       idx,
                       shapes,
+                      pc,
                       _a,
                       _b,
                       _c| {
-    let (chunk, pc, instr) = own_instr(frames, program, idx)?;
+    let (chunk, instr) = own_instr(frames, program, idx, pc as usize)?;
     let Instr::SetProp { obj, name, src } = instr else {
         return Err(RtError::InvalidBytecode(
             "шим свойства вызван не на своей инструкции",
@@ -762,7 +825,7 @@ shim!(shim_set_prop, |frames,
     // `Значение` перехватывается ТАК ЖЕ, как в ветке интерпретатора: ему
     // нужно форматирование из `bsl-format`.
     if !crate::set_spread_value(&ov, field_name(program, name)?, &sv)? {
-        match ov.set_field_cached(name, sv.clone(), prop_cache(chunk, pc)?) {
+        match ov.set_field_cached(name, sv.clone(), prop_cache(chunk, pc as usize)?) {
             Err(RtError::NotAnObject) => ov.set_field_by_name(field_name(program, name)?, sv)?,
             other => other?,
         }
@@ -775,10 +838,11 @@ shim!(shim_call_method, |frames,
                          program,
                          idx,
                          shapes,
+                         pc,
                          _a,
                          _b,
                          _c| {
-    let (_chunk, _pc, instr) = own_instr(frames, program, idx)?;
+    let (_chunk, instr) = own_instr(frames, program, idx, pc as usize)?;
     let Instr::CallMethod {
         dst,
         obj,
@@ -808,13 +872,15 @@ shim!(shim_call_method, |frames,
 
 shim!(
     shim_numeric_for_next,
-    |frames, stack, program, idx, shapes, counter, bound, target| {
+    |frames, stack, program, idx, shapes, pc, counter, bound, target| {
         let counter_idx = frames[idx].reg_index(counter as u8);
         let bound_idx = frames[idx].reg_index(bound as u8);
-        let here = frames[idx].pc;
-        let mut pc = here;
-        numeric_for_next_regular(stack, counter_idx, bound_idx, &mut pc, target as i16)?;
-        Ok(if pc == here + 1 { OK } else { JUMPED })
+        // Своя позиция — из аргумента шима: `frame.pc` на горячем пути не
+        // поддерживается (см. `run_shim`).
+        let here = pc as usize;
+        let mut next = here;
+        numeric_for_next_regular(stack, counter_idx, bound_idx, &mut next, target as i16)?;
+        Ok(if next == here + 1 { OK } else { JUMPED })
     }
 );
 
@@ -823,6 +889,7 @@ shim!(shim_jump_if_true, |frames,
                           program,
                           idx,
                           shapes,
+                          _pc,
                           cond,
                           _b,
                           _c| {
@@ -833,17 +900,3 @@ shim!(shim_jump_if_true, |frames,
         OK
     })
 });
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_prologue_length_matches_what_is_emitted() {
-        // Переходы внутрь чанка целятся ЗА пролог по КОНСТАНТЕ. Разъедется
-        // она с кодогеном — управление попадёт в середину инструкции.
-        let mut asm = Assembler::new();
-        prologue(&mut asm);
-        assert_eq!(asm.here(), PROLOGUE_LEN);
-    }
-}
