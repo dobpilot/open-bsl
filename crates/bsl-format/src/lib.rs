@@ -167,10 +167,41 @@ pub struct DateFormat {
     pub locale: Locale,
 }
 
+/// Разобранные пары форматной строки кэшируются: `Формат` в горячих
+/// циклах зовётся с одними и теми же литералами, и повторный разбор — с
+/// `to_uppercase` кириллических ключей на каждый вызов — был заметен в
+/// профиле. Кэш потоко-локальный и ограничен по числу записей: форматные
+/// строки в реальном коде — литералы, их единицы; при переполнении кэш
+/// просто очищается.
+const SPEC_CACHE_CAP: usize = 128;
+
+/// Пары `ключ=значение` одной форматной строки, разделяемые кэшем.
+type SpecParts = std::rc::Rc<Vec<(String, String)>>;
+
+thread_local! {
+    static SPEC_CACHE: std::cell::RefCell<std::collections::HashMap<String, SpecParts>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+fn spec_parts(spec: &str) -> SpecParts {
+    SPEC_CACHE.with(|cache| {
+        if let Some(hit) = cache.borrow().get(spec) {
+            return hit.clone();
+        }
+        let parts = std::rc::Rc::new(spec_parts_uncached(spec));
+        let mut cache = cache.borrow_mut();
+        if cache.len() >= SPEC_CACHE_CAP {
+            cache.clear();
+        }
+        cache.insert(spec.to_string(), parts.clone());
+        parts
+    })
+}
+
 /// Разбивает форматную строку на пары `ключ=значение` по `;`, НЕ разрезая
 /// внутри одинарных кавычек: `ДФ='дд.ММ.гггг'` кавычки нужны как раз
 /// потому, что шаблон может содержать что угодно, включая `;`.
-fn spec_parts(spec: &str) -> Vec<(String, String)> {
+fn spec_parts_uncached(spec: &str) -> Vec<(String, String)> {
     let mut out = Vec::new();
     let mut current = String::new();
     let mut in_quotes = false;
@@ -228,10 +259,10 @@ pub fn parse_date_format(spec: &str) -> RtResult<DateFormat> {
         locale: parse_locale(&parts),
         ..DateFormat::default()
     };
-    for (key, val) in parts {
+    for (key, val) in parts.iter() {
         match key.as_str() {
-            "ДФ" | "DF" => fmt.pattern = Some(val),
-            "ДЛФ" | "DLF" => fmt.long = Some(val),
+            "ДФ" | "DF" => fmt.pattern = Some(val.clone()),
+            "ДЛФ" | "DLF" => fmt.long = Some(val.clone()),
             _ => {}
         }
     }
@@ -246,10 +277,10 @@ pub fn parse_boolean_format(spec: &str) -> RtResult<BooleanFormat> {
         true_text: None,
         false_text: None,
     };
-    for (key, val) in parts {
+    for (key, val) in parts.iter() {
         match key.as_str() {
-            "БИ" | "BT" => fmt.true_text = Some(val),
-            "БЛ" | "BF" => fmt.false_text = Some(val),
+            "БИ" | "BT" => fmt.true_text = Some(val.clone()),
+            "БЛ" | "BF" => fmt.false_text = Some(val.clone()),
             _ => {}
         }
     }
@@ -265,7 +296,7 @@ pub fn parse_number_format(spec: &str) -> RtResult<NumberFormat> {
     let parts = spec_parts(spec);
     let mut fmt = NumberFormat::for_locale(parse_locale(&parts));
     fmt.blank_zero = true;
-    for (key, val) in &parts {
+    for (key, val) in parts.iter() {
         let val = val.as_str();
         match key.as_str() {
             "ЧГ" => fmt.group = val != "0",

@@ -663,7 +663,31 @@ impl ValueTableData {
     /// указывать на ту же строку, просто стоящую в другом месте.
     pub fn sort(&mut self, keys: &[SortKey]) {
         let mut order: Vec<usize> = (0..self.row_count()).collect();
+        // Декорация ПЕРВОГО ключа: большинство сравнений решается им, и
+        // упакованный префикс сравнивается парой машинных инструкций
+        // вместо прохода компаратора по значениям. Совпадение префиксов
+        // ничего не утверждает — тогда значения сравниваются полностью.
+        // Выгодна она только строковым колонкам: у прочих типов префикс
+        // нулевой, и колонка без единой строки получала бы чистый
+        // накладной расход на каждое сравнение — замерено на table_sort.
+        // Пакуются символы ПОСЛЕ общего коллационного префикса колонки:
+        // на данных вида «имя_12345» первые символы у всех совпадают, и
+        // без сдвига декорация не различала бы ничего.
+        let deco: Option<(Vec<SortPrefix>, bool)> = keys.first().and_then(|key| {
+            let col = self.columns.get(key.column)?;
+            let skip = column_collation_lcp(col)?;
+            Some((
+                col.iter().map(|v| sort_prefix(v, skip)).collect(),
+                key.descending,
+            ))
+        });
         order.sort_by(|&a, &b| {
+            if let Some((deco, descending)) = &deco {
+                let ord = deco[a].compare(&deco[b]);
+                if ord != Ordering::Equal {
+                    return if *descending { ord.reverse() } else { ord };
+                }
+            }
             for key in keys {
                 let Some(col) = self.columns.get(key.column) else {
                     continue;
@@ -1071,6 +1095,101 @@ fn type_rank(v: &BslValue) -> u8 {
         BslValue::Object(_) => 8,
         BslValue::Skipped => 9,
     }
+}
+
+/// Упакованный первичный префикс значения для быстрого пути сортировки:
+/// ранг типа и первые четыре символа строки в первичной коллации (нижний
+/// регистр, `ё` сведена к `е`) по u16 на символ, старший — первый.
+/// НЕРАВЕНСТВО префиксов совпадает с вердиктом [`compare_for_sort`];
+/// равенство ничего не значит и уводит в полное сравнение. Строка с
+/// символом вне базовой плоскости в префиксе (`clean == false`) в u16 не
+/// помещается — такому значению быстрый путь не доверяет вовсе.
+/// Нестроковые значения несут нулевой ключ: между собой они решаются
+/// полным сравнением, как раньше, а от строк их отделяет ранг типа.
+struct SortPrefix {
+    rank: u8,
+    clean: bool,
+    key: u64,
+}
+
+impl SortPrefix {
+    fn compare(&self, other: &Self) -> Ordering {
+        match self.rank.cmp(&other.rank) {
+            Ordering::Equal if self.clean && other.clean => self.key.cmp(&other.key),
+            Ordering::Equal => Ordering::Equal,
+            other => other,
+        }
+    }
+}
+
+/// Свёрнутый в первичную коллацию символ: нижний регистр уже дала
+/// [`BslString::lowercase_chars`], здесь остаётся `ё` → `е`.
+fn fold_collation(c: char) -> char {
+    if c == 'ё' {
+        'е'
+    } else {
+        c
+    }
+}
+
+/// Общий первичный префикс всех СТРОК колонки в символах; `None` — в
+/// колонке нет ни одной строки и декорация не окупится. Значения других
+/// типов на префикс не влияют: между собой их разводит ранг типа.
+fn column_collation_lcp(col: &[BslValue]) -> Option<usize> {
+    let mut lcp: Option<(&BslString, usize)> = None;
+    for v in col {
+        let BslValue::Str(s) = v else { continue };
+        match &mut lcp {
+            None => {
+                let len = s.lowercase_chars().len();
+                lcp = Some((s, len));
+            }
+            Some((first, len)) => {
+                let a = first.lowercase_chars();
+                let b = s.lowercase_chars();
+                let cap = (*len).min(b.len());
+                let mut common = 0;
+                while common < cap && fold_collation(a[common]) == fold_collation(b[common]) {
+                    common += 1;
+                }
+                *len = common;
+                if common == 0 {
+                    break;
+                }
+            }
+        }
+    }
+    lcp.map(|(_, len)| len)
+}
+
+fn sort_prefix(v: &BslValue, skip: usize) -> SortPrefix {
+    let rank = type_rank(v);
+    let BslValue::Str(s) = v else {
+        return SortPrefix {
+            rank,
+            clean: true,
+            key: 0,
+        };
+    };
+    let chars = s.lowercase_chars();
+    let mut key = 0u64;
+    let mut clean = true;
+    for i in skip..skip + 4 {
+        let unit = match chars.get(i) {
+            Some(&c) => {
+                let cp = fold_collation(c) as u32;
+                if cp > 0xFFFF {
+                    clean = false;
+                    0
+                } else {
+                    cp as u16
+                }
+            }
+            None => 0,
+        };
+        key = (key << 16) | u64::from(unit);
+    }
+    SortPrefix { rank, clean, key }
 }
 
 /// Сравнение двух значений колонки. Одинаковые типы сравниваются по

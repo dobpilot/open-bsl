@@ -33,6 +33,31 @@ pub struct NameInterner {
     index: HashMap<String, NameId>,
 }
 
+/// Верхний регистр для ключа индекса. ASCII и кириллица минуют таблицы
+/// Unicode — имена полей BSL почти целиком из них и состоят, а полный
+/// `to_uppercase` с двоичным поиском по таблицам был заметен в профиле
+/// на миллионах `Вставить`. Прочие символы уходят в полный путь. Обе
+/// операции интернера обязаны нормализовать ключ ЭТОЙ функцией — иначе
+/// `intern` и `lookup` разойдутся на одном имени.
+fn key_upper(name: &str) -> String {
+    // Чистый ASCII — векторизованный путь стандартной библиотеки; он
+    // быстрее посимвольного цикла ниже.
+    if name.is_ascii() {
+        return name.to_ascii_uppercase();
+    }
+    let mut out = String::with_capacity(name.len());
+    for ch in name.chars() {
+        match ch {
+            'a'..='z' => out.push(((ch as u8) - (b'a' - b'A')) as char),
+            'а'..='я' => out.push(char::from_u32(ch as u32 - 0x20).unwrap_or(ch)),
+            'ё' => out.push('Ё'),
+            '\0'..='\u{7f}' | 'А'..='Я' | 'Ё' => out.push(ch),
+            _ => out.extend(ch.to_uppercase()),
+        }
+    }
+    out
+}
+
 impl NameInterner {
     pub fn new() -> Self {
         Self::default()
@@ -47,13 +72,13 @@ impl NameInterner {
         let index = names
             .iter()
             .enumerate()
-            .map(|(i, n)| (n.to_uppercase(), NameId(i as u32)))
+            .map(|(i, n)| (key_upper(n), NameId(i as u32)))
             .collect();
         NameInterner { names, index }
     }
 
     pub fn intern(&mut self, name: &str) -> NameId {
-        let key = name.to_uppercase();
+        let key = key_upper(name);
         if let Some(&id) = self.index.get(&key) {
             return id;
         }
@@ -72,7 +97,7 @@ impl NameInterner {
     /// Через [`intern`](Self::intern) тот же вопрос задавать нельзя: он
     /// растил бы таблицу на каждое чужое имя, а имена не выселяются.
     pub fn lookup(&self, name: &str) -> Option<NameId> {
-        self.index.get(&name.to_uppercase()).copied()
+        self.index.get(&key_upper(name)).copied()
     }
 
     /// Оригинальное написание имени. Нужно там, где `NameId` приходится
