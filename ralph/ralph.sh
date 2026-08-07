@@ -46,7 +46,7 @@ run () {  # $1=model  $2=effort  $3=tools  $4=prompt-string
 
 log ()      { printf '%s  %s\n' "$(date -u +%FT%TZ)" "$1" >> PROGRESS.md; }
 field ()    { sed -n "s/^## $1:[[:space:]]*//p" PLAN.md | head -1 | tr -d '[:space:]'; }
-verdict ()  { sed -n 's/^VERDICT:[[:space:]]*//p' "$1" 2>/dev/null | head -1 | tr -d '[:space:]'; }
+verdict ()  { [ -f "$1" ] || return 0; sed -n 's/^VERDICT:[[:space:]]*//p' "$1" | head -1 | tr -d '[:space:]'; }
 
 for i in $(seq 1 "$MAX_ITERS"); do
   echo "═══════════════ iteration $i / $MAX_ITERS ═══════════════"
