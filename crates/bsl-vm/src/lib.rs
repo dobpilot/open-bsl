@@ -1387,6 +1387,132 @@ fn run_dynamic_snippet(
     Ok(value)
 }
 
+/// Вызывает процедуру или функцию модуля ПО ИМЕНИ — узкая точка входа для
+/// рантайма, которому надо позвать пользовательский код по строке, пришедшей
+/// из данных (функция восстановления `ПрочитатьJSON`, обработчик события и
+/// далее в том же духе). Машинерия под ней та же, что у изолированного
+/// исполнения `Выполнить`/`Вычислить` (см. `run_dynamic_snippet`), только
+/// без текстовой прослойки: чанк уже скомпилирован, компилировать и
+/// кэшировать нечего.
+///
+/// Имя ищется регистронезависимо (через `to_uppercase`, как сравнивает
+/// идентификаторы `bsl-sema`) по [`Program::function_names`], куда входят и
+/// процедуры, и функции.
+///
+/// `stack` — стек значений вызывающего: из него по [`Program::module_base`]
+/// читается блок модульных переменных и в него же он возвращается после
+/// вызова, поэтому запись в модульную переменную из вызванной процедуры
+/// переживает вызов ровно так же, как при обычном `Call`.
+///
+/// Аргументы передаются ПО ЗНАЧЕНИЮ, даже для параметров без `Знач`:
+/// алиасить нечего — вызов приходит не с места вызова в BSL, а изнутри
+/// рантайма, и «переменной вызывающего» здесь не существует. Наблюдать то,
+/// что вызванный код записал в свой параметр, позволяет второй элемент
+/// возвращаемой пары — ФИНАЛЬНЫЕ значения слотов параметров, длиной
+/// `n_params` и в порядке объявления (это будущий канал для `Отказ`).
+/// Первый элемент — значение `Возврат`; у процедуры и у функции, дошедшей
+/// до конца тела без `Возврат`, это `Неопределено`.
+///
+/// # Errors
+///
+/// - [`RtError::DynamicError`] — имени нет в модуле либо число аргументов
+///   не совпало с числом параметров. И то, и другое приходит из
+///   пользовательских данных, поэтому это перехватываемая `Попытка` ошибка,
+///   а не паника. Аргументов обязано быть РОВНО `n_params`: пропущенный
+///   аргумент кодоген передаёт маркером `BslValue::Skipped`, а значение по
+///   умолчанию вычисляет пролог самой вызванной функции — здесь это
+///   работает так же.
+/// - [`RtError::StackOverflow`] — превышена вложенность динамических
+///   вызовов: вызов по имени — такой же вложенный `drive` на стеке Rust,
+///   как `Выполнить`, и рекурсия через него не должна валить процесс мимо
+///   `Попытка`.
+/// - Любая ошибка самого исполнения, не перехваченная внутри вызванного
+///   кода, а также [`RtError::InvalidBytecode`], если `program`
+///   рассогласована (имя функции есть, чанка под него нет) или `stack`
+///   короче блока модульных переменных.
+pub fn call_module_function(
+    program: &Program,
+    stack: &mut [BslValue],
+    name: &str,
+    args: Vec<BslValue>,
+) -> Result<(BslValue, Vec<BslValue>), RtError> {
+    let _depth = DynamicDepthGuard::enter()?;
+
+    let upper = name.to_uppercase();
+    let index = program
+        .function_names
+        .iter()
+        .position(|n| n.to_uppercase() == upper)
+        .ok_or_else(|| {
+            RtError::DynamicError(format!(
+                "Процедура или функция «{name}» в модуле не найдена"
+            ))
+        })?;
+    // `function_names[i]` — это `chunks[i + 1]`: нулевой чанк занят
+    // операторами верхнего уровня.
+    let func_id = index + 1;
+    let chunk = at(&program.chunks, func_id, "номер чанка вне таблицы функций")?;
+    let n_params = chunk.n_params as usize;
+    if args.len() != n_params {
+        return Err(RtError::DynamicError(format!(
+            "Неверное число аргументов при вызове «{name}»: передано {}, а параметров {n_params}",
+            args.len()
+        )));
+    }
+
+    // Кадр вызванной функции строится так же, как его строит `drive`:
+    // параметры — слоты `0..n_params`, собственные регистры сразу за ними.
+    // Алиасов на слоты вызывающего у этого кадра нет (`drive` заводит его с
+    // пустым `Frame::param_aliases`), поэтому аргументы просто лежат
+    // значениями в начале стека.
+    let mut call_stack = args;
+    push_own_registers(&mut call_stack, chunk);
+
+    // Модульный блок кладётся ЗА регистрами кадра — как у фрагмента
+    // `Выполнить` в области функции: в локальные слоты функции модульные
+    // переменные не входят, наложить их, как на верхнем уровне, не на что.
+    // Источник — блок ТЕКУЩЕЙ программы по её `module_base`, а не
+    // абсолютный ноль: у главной программы база нулевая, но нас могли
+    // позвать изнутри фрагмента, где блок лежит за его собственными
+    // регистрами. Вызовы внутри функции кладут свои кадры за блоком и
+    // усекают стек только до своей базы, так что блок стоит неподвижно.
+    let n_module = program.module_vars.len();
+    let module_base = call_stack.len();
+    for i in 0..n_module {
+        call_stack.push(reg_load(stack, program.module_base as usize + i)?);
+    }
+
+    // Та же программа, но с базой модульного блока на новом стеке. Чанки,
+    // имена и формы едут КАК ЕСТЬ: `Call func=N` индексирует ровно
+    // `chunks[N]`, а вызванная функция может звать соседей по модулю, так
+    // что нумерация обязана совпасть с исходной.
+    let callee_program = Program {
+        module_base: module_base as u32,
+        ..program.clone()
+    };
+
+    let (value, final_stack) = drive(&callee_program, func_id, call_stack)?;
+
+    // Мутации модульных переменных обязаны пережить вызов — та же
+    // дисциплина, что в `run_dynamic_snippet`.
+    for i in 0..n_module {
+        reg_store(
+            stack,
+            program.module_base as usize + i,
+            reg_load(&final_stack, module_base + i)?,
+        )?;
+    }
+
+    // Финальные значения слотов параметров: верхний кадр при возврате стек
+    // не усекает (см. `do_return_with_value`), поэтому они всё ещё на
+    // месте — в слотах `0..n_params`.
+    let mut final_params = Vec::with_capacity(n_params);
+    for i in 0..n_params {
+        final_params.push(reg_load(&final_stack, i)?);
+    }
+    Ok((value, final_params))
+}
+
 /// Один скомпилированный фрагмент. `shapes` — СОБСТВЕННЫЙ список форм
 /// фрагмента: индексы `shape` внутри `chunk` ссылаются именно на него, а
 /// не на `program.shapes` (был баг ровно на этом — `NewStructure` попадал
@@ -4731,5 +4857,133 @@ mod tests {
             b"\xef\xbb\xbf\xd0\x9f\xd1\x80\xd0\xb8\xd0\xb2\xd0\xb5\xd1\x82\r\n"
         );
         std::fs::remove_file(path).unwrap();
+    }
+
+    // --- Вызов процедуры/функции модуля по имени --------------------------
+
+    /// Компилирует модуль, не запуская его: тестам `call_module_function`
+    /// нужна сама `Program`, а не только значение прогона.
+    fn compile_src(src: &str) -> Program {
+        let prog = parse(src).unwrap_or_else(|e| panic!("parse error: {e:?}"));
+        let resolved = resolve_program(&prog.items).unwrap_or_else(|e| panic!("sema error: {e:?}"));
+        compile_program(&resolved).unwrap_or_else(|e| panic!("compile error: {e:?}"))
+    }
+
+    /// Прогоняет верхний уровень модуля и отдаёт его финальный стек — то
+    /// самое состояние, поверх которого рантайм зовёт функцию по имени
+    /// (первые слоты этого стека и есть модульные переменные).
+    fn module_state(program: &Program) -> Vec<BslValue> {
+        let mut stack: Vec<BslValue> = Vec::new();
+        push_own_registers(&mut stack, &program.chunks[0]);
+        let (_value, stack) =
+            drive(program, 0, stack).unwrap_or_else(|e| panic!("runtime error: {e:?}"));
+        stack
+    }
+
+    #[test]
+    fn call_module_function_by_name_returns_value() {
+        let program = compile_src(
+            "Функция Удвоить(х)\n\
+             Возврат х * 2;\n\
+             КонецФункции\n",
+        );
+        let mut stack = module_state(&program);
+        // Имя приходит из данных, а не из исходника, поэтому регистр здесь
+        // намеренно другой: поиск обязан быть регистронезависимым.
+        let (value, params) =
+            call_module_function(&program, &mut stack, "уДВОИТЬ", vec![num("21")]).unwrap();
+        assert_eq!(value, num("42"));
+        assert_eq!(params, vec![num("21")]);
+    }
+
+    #[test]
+    fn call_module_function_passes_several_args() {
+        let program = compile_src(
+            "Функция Собрать(а, б, в)\n\
+             Возврат а * 100 + б * 10 + в;\n\
+             КонецФункции\n",
+        );
+        let mut stack = module_state(&program);
+        // Разряды разные, поэтому перепутанный порядок аргументов даст
+        // другое число, а не то же самое.
+        let (value, params) = call_module_function(
+            &program,
+            &mut stack,
+            "Собрать",
+            vec![num("1"), num("2"), num("3")],
+        )
+        .unwrap();
+        assert_eq!(value, num("123"));
+        assert_eq!(params, vec![num("1"), num("2"), num("3")]);
+    }
+
+    #[test]
+    fn call_module_function_on_procedure_returns_undefined() {
+        let program = compile_src(
+            "Процедура Пометить(Отказ)\n\
+             Отказ = Истина;\n\
+             КонецПроцедуры\n",
+        );
+        let mut stack = module_state(&program);
+        let (value, params) = call_module_function(
+            &program,
+            &mut stack,
+            "Пометить",
+            vec![BslValue::Boolean(false)],
+        )
+        .unwrap();
+        assert_eq!(value, BslValue::Undefined);
+        // Аргументы едут по значению, и запись в параметр без `Знач`
+        // наблюдаема ровно одним каналом — финальными значениями слотов.
+        assert_eq!(params, vec![BslValue::Boolean(true)]);
+    }
+
+    #[test]
+    fn call_module_function_mutates_module_var() {
+        let program = compile_src(
+            "Перем Счетчик;\n\
+             Процедура Увеличить()\n\
+             Счетчик = Счетчик + 1;\n\
+             КонецПроцедуры\n\
+             Счетчик = 10;\n",
+        );
+        let mut stack = module_state(&program);
+        // Модульная переменная — первый слот кадра верхнего уровня.
+        assert_eq!(stack[0], num("10"));
+        let (value, params) =
+            call_module_function(&program, &mut stack, "Увеличить", Vec::new()).unwrap();
+        assert_eq!(value, BslValue::Undefined);
+        assert!(params.is_empty());
+        assert_eq!(stack[0], num("11"));
+    }
+
+    #[test]
+    fn call_module_function_unknown_name_is_rt_error() {
+        let program = compile_src(
+            "Функция Удвоить(х)\n\
+             Возврат х * 2;\n\
+             КонецФункции\n",
+        );
+        let mut stack = module_state(&program);
+        // Имя приходит из пользовательских данных, поэтому промах — это
+        // перехватываемая ошибка, а не паника.
+        let err = call_module_function(&program, &mut stack, "НетТакойФункции", vec![num("1")])
+            .unwrap_err();
+        assert!(matches!(err, RtError::DynamicError(_)), "{err:?}");
+    }
+
+    #[test]
+    fn call_module_function_wrong_arity_is_rt_error() {
+        let program = compile_src(
+            "Функция Удвоить(х)\n\
+             Возврат х * 2;\n\
+             КонецФункции\n",
+        );
+        let mut stack = module_state(&program);
+        let err = call_module_function(&program, &mut stack, "Удвоить", Vec::new()).unwrap_err();
+        assert!(matches!(err, RtError::DynamicError(_)), "{err:?}");
+        let err = call_module_function(&program, &mut stack, "Удвоить", vec![num("1"), num("2")])
+            .unwrap_err();
+        assert!(matches!(err, RtError::DynamicError(_)), "{err:?}");
     }
 }
