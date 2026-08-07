@@ -37,6 +37,15 @@ pub enum TypeId {
     VstrOpaque,
     /// Тип самого типа: `ТипЗнч(Тип("Число"))` -> `Тип`.
     Type,
+    /// Метатип системного перечисления — `ТипЗнч(ВариантЗаписиДатыJSON)`
+    /// от ГОЛОГО имени перечисления. Единственный несущий вариант: имя
+    /// зависит от перечисления («ПеречислениеВариантЗаписиДатыJSON» —
+    /// измерено), а плодить по варианту на каждое перечисление значило бы
+    /// дублировать список `EnumKind`. В `NAMES` его нет — имя отдаёт
+    /// `EnumKind::meta_ru_name`, а `Тип("Перечисление...")` такой тип НЕ
+    /// находит: разрешимость этого имени через `Тип()` не измерена, и до
+    /// замера честнее ошибка, чем угаданный успех.
+    EnumMeta(crate::EnumKind),
 
     // --- JSON ---------------------------------------------------------
     // Имена ТИПОВ у этих шести — с пробелами («Чтение JSON»), а имена
@@ -46,10 +55,15 @@ pub enum TypeId {
     JsonReader,
     JsonWriter,
     JsonWriterSettings,
+    /// `НастройкиСериализацииJSON` — в отличие от `JsonWriterSettings`
+    /// (форматирование текста: переносы строк, отступ) управляет тем, КАК
+    /// сериализуются даты и массивы внутри `ЗаписатьJSON`.
+    JsonSerializerSettings,
     /// Перечисления платформы. Тип члена — само перечисление.
     JsonValueType,
     JsonLineBreak,
     JsonDateFormat,
+    JsonDateWritingVariant,
 
     // --- XML ----------------------------------------------------------
     // Та же пара написаний, что и у JSON: тип печатается с пробелом
@@ -126,9 +140,21 @@ const NAMES: &[(TypeId, &str, &str)] = &[
         "Параметры записи JSON",
         "JSONWriterSettings",
     ),
+    // Тип с пробелом, как и остальные объектные типы JSON выше; значение
+    // («Строка(Новый НастройкиСериализацииJSON)») — без, см. `lib.rs`.
+    (
+        TypeId::JsonSerializerSettings,
+        "Настройки сериализации JSON",
+        "JSONSerializerSettings",
+    ),
     (TypeId::JsonValueType, "ТипЗначенияJSON", "JSONValueType"),
     (TypeId::JsonLineBreak, "ПереносСтрокJSON", "JSONLineBreak"),
     (TypeId::JsonDateFormat, "ФорматДатыJSON", "JSONDateFormat"),
+    (
+        TypeId::JsonDateWritingVariant,
+        "ВариантЗаписиДатыJSON",
+        "JSONDateWritingVariant",
+    ),
     (TypeId::XmlReader, "Чтение XML", "XMLReader"),
     (TypeId::XmlWriter, "Запись XML", "XMLWriter"),
     (
@@ -179,6 +205,9 @@ const NAMES: &[(TypeId, &str, &str)] = &[
 impl TypeId {
     /// Каноническое (русское) имя типа — то, что печатает `Строка()`.
     pub fn name(self) -> &'static str {
+        if let TypeId::EnumMeta(kind) = self {
+            return kind.meta_ru_name();
+        }
         NAMES
             .iter()
             .find(|(id, _, _)| *id == self)

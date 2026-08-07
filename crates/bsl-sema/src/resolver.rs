@@ -310,6 +310,8 @@ pub const NEW_TYPES: &[&str] = &[
     "JSONWriter",
     "ПараметрыЗаписиJSON",
     "JSONWriterSettings",
+    "НастройкиСериализацииJSON",
+    "JSONSerializerSettings",
     "ЧтениеXML",
     "XMLReader",
     "ЗаписьXML",
@@ -520,6 +522,19 @@ impl<'a> Resolver<'a> {
                             args: Vec::new(),
                         })
                     }
+                    // Голое имя СИСТЕМНОГО перечисления (без `.Член`) — тоже
+                    // валидное выражение, а не обращение к неопределённой
+                    // переменной. ИЗМЕРЕНО на `ВариантЗаписиДатыJSON`
+                    // (`JSON.DATE_VARIANT_EN_NAMES`, «Т+»:
+                    // `Вычислить("JSONDateWritingVariant")` платформа
+                    // вычисляет, а не отвергает). Переменная/модульная с тем
+                    // же именем побеждает — проверки выше. Что именно
+                    // возвращают `Строка()`/`ТипЗнч()` такого значения, не
+                    // измерено (см. `bsl_rt::BslValue::EnumType`,
+                    // `НЕ ИЗМЕРЕНО(JSON.ENUM.BARE_NAME)`).
+                    None if bsl_rt::lookup_enum(name).is_some() => Ok(RExpr::EnumTypeRef(
+                        bsl_rt::lookup_enum(name).expect("проверено guard'ом выше"),
+                    )),
                     None => Err(SemaError::UndefinedVariable(name.clone())),
                 },
             },
@@ -740,6 +755,18 @@ impl<'a> Resolver<'a> {
                     line_break: Box::new(line_break),
                     indent: Box::new(indent),
                 })
+            }
+            // Без аргументов — все свойства читаются и пишутся отдельно
+            // через точку (см. `bsl_rt::BslValue::new_json_serializer_settings`).
+            "НАСТРОЙКИСЕРИАЛИЗАЦИИJSON" | "JSONSERIALIZERSETTINGS" => {
+                if !args.is_empty() {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый НастройкиСериализацииJSON".to_string(),
+                        expected: 0,
+                        found: args.len(),
+                    });
+                }
+                Ok(RExpr::NewJsonSerializerSettings)
             }
             "ТАБЛИЧНЫЙДОКУМЕНТ" | "SPREADSHEETDOCUMENT" => {
                 if !args.is_empty() {

@@ -86,6 +86,7 @@ pub const OPCODES: &[&str] = &[
     "NewJsonReader",
     "NewJsonWriter",
     "NewJsonWriterSettings",
+    "NewJsonSerializerSettings",
     "NewTextDocument",
     "NewSpreadDocument",
     "NewXmlReader",
@@ -326,6 +327,12 @@ fn write_const(v: &BslValue) -> Result<String> {
         // и в текстовом формате он обязан быть представим, иначе
         // напечатанный байт-код перестал бы исполняться.
         BslValue::Enum(e) => format!("Перечисление {}.{}", e.enum_name(), e.member_name()),
+        // Голое имя перечисления — та же логика, что у члена: константа
+        // времени компиляции (`RExpr::EnumTypeRef`), обязана быть
+        // представима в тексте. Отдельный тег, а не «Перечисление» без
+        // точки: `Перечисление X.Y` уже занят членом, и без точки текст
+        // разбирался бы неоднозначно.
+        BslValue::EnumType(k) => format!("ТипПеречисления {}", k.ru_name()),
         BslValue::Object(_) => return Err(TextError::Unrepresentable("объект")),
         BslValue::Skipped => "Пропущено".to_string(),
     })
@@ -411,6 +418,9 @@ fn write_instr(instr: &Instr) -> String {
             line_break,
             indent,
         } => format!("NewJsonWriterSettings dst={dst} break={line_break} indent={indent}"),
+        Instr::NewJsonSerializerSettings { dst } => {
+            format!("NewJsonSerializerSettings dst={dst}")
+        }
         Instr::NewTextDocument { dst } => format!("NewTextDocument dst={dst}"),
         Instr::NewSpreadDocument { dst } => format!("NewSpreadDocument dst={dst}"),
         Instr::NewXmlReader { dst } => format!("NewXmlReader dst={dst}"),
@@ -941,6 +951,11 @@ fn parse_const(no: usize, text: &str) -> Result<BslValue> {
             })?;
             BslValue::Enum(value)
         }
+        "ТипПеречисления" => {
+            let kind = bsl_rt::lookup_enum(rest)
+                .ok_or_else(|| TextError::At(no, format!("нет перечисления «{rest}»")))?;
+            BslValue::EnumType(kind)
+        }
         other => return Err(TextError::At(no, format!("неизвестный тип «{other}»"))),
     })
 }
@@ -1190,6 +1205,7 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
             line_break: field_u8(&f, no, "break")?,
             indent: field_u8(&f, no, "indent")?,
         },
+        "NewJsonSerializerSettings" => Instr::NewJsonSerializerSettings { dst: dst(&f)? },
         "NewTextDocument" => Instr::NewTextDocument { dst: dst(&f)? },
         "NewSpreadDocument" => Instr::NewSpreadDocument { dst: dst(&f)? },
         "NewXmlReader" => Instr::NewXmlReader { dst: dst(&f)? },
@@ -1321,7 +1337,9 @@ mod tests {
          н = Новый ПараметрыЗаписиJSON(ПереносСтрокJSON.Нет, \"  \");\n\
          з = Новый ЗаписьJSON;\nз.УстановитьСтроку(н);\n\
          з.ЗаписатьНачалоМассива();\nз.ЗаписатьЗначение(1);\nз.ЗаписатьКонецМассива();\n\
-         т = ч.ТипТекущегоЗначения;\n",
+         т = ч.ТипТекущегоЗначения;\n\
+         нс = Новый НастройкиСериализацииJSON;\n\
+         нс.СериализовыватьМассивыКакОбъекты = Истина;\n",
         // XML: те же три конструктора. `ПараметрыЗаписиXML` берёт три
         // аргумента, а не два, поэтому своя строка корпуса, а не довесок
         // к JSON.

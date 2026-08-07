@@ -596,11 +596,19 @@ impl<'a> Compiler<'a> {
                 let k = self.add_const(BslValue::Enum(*v))?;
                 self.emit(Instr::LoadConst { dst, k });
             }
+            // Голое имя перечисления — той же природы константа.
+            RExpr::EnumTypeRef(k) => {
+                let c = self.add_const(BslValue::EnumType(*k))?;
+                self.emit(Instr::LoadConst { dst, k: c });
+            }
             RExpr::NewJsonReader => {
                 self.emit(Instr::NewJsonReader { dst });
             }
             RExpr::NewJsonWriter => {
                 self.emit(Instr::NewJsonWriter { dst });
+            }
+            RExpr::NewJsonSerializerSettings => {
+                self.emit(Instr::NewJsonSerializerSettings { dst });
             }
             RExpr::NewJsonWriterSettings { line_break, indent } => {
                 let lb = self.alloc_temp()?;

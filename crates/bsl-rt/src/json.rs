@@ -462,6 +462,93 @@ pub struct JsonWriterSettings {
     pub indent: String,
 }
 
+/// `ФорматДатыJSON` в терминах СЕРИАЛИЗАЦИИ, а не события разбора (тот —
+/// [`JsonEvent`]) — отдельный тип от `EnumValue`, потому что здесь удобнее
+/// работать `match`ем без соседних членов `ТипЗначенияJSON`/`ПереносСтрокJSON`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JsonDateFormat {
+    Iso,
+    JavaScript,
+    Microsoft,
+}
+
+impl JsonDateFormat {
+    fn from_enum_value(v: EnumValue) -> Option<Self> {
+        match v {
+            EnumValue::DateFormatIso => Some(Self::Iso),
+            EnumValue::DateFormatJavaScript => Some(Self::JavaScript),
+            EnumValue::DateFormatMicrosoft => Some(Self::Microsoft),
+            _ => None,
+        }
+    }
+
+    fn to_enum_value(self) -> EnumValue {
+        match self {
+            Self::Iso => EnumValue::DateFormatIso,
+            Self::JavaScript => EnumValue::DateFormatJavaScript,
+            Self::Microsoft => EnumValue::DateFormatMicrosoft,
+        }
+    }
+}
+
+/// `ВариантЗаписиДатыJSON` — какой момент означает записанная дата:
+/// наивное локальное время машины, то же самое со смещением от UTC
+/// в тексте, либо перевод в UTC.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JsonDateWritingVariant {
+    Local,
+    LocalOffset,
+    Universal,
+}
+
+impl JsonDateWritingVariant {
+    fn from_enum_value(v: EnumValue) -> Option<Self> {
+        match v {
+            EnumValue::DateVariantLocal => Some(Self::Local),
+            EnumValue::DateVariantLocalOffset => Some(Self::LocalOffset),
+            EnumValue::DateVariantUniversal => Some(Self::Universal),
+            _ => None,
+        }
+    }
+
+    fn to_enum_value(self) -> EnumValue {
+        match self {
+            Self::Local => EnumValue::DateVariantLocal,
+            Self::LocalOffset => EnumValue::DateVariantLocalOffset,
+            Self::Universal => EnumValue::DateVariantUniversal,
+        }
+    }
+}
+
+impl Default for JsonDateWritingVariant {
+    /// ИЗМЕРЕНО (`JSON.SETTINGS.DATE_VARIANT_DEFAULT`): умолчание
+    /// `НастройкиСериализацииJSON.ВариантЗаписиДаты` — `ЛокальнаяДата`.
+    fn default() -> Self {
+        Self::Local
+    }
+}
+
+/// `НастройкиСериализацииJSON` — третий аргумент `ЗаписатьJSON`. В отличие
+/// от [`JsonWriterSettings`] (форматирование ТЕКСТА: переносы строк,
+/// отступ) управляет тем, КАК сериализуются даты и массивы внутри
+/// значения.
+#[derive(Debug, Clone, PartialEq)]
+pub struct JsonSerializerSettings {
+    pub date_format: JsonDateFormat,
+    pub date_variant: JsonDateWritingVariant,
+    pub arrays_as_objects: bool,
+}
+
+impl Default for JsonSerializerSettings {
+    fn default() -> Self {
+        JsonSerializerSettings {
+            date_format: JsonDateFormat::Iso,
+            date_variant: JsonDateWritingVariant::default(),
+            arrays_as_objects: false,
+        }
+    }
+}
+
 impl Default for JsonWriterSettings {
     /// Умолчание `УстановитьСтроку()` без аргументов: переносы есть,
     /// отступа НЕТ. Измерено (`JSON.WRITE.DEFAULT_FORMAT` дал
@@ -494,6 +581,15 @@ pub struct JsonWriter {
     awaiting_value: bool,
     /// Куда уйдёт результат: `None` — в строку (`УстановитьСтроку`).
     path: Option<std::path::PathBuf>,
+    /// `ЗаписьJSON.ПроверятьСтруктуру`. Умолчание `true` — ИЗМЕРЕНО
+    /// (`JSON.WRITE.CHECK_STRUCTURE_DEFAULT`). Свойство читается и
+    /// пишется, но ни на одну из известных проверок структуры документа
+    /// (`end_object`/`end_array`/`begin_property_name`/`value` ниже) не
+    /// влияет — ИЗМЕРЕНО, что все они безусловны что при `Истина`, что при
+    /// `Ложь`. `НЕ ИЗМЕРЕНО(JSON.WRITE.CHECK_STRUCTURE_OFF)`: что тогда
+    /// вообще отключает `Ложь` (если хоть что-то) — открытый вопрос,
+    /// пробуются новые кандидаты (см. реестр).
+    check_structure: bool,
 }
 
 impl JsonWriter {
@@ -505,6 +601,7 @@ impl JsonWriter {
             has_member: Vec::new(),
             awaiting_value: false,
             path: None,
+            check_structure: true,
         }
     }
 
@@ -512,6 +609,14 @@ impl JsonWriter {
         let mut w = Self::to_string_target(settings);
         w.path = Some(path);
         w
+    }
+
+    pub fn check_structure(&self) -> bool {
+        self.check_structure
+    }
+
+    pub fn set_check_structure(&mut self, v: bool) {
+        self.check_structure = v;
     }
 
     fn pretty(&self) -> bool {
@@ -561,6 +666,11 @@ impl JsonWriter {
     /// # Errors
     ///
     /// [`RtError::Json`], если открытого объекта нет.
+    ///
+    /// ИЗМЕРЕНО: эта проверка тоже БЕЗУСЛОВНАЯ — `ПроверятьСтруктуру = Ложь`
+    /// её не снимает (см. `JSON.WRITE.CHECK_STRUCTURE_OFF`: пооперационная
+    /// проба дала «ошибка» и здесь, и у `end_array`/`begin_property_name`,
+    /// то есть ни одна из известных проверок настройкой не управляется).
     pub fn end_object(&mut self) -> RtResult<()> {
         if self.stack.last() != Some(&WCtx::Object) {
             return Err(RtError::Json(
@@ -592,7 +702,8 @@ impl JsonWriter {
 
     /// # Errors
     ///
-    /// [`RtError::Json`], если открытого массива нет.
+    /// [`RtError::Json`], если открытого массива нет — БЕЗУСЛОВНО, см.
+    /// `end_object`.
     pub fn end_array(&mut self) -> RtResult<()> {
         if self.stack.last() != Some(&WCtx::Array) {
             return Err(RtError::Json(
@@ -610,6 +721,8 @@ impl JsonWriter {
     }
 
     /// Открывает имя свойства и ставит начальную кавычку.
+    ///
+    /// ИЗМЕРЕНО: проверка контекста БЕЗУСЛОВНАЯ, см. `end_object`.
     fn begin_property_name(&mut self) -> RtResult<()> {
         if self.stack.last() != Some(&WCtx::Object) {
             return Err(RtError::Json("ЗаписатьИмяСвойства вне объекта".to_string()));
@@ -660,8 +773,15 @@ impl JsonWriter {
 
     /// # Errors
     ///
-    /// [`RtError::Json`], если значение пишется в объект без имени свойства,
-    /// либо тип значения записать нечем.
+    /// [`RtError::Json`], если значение пишется в объект без имени
+    /// свойства, либо тип значения записать нечем.
+    ///
+    /// ИЗМЕРЕНО: эта проверка, как и все прочие проверки структуры
+    /// документа (`end_object`/`end_array`/`begin_property_name`), —
+    /// БЕЗУСЛОВНАЯ; `ПроверятьСтруктуру = Ложь` не снимает ни одну из них
+    /// (`JSON.WRITE.CHECK_STRUCTURE_OFF`, пооперационная проба). Что же
+    /// именно отключает эта настройка (если хоть что-то), остаётся
+    /// открытым вопросом — свойство при этом читаемо и записываемо.
     pub fn value(&mut self, v: &BslValue) -> RtResult<()> {
         if self.stack.last() == Some(&WCtx::Object) && !self.awaiting_value {
             return Err(RtError::Json(
@@ -847,6 +967,130 @@ fn settings_from(arg: Option<&BslValue>) -> RtResult<JsonWriterSettings> {
             expected: "ПараметрыЗаписиJSON",
             op: "УстановитьСтроку",
         }),
+    }
+}
+
+/// Настройки из третьего аргумента `ЗаписатьJSON(Запись, Значение,
+/// [Настройки])`. Отсутствующий аргумент — умолчания
+/// [`JsonSerializerSettings::default`].
+///
+/// # Errors
+///
+/// [`RtError::TypeError`], если аргумент задан и не `НастройкиСериализацииJSON`.
+pub fn serializer_settings_from(arg: Option<&BslValue>) -> RtResult<JsonSerializerSettings> {
+    match arg {
+        None | Some(BslValue::Undefined) => Ok(JsonSerializerSettings::default()),
+        Some(BslValue::Object(o)) => match &**o {
+            BslObject::JsonSerializerSettings(s) => Ok(s.borrow().clone()),
+            _ => Err(RtError::TypeError {
+                expected: "НастройкиСериализацииJSON",
+                op: "ЗаписатьJSON",
+            }),
+        },
+        Some(_) => Err(RtError::TypeError {
+            expected: "НастройкиСериализацииJSON",
+            op: "ЗаписатьJSON",
+        }),
+    }
+}
+
+/// `НастройкиСериализацииJSON.<поле>` (чтение) — три свойства, все
+/// читаемые и записываемые (см. `set_serializer_setting`).
+///
+/// Все шесть написаний (рус./англ. на каждое из трёх свойств) — ИЗМЕРЕНО
+/// (`JSON.SETTINGS.PROPERTY_NAMES`): `ФорматСериализацииДаты` (с «ы»!) /
+/// `DateSerializationFormat`, `ВариантЗаписиДаты` / `DateWritingVariant`,
+/// `СериализовыватьМассивыКакОбъекты` / `SerializeArraysAsObjects`. Статья
+/// 16.2.3.2 приводит `ФорматСериализацииДат` (без «ы») — это ОПЕЧАТКА
+/// статьи, живая 8.3.27 такое имя отвергает («Поле объекта не обнаружено»,
+/// снято прогоном фикстуры `json-dates`), поэтому здесь оно НЕ принимается.
+///
+/// # Errors
+///
+/// [`RtError::UnknownColumn`] на неизвестном имени; [`RtError::NotAnObject`],
+/// если получатель не `НастройкиСериализацииJSON`.
+pub fn get_serializer_setting(obj: &BslValue, name: &str) -> RtResult<BslValue> {
+    let BslValue::Object(o) = obj else {
+        return Err(RtError::NotAnObject);
+    };
+    let BslObject::JsonSerializerSettings(cell) = &**o else {
+        return Err(RtError::NotAnObject);
+    };
+    let s = cell.borrow();
+    if name.eq_ignore_ascii_case("ФорматСериализацииДаты")
+        || name.eq_ignore_ascii_case("DateSerializationFormat")
+    {
+        Ok(BslValue::Enum(s.date_format.to_enum_value()))
+    } else if name.eq_ignore_ascii_case("ВариантЗаписиДаты")
+        || name.eq_ignore_ascii_case("DateWritingVariant")
+    {
+        Ok(BslValue::Enum(s.date_variant.to_enum_value()))
+    } else if name.eq_ignore_ascii_case("СериализовыватьМассивыКакОбъекты")
+        || name.eq_ignore_ascii_case("SerializeArraysAsObjects")
+    {
+        Ok(BslValue::Boolean(s.arrays_as_objects))
+    } else {
+        Err(RtError::UnknownColumn(name.to_string()))
+    }
+}
+
+/// `НастройкиСериализацииJSON.<поле> = Значение` (запись).
+///
+/// # Errors
+///
+/// [`RtError::TypeError`] на значении не того типа; [`RtError::UnknownColumn`]
+/// на неизвестном имени; [`RtError::NotAnObject`], если получатель не
+/// `НастройкиСериализацииJSON`.
+pub fn set_serializer_setting(obj: &BslValue, name: &str, val: BslValue) -> RtResult<()> {
+    let BslValue::Object(o) = obj else {
+        return Err(RtError::NotAnObject);
+    };
+    let BslObject::JsonSerializerSettings(cell) = &**o else {
+        return Err(RtError::NotAnObject);
+    };
+    if name.eq_ignore_ascii_case("ФорматСериализацииДаты")
+        || name.eq_ignore_ascii_case("DateSerializationFormat")
+    {
+        let BslValue::Enum(e) = val else {
+            return Err(RtError::TypeError {
+                expected: "ФорматДатыJSON",
+                op: "ФорматСериализацииДаты",
+            });
+        };
+        let format = JsonDateFormat::from_enum_value(e).ok_or(RtError::TypeError {
+            expected: "ФорматДатыJSON",
+            op: "ФорматСериализацииДаты",
+        })?;
+        cell.borrow_mut().date_format = format;
+        Ok(())
+    } else if name.eq_ignore_ascii_case("ВариантЗаписиДаты")
+        || name.eq_ignore_ascii_case("DateWritingVariant")
+    {
+        let BslValue::Enum(e) = val else {
+            return Err(RtError::TypeError {
+                expected: "ВариантЗаписиДатыJSON",
+                op: "ВариантЗаписиДаты",
+            });
+        };
+        let variant = JsonDateWritingVariant::from_enum_value(e).ok_or(RtError::TypeError {
+            expected: "ВариантЗаписиДатыJSON",
+            op: "ВариантЗаписиДаты",
+        })?;
+        cell.borrow_mut().date_variant = variant;
+        Ok(())
+    } else if name.eq_ignore_ascii_case("СериализовыватьМассивыКакОбъекты")
+        || name.eq_ignore_ascii_case("SerializeArraysAsObjects")
+    {
+        let BslValue::Boolean(b) = val else {
+            return Err(RtError::TypeError {
+                expected: "Булево",
+                op: "СериализовыватьМассивыКакОбъекты",
+            });
+        };
+        cell.borrow_mut().arrays_as_objects = b;
+        Ok(())
+    } else {
+        Err(RtError::UnknownColumn(name.to_string()))
     }
 }
 
@@ -1110,6 +1354,35 @@ pub fn is_json_writer(v: &BslValue) -> bool {
     matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::JsonWriter(_)))
 }
 
+/// `ЗаписьJSON.ПроверятьСтруктуру` (чтение).
+///
+/// # Errors
+///
+/// [`RtError::TypeError`], если приёмник ещё не назначен — то же условие,
+/// что и у остальных методов записи.
+pub fn get_check_structure(obj: &BslValue) -> RtResult<BslValue> {
+    with_writer(obj, |w| Ok(BslValue::Boolean(w.check_structure())))
+}
+
+/// `ЗаписьJSON.ПроверятьСтруктуру` (запись).
+///
+/// # Errors
+///
+/// [`RtError::TypeError`], если значение не `Булево` либо приёмник ещё не
+/// назначен.
+pub fn set_check_structure(obj: &BslValue, val: BslValue) -> RtResult<()> {
+    let BslValue::Boolean(b) = val else {
+        return Err(RtError::TypeError {
+            expected: "Булево",
+            op: "ПроверятьСтруктуру",
+        });
+    };
+    with_writer(obj, |w| {
+        w.set_check_structure(b);
+        Ok(())
+    })
+}
+
 // --- ПрочитатьJSON / ЗаписатьJSON ---------------------------------------
 
 use crate::runtime_shapes::RuntimeShapes;
@@ -1160,6 +1433,15 @@ fn is_identifier(name: &str) -> bool {
 /// отдаёт UTC (давнее задокументированное отклонение), и вводить смещение
 /// ради одной функции значило бы завести полузону, о которой не знает
 /// остальной рантайм.
+///
+/// `ПрочитатьДатуJSON`/`ЗаписатьДатуJSON` (см. `read_json_date`/
+/// `write_json_date` ниже) — ИСКЛЮЧЕНИЕ из этого правила, а не отказ от
+/// него: смещение машины (`crate::tz`) там нужно самой сутью функций
+/// (варианты `ЛокальнаяДатаСоСмещением`/`УниверсальнаяДата`
+/// `ВариантЗаписиДатыJSON` описаны платформой именно через часовой пояс
+/// машины), это явно заказанная этим этапом способность, а не тихое
+/// распространение зоны на весь модуль `json`. `ИменаСвойствСоЗначениямиДата`
+/// здесь по-прежнему без сдвига.
 fn parse_json_date(text: &str) -> Option<crate::BslDate> {
     let body = text.strip_suffix('Z').unwrap_or(text);
     let (date, time) = match body.split_once('T') {
@@ -1179,16 +1461,324 @@ fn parse_json_date(text: &str) -> Option<crate::BslDate> {
     crate::BslDate::from_civil(year, month, day, hour, minute, second)
 }
 
-/// `ПрочитатьJSON(Чтение[, ВозвращатьСоответствие[, ИменаСвойствСоЗначениямиДата]])`.
+// --- ЗаписатьДатуJSON / ПрочитатьДатуJSON -------------------------------
+//
+// Единственное место в крейте, где дата интерпретируется относительно
+// часового пояса МАШИНЫ (`crate::tz`), а не как наивный набор полей: сама
+// суть `ВариантЗаписиДатыJSON` — «локальная», «локальная со смещением»,
+// «универсальная» — это часовой пояс. `BslDate`, переданная сюда, читается
+// как НАИВНОЕ ЛОКАЛЬНОЕ время машины: `ЗаписатьДатуJSON` с вариантом
+// `УниверсальнаяДата` вычитает офсет машины, `ПрочитатьДатуJSON` с
+// UTC-моментом (`Z`, JavaScript, Microsoft) его прибавляет — симметрично,
+// так что `ПрочитатьДатуJSON(ЗаписатьДатуJSON(Д, ...), ...) = Д` на машине
+// с одним и тем же смещением в оба конца.
+
+/// Секунды нашей эпохи (`0001-01-01`), пересчитанные в СЕКУНДЫ ОТ
+/// Unix-эпохи БЕЗ смены смысла полей — то есть числа гражданского времени
+/// «как если бы» это уже был момент Unix. Только в этом виде дату можно
+/// подать в `crate::tz::local_offset_seconds`, у которого нет отдельного
+/// понятия «наивное время»: и здесь, и в остальной функции это ПСЕВДО-Unix,
+/// не настоящий момент UTC, — этого достаточно для смещения (оно меняется
+/// не чаще раза в сутки), но не гарантирует секундной точности РОВНО в
+/// момент перехода на летнее/зимнее время.
+fn pseudo_unix_seconds(date: crate::BslDate) -> i64 {
+    date.seconds() - crate::date::UNIX_EPOCH_SECONDS
+}
+
+fn unix_to_bsl_date(unix_seconds: i64, op: &'static str) -> RtResult<crate::BslDate> {
+    unix_seconds
+        .checked_add(crate::date::UNIX_EPOCH_SECONDS)
+        .and_then(crate::BslDate::from_seconds)
+        .ok_or(RtError::DateOutOfRange { op })
+}
+
+/// `+ЧЧ:ММ`/`-ЧЧ:ММ` — знак и величина смещения в секундах.
+fn format_offset(offset_seconds: i32) -> String {
+    let sign = if offset_seconds < 0 { '-' } else { '+' };
+    let abs = offset_seconds.unsigned_abs();
+    format!("{sign}{:02}:{:02}", abs / 3600, (abs % 3600) / 60)
+}
+
+/// Содержимое ЗНАЧЕНИЯ даты — без кавычек JSON, их ставит вызывающий
+/// (`write_json_date` отдаёт эту строку как есть, `serialize` заворачивает
+/// её как обычную строку через `JsonWriter::value`).
 ///
 /// # Errors
 ///
-/// [`RtError::Json`] на битом вводе или на ключе, который не может быть
-/// именем поля структуры.
+/// ИЗМЕРЕНО (`JSON.WRITE_DATE.NON_ISO_LOCAL_ERROR`): платформа отвергает
+/// сочетание не-ISO формата с не-универсальным вариантом записи — факт
+/// исключения подтверждён, точный текст платформы снять не удалось (см.
+/// `Anchor` в реестре), здесь [`RtError::Json`] с СОБСТВЕННЫМ текстом по
+/// смыслу статьи. [`RtError::DateOutOfRange`], если перевод в UTC
+/// вычитанием смещения машины ушёл за границы `0001-01-01..9999-12-31`
+/// (пустые и предельные даты около границ диапазона).
+fn format_json_date(
+    date: crate::BslDate,
+    format: JsonDateFormat,
+    variant: JsonDateWritingVariant,
+) -> RtResult<String> {
+    if format != JsonDateFormat::Iso && variant != JsonDateWritingVariant::Universal {
+        return Err(RtError::Json(
+            "формат даты, отличный от ISO, поддержан только для варианта записи \
+             УниверсальнаяДата (JSONDateWritingVariant.UniversalDate)"
+                .to_string(),
+        ));
+    }
+    match variant {
+        JsonDateWritingVariant::Local => {
+            let c = date.to_civil();
+            Ok(format!(
+                "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}",
+                c.year, c.month, c.day, c.hour, c.minute, c.second
+            ))
+        }
+        JsonDateWritingVariant::LocalOffset => {
+            let c = date.to_civil();
+            let offset = crate::tz::local_offset_seconds(pseudo_unix_seconds(date));
+            Ok(format!(
+                "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}{}",
+                c.year,
+                c.month,
+                c.day,
+                c.hour,
+                c.minute,
+                c.second,
+                format_offset(offset)
+            ))
+        }
+        JsonDateWritingVariant::Universal => {
+            let pseudo = pseudo_unix_seconds(date);
+            let offset = crate::tz::local_offset_seconds(pseudo);
+            let utc_unix = pseudo - i64::from(offset);
+            // ИЗМЕРЕНО: `ЗаписатьДатуJSON(Дата(1,1,1), ISO, УниверсальнаяДата)`
+            // на платформе даёт `0001-01-01T00:00:00Z`, а не ошибку — хотя
+            // вычитание смещения машины уводит псевдо-момент НИЖЕ пола
+            // диапазона (`0001-01-01`) для положительных (восточных)
+            // смещений. Платформа клампит результат к полу, а не падает;
+            // тот же приём применён здесь. Поведение для дат ВБЛИЗИ пола,
+            // но не равных ему, замером не подтверждено — фикстура несёт
+            // пробу на этот случай.
+            let floor = pseudo_unix_seconds(crate::BslDate::empty());
+            let utc_unix = utc_unix.max(floor);
+            match format {
+                JsonDateFormat::Iso => {
+                    let utc_date = unix_to_bsl_date(utc_unix, "ЗаписатьДатуJSON")?;
+                    let c = utc_date.to_civil();
+                    Ok(format!(
+                        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+                        c.year, c.month, c.day, c.hour, c.minute, c.second
+                    ))
+                }
+                JsonDateFormat::JavaScript => Ok(format!("new Date({})", utc_unix * 1000)),
+                // ИЗМЕРЕНО: платформа пишет момент БЕЗ обратных косых —
+                // `/Date(мс)/`, а не `\/Date(мс)\/`, как ошибочно
+                // предполагалось раньше (до замера).
+                JsonDateFormat::Microsoft => Ok(format!("/Date({})/", utc_unix * 1000)),
+            }
+        }
+    }
+}
+
+/// `ЗаписатьДатуJSON(Дата, Формат[, Вариант])` -> `Строка`.
+///
+/// # Errors
+///
+/// [`RtError::TypeError`] на аргументах не тех типов; иначе см.
+/// [`format_json_date`].
+pub fn write_json_date(
+    date: &BslValue,
+    format: &BslValue,
+    variant: &BslValue,
+) -> RtResult<BslValue> {
+    let BslValue::Date(d) = date else {
+        return Err(RtError::TypeError {
+            expected: "Дата",
+            op: "ЗаписатьДатуJSON",
+        });
+    };
+    let BslValue::Enum(format_enum) = format else {
+        return Err(RtError::TypeError {
+            expected: "ФорматДатыJSON",
+            op: "ЗаписатьДатуJSON",
+        });
+    };
+    let format = JsonDateFormat::from_enum_value(*format_enum).ok_or(RtError::TypeError {
+        expected: "ФорматДатыJSON",
+        op: "ЗаписатьДатуJSON",
+    })?;
+    let variant = match variant {
+        BslValue::Undefined => JsonDateWritingVariant::default(),
+        BslValue::Enum(e) => {
+            JsonDateWritingVariant::from_enum_value(*e).ok_or(RtError::TypeError {
+                expected: "ВариантЗаписиДатыJSON",
+                op: "ЗаписатьДатуJSON",
+            })?
+        }
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "ВариантЗаписиДатыJSON",
+                op: "ЗаписатьДатуJSON",
+            })
+        }
+    };
+    let text = format_json_date(*d, format, variant)?;
+    Ok(BslValue::Str(crate::BslString::from_str(&text)))
+}
+
+/// ИЗМЕРЕНО (`JSON.READ_DATE.BAD_FORMAT_TEXT`): факт исключения на
+/// неразобравшемся представлении подтверждён, точный текст платформы снять
+/// не удалось (см. `Anchor` в реестре — `КраткоеПредставлениеОшибки`
+/// внутри `Вычислить` не видит контекст чужого исключения). Текст ниже —
+/// «Представление даты имеет неверный формат» — СОБСТВЕННЫЙ, по смыслу
+/// платформенных сообщений об ошибках разбора (`XXXИзСтроки`).
+fn bad_date_representation() -> RtError {
+    RtError::Json("Представление даты имеет неверный формат".to_string())
+}
+
+/// Секунды Unix-эпохи UTC -> локальная (машинная) `BslDate` — прибавляет
+/// смещение, действующее в этот момент.
+fn utc_millis_to_local_date(ms: i64) -> RtResult<crate::BslDate> {
+    let utc_unix = ms.div_euclid(1000);
+    let offset = crate::tz::local_offset_seconds(utc_unix);
+    let local_unix = utc_unix
+        .checked_add(i64::from(offset))
+        .ok_or(RtError::DateOutOfRange {
+            op: "ПрочитатьДатуJSON",
+        })?;
+    unix_to_bsl_date(local_unix, "ПрочитатьДатуJSON")
+}
+
+/// `+ЧЧ:ММ`/`-ЧЧ:ММ` -> секунды. `None` — не разобралось.
+fn parse_offset(s: &str) -> Option<i32> {
+    let (h, m) = s.split_once(':')?;
+    let h: i32 = h.parse().ok()?;
+    let m: i32 = m.parse().ok()?;
+    Some(h * 3600 + m * 60)
+}
+
+/// Хвост ISO-представления после времени суток: маркер зоны или явное
+/// смещение (в секундах, уже со знаком).
+enum IsoTail {
+    Utc,
+    Offset(i32),
+}
+
+/// Отделяет от ISO-строки суффикс зоны. Знак смещения ищется ПОСЛЕ `T`:
+/// до неё дефисы принадлежат самой дате (`2024-03-04`), а время суток
+/// `+`/`-` не содержит вовсе.
+fn split_iso_tail(text: &str) -> (&str, Option<IsoTail>) {
+    if let Some(body) = text.strip_suffix('Z') {
+        return (body, Some(IsoTail::Utc));
+    }
+    if let Some(t_pos) = text.find('T') {
+        let after_time = &text[t_pos + 1..];
+        if let Some(rel) = after_time.find(['+', '-']) {
+            let sign = after_time.as_bytes()[rel] as char;
+            if let Some(magnitude) = parse_offset(&after_time[rel + 1..]) {
+                let secs = if sign == '-' { -magnitude } else { magnitude };
+                return (&text[..t_pos + 1 + rel], Some(IsoTail::Offset(secs)));
+            }
+        }
+    }
+    (text, None)
+}
+
+/// Разбор ISO-представления `ПрочитатьДатуJSON` во всех трёх вариантах
+/// записи: без зоны (локальное время как есть), `Z` (UTC) и явное
+/// смещение.
+fn parse_iso_json_date(text: &str) -> Option<crate::BslDate> {
+    let (body, tail) = split_iso_tail(text);
+    let (date_part, time_part) = body.split_once('T')?;
+    let mut dp = date_part.split('-');
+    let year: i64 = dp.next()?.parse().ok()?;
+    let month: u32 = dp.next()?.parse().ok()?;
+    let day: u32 = dp.next()?.parse().ok()?;
+    let mut tp = time_part.split(':');
+    let hour: u32 = tp.next()?.parse().ok()?;
+    let minute: u32 = tp.next()?.parse().ok()?;
+    let second: u32 = tp.next()?.split('.').next()?.parse().ok()?;
+    let wall = crate::BslDate::from_civil(year, month, day, hour, minute, second)?;
+    match tail {
+        // Без указания зоны — то, что и хранится: локальное время машины
+        // как есть, без пересчёта (симметрично `Local` при записи).
+        None => Some(wall),
+        Some(IsoTail::Utc) => utc_millis_to_local_date(pseudo_unix_seconds(wall) * 1000).ok(),
+        Some(IsoTail::Offset(off_secs)) => {
+            let utc_unix = pseudo_unix_seconds(wall) - i64::from(off_secs);
+            utc_millis_to_local_date(utc_unix * 1000).ok()
+        }
+    }
+}
+
+fn parse_json_date_by_format(text: &str, format: JsonDateFormat) -> Option<crate::BslDate> {
+    match format {
+        JsonDateFormat::Iso => parse_iso_json_date(text),
+        JsonDateFormat::JavaScript => {
+            let inner = text.strip_prefix("new Date(")?.strip_suffix(')')?;
+            let ms: i64 = inner.trim().parse().ok()?;
+            utc_millis_to_local_date(ms).ok()
+        }
+        // ИЗМЕРЕНО: платформа кидает исключение на написании с обратными
+        // косыми (`\/Date(...)\/ `) — до замера здесь принимались оба
+        // написания «на всякий случай», это оказалось лишним снисхождением.
+        // Единственная принимаемая форма — `/Date(мс)/ `. Закрывающая
+        // скобка идёт ПЕРЕД хвостовой чертой, поэтому в хвосте снимается
+        // `)/ ` целиком, а не только сама черта.
+        JsonDateFormat::Microsoft => {
+            let inner = text.strip_prefix("/Date(")?.strip_suffix(")/")?;
+            let ms: i64 = inner.trim().parse().ok()?;
+            utc_millis_to_local_date(ms).ok()
+        }
+    }
+}
+
+/// `ПрочитатьДатуJSON(Строка, Формат)` -> `Дата`.
+///
+/// # Errors
+///
+/// [`RtError::TypeError`] на аргументах не тех типов;
+/// [`RtError::Json`] (см. [`bad_date_representation`]) на строке, не
+/// разобравшейся в заданном формате.
+pub fn read_json_date(text: &BslValue, format: &BslValue) -> RtResult<BslValue> {
+    let BslValue::Str(s) = text else {
+        return Err(RtError::TypeError {
+            expected: "Строка",
+            op: "ПрочитатьДатуJSON",
+        });
+    };
+    let BslValue::Enum(format_enum) = format else {
+        return Err(RtError::TypeError {
+            expected: "ФорматДатыJSON",
+            op: "ПрочитатьДатуJSON",
+        });
+    };
+    let format = JsonDateFormat::from_enum_value(*format_enum).ok_or(RtError::TypeError {
+        expected: "ФорматДатыJSON",
+        op: "ПрочитатьДатуJSON",
+    })?;
+    let text = s.to_string();
+    let date = parse_json_date_by_format(&text, format).ok_or_else(bad_date_representation)?;
+    Ok(BslValue::Date(date))
+}
+
+/// `ПрочитатьJSON(Чтение[, ВозвращатьСоответствие[, ИменаСвойствСоЗначениямиДата
+/// [, ОжидаемыйФорматДаты]]])`.
+///
+/// `date_format` — четвёртый аргумент платформы: `None`, если он не задан
+/// (тогда разбор `ИменаСвойствСоЗначениямиДата` идёт по старому правилу —
+/// см. `optional_date_format_from_arg`).
+///
+/// # Errors
+///
+/// [`RtError::Json`] на битом вводе, на ключе, который не может быть именем
+/// поля структуры, либо (при заданном `date_format`) на значении из
+/// `ИменаСвойствСоЗначениямиДата`, не разобравшемся в этом формате
+/// (см. `bad_date_representation`, `JSON.READ_DATE.BAD_FORMAT_TEXT`).
 pub fn read_json(
     reader: &BslValue,
     as_map: bool,
     date_names: &[String],
+    date_format: Option<JsonDateFormat>,
     rt: &mut RuntimeShapes,
 ) -> RtResult<BslValue> {
     // Первое событие читается здесь же: `ПрочитатьJSON` забирает документ
@@ -1217,7 +1807,101 @@ pub fn read_json(
     };
     let parser = state.parser.as_mut().expect("наличие проверено выше");
     let mut cache = JsonBuildCache::default();
-    build_value(first, parser, as_map, date_names, None, rt, &mut cache, 0)
+    build_value(
+        first,
+        parser,
+        as_map,
+        date_names,
+        date_format,
+        None,
+        rt,
+        &mut cache,
+        0,
+    )
+}
+
+/// `ОжидаемыйФорматДаты` — четвёртый аргумент `ПрочитатьJSON`.
+///
+/// Отсутствует (`Неопределено`) — `None`: разбор
+/// `ИменаСвойствСоЗначениямиДата` по умолчанию — ISO, но через СТАРЫЙ
+/// парсер без сдвига зоны ([`parse_json_date`], не
+/// `parse_json_date_by_format`) — это отдельное, ранее измеренное
+/// намеренное отклонение (см. doc comment на `parse_json_date`), не
+/// тронутое добавлением этого аргумента. ИЗМЕРЕНО: разбор СТРОГИЙ даже без
+/// явного формата — представление, не разобравшееся как ISO, даёт то же
+/// исключение, что и при явном формате (до замера здесь был тихий фолбэк
+/// в строку).
+///
+/// Задан — платформа проверяет представление СТРОГО под этот формат;
+/// несовпадение (в том числе значение вовсе не строка — статья приводит
+/// пример с числом при `ФорматДатыJSON.JavaScript`) — исключение с тем же
+/// текстом, что и у `ПрочитатьДатуJSON` (`JSON.READ_DATE.BAD_FORMAT_TEXT`).
+///
+/// # Errors
+///
+/// [`RtError::TypeError`], если аргумент задан и не `ФорматДатыJSON`.
+pub fn optional_date_format_from_arg(
+    arg: Option<&BslValue>,
+    op: &'static str,
+) -> RtResult<Option<JsonDateFormat>> {
+    match arg {
+        None | Some(BslValue::Undefined) => Ok(None),
+        Some(BslValue::Enum(e)) => {
+            JsonDateFormat::from_enum_value(*e)
+                .map(Some)
+                .ok_or(RtError::TypeError {
+                    expected: "ФорматДатыJSON",
+                    op,
+                })
+        }
+        Some(_) => Err(RtError::TypeError {
+            expected: "ФорматДатыJSON",
+            op,
+        }),
+    }
+}
+
+/// `ПрочитатьЗначениеJSON(Строка)` -> значение — обратная операция к
+/// `ЗаписатьЗначениеJSON`, поверх того же `build_value`, которым разбирает
+/// и `ПрочитатьJSON`.
+///
+/// ИЗМЕРЕНО (`JSON.VALUE.READ_KIND`): объект JSON превращается в
+/// `Структура`, а не в `Соответствие` — тот же выбор по умолчанию, что и у
+/// `ПрочитатьJSON` без второго аргумента (`JSON.DESERIALIZE.DEFAULT_TYPE`).
+///
+/// ИЗМЕРЕНО: пустая строка — тоже исключение, а не тихое `Неопределено`
+/// (снято прогоном фикстуры `json-dates`; до замера здесь было наоборот).
+///
+/// # Errors
+///
+/// [`RtError::TypeError`], если аргумент не строка; [`RtError::Json`] на
+/// пустой строке (в ней нет ни одного события разбора); иначе — см.
+/// [`read_json`].
+pub fn read_json_value(text: &BslValue, rt: &mut RuntimeShapes) -> RtResult<BslValue> {
+    let BslValue::Str(s) = text else {
+        return Err(RtError::TypeError {
+            expected: "Строка",
+            op: "ПрочитатьЗначениеJSON",
+        });
+    };
+    let mut parser = JsonParser::from_bsl_string(s);
+    let Some(first) = parser.next_event()? else {
+        return Err(RtError::Json(
+            "пустая строка не представляет значение JSON".to_string(),
+        ));
+    };
+    let mut cache = JsonBuildCache::default();
+    build_value(
+        first,
+        &mut parser,
+        false,
+        &[],
+        None,
+        None,
+        rt,
+        &mut cache,
+        0,
+    )
 }
 
 /// Проверяет и интернирует имя один раз за разбор документа.
@@ -1313,17 +1997,31 @@ fn build_json_structure(
     Ok(object)
 }
 
+/// Свойство `property` перечислено в `ИменаСвойствСоЗначениямиДата`?
+/// Регистронезависимо, как и остальные имена в языке.
+fn is_date_property(property: Option<&str>, date_names: &[String]) -> bool {
+    property.is_some_and(|p| {
+        date_names
+            .iter()
+            .any(|n| n.to_uppercase() == p.to_uppercase())
+    })
+}
+
 /// Сборка значения из события и продолжения потока.
 ///
 /// `property` — имя свойства, под которым это значение лежит у родителя:
 /// по нему решается, превращать ли строку в дату
-/// (`ИменаСвойствСоЗначениямиДата`).
+/// (`ИменаСвойствСоЗначениямиДата`). `date_format` — четвёртый аргумент
+/// `ПрочитатьJSON` (см. `optional_date_format_from_arg`): `None` — старое
+/// правило (только ISO, неудача молча оставляет строку), `Some(fmt)` —
+/// значение обязано разобраться СТРОГО под этот формат.
 #[allow(clippy::too_many_arguments)]
 fn build_value(
     event: JsonEvent,
     parser: &mut JsonParser,
     as_map: bool,
     date_names: &[String],
+    date_format: Option<JsonDateFormat>,
     property: Option<&str>,
     rt: &mut RuntimeShapes,
     cache: &mut JsonBuildCache,
@@ -1361,6 +2059,7 @@ fn build_value(
                             parser,
                             as_map,
                             date_names,
+                            date_format,
                             Some(&name),
                             rt,
                             cache,
@@ -1391,7 +2090,17 @@ fn build_value(
                 if next == JsonEvent::ArrayEnd {
                     break;
                 }
-                let v = build_value(next, parser, as_map, date_names, None, rt, cache, depth + 1)?;
+                let v = build_value(
+                    next,
+                    parser,
+                    as_map,
+                    date_names,
+                    date_format,
+                    None,
+                    rt,
+                    cache,
+                    depth + 1,
+                )?;
                 items.push_element(v)?;
             }
             Ok(items)
@@ -1400,21 +2109,53 @@ fn build_value(
             // Дата — только если имя свойства перечислено. JSON типа даты
             // не знает, а гадать по виду строки платформа не берётся, и мы
             // тоже: «2024-03-04» может быть просто строкой.
-            let wanted = property.is_some_and(|p| {
-                date_names
-                    .iter()
-                    .any(|n| n.to_uppercase() == p.to_uppercase())
-            });
-            if wanted {
-                if let Some(d) = parse_json_date(&s) {
-                    return Ok(BslValue::Date(d));
+            //
+            // ИЗМЕРЕНО: платформа кидает исключение и БЕЗ явного формата
+            // (четвёртого аргумента `ПрочитатьJSON`), если значение не
+            // разбирается, — до замера здесь был тихий фолбэк в строку, и
+            // фикстура `json-dates` упала ровно на этой пробе (была без
+            // `Попытка`). Формат по умолчанию — ISO, но именно СТАРЫЙ
+            // парсер без сдвига зоны (`parse_json_date`), а не
+            // `parse_json_date_by_format(..., Iso)`: сдвиг `Z`/явного
+            // смещения в локальное время машины для ЭТОГО (более раннего)
+            // пути — отдельное, ранее измеренное намеренное отклонение
+            // (см. doc comment на `parse_json_date`), эта правка его не
+            // трогает — меняется только СТРОГОСТЬ (ошибка вместо тихого
+            // фолбэка), не арифметика разбора.
+            if is_date_property(property, date_names) {
+                let d = match date_format {
+                    Some(fmt) => parse_json_date_by_format(&s, fmt),
+                    None => parse_json_date(&s),
                 }
+                .ok_or_else(bad_date_representation)?;
+                return Ok(BslValue::Date(d));
             }
             Ok(BslValue::Str(crate::BslString::from_str(&s)))
         }
-        JsonEvent::Number(n) => Ok(BslValue::Number(n)),
-        JsonEvent::Boolean(b) => Ok(BslValue::Boolean(b)),
-        // ИЗМЕРЕНО: `null` становится `Неопределено`, а НЕ `Null`.
+        // Число/булево на месте объявленного имени даты — заведомо не
+        // текстовое представление ни одного из трёх форматов (у всех троих
+        // момент кодируется строкой), поэтому та же ошибка, что и у
+        // несоответствующей строки. Статья приводит именно такой пример —
+        // число вместо `"new Date(...)"` — при ЯВНО заданном формате;
+        // ИЗМЕРЕНО, что без него платформа тоже не прощает (см. выше), так
+        // что здесь проверка больше не зависит от `date_format.is_some()`.
+        JsonEvent::Number(n) => {
+            if is_date_property(property, date_names) {
+                return Err(bad_date_representation());
+            }
+            Ok(BslValue::Number(n))
+        }
+        JsonEvent::Boolean(b) => {
+            if is_date_property(property, date_names) {
+                return Err(bad_date_representation());
+            }
+            Ok(BslValue::Boolean(b))
+        }
+        // ИЗМЕРЕНО: `null` становится `Неопределено`, а НЕ `Null`. `null`
+        // не проверяется на соответствие формату даты даже при явном
+        // формате: это осмысленное «нет значения», а не мусор на месте
+        // даты, и статья не даёт для него примера — расширять список
+        // отвергаемых значений домыслом не стоит.
         JsonEvent::Null => Ok(BslValue::Undefined),
         JsonEvent::PropertyName(s) => Ok(BslValue::Str(crate::BslString::from_str(&s))),
         JsonEvent::ObjectEnd | JsonEvent::ArrayEnd => Ok(BslValue::Undefined),
@@ -1440,7 +2181,26 @@ fn build_value(
 // сеанс замеров. Замер даёт нижнюю границу: 400 уровней обязаны работать.
 const MAX_JSON_DEPTH: usize = 500;
 
-pub fn write_json(writer: &BslValue, value: &BslValue, rt: &RuntimeShapes) -> RtResult<()> {
+/// `has_convert_fn` — задано ли имя функции преобразования (третий/четвёртый
+/// аргумент платформенного `ЗаписатьJSON`, см. `bsl_rt::builtin`): ИЗМЕРЕНО,
+/// что непустое имя само по себе НЕ ошибка на входе — платформа принимает
+/// вызов и сериализует то, что умеет сама (`ЗаписатьJSON(Запись, 1,
+/// Неопределено, "ИмяФункции")` пишет `1`, функция не понадобилась). Колбэков
+/// в языке ещё нет (`docs/std-library-plan.md`, этап 1), так что здесь это
+/// флаг «был бы вызов функции, будь она у нас» — используется только чтобы
+/// решить, каким текстом ответить, если сериализовать значение всё-таки
+/// нечем (см. `serialize`).
+///
+/// # Errors
+///
+/// См. `serialize`.
+pub fn write_json(
+    writer: &BslValue,
+    value: &BslValue,
+    settings: &JsonSerializerSettings,
+    has_convert_fn: bool,
+    rt: &RuntimeShapes,
+) -> RtResult<()> {
     let cell = as_writer(writer)?;
     let mut slot = cell.borrow_mut();
     let Some(w) = slot.as_mut() else {
@@ -1449,12 +2209,78 @@ pub fn write_json(writer: &BslValue, value: &BslValue, rt: &RuntimeShapes) -> Rt
             op: "ЗаписатьJSON",
         });
     };
-    serialize(w, value, rt, 0)
+    serialize(w, value, settings, false, has_convert_fn, rt, 0)
 }
 
+/// `ЗаписатьЗначениеJSON(Значение)` — сериализация ОДНОГО значения в
+/// строку поверх того же `serialize`, что и `ЗаписатьJSON`, но с
+/// `single_value_mode = true`: дата, в том числе вложенная, — исключение
+/// (см. обзор задачи в плане реализации, раздел «Этап 0»), и ИЗМЕРЕНО, что
+/// `Соответствие` — тоже (`ЗаписатьJSON` с `Соответствие` работает и
+/// измерен отдельно, значит отличие — в самой функции
+/// `ЗаписатьЗначениеJSON`, не в объектной технике сериализации вообще).
+///
+/// # Errors
+///
+/// См. `serialize`; дополнительно [`RtError::TypeError`] на `Дата` или
+/// `Соответствие` в любой позиции дерева значения.
+pub fn write_json_value(value: &BslValue, rt: &RuntimeShapes) -> RtResult<BslValue> {
+    let mut w = JsonWriter::to_string_target(JsonWriterSettings::default());
+    serialize(
+        &mut w,
+        value,
+        &JsonSerializerSettings::default(),
+        true,
+        // `ЗаписатьЗначениеJSON` не берёт функцию преобразования вовсе —
+        // у платформы такого параметра здесь нет.
+        false,
+        rt,
+        0,
+    )?;
+    Ok(BslValue::Str(crate::BslString::from_utf8_string(
+        w.finish()?,
+    )))
+}
+
+/// Ошибка на значении, которое `serialize` сериализовать не умеет. Если
+/// вызывающий передал имя функции преобразования, ИМЕННО ЗДЕСЬ она
+/// понадобилась бы по-настоящему — колбэков в языке ещё нет, поэтому вместо
+/// вызова понятная «появится позже»; без функции — обычная ошибка типа, как
+/// и было измерено до появления этого параметра (`JSON.SERIALIZE.UNSUPPORTED_TYPE`).
+fn unsupported_value_error(has_convert_fn: bool) -> RtError {
+    if has_convert_fn {
+        RtError::Json(
+            "функция преобразования для ЗаписатьJSON появится на этапе 1 \
+             (см. docs/std-library-plan.md)"
+                .to_string(),
+        )
+    } else {
+        RtError::TypeError {
+            expected: "значение, представимое в JSON",
+            op: "ЗаписатьJSON",
+        }
+    }
+}
+
+/// Общее ядро `ЗаписатьJSON`/`ЗаписатьЗначениеJSON`.
+///
+/// # Errors
+///
+/// [`RtError::TypeError`] на значении, которое сериализовать нечем
+/// (`ТаблицаЗначений` и прочие объекты, а при `single_value_mode` — ещё и
+/// любая `Дата`/`Соответствие`) — измерено, платформа тоже отвергает; на
+/// такой точке при `has_convert_fn` — [`RtError::Json`] «появится позже»
+/// вместо неё (см. doc comment `write_json`); [`RtError::StackOverflow`]
+/// на слишком глубокой вложенности (см. `MAX_JSON_DEPTH`); ошибку
+/// [`format_json_date`] на настройках даты, запрещающих сочетание формата
+/// и варианта записи.
+#[allow(clippy::too_many_arguments)]
 fn serialize(
     w: &mut JsonWriter,
     value: &BslValue,
+    settings: &JsonSerializerSettings,
+    single_value_mode: bool,
+    has_convert_fn: bool,
     rt: &RuntimeShapes,
     depth: usize,
 ) -> RtResult<()> {
@@ -1475,16 +2301,23 @@ fn serialize(
             w.literal("null");
             Ok(())
         }
-        // ИЗМЕРЕНО: дата уходит строкой ISO без зоны, включая пустую
-        // (`0001-01-01T00:00:00`).
         BslValue::Date(d) => {
-            let c = d.to_civil();
-            let text = format!(
-                "\"{:04}-{:02}-{:02}T{:02}:{:02}:{:02}\"",
-                c.year, c.month, c.day, c.hour, c.minute, c.second
-            );
-            w.literal(&text);
-            Ok(())
+            if single_value_mode {
+                return Err(RtError::TypeError {
+                    expected: "значение без Даты (ЗаписатьЗначениеJSON её не сериализует)",
+                    op: "ЗаписатьЗначениеJSON",
+                });
+            }
+            // ИЗМЕРЕНО: Microsoft-формат пишется БЕЗ обратных косых
+            // (`/Date(мс)/`), так что в содержимом нет символов, которые
+            // экранирование JSON вообще трогает (см. `format_json_date`) —
+            // обычный `JsonWriter::value` (с проверкой контекста и
+            // стандартным экранированием строки) безопасен для всех трёх
+            // форматов даты. Какой вид вложенная Microsoft-дата примет в
+            // ДОКУМЕНТЕ через `НастройкиСериализацииJSON`, замерит фикстура
+            // (проба уже есть в `json-dates.bsl`).
+            let content = format_json_date(*d, settings.date_format, settings.date_variant)?;
+            w.value(&BslValue::Str(crate::BslString::from_str(&content)))
         }
         BslValue::Object(o) => match &**o {
             BslObject::Array(items) => {
@@ -1492,11 +2325,38 @@ fn serialize(
                 // массивом, а `RefCell` вложенного заимствования не
                 // переживёт.
                 let snapshot: Vec<BslValue> = items.borrow().clone();
-                w.begin_array()?;
-                for item in &snapshot {
-                    serialize(w, item, rt, depth + 1)?;
+                if settings.arrays_as_objects {
+                    // `СериализовыватьМассивыКакОбъекты`: индексы уходят
+                    // строковыми именами свойств `"0"`, `"1"`, ...
+                    w.begin_object()?;
+                    for (i, item) in snapshot.iter().enumerate() {
+                        w.property_name(&i.to_string())?;
+                        serialize(
+                            w,
+                            item,
+                            settings,
+                            single_value_mode,
+                            has_convert_fn,
+                            rt,
+                            depth + 1,
+                        )?;
+                    }
+                    w.end_object()
+                } else {
+                    w.begin_array()?;
+                    for item in &snapshot {
+                        serialize(
+                            w,
+                            item,
+                            settings,
+                            single_value_mode,
+                            has_convert_fn,
+                            rt,
+                            depth + 1,
+                        )?;
+                    }
+                    w.end_array()
                 }
-                w.end_array()
             }
             BslObject::Structure(s) => {
                 let entries: Vec<(String, BslValue)> = {
@@ -1509,11 +2369,32 @@ fn serialize(
                 w.begin_object()?;
                 for (name, v) in &entries {
                     w.property_name(name)?;
-                    serialize(w, v, rt, depth + 1)?;
+                    serialize(
+                        w,
+                        v,
+                        settings,
+                        single_value_mode,
+                        has_convert_fn,
+                        rt,
+                        depth + 1,
+                    )?;
                 }
                 w.end_object()
             }
             BslObject::Map(data) => {
+                // ИЗМЕРЕНО: `ЗаписатьЗначениеJSON(Соответствие)` — исключение
+                // на платформе, вопреки таблице сериализуемых типов из статьи
+                // 16.2.1 (снято прогоном фикстуры `json-dates`); `ЗаписатьJSON`
+                // с `Соответствие` при этом работает и измерен отдельно
+                // (`JSON.SERIALIZE.NESTED`) — отличие именно в
+                // `ЗаписатьЗначениеJSON`, а не в объектной технике сериализации.
+                if single_value_mode {
+                    return Err(RtError::TypeError {
+                        expected:
+                            "значение без Соответствия (ЗаписатьЗначениеJSON его не сериализует)",
+                        op: "ЗаписатьЗначениеJSON",
+                    });
+                }
                 let entries: Vec<(BslValue, BslValue)> = {
                     let d = data.borrow();
                     (0..d.len()).filter_map(|i| d.entry_at(i)).collect()
@@ -1535,19 +2416,21 @@ fn serialize(
                         }
                     };
                     w.property_name(&name)?;
-                    serialize(w, v, rt, depth + 1)?;
+                    serialize(
+                        w,
+                        v,
+                        settings,
+                        single_value_mode,
+                        has_convert_fn,
+                        rt,
+                        depth + 1,
+                    )?;
                 }
                 w.end_object()
             }
-            _ => Err(RtError::TypeError {
-                expected: "значение, представимое в JSON",
-                op: "ЗаписатьJSON",
-            }),
+            _ => Err(unsupported_value_error(has_convert_fn)),
         },
-        _ => Err(RtError::TypeError {
-            expected: "значение, представимое в JSON",
-            op: "ЗаписатьJSON",
-        }),
+        _ => Err(unsupported_value_error(has_convert_fn)),
     }
 }
 
@@ -1579,8 +2462,18 @@ mod tests {
         let mut cache = JsonBuildCache::default();
         let mut parser = JsonParser::new(&text);
         let first = parser.next_event().unwrap().unwrap();
-        let e =
-            build_value(first, &mut parser, false, &[], None, &mut rt, &mut cache, 0).unwrap_err();
+        let e = build_value(
+            first,
+            &mut parser,
+            false,
+            &[],
+            None,
+            None,
+            &mut rt,
+            &mut cache,
+            0,
+        )
+        .unwrap_err();
         assert!(matches!(e, RtError::StackOverflow { .. }), "{e:?}");
     }
 
@@ -1593,8 +2486,18 @@ mod tests {
         let mut cache = JsonBuildCache::default();
         let mut parser = JsonParser::new(&text);
         let first = parser.next_event().unwrap().unwrap();
-        build_value(first, &mut parser, false, &[], None, &mut rt, &mut cache, 0)
-            .expect("глубина ниже предела обязана читаться");
+        build_value(
+            first,
+            &mut parser,
+            false,
+            &[],
+            None,
+            None,
+            &mut rt,
+            &mut cache,
+            0,
+        )
+        .expect("глубина ниже предела обязана читаться");
     }
 
     #[test]
@@ -1605,7 +2508,16 @@ mod tests {
         arr.push_element(arr.clone()).unwrap();
         let rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
         let mut w = JsonWriter::to_string_target(settings_from(None).unwrap());
-        let e = serialize(&mut w, &arr, &rt, 0).unwrap_err();
+        let e = serialize(
+            &mut w,
+            &arr,
+            &JsonSerializerSettings::default(),
+            false,
+            false,
+            &rt,
+            0,
+        )
+        .unwrap_err();
         assert!(matches!(e, RtError::StackOverflow { .. }), "{e:?}");
     }
 
@@ -1937,5 +2849,499 @@ mod tests {
         let mut w = JsonWriter::to_string_target(JsonWriterSettings::default());
         w.begin_object().unwrap();
         assert!(w.value(&BslValue::Number(num("1"))).is_err());
+    }
+
+    // --- ПроверятьСтруктуру -------------------------------------------
+
+    #[test]
+    fn check_structure_defaults_to_true() {
+        // ИЗМЕРЕНО (JSON.WRITE.CHECK_STRUCTURE_DEFAULT): «Да».
+        let w = JsonWriter::to_string_target(JsonWriterSettings::default());
+        assert!(w.check_structure());
+    }
+
+    #[test]
+    fn disabling_check_structure_does_not_lift_any_known_check() {
+        // ИЗМЕРЕНО (`JSON.WRITE.CHECK_STRUCTURE_OFF`): все известные
+        // проверки структуры документа остаются ошибками даже при
+        // `ПроверятьСтруктуру = Ложь` — ни одна из них этой настройкой не
+        // управляется (что она отключает — открытый вопрос).
+        let mut w = JsonWriter::to_string_target(settings_from(None).unwrap());
+        w.set_check_structure(false);
+        w.begin_object().unwrap();
+        assert!(w.value(&BslValue::Number(num("1"))).is_err());
+
+        let mut w2 = JsonWriter::to_string_target(settings_from(None).unwrap());
+        w2.set_check_structure(false);
+        assert!(w2.end_array().is_err());
+        assert!(w2.end_object().is_err());
+
+        let mut w3 = JsonWriter::to_string_target(settings_from(None).unwrap());
+        w3.set_check_structure(false);
+        assert!(w3.property_name("х").is_err());
+    }
+
+    // --- ЗаписатьДатуJSON / ПрочитатьДатуJSON --------------------------
+
+    fn civil(y: i64, m: u32, d: u32, h: u32, mi: u32, s: u32) -> crate::BslDate {
+        crate::BslDate::from_civil(y, m, d, h, mi, s).unwrap()
+    }
+
+    #[test]
+    fn write_json_date_local_variant_is_iso_without_zone() {
+        let d = civil(2014, 5, 10, 13, 14, 15);
+        let s = format_json_date(d, JsonDateFormat::Iso, JsonDateWritingVariant::Local).unwrap();
+        assert_eq!(s, "2014-05-10T13:14:15");
+    }
+
+    #[test]
+    fn write_json_date_local_offset_variant_appends_the_machine_offset() {
+        let d = civil(2014, 5, 10, 13, 14, 15);
+        let s =
+            format_json_date(d, JsonDateFormat::Iso, JsonDateWritingVariant::LocalOffset).unwrap();
+        let offset = crate::tz::local_offset_seconds(pseudo_unix_seconds(d));
+        assert_eq!(s, format!("2014-05-10T13:14:15{}", format_offset(offset)));
+    }
+
+    #[test]
+    fn write_json_date_universal_variant_covers_all_three_formats() {
+        let d = civil(2014, 5, 10, 13, 14, 15);
+        let pseudo = pseudo_unix_seconds(d);
+        let offset = crate::tz::local_offset_seconds(pseudo);
+        let utc_unix = pseudo - i64::from(offset);
+
+        let iso = format_json_date(d, JsonDateFormat::Iso, JsonDateWritingVariant::Universal)
+            .expect("универсальный ISO обязан построиться");
+        let utc_civil = unix_to_bsl_date(utc_unix, "test").unwrap().to_civil();
+        assert_eq!(
+            iso,
+            format!(
+                "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+                utc_civil.year,
+                utc_civil.month,
+                utc_civil.day,
+                utc_civil.hour,
+                utc_civil.minute,
+                utc_civil.second
+            )
+        );
+
+        let js = format_json_date(
+            d,
+            JsonDateFormat::JavaScript,
+            JsonDateWritingVariant::Universal,
+        )
+        .unwrap();
+        assert_eq!(js, format!("new Date({})", utc_unix * 1000));
+
+        // ИЗМЕРЕНО: БЕЗ обратных косых — `/Date(мс)/`, не `\/Date(мс)\/`,
+        // как ошибочно предполагалось до замера.
+        let ms = format_json_date(
+            d,
+            JsonDateFormat::Microsoft,
+            JsonDateWritingVariant::Universal,
+        )
+        .unwrap();
+        assert_eq!(ms, format!("/Date({})/", utc_unix * 1000));
+        assert!(!ms.contains('\\'), "обратных косых быть не должно: {ms}");
+    }
+
+    /// Документ, а не только `format_json_date`, обязан нести дату слово в
+    /// слово (в кавычках) — раз в содержимом больше нет символов,
+    /// требующих экранирования JSON, обычный `JsonWriter::value` ничего в
+    /// нём не меняет.
+    #[test]
+    fn nested_microsoft_date_matches_the_standalone_content_in_the_document() {
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let id = rt.names.intern("д");
+        let d = civil(2014, 5, 10, 13, 14, 15);
+        let structure = BslValue::new_structure(rt.shapes.empty(), Vec::new());
+        structure
+            .structure_insert(id, BslValue::Date(d), &mut rt.shapes)
+            .unwrap();
+
+        let settings = JsonSerializerSettings {
+            date_format: JsonDateFormat::Microsoft,
+            date_variant: JsonDateWritingVariant::Universal,
+            arrays_as_objects: false,
+        };
+        let content = format_json_date(d, settings.date_format, settings.date_variant).unwrap();
+
+        let mut w = JsonWriter::to_string_target(settings_from(None).unwrap());
+        serialize(&mut w, &structure, &settings, false, false, &rt, 0).unwrap();
+        let text = w.finish().unwrap();
+
+        assert_eq!(text, format!("{{\n\"д\": \"{content}\"\n}}"));
+        assert!(
+            !text.contains('\\'),
+            "обратных косых быть не должно: {text}"
+        );
+    }
+
+    #[test]
+    fn non_iso_format_requires_the_universal_variant() {
+        // Замер JSON.WRITE_DATE.NON_ISO_LOCAL_ERROR: выбранное поведение —
+        // ошибка, а не тихая подстановка ISO.
+        let d = civil(2024, 1, 1, 0, 0, 0);
+        assert!(
+            format_json_date(d, JsonDateFormat::JavaScript, JsonDateWritingVariant::Local).is_err()
+        );
+        assert!(format_json_date(
+            d,
+            JsonDateFormat::Microsoft,
+            JsonDateWritingVariant::LocalOffset
+        )
+        .is_err());
+        assert!(format_json_date(
+            d,
+            JsonDateFormat::JavaScript,
+            JsonDateWritingVariant::Universal
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn empty_date_formats_without_error_in_local_variants() {
+        // Граница диапазона: пустая дата, оба варианта без пересчёта в UTC.
+        let d = crate::BslDate::empty();
+        assert_eq!(
+            format_json_date(d, JsonDateFormat::Iso, JsonDateWritingVariant::Local).unwrap(),
+            "0001-01-01T00:00:00"
+        );
+        assert!(
+            format_json_date(d, JsonDateFormat::Iso, JsonDateWritingVariant::LocalOffset).is_ok()
+        );
+    }
+
+    /// ИЗМЕРЕНО: `ЗаписатьДатуJSON(Дата(1,1,1), ISO, УниверсальнаяДата)` на
+    /// платформе даёт `0001-01-01T00:00:00Z`, а не ошибку — вычитание
+    /// смещения машины клампится к полу диапазона.
+    #[test]
+    fn universal_variant_of_the_empty_date_clamps_to_the_floor_instead_of_erroring() {
+        let d = crate::BslDate::empty();
+        let text = format_json_date(d, JsonDateFormat::Iso, JsonDateWritingVariant::Universal)
+            .expect("клампится, а не падает");
+        assert!(
+            text.starts_with("0001-01-01T") && text.ends_with('Z'),
+            "{text}"
+        );
+        // На восточном (неотрицательном) смещении платформа измерена ТОЧНО
+        // на полу; при отрицательном смещении вычитание и так не уходит за
+        // пол, кламп там — no-op, и точное значение не измерено.
+        let offset = crate::tz::local_offset_seconds(pseudo_unix_seconds(d));
+        if offset >= 0 {
+            assert_eq!(text, "0001-01-01T00:00:00Z");
+        }
+    }
+
+    #[test]
+    fn read_json_date_parses_iso_without_zone() {
+        let d = civil(2014, 5, 10, 13, 14, 15);
+        assert_eq!(
+            parse_json_date_by_format("2014-05-10T13:14:15", JsonDateFormat::Iso),
+            Some(d)
+        );
+    }
+
+    #[test]
+    fn read_json_date_parses_iso_with_z_as_a_utc_moment() {
+        // ИЗМЕРЕНО по примеру статьи: момент UTC переводится в локальное
+        // время МАШИНЫ — то, что и делает `utc_millis_to_local_date`.
+        let utc = civil(2014, 5, 10, 9, 14, 15);
+        let expected = utc_millis_to_local_date(pseudo_unix_seconds(utc) * 1000).unwrap();
+        assert_eq!(
+            parse_json_date_by_format("2014-05-10T09:14:15Z", JsonDateFormat::Iso),
+            Some(expected)
+        );
+    }
+
+    #[test]
+    fn read_json_date_parses_javascript_and_microsoft_examples_from_the_article() {
+        // "new Date(1411464940000)" -> 23.09.2014 13:35:40 при UTC+4
+        // (пример из статьи) — здесь проверяется не конкретная зона (она
+        // зависит от машины), а то, что оба формата дают ОДИН И ТОТ ЖЕ
+        // момент. Microsoft — БЕЗ обратных косых (см. `format_json_date`).
+        let ms = 1_411_464_940_000i64;
+        let expected = utc_millis_to_local_date(ms).unwrap();
+        assert_eq!(
+            parse_json_date_by_format("new Date(1411464940000)", JsonDateFormat::JavaScript),
+            Some(expected)
+        );
+        assert_eq!(
+            parse_json_date_by_format("/Date(1411464940000)/", JsonDateFormat::Microsoft),
+            Some(expected)
+        );
+    }
+
+    /// ИЗМЕРЕНО: платформа кидает исключение на написании с обратными
+    /// косыми — до замера здесь снисходительно принимались оба написания,
+    /// это оказалось лишним. Единственная принимаемая форма — без них.
+    #[test]
+    fn read_json_date_rejects_microsoft_format_with_backslashes() {
+        assert_eq!(
+            parse_json_date_by_format("\\/Date(1411464940000)\\/", JsonDateFormat::Microsoft),
+            None
+        );
+    }
+
+    #[test]
+    fn read_json_date_round_trips_every_writing_variant() {
+        let d = civil(2014, 5, 10, 13, 14, 15);
+        for variant in [
+            JsonDateWritingVariant::Local,
+            JsonDateWritingVariant::LocalOffset,
+            JsonDateWritingVariant::Universal,
+        ] {
+            let text = format_json_date(d, JsonDateFormat::Iso, variant).unwrap();
+            let back = parse_json_date_by_format(&text, JsonDateFormat::Iso);
+            assert_eq!(back, Some(d), "вариант {variant:?}, текст {text:?}");
+        }
+    }
+
+    #[test]
+    fn read_json_date_rejects_garbage_in_every_format() {
+        assert_eq!(
+            parse_json_date_by_format("совсем не дата", JsonDateFormat::Iso),
+            None
+        );
+        assert_eq!(
+            parse_json_date_by_format("new Date(не число)", JsonDateFormat::JavaScript),
+            None
+        );
+        assert_eq!(
+            parse_json_date_by_format("Date(123)", JsonDateFormat::Microsoft),
+            None,
+            "без ведущей `\\/` — не микрософтовский формат"
+        );
+    }
+
+    /// Округление краёв: доли миллисекунды НИЖЕ секунды отбрасываются к
+    /// РАНЕЕ идущей секунде (`div_euclid`, а не усечение к нулю) —
+    /// симметрично и на положительной, и на отрицательной стороне эпохи.
+    #[test]
+    fn millisecond_fraction_rounds_toward_the_earlier_second_on_both_sides_of_the_epoch() {
+        assert_eq!(
+            parse_json_date_by_format("new Date(999)", JsonDateFormat::JavaScript),
+            parse_json_date_by_format("new Date(0)", JsonDateFormat::JavaScript)
+        );
+        assert_eq!(
+            parse_json_date_by_format("new Date(-1)", JsonDateFormat::JavaScript),
+            parse_json_date_by_format("new Date(-1000)", JsonDateFormat::JavaScript)
+        );
+    }
+
+    #[test]
+    fn write_json_date_rejects_wrong_argument_types() {
+        let format = BslValue::Enum(EnumValue::DateFormatIso);
+        assert!(write_json_date(&BslValue::Undefined, &format, &BslValue::Undefined).is_err());
+        let date = BslValue::Date(crate::BslDate::empty());
+        assert!(write_json_date(&date, &BslValue::Undefined, &BslValue::Undefined).is_err());
+    }
+
+    #[test]
+    fn read_json_date_reports_the_chosen_error_text() {
+        // Замер JSON.READ_DATE.BAD_FORMAT_TEXT — фиксирует ВЫБРАННЫЙ текст.
+        let text = BslValue::Str(crate::BslString::from_str("мусор"));
+        let format = BslValue::Enum(EnumValue::DateFormatIso);
+        let e = read_json_date(&text, &format).unwrap_err();
+        assert_eq!(e.to_string(), "Представление даты имеет неверный формат");
+    }
+
+    // --- НастройкиСериализацииJSON --------------------------------------
+
+    #[test]
+    fn serializer_settings_default_is_iso_local_and_arrays_stay_arrays() {
+        let s = JsonSerializerSettings::default();
+        assert_eq!(s.date_format, JsonDateFormat::Iso);
+        assert_eq!(s.date_variant, JsonDateWritingVariant::Local);
+        assert!(!s.arrays_as_objects);
+    }
+
+    #[test]
+    fn serializer_setting_accessors_round_trip_every_field() {
+        let obj = BslValue::Object(std::rc::Rc::new(BslObject::JsonSerializerSettings(
+            std::cell::RefCell::new(JsonSerializerSettings::default()),
+        )));
+        set_serializer_setting(
+            &obj,
+            "ФорматСериализацииДаты",
+            BslValue::Enum(EnumValue::DateFormatMicrosoft),
+        )
+        .unwrap();
+        set_serializer_setting(
+            &obj,
+            "ВариантЗаписиДаты",
+            BslValue::Enum(EnumValue::DateVariantUniversal),
+        )
+        .unwrap();
+        set_serializer_setting(
+            &obj,
+            "СериализовыватьМассивыКакОбъекты",
+            BslValue::Boolean(true),
+        )
+        .unwrap();
+
+        assert_eq!(
+            get_serializer_setting(&obj, "DateSerializationFormat").unwrap(),
+            BslValue::Enum(EnumValue::DateFormatMicrosoft)
+        );
+        assert_eq!(
+            get_serializer_setting(&obj, "DateWritingVariant").unwrap(),
+            BslValue::Enum(EnumValue::DateVariantUniversal)
+        );
+        assert_eq!(
+            get_serializer_setting(&obj, "SerializeArraysAsObjects").unwrap(),
+            BslValue::Boolean(true)
+        );
+        assert!(get_serializer_setting(&obj, "НетТакогоСвойства").is_err());
+    }
+
+    /// ИЗМЕРЕНО: статья 16.2.3.2 приводит `ФорматСериализацииДат` (без
+    /// «ы») — опечатка статьи, живая 8.3.27 такое имя отвергает.
+    #[test]
+    fn the_article_typo_spelling_of_date_format_property_is_rejected() {
+        let obj = BslValue::Object(std::rc::Rc::new(BslObject::JsonSerializerSettings(
+            std::cell::RefCell::new(JsonSerializerSettings::default()),
+        )));
+        assert!(get_serializer_setting(&obj, "ФорматСериализацииДат").is_err());
+    }
+
+    // --- ЗаписатьЗначениеJSON / ПрочитатьЗначениеJSON -------------------
+
+    #[test]
+    fn write_json_value_rejects_date_at_top_level_and_nested() {
+        let rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let e = write_json_value(&BslValue::Date(crate::BslDate::empty()), &rt).unwrap_err();
+        assert!(matches!(e, RtError::TypeError { .. }));
+
+        let mut rt2 = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let id = rt2.names.intern("д");
+        let s = BslValue::new_structure(rt2.shapes.empty(), Vec::new());
+        s.structure_insert(id, BslValue::Date(crate::BslDate::empty()), &mut rt2.shapes)
+            .unwrap();
+        let e2 = write_json_value(&s, &rt2).unwrap_err();
+        assert!(matches!(e2, RtError::TypeError { .. }));
+    }
+
+    /// ИЗМЕРЕНО: `ЗаписатьЗначениеJSON(Соответствие)` — исключение, тогда
+    /// как `ЗаписатьJSON` с тем же `Соответствие` по-прежнему работает.
+    #[test]
+    fn write_json_value_rejects_a_map_while_write_json_still_accepts_it() {
+        let rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let map = BslValue::new_map();
+        map.map_insert(
+            BslValue::Str(crate::BslString::from_str("ключ")),
+            BslValue::Number(num("1")),
+        )
+        .unwrap();
+
+        let e = write_json_value(&map, &rt).unwrap_err();
+        assert!(matches!(e, RtError::TypeError { .. }));
+
+        let mut w = JsonWriter::to_string_target(settings_from(None).unwrap());
+        serialize(
+            &mut w,
+            &map,
+            &JsonSerializerSettings::default(),
+            false,
+            false,
+            &rt,
+            0,
+        )
+        .expect("ЗаписатьJSON по-прежнему сериализует Соответствие");
+    }
+
+    /// ИЗМЕРЕНО: `ЗаписатьJSON(Запись, 1, Неопределено, "ИмяФункции")` пишет
+    /// `1` — непустое имя функции преобразования само по себе НЕ ошибка на
+    /// входе. Ошибка откладывается до точки, где сериализовать нечем и
+    /// функция понадобилась бы (здесь — `ТаблицаЗначений`, тот же
+    /// несериализуемый тип, что и в `JSON.SERIALIZE.UNSUPPORTED_TYPE`).
+    #[test]
+    fn write_json_defers_the_unsupported_type_error_when_a_convert_function_is_named() {
+        let rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let writer = BslValue::new_json_writer();
+        set_string(&writer, &[]).unwrap();
+        let table = BslValue::new_table();
+        let e = write_json(
+            &writer,
+            &table,
+            &JsonSerializerSettings::default(),
+            true,
+            &rt,
+        )
+        .unwrap_err();
+        // Не `TypeError` (как без функции) — своя, «появится позже».
+        assert!(matches!(e, RtError::Json(_)), "{e:?}");
+    }
+
+    /// Без функции преобразования тот же несериализуемый тип по-прежнему
+    /// даёт обычную ошибку типа — измерено ДО появления этого параметра
+    /// (`JSON.SERIALIZE.UNSUPPORTED_TYPE`), и это поведение не изменилось.
+    #[test]
+    fn write_json_without_a_convert_function_keeps_the_plain_type_error() {
+        let rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let writer = BslValue::new_json_writer();
+        set_string(&writer, &[]).unwrap();
+        let table = BslValue::new_table();
+        let e = write_json(
+            &writer,
+            &table,
+            &JsonSerializerSettings::default(),
+            false,
+            &rt,
+        )
+        .unwrap_err();
+        assert!(matches!(e, RtError::TypeError { .. }), "{e:?}");
+    }
+
+    /// Функция преобразования, названная, но не понадобившаяся (значение и
+    /// так сериализуется), не мешает записи — ровно измеренный пример.
+    #[test]
+    fn write_json_with_a_convert_function_still_serializes_what_it_can() {
+        let rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let writer = BslValue::new_json_writer();
+        set_string(&writer, &[]).unwrap();
+        write_json(
+            &writer,
+            &BslValue::Number(num("1")),
+            &JsonSerializerSettings::default(),
+            true,
+            &rt,
+        )
+        .expect("сериализуемое значение проходит даже с указанной функцией");
+        assert_eq!(
+            close_writer(&writer).unwrap(),
+            BslValue::Str(crate::BslString::from_str("1"))
+        );
+    }
+
+    /// ИЗМЕРЕНО: пустая строка в `ПрочитатьЗначениеJSON` — исключение, а
+    /// не тихое `Неопределено`.
+    #[test]
+    fn read_json_value_rejects_an_empty_string() {
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let e =
+            read_json_value(&BslValue::Str(crate::BslString::from_str("")), &mut rt).unwrap_err();
+        assert!(matches!(e, RtError::Json(_)));
+    }
+
+    #[test]
+    fn write_and_read_json_value_round_trip_scalars_and_structures() {
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let s = write_json_value(&BslValue::Number(num("42")), &rt).unwrap();
+        assert_eq!(s, BslValue::Str(crate::BslString::from_str("42")));
+
+        let id = rt.names.intern("а");
+        let structure = BslValue::new_structure(rt.shapes.empty(), Vec::new());
+        structure
+            .structure_insert(id, BslValue::Number(num("1")), &mut rt.shapes)
+            .unwrap();
+        let text = write_json_value(&structure, &rt).unwrap();
+        let BslValue::Str(text) = text else {
+            panic!("ожидалась строка")
+        };
+        let back = read_json_value(&BslValue::Str(text), &mut rt).unwrap();
+        // ИЗМЕРЕНО (JSON.VALUE.READ_KIND): «Структура».
+        assert_eq!(back.type_name(), "Структура");
     }
 }

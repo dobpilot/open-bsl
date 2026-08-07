@@ -43,6 +43,11 @@ pub enum EnumValue {
     DateFormatJavaScript,
     DateFormatMicrosoft,
 
+    // --- ВариантЗаписиДатыJSON ------------------------------------------
+    DateVariantLocal,
+    DateVariantLocalOffset,
+    DateVariantUniversal,
+
     // --- ТипФайлаТабличногоДокумента -----------------------------------
     // Членов у платформы четырнадцать (MXL, MXL7, XLS, XLS95, XLSX, ODS,
     // TXT, ANSITXT, HTML, HTML3, HTML4, HTML5, PDF, DOCX; `MXLX` НЕТ —
@@ -83,11 +88,19 @@ pub enum EnumValue {
 
 /// К какому перечислению принадлежит член — это же имя стоит слева от
 /// точки в исходном тексте.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// `Ord` нужен не самому перечислению, а несущему варианту
+/// `TypeId::EnumMeta(EnumKind)`: `TypeId` упорядочен целиком.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum EnumKind {
     JsonValueType,
     JsonLineBreak,
     JsonDateFormat,
+    /// `ВариантЗаписиДатыJSON` — англ. написание `JSONDateWritingVariant`
+    /// взято по аналогии с остальными именами перечислений JSON (`JSON` +
+    /// суть без пробелов), само не измерялось отдельно; написания ЧЛЕНОВ
+    /// ниже — ИЗМЕРЕНО (`JSON.DATE_VARIANT_EN_NAMES`).
+    JsonDateWritingVariant,
     XmlNodeType,
     SpreadFileType,
     DrawingKind,
@@ -101,6 +114,7 @@ impl EnumKind {
             EnumKind::JsonValueType => ("ТипЗначенияJSON", "JSONValueType"),
             EnumKind::JsonLineBreak => ("ПереносСтрокJSON", "JSONLineBreak"),
             EnumKind::JsonDateFormat => ("ФорматДатыJSON", "JSONDateFormat"),
+            EnumKind::JsonDateWritingVariant => ("ВариантЗаписиДатыJSON", "JSONDateWritingVariant"),
             EnumKind::XmlNodeType => ("ТипУзлаXML", "XMLNodeType"),
             EnumKind::SpreadFileType => {
                 ("ТипФайлаТабличногоДокумента", "SpreadsheetDocumentFileType")
@@ -111,6 +125,35 @@ impl EnumKind {
             ),
             EnumKind::TextEncoding => ("КодировкаТекста", "TextEncoding"),
         }
+    }
+
+    /// Имя МЕТАТИПА перечисления — то, что печатают `Строка()` и
+    /// `Строка(ТипЗнч())` от ГОЛОГО имени перечисления как выражения.
+    /// Для `ВариантЗаписиДатыJSON` ИЗМЕРЕНО:
+    /// `ПеречислениеВариантЗаписиДатыJSON` — префикс `Перечисление` плюс
+    /// русское написание, слитно. `НЕ ИЗМЕРЕНО(JSON.ENUM.BARE_NAME)`:
+    /// распространение того же префикса на остальные перечисления и
+    /// английское написание метатипа — предположение по образцу.
+    pub const fn meta_ru_name(self) -> &'static str {
+        match self {
+            EnumKind::JsonValueType => "ПеречислениеТипЗначенияJSON",
+            EnumKind::JsonLineBreak => "ПеречислениеПереносСтрокJSON",
+            EnumKind::JsonDateFormat => "ПеречислениеФорматДатыJSON",
+            EnumKind::JsonDateWritingVariant => "ПеречислениеВариантЗаписиДатыJSON",
+            EnumKind::XmlNodeType => "ПеречислениеТипУзлаXML",
+            EnumKind::SpreadFileType => "ПеречислениеТипФайлаТабличногоДокумента",
+            EnumKind::DrawingKind => "ПеречислениеТипРисункаТабличногоДокумента",
+            EnumKind::TextEncoding => "ПеречислениеКодировкаТекста",
+        }
+    }
+
+    /// Русское написание самого перечисления — то, что стоит слева от
+    /// точки в исходном тексте (`ВариантЗаписиДатыJSON.ЛокальнаяДата`) и то
+    /// же, что печатает `EnumValue::enum_name` для любого его члена. Нужно
+    /// снаружи модуля для `BslValue::EnumType` — голого имени перечисления
+    /// как выражения (`Вычислить("ВариантЗаписиДатыJSON")`).
+    pub fn ru_name(self) -> &'static str {
+        self.names().0
     }
 }
 
@@ -406,6 +449,38 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "Microsoft",
         "Microsoft",
     ),
+    // Английские написания членов — ИЗМЕРЕНО (`JSON.DATE_VARIANT_EN_NAMES`,
+    // детализированная проба по кандидатам): `LocalDate`,
+    // `LocalDateWithOffset`, `UniversalDate`. Первый прогон (равенство всех
+    // трёх разом) дал общий `<ошибка>` из-за `LocalDateTimeOffset` —
+    // предположения по аналогии, которое здесь ошибочно стояло вместо
+    // измеренного `LocalDateWithOffset`.
+    //
+    // Пятая колонка (текст `Строка()`) — ИЗМЕРЕНО для всех трёх членов:
+    // «Локальная дата», «Локальная дата со смещением», «Универсальная
+    // дата» (раздельно, со строчными буквами — НЕ слитное написание
+    // идентификатора, как ошибочно предполагалось до первого замера).
+    (
+        EnumKind::JsonDateWritingVariant,
+        EnumValue::DateVariantLocal,
+        "ЛокальнаяДата",
+        "LocalDate",
+        "Локальная дата",
+    ),
+    (
+        EnumKind::JsonDateWritingVariant,
+        EnumValue::DateVariantLocalOffset,
+        "ЛокальнаяДатаСоСмещением",
+        "LocalDateWithOffset",
+        "Локальная дата со смещением",
+    ),
+    (
+        EnumKind::JsonDateWritingVariant,
+        EnumValue::DateVariantUniversal,
+        "УниверсальнаяДата",
+        "UniversalDate",
+        "Универсальная дата",
+    ),
 ];
 
 /// Имена всех перечислений — для автодополнения REPL и для резолвера,
@@ -417,6 +492,8 @@ pub const ENUM_NAMES: &[(&str, EnumKind)] = &[
     ("JSONLineBreak", EnumKind::JsonLineBreak),
     ("ФорматДатыJSON", EnumKind::JsonDateFormat),
     ("JSONDateFormat", EnumKind::JsonDateFormat),
+    ("ВариантЗаписиДатыJSON", EnumKind::JsonDateWritingVariant),
+    ("JSONDateWritingVariant", EnumKind::JsonDateWritingVariant),
     ("ТипУзлаXML", EnumKind::XmlNodeType),
     ("XMLNodeType", EnumKind::XmlNodeType),
     ("КодировкаТекста", EnumKind::TextEncoding),

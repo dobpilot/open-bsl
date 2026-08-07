@@ -141,9 +141,25 @@ pub enum BuiltinFn {
     /// `ЗаполнитьЗначенияСвойств`, требует контекста форм: объект JSON
     /// превращается в `Структура`, а её поля надо интернировать.
     ReadJson,
-    /// `ЗаписатьJSON(Запись, Значение)` — тот же контекст нужен, чтобы
-    /// прочитать ИМЕНА полей сериализуемой структуры.
+    /// `ЗаписатьJSON(Запись, Значение[, Настройки[, ИмяФункции[,
+    /// ДополнительныеПараметры[, ВызовКонтекстногоМетода]]]])` — тот же
+    /// контекст нужен, чтобы прочитать ИМЕНА полей сериализуемой структуры.
+    /// Функции преобразования (три последних параметра) появятся на
+    /// этапе 1 плана (`docs/std-library-plan.md`) — непустой аргумент на
+    /// этих позициях сейчас даёт понятную ошибку, а не молчаливый пропуск.
     WriteJson,
+
+    /// `ЗаписатьДатуJSON(Дата, Формат[, Вариант])` -> `Строка`. Контекста
+    /// имён не требует — сама по себе функция дат, без структур.
+    WriteJsonDate,
+    /// `ПрочитатьДатуJSON(Строка, Формат)` -> `Дата`.
+    ReadJsonDate,
+    /// `ЗаписатьЗначениеJSON(Значение)` -> `Строка`. Контекст нужен затем
+    /// же, зачем `ЗаписатьJSON`, — сериализовать структуру.
+    WriteJsonValue,
+    /// `ПрочитатьЗначениеJSON(Строка)` -> значение. Контекст нужен затем
+    /// же, зачем `ПрочитатьJSON`.
+    ReadJsonValue,
 
     /// `ЗначениеВСтрокуВнутр(Значение)` — внутренний строковый формат
     /// платформы (см. модуль `vstr`). Контекст имён нужен затем же, зачем
@@ -336,6 +352,14 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("ReadJSON", BuiltinFn::ReadJson),
     ("ЗаписатьJSON", BuiltinFn::WriteJson),
     ("WriteJSON", BuiltinFn::WriteJson),
+    ("ЗаписатьДатуJSON", BuiltinFn::WriteJsonDate),
+    ("WriteJSONDate", BuiltinFn::WriteJsonDate),
+    ("ПрочитатьДатуJSON", BuiltinFn::ReadJsonDate),
+    ("ReadJSONDate", BuiltinFn::ReadJsonDate),
+    ("ЗаписатьЗначениеJSON", BuiltinFn::WriteJsonValue),
+    ("WriteJSONValue", BuiltinFn::WriteJsonValue),
+    ("ПрочитатьЗначениеJSON", BuiltinFn::ReadJsonValue),
+    ("ReadJSONValue", BuiltinFn::ReadJsonValue),
     ("ЗначениеВСтрокуВнутр", BuiltinFn::ValueToStringInternal),
     ("ValueToStringInternal", BuiltinFn::ValueToStringInternal),
     ("ЗначениеИзСтрокиВнутр", BuiltinFn::ValueFromStringInternal),
@@ -402,12 +426,28 @@ impl BuiltinFn {
             // Оба списка свойств необязательны; недостающие позиции
             // резолвер добьёт `Неопределено`, что и значит «не задан».
             BuiltinFn::FillPropertyValues => (2, 4),
-            // Функции восстановления и преобразования (последние три
-            // параметра каждой у платформы) не поддержаны: встроенная
-            // функция не умеет позвать пользовательскую — см. обзор
-            // модуля `json`.
-            BuiltinFn::ReadJson => (1, 3),
-            BuiltinFn::WriteJson => (2, 2),
+            // Полные арности платформы: `ПрочитатьJSON` — 8 (три уже
+            // поддержаны, следующие пять — функция восстановления и её
+            // параметры), `ЗаписатьJSON` — 6 (`Настройки` поддержаны,
+            // следующие три — функция преобразования и её параметры).
+            // Колбэков в языке ещё нет (см. `docs/std-library-plan.md`,
+            // этап 1), но их обработка на чтении и записи РАЗНАЯ, и это
+            // ИЗМЕРЕНО: `ПрочитатьJSON` отвергает непустую пятую позицию
+            // (имя функции восстановления) немедленно на входе, а
+            // `ЗаписатьJSON` непустую четвёртую (имя функции
+            // преобразования) — НЕТ, платформа принимает вызов и
+            // откладывает решение до точки, где сериализовать значение
+            // нечем и функция понадобилась бы по-настоящему (см.
+            // `bsl_rt::json::write_json`/`unsupported_value_error`); пятая
+            // и шестая позиции `ЗаписатьJSON` (доп. параметры, признак
+            // контекстного вызова) без функции преобразования смысла не
+            // имеют и остались немедленной ошибкой — это не измерено
+            // отдельно.
+            BuiltinFn::ReadJson => (1, 8),
+            BuiltinFn::WriteJson => (2, 6),
+            BuiltinFn::WriteJsonDate => (2, 3),
+            BuiltinFn::ReadJsonDate => (2, 2),
+            BuiltinFn::WriteJsonValue | BuiltinFn::ReadJsonValue => (1, 1),
             BuiltinFn::ValueToStringInternal | BuiltinFn::ValueFromStringInternal => (1, 1),
             BuiltinFn::ValueToFile => (2, 2),
             BuiltinFn::ValueFromFile => (1, 1),
@@ -771,9 +811,14 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         // функция публична, и ронять процесс на прямом вызове из
         // встраивающего приложения незачем (то же соображение, что и у
         // `RtError::InvalidBytecode`).
-        BuiltinFn::ReadJson | BuiltinFn::WriteJson => Err(RtError::InvalidBytecode(
+        BuiltinFn::ReadJson
+        | BuiltinFn::WriteJson
+        | BuiltinFn::WriteJsonValue
+        | BuiltinFn::ReadJsonValue => Err(RtError::InvalidBytecode(
             "функции JSON требуют контекста имён: вызывайте call_builtin_fn_ctx",
         )),
+        BuiltinFn::WriteJsonDate => crate::json::write_json_date(&args[0], &args[1], &args[2]),
+        BuiltinFn::ReadJsonDate => crate::json::read_json_date(&args[0], &args[1]),
         BuiltinFn::ValueToStringInternal
         | BuiltinFn::ValueFromStringInternal
         | BuiltinFn::ValueToFile
@@ -796,6 +841,26 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
 ///
 /// Ошибку самой встроенной функции; [`RtError::InvalidBytecode`], если
 /// аргументов пришло не столько, сколько требует арность.
+/// Хвостовые аргументы `ПрочитатьJSON`/`ЗаписатьJSON`, отведённые платформой
+/// под функцию восстановления/преобразования и её параметры. Прецедент
+/// формулировки — резолвер, `Новый Структура(...)` со списком полей не
+/// строковым литералом («появится позже»): вызов по имени пользовательской
+/// функции требует машинерии `Выполнить`/`Вычислить`, которой в рантайме
+/// пока нет (см. `docs/std-library-plan.md`, этап 1), поэтому непустой
+/// аргумент на этих позициях — понятная ошибка, а не тихий пропуск.
+///
+/// # Errors
+///
+/// [`RtError::Json`], если хоть один из `args` — не `Неопределено`.
+fn reject_unsupported_json_callback_args(args: &[BslValue], op: &'static str) -> RtResult<()> {
+    if args.iter().any(|a| !matches!(a, BslValue::Undefined)) {
+        return Err(RtError::Json(format!(
+            "{op}: функции преобразования/восстановления JSON появятся позже"
+        )));
+    }
+    Ok(())
+}
+
 pub fn call_builtin_fn_ctx(
     f: BuiltinFn,
     args: &[BslValue],
@@ -844,11 +909,42 @@ pub fn call_builtin_fn_ctx(
                 }
             }
         }
-        return crate::json::read_json(&args[0], as_map, &date_names, rt);
+        // Четвёртая позиция платформы — `ОжидаемыйФорматДаты`
+        // (`ФорматДатыJSON`), а НЕ колбэк: см. `optional_date_format_from_arg`.
+        let date_format = crate::json::optional_date_format_from_arg(
+            args.get(3),
+            "ПрочитатьJSON(ОжидаемыйФорматДаты)",
+        )?;
+        // Позиции 5..8 платформы — имя функции восстановления и её
+        // параметры (см. `arity_range`): колбэков в языке пока нет,
+        // непустой аргумент здесь — понятная ошибка, а не молчаливый
+        // пропуск.
+        reject_unsupported_json_callback_args(&args[4..8], "ПрочитатьJSON")?;
+        return crate::json::read_json(&args[0], as_map, &date_names, date_format, rt);
     }
     if f == BuiltinFn::WriteJson {
-        crate::json::write_json(&args[0], &args[1], rt)?;
+        let settings = crate::json::serializer_settings_from(args.get(2))?;
+        // Пятая-шестая позиции (доп. параметры вызова функции и признак
+        // контекстного вызова) без функции преобразования смысла не имеют
+        // и остаются немедленной ошибкой на входе, как раньше, — это НЕ
+        // измерено отдельно от четвёртой позиции.
+        reject_unsupported_json_callback_args(&args[4..6], "ЗаписатьJSON")?;
+        // Четвёртая позиция — имя функции преобразования. ИЗМЕРЕНО: непустое
+        // имя само по себе больше не ошибка на входе — платформа принимает
+        // вызов и сериализует то, что умеет сама
+        // (`ЗаписатьJSON(Запись, 1, Неопределено, "ИмяФункции")` пишет `1`,
+        // функция не понадобилась). Ошибка откладывается до точки в
+        // `serialize`, где встретится несериализуемый тип и колбэк
+        // действительно понадобился бы (см. `write_json`).
+        let has_convert_fn = !matches!(args[3], BslValue::Undefined);
+        crate::json::write_json(&args[0], &args[1], &settings, has_convert_fn, rt)?;
         return Ok(BslValue::Undefined);
+    }
+    if f == BuiltinFn::WriteJsonValue {
+        return crate::json::write_json_value(&args[0], rt);
+    }
+    if f == BuiltinFn::ReadJsonValue {
+        return crate::json::read_json_value(&args[0], rt);
     }
     if f == BuiltinFn::ValueToStringInternal {
         let text = crate::vstr::value_to_string_internal(&args[0], rt)?;
@@ -1390,5 +1486,60 @@ mod name_table_tests {
             assert_eq!(BuiltinFn::lookup(name), None, "{name}");
         }
         assert_eq!(BuiltinMethod::lookup("Опечатка"), None);
+    }
+}
+
+/// Читающая и пишущая стороны колбэков JSON ведут себя РАЗНО — ИЗМЕРЕНО:
+/// `ЗаписатьJSON` откладывает ошибку до точки, где функция преобразования
+/// действительно понадобилась бы (см. `json.rs`), а `ПрочитатьJSON`
+/// по-прежнему отвергает непустое имя функции восстановления сразу на
+/// входе — это не измерено отдельно, оставлено консервативно.
+#[cfg(test)]
+mod json_callback_tests {
+    use super::*;
+
+    #[test]
+    fn read_json_rejects_a_restore_function_name_immediately() {
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let reader = BslValue::new_json_reader();
+        crate::json::set_string(&reader, &[BslValue::Str(BslString::from_str("1"))]).unwrap();
+
+        // args: Чтение, ВозвращатьСоответствие, ИменаСвойствСоЗначениямиДата,
+        // ОжидаемыйФорматДаты, ИмяФункцииВосстановления, ...
+        let args = [
+            reader,
+            BslValue::Boolean(false),
+            BslValue::Undefined,
+            BslValue::Undefined,
+            BslValue::Str(BslString::from_str("ИмяФункции")),
+            BslValue::Undefined,
+            BslValue::Undefined,
+            BslValue::Undefined,
+        ];
+        let e = call_builtin_fn_ctx(BuiltinFn::ReadJson, &args, &mut rt).unwrap_err();
+        assert!(matches!(e, RtError::Json(_)), "{e:?}");
+    }
+
+    #[test]
+    fn write_json_accepts_a_convert_function_name_when_the_value_serializes_fine() {
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let writer = BslValue::new_json_writer();
+        crate::json::set_string(&writer, &[]).unwrap();
+
+        // args: Запись, Значение, Настройки, ИмяФункции, ...
+        let args = [
+            writer.clone(),
+            BslValue::Number(bsl_number::BslNumber::from_i64(1)),
+            BslValue::Undefined,
+            BslValue::Str(BslString::from_str("ИмяФункции")),
+            BslValue::Undefined,
+            BslValue::Undefined,
+        ];
+        // ИЗМЕРЕНО: принято, а не отклонено на входе (в отличие от чтения).
+        call_builtin_fn_ctx(BuiltinFn::WriteJson, &args, &mut rt).unwrap();
+        assert_eq!(
+            crate::json::close_writer(&writer).unwrap(),
+            BslValue::Str(BslString::from_str("1"))
+        );
     }
 }

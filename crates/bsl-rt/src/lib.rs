@@ -25,6 +25,7 @@ mod string;
 mod table;
 mod textdoc;
 mod types;
+mod tz;
 mod vstr;
 mod xlsx;
 mod xml;
@@ -97,6 +98,14 @@ pub enum BslValue {
     /// переменную и напечатать. `Copy` в один байт — размер `BslValue` не
     /// растёт (см. модуль `enums`).
     Enum(EnumValue),
+    /// Голое имя системного перечисления как ВЫРАЖЕНИЕ (`Вычислить("ВариантЗаписиДатыJSON")`,
+    /// без `.Член`) — ИЗМЕРЕНО (`JSON.DATE_VARIANT_EN_NAMES`, «Т+»): платформа
+    /// принимает такое выражение, а не отвергает его как обращение к
+    /// неопределённой переменной. Что именно возвращает `Строка()`/`ТипЗнч()`
+    /// от этого значения — `НЕ ИЗМЕРЕНО(JSON.ENUM.BARE_NAME)`; здесь это
+    /// самостоятельный вариант (не `Type`/`Enum` — семантически ни то, ни
+    /// другое: не тип и не конкретный член), `Copy` в один байт, как и они.
+    EnumType(EnumKind),
     Object(Rc<BslObject>),
     /// Пропущенный позиционный аргумент (`Ф(1, , 3)`) — ТОЛЬКО как
     /// временное значение параметра сразу при входе в функцию/процедуру, до
@@ -273,6 +282,23 @@ impl std::error::Error for RtError {}
 
 pub type RtResult<T> = Result<T, RtError>;
 
+/// `TypeId` перечисления, к которому принадлежит член, — используется и
+/// для `ТипЗнч()` конкретного члена (`BslValue::Enum`), и для голого имени
+/// перечисления как выражения (`BslValue::EnumType`, см. doc comment на
+/// самом варианте).
+fn enum_kind_type_id(kind: EnumKind) -> TypeId {
+    match kind {
+        EnumKind::JsonValueType => TypeId::JsonValueType,
+        EnumKind::JsonLineBreak => TypeId::JsonLineBreak,
+        EnumKind::JsonDateFormat => TypeId::JsonDateFormat,
+        EnumKind::JsonDateWritingVariant => TypeId::JsonDateWritingVariant,
+        EnumKind::XmlNodeType => TypeId::XmlNodeType,
+        EnumKind::SpreadFileType => TypeId::SpreadFileType,
+        EnumKind::DrawingKind => TypeId::DrawingKind,
+        EnumKind::TextEncoding => TypeId::TextEncoding,
+    }
+}
+
 impl BslValue {
     pub fn type_name(&self) -> &'static str {
         match self {
@@ -284,6 +310,10 @@ impl BslValue {
             BslValue::Date(_) => "Дата",
             BslValue::Type(_) => "Тип",
             BslValue::Enum(e) => e.enum_name(),
+            // ИЗМЕРЕНО (проба `JSON.ENUM.BARE_NAME`): голое имя
+            // перечисления печатается МЕТАТИПОМ — `Перечисление` плюс
+            // русское написание, слитно.
+            BslValue::EnumType(k) => k.meta_ru_name(),
             BslValue::Object(o) => match &**o {
                 BslObject::Array(_) => "Массив",
                 BslObject::Structure(_) => "Структура",
@@ -306,6 +336,7 @@ impl BslValue {
                 BslObject::JsonReader(_) => "ЧтениеJSON",
                 BslObject::JsonWriter(_) => "ЗаписьJSON",
                 BslObject::JsonWriterSettings(_) => "ПараметрыЗаписиJSON",
+                BslObject::JsonSerializerSettings(_) => "НастройкиСериализацииJSON",
                 BslObject::XmlReader(_) => "ЧтениеXML",
                 BslObject::XmlWriter(_) => "ЗаписьXML",
                 BslObject::XmlWriterSettings(_) => "ПараметрыЗаписиXML",
@@ -1012,6 +1043,9 @@ impl BslValue {
             BslValue::Type(_) => true,
             // Член перечисления — тоже всегда значение.
             BslValue::Enum(_) => true,
+            // Голое имя перечисления — тем же рассуждением: значение есть,
+            // «пустого» варианта нет (не измерено отдельно).
+            BslValue::EnumType(_) => true,
             BslValue::Object(o) => match &**o {
                 // Непрозрачное значение — всегда «что-то»: судить о его
                 // заполненности, не материализуя вид, нечем.
@@ -1040,6 +1074,7 @@ impl BslValue {
                 | BslObject::JsonReader(..)
                 | BslObject::JsonWriter(..)
                 | BslObject::JsonWriterSettings(..)
+                | BslObject::JsonSerializerSettings(..)
                 | BslObject::XmlReader(..)
                 | BslObject::XmlWriter(..)
                 | BslObject::XmlWriterSettings(..)
@@ -1070,15 +1105,11 @@ impl BslValue {
             BslValue::Date(_) => TypeId::Date,
             BslValue::Type(_) => TypeId::Type,
             // Тип члена перечисления — само перечисление.
-            BslValue::Enum(e) => match e.kind() {
-                EnumKind::JsonValueType => TypeId::JsonValueType,
-                EnumKind::JsonLineBreak => TypeId::JsonLineBreak,
-                EnumKind::JsonDateFormat => TypeId::JsonDateFormat,
-                EnumKind::XmlNodeType => TypeId::XmlNodeType,
-                EnumKind::SpreadFileType => TypeId::SpreadFileType,
-                EnumKind::DrawingKind => TypeId::DrawingKind,
-                EnumKind::TextEncoding => TypeId::TextEncoding,
-            },
+            BslValue::Enum(e) => enum_kind_type_id(e.kind()),
+            // ИЗМЕРЕНО (проба `JSON.ENUM.BARE_NAME`): `ТипЗнч()` голого
+            // имени перечисления — отдельный МЕТАТИП, печатающийся как
+            // `Перечисление<Имя>`, а не тип членов.
+            BslValue::EnumType(k) => TypeId::EnumMeta(*k),
             BslValue::Object(o) => match &**o {
                 BslObject::VstrOpaque(_) => TypeId::VstrOpaque,
                 BslObject::Array(_) => TypeId::Array,
@@ -1100,6 +1131,7 @@ impl BslValue {
                 BslObject::JsonReader(..) => TypeId::JsonReader,
                 BslObject::JsonWriter(..) => TypeId::JsonWriter,
                 BslObject::JsonWriterSettings(..) => TypeId::JsonWriterSettings,
+                BslObject::JsonSerializerSettings(..) => TypeId::JsonSerializerSettings,
                 BslObject::XmlReader(..) => TypeId::XmlReader,
                 BslObject::XmlWriter(..) => TypeId::XmlWriter,
                 BslObject::XmlWriterSettings(..) => TypeId::XmlWriterSettings,
@@ -1316,6 +1348,16 @@ impl BslValue {
                 indent,
             },
         ))))
+    }
+
+    /// `Новый НастройкиСериализацииJSON` — БЕЗ аргументов конструктора: все
+    /// три свойства читаются и пишутся отдельно через точку, а не задаются
+    /// на месте создания, как у `СравнениеЗначений`/`Соответствие` выше;
+    /// умолчания — `json::JsonSerializerSettings::default`.
+    pub fn new_json_serializer_settings() -> Self {
+        BslValue::Object(Rc::new(BslObject::JsonSerializerSettings(
+            std::cell::RefCell::new(json::JsonSerializerSettings::default()),
+        )))
     }
 
     /// Создаёт объект `ЗаписьТекста` и открывает файл для буферизованной
@@ -1572,6 +1614,7 @@ impl BslValue {
                 | BslObject::JsonReader(..)
                 | BslObject::JsonWriter(..)
                 | BslObject::JsonWriterSettings(..)
+                | BslObject::JsonSerializerSettings(..)
                 | BslObject::XmlReader(..)
                 | BslObject::XmlWriter(..)
                 | BslObject::XmlWriterSettings(..)
@@ -1901,6 +1944,20 @@ impl BslValue {
                         Err(RtError::UnknownColumn(name.to_string()))
                     }
                 }
+                // `ЗаписьJSON.ПроверятьСтруктуру` — единственное свойство
+                // писателя (см. `json::get_check_structure`); английское имя
+                // — предположение по образцу остальных пар этого файла, не
+                // измерено отдельно.
+                BslObject::JsonWriter(_) => {
+                    if name.eq_ignore_ascii_case("ПроверятьСтруктуру")
+                        || name.eq_ignore_ascii_case("CheckStructure")
+                    {
+                        json::get_check_structure(self)
+                    } else {
+                        Err(RtError::UnknownColumn(name.to_string()))
+                    }
+                }
+                BslObject::JsonSerializerSettings(_) => json::get_serializer_setting(self, name),
                 // У `ЧтениеXML` свойств больше, но природа та же: читатель
                 // помнит текущий узел, а `ТипУзла`/`Имя`/`Значение` только
                 // показывают его с разных сторон.
@@ -1988,6 +2045,18 @@ impl BslValue {
                     spreadsheet::set_drawing_property(data, *i, name, &val)
                 }
                 BslObject::TextDocParams(_) => textdoc::set_parameter(self, name, val),
+                BslObject::JsonWriter(_) => {
+                    if name.eq_ignore_ascii_case("ПроверятьСтруктуру")
+                        || name.eq_ignore_ascii_case("CheckStructure")
+                    {
+                        json::set_check_structure(self, val)
+                    } else {
+                        Err(RtError::UnknownColumn(name.to_string()))
+                    }
+                }
+                BslObject::JsonSerializerSettings(_) => {
+                    json::set_serializer_setting(self, name, val)
+                }
                 BslObject::TableRow(data, row_id) => {
                     let mut data = data.borrow_mut();
                     let col = data
@@ -2621,6 +2690,8 @@ impl PartialEq for BslValue {
             // держится весь потоковый разбор JSON (`Если Т =
             // ТипЗначенияJSON.ИмяСвойства Тогда`).
             (BslValue::Enum(a), BslValue::Enum(b)) => a == b,
+            // Голое имя перечисления — тоже значение, тем же рассуждением.
+            (BslValue::EnumType(a), BslValue::EnumType(b)) => a == b,
             // Один и тот же объект равен себе при любом виде — для
             // непрозрачных значений это быстрый путь: чтение интернирует
             // повторяющиеся ссылки в один объект, и сравнение текстов до
@@ -2662,6 +2733,7 @@ impl Hash for BslValue {
             BslValue::Date(d) => d.hash(state),
             BslValue::Type(t) => t.hash(state),
             BslValue::Enum(e) => e.hash(state),
+            BslValue::EnumType(k) => k.hash(state),
             // Непрозрачное значение хэширует текст — согласовано с его
             // равенством по тексту в `PartialEq` выше.
             BslValue::Object(o) => match &**o {
@@ -2689,6 +2761,10 @@ impl fmt::Display for BslValue {
             // то же `Массив`, что и `Строка(Новый Массив)`.
             BslValue::Type(t) => write!(f, "{t}"),
             BslValue::Enum(e) => write!(f, "{}", e.display_text()),
+            // `НЕ ИЗМЕРЕНО(JSON.ENUM.BARE_NAME)`: по умолчанию — то же имя,
+            // что стоит слева от точки в исходном тексте (симметрично
+            // `type_name`).
+            BslValue::EnumType(k) => write!(f, "{}", k.meta_ru_name()),
             BslValue::Object(o) => match &**o {
                 BslObject::VstrOpaque(_) => write!(f, "НепрозрачноеЗначение"),
                 BslObject::Array(_) => write!(f, "Массив"),
@@ -2705,6 +2781,7 @@ impl fmt::Display for BslValue {
                 BslObject::JsonReader(_) => write!(f, "ЧтениеJSON"),
                 BslObject::JsonWriter(_) => write!(f, "ЗаписьJSON"),
                 BslObject::JsonWriterSettings(_) => write!(f, "ПараметрыЗаписиJSON"),
+                BslObject::JsonSerializerSettings(_) => write!(f, "НастройкиСериализацииJSON"),
                 BslObject::XmlReader(_) => write!(f, "ЧтениеXML"),
                 BslObject::XmlWriter(_) => write!(f, "ЗаписьXML"),
                 BslObject::XmlWriterSettings(_) => write!(f, "ПараметрыЗаписиXML"),

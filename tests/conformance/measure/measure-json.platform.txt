@@ -1,0 +1,49 @@
+JSON.WRITE.DEFAULT_FORMAT	{<ПС>"а": 1,<ПС>"б": "текст"<ПС>}
+JSON.WRITE.NESTED	[<ПС>1,<ПС>{<ПС>"к": true<ПС>}<ПС>]
+JSON.WRITE.NO_LINE_BREAKS	{"а":1}
+JSON.WRITE.INDENT_NESTED	{<ПС>__"а": {<ПС>____"б": 1<ПС>__}<ПС>}
+JSON.WRITE.BREAK_WINDOWS	{<ВК><ПС> "а": 1<ВК><ПС>}
+JSON.WRITE.BREAK_UNIX	{<ПС> "а": 1<ПС>}
+JSON.WRITE.NUMBERS	[1.5,-2,1000000,0,0.333333333333333333333333333]
+JSON.WRITE.ESCAPES	"\"\\/\n\u0009Ёж\u0001"
+JSON.WRITE.CONTROL_CHARS	"\r\u0008\u000C\u000B"
+JSON.WRITE.VALUE_BOOLEAN	true
+JSON.WRITE.VALUE_NULL	<ошибка>
+JSON.WRITE.VALUE_DATE	<ошибка>
+JSON.WRITE.VALUE_UNDEFINED	null
+JSON.WRITE.VALUE_WITHOUT_NAME	<ошибка>
+JSON.SERIALIZE.STRUCTURE	{"Фамилия":"Петров","Имя":"Иван","Возраст":30}
+JSON.SERIALIZE.NESTED	[1,"два",{"к":1}]
+JSON.SERIALIZE.DATE_DEFAULT	{"д":"2024-03-04T05:06:07"}
+JSON.SERIALIZE.DATE_EMPTY	{"д":"0001-01-01T00:00:00"}
+JSON.SERIALIZE.UNSUPPORTED_TYPE	<ошибка>
+JSON.READ.EVENT_SEQUENCE	Начало объекта Имя свойства  Число Имя свойства  Начало массива Булево Значение Null Конец массива  Конец объекта 
+JSON.READ.CURRENT_VALUE	[а][1,5][б][с][в][Да]
+JSON.READ.VALUE_ON_BRACE	<ошибка>
+JSON.READ.SKIP	Начало объекта Имя свойства  Число Конец объекта 
+JSON.READ.UNESCAPE	Ё<Т>"\/
+JSON.READ.MALFORMED_NO_VALUE	3
+JSON.READ.MALFORMED_TRAILING_COMMA	3
+JSON.READ.MALFORMED_NO_COLON	4
+JSON.READ.MALFORMED_UNCLOSED	3
+JSON.READ.MALFORMED_GARBAGE	<ошибка>
+JSON.DESERIALIZE.DEFAULT_TYPE	Структура
+JSON.DESERIALIZE.AS_MAP	Соответствие|1
+JSON.DESERIALIZE.VALUE_TYPES	Массив: Число Булево Не определено Строка Число
+JSON.DESERIALIZE.NESTED	Структура|1|Массив
+JSON.DESERIALIZE.BAD_KEY	<ошибка>
+JSON.DESERIALIZE.DATE_NO_ZONE	Дата|04.03.2024 5:06:07
+JSON.ROUND_TRIP	{"а":1,"б":"текст"} -> 1|текст
+JSON.ENUM.VALUE_TYPES	Строка|Число|Булево|Значение Null|Начало объекта|Конец объекта|Начало массива|Конец массива |Имя свойства |Нет|Комментарий
+JSON.ENUM.LINE_BREAKS	Нет|Автоматически|Windows|Unix
+JSON.TYPE.NAMES	Чтение JSON|Запись JSON|Параметры записи JSON
+JSON.VALUE.NAMES	ЧтениеJSON|ЗаписьJSON|ПараметрыЗаписиJSON
+JSON.DATE_VARIANT_EN_NAMES	Т+ Л:LocalDate О:LocalDateWithOffset У:UniversalDate
+JSON.ENUM.BARE_NAME	ПеречислениеВариантЗаписиДатыJSON|ПеречислениеВариантЗаписиДатыJSON
+JSON.SETTINGS.PROPERTY_NAMES	ФорматСериализацииДаты|ВариантЗаписиДаты|СериализовыватьМассивыКакОбъекты|DateSerializationFormat|DateWritingVariant|SerializeArraysAsObjects
+JSON.SETTINGS.DATE_VARIANT_DEFAULT	Локальная дата|Локальная дата|Локальная дата со смещением|Универсальная дата
+JSON.WRITE_DATE.NON_ISO_LOCAL_ERROR	<ошибка>
+JSON.READ_DATE.BAD_FORMAT_TEXT	<ошибка>
+JSON.VALUE.READ_KIND	Структура
+JSON.WRITE.CHECK_STRUCTURE_DEFAULT	Да
+JSON.WRITE.CHECK_STRUCTURE_OFF	Повтор@Истина:{"х":1,"х":2} Повтор@Ложь:{"х":1,"х":2} Закрыть@Истина:{ Закрыть@Ложь:{

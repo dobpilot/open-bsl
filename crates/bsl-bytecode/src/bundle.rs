@@ -443,6 +443,7 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
         | Instr::NewMap { dst }
         | Instr::NewJsonReader { dst }
         | Instr::NewJsonWriter { dst }
+        | Instr::NewJsonSerializerSettings { dst }
         | Instr::NewTextDocument { dst }
         | Instr::NewSpreadDocument { dst }
         | Instr::NewXmlReader { dst }

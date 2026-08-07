@@ -1134,8 +1134,11 @@ fn type_rank(v: &BslValue) -> u8 {
         // наименее произвольное из возможных, как и `Null` рядом с
         // `Неопределено` выше.
         BslValue::Enum(_) => 7,
-        BslValue::Object(_) => 8,
-        BslValue::Skipped => 9,
+        // Голое имя перечисления — тем же рассуждением, рядом с членом
+        // перечисления: тоже не участвовало в замере.
+        BslValue::EnumType(_) => 8,
+        BslValue::Object(_) => 9,
+        BslValue::Skipped => 10,
     }
 }
 

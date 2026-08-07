@@ -76,6 +76,11 @@ pub enum BslObject {
     /// `ПараметрыЗаписиJSON` — простой набор значений, менять его после
     /// создания незачем, поэтому без `RefCell`.
     JsonWriterSettings(crate::json::JsonWriterSettings),
+    /// `НастройкиСериализацииJSON` (третий аргумент `ЗаписатьJSON`) —
+    /// в отличие от `JsonWriterSettings` её поля ЧИТАЮТСЯ И ПИШУТСЯ через
+    /// точку (`Настройки.ФорматСериализацииДат = ...`) уже после создания
+    /// объекта, поэтому под `RefCell`.
+    JsonSerializerSettings(RefCell<crate::json::JsonSerializerSettings>),
 
     /// `ЧтениеXML`. Как и у JSON, разборщик появляется только после
     /// `УстановитьСтроку`/`ОткрытьФайл`.

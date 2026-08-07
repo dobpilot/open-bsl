@@ -1046,6 +1046,11 @@ fn step(
                 reg_store(stack, d, settings)?;
                 frames[frame_idx].pc += 1;
             }
+            Instr::NewJsonSerializerSettings { dst } => {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, BslValue::new_json_serializer_settings())?;
+                frames[frame_idx].pc += 1;
+            }
             Instr::NewSpreadDocument { dst } => {
                 let d = frames[frame_idx].reg_index(dst);
                 reg_store(stack, d, bsl_rt::new_spread_document())?;
@@ -1336,7 +1341,14 @@ fn run_dynamic_snippet(
     }
     let snippet_program = Program {
         chunks,
-        names: program.names.clone(),
+        // СОБСТВЕННАЯ таблица фрагмента, не `program.names`: она — префикс
+        // (те же имена, в том же порядке, значит те же `NameId`) плюс,
+        // возможно, новые поля, которых в статическом коде не было (см.
+        // doc comment `CompiledSnippet`). Старые `GetProp`/`SetProp` — и
+        // статического кода вокруг, и вложенных вызовов функций программы
+        // (см. ниже про `chunks`) — по-прежнему резолвятся: их `NameId`
+        // меньше длины `program.names` и указывают на тот же префикс.
+        names: compiled.names.clone(),
         shapes: compiled.shapes.clone(),
         top_level_locals: Vec::new(),
         function_names: program.function_names.clone(),
@@ -1378,9 +1390,18 @@ fn run_dynamic_snippet(
 /// Один скомпилированный фрагмент. `shapes` — СОБСТВЕННЫЙ список форм
 /// фрагмента: индексы `shape` внутри `chunk` ссылаются именно на него, а
 /// не на `program.shapes` (был баг ровно на этом — `NewStructure` попадал
-/// по чужому индексу).
+/// по чужому индексу). `names` — по той же причине СОБСТВЕННАЯ (расширенная)
+/// таблица имён полей: `compile_snippet` сеет свежий интернер именами
+/// ОСНОВНОЙ программы, чтобы старые `NameId` совпали, но имя поля, которого
+/// в статическом коде вообще не было (например, поле объекта, известное
+/// только рантайму, как у `НастройкиСериализацииJSON`), получает НОВЫЙ
+/// `NameId` ЗА пределами `program.names`. Раньше эта расширенная таблица
+/// отбрасывалась (`let (chunk, _names, shapes) = ...`), и `GetProp`/`SetProp`
+/// на такое поле падали с «идентификатор имени вне таблицы имён программы»
+/// — тот же класс бага, что и с формами, просто не пойманный тогда.
 struct CompiledSnippet {
     chunk: bsl_bytecode::Chunk,
+    names: Vec<String>,
     shapes: Vec<std::rc::Rc<bsl_rt::Shape>>,
 }
 
@@ -1487,11 +1508,15 @@ fn compile_dynamic_snippet(
         .skip(1)
         .map(|c| c.param_by_val.clone())
         .collect();
-    let (chunk, _names, shapes) =
+    let (chunk, names, shapes) =
         bsl_bytecode::compile_snippet(&all_locals, &body, &program.names, &callee_params)
             .map_err(|e| RtError::DynamicError(format!("{e:?}")))?;
 
-    Ok(CompiledSnippet { chunk, shapes })
+    Ok(CompiledSnippet {
+        chunk,
+        names,
+        shapes,
+    })
 }
 
 /// Размерность в `Новый Массив(d1, d2, ...)` обязана быть целым
@@ -4396,6 +4421,27 @@ mod tests {
     fn vychislit_can_construct_and_use_new_values() {
         let v = run_src(r#"Возврат Вычислить("Новый Массив(3).Count()");"#);
         assert_eq!(v, num("3"));
+    }
+
+    #[test]
+    fn vychislit_reads_a_property_whose_name_never_appears_in_static_code() {
+        // Регрессия, тот же класс бага, что и у
+        // `vypolnit_can_construct_a_new_structure_inside_the_snippet_itself`,
+        // только про `NameId`, а не про `Shape`: `compile_dynamic_snippet`
+        // отбрасывал СОБСТВЕННУЮ (расширенную) таблицу имён фрагмента и
+        // запускал его поверх `program.names` ОСНОВНОЙ программы. Пока имя
+        // поля уже встречалось где-то статически, `NameId` совпадал
+        // случайно; для имени, впервые встреченного ТОЛЬКО внутри текста
+        // `Вычислить`, `NameId` указывал за пределы этой таблицы, и
+        // `GetProp` падал с «идентификатор имени вне таблицы имён
+        // программы». `НастройкиСериализацииJSON` резолвит свойства
+        // СТРОКОЙ (не через `Shape`), поэтому падает именно на пути,
+        // который был сломан.
+        let v = run_src(
+            "нс = Новый НастройкиСериализацииJSON;\n\
+             Возврат Вычислить(\"нс.СериализовыватьМассивыКакОбъекты\");",
+        );
+        assert_eq!(v, BslValue::Boolean(false));
     }
 
     #[test]

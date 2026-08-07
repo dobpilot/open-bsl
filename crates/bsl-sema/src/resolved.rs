@@ -101,8 +101,15 @@ pub enum RExpr {
     /// У платформы перечисление тоже не объект с полями: опечатка в имени
     /// члена там ошибка компиляции, а не рантайма.
     EnumMember(bsl_rt::EnumValue),
+    /// Голое имя системного перечисления (`ВариантЗаписиДатыJSON`, без
+    /// `.Член`) — тоже КОНСТАНТА времени компиляции, тем же рассуждением,
+    /// что и `EnumMember` (см. doc comment там же и на
+    /// `bsl_rt::BslValue::EnumType`).
+    EnumTypeRef(bsl_rt::EnumKind),
     NewJsonReader,
     NewJsonWriter,
+    /// `Новый НастройкиСериализацииJSON` — без аргументов, как `NewJsonReader`.
+    NewJsonSerializerSettings,
     /// `?(Условие, Тогда, Иначе)`. Хранится тремя выражениями, а не
     /// вызовом с тремя аргументами: оператор ЛЕНИВ (измерено), и
     /// кодогену нужно вкомпилировать переходы между ветвями, а не
@@ -329,8 +336,10 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
         RExpr::NewArray { dims } => dims.iter().any(expr_uses_dynamic),
         RExpr::NewStructure { values, .. } => values.iter().any(expr_uses_dynamic),
         RExpr::EnumMember(_)
+        | RExpr::EnumTypeRef(_)
         | RExpr::NewJsonReader
         | RExpr::NewJsonWriter
+        | RExpr::NewJsonSerializerSettings
         | RExpr::NewTextDocument
         | RExpr::NewSpreadDocument
         | RExpr::NewXmlReader
