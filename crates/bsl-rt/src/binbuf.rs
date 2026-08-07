@@ -683,9 +683,13 @@ pub fn invert(v: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
             let c = usize::try_from(c).map_err(|_| RtError::BadIndex)?;
             // Ноль — «до конца», измерено; иначе хвост обязан влезать.
             let c = if c == 0 { total - p } else { c };
-            if p + c > total {
+            // Конец считается с проверкой переполнения: количество приходит
+            // от пользователя, и `p + c` при `c` около `usize::MAX` уронил бы
+            // процесс паникой мимо `Попытка`.
+            let end = p.checked_add(c).ok_or(RtError::BadIndex)?;
+            if end > total {
                 return Err(RtError::IndexOutOfBounds {
-                    index: (p + c) as i64,
+                    index: end as i64,
                     len: total,
                 });
             }
@@ -1073,6 +1077,21 @@ mod tests {
         // Ровно до конца — можно.
         assert!(invert(&b, &[num(0), num(4)]).is_ok());
         assert_eq!(dump(&b), vec![254, 253, 252, 251]);
+    }
+
+    /// Количество, переполняющее позицию, — ошибка, а не паника.
+    ///
+    /// Позиция здесь именно `1`, а не `0`: при нулевой позиции сумма
+    /// `Позиция + Количество` не переполняется и дыру не задевает. До правки
+    /// отладочная сборка падала на `p + c` с `attempt to add with overflow`,
+    /// сборка с оптимизацией — на срезе `bytes[1..0]` строкой ниже; `Попытка`
+    /// в BSL ни то, ни другое не ловила. После правки оба профиля идут через
+    /// `checked_add`, поэтому проверка одна на оба.
+    #[test]
+    fn invert_rejects_a_count_that_overflows_the_position() {
+        let b = buf(&[1, 2, 3, 4]);
+        assert!(invert(&b, &[num(1), dec("18446744073709551615")]).is_err());
+        assert_eq!(dump(&b), vec![1, 2, 3, 4]);
     }
 
     /// Пустой буфер инвертировать нельзя даже без аргументов — измерено.
