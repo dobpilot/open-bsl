@@ -322,6 +322,10 @@ pub const NEW_TYPES: &[&str] = &[
     "TextDocument",
     "ТабличныйДокумент",
     "SpreadsheetDocument",
+    // Английское написание проверено пробой `BIN.NEW.EN` на платформе:
+    // `Новый BinaryData(Путь)` принимается.
+    "ДвоичныеДанные",
+    "BinaryData",
 ];
 
 struct Resolver<'a> {
@@ -712,6 +716,22 @@ impl<'a> Resolver<'a> {
                     path: Box::new(self.resolve_expr(&args[0])?),
                 })
             }
+            // Ровно один аргумент — имя файла. Ни пустой конструктор, ни
+            // два аргумента платформа не принимает (пробы `BIN.NEW.NOARG`,
+            // `BIN.NEW.TWOARGS`), поэтому арность проверяется здесь, а не
+            // в рантайме.
+            "ДВОИЧНЫЕДАННЫЕ" | "BINARYDATA" => {
+                if args.len() != 1 {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый ДвоичныеДанные".to_string(),
+                        expected: 1,
+                        found: args.len(),
+                    });
+                }
+                Ok(RExpr::NewBinaryData {
+                    path: Box::new(self.resolve_expr(&args[0])?),
+                })
+            }
             "ЧТЕНИЕJSON" | "JSONREADER" => {
                 if !args.is_empty() {
                     return Err(SemaError::ArgumentCountMismatch {
@@ -963,6 +983,10 @@ impl<'a> Resolver<'a> {
                     bsl_rt::BuiltinMethod::Count
                     | bsl_rt::BuiltinMethod::Clear
                     | bsl_rt::BuiltinMethod::Close => Some(0),
+                    // `Размер` есть только у двоичных данных, и лишний
+                    // аргумент платформа отвергает (проба
+                    // `BIN.SIZE.EXTRAARG`) — арность фиксированная.
+                    bsl_rt::BuiltinMethod::Size => Some(0),
                     bsl_rt::BuiltinMethod::Delete | bsl_rt::BuiltinMethod::Get => Some(1),
                     bsl_rt::BuiltinMethod::Insert => Some(2),
                     bsl_rt::BuiltinMethod::FindRows | bsl_rt::BuiltinMethod::Total => Some(1),

@@ -684,6 +684,15 @@ impl<'a> Compiler<'a> {
                 });
                 self.free_temp(1);
             }
+            RExpr::NewBinaryData { path } => {
+                let path_reg = self.alloc_temp()?;
+                self.compile_expr(path, path_reg)?;
+                self.emit(Instr::NewBinaryData {
+                    dst,
+                    path: path_reg,
+                });
+                self.free_temp(1);
+            }
             RExpr::DynEval(e) => {
                 let s = self.alloc_temp()?;
                 self.compile_expr(e, s)?;

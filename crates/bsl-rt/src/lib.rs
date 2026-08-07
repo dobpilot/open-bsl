@@ -334,6 +334,12 @@ impl BslValue {
                 BslObject::Map(_) => "Соответствие",
                 BslObject::KeyValuePair(_, _) => "КлючИЗначение",
                 BslObject::TextWriter(_) => "ЗаписьТекста",
+                // У двоичных данных имя ЗНАЧЕНИЯ платформой не наблюдаемо:
+                // `Строка(ДД)` отдаёт дамп байтов, а не имя (измерено,
+                // проба `BIN.STR`). Эта строка живёт только в
+                // диагностике самой реализации — в тексте `RtError`, — и
+                // написана слитно по образцу соседей.
+                BslObject::BinaryData(_) => "ДвоичныеДанные",
                 // Имя ЗНАЧЕНИЯ — без пробелов; имя ТИПА («Чтение JSON») в
                 // `types.rs`. Измерено: `Строка(Новый ЧтениеJSON)` даёт
                 // «ЧтениеJSON», а `Строка(ТипЗнч(...))` — «Чтение JSON».
@@ -1065,6 +1071,11 @@ impl BslValue {
                 | BslObject::Map(_)
                 | BslObject::ValueTable(_)
                 | BslObject::TableColumns(_) => self.collection_len()? > 0,
+                // ИЗМЕРЕНО (пробы `BIN.IS_FILLED`/`BIN.EMPTY`): двоичные
+                // данные считаются заполненными по ДЛИНЕ — 13 байт «Да»,
+                // ноль байт «Нет». Это тот же критерий, что у коллекций,
+                // а не «объект есть — значит заполнен».
+                BslObject::BinaryData(bytes) => !bytes.is_empty(),
                 // У строки таблицы и пары ключ-значение «длины» нет: сам
                 // факт существования объекта и есть заполненность.
                 BslObject::TableRow(..)
@@ -1132,6 +1143,7 @@ impl BslValue {
                         op: "ТипЗнч",
                     })
                 }
+                BslObject::BinaryData(..) => TypeId::BinaryData,
                 BslObject::JsonReader(..) => TypeId::JsonReader,
                 BslObject::JsonWriter(..) => TypeId::JsonWriter,
                 BslObject::JsonWriterSettings(..) => TypeId::JsonWriterSettings,
@@ -1457,6 +1469,164 @@ impl BslValue {
         }
     }
 
+    /// Двоичные данные из готовых байтов — общий конструктор для чтения
+    /// файла, `РазделитьДвоичныеДанные` и `СоединитьДвоичныеДанные`.
+    pub fn binary_data_of(bytes: impl Into<Rc<[u8]>>) -> Self {
+        BslValue::Object(Rc::new(BslObject::BinaryData(bytes.into())))
+    }
+
+    /// Байты значения `ДвоичныеДанные`; для любого другого значения —
+    /// ошибка типа с указанием операции, которая его потребовала.
+    fn as_binary_data(&self, op: &'static str) -> RtResult<&Rc<[u8]>> {
+        match self {
+            BslValue::Object(o) => match &**o {
+                BslObject::BinaryData(bytes) => Ok(bytes),
+                _ => Err(RtError::TypeError {
+                    expected: "ДвоичныеДанные",
+                    op,
+                }),
+            },
+            _ => Err(RtError::TypeError {
+                expected: "ДвоичныеДанные",
+                op,
+            }),
+        }
+    }
+
+    /// `Новый ДвоичныеДанные(ИмяФайла)` — файл читается ЦЕЛИКОМ в память
+    /// сразу, как и на платформе (размер известен немедленно, а `Размер()`
+    /// после удаления файла продолжает отвечать).
+    ///
+    /// Конструктор без аргументов, с числом вместо имени файла и с двумя
+    /// аргументами платформа отвергает (пробы `BIN.NEW.NOARG`,
+    /// `BIN.NEW.NUMARG`, `BIN.NEW.TWOARGS`) — ровно один строковый
+    /// аргумент, и это проверяет резолвер.
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::TypeError`], если путь не строка; [`RtError::IoError`],
+    /// если файла нет, он недоступен или это каталог (пробы
+    /// `BIN.NEW.MISSING`, `BIN.NEW.DIR` — платформа в обоих случаях
+    /// бросает исключение).
+    pub fn new_binary_data(path: &BslValue) -> RtResult<Self> {
+        let path = path.as_str("Новый ДвоичныеДанные")?.to_string();
+        let bytes = std::fs::read(&path).map_err(|e| RtError::IoError(format!("{path}: {e}")))?;
+        Ok(BslValue::binary_data_of(bytes))
+    }
+
+    /// `ДвоичныеДанные.Размер()` — число байтов.
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::MethodNotApplicable`], если получатель — не двоичные
+    /// данные.
+    pub fn binary_data_size(&self) -> RtResult<Self> {
+        let bytes = self
+            .as_binary_data("Размер")
+            .map_err(|_| RtError::MethodNotApplicable {
+                method: "Размер",
+                receiver: self.type_name(),
+            })?;
+        Ok(BslValue::Number(BslNumber::from_i64(bytes.len() as i64)))
+    }
+
+    /// `РазделитьДвоичныеДанные(Данные, РазмерЧасти)` -> `Массив` частей.
+    ///
+    /// ИЗМЕРЕНО на 8.3.27 (пробы `BIN.SPLIT.*`) на 13 байтах: по 5 — три
+    /// части 5, 5, 3; по 3 — пять частей 3, 3, 3, 3, 1; по 100 и по
+    /// 10 000 000 000 — одна часть целиком; по 10 — две части 10 и 3.
+    /// То есть хвост КОРОЧЕ, а не дополняется, и размер части больше
+    /// целого — не ошибка.
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::TypeError`], если первый аргумент не двоичные данные
+    /// (проба `BIN.SPLIT.BADARG`) либо размер части не целое положительное
+    /// число, влезающее в 64 бита без знака: ноль, отрицательное, дробное
+    /// и даже числовая СТРОКА `"5"` платформой отвергнуты (пробы
+    /// `BIN.SPLIT.ZERO`, `.NEGATIVE`, `.FRACTIONAL`, `.STRSIZE`), а
+    /// верхняя граница снята фикстурой `binary-data` с точностью до
+    /// единицы: `2^64-1` принимается, `2^64` — уже ошибка.
+    pub fn binary_data_split(&self, part_size: &BslValue) -> RtResult<Self> {
+        const OP: &str = "РазделитьДвоичныеДанные";
+        let bad_size = || RtError::TypeError {
+            expected: "Целое положительное число не больше 2^64-1",
+            op: OP,
+        };
+        let bytes = self.as_binary_data(OP)?;
+        let size = part_size.as_number(OP).map_err(|_| bad_size())?;
+        if !size.is_integer()
+            || size.is_negative()
+            || size.is_zero()
+            || *size > binary_split_max_part()
+        {
+            return Err(bad_size());
+        }
+        // Размер части шире `usize` ошибкой НЕ является, пока он в
+        // пределах `2^64-1`: платформа на 10^10 и на `2^64-1` одинаково
+        // отдаёт одну часть целиком, и насыщение до `usize::MAX` даёт
+        // ровно это.
+        let size = size
+            .to_i64_exact()
+            .and_then(|n| usize::try_from(n).ok())
+            .unwrap_or(usize::MAX);
+        // ПУСТЫЕ данные — краевой случай, где `chunks` расходится с
+        // платформой: он не даёт ни одной части, а платформа отдаёт массив
+        // из ОДНОЙ пустой части (измерено фикстурой `binary-data`, строка
+        // «разбиение пустых»). Пустое на входе — пустое на выходе, но
+        // обёрнутое.
+        if bytes.is_empty() {
+            return Ok(BslValue::new_array(vec![BslValue::binary_data_of(
+                Vec::new(),
+            )]));
+        }
+        Ok(BslValue::new_array(
+            bytes
+                .chunks(size)
+                .map(BslValue::binary_data_of)
+                .collect::<Vec<_>>(),
+        ))
+    }
+
+    /// `СоединитьДвоичныеДанные(Массив)` -> склеенные данные в порядке
+    /// массива (ИЗМЕРЕНО, проба `BIN.COMBINE.ORDER`: три элемента по 13
+    /// байт дают 39 байт, и дамп идёт в порядке массива).
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::TypeError`], если аргумент не массив (проба
+    /// `BIN.COMBINE.NOTARRAY`) или его элемент — не двоичные данные:
+    /// платформа отвергает и строку, и `Неопределено` (пробы
+    /// `BIN.COMBINE.BADELEM`, `BIN.COMBINE.UNDEF`). Пустой массив
+    /// ошибкой НЕ является — он даёт пустые двоичные данные (проба
+    /// `BIN.COMBINE.EMPTY`).
+    pub fn binary_data_combine(&self) -> RtResult<Self> {
+        const OP: &str = "СоединитьДвоичныеДанные";
+        let items = match self {
+            BslValue::Object(o) => match &**o {
+                BslObject::Array(items) => items,
+                _ => {
+                    return Err(RtError::TypeError {
+                        expected: "Массив",
+                        op: OP,
+                    })
+                }
+            },
+            _ => {
+                return Err(RtError::TypeError {
+                    expected: "Массив",
+                    op: OP,
+                })
+            }
+        };
+        let items = items.borrow();
+        let mut out = Vec::new();
+        for item in items.iter() {
+            out.extend_from_slice(item.as_binary_data(OP)?);
+        }
+        Ok(BslValue::binary_data_of(out))
+    }
+
     /// Индекс должен быть целым неотрицательным числом — `1С` использует
     /// `Число` для индексов, отдельного целочисленного типа нет.
     fn index_as_usize(idx: &BslValue) -> RtResult<usize> {
@@ -1614,6 +1784,11 @@ impl BslValue {
                 BslObject::Map(data) => Ok(data.borrow().len()),
                 BslObject::KeyValuePair(..) => Err(RtError::NotIndexable),
                 BslObject::VstrOpaque(_) => Err(RtError::NotIndexable),
+                // Число байтов отдаёт `Размер()`, а `Количество()` у этого
+                // типа нет вовсе — как нет и обхода `Для Каждого`:
+                // двоичные данные не коллекция, доступа к отдельному байту
+                // здесь не заведено (он появится с `БуферДвоичныхДанных`).
+                BslObject::BinaryData(..) => Err(RtError::NotIndexable),
                 BslObject::TextWriter(..)
                 | BslObject::JsonReader(..)
                 | BslObject::JsonWriter(..)
@@ -2707,6 +2882,10 @@ impl PartialEq for BslValue {
                 // разных строк, равны — так ведёт себя платформа
                 // (измерено, проба `REF.CAT.RT`).
                 (BslObject::VstrOpaque(x), BslObject::VstrOpaque(y)) => x == y,
+                // Двоичные данные — тоже значение, а не ссылка: ИЗМЕРЕНО
+                // (пробы `BIN.EQ`/`BIN.EQ.DIFF`), что два `Новый
+                // ДвоичныеДанные` от ОДНОГО файла равны, а от разных — нет.
+                (BslObject::BinaryData(x), BslObject::BinaryData(y)) => x == y,
                 _ => false,
             },
             _ => false,
@@ -2738,15 +2917,57 @@ impl Hash for BslValue {
             BslValue::Type(t) => t.hash(state),
             BslValue::Enum(e) => e.hash(state),
             BslValue::EnumType(k) => k.hash(state),
-            // Непрозрачное значение хэширует текст — согласовано с его
-            // равенством по тексту в `PartialEq` выше.
+            // Непрозрачное значение хэширует текст, двоичные данные —
+            // байты: оба согласованы со своим равенством ПО СОДЕРЖИМОМУ в
+            // `PartialEq` выше, иначе ключ `Соответствие` терялся бы.
             BslValue::Object(o) => match &**o {
                 BslObject::VstrOpaque(text) => text.hash(state),
+                BslObject::BinaryData(bytes) => bytes.hash(state),
                 _ => Rc::as_ptr(o).hash(state),
             },
             BslValue::Skipped => {}
         }
     }
+}
+
+/// Наибольший размер части, который принимает `РазделитьДвоичныеДанные`.
+///
+/// ИЗМЕРЕНО фикстурой `binary-data` с точностью до единицы: `2^64-1`
+/// платформа принимает (и отдаёт одну часть целиком), `2^64` — уже
+/// ошибка. То есть счётчик у неё 64-битный БЕЗ знака, а не `i64`: `2^63`
+/// тоже проходит.
+fn binary_split_max_part() -> BslNumber {
+    BslNumber::from_parts(u64::MAX as i128, 0)
+}
+
+/// Сколько байтов попадает в строковое представление `ДвоичныеДанные`.
+///
+/// ИЗМЕРЕНО (проба `BIN.STR.LONG`): у значения в 303 байта `Строка()`
+/// печатает ровно 256 пар, за которыми СРАЗУ, без разделяющего пробела,
+/// идёт многоточие. Ровно на границе (255/256/257 байт) поведение
+/// закреплено фикстурой `binary-data`.
+const BINARY_DATA_DISPLAY_LIMIT: usize = 256;
+
+/// Строковое представление `ДвоичныеДанные` — не имя типа, а САМИ БАЙТЫ:
+/// шестнадцатеричные пары в ВЕРХНЕМ регистре через пробел, не более
+/// [`BINARY_DATA_DISPLAY_LIMIT`] штук, с многоточием у длинного значения
+/// (измерено, пробы `BIN.STR`, `BIN.STR.LONG`, `BIN.EMPTY`: у пустых
+/// данных представление — пустая строка).
+fn binary_data_display(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    let shown = bytes.len().min(BINARY_DATA_DISPLAY_LIMIT);
+    let mut out = String::with_capacity(shown * 3 + 3);
+    for (i, b) in bytes[..shown].iter().enumerate() {
+        if i > 0 {
+            out.push(' ');
+        }
+        out.push(HEX[(b >> 4) as usize] as char);
+        out.push(HEX[(b & 0x0f) as usize] as char);
+    }
+    if bytes.len() > shown {
+        out.push_str("...");
+    }
+    out
 }
 
 impl fmt::Display for BslValue {
@@ -2782,6 +3003,9 @@ impl fmt::Display for BslValue {
                 BslObject::Map(_) => write!(f, "Соответствие"),
                 BslObject::KeyValuePair(_, _) => write!(f, "КлючИЗначение"),
                 BslObject::TextWriter(_) => write!(f, "ЗаписьТекста"),
+                // Единственный объект, который печатается СОДЕРЖИМЫМ, а не
+                // именем: см. `binary_data_display`.
+                BslObject::BinaryData(bytes) => write!(f, "{}", binary_data_display(bytes)),
                 BslObject::JsonReader(_) => write!(f, "ЧтениеJSON"),
                 BslObject::JsonWriter(_) => write!(f, "ЗаписьJSON"),
                 BslObject::JsonWriterSettings(_) => write!(f, "ПараметрыЗаписиJSON"),
@@ -3165,5 +3389,142 @@ mod tests {
         let arr = BslValue::new_array(vec![num("1"), num("2"), num("3")]);
         let v = call_builtin_method(BuiltinMethod::Count, &arr, &[]).unwrap();
         assert_eq!(v, num("3"));
+    }
+
+    /// Двоичные данные из байтов — минуя файл: разбиение и склейка сами по
+    /// себе к файловой системе отношения не имеют, а фикстура
+    /// `binary-data` проверяет их вместе с конструктором.
+    fn bin(bytes: &[u8]) -> BslValue {
+        BslValue::binary_data_of(bytes)
+    }
+
+    /// Размеры частей разбиения — то, что видно из BSL через `Размер()`.
+    fn part_sizes(parts: &BslValue) -> Vec<usize> {
+        let BslValue::Object(o) = parts else {
+            panic!("разбиение обязано отдать массив, отдало {parts:?}");
+        };
+        let BslObject::Array(items) = &**o else {
+            panic!("разбиение обязано отдать массив, отдало {parts:?}");
+        };
+        items
+            .borrow()
+            .iter()
+            .map(
+                |part| match part.binary_data_size().expect("у части есть размер") {
+                    BslValue::Number(n) => n.to_i64_exact().expect("размер целый") as usize,
+                    other => panic!("Размер() вернул не число: {other:?}"),
+                },
+            )
+            .collect()
+    }
+
+    #[test]
+    fn binary_data_split_exact_multiple() {
+        let parts = bin(b"0123456789ab").binary_data_split(&num("4")).unwrap();
+        assert_eq!(part_sizes(&parts), vec![4, 4, 4]);
+    }
+
+    #[test]
+    fn binary_data_split_short_tail() {
+        let parts = bin(b"0123456789").binary_data_split(&num("4")).unwrap();
+        assert_eq!(part_sizes(&parts), vec![4, 4, 2]);
+    }
+
+    #[test]
+    fn binary_data_split_part_larger_than_whole() {
+        let parts = bin(b"012").binary_data_split(&num("100")).unwrap();
+        assert_eq!(part_sizes(&parts), vec![3]);
+        // Размер части шире `usize`, но в пределах `2^64-1`, — не ошибка:
+        // та же одна часть (измерено, см. `binary_split_max_part`).
+        let parts = bin(b"012")
+            .binary_data_split(&num("18446744073709551615"))
+            .unwrap();
+        assert_eq!(part_sizes(&parts), vec![3]);
+        // На единицу больше — уже ошибка, ровно как у платформы.
+        assert!(bin(b"012")
+            .binary_data_split(&num("18446744073709551616"))
+            .is_err());
+    }
+
+    /// Пустые данные дают массив из ОДНОЙ пустой части, а не пустой массив
+    /// (измерено фикстурой `binary-data`).
+    #[test]
+    fn binary_data_split_empty_yields_one_empty_part() {
+        let parts = bin(b"").binary_data_split(&num("5")).unwrap();
+        assert_eq!(part_sizes(&parts), vec![0]);
+    }
+
+    #[test]
+    fn binary_data_split_rejects_non_positive_and_fractional_sizes() {
+        for bad in ["0", "-1", "2.5"] {
+            assert!(
+                bin(b"0123").binary_data_split(&num(bad)).is_err(),
+                "размер части {bad} обязан быть ошибкой"
+            );
+        }
+        // Числовая строка тоже отвергается — платформа её не приводит.
+        assert!(bin(b"0123")
+            .binary_data_split(&BslValue::Str(BslString::from_str("5")))
+            .is_err());
+        // Разбивать не двоичные данные нечего.
+        assert!(BslValue::Str(BslString::from_str("абв"))
+            .binary_data_split(&num("2"))
+            .is_err());
+    }
+
+    #[test]
+    fn binary_data_combine_empty_array() {
+        let joined = BslValue::new_array(vec![]).binary_data_combine().unwrap();
+        assert_eq!(joined, bin(b""));
+        assert!(!joined.is_filled().expect("пустые данные не заполнены"));
+        assert_eq!(joined.to_string(), "");
+    }
+
+    #[test]
+    fn binary_data_combine_concatenates_in_array_order() {
+        let joined = BslValue::new_array(vec![bin(b"ab"), bin(b""), bin(b"cd")])
+            .binary_data_combine()
+            .unwrap();
+        assert_eq!(joined, bin(b"abcd"));
+    }
+
+    #[test]
+    fn binary_data_combine_rejects_a_non_binary_element() {
+        let bad = BslValue::new_array(vec![bin(b"ab"), BslValue::Str(BslString::from_str("вг"))]);
+        assert!(bad.binary_data_combine().is_err());
+        let bad = BslValue::new_array(vec![bin(b"ab"), BslValue::Undefined]);
+        assert!(bad.binary_data_combine().is_err());
+        // Аргумент вообще не массив.
+        assert!(bin(b"ab").binary_data_combine().is_err());
+    }
+
+    /// Строковое представление — байты, а не имя типа: пары в верхнем
+    /// регистре через пробел, не длиннее 256 байт, с многоточием после
+    /// обрезания (измерено, фикстура `binary-data` плюс проба
+    /// `BIN.STR.LONG`).
+    #[test]
+    fn binary_data_display_is_a_hex_dump_capped_at_256_bytes() {
+        assert_eq!(bin(&[0xef, 0xbb, 0xbf, 0x30]).to_string(), "EF BB BF 30");
+        assert_eq!(bin(b"").to_string(), "");
+
+        let at_limit = bin(&[0x41; 256]).to_string();
+        assert_eq!(at_limit.len(), 256 * 3 - 1);
+        assert!(!at_limit.ends_with("..."), "на границе многоточия ещё нет");
+
+        let over_limit = bin(&[0x41; 257]).to_string();
+        assert_eq!(over_limit.len(), 256 * 3 - 1 + 3);
+        assert!(over_limit.ends_with("41..."), "многоточие без пробела");
+    }
+
+    /// Равенство и хэш идут ПО СОДЕРЖИМОМУ (измерено): иначе одинаковые
+    /// данные из двух файлов оказались бы разными ключами `Соответствие`.
+    #[test]
+    fn binary_data_compares_and_hashes_by_content() {
+        assert_eq!(bin("абв".as_bytes()), bin("абв".as_bytes()));
+        assert_ne!(bin("абв".as_bytes()), bin("абг".as_bytes()));
+
+        let mut map = crate::map::MapData::default();
+        map.insert(bin("ключ".as_bytes()), num("1"));
+        assert_eq!(map.get(&bin("ключ".as_bytes())), Some(num("1")));
     }
 }

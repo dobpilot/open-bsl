@@ -1092,6 +1092,13 @@ fn step(
                 reg_store(stack, d, writer)?;
                 frames[frame_idx].pc += 1;
             }
+            Instr::NewBinaryData { dst, path } => {
+                let path = reg_load(stack, frames[frame_idx].reg_index(path))?;
+                let data = BslValue::new_binary_data(&path)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, data)?;
+                frames[frame_idx].pc += 1;
+            }
             Instr::CollectionLen { dst, obj } => {
                 let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
                 let len = ov.collection_len()?;
