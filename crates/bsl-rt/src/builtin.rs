@@ -426,23 +426,26 @@ impl BuiltinFn {
             // Оба списка свойств необязательны; недостающие позиции
             // резолвер добьёт `Неопределено`, что и значит «не задан».
             BuiltinFn::FillPropertyValues => (2, 4),
-            // Полные арности платформы: `ПрочитатьJSON` — 8 (три уже
-            // поддержаны, следующие пять — функция восстановления и её
-            // параметры), `ЗаписатьJSON` — 6 (`Настройки` поддержаны,
-            // следующие три — функция преобразования и её параметры).
-            // Колбэков в языке ещё нет (см. `docs/std-library-plan.md`,
-            // этап 1), но их обработка на чтении и записи РАЗНАЯ, и это
-            // ИЗМЕРЕНО: `ПрочитатьJSON` отвергает непустую пятую позицию
-            // (имя функции восстановления) немедленно на входе, а
-            // `ЗаписатьJSON` непустую четвёртую (имя функции
-            // преобразования) — НЕТ, платформа принимает вызов и
-            // откладывает решение до точки, где сериализовать значение
-            // нечем и функция понадобилась бы по-настоящему (см.
-            // `bsl_rt::json::write_json`/`unsupported_value_error`); пятая
-            // и шестая позиции `ЗаписатьJSON` (доп. параметры, признак
-            // контекстного вызова) без функции преобразования смысла не
-            // имеют и остались немедленной ошибкой — это не измерено
-            // отдельно.
+            // Полные арности платформы поддержаны целиком: `ПрочитатьJSON` —
+            // 8 позиций, `ЗаписатьJSON` — 6. Хвостовые позиции обеих — это
+            // функция восстановления и функция преобразования со своими
+            // параметрами: имя, модуль, дополнительные параметры, а у чтения
+            // ещё и `ИменаСвойствДляФункцииВосстановления`. Разбирают их
+            // `read_json_builtin`/`write_json_builtin`, а зовут по имени через
+            // контекст исполнения, который даёт VM в
+            // `call_builtin_with_format` (интерпретатор и JIT проходят одной
+            // точкой).
+            //
+            // Про сами хвостовые позиции ИЗМЕРЕНО две вещи. Функция
+            // преобразования зовётся ЛЕНИВО: одно её имя ничего не меняет,
+            // пока не встретилось значение, которое сериализовать нечем (см.
+            // `bsl_rt::json::write_json`). И `ПрочитатьJSON` отвергает ЯВНОЕ
+            // `Неопределено` в четвёртой позиции (`ОжидаемыйФорматДаты`) —
+            // «Несоответствие типов (параметр номер '4')», — тогда как
+            // ПРОПУСК той же позиции принимает; здесь резолвер добивает
+            // пропущенные позиции тем же `Неопределено`, поэтому различие не
+            // воспроизводится (см.
+            // `bsl_rt::json::optional_date_format_from_arg`).
             BuiltinFn::ReadJson => (1, 8),
             BuiltinFn::WriteJson => (2, 6),
             BuiltinFn::WriteJsonDate => (2, 3),
@@ -841,24 +844,193 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
 ///
 /// Ошибку самой встроенной функции; [`RtError::InvalidBytecode`], если
 /// аргументов пришло не столько, сколько требует арность.
-/// Хвостовые аргументы `ПрочитатьJSON`/`ЗаписатьJSON`, отведённые платформой
-/// под функцию восстановления/преобразования и её параметры. Прецедент
-/// формулировки — резолвер, `Новый Структура(...)` со списком полей не
-/// строковым литералом («появится позже»): вызов по имени пользовательской
-/// функции требует машинерии `Выполнить`/`Вычислить`, которой в рантайме
-/// пока нет (см. `docs/std-library-plan.md`, этап 1), поэтому непустой
-/// аргумент на этих позициях — понятная ошибка, а не тихий пропуск.
+/// Имя пользовательской функции и её модуль — общая для `ПрочитатьJSON` и
+/// `ЗаписатьJSON` пара позиций.
+///
+/// ИЗМЕРЕНО на 8.3.27 (модуль формы, функции с `Экспорт`), что колбэк
+/// работает ТОЛЬКО когда заданы обе позиции:
+///
+/// * `МодульФункции...` = `Неопределено` (или аргумент опущен) — платформа
+///   функцию не ищет ВООБЩЕ: `ЗаписатьJSON` на несериализуемом значении
+///   падает тем же «Значение содержит данные недопустимых типов», что и без
+///   имени функции, а `ПрочитатьJSON` молча читает документ, ни разу её не
+///   позвав;
+/// * имя — пустая строка: то же самое, функция не зовётся;
+/// * имя не строкой (число) — «Несоответствие типов (параметр номер '4')»,
+///   то есть ошибка типа на входе.
+///
+/// Модуль здесь — ЛЮБОЕ значение, кроме `Неопределено`: своей системы
+/// модулей у интерпретатора нет, функция всегда ищется в модуле
+/// исполняемого скрипта. Платформа в этой позиции разбирается: не-объект
+/// даёт «Несоответствие типов (параметр номер '5')», а объект без такого
+/// метода — «Метод 'X' не найден». Воспроизводить это различие нечем —
+/// модуль у нас ровно один, — поэтому проверяется только `Неопределено`,
+/// от которого зависит, звать ли функцию вообще.
 ///
 /// # Errors
 ///
-/// [`RtError::Json`], если хоть один из `args` — не `Неопределено`.
-fn reject_unsupported_json_callback_args(args: &[BslValue], op: &'static str) -> RtResult<()> {
-    if args.iter().any(|a| !matches!(a, BslValue::Undefined)) {
-        return Err(RtError::Json(format!(
-            "{op}: функции преобразования/восстановления JSON появятся позже"
-        )));
+/// [`RtError::TypeError`], если имя задано и не строка.
+fn callback_name(
+    name_arg: Option<&BslValue>,
+    module_arg: Option<&BslValue>,
+    op: &'static str,
+) -> RtResult<Option<String>> {
+    let name = match name_arg {
+        None | Some(BslValue::Undefined) => return Ok(None),
+        Some(BslValue::Str(s)) => s.to_string(),
+        Some(_) => {
+            return Err(RtError::TypeError {
+                expected: "Строка",
+                op,
+            })
+        }
+    };
+    if name.is_empty() || matches!(module_arg, None | Some(BslValue::Undefined)) {
+        return Ok(None);
     }
-    Ok(())
+    Ok(Some(name))
+}
+
+/// Массив строк из аргумента-списка имён. Отсутствующий аргумент —
+/// пустой список.
+///
+/// # Errors
+///
+/// [`RtError::TypeError`], если аргумент задан и не коллекция: ИЗМЕРЕНО,
+/// что платформа отвечает на строку в позиции
+/// `ИменаСвойствДляФункцииВосстановления` «Несоответствие типов (параметр
+/// номер '8')».
+fn name_list_arg(
+    arg: Option<&BslValue>,
+    rt: &RuntimeShapes,
+    op: &'static str,
+) -> RtResult<Vec<String>> {
+    let Some(list) = arg else {
+        return Ok(Vec::new());
+    };
+    if matches!(list, BslValue::Undefined) {
+        return Ok(Vec::new());
+    }
+    let len = list.collection_len().map_err(|_| RtError::TypeError {
+        expected: "Массив",
+        op,
+    })?;
+    let mut names = Vec::with_capacity(len);
+    for i in 0..len {
+        let item = list.get_index(
+            &BslValue::Number(bsl_number::BslNumber::from_i64(i as i64)),
+            &rt.names,
+        )?;
+        if let BslValue::Str(s) = item {
+            names.push(s.to_string());
+        }
+    }
+    Ok(names)
+}
+
+/// `ПрочитатьJSON` целиком: разбор аргументов плюс, если функция
+/// восстановления задана и вызывать её есть чем, её подключение.
+///
+/// `call` — канал вызова функции модуля по имени (его даёт VM, см.
+/// [`crate::json::JsonCallByName`]). `None` — контекста исполнения нет
+/// (прямой вызов из встраивающего приложения), и тогда имя функции
+/// восстановления остаётся понятной ошибкой, а не тихо игнорируется.
+///
+/// # Errors
+///
+/// См. `crate::json::read_json`; [`RtError::Json`], если функция
+/// восстановления задана, а исполняющей VM нет.
+pub fn read_json_builtin(
+    args: &[BslValue],
+    rt: &mut RuntimeShapes,
+    call: Option<crate::json::JsonCallByName<'_>>,
+) -> RtResult<BslValue> {
+    let as_map = match args.get(1) {
+        None | Some(BslValue::Undefined) => false,
+        Some(BslValue::Boolean(b)) => *b,
+        Some(_) => {
+            return Err(RtError::TypeError {
+                expected: "Булево",
+                op: "ПрочитатьJSON(ВозвращатьСоответствие)",
+            })
+        }
+    };
+    // Имена свойств с датами приходят массивом строк.
+    let date_names = name_list_arg(
+        args.get(2),
+        rt,
+        "ПрочитатьJSON(ИменаСвойствСоЗначениямиДата)",
+    )?;
+    // Четвёртая позиция платформы — `ОжидаемыйФорматДаты`
+    // (`ФорматДатыJSON`), а НЕ колбэк: см. `optional_date_format_from_arg`.
+    let date_format = crate::json::optional_date_format_from_arg(
+        args.get(3),
+        "ПрочитатьJSON(ОжидаемыйФорматДаты)",
+    )?;
+    // Позиции 5..8 — имя функции восстановления, её модуль, дополнительные
+    // параметры и `ИменаСвойствДляФункцииВосстановления`.
+    let name = callback_name(
+        args.get(4),
+        args.get(5),
+        "ПрочитатьJSON(ИмяФункцииВосстановления)",
+    )?;
+    let restore = match (name, call) {
+        (None, _) => None,
+        (Some(name), Some(call)) => Some(crate::json::JsonRestoreFn {
+            name,
+            extra: args.get(6).cloned().unwrap_or(BslValue::Undefined),
+            property_names: name_list_arg(
+                args.get(7),
+                rt,
+                "ПрочитатьJSON(ИменаСвойствДляФункцииВосстановления)",
+            )?,
+            call,
+        }),
+        (Some(_), None) => {
+            return Err(RtError::Json(
+                "ПрочитатьJSON: функция восстановления требует исполняющей VM \
+                 (вызывайте через bsl-vm, а не call_builtin_fn_ctx)"
+                    .to_string(),
+            ))
+        }
+    };
+    crate::json::read_json(&args[0], as_map, &date_names, date_format, restore, rt)
+}
+
+/// `ЗаписатьJSON` целиком — то же самое для функции преобразования.
+///
+/// # Errors
+///
+/// См. `crate::json::write_json`; [`RtError::Json`], если функция
+/// преобразования задана, а исполняющей VM нет.
+pub fn write_json_builtin(
+    args: &[BslValue],
+    rt: &mut RuntimeShapes,
+    call: Option<crate::json::JsonCallByName<'_>>,
+) -> RtResult<BslValue> {
+    let settings = crate::json::serializer_settings_from(args.get(2))?;
+    let name = callback_name(
+        args.get(3),
+        args.get(4),
+        "ЗаписатьJSON(ИмяФункцииПреобразования)",
+    )?;
+    let convert = match (name, call) {
+        (None, _) => None,
+        (Some(name), Some(call)) => Some(crate::json::JsonConvertFn {
+            name,
+            extra: args.get(5).cloned().unwrap_or(BslValue::Undefined),
+            call,
+        }),
+        (Some(_), None) => {
+            return Err(RtError::Json(
+                "ЗаписатьJSON: функция преобразования требует исполняющей VM \
+                 (вызывайте через bsl-vm, а не call_builtin_fn_ctx)"
+                    .to_string(),
+            ))
+        }
+    };
+    crate::json::write_json(&args[0], &args[1], &settings, convert, rt)?;
+    Ok(BslValue::Undefined)
 }
 
 pub fn call_builtin_fn_ctx(
@@ -879,66 +1051,12 @@ pub fn call_builtin_fn_ctx(
         return Ok(BslValue::Undefined);
     }
     if f == BuiltinFn::ReadJson {
-        let as_map = match args.get(1) {
-            None | Some(BslValue::Undefined) => false,
-            Some(BslValue::Boolean(b)) => *b,
-            Some(_) => {
-                return Err(RtError::TypeError {
-                    expected: "Булево",
-                    op: "ПрочитатьJSON(ВозвращатьСоответствие)",
-                })
-            }
-        };
-        // Имена свойств с датами приходят массивом строк.
-        let mut date_names: Vec<String> = Vec::new();
-        match args.get(2) {
-            None | Some(BslValue::Undefined) => {}
-            Some(list) => {
-                let len = list.collection_len().map_err(|_| RtError::TypeError {
-                    expected: "Массив",
-                    op: "ПрочитатьJSON(ИменаСвойствСоЗначениямиДата)",
-                })?;
-                for i in 0..len {
-                    let item = list.get_index(
-                        &BslValue::Number(bsl_number::BslNumber::from_i64(i as i64)),
-                        &rt.names,
-                    )?;
-                    if let BslValue::Str(s) = item {
-                        date_names.push(s.to_string());
-                    }
-                }
-            }
-        }
-        // Четвёртая позиция платформы — `ОжидаемыйФорматДаты`
-        // (`ФорматДатыJSON`), а НЕ колбэк: см. `optional_date_format_from_arg`.
-        let date_format = crate::json::optional_date_format_from_arg(
-            args.get(3),
-            "ПрочитатьJSON(ОжидаемыйФорматДаты)",
-        )?;
-        // Позиции 5..8 платформы — имя функции восстановления и её
-        // параметры (см. `arity_range`): колбэков в языке пока нет,
-        // непустой аргумент здесь — понятная ошибка, а не молчаливый
-        // пропуск.
-        reject_unsupported_json_callback_args(&args[4..8], "ПрочитатьJSON")?;
-        return crate::json::read_json(&args[0], as_map, &date_names, date_format, rt);
+        // Разбор аргументов — общий с путём из VM, см. `read_json_builtin`.
+        // Здесь исполняющей VM нет, поэтому колбэка нет тоже.
+        return read_json_builtin(args, rt, None);
     }
     if f == BuiltinFn::WriteJson {
-        let settings = crate::json::serializer_settings_from(args.get(2))?;
-        // Пятая-шестая позиции (доп. параметры вызова функции и признак
-        // контекстного вызова) без функции преобразования смысла не имеют
-        // и остаются немедленной ошибкой на входе, как раньше, — это НЕ
-        // измерено отдельно от четвёртой позиции.
-        reject_unsupported_json_callback_args(&args[4..6], "ЗаписатьJSON")?;
-        // Четвёртая позиция — имя функции преобразования. ИЗМЕРЕНО: непустое
-        // имя само по себе больше не ошибка на входе — платформа принимает
-        // вызов и сериализует то, что умеет сама
-        // (`ЗаписатьJSON(Запись, 1, Неопределено, "ИмяФункции")` пишет `1`,
-        // функция не понадобилась). Ошибка откладывается до точки в
-        // `serialize`, где встретится несериализуемый тип и колбэк
-        // действительно понадобился бы (см. `write_json`).
-        let has_convert_fn = !matches!(args[3], BslValue::Undefined);
-        crate::json::write_json(&args[0], &args[1], &settings, has_convert_fn, rt)?;
-        return Ok(BslValue::Undefined);
+        return write_json_builtin(args, rt, None);
     }
     if f == BuiltinFn::WriteJsonValue {
         return crate::json::write_json_value(&args[0], rt);
@@ -1489,57 +1607,615 @@ mod name_table_tests {
     }
 }
 
-/// Читающая и пишущая стороны колбэков JSON ведут себя РАЗНО — ИЗМЕРЕНО:
-/// `ЗаписатьJSON` откладывает ошибку до точки, где функция преобразования
-/// действительно понадобилась бы (см. `json.rs`), а `ПрочитатьJSON`
-/// по-прежнему отвергает непустое имя функции восстановления сразу на
-/// входе — это не измерено отдельно, оставлено консервативно.
+/// Колбэки `ПрочитатьJSON`/`ЗаписатьJSON`: разбор аргументов и вся
+/// семантика вызова — на mock-замыкании, без исполняющей VM. Каждый тест
+/// назван по пробе, которой поведение снято с 8.3.27 (см. PROGRESS.md).
 #[cfg(test)]
 mod json_callback_tests {
     use super::*;
 
-    #[test]
-    fn read_json_rejects_a_restore_function_name_immediately() {
-        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
-        let reader = BslValue::new_json_reader();
-        crate::json::set_string(&reader, &[BslValue::Str(BslString::from_str("1"))]).unwrap();
+    fn s(text: &str) -> BslValue {
+        BslValue::Str(BslString::from_str(text))
+    }
 
-        // args: Чтение, ВозвращатьСоответствие, ИменаСвойствСоЗначениямиДата,
-        // ОжидаемыйФорматДаты, ИмяФункцииВосстановления, ...
-        let args = [
+    fn n(v: i64) -> BslValue {
+        BslValue::Number(bsl_number::BslNumber::from_i64(v))
+    }
+
+    fn reader_of(text: &str) -> BslValue {
+        let reader = BslValue::new_json_reader();
+        crate::json::set_string(&reader, &[s(text)]).unwrap();
+        reader
+    }
+
+    fn writer() -> BslValue {
+        let writer = BslValue::new_json_writer();
+        crate::json::set_string(&writer, &[]).unwrap();
+        writer
+    }
+
+    fn written(w: &BslValue) -> String {
+        match crate::json::close_writer(w).unwrap() {
+            BslValue::Str(text) => text.to_string(),
+            other => panic!("Закрыть() вернул не строку: {other:?}"),
+        }
+    }
+
+    /// Журнал вызовов mock-функции: имя и аргументы каждого вызова.
+    #[derive(Default)]
+    struct CallLog(Vec<(String, Vec<BslValue>)>);
+
+    impl CallLog {
+        /// Имена первого параметра (`Свойство`) в порядке вызовов:
+        /// `None` — пришло `Неопределено`.
+        fn properties(&self) -> Vec<Option<String>> {
+            self.0
+                .iter()
+                .map(|(_, args)| match &args[0] {
+                    BslValue::Str(p) => Some(p.to_string()),
+                    _ => None,
+                })
+                .collect()
+        }
+    }
+
+    /// Аргументы `ПрочитатьJSON` до колбэка включительно.
+    fn read_args(reader: BslValue, name: &str, module: BslValue) -> [BslValue; 8] {
+        [
             reader,
-            BslValue::Boolean(false),
-            BslValue::Undefined,
-            BslValue::Undefined,
-            BslValue::Str(BslString::from_str("ИмяФункции")),
             BslValue::Undefined,
             BslValue::Undefined,
             BslValue::Undefined,
-        ];
-        let e = call_builtin_fn_ctx(BuiltinFn::ReadJson, &args, &mut rt).unwrap_err();
+            s(name),
+            module,
+            s("ДОП"),
+            BslValue::Undefined,
+        ]
+    }
+
+    /// Аргументы `ЗаписатьJSON` до колбэка включительно.
+    fn write_args(w: BslValue, value: BslValue, name: &str, module: BslValue) -> [BslValue; 6] {
+        [w, value, BslValue::Undefined, s(name), module, s("ДОП")]
+    }
+
+    /// Несериализуемое значение — то же, на котором снята вся серия проб.
+    fn unserializable() -> BslValue {
+        BslValue::new_table()
+    }
+
+    /// Поле собранной структуры по имени — через таблицу имён, в которую
+    /// разбор его и интернировал.
+    fn field(v: &BslValue, rt: &RuntimeShapes, name: &str) -> BslValue {
+        let id = rt.names.lookup(name).expect("имя интернировано разбором");
+        v.get_field(id).expect("поле должно быть на месте")
+    }
+
+    /// ИЗМЕРЕНО (проба F1/F3): без `МодульФункции...` платформа функцию не
+    /// ищет ВООБЩЕ — чтение молча проходит мимо неё, а запись падает тем же
+    /// «недопустимые типы», что и без имени. Раньше здесь была ошибка
+    /// «появятся позже».
+    #[test]
+    fn json_callback_is_not_used_without_a_module() {
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut called = false;
+        {
+            let mut call = |_: &str, _: Vec<BslValue>| {
+                called = true;
+                Ok((BslValue::Undefined, Vec::new()))
+            };
+            let args = read_args(reader_of("1"), "ИмяФункции", BslValue::Undefined);
+            let v = read_json_builtin(&args, &mut rt, Some(&mut call)).unwrap();
+            assert_eq!(v, n(1));
+        }
+        assert!(!called, "функция восстановления звалась без модуля");
+
+        let mut called = false;
+        {
+            let mut call = |_: &str, _: Vec<BslValue>| {
+                called = true;
+                Ok((BslValue::Undefined, Vec::new()))
+            };
+            let args = write_args(
+                writer(),
+                unserializable(),
+                "ИмяФункции",
+                BslValue::Undefined,
+            );
+            let e = write_json_builtin(&args, &mut rt, Some(&mut call)).unwrap_err();
+            assert!(matches!(e, RtError::TypeError { .. }), "{e:?}");
+        }
+        assert!(!called, "функция преобразования звалась без модуля");
+    }
+
+    /// ИЗМЕРЕНО (проба I6/K6): пустое имя равносильно отсутствию функции.
+    #[test]
+    fn json_callback_is_not_used_with_an_empty_name() {
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut called = false;
+        let mut call = |_: &str, _: Vec<BslValue>| {
+            called = true;
+            Ok((BslValue::Undefined, Vec::new()))
+        };
+        let args = read_args(reader_of("1"), "", BslValue::Boolean(true));
+        read_json_builtin(&args, &mut rt, Some(&mut call)).unwrap();
+        assert!(!called);
+    }
+
+    /// ИЗМЕРЕНО (проба T1): имя не строкой — ошибка типа на входе.
+    #[test]
+    fn json_callback_name_must_be_a_string() {
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut call = |_: &str, _: Vec<BslValue>| Ok((BslValue::Undefined, Vec::new()));
+        let mut args = write_args(writer(), n(1), "х", BslValue::Boolean(true));
+        args[3] = n(42);
+        let e = write_json_builtin(&args, &mut rt, Some(&mut call)).unwrap_err();
+        assert!(matches!(e, RtError::TypeError { .. }), "{e:?}");
+    }
+
+    /// Без исполняющей VM (прямой вызов из встраивающего приложения)
+    /// заданный колбэк — понятная ошибка, а не тихий пропуск.
+    #[test]
+    fn json_callback_without_a_vm_is_a_clear_error() {
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let args = read_args(reader_of("1"), "ИмяФункции", BslValue::Boolean(true));
+        let e = read_json_builtin(&args, &mut rt, None).unwrap_err();
+        assert!(matches!(e, RtError::Json(_)), "{e:?}");
+
+        let args = write_args(writer(), n(1), "ИмяФункции", BslValue::Boolean(true));
+        let e = write_json_builtin(&args, &mut rt, None).unwrap_err();
         assert!(matches!(e, RtError::Json(_)), "{e:?}");
     }
 
+    /// ИЗМЕРЕНО (пробы H4/H5): функция преобразования ЛЕНИВА — на значении,
+    /// которое платформа сериализует сама (число, дата), её не зовут ни разу.
     #[test]
-    fn write_json_accepts_a_convert_function_name_when_the_value_serializes_fine() {
+    fn json_convert_function_is_lazy() {
         let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
-        let writer = BslValue::new_json_writer();
-        crate::json::set_string(&writer, &[]).unwrap();
+        let mut log = CallLog::default();
+        let w = writer();
+        {
+            let mut call = |name: &str, args: Vec<BslValue>| {
+                log.0.push((name.to_string(), args));
+                Ok((s("<преобразовано>"), vec![BslValue::Boolean(false); 4]))
+            };
+            let args = write_args(w.clone(), n(1), "Преобразовать", BslValue::Boolean(true));
+            write_json_builtin(&args, &mut rt, Some(&mut call)).unwrap();
+        }
+        assert_eq!(written(&w), "1");
+        assert!(log.0.is_empty(), "функция звалась зря: {:?}", log.0);
+    }
 
-        // args: Запись, Значение, Настройки, ИмяФункции, ...
-        let args = [
-            writer.clone(),
-            BslValue::Number(bsl_number::BslNumber::from_i64(1)),
+    /// ИЗМЕРЕНО (пробы H1/H2/H3/H7): `Свойство` — имя свойства для члена
+    /// структуры и соответствия, `Неопределено` для элемента массива и для
+    /// верхнего уровня; остальные три параметра — значение, дополнительные
+    /// параметры и `Отказ = Ложь`.
+    #[test]
+    fn json_convert_function_gets_the_measured_arguments() {
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut log = CallLog::default();
+        let w = writer();
+        {
+            let mut call = |name: &str, args: Vec<BslValue>| {
+                log.0.push((name.to_string(), args));
+                Ok((s("<з>"), vec![BslValue::Boolean(false); 4]))
+            };
+            let value = BslValue::new_array(vec![unserializable()]);
+            let args = write_args(w.clone(), value, "Преобразовать", BslValue::Boolean(true));
+            write_json_builtin(&args, &mut rt, Some(&mut call)).unwrap();
+        }
+        assert_eq!(written(&w), "[\n\"<з>\"\n]");
+        assert_eq!(log.0.len(), 1);
+        let (name, args) = &log.0[0];
+        assert_eq!(name, "Преобразовать");
+        assert_eq!(args.len(), 4, "ровно четыре параметра");
+        assert_eq!(args[0], BslValue::Undefined, "элемент массива — без имени");
+        assert_eq!(args[2], s("ДОП"));
+        assert_eq!(args[3], BslValue::Boolean(false), "Отказ приходит Ложь");
+    }
+
+    /// ИЗМЕРЕНО (проба I1/M2/M3): `Отказ` убирает значение из документа
+    /// целиком — свойство исчезает, элемент массива исчезает, а на верхнем
+    /// уровне не пишется вообще ничего.
+    #[test]
+    fn json_convert_refusal_drops_the_value() {
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let refuse = |_: &str, _: Vec<BslValue>| {
+            Ok((
+                s("<в документ попасть не должно>"),
+                vec![
+                    BslValue::Undefined,
+                    BslValue::Undefined,
+                    BslValue::Undefined,
+                    BslValue::Boolean(true),
+                ],
+            ))
+        };
+
+        let w = writer();
+        {
+            let mut call = refuse;
+            let value = BslValue::new_array(vec![n(1), unserializable(), n(3)]);
+            let args = write_args(w.clone(), value, "Отказная", BslValue::Boolean(true));
+            write_json_builtin(&args, &mut rt, Some(&mut call)).unwrap();
+        }
+        assert_eq!(written(&w), "[\n1,\n3\n]");
+
+        let w = writer();
+        {
+            let mut call = refuse;
+            let args = write_args(
+                w.clone(),
+                unserializable(),
+                "Отказная",
+                BslValue::Boolean(true),
+            );
+            write_json_builtin(&args, &mut rt, Some(&mut call)).unwrap();
+        }
+        assert_eq!(written(&w), "", "на верхнем уровне не пишется ничего");
+    }
+
+    /// ИЗМЕРЕНО (пробы U/S/V, четырнадцать значений): `Отказ` читается по
+    /// обычным правилам условия языка, а неприводимое значение отказом не
+    /// считается.
+    #[test]
+    fn json_convert_refusal_follows_the_condition_rules() {
+        let refuses = [BslValue::Boolean(true), n(1), n(-1), s("да")];
+        let keeps = [
+            BslValue::Boolean(false),
+            n(0),
+            s(""),
+            s("   "),
+            s("абв"),
             BslValue::Undefined,
-            BslValue::Str(BslString::from_str("ИмяФункции")),
-            BslValue::Undefined,
-            BslValue::Undefined,
+            BslValue::Null,
+            BslValue::new_array(Vec::new()),
         ];
-        // ИЗМЕРЕНО: принято, а не отклонено на входе (в отличие от чтения).
-        call_builtin_fn_ctx(BuiltinFn::WriteJson, &args, &mut rt).unwrap();
+        for value in refuses {
+            let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+            let w = writer();
+            {
+                let mut call = |_: &str, _: Vec<BslValue>| {
+                    Ok((
+                        s("<з>"),
+                        vec![
+                            BslValue::Undefined,
+                            BslValue::Undefined,
+                            BslValue::Undefined,
+                            value.clone(),
+                        ],
+                    ))
+                };
+                let args = write_args(
+                    w.clone(),
+                    unserializable(),
+                    "Отказная",
+                    BslValue::Boolean(true),
+                );
+                write_json_builtin(&args, &mut rt, Some(&mut call)).unwrap();
+            }
+            assert_eq!(written(&w), "", "отказом обязано быть: {value:?}");
+        }
+        for value in keeps {
+            let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+            let w = writer();
+            {
+                let mut call = |_: &str, _: Vec<BslValue>| {
+                    Ok((
+                        s("<з>"),
+                        vec![
+                            BslValue::Undefined,
+                            BslValue::Undefined,
+                            BslValue::Undefined,
+                            value.clone(),
+                        ],
+                    ))
+                };
+                let args = write_args(
+                    w.clone(),
+                    unserializable(),
+                    "Отказная",
+                    BslValue::Boolean(true),
+                );
+                write_json_builtin(&args, &mut rt, Some(&mut call)).unwrap();
+            }
+            assert_eq!(written(&w), "\"<з>\"", "отказом быть НЕ должно: {value:?}");
+        }
+    }
+
+    /// ИЗМЕРЕНО (проба I2): вернувшееся снова несериализуемое значение
+    /// повторного вызова НЕ вызывает — обычная ошибка типа после одного
+    /// вызова.
+    #[test]
+    fn json_convert_result_is_not_converted_again() {
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut calls = 0;
+        let w = writer();
+        let e = {
+            let mut call = |_: &str, _: Vec<BslValue>| {
+                calls += 1;
+                Ok((unserializable(), vec![BslValue::Boolean(false); 4]))
+            };
+            let args = write_args(
+                w.clone(),
+                unserializable(),
+                "Преобразовать",
+                BslValue::Boolean(true),
+            );
+            write_json_builtin(&args, &mut rt, Some(&mut call)).unwrap_err()
+        };
+        assert!(matches!(e, RtError::TypeError { .. }), "{e:?}");
+        assert_eq!(calls, 1, "вызов обязан быть ровно один");
+    }
+
+    /// ИЗМЕРЕНО (проба I3): а вот КОНТЕЙНЕР, вернувшийся из функции,
+    /// обходится как обычно — на несериализуемом внутри него функция
+    /// зовётся снова.
+    #[test]
+    fn json_convert_result_container_is_walked_normally() {
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut calls = 0;
+        let w = writer();
+        {
+            let mut call = |_: &str, _: Vec<BslValue>| {
+                calls += 1;
+                let returned = if calls > 2 {
+                    s("<хватит>")
+                } else {
+                    BslValue::new_array(vec![unserializable()])
+                };
+                Ok((returned, vec![BslValue::Boolean(false); 4]))
+            };
+            let args = write_args(
+                w.clone(),
+                unserializable(),
+                "Преобразовать",
+                BslValue::Boolean(true),
+            );
+            write_json_builtin(&args, &mut rt, Some(&mut call)).unwrap();
+        }
+        assert_eq!(calls, 3);
+        assert_eq!(written(&w), "[\n[\n\"<хватит>\"\n]\n]");
+    }
+
+    /// Ошибка изнутри функции преобразования не глотается — ИЗМЕРЕНО
+    /// (проба L1), платформа выпускает её наружу из `ЗаписатьJSON`.
+    #[test]
+    fn json_convert_error_is_not_swallowed() {
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let w = writer();
+        let e = {
+            let mut call =
+                |_: &str, _: Vec<BslValue>| Err(RtError::Raised(s("изнутри преобразования")));
+            let args = write_args(
+                w.clone(),
+                unserializable(),
+                "Преобразовать",
+                BslValue::Boolean(true),
+            );
+            write_json_builtin(&args, &mut rt, Some(&mut call)).unwrap_err()
+        };
+        assert!(matches!(e, RtError::Raised(_)), "{e:?}");
+    }
+
+    /// ИЗМЕРЕНО (проба J1): функция восстановления зовётся для КАЖДОГО
+    /// значения документа в ОБРАТНОМ порядке (дети раньше родителя), с
+    /// именем свойства или `Неопределено` для элемента массива и корня.
+    /// Порядок снят на этом же документе.
+    #[test]
+    fn json_restore_function_visits_every_value_bottom_up() {
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut log = CallLog::default();
+        let doc = r#"{"чис":1,"стр":"т","лог":true,"нул":null,"#.to_string()
+            + r#""об":{"вчис":2,"вмас":[7,8]},"#
+            + r#""мас":[3,"ф",false,null,{"мчис":4},[5,6]]}"#;
+        {
+            let mut call = |name: &str, args: Vec<BslValue>| {
+                log.0.push((name.to_string(), args.clone()));
+                Ok((args[1].clone(), Vec::new()))
+            };
+            let args = read_args(reader_of(&doc), "Восстановить", BslValue::Boolean(true));
+            read_json_builtin(&args, &mut rt, Some(&mut call)).unwrap();
+        }
+        let expected: Vec<Option<String>> = [
+            Some("чис"),
+            Some("стр"),
+            Some("лог"),
+            Some("нул"),
+            Some("вчис"),
+            None,
+            None,
+            Some("вмас"),
+            Some("об"),
+            None,
+            None,
+            None,
+            None,
+            Some("мчис"),
+            None,
+            None,
+            None,
+            None,
+            Some("мас"),
+            None,
+        ]
+        .iter()
+        .map(|p| p.map(str::to_string))
+        .collect();
+        assert_eq!(log.properties(), expected);
+        assert!(
+            log.0.iter().all(|(_, a)| a.len() == 3 && a[2] == s("ДОП")),
+            "ровно три параметра, третий — дополнительные"
+        );
+    }
+
+    /// ИЗМЕРЕНО (пробы J3/O3): скаляр на верхнем уровне тоже получает
+    /// вызов, с `Свойство = Неопределено`, и результат заменяет значение.
+    #[test]
+    fn json_restore_function_replaces_a_top_level_scalar() {
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut log = CallLog::default();
+        let v = {
+            let mut call = |name: &str, args: Vec<BslValue>| {
+                log.0.push((name.to_string(), args));
+                Ok((s("<заменено>"), Vec::new()))
+            };
+            let args = read_args(reader_of("42"), "Восстановить", BslValue::Boolean(true));
+            read_json_builtin(&args, &mut rt, Some(&mut call)).unwrap()
+        };
+        assert_eq!(v, s("<заменено>"));
+        assert_eq!(log.properties(), vec![None]);
+    }
+
+    /// ИЗМЕРЕНО (пробы K1/K2/Q1): непустой список имён сужает вызовы до
+    /// перечисленных свойств НА ЛЮБОЙ ГЛУБИНЕ и отменяет вызов на корне;
+    /// пустой список — то же, что его отсутствие; сравнение
+    /// РЕГИСТРОЗАВИСИМОЕ.
+    #[test]
+    fn json_restore_property_filter_is_case_sensitive_and_skips_the_root() {
+        let doc = r#"{"а":1,"б":2,"в":{"б":3,"г":4}}"#;
+        for (filter, expected) in [
+            (
+                vec![s("б")],
+                vec![Some("б".to_string()), Some("б".to_string())],
+            ),
+            (vec![s("Б")], Vec::new()),
+            (
+                Vec::new(),
+                vec![
+                    Some("а".to_string()),
+                    Some("б".to_string()),
+                    Some("б".to_string()),
+                    Some("г".to_string()),
+                    Some("в".to_string()),
+                    None,
+                ],
+            ),
+        ] {
+            let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+            let mut log = CallLog::default();
+            {
+                let mut call = |name: &str, args: Vec<BslValue>| {
+                    log.0.push((name.to_string(), args.clone()));
+                    Ok((args[1].clone(), Vec::new()))
+                };
+                let mut args = read_args(reader_of(doc), "Восстановить", BslValue::Boolean(true));
+                args[7] = BslValue::new_array(filter.clone());
+                read_json_builtin(&args, &mut rt, Some(&mut call)).unwrap();
+            }
+            assert_eq!(log.properties(), expected, "фильтр {filter:?}");
+        }
+    }
+
+    /// ИЗМЕРЕНО (пробы P1/P2/P3): функция восстановления имеет приоритет
+    /// над `ИменаСвойствСоЗначениямиДата` — свойство, которое ей достаётся,
+    /// приходит СЫРОЙ строкой и датой не становится; свойство, до неё не
+    /// дошедшее, разбирается в дату как раньше.
+    #[test]
+    fn json_restore_function_wins_over_the_date_property_list() {
+        let doc = r#"{"создано":"2014-05-10T13:14:15","прочее":1}"#;
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+
+        // Без функции восстановления — дата.
+        let mut args = read_args(reader_of(doc), "", BslValue::Undefined);
+        args[2] = BslValue::new_array(vec![s("создано")]);
+        let v = read_json_builtin(&args, &mut rt, None).unwrap();
+        assert!(
+            matches!(field(&v, &rt, "создано"), BslValue::Date(_)),
+            "без функции обязана быть Дата"
+        );
+
+        // Функция сужена до «прочее» — «создано» по-прежнему дата.
+        let mut log = CallLog::default();
+        let v = {
+            let mut call = |name: &str, args: Vec<BslValue>| {
+                log.0.push((name.to_string(), args.clone()));
+                Ok((args[1].clone(), Vec::new()))
+            };
+            let mut args = read_args(reader_of(doc), "Восстановить", BslValue::Boolean(true));
+            args[2] = BslValue::new_array(vec![s("создано")]);
+            args[7] = BslValue::new_array(vec![s("прочее")]);
+            read_json_builtin(&args, &mut rt, Some(&mut call)).unwrap()
+        };
+        assert!(matches!(field(&v, &rt, "создано"), BslValue::Date(_)));
+        assert_eq!(log.properties(), vec![Some("прочее".to_string())]);
+
+        // Функция достаётся «создано» — приходит и остаётся строкой.
+        let mut log = CallLog::default();
+        let v = {
+            let mut call = |name: &str, args: Vec<BslValue>| {
+                log.0.push((name.to_string(), args.clone()));
+                Ok((args[1].clone(), Vec::new()))
+            };
+            let mut args = read_args(reader_of(doc), "Восстановить", BslValue::Boolean(true));
+            args[2] = BslValue::new_array(vec![s("создано")]);
+            args[7] = BslValue::new_array(vec![s("создано")]);
+            read_json_builtin(&args, &mut rt, Some(&mut call)).unwrap()
+        };
+        assert_eq!(field(&v, &rt, "создано"), s("2014-05-10T13:14:15"));
         assert_eq!(
-            crate::json::close_writer(&writer).unwrap(),
-            BslValue::Str(BslString::from_str("1"))
+            log.0[0].1[1],
+            s("2014-05-10T13:14:15"),
+            "в функцию — сырая строка"
+        );
+    }
+
+    /// Ошибка изнутри функции восстановления не глотается (проба L2).
+    #[test]
+    fn json_restore_error_is_not_swallowed() {
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let e = {
+            let mut call =
+                |_: &str, _: Vec<BslValue>| Err(RtError::Raised(s("изнутри восстановления")));
+            let args = read_args(
+                reader_of("{\"а\":1}"),
+                "Восстановить",
+                BslValue::Boolean(true),
+            );
+            read_json_builtin(&args, &mut rt, Some(&mut call)).unwrap_err()
+        };
+        assert!(matches!(e, RtError::Raised(_)), "{e:?}");
+    }
+
+    /// ИЗМЕРЕНО (проба T2): список имён не массивом — ошибка типа.
+    #[test]
+    fn json_restore_property_filter_must_be_an_array() {
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut call = |_: &str, _: Vec<BslValue>| Ok((BslValue::Undefined, Vec::new()));
+        let mut args = read_args(
+            reader_of("{\"а\":1}"),
+            "Восстановить",
+            BslValue::Boolean(true),
+        );
+        args[7] = s("нестрока");
+        let e = read_json_builtin(&args, &mut rt, Some(&mut call)).unwrap_err();
+        assert!(matches!(e, RtError::TypeError { .. }), "{e:?}");
+    }
+
+    /// Повторный вход в тот же `ЧтениеJSON`/`ЗаписьJSON` изнутри колбэка —
+    /// перехватываемая ошибка, а НЕ паника `RefCell`. Платформа тоже
+    /// отвечает ошибкой («Недопустимое состояние потока чтения JSON»,
+    /// «Неверный порядок записи JSON»); текст у нас свой.
+    #[test]
+    fn reentering_the_same_json_object_from_a_callback_is_an_error_not_a_panic() {
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let reader = reader_of(r#"{"а":1}"#);
+        let inner = reader.clone();
+        let mut nested: Option<RtError> = None;
+        {
+            let mut call = |_: &str, args: Vec<BslValue>| {
+                let mut inner_rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+                let probe = [inner.clone()];
+                if let Err(e) = read_json_builtin(&probe, &mut inner_rt, None) {
+                    nested = Some(e);
+                }
+                Ok((args[1].clone(), Vec::new()))
+            };
+            let args = read_args(reader.clone(), "Восстановить", BslValue::Boolean(true));
+            read_json_builtin(&args, &mut rt, Some(&mut call)).unwrap();
+        }
+        assert!(
+            matches!(nested, Some(RtError::TypeError { .. })),
+            "{nested:?}"
         );
     }
 }

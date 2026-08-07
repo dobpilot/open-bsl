@@ -1761,63 +1761,204 @@ pub fn read_json_date(text: &BslValue, format: &BslValue) -> RtResult<BslValue> 
     Ok(BslValue::Date(date))
 }
 
+/// Вызов функции модуля ПО ИМЕНИ — канал из исполняющей VM в рантайм.
+///
+/// `bsl-rt` не видит `bsl-vm` (зависимость идёт в обратную сторону), поэтому
+/// колбэки `ПрочитатьJSON`/`ЗаписатьJSON` приходят сюда сверху замыканием
+/// над `bsl_vm::call_module_function`. Аргументы уходят по значению, а
+/// возвращается ПАРА: значение `Возврат` и финальные значения слотов
+/// параметров — второй элемент нужен ровно затем, чтобы прочитать `Отказ`
+/// функции преобразования (запись в параметр без `Знач` наблюдаема только
+/// так, см. `call_module_function`).
+pub type JsonCallByName<'a> =
+    &'a mut dyn FnMut(&str, Vec<BslValue>) -> RtResult<(BslValue, Vec<BslValue>)>;
+
+/// Функция преобразования `ЗаписатьJSON` (статья 16.2).
+///
+/// Сигнатура на платформе — РОВНО четыре параметра
+/// `(Свойство, Значение, ДополнительныеПараметры, Отказ)`; другое их число —
+/// ошибка вызова («В методе X количество параметров 2. Ожидаемое
+/// количество - 4»), и у нас её даёт `call_module_function` своим текстом.
+pub struct JsonConvertFn<'a> {
+    /// `ИмяФункцииПреобразования` — четвёртый аргумент `ЗаписатьJSON`.
+    pub name: String,
+    /// `ДополнительныеПараметрыФункцииПреобразования` — шестой аргумент;
+    /// уходит в функцию третьим параметром как есть.
+    pub extra: BslValue,
+    /// Как позвать функцию модуля по имени.
+    pub call: JsonCallByName<'a>,
+}
+
+/// Функция восстановления `ПрочитатьJSON` (статья 16.2).
+///
+/// Сигнатура на платформе — РОВНО три параметра
+/// `(Свойство, Значение, ДополнительныеПараметры)`.
+pub struct JsonRestoreFn<'a> {
+    /// `ИмяФункцииВосстановления` — пятый аргумент `ПрочитатьJSON`.
+    pub name: String,
+    /// `ДополнительныеПараметрыФункцииВосстановления` — седьмой аргумент.
+    pub extra: BslValue,
+    /// `ИменаСвойствДляФункцииВосстановления` — восьмой аргумент.
+    ///
+    /// ИЗМЕРЕНО: пустой список (как и отсутствующий аргумент) означает «для
+    /// каждого значения документа», а непустой сужает вызовы до
+    /// перечисленных имён свойств НА ЛЮБОЙ ГЛУБИНЕ и заодно отменяет вызов
+    /// на корне документа. Сравнение регистрозависимое — см.
+    /// `JsonRestoreFn::applies_to`.
+    pub property_names: Vec<String>,
+    /// Как позвать функцию модуля по имени.
+    pub call: JsonCallByName<'a>,
+}
+
+impl JsonRestoreFn<'_> {
+    /// Зовётся ли функция восстановления для значения, лежащего под именем
+    /// `property` (`None` — элемент массива или корень документа)?
+    ///
+    /// ИЗМЕРЕНО на 8.3.27, документ `{"а":1,"б":2,"в":{"б":3,"г":4}}`:
+    /// * без списка имён функция получает ВСЕ значения — включая элементы
+    ///   массивов (`Свойство = Неопределено`) и сам корень;
+    /// * со списком `["б"]` — ровно два вызова, оба на свойстве `б`
+    ///   (внешнем и вложенном), и НИ ОДНОГО на корне;
+    /// * со списком `["БЭ"]` против свойства `бэ` — ни одного вызова,
+    ///   то есть сравнение РЕГИСТРОЗАВИСИМОЕ (как и у
+    ///   `ИменаСвойствСоЗначениямиДата`, см. [`is_date_property`]).
+    fn applies_to(&self, property: Option<&str>) -> bool {
+        if self.property_names.is_empty() {
+            return true;
+        }
+        property.is_some_and(|p| self.property_names.iter().any(|n| n == p))
+    }
+}
+
+/// Всё, что при сборке значения не меняется от узла к узлу.
+///
+/// Отдельной структурой, потому что без неё `build_value` пришлось бы
+/// тащить девять параметров сквозь рекурсию, а функция восстановления
+/// добавляет десятый — и повторное `&mut`-заимствование каждого из них на
+/// каждом уровне.
+struct BuildCtx<'a, 'c> {
+    as_map: bool,
+    date_names: &'a [String],
+    date_format: Option<JsonDateFormat>,
+    /// Функция восстановления или `None`, если она не задана.
+    restore: Option<JsonRestoreFn<'c>>,
+    rt: &'a mut RuntimeShapes,
+    cache: JsonBuildCache,
+}
+
+impl BuildCtx<'_, '_> {
+    /// Нужно ли звать функцию восстановления на значении под именем
+    /// `property`.
+    fn restores(&self, property: Option<&str>) -> bool {
+        self.restore
+            .as_ref()
+            .is_some_and(|r| r.applies_to(property))
+    }
+
+    /// Вызов функции восстановления на уже собранном значении.
+    ///
+    /// # Errors
+    ///
+    /// Ошибку самого вызова (нет такой функции, не то число параметров) и
+    /// любое исключение изнутри функции — ИЗМЕРЕНО, что платформа их не
+    /// глотает, а выпускает наружу из `ПрочитатьJSON`.
+    fn call_restore(&mut self, property: Option<&str>, value: BslValue) -> RtResult<BslValue> {
+        let Some(restore) = self.restore.as_mut() else {
+            return Ok(value);
+        };
+        let args = vec![property_arg(property), value, restore.extra.clone()];
+        let (returned, _) = (restore.call)(&restore.name, args)?;
+        Ok(returned)
+    }
+}
+
+/// Первый параметр колбэка: имя свойства или `Неопределено`.
+///
+/// ИЗМЕРЕНО: `Неопределено` приходит и для элемента массива, и для
+/// верхнего уровня документа — платформа не выдумывает им ни индекса, ни
+/// пустой строки.
+fn property_arg(property: Option<&str>) -> BslValue {
+    match property {
+        Some(p) => BslValue::Str(crate::BslString::from_str(p)),
+        None => BslValue::Undefined,
+    }
+}
+
 /// `ПрочитатьJSON(Чтение[, ВозвращатьСоответствие[, ИменаСвойствСоЗначениямиДата
-/// [, ОжидаемыйФорматДаты]]])`.
+/// [, ОжидаемыйФорматДаты[, ИмяФункцииВосстановления, ...]]]])`.
 ///
 /// `date_format` — четвёртый аргумент платформы: `None`, если он не задан
 /// (тогда разбор `ИменаСвойствСоЗначениямиДата` идёт по старому правилу —
-/// см. `optional_date_format_from_arg`).
+/// см. `optional_date_format_from_arg`). `restore` — функция восстановления
+/// (пятый-восьмой аргументы), см. [`JsonRestoreFn`].
 ///
 /// # Errors
 ///
 /// [`RtError::Json`] на битом вводе, на ключе, который не может быть именем
 /// поля структуры, либо (при заданном `date_format`) на значении из
 /// `ИменаСвойствСоЗначениямиДата`, не разобравшемся в этом формате
-/// (см. `bad_date_representation`, `JSON.READ_DATE.BAD_FORMAT_TEXT`).
+/// (см. `bad_date_representation`, `JSON.READ_DATE.BAD_FORMAT_TEXT`);
+/// ошибку вызова функции восстановления и любое исключение из неё.
 pub fn read_json(
     reader: &BslValue,
     as_map: bool,
     date_names: &[String],
     date_format: Option<JsonDateFormat>,
+    restore: Option<JsonRestoreFn<'_>>,
     rt: &mut RuntimeShapes,
 ) -> RtResult<BslValue> {
     // Первое событие читается здесь же: `ПрочитатьJSON` забирает документ
     // с текущей позиции целиком, и вызывать перед ним `Прочитать()` не
     // требуется.
     let cell = as_reader(reader)?;
-    let mut state = cell.borrow_mut();
-    if state.parser.is_none() {
-        return Err(RtError::TypeError {
-            expected: "назначенный источник (УстановитьСтроку/ОткрытьФайл)",
-            op: "ПрочитатьJSON",
-        });
-    }
-    // Текущее событие, если на него уже встали ручным `Прочитать()`, иначе
-    // следующее: `ПрочитатьJSON` работает в обоих сценариях.
-    let first = match state.current.take() {
-        Some(e) => Some(e),
-        None => state
-            .parser
-            .as_mut()
-            .expect("наличие проверено выше")
-            .next_event()?,
+    // Разборщик ВЫНИМАЕТСЯ из ячейки на всё время сборки, а не держится
+    // заимствованным: функция восстановления — это пользовательский код,
+    // и он волен потрогать тот же самый `ЧтениеJSON`. С `borrow_mut()`
+    // такой повторный вход был бы паникой `RefCell` мимо `Попытка`; без
+    // разборщика в ячейке он упирается в обычную перехватываемую ошибку
+    // «нет назначенного источника». Платформа в этом месте тоже отвечает
+    // ошибкой («Недопустимое состояние потока чтения JSON»), а не молча
+    // продолжает, — текст у нас свой, как и для остальных ошибок JSON.
+    let (first, mut parser) = {
+        let mut state = cell.borrow_mut();
+        let Some(mut parser) = state.parser.take() else {
+            return Err(RtError::TypeError {
+                expected: "назначенный источник (УстановитьСтроку/ОткрытьФайл)",
+                op: "ПрочитатьJSON",
+            });
+        };
+        // Текущее событие, если на него уже встали ручным `Прочитать()`,
+        // иначе следующее: `ПрочитатьJSON` работает в обоих сценариях.
+        let first = match state.current.take() {
+            Some(e) => Ok(Some(e)),
+            None => parser.next_event(),
+        };
+        match first {
+            Ok(first) => (first, parser),
+            Err(e) => {
+                state.parser = Some(parser);
+                return Err(e);
+            }
+        }
     };
-    let Some(first) = first else {
-        return Ok(BslValue::Undefined);
-    };
-    let parser = state.parser.as_mut().expect("наличие проверено выше");
-    let mut cache = JsonBuildCache::default();
-    build_value(
-        first,
-        parser,
+
+    let mut ctx = BuildCtx {
         as_map,
         date_names,
         date_format,
-        None,
+        restore,
         rt,
-        &mut cache,
-        0,
-    )
+        cache: JsonBuildCache::default(),
+    };
+    let built = match first {
+        None => Ok(BslValue::Undefined),
+        Some(first) => build_value(first, &mut parser, None, &mut ctx, 0),
+    };
+    // Разборщик возвращается на место при любом исходе: после ошибки
+    // `ЧтениеJSON` обязан остаться тем же объектом, у которого можно
+    // спросить `Закрыть()`.
+    cell.borrow_mut().parser = Some(parser);
+    built
 }
 
 /// `ОжидаемыйФорматДаты` — четвёртый аргумент `ПрочитатьJSON`.
@@ -1836,6 +1977,19 @@ pub fn read_json(
 /// несовпадение (в том числе значение вовсе не строка — статья приводит
 /// пример с числом при `ФорматДатыJSON.JavaScript`) — исключение с тем же
 /// текстом, что и у `ПрочитатьДатуJSON` (`JSON.READ_DATE.BAD_FORMAT_TEXT`).
+///
+/// ИЗМЕРЕНО и НЕ ВОСПРОИЗВОДИТСЯ: платформа различает ПРОПУЩЕННЫЙ аргумент
+/// и явно переданное `Неопределено`. `ПрочитатьJSON(Ч, Ложь, , , "Имя")`
+/// работает, а `ПрочитатьJSON(Ч, Ложь, Неопределено, Неопределено, "Имя")`
+/// падает с «Несоответствие типов (параметр номер '4')» — то есть
+/// `ОжидаемыйФорматДаты` принимает только `ФорматДатыJSON`, но
+/// необязательность проверяет по факту передачи. Здесь этого различия нет:
+/// резолвер добивает необязательные позиции встроенного вызова именно
+/// `Неопределено` (см. `call_builtin_with_format`), так что оба написания
+/// приходят сюда одинаковыми, и отвергать `Неопределено` значило бы сломать
+/// все вызовы с пропущенным форматом. Это НЕ открытый вопрос — поведение
+/// платформы известно; воспроизвести его нечем без отдельного маркера
+/// «аргумент не передавали» в байт-коде встроенных вызовов.
 ///
 /// # Errors
 ///
@@ -1890,18 +2044,17 @@ pub fn read_json_value(text: &BslValue, rt: &mut RuntimeShapes) -> RtResult<BslV
             "пустая строка не представляет значение JSON".to_string(),
         ));
     };
-    let mut cache = JsonBuildCache::default();
-    build_value(
-        first,
-        &mut parser,
-        false,
-        &[],
-        None,
-        None,
+    // Функции восстановления у `ПрочитатьЗначениеJSON` нет вовсе — у
+    // платформы такого параметра здесь не существует.
+    let mut ctx = BuildCtx {
+        as_map: false,
+        date_names: &[],
+        date_format: None,
+        restore: None,
         rt,
-        &mut cache,
-        0,
-    )
+        cache: JsonBuildCache::default(),
+    };
+    build_value(first, &mut parser, None, &mut ctx, 0)
 }
 
 /// Проверяет и интернирует имя один раз за разбор документа.
@@ -1998,16 +2151,48 @@ fn build_json_structure(
 }
 
 /// Свойство `property` перечислено в `ИменаСвойствСоЗначениямиДата`?
-/// Регистронезависимо, как и остальные имена в языке.
+///
+/// ИЗМЕРЕНО: сравнение РЕГИСТРОЗАВИСИМОЕ — вопреки общему правилу языка,
+/// где идентификаторы регистр не различают. Проба: документ
+/// `{"создано":"2014-05-10T13:14:15"}` со списком `["создано"]` даёт `Дата`,
+/// а с `["СОЗДАНО"]` — по-прежнему `Строка`. Это имена свойств ДОКУМЕНТА,
+/// а не идентификаторы BSL, и платформа обращается с ними как с ключами
+/// JSON. До замера здесь стояло `to_uppercase` на обеих сторонах.
 fn is_date_property(property: Option<&str>, date_names: &[String]) -> bool {
-    property.is_some_and(|p| {
-        date_names
-            .iter()
-            .any(|n| n.to_uppercase() == p.to_uppercase())
-    })
+    property.is_some_and(|p| date_names.iter().any(|n| n == p))
 }
 
-/// Сборка значения из события и продолжения потока.
+/// Сборка значения из события и продолжения потока с вызовом функции
+/// восстановления на готовом результате.
+///
+/// ИЗМЕРЕНО, что порядок вызовов — ОБРАТНЫЙ (сначала дети, потом родитель).
+/// Документ
+/// `{"чис":1,"стр":"т","лог":true,"нул":null,"об":{"вчис":2,"вмас":[7,8]},
+/// "мас":[3,"ф",false,null,{"мчис":4},[5,6]]}` даёт ровно двадцать вызовов
+/// в порядке `чис`, `стр`, `лог`, `нул`, `вчис`, элемент, элемент, `вмас`,
+/// `об`, элемент, элемент, элемент, элемент, `мчис`, элемент (объект),
+/// элемент, элемент, элемент (массив), `мас`, корень: значение приходит в
+/// функцию уже собранным из УЖЕ восстановленных детей, а её результат
+/// становится тем, что увидит родитель. Поэтому вызов стоит здесь, на
+/// выходе, а не в родительских ветках.
+fn build_value(
+    event: JsonEvent,
+    parser: &mut JsonParser,
+    property: Option<&str>,
+    ctx: &mut BuildCtx<'_, '_>,
+    depth: usize,
+) -> RtResult<BslValue> {
+    let restores = ctx.restores(property);
+    let value = build_raw_value(event, parser, property, restores, ctx, depth)?;
+    if restores {
+        ctx.call_restore(property, value)
+    } else {
+        Ok(value)
+    }
+}
+
+/// Сборка значения из события и продолжения потока — без функции
+/// восстановления.
 ///
 /// `property` — имя свойства, под которым это значение лежит у родителя:
 /// по нему решается, превращать ли строку в дату
@@ -2015,16 +2200,21 @@ fn is_date_property(property: Option<&str>, date_names: &[String]) -> bool {
 /// `ПрочитатьJSON` (см. `optional_date_format_from_arg`): `None` — старое
 /// правило (только ISO, неудача молча оставляет строку), `Some(fmt)` —
 /// значение обязано разобраться СТРОГО под этот формат.
-#[allow(clippy::too_many_arguments)]
-fn build_value(
+///
+/// `restores` — будет ли на ЭТОМ значении вызвана функция восстановления.
+/// ИЗМЕРЕНО, что она отменяет разбор даты: документ
+/// `{"создано":"2014-05-10T13:14:15","прочее":1}` с
+/// `ИменаСвойствСоЗначениямиДата = ["создано"]` даёт `Дата` без функции
+/// восстановления и с функцией, суженной списком до `прочее`, — но
+/// `Строка` (сырое представление), если функция зовётся и на `создано`.
+/// То есть функция восстановления имеет приоритет над списком дат, а не
+/// получает уже готовую дату.
+fn build_raw_value(
     event: JsonEvent,
     parser: &mut JsonParser,
-    as_map: bool,
-    date_names: &[String],
-    date_format: Option<JsonDateFormat>,
     property: Option<&str>,
-    rt: &mut RuntimeShapes,
-    cache: &mut JsonBuildCache,
+    restores: bool,
+    ctx: &mut BuildCtx<'_, '_>,
     depth: usize,
 ) -> RtResult<BslValue> {
     // Как и в `serialize`: рекурсия возможна только на контейнерах, на
@@ -2034,6 +2224,9 @@ fn build_value(
             what: "слишком глубокая вложенность документа при чтении JSON",
         });
     }
+    // Разбор даты отменяется, если это значение уходит в функцию
+    // восстановления (измерено, см. doc comment).
+    let is_date = !restores && is_date_property(property, ctx.date_names);
     match event {
         JsonEvent::ObjectStart => {
             let mut keys: Vec<String> = Vec::new();
@@ -2054,31 +2247,21 @@ fn build_value(
                         if value_event == JsonEvent::ObjectEnd {
                             break;
                         }
-                        let v = build_value(
-                            value_event,
-                            parser,
-                            as_map,
-                            date_names,
-                            date_format,
-                            Some(&name),
-                            rt,
-                            cache,
-                            depth + 1,
-                        )?;
+                        let v = build_value(value_event, parser, Some(&name), ctx, depth + 1)?;
                         keys.push(name);
                         values.push(v);
                     }
                     _ => break,
                 }
             }
-            if as_map {
+            if ctx.as_map {
                 let map = BslValue::new_map();
                 for (k, v) in keys.into_iter().zip(values) {
                     map.map_insert(BslValue::Str(crate::BslString::from_str(&k)), v)?;
                 }
                 Ok(map)
             } else {
-                build_json_structure(keys, values, rt, cache)
+                build_json_structure(keys, values, ctx.rt, &mut ctx.cache)
             }
         }
         JsonEvent::ArrayStart => {
@@ -2090,17 +2273,7 @@ fn build_value(
                 if next == JsonEvent::ArrayEnd {
                     break;
                 }
-                let v = build_value(
-                    next,
-                    parser,
-                    as_map,
-                    date_names,
-                    date_format,
-                    None,
-                    rt,
-                    cache,
-                    depth + 1,
-                )?;
+                let v = build_value(next, parser, None, ctx, depth + 1)?;
                 items.push_element(v)?;
             }
             Ok(items)
@@ -2122,8 +2295,8 @@ fn build_value(
             // (см. doc comment на `parse_json_date`), эта правка его не
             // трогает — меняется только СТРОГОСТЬ (ошибка вместо тихого
             // фолбэка), не арифметика разбора.
-            if is_date_property(property, date_names) {
-                let d = match date_format {
+            if is_date {
+                let d = match ctx.date_format {
                     Some(fmt) => parse_json_date_by_format(&s, fmt),
                     None => parse_json_date(&s),
                 }
@@ -2140,13 +2313,13 @@ fn build_value(
         // ИЗМЕРЕНО, что без него платформа тоже не прощает (см. выше), так
         // что здесь проверка больше не зависит от `date_format.is_some()`.
         JsonEvent::Number(n) => {
-            if is_date_property(property, date_names) {
+            if is_date {
                 return Err(bad_date_representation());
             }
             Ok(BslValue::Number(n))
         }
         JsonEvent::Boolean(b) => {
-            if is_date_property(property, date_names) {
+            if is_date {
                 return Err(bad_date_representation());
             }
             Ok(BslValue::Boolean(b))
@@ -2181,15 +2354,14 @@ fn build_value(
 // сеанс замеров. Замер даёт нижнюю границу: 400 уровней обязаны работать.
 const MAX_JSON_DEPTH: usize = 500;
 
-/// `has_convert_fn` — задано ли имя функции преобразования (третий/четвёртый
-/// аргумент платформенного `ЗаписатьJSON`, см. `bsl_rt::builtin`): ИЗМЕРЕНО,
-/// что непустое имя само по себе НЕ ошибка на входе — платформа принимает
-/// вызов и сериализует то, что умеет сама (`ЗаписатьJSON(Запись, 1,
-/// Неопределено, "ИмяФункции")` пишет `1`, функция не понадобилась). Колбэков
-/// в языке ещё нет (`docs/std-library-plan.md`, этап 1), так что здесь это
-/// флаг «был бы вызов функции, будь она у нас» — используется только чтобы
-/// решить, каким текстом ответить, если сериализовать значение всё-таки
-/// нечем (см. `serialize`).
+/// `ЗаписатьJSON(Запись, Значение[, Настройки[, ИмяФункцииПреобразования, ...]])`.
+///
+/// `convert` — функция преобразования (четвёртый-шестой аргументы
+/// платформы), см. [`JsonConvertFn`]. ИЗМЕРЕНО, что её имя само по себе НЕ
+/// ошибка на входе и что зовётся она ЛЕНИВО — только там, где встретилось
+/// значение, которое сериализовать нечем: `ЗаписатьJSON(Запись, 1,
+/// Неопределено, "ИмяФункции", ЭтотОбъект)` пишет `1`, ни разу не позвав
+/// функцию, и то же самое верно для `Дата` (её платформа сериализует сама).
 ///
 /// # Errors
 ///
@@ -2198,18 +2370,52 @@ pub fn write_json(
     writer: &BslValue,
     value: &BslValue,
     settings: &JsonSerializerSettings,
-    has_convert_fn: bool,
+    convert: Option<JsonConvertFn<'_>>,
     rt: &RuntimeShapes,
 ) -> RtResult<()> {
     let cell = as_writer(writer)?;
-    let mut slot = cell.borrow_mut();
-    let Some(w) = slot.as_mut() else {
+    // Приёмник, как и разборщик в `read_json`, ВЫНИМАЕТСЯ из ячейки на
+    // время записи: функция преобразования — пользовательский код, который
+    // волен позвать `ЗаписатьJSON` на том же самом объекте, а `borrow_mut()`
+    // поперёк такого повторного входа был бы паникой `RefCell` мимо
+    // `Попытка`. Платформа отвечает на этот случай ошибкой («Неверный
+    // порядок записи JSON»), не паникой, — здесь получится своя ошибка про
+    // отсутствие назначенного приёмника.
+    let Some(mut w) = cell.borrow_mut().take() else {
         return Err(RtError::TypeError {
             expected: "назначенный приёмник (УстановитьСтроку/ОткрытьФайл)",
             op: "ЗаписатьJSON",
         });
     };
-    serialize(w, value, settings, false, has_convert_fn, rt, 0)
+    let mut ctx = SerializeCtx {
+        settings,
+        single_value_mode: false,
+        convert,
+        rt,
+    };
+    let written = write_top_level(&mut w, value, &mut ctx);
+    // Приёмник возвращается на место при любом исходе: `Закрыть()` после
+    // ошибки обязан работать (измерено на отказе функции преобразования на
+    // верхнем уровне — там документ пуст, а `Закрыть()` отдаёт пустую
+    // строку).
+    *cell.borrow_mut() = Some(w);
+    written
+}
+
+/// Верхний уровень документа. Отдельной функцией из-за `Отказ`: ИЗМЕРЕНО,
+/// что отказ функции преобразования на САМОМ значении не пишет вообще
+/// ничего — `ЗаписатьJSON(Запись, ТаблицаЗначений, , "Отказная", ЭтотОбъект)`
+/// с последующим `Закрыть()` даёт пустую строку, а не `null` и не ошибку.
+fn write_top_level(
+    w: &mut JsonWriter,
+    value: &BslValue,
+    ctx: &mut SerializeCtx<'_, '_>,
+) -> RtResult<()> {
+    match prepare(value, None, ctx)? {
+        Prepared::Skip => Ok(()),
+        Prepared::AsIs => serialize(w, value, ctx, 0),
+        Prepared::Converted(v) => serialize_converted(w, &v, ctx, 0),
+    }
 }
 
 /// `ЗаписатьЗначениеJSON(Значение)` — сериализация ОДНОГО значения в
@@ -2226,39 +2432,180 @@ pub fn write_json(
 /// `Соответствие` в любой позиции дерева значения.
 pub fn write_json_value(value: &BslValue, rt: &RuntimeShapes) -> RtResult<BslValue> {
     let mut w = JsonWriter::to_string_target(JsonWriterSettings::default());
-    serialize(
-        &mut w,
-        value,
-        &JsonSerializerSettings::default(),
-        true,
+    let mut ctx = SerializeCtx {
+        settings: &JsonSerializerSettings::default(),
+        single_value_mode: true,
         // `ЗаписатьЗначениеJSON` не берёт функцию преобразования вовсе —
         // у платформы такого параметра здесь нет.
-        false,
+        convert: None,
         rt,
-        0,
-    )?;
+    };
+    serialize(&mut w, value, &mut ctx, 0)?;
     Ok(BslValue::Str(crate::BslString::from_utf8_string(
         w.finish()?,
     )))
 }
 
-/// Ошибка на значении, которое `serialize` сериализовать не умеет. Если
-/// вызывающий передал имя функции преобразования, ИМЕННО ЗДЕСЬ она
-/// понадобилась бы по-настоящему — колбэков в языке ещё нет, поэтому вместо
-/// вызова понятная «появится позже»; без функции — обычная ошибка типа, как
-/// и было измерено до появления этого параметра (`JSON.SERIALIZE.UNSUPPORTED_TYPE`).
-fn unsupported_value_error(has_convert_fn: bool) -> RtError {
-    if has_convert_fn {
-        RtError::Json(
-            "функция преобразования для ЗаписатьJSON появится на этапе 1 \
-             (см. docs/std-library-plan.md)"
-                .to_string(),
-        )
-    } else {
-        RtError::TypeError {
-            expected: "значение, представимое в JSON",
-            op: "ЗаписатьJSON",
-        }
+/// Ошибка на значении, которое `serialize` сериализовать не умеет
+/// (`JSON.SERIALIZE.UNSUPPORTED_TYPE`).
+///
+/// ИЗМЕРЕНО, что имя функции преобразования само по себе эту ошибку НЕ
+/// меняет: без `МодульФункцииПреобразования` платформа функцию не ищет
+/// вовсе и отвечает тем же «Значение содержит данные недопустимых типов»,
+/// что и без имени. Поэтому текст здесь один на все случаи, когда звать
+/// оказалось некого.
+fn unsupported_value_error() -> RtError {
+    RtError::TypeError {
+        expected: "значение, представимое в JSON",
+        op: "ЗаписатьJSON",
+    }
+}
+
+/// Всё, что при сериализации не меняется от узла к узлу.
+struct SerializeCtx<'a, 'c> {
+    settings: &'a JsonSerializerSettings,
+    /// `ЗаписатьЗначениеJSON`: у него свои запреты (`Дата`, `Соответствие`)
+    /// и функции преобразования не бывает.
+    single_value_mode: bool,
+    convert: Option<JsonConvertFn<'c>>,
+    rt: &'a RuntimeShapes,
+}
+
+/// Что писать на месте очередного значения.
+enum Prepared {
+    /// Само значение: функция преобразования либо не нужна (значение
+    /// сериализуемо), либо не задана.
+    AsIs,
+    /// Результат функции преобразования.
+    Converted(BslValue),
+    /// `Отказ = Истина`: значение молча выпадает из документа.
+    Skip,
+}
+
+/// Значения, у которых нет собственного представления в JSON, — ровно те,
+/// на которых платформа зовёт функцию преобразования.
+///
+/// Матч по `BslValue` исчерпывающий намеренно: новый вариант ЗНАЧЕНИЯ обязан
+/// решить здесь, сериализуем он сам или уходит в функцию преобразования, —
+/// иначе он молча попал бы в «сериализуемые» и упал бы уже в `serialize`.
+/// На `BslObject` эта защита НЕ распространяется: ветка написана негативным
+/// `matches!`, поэтому новый вариант объекта компилятор здесь не остановит —
+/// он по умолчанию попадёт в «несериализуемые», то есть в функцию
+/// преобразования. Умолчание консервативное и совпадает с тем, что давал
+/// прежний `_ => Err(unsupported_value_error(..))` в `serialize`, но
+/// проверить его на новом варианте придётся глазами.
+fn needs_convert(value: &BslValue) -> bool {
+    match value {
+        BslValue::Str(_)
+        | BslValue::Number(_)
+        | BslValue::Boolean(_)
+        | BslValue::Undefined
+        | BslValue::Null
+        | BslValue::Date(_) => false,
+        BslValue::Object(o) => !matches!(
+            &**o,
+            BslObject::Array(_) | BslObject::Structure(_) | BslObject::Map(_)
+        ),
+        BslValue::Type(_) | BslValue::Enum(_) | BslValue::EnumType(_) | BslValue::Skipped => true,
+    }
+}
+
+/// Прочтение параметра `Отказ` из финального слота функции преобразования.
+///
+/// ИЗМЕРЕНО на 8.3.27 четырнадцатью пробами: платформа читает `Отказ` по
+/// ОБЫЧНЫМ правилам условия языка, а значение, которое к условию не
+/// приводится, отказом не считает. Отказом обернулись `Истина`, `1`, `-1` и
+/// строка `"да"`; НЕ обернулись `Ложь`, `0`, `""`, `"   "`, `"абв"`,
+/// `Неопределено`, `Null`, пустая и непустая дата, пустой и непустой
+/// массив, `Тип("Строка")`. Это ровно [`BslValue::as_condition`] с
+/// подавленной ошибкой — включая её нетривиальную часть про строки
+/// (истинны только слова «Да»/«Истина»/«True», а не «непустая строка»).
+fn refused(final_params: &[BslValue]) -> bool {
+    final_params
+        .get(3)
+        .and_then(|v| v.as_condition().ok())
+        .unwrap_or(false)
+}
+
+/// Готовит значение к записи в позиции `property`: решает, нужна ли функция
+/// преобразования, и зовёт её.
+///
+/// # Errors
+///
+/// Ошибку вызова функции (нет такой, не то число параметров) и любое
+/// исключение изнутри неё — ИЗМЕРЕНО, что платформа их не глотает.
+fn prepare(
+    value: &BslValue,
+    property: Option<&str>,
+    ctx: &mut SerializeCtx<'_, '_>,
+) -> RtResult<Prepared> {
+    if !needs_convert(value) {
+        return Ok(Prepared::AsIs);
+    }
+    let Some(convert) = ctx.convert.as_mut() else {
+        // Звать некого — ошибку выдаст сам `serialize`, чтобы точка отказа
+        // была одна.
+        return Ok(Prepared::AsIs);
+    };
+    let args = vec![
+        property_arg(property),
+        value.clone(),
+        convert.extra.clone(),
+        BslValue::Boolean(false),
+    ];
+    let (returned, final_params) = (convert.call)(&convert.name, args)?;
+    if refused(&final_params) {
+        return Ok(Prepared::Skip);
+    }
+    Ok(Prepared::Converted(returned))
+}
+
+/// Запись значения, УЖЕ прошедшего функцию преобразования.
+///
+/// ИЗМЕРЕНО, что второй раз на том же месте платформа функцию не зовёт:
+/// функция, возвращающая снова `ТаблицаЗначений`, вызывается ровно один раз
+/// и запись падает обычной ошибкой типа. При этом возвращённый КОНТЕЙНЕР
+/// обходится как обычно — функция, возвращающая `Структура("вложенное",
+/// ТаблицаЗначений)`, вызывается на каждом следующем уровне вложенности.
+/// Отсюда и разделение: подавляется вызов ровно на этой позиции, а не во
+/// всём поддереве.
+fn serialize_converted(
+    w: &mut JsonWriter,
+    value: &BslValue,
+    ctx: &mut SerializeCtx<'_, '_>,
+    depth: usize,
+) -> RtResult<()> {
+    if needs_convert(value) {
+        return Err(unsupported_value_error());
+    }
+    serialize(w, value, ctx, depth)
+}
+
+/// Записывает один элемент контейнера, пропуская его при отказе.
+///
+/// `property` — имя, под которым элемент лежит (`None` для элемента
+/// массива); `name` — имя свойства, которое надо написать ПЕРЕД значением,
+/// но только если значение в документ попадёт: ИЗМЕРЕНО, что отказ убирает
+/// свойство целиком (`{"а": ТаблицаЗначений}` -> `{}`), а не оставляет его
+/// с `null`.
+fn serialize_member(
+    w: &mut JsonWriter,
+    name: Option<&str>,
+    value: &BslValue,
+    ctx: &mut SerializeCtx<'_, '_>,
+    depth: usize,
+) -> RtResult<()> {
+    let prepared = prepare(value, name, ctx)?;
+    if matches!(prepared, Prepared::Skip) {
+        return Ok(());
+    }
+    if let Some(name) = name {
+        w.property_name(name)?;
+    }
+    match prepared {
+        Prepared::AsIs => serialize(w, value, ctx, depth),
+        Prepared::Converted(v) => serialize_converted(w, &v, ctx, depth),
+        Prepared::Skip => unreachable!("отказ обработан выше"),
     }
 }
 
@@ -2268,20 +2615,15 @@ fn unsupported_value_error(has_convert_fn: bool) -> RtError {
 ///
 /// [`RtError::TypeError`] на значении, которое сериализовать нечем
 /// (`ТаблицаЗначений` и прочие объекты, а при `single_value_mode` — ещё и
-/// любая `Дата`/`Соответствие`) — измерено, платформа тоже отвергает; на
-/// такой точке при `has_convert_fn` — [`RtError::Json`] «появится позже»
-/// вместо неё (см. doc comment `write_json`); [`RtError::StackOverflow`]
-/// на слишком глубокой вложенности (см. `MAX_JSON_DEPTH`); ошибку
-/// [`format_json_date`] на настройках даты, запрещающих сочетание формата
-/// и варианта записи.
-#[allow(clippy::too_many_arguments)]
+/// любая `Дата`/`Соответствие`) — измерено, платформа тоже отвергает;
+/// [`RtError::StackOverflow`] на слишком глубокой вложенности (см.
+/// `MAX_JSON_DEPTH`); ошибку [`format_json_date`] на настройках даты,
+/// запрещающих сочетание формата и варианта записи; ошибку вызова функции
+/// преобразования и любое исключение из неё.
 fn serialize(
     w: &mut JsonWriter,
     value: &BslValue,
-    settings: &JsonSerializerSettings,
-    single_value_mode: bool,
-    has_convert_fn: bool,
-    rt: &RuntimeShapes,
+    ctx: &mut SerializeCtx<'_, '_>,
     depth: usize,
 ) -> RtResult<()> {
     // Рекурсия возможна только на контейнерах, поэтому на скалярах предел
@@ -2302,7 +2644,7 @@ fn serialize(
             Ok(())
         }
         BslValue::Date(d) => {
-            if single_value_mode {
+            if ctx.single_value_mode {
                 return Err(RtError::TypeError {
                     expected: "значение без Даты (ЗаписатьЗначениеJSON её не сериализует)",
                     op: "ЗаписатьЗначениеJSON",
@@ -2316,7 +2658,8 @@ fn serialize(
             // форматов даты. Какой вид вложенная Microsoft-дата примет в
             // ДОКУМЕНТЕ через `НастройкиСериализацииJSON`, замерит фикстура
             // (проба уже есть в `json-dates.bsl`).
-            let content = format_json_date(*d, settings.date_format, settings.date_variant)?;
+            let content =
+                format_json_date(*d, ctx.settings.date_format, ctx.settings.date_variant)?;
             w.value(&BslValue::Str(crate::BslString::from_str(&content)))
         }
         BslValue::Object(o) => match &**o {
@@ -2325,35 +2668,22 @@ fn serialize(
                 // массивом, а `RefCell` вложенного заимствования не
                 // переживёт.
                 let snapshot: Vec<BslValue> = items.borrow().clone();
-                if settings.arrays_as_objects {
+                if ctx.settings.arrays_as_objects {
                     // `СериализовыватьМассивыКакОбъекты`: индексы уходят
                     // строковыми именами свойств `"0"`, `"1"`, ...
+                    // ИЗМЕРЕНО, что и функция преобразования получает в
+                    // `Свойство` этот самый индекс строкой (`"1"`), а не
+                    // `Неопределено`, как для настоящего элемента массива:
+                    // она видит документ таким, каким он ПИШЕТСЯ.
                     w.begin_object()?;
                     for (i, item) in snapshot.iter().enumerate() {
-                        w.property_name(&i.to_string())?;
-                        serialize(
-                            w,
-                            item,
-                            settings,
-                            single_value_mode,
-                            has_convert_fn,
-                            rt,
-                            depth + 1,
-                        )?;
+                        serialize_member(w, Some(&i.to_string()), item, ctx, depth + 1)?;
                     }
                     w.end_object()
                 } else {
                     w.begin_array()?;
                     for item in &snapshot {
-                        serialize(
-                            w,
-                            item,
-                            settings,
-                            single_value_mode,
-                            has_convert_fn,
-                            rt,
-                            depth + 1,
-                        )?;
+                        serialize_member(w, None, item, ctx, depth + 1)?;
                     }
                     w.end_array()
                 }
@@ -2363,21 +2693,12 @@ fn serialize(
                     let s = s.borrow();
                     (0..s.len())
                         .filter_map(|i| s.entry_at(i))
-                        .filter_map(|(id, v)| rt.names.name(id).map(|n| (n.to_string(), v)))
+                        .filter_map(|(id, v)| ctx.rt.names.name(id).map(|n| (n.to_string(), v)))
                         .collect()
                 };
                 w.begin_object()?;
                 for (name, v) in &entries {
-                    w.property_name(name)?;
-                    serialize(
-                        w,
-                        v,
-                        settings,
-                        single_value_mode,
-                        has_convert_fn,
-                        rt,
-                        depth + 1,
-                    )?;
+                    serialize_member(w, Some(name), v, ctx, depth + 1)?;
                 }
                 w.end_object()
             }
@@ -2388,7 +2709,7 @@ fn serialize(
                 // с `Соответствие` при этом работает и измерен отдельно
                 // (`JSON.SERIALIZE.NESTED`) — отличие именно в
                 // `ЗаписатьЗначениеJSON`, а не в объектной технике сериализации.
-                if single_value_mode {
+                if ctx.single_value_mode {
                     return Err(RtError::TypeError {
                         expected:
                             "значение без Соответствия (ЗаписатьЗначениеJSON его не сериализует)",
@@ -2415,22 +2736,17 @@ fn serialize(
                             })
                         }
                     };
-                    w.property_name(&name)?;
-                    serialize(
-                        w,
-                        v,
-                        settings,
-                        single_value_mode,
-                        has_convert_fn,
-                        rt,
-                        depth + 1,
-                    )?;
+                    // Функция преобразования зовётся только на ЗНАЧЕНИИ —
+                    // ИЗМЕРЕНО, что несериализуемый КЛЮЧ до неё не доходит
+                    // («Недопустимый тип значения ключа элемента
+                    // соответствия»), даже когда функция задана.
+                    serialize_member(w, Some(&name), v, ctx, depth + 1)?;
                 }
                 w.end_object()
             }
-            _ => Err(unsupported_value_error(has_convert_fn)),
+            _ => Err(unsupported_value_error()),
         },
-        _ => Err(unsupported_value_error(has_convert_fn)),
+        _ => Err(unsupported_value_error()),
     }
 }
 
@@ -2451,6 +2767,32 @@ mod tests {
         BslNumber::parse_canonical(s).unwrap()
     }
 
+    /// Контекст сборки без функции восстановления — то, чем был
+    /// `build_value` до появления колбэков.
+    fn plain_build_ctx(rt: &mut RuntimeShapes) -> BuildCtx<'_, 'static> {
+        BuildCtx {
+            as_map: false,
+            date_names: &[],
+            date_format: None,
+            restore: None,
+            rt,
+            cache: JsonBuildCache::default(),
+        }
+    }
+
+    /// Контекст сериализации без функции преобразования.
+    fn plain_serialize_ctx<'a>(
+        settings: &'a JsonSerializerSettings,
+        rt: &'a RuntimeShapes,
+    ) -> SerializeCtx<'a, 'static> {
+        SerializeCtx {
+            settings,
+            single_value_mode: false,
+            convert: None,
+            rt,
+        }
+    }
+
     // НЕ ИЗМЕРЕНО(JSON.MAX_DEPTH) — тесты фиксируют ВЫБРАННОЕ поведение:
     // перехватываемая ошибка вместо переполнения стека процесса; предел
     // платформы не замерен.
@@ -2459,21 +2801,10 @@ mod tests {
         let depth = MAX_JSON_DEPTH + 100;
         let text = format!("{}1{}", "[".repeat(depth), "]".repeat(depth));
         let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
-        let mut cache = JsonBuildCache::default();
         let mut parser = JsonParser::new(&text);
         let first = parser.next_event().unwrap().unwrap();
-        let e = build_value(
-            first,
-            &mut parser,
-            false,
-            &[],
-            None,
-            None,
-            &mut rt,
-            &mut cache,
-            0,
-        )
-        .unwrap_err();
+        let e =
+            build_value(first, &mut parser, None, &mut plain_build_ctx(&mut rt), 0).unwrap_err();
         assert!(matches!(e, RtError::StackOverflow { .. }), "{e:?}");
     }
 
@@ -2483,21 +2814,10 @@ mod tests {
         let depth = 400;
         let text = format!("{}1{}", "[".repeat(depth), "]".repeat(depth));
         let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
-        let mut cache = JsonBuildCache::default();
         let mut parser = JsonParser::new(&text);
         let first = parser.next_event().unwrap().unwrap();
-        build_value(
-            first,
-            &mut parser,
-            false,
-            &[],
-            None,
-            None,
-            &mut rt,
-            &mut cache,
-            0,
-        )
-        .expect("глубина ниже предела обязана читаться");
+        build_value(first, &mut parser, None, &mut plain_build_ctx(&mut rt), 0)
+            .expect("глубина ниже предела обязана читаться");
     }
 
     #[test]
@@ -2508,16 +2828,8 @@ mod tests {
         arr.push_element(arr.clone()).unwrap();
         let rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
         let mut w = JsonWriter::to_string_target(settings_from(None).unwrap());
-        let e = serialize(
-            &mut w,
-            &arr,
-            &JsonSerializerSettings::default(),
-            false,
-            false,
-            &rt,
-            0,
-        )
-        .unwrap_err();
+        let settings = JsonSerializerSettings::default();
+        let e = serialize(&mut w, &arr, &mut plain_serialize_ctx(&settings, &rt), 0).unwrap_err();
         assert!(matches!(e, RtError::StackOverflow { .. }), "{e:?}");
     }
 
@@ -2968,7 +3280,13 @@ mod tests {
         let content = format_json_date(d, settings.date_format, settings.date_variant).unwrap();
 
         let mut w = JsonWriter::to_string_target(settings_from(None).unwrap());
-        serialize(&mut w, &structure, &settings, false, false, &rt, 0).unwrap();
+        serialize(
+            &mut w,
+            &structure,
+            &mut plain_serialize_ctx(&settings, &rt),
+            0,
+        )
+        .unwrap();
         let text = w.finish().unwrap();
 
         assert_eq!(text, format!("{{\n\"д\": \"{content}\"\n}}"));
@@ -3239,44 +3557,13 @@ mod tests {
         assert!(matches!(e, RtError::TypeError { .. }));
 
         let mut w = JsonWriter::to_string_target(settings_from(None).unwrap());
-        serialize(
-            &mut w,
-            &map,
-            &JsonSerializerSettings::default(),
-            false,
-            false,
-            &rt,
-            0,
-        )
-        .expect("ЗаписатьJSON по-прежнему сериализует Соответствие");
+        let settings = JsonSerializerSettings::default();
+        serialize(&mut w, &map, &mut plain_serialize_ctx(&settings, &rt), 0)
+            .expect("ЗаписатьJSON по-прежнему сериализует Соответствие");
     }
 
-    /// ИЗМЕРЕНО: `ЗаписатьJSON(Запись, 1, Неопределено, "ИмяФункции")` пишет
-    /// `1` — непустое имя функции преобразования само по себе НЕ ошибка на
-    /// входе. Ошибка откладывается до точки, где сериализовать нечем и
-    /// функция понадобилась бы (здесь — `ТаблицаЗначений`, тот же
-    /// несериализуемый тип, что и в `JSON.SERIALIZE.UNSUPPORTED_TYPE`).
-    #[test]
-    fn write_json_defers_the_unsupported_type_error_when_a_convert_function_is_named() {
-        let rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
-        let writer = BslValue::new_json_writer();
-        set_string(&writer, &[]).unwrap();
-        let table = BslValue::new_table();
-        let e = write_json(
-            &writer,
-            &table,
-            &JsonSerializerSettings::default(),
-            true,
-            &rt,
-        )
-        .unwrap_err();
-        // Не `TypeError` (как без функции) — своя, «появится позже».
-        assert!(matches!(e, RtError::Json(_)), "{e:?}");
-    }
-
-    /// Без функции преобразования тот же несериализуемый тип по-прежнему
-    /// даёт обычную ошибку типа — измерено ДО появления этого параметра
-    /// (`JSON.SERIALIZE.UNSUPPORTED_TYPE`), и это поведение не изменилось.
+    /// Без функции преобразования несериализуемый тип даёт обычную ошибку
+    /// типа — `JSON.SERIALIZE.UNSUPPORTED_TYPE`, поведение не изменилось.
     #[test]
     fn write_json_without_a_convert_function_keeps_the_plain_type_error() {
         let rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
@@ -3287,32 +3574,11 @@ mod tests {
             &writer,
             &table,
             &JsonSerializerSettings::default(),
-            false,
+            None,
             &rt,
         )
         .unwrap_err();
         assert!(matches!(e, RtError::TypeError { .. }), "{e:?}");
-    }
-
-    /// Функция преобразования, названная, но не понадобившаяся (значение и
-    /// так сериализуется), не мешает записи — ровно измеренный пример.
-    #[test]
-    fn write_json_with_a_convert_function_still_serializes_what_it_can() {
-        let rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
-        let writer = BslValue::new_json_writer();
-        set_string(&writer, &[]).unwrap();
-        write_json(
-            &writer,
-            &BslValue::Number(num("1")),
-            &JsonSerializerSettings::default(),
-            true,
-            &rt,
-        )
-        .expect("сериализуемое значение проходит даже с указанной функцией");
-        assert_eq!(
-            close_writer(&writer).unwrap(),
-            BslValue::Str(crate::BslString::from_str("1"))
-        );
     }
 
     /// ИЗМЕРЕНО: пустая строка в `ПрочитатьЗначениеJSON` — исключение, а
