@@ -41,7 +41,8 @@ use bsl_number::{BslNumber, NumError};
 
 pub use builtin::{
     call_builtin_fn, call_builtin_fn_ctx, call_builtin_method, call_builtin_method_ctx,
-    set_command_line_args, BuiltinFn, BuiltinMethod, BUILTIN_FN_NAMES, BUILTIN_METHOD_NAMES,
+    read_json_builtin, set_command_line_args, write_json_builtin, BuiltinFn, BuiltinMethod,
+    BUILTIN_FN_NAMES, BUILTIN_METHOD_NAMES,
 };
 pub use date::{
     format_long as format_date_long, format_pattern as format_date_pattern, BslDate, DateBoundary,
@@ -49,7 +50,10 @@ pub use date::{
 };
 pub use enums::{lookup_enum, lookup_member, members_of, EnumKind, EnumValue, ENUM_NAMES};
 pub use interner::{NameId, NameInterner};
-pub use json::{JsonEvent, JsonLineBreak, JsonParser, JsonWriter, JsonWriterSettings};
+pub use json::{
+    JsonCallByName, JsonConvertFn, JsonEvent, JsonLineBreak, JsonParser, JsonRestoreFn, JsonWriter,
+    JsonWriterSettings,
+};
 pub use locale::{Locale, NBSP};
 pub use map::MapData;
 pub use object::{BslObject, StructureStorage};
