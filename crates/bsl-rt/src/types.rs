@@ -90,6 +90,13 @@ pub enum TypeId {
     TextDocument,
     TextDocParams,
     TextEncoding,
+
+    // --- ДвоичныеДанные -------------------------------------------------
+    // Та же пара написаний: тип печатается с пробелом («Двоичные данные»,
+    // измерено пробой `BIN.TYPE`), а само ЗНАЧЕНИЕ не печатается именем
+    // вовсе — оно отдаёт шестнадцатеричный дамп (см. `impl Display for
+    // BslValue`).
+    BinaryData,
 }
 
 /// `(русское, английское)`. Русское — каноническое: именно оно уходит в
@@ -200,6 +207,7 @@ const NAMES: &[(TypeId, &str, &str)] = &[
         "TextTemplateParameters",
     ),
     (TypeId::TextEncoding, "КодировкаТекста", "TextEncoding"),
+    (TypeId::BinaryData, "Двоичные данные", "BinaryData"),
 ];
 
 impl TypeId {

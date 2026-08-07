@@ -474,11 +474,12 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
             read!(indent);
             write!(dst);
         }
-        Instr::NewTextWriter { dst, path } => {
+        Instr::NewTextWriter { dst, path } | Instr::NewBinaryData { dst, path } => {
             read!(path);
             write!(dst);
             // Конструктор открывает файл — порядок относительно другого
-            // вывода наблюдаем.
+            // вывода наблюдаем. У `NewBinaryData` это чтение, но соседство
+            // с записью в тот же файл наблюдаемо ровно так же.
             e.io = true;
         }
         Instr::CollectionLen { dst, obj } => {

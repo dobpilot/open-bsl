@@ -36,7 +36,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 2;
+pub const FORMAT_VERSION: u32 = 3;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -83,6 +83,7 @@ pub const OPCODES: &[&str] = &[
     "NewValueComparison",
     "NewMap",
     "NewTextWriter",
+    "NewBinaryData",
     "NewJsonReader",
     "NewJsonWriter",
     "NewJsonWriterSettings",
@@ -411,6 +412,7 @@ fn write_instr(instr: &Instr) -> String {
         Instr::NewValueComparison { dst } => format!("NewValueComparison dst={dst}"),
         Instr::NewMap { dst } => format!("NewMap dst={dst}"),
         Instr::NewTextWriter { dst, path } => format!("NewTextWriter dst={dst} path={path}"),
+        Instr::NewBinaryData { dst, path } => format!("NewBinaryData dst={dst} path={path}"),
         Instr::NewJsonReader { dst } => format!("NewJsonReader dst={dst}"),
         Instr::NewJsonWriter { dst } => format!("NewJsonWriter dst={dst}"),
         Instr::NewJsonWriterSettings {
@@ -1220,6 +1222,10 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
             dst: dst(&f)?,
             path: field_u8(&f, no, "path")?,
         },
+        "NewBinaryData" => Instr::NewBinaryData {
+            dst: dst(&f)?,
+            path: field_u8(&f, no, "path")?,
+        },
         "CollectionLen" => Instr::CollectionLen {
             dst: dst(&f)?,
             obj: obj(&f)?,
@@ -1330,6 +1336,11 @@ mod tests {
          Общая = 0;\nПишет();\nх = Читает();\n",
         // Запись текста: NewTextWriter и оба горячих пути.
         "з = Новый ЗаписьТекста(\"/dev/null\");\nз.Записать(\"строка\");\nз.Закрыть();\n",
+        // Двоичные данные: NewBinaryData плюс метод `Размер` и обе
+        // глобальные функции — печать и разбор имён у них общие с
+        // остальными CallBuiltin/CallMethod, но задеть их корпус обязан.
+        "д = Новый ДвоичныеДанные(\"/dev/null\");\nн = д.Размер();\n\
+         ч = РазделитьДвоичныеДанные(д, 4);\nц = СоединитьДвоичныеДанные(ч);\n",
         // JSON: все три конструктора плюс член перечисления константой
         // (`Перечисление ...` в таблице констант тоже обязан пережить
         // печать и разбор).

@@ -176,6 +176,16 @@ pub enum BuiltinFn {
     /// `ЗначениеИзФайла(ИмяФайла)` — обратное чтение того же файла.
     ValueFromFile,
 
+    /// `РазделитьДвоичныеДанные(Данные, РазмерЧасти)` -> `Массив` частей
+    /// (см. [`BslValue::binary_data_split`]).
+    SplitBinaryData,
+    /// `СоединитьДвоичныеДанные(Массив)` -> склеенные данные (см.
+    /// [`BslValue::binary_data_combine`]). Английское написание —
+    /// `ConcatBinaryData`: ИЗМЕРЕНО пробой (`CombineBinaryData`,
+    /// `MergeBinaryData` и `JoinBinaryData` платформа не знает), а не
+    /// угадано по русскому имени.
+    ConcatBinaryData,
+
     /// `АргументыКоманднойСтроки` — массив строк, переданных скрипту после
     /// его имени в командной строке. В 1С такой глобальной функции нет —
     /// это расширение по образцу OneScript, мерить его не на чем; резолвер
@@ -373,6 +383,10 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("ValueFromFile", BuiltinFn::ValueFromFile),
     ("АргументыКоманднойСтроки", BuiltinFn::CommandLineArguments),
     ("CommandLineArguments", BuiltinFn::CommandLineArguments),
+    ("РазделитьДвоичныеДанные", BuiltinFn::SplitBinaryData),
+    ("SplitBinaryData", BuiltinFn::SplitBinaryData),
+    ("СоединитьДвоичныеДанные", BuiltinFn::ConcatBinaryData),
+    ("ConcatBinaryData", BuiltinFn::ConcatBinaryData),
 ];
 
 impl BuiltinFn {
@@ -454,6 +468,12 @@ impl BuiltinFn {
             BuiltinFn::ValueToStringInternal | BuiltinFn::ValueFromStringInternal => (1, 1),
             BuiltinFn::ValueToFile => (2, 2),
             BuiltinFn::ValueFromFile => (1, 1),
+            // Обе арности строгие: платформа отвергает и
+            // `РазделитьДвоичныеДанные` с одним аргументом, и
+            // `СоединитьДвоичныеДанные` без аргументов (пробы
+            // `BIN.SPLIT.ONEARG`, `BIN.COMBINE.NOARG`).
+            BuiltinFn::SplitBinaryData => (2, 2),
+            BuiltinFn::ConcatBinaryData => (1, 1),
             _ => (1, 1),
         }
     }
@@ -602,6 +622,11 @@ pub enum BuiltinMethod {
     /// `НачатьГруппуСтрок` / `ЗакончитьГруппуСтрок`.
     BeginRowGroup,
     EndRowGroup,
+
+    // --- ДвоичныеДанные --------------------------------------------------
+    /// `ДвоичныеДанные.Размер()` — число байтов. Не `Количество()`:
+    /// двоичные данные не коллекция, и имя у метода своё.
+    Size,
 }
 
 /// Написания МЕТОДОВ объектов — тот же принцип, что и у
@@ -734,6 +759,10 @@ pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
     ("StartRowGroup", BuiltinMethod::BeginRowGroup),
     ("ЗакончитьГруппуСтрок", BuiltinMethod::EndRowGroup),
     ("EndRowGroup", BuiltinMethod::EndRowGroup),
+    // Английское написание проверено пробой `BIN.SIZE.EN`: платформа
+    // принимает `ДД.Size()`.
+    ("Размер", BuiltinMethod::Size),
+    ("Size", BuiltinMethod::Size),
 ];
 
 impl BuiltinMethod {
@@ -820,6 +849,8 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         | BuiltinFn::ReadJsonValue => Err(RtError::InvalidBytecode(
             "функции JSON требуют контекста имён: вызывайте call_builtin_fn_ctx",
         )),
+        BuiltinFn::SplitBinaryData => args[0].binary_data_split(&args[1]),
+        BuiltinFn::ConcatBinaryData => args[0].binary_data_combine(),
         BuiltinFn::WriteJsonDate => crate::json::write_json_date(&args[0], &args[1], &args[2]),
         BuiltinFn::ReadJsonDate => crate::json::read_json_date(&args[0], &args[1]),
         BuiltinFn::ValueToStringInternal
@@ -1393,6 +1424,7 @@ pub fn call_builtin_method(
             method: "Вывести",
             receiver: obj.type_name(),
         }),
+        BuiltinMethod::Size => obj.binary_data_size(),
         BuiltinMethod::XmlReadAttribute => crate::xml::read_attribute(obj),
         BuiltinMethod::XmlAttributeCount => crate::xml::attribute_count(obj),
         BuiltinMethod::XmlAttributeName => crate::xml::attribute_name(obj, args),

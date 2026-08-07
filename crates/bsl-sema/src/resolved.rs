@@ -135,6 +135,11 @@ pub enum RExpr {
     NewTextWriter {
         path: Box<RExpr>,
     },
+    /// `Новый ДвоичныеДанные(ИмяФайла)` — файл читается целиком в момент
+    /// создания.
+    NewBinaryData {
+        path: Box<RExpr>,
+    },
     /// `Вычислить(<строка>)` — компилирует строку как ОДНО выражение (через
     /// внутреннюю обёртку `Возврат (<строка>);`, см. `bsl-vm`) и исполняет
     /// его в текущей области видимости верхнего уровня, возвращая значение.
@@ -359,7 +364,7 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
         RExpr::NewJsonWriterSettings { line_break, indent } => {
             expr_uses_dynamic(line_break) || expr_uses_dynamic(indent)
         }
-        RExpr::NewTextWriter { path } => expr_uses_dynamic(path),
+        RExpr::NewTextWriter { path } | RExpr::NewBinaryData { path } => expr_uses_dynamic(path),
         RExpr::NewTypeDescription(names) => expr_uses_dynamic(names),
         RExpr::Number(_)
         | RExpr::Date(_)
