@@ -4,6 +4,7 @@
 //! модуль `date`) и типы как значения (`Type`/`TypeId`). `BslValue` растёт
 //! по мере готовности остальных слоёв, а не заранее под все типы из брифа.
 
+mod binbuf;
 mod builtin;
 mod date;
 mod deflate;
@@ -300,6 +301,7 @@ fn enum_kind_type_id(kind: EnumKind) -> TypeId {
         EnumKind::SpreadFileType => TypeId::SpreadFileType,
         EnumKind::DrawingKind => TypeId::DrawingKind,
         EnumKind::TextEncoding => TypeId::TextEncoding,
+        EnumKind::ByteOrder => TypeId::ByteOrder,
     }
 }
 
@@ -340,6 +342,12 @@ impl BslValue {
                 // диагностике самой реализации — в тексте `RtError`, — и
                 // написана слитно по образцу соседей.
                 BslObject::BinaryData(_) => "ДвоичныеДанные",
+                // А вот у БУФЕРА имя значения наблюдаемо и измерено:
+                // `Строка(Буфер)` печатает именно «БуферДвоичныхДанных»
+                // (слитно), в отличие от имени типа «Буфер двоичных
+                // данных» в `types.rs` и в отличие от соседа сверху,
+                // который печатается дампом байтов.
+                BslObject::BinaryBuffer(_) => "БуферДвоичныхДанных",
                 // Имя ЗНАЧЕНИЯ — без пробелов; имя ТИПА («Чтение JSON») в
                 // `types.rs`. Измерено: `Строка(Новый ЧтениеJSON)` даёт
                 // «ЧтениеJSON», а `Строка(ТипЗнч(...))` — «Чтение JSON».
@@ -1076,6 +1084,10 @@ impl BslValue {
                 // ноль байт «Нет». Это тот же критерий, что у коллекций,
                 // а не «объект есть — значит заполнен».
                 BslObject::BinaryData(bytes) => !bytes.is_empty(),
+                // У буфера тот же критерий — ПО РАЗМЕРУ, не по содержимому:
+                // измерено, что четырёхбайтовый НУЛЕВОЙ буфер считается
+                // заполненным («Да»), а буфер нулевого размера — нет.
+                BslObject::BinaryBuffer(d) => !d.borrow().bytes.is_empty(),
                 // У строки таблицы и пары ключ-значение «длины» нет: сам
                 // факт существования объекта и есть заполненность.
                 BslObject::TableRow(..)
@@ -1144,6 +1156,7 @@ impl BslValue {
                     })
                 }
                 BslObject::BinaryData(..) => TypeId::BinaryData,
+                BslObject::BinaryBuffer(..) => TypeId::BinaryDataBuffer,
                 BslObject::JsonReader(..) => TypeId::JsonReader,
                 BslObject::JsonWriter(..) => TypeId::JsonWriter,
                 BslObject::JsonWriterSettings(..) => TypeId::JsonWriterSettings,
@@ -1514,6 +1527,24 @@ impl BslValue {
         Ok(BslValue::binary_data_of(bytes))
     }
 
+    /// `Новый БуферДвоичныхДанных(Размер[, ПорядокБайтов])`.
+    ///
+    /// Размер обязателен и фиксирует буфер навсегда — роста у него нет;
+    /// байты нулевые, порядок по умолчанию `LittleEndian` (измерено).
+    /// Пропущенный второй аргумент приходит сюда как
+    /// [`BslValue::Undefined`].
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::TypeError`], если размер не целое неотрицательное число
+    /// (платформа отвергает `-1`, `2.5` и строку `"4"`, а `0` принимает),
+    /// если порядок байтов не член `ПорядокБайтов`, а также если буфер
+    /// такого размера не удалось разместить в памяти: отказом это лучше,
+    /// чем падением процесса на числе из пользовательского текста.
+    pub fn new_binary_buffer(size: &BslValue, order: &BslValue) -> RtResult<Self> {
+        binbuf::new_binary_buffer(size, order)
+    }
+
     /// `ДвоичныеДанные.Размер()` — число байтов.
     ///
     /// # Errors
@@ -1742,6 +1773,10 @@ impl BslValue {
                         v,
                     ))))
                 }
+                // `Буфер[Позиция]` -> `Число` 0..255. Индекс здесь свой, не
+                // общий `index_as_usize`: у буфера дробная позиция не
+                // ошибка, а отбрасывается к нулю (измерено).
+                BslObject::BinaryBuffer(_) => binbuf::get_byte(self, idx),
                 _ => Err(RtError::NotIndexable),
             },
             _ => Err(RtError::NotIndexable),
@@ -1762,6 +1797,9 @@ impl BslValue {
                     *slot = val;
                     Ok(())
                 }
+                // `Буфер[Позиция] = Значение` — единственный, кроме массива,
+                // изменяемый по индексу объект.
+                BslObject::BinaryBuffer(_) => binbuf::set_byte(self, idx, &val),
                 _ => Err(RtError::NotIndexable),
             },
             _ => Err(RtError::NotIndexable),
@@ -1789,6 +1827,12 @@ impl BslValue {
                 // двоичные данные не коллекция, доступа к отдельному байту
                 // здесь не заведено (он появится с `БуферДвоичныхДанных`).
                 BslObject::BinaryData(..) => Err(RtError::NotIndexable),
+                // Число байтов буфера отдаёт СВОЙСТВО `Размер`, а
+                // `Количество()` платформа на нём отвергает — измерено.
+                // (`Для Каждого` по буферу она при этом принимает; обход
+                // здесь не заведён, потому что в задачу этого типа он не
+                // входит, и своего эталона у него ещё нет.)
+                BslObject::BinaryBuffer(..) => Err(RtError::NotIndexable),
                 BslObject::TextWriter(..)
                 | BslObject::JsonReader(..)
                 | BslObject::JsonWriter(..)
@@ -2137,6 +2181,21 @@ impl BslValue {
                     }
                 }
                 BslObject::JsonSerializerSettings(_) => json::get_serializer_setting(self, name),
+                // У буфера `Размер` и `ПорядокБайтов` — именно СВОЙСТВА:
+                // `Б.Размер()` со скобками платформа отвергает (измерено),
+                // поэтому оба живут здесь, а не в таблице методов.
+                BslObject::BinaryBuffer(_) => {
+                    if name.eq_ignore_ascii_case("Размер") || name.eq_ignore_ascii_case("Size")
+                    {
+                        binbuf::size(self)
+                    } else if name.eq_ignore_ascii_case("ПорядокБайтов")
+                        || name.eq_ignore_ascii_case("ByteOrder")
+                    {
+                        binbuf::get_order(self)
+                    } else {
+                        Err(RtError::UnknownColumn(name.to_string()))
+                    }
+                }
                 // У `ЧтениеXML` свойств больше, но природа та же: читатель
                 // помнит текущий узел, а `ТипУзла`/`Имя`/`Значение` только
                 // показывают его с разных сторон.
@@ -2235,6 +2294,25 @@ impl BslValue {
                 }
                 BslObject::JsonSerializerSettings(_) => {
                     json::set_serializer_setting(self, name, val)
+                }
+                // Пишется только `ПорядокБайтов`: `Размер` доступен лишь на
+                // чтение, присваивание в него платформа отвергает
+                // (измерено — прежний размер при этом уцелел).
+                BslObject::BinaryBuffer(_) => {
+                    if name.eq_ignore_ascii_case("ПорядокБайтов")
+                        || name.eq_ignore_ascii_case("ByteOrder")
+                    {
+                        binbuf::set_order(self, val)
+                    } else if name.eq_ignore_ascii_case("Размер")
+                        || name.eq_ignore_ascii_case("Size")
+                    {
+                        Err(RtError::TypeError {
+                            expected: "Свойство, доступное для записи",
+                            op: "Размер",
+                        })
+                    } else {
+                        Err(RtError::UnknownColumn(name.to_string()))
+                    }
                 }
                 BslObject::TableRow(data, row_id) => {
                     let mut data = data.borrow_mut();
@@ -3006,6 +3084,9 @@ impl fmt::Display for BslValue {
                 // Единственный объект, который печатается СОДЕРЖИМЫМ, а не
                 // именем: см. `binary_data_display`.
                 BslObject::BinaryData(bytes) => write!(f, "{}", binary_data_display(bytes)),
+                // Буфер, в отличие от двоичных данных, печатается ИМЕНЕМ, а
+                // не содержимым (измерено): дампа байтов у него нет.
+                BslObject::BinaryBuffer(_) => write!(f, "БуферДвоичныхДанных"),
                 BslObject::JsonReader(_) => write!(f, "ЧтениеJSON"),
                 BslObject::JsonWriter(_) => write!(f, "ЗаписьJSON"),
                 BslObject::JsonWriterSettings(_) => write!(f, "ПараметрыЗаписиJSON"),

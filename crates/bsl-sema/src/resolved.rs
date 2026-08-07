@@ -140,6 +140,14 @@ pub enum RExpr {
     NewBinaryData {
         path: Box<RExpr>,
     },
+    /// `Новый БуферДвоичныхДанных(Размер[, ПорядокБайтов])` — размер
+    /// обязателен, порядок необязателен и по умолчанию `LittleEndian`.
+    /// Пропущенная позиция приходит `Undefined`, как у
+    /// [`RExpr::NewJsonWriterSettings`].
+    NewBinaryBuffer {
+        size: Box<RExpr>,
+        order: Box<RExpr>,
+    },
     /// `Вычислить(<строка>)` — компилирует строку как ОДНО выражение (через
     /// внутреннюю обёртку `Возврат (<строка>);`, см. `bsl-vm`) и исполняет
     /// его в текущей области видимости верхнего уровня, возвращая значение.
@@ -365,6 +373,9 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
             expr_uses_dynamic(line_break) || expr_uses_dynamic(indent)
         }
         RExpr::NewTextWriter { path } | RExpr::NewBinaryData { path } => expr_uses_dynamic(path),
+        RExpr::NewBinaryBuffer { size, order } => {
+            expr_uses_dynamic(size) || expr_uses_dynamic(order)
+        }
         RExpr::NewTypeDescription(names) => expr_uses_dynamic(names),
         RExpr::Number(_)
         | RExpr::Date(_)

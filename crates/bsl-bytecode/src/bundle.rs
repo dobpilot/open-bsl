@@ -482,6 +482,13 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
             // с записью в тот же файл наблюдаемо ровно так же.
             e.io = true;
         }
+        // А буфер, в отличие от соседа выше, никуда не ходит: чистое
+        // выделение памяти, наблюдаемых побочных эффектов нет.
+        Instr::NewBinaryBuffer { dst, size, order } => {
+            read!(size);
+            read!(order);
+            write!(dst);
+        }
         Instr::CollectionLen { dst, obj } => {
             read!(obj);
             write!(dst);
