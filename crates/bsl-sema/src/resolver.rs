@@ -326,6 +326,10 @@ pub const NEW_TYPES: &[&str] = &[
     // `Новый BinaryData(Путь)` принимается.
     "ДвоичныеДанные",
     "BinaryData",
+    // Английское написание ИЗМЕРЕНО: `Новый BinaryDataBuffer(4)` платформа
+    // принимает.
+    "БуферДвоичныхДанных",
+    "BinaryDataBuffer",
 ];
 
 struct Resolver<'a> {
@@ -732,6 +736,27 @@ impl<'a> Resolver<'a> {
                     path: Box::new(self.resolve_expr(&args[0])?),
                 })
             }
+            // Размер обязателен, порядок байтов необязателен, третьего
+            // аргумента нет: всё измерено — платформа отвергает и пустой
+            // конструктор, и вызов с тремя аргументами.
+            "БУФЕРДВОИЧНЫХДАННЫХ" | "BINARYDATABUFFER" => {
+                if args.is_empty() || args.len() > 2 {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый БуферДвоичныхДанных".to_string(),
+                        expected: 1,
+                        found: args.len(),
+                    });
+                }
+                let size = self.resolve_expr(&args[0])?;
+                let order = match args.get(1) {
+                    Some(a) => self.resolve_expr(a)?,
+                    None => RExpr::Undefined,
+                };
+                Ok(RExpr::NewBinaryBuffer {
+                    size: Box::new(size),
+                    order: Box::new(order),
+                })
+            }
             "ЧТЕНИЕJSON" | "JSONREADER" => {
                 if !args.is_empty() {
                     return Err(SemaError::ArgumentCountMismatch {
@@ -988,6 +1013,24 @@ impl<'a> Resolver<'a> {
                     // `BIN.SIZE.EXTRAARG`) — арность фиксированная.
                     bsl_rt::BuiltinMethod::Size => Some(0),
                     bsl_rt::BuiltinMethod::Delete | bsl_rt::BuiltinMethod::Get => Some(1),
+                    // Методы буфера. `Установить` и побитовые — строго два
+                    // аргумента, `Разделить`/`Соединить` — один (измерено:
+                    // ни без аргументов, ни с двумя платформа их не берёт).
+                    bsl_rt::BuiltinMethod::BufSet
+                    | bsl_rt::BuiltinMethod::WriteBitwiseAnd
+                    | bsl_rt::BuiltinMethod::WriteBitwiseOr
+                    | bsl_rt::BuiltinMethod::WriteBitwiseXor
+                    | bsl_rt::BuiltinMethod::WriteBitwiseAndNot => Some(2),
+                    bsl_rt::BuiltinMethod::BufSplit | bsl_rt::BuiltinMethod::BufConcat => Some(1),
+                    // У чтения целого 1..2 аргумента, у записи 2..3, у
+                    // `Инвертировать` 0..2 — арность решает рантайм.
+                    bsl_rt::BuiltinMethod::ReadInt16
+                    | bsl_rt::BuiltinMethod::ReadInt32
+                    | bsl_rt::BuiltinMethod::ReadInt64
+                    | bsl_rt::BuiltinMethod::WriteInt16
+                    | bsl_rt::BuiltinMethod::WriteInt32
+                    | bsl_rt::BuiltinMethod::WriteInt64
+                    | bsl_rt::BuiltinMethod::Invert => None,
                     bsl_rt::BuiltinMethod::Insert => Some(2),
                     bsl_rt::BuiltinMethod::FindRows | bsl_rt::BuiltinMethod::Total => Some(1),
                     // `Записать` — 1 у `ЗаписьТекста` (кусок текста) и 1..2 у

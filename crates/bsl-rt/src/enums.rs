@@ -84,6 +84,12 @@ pub enum EnumValue {
     TextEncodingUtf16,
     TextEncodingUtf8,
     TextEncodingSystem,
+
+    // --- ПорядокБайтов --------------------------------------------------
+    // Ровно два члена, и оба пишутся ОДИНАКОВО на обоих языках: русских
+    // `Прямой`/`Обратный` платформа не знает (проверено перебором).
+    ByteOrderLittle,
+    ByteOrderBig,
 }
 
 /// К какому перечислению принадлежит член — это же имя стоит слева от
@@ -105,6 +111,12 @@ pub enum EnumKind {
     SpreadFileType,
     DrawingKind,
     TextEncoding,
+    /// `ПорядокБайтов` — порядок байтов многобайтового целого в
+    /// `БуферДвоичныхДанных`. Английское написание `ByteOrder` ИЗМЕРЕНО
+    /// (`ByteOrder.LittleEndian` платформа принимает и считает равным
+    /// русскому написанию), метатип — «ПеречислениеПорядокБайтов», тоже
+    /// измерено.
+    ByteOrder,
 }
 
 impl EnumKind {
@@ -124,6 +136,7 @@ impl EnumKind {
                 "SpreadsheetDocumentDrawingType",
             ),
             EnumKind::TextEncoding => ("КодировкаТекста", "TextEncoding"),
+            EnumKind::ByteOrder => ("ПорядокБайтов", "ByteOrder"),
         }
     }
 
@@ -144,6 +157,10 @@ impl EnumKind {
             EnumKind::SpreadFileType => "ПеречислениеТипФайлаТабличногоДокумента",
             EnumKind::DrawingKind => "ПеречислениеТипРисункаТабличногоДокумента",
             EnumKind::TextEncoding => "ПеречислениеКодировкаТекста",
+            // Здесь префикс не предположение по образцу, а ИЗМЕРЕНО:
+            // `Строка(ПорядокБайтов)` и `Строка(ТипЗнч(ПорядокБайтов))`
+            // оба дают «ПеречислениеПорядокБайтов».
+            EnumKind::ByteOrder => "ПеречислениеПорядокБайтов",
         }
     }
 
@@ -481,6 +498,24 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "UniversalDate",
         "Универсальная дата",
     ),
+    // Третья и четвёртая колонки СОВПАДАЮТ: у этого перечисления русских
+    // написаний членов нет вовсе, а печатается член через дефис и со
+    // строчной второй частью — «Little-endian», не «LittleEndian». Всё
+    // измерено на 8.3.27.
+    (
+        EnumKind::ByteOrder,
+        EnumValue::ByteOrderLittle,
+        "LittleEndian",
+        "LittleEndian",
+        "Little-endian",
+    ),
+    (
+        EnumKind::ByteOrder,
+        EnumValue::ByteOrderBig,
+        "BigEndian",
+        "BigEndian",
+        "Big-endian",
+    ),
 ];
 
 /// Имена всех перечислений — для автодополнения REPL и для резолвера,
@@ -502,6 +537,8 @@ pub const ENUM_NAMES: &[(&str, EnumKind)] = &[
     ("SpreadsheetDocumentFileType", EnumKind::SpreadFileType),
     ("ТипРисункаТабличногоДокумента", EnumKind::DrawingKind),
     ("SpreadsheetDocumentDrawingType", EnumKind::DrawingKind),
+    ("ПорядокБайтов", EnumKind::ByteOrder),
+    ("ByteOrder", EnumKind::ByteOrder),
 ];
 
 /// Перечисление по имени слева от точки. Регистронезависимо и на обоих

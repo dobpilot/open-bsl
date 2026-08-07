@@ -1092,6 +1092,14 @@ fn step(
                 reg_store(stack, d, writer)?;
                 frames[frame_idx].pc += 1;
             }
+            Instr::NewBinaryBuffer { dst, size, order } => {
+                let size = reg_load(stack, frames[frame_idx].reg_index(size))?;
+                let order = reg_load(stack, frames[frame_idx].reg_index(order))?;
+                let buf = BslValue::new_binary_buffer(&size, &order)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, buf)?;
+                frames[frame_idx].pc += 1;
+            }
             Instr::NewBinaryData { dst, path } => {
                 let path = reg_load(stack, frames[frame_idx].reg_index(path))?;
                 let data = BslValue::new_binary_data(&path)?;

@@ -36,7 +36,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 3;
+pub const FORMAT_VERSION: u32 = 4;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -84,6 +84,7 @@ pub const OPCODES: &[&str] = &[
     "NewMap",
     "NewTextWriter",
     "NewBinaryData",
+    "NewBinaryBuffer",
     "NewJsonReader",
     "NewJsonWriter",
     "NewJsonWriterSettings",
@@ -413,6 +414,9 @@ fn write_instr(instr: &Instr) -> String {
         Instr::NewMap { dst } => format!("NewMap dst={dst}"),
         Instr::NewTextWriter { dst, path } => format!("NewTextWriter dst={dst} path={path}"),
         Instr::NewBinaryData { dst, path } => format!("NewBinaryData dst={dst} path={path}"),
+        Instr::NewBinaryBuffer { dst, size, order } => {
+            format!("NewBinaryBuffer dst={dst} size={size} order={order}")
+        }
         Instr::NewJsonReader { dst } => format!("NewJsonReader dst={dst}"),
         Instr::NewJsonWriter { dst } => format!("NewJsonWriter dst={dst}"),
         Instr::NewJsonWriterSettings {
@@ -1226,6 +1230,11 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
             dst: dst(&f)?,
             path: field_u8(&f, no, "path")?,
         },
+        "NewBinaryBuffer" => Instr::NewBinaryBuffer {
+            dst: dst(&f)?,
+            size: field_u8(&f, no, "size")?,
+            order: field_u8(&f, no, "order")?,
+        },
         "CollectionLen" => Instr::CollectionLen {
             dst: dst(&f)?,
             obj: obj(&f)?,
@@ -1341,6 +1350,15 @@ mod tests {
         // остальными CallBuiltin/CallMethod, но задеть их корпус обязан.
         "д = Новый ДвоичныеДанные(\"/dev/null\");\nн = д.Размер();\n\
          ч = РазделитьДвоичныеДанные(д, 4);\nц = СоединитьДвоичныеДанные(ч);\n",
+        // Буфер двоичных данных: NewBinaryBuffer в обеих формах (с
+        // порядком байтов и без), индексация буфера на чтение и на запись,
+        // свойство `Размер` и один из методов — их печать и разбор идут
+        // общими путями, но опкод конструктора свой.
+        "б = Новый БуферДвоичныхДанных(4);\n\
+         в = Новый БуферДвоичныхДанных(2, ПорядокБайтов.BigEndian);\n\
+         б[0] = 255;\nн = б[0];\nр = б.Размер;\n\
+         б.ЗаписатьЦелое16(0, 258);\nц = б.ПрочитатьЦелое16(0);\n\
+         б.Инвертировать();\nс = б.Соединить(в);\n",
         // JSON: все три конструктора плюс член перечисления константой
         // (`Перечисление ...` в таблице констант тоже обязан пережить
         // печать и разбор).

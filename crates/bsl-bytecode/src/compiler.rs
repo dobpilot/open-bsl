@@ -684,6 +684,18 @@ impl<'a> Compiler<'a> {
                 });
                 self.free_temp(1);
             }
+            RExpr::NewBinaryBuffer { size, order } => {
+                let size_reg = self.alloc_temp()?;
+                self.compile_expr(size, size_reg)?;
+                let order_reg = self.alloc_temp()?;
+                self.compile_expr(order, order_reg)?;
+                self.emit(Instr::NewBinaryBuffer {
+                    dst,
+                    size: size_reg,
+                    order: order_reg,
+                });
+                self.free_temp(2);
+            }
             RExpr::NewBinaryData { path } => {
                 let path_reg = self.alloc_temp()?;
                 self.compile_expr(path, path_reg)?;

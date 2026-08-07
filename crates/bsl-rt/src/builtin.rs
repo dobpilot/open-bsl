@@ -626,7 +626,40 @@ pub enum BuiltinMethod {
     // --- ДвоичныеДанные --------------------------------------------------
     /// `ДвоичныеДанные.Размер()` — число байтов. Не `Количество()`:
     /// двоичные данные не коллекция, и имя у метода своё.
+    ///
+    /// У `БуферДвоичныхДанных` `Размер` — наоборот, СВОЙСТВО (см.
+    /// `BslValue::get_field_by_name`), и вызов со скобками на нём ошибка:
+    /// измерено, что платформа отвергает `Буфер.Размер()`.
     Size,
+
+    // --- БуферДвоичныхДанных ---------------------------------------------
+    /// `Установить(Позиция, Значение)` — то же, что `Буфер[Позиция] = ...`.
+    /// Пары `Получить`/`Get` у буфера нет своей: он делит `BuiltinMethod::Get`
+    /// с `Соответствие`, и получатель разводится в рантайме.
+    BufSet,
+    /// `ПрочитатьЦелое16/32/64` и парные `ЗаписатьЦелое16/32/64`.
+    /// Восьмибитных методов у платформы НЕТ ни в каком написании
+    /// (проверено перебором `ПрочитатьЦелое8`, `ReadInt8`, `ПрочитатьБайт`,
+    /// `ПолучитьБайт`) — один байт берётся индексом либо `Получить`.
+    ReadInt16,
+    ReadInt32,
+    ReadInt64,
+    WriteInt16,
+    WriteInt32,
+    WriteInt64,
+    /// `Разделить(Разделитель)` — раскрой по вхождениям БУФЕРА-разделителя,
+    /// а не нарезка на куски заданной длины (измерено: число платформа
+    /// отвергает).
+    BufSplit,
+    /// `Соединить(Другой)` -> НОВЫЙ буфер; получатель не меняется.
+    BufConcat,
+    /// Побитовые операции с БУФЕРОМ-маской, накладываемой с позиции.
+    WriteBitwiseAnd,
+    WriteBitwiseOr,
+    WriteBitwiseXor,
+    WriteBitwiseAndNot,
+    /// `Инвертировать([Позиция][, Количество])` — побитовое НЕ по месту.
+    Invert,
 }
 
 /// Написания МЕТОДОВ объектов — тот же принцип, что и у
@@ -763,6 +796,43 @@ pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
     // принимает `ДД.Size()`.
     ("Размер", BuiltinMethod::Size),
     ("Size", BuiltinMethod::Size),
+    // Английские написания методов буфера ИЗМЕРЕНЫ, а не достроены по
+    // образцу: платформа принимает `Set`, `ReadInt16`, `WriteInt16`,
+    // `Split`, `Concat`, `WriteBitwiseAnd`, `WriteBitwiseXor`,
+    // `WriteBitwiseAndNot`, `Invert`. Русское имя исключающего ИЛИ —
+    // `ЗаписатьПобитовоеИсключительноеИли`; `...ИсключающееИли` платформа
+    // НЕ знает, и это стоило отдельного захода.
+    ("Установить", BuiltinMethod::BufSet),
+    ("Set", BuiltinMethod::BufSet),
+    ("ПрочитатьЦелое16", BuiltinMethod::ReadInt16),
+    ("ReadInt16", BuiltinMethod::ReadInt16),
+    ("ПрочитатьЦелое32", BuiltinMethod::ReadInt32),
+    ("ReadInt32", BuiltinMethod::ReadInt32),
+    ("ПрочитатьЦелое64", BuiltinMethod::ReadInt64),
+    ("ReadInt64", BuiltinMethod::ReadInt64),
+    ("ЗаписатьЦелое16", BuiltinMethod::WriteInt16),
+    ("WriteInt16", BuiltinMethod::WriteInt16),
+    ("ЗаписатьЦелое32", BuiltinMethod::WriteInt32),
+    ("WriteInt32", BuiltinMethod::WriteInt32),
+    ("ЗаписатьЦелое64", BuiltinMethod::WriteInt64),
+    ("WriteInt64", BuiltinMethod::WriteInt64),
+    ("Разделить", BuiltinMethod::BufSplit),
+    ("Split", BuiltinMethod::BufSplit),
+    ("Соединить", BuiltinMethod::BufConcat),
+    ("Concat", BuiltinMethod::BufConcat),
+    ("ЗаписатьПобитовоеИ", BuiltinMethod::WriteBitwiseAnd),
+    ("WriteBitwiseAnd", BuiltinMethod::WriteBitwiseAnd),
+    ("ЗаписатьПобитовоеИли", BuiltinMethod::WriteBitwiseOr),
+    ("WriteBitwiseOr", BuiltinMethod::WriteBitwiseOr),
+    (
+        "ЗаписатьПобитовоеИсключительноеИли",
+        BuiltinMethod::WriteBitwiseXor,
+    ),
+    ("WriteBitwiseXor", BuiltinMethod::WriteBitwiseXor),
+    ("ЗаписатьПобитовоеИНе", BuiltinMethod::WriteBitwiseAndNot),
+    ("WriteBitwiseAndNot", BuiltinMethod::WriteBitwiseAndNot),
+    ("Инвертировать", BuiltinMethod::Invert),
+    ("Invert", BuiltinMethod::Invert),
 ];
 
 impl BuiltinMethod {
@@ -1216,8 +1286,12 @@ pub fn call_builtin_method(
                 receiver: obj.type_name(),
             }),
         },
+        // `Получить` полиморфен: у `Соответствие` это чтение по ключу, у
+        // буфера — байт по позиции (измерено, что `Буфер.Получить(0)`
+        // делает ровно то же, что `Буфер[0]`).
         BuiltinMethod::Get => match obj {
             BslValue::Object(o) if matches!(&**o, BslObject::Map(_)) => obj.map_get(&args[0]),
+            _ if crate::binbuf::is_buffer(obj) => crate::binbuf::get_byte(obj, &args[0]),
             _ => Err(RtError::MethodNotApplicable {
                 method: "Получить",
                 receiver: obj.type_name(),
@@ -1425,6 +1499,48 @@ pub fn call_builtin_method(
             receiver: obj.type_name(),
         }),
         BuiltinMethod::Size => obj.binary_data_size(),
+
+        // --- БуферДвоичныхДанных ------------------------------------------
+        BuiltinMethod::BufSet => match args {
+            [pos, value] => crate::binbuf::set_byte(obj, pos, value).map(|()| BslValue::Undefined),
+            _ => Err(RtError::MethodNotApplicable {
+                method: "Установить",
+                receiver: obj.type_name(),
+            }),
+        },
+        BuiltinMethod::ReadInt16 => {
+            crate::binbuf::read_int(obj, args, crate::binbuf::IntWidth::W16)
+        }
+        BuiltinMethod::ReadInt32 => {
+            crate::binbuf::read_int(obj, args, crate::binbuf::IntWidth::W32)
+        }
+        BuiltinMethod::ReadInt64 => {
+            crate::binbuf::read_int(obj, args, crate::binbuf::IntWidth::W64)
+        }
+        BuiltinMethod::WriteInt16 => {
+            crate::binbuf::write_int(obj, args, crate::binbuf::IntWidth::W16)
+        }
+        BuiltinMethod::WriteInt32 => {
+            crate::binbuf::write_int(obj, args, crate::binbuf::IntWidth::W32)
+        }
+        BuiltinMethod::WriteInt64 => {
+            crate::binbuf::write_int(obj, args, crate::binbuf::IntWidth::W64)
+        }
+        BuiltinMethod::BufSplit => crate::binbuf::split(obj, &args[0]),
+        BuiltinMethod::BufConcat => crate::binbuf::concat(obj, &args[0]),
+        BuiltinMethod::WriteBitwiseAnd => {
+            crate::binbuf::bitwise(obj, args, crate::binbuf::BitOp::And)
+        }
+        BuiltinMethod::WriteBitwiseOr => {
+            crate::binbuf::bitwise(obj, args, crate::binbuf::BitOp::Or)
+        }
+        BuiltinMethod::WriteBitwiseXor => {
+            crate::binbuf::bitwise(obj, args, crate::binbuf::BitOp::Xor)
+        }
+        BuiltinMethod::WriteBitwiseAndNot => {
+            crate::binbuf::bitwise(obj, args, crate::binbuf::BitOp::AndNot)
+        }
+        BuiltinMethod::Invert => crate::binbuf::invert(obj, args),
         BuiltinMethod::XmlReadAttribute => crate::xml::read_attribute(obj),
         BuiltinMethod::XmlAttributeCount => crate::xml::attribute_count(obj),
         BuiltinMethod::XmlAttributeName => crate::xml::attribute_name(obj, args),
