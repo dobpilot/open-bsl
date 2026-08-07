@@ -15,7 +15,7 @@ Line format (order top-to-bottom by priority):
 
 Этапы 1 и 2 из docs/std-library-plan.md (этап 0 — JSON — выполнен и измерен).
 
-- [ ] (vm-call-by-name) [hard] этап 1: вызов BSL-функции по имени из рантайма
+- [x] (vm-call-by-name) [hard] этап 1: вызов BSL-функции по имени из рантайма
       — узкий API поверх машинерии `Выполнить`/`Вычислить` в bsl-vm (кэш
       скомпилированных фрагментов уже есть, см. `run_isolated` и
       `CompiledSnippet`); юнит-тесты на вызов процедуры и функции по имени,
