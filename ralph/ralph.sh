@@ -1,19 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ── Ralph loop: fable → opus → fable, with a review panel on hard tasks ──────
+# ── Ralph loop: plan → implement → review, with a review panel on hard tasks ─
 #
-#   plan       fable   (picks a task or plans the fix for a rejected one)
-#   implement  opus
-#   review     fable                         ← always
-#   review     opus    (independent, panel)  ← only when the task is [hard]
+#   plan       $PLAN_MODEL    (picks a task or plans the fix for a rejected one)
+#   implement  $IMPL_MODEL
+#   review     $REVIEW_MODEL                          ← always
+#   review     $REVIEW2_MODEL  (independent, panel)   ← only when the task is [hard]
 #   arbiter    bash    (PASS only if every active reviewer says PASS)
+#
+# The four models are knobs: `PLAN_MODEL=opus ./ralph/ralph.sh` swaps one phase
+# without editing the script, which is what a per-model usage limit calls for.
+# The two verdict files keep their names whatever model writes them — the
+# arbiter and ralph/prompts/plan.md both address them by name.
 #
 # State lives on disk, not in any session's context:
 #   TASKS.md          backlog; the arbiter ticks a task off only on PASS
 #   PLAN.md           the current plan the phases hand off through
-#   REVIEW_FABLE.md   Fable's verdict for the last attempt (kept until a PASS)
-#   REVIEW_OPUS.md    Opus's verdict, hard tasks only
+#   REVIEW_FABLE.md   the first reviewer's verdict for the last attempt (kept until a PASS)
+#   REVIEW_OPUS.md    the second reviewer's verdict, hard tasks only
 #   PROGRESS.md       append-only log you read afterwards
 #
 #   Run from repo root:   ./ralph/ralph.sh
@@ -21,6 +26,15 @@ set -euo pipefail
 # ────────────────────────────────────────────────────────────────────────────
 
 MAX_ITERS="${MAX_ITERS:-20}"
+
+# Model per phase. Панель на hard-задачах остаётся двухголосой даже когда обе
+# роли достались одной модели: второй ревьюер приходит с чистым контекстом и не
+# читает чужой вердикт, так что независимость прогона сохраняется — теряется
+# только независимость самой модели.
+PLAN_MODEL="${PLAN_MODEL:-opus}"
+IMPL_MODEL="${IMPL_MODEL:-opus}"
+REVIEW_MODEL="${REVIEW_MODEL:-opus}"
+REVIEW2_MODEL="${REVIEW2_MODEL:-opus}"
 PROMPTS="$(cd "$(dirname "$0")/prompts" && pwd)"
 DONE_SENTINEL="ALL_TASKS_DONE"
 
@@ -51,11 +65,11 @@ verdict ()  { [ -f "$1" ] || return 0; sed -n 's/^VERDICT:[[:space:]]*//p' "$1" 
 for i in $(seq 1 "$MAX_ITERS"); do
   echo "═══════════════ iteration $i / $MAX_ITERS ═══════════════"
 
-  # ── plan (fable) ───────────────────────────────────────────────────────────
+  # ── plan ───────────────────────────────────────────────────────────────────
   # If REVIEW_*.md with VERDICT: FAIL are still on disk, the last attempt was
   # rejected and the planner will plan the fix instead of picking a new task.
-  echo "── [fable] plan ──"
-  run fable "$PLAN_EFFORT" "$PLAN_TOOLS" "$(cat "$PROMPTS/plan.md")"
+  echo "── [$PLAN_MODEL] plan ──"
+  run "$PLAN_MODEL" "$PLAN_EFFORT" "$PLAN_TOOLS" "$(cat "$PROMPTS/plan.md")"
 
   if grep -q "$DONE_SENTINEL" PLAN.md 2>/dev/null; then
     echo "Planner reports no remaining tasks. Stopping."
@@ -66,16 +80,16 @@ for i in $(seq 1 "$MAX_ITERS"); do
   DIFFICULTY="$(field DIFFICULTY)"
   echo "   task=${TASK_ID:-?}  difficulty=${DIFFICULTY:-normal}"
 
-  # ── implement (opus) ───────────────────────────────────────────────────────
-  echo "── [opus] implement ──"
-  run opus "$IMPL_EFFORT" "$IMPL_TOOLS" "$(cat "$PROMPTS/implement.md")"
+  # ── implement ──────────────────────────────────────────────────────────────
+  echo "── [$IMPL_MODEL] implement ──"
+  run "$IMPL_MODEL" "$IMPL_EFFORT" "$IMPL_TOOLS" "$(cat "$PROMPTS/implement.md")"
 
   # ── review ─────────────────────────────────────────────────────────────────
   rm -f REVIEW_FABLE.md REVIEW_OPUS.md
 
-  echo "── [fable] review ──"
+  echo "── [$REVIEW_MODEL] review ──"
   reff="$REVIEW_EFFORT"; [ "$DIFFICULTY" = "hard" ] && reff="$REVIEW_EFFORT_HARD"
-  run fable "$reff" "$REVIEW_TOOLS" \
+  run "$REVIEW_MODEL" "$reff" "$REVIEW_TOOLS" \
 "$(cat "$PROMPTS/review.md")
 
 Write your entire verdict to the file REVIEW_FABLE.md and to no other file."
@@ -83,8 +97,8 @@ Write your entire verdict to the file REVIEW_FABLE.md and to no other file."
   PANEL=0
   if [ "$DIFFICULTY" = "hard" ]; then
     PANEL=1
-    echo "── [opus] independent review (panel) ──"
-    run opus "$REVIEW_OPUS_EFFORT" "$REVIEW_TOOLS" \
+    echo "── [$REVIEW2_MODEL] independent review (panel) ──"
+    run "$REVIEW2_MODEL" "$REVIEW_OPUS_EFFORT" "$REVIEW_TOOLS" \
 "$(cat "$PROMPTS/review.md")
 
 Write your entire verdict to the file REVIEW_OPUS.md and to no other file.
