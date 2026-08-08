@@ -5,6 +5,7 @@
 //! по мере готовности остальных слоёв, а не заранее под все типы из брифа.
 
 mod binbuf;
+mod bitops;
 mod builtin;
 mod datarw;
 mod date;

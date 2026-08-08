@@ -24,6 +24,33 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::{Mutex, MutexGuard};
+
+/// Замок на ОБХОД КОРПУСА: четыре теста ниже исполняют одни и те же
+/// фикстуры, а cargo пускает тесты одного бинарника параллельно.
+///
+/// Часть фикстур пишет во временные файлы по ФИКСИРОВАННЫМ путям
+/// (`binary-data`, `binary-datarw` — `/tmp/open-bsl-datarw-fixture.bin` и
+/// соседи), поэтому два обхода, попавшие на такую фикстуру одновременно,
+/// затирают файл друг у друга, и тест падает на расхождении с оракулом —
+/// не потому, что что-то сломано, а потому, что фикстура не выдерживает
+/// запуска сама с собой. Опасность отмечена в `PROGRESS.md` ещё прошлой
+/// итерацией (тогда — на `binary-data`); проявляется она от того, насколько
+/// сойдутся по времени два обхода, поэтому добавление любой пары фикстур
+/// способно её разбудить.
+///
+/// Замок лечит именно это: обход идёт по одному за раз, внутри теста всё
+/// по-прежнему последовательно. Правильнее было бы развести сами фикстуры
+/// по уникальным путям, но их `.expected` — платформенные эталоны, и такая
+/// правка требует нового прогона на 1С; здесь это отдельная задача.
+static CORPUS: Mutex<()> = Mutex::new(());
+
+/// Взять замок корпуса, не заражаясь отравлением: если один тест уже упал с
+/// паникой, остальные обязаны сообщить СВОЙ результат, а не панику про
+/// `PoisonError`.
+fn corpus_lock() -> MutexGuard<'static, ()> {
+    CORPUS.lock().unwrap_or_else(|e| e.into_inner())
+}
 
 fn conformance_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/conformance")
@@ -79,6 +106,7 @@ fn line_diff(expected: &str, actual: &str) -> String {
 
 #[test]
 fn conformance_fixtures_match_oracle_output() {
+    let _corpus = corpus_lock();
     let dir = fixtures_dir();
     let bsl_cli = env!("CARGO_BIN_EXE_bsl-cli");
 
@@ -159,6 +187,7 @@ fn conformance_fixtures_match_oracle_output() {
 /// эталон приходит только с платформы (`bsl-cli --ingest-measurements`).
 #[test]
 fn measure_script_runs_under_this_interpreter() {
+    let _corpus = corpus_lock();
     let script = measure_dir().join("measure-all.bsl");
     let output = Command::new(env!("CARGO_BIN_EXE_bsl-cli"))
         .arg(&script)
@@ -222,6 +251,7 @@ fn measure_script_runs_under_this_interpreter() {
 /// корпусе round-trip внутри bsl-bytecode.
 #[test]
 fn fixtures_produce_the_same_output_when_run_from_printed_bytecode() {
+    let _corpus = corpus_lock();
     let bsl_cli = env!("CARGO_BIN_EXE_bsl-cli");
     let tmp = std::env::temp_dir().join(format!("bslc-{}", std::process::id()));
     fs::create_dir_all(&tmp).expect("не создаётся временный каталог");
@@ -290,6 +320,7 @@ fn fixtures_produce_the_same_output_when_run_from_printed_bytecode() {
 /// из-за которого на этих платформах он молча не запускался бы.
 #[test]
 fn the_jit_agrees_with_the_interpreter_on_every_script() {
+    let _corpus = corpus_lock();
     let mut checked = 0;
     for dir in [fixtures_dir(), measure_dir()] {
         for script in scripts_in(&dir) {

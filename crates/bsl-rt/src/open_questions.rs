@@ -305,6 +305,19 @@ pub const OPEN_QUESTIONS: &[OpenQuestion] = &[
                  deep_expression_nesting_is_a_parse_error_not_a_crash и \
                  deep_statement_nesting_is_a_parse_error_not_a_crash",
     },
+    OpenQuestion {
+        id: "BIN.RADIX.WIDTH",
+        what: "есть ли у `ЧислоИзШестнадцатеричнойСтроки` и \
+               `ЧислоИзДвоичнойСтроки` потолок длины разбираемой строки и что \
+               за этим потолком — ошибка или молчаливая потеря старших \
+               разрядов. Измерены сорок знаков `F` (2^160-1, отданы точно); \
+               шире не пробовалось",
+        chosen: "потолка нет: значение копится средствами `BslNumber`, длину \
+                 строки ограничивает только память. Разбор при этом O(n²) по \
+                 длине — плата за произвольную ширину",
+        blocks: "bsl_rt::bitops::parse_radix; тест \
+                 parse_radix_accepts_strings_wider_than_measured",
+    },
 ];
 
 /// Уже измеренные значения — якоря сеанса. Менять их можно только новым

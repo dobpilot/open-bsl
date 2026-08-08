@@ -186,6 +186,43 @@ pub enum BuiltinFn {
     /// угадано по русскому имени.
     ConcatBinaryData,
 
+    /// `ПобитовоеИ(Число1, Число2)` и соседи по семейству (см. модуль
+    /// `bitops`). Английские написания у всей дюжины ИЗМЕРЕНЫ
+    /// перебором кандидатов через `Вычислить`, а не выведены из русских:
+    /// платформа знает `BitwiseXor`, но не `BitwiseExclusiveOr`, и
+    /// `BitwiseShiftLeft`, но не `BitShiftLeft`.
+    BitwiseAnd,
+    BitwiseOr,
+    BitwiseNot,
+    BitwiseAndNot,
+    BitwiseXor,
+    BitwiseShiftLeft,
+    BitwiseShiftRight,
+    /// `ПроверитьБит(Число, НомерБита)` -> `Булево`.
+    CheckBit,
+    /// `ПроверитьПоБитовойМаске(Число, Маска)` -> `Булево`: ВСЕ биты маски
+    /// стоят в числе (измерено).
+    CheckByBitMask,
+    /// `УстановитьБит(Число, НомерБита, Значение)`; третий аргумент
+    /// обязателен и строго `Булево` (измерено).
+    SetBit,
+    /// `ЧислоИзШестнадцатеричнойСтроки("0xFF")` -> 255. Приставка
+    /// обязательна, `0XFF` платформа отвергает (измерено).
+    NumberFromHexString,
+    /// `ЧислоИзДвоичнойСтроки("0b1010")` -> 10.
+    NumberFromBinaryString,
+
+    /// `ПолучитьДвоичныеДанныеИзСтроки(Строка[, Кодировка][, ДобавлятьBOM])`
+    /// (см. `binbuf::binary_data_from_string`).
+    GetBinaryDataFromString,
+    /// `ПолучитьБуферДвоичныхДанныхИзСтроки` — то же самое, но в буфер.
+    GetBinaryDataBufferFromString,
+    /// `ПолучитьСтрокуИзДвоичныхДанных(Данные[, Кодировка])`; ведущая
+    /// сигнатура снимается (измерено).
+    GetStringFromBinaryData,
+    /// `ПолучитьСтрокуИзБуфераДвоичныхДанных(Буфер[, Кодировка])`.
+    GetStringFromBinaryDataBuffer,
+
     /// `АргументыКоманднойСтроки` — массив строк, переданных скрипту после
     /// его имени в командной строке. В 1С такой глобальной функции нет —
     /// это расширение по образцу OneScript, мерить его не на чем; резолвер
@@ -387,6 +424,65 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("SplitBinaryData", BuiltinFn::SplitBinaryData),
     ("СоединитьДвоичныеДанные", BuiltinFn::ConcatBinaryData),
     ("ConcatBinaryData", BuiltinFn::ConcatBinaryData),
+    ("ПобитовоеИ", BuiltinFn::BitwiseAnd),
+    ("BitwiseAnd", BuiltinFn::BitwiseAnd),
+    ("ПобитовоеИли", BuiltinFn::BitwiseOr),
+    ("BitwiseOr", BuiltinFn::BitwiseOr),
+    ("ПобитовоеНе", BuiltinFn::BitwiseNot),
+    ("BitwiseNot", BuiltinFn::BitwiseNot),
+    ("ПобитовоеИНе", BuiltinFn::BitwiseAndNot),
+    ("BitwiseAndNot", BuiltinFn::BitwiseAndNot),
+    ("ПобитовоеИсключительноеИли", BuiltinFn::BitwiseXor),
+    ("BitwiseXor", BuiltinFn::BitwiseXor),
+    ("ПобитовыйСдвигВлево", BuiltinFn::BitwiseShiftLeft),
+    ("BitwiseShiftLeft", BuiltinFn::BitwiseShiftLeft),
+    ("ПобитовыйСдвигВправо", BuiltinFn::BitwiseShiftRight),
+    ("BitwiseShiftRight", BuiltinFn::BitwiseShiftRight),
+    ("ПроверитьБит", BuiltinFn::CheckBit),
+    ("CheckBit", BuiltinFn::CheckBit),
+    ("ПроверитьПоБитовойМаске", BuiltinFn::CheckByBitMask),
+    ("CheckByBitMask", BuiltinFn::CheckByBitMask),
+    ("УстановитьБит", BuiltinFn::SetBit),
+    ("SetBit", BuiltinFn::SetBit),
+    (
+        "ЧислоИзШестнадцатеричнойСтроки",
+        BuiltinFn::NumberFromHexString,
+    ),
+    ("NumberFromHexString", BuiltinFn::NumberFromHexString),
+    ("ЧислоИзДвоичнойСтроки", BuiltinFn::NumberFromBinaryString),
+    ("NumberFromBinaryString", BuiltinFn::NumberFromBinaryString),
+    (
+        "ПолучитьДвоичныеДанныеИзСтроки",
+        BuiltinFn::GetBinaryDataFromString,
+    ),
+    (
+        "GetBinaryDataFromString",
+        BuiltinFn::GetBinaryDataFromString,
+    ),
+    (
+        "ПолучитьБуферДвоичныхДанныхИзСтроки",
+        BuiltinFn::GetBinaryDataBufferFromString,
+    ),
+    (
+        "GetBinaryDataBufferFromString",
+        BuiltinFn::GetBinaryDataBufferFromString,
+    ),
+    (
+        "ПолучитьСтрокуИзДвоичныхДанных",
+        BuiltinFn::GetStringFromBinaryData,
+    ),
+    (
+        "GetStringFromBinaryData",
+        BuiltinFn::GetStringFromBinaryData,
+    ),
+    (
+        "ПолучитьСтрокуИзБуфераДвоичныхДанных",
+        BuiltinFn::GetStringFromBinaryDataBuffer,
+    ),
+    (
+        "GetStringFromBinaryDataBuffer",
+        BuiltinFn::GetStringFromBinaryDataBuffer,
+    ),
 ];
 
 impl BuiltinFn {
@@ -474,6 +570,22 @@ impl BuiltinFn {
             // `BIN.SPLIT.ONEARG`, `BIN.COMBINE.NOARG`).
             BuiltinFn::SplitBinaryData => (2, 2),
             BuiltinFn::ConcatBinaryData => (1, 1),
+            BuiltinFn::BitwiseAnd
+            | BuiltinFn::BitwiseOr
+            | BuiltinFn::BitwiseAndNot
+            | BuiltinFn::BitwiseXor
+            | BuiltinFn::BitwiseShiftLeft
+            | BuiltinFn::BitwiseShiftRight
+            | BuiltinFn::CheckBit
+            | BuiltinFn::CheckByBitMask => (2, 2),
+            BuiltinFn::BitwiseNot
+            | BuiltinFn::NumberFromHexString
+            | BuiltinFn::NumberFromBinaryString => (1, 1),
+            // Третий аргумент ОБЯЗАТЕЛЕН: вызов с двумя платформа не
+            // компилирует («Недостаточно фактических параметров»).
+            BuiltinFn::SetBit => (3, 3),
+            BuiltinFn::GetBinaryDataFromString | BuiltinFn::GetBinaryDataBufferFromString => (1, 3),
+            BuiltinFn::GetStringFromBinaryData | BuiltinFn::GetStringFromBinaryDataBuffer => (1, 2),
             _ => (1, 1),
         }
     }
@@ -1028,6 +1140,22 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         )),
         BuiltinFn::SplitBinaryData => args[0].binary_data_split(&args[1]),
         BuiltinFn::ConcatBinaryData => args[0].binary_data_combine(),
+        BuiltinFn::BitwiseAnd => crate::bitops::and(&args[0], &args[1]),
+        BuiltinFn::BitwiseOr => crate::bitops::or(&args[0], &args[1]),
+        BuiltinFn::BitwiseNot => crate::bitops::not(&args[0]),
+        BuiltinFn::BitwiseAndNot => crate::bitops::and_not(&args[0], &args[1]),
+        BuiltinFn::BitwiseXor => crate::bitops::xor(&args[0], &args[1]),
+        BuiltinFn::BitwiseShiftLeft => crate::bitops::shift_left(&args[0], &args[1]),
+        BuiltinFn::BitwiseShiftRight => crate::bitops::shift_right(&args[0], &args[1]),
+        BuiltinFn::CheckBit => crate::bitops::check_bit(&args[0], &args[1]),
+        BuiltinFn::CheckByBitMask => crate::bitops::check_by_bit_mask(&args[0], &args[1]),
+        BuiltinFn::SetBit => crate::bitops::set_bit(&args[0], &args[1], &args[2]),
+        BuiltinFn::NumberFromHexString => crate::bitops::number_from_hex_string(&args[0]),
+        BuiltinFn::NumberFromBinaryString => crate::bitops::number_from_binary_string(&args[0]),
+        BuiltinFn::GetBinaryDataFromString => crate::binbuf::binary_data_from_string(args),
+        BuiltinFn::GetBinaryDataBufferFromString => crate::binbuf::binary_buffer_from_string(args),
+        BuiltinFn::GetStringFromBinaryData => crate::binbuf::string_from_binary_data(args),
+        BuiltinFn::GetStringFromBinaryDataBuffer => crate::binbuf::string_from_binary_buffer(args),
         BuiltinFn::WriteJsonDate => crate::json::write_json_date(&args[0], &args[1], &args[2]),
         BuiltinFn::ReadJsonDate => crate::json::read_json_date(&args[0], &args[1]),
         BuiltinFn::ValueToStringInternal
