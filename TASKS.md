@@ -49,7 +49,7 @@ Line format (order top-to-bottom by priority):
       иначе исключение), `ПолучитьДвоичныеДанныеИзСтроки`/
       `ПолучитьБуферДвоичныхДанныхИзСтроки` и обратные — кодировки через
       существующий `bsl-rt/src/encoding.rs`.
-- [ ] (bin-measure) `tests/conformance/measure/measure-binary.bsl`: пробы по
+- [x] (bin-measure) `tests/conformance/measure/measure-binary.bsl`: пробы по
       каждому заведённому `BIN.*` вопросу, по правилам из AGENTS.md (одна
       строка `М()` на ID, литеральные ID, всё рискованное — в `Попытка`,
       скрипт обязан исполняться и этим интерпретатором).

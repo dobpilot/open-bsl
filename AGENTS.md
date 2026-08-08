@@ -81,12 +81,13 @@ The runner takes an optional script path: `measure-all.bsl` lands in `platform.t
 
 `--ingest-measurements` records results and prints discrepancies. It never edits code — every discrepancy is a human decision. It always writes `platform.tsv` beside the file you hand it, so ingesting a `measure-*.platform.txt` from that same directory clobbers the `measure-all` oracle.
 
-Writing a new `measure-*.bsl` (the contract scripts next to `measure-all.bsl`) has four rules that each cost a wasted 40-second platform round trip to learn:
+Writing a new `measure-*.bsl` (the contract scripts next to `measure-all.bsl`) has five rules that each cost a wasted 40-second platform round trip to learn:
 
 - **It must run on both sides.** The script is executed by the platform *and* by this interpreter so the two outputs diff line by line. Anything unimplemented here — `ЧтениеТекста`, a type `Новый` does not know, a method name the resolver rejects at compile time — breaks the whole run, not one line. Probing something the platform might not have goes through `Вычислить` inside `Попытка`, where the failure is catchable on both sides.
 - **IDs must be literal.** The scanner in `open_questions_registry.rs` reads string literals as written, so `М("AREA." + Имя, ...)` registers a truncated ID. Unroll the loop.
 - **One `М()` per ID.** The rule is exactly one line per ID across all scripts, so the `Попытка`/`Исключение` pair must assign to a variable and report once, not call `М()` in both branches.
 - **A modal dialog on the platform reads as a timeout.** An unhandled exception at startup shows a modal: no output, 180 s, killed. Wrap every probe. A form module compiles lazily, so a syntax error — for instance a variable named `И`, which is a keyword — shows up the same way, with an empty log and a successfully updated configuration.
+- **A variable named like a form property is that property.** The script runs inside a *managed form* module, so `Ширина = "";` assigns an empty string to the form's width, not to a local — and the resulting type error is a modal, i.e. the same silent empty-output timeout. `Попытка` does not help: the assignment is the probe's setup, not its body. Hence `Ширина40`/`ШиринаЗнаков` rather than `Ширина`. Suspect this whenever a script hangs with output that stops right before a block whose first statement assigns to a short, generic Russian noun (`Ширина`, `Высота`, `Заголовок`).
 
 ## Commit & Pull Request Guidelines
 

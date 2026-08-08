@@ -515,10 +515,20 @@ fn encoding_arg(arg: Option<&BslValue>) -> RtResult<crate::encoding::Encoding> {
         None | Some(BslValue::Undefined) => Ok(Encoding::Utf8),
         Some(BslValue::Str(s)) => Encoding::by_name(&s.to_string()),
         Some(BslValue::Enum(e)) => match e {
-            // ANSI и «Системная» — кодовая страница системы. На машине
-            // замеров это windows-1251 (проверено дампом записанного
-            // файла); на системе с другой локалью платформа взяла бы
-            // другую, и вот эта зависимость у нас не воспроизведена.
+            // Оба члена сведены здесь в windows-1251, но измерен из них
+            // только `ANSI`: у `ТекстовыйДокумент.Записать` он снят
+            // дампом файла, который записала сама платформа, «Аб» ->
+            // `C0 E1` (шапка `encoding.rs`, якорь `ENC.WRITE.ANSI`);
+            // автоматическая проба удержала от этого лишь «записан», то
+            // есть приём члена (`measure-textdoc.platform.txt:76`).
+            // «Системную» в семействе `ТекстовыйДокумент` не зондировали
+            // ни разу, а у соседнего
+            // `ПолучитьБуферДвоичныхДанныхИзСтроки` (`encoding_arg` в
+            // `binbuf.rs`) она измерена как UTF-8 («Аб» ->
+            // `D0 90 D0 B1`, `measure-binary.platform.txt:5`). Опоры под
+            // windows-1251 для «Системной» здесь нет ни в одном замере:
+            // это сознательное расхождение с единственным имеющимся,
+            // ровно как у соседа.
             crate::EnumValue::TextEncodingAnsi | crate::EnumValue::TextEncodingSystem => {
                 Ok(Encoding::Windows1251)
             }

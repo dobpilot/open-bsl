@@ -738,8 +738,14 @@ fn encoding_arg(arg: &BslValue, op: &'static str) -> RtResult<crate::encoding::E
         BslValue::Undefined => Ok(Encoding::Utf8),
         BslValue::Str(s) => Encoding::by_name(&s.to_string()),
         BslValue::Enum(e) => match e {
-            // ANSI и «Системная» — кодовая страница системы; на машине
-            // замеров это windows-1251 (измерено: «Аб» -> `C0 E1`).
+            // `ANSI` измерен как windows-1251 («Аб» -> `C0 E1`), и от локали
+            // машины это не зависит: оракул снят на `ru_RU.UTF-8`. А вот
+            // «Системная» в том же сеансе на той же машине дала UTF-8
+            // («Аб» -> `D0 90 D0 B1`), то есть идёт за локалью системы, а не
+            // за кодовой страницей. Сведение обеих в windows-1251 —
+            // сознательное расхождение, а не недосмотр; измеренное лежит в
+            // строках `байты Системная` и `байты ANSI` файла
+            // `tests/conformance/measure/measure-binary.platform.txt`.
             EnumValue::TextEncodingAnsi | EnumValue::TextEncodingSystem => {
                 Ok(Encoding::Windows1251)
             }
