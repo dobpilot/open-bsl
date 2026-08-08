@@ -148,6 +148,23 @@ pub enum RExpr {
         size: Box<RExpr>,
         order: Box<RExpr>,
     },
+    /// `Новый ПотокВПамяти([ЁмкостьЛибоБуфер])` — единственный аргумент
+    /// необязателен и приходит `Undefined`, когда его нет.
+    NewMemoryStream {
+        arg: Box<RExpr>,
+    },
+    /// `Новый ФайловыйПоток(Имя, Режим[, Доступ])` — доступ необязателен и
+    /// по умолчанию `ЧтениеИЗапись` (измерено).
+    NewFileStream {
+        path: Box<RExpr>,
+        mode: Box<RExpr>,
+        access: Box<RExpr>,
+    },
+    /// Голое имя `ФайловыеПотоки` как выражение. В отличие от
+    /// [`RExpr::EnumTypeRef`] это НЕ константа: `ФайловыеПотоки =
+    /// ФайловыеПотоки` платформа считает ложью (измерено), значит каждое
+    /// обращение обязано строить новый объект.
+    NewFileStreamsManager,
     /// `Вычислить(<строка>)` — компилирует строку как ОДНО выражение (через
     /// внутреннюю обёртку `Возврат (<строка>);`, см. `bsl-vm`) и исполняет
     /// его в текущей области видимости верхнего уровня, возвращая значение.
@@ -356,7 +373,8 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
         | RExpr::NewTextDocument
         | RExpr::NewSpreadDocument
         | RExpr::NewXmlReader
-        | RExpr::NewXmlWriter => false,
+        | RExpr::NewXmlWriter
+        | RExpr::NewFileStreamsManager => false,
         RExpr::NewXmlWriterSettings {
             encoding,
             version,
@@ -375,6 +393,10 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
         RExpr::NewTextWriter { path } | RExpr::NewBinaryData { path } => expr_uses_dynamic(path),
         RExpr::NewBinaryBuffer { size, order } => {
             expr_uses_dynamic(size) || expr_uses_dynamic(order)
+        }
+        RExpr::NewMemoryStream { arg } => expr_uses_dynamic(arg),
+        RExpr::NewFileStream { path, mode, access } => {
+            expr_uses_dynamic(path) || expr_uses_dynamic(mode) || expr_uses_dynamic(access)
         }
         RExpr::NewTypeDescription(names) => expr_uses_dynamic(names),
         RExpr::Number(_)

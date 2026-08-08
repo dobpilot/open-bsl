@@ -22,6 +22,7 @@ mod runtime_shapes;
 mod shape;
 mod spreadsheet;
 mod spreadsheet_template;
+mod stream;
 mod string;
 mod table;
 mod textdoc;
@@ -68,6 +69,7 @@ pub use spreadsheet::{
     HAlign, Line, LineStyle, Merge, NamedArea, Rect, SpreadDocData, VAlign,
 };
 pub use spreadsheet_template::from_template_xml;
+pub use stream::{is_stream, write as stream_write, StreamData};
 pub use string::{BslString, MAX_TEMPLATE_ARGS};
 pub use table::{ColumnVstr, ValueTableData};
 pub use textdoc::{
@@ -302,6 +304,9 @@ fn enum_kind_type_id(kind: EnumKind) -> TypeId {
         EnumKind::DrawingKind => TypeId::DrawingKind,
         EnumKind::TextEncoding => TypeId::TextEncoding,
         EnumKind::ByteOrder => TypeId::ByteOrder,
+        EnumKind::FileOpenMode => TypeId::FileOpenMode,
+        EnumKind::FileAccess => TypeId::FileAccess,
+        EnumKind::StreamPosition => TypeId::StreamPosition,
     }
 }
 
@@ -364,6 +369,12 @@ impl BslValue {
                 BslObject::SpreadArea(..) => "ОбластьЯчеекТабличногоДокумента",
                 BslObject::TextDocument(_) => "ТекстовыйДокумент",
                 BslObject::TextDocParams(_) => "ПараметрыМакетаТекстовогоДокумента",
+                // Имена ЗНАЧЕНИЙ у потоков — слитные и РАЗНЫЕ, в отличие от
+                // имени их типа, которое у обоих одно («Файловый поток»,
+                // см. `types.rs`). Измерено обеими сторонами.
+                BslObject::MemoryStream(_) => "ПотокВПамяти",
+                BslObject::FileStream(_) => "ФайловыйПоток",
+                BslObject::FileStreamsManager => "МенеджерФайловыхПотоков",
             },
             BslValue::Skipped => "Skipped",
         }
@@ -1111,6 +1122,19 @@ impl BslValue {
                 | BslObject::SpreadDrawings(..)
                 | BslObject::TextDocument(..)
                 | BslObject::TextDocParams(..) => true,
+                // ИЗМЕРЕНО, и для потока, и для менеджера:
+                // `ЗначениеЗаполнено` от них платформа отвергает — это
+                // ошибка, а не «Да»/«Нет». Поток снят фикстурой
+                // `binary-streams`, менеджер — отдельной разведочной
+                // пробой на 8.3.27.
+                BslObject::MemoryStream(..)
+                | BslObject::FileStream(..)
+                | BslObject::FileStreamsManager => {
+                    return Err(RtError::TypeError {
+                        expected: "Значение, у которого есть признак заполненности",
+                        op: "ЗначениеЗаполнено",
+                    })
+                }
             },
             BslValue::Skipped => {
                 return Err(RtError::TypeError {
@@ -1170,6 +1194,9 @@ impl BslValue {
                 BslObject::SpreadArea(..) => TypeId::SpreadArea,
                 BslObject::TextDocument(..) => TypeId::TextDocument,
                 BslObject::TextDocParams(..) => TypeId::TextDocParams,
+                BslObject::MemoryStream(..) => TypeId::MemoryStream,
+                BslObject::FileStream(..) => TypeId::FileStream,
+                BslObject::FileStreamsManager => TypeId::FileStreamsManager,
             },
             BslValue::Skipped => {
                 return Err(RtError::TypeError {
@@ -1252,7 +1279,14 @@ impl BslValue {
     ///
     /// Ошибку ввода-вывода либо неприменимость метода к получателю.
     pub fn close_object(&self) -> RtResult<BslValue> {
-        if json::is_json_writer(self) {
+        if stream::is_stream(self) {
+            // Поток отпускает носитель, но остаётся живым наполовину:
+            // позиция и три признака доступности переживают закрытие
+            // (измерено), поэтому здесь не сброс объекта, а только
+            // `backing = None` внутри `StreamData`.
+            stream::close(self)?;
+            Ok(BslValue::Undefined)
+        } else if json::is_json_writer(self) {
             json::close_writer(self)
         } else if xml::is_xml_writer(self) {
             xml::close_writer(self)
@@ -1543,6 +1577,41 @@ impl BslValue {
     /// чем падением процесса на числе из пользовательского текста.
     pub fn new_binary_buffer(size: &BslValue, order: &BslValue) -> RtResult<Self> {
         binbuf::new_binary_buffer(size, order)
+    }
+
+    /// `Новый ПотокВПамяти([ЁмкостьЛибоБуфер])`.
+    ///
+    /// Без аргумента — пустой растущий поток; число — начальная ЁМКОСТЬ, а
+    /// не предел; `БуферДвоичныхДанных` — поток НАД ним, с той же памятью
+    /// и фиксированным размером. Всё измерено, подробности — в модуле
+    /// `stream`.
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::TypeError`], если аргумент не число, не буфер и не
+    /// `Неопределено`, либо если ёмкость не удалось разместить в памяти.
+    pub fn new_memory_stream(arg: &BslValue) -> RtResult<Self> {
+        stream::new_memory_stream(arg)
+    }
+
+    /// `Новый ФайловыйПоток(Имя, Режим[, Доступ])`. Доступ по умолчанию —
+    /// `ЧтениеИЗапись`; таблица совместимости режима с доступом измерена
+    /// целиком и описана в заголовке модуля `stream`.
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::TypeError`] на аргументах не тех типов,
+    /// [`RtError::IoError`] на несовместимости режима с доступом и на
+    /// отказе файловой системы.
+    pub fn new_file_stream(path: &BslValue, mode: &BslValue, access: &BslValue) -> RtResult<Self> {
+        stream::new_file_stream(path, mode, access)
+    }
+
+    /// Голое имя `ФайловыеПотоки` как выражение. Каждое обращение даёт
+    /// НОВЫЙ объект: `ФайловыеПотоки = ФайловыеПотоки` платформа считает
+    /// ложью (измерено).
+    pub fn new_file_streams_manager() -> Self {
+        stream::new_file_streams_manager()
     }
 
     /// `ДвоичныеДанные.Размер()` — число байтов.
@@ -1845,7 +1914,14 @@ impl BslValue {
                 | BslObject::SpreadArea(..)
                 | BslObject::SpreadDrawing(..)
                 | BslObject::TextDocument(..)
-                | BslObject::TextDocParams(..) => Err(RtError::NotIndexable),
+                | BslObject::TextDocParams(..)
+                // Число байтов потока отдаёт МЕТОД `Размер()`, а
+                // `Количество()` платформа отвергает и на потоке, и на
+                // менеджере — измерено на обоих. `Для Каждого` по ним
+                // тоже нет.
+                | BslObject::MemoryStream(..)
+                | BslObject::FileStream(..)
+                | BslObject::FileStreamsManager => Err(RtError::NotIndexable),
                 // У коллекции рисунков длина есть — это её `Количество`.
                 BslObject::SpreadDrawings(doc) => Ok(doc.borrow().drawings().len()),
             },
@@ -2192,6 +2268,29 @@ impl BslValue {
                         || name.eq_ignore_ascii_case("ByteOrder")
                     {
                         binbuf::get_order(self)
+                    } else {
+                        Err(RtError::UnknownColumn(name.to_string()))
+                    }
+                }
+                // У потока СВОЙСТВА — ровно три признака доступности, а
+                // `Размер` и `ТекущаяПозиция` — наоборот, МЕТОДЫ (вызов со
+                // скобками платформа принимает у них и отвергает у трёх
+                // признаков; измерено обеими формами на каждом из пяти
+                // имён). После `Закрыть()` признаки продолжают отдавать
+                // прежние значения — тоже измерено.
+                BslObject::MemoryStream(_) | BslObject::FileStream(_) => {
+                    if name.eq_ignore_ascii_case("ДоступнаЗапись")
+                        || name.eq_ignore_ascii_case("CanWrite")
+                    {
+                        stream::flag(self, stream::StreamFlag::Writable)
+                    } else if name.eq_ignore_ascii_case("ДоступноЧтение")
+                        || name.eq_ignore_ascii_case("CanRead")
+                    {
+                        stream::flag(self, stream::StreamFlag::Readable)
+                    } else if name.eq_ignore_ascii_case("ДоступноИзменениеПозиции")
+                        || name.eq_ignore_ascii_case("CanSeek")
+                    {
+                        stream::flag(self, stream::StreamFlag::Seekable)
                     } else {
                         Err(RtError::UnknownColumn(name.to_string()))
                     }
@@ -3100,6 +3199,12 @@ impl fmt::Display for BslValue {
                 BslObject::SpreadArea(..) => write!(f, "ОбластьЯчеекТабличногоДокумента"),
                 BslObject::TextDocument(_) => write!(f, "ТекстовыйДокумент"),
                 BslObject::TextDocParams(_) => write!(f, "ПараметрыМакетаТекстовогоДокумента"),
+                // Потоки печатаются ИМЕНЕМ ЗНАЧЕНИЯ, и закрытие его не
+                // меняет: `Строка(Зкр)` после `Закрыть()` — по-прежнему
+                // «ПотокВПамяти» (измерено).
+                BslObject::MemoryStream(_) => write!(f, "ПотокВПамяти"),
+                BslObject::FileStream(_) => write!(f, "ФайловыйПоток"),
+                BslObject::FileStreamsManager => write!(f, "МенеджерФайловыхПотоков"),
             },
             // Никогда не должно реально дойти до печати (см. doc comment
             // на варианте) — но `Display` обязан быть тотальным.

@@ -105,6 +105,22 @@ pub enum TypeId {
     /// БЕЗ пробелов и без префикса `Перечисление`, который носит метатип
     /// голого имени (`TypeId::EnumMeta`).
     ByteOrder,
+
+    // --- Потоки ---------------------------------------------------------
+    /// `ПотокВПамяти` и `ФайловыйПоток` — РАЗНЫЕ типы
+    /// (`Тип("ПотокВПамяти") = Тип("ФайловыйПоток")` даёт «Нет»,
+    /// измерено), но печатаются они ОДИНАКОВО — «Файловый поток»; см.
+    /// таблицу `DISPLAY` в этом же модуле.
+    MemoryStream,
+    FileStream,
+    /// Тип менеджера `ФайловыеПотоки`. Имя ТИПА с пробелами («Менеджер
+    /// файловых потоков»), имя ЗНАЧЕНИЯ слитно — измерено, как у соседей.
+    FileStreamsManager,
+    /// Типы ЧЛЕНОВ трёх перечислений потоков — как у `ByteOrder`, без
+    /// пробелов и без префикса `Перечисление`.
+    FileOpenMode,
+    FileAccess,
+    StreamPosition,
 }
 
 /// `(русское, английское)`. Русское — каноническое: именно оно уходит в
@@ -222,6 +238,32 @@ const NAMES: &[(TypeId, &str, &str)] = &[
         "BinaryDataBuffer",
     ),
     (TypeId::ByteOrder, "ПорядокБайтов", "ByteOrder"),
+    (TypeId::MemoryStream, "ПотокВПамяти", "MemoryStream"),
+    (TypeId::FileStream, "ФайловыйПоток", "FileStream"),
+    (
+        TypeId::FileStreamsManager,
+        "Менеджер файловых потоков",
+        "FileStreamsManager",
+    ),
+    (TypeId::FileOpenMode, "РежимОткрытияФайла", "FileOpenMode"),
+    (TypeId::FileAccess, "ДоступКФайлу", "FileAccess"),
+    (TypeId::StreamPosition, "ПозицияВПотоке", "PositionInStream"),
+];
+
+/// Типы, чьё ПРЕДСТАВЛЕНИЕ не совпадает с именем, по которому тип ищется.
+///
+/// Единственный такой случай — два потока: ИЗМЕРЕНО на 8.3.27, что
+/// `Строка(Тип("ПотокВПамяти"))` и `Строка(Тип("ФайловыйПоток"))` оба дают
+/// «Файловый поток», хотя сами типы РАЗНЫЕ (`Тип("ПотокВПамяти") =
+/// Тип("ФайловыйПоток")` — «Нет»). Одно имя на два типа в [`NAMES`] не
+/// помещается: там русская колонка служит и поиском, и печатью. Обратная
+/// сторона совпадения — `Тип("Файловый поток")` находит `FileStream`
+/// (пробелы при поиске не значимы), а `MemoryStream` через своё
+/// представление уже не находится; так же несимметрично ведёт себя и
+/// платформа.
+const DISPLAY: &[(TypeId, &str)] = &[
+    (TypeId::MemoryStream, "Файловый поток"),
+    (TypeId::FileStream, "Файловый поток"),
 ];
 
 impl TypeId {
@@ -229,6 +271,9 @@ impl TypeId {
     pub fn name(self) -> &'static str {
         if let TypeId::EnumMeta(kind) = self {
             return kind.meta_ru_name();
+        }
+        if let Some((_, text)) = DISPLAY.iter().find(|(id, _)| *id == self) {
+            return text;
         }
         NAMES
             .iter()
@@ -285,7 +330,24 @@ mod tests {
         for (id, ru, en) in NAMES {
             assert_eq!(TypeId::lookup(ru), Some(*id), "русское имя {ru}");
             assert_eq!(TypeId::lookup(en), Some(*id), "английское имя {en}");
-            assert_eq!(id.name(), *ru);
+            // Типы с отдельным представлением печатаются не своим именем
+            // поиска — это измеренное свойство платформы, см. `DISPLAY`.
+            if !DISPLAY.iter().any(|(d, _)| d == id) {
+                assert_eq!(id.name(), *ru);
+            }
         }
+    }
+
+    /// Два потока — разные типы с ОДНИМ представлением. Измерено; ровно это
+    /// и закрепляет фикстура `binary-streams`.
+    #[test]
+    fn both_streams_print_the_same_name_but_stay_different_types() {
+        assert_ne!(TypeId::MemoryStream, TypeId::FileStream);
+        assert_eq!(TypeId::MemoryStream.name(), "Файловый поток");
+        assert_eq!(TypeId::FileStream.name(), "Файловый поток");
+        assert_eq!(TypeId::lookup("ПотокВПамяти"), Some(TypeId::MemoryStream));
+        assert_eq!(TypeId::lookup("MemoryStream"), Some(TypeId::MemoryStream));
+        assert_eq!(TypeId::lookup("ФайловыйПоток"), Some(TypeId::FileStream));
+        assert_eq!(TypeId::lookup("FileStream"), Some(TypeId::FileStream));
     }
 }

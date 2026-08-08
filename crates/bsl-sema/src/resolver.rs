@@ -330,6 +330,12 @@ pub const NEW_TYPES: &[&str] = &[
     // принимает.
     "БуферДвоичныхДанных",
     "BinaryDataBuffer",
+    // Английские написания обоих потоков ИЗМЕРЕНЫ: `Тип("MemoryStream")` и
+    // `Тип("FileStream")` платформа разрешает и считает равными русским.
+    "ПотокВПамяти",
+    "MemoryStream",
+    "ФайловыйПоток",
+    "FileStream",
 ];
 
 struct Resolver<'a> {
@@ -543,6 +549,18 @@ impl<'a> Resolver<'a> {
                     None if bsl_rt::lookup_enum(name).is_some() => Ok(RExpr::EnumTypeRef(
                         bsl_rt::lookup_enum(name).expect("проверено guard'ом выше"),
                     )),
+                    // Голое имя менеджера `ФайловыеПотоки` разрешается так
+                    // же, как голое имя перечисления, — но НЕ в константу:
+                    // измерено, что `ФайловыеПотоки = ФайловыеПотоки` —
+                    // «Нет», значит каждое обращение строит новый объект, и
+                    // за этим стоит отдельная инструкция.
+                    None if matches!(
+                        name.to_uppercase().as_str(),
+                        "ФАЙЛОВЫЕПОТОКИ" | "FILESTREAMS"
+                    ) =>
+                    {
+                        Ok(RExpr::NewFileStreamsManager)
+                    }
                     None => Err(SemaError::UndefinedVariable(name.clone())),
                 },
             },
@@ -755,6 +773,45 @@ impl<'a> Resolver<'a> {
                 Ok(RExpr::NewBinaryBuffer {
                     size: Box::new(size),
                     order: Box::new(order),
+                })
+            }
+            // Единственный аргумент необязателен: пустой конструктор
+            // платформа принимает, а второй аргумент отвергает (измерено).
+            "ПОТОКВПАМЯТИ" | "MEMORYSTREAM" => {
+                if args.len() > 1 {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый ПотокВПамяти".to_string(),
+                        expected: 1,
+                        found: args.len(),
+                    });
+                }
+                let arg = match args.first() {
+                    Some(a) => self.resolve_expr(a)?,
+                    None => RExpr::Undefined,
+                };
+                Ok(RExpr::NewMemoryStream { arg: Box::new(arg) })
+            }
+            // Имя и режим обязательны, доступ необязателен и по умолчанию
+            // `ЧтениеИЗапись` — измерено сравнением «без доступа» с явной
+            // `ЧтениеИЗапись` во всей таблице режимов.
+            "ФАЙЛОВЫЙПОТОК" | "FILESTREAM" => {
+                if args.len() < 2 || args.len() > 3 {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый ФайловыйПоток".to_string(),
+                        expected: 3,
+                        found: args.len(),
+                    });
+                }
+                let path = self.resolve_expr(&args[0])?;
+                let mode = self.resolve_expr(&args[1])?;
+                let access = match args.get(2) {
+                    Some(a) => self.resolve_expr(a)?,
+                    None => RExpr::Undefined,
+                };
+                Ok(RExpr::NewFileStream {
+                    path: Box::new(path),
+                    mode: Box::new(mode),
+                    access: Box::new(access),
                 })
             }
             "ЧТЕНИЕJSON" | "JSONREADER" => {
@@ -1109,6 +1166,20 @@ impl<'a> Resolver<'a> {
                     | bsl_rt::BuiltinMethod::WriteXmlRaw => Some(1),
                     bsl_rt::BuiltinMethod::WriteXmlAttribute
                     | bsl_rt::BuiltinMethod::WriteXmlProcessingInstruction => Some(2),
+                    // Потоки. `ТекущаяПозиция` — без аргументов, `Перейти`
+                    // — строго со смещением и точкой отсчёта: `Перейти(0)`
+                    // платформа отвергает, и это ошибка КОМПИЛЯЦИИ, а не
+                    // ловимое исключение (измерено).
+                    bsl_rt::BuiltinMethod::CurrentPosition => Some(0),
+                    bsl_rt::BuiltinMethod::Seek => Some(2),
+                    // У `Открыть` доступ необязателен (2..3), поэтому
+                    // арность решает рантайм; остальные четыре метода
+                    // менеджера берут ровно имя файла.
+                    bsl_rt::BuiltinMethod::StreamOpen => None,
+                    bsl_rt::BuiltinMethod::StreamOpenForRead
+                    | bsl_rt::BuiltinMethod::StreamOpenForWrite
+                    | bsl_rt::BuiltinMethod::StreamOpenForAppend
+                    | bsl_rt::BuiltinMethod::StreamCreate => Some(1),
                 };
                 if let Some(expected) = expected {
                     if args.len() != expected {

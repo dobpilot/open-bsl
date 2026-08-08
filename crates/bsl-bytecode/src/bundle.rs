@@ -489,6 +489,32 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
             read!(order);
             write!(dst);
         }
+        // Поток в памяти — тоже чистое выделение. Даже над буфером: там
+        // берётся тот же `Rc`, байты не копируются и не читаются.
+        Instr::NewMemoryStream { dst, arg } => {
+            read!(arg);
+            write!(dst);
+        }
+        // А файловый поток открывает файл и в половине режимов его создаёт
+        // либо обрезает — порядок относительно другого ввода-вывода
+        // наблюдаем, как у `NewTextWriter`.
+        Instr::NewFileStream {
+            dst,
+            path,
+            mode,
+            access,
+        } => {
+            read!(path);
+            read!(mode);
+            read!(access);
+            write!(dst);
+            e.io = true;
+        }
+        // Менеджер сам ничего не открывает: файл открывают его МЕТОДЫ, а
+        // они идут через `CallMethod`. Здесь только выделение объекта.
+        Instr::NewFileStreamsManager { dst } => {
+            write!(dst);
+        }
         Instr::CollectionLen { dst, obj } => {
             read!(obj);
             write!(dst);

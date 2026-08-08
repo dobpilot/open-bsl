@@ -36,7 +36,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 4;
+pub const FORMAT_VERSION: u32 = 5;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -85,6 +85,9 @@ pub const OPCODES: &[&str] = &[
     "NewTextWriter",
     "NewBinaryData",
     "NewBinaryBuffer",
+    "NewMemoryStream",
+    "NewFileStream",
+    "NewFileStreamsManager",
     "NewJsonReader",
     "NewJsonWriter",
     "NewJsonWriterSettings",
@@ -417,6 +420,14 @@ fn write_instr(instr: &Instr) -> String {
         Instr::NewBinaryBuffer { dst, size, order } => {
             format!("NewBinaryBuffer dst={dst} size={size} order={order}")
         }
+        Instr::NewMemoryStream { dst, arg } => format!("NewMemoryStream dst={dst} arg={arg}"),
+        Instr::NewFileStream {
+            dst,
+            path,
+            mode,
+            access,
+        } => format!("NewFileStream dst={dst} path={path} mode={mode} access={access}"),
+        Instr::NewFileStreamsManager { dst } => format!("NewFileStreamsManager dst={dst}"),
         Instr::NewJsonReader { dst } => format!("NewJsonReader dst={dst}"),
         Instr::NewJsonWriter { dst } => format!("NewJsonWriter dst={dst}"),
         Instr::NewJsonWriterSettings {
@@ -1235,6 +1246,17 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
             size: field_u8(&f, no, "size")?,
             order: field_u8(&f, no, "order")?,
         },
+        "NewMemoryStream" => Instr::NewMemoryStream {
+            dst: dst(&f)?,
+            arg: field_u8(&f, no, "arg")?,
+        },
+        "NewFileStream" => Instr::NewFileStream {
+            dst: dst(&f)?,
+            path: field_u8(&f, no, "path")?,
+            mode: field_u8(&f, no, "mode")?,
+            access: field_u8(&f, no, "access")?,
+        },
+        "NewFileStreamsManager" => Instr::NewFileStreamsManager { dst: dst(&f)? },
         "CollectionLen" => Instr::CollectionLen {
             dst: dst(&f)?,
             obj: obj(&f)?,
@@ -1359,6 +1381,21 @@ mod tests {
          б[0] = 255;\nн = б[0];\nр = б.Размер;\n\
          б.ЗаписатьЦелое16(0, 258);\nц = б.ПрочитатьЦелое16(0);\n\
          б.Инвертировать();\nс = б.Соединить(в);\n",
+        // Потоки: оба конструктора в обеих формах (с необязательным
+        // аргументом и без), голое имя менеджера — своя инструкция, а не
+        // константа, — и методы, у которых печать общая с остальными
+        // `CallMethod`, но получатель новый. Корпус только компилируется,
+        // поэтому открывать здесь можно и `/dev/null`.
+        "п = Новый ПотокВПамяти;\n\
+         б = Новый БуферДвоичныхДанных(4);\n\
+         н = Новый ПотокВПамяти(б);\n\
+         п.Записать(б, 0, 4);\nк = п.Прочитать(б, 0, 4);\n\
+         р = п.Размер();\nт = п.ТекущаяПозиция();\n\
+         с = п.Перейти(0, ПозицияВПотоке.Начало);\n\
+         д = п.ДоступнаЗапись;\nп.Закрыть();\n\
+         ф = Новый ФайловыйПоток(\"/dev/null\", РежимОткрытияФайла.Открыть);\n\
+         г = Новый ФайловыйПоток(\"/dev/null\", РежимОткрытияФайла.Открыть, ДоступКФайлу.Чтение);\n\
+         м = ФайловыеПотоки;\nо = м.ОткрытьДляЧтения(\"/dev/null\");\n",
         // JSON: все три конструктора плюс член перечисления константой
         // (`Перечисление ...` в таблице констант тоже обязан пережить
         // печать и разбор).

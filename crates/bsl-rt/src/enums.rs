@@ -90,6 +90,26 @@ pub enum EnumValue {
     // `Прямой`/`Обратный` платформа не знает (проверено перебором).
     ByteOrderLittle,
     ByteOrderBig,
+
+    // --- РежимОткрытияФайла ---------------------------------------------
+    // Шесть членов; состав и написания измерены полной таблицей «режим x
+    // доступ» (см. заголовок `crate::stream`).
+    FileOpenModeOpen,
+    FileOpenModeOpenOrCreate,
+    FileOpenModeCreate,
+    FileOpenModeCreateNew,
+    FileOpenModeTruncate,
+    FileOpenModeAppend,
+
+    // --- ДоступКФайлу ------------------------------------------------------
+    FileAccessRead,
+    FileAccessWrite,
+    FileAccessReadAndWrite,
+
+    // --- ПозицияВПотоке ----------------------------------------------------
+    StreamPositionBegin,
+    StreamPositionCurrent,
+    StreamPositionEnd,
 }
 
 /// К какому перечислению принадлежит член — это же имя стоит слева от
@@ -117,6 +137,19 @@ pub enum EnumKind {
     /// русскому написанию), метатип — «ПеречислениеПорядокБайтов», тоже
     /// измерено.
     ByteOrder,
+    /// `РежимОткрытияФайла` — второй аргумент `Новый ФайловыйПоток`.
+    /// Английское написание `FileOpenMode` и написания всех шести членов
+    /// ИЗМЕРЕНЫ (`FileOpenMode.Open = РежимОткрытияФайла.Открыть` —
+    /// «Да»), метатип — «ПеречислениеРежимОткрытияФайла», тоже измерено.
+    FileOpenMode,
+    /// `ДоступКФайлу` — третий аргумент `Новый ФайловыйПоток`. Написание
+    /// члена `ЧтениеИЗапись` по-английски — `ReadAndWrite`, а не
+    /// `ReadWrite`: измерено.
+    FileAccess,
+    /// `ПозицияВПотоке` — точка отсчёта у `Перейти`. Английское написание
+    /// самого перечисления — `PositionInStream`, а не `StreamPosition`:
+    /// измерено.
+    StreamPosition,
 }
 
 impl EnumKind {
@@ -137,6 +170,9 @@ impl EnumKind {
             ),
             EnumKind::TextEncoding => ("КодировкаТекста", "TextEncoding"),
             EnumKind::ByteOrder => ("ПорядокБайтов", "ByteOrder"),
+            EnumKind::FileOpenMode => ("РежимОткрытияФайла", "FileOpenMode"),
+            EnumKind::FileAccess => ("ДоступКФайлу", "FileAccess"),
+            EnumKind::StreamPosition => ("ПозицияВПотоке", "PositionInStream"),
         }
     }
 
@@ -161,6 +197,12 @@ impl EnumKind {
             // `Строка(ПорядокБайтов)` и `Строка(ТипЗнч(ПорядокБайтов))`
             // оба дают «ПеречислениеПорядокБайтов».
             EnumKind::ByteOrder => "ПеречислениеПорядокБайтов",
+            // Тоже ИЗМЕРЕНО, а не достроено по образцу: фикстура
+            // `binary-streams` печатает и голое имя, и его `ТипЗнч()` для
+            // всех трёх перечислений потоков.
+            EnumKind::FileOpenMode => "ПеречислениеРежимОткрытияФайла",
+            EnumKind::FileAccess => "ПеречислениеДоступКФайлу",
+            EnumKind::StreamPosition => "ПеречислениеПозицияВПотоке",
         }
     }
 
@@ -516,6 +558,94 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "BigEndian",
         "Big-endian",
     ),
+    // Пятая колонка у потоковых перечислений снова не производная от
+    // третьей: составные члены платформа печатает раздельно и со строчной
+    // второй частью — «Создать новый», «Открыть или создать», «Чтение и
+    // запись». Всё измерено фикстурой `binary-streams`.
+    (
+        EnumKind::FileOpenMode,
+        EnumValue::FileOpenModeOpen,
+        "Открыть",
+        "Open",
+        "Открыть",
+    ),
+    (
+        EnumKind::FileOpenMode,
+        EnumValue::FileOpenModeOpenOrCreate,
+        "ОткрытьИлиСоздать",
+        "OpenOrCreate",
+        "Открыть или создать",
+    ),
+    (
+        EnumKind::FileOpenMode,
+        EnumValue::FileOpenModeCreate,
+        "Создать",
+        "Create",
+        "Создать",
+    ),
+    (
+        EnumKind::FileOpenMode,
+        EnumValue::FileOpenModeCreateNew,
+        "СоздатьНовый",
+        "CreateNew",
+        "Создать новый",
+    ),
+    (
+        EnumKind::FileOpenMode,
+        EnumValue::FileOpenModeTruncate,
+        "Обрезать",
+        "Truncate",
+        "Обрезать",
+    ),
+    (
+        EnumKind::FileOpenMode,
+        EnumValue::FileOpenModeAppend,
+        "Дописать",
+        "Append",
+        "Дописать",
+    ),
+    (
+        EnumKind::FileAccess,
+        EnumValue::FileAccessRead,
+        "Чтение",
+        "Read",
+        "Чтение",
+    ),
+    (
+        EnumKind::FileAccess,
+        EnumValue::FileAccessWrite,
+        "Запись",
+        "Write",
+        "Запись",
+    ),
+    (
+        EnumKind::FileAccess,
+        EnumValue::FileAccessReadAndWrite,
+        "ЧтениеИЗапись",
+        "ReadAndWrite",
+        "Чтение и запись",
+    ),
+    (
+        EnumKind::StreamPosition,
+        EnumValue::StreamPositionBegin,
+        "Начало",
+        "Begin",
+        "Начало",
+    ),
+    (
+        EnumKind::StreamPosition,
+        EnumValue::StreamPositionCurrent,
+        "Текущая",
+        "Current",
+        "Текущая",
+    ),
+    (
+        EnumKind::StreamPosition,
+        EnumValue::StreamPositionEnd,
+        "Конец",
+        "End",
+        "Конец",
+    ),
 ];
 
 /// Имена всех перечислений — для автодополнения REPL и для резолвера,
@@ -539,6 +669,12 @@ pub const ENUM_NAMES: &[(&str, EnumKind)] = &[
     ("SpreadsheetDocumentDrawingType", EnumKind::DrawingKind),
     ("ПорядокБайтов", EnumKind::ByteOrder),
     ("ByteOrder", EnumKind::ByteOrder),
+    ("РежимОткрытияФайла", EnumKind::FileOpenMode),
+    ("FileOpenMode", EnumKind::FileOpenMode),
+    ("ДоступКФайлу", EnumKind::FileAccess),
+    ("FileAccess", EnumKind::FileAccess),
+    ("ПозицияВПотоке", EnumKind::StreamPosition),
+    ("PositionInStream", EnumKind::StreamPosition),
 ];
 
 /// Перечисление по имени слева от точки. Регистронезависимо и на обоих
@@ -648,6 +784,35 @@ mod tests {
         assert_eq!(EnumValue::JsonNothing.display_text(), "Нет");
         assert_eq!(EnumValue::JsonNull.display_text(), "Значение Null");
         assert_eq!(EnumValue::LineBreakAuto.display_text(), "Автоматически");
+    }
+
+    /// Составные члены потоковых перечислений печатаются раздельно и со
+    /// строчной второй частью — измерено, и «уборка» таблицы в слитное
+    /// написание идентификатора его бы сломала.
+    #[test]
+    fn stream_enum_members_print_as_human_text() {
+        assert_eq!(
+            EnumValue::FileOpenModeCreateNew.display_text(),
+            "Создать новый"
+        );
+        assert_eq!(
+            EnumValue::FileOpenModeOpenOrCreate.display_text(),
+            "Открыть или создать"
+        );
+        assert_eq!(
+            EnumValue::FileAccessReadAndWrite.display_text(),
+            "Чтение и запись"
+        );
+        assert_eq!(EnumValue::StreamPositionBegin.display_text(), "Начало");
+        // Английские написания самих перечислений — не калька с русского.
+        assert_eq!(
+            lookup_enum("PositionInStream"),
+            Some(EnumKind::StreamPosition)
+        );
+        assert_eq!(
+            lookup_member(EnumKind::FileAccess, "ReadAndWrite"),
+            Some(EnumValue::FileAccessReadAndWrite)
+        );
     }
 
     #[test]

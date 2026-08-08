@@ -696,6 +696,30 @@ impl<'a> Compiler<'a> {
                 });
                 self.free_temp(2);
             }
+            RExpr::NewMemoryStream { arg } => {
+                let arg_reg = self.alloc_temp()?;
+                self.compile_expr(arg, arg_reg)?;
+                self.emit(Instr::NewMemoryStream { dst, arg: arg_reg });
+                self.free_temp(1);
+            }
+            RExpr::NewFileStream { path, mode, access } => {
+                let path_reg = self.alloc_temp()?;
+                self.compile_expr(path, path_reg)?;
+                let mode_reg = self.alloc_temp()?;
+                self.compile_expr(mode, mode_reg)?;
+                let access_reg = self.alloc_temp()?;
+                self.compile_expr(access, access_reg)?;
+                self.emit(Instr::NewFileStream {
+                    dst,
+                    path: path_reg,
+                    mode: mode_reg,
+                    access: access_reg,
+                });
+                self.free_temp(3);
+            }
+            RExpr::NewFileStreamsManager => {
+                self.emit(Instr::NewFileStreamsManager { dst });
+            }
             RExpr::NewBinaryData { path } => {
                 let path_reg = self.alloc_temp()?;
                 self.compile_expr(path, path_reg)?;

@@ -660,6 +660,32 @@ pub enum BuiltinMethod {
     WriteBitwiseAndNot,
     /// `Инвертировать([Позиция][, Количество])` — побитовое НЕ по месту.
     Invert,
+
+    // --- Потоки ------------------------------------------------------------
+    // `Размер`, `Записать`, `Прочитать` и `Закрыть` у потоков переиспользуют
+    // уже заведённые варианты: у платформы это те же имена, а смысл
+    // выбирается по получателю. Своих вариантов два, и оба — потому что
+    // такого имени в таблице ещё нет.
+    /// `Поток.ТекущаяПозиция()` — именно МЕТОД, в отличие от трёх признаков
+    /// доступности, которые у потока СВОЙСТВА (измерено обеими формами).
+    /// На ЗАКРЫТОМ потоке продолжает работать и отдаёт последнюю позицию.
+    CurrentPosition,
+    /// `Поток.Перейти(Смещение, ПозицияВПотоке)` -> новая позиция числом.
+    Seek,
+
+    // --- ФайловыеПотоки (менеджер) ------------------------------------------
+    /// `ФайловыеПотоки.Открыть(Имя, Режим[, Доступ])` — то же, что
+    /// конструктор `ФайловыйПоток`.
+    StreamOpen,
+    /// `ОткрытьДляЧтения(Имя)` — `Открыть` плюс доступ `Чтение`.
+    StreamOpenForRead,
+    /// `ОткрытьДляЗаписи(Имя)` — `ОткрытьИлиСоздать` плюс доступ `Запись`;
+    /// существующий файл НЕ обрезается (измерено).
+    StreamOpenForWrite,
+    /// `ОткрытьДляДописывания(Имя)` — `Дописать` плюс доступ `Запись`.
+    StreamOpenForAppend,
+    /// `Создать(Имя)` — `Создать` с доступом по умолчанию.
+    StreamCreate,
 }
 
 /// Написания МЕТОДОВ объектов — тот же принцип, что и у
@@ -833,6 +859,25 @@ pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
     ("WriteBitwiseAndNot", BuiltinMethod::WriteBitwiseAndNot),
     ("Инвертировать", BuiltinMethod::Invert),
     ("Invert", BuiltinMethod::Invert),
+    // Английские написания у потоков и их менеджера ИЗМЕРЕНЫ: фикстура
+    // `binary-streams` зовёт `Size`, `CurrentPosition`, `Seek`, а у
+    // менеджера — `OpenForRead`, `OpenForWrite`, `OpenForAppend`, `Create`.
+    // Русское имя дописывания — `ОткрытьДляДописывания`, а не
+    // `ОткрытьДляДобавления`.
+    ("ТекущаяПозиция", BuiltinMethod::CurrentPosition),
+    ("CurrentPosition", BuiltinMethod::CurrentPosition),
+    ("Перейти", BuiltinMethod::Seek),
+    ("Seek", BuiltinMethod::Seek),
+    ("Открыть", BuiltinMethod::StreamOpen),
+    ("Open", BuiltinMethod::StreamOpen),
+    ("ОткрытьДляЧтения", BuiltinMethod::StreamOpenForRead),
+    ("OpenForRead", BuiltinMethod::StreamOpenForRead),
+    ("ОткрытьДляЗаписи", BuiltinMethod::StreamOpenForWrite),
+    ("OpenForWrite", BuiltinMethod::StreamOpenForWrite),
+    ("ОткрытьДляДописывания", BuiltinMethod::StreamOpenForAppend),
+    ("OpenForAppend", BuiltinMethod::StreamOpenForAppend),
+    ("Создать", BuiltinMethod::StreamCreate),
+    ("Create", BuiltinMethod::StreamCreate),
 ];
 
 impl BuiltinMethod {
@@ -1398,8 +1443,24 @@ pub fn call_builtin_method(
             } else if crate::textdoc::is_text_document(obj) {
                 crate::textdoc::write_file(obj, args)?;
                 Ok(BslValue::Undefined)
+            } else if crate::stream::is_stream(obj) {
+                // У потока `Записать(Буфер, СмещениеВБуфере, Количество)` —
+                // ровно три аргумента, и проверяет их сам `stream::write`:
+                // резолвер арность `Записать` не фиксирует (получатель у
+                // этого имени бывает четырёх видов).
+                crate::stream::write(obj, args)?;
+                Ok(BslValue::Undefined)
             } else {
-                obj.text_writer_write(&args[0])
+                // Получатель здесь может оказаться и не `ЗаписьТекста`:
+                // тогда индексация `args[0]` обязана быть безопасной, а
+                // ошибка — понятной.
+                match args {
+                    [text] => obj.text_writer_write(text),
+                    _ => Err(RtError::MethodNotApplicable {
+                        method: "Записать",
+                        receiver: obj.type_name(),
+                    }),
+                }
             }
         }
         // `Закрыть` полиморфен: у `ЗаписьТекста` он ничего не возвращает,
@@ -1435,6 +1496,10 @@ pub fn call_builtin_method(
                 Ok(BslValue::Undefined)
             } else if crate::xml::is_xml_reader(obj) {
                 crate::xml::read(obj)
+            } else if crate::stream::is_stream(obj) {
+                // У потока `Прочитать` не шаг по потоку событий, а чтение
+                // байтов в буфер, и он ОТДАЁТ число прочитанных байтов.
+                crate::stream::read(obj, args)
             } else {
                 Ok(BslValue::Boolean(crate::json::read(obj)?))
             }
@@ -1498,7 +1563,15 @@ pub fn call_builtin_method(
             method: "Вывести",
             receiver: obj.type_name(),
         }),
-        BuiltinMethod::Size => obj.binary_data_size(),
+        // `Размер()` — метод и у `ДвоичныеДанные`, и у потока (а вот у
+        // БУФЕРА это свойство, см. `BslValue::get_field_by_name`).
+        BuiltinMethod::Size => {
+            if crate::stream::is_stream(obj) {
+                crate::stream::size(obj)
+            } else {
+                obj.binary_data_size()
+            }
+        }
 
         // --- БуферДвоичныхДанных ------------------------------------------
         BuiltinMethod::BufSet => match args {
@@ -1606,7 +1679,55 @@ pub fn call_builtin_method(
             crate::json::write_value(obj, args)?;
             Ok(BslValue::Undefined)
         }
+
+        // --- Потоки -------------------------------------------------------
+        BuiltinMethod::CurrentPosition => crate::stream::current_position(obj),
+        BuiltinMethod::Seek => crate::stream::seek(obj, args),
+
+        // Пять методов менеджера открывают файл, а не работают с
+        // получателем, поэтому получателя надо проверить здесь: сами
+        // функции в `stream.rs` видят только аргументы, и без этой
+        // проверки `Поток.Создать("файл")` завёл бы файл. Что платформа
+        // такой вызов отвергает — ИЗМЕРЕНО (`Поток.Создать` и
+        // `Поток.ОткрытьДляЧтения` на `ПотокВПамяти` дают ошибку).
+        BuiltinMethod::StreamOpen => manager(obj, "Открыть", crate::stream::manager_open, args),
+        BuiltinMethod::StreamOpenForRead => manager(
+            obj,
+            "ОткрытьДляЧтения",
+            crate::stream::manager_open_for_read,
+            args,
+        ),
+        BuiltinMethod::StreamOpenForWrite => manager(
+            obj,
+            "ОткрытьДляЗаписи",
+            crate::stream::manager_open_for_write,
+            args,
+        ),
+        BuiltinMethod::StreamOpenForAppend => manager(
+            obj,
+            "ОткрытьДляДописывания",
+            crate::stream::manager_open_for_append,
+            args,
+        ),
+        BuiltinMethod::StreamCreate => manager(obj, "Создать", crate::stream::manager_create, args),
     }
+}
+
+/// Метод менеджера `ФайловыеПотоки`: получатель обязан быть самим
+/// менеджером, всё остальное решают аргументы.
+fn manager(
+    obj: &BslValue,
+    method: &'static str,
+    open: fn(&[BslValue]) -> RtResult<BslValue>,
+    args: &[BslValue],
+) -> RtResult<BslValue> {
+    if !crate::stream::is_file_streams_manager(obj) {
+        return Err(RtError::MethodNotApplicable {
+            method,
+            receiver: obj.type_name(),
+        });
+    }
+    open(args)
 }
 
 fn is_structure(obj: &BslValue) -> bool {

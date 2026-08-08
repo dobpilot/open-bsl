@@ -1100,6 +1100,33 @@ fn step(
                 reg_store(stack, d, buf)?;
                 frames[frame_idx].pc += 1;
             }
+            Instr::NewMemoryStream { dst, arg } => {
+                let arg = reg_load(stack, frames[frame_idx].reg_index(arg))?;
+                let stream = BslValue::new_memory_stream(&arg)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, stream)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::NewFileStream {
+                dst,
+                path,
+                mode,
+                access,
+            } => {
+                let path = reg_load(stack, frames[frame_idx].reg_index(path))?;
+                let mode = reg_load(stack, frames[frame_idx].reg_index(mode))?;
+                let access = reg_load(stack, frames[frame_idx].reg_index(access))?;
+                let stream = BslValue::new_file_stream(&path, &mode, &access)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, stream)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::NewFileStreamsManager { dst } => {
+                let manager = BslValue::new_file_streams_manager();
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, manager)?;
+                frames[frame_idx].pc += 1;
+            }
             Instr::NewBinaryData { dst, path } => {
                 let path = reg_load(stack, frames[frame_idx].reg_index(path))?;
                 let data = BslValue::new_binary_data(&path)?;
@@ -1189,6 +1216,13 @@ fn step(
                         BslValue::Undefined
                     } else if bsl_rt::textdoc_is_document(ov) {
                         bsl_rt::textdoc_write_file(ov, std::slice::from_ref(sv))?;
+                        BslValue::Undefined
+                    } else if bsl_rt::is_stream(ov) {
+                        // Поток берёт ровно три аргумента, так что сюда он
+                        // попадает только вызовом с одним аргументом, то
+                        // есть ошибочным; ошибка о потоке понятнее, чем
+                        // ошибка о `ЗаписьТекста` из ветки ниже.
+                        bsl_rt::stream_write(ov, std::slice::from_ref(sv))?;
                         BslValue::Undefined
                     } else {
                         ov.text_writer_write(sv)?
