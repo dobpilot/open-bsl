@@ -720,6 +720,45 @@ impl<'a> Compiler<'a> {
             RExpr::NewFileStreamsManager => {
                 self.emit(Instr::NewFileStreamsManager { dst });
             }
+            RExpr::NewDataReader {
+                source,
+                encoding,
+                order,
+                separator,
+            }
+            | RExpr::NewDataWriter {
+                source,
+                encoding,
+                order,
+                separator,
+            } => {
+                let source_reg = self.alloc_temp()?;
+                self.compile_expr(source, source_reg)?;
+                let encoding_reg = self.alloc_temp()?;
+                self.compile_expr(encoding, encoding_reg)?;
+                let order_reg = self.alloc_temp()?;
+                self.compile_expr(order, order_reg)?;
+                let separator_reg = self.alloc_temp()?;
+                self.compile_expr(separator, separator_reg)?;
+                self.emit(if matches!(e, RExpr::NewDataReader { .. }) {
+                    Instr::NewDataReader {
+                        dst,
+                        source: source_reg,
+                        encoding: encoding_reg,
+                        order: order_reg,
+                        separator: separator_reg,
+                    }
+                } else {
+                    Instr::NewDataWriter {
+                        dst,
+                        source: source_reg,
+                        encoding: encoding_reg,
+                        order: order_reg,
+                        separator: separator_reg,
+                    }
+                });
+                self.free_temp(4);
+            }
             RExpr::NewBinaryData { path } => {
                 let path_reg = self.alloc_temp()?;
                 self.compile_expr(path, path_reg)?;

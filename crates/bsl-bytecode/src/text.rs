@@ -36,7 +36,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 5;
+pub const FORMAT_VERSION: u32 = 6;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -88,6 +88,8 @@ pub const OPCODES: &[&str] = &[
     "NewMemoryStream",
     "NewFileStream",
     "NewFileStreamsManager",
+    "NewDataReader",
+    "NewDataWriter",
     "NewJsonReader",
     "NewJsonWriter",
     "NewJsonWriterSettings",
@@ -428,6 +430,24 @@ fn write_instr(instr: &Instr) -> String {
             access,
         } => format!("NewFileStream dst={dst} path={path} mode={mode} access={access}"),
         Instr::NewFileStreamsManager { dst } => format!("NewFileStreamsManager dst={dst}"),
+        Instr::NewDataReader {
+            dst,
+            source,
+            encoding,
+            order,
+            separator,
+        } => format!(
+            "NewDataReader dst={dst} source={source} encoding={encoding} order={order} separator={separator}"
+        ),
+        Instr::NewDataWriter {
+            dst,
+            source,
+            encoding,
+            order,
+            separator,
+        } => format!(
+            "NewDataWriter dst={dst} source={source} encoding={encoding} order={order} separator={separator}"
+        ),
         Instr::NewJsonReader { dst } => format!("NewJsonReader dst={dst}"),
         Instr::NewJsonWriter { dst } => format!("NewJsonWriter dst={dst}"),
         Instr::NewJsonWriterSettings {
@@ -1257,6 +1277,20 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
             access: field_u8(&f, no, "access")?,
         },
         "NewFileStreamsManager" => Instr::NewFileStreamsManager { dst: dst(&f)? },
+        "NewDataReader" => Instr::NewDataReader {
+            dst: dst(&f)?,
+            source: field_u8(&f, no, "source")?,
+            encoding: field_u8(&f, no, "encoding")?,
+            order: field_u8(&f, no, "order")?,
+            separator: field_u8(&f, no, "separator")?,
+        },
+        "NewDataWriter" => Instr::NewDataWriter {
+            dst: dst(&f)?,
+            source: field_u8(&f, no, "source")?,
+            encoding: field_u8(&f, no, "encoding")?,
+            order: field_u8(&f, no, "order")?,
+            separator: field_u8(&f, no, "separator")?,
+        },
         "CollectionLen" => Instr::CollectionLen {
             dst: dst(&f)?,
             obj: obj(&f)?,
@@ -1396,6 +1430,26 @@ mod tests {
          ф = Новый ФайловыйПоток(\"/dev/null\", РежимОткрытияФайла.Открыть);\n\
          г = Новый ФайловыйПоток(\"/dev/null\", РежимОткрытияФайла.Открыть, ДоступКФайлу.Чтение);\n\
          м = ФайловыеПотоки;\nо = м.ОткрытьДляЧтения(\"/dev/null\");\n",
+        // Читатель и писатель данных: обе формы конструктора (только
+        // источник и все четыре аргумента) плюс методы, чьи имена общие с
+        // буфером и потоками, но получатель новый.
+        "п = Новый ПотокВПамяти;\n\
+         ч = Новый ЧтениеДанных(п);\n\
+         щ = Новый ЧтениеДанных(п, \"UTF-8\", ПорядокБайтов.BigEndian, \"|\");\n\
+         з = Новый ЗаписьДанных(п);\n\
+         ы = Новый ЗаписьДанных(п, \"UTF-8\", ПорядокБайтов.LittleEndian, \"|\");\n\
+         а = ч.Прочитать(4);\nб = ч.ПрочитатьБайт();\n\
+         в = ч.ПрочитатьВБуферДвоичныхДанных(4);\n\
+         г = ч.ПрочитатьСимволы(2);\nд = ч.ПрочитатьСтроку();\n\
+         е = ч.ПрочитатьЦелое16();\nж = ч.ПрочитатьЦелое32();\n\
+         й = ч.ПрочитатьЦелое64();\nк = ч.Пропустить(2);\n\
+         л = а.Размер;\nм = а.ПолучитьДвоичныеДанные();\n\
+         н = а.ПолучитьБуферДвоичныхДанных();\n\
+         з.ЗаписатьБайт(65);\nз.ЗаписатьСимволы(\"а\");\n\
+         з.ЗаписатьСтроку(\"а\");\nз.ЗаписатьЦелое16(1);\n\
+         з.ЗаписатьЦелое32(1);\nз.ЗаписатьЦелое64(1);\n\
+         з.ПорядокБайтов = ПорядокБайтов.BigEndian;\n\
+         о = з.РазделительСтрок;\nч.Закрыть();\nз.Закрыть();\n",
         // JSON: все три конструктора плюс член перечисления константой
         // (`Перечисление ...` в таблице констант тоже обязан пережить
         // печать и разбор).

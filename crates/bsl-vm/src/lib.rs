@@ -1121,6 +1121,38 @@ fn step(
                 reg_store(stack, d, stream)?;
                 frames[frame_idx].pc += 1;
             }
+            Instr::NewDataReader {
+                dst,
+                source,
+                encoding,
+                order,
+                separator,
+            } => {
+                let source = reg_load(stack, frames[frame_idx].reg_index(source))?;
+                let encoding = reg_load(stack, frames[frame_idx].reg_index(encoding))?;
+                let order = reg_load(stack, frames[frame_idx].reg_index(order))?;
+                let separator = reg_load(stack, frames[frame_idx].reg_index(separator))?;
+                let reader = bsl_rt::new_data_reader(&source, &encoding, &order, &separator)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, reader)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::NewDataWriter {
+                dst,
+                source,
+                encoding,
+                order,
+                separator,
+            } => {
+                let source = reg_load(stack, frames[frame_idx].reg_index(source))?;
+                let encoding = reg_load(stack, frames[frame_idx].reg_index(encoding))?;
+                let order = reg_load(stack, frames[frame_idx].reg_index(order))?;
+                let separator = reg_load(stack, frames[frame_idx].reg_index(separator))?;
+                let writer = bsl_rt::new_data_writer(&source, &encoding, &order, &separator)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, writer)?;
+                frames[frame_idx].pc += 1;
+            }
             Instr::NewFileStreamsManager { dst } => {
                 let manager = BslValue::new_file_streams_manager();
                 let d = frames[frame_idx].reg_index(dst);

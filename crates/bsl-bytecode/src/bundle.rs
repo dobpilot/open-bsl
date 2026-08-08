@@ -515,6 +515,32 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
         Instr::NewFileStreamsManager { dst } => {
             write!(dst);
         }
+        // Читатель и писатель данных: источником бывает ИМЯ ФАЙЛА, и тогда
+        // конструктор открывает файл (а у писателя — создаёт, если файла нет;
+        // существующий не обрезает — измерено). Кроме того оба запоминают
+        // позицию целевого потока, так что порядок относительно операций над
+        // этим потоком наблюдаем.
+        Instr::NewDataReader {
+            dst,
+            source,
+            encoding,
+            order,
+            separator,
+        }
+        | Instr::NewDataWriter {
+            dst,
+            source,
+            encoding,
+            order,
+            separator,
+        } => {
+            read!(source);
+            read!(encoding);
+            read!(order);
+            read!(separator);
+            write!(dst);
+            e.io = true;
+        }
         Instr::CollectionLen { dst, obj } => {
             read!(obj);
             write!(dst);

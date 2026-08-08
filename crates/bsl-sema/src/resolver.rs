@@ -336,6 +336,12 @@ pub const NEW_TYPES: &[&str] = &[
     "MemoryStream",
     "ФайловыйПоток",
     "FileStream",
+    // Английские написания ИЗМЕРЕНЫ: `Тип("DataReader")` и `Тип("DataWriter")`
+    // платформа разрешает и считает равными русским.
+    "ЧтениеДанных",
+    "DataReader",
+    "ЗаписьДанных",
+    "DataWriter",
 ];
 
 struct Resolver<'a> {
@@ -814,6 +820,55 @@ impl<'a> Resolver<'a> {
                     access: Box::new(access),
                 })
             }
+            // Источник обязателен (пустой конструктор платформа не находит
+            // вовсе), хвостовые три — нет. Пятый аргумент у платформы есть,
+            // но его тип не измерен, поэтому больше четырёх здесь ошибка.
+            "ЧТЕНИЕДАННЫХ" | "DATAREADER" | "ЗАПИСЬДАННЫХ" | "DATAWRITER" =>
+            {
+                let reader = matches!(
+                    type_name.to_uppercase().as_str(),
+                    "ЧТЕНИЕДАННЫХ" | "DATAREADER"
+                );
+                let display = if reader {
+                    "Новый ЧтениеДанных"
+                } else {
+                    "Новый ЗаписьДанных"
+                };
+                if args.is_empty() || args.len() > 4 {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: display.to_string(),
+                        expected: 1,
+                        found: args.len(),
+                    });
+                }
+                let source = Box::new(self.resolve_expr(&args[0])?);
+                let mut tail = Vec::new();
+                for i in 1..4 {
+                    tail.push(Box::new(match args.get(i) {
+                        Some(a) => self.resolve_expr(a)?,
+                        None => RExpr::Undefined,
+                    }));
+                }
+                let mut tail = tail.into_iter();
+                let encoding = tail.next().unwrap_or_else(|| Box::new(RExpr::Undefined));
+                let order = tail.next().unwrap_or_else(|| Box::new(RExpr::Undefined));
+                let separator = tail.next().unwrap_or_else(|| Box::new(RExpr::Undefined));
+                Ok(if reader {
+                    RExpr::NewDataReader {
+                        source,
+                        encoding,
+                        order,
+                        separator,
+                    }
+                } else {
+                    RExpr::NewDataWriter {
+                        source,
+                        encoding,
+                        order,
+                        separator,
+                    }
+                })
+            }
             "ЧТЕНИЕJSON" | "JSONREADER" => {
                 if !args.is_empty() {
                     return Err(SemaError::ArgumentCountMismatch {
@@ -1111,11 +1166,28 @@ impl<'a> Resolver<'a> {
                     | bsl_rt::BuiltinMethod::Collapse => None,
                     // JSON. Без аргументов — обход читателя и открытие/
                     // закрытие контейнеров записи.
-                    bsl_rt::BuiltinMethod::SkipNode
-                    | bsl_rt::BuiltinMethod::WriteStartObject
+                    bsl_rt::BuiltinMethod::WriteStartObject
                     | bsl_rt::BuiltinMethod::WriteEndObject
                     | bsl_rt::BuiltinMethod::WriteStartArray
                     | bsl_rt::BuiltinMethod::WriteEndArray => Some(0),
+                    // `Пропустить` — 0 у читателей JSON/XML (шаг через узел) и
+                    // 1 у `ЧтениеДанных` (сколько байтов перешагнуть). Тип
+                    // получателя здесь ещё не известен, поэтому арность решает
+                    // рантайм.
+                    bsl_rt::BuiltinMethod::SkipNode => None,
+                    // Методы `ЧтениеДанных`/`ЗаписьДанных`. Необязательные
+                    // хвостовые аргументы (количество, кодировка, разделитель)
+                    // проверяет рантайм; фиксированы только те, у кого форма
+                    // ровно одна.
+                    bsl_rt::BuiltinMethod::DataReadByte
+                    | bsl_rt::BuiltinMethod::GetBinaryData
+                    | bsl_rt::BuiltinMethod::GetBinaryDataBuffer => Some(0),
+                    bsl_rt::BuiltinMethod::DataWriteByte => Some(1),
+                    bsl_rt::BuiltinMethod::DataReadIntoBuffer
+                    | bsl_rt::BuiltinMethod::DataReadChars
+                    | bsl_rt::BuiltinMethod::DataReadLine
+                    | bsl_rt::BuiltinMethod::DataWriteChars
+                    | bsl_rt::BuiltinMethod::DataWriteLine => None,
                     bsl_rt::BuiltinMethod::WritePropertyName
                     | bsl_rt::BuiltinMethod::WriteJsonValue => Some(1),
                     // `УстановитьСтроку` — 1 у читателя (текст) и 0..1 у

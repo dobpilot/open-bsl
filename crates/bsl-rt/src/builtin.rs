@@ -686,6 +686,35 @@ pub enum BuiltinMethod {
     StreamOpenForAppend,
     /// `Создать(Имя)` — `Создать` с доступом по умолчанию.
     StreamCreate,
+
+    // --- ЧтениеДанных / ЗаписьДанных ----------------------------------------
+    // `Прочитать`, `Записать`, `Закрыть`, `Пропустить` и шесть
+    // `Прочитать/ЗаписатьЦелоеN` переиспользуют уже заведённые варианты: у
+    // платформы это те же имена, а смысл выбирается по получателю. Свои
+    // варианты — только у имён, которых в таблице ещё нет.
+    /// `ЧтениеДанных.ПрочитатьБайт()` -> число либо `Неопределено` на краю.
+    /// Одноимённого метода у `БуферДвоичныхДанных` НЕТ (проверено перебором),
+    /// так что это имя принадлежит читателю целиком.
+    DataReadByte,
+    /// `ЧтениеДанных.ПрочитатьВБуферДвоичныхДанных([Количество])` -> буфер
+    /// ровно по числу прочитанных байтов.
+    DataReadIntoBuffer,
+    /// `ЧтениеДанных.ПрочитатьСимволы([Количество][, Кодировка])` — счёт в
+    /// СИМВОЛАХ, а не в байтах (измерено).
+    DataReadChars,
+    /// `ЧтениеДанных.ПрочитатьСтроку([Кодировка])` — до разделителя строк.
+    DataReadLine,
+    /// `ЗаписьДанных.ЗаписатьБайт(0..255)`.
+    DataWriteByte,
+    /// `ЗаписьДанных.ЗаписатьСимволы(Строка[, Кодировка])` — текст без
+    /// разделителя.
+    DataWriteChars,
+    /// `ЗаписьДанных.ЗаписатьСтроку(Строка[, Кодировка][, Разделитель])`.
+    DataWriteLine,
+    /// `РезультатЧтенияДанных.ПолучитьДвоичныеДанные()`.
+    GetBinaryData,
+    /// `РезультатЧтенияДанных.ПолучитьБуферДвоичныхДанных()`.
+    GetBinaryDataBuffer,
 }
 
 /// Написания МЕТОДОВ объектов — тот же принцип, что и у
@@ -878,6 +907,39 @@ pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
     ("OpenForAppend", BuiltinMethod::StreamOpenForAppend),
     ("Создать", BuiltinMethod::StreamCreate),
     ("Create", BuiltinMethod::StreamCreate),
+    // `ЧтениеДанных`/`ЗаписьДанных`/`РезультатЧтенияДанных`. Английские
+    // написания ИЗМЕРЕНЫ перебором: каждое вызвано на живом объекте, и
+    // отсутствующее имя платформа отличает («Метод объекта не обнаружен»)
+    // от существующего, но не возвращающего значения («Обращение к
+    // процедуре объекта как к функции»). Так отпали `ReadToBinaryDataBuffer`
+    // и `ReadIntoBuffer` в пользу `ReadIntoBinaryDataBuffer`.
+    ("ПрочитатьБайт", BuiltinMethod::DataReadByte),
+    ("ReadByte", BuiltinMethod::DataReadByte),
+    (
+        "ПрочитатьВБуферДвоичныхДанных",
+        BuiltinMethod::DataReadIntoBuffer,
+    ),
+    (
+        "ReadIntoBinaryDataBuffer",
+        BuiltinMethod::DataReadIntoBuffer,
+    ),
+    ("ПрочитатьСимволы", BuiltinMethod::DataReadChars),
+    ("ReadChars", BuiltinMethod::DataReadChars),
+    ("ПрочитатьСтроку", BuiltinMethod::DataReadLine),
+    ("ReadLine", BuiltinMethod::DataReadLine),
+    ("ЗаписатьБайт", BuiltinMethod::DataWriteByte),
+    ("WriteByte", BuiltinMethod::DataWriteByte),
+    ("ЗаписатьСимволы", BuiltinMethod::DataWriteChars),
+    ("WriteChars", BuiltinMethod::DataWriteChars),
+    ("ЗаписатьСтроку", BuiltinMethod::DataWriteLine),
+    ("WriteLine", BuiltinMethod::DataWriteLine),
+    ("ПолучитьДвоичныеДанные", BuiltinMethod::GetBinaryData),
+    ("GetBinaryData", BuiltinMethod::GetBinaryData),
+    (
+        "ПолучитьБуферДвоичныхДанных",
+        BuiltinMethod::GetBinaryDataBuffer,
+    ),
+    ("GetBinaryDataBuffer", BuiltinMethod::GetBinaryDataBuffer),
 ];
 
 impl BuiltinMethod {
@@ -1253,6 +1315,34 @@ fn arg(args: &[BslValue], i: usize) -> &BslValue {
     args.get(i).unwrap_or(&BslValue::Undefined)
 }
 
+/// `ПрочитатьЦелоеN` по получателю: у буфера первым аргументом идёт ПОЗИЦИЯ,
+/// у `ЧтениеДанных` позиции нет — он читает с собственной и сдвигает её.
+fn read_int_by_receiver(
+    obj: &BslValue,
+    args: &[BslValue],
+    w: crate::binbuf::IntWidth,
+) -> RtResult<BslValue> {
+    if crate::datarw::is_data_reader(obj) {
+        crate::datarw::read_int(obj, args, w)
+    } else {
+        crate::binbuf::read_int(obj, args, w)
+    }
+}
+
+/// `ЗаписатьЦелоеN` по получателю — то же различие, что и у чтения.
+fn write_int_by_receiver(
+    obj: &BslValue,
+    args: &[BslValue],
+    w: crate::binbuf::IntWidth,
+) -> RtResult<BslValue> {
+    if crate::datarw::is_data_writer(obj) {
+        crate::datarw::write_int(obj, args, w)?;
+        Ok(BslValue::Undefined)
+    } else {
+        crate::binbuf::write_int(obj, args, w)
+    }
+}
+
 /// Лишние аргументы у метода с переменной арностью. Тихо игнорировать их
 /// нельзя: `Свернуть("а", "б", "в")` — почти наверняка опечатка, а не
 /// намерение.
@@ -1447,8 +1537,14 @@ pub fn call_builtin_method(
                 // У потока `Записать(Буфер, СмещениеВБуфере, Количество)` —
                 // ровно три аргумента, и проверяет их сам `stream::write`:
                 // резолвер арность `Записать` не фиксирует (получатель у
-                // этого имени бывает четырёх видов).
+                // этого имени бывает пяти видов).
                 crate::stream::write(obj, args)?;
+                Ok(BslValue::Undefined)
+            } else if crate::datarw::is_data_writer(obj) {
+                // У `ЗаписьДанных` `Записать(ДвоичныеДанные)` — ровно один
+                // аргумент (измерено: трёхаргументную форму платформа
+                // отвергает «Слишком много фактических параметров»).
+                crate::datarw::write(obj, args)?;
                 Ok(BslValue::Undefined)
             } else {
                 // Получатель здесь может оказаться и не `ЗаписьТекста`:
@@ -1500,11 +1596,27 @@ pub fn call_builtin_method(
                 // У потока `Прочитать` не шаг по потоку событий, а чтение
                 // байтов в буфер, и он ОТДАЁТ число прочитанных байтов.
                 crate::stream::read(obj, args)
+            } else if crate::datarw::is_data_reader(obj) {
+                // У `ЧтениеДанных` `Прочитать([Количество])` отдаёт
+                // `РезультатЧтенияДанных`.
+                crate::datarw::read(obj, args)
             } else {
                 Ok(BslValue::Boolean(crate::json::read(obj)?))
             }
         }
         BuiltinMethod::SkipNode => {
+            // У читателей JSON/XML `Пропустить()` — шаг через узел без
+            // результата, у `ЧтениеДанных` — перевод позиции на заданное
+            // число байтов, и он ОТДАЁТ это число.
+            if crate::datarw::is_data_reader(obj) {
+                return crate::datarw::skip(obj, args);
+            }
+            // Из-за аргумента у `ЧтениеДанных` резолвер арность этого имени
+            // больше не фиксирует (была `Some(0)`), поэтому у читателей
+            // JSON/XML верхнюю границу проверяет рантайм — иначе
+            // `ЧтениеJSON.Пропустить(5)` прошёл бы молча: `xml::skip` и
+            // `json::skip` аргументы попросту не смотрят.
+            too_many(obj, "Пропустить", args, 0)?;
             if crate::xml::is_xml_reader(obj) {
                 crate::xml::skip(obj)?;
             } else {
@@ -1581,24 +1693,34 @@ pub fn call_builtin_method(
                 receiver: obj.type_name(),
             }),
         },
-        BuiltinMethod::ReadInt16 => {
-            crate::binbuf::read_int(obj, args, crate::binbuf::IntWidth::W16)
+        // Шесть имён целых общие у `БуферДвоичныхДанных` и у
+        // `ЧтениеДанных`/`ЗаписьДанных`, но смысл аргументов разный: у буфера
+        // первым идёт ПОЗИЦИЯ, у читателя и писателя её нет вовсе (позиция
+        // своя). Разводится по получателю.
+        BuiltinMethod::ReadInt16 => read_int_by_receiver(obj, args, crate::binbuf::IntWidth::W16),
+        BuiltinMethod::ReadInt32 => read_int_by_receiver(obj, args, crate::binbuf::IntWidth::W32),
+        BuiltinMethod::ReadInt64 => read_int_by_receiver(obj, args, crate::binbuf::IntWidth::W64),
+        BuiltinMethod::WriteInt16 => write_int_by_receiver(obj, args, crate::binbuf::IntWidth::W16),
+        BuiltinMethod::WriteInt32 => write_int_by_receiver(obj, args, crate::binbuf::IntWidth::W32),
+        BuiltinMethod::WriteInt64 => write_int_by_receiver(obj, args, crate::binbuf::IntWidth::W64),
+        BuiltinMethod::DataReadByte => crate::datarw::read_byte(obj),
+        BuiltinMethod::DataReadIntoBuffer => crate::datarw::read_into_buffer(obj, args),
+        BuiltinMethod::DataReadChars => crate::datarw::read_chars(obj, args),
+        BuiltinMethod::DataReadLine => crate::datarw::read_line(obj, args),
+        BuiltinMethod::DataWriteByte => {
+            crate::datarw::write_byte(obj, args)?;
+            Ok(BslValue::Undefined)
         }
-        BuiltinMethod::ReadInt32 => {
-            crate::binbuf::read_int(obj, args, crate::binbuf::IntWidth::W32)
+        BuiltinMethod::DataWriteChars => {
+            crate::datarw::write_chars(obj, args)?;
+            Ok(BslValue::Undefined)
         }
-        BuiltinMethod::ReadInt64 => {
-            crate::binbuf::read_int(obj, args, crate::binbuf::IntWidth::W64)
+        BuiltinMethod::DataWriteLine => {
+            crate::datarw::write_line(obj, args)?;
+            Ok(BslValue::Undefined)
         }
-        BuiltinMethod::WriteInt16 => {
-            crate::binbuf::write_int(obj, args, crate::binbuf::IntWidth::W16)
-        }
-        BuiltinMethod::WriteInt32 => {
-            crate::binbuf::write_int(obj, args, crate::binbuf::IntWidth::W32)
-        }
-        BuiltinMethod::WriteInt64 => {
-            crate::binbuf::write_int(obj, args, crate::binbuf::IntWidth::W64)
-        }
+        BuiltinMethod::GetBinaryData => crate::datarw::result_binary_data(obj),
+        BuiltinMethod::GetBinaryDataBuffer => crate::datarw::result_binary_buffer(obj),
         BuiltinMethod::BufSplit => crate::binbuf::split(obj, &args[0]),
         BuiltinMethod::BufConcat => crate::binbuf::concat(obj, &args[0]),
         BuiltinMethod::WriteBitwiseAnd => {
@@ -1873,6 +1995,59 @@ mod name_table_tests {
             assert_eq!(BuiltinFn::lookup(name), None, "{name}");
         }
         assert_eq!(BuiltinMethod::lookup("Опечатка"), None);
+    }
+}
+
+/// Арность полиморфных имён, которую резолвер зафиксировать не может, —
+/// её проверяет только диспетчер, и значит проверять её надо здесь.
+#[cfg(test)]
+mod method_arity_tests {
+    use super::*;
+
+    fn json_reader_of(text: &str) -> BslValue {
+        let reader = BslValue::new_json_reader();
+        crate::json::set_string(&reader, &[BslValue::Str(BslString::from_str(text))]).unwrap();
+        reader
+    }
+
+    fn num(v: i64) -> BslValue {
+        BslValue::Number(bsl_number::BslNumber::from_i64(v))
+    }
+
+    /// `Пропустить` у читателей JSON/XML аргументов не принимает, а у
+    /// `ЧтениеДанных` принимает один — поэтому `arity_range` для этого имени
+    /// отдаёт `None` и верхняя граница остаётся на рантайме. Без неё лишние
+    /// аргументы проходили бы молча: `json::skip` и `xml::skip` их не смотрят.
+    #[test]
+    fn a_json_readers_skip_rejects_extra_arguments() {
+        let reader = json_reader_of(r#"{"а":1}"#);
+        // Сначала шаг на начало объекта, чтобы `Пропустить` было чем работать.
+        call_builtin_method(BuiltinMethod::ReadNext, &reader, &[]).unwrap();
+        assert!(
+            call_builtin_method(BuiltinMethod::SkipNode, &reader, &[num(5), num(7), num(9)])
+                .is_err(),
+            "Пропустить(5, 7, 9) обязан быть отвергнут"
+        );
+        assert!(call_builtin_method(BuiltinMethod::SkipNode, &reader, &[num(5)]).is_err());
+        // А форма без аргументов по-прежнему работает.
+        call_builtin_method(BuiltinMethod::SkipNode, &reader, &[])
+            .expect("Пропустить() обязан работать");
+    }
+
+    /// У `ЧтениеДанных` то же имя аргумент ПРИНИМАЕТ и отдаёт его же
+    /// (`Пропустить` переводит позицию), а лишние — по-прежнему отвергает.
+    #[test]
+    fn a_data_readers_skip_still_takes_its_one_argument() {
+        let reader = crate::datarw::new_data_reader(
+            &BslValue::binary_data_of(vec![65, 66, 67]),
+            &BslValue::Undefined,
+            &BslValue::Undefined,
+            &BslValue::Undefined,
+        )
+        .unwrap();
+        let moved = call_builtin_method(BuiltinMethod::SkipNode, &reader, &[num(2)]).unwrap();
+        assert_eq!(moved, num(2));
+        assert!(call_builtin_method(BuiltinMethod::SkipNode, &reader, &[num(1), num(2)]).is_err());
     }
 }
 

@@ -6,6 +6,7 @@
 
 mod binbuf;
 mod builtin;
+mod datarw;
 mod date;
 mod deflate;
 pub mod encoding;
@@ -45,6 +46,10 @@ pub use builtin::{
     call_builtin_fn, call_builtin_fn_ctx, call_builtin_method, call_builtin_method_ctx,
     read_json_builtin, set_command_line_args, write_json_builtin, BuiltinFn, BuiltinMethod,
     BUILTIN_FN_NAMES, BUILTIN_METHOD_NAMES,
+};
+pub use datarw::{
+    is_data_reader, is_data_writer, is_read_result, new_data_reader, new_data_writer, DataRwProp,
+    DataRwState,
 };
 pub use date::{
     format_long as format_date_long, format_pattern as format_date_pattern, BslDate, DateBoundary,
@@ -375,6 +380,12 @@ impl BslValue {
                 BslObject::MemoryStream(_) => "ПотокВПамяти",
                 BslObject::FileStream(_) => "ФайловыйПоток",
                 BslObject::FileStreamsManager => "МенеджерФайловыхПотоков",
+                // Имена ЗНАЧЕНИЙ слитные, имена их ТИПОВ — с пробелом
+                // («Чтение данных»), как у JSON и XML. Измерено обеими
+                // сторонами.
+                BslObject::DataReader(_) => "ЧтениеДанных",
+                BslObject::DataWriter(_) => "ЗаписьДанных",
+                BslObject::DataReadResult(_) => "РезультатЧтенияДанных",
             },
             BslValue::Skipped => "Skipped",
         }
@@ -1127,9 +1138,15 @@ impl BslValue {
                 // ошибка, а не «Да»/«Нет». Поток снят фикстурой
                 // `binary-streams`, менеджер — отдельной разведочной
                 // пробой на 8.3.27.
+                //
+                // Читатель, писатель и результат чтения ведут себя так же —
+                // измерено на каждом из трёх отдельной пробой.
                 BslObject::MemoryStream(..)
                 | BslObject::FileStream(..)
-                | BslObject::FileStreamsManager => {
+                | BslObject::FileStreamsManager
+                | BslObject::DataReader(..)
+                | BslObject::DataWriter(..)
+                | BslObject::DataReadResult(..) => {
                     return Err(RtError::TypeError {
                         expected: "Значение, у которого есть признак заполненности",
                         op: "ЗначениеЗаполнено",
@@ -1197,6 +1214,9 @@ impl BslValue {
                 BslObject::MemoryStream(..) => TypeId::MemoryStream,
                 BslObject::FileStream(..) => TypeId::FileStream,
                 BslObject::FileStreamsManager => TypeId::FileStreamsManager,
+                BslObject::DataReader(..) => TypeId::DataReader,
+                BslObject::DataWriter(..) => TypeId::DataWriter,
+                BslObject::DataReadResult(..) => TypeId::DataReadResult,
             },
             BslValue::Skipped => {
                 return Err(RtError::TypeError {
@@ -1279,7 +1299,14 @@ impl BslValue {
     ///
     /// Ошибку ввода-вывода либо неприменимость метода к получателю.
     pub fn close_object(&self) -> RtResult<BslValue> {
-        if stream::is_stream(self) {
+        if datarw::is_data_reader(self) || datarw::is_data_writer(self) {
+            // У читателя и писателя данных `Закрыть` ничего не закрывает:
+            // целевой поток остаётся живым, а сами они продолжают работать
+            // (измерено). Сбрасывать тоже нечего — собственного буфера у
+            // платформы нет.
+            datarw::close(self)?;
+            Ok(BslValue::Undefined)
+        } else if stream::is_stream(self) {
             // Поток отпускает носитель, но остаётся живым наполовину:
             // позиция и три признака доступности переживают закрытие
             // (измерено), поэтому здесь не сброс объекта, а только
@@ -1921,7 +1948,10 @@ impl BslValue {
                 // тоже нет.
                 | BslObject::MemoryStream(..)
                 | BslObject::FileStream(..)
-                | BslObject::FileStreamsManager => Err(RtError::NotIndexable),
+                | BslObject::FileStreamsManager
+                | BslObject::DataReader(..)
+                | BslObject::DataWriter(..)
+                | BslObject::DataReadResult(..) => Err(RtError::NotIndexable),
                 // У коллекции рисунков длина есть — это её `Количество`.
                 BslObject::SpreadDrawings(doc) => Ok(doc.borrow().drawings().len()),
             },
@@ -2278,6 +2308,26 @@ impl BslValue {
                 // признаков; измерено обеими формами на каждом из пяти
                 // имён). После `Закрыть()` признаки продолжают отдавать
                 // прежние значения — тоже измерено.
+                // У читателя и писателя данных СВОЙСТВА — три: порядок
+                // байтов, кодировка текста и разделитель строк. Английское
+                // имя разделителя — `LineSplitter`, а не `LineSeparator`
+                // (измерено: второе платформа не знает).
+                BslObject::DataReader(_) | BslObject::DataWriter(_) => {
+                    match datarw::DataRwProp::lookup(name) {
+                        Some(prop) => datarw::get_prop(self, prop),
+                        None => Err(RtError::UnknownColumn(name.to_string())),
+                    }
+                }
+                // У результата чтения `Размер` — СВОЙСТВО, а не метод
+                // (измерено: вызов со скобками платформа отвергает).
+                BslObject::DataReadResult(_) => {
+                    if name.eq_ignore_ascii_case("Размер") || name.eq_ignore_ascii_case("Size")
+                    {
+                        datarw::result_size(self)
+                    } else {
+                        Err(RtError::UnknownColumn(name.to_string()))
+                    }
+                }
                 BslObject::MemoryStream(_) | BslObject::FileStream(_) => {
                     if name.eq_ignore_ascii_case("ДоступнаЗапись")
                         || name.eq_ignore_ascii_case("CanWrite")
@@ -2393,6 +2443,16 @@ impl BslValue {
                 }
                 BslObject::JsonSerializerSettings(_) => {
                     json::set_serializer_setting(self, name, val)
+                }
+                // Все три свойства читателя и писателя данных ПИШУТСЯ. Но
+                // `ПорядокБайтов` у ЧИТАТЕЛЯ при этом меняет только то, что
+                // отдаёт геттер: чтение целых по-прежнему идёт порядком из
+                // конструктора (измерено, см. `datarw`).
+                BslObject::DataReader(_) | BslObject::DataWriter(_) => {
+                    match datarw::DataRwProp::lookup(name) {
+                        Some(prop) => datarw::set_prop(self, prop, &val),
+                        None => Err(RtError::UnknownColumn(name.to_string())),
+                    }
                 }
                 // Пишется только `ПорядокБайтов`: `Размер` доступен лишь на
                 // чтение, присваивание в него платформа отвергает
@@ -3205,6 +3265,10 @@ impl fmt::Display for BslValue {
                 BslObject::MemoryStream(_) => write!(f, "ПотокВПамяти"),
                 BslObject::FileStream(_) => write!(f, "ФайловыйПоток"),
                 BslObject::FileStreamsManager => write!(f, "МенеджерФайловыхПотоков"),
+                // Печатаются именем ЗНАЧЕНИЯ, слитно (измерено).
+                BslObject::DataReader(_) => write!(f, "ЧтениеДанных"),
+                BslObject::DataWriter(_) => write!(f, "ЗаписьДанных"),
+                BslObject::DataReadResult(_) => write!(f, "РезультатЧтенияДанных"),
             },
             // Никогда не должно реально дойти до печати (см. doc comment
             // на варианте) — но `Display` обязан быть тотальным.

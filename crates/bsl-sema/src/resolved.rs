@@ -160,6 +160,22 @@ pub enum RExpr {
         mode: Box<RExpr>,
         access: Box<RExpr>,
     },
+    /// `Новый ЧтениеДанных(Источник[, Кодировка][, ПорядокБайтов][, Разделитель])`
+    /// и парный `Новый ЗаписьДанных(...)`. Хвостовые три аргумента
+    /// необязательны и приходят `Undefined`; ПЯТЫЙ аргумент у платформы
+    /// есть, но его тип не измерен, поэтому здесь разбираются четыре.
+    NewDataReader {
+        source: Box<RExpr>,
+        encoding: Box<RExpr>,
+        order: Box<RExpr>,
+        separator: Box<RExpr>,
+    },
+    NewDataWriter {
+        source: Box<RExpr>,
+        encoding: Box<RExpr>,
+        order: Box<RExpr>,
+        separator: Box<RExpr>,
+    },
     /// Голое имя `ФайловыеПотоки` как выражение. В отличие от
     /// [`RExpr::EnumTypeRef`] это НЕ константа: `ФайловыеПотоки =
     /// ФайловыеПотоки` платформа считает ложью (измерено), значит каждое
@@ -397,6 +413,23 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
         RExpr::NewMemoryStream { arg } => expr_uses_dynamic(arg),
         RExpr::NewFileStream { path, mode, access } => {
             expr_uses_dynamic(path) || expr_uses_dynamic(mode) || expr_uses_dynamic(access)
+        }
+        RExpr::NewDataReader {
+            source,
+            encoding,
+            order,
+            separator,
+        }
+        | RExpr::NewDataWriter {
+            source,
+            encoding,
+            order,
+            separator,
+        } => {
+            expr_uses_dynamic(source)
+                || expr_uses_dynamic(encoding)
+                || expr_uses_dynamic(order)
+                || expr_uses_dynamic(separator)
         }
         RExpr::NewTypeDescription(names) => expr_uses_dynamic(names),
         RExpr::Number(_)

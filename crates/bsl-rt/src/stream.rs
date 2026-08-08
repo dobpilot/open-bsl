@@ -206,6 +206,142 @@ impl StreamData {
                 .map_err(|e| RtError::IoError(format!("Размер: {e}"))),
         }
     }
+
+    /// Текущая позиция. Нужна снаружи модуля читателю и писателю
+    /// (`crate::datarw`): те сверяют её со своей ожидаемой и отвергают
+    /// операцию, если позицию подвинули мимо них.
+    pub(crate) fn position(&self) -> u64 {
+        self.pos
+    }
+
+    /// Поставить позицию. Нужна `crate::datarw`: `Пропустить` у читателя
+    /// именно ПЕРЕВОДИТ позицию, а не вычитывает байты (измерено:
+    /// `Пропустить(100)` над шестнадцатью байтами уводит поток на 100), а
+    /// неудавшееся чтение целого откатывает её обратно.
+    pub(crate) fn set_position(&mut self, pos: u64) {
+        self.pos = pos;
+    }
+
+    /// Прочитать не больше `count` байтов с текущей позиции, сдвинув её на
+    /// фактически прочитанное. У конца отдаёт СКОЛЬКО ЕСТЬ, а не ошибку
+    /// (измерено) — вплоть до пустого среза.
+    ///
+    /// Общая часть [`read`] и чтения в `crate::datarw`: носитель у обоих
+    /// один, и различаются они только тем, куда байты потом кладутся.
+    pub(crate) fn read_bytes(&mut self, count: usize, op: &'static str) -> RtResult<Vec<u8>> {
+        if !self.can_read {
+            return Err(RtError::IoError(
+                "поток открыт без доступа на чтение".to_string(),
+            ));
+        }
+        let pos = self.pos;
+        let chunk: Vec<u8> = match self.open_mut(op)? {
+            Backing::Owned(bytes) => slice_from(bytes, pos, count),
+            Backing::Buffer(source) => {
+                let source = source.borrow();
+                slice_from(&source.bytes, pos, count)
+            }
+            Backing::File(file) => {
+                file.seek(SeekFrom::Start(pos))
+                    .map_err(|e| RtError::IoError(format!("{op}: {e}")))?;
+                // `vec![0; count]` на неразмещаемом размере ПАНИКУЕТ, а
+                // количество приходит из пользовательского текста (`Прочитать`
+                // у `ЧтениеДанных`) — значит, отказ обязан быть
+                // перехватываемым. Тот же приём, что в
+                // `binbuf::new_binary_buffer`; после `try_reserve_exact`
+                // `resize` уже не размещает память заново и упасть не может.
+                let mut chunk = Vec::new();
+                chunk
+                    .try_reserve_exact(count)
+                    .map_err(|_| RtError::TypeError {
+                        expected: "Размер, который удаётся разместить в памяти",
+                        op,
+                    })?;
+                chunk.resize(count, 0u8);
+                let mut filled = 0;
+                while filled < count {
+                    let n = file
+                        .read(&mut chunk[filled..])
+                        .map_err(|e| RtError::IoError(format!("{op}: {e}")))?;
+                    if n == 0 {
+                        break;
+                    }
+                    filled += n;
+                }
+                chunk.truncate(filled);
+                chunk
+            }
+        };
+        // Переполниться эта сумма не может: у своей памяти и у потока над
+        // буфером `slice_from` за концом отдаёт пустой срез, а файл на такой
+        // позиции либо не отдаёт ничего, либо падает ещё на `seek`.
+        self.pos = pos + chunk.len() as u64;
+        Ok(chunk)
+    }
+
+    /// Записать байты в текущую позицию, сдвинув её на длину записанного.
+    ///
+    /// Общая часть [`write`] и записи в `crate::datarw`. Конец записи
+    /// считается `checked_add` ДО любого побочного эффекта: `Перейти`
+    /// разрешает уход за конец, позиция может стоять у самого края `u64`, и
+    /// в голом сложении это переполнилось бы (см. комментарий у вызова).
+    pub(crate) fn write_bytes(&mut self, chunk: &[u8], op: &'static str) -> RtResult<()> {
+        if !self.can_write {
+            return Err(RtError::IoError(
+                "поток открыт без доступа на запись".to_string(),
+            ));
+        }
+        let pos = self.pos;
+        // Копировать здесь нечего: платформа 8.3.27.2074 на записи у края
+        // `u64` не бросает исключение, а ПАДАЕТ по SIGSEGV, унося сеанс
+        // целиком (измерено 08.08.2026, подробности и запрет на такую пробу —
+        // в шапке `measure-stream.bsl`). Ловимая ошибка не выбрана из
+        // вариантов, а осталась единственным поведением лучше падения.
+        let end = pos
+            .checked_add(chunk.len() as u64)
+            .ok_or(RtError::TypeError {
+                expected: "Позиция, умещающаяся в потоке",
+                op,
+            })?;
+        match self.open_mut(op)? {
+            Backing::Owned(bytes) => {
+                let end = usize::try_from(end).map_err(|_| RtError::TypeError {
+                    expected: "Позиция, умещающаяся в памяти",
+                    op,
+                })?;
+                if bytes.len() < end {
+                    bytes
+                        .try_reserve(end - bytes.len())
+                        .map_err(|_| RtError::TypeError {
+                            expected: "Размер, который удаётся разместить в памяти",
+                            op,
+                        })?;
+                    bytes.resize(end, 0);
+                }
+                let start = end - chunk.len();
+                bytes[start..end].copy_from_slice(chunk);
+            }
+            Backing::Buffer(target) => {
+                let mut target = target.borrow_mut();
+                if end > target.bytes.len() as u64 {
+                    return Err(RtError::IndexOutOfBounds {
+                        index: end as i64,
+                        len: target.bytes.len(),
+                    });
+                }
+                let start = pos as usize;
+                target.bytes[start..start + chunk.len()].copy_from_slice(chunk);
+            }
+            Backing::File(file) => {
+                file.seek(SeekFrom::Start(pos))
+                    .map_err(|e| RtError::IoError(format!("{op}: {e}")))?;
+                file.write_all(chunk)
+                    .map_err(|e| RtError::IoError(format!("{op}: {e}")))?;
+            }
+        }
+        self.pos = end;
+        Ok(())
+    }
 }
 
 // --- доступ к объекту ---------------------------------------------------------
@@ -428,8 +564,43 @@ pub fn new_file_stream(path: &BslValue, mode: &BslValue, access: &BslValue) -> R
     open_file_stream(&path, mode, access)
 }
 
+/// Поток над ГОТОВЫМИ байтами — носитель для `ЧтениеДанных` поверх
+/// `ДвоичныеДанные`: своего потока у такого источника нет, а весь остальной
+/// код читателя работает с одним видом носителя.
+pub(crate) fn data_over_bytes(bytes: Vec<u8>) -> Rc<RefCell<StreamData>> {
+    Rc::new(RefCell::new(StreamData {
+        backing: Some(Backing::Owned(bytes)),
+        pos: 0,
+        can_read: true,
+        can_write: true,
+        can_seek: true,
+    }))
+}
+
+/// Внутренности файлового потока — то же, что [`open_file_stream`], но без
+/// обёртки в `BslValue`: `ЧтениеДанных`/`ЗаписьДанных` по ИМЕНИ ФАЙЛА держат
+/// такой поток внутри себя, наружу его не отдавая.
+pub(crate) fn data_over_file(
+    path: &str,
+    mode: FileOpenMode,
+    access: FileAccess,
+) -> RtResult<Rc<RefCell<StreamData>>> {
+    open_file_data(path, mode, access)
+}
+
 /// Общая часть конструктора и методов менеджера.
 fn open_file_stream(path: &str, mode: FileOpenMode, access: FileAccess) -> RtResult<BslValue> {
+    Ok(BslValue::Object(Rc::new(BslObject::FileStream(
+        open_file_data(path, mode, access)?,
+    ))))
+}
+
+/// Открытие файла и построение состояния потока.
+fn open_file_data(
+    path: &str,
+    mode: FileOpenMode,
+    access: FileAccess,
+) -> RtResult<Rc<RefCell<StreamData>>> {
     // Существование файла спрашивается ЗАРАНЕЕ, потому что от него зависит и
     // совместимость режима с доступом (`ОткрытьИлиСоздать` + `Чтение`), и
     // то, разрешает ли `OpenOptions` создание вообще: с одним лишь `read`
@@ -477,15 +648,13 @@ fn open_file_stream(path: &str, mode: FileOpenMode, access: FileAccess) -> RtRes
     } else {
         0
     };
-    Ok(BslValue::Object(Rc::new(BslObject::FileStream(Rc::new(
-        RefCell::new(StreamData {
-            backing: Some(Backing::File(file)),
-            pos,
-            can_read: access.can_read(),
-            can_write: access.can_write(),
-            can_seek: true,
-        }),
-    )))))
+    Ok(Rc::new(RefCell::new(StreamData {
+        backing: Some(Backing::File(file)),
+        pos,
+        can_read: access.can_read(),
+        can_write: access.can_write(),
+        can_seek: true,
+    })))
 }
 
 /// Голое имя `ФайловыеПотоки` как выражение.
@@ -720,68 +889,12 @@ pub fn write(v: &BslValue, args: &[BslValue]) -> RtResult<()> {
         src.bytes[offset..offset + count].to_vec()
     };
     let d = data(v, OP)?;
-    let mut d = d.borrow_mut();
-    if !d.can_write {
-        return Err(RtError::IoError(
-            "поток открыт без доступа на запись".to_string(),
-        ));
-    }
-    let pos = d.pos;
-    let written = chunk.len() as u64;
     // `Перейти` разрешает уход за конец, поэтому позиция может стоять у самого
     // края `u64` (два перехода по `9223372036854775807` дают `2^64 - 2` — и у
-    // нас, и у платформы, измерено контрактом `measure-stream.bsl`), и конец
-    // записи в голом `u64` переполнился бы. Считаем его один раз ДО любой
-    // записи: край отвергается ловимой ошибкой, ничего не записав и не сдвинув
-    // позицию.
-    //
-    // Копировать здесь нечего: платформа 8.3.27.2074 на такой записи не бросает
-    // исключение, а ПАДАЕТ по SIGSEGV, унося сеанс целиком (измерено 08.08.2026,
-    // подробности и запрет на такую пробу — в шапке `measure-stream.bsl`).
-    // Ловимая ошибка не выбрана из вариантов, а осталась единственным поведением
-    // лучше падения.
-    let end = pos.checked_add(written).ok_or(RtError::TypeError {
-        expected: "Позиция, умещающаяся в потоке",
-        op: OP,
-    })?;
-    match d.open_mut(OP)? {
-        Backing::Owned(bytes) => {
-            let end = usize::try_from(end).map_err(|_| RtError::TypeError {
-                expected: "Позиция, умещающаяся в памяти",
-                op: OP,
-            })?;
-            if bytes.len() < end {
-                bytes
-                    .try_reserve(end - bytes.len())
-                    .map_err(|_| RtError::TypeError {
-                        expected: "Размер, который удаётся разместить в памяти",
-                        op: OP,
-                    })?;
-                bytes.resize(end, 0);
-            }
-            let start = end - chunk.len();
-            bytes[start..end].copy_from_slice(&chunk);
-        }
-        Backing::Buffer(target) => {
-            let mut target = target.borrow_mut();
-            if end > target.bytes.len() as u64 {
-                return Err(RtError::IndexOutOfBounds {
-                    index: end as i64,
-                    len: target.bytes.len(),
-                });
-            }
-            let start = pos as usize;
-            target.bytes[start..start + chunk.len()].copy_from_slice(&chunk);
-        }
-        Backing::File(file) => {
-            file.seek(SeekFrom::Start(pos))
-                .map_err(|e| RtError::IoError(format!("Записать: {e}")))?;
-            file.write_all(&chunk)
-                .map_err(|e| RtError::IoError(format!("Записать: {e}")))?;
-        }
-    }
-    d.pos = end;
-    Ok(())
+    // нас, и у платформы, измерено контрактом `measure-stream.bsl`). Проверку
+    // на это, как и всю работу с носителем, делает `write_bytes`: край
+    // отвергается ловимой ошибкой, ничего не записав и не сдвинув позицию.
+    d.borrow_mut().write_bytes(&chunk, OP)
 }
 
 /// `Поток.Прочитать(Буфер, СмещениеВБуфере, Количество)` -> сколько байтов
@@ -807,43 +920,11 @@ pub fn read(v: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
         slice_in_buffer(offset, count, dst.bytes.len(), OP)?
     };
     let d = data(v, OP)?;
-    let mut d = d.borrow_mut();
-    if !d.can_read {
-        return Err(RtError::IoError(
-            "поток открыт без доступа на чтение".to_string(),
-        ));
-    }
-    let pos = d.pos;
-    // Как и в `write`, байты сначала снимаются, и только потом берётся
-    // изменяемое заимствование буфера: источник и приёмник могут совпасть.
-    let chunk: Vec<u8> = match d.open_mut(OP)? {
-        Backing::Owned(bytes) => slice_from(bytes, pos, count),
-        Backing::Buffer(source) => {
-            let source = source.borrow();
-            slice_from(&source.bytes, pos, count)
-        }
-        Backing::File(file) => {
-            file.seek(SeekFrom::Start(pos))
-                .map_err(|e| RtError::IoError(format!("Прочитать: {e}")))?;
-            let mut chunk = vec![0u8; count];
-            let mut filled = 0;
-            while filled < count {
-                let n = file
-                    .read(&mut chunk[filled..])
-                    .map_err(|e| RtError::IoError(format!("Прочитать: {e}")))?;
-                if n == 0 {
-                    break;
-                }
-                filled += n;
-            }
-            chunk.truncate(filled);
-            chunk
-        }
-    };
-    // Переполниться эта сумма не может: у своей памяти и у потока над буфером
-    // `slice_from` за концом отдаёт пустой срез, а файл на такой позиции либо
-    // не отдаёт ничего, либо падает ещё на `seek`.
-    d.pos = pos + chunk.len() as u64;
+    // Байты сначала снимаются, и только потом берётся изменяемое
+    // заимствование приёмника: у потока НАД БУФЕРОМ источник и приёмник могут
+    // оказаться одним и тем же `RefCell`, и два заимствования разом уронили бы
+    // процесс.
+    let chunk = d.borrow_mut().read_bytes(count, OP)?;
     {
         let mut dst = dst.borrow_mut();
         dst.bytes[offset..offset + chunk.len()].copy_from_slice(&chunk);

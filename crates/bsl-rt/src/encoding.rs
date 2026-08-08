@@ -141,22 +141,38 @@ impl Encoding {
         }
     }
 
-    /// Текст в байты. Сигнатура ставится у UTF-8 и UTF-16 — так пишет
-    /// платформа (измерено).
-    pub fn encode(self, text: &str) -> Vec<u8> {
+    /// Сигнатура (BOM) этой кодировки — то, что [`Encoding::encode`] ставит
+    /// перед текстом. У однобайтовых и у UTF-32 её нет: измерено, что
+    /// платформа пишет сигнатуру только для UTF-8 и UTF-16.
+    fn signature(self) -> &'static [u8] {
         match self {
-            Encoding::Utf8 => {
-                let mut out = vec![0xEF, 0xBB, 0xBF];
-                out.extend_from_slice(text.as_bytes());
-                out
-            }
+            Encoding::Utf8 => &[0xEF, 0xBB, 0xBF],
+            Encoding::Utf16Le => &[0xFF, 0xFE],
+            Encoding::Utf16Be => &[0xFE, 0xFF],
+            Encoding::Utf32Le | Encoding::Utf32Be => &[],
+            Encoding::Windows1251 | Encoding::Cp866 | Encoding::Koi8R => &[],
+        }
+    }
+
+    /// Текст в байты. Сигнатура ставится у UTF-8 и UTF-16 — так пишет
+    /// платформа в ФАЙЛ (измерено на `ЗаписьТекста`/`ТекстовыйДокумент`).
+    ///
+    /// В ПОТОК та же платформа сигнатуру не пишет: `ЗаписьДанных` кладёт «Аб»
+    /// ровно четырьмя байтами UTF-8, без `EF BB BF` (измерено). Для этого
+    /// случая есть [`Encoding::encode_without_signature`].
+    pub fn encode(self, text: &str) -> Vec<u8> {
+        let mut out = self.signature().to_vec();
+        out.extend_from_slice(&self.encode_without_signature(text));
+        out
+    }
+
+    /// Текст в байты БЕЗ сигнатуры — то, что пишет `ЗаписьДанных` (измерено).
+    pub fn encode_without_signature(self, text: &str) -> Vec<u8> {
+        match self {
+            Encoding::Utf8 => text.as_bytes().to_vec(),
             Encoding::Utf16Le | Encoding::Utf16Be => {
                 let le = self == Encoding::Utf16Le;
-                let mut out = if le {
-                    vec![0xFF, 0xFE]
-                } else {
-                    vec![0xFE, 0xFF]
-                };
+                let mut out = Vec::with_capacity(text.len() * 2);
                 for unit in text.encode_utf16() {
                     let b = if le {
                         unit.to_le_bytes()
@@ -203,13 +219,20 @@ impl Encoding {
     }
 
     /// Байты в текст. Негодные последовательности становятся U+FFFD, а не
-    /// ошибкой — измерено на чтении файла чужой кодировкой.
+    /// ошибкой — измерено на чтении файла чужой кодировкой. Ведущая
+    /// сигнатура (BOM) снимается: файл, который платформа сама записала, с
+    /// неё и начинается.
     pub fn decode(self, bytes: &[u8]) -> String {
+        let s = self.decode_without_bom(bytes);
+        s.strip_prefix('\u{feff}').unwrap_or(&s).to_string()
+    }
+
+    /// Байты в текст БЕЗ снятия ведущей сигнатуры — чтение куска ПОТОКА
+    /// (`ЧтениеДанных`), где начало куска ничем не выделено и U+FEFF в нём
+    /// такой же символ, как любой другой.
+    pub fn decode_without_bom(self, bytes: &[u8]) -> String {
         match self {
-            Encoding::Utf8 => {
-                let s = String::from_utf8_lossy(bytes);
-                s.strip_prefix('\u{feff}').unwrap_or(&s).to_string()
-            }
+            Encoding::Utf8 => String::from_utf8_lossy(bytes).into_owned(),
             Encoding::Utf16Le | Encoding::Utf16Be => {
                 let le = self == Encoding::Utf16Le;
                 let units: Vec<u16> = bytes
@@ -222,12 +245,11 @@ impl Encoding {
                         }
                     })
                     .collect();
-                let s = String::from_utf16_lossy(&units);
-                s.strip_prefix('\u{feff}').unwrap_or(&s).to_string()
+                String::from_utf16_lossy(&units)
             }
             Encoding::Utf32Le | Encoding::Utf32Be => {
                 let le = self == Encoding::Utf32Le;
-                let s: String = bytes
+                bytes
                     .chunks_exact(4)
                     .map(|p| {
                         let v = if le {
@@ -237,8 +259,7 @@ impl Encoding {
                         };
                         char::from_u32(v).unwrap_or('\u{fffd}')
                     })
-                    .collect();
-                s.strip_prefix('\u{feff}').unwrap_or(&s).to_string()
+                    .collect()
             }
             _ => {
                 let table = self.single_byte_table().expect("однобайтовая таблица");

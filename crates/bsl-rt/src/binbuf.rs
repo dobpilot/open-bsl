@@ -296,7 +296,9 @@ pub enum IntWidth {
 }
 
 impl IntWidth {
-    fn bytes(self) -> usize {
+    /// Ширина в байтах. Нужна и `crate::datarw`: у читателя и писателя те же
+    /// три ширины над потоком вместо буфера.
+    pub(crate) fn bytes(self) -> usize {
         match self {
             IntWidth::W16 => 2,
             IntWidth::W32 => 4,
@@ -306,7 +308,7 @@ impl IntWidth {
 
     /// Наибольшее значение, которое влезает. Целые БЕЗЗНАКОВЫЕ — измерено:
     /// восемь байтов `FF` читаются как `18446744073709551615`, а не как `-1`.
-    fn max(self) -> u64 {
+    pub(crate) fn max(self) -> u64 {
         match self {
             IntWidth::W16 => u16::MAX as u64,
             IntWidth::W32 => u32::MAX as u64,
@@ -315,7 +317,7 @@ impl IntWidth {
     }
 
     /// Имя для диагностики — то же, что стоит в исходном тексте BSL.
-    fn read_op(self) -> &'static str {
+    pub(crate) fn read_op(self) -> &'static str {
         match self {
             IntWidth::W16 => "ПрочитатьЦелое16",
             IntWidth::W32 => "ПрочитатьЦелое32",
@@ -323,12 +325,39 @@ impl IntWidth {
         }
     }
 
-    fn write_op(self) -> &'static str {
+    pub(crate) fn write_op(self) -> &'static str {
         match self {
             IntWidth::W16 => "ЗаписатьЦелое16",
             IntWidth::W32 => "ЗаписатьЦелое32",
             IntWidth::W64 => "ЗаписатьЦелое64",
         }
+    }
+
+    /// Собрать целое из уже прочитанных байтов. Длина среза обязана быть
+    /// [`IntWidth::bytes`]; общая часть [`read_int`] и чтения из потока.
+    pub(crate) fn decode(self, bytes: &[u8], order: ByteOrder) -> u64 {
+        let mut acc: u64 = 0;
+        for (i, b) in bytes.iter().enumerate() {
+            let b = *b as u64;
+            match order {
+                ByteOrder::Little => acc |= b << (8 * i),
+                ByteOrder::Big => acc = (acc << 8) | b,
+            }
+        }
+        acc
+    }
+
+    /// Разложить целое в байты — обратная сторона [`IntWidth::decode`].
+    pub(crate) fn encode(self, value: u64, order: ByteOrder) -> Vec<u8> {
+        (0..self.bytes())
+            .map(|i| {
+                let shift = match order {
+                    ByteOrder::Little => 8 * i,
+                    ByteOrder::Big => 8 * (self.bytes() - 1 - i),
+                };
+                (value >> shift) as u8
+            })
+            .collect()
     }
 }
 
@@ -382,15 +411,7 @@ pub fn read_int(v: &BslValue, args: &[BslValue], w: IntWidth) -> RtResult<BslVal
             len: d.bytes.len(),
         });
     }
-    let mut acc: u64 = 0;
-    for i in 0..w.bytes() {
-        let b = d.bytes[p + i] as u64;
-        match order {
-            ByteOrder::Little => acc |= b << (8 * i),
-            ByteOrder::Big => acc = (acc << 8) | b,
-        }
-    }
-    Ok(from_u64(acc))
+    Ok(from_u64(w.decode(&d.bytes[p..end], order)))
 }
 
 /// `ЗаписатьЦелое16/32/64(Позиция, Значение[, ПорядокБайтов])`.
@@ -437,13 +458,7 @@ pub fn write_int(v: &BslValue, args: &[BslValue], w: IntWidth) -> RtResult<BslVa
     if value > w.max() {
         return Err(bad());
     }
-    for i in 0..w.bytes() {
-        let shift = match order {
-            ByteOrder::Little => 8 * i,
-            ByteOrder::Big => 8 * (w.bytes() - 1 - i),
-        };
-        d.bytes[p + i] = ((value >> shift) & 0xff) as u8;
-    }
+    d.bytes[p..end].copy_from_slice(&w.encode(value, order));
     Ok(BslValue::Undefined)
 }
 

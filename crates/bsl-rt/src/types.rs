@@ -121,6 +121,19 @@ pub enum TypeId {
     FileOpenMode,
     FileAccess,
     StreamPosition,
+
+    // --- ЧтениеДанных / ЗаписьДанных -------------------------------------
+    /// Та же пара написаний, что у JSON и XML: имя ТИПА с пробелом («Чтение
+    /// данных»), имя ЗНАЧЕНИЯ слитно («ЧтениеДанных») — измерено обеими
+    /// сторонами. Отдельного `DISPLAY` им, в отличие от потоков, не нужно:
+    /// поиск сминает пробелы, и `Тип("ЧтениеДанных")` находит этот же тип.
+    DataReader,
+    DataWriter,
+    /// `РезультатЧтенияДанных` — то, что отдаёт `ЧтениеДанных.Прочитать`.
+    /// Английское имя ИЗМЕРЕНО перебором: `Тип("ReadDataResult")` платформа
+    /// разрешает, а `DataReadResult`, `DataReaderResult`, `DataReadingResult`
+    /// и `ReadResult` — нет.
+    DataReadResult,
 }
 
 /// `(русское, английское)`. Русское — каноническое: именно оно уходит в
@@ -248,6 +261,13 @@ const NAMES: &[(TypeId, &str, &str)] = &[
     (TypeId::FileOpenMode, "РежимОткрытияФайла", "FileOpenMode"),
     (TypeId::FileAccess, "ДоступКФайлу", "FileAccess"),
     (TypeId::StreamPosition, "ПозицияВПотоке", "PositionInStream"),
+    (TypeId::DataReader, "Чтение данных", "DataReader"),
+    (TypeId::DataWriter, "Запись данных", "DataWriter"),
+    (
+        TypeId::DataReadResult,
+        "Результат чтения данных",
+        "ReadDataResult",
+    ),
 ];
 
 /// Типы, чьё ПРЕДСТАВЛЕНИЕ не совпадает с именем, по которому тип ищется.
