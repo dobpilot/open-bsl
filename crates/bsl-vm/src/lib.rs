@@ -462,19 +462,28 @@ enum Step {
 // инструкцию), недостижимые никаким байт-кодом. Голых `unwrap()` вне
 // тестов нет ни одного.
 
-#[inline]
+// Три следующие функции помечены `#[inline(always)]`, а не подсказкой
+// `#[inline]`, намеренно. Это самые горячие операции цикла диспетчеризации,
+// и решение инлайнера по ним оплачивает не тот код, который его сдвинул:
+// коммит, добавивший к `match` в `step` один опкод для JSON, перевесил
+// бюджет инлайнера, `reg_load` выехал наружу — и `pi_leibniz`, ни о каком
+// JSON не знающий, замедлился на десятую часть (2,98 -> 3,16 млрд
+// инструкций, 11% времени в вызовах `reg_load`). Пока диспетчер — одна
+// огромная функция, размер которой меняется с каждым новым опкодом, такую
+// связь надо разрывать явно.
+#[inline(always)]
 fn at<'a, T>(xs: &'a [T], i: usize, what: &'static str) -> Result<&'a T, RtError> {
     xs.get(i).ok_or(RtError::InvalidBytecode(what))
 }
 
-#[inline]
+#[inline(always)]
 fn reg_load(stack: &[BslValue], i: usize) -> Result<BslValue, RtError> {
     stack.get(i).cloned().ok_or(RtError::InvalidBytecode(
         "чтение регистра за границей стека значений",
     ))
 }
 
-#[inline]
+#[inline(always)]
 fn reg_store(stack: &mut [BslValue], i: usize, v: BslValue) -> Result<(), RtError> {
     match stack.get_mut(i) {
         Some(slot) => {
