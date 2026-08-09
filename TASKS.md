@@ -6,14 +6,23 @@ Line format (order top-to-bottom by priority):
 
 - `(slug)` is a stable id with no spaces. The arbiter ticks the box by matching
   it, so it must be unique. Reuse OpenQuestion IDs where one exists.
-- `[hard]` is optional. Tag a task hard to trigger the two-reviewer panel
-  (Fable + independent Opus, both must PASS) and max effort on review. Use it for
+- `[hard]` is optional. Tag a task hard to trigger the two-reviewer panel (two
+  independent reviewers, both must PASS) and max effort on review. Use it for
   subtle platform semantics, decimal edge cases, and VM/bytecode correctness.
 - The reviewer flips `- [ ]` to `- [x]` — never do it by hand mid-run.
 
 ## Open
 
-Этапы 1 и 2 из docs/std-library-plan.md (этап 0 — JSON — выполнен и измерен).
+Пусто. Этапы 0, 1 и 2 из docs/std-library-plan.md выполнены и измерены.
+Следующая работа — этап 3 (регулярные выражения, свой backtracking-движок
+по измеренному подмножеству ICU, область ID `REGEX.*`) или этап 4
+(архивы, начиная с inflate — в дереве есть только сжатие); они независимы
+друг от друга. Пока здесь нет ни одной строки `- [ ]`, планировщик пишет
+в PLAN.md `ALL_TASKS_DONE`, и цикл останавливается на первой же итерации.
+
+## Closed
+
+Этапы 1 и 2 (этап 0 — JSON — выполнен и измерен раньше, до этого бэклога).
 
 - [x] (vm-call-by-name) [hard] этап 1: вызов BSL-функции по имени из рантайма
       — узкий API поверх машинерии `Выполнить`/`Вычислить` в bsl-vm (кэш
