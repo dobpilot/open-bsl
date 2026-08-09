@@ -14,6 +14,13 @@ Assess BOTH that the diff matches the plan AND that it meets project standards:
 - The "## ACCEPTANCE" check genuinely exercises the change — it would FAIL on a
   wrong implementation, not merely pass vacuously. Derive the pass condition
   yourself; do not trust that a green test proves correctness.
+- COMMIT_MSG.md exists and obeys ralph/prompts/commit-style.md. This file
+  becomes the permanent record of the task — the iteration checkpoints are
+  squashed away — so treat a wrong claim in it as a defect of the same weight as
+  a wrong comment: check its measured values against the fixtures and its
+  statements against the diff, and FAIL an invented number, an unsupported
+  claim about where a value came from, or a message that describes only the
+  latest iteration instead of the finished task.
 
 Run the gates yourself and read their output:
   cargo clippy --all-targets --all-features -- -D warnings

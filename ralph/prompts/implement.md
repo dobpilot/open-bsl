@@ -21,5 +21,13 @@ and their pass/fail results, and any surprising platform behaviour worth an
 OpenQuestion ID (e.g. SQRT.SMALL_ARG). State unknowns plainly; do not paper over
 them.
 
+Write COMMIT_MSG.md — the commit message for the whole task, following
+ralph/prompts/commit-style.md, which you must read first. On a PASS the loop
+squashes every iteration of this task into one commit and uses this file as its
+message, so it describes the finished task, not this iteration: overwrite it
+completely each time, never append, and never mention the loop, iterations or
+reviewers. It must cover the work as it now stands, including what earlier
+iterations of the same task already landed.
+
 Do NOT edit TASKS.md, do NOT check anything off, and do NOT write any REVIEW_*.md
 file — those belong to the reviewers and the arbiter.

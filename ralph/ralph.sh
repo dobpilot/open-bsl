@@ -19,7 +19,13 @@ set -euo pipefail
 #   PLAN.md           the current plan the phases hand off through
 #   REVIEW_FABLE.md   the first reviewer's verdict for the last attempt (kept until a PASS)
 #   REVIEW_OPUS.md    the second reviewer's verdict, hard tasks only
+#   COMMIT_MSG.md     the implementer's commit message for the whole task
 #   PROGRESS.md       append-only log you read afterwards
+#
+# History: a FAIL keeps its mechanical checkpoint so the next iteration can be
+# bisected against it, and a PASS collapses the task's checkpoints into one
+# commit written from COMMIT_MSG.md (see ralph/prompts/commit-style.md). The
+# history therefore carries one commit per task, not one per iteration.
 #
 #   Run from repo root:   ./ralph/ralph.sh
 #   Tune iterations:      MAX_ITERS=40 ./ralph/ralph.sh
@@ -61,6 +67,20 @@ run () {  # $1=model  $2=effort  $3=tools  $4=prompt-string
 log ()      { printf '%s  %s\n' "$(date -u +%FT%TZ)" "$1" >> PROGRESS.md; }
 field ()    { sed -n "s/^## $1:[[:space:]]*//p" PLAN.md | head -1 | tr -d '[:space:]'; }
 verdict ()  { [ -f "$1" ] || return 0; sed -n 's/^VERDICT:[[:space:]]*//p' "$1" | head -1 | tr -d '[:space:]'; }
+
+# Where the current task started: walk back over its own iteration checkpoints
+# and stop at the first commit that is not one of them. With no checkpoints yet
+# this is HEAD, and the squash below degenerates into an ordinary commit.
+task_base () {
+  local slug="$1" cur="HEAD" base
+  base="$(git rev-parse HEAD)"
+  while git log -1 --format=%s "$cur" 2>/dev/null |
+        grep -qE "^ralph: iter [0-9]+ ${slug} (PASS|FAIL)$"; do
+    cur="$cur^"
+    base="$(git rev-parse "$cur" 2>/dev/null)" || break
+  done
+  printf '%s\n' "$base"
+}
 
 for i in $(seq 1 "$MAX_ITERS"); do
   echo "═══════════════ iteration $i / $MAX_ITERS ═══════════════"
@@ -114,9 +134,11 @@ Review independently. Do not read REVIEW_FABLE.md."
     PASS=1
   fi
 
+  TASK_MSG=""
   if [ "$PASS" -eq 1 ]; then
     [ -n "$TASK_ID" ] && sed -i "s/^- \[ \] (${TASK_ID})/- [x] (${TASK_ID})/" TASKS.md || true
-    rm -f REVIEW_FABLE.md REVIEW_OPUS.md PLAN.md
+    if [ -s COMMIT_MSG.md ]; then TASK_MSG="$(cat COMMIT_MSG.md)"; fi
+    rm -f REVIEW_FABLE.md REVIEW_OPUS.md PLAN.md COMMIT_MSG.md
     log "PASS  ${TASK_ID}  panel=${PANEL}"
     echo "   ✔ PASS — task closed."
   else
@@ -125,10 +147,22 @@ Review independently. Do not read REVIEW_FABLE.md."
     echo "   ✘ FAIL — findings kept, retrying next iteration."
   fi
 
-  # Checkpoint so the whole run is bisectable / revertable.
+  # Checkpoint so the whole run is bisectable / revertable. A closed task
+  # collapses into a single commit carrying the implementer's message; anything
+  # else — a FAIL, or a PASS with no usable message — keeps the mechanical one.
   if ! git diff --quiet || ! git diff --cached --quiet; then
     git add -A
-    git commit -q -m "ralph: iter $i ${TASK_ID:-?} $([ $PASS -eq 1 ] && echo PASS || echo FAIL)" || true
+    SQUASHED=0
+    if [ "$PASS" -eq 1 ] && [ -n "$TASK_MSG" ] && [ -n "$TASK_ID" ]; then
+      BASE="$(task_base "$TASK_ID")"
+      if [ -n "$BASE" ] && git merge-base --is-ancestor "$BASE" HEAD; then
+        git reset --soft "$BASE"
+        if printf '%s\n' "$TASK_MSG" | git commit -q -F -; then SQUASHED=1; fi
+      fi
+    fi
+    if [ "$SQUASHED" -eq 0 ]; then
+      git commit -q -m "ralph: iter $i ${TASK_ID:-?} $([ $PASS -eq 1 ] && echo PASS || echo FAIL)" || true
+    fi
   fi
 done
 

@@ -33,5 +33,5 @@ Write PLAN.md (overwrite it completely) with these sections, in this order:
   `cargo test -p bsl-number sqrt_small_arg`, a proptest, or a named conformance
   fixture with its .expected file. This must genuinely exercise the change.
 
-Keep it to one task per iteration. Do not modify TASKS.md, PROGRESS.md, or any
-REVIEW_*.md file.
+Keep it to one task per iteration. Do not modify TASKS.md, PROGRESS.md,
+COMMIT_MSG.md, or any REVIEW_*.md file.
