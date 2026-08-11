@@ -528,6 +528,69 @@ fn reg_pair_mut(
     }
 }
 
+/// Первый заход в `Instr::NumericForNextI64`: счётчик и граница ещё не
+/// сняты в `i64`. Отдельной функцией с `#[inline(never)]`, потому что на
+/// цикл это выполняется однажды, а код занимает место ровно там, где
+/// крутится тело цикла — а горячий путь диспетчера живёт на грани кеша
+/// микроопераций (см. комментарий у `step_cold`).
+///
+/// `Ok(None)` означает, что цикл не уложился в `i64` и уже отработан
+/// общим путём `numeric_for_next_regular`.
+///
+/// # Errors
+///
+/// Возвращает ошибку чтения регистра за границей стека значений или
+/// ошибку общего пути.
+#[inline(never)]
+fn numeric_for_i64_start(
+    stack: &mut [BslValue],
+    counter_idx: usize,
+    bound_idx: usize,
+    pc: usize,
+    frame_pc: &mut usize,
+    target: i16,
+) -> Result<Option<NumericForState>, RtError> {
+    let counter_value = reg_load(stack, counter_idx)?;
+    let bound_value = reg_load(stack, bound_idx)?;
+    let pair = match (&counter_value, &bound_value) {
+        (BslValue::Number(counter), BslValue::Number(bound)) => {
+            counter.to_i64_exact().zip(bound.to_i64_exact())
+        }
+        _ => None,
+    };
+    let Some((current, bound)) = pair else {
+        numeric_for_next_regular(stack, counter_idx, bound_idx, frame_pc, target)?;
+        return Ok(None);
+    };
+    Ok(Some(NumericForState { pc, current, bound }))
+}
+
+/// Переполнение `i64` на инкременте счётчика: цикл дошёл до `i64::MAX` и
+/// дальше считается общим путём. Вынесено по той же причине, что и
+/// [`numeric_for_i64_start`], — недостижимый на практике код не должен
+/// занимать место в теле горячего цикла.
+///
+/// # Errors
+///
+/// Возвращает ошибку записи регистра за границей стека значений или
+/// ошибку общего пути.
+#[inline(never)]
+fn numeric_for_i64_overflow(
+    stack: &mut [BslValue],
+    counter_idx: usize,
+    bound_idx: usize,
+    current: i64,
+    frame_pc: &mut usize,
+    target: i16,
+) -> Result<(), RtError> {
+    reg_store(
+        stack,
+        counter_idx,
+        BslValue::Number(bsl_number::BslNumber::from_i64(current)),
+    )?;
+    numeric_for_next_regular(stack, counter_idx, bound_idx, frame_pc, target)
+}
+
 #[inline]
 fn numeric_for_next_regular(
     stack: &mut [BslValue],
@@ -814,38 +877,26 @@ fn step(
                         ))
                     }
                     None => {
-                        let counter_value = reg_load(stack, counter_idx)?;
-                        let bound_value = reg_load(stack, bound_idx)?;
-                        let pair = match (&counter_value, &bound_value) {
-                            (BslValue::Number(counter), BslValue::Number(bound)) => {
-                                counter.to_i64_exact().zip(bound.to_i64_exact())
-                            }
-                            _ => None,
-                        };
-                        let Some((current, bound)) = pair else {
-                            numeric_for_next_regular(
-                                stack,
-                                counter_idx,
-                                bound_idx,
-                                &mut frames[frame_idx].pc,
-                                target,
-                            )?;
-                            return Ok(Step::Continue);
-                        };
-                        NumericForState { pc, current, bound }
+                        match numeric_for_i64_start(
+                            stack,
+                            counter_idx,
+                            bound_idx,
+                            pc,
+                            &mut frames[frame_idx].pc,
+                            target,
+                        )? {
+                            Some(state) => state,
+                            None => return Ok(Step::Continue),
+                        }
                     }
                 };
 
                 let Some(next) = state.current.checked_add(1) else {
-                    reg_store(
-                        stack,
-                        counter_idx,
-                        BslValue::Number(bsl_number::BslNumber::from_i64(state.current)),
-                    )?;
-                    numeric_for_next_regular(
+                    numeric_for_i64_overflow(
                         stack,
                         counter_idx,
                         bound_idx,
+                        state.current,
                         &mut frames[frame_idx].pc,
                         target,
                     )?;
@@ -979,223 +1030,6 @@ fn step(
                 }
                 frames[frame_idx].pc += 1;
             }
-            Instr::NewArray { dst, base, count } => {
-                let mut dims = Vec::with_capacity(count as usize);
-                for i in 0..count {
-                    let v = reg_load(stack, frames[frame_idx].reg_index(base + i))?;
-                    dims.push(dim_to_usize(&v)?);
-                }
-                let arr = build_nested_array(&dims);
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, arr)?;
-                frames[frame_idx].pc += 1;
-            }
-            Instr::NewStructure {
-                dst,
-                shape,
-                base,
-                count,
-            } => {
-                let shape_rc = at(
-                    &program.shapes,
-                    shape as usize,
-                    "номер формы вне таблицы форм программы",
-                )?
-                .clone();
-                let mut slots = Vec::with_capacity(count as usize);
-                for i in 0..count {
-                    slots.push(reg_load(stack, frames[frame_idx].reg_index(base + i))?);
-                }
-                let v = BslValue::new_structure(shape_rc, slots);
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, v)?;
-                frames[frame_idx].pc += 1;
-            }
-            Instr::NewTable { dst } => {
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, BslValue::new_table())?;
-                frames[frame_idx].pc += 1;
-            }
-            Instr::NewTypeDescription { dst, names } => {
-                let names = reg_load(stack, frames[frame_idx].reg_index(names))?;
-                let value = BslValue::new_type_description(&names)?;
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, value)?;
-                frames[frame_idx].pc += 1;
-            }
-            Instr::NewValueComparison { dst } => {
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, BslValue::new_value_comparison())?;
-                frames[frame_idx].pc += 1;
-            }
-            Instr::NewMap { dst } => {
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, BslValue::new_map())?;
-                frames[frame_idx].pc += 1;
-            }
-            Instr::NewJsonReader { dst } => {
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, BslValue::new_json_reader())?;
-                frames[frame_idx].pc += 1;
-            }
-            Instr::NewJsonWriter { dst } => {
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, BslValue::new_json_writer())?;
-                frames[frame_idx].pc += 1;
-            }
-            Instr::NewJsonWriterSettings {
-                dst,
-                line_break,
-                indent,
-            } => {
-                let lb = reg_load(stack, frames[frame_idx].reg_index(line_break))?;
-                let ind = reg_load(stack, frames[frame_idx].reg_index(indent))?;
-                let settings = BslValue::new_json_writer_settings(&lb, &ind)?;
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, settings)?;
-                frames[frame_idx].pc += 1;
-            }
-            Instr::NewJsonSerializerSettings { dst } => {
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, BslValue::new_json_serializer_settings())?;
-                frames[frame_idx].pc += 1;
-            }
-            Instr::NewSpreadDocument { dst } => {
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, bsl_rt::new_spread_document())?;
-                frames[frame_idx].pc += 1;
-            }
-            Instr::NewTextDocument { dst } => {
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, BslValue::new_text_document())?;
-                frames[frame_idx].pc += 1;
-            }
-            Instr::NewXmlReader { dst } => {
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, BslValue::new_xml_reader())?;
-                frames[frame_idx].pc += 1;
-            }
-            Instr::NewXmlWriter { dst } => {
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, BslValue::new_xml_writer())?;
-                frames[frame_idx].pc += 1;
-            }
-            Instr::NewXmlWriterSettings {
-                dst,
-                encoding,
-                version,
-                indent,
-            } => {
-                let enc = reg_load(stack, frames[frame_idx].reg_index(encoding))?;
-                let ver = reg_load(stack, frames[frame_idx].reg_index(version))?;
-                let ind = reg_load(stack, frames[frame_idx].reg_index(indent))?;
-                let settings = BslValue::new_xml_writer_settings(&enc, &ver, &ind)?;
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, settings)?;
-                frames[frame_idx].pc += 1;
-            }
-            Instr::NewTextWriter { dst, path } => {
-                let path = reg_load(stack, frames[frame_idx].reg_index(path))?;
-                let writer = BslValue::new_text_writer(&path)?;
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, writer)?;
-                frames[frame_idx].pc += 1;
-            }
-            Instr::NewBinaryBuffer { dst, size, order } => {
-                let size = reg_load(stack, frames[frame_idx].reg_index(size))?;
-                let order = reg_load(stack, frames[frame_idx].reg_index(order))?;
-                let buf = BslValue::new_binary_buffer(&size, &order)?;
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, buf)?;
-                frames[frame_idx].pc += 1;
-            }
-            Instr::NewMemoryStream { dst, arg } => {
-                let arg = reg_load(stack, frames[frame_idx].reg_index(arg))?;
-                let stream = BslValue::new_memory_stream(&arg)?;
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, stream)?;
-                frames[frame_idx].pc += 1;
-            }
-            Instr::NewFileStream {
-                dst,
-                path,
-                mode,
-                access,
-            } => {
-                let path = reg_load(stack, frames[frame_idx].reg_index(path))?;
-                let mode = reg_load(stack, frames[frame_idx].reg_index(mode))?;
-                let access = reg_load(stack, frames[frame_idx].reg_index(access))?;
-                let stream = BslValue::new_file_stream(&path, &mode, &access)?;
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, stream)?;
-                frames[frame_idx].pc += 1;
-            }
-            Instr::NewDataReader {
-                dst,
-                source,
-                encoding,
-                order,
-                separator,
-            } => {
-                let source = reg_load(stack, frames[frame_idx].reg_index(source))?;
-                let encoding = reg_load(stack, frames[frame_idx].reg_index(encoding))?;
-                let order = reg_load(stack, frames[frame_idx].reg_index(order))?;
-                let separator = reg_load(stack, frames[frame_idx].reg_index(separator))?;
-                let reader = bsl_rt::new_data_reader(&source, &encoding, &order, &separator)?;
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, reader)?;
-                frames[frame_idx].pc += 1;
-            }
-            Instr::NewDataWriter {
-                dst,
-                source,
-                encoding,
-                order,
-                separator,
-            } => {
-                let source = reg_load(stack, frames[frame_idx].reg_index(source))?;
-                let encoding = reg_load(stack, frames[frame_idx].reg_index(encoding))?;
-                let order = reg_load(stack, frames[frame_idx].reg_index(order))?;
-                let separator = reg_load(stack, frames[frame_idx].reg_index(separator))?;
-                let writer = bsl_rt::new_data_writer(&source, &encoding, &order, &separator)?;
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, writer)?;
-                frames[frame_idx].pc += 1;
-            }
-            Instr::NewFileStreamsManager { dst } => {
-                let manager = BslValue::new_file_streams_manager();
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, manager)?;
-                frames[frame_idx].pc += 1;
-            }
-            Instr::NewBinaryData { dst, path } => {
-                let path = reg_load(stack, frames[frame_idx].reg_index(path))?;
-                let data = BslValue::new_binary_data(&path)?;
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, data)?;
-                frames[frame_idx].pc += 1;
-            }
-            Instr::CollectionLen { dst, obj } => {
-                let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
-                let len = ov.collection_len()?;
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(
-                    stack,
-                    d,
-                    BslValue::Number(bsl_number::BslNumber::from_i64(len as i64)),
-                )?;
-                frames[frame_idx].pc += 1;
-            }
-            Instr::Raise { src } => {
-                let value = match src {
-                    Some(r) => reg_load(stack, frames[frame_idx].reg_index(r))?,
-                    // Голая форма: повторно бросаем то, что сейчас поймано
-                    // (или Неопределено, если бросить нечего — например,
-                    // `ВызватьИсключение;` вне `Исключение`).
-                    None => current_exception.clone().unwrap_or(BslValue::Undefined),
-                };
-                return Err(RtError::Raised(value));
-            }
             Instr::CallBuiltin {
                 dst,
                 builtin,
@@ -1273,48 +1107,69 @@ fn step(
                 reg_store(stack, d, v)?;
                 frames[frame_idx].pc += 1;
             }
-            Instr::CloseText { dst, obj } => {
-                let obj_idx = frames[frame_idx].reg_index(obj);
-                let v = at(stack, obj_idx, "чтение объекта за границей стека значений")?
-                    .close_object()?;
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, v)?;
-                frames[frame_idx].pc += 1;
-            }
-            Instr::RunDynamic { src, dst, is_eval } => {
-                let code = reg_load(stack, frames[frame_idx].reg_index(src))?;
-                let code = match code {
-                    BslValue::Str(s) => s.to_string(),
-                    _ => {
-                        return Err(RtError::TypeError {
-                            expected: "Строка",
-                            op: if is_eval {
-                                "Вычислить"
-                            } else {
-                                "Выполнить"
-                            },
-                        })
-                    }
-                };
-                // Область видимости фрагмента — материализованная таблица
-                // имён ЭТОГО кадра (`Chunk::local_names`), а не только
-                // верхнего уровня: `Выполнить` внутри процедуры видит её
-                // локальные. Таблица есть у всех чанков, помеченных
-                // `uses_dynamic` в `bsl-sema`, а `RunDynamic` эмитится
-                // только в них — так что пустой она здесь быть не может,
-                // кроме как у кадра вообще без локальных переменных.
-                let value = run_dynamic_snippet(
-                    &code,
-                    is_eval,
-                    program,
-                    &chunk.local_names,
-                    func_id,
+            // Холодные опкоды: конструирование объектов, возбуждение
+            // исключения, закрытие файла и динамическое исполнение. Тела
+            // вынесены в `step_cold`, чтобы код диспетчера не разъезжался
+            // по памяти вокруг горячего пути: он живёт на грани кеша
+            // микроопераций процессора, и лишние окна на пути стоят до
+            // полутора раз при том же числе исполненных инструкций.
+            //
+            // Граница проведена по стоимости тела, а не по редкости
+            // опкода: `CallBuiltin`, `CallMethod` и `WriteText` остались
+            // здесь, потому что исполняются миллионами и лишний вызов на
+            // каждый стоит дороже, чем занятое ими место (измерено —
+            // `csv_write` теряет 7%, если унести и их).
+            //
+            // Опкоды перечислены поимённо, а не `_`, чтобы `match`
+            // остался исчерпывающим и новый опкод по-прежнему ломал
+            // сборку, пока его не расклассифицируют.
+            Instr::NewArray { .. }
+            | Instr::NewStructure { .. }
+            | Instr::NewTable { .. }
+            | Instr::NewTypeDescription { .. }
+            | Instr::NewValueComparison { .. }
+            | Instr::NewMap { .. }
+            | Instr::NewJsonReader { .. }
+            | Instr::NewJsonWriter { .. }
+            | Instr::NewJsonWriterSettings { .. }
+            | Instr::NewJsonSerializerSettings { .. }
+            | Instr::NewSpreadDocument { .. }
+            | Instr::NewTextDocument { .. }
+            | Instr::NewXmlReader { .. }
+            | Instr::NewXmlWriter { .. }
+            | Instr::NewXmlWriterSettings { .. }
+            | Instr::NewTextWriter { .. }
+            | Instr::NewBinaryBuffer { .. }
+            | Instr::NewMemoryStream { .. }
+            | Instr::NewFileStream { .. }
+            | Instr::NewDataReader { .. }
+            | Instr::NewDataWriter { .. }
+            | Instr::NewFileStreamsManager { .. }
+            | Instr::NewBinaryData { .. }
+            | Instr::Raise { .. }
+            | Instr::CloseText { .. }
+            | Instr::RunDynamic { .. } => {
+                step_cold(
+                    instr,
+                    frames,
                     stack,
-                    &frames[frame_idx],
+                    program,
+                    current_exception,
                     snippets,
+                    frame_idx,
+                    func_id,
+                    chunk,
                 )?;
+            }
+            Instr::CollectionLen { dst, obj } => {
+                let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
+                let len = ov.collection_len()?;
                 let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, value)?;
+                reg_store(
+                    stack,
+                    d,
+                    BslValue::Number(bsl_number::BslNumber::from_i64(len as i64)),
+                )?;
                 frames[frame_idx].pc += 1;
             }
         }
@@ -1352,6 +1207,293 @@ fn step(
         }
     }
     Ok(Step::Continue)
+}
+
+/// Холодная половина диспетчера: опкоды, тело которых делает настоящую
+/// работу — выделяет объект, зовёт встроенную функцию или метод, пишет
+/// текст, исполняет динамический фрагмент. Вынесены из [`step`] отдельной
+/// функцией с `#[inline(never)]`, потому что горячий цикл
+/// диспетчеризации живёт на грани кеша микроопераций: измерено, что рост
+/// `step` на три байта роняет пустой цикл BSL в полтора раза при том же
+/// числе исполненных инструкций. Лишний вызов на такой опкод теряется на
+/// фоне его собственной работы.
+///
+/// # Errors
+///
+/// Возвращает ошибку исполнения опкода, `RtError::Raised` от
+/// `ВызватьИсключение`, а на горячем опкоде, который сюда попасть не
+/// может, — `RtError::InvalidBytecode`.
+#[inline(never)]
+#[allow(clippy::too_many_arguments)]
+fn step_cold(
+    instr: Instr,
+    frames: &mut [Frame],
+    stack: &mut [BslValue],
+    program: &Program,
+    current_exception: &Option<BslValue>,
+    snippets: &mut SnippetCache,
+    frame_idx: usize,
+    func_id: usize,
+    chunk: &bsl_bytecode::Chunk,
+) -> Result<(), RtError> {
+    match instr {
+        Instr::NewArray { dst, base, count } => {
+            let mut dims = Vec::with_capacity(count as usize);
+            for i in 0..count {
+                let v = reg_load(stack, frames[frame_idx].reg_index(base + i))?;
+                dims.push(dim_to_usize(&v)?);
+            }
+            let arr = build_nested_array(&dims);
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, arr)?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewStructure {
+            dst,
+            shape,
+            base,
+            count,
+        } => {
+            let shape_rc = at(
+                &program.shapes,
+                shape as usize,
+                "номер формы вне таблицы форм программы",
+            )?
+            .clone();
+            let mut slots = Vec::with_capacity(count as usize);
+            for i in 0..count {
+                slots.push(reg_load(stack, frames[frame_idx].reg_index(base + i))?);
+            }
+            let v = BslValue::new_structure(shape_rc, slots);
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, v)?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewTable { dst } => {
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, BslValue::new_table())?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewTypeDescription { dst, names } => {
+            let names = reg_load(stack, frames[frame_idx].reg_index(names))?;
+            let value = BslValue::new_type_description(&names)?;
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, value)?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewValueComparison { dst } => {
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, BslValue::new_value_comparison())?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewMap { dst } => {
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, BslValue::new_map())?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewJsonReader { dst } => {
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, BslValue::new_json_reader())?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewJsonWriter { dst } => {
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, BslValue::new_json_writer())?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewJsonWriterSettings {
+            dst,
+            line_break,
+            indent,
+        } => {
+            let lb = reg_load(stack, frames[frame_idx].reg_index(line_break))?;
+            let ind = reg_load(stack, frames[frame_idx].reg_index(indent))?;
+            let settings = BslValue::new_json_writer_settings(&lb, &ind)?;
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, settings)?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewJsonSerializerSettings { dst } => {
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, BslValue::new_json_serializer_settings())?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewSpreadDocument { dst } => {
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, bsl_rt::new_spread_document())?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewTextDocument { dst } => {
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, BslValue::new_text_document())?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewXmlReader { dst } => {
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, BslValue::new_xml_reader())?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewXmlWriter { dst } => {
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, BslValue::new_xml_writer())?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewXmlWriterSettings {
+            dst,
+            encoding,
+            version,
+            indent,
+        } => {
+            let enc = reg_load(stack, frames[frame_idx].reg_index(encoding))?;
+            let ver = reg_load(stack, frames[frame_idx].reg_index(version))?;
+            let ind = reg_load(stack, frames[frame_idx].reg_index(indent))?;
+            let settings = BslValue::new_xml_writer_settings(&enc, &ver, &ind)?;
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, settings)?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewTextWriter { dst, path } => {
+            let path = reg_load(stack, frames[frame_idx].reg_index(path))?;
+            let writer = BslValue::new_text_writer(&path)?;
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, writer)?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewBinaryBuffer { dst, size, order } => {
+            let size = reg_load(stack, frames[frame_idx].reg_index(size))?;
+            let order = reg_load(stack, frames[frame_idx].reg_index(order))?;
+            let buf = BslValue::new_binary_buffer(&size, &order)?;
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, buf)?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewMemoryStream { dst, arg } => {
+            let arg = reg_load(stack, frames[frame_idx].reg_index(arg))?;
+            let stream = BslValue::new_memory_stream(&arg)?;
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, stream)?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewFileStream {
+            dst,
+            path,
+            mode,
+            access,
+        } => {
+            let path = reg_load(stack, frames[frame_idx].reg_index(path))?;
+            let mode = reg_load(stack, frames[frame_idx].reg_index(mode))?;
+            let access = reg_load(stack, frames[frame_idx].reg_index(access))?;
+            let stream = BslValue::new_file_stream(&path, &mode, &access)?;
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, stream)?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewDataReader {
+            dst,
+            source,
+            encoding,
+            order,
+            separator,
+        } => {
+            let source = reg_load(stack, frames[frame_idx].reg_index(source))?;
+            let encoding = reg_load(stack, frames[frame_idx].reg_index(encoding))?;
+            let order = reg_load(stack, frames[frame_idx].reg_index(order))?;
+            let separator = reg_load(stack, frames[frame_idx].reg_index(separator))?;
+            let reader = bsl_rt::new_data_reader(&source, &encoding, &order, &separator)?;
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, reader)?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewDataWriter {
+            dst,
+            source,
+            encoding,
+            order,
+            separator,
+        } => {
+            let source = reg_load(stack, frames[frame_idx].reg_index(source))?;
+            let encoding = reg_load(stack, frames[frame_idx].reg_index(encoding))?;
+            let order = reg_load(stack, frames[frame_idx].reg_index(order))?;
+            let separator = reg_load(stack, frames[frame_idx].reg_index(separator))?;
+            let writer = bsl_rt::new_data_writer(&source, &encoding, &order, &separator)?;
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, writer)?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewFileStreamsManager { dst } => {
+            let manager = BslValue::new_file_streams_manager();
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, manager)?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewBinaryData { dst, path } => {
+            let path = reg_load(stack, frames[frame_idx].reg_index(path))?;
+            let data = BslValue::new_binary_data(&path)?;
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, data)?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::Raise { src } => {
+            let value = match src {
+                Some(r) => reg_load(stack, frames[frame_idx].reg_index(r))?,
+                // Голая форма: повторно бросаем то, что сейчас поймано
+                // (или Неопределено, если бросить нечего — например,
+                // `ВызватьИсключение;` вне `Исключение`).
+                None => current_exception.clone().unwrap_or(BslValue::Undefined),
+            };
+            return Err(RtError::Raised(value));
+        }
+        Instr::CloseText { dst, obj } => {
+            let obj_idx = frames[frame_idx].reg_index(obj);
+            let v =
+                at(stack, obj_idx, "чтение объекта за границей стека значений")?.close_object()?;
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, v)?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::RunDynamic { src, dst, is_eval } => {
+            let code = reg_load(stack, frames[frame_idx].reg_index(src))?;
+            let code = match code {
+                BslValue::Str(s) => s.to_string(),
+                _ => {
+                    return Err(RtError::TypeError {
+                        expected: "Строка",
+                        op: if is_eval {
+                            "Вычислить"
+                        } else {
+                            "Выполнить"
+                        },
+                    })
+                }
+            };
+            // Область видимости фрагмента — материализованная таблица
+            // имён ЭТОГО кадра (`Chunk::local_names`), а не только
+            // верхнего уровня: `Выполнить` внутри процедуры видит её
+            // локальные. Таблица есть у всех чанков, помеченных
+            // `uses_dynamic` в `bsl-sema`, а `RunDynamic` эмитится
+            // только в них — так что пустой она здесь быть не может,
+            // кроме как у кадра вообще без локальных переменных.
+            let value = run_dynamic_snippet(
+                &code,
+                is_eval,
+                program,
+                &chunk.local_names,
+                func_id,
+                stack,
+                &frames[frame_idx],
+                snippets,
+            )?;
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, value)?;
+            frames[frame_idx].pc += 1;
+        }
+        _ => {
+            return Err(RtError::InvalidBytecode(
+                "горячий опкод попал в холодную половину диспетчера",
+            ))
+        }
+    }
+    Ok(())
 }
 
 /// Компилирует и исполняет `code` в контексте top-level переменных
