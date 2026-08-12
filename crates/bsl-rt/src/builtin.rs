@@ -929,6 +929,38 @@ pub enum BuiltinMethod {
     GetBinaryData,
     /// `РезультатЧтенияДанных.ПолучитьБуферДвоичныхДанных()`.
     GetBinaryDataBuffer,
+
+    // --- экземпляр XDTO -----------------------------------------------------
+    // `Получить`, `Установить`, `Добавить`, `Вставить`, `Удалить`,
+    // `Очистить` и `Количество` у экземпляра и его списка — те же имена,
+    // что у остальных коллекций, и переиспользуют заведённые варианты.
+    // Свои варианты — только у имён, которых в таблице ещё не было; все
+    // они измерены поимённо на 8.3.27, вместе с английскими написаниями.
+    /// `ОбъектXDTO.ПолучитьСписок(Имя|Свойство)` — список множественного
+    /// свойства; у одиночного это ошибка (измерено).
+    XdtoGetList,
+    /// `ОбъектXDTO.Установлено(Имя|Свойство)` — было ли свойство
+    /// ЗАПОЛНЕНО. У свойства с `default` это «Нет», хотя чтение отдаёт
+    /// значение по умолчанию (измерено).
+    XdtoIsSet,
+    /// `ОбъектXDTO.Сбросить(Имя|Свойство)`. Написание `Сброс` платформа
+    /// отвергает (измерено).
+    XdtoUnset,
+    /// `ОбъектXDTO.Проверить()` — границы вхождения, рекурсивно.
+    XdtoValidate,
+    /// `ОбъектXDTO.Свойства()` — именно МЕТОД: обращение к `Свойства` как
+    /// к члену платформа отвергает (измерено).
+    XdtoObjectProperties,
+    /// `ОбъектXDTO.Владелец()` — тоже метод, в отличие от `Владелец` у
+    /// списка и последовательности, где это ЧЛЕН (измерено обе стороны).
+    XdtoOwner,
+    /// `ОбъектXDTO.Последовательность()` — у непоследовательного типа
+    /// отдаёт `Неопределено`, а не ошибку (измерено).
+    XdtoSequenceOf,
+    /// `ПоследовательностьXDTO.ПолучитьЗначение(i)`.
+    XdtoSequenceValue,
+    /// `ПоследовательностьXDTO.ПолучитьСвойство(i)` -> `СвойствоXDTO`.
+    XdtoSequenceProperty,
 }
 
 /// Написания МЕТОДОВ объектов — тот же принцип, что и у
@@ -1128,6 +1160,27 @@ pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
     // `Фаб.Create(Тип, "аб")` платформа принимает.
     ("Тип", BuiltinMethod::XdtoType),
     ("Type", BuiltinMethod::XdtoType),
+    // Экземпляр XDTO. Оба написания каждого имени ИЗМЕРЕНЫ вызовом на
+    // живом экземпляре, и отвергнутые платформой (`Сброс`, `ЭтоNull`,
+    // `УстановитьNull`, `ДобавитьЗначение`) сюда сознательно не попали.
+    ("ПолучитьСписок", BuiltinMethod::XdtoGetList),
+    ("GetList", BuiltinMethod::XdtoGetList),
+    ("Установлено", BuiltinMethod::XdtoIsSet),
+    ("IsSet", BuiltinMethod::XdtoIsSet),
+    ("Сбросить", BuiltinMethod::XdtoUnset),
+    ("Unset", BuiltinMethod::XdtoUnset),
+    ("Проверить", BuiltinMethod::XdtoValidate),
+    ("Validate", BuiltinMethod::XdtoValidate),
+    ("Свойства", BuiltinMethod::XdtoObjectProperties),
+    ("Properties", BuiltinMethod::XdtoObjectProperties),
+    ("Владелец", BuiltinMethod::XdtoOwner),
+    ("Owner", BuiltinMethod::XdtoOwner),
+    ("Последовательность", BuiltinMethod::XdtoSequenceOf),
+    ("Sequence", BuiltinMethod::XdtoSequenceOf),
+    ("ПолучитьЗначение", BuiltinMethod::XdtoSequenceValue),
+    ("GetValue", BuiltinMethod::XdtoSequenceValue),
+    ("ПолучитьСвойство", BuiltinMethod::XdtoSequenceProperty),
+    ("GetProperty", BuiltinMethod::XdtoSequenceProperty),
     // `ЧтениеДанных`/`ЗаписьДанных`/`РезультатЧтенияДанных`. Английские
     // написания ИЗМЕРЕНЫ перебором: каждое вызвано на живом объекте, и
     // отсутствующее имя платформа отличает («Метод объекта не обнаружен»)
@@ -1689,6 +1742,11 @@ pub fn call_builtin_method(
             // второй раз проходит молча, а другая схема того же
             // пространства имён — ошибка (измерено).
             _ if crate::xsd::is_schema_set(obj) => crate::xsd::schema_set_add(obj, args),
+            // `СписокXDTO.Добавить(Значение)` и
+            // `ПоследовательностьXDTO.Добавить(Свойство, Значение)` — одно
+            // имя, разная арность, разводится получателем.
+            _ if crate::xdto::is_list(obj) => crate::xdto::list_add(obj, args),
+            _ if crate::xdto::is_sequence(obj) => crate::xdto::sequence_add(obj, args),
             [] => obj.table_add_row(),
             [v] => match obj.push_element(v.clone()) {
                 Ok(()) => Ok(BslValue::Undefined),
@@ -1726,6 +1784,7 @@ pub fn call_builtin_method(
                 obj.map_insert(args[0].clone(), args[1].clone())?;
                 Ok(BslValue::Undefined)
             }
+            _ if crate::xdto::is_list(obj) => crate::xdto::list_insert(obj, args),
             // `Структура.Вставить` доходит сюда, только если `obj` НЕ
             // структура — сам структурный случай перехвачен раньше, в
             // `call_builtin_method_ctx` (нужен рантайм-контекст форм).
@@ -1757,6 +1816,16 @@ pub fn call_builtin_method(
             {
                 crate::xdto::collection_lookup(obj, args)
             }
+            // У экземпляра `Получить` берёт имя свойства или само
+            // `СвойствоXDTO`, у списка — номер (измерено оба).
+            _ if crate::xdto::is_object(obj) => crate::xdto::object_get(obj, args),
+            _ if crate::xdto::is_list(obj) => match args {
+                [index] => crate::xdto::list_get(obj, BslValue::index_as_usize(index)?),
+                _ => Err(RtError::MethodNotApplicable {
+                    method: "Получить",
+                    receiver: obj.type_name(),
+                }),
+            },
             BslValue::Object(o) if matches!(&**o, BslObject::XsSchemaSet(_)) => match args {
                 [BslValue::Number(n)] => {
                     let i = n
@@ -2063,6 +2132,11 @@ pub fn call_builtin_method(
 
         // --- БуферДвоичныхДанных ------------------------------------------
         BuiltinMethod::BufSet => match args {
+            // `Установить` делят буфер, экземпляр XDTO (имя свойства и
+            // значение) и его список (номер и значение) — решает
+            // получатель.
+            _ if crate::xdto::is_object(obj) => crate::xdto::object_set(obj, args),
+            _ if crate::xdto::is_list(obj) => crate::xdto::list_set(obj, args),
             [pos, value] => crate::binbuf::set_byte(obj, pos, value).map(|()| BslValue::Undefined),
             _ => Err(RtError::MethodNotApplicable {
                 method: "Установить",
@@ -2238,12 +2312,23 @@ pub fn call_builtin_method(
             crate::xdto::factory_create(obj, args)
         }
         BuiltinMethod::Create => manager(obj, "Создать", crate::stream::manager_create, args),
-        // `Тип` — то же самое: у фабрики это поиск типа, у экземпляра —
-        // его собственный тип.
-        BuiltinMethod::XdtoType if crate::xdto::is_object(obj) => {
+        // `Тип` — то же самое: у фабрики это поиск типа, а у экземпляра и
+        // у `ЗначениеXDTO` — собственный тип (измерено на обоих).
+        BuiltinMethod::XdtoType if crate::xdto::is_object(obj) || crate::xdto::is_value(obj) => {
             crate::xdto::object_type(obj, args)
         }
         BuiltinMethod::XdtoType => crate::xdto::factory_type(obj, args),
+
+        // --- экземпляр XDTO -------------------------------------------------
+        BuiltinMethod::XdtoGetList => crate::xdto::object_get_list(obj, args),
+        BuiltinMethod::XdtoIsSet => crate::xdto::object_is_set(obj, args),
+        BuiltinMethod::XdtoUnset => crate::xdto::object_unset(obj, args),
+        BuiltinMethod::XdtoValidate => crate::xdto::object_validate(obj, args),
+        BuiltinMethod::XdtoObjectProperties => crate::xdto::object_properties(obj, args),
+        BuiltinMethod::XdtoOwner => crate::xdto::object_owner(obj, args),
+        BuiltinMethod::XdtoSequenceOf => crate::xdto::object_sequence(obj, args),
+        BuiltinMethod::XdtoSequenceValue => crate::xdto::sequence_value(obj, args),
+        BuiltinMethod::XdtoSequenceProperty => crate::xdto::sequence_property(obj, args),
     }
 }
 

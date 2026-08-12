@@ -90,7 +90,9 @@ pub use vstr::{value_from_string_internal, value_to_string_internal};
 // Модель типов XDTO наружу крейта нужна целиком: строит её фабрика,
 // которой в этой реализации ещё нет, а до тех пор единственный её
 // потребитель — собственные тесты модуля.
-pub use xdto::{model_of_schema, type_value, value_from_lexical, BuiltinBsl, XdtoModel};
+pub use xdto::{
+    model_of_schema, type_value, value_from_lexical, BuiltinBsl, XdtoModel, XdtoObjectData,
+};
 pub use xlsx::to_xlsx_bytes;
 pub use xml::{XmlAttr, XmlEvent, XmlParser, XmlWriter, XmlWriterSettings};
 
@@ -437,9 +439,11 @@ impl BslValue {
                 | BslObject::XdtoProperties(..)
                 | BslObject::XdtoFacets(..)
                 | BslObject::XdtoFacet(..)
-                | BslObject::XdtoValue(_)
+                | BslObject::XdtoValue(..)
                 | BslObject::XdtoFactory(_)
-                | BslObject::XdtoObject(..)) => match crate::xdto::type_name_of(obj) {
+                | BslObject::XdtoObject(..)
+                | BslObject::XdtoList(..)
+                | BslObject::XdtoSequence(..)) => match crate::xdto::type_name_of(obj) {
                     Some(name) => name,
                     None => "ТипЗначенияXDTO",
                 },
@@ -1262,13 +1266,19 @@ impl BslValue {
                 // проба на значении вешает платформу модальным окном, и
                 // обоих ждала бы та же судьба, поэтому они отнесены к своим
                 // соседям по аналогии, а не по замеру.
+                // Список и последовательность экземпляра отнесены туда же и
+                // по той же причине: их `Количество()` измерено, а
+                // `ЗначениеЗаполнено` от них — нет и не будет, пока проба
+                // вешает платформу.
                 // НЕ ИЗМЕРЕНО(XDTO.VALUE.FILLED)
                 | BslObject::XdtoType(..)
                 | BslObject::XdtoProperty(..)
                 | BslObject::XdtoFacet(..)
                 | BslObject::XdtoValue(..)
                 | BslObject::XdtoFactory(..)
-                | BslObject::XdtoObject(..) => {
+                | BslObject::XdtoObject(..)
+                | BslObject::XdtoList(..)
+                | BslObject::XdtoSequence(..) => {
                     return Err(RtError::TypeError {
                         expected: "Значение, у которого есть признак заполненности",
                         op: "ЗначениеЗаполнено",
@@ -1369,9 +1379,11 @@ impl BslValue {
                 | BslObject::XdtoProperties(..)
                 | BslObject::XdtoFacets(..)
                 | BslObject::XdtoFacet(..)
-                | BslObject::XdtoValue(_)
+                | BslObject::XdtoValue(..)
                 | BslObject::XdtoFactory(_)
-                | BslObject::XdtoObject(..)) => match crate::xdto::type_id_of(obj) {
+                | BslObject::XdtoObject(..)
+                | BslObject::XdtoList(..)
+                | BslObject::XdtoSequence(..)) => match crate::xdto::type_id_of(obj) {
                     Some(id) => id,
                     None => TypeId::XdtoValueType,
                 },
@@ -2116,9 +2128,9 @@ impl BslValue {
                     xsd::name_list_get(names, Self::index_as_usize(idx)?)
                 }
                 BslObject::XsSchemaSet(_) => xsd::schema_set_get(self, Self::index_as_usize(idx)?),
-                obj @ (BslObject::XdtoProperties(..) | BslObject::XdtoFacets(..)) => {
-                    xdto::collection_get(obj, Self::index_as_usize(idx)?)
-                }
+                obj @ (BslObject::XdtoProperties(..)
+                | BslObject::XdtoFacets(..)
+                | BslObject::XdtoList(..)) => xdto::collection_get(obj, Self::index_as_usize(idx)?),
                 _ => Err(RtError::NotIndexable),
             },
             _ => Err(RtError::NotIndexable),
@@ -2196,12 +2208,18 @@ impl BslValue {
                 // `Количество()` и `Для Каждого` по свойствам и по
                 // фасетам измерены. Сами тип, свойство, фасет и значение
                 // — нет.
-                obj @ (BslObject::XdtoProperties(..) | BslObject::XdtoFacets(..)) => {
-                    match xdto::collection_len(obj) {
-                        Some(len) => len,
-                        None => Err(RtError::NotIndexable),
-                    }
-                }
+                // Экземплярные коллекции — там же: `Количество()` измерено и
+                // у `СписокXDTO`, и у `ПоследовательностьXDTO`. Обход
+                // `Для Каждого` при этом получается только у списка —
+                // последовательность не индексируется (измерено), и цикл
+                // спотыкается о `get_index`, как на платформе.
+                obj @ (BslObject::XdtoProperties(..)
+                | BslObject::XdtoFacets(..)
+                | BslObject::XdtoList(..)
+                | BslObject::XdtoSequence(..)) => match xdto::collection_len(obj) {
+                    Some(len) => len,
+                    None => Err(RtError::NotIndexable),
+                },
                 BslObject::XdtoType(..)
                 | BslObject::XdtoProperty(..)
                 | BslObject::XdtoFacet(..)
@@ -2685,10 +2703,16 @@ impl BslValue {
                 BslObject::XsComponent(..) | BslObject::XmlExpandedName(_) => {
                     xsd::get_property(self, name)
                 }
+                // У экземпляра точкой читаются СВОЙСТВА ЕГО ТИПА, у списка и
+                // последовательности — только `Владелец` (измерено), у
+                // самой фабрики членов нет вовсе.
                 BslObject::XdtoType(..)
                 | BslObject::XdtoProperty(..)
                 | BslObject::XdtoFacet(..)
-                | BslObject::XdtoValue(_) => xdto::get_property(self, name),
+                | BslObject::XdtoValue(..)
+                | BslObject::XdtoObject(..)
+                | BslObject::XdtoList(..)
+                | BslObject::XdtoSequence(..) => xdto::get_property(self, name),
                 BslObject::KeyValuePair(k, v) => {
                     if name.eq_ignore_ascii_case("Ключ") || name.eq_ignore_ascii_case("Key") {
                         Ok(k.clone())
@@ -2764,6 +2788,10 @@ impl BslValue {
                 // содержимое, а имя узла только читается — см.
                 // `dom::set_property`.
                 BslObject::DomNode(..) => dom::set_property(self, name, &val),
+                // Свойства экземпляра XDTO пишутся точкой, с приведением к
+                // типу свойства; множественное свойство так не пишется
+                // (измерено), для него есть `СписокXDTO`.
+                BslObject::XdtoObject(..) => xdto::set_property(self, name, val),
                 BslObject::TableRow(data, row_id) => {
                     let mut data = data.borrow_mut();
                     let col = data
@@ -2887,6 +2915,8 @@ impl BslValue {
                     v.remove(i);
                     Ok(())
                 }
+                // `СписокXDTO.Удалить(i)` — по позиции, как у массива.
+                BslObject::XdtoList(..) => xdto::list_delete(self, idx),
                 BslObject::ValueTable(data) => {
                     let mut d = data.borrow_mut();
                     let i = Self::index_as_usize(idx)?;
@@ -3348,6 +3378,11 @@ impl BslValue {
                     data.borrow_mut().clear();
                     Ok(())
                 }
+                // У списка `Очистить` забывает заполнения его свойства, у
+                // последовательности — заполнения всех свойств-элементов
+                // (атрибуты уцелевают, измерено).
+                BslObject::XdtoList(..) => xdto::list_clear(self),
+                BslObject::XdtoSequence(..) => xdto::sequence_clear(self),
                 _ => Err(RtError::MethodNotApplicable {
                     method: "Очистить",
                     receiver: self.type_name(),
@@ -3438,6 +3473,20 @@ impl PartialEq for BslValue {
                 // фабрики равны.
                 (BslObject::XdtoType(a, i), BslObject::XdtoType(b, j))
                 | (BslObject::XdtoProperty(a, i), BslObject::XdtoProperty(b, j)) => {
+                    i == j && Rc::ptr_eq(a, b)
+                }
+                // Экземпляр — по ХРАНИЛИЩУ, а не по обёртке: обёртку
+                // строит каждое чтение свойства и каждый `Владелец()`, и
+                // измерено, что `О.anon = А` после `О.anon = А` — «Да», а
+                // `А.Владелец() = О` — тоже «Да». Два отдельно созданных
+                // объекта одного типа при этом не равны (измерено) — и не
+                // равны здесь, потому что хранилища разные.
+                (BslObject::XdtoObject(a), BslObject::XdtoObject(b))
+                | (BslObject::XdtoSequence(a), BslObject::XdtoSequence(b)) => Rc::ptr_eq(a, b),
+                // Список — окно «то же хранилище, то же свойство»:
+                // измерено, что `О.code = О.code` — «Да», хотя каждое
+                // чтение строит своё значение.
+                (BslObject::XdtoList(a, i), BslObject::XdtoList(b, j)) => {
                     i == j && Rc::ptr_eq(a, b)
                 }
                 _ => false,
@@ -3618,9 +3667,11 @@ impl fmt::Display for BslValue {
                 | BslObject::XdtoProperties(..)
                 | BslObject::XdtoFacets(..)
                 | BslObject::XdtoFacet(..)
-                | BslObject::XdtoValue(_)
+                | BslObject::XdtoValue(..)
                 | BslObject::XdtoFactory(_)
-                | BslObject::XdtoObject(..)) => match crate::xdto::display_text(obj) {
+                | BslObject::XdtoObject(..)
+                | BslObject::XdtoList(..)
+                | BslObject::XdtoSequence(..)) => match crate::xdto::display_text(obj) {
                     Some(text) => write!(f, "{text}"),
                     None => unreachable!("вид проверен объемлющим match"),
                 },

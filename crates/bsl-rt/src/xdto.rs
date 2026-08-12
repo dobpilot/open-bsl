@@ -45,6 +45,10 @@
 //!   абстрактный тип отвергает совсем. У самого экземпляра `Строка()` —
 //!   `ОбъектXDTO`, свой тип он отдаёт МЕТОДОМ `Тип()` (обращение к `Тип`
 //!   как к свойству — ошибка), и два экземпляра одного типа не равны;
+//! * `ЗначениеXDTO` — только на ЧТЕНИЕ: присваивание и в `Значение`, и в
+//!   `ЛексическоеЗначение` платформа отвергает. Свой тип оно отдаёт
+//!   методом `Тип()`, а `Владелец` у него нет ни членом, ни методом
+//!   (измерено все пять проб);
 //! * все три типа существуют под двумя написаниями и печатаются с
 //!   пробелами: `ТипЗначенияXDTO`/`XDTOValueType` -> «Тип значения XDTO»,
 //!   `ТипОбъектаXDTO`/`XDTOObjectType` -> «Тип объекта XDTO»,
@@ -115,6 +119,84 @@
 //!   форму: у `union memberTypes="xs:int xs:string"` запись «5» дала
 //!   `Число`, а «аб» — `Строка`.
 //!
+//! # Экземпляр: что ИЗМЕРЕНО про хранилище
+//!
+//! * **чтение свойства** идёт по СПЛЮЩЕННОМУ списку типа и регистра не
+//!   различает (`О.NAME` читает `name`). Незаполненное свойство —
+//!   `Неопределено`, а объявленное с `default` или `fixed` — сразу
+//!   значение (`def` -> 7, `fx` -> 9, `color` -> «red», `efx` -> 3).
+//!   Постороннее имя — ошибка. МНОЖЕСТВЕННОЕ свойство (верхняя граница не
+//!   единица: и `0..-1`, и `1..5`) отдаёт `СписокXDTO`, а не значение,
+//!   даже когда список пуст;
+//! * **запись** приводит значение к типу свойства ЧЕРЕЗ ЛЕКСИЧЕСКУЮ ФОРМУ:
+//!   `О.name = 5` даёт строку «5», `О.name = Дата(2026,8,13)` —
+//!   «2026-08-13T00:00:00», `О.name = Истина` — «true», `О.id = "5"` —
+//!   число 5, `О.дата = "2026-08-13"` — дату. Отказы — с той же стороны:
+//!   `О.id = Истина` и `О.id = 1.5` — ошибка, потому что «true» и «1.5» не
+//!   лексические формы `xs:int`. `Неопределено`, `Null` и посторонний
+//!   объект в свойство простого типа — тоже ошибка (сброс делает
+//!   `Сбросить`, а не присваивание `Неопределено`). `ЗначениеXDTO`
+//!   принимается, и берётся из него ЗНАЧЕНИЕ: `Создать(xs:string, "5")` в
+//!   свойство `xs:int` дало число 5. Присваивание в множественное
+//!   свойство — ошибка;
+//! * **свойство типа ОБЪЕКТА** принимает экземпляр своего типа и его
+//!   НАСЛЕДНИКА (`ExtType` в свойство типа `RootType` прошёл), а
+//!   посторонний тип — ошибка. Записанный объект остаётся ТЕМ ЖЕ (`О.anon
+//!   = А; О.anon = А` — «Да») и получает владельца: `А.Владелец() = О` —
+//!   «Да». Свойство типа `anyType` — исключение: оно принимает что угодно
+//!   как есть (строку, число, объект);
+//! * **`СписокXDTO` — окно, а не снимок.** `С = О.code; С.Добавить(...)`
+//!   видно через `О.code`, а два отдельных чтения равны (`О.code = О.code`
+//!   — «Да»). `Владелец` у него ЧЛЕН (`Владелец()` — ошибка). Методы:
+//!   `Количество`/`Count`, `Добавить`/`Add`, `Получить`/`Get`,
+//!   `Установить`/`Set`, `Вставить` (АНГЛИЙСКОГО написания у неё нет —
+//!   `Insert` отвергнут), `Удалить`/`Delete` (`Remove` отвергнут),
+//!   `Очистить`/`Clear`; `Индекс`, `Найти` и `ВГраница` отвергнуты.
+//!   Индексация и `Для Каждого` работают, номер за границей — ошибка, как
+//!   и `Установить`, `Удалить` за границей и `Добавить` без аргументов.
+//!   `Вставить` требует ЗАНЯТОЙ позиции: и в пустой список, и на место
+//!   сразу за последним элементом платформа вставлять отказывается, так
+//!   что дописать в конец умеет только `Добавить`. Значение в списке — обычное значение BSL, не
+//!   `ЗначениеXDTO`. Верхняя граница вхождения при `Добавить` НЕ
+//!   проверяется: в свойство `1..5` шесть значений легли молча;
+//! * **члены экземпляра**: `Получить`/`Get` и `Установить`/`Set` берут имя
+//!   строкой ИЛИ `СвойствоXDTO`, но только у одиночного свойства (у
+//!   множественного — ошибка, для него есть `ПолучитьСписок`/`GetList`);
+//!   `Установлено`/`IsSet` показывает именно ЗАПИСЬ, а не наличие значения
+//!   (у свежего объекта `Установлено("def")` — «Нет», хотя `О.def` отдаёт
+//!   7); `Сбросить`/`Unset` возвращает свойство в незаполненное состояние
+//!   (`Сброс` отвергнут); `Свойства()`/`Properties()` — коллекция свойств
+//!   СВОЕГО ТИПА (14 и 14); `Владелец()`/`Owner()` — метод, у отдельно
+//!   созданного объекта `Неопределено`; `Проверить()`/`Validate()`
+//!   проверяет границы вхождения и делает это РЕКУРСИВНО (пустой тип
+//!   прошёл, недозаполненный `RootType` отвергнут, объект с пустым
+//!   вложенным — отвергнут, с заполненным — прошёл, шесть значений в
+//!   свойстве `1..5` — отвергнут, недозаполненный объект в списке —
+//!   отвергнут). Отвергнуты `ЭтоNull`, `УстановитьNull` и `Владелец` как
+//!   член;
+//! * **`ПоследовательностьXDTO` достижима** — методом
+//!   `Последовательность()`/`Sequence()`, и только у ПОСЛЕДОВАТЕЛЬНОГО
+//!   типа: `xs:choice` и `xs:all` дают объект, а тип-последовательность и
+//!   простое содержимое — `Неопределено`, а не ошибку. Это порядок
+//!   ЗАПОЛНЕНИЯ свойств-элементов: запись атрибута её не удлиняет,
+//!   повторная запись одиночного свойства сохраняет своё место
+//!   (`ca = "вг"; cb.Добавить("аб"); ca = "де"` -> `[ca=де][cb=аб]`), а
+//!   `Сбросить` с последующей записью отправляет свойство в конец.
+//!   `Вставить` в список кладёт значение перед тем, на чьё место оно
+//!   встало (`[cb=де][cb=аб][ca=вг]`). Члены: `Количество`/`Count`,
+//!   `ПолучитьЗначение`/`GetValue`, `ПолучитьСвойство`/`GetProperty`,
+//!   `Добавить`/`Add` (берёт именно `СвойствоXDTO` и именно элемент —
+//!   имя строкой и атрибут отвергнуты; заполнение видно и через само
+//!   свойство), `Очистить`/`Clear` (чистит элементы, атрибуты уцелевают),
+//!   `Владелец` членом. Отвергнуты `Получить`, `Свойство`, `ЭтоТекст`,
+//!   индексация, `Для Каждого` и `ДобавитьЗначение`;
+//! * **`Последовательность().Удалить(0)` РОНЯЕТ ПЛАТФОРМУ.** 8.3.27
+//!   падает по сигналу сегментации — не исключение, которое ловится
+//!   `Попытка`, а смерть процесса вместе со всем прогоном замеров. Эту
+//!   пробу в `measure-xdto.bsl` возвращать нельзя (см. её шапку), а
+//!   значит, поведение `Удалить` у последовательности не измерено и
+//!   здесь его нет.
+//!
 //! # Сознательные расхождения и незакрытые углы
 //!
 //! * **Фасеты только хранятся.** Платформа ПРОВЕРЯЕТ по ним лексическую
@@ -139,14 +221,36 @@
 //!   `КоллекциюПакетовXDTO` (у фабрики от нашей схемы их два: своё
 //!   пространство имён и пространство XML Schema), но пакет — это отдельная
 //!   сущность со своим содержимым, и она сюда не входит.
-//! * **У экземпляра нет хранилища.** `ОбъектXDTO` здесь умеет только то,
-//!   что измерено на нём самом: печататься и отдавать свой тип `Тип()`.
-//!   Чтение свойства платформа поддерживает (незаполненное —
-//!   `Неопределено`, объявленное с `default`/`fixed` — сразу значение,
-//!   поиск имени регистронезависим, постороннее имя — ошибка), и здесь это
-//!   честная ошибка до отдельной работы про экземпляры.
+//! * **Фасеты не проверяются и на записи**, и это ровно та же отложенная
+//!   работа, что и в `Создать`. Ими объясняются ПЯТЬ из шести расхождений
+//!   экземплярной части `measure-xdto.bsl`: платформа отвергает
+//!   `О.color = "синий"` (перечисление `red|green`), `code.Добавить("аб")`
+//!   и `code.Добавить(5)` (образец `[A-Z]+` и длина 2..5), `О.hl = 5` (тот
+//!   же образец у элемента списочного типа) и `О.id = 1.5` (у
+//!   `xs:integer` фасет «разрядов дробной части» — ноль), а здесь все пять
+//!   проходят. Шестое к фасетам отношения не имеет: в пробе «объект запись
+//!   в список строкой» платформа отдаёт `ФиксированныйМассив`, а здесь
+//!   получается обычный `Массив` — то самое списочное расхождение,
+//!   описанное у `value_from_lexical_at` (неизменяемого вида в этой
+//!   реализации нет).
+//! * **Английские написания разбираются по имени, а не по получателю.**
+//!   Таблица `BUILTIN_METHOD_NAMES` — одна на весь рантайм, и «Вставить»
+//!   делит вариант с `Insert`, поэтому `Список.Insert(...)` здесь имя
+//!   находит и дальше идёт тем же путём, что `Вставить`, тогда как
+//!   платформа у `СписокXDTO` английского написания не знает вовсе.
+//!   Ошибка в сторону разрешённого: программа, которая работает на
+//!   платформе, работает и здесь. `Remove` в таблице нет ни у одного
+//!   получателя, так что `Список.Remove(...)` отвергается и здесь — это
+//!   совпадение с платформой, а не разбор по получателю. В самих пробах
+//!   расхождения не видно: «список Insert» вставляет в ПУСТОЙ список и
+//!   потому ошибка с обеих сторон.
+//! * **Порядок обхода `Для Каждого` по списку** — порядок заполнения, тот
+//!   же, что у индексации. Отдельной пробы на «список после `Вставить` в
+//!   середину» нет: измерено только, куда `Вставить` встаёт в
+//!   ПОСЛЕДОВАТЕЛЬНОСТИ.
 
-use std::rc::Rc;
+use std::cell::RefCell;
+use std::rc::{Rc, Weak};
 
 use crate::object::BslObject;
 use crate::string::BslString;
@@ -527,11 +631,15 @@ struct XdtoPropertyData {
 }
 
 /// `ЗначениеXDTO` — значение BSL вместе с лексической формой, из которой
-/// оно получено.
+/// оно получено, и номером типа, по которому разбиралось.
 #[derive(Debug)]
 pub struct XdtoValueData {
     value: BslValue,
     lexical: String,
+    /// Номер типа в модели — его отдаёт метод `Тип()` (измерено:
+    /// `Создать(xs:int, "42").Тип()` -> «Тип значения XDTO
+    /// [{...}int]`»).
+    type_index: usize,
 }
 
 /// Разрешённая модель типов одной схемы вместе со встроенными типами XML
@@ -1089,6 +1197,7 @@ impl<'a> Builder<'a> {
         Ok(Rc::new(XdtoValueData {
             value: value_from_lexical(&self.model, type_index, lexical)?,
             lexical: lexical.to_string(),
+            type_index,
         }))
     }
 }
@@ -1507,8 +1616,8 @@ fn property_value(model: &Rc<XdtoModel>, index: usize) -> BslValue {
 }
 
 /// `ЗначениеXDTO` из готовой пары «значение, лексическая форма».
-fn data_value(data: &Rc<XdtoValueData>) -> BslValue {
-    BslValue::Object(Rc::new(BslObject::XdtoValue(data.clone())))
+fn data_value(model: &Rc<XdtoModel>, data: &Rc<XdtoValueData>) -> BslValue {
+    BslValue::Object(Rc::new(BslObject::XdtoValue(model.clone(), data.clone())))
 }
 
 /// Границы наружу: `unbounded` — это `-1` (измерено).
@@ -1544,15 +1653,19 @@ pub fn display_text(obj: &BslObject) -> Option<String> {
             Some(data) => data.name.clone(),
             None => String::new(),
         },
-        // Фабрика и экземпляр печатаются именем своего типа — измерено
-        // обоих: `Строка(Фаб)` -> `ФабрикаXDTO`, `Строка(Объект)` ->
-        // `ОбъектXDTO`.
+        // Фабрика, экземпляр, его список и последовательность печатаются
+        // именем своего типа — измерено все четыре: `Строка(Фаб)` ->
+        // `ФабрикаXDTO`, `Строка(Объект)` -> `ОбъектXDTO`,
+        // `Строка(О.code)` -> `СписокXDTO` (и пустого, и непустого),
+        // `Строка(О.Последовательность())` -> `ПоследовательностьXDTO`.
         BslObject::XdtoProperties(..)
         | BslObject::XdtoFacets(..)
         | BslObject::XdtoFacet(..)
-        | BslObject::XdtoValue(_)
+        | BslObject::XdtoValue(..)
         | BslObject::XdtoFactory(_)
-        | BslObject::XdtoObject(..) => type_name_of(obj)?.to_string(),
+        | BslObject::XdtoObject(..)
+        | BslObject::XdtoList(..)
+        | BslObject::XdtoSequence(..) => type_name_of(obj)?.to_string(),
         _ => return None,
     })
 }
@@ -1569,9 +1682,11 @@ pub fn type_name_of(obj: &BslObject) -> Option<&'static str> {
         BslObject::XdtoProperties(..) => "КоллекцияСвойствXDTO",
         BslObject::XdtoFacets(..) => "КоллекцияФасетовXDTO",
         BslObject::XdtoFacet(..) => "ФасетXDTO",
-        BslObject::XdtoValue(_) => "ЗначениеXDTO",
+        BslObject::XdtoValue(..) => "ЗначениеXDTO",
         BslObject::XdtoFactory(_) => "ФабрикаXDTO",
         BslObject::XdtoObject(..) => "ОбъектXDTO",
+        BslObject::XdtoList(..) => "СписокXDTO",
+        BslObject::XdtoSequence(..) => "ПоследовательностьXDTO",
         _ => return None,
     })
 }
@@ -1588,9 +1703,11 @@ pub fn type_id_of(obj: &BslObject) -> Option<TypeId> {
         BslObject::XdtoProperties(..) => TypeId::XdtoPropertyCollection,
         BslObject::XdtoFacets(..) => TypeId::XdtoFacetCollection,
         BslObject::XdtoFacet(..) => TypeId::XdtoFacet,
-        BslObject::XdtoValue(_) => TypeId::XdtoDataValue,
+        BslObject::XdtoValue(..) => TypeId::XdtoDataValue,
         BslObject::XdtoFactory(_) => TypeId::XdtoFactory,
         BslObject::XdtoObject(..) => TypeId::XdtoDataObject,
+        BslObject::XdtoList(..) => TypeId::XdtoList,
+        BslObject::XdtoSequence(..) => TypeId::XdtoSequence,
         _ => return None,
     })
 }
@@ -1608,9 +1725,20 @@ pub fn factory_value(model: Rc<XdtoModel>) -> BslValue {
     BslValue::Object(Rc::new(BslObject::XdtoFactory(model)))
 }
 
-/// `ОбъектXDTO` — экземпляр типа объекта.
+/// `ОбъектXDTO` — свежий экземпляр типа объекта: хранилище пусто, владельца
+/// нет.
 fn object_value(model: &Rc<XdtoModel>, index: usize) -> BslValue {
-    BslValue::Object(Rc::new(BslObject::XdtoObject(model.clone(), index)))
+    instance_value(&Rc::new(XdtoObjectData {
+        model: model.clone(),
+        type_index: index,
+        owner: RefCell::new(Weak::new()),
+        entries: RefCell::new(Vec::new()),
+    }))
+}
+
+/// Значение вокруг готового хранилища — им же отдаётся `Владелец()`.
+fn instance_value(data: &Rc<XdtoObjectData>) -> BslValue {
+    BslValue::Object(Rc::new(BslObject::XdtoObject(data.clone())))
 }
 
 /// `СоздатьФабрикуXDTO(Путь)` — фабрика по файлу XSD.
@@ -1681,6 +1809,22 @@ pub fn is_factory(v: &BslValue) -> bool {
 /// Экземпляр `ОбъектXDTO` ли это.
 pub fn is_object(v: &BslValue) -> bool {
     matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::XdtoObject(..)))
+}
+
+/// `ЗначениеXDTO` ли это — у него свой `Тип()`, как у экземпляра.
+pub fn is_value(v: &BslValue) -> bool {
+    matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::XdtoValue(..)))
+}
+
+/// `СписокXDTO` ли это — нужно диспетчеру методов: имена `Добавить`,
+/// `Получить`, `Установить` делят между собой все коллекции рантайма.
+pub fn is_list(v: &BslValue) -> bool {
+    matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::XdtoList(..)))
+}
+
+/// `ПоследовательностьXDTO` ли это.
+pub fn is_sequence(v: &BslValue) -> bool {
+    matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::XdtoSequence(..)))
 }
 
 fn not_applicable(obj: &BslValue, method: &'static str) -> RtError {
@@ -1795,10 +1939,14 @@ pub fn factory_create(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
         ));
     };
     let text = text.to_string();
-    Ok(data_value(&Rc::new(XdtoValueData {
-        value: value_from_lexical(model, *index, &text)?,
-        lexical: text,
-    })))
+    Ok(data_value(
+        model,
+        &Rc::new(XdtoValueData {
+            value: value_from_lexical(model, *index, &text)?,
+            lexical: text,
+            type_index: *index,
+        }),
+    ))
 }
 
 /// `ОбъектXDTO.Тип()` — свой тип XDTO. Именно МЕТОД: обращение к `Тип` как
@@ -1811,19 +1959,23 @@ pub fn factory_create(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
 /// [`RtError::MethodNotApplicable`], если получатель не `ОбъектXDTO` либо
 /// вызов с аргументами.
 pub fn object_type(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
-    let BslValue::Object(o) = obj else {
-        return Err(not_applicable(obj, "Тип"));
-    };
-    let BslObject::XdtoObject(model, index) = &**o else {
-        return Err(not_applicable(obj, "Тип"));
-    };
     if !args.is_empty() {
         return Err(not_applicable(obj, "Тип"));
     }
+    // `ЗначениеXDTO` отвечает на `Тип()` так же — типом, по которому
+    // разобрана его лексическая форма (измерено: `Создать(xs:int, "42")
+    // .Тип()` -> `{...}int`).
+    if let BslValue::Object(o) = obj {
+        if let BslObject::XdtoValue(model, data) = &**o {
+            model.type_at(data.type_index)?;
+            return Ok(type_value(model, data.type_index));
+        }
+    }
+    let data = instance_of(obj, "Тип")?;
     // Номер проверяется до построения значения: испорченная модель обязана
     // отвечать ошибкой, а не типом, которого нет.
-    model.type_at(*index)?;
-    Ok(type_value(model, *index))
+    data.type_data()?;
+    Ok(type_value(&data.model, data.type_index))
 }
 
 /// Член `ВидФасетаXDTO` по виду фасета лексической модели XSD.
@@ -1852,7 +2004,12 @@ fn facet_kind_value(kind: FacetKind) -> EnumValue {
 /// нет; [`RtError::Xdto`], если модель ссылается на несуществующий узел.
 pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
     let unknown = || RtError::UnknownColumn(name.to_string());
-    let is = |ru: &str, en: &str| name.eq_ignore_ascii_case(ru) || name.eq_ignore_ascii_case(en);
+    // Сравнение — через `fold`, а не `eq_ignore_ascii_case`: имена членов
+    // здесь РУССКИЕ, а ASCII-свёртка кириллицу не трогает. Имя приходит в
+    // том написании, в каком его первым увидел интерн полей, и `Значение`
+    // в скрипте, где раньше встретилось `значение`, доходит сюда строчным.
+    let is =
+        |ru: &str, en: &str| crate::fold::folded_eq(name, ru) || crate::fold::folded_eq(name, en);
     let BslValue::Object(o) = obj else {
         return Err(unknown());
     };
@@ -1928,7 +2085,7 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
             }
             if is("ЗначениеПоУмолчанию", "DefaultValue") {
                 return Ok(match &data.default {
-                    Some(v) => data_value(v),
+                    Some(v) => data_value(model, v),
                     None => BslValue::Undefined,
                 });
             }
@@ -1952,7 +2109,7 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
             }
             Err(unknown())
         }
-        BslObject::XdtoValue(data) => {
+        BslObject::XdtoValue(_, data) => {
             if is("Значение", "Value") {
                 return Ok(data.value.clone());
             }
@@ -1965,18 +2122,19 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
         // а на постороннее имя платформа отвечает ошибкой (измерено
         // `Фаб.НетТакогоЧлена`). `Пакеты` этой реализацией не поддержаны.
         BslObject::XdtoFactory(_) => Err(unknown()),
-        // Свойства экземпляра ЗДЕСЬ НЕ ЧИТАЮТСЯ, и это честный отказ, а не
-        // забытая ветка: платформа отдаёт незаполненному свойству
-        // `Неопределено`, а свойству с `default`/`fixed` — сразу
-        // подставленное значение (измерено `def` -> 7, `fx` -> 9, поиск
-        // имени регистронезависим), то есть у экземпляра есть ХРАНИЛИЩЕ с
-        // предзаполнением. Заводить его вместе с чтением и записью —
-        // отдельная работа; пока экземпляр умеет ровно то, что измерено
-        // здесь: печататься и отдавать свой тип методом `Тип()`.
-        BslObject::XdtoObject(..) => Err(RtError::Xdto(format!(
-            "свойства «ОбъектXDTO» эта реализация пока не читает (обращение к «{name}»); \
-             у экземпляра поддержан только метод «Тип()»"
-        ))),
+        // У экземпляра члены — это СВОЙСТВА ЕГО ТИПА: `Тип`, `Владелец`,
+        // `Свойства` читаются методами, а не точкой (измерено — все три
+        // как члены отвергнуты).
+        BslObject::XdtoObject(data) => object_get_property(data, name),
+        // А вот у списка и последовательности владелец, наоборот, ЧЛЕН:
+        // `Список.Владелец` даёт объект, `Список.Владелец()` — ошибка
+        // (измерено обе пробы, и то же самое у последовательности).
+        BslObject::XdtoList(data, _) | BslObject::XdtoSequence(data) => {
+            if is("Владелец", "Owner") {
+                return Ok(instance_value(data));
+            }
+            Err(unknown())
+        }
         _ => Err(unknown()),
     }
 }
@@ -1992,6 +2150,12 @@ pub fn collection_len(obj: &BslObject) -> Option<RtResult<usize>> {
             Some(model.type_at(*i).map(|data| data.properties.len()))
         }
         BslObject::XdtoFacets(model, i) => Some(model.type_at(*i).map(|data| data.facets.len())),
+        // Длина есть и у экземплярных коллекций: `Количество()` измерено и
+        // у списка, и у последовательности. Разница между ними в другом —
+        // список ещё и ИНДЕКСИРУЕТСЯ, а последовательность нет, поэтому
+        // `Для Каждого` по ней платформа отвергает (измерено).
+        BslObject::XdtoList(data, prop) => Some(Ok(list_len(data, *prop))),
+        BslObject::XdtoSequence(data) => Some(sequence_len(data)),
         _ => None,
     }
 }
@@ -2028,6 +2192,8 @@ pub fn collection_get(obj: &BslObject, i: usize) -> RtResult<BslValue> {
                 })
             }
         }
+        // `Список[i]` и `Для Каждого` по списку — измерены оба.
+        BslObject::XdtoList(data, prop) => list_item(data, *prop, i),
         _ => Err(RtError::NotIndexable),
     }
 }
@@ -2079,6 +2245,884 @@ pub fn collection_lookup(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue
         }
         _ => Err(not_applicable()),
     }
+}
+
+// --- экземпляр -----------------------------------------------------------
+
+/// Хранилище экземпляра `ОбъектXDTO`.
+///
+/// Слоты здесь параллельны не списку свойств типа, а ПОРЯДКУ ЗАПОЛНЕНИЯ:
+/// хранится список записей «свойство — значение». Так устроено потому, что
+/// именно этот порядок платформа показывает через `Последовательность()`
+/// (измерено: `О.cb.Добавить("аб"); О.ca = "вг"; О.cb.Добавить("де")` даёт
+/// `[cb=аб][ca=вг][cb=де]`), а повторная запись одиночного свойства своё
+/// место в нём СОХРАНЯЕТ (измерено: `О.ca = "вг"; О.cb.Добавить("аб");
+/// О.ca = "де"` -> `[ca=де][cb=аб]`, а после `Сбросить` то же свойство
+/// уходит в конец). Массив слотов по числу свойств этот порядок потерял бы,
+/// а он наблюдаем.
+#[derive(Debug)]
+pub struct XdtoObjectData {
+    model: Rc<XdtoModel>,
+    type_index: usize,
+    /// `Владелец()` — объект, в свойство которого этот экземпляр записан
+    /// (измерено: `О.anon = А; А.Владелец() = О` — «Да», у отдельно
+    /// созданного — `Неопределено`). Ссылка СЛАБАЯ: владелец держит этот
+    /// экземпляр в своём хранилище, и сильная обратная ссылка замкнула бы
+    /// `Rc` в кольцо, которого счётчик ссылок не разбирает.
+    owner: RefCell<Weak<XdtoObjectData>>,
+    entries: RefCell<Vec<XdtoEntry>>,
+}
+
+/// Одно заполнение свойства. Множественное свойство — это несколько
+/// записей с одним и тем же `prop`.
+#[derive(Debug)]
+struct XdtoEntry {
+    /// Номер свойства в [`XdtoModel::properties`].
+    prop: usize,
+    value: BslValue,
+}
+
+impl XdtoObjectData {
+    fn type_data(&self) -> RtResult<&XdtoTypeData> {
+        self.model.type_at(self.type_index)
+    }
+
+    /// Номер свойства по имени: поиск идёт по СПЛЮЩЕННОМУ списку типа и
+    /// регистра не различает (измерено: `О.NAME` читает `name`).
+    fn property_by_name(&self, name: &str) -> RtResult<Option<usize>> {
+        for p in &self.type_data()?.properties {
+            if crate::fold::folded_eq(&self.model.property_at(*p)?.name, name) {
+                return Ok(Some(*p));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Номера записей хранилища, относящихся к свойству, в порядке
+    /// заполнения.
+    fn occurrences(&self, prop: usize) -> Vec<usize> {
+        self.entries
+            .borrow()
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| e.prop == prop)
+            .map(|(i, _)| i)
+            .collect()
+    }
+
+    /// Чтение ОДИНОЧНОГО свойства: последнее заполнение, а если его нет —
+    /// значение по умолчанию из `default`/`fixed` (измерено: у свежего
+    /// объекта `def` -> 7, `fx` -> 9, `color` -> «red», а свойство без
+    /// того и другого -> `Неопределено`).
+    fn single_value(&self, prop: usize) -> RtResult<BslValue> {
+        if let Some(e) = self.entries.borrow().iter().rev().find(|e| e.prop == prop) {
+            return Ok(e.value.clone());
+        }
+        Ok(match &self.model.property_at(prop)?.default {
+            Some(v) => v.value.clone(),
+            None => BslValue::Undefined,
+        })
+    }
+}
+
+/// Множественное ли свойство: верхняя граница, отличная от единицы.
+/// Измерено на границах `0..-1` (`code`) и `1..5` (`many5`) — оба дают
+/// `СписокXDTO`, а `1..1` и `0..1` — само значение.
+fn is_multiple(prop: &XdtoPropertyData) -> bool {
+    prop.upper != Some(1)
+}
+
+/// Хранилище получателя-экземпляра.
+fn instance_of<'a>(obj: &'a BslValue, method: &'static str) -> RtResult<&'a Rc<XdtoObjectData>> {
+    match obj {
+        BslValue::Object(o) => match &**o {
+            BslObject::XdtoObject(data) => Ok(data),
+            _ => Err(not_applicable(obj, method)),
+        },
+        _ => Err(not_applicable(obj, method)),
+    }
+}
+
+/// Хранилище и свойство получателя-списка.
+fn list_of<'a>(
+    obj: &'a BslValue,
+    method: &'static str,
+) -> RtResult<(&'a Rc<XdtoObjectData>, usize)> {
+    match obj {
+        BslValue::Object(o) => match &**o {
+            BslObject::XdtoList(data, prop) => Ok((data, *prop)),
+            _ => Err(not_applicable(obj, method)),
+        },
+        _ => Err(not_applicable(obj, method)),
+    }
+}
+
+/// Свойство, названное аргументом: платформа принимает и имя строкой, и
+/// само `СвойствоXDTO` (измерено на `Получить`, `Установлено` и
+/// `Сбросить`). Постороннее имя — ошибка, а не `Неопределено` (измерено).
+fn property_arg(data: &XdtoObjectData, arg: &BslValue, method: &'static str) -> RtResult<usize> {
+    let unknown = |name: String| {
+        RtError::Xdto(format!(
+            "у типа «{}» нет свойства «{name}»",
+            data.type_data()
+                .map(type_display)
+                .unwrap_or_else(|_| String::new())
+        ))
+    };
+    match arg {
+        BslValue::Str(s) => {
+            let name = s.to_string();
+            data.property_by_name(&name)?.ok_or_else(|| unknown(name))
+        }
+        BslValue::Object(o) => match &**o {
+            BslObject::XdtoProperty(model, index) => {
+                // Чужое свойство — из другой модели или из другого типа —
+                // не годится: хранилище адресуется номерами СВОЕЙ модели.
+                if !Rc::ptr_eq(model, &data.model) || !data.type_data()?.properties.contains(index)
+                {
+                    return Err(unknown(
+                        model
+                            .property_at(*index)
+                            .map(|p| p.name.clone())
+                            .unwrap_or_default(),
+                    ));
+                }
+                Ok(*index)
+            }
+            _ => Err(RtError::MethodNotApplicable {
+                method,
+                receiver: arg.type_name(),
+            }),
+        },
+        _ => Err(RtError::MethodNotApplicable {
+            method,
+            receiver: arg.type_name(),
+        }),
+    }
+}
+
+/// `anyType` ли это — единственный тип, который принимает в свойство любое
+/// значение как есть (измерено на `notype`: строка остаётся строкой, число
+/// числом, `ОбъектXDTO` объектом).
+fn is_any_type(data: &XdtoTypeData) -> bool {
+    data.shape.is_none() && data.base.is_none()
+}
+
+/// Наследник ли `candidate` типу `target` — цепочкой базовых типов.
+fn derives_from(model: &XdtoModel, candidate: usize, target: usize) -> bool {
+    let mut cur = candidate;
+    // Длина модели — верхняя граница цепочки и заодно страховка от кольца
+    // в испорченной схеме.
+    for _ in 0..=model.types.len() {
+        if cur == target {
+            return true;
+        }
+        match model.types.get(cur).and_then(|t| t.base) {
+            Some(base) => cur = base,
+            None => return false,
+        }
+    }
+    false
+}
+
+/// Приведение значения к типу свойства — то, что платформа делает при
+/// записи.
+///
+/// Правило одно на все измеренные случаи: значение переводится в
+/// ЛЕКСИЧЕСКУЮ ФОРМУ типа-приёмника и разбирается обратно. Отсюда и
+/// `О.name = 5` -> строка «5», и `О.name = Дата(2026,8,13)` ->
+/// «2026-08-13T00:00:00», и `О.name = Истина` -> «true», и отказы: «true»
+/// не разбирается как `xs:int` (`О.id = Истина` — ошибка), «1.5» тоже
+/// (`О.id = 1.5` — ошибка), а `О.id = "5"` даёт число 5. Объединение
+/// выбирает член по той же лексической форме (измерено: `5` и «5» дают
+/// число, «аб» — строку).
+fn coerce_to_property(
+    owner: &Rc<XdtoObjectData>,
+    prop: usize,
+    value: BslValue,
+) -> RtResult<BslValue> {
+    let model = &owner.model;
+    let target = model.property_at(prop)?.type_index;
+    let data = model.type_at(target)?;
+    if data.shape.is_none() {
+        // `anyType` принимает что угодно (измерено), остальные типы
+        // объектов — только экземпляр своего типа или его наследника
+        // (измерено: `ExtType` в свойство типа `RootType` проходит,
+        // `EmptyType` — ошибка).
+        if is_any_type(data) {
+            return Ok(value);
+        }
+        let BslValue::Object(o) = &value else {
+            return Err(bad_property_value(model, target, &value));
+        };
+        let BslObject::XdtoObject(inst) = &**o else {
+            return Err(bad_property_value(model, target, &value));
+        };
+        if !Rc::ptr_eq(&inst.model, model) || !derives_from(model, inst.type_index, target) {
+            return Err(bad_property_value(model, target, &value));
+        }
+        *inst.owner.borrow_mut() = Rc::downgrade(owner);
+        return Ok(value);
+    }
+    // `ЗначениеXDTO` в свойство простого типа платформа принимает и берёт
+    // из него ЗНАЧЕНИЕ, а не лексическую форму: `О.id = Создать(xs:string,
+    // "5")` дало число 5, хотя типы источника и приёмника разные
+    // (измерено).
+    let value = match &value {
+        BslValue::Object(o) => match &**o {
+            BslObject::XdtoValue(_, v) => v.value.clone(),
+            _ => value,
+        },
+        _ => value,
+    };
+    coerce_to_value_type(model, target, value)
+}
+
+/// Значение простого типа из значения BSL — лексический круг из
+/// [`coerce_to_property`].
+fn coerce_to_value_type(
+    model: &Rc<XdtoModel>,
+    target: usize,
+    value: BslValue,
+) -> RtResult<BslValue> {
+    let builtin = model.builtin_of(target);
+    // Двоичные данные и расширенное имя проходят без круга: обратной
+    // лексической формы у них здесь нет (см. «Двоичные лексические формы» и
+    // «QName с префиксом» в шапке модуля), а значение уже нужного вида.
+    if let BslValue::Object(o) = &value {
+        match (builtin, &**o) {
+            (Some(BuiltinBsl::Base64 | BuiltinBsl::Hex), BslObject::BinaryData(_))
+            | (Some(BuiltinBsl::QName), BslObject::XmlExpandedName(_)) => return Ok(value),
+            _ => {}
+        }
+    }
+    let lexical = lexical_of_value(&value, builtin)
+        .ok_or_else(|| bad_property_value(model, target, &value))?;
+    value_from_lexical(model, target, &lexical)
+}
+
+/// Лексическая форма значения BSL для типа-приёмника. `None` — значение,
+/// у которого лексической формы нет вовсе: `Неопределено`, `Null` и любой
+/// объект (измерено: запись `Неопределено`, `Null` и `ОбъектXDTO` в
+/// свойство простого типа — ошибка).
+fn lexical_of_value(value: &BslValue, target: Option<BuiltinBsl>) -> Option<String> {
+    Some(match value {
+        BslValue::Str(s) => s.to_string(),
+        BslValue::Number(n) => n.to_canonical(),
+        BslValue::Boolean(b) => (if *b { "true" } else { "false" }).to_string(),
+        BslValue::Date(d) => {
+            let c = d.to_civil();
+            match target {
+                // У приёмника-даты и приёмника-времени формы свои, у всех
+                // остальных (в том числе у `xs:string`) — полная запись
+                // `dateTime` (измерено: `О.name = Дата(2026,8,13)` дало
+                // «2026-08-13T00:00:00»).
+                Some(BuiltinBsl::Date) => format!("{:04}-{:02}-{:02}", c.year, c.month, c.day),
+                Some(BuiltinBsl::Time) => {
+                    format!("{:02}:{:02}:{:02}", c.hour, c.minute, c.second)
+                }
+                _ => format!(
+                    "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}",
+                    c.year, c.month, c.day, c.hour, c.minute, c.second
+                ),
+            }
+        }
+        _ => return None,
+    })
+}
+
+fn bad_property_value(model: &Rc<XdtoModel>, target: usize, value: &BslValue) -> RtError {
+    let name = model
+        .type_at(target)
+        .map(type_display)
+        .unwrap_or_else(|_| String::new());
+    RtError::Xdto(format!(
+        "значение типа «{}» не годится свойству типа «{name}»",
+        value.type_name()
+    ))
+}
+
+/// Запись ОДИНОЧНОГО свойства: место в порядке заполнения сохраняется, а
+/// незаполненное свойство встаёт в конец (измерено обе стороны).
+fn set_single(data: &Rc<XdtoObjectData>, prop: usize, value: BslValue) -> RtResult<()> {
+    let coerced = coerce_to_property(data, prop, value)?;
+    let mut entries = data.entries.borrow_mut();
+    match entries.iter_mut().rev().find(|e| e.prop == prop) {
+        Some(e) => e.value = coerced,
+        None => entries.push(XdtoEntry {
+            prop,
+            value: coerced,
+        }),
+    }
+    Ok(())
+}
+
+/// Чтение свойства экземпляра.
+///
+/// # Errors
+///
+/// [`RtError::UnknownColumn`], если у типа нет такого свойства (измерено:
+/// постороннее имя — ошибка, а не `Неопределено`).
+fn object_get_property(data: &Rc<XdtoObjectData>, name: &str) -> RtResult<BslValue> {
+    let Some(prop) = data.property_by_name(name)? else {
+        return Err(RtError::UnknownColumn(name.to_string()));
+    };
+    if is_multiple(data.model.property_at(prop)?) {
+        return Ok(BslValue::Object(Rc::new(BslObject::XdtoList(
+            data.clone(),
+            prop,
+        ))));
+    }
+    data.single_value(prop)
+}
+
+/// Запись свойства экземпляра.
+///
+/// # Errors
+///
+/// [`RtError::UnknownColumn`], если такого свойства нет; [`RtError::Xdto`],
+/// если свойство множественное (оно наполняется через `СписокXDTO` —
+/// измерено, что присваивание в него ошибка) либо значение не приводится к
+/// типу свойства.
+pub fn set_property(obj: &BslValue, name: &str, value: BslValue) -> RtResult<()> {
+    let data = instance_of(obj, "Установить")?;
+    let Some(prop) = data.property_by_name(name)? else {
+        return Err(RtError::UnknownColumn(name.to_string()));
+    };
+    if is_multiple(data.model.property_at(prop)?) {
+        return Err(RtError::Xdto(format!(
+            "множественное свойство «{name}» наполняется через «СписокXDTO», \
+             а не присваиванием"
+        )));
+    }
+    set_single(data, prop, value)
+}
+
+/// `ОбъектXDTO.Получить(Имя|Свойство)` — только ОДИНОЧНОЕ свойство:
+/// множественное платформа через `Получить` не отдаёт (измерено), для него
+/// есть `ПолучитьСписок`.
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`] на чужом получателе или аргументе,
+/// [`RtError::Xdto`], если свойства нет или оно множественное.
+pub fn object_get(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let data = instance_of(obj, "Получить")?;
+    let [arg] = args else {
+        return Err(not_applicable(obj, "Получить"));
+    };
+    let prop = property_arg(data, arg, "Получить")?;
+    if is_multiple(data.model.property_at(prop)?) {
+        return Err(RtError::Xdto(format!(
+            "множественное свойство «{}» читается методом «ПолучитьСписок»",
+            data.model.property_at(prop)?.name
+        )));
+    }
+    data.single_value(prop)
+}
+
+/// `ОбъектXDTO.Установить(Имя|Свойство, Значение)` — тоже только
+/// одиночное свойство (измерено: `Установить("code", ...)` — ошибка).
+///
+/// # Errors
+///
+/// Те же, что у [`set_property`].
+pub fn object_set(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let data = instance_of(obj, "Установить")?;
+    let [arg, value] = args else {
+        return Err(not_applicable(obj, "Установить"));
+    };
+    let prop = property_arg(data, arg, "Установить")?;
+    if is_multiple(data.model.property_at(prop)?) {
+        return Err(RtError::Xdto(format!(
+            "множественное свойство «{}» наполняется через «СписокXDTO»",
+            data.model.property_at(prop)?.name
+        )));
+    }
+    set_single(data, prop, value.clone())?;
+    Ok(BslValue::Undefined)
+}
+
+/// `ОбъектXDTO.ПолучитьСписок(Имя|Свойство)` — тот же список, что отдаёт
+/// чтение множественного свойства (измерено: `О.ПолучитьСписок("code")
+/// .Добавить(...)` видно через `О.code`). У одиночного свойства списка нет
+/// (измерено — ошибка).
+///
+/// # Errors
+///
+/// [`RtError::Xdto`], если свойства нет или оно одиночное.
+pub fn object_get_list(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let data = instance_of(obj, "ПолучитьСписок")?;
+    let [arg] = args else {
+        return Err(not_applicable(obj, "ПолучитьСписок"));
+    };
+    let prop = property_arg(data, arg, "ПолучитьСписок")?;
+    if !is_multiple(data.model.property_at(prop)?) {
+        return Err(RtError::Xdto(format!(
+            "свойство «{}» одиночное, списка у него нет",
+            data.model.property_at(prop)?.name
+        )));
+    }
+    Ok(BslValue::Object(Rc::new(BslObject::XdtoList(
+        data.clone(),
+        prop,
+    ))))
+}
+
+/// `ОбъектXDTO.Установлено(Имя|Свойство)`.
+///
+/// Заполненность — это ЗАПИСЬ в хранилище, а не наличие значения при
+/// чтении: у свежего объекта `Установлено("def")` — «Нет», хотя `О.def`
+/// отдаёт 7 из `default` (измерено).
+///
+/// # Errors
+///
+/// [`RtError::Xdto`], если у типа нет такого свойства.
+pub fn object_is_set(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let data = instance_of(obj, "Установлено")?;
+    let [arg] = args else {
+        return Err(not_applicable(obj, "Установлено"));
+    };
+    let prop = property_arg(data, arg, "Установлено")?;
+    Ok(BslValue::Boolean(!data.occurrences(prop).is_empty()))
+}
+
+/// `ОбъектXDTO.Сбросить(Имя|Свойство)` — забыть заполнение: после сброса
+/// свойство с `default` снова отдаёт значение по умолчанию, а
+/// множественное становится пустым (измерено).
+///
+/// # Errors
+///
+/// [`RtError::Xdto`], если у типа нет такого свойства.
+pub fn object_unset(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let data = instance_of(obj, "Сбросить")?;
+    let [arg] = args else {
+        return Err(not_applicable(obj, "Сбросить"));
+    };
+    let prop = property_arg(data, arg, "Сбросить")?;
+    data.entries.borrow_mut().retain(|e| e.prop != prop);
+    Ok(BslValue::Undefined)
+}
+
+/// `ОбъектXDTO.Свойства()` — свойства СВОЕГО ТИПА, та же коллекция, что и
+/// `Тип().Свойства` (измерено: длины совпадают — 14 и 14).
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель не экземпляр либо
+/// вызов с аргументами.
+pub fn object_properties(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let data = instance_of(obj, "Свойства")?;
+    if !args.is_empty() {
+        return Err(not_applicable(obj, "Свойства"));
+    }
+    data.type_data()?;
+    Ok(BslValue::Object(Rc::new(BslObject::XdtoProperties(
+        data.model.clone(),
+        data.type_index,
+    ))))
+}
+
+/// `ОбъектXDTO.Владелец()` — объект, в свойство которого этот записан;
+/// у отдельно созданного — `Неопределено` (измерено обе стороны).
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель не экземпляр либо
+/// вызов с аргументами. У `СписокXDTO` и `ПоследовательностьXDTO`
+/// владелец — ЧЛЕН, а не метод (измерено: `Список.Владелец()` — ошибка),
+/// поэтому они сюда не попадают.
+pub fn object_owner(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let data = instance_of(obj, "Владелец")?;
+    if !args.is_empty() {
+        return Err(not_applicable(obj, "Владелец"));
+    }
+    Ok(match data.owner.borrow().upgrade() {
+        Some(owner) => instance_value(&owner),
+        None => BslValue::Undefined,
+    })
+}
+
+/// `ОбъектXDTO.Проверить()` — проверка ГРАНИЦ ВХОЖДЕНИЯ, своих и
+/// вложенных.
+///
+/// Измерено четырьмя пробами: пустой тип проходит; `RootType` без
+/// обязательных свойств отвергается; заполненный, но с пустым вложенным
+/// объектом — отвергается, а с заполненным — проходит; шесть значений в
+/// свойстве `1..5` — отвергается. Отсюда и правило: у каждого свойства
+/// число заполнений обязано лежать между `НижняяГраница` и
+/// `ВерхняяГраница`, а вложенные объекты — и в свойстве, и в списке —
+/// проверяются рекурсивно.
+///
+/// ФАСЕТЫ здесь не проверяются, как и в `Создать`: значение, нарушающее
+/// фасет, платформа не пускает уже в запись, а этой реализации проверять
+/// образцы нечем (см. «Фасеты только хранятся» в шапке модуля).
+///
+/// # Errors
+///
+/// [`RtError::Xdto`], если какая-нибудь граница нарушена.
+pub fn object_validate(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let data = instance_of(obj, "Проверить")?;
+    if !args.is_empty() {
+        return Err(not_applicable(obj, "Проверить"));
+    }
+    validate_instance(data, data.model.types.len() + 8)?;
+    Ok(BslValue::Undefined)
+}
+
+fn validate_instance(data: &Rc<XdtoObjectData>, depth: usize) -> RtResult<()> {
+    let Some(depth) = depth.checked_sub(1) else {
+        return Err(RtError::Xdto(
+            "объекты XDTO вложены друг в друга кольцом".to_string(),
+        ));
+    };
+    for p in &data.type_data()?.properties {
+        let prop = data.model.property_at(*p)?;
+        let places = data.occurrences(*p);
+        let count = u32::try_from(places.len()).unwrap_or(u32::MAX);
+        if count < prop.lower.unwrap_or(0) {
+            return Err(RtError::Xdto(format!(
+                "свойство «{}» обязано входить не менее {} раз, а заполнено {count}",
+                prop.name,
+                prop.lower.unwrap_or(0)
+            )));
+        }
+        if let Some(upper) = prop.upper {
+            if count > upper {
+                return Err(RtError::Xdto(format!(
+                    "свойство «{}» входит не более {upper} раз, а заполнено {count}",
+                    prop.name
+                )));
+            }
+        }
+        for place in places {
+            let nested = match data.entries.borrow().get(place).map(|e| e.value.clone()) {
+                Some(BslValue::Object(o)) => match &*o {
+                    BslObject::XdtoObject(inst) => Some(inst.clone()),
+                    _ => None,
+                },
+                _ => None,
+            };
+            if let Some(nested) = nested {
+                validate_instance(&nested, depth)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// `ОбъектXDTO.Последовательность()` — порядок заполнения свойств-элементов.
+///
+/// Есть она только у ПОСЛЕДОВАТЕЛЬНОГО типа: у `xs:choice` и `xs:all`
+/// возвращается объект, а у типа-последовательности (`Упорядоченный` —
+/// «Да») — `Неопределено`, а не ошибка (измерено на `RootType` и
+/// `SimpContent`).
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель не экземпляр либо
+/// вызов с аргументами.
+pub fn object_sequence(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let data = instance_of(obj, "Последовательность")?;
+    if !args.is_empty() {
+        return Err(not_applicable(obj, "Последовательность"));
+    }
+    if !data.type_data()?.sequenced() {
+        return Ok(BslValue::Undefined);
+    }
+    Ok(BslValue::Object(Rc::new(BslObject::XdtoSequence(
+        data.clone(),
+    ))))
+}
+
+// --- `СписокXDTO` --------------------------------------------------------
+
+/// Длина списка — число заполнений его свойства.
+fn list_len(data: &Rc<XdtoObjectData>, prop: usize) -> usize {
+    data.occurrences(prop).len()
+}
+
+fn out_of_bounds(i: usize, len: usize) -> RtError {
+    RtError::IndexOutOfBounds {
+        index: i as i64,
+        len,
+    }
+}
+
+/// `Список[i]`, `Список.Получить(i)` — само значение, а не `ЗначениеXDTO`
+/// (измерено: `ТипЗнч(О.code[0])` — «Строка»).
+///
+/// # Errors
+///
+/// [`RtError::IndexOutOfBounds`], если номера в списке нет (измерено:
+/// платформа отвечает ошибкой, а не `Неопределено`).
+pub fn list_get(obj: &BslValue, i: usize) -> RtResult<BslValue> {
+    let (data, prop) = list_of(obj, "Получить")?;
+    list_item(data, prop, i)
+}
+
+fn list_item(data: &Rc<XdtoObjectData>, prop: usize, i: usize) -> RtResult<BslValue> {
+    let places = data.occurrences(prop);
+    let place = *places
+        .get(i)
+        .ok_or_else(|| out_of_bounds(i, places.len()))?;
+    let entries = data.entries.borrow();
+    entries
+        .get(place)
+        .map(|e| e.value.clone())
+        .ok_or_else(|| broken("значение свойства"))
+}
+
+/// `Список.Добавить(Значение)` — значение приводится к типу свойства теми
+/// же правилами, что и при записи (измерено: `many5.Добавить(5)` даёт
+/// строку «5», `Добавить(Дата)` — «2026-08-13T00:00:00», `Добавить(Истина)`
+/// — «true», а `Добавить(Неопределено)` — ошибка).
+///
+/// # Errors
+///
+/// [`RtError::Xdto`], если значение не приводится к типу свойства.
+pub fn list_add(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let (data, prop) = list_of(obj, "Добавить")?;
+    let [value] = args else {
+        return Err(not_applicable(obj, "Добавить"));
+    };
+    let coerced = coerce_to_property(data, prop, value.clone())?;
+    data.entries.borrow_mut().push(XdtoEntry {
+        prop,
+        value: coerced,
+    });
+    Ok(BslValue::Undefined)
+}
+
+/// `Список.Установить(i, Значение)`.
+///
+/// # Errors
+///
+/// [`RtError::IndexOutOfBounds`] за границей списка (измерено),
+/// [`RtError::Xdto`], если значение не приводится к типу свойства.
+pub fn list_set(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let (data, prop) = list_of(obj, "Установить")?;
+    let [index, value] = args else {
+        return Err(not_applicable(obj, "Установить"));
+    };
+    let places = data.occurrences(prop);
+    let i = index_arg(index, places.len())?;
+    let place = *places
+        .get(i)
+        .ok_or_else(|| out_of_bounds(i, places.len()))?;
+    let coerced = coerce_to_property(data, prop, value.clone())?;
+    let mut entries = data.entries.borrow_mut();
+    let slot = entries
+        .get_mut(place)
+        .ok_or_else(|| broken("значение свойства"))?;
+    slot.value = coerced;
+    Ok(BslValue::Undefined)
+}
+
+/// `Список.Вставить(i, Значение)` — новое заполнение встаёт на место
+/// i-го, то есть и в последовательности оно оказывается перед ним
+/// (измерено: после `cb.Добавить("аб"); ca = "вг"; cb.Вставить(0, "де")`
+/// последовательность — `[cb=де][cb=аб][ca=вг]`).
+///
+/// Позиция обязана быть ЗАНЯТОЙ: и в пустой список, и на место сразу за
+/// последним элементом платформа вставлять отказывается (измерено оба),
+/// так что дописать в конец можно только `Добавить`.
+///
+/// # Errors
+///
+/// [`RtError::IndexOutOfBounds`] за границей списка, [`RtError::Xdto`],
+/// если значение не приводится к типу свойства.
+pub fn list_insert(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let (data, prop) = list_of(obj, "Вставить")?;
+    let [index, value] = args else {
+        return Err(not_applicable(obj, "Вставить"));
+    };
+    let places = data.occurrences(prop);
+    let i = index_arg(index, places.len())?;
+    let at = *places
+        .get(i)
+        .ok_or_else(|| out_of_bounds(i, places.len()))?;
+    let coerced = coerce_to_property(data, prop, value.clone())?;
+    data.entries.borrow_mut().insert(
+        at,
+        XdtoEntry {
+            prop,
+            value: coerced,
+        },
+    );
+    Ok(BslValue::Undefined)
+}
+
+/// `Список.Удалить(i)`.
+///
+/// # Errors
+///
+/// [`RtError::IndexOutOfBounds`] за границей списка (измерено).
+pub fn list_delete(obj: &BslValue, index: &BslValue) -> RtResult<()> {
+    let (data, prop) = list_of(obj, "Удалить")?;
+    let places = data.occurrences(prop);
+    let i = index_arg(index, places.len())?;
+    let place = *places
+        .get(i)
+        .ok_or_else(|| out_of_bounds(i, places.len()))?;
+    data.entries.borrow_mut().remove(place);
+    Ok(())
+}
+
+/// `Список.Очистить()` — забыть все заполнения этого свойства.
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель не список.
+pub fn list_clear(obj: &BslValue) -> RtResult<()> {
+    let (data, prop) = list_of(obj, "Очистить")?;
+    data.entries.borrow_mut().retain(|e| e.prop != prop);
+    Ok(())
+}
+
+/// Номер элемента из аргумента-числа.
+fn index_arg(index: &BslValue, len: usize) -> RtResult<usize> {
+    let BslValue::Number(n) = index else {
+        return Err(RtError::BadIndex);
+    };
+    let i = n.to_i64_exact().ok_or(RtError::BadIndex)?;
+    usize::try_from(i).map_err(|_| RtError::IndexOutOfBounds { index: i, len })
+}
+
+// --- `ПоследовательностьXDTO` --------------------------------------------
+
+/// Хранилище получателя-последовательности.
+fn sequence_of<'a>(obj: &'a BslValue, method: &'static str) -> RtResult<&'a Rc<XdtoObjectData>> {
+    match obj {
+        BslValue::Object(o) => match &**o {
+            BslObject::XdtoSequence(data) => Ok(data),
+            _ => Err(not_applicable(obj, method)),
+        },
+        _ => Err(not_applicable(obj, method)),
+    }
+}
+
+/// Элемент ли это последовательности: в неё попадают только свойства формы
+/// «Элемент» — запись АТРИБУТА её не удлиняет (измерено на `cat`).
+fn in_sequence(model: &XdtoModel, prop: usize) -> RtResult<bool> {
+    Ok(model.property_at(prop)?.form == EnumValue::XmlFormElement)
+}
+
+/// Номера записей хранилища, попадающих в последовательность.
+fn sequence_places(data: &Rc<XdtoObjectData>) -> RtResult<Vec<usize>> {
+    let mut places = Vec::new();
+    for (i, e) in data.entries.borrow().iter().enumerate() {
+        if in_sequence(&data.model, e.prop)? {
+            places.push(i);
+        }
+    }
+    Ok(places)
+}
+
+fn sequence_len(data: &Rc<XdtoObjectData>) -> RtResult<usize> {
+    Ok(sequence_places(data)?.len())
+}
+
+/// `Последовательность.ПолучитьЗначение(i)`.
+///
+/// # Errors
+///
+/// [`RtError::IndexOutOfBounds`] за границей (измерено).
+pub fn sequence_value(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let data = sequence_of(obj, "ПолучитьЗначение")?;
+    let [index] = args else {
+        return Err(not_applicable(obj, "ПолучитьЗначение"));
+    };
+    let places = sequence_places(data)?;
+    let i = index_arg(index, places.len())?;
+    let place = *places
+        .get(i)
+        .ok_or_else(|| out_of_bounds(i, places.len()))?;
+    let entries = data.entries.borrow();
+    entries
+        .get(place)
+        .map(|e| e.value.clone())
+        .ok_or_else(|| broken("значение свойства"))
+}
+
+/// `Последовательность.ПолучитьСвойство(i)` — `СвойствоXDTO`, которым это
+/// место заполнено (измерено: печатается именем свойства).
+///
+/// # Errors
+///
+/// [`RtError::IndexOutOfBounds`] за границей.
+pub fn sequence_property(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let data = sequence_of(obj, "ПолучитьСвойство")?;
+    let [index] = args else {
+        return Err(not_applicable(obj, "ПолучитьСвойство"));
+    };
+    let places = sequence_places(data)?;
+    let i = index_arg(index, places.len())?;
+    let place = *places
+        .get(i)
+        .ok_or_else(|| out_of_bounds(i, places.len()))?;
+    let prop = data
+        .entries
+        .borrow()
+        .get(place)
+        .map(|e| e.prop)
+        .ok_or_else(|| broken("значение свойства"))?;
+    Ok(property_value(&data.model, prop))
+}
+
+/// `Последовательность.Добавить(Свойство, Значение)` — заполнение в конец.
+///
+/// Свойство берётся только `СвойствоXDTO`, имя строкой платформа не
+/// принимает, и атрибут тоже (измерено обе пробы). Заполнение видно и
+/// через само свойство: после `Добавить(ca, "аб")` чтение `О.ca` даёт
+/// «аб», а второе `Добавить` того же свойства удлиняет
+/// последовательность до двух, оставляя в свойстве последнее значение
+/// (измерено).
+///
+/// # Errors
+///
+/// [`RtError::Xdto`], если свойство чужое, атрибутное либо значение не
+/// приводится к его типу.
+pub fn sequence_add(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let data = sequence_of(obj, "Добавить")?;
+    let [arg, value] = args else {
+        return Err(not_applicable(obj, "Добавить"));
+    };
+    let BslValue::Object(_) = arg else {
+        return Err(RtError::MethodNotApplicable {
+            method: "Добавить",
+            receiver: arg.type_name(),
+        });
+    };
+    let prop = property_arg(data, arg, "Добавить")?;
+    if !in_sequence(&data.model, prop)? {
+        return Err(RtError::Xdto(format!(
+            "свойство «{}» — не элемент, в последовательность оно не входит",
+            data.model.property_at(prop)?.name
+        )));
+    }
+    let coerced = coerce_to_property(data, prop, value.clone())?;
+    data.entries.borrow_mut().push(XdtoEntry {
+        prop,
+        value: coerced,
+    });
+    Ok(BslValue::Undefined)
+}
+
+/// `Последовательность.Очистить()` — забыть заполнения свойств-ЭЛЕМЕНТОВ;
+/// атрибуты уцелевают (измерено: после очистки `cat` на месте, `ca` пуст).
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель не последовательность.
+pub fn sequence_clear(obj: &BslValue) -> RtResult<()> {
+    let data = sequence_of(obj, "Очистить")?;
+    let places = sequence_places(data)?;
+    let mut entries = data.entries.borrow_mut();
+    for place in places.into_iter().rev() {
+        entries.remove(place);
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -3122,13 +4166,13 @@ mod tests {
             factory_type(&f, &[str_value("urn:test"), str_value("EmptyType")]).expect("тип");
         assert!(factory_create(&f, &[empty.clone(), str_value("аб")]).is_err());
         assert!(factory_create(&f, &[empty]).is_ok());
-        // Свойства экземпляра — честный отказ, а не молчаливое
-        // `Неопределено`: хранилища у него пока нет (см. шапку модуля).
-        let error = get_property(&object, "name").expect_err("свойства не читаются");
-        assert!(
-            error.to_string().contains("ОбъектXDTO"),
-            "в тексте отказа нет имени типа: {error}"
+        // Незаполненное свойство — `Неопределено`, а постороннее имя —
+        // ошибка (измерено обе стороны).
+        assert_eq!(
+            get_property(&object, "name").expect("свойство читается"),
+            BslValue::Undefined
         );
+        assert!(get_property(&object, "нетТакого").is_err());
         // `Тип` у экземпляра — метод, а не член: обращение как к свойству
         // отвечает ошибкой (измерено).
         assert!(get_property(&object, "Тип").is_err());
@@ -3213,5 +4257,286 @@ mod tests {
         .is_err());
         let _ = std::fs::remove_file(&path);
         let _ = std::fs::remove_file(&broken);
+    }
+
+    // --- экземпляр ---------------------------------------------------------
+
+    /// Экземпляр `RootType` из фабрики над [`SAMPLE`].
+    fn instance(f: &BslValue, name: &str) -> BslValue {
+        let t = factory_type(f, &[str_value("urn:test"), str_value(name)]).expect("тип");
+        factory_create(f, &[t]).expect("экземпляр")
+    }
+
+    /// Чтение свежего экземпляра: пусто там, где ничего не объявлено, и
+    /// сразу значение там, где есть `default`/`fixed`.
+    #[test]
+    fn a_fresh_instance_answers_with_defaults_and_empty_lists() {
+        let f = factory(SAMPLE);
+        let o = instance(&f, "RootType");
+        assert_eq!(prop(&o, "name"), BslValue::Undefined);
+        assert_eq!(prop(&o, "opt"), BslValue::Undefined);
+        // `default="7"` и `fixed="9"` подставляются при чтении (измерено).
+        assert_eq!(prop(&o, "def"), number_value(7));
+        assert_eq!(prop(&o, "fx"), number_value(9));
+        // Поиск имени регистронезависим (измерено: `О.NAME`).
+        assert_eq!(prop(&o, "NAME"), BslValue::Undefined);
+        // Множественное свойство — всегда список, даже пустой.
+        let list = prop(&o, "code");
+        assert_eq!(list.to_string(), "СписокXDTO");
+        assert_eq!(list.type_of().unwrap(), BslValue::Type(TypeId::XdtoList));
+        assert_eq!(TypeId::XdtoList.name(), "Список XDTO");
+        assert_eq!(list.collection_len().expect("длина"), 0);
+        // Постороннее имя — ошибка, а не `Неопределено` (измерено).
+        assert!(get_property(&o, "нетТакого").is_err());
+        // Унаследованное свойство читается у наследника так же.
+        assert_eq!(prop(&instance(&f, "ExtType"), "def"), number_value(7));
+    }
+
+    /// Запись идёт через лексическую форму типа-приёмника — отсюда и
+    /// приведения, и отказы (измерено поимённо).
+    #[test]
+    fn writing_a_property_goes_through_the_lexical_form() {
+        let f = factory(SAMPLE);
+        let o = instance(&f, "RootType");
+        set_property(&o, "name", str_value("аб")).expect("строка в строку");
+        assert_eq!(text_of(&prop(&o, "name")), "аб");
+        // Регистр имени не важен и на записи (измерено).
+        set_property(&o, "NAME", number_value(5)).expect("число в строку");
+        assert_eq!(text_of(&prop(&o, "name")), "5");
+        set_property(&o, "name", BslValue::Boolean(true)).expect("булево в строку");
+        assert_eq!(text_of(&prop(&o, "name")), "true");
+        let day = BslValue::Date(crate::BslDate::from_civil(2026, 8, 13, 0, 0, 0).expect("дата"));
+        set_property(&o, "name", day.clone()).expect("дата в строку");
+        assert_eq!(text_of(&prop(&o, "name")), "2026-08-13T00:00:00");
+        // В `xs:int` строка цифрами проходит, а «true» — нет: это не его
+        // лексическая форма (измерено обе стороны).
+        set_property(&o, "id", str_value("5")).expect("строка в число");
+        assert_eq!(prop(&o, "id"), number_value(5));
+        assert!(set_property(&o, "id", BslValue::Boolean(true)).is_err());
+        // `Неопределено` и `Null` не пишутся вовсе — сброс делает
+        // `Сбросить` (измерено).
+        assert!(set_property(&o, "name", BslValue::Undefined).is_err());
+        assert!(set_property(&o, "name", BslValue::Null).is_err());
+        // `ЗначениеXDTO` принимается, и берётся из него ЗНАЧЕНИЕ: тип
+        // источника может быть другим (измерено).
+        let int_type = factory_type(
+            &f,
+            &[
+                str_value("http://www.w3.org/2001/XMLSchema"),
+                str_value("string"),
+            ],
+        )
+        .expect("тип");
+        let value = factory_create(&f, &[int_type, str_value("5")]).expect("значение");
+        set_property(&o, "id", value).expect("значение XDTO в число");
+        assert_eq!(prop(&o, "id"), number_value(5));
+        // Множественное свойство присваиванием не пишется (измерено).
+        assert!(set_property(&o, "code", str_value("AB")).is_err());
+        assert!(set_property(&o, "нетТакого", str_value("аб")).is_err());
+        // Свойство типа `anyType` принимает что угодно как есть (измерено).
+        set_property(&o, "notype", number_value(5)).expect("число в anyType");
+        assert_eq!(prop(&o, "notype"), number_value(5));
+    }
+
+    /// Список — окно в хранилище владельца, а не снимок.
+    #[test]
+    fn a_list_is_a_window_into_its_owner() {
+        let f = factory(SAMPLE);
+        let o = instance(&f, "RootType");
+        let list = prop(&o, "code");
+        list_add(&list, &[str_value("AB")]).expect("добавление");
+        // Видно через второе чтение свойства, и два чтения РАВНЫ
+        // (измерено обе стороны).
+        assert_eq!(prop(&o, "code").collection_len().expect("длина"), 1);
+        assert_eq!(prop(&o, "code"), prop(&o, "code"));
+        assert_eq!(prop(&list, "Владелец"), o);
+        // В списке лежит само значение, а не `ЗначениеXDTO` (измерено).
+        assert_eq!(text_of(&list_get(&list, 0).expect("элемент")), "AB");
+        assert!(list_get(&list, 1).is_err());
+        // Приведение то же, что при записи свойства.
+        list_add(&prop(&o, "many5"), &[number_value(5)]).expect("число в строку");
+        assert_eq!(
+            text_of(&list_get(&prop(&o, "many5"), 0).expect("элемент")),
+            "5"
+        );
+        assert!(list_add(&list, &[BslValue::Undefined]).is_err());
+        // `Вставить` встаёт на место указанного элемента, `Удалить` и
+        // `Очистить` работают по позиции (измерено).
+        list_insert(&list, &[number_value(0), str_value("CD")]).expect("вставка");
+        assert_eq!(text_of(&list_get(&list, 0).expect("элемент")), "CD");
+        assert_eq!(list.collection_len().expect("длина"), 2);
+        list_set(&list, &[number_value(0), str_value("EF")]).expect("установка");
+        assert_eq!(text_of(&list_get(&list, 0).expect("элемент")), "EF");
+        assert!(list_set(&list, &[number_value(9), str_value("EF")]).is_err());
+        // `Вставить` требует ЗАНЯТОЙ позиции: ни за концом, ни в пустой
+        // список платформа не вставляет (измерено оба).
+        assert!(list_insert(&list, &[number_value(2), str_value("EF")]).is_err());
+        list_delete(&list, &number_value(0)).expect("удаление");
+        assert_eq!(list.collection_len().expect("длина"), 1);
+        list_clear(&list).expect("очистка");
+        assert_eq!(list.collection_len().expect("длина"), 0);
+        assert!(list_delete(&list, &number_value(0)).is_err());
+        assert!(list_insert(&list, &[number_value(0), str_value("EF")]).is_err());
+    }
+
+    /// Члены экземпляра: заполненность — это ЗАПИСЬ, а не наличие
+    /// значения при чтении.
+    #[test]
+    fn instance_members_tell_filling_from_defaults() {
+        let f = factory(SAMPLE);
+        let o = instance(&f, "RootType");
+        // У свойства с `default` чтение даёт 7, а `Установлено` — «Нет»
+        // (измерено).
+        assert_eq!(
+            object_is_set(&o, &[str_value("def")]).expect("установлено"),
+            BslValue::Boolean(false)
+        );
+        object_set(&o, &[str_value("name"), str_value("аб")]).expect("установка");
+        assert_eq!(
+            object_is_set(&o, &[str_value("name")]).expect("установлено"),
+            BslValue::Boolean(true)
+        );
+        assert_eq!(
+            text_of(&object_get(&o, &[str_value("name")]).expect("чтение")),
+            "аб"
+        );
+        // Свойство можно назвать и объектом `СвойствоXDTO` (измерено).
+        let properties = prop(&object_type(&o, &[]).expect("тип"), "Свойства");
+        let name = collection_lookup(&properties, &[str_value("name")]).expect("свойство");
+        assert_eq!(
+            text_of(&object_get(&o, std::slice::from_ref(&name)).expect("чтение")),
+            "аб"
+        );
+        object_unset(&o, &[name]).expect("сброс");
+        assert_eq!(prop(&o, "name"), BslValue::Undefined);
+        // Множественное свойство `Получить` не отдаёт, а `ПолучитьСписок`
+        // отдаёт — и это тот же список (измерено).
+        assert!(object_get(&o, &[str_value("code")]).is_err());
+        let list = object_get_list(&o, &[str_value("code")]).expect("список");
+        list_add(&list, &[str_value("AB")]).expect("добавление");
+        assert_eq!(prop(&o, "code").collection_len().expect("длина"), 1);
+        assert!(object_get_list(&o, &[str_value("name")]).is_err());
+        // Постороннее имя — ошибка у всех четырёх (измерено).
+        assert!(object_get(&o, &[str_value("нетТакого")]).is_err());
+        assert!(object_is_set(&o, &[str_value("нетТакого")]).is_err());
+        assert!(object_unset(&o, &[str_value("нетТакого")]).is_err());
+        assert!(object_get_list(&o, &[str_value("нетТакого")]).is_err());
+        // `Свойства()` — коллекция свойств СВОЕГО типа, `Владелец()` у
+        // отдельно созданного объекта — `Неопределено` (измерено).
+        assert_eq!(
+            object_properties(&o, &[])
+                .expect("свойства")
+                .collection_len()
+                .expect("длина"),
+            properties.collection_len().expect("длина")
+        );
+        assert_eq!(
+            object_owner(&o, &[]).expect("владелец"),
+            BslValue::Undefined
+        );
+    }
+
+    /// Вложенный объект: тот же экземпляр, свой владелец и рекурсивная
+    /// проверка границ.
+    #[test]
+    fn a_nested_object_keeps_its_owner_and_is_validated() {
+        let f = factory(SAMPLE);
+        let o = instance(&f, "RootType");
+        let anon = prop(
+            &collection_lookup(
+                &prop(&object_type(&o, &[]).expect("тип"), "Свойства"),
+                &[str_value("anon")],
+            )
+            .expect("свойство"),
+            "Тип",
+        );
+        let nested = factory_create(&f, &[anon]).expect("экземпляр анонимного типа");
+        set_property(&o, "anon", nested.clone()).expect("объект в объектное свойство");
+        // Записан ТОТ ЖЕ объект, и владелец у него — приёмник (измерено).
+        assert_eq!(prop(&o, "anon"), nested);
+        assert_eq!(object_owner(&nested, &[]).expect("владелец"), o);
+        // Посторонний тип в это свойство не пишется (измерено; наследник
+        // объявленного — пишется, но в этой схеме объектного свойства с
+        // ИМЕНОВАННЫМ типом нет, и проверено это на платформе).
+        assert!(set_property(&o, "anon", instance(&f, "EmptyType")).is_err());
+        // `Проверить` смотрит и внутрь: вложенный объект пуст, а `inner`
+        // у него обязателен (измерено).
+        assert!(object_validate(&o, &[]).is_err());
+        object_validate(&instance(&f, "EmptyType"), &[]).expect("пустой тип проходит");
+        set_property(&nested, "inner", number_value(1)).expect("запись во вложенный");
+        set_property(&o, "name", str_value("аб")).expect("запись");
+        set_property(&o, "uq", str_value("вг")).expect("запись");
+        set_property(&o, "id", number_value(1)).expect("запись");
+        list_add(&prop(&o, "many5"), &[str_value("я")]).expect("добавление");
+        object_validate(&o, &[]).expect("заполненный объект проходит");
+        // Верхняя граница тоже проверяется: у `many5` она 5 (измерено).
+        for _ in 0..5 {
+            list_add(&prop(&o, "many5"), &[str_value("я")]).expect("добавление");
+        }
+        assert!(object_validate(&o, &[]).is_err());
+    }
+
+    /// Последовательность — порядок заполнения свойств-элементов; у
+    /// упорядоченного типа её нет вовсе.
+    #[test]
+    fn the_sequence_follows_the_order_of_filling() {
+        let f = factory(SAMPLE);
+        // `xs:sequence` — упорядоченный тип, у него `Неопределено`
+        // (измерено), а `xs:choice` и `xs:all` — последовательные.
+        assert_eq!(
+            object_sequence(&instance(&f, "RootType"), &[]).expect("последовательность"),
+            BslValue::Undefined
+        );
+        let o = instance(&f, "ChoiceType");
+        let seq = object_sequence(&o, &[]).expect("последовательность");
+        assert_eq!(seq.to_string(), "ПоследовательностьXDTO");
+        assert_eq!(seq.type_of().unwrap(), BslValue::Type(TypeId::XdtoSequence));
+        assert_eq!(TypeId::XdtoSequence.name(), "Последовательность XDTO");
+        assert_eq!(seq.collection_len().expect("длина"), 0);
+        // Порядок: заполнение элементов, атрибут в него не попадает
+        // (измерено).
+        list_add(&prop(&o, "cb"), &[str_value("аб")]).expect("добавление");
+        set_property(&o, "ca", str_value("вг")).expect("запись");
+        set_property(&o, "cat", str_value("атрибут")).expect("запись атрибута");
+        list_add(&prop(&o, "cb"), &[str_value("де")]).expect("добавление");
+        assert_eq!(seq.collection_len().expect("длина"), 3);
+        assert_eq!(
+            text_of(&sequence_value(&seq, &[number_value(1)]).expect("значение")),
+            "вг"
+        );
+        assert_eq!(
+            sequence_property(&seq, &[number_value(1)])
+                .expect("свойство")
+                .to_string(),
+            "ca"
+        );
+        assert!(sequence_value(&seq, &[number_value(3)]).is_err());
+        // Повторная запись одиночного свойства своё место сохраняет
+        // (измерено).
+        set_property(&o, "ca", str_value("же")).expect("повторная запись");
+        assert_eq!(seq.collection_len().expect("длина"), 3);
+        assert_eq!(
+            text_of(&sequence_value(&seq, &[number_value(1)]).expect("значение")),
+            "же"
+        );
+        // `Владелец` у последовательности — ЧЛЕН (измерено), а два вызова
+        // `Последовательность()` дают равные значения.
+        assert_eq!(prop(&seq, "Владелец"), o);
+        assert_eq!(object_sequence(&o, &[]).expect("вторая"), seq);
+        // `Добавить` берёт именно `СвойствоXDTO` и именно элемент, а
+        // заполнение видно через само свойство (измерено).
+        let properties = prop(&object_type(&o, &[]).expect("тип"), "Свойства");
+        let ca = collection_lookup(&properties, &[str_value("ca")]).expect("свойство");
+        let cat = collection_lookup(&properties, &[str_value("cat")]).expect("свойство");
+        sequence_add(&seq, &[ca, str_value("зи")]).expect("добавление");
+        assert_eq!(seq.collection_len().expect("длина"), 4);
+        assert_eq!(text_of(&prop(&o, "ca")), "зи");
+        assert!(sequence_add(&seq, &[cat, str_value("к")]).is_err());
+        assert!(sequence_add(&seq, &[str_value("ca"), str_value("к")]).is_err());
+        // `Очистить` забывает элементы, атрибут уцелевает (измерено).
+        sequence_clear(&seq).expect("очистка");
+        assert_eq!(seq.collection_len().expect("длина"), 0);
+        assert_eq!(prop(&o, "ca"), BslValue::Undefined);
+        assert_eq!(text_of(&prop(&o, "cat")), "атрибут");
     }
 }

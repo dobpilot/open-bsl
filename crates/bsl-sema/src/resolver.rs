@@ -1454,6 +1454,25 @@ impl<'a> Resolver<'a> {
                     // расширенное имя, а у экземпляра `ОбъектXDTO` —
                     // вообще без аргументов. Всё измерено, и решает рантайм.
                     bsl_rt::BuiltinMethod::Create | bsl_rt::BuiltinMethod::XdtoType => None,
+                    // Экземпляр XDTO. Арности измерены поимённо: имя
+                    // свойства — один аргумент, `Установить` — два (оно
+                    // делит вариант с `БуферДвоичныхДанных`, см. выше), а
+                    // `Проверить`, `Свойства`, `Владелец` и
+                    // `Последовательность` берут ровно ноль: лишний
+                    // аргумент — ошибка на всех четырёх (пробы «объект …
+                    // с аргументом» в `measure-xdto.bsl`; какая именно —
+                    // компиляции или исполнения — не различима, они сняты
+                    // через `Выполнить` внутри `Попытка`, здесь это
+                    // ошибка компиляции).
+                    bsl_rt::BuiltinMethod::XdtoGetList
+                    | bsl_rt::BuiltinMethod::XdtoIsSet
+                    | bsl_rt::BuiltinMethod::XdtoUnset
+                    | bsl_rt::BuiltinMethod::XdtoSequenceValue
+                    | bsl_rt::BuiltinMethod::XdtoSequenceProperty => Some(1),
+                    bsl_rt::BuiltinMethod::XdtoValidate
+                    | bsl_rt::BuiltinMethod::XdtoObjectProperties
+                    | bsl_rt::BuiltinMethod::XdtoOwner
+                    | bsl_rt::BuiltinMethod::XdtoSequenceOf => Some(0),
                 };
                 if let Some(expected) = expected {
                     if args.len() != expected {

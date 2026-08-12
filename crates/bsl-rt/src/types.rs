@@ -153,6 +153,8 @@ pub enum TypeId {
     XdtoFacet,
     XdtoFacetCollection,
     XdtoDataValue,
+    XdtoList,
+    XdtoSequence,
     /// Типы ЧЛЕНОВ перечислений модели схемы — как `DomNodeType`.
     XsComponentType,
     XsForm,
@@ -527,6 +529,15 @@ const NAMES: &[(TypeId, &str, &str)] = &[
         "XDTOFacetCollection",
     ),
     (TypeId::XdtoDataValue, "Значение XDTO", "XDTODataValue"),
+    // Множественное свойство экземпляра и последовательность его
+    // элементов — оба имени и оба написания ИЗМЕРЕНЫ через `Тип("...")`:
+    // «Список XDTO» и «Последовательность XDTO».
+    (TypeId::XdtoList, "Список XDTO", "XDTOList"),
+    (
+        TypeId::XdtoSequence,
+        "Последовательность XDTO",
+        "XDTOSequence",
+    ),
     (TypeId::XmlForm, "ФормаXML", "XMLForm"),
     (TypeId::XdtoFacetKind, "ВидФасетаXDTO", "XDTOFacetType"),
     (
