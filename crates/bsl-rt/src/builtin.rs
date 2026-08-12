@@ -765,6 +765,11 @@ pub enum BuiltinMethod {
     BufSplit,
     /// `Соединить(Другой)` -> НОВЫЙ буфер; получатель не меняется.
     BufConcat,
+    /// `ПолучитьСрез(Позиция[, Количество])` -> ОКНО в тот же массив
+    /// байтов, а не копия (измерено, см. `crate::binbuf::get_slice`).
+    /// Копию отдаёт `Скопировать`, которое буфер делит с `ТаблицаЗначений`
+    /// — получатель разводится в рантайме.
+    BufSlice,
     /// Побитовые операции с БУФЕРОМ-маской, накладываемой с позиции.
     WriteBitwiseAnd,
     WriteBitwiseOr,
@@ -987,6 +992,8 @@ pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
     ("Split", BuiltinMethod::BufSplit),
     ("Соединить", BuiltinMethod::BufConcat),
     ("Concat", BuiltinMethod::BufConcat),
+    ("ПолучитьСрез", BuiltinMethod::BufSlice),
+    ("GetSlice", BuiltinMethod::BufSlice),
     ("ЗаписатьПобитовоеИ", BuiltinMethod::WriteBitwiseAnd),
     ("WriteBitwiseAnd", BuiltinMethod::WriteBitwiseAnd),
     ("ЗаписатьПобитовоеИли", BuiltinMethod::WriteBitwiseOr),
@@ -1622,7 +1629,13 @@ pub fn call_builtin_method(
         // Волна 3. У `Скопировать`/`СкопироватьКолонки`/`Свернуть` арность
         // переменная, поэтому и здесь `args.get(...)`, а лишние аргументы
         // ловятся тут же: резолвер для них проверку не делает.
+        // `Скопировать` у буфера — независимая копия БЕЗ аргументов, у
+        // таблицы значений — отбор и список колонок. Одно имя, разный смысл
+        // по получателю, как у `Записать` и `Закрыть`.
         BuiltinMethod::Copy => {
+            if crate::binbuf::is_buffer(obj) {
+                return crate::binbuf::copy_buffer(obj, args);
+            }
             too_many(obj, "Скопировать", args, 2)?;
             obj.table_copy(arg(args, 0), arg(args, 1))
         }
@@ -1655,7 +1668,11 @@ pub fn call_builtin_method(
         // `ТекстовыйДокумент` — сохранить файл. Одно имя, разный смысл по
         // получателю, как и у `Закрыть`.
         BuiltinMethod::Write => {
-            if crate::spreadsheet::is_spread_document(obj) {
+            if crate::binbuf::is_buffer(obj) {
+                // У буфера `Записать(Позиция, Источник[, Количество])` —
+                // блочная запись; арность и границы проверяет он сам.
+                crate::binbuf::write_buffer(obj, args)
+            } else if crate::spreadsheet::is_spread_document(obj) {
                 crate::spreadsheet::write(obj, args)?;
                 Ok(BslValue::Undefined)
             } else if crate::textdoc::is_text_document(obj) {
@@ -1851,6 +1868,7 @@ pub fn call_builtin_method(
         BuiltinMethod::GetBinaryDataBuffer => crate::datarw::result_binary_buffer(obj),
         BuiltinMethod::BufSplit => crate::binbuf::split(obj, &args[0]),
         BuiltinMethod::BufConcat => crate::binbuf::concat(obj, &args[0]),
+        BuiltinMethod::BufSlice => crate::binbuf::get_slice(obj, args),
         BuiltinMethod::WriteBitwiseAnd => {
             crate::binbuf::bitwise(obj, args, crate::binbuf::BitOp::And)
         }

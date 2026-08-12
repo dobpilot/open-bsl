@@ -1134,6 +1134,9 @@ impl<'a> Resolver<'a> {
                     | bsl_rt::BuiltinMethod::WriteBitwiseXor
                     | bsl_rt::BuiltinMethod::WriteBitwiseAndNot => Some(2),
                     bsl_rt::BuiltinMethod::BufSplit | bsl_rt::BuiltinMethod::BufConcat => Some(1),
+                    // `ПолучитьСрез` — 1 или 2 (количество необязательно),
+                    // арность решает рантайм.
+                    bsl_rt::BuiltinMethod::BufSlice => None,
                     // У чтения целого 1..2 аргумента, у записи 2..3, у
                     // `Инвертировать` 0..2 — арность решает рантайм.
                     bsl_rt::BuiltinMethod::ReadInt16

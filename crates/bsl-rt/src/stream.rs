@@ -199,7 +199,7 @@ impl StreamData {
     fn len(&self, op: &'static str) -> RtResult<u64> {
         match self.open(op)? {
             Backing::Owned(bytes) => Ok(bytes.len() as u64),
-            Backing::Buffer(buf) => Ok(buf.borrow().bytes.len() as u64),
+            Backing::Buffer(buf) => Ok(buf.borrow().len() as u64),
             Backing::File(file) => file
                 .metadata()
                 .map(|m| m.len())
@@ -239,7 +239,7 @@ impl StreamData {
             Backing::Owned(bytes) => slice_from(bytes, pos, count),
             Backing::Buffer(source) => {
                 let source = source.borrow();
-                slice_from(&source.bytes, pos, count)
+                source.with_bytes(|bytes| slice_from(bytes, pos, count))
             }
             Backing::File(file) => {
                 file.seek(SeekFrom::Start(pos))
@@ -322,15 +322,17 @@ impl StreamData {
                 bytes[start..end].copy_from_slice(chunk);
             }
             Backing::Buffer(target) => {
-                let mut target = target.borrow_mut();
-                if end > target.bytes.len() as u64 {
+                let target = target.borrow();
+                if end > target.len() as u64 {
                     return Err(RtError::IndexOutOfBounds {
                         index: end as i64,
-                        len: target.bytes.len(),
+                        len: target.len(),
                     });
                 }
                 let start = pos as usize;
-                target.bytes[start..start + chunk.len()].copy_from_slice(chunk);
+                target.with_bytes_mut(|bytes| {
+                    bytes[start..start + chunk.len()].copy_from_slice(chunk);
+                });
             }
             Backing::File(file) => {
                 file.seek(SeekFrom::Start(pos))
@@ -885,8 +887,8 @@ pub fn write(v: &BslValue, args: &[BslValue]) -> RtResult<()> {
     // уронили бы процесс.
     let chunk = {
         let src = src.borrow();
-        let (offset, count) = slice_in_buffer(offset, count, src.bytes.len(), OP)?;
-        src.bytes[offset..offset + count].to_vec()
+        let (offset, count) = slice_in_buffer(offset, count, src.len(), OP)?;
+        src.with_bytes(|bytes| bytes[offset..offset + count].to_vec())
     };
     let d = data(v, OP)?;
     // `Перейти` разрешает уход за конец, поэтому позиция может стоять у самого
@@ -917,7 +919,7 @@ pub fn read(v: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
     let dst = buffer_of(buf, OP)?;
     let (offset, count) = {
         let dst = dst.borrow();
-        slice_in_buffer(offset, count, dst.bytes.len(), OP)?
+        slice_in_buffer(offset, count, dst.len(), OP)?
     };
     let d = data(v, OP)?;
     // Байты сначала снимаются, и только потом берётся изменяемое
@@ -926,8 +928,10 @@ pub fn read(v: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
     // процесс.
     let chunk = d.borrow_mut().read_bytes(count, OP)?;
     {
-        let mut dst = dst.borrow_mut();
-        dst.bytes[offset..offset + chunk.len()].copy_from_slice(&chunk);
+        let dst = dst.borrow();
+        dst.with_bytes_mut(|bytes| {
+            bytes[offset..offset + chunk.len()].copy_from_slice(&chunk);
+        });
     }
     Ok(from_u64(chunk.len() as u64))
 }
@@ -980,7 +984,7 @@ mod tests {
     fn bytes_of(b: &BslValue) -> Vec<u8> {
         match b {
             BslValue::Object(o) => match &**o {
-                BslObject::BinaryBuffer(d) => d.borrow().bytes.clone(),
+                BslObject::BinaryBuffer(d) => d.borrow().to_vec(),
                 _ => panic!("не буфер"),
             },
             _ => panic!("не буфер"),

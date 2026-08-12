@@ -65,16 +65,111 @@ impl ByteOrder {
     }
 }
 
-/// Содержимое буфера: сами байты и текущий порядок.
+/// Содержимое буфера: ОКНО в общий массив байтов и текущий порядок.
 ///
 /// Порядок хранится в буфере, а не только передаётся в методы: свойство
 /// `ПорядокБайтов` читается И ПИШЕТСЯ, и запись видна следующему
 /// `ЗаписатьЦелое16` без третьего аргумента (измерено — после смены на
 /// `BigEndian` число 258 легло байтами `1 2`, а не `2 1`).
+///
+/// Окно, а не собственный `Vec<u8>` на объект, — потому что `ПолучитьСрез`
+/// отдаёт ВИД НА ТУ ЖЕ ПАМЯТЬ, а не копию: правка источника видна в срезе,
+/// правка среза — в источнике (измерено, `measure-binbuf.bsl`, строки «срез
+/// после правки источника» и «запись в срез»). Порядок байтов при этом у
+/// каждого окна СВОЙ: он наследуется от источника, но пишется независимо
+/// (там же, «порядок правится у среза»). Отсюда и деление полей: `store`
+/// общий, `order` — нет.
+///
+/// Поле `store` закрыто намеренно. Снаружи байты видны только через
+/// [`BinBufData::with_bytes`]/[`BinBufData::with_bytes_mut`], которые сами
+/// вырезают окно: прямой доступ к вектору мимо `offset`/`len` — это ровно
+/// тот выход за границы среза, ради невозможности которого окно и заведено.
 #[derive(Debug)]
 pub struct BinBufData {
-    pub bytes: Vec<u8>,
+    store: Rc<RefCell<Vec<u8>>>,
+    offset: usize,
+    len: usize,
     pub order: ByteOrder,
+}
+
+impl BinBufData {
+    /// Буфер-владелец: окно во весь свежий массив.
+    pub fn new(bytes: Vec<u8>, order: ByteOrder) -> Self {
+        let len = bytes.len();
+        BinBufData {
+            store: Rc::new(RefCell::new(bytes)),
+            offset: 0,
+            len,
+            order,
+        }
+    }
+
+    /// Размер ОКНА, а не общего массива.
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Пустое ли окно. Нужен `clippy::len_without_is_empty`, но и по делу:
+    /// `Новый БуферДвоичныхДанных(0)` платформа принимает.
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// Байты окна под замком чтения.
+    pub fn with_bytes<R>(&self, f: impl FnOnce(&[u8]) -> R) -> R {
+        f(&self.store.borrow()[self.offset..self.offset + self.len])
+    }
+
+    /// Байты окна под замком записи. Берёт `&self`: буфер меняется на месте
+    /// и через `Rc`, изменяемость здесь внутренняя.
+    pub fn with_bytes_mut<R>(&self, f: impl FnOnce(&mut [u8]) -> R) -> R {
+        f(&mut self.store.borrow_mut()[self.offset..self.offset + self.len])
+    }
+
+    /// Копия байтов окна — для тех мест, где содержимое нужно пережить
+    /// освобождение замка (разделитель `Разделить`, маска побитовых, хвост
+    /// `Соединить`).
+    pub fn to_vec(&self) -> Vec<u8> {
+        self.with_bytes(<[u8]>::to_vec)
+    }
+
+    /// Окно внутри этого окна — общий массив, свой `ПорядокБайтов`.
+    /// Смещение и длина уже проверены вызывающим.
+    fn window(&self, offset: usize, len: usize) -> Self {
+        BinBufData {
+            store: Rc::clone(&self.store),
+            offset: self.offset + offset,
+            len,
+            order: self.order,
+        }
+    }
+
+    /// Общий ли у двух окон массив байтов. Проверяется перед копированием:
+    /// `Записать` из среза САМОГО СЕБЯ платформа принимает (измерено,
+    /// «записать в себя»), а `RefCell` двойного заимствования не переживёт.
+    fn shares_store(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.store, &other.store)
+    }
+
+    /// Блочная запись в это окно с позиции `pos`, ОБРЕЗАННАЯ по его размеру
+    /// (почему обрезка, а не ошибка, — см. [`write_buffer`]). Наложение
+    /// источника и приёмника допустимо: у общего массива копирование идёт
+    /// `copy_within`, который перекрытие переживает.
+    fn copy_from(&self, pos: usize, src: &BinBufData, count: usize) {
+        let count = count.min(src.len).min(self.len.saturating_sub(pos));
+        if count == 0 {
+            return;
+        }
+        let to = self.offset + pos;
+        if self.shares_store(src) {
+            let mut store = self.store.borrow_mut();
+            store.copy_within(src.offset..src.offset + count, to);
+        } else {
+            let source = src.store.borrow();
+            let mut store = self.store.borrow_mut();
+            store[to..to + count].copy_from_slice(&source[src.offset..src.offset + count]);
+        }
+    }
 }
 
 /// `Новый БуферДвоичныхДанных(Размер[, ПорядокБайтов])`.
@@ -127,9 +222,13 @@ pub fn new_binary_buffer(size: &BslValue, order: &BslValue) -> RtResult<BslValue
             op: OP,
         })?;
     bytes.resize(size, 0);
-    Ok(BslValue::Object(Rc::new(BslObject::BinaryBuffer(Rc::new(
-        RefCell::new(BinBufData { bytes, order }),
-    )))))
+    Ok(wrap(BinBufData::new(bytes, order)))
+}
+
+/// Значение BSL вокруг готового окна — и для конструктора, и для среза, и
+/// для `Скопировать`.
+fn wrap(d: BinBufData) -> BslValue {
+    BslValue::Object(Rc::new(BslObject::BinaryBuffer(Rc::new(RefCell::new(d)))))
 }
 
 /// Внутренности буфера; для любого другого значения — ошибка «метод не
@@ -237,7 +336,7 @@ fn byte_of(v: &BslValue, op: &'static str) -> RtResult<u8> {
 /// (измерено), и запись в него тоже.
 pub fn size(v: &BslValue) -> RtResult<BslValue> {
     let d = data(v, "Размер")?;
-    let len = d.borrow().bytes.len();
+    let len = d.borrow().len();
     Ok(BslValue::Number(BslNumber::from_i64(len as i64)))
 }
 
@@ -270,16 +369,19 @@ pub fn set_order(v: &BslValue, val: BslValue) -> RtResult<()> {
 pub fn get_byte(v: &BslValue, idx: &BslValue) -> RtResult<BslValue> {
     let d = data(v, "Получить")?;
     let d = d.borrow();
-    let p = checked_pos(idx, d.bytes.len())?;
-    Ok(BslValue::Number(BslNumber::from_i64(d.bytes[p] as i64)))
+    let p = checked_pos(idx, d.len())?;
+    Ok(BslValue::Number(BslNumber::from_i64(
+        d.with_bytes(|b| b[p]) as i64,
+    )))
 }
 
 /// `Буфер[Позиция] = Значение` и `Буфер.Установить(Позиция, Значение)`.
 pub fn set_byte(v: &BslValue, idx: &BslValue, val: &BslValue) -> RtResult<()> {
     let d = data(v, "Установить")?;
-    let mut d = d.borrow_mut();
-    let p = checked_pos(idx, d.bytes.len())?;
-    d.bytes[p] = byte_of(val, "Установить")?;
+    let d = d.borrow();
+    let p = checked_pos(idx, d.len())?;
+    let byte = byte_of(val, "Установить")?;
+    d.with_bytes_mut(|b| b[p] = byte);
     Ok(())
 }
 
@@ -403,15 +505,15 @@ pub fn read_int(v: &BslValue, args: &[BslValue], w: IntWidth) -> RtResult<BslVal
         });
     }
     let order = order_arg(rest.first(), d.order, op)?;
-    let p = checked_pos(pos, d.bytes.len())?;
+    let p = checked_pos(pos, d.len())?;
     let end = p.checked_add(w.bytes()).ok_or(RtError::BadIndex)?;
-    if end > d.bytes.len() {
+    if end > d.len() {
         return Err(RtError::IndexOutOfBounds {
             index: p as i64,
-            len: d.bytes.len(),
+            len: d.len(),
         });
     }
-    Ok(from_u64(w.decode(&d.bytes[p..end], order)))
+    Ok(from_u64(d.with_bytes(|b| w.decode(&b[p..end], order))))
 }
 
 /// `ЗаписатьЦелое16/32/64(Позиция, Значение[, ПорядокБайтов])`.
@@ -424,7 +526,7 @@ pub fn read_int(v: &BslValue, args: &[BslValue], w: IntWidth) -> RtResult<BslVal
 pub fn write_int(v: &BslValue, args: &[BslValue], w: IntWidth) -> RtResult<BslValue> {
     let op = w.write_op();
     let d = data(v, op)?;
-    let mut d = d.borrow_mut();
+    let d = d.borrow();
     let [pos, value, rest @ ..] = args else {
         return Err(RtError::MethodNotApplicable {
             method: op,
@@ -438,12 +540,12 @@ pub fn write_int(v: &BslValue, args: &[BslValue], w: IntWidth) -> RtResult<BslVa
         });
     }
     let order = order_arg(rest.first(), d.order, op)?;
-    let p = checked_pos(pos, d.bytes.len())?;
+    let p = checked_pos(pos, d.len())?;
     let end = p.checked_add(w.bytes()).ok_or(RtError::BadIndex)?;
-    if end > d.bytes.len() {
+    if end > d.len() {
         return Err(RtError::IndexOutOfBounds {
             index: p as i64,
-            len: d.bytes.len(),
+            len: d.len(),
         });
     }
     let bad = || RtError::TypeError {
@@ -458,7 +560,7 @@ pub fn write_int(v: &BslValue, args: &[BslValue], w: IntWidth) -> RtResult<BslVa
     if value > w.max() {
         return Err(bad());
     }
-    d.bytes[p..end].copy_from_slice(&w.encode(value, order));
+    d.with_bytes_mut(|b| b[p..end].copy_from_slice(&w.encode(value, order)));
     Ok(BslValue::Undefined)
 }
 
@@ -498,7 +600,7 @@ pub fn split(v: &BslValue, sep: &BslValue) -> RtResult<BslValue> {
     };
     // Разделитель и получатель могут быть ОДНИМ объектом (`Б.Разделить(Б)`),
     // а `RefCell` двух заимствований подряд не даст — копируем байты.
-    let sep_bytes = sep.borrow().bytes.clone();
+    let sep_bytes = sep.borrow().to_vec();
     let d = d.borrow();
     if sep_bytes.is_empty() {
         return Err(RtError::TypeError {
@@ -507,30 +609,29 @@ pub fn split(v: &BslValue, sep: &BslValue) -> RtResult<BslValue> {
         });
     }
     let order = d.order;
-    let mut parts = Vec::new();
-    let mut start = 0usize;
-    let mut i = 0usize;
-    while i + sep_bytes.len() <= d.bytes.len() {
-        if d.bytes[i..i + sep_bytes.len()] == sep_bytes[..] {
-            parts.push(make_part(&d.bytes[start..i], order));
-            i += sep_bytes.len();
-            start = i;
-        } else {
-            i += 1;
+    let parts = d.with_bytes(|bytes| {
+        let mut parts = Vec::new();
+        let mut start = 0usize;
+        let mut i = 0usize;
+        while i + sep_bytes.len() <= bytes.len() {
+            if bytes[i..i + sep_bytes.len()] == sep_bytes[..] {
+                parts.push(make_part(&bytes[start..i], order));
+                i += sep_bytes.len();
+                start = i;
+            } else {
+                i += 1;
+            }
         }
-    }
-    parts.push(make_part(&d.bytes[start..], order));
+        parts.push(make_part(&bytes[start..], order));
+        parts
+    });
     Ok(BslValue::new_array(parts))
 }
 
-/// Часть раскроя — самостоятельный буфер, а не вид на исходный.
+/// Часть раскроя — самостоятельный буфер, а не окно в исходный: `Разделить`
+/// отдаёт независимые части (в отличие от `ПолучитьСрез`, см. [`get_slice`]).
 fn make_part(bytes: &[u8], order: ByteOrder) -> BslValue {
-    BslValue::Object(Rc::new(BslObject::BinaryBuffer(Rc::new(RefCell::new(
-        BinBufData {
-            bytes: bytes.to_vec(),
-            order,
-        },
-    )))))
+    wrap(BinBufData::new(bytes.to_vec(), order))
 }
 
 /// `Буфер.Соединить(Другой)` -> НОВЫЙ буфер.
@@ -565,17 +666,191 @@ pub fn concat(v: &BslValue, other: &BslValue) -> RtResult<BslValue> {
     };
     // `Б.Соединить(Б)` измерено — даёт удвоенный размер, поэтому второе
     // заимствование берётся копией, а не одновременно с первым.
-    let tail = other.borrow().bytes.clone();
+    let tail = other.borrow().to_vec();
     let d = d.borrow();
-    let mut bytes = Vec::with_capacity(d.bytes.len() + tail.len());
-    bytes.extend_from_slice(&d.bytes);
+    let mut bytes = Vec::with_capacity(d.len() + tail.len());
+    d.with_bytes(|b| bytes.extend_from_slice(b));
     bytes.extend_from_slice(&tail);
-    Ok(BslValue::Object(Rc::new(BslObject::BinaryBuffer(Rc::new(
-        RefCell::new(BinBufData {
-            bytes,
-            order: d.order,
+    Ok(wrap(BinBufData::new(bytes, d.order)))
+}
+
+// --- ПолучитьСрез / Записать / Скопировать ----------------------------------
+
+/// Количество байтов из аргумента. От [`pos_of`] отличается тем, что
+/// ДРОБНОЕ отвергает, а не отбрасывает дробную часть: измерено, что
+/// `ПолучитьСрез(0, 2.5)` и `Записать(0, Буф, 2.5)` платформа не берёт, а
+/// дробную ПОЗИЦИЮ в тех же методах усекает (`ПолучитьСрез(1.9, 2)` читает
+/// с байта 1).
+fn count_of(v: &BslValue, op: &'static str) -> RtResult<usize> {
+    let bad = || RtError::TypeError {
+        expected: "Целое неотрицательное число",
+        op,
+    };
+    let n = match v {
+        BslValue::Number(n) => n,
+        _ => return Err(bad()),
+    };
+    if !n.is_integer() {
+        return Err(bad());
+    }
+    usize::try_from(to_u64(n).ok_or_else(bad)?).map_err(|_| bad())
+}
+
+/// Аргумент-буфер у методов, которые ничего другого не принимают.
+fn buffer_arg<'a>(v: &'a BslValue, op: &'static str) -> RtResult<&'a Rc<RefCell<BinBufData>>> {
+    match v {
+        BslValue::Object(o) => match &**o {
+            BslObject::BinaryBuffer(b) => Ok(b),
+            _ => Err(RtError::TypeError {
+                expected: "БуферДвоичныхДанных",
+                op,
+            }),
+        },
+        _ => Err(RtError::TypeError {
+            expected: "БуферДвоичныхДанных",
+            op,
         }),
-    )))))
+    }
+}
+
+/// `Буфер.ПолучитьСрез(Позиция[, Количество])` -> ОКНО в тот же массив.
+///
+/// Копии здесь нет и быть не должно: измерено, что правка источника видна в
+/// срезе, а правка среза — в источнике. Ради этого буфер и устроен окном
+/// (см. [`BinBufData`]). Копию отдаёт [`copy_buffer`].
+///
+/// `Количество = 0` и опущенный аргумент значат «до конца» — то же правило,
+/// что у [`invert`], и тоже измеренное (`ПолучитьСрез(0, 0)` вернул буфер
+/// целиком). Порядок байтов окно наследует от источника, но дальше пишется
+/// он у каждого свой.
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`] — получатель не буфер либо аргументов не
+/// один и не два (без аргументов платформа отвергает);
+/// [`RtError::IndexOutOfBounds`] — позиция равна размеру или больше (край
+/// строгий: срез с позиции 8 в буфере из восьми байтов отвергнут) либо
+/// количество уводит за конец; [`RtError::BadIndex`] — позиция не число или
+/// отрицательна; [`RtError::TypeError`] — количество дробное или
+/// отрицательное.
+pub fn get_slice(v: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    const OP: &str = "ПолучитьСрез";
+    let d = data(v, OP)?;
+    let d = d.borrow();
+    let (pos, count) = match args {
+        [pos] => {
+            let p = checked_pos(pos, d.len())?;
+            (p, d.len() - p)
+        }
+        [pos, count] => {
+            let p = checked_pos(pos, d.len())?;
+            let c = count_of(count, OP)?;
+            let c = if c == 0 { d.len() - p } else { c };
+            // Конец считается с проверкой переполнения: количество приходит
+            // из пользовательского текста, и `p + c` у `usize::MAX` уронил бы
+            // процесс паникой мимо `Попытка`.
+            let end = p.checked_add(c).ok_or(RtError::BadIndex)?;
+            if end > d.len() {
+                return Err(RtError::IndexOutOfBounds {
+                    index: end as i64,
+                    len: d.len(),
+                });
+            }
+            (p, c)
+        }
+        _ => {
+            return Err(RtError::MethodNotApplicable {
+                method: OP,
+                receiver: v.type_name(),
+            })
+        }
+    };
+    Ok(wrap(d.window(pos, count)))
+}
+
+/// `Буфер.Записать(Позиция, Источник[, Количество])` — блочная запись.
+///
+/// `Количество = 0` и опущенный аргумент значат «весь источник»; больше
+/// размера ИСТОЧНИКА — ошибка (измерено). Отрицательная позиция — тоже
+/// ошибка, а вот позиция ЗА КОНЦОМ приёмника ошибкой не считается: там
+/// просто ничего не пишется.
+///
+/// ЗДЕСЬ ОДНО ОСОЗНАННОЕ РАСХОЖДЕНИЕ С ПЛАТФОРМОЙ. Диапазон ПРИЁМНИКА 1С не
+/// проверяет вовсе: `Записать(2, Буф4)` в четырёхбайтовый буфер кладёт два
+/// байта в буфер и ещё два мимо него, а `Записать(9, ...)` в буфер из
+/// восьми байтов роняет клиент по SIGSEGV на завершении работы (измерено,
+/// см. шапку `tests/conformance/measure/measure-binbuf.bsl`). Правка чужой
+/// памяти по пользовательскому индексу — это дефект, а не поведение,
+/// поэтому запись ОБРЕЗАЕТСЯ по размеру приёмника: у всех строк, которые
+/// платформа пережила, результат тот же самый.
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`] — получатель не буфер либо аргументов не
+/// два и не три (четвёртого аргумента у метода нет);
+/// [`RtError::TypeError`] — источник не буфер, количество дробное или
+/// отрицательное; [`RtError::IndexOutOfBounds`] — количество больше размера
+/// источника; [`RtError::BadIndex`] — позиция не число или отрицательна.
+pub fn write_buffer(v: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    const OP: &str = "Записать";
+    let (pos, src, count_arg) = match args {
+        [pos, src] => (pos, src, None),
+        [pos, src, count] => (pos, src, Some(count)),
+        _ => {
+            return Err(RtError::MethodNotApplicable {
+                method: OP,
+                receiver: v.type_name(),
+            })
+        }
+    };
+    let d = data(v, OP)?;
+    let src = buffer_arg(src, OP)?;
+    // Оба заимствования НЕИЗМЕНЯЕМЫЕ: приёмник и источник бывают одним и тем
+    // же объектом, а сама запись идёт через внутреннюю изменяемость окна.
+    let d = d.borrow();
+    let s = src.borrow();
+    let count = match count_arg {
+        None => s.len(),
+        Some(c) => {
+            let c = count_of(c, OP)?;
+            if c == 0 {
+                s.len()
+            } else if c > s.len() {
+                return Err(RtError::IndexOutOfBounds {
+                    index: c as i64,
+                    len: s.len(),
+                });
+            } else {
+                c
+            }
+        }
+    };
+    let pos = usize::try_from(pos_of(pos)?).map_err(|_| RtError::BadIndex)?;
+    d.copy_from(pos, &s, count);
+    Ok(BslValue::Undefined)
+}
+
+/// `Буфер.Скопировать()` -> НЕЗАВИСИМЫЙ буфер с тем же содержимым.
+///
+/// Противоположность [`get_slice`]: правка копии в источнике не видна
+/// (измерено). Порядок байтов наследуется — тоже измерено, на буфере
+/// `BigEndian`.
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`] — получатель не буфер либо метод позван
+/// с аргументом (измерено: `Скопировать(2)` платформа отвергает).
+pub fn copy_buffer(v: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    const OP: &str = "Скопировать";
+    if !args.is_empty() {
+        return Err(RtError::MethodNotApplicable {
+            method: OP,
+            receiver: v.type_name(),
+        });
+    }
+    let d = data(v, OP)?;
+    let d = d.borrow();
+    Ok(wrap(BinBufData::new(d.to_vec(), d.order)))
 }
 
 // --- побитовые --------------------------------------------------------------
@@ -649,19 +924,21 @@ pub fn bitwise(v: &BslValue, args: &[BslValue], op: BitOp) -> RtResult<BslValue>
         }
     };
     // Маской может быть сам получатель — берём её копией до `borrow_mut`.
-    let mask_bytes = mask.borrow().bytes.clone();
-    let mut d = d.borrow_mut();
-    let p = checked_pos(pos, d.bytes.len())?;
+    let mask_bytes = mask.borrow().to_vec();
+    let d = d.borrow();
+    let p = checked_pos(pos, d.len())?;
     let end = p.checked_add(mask_bytes.len()).ok_or(RtError::BadIndex)?;
-    if end > d.bytes.len() {
+    if end > d.len() {
         return Err(RtError::IndexOutOfBounds {
             index: p as i64,
-            len: d.bytes.len(),
+            len: d.len(),
         });
     }
-    for (i, m) in mask_bytes.iter().enumerate() {
-        d.bytes[p + i] = op.apply(d.bytes[p + i], *m);
-    }
+    d.with_bytes_mut(|b| {
+        for (i, m) in mask_bytes.iter().enumerate() {
+            b[p + i] = op.apply(b[p + i], *m);
+        }
+    });
     Ok(BslValue::Undefined)
 }
 
@@ -681,8 +958,8 @@ pub fn bitwise(v: &BslValue, args: &[BslValue], op: BitOp) -> RtResult<BslValue>
 pub fn invert(v: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
     const OP: &str = "Инвертировать";
     let d = data(v, OP)?;
-    let mut d = d.borrow_mut();
-    let total = d.bytes.len();
+    let d = d.borrow();
+    let total = d.len();
     let (from, count) = match args {
         // Пустой буфер платформа отвергает даже без аргументов (измерено):
         // позиция 0 в нём уже не указывает ни на какой байт.
@@ -717,9 +994,11 @@ pub fn invert(v: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
             })
         }
     };
-    for b in &mut d.bytes[from..from + count] {
-        *b = !*b;
-    }
+    d.with_bytes_mut(|b| {
+        for byte in &mut b[from..from + count] {
+            *byte = !*byte;
+        }
+    });
     Ok(BslValue::Undefined)
 }
 
@@ -828,12 +1107,7 @@ pub fn binary_data_from_string(args: &[BslValue]) -> RtResult<BslValue> {
 pub fn binary_buffer_from_string(args: &[BslValue]) -> RtResult<BslValue> {
     const OP: &str = "ПолучитьБуферДвоичныхДанныхИзСтроки";
     let bytes = encode_arg(args, OP)?;
-    Ok(BslValue::Object(Rc::new(BslObject::BinaryBuffer(Rc::new(
-        RefCell::new(BinBufData {
-            bytes,
-            order: ByteOrder::Little,
-        }),
-    )))))
+    Ok(wrap(BinBufData::new(bytes, ByteOrder::Little)))
 }
 
 /// `ПолучитьСтрокуИзДвоичныхДанных(ДвоичныеДанные[, Кодировка])`.
@@ -890,7 +1164,7 @@ pub fn string_from_binary_buffer(args: &[BslValue]) -> RtResult<BslValue> {
     const OP: &str = "ПолучитьСтрокуИзБуфераДвоичныхДанных";
     let d = data(args.first().unwrap_or(&BslValue::Undefined), OP)?;
     let encoding = encoding_arg(args.get(1).unwrap_or(&BslValue::Undefined), OP)?;
-    let text = encoding.decode(&d.borrow().bytes);
+    let text = encoding.decode(&d.borrow().to_vec());
     Ok(BslValue::Str(crate::BslString::from_str(&text)))
 }
 
@@ -909,9 +1183,8 @@ mod tests {
         .expect("размер из длины среза всегда годен");
         data(&v, "тест")
             .expect("только что созданный буфер")
-            .borrow_mut()
-            .bytes
-            .copy_from_slice(bytes);
+            .borrow()
+            .with_bytes_mut(|b| b.copy_from_slice(bytes));
         v
     }
 
@@ -924,7 +1197,7 @@ mod tests {
     }
 
     fn dump(v: &BslValue) -> Vec<u8> {
-        data(v, "тест").unwrap().borrow().bytes.clone()
+        data(v, "тест").unwrap().borrow().to_vec()
     }
 
     fn as_u64(v: &BslValue) -> u64 {
@@ -1209,6 +1482,169 @@ mod tests {
         assert!(split(&b, &buf(&[])).is_err());
         assert!(split(&b, &num(1)).is_err());
         assert!(split(&b, &BslValue::Undefined).is_err());
+    }
+
+    #[test]
+    fn slice_is_a_window_into_the_same_bytes() {
+        let b = buf(&[10, 11, 12, 13, 14, 15, 16, 17]);
+        let s = get_slice(&b, &[num(2), num(3)]).unwrap();
+        assert_eq!(dump(&s), vec![12, 13, 14]);
+        // Правка источника видна в срезе, правка среза — в источнике.
+        set_byte(&b, &num(2), &num(99)).unwrap();
+        assert_eq!(dump(&s), vec![99, 13, 14]);
+        set_byte(&s, &num(0), &num(77)).unwrap();
+        assert_eq!(dump(&b), vec![10, 11, 77, 13, 14, 15, 16, 17]);
+    }
+
+    #[test]
+    fn slice_length_defaults_to_the_rest_of_the_buffer() {
+        let b = buf(&[10, 11, 12, 13]);
+        assert_eq!(dump(&get_slice(&b, &[num(2)]).unwrap()), vec![12, 13]);
+        // Ноль — «до конца», как у `Инвертировать`.
+        assert_eq!(
+            dump(&get_slice(&b, &[num(0), num(0)]).unwrap()),
+            vec![10, 11, 12, 13]
+        );
+        // Срез среза считается от окна, а не от исходного массива.
+        let inner = get_slice(
+            &get_slice(&b, &[num(1), num(3)]).unwrap(),
+            &[num(1), num(2)],
+        );
+        assert_eq!(dump(&inner.unwrap()), vec![12, 13]);
+    }
+
+    #[test]
+    fn slice_checks_its_bounds() {
+        let b = buf(&[1, 2, 3, 4]);
+        // Позиция, равная размеру, — уже за краем.
+        assert!(get_slice(&b, &[num(4)]).is_err());
+        assert!(get_slice(&b, &[num(2), num(3)]).is_err());
+        assert!(get_slice(&b, &[num(-1), num(2)]).is_err());
+        assert!(get_slice(&b, &[num(0), num(-1)]).is_err());
+        assert!(get_slice(&b, &[num(0), dec("2.5")]).is_err());
+        assert!(get_slice(&b, &[]).is_err());
+        assert!(get_slice(&b, &[num(0), num(1), num(1)]).is_err());
+        // А дробная ПОЗИЦИЯ усекается — как и у индексации.
+        assert_eq!(
+            dump(&get_slice(&b, &[dec("1.9"), num(2)]).unwrap()),
+            vec![2, 3]
+        );
+    }
+
+    #[test]
+    fn slice_gets_its_own_byte_order() {
+        let b = buf(&[1, 2, 3, 4]);
+        set_order(&b, BslValue::Enum(EnumValue::ByteOrderBig)).unwrap();
+        let s = get_slice(&b, &[num(0), num(2)]).unwrap();
+        assert_eq!(
+            get_order(&s).unwrap(),
+            BslValue::Enum(EnumValue::ByteOrderBig)
+        );
+        set_order(&s, BslValue::Enum(EnumValue::ByteOrderLittle)).unwrap();
+        assert_eq!(
+            get_order(&b).unwrap(),
+            BslValue::Enum(EnumValue::ByteOrderBig)
+        );
+    }
+
+    #[test]
+    fn write_copies_a_block_and_counts_from_the_source_start() {
+        let dst = buf(&[0, 0, 0, 0, 0, 0, 0, 0]);
+        let src = buf(&[200, 201, 202, 203]);
+        write_buffer(&dst, &[num(2), src.clone()]).unwrap();
+        assert_eq!(dump(&dst), vec![0, 0, 200, 201, 202, 203, 0, 0]);
+
+        let dst = buf(&[0, 0, 0, 0, 0, 0, 0, 0]);
+        write_buffer(&dst, &[num(0), src.clone(), num(2)]).unwrap();
+        assert_eq!(dump(&dst), vec![200, 201, 0, 0, 0, 0, 0, 0]);
+
+        // Ноль — «весь источник», а не «ничего».
+        let dst = buf(&[0, 0, 0, 0, 0, 0, 0, 0]);
+        write_buffer(&dst, &[num(0), src, num(0)]).unwrap();
+        assert_eq!(dump(&dst), vec![200, 201, 202, 203, 0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn write_truncates_at_the_end_of_the_receiver() {
+        // Платформа здесь пишет мимо буфера и падает; мы обрезаем — см.
+        // `write_buffer`. Видимый результат тот же, что у платформы там,
+        // где она уцелела.
+        let dst = buf(&[0, 0, 0, 0]);
+        write_buffer(&dst, &[num(2), buf(&[200, 201, 202, 203])]).unwrap();
+        assert_eq!(dump(&dst), vec![0, 0, 200, 201]);
+
+        let dst = buf(&[0, 0, 0, 0]);
+        write_buffer(&dst, &[num(9), buf(&[1, 2])]).unwrap();
+        assert_eq!(dump(&dst), vec![0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn write_rejects_a_bad_count_or_position() {
+        let dst = buf(&[0, 0, 0, 0]);
+        let src = buf(&[1, 2]);
+        // Количество больше размера ИСТОЧНИКА — ошибка, в отличие от
+        // выхода за конец приёмника.
+        assert!(write_buffer(&dst, &[num(0), src.clone(), num(100)]).is_err());
+        assert!(write_buffer(&dst, &[num(0), src.clone(), dec("2.5")]).is_err());
+        assert!(write_buffer(&dst, &[num(0), src.clone(), num(-1)]).is_err());
+        assert!(write_buffer(&dst, &[num(-1), src.clone()]).is_err());
+        assert!(write_buffer(&dst, &[num(0), num(5)]).is_err());
+        assert!(write_buffer(&dst, &[num(0)]).is_err());
+        assert!(write_buffer(&dst, &[num(0), src, num(1), num(1)]).is_err());
+        assert_eq!(dump(&dst), vec![0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn write_accepts_a_slice_of_the_receiver_itself() {
+        let b = buf(&[10, 11, 12, 13, 14, 15, 16, 17]);
+        let head = get_slice(&b, &[num(0), num(4)]).unwrap();
+        write_buffer(&b, &[num(4), head]).unwrap();
+        assert_eq!(dump(&b), vec![10, 11, 12, 13, 10, 11, 12, 13]);
+        // И сам себя, с перекрытием: `copy_within` это переживает.
+        let b = buf(&[1, 2, 3, 4]);
+        let head = get_slice(&b, &[num(0), num(3)]).unwrap();
+        write_buffer(&b, &[num(1), head]).unwrap();
+        assert_eq!(dump(&b), vec![1, 1, 2, 3]);
+    }
+
+    #[test]
+    fn copy_is_independent_of_the_source() {
+        let b = buf(&[1, 2, 3, 4]);
+        set_order(&b, BslValue::Enum(EnumValue::ByteOrderBig)).unwrap();
+        let c = copy_buffer(&b, &[]).unwrap();
+        assert_eq!(dump(&c), vec![1, 2, 3, 4]);
+        assert_eq!(
+            get_order(&c).unwrap(),
+            BslValue::Enum(EnumValue::ByteOrderBig)
+        );
+        set_byte(&b, &num(0), &num(99)).unwrap();
+        assert_eq!(dump(&c), vec![1, 2, 3, 4]);
+        // Копия СРЕЗА — тоже самостоятельный буфер.
+        let s = get_slice(&b, &[num(1), num(2)]).unwrap();
+        let c = copy_buffer(&s, &[]).unwrap();
+        set_byte(&b, &num(1), &num(88)).unwrap();
+        assert_eq!(dump(&c), vec![2, 3]);
+        // Аргументов метод не берёт.
+        assert!(copy_buffer(&b, &[num(2)]).is_err());
+    }
+
+    #[test]
+    fn a_slice_carries_the_whole_buffer_api() {
+        // Окно — полноценный буфер: целые, побитовые и `Разделить`
+        // считают позиции ОТ НАЧАЛА ОКНА, а не общего массива.
+        let b = buf(&[0, 0, 1, 2, 0, 0]);
+        let s = get_slice(&b, &[num(2), num(2)]).unwrap();
+        assert_eq!(size(&s).unwrap(), num(2));
+        assert_eq!(
+            as_u64(&read_int(&s, &[num(0)], IntWidth::W16).unwrap()),
+            0x0201
+        );
+        write_int(&s, &[num(0), num(0x0403)], IntWidth::W16).unwrap();
+        assert_eq!(dump(&b), vec![0, 0, 3, 4, 0, 0]);
+        invert(&s, &[]).unwrap();
+        assert_eq!(dump(&b), vec![0, 0, 252, 251, 0, 0]);
+        // Чтение за конец ОКНА — ошибка, хотя байты за ним есть.
+        assert!(read_int(&s, &[num(1)], IntWidth::W16).is_err());
     }
 
     #[test]

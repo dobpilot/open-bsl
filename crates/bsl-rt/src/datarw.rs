@@ -812,10 +812,7 @@ pub fn read_into_buffer(v: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
 /// по умолчанию `LittleEndian`, как у `Новый БуферДвоичныхДанных`.
 fn buffer_of_bytes(bytes: Vec<u8>) -> BslValue {
     BslValue::Object(Rc::new(BslObject::BinaryBuffer(Rc::new(RefCell::new(
-        BinBufData {
-            bytes,
-            order: ByteOrder::Little,
-        },
+        BinBufData::new(bytes, ByteOrder::Little),
     )))))
 }
 
@@ -1251,7 +1248,7 @@ mod tests {
     fn bytes_of(b: &BslValue) -> Vec<u8> {
         match b {
             BslValue::Object(o) => match &**o {
-                BslObject::BinaryBuffer(d) => d.borrow().bytes.clone(),
+                BslObject::BinaryBuffer(d) => d.borrow().to_vec(),
                 _ => panic!("не буфер"),
             },
             _ => panic!("не буфер"),
