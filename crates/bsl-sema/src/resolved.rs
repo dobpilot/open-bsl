@@ -130,6 +130,18 @@ pub enum RExpr {
     NewDomDocument,
     /// `Новый ЗаписьDOM` — сериализатор дерева в `ЗаписьXML`.
     NewDomWriter,
+    /// `Новый ПостроительСхемXML` — разбирает дерево DOM в `СхемаXML`.
+    NewXsBuilder,
+    /// `Новый СхемаXML` — пустая схема.
+    NewXmlSchema,
+    /// `Новый НаборСхемXML` — схемы по одной на пространство имён.
+    NewXmlSchemaSet,
+    /// `Новый РасширенноеИмяXML(URI, ЛокальноеИмя)` — ровно два аргумента
+    /// (измерено: одноаргументную форму платформа отвергает).
+    NewXmlExpandedName {
+        uri: Box<RExpr>,
+        local: Box<RExpr>,
+    },
     NewXmlWriterSettings {
         encoding: Box<RExpr>,
         version: Box<RExpr>,
@@ -400,7 +412,13 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
         | RExpr::NewDomBuilder
         | RExpr::NewDomDocument
         | RExpr::NewDomWriter
+        | RExpr::NewXsBuilder
+        | RExpr::NewXmlSchema
+        | RExpr::NewXmlSchemaSet
         | RExpr::NewFileStreamsManager => false,
+        RExpr::NewXmlExpandedName { uri, local } => {
+            expr_uses_dynamic(uri) || expr_uses_dynamic(local)
+        }
         RExpr::NewXmlWriterSettings {
             encoding,
             version,

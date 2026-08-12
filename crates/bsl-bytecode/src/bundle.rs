@@ -450,7 +450,15 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
         | Instr::NewXmlWriter { dst }
         | Instr::NewDomBuilder { dst }
         | Instr::NewDomDocument { dst }
-        | Instr::NewDomWriter { dst } => {
+        | Instr::NewDomWriter { dst }
+        | Instr::NewXsBuilder { dst }
+        | Instr::NewXmlSchema { dst }
+        | Instr::NewXmlSchemaSet { dst } => {
+            write!(dst);
+        }
+        Instr::NewXmlExpandedName { dst, uri, local } => {
+            read!(uri);
+            read!(local);
             write!(dst);
         }
         Instr::NewTypeDescription { dst, names } => {

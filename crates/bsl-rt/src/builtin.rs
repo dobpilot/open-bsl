@@ -760,6 +760,11 @@ pub enum BuiltinMethod {
     /// `ЭлементDOM.УдалитьУзелАтрибута(Атрибут)` -> удалённый атрибут.
     DomRemoveAttributeNode,
 
+    // --- объектная модель XML-схемы ------------------------------------
+    /// `ПостроительСхемXML.СоздатьСхемуXML(ДокументDOM | ЭлементDOM)` ->
+    /// `СхемаXML` либо `Неопределено`, если корень — не схема.
+    CreateXmlSchema,
+
     // --- ТекстовыйДокумент ---------------------------------------------
     // `Прочитать`, `Записать` и `Очистить` переиспользуются: у платформы
     // это те же имена, что у JSON/XML/ЗаписьТекста, а смысл выбирается по
@@ -1169,6 +1174,8 @@ pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
     ("SetAttributeNode", BuiltinMethod::DomSetAttributeNode),
     ("УдалитьУзелАтрибута", BuiltinMethod::DomRemoveAttributeNode),
     ("RemoveAttributeNode", BuiltinMethod::DomRemoveAttributeNode),
+    ("СоздатьСхемуXML", BuiltinMethod::CreateXmlSchema),
+    ("CreateXMLSchema", BuiltinMethod::CreateXmlSchema),
 ];
 
 impl BuiltinMethod {
@@ -1621,6 +1628,10 @@ pub fn call_builtin_method(
             _ if crate::spreadsheet::is_drawings(obj) => {
                 crate::spreadsheet::drawings_add(obj, args)
             }
+            // `НаборСхемXML.Добавить(Схема)` — процедура: та же схема
+            // второй раз проходит молча, а другая схема того же
+            // пространства имён — ошибка (измерено).
+            _ if crate::xsd::is_schema_set(obj) => crate::xsd::schema_set_add(obj, args),
             [] => obj.table_add_row(),
             [v] => match obj.push_element(v.clone()) {
                 Ok(()) => Ok(BslValue::Undefined),
@@ -1669,9 +1680,42 @@ pub fn call_builtin_method(
         // `Получить` полиморфен: у `Соответствие` это чтение по ключу, у
         // буфера — байт по позиции (измерено, что `Буфер.Получить(0)`
         // делает ровно то же, что `Буфер[0]`).
+        // Арность `Получить` резолвер больше не проверяет (у именованной
+        // коллекции компонент схемы есть форма из двух аргументов), поэтому
+        // однозначные получатели проверяют её здесь сами: `Получить()` без
+        // аргументов обязано стать понятной ошибкой, а не паникой на
+        // `args[0]`.
         BuiltinMethod::Get => match obj {
-            BslValue::Object(o) if matches!(&**o, BslObject::Map(_)) => obj.map_get(&args[0]),
-            _ if crate::binbuf::is_buffer(obj) => crate::binbuf::get_byte(obj, &args[0]),
+            BslValue::Object(o) if matches!(&**o, BslObject::XsList(..)) => {
+                crate::xsd::list_lookup(obj, args)
+            }
+            BslValue::Object(o) if matches!(&**o, BslObject::XsSchemaSet(_)) => match args {
+                [BslValue::Number(n)] => {
+                    let i = n
+                        .to_i64_exact()
+                        .and_then(|v| usize::try_from(v).ok())
+                        .ok_or(RtError::BadIndex)?;
+                    crate::xsd::schema_set_get(obj, i)
+                }
+                _ => Err(RtError::MethodNotApplicable {
+                    method: "Получить",
+                    receiver: obj.type_name(),
+                }),
+            },
+            BslValue::Object(o) if matches!(&**o, BslObject::Map(_)) => match args {
+                [key] => obj.map_get(key),
+                _ => Err(RtError::MethodNotApplicable {
+                    method: "Получить",
+                    receiver: obj.type_name(),
+                }),
+            },
+            _ if crate::binbuf::is_buffer(obj) => match args {
+                [pos] => crate::binbuf::get_byte(obj, pos),
+                _ => Err(RtError::MethodNotApplicable {
+                    method: "Получить",
+                    receiver: obj.type_name(),
+                }),
+            },
             _ => Err(RtError::MethodNotApplicable {
                 method: "Получить",
                 receiver: obj.type_name(),
@@ -2029,6 +2073,7 @@ pub fn call_builtin_method(
         BuiltinMethod::DomRemoveAttribute => crate::dom::remove_attribute(obj, args),
         BuiltinMethod::DomSetAttributeNode => crate::dom::set_attribute_node(obj, args),
         BuiltinMethod::DomRemoveAttributeNode => crate::dom::remove_attribute_node(obj, args),
+        BuiltinMethod::CreateXmlSchema => crate::xsd::create_schema(obj, args),
         BuiltinMethod::WriteXmlDeclaration => {
             crate::xml::write_declaration(obj)?;
             Ok(BslValue::Undefined)

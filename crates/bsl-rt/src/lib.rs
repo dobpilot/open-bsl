@@ -34,6 +34,7 @@ mod tz;
 mod vstr;
 mod xlsx;
 mod xml;
+mod xsd;
 mod zip;
 
 use std::cmp::Ordering;
@@ -173,6 +174,12 @@ pub enum RtError {
     /// документа при записи (атрибут после текста). Отдельно от
     /// [`RtError::Json`] — чтобы по типу ошибки было видно, чей это слой.
     Xml(String),
+    /// Объектная модель XML-схемы: конструкция XSD, которой эта модель не
+    /// знает, битая ссылка или неверный аргумент разбора. Отдельно от
+    /// [`RtError::Xml`] по той же причине, по какой тот отделён от JSON:
+    /// разбор схемы — свой слой поверх готового дерева DOM, и по типу
+    /// ошибки должно быть видно, чей это отказ.
+    Xsd(String),
     /// `ТекстовыйДокумент`: области макета и его параметры. Отдельно от
     /// [`RtError::Xml`] — слой другой, и по типу ошибки это должно быть
     /// видно.
@@ -268,6 +275,7 @@ impl fmt::Display for RtError {
             RtError::UnknownProperty(name) => write!(f, "свойство «{name}» не найдено"),
             RtError::Json(msg) => write!(f, "{msg}"),
             RtError::Xml(msg) => write!(f, "{msg}"),
+            RtError::Xsd(msg) => write!(f, "{msg}"),
             RtError::TextDoc(msg) => write!(f, "{msg}"),
             RtError::Spread(msg) => write!(f, "{msg}"),
             RtError::Vstr(msg) => write!(f, "{msg}"),
@@ -315,6 +323,13 @@ fn enum_kind_type_id(kind: EnumKind) -> TypeId {
         EnumKind::FileOpenMode => TypeId::FileOpenMode,
         EnumKind::FileAccess => TypeId::FileAccess,
         EnumKind::StreamPosition => TypeId::StreamPosition,
+        EnumKind::XsComponentType => TypeId::XsComponentType,
+        EnumKind::XsForm => TypeId::XsForm,
+        EnumKind::XsSimpleTypeVariety => TypeId::XsSimpleTypeVariety,
+        EnumKind::XsModelGroupKind => TypeId::XsModelGroupKind,
+        EnumKind::XsDerivationMethod => TypeId::XsDerivationMethod,
+        EnumKind::XsValueConstraint => TypeId::XsValueConstraint,
+        EnumKind::XsWhitespaceHandling => TypeId::XsWhitespaceHandling,
     }
 }
 
@@ -389,6 +404,17 @@ impl BslValue {
                     crate::dom::DomListKind::Nodes(_) => "СписокУзловDOM",
                     crate::dom::DomListKind::Attributes(_) => "КоллекцияАтрибутовDOM",
                     crate::dom::DomListKind::Elements(_) => "СписокЭлементовDOM",
+                },
+                // Имена значений модели схемы живут одной таблицей в
+                // `xsd.rs` — рядом с их `ТипЗнч()`, чтобы не разъезжались.
+                obj @ (BslObject::XsBuilder
+                | BslObject::XsSchemaSet(_)
+                | BslObject::XsComponent(..)
+                | BslObject::XsList(..)
+                | BslObject::XmlExpandedName(_)
+                | BslObject::XmlExpandedNameList(_)) => match crate::xsd::type_name_of(obj) {
+                    Some(name) => name,
+                    None => unreachable!("вид проверен объемлющим match"),
                 },
                 BslObject::SpreadDocument(_) => "ТабличныйДокумент",
                 BslObject::SpreadDrawings(_) => "КоллекцияРисунковТабличногоДокумента",
@@ -1161,6 +1187,9 @@ impl BslValue {
                 // Сам узел и построитель заполненности не имеют вовсе (см.
                 // ниже).
                 BslObject::DomList(kind, _) => !kind.is_empty(),
+                // Коллекции модели схемы — по тому же критерию длины.
+                BslObject::XsList(_, kind) => !kind.is_empty(),
+                BslObject::XmlExpandedNameList(names) => !names.is_empty(),
                 // ИЗМЕРЕНО, и для потока, и для менеджера:
                 // `ЗначениеЗаполнено` от них платформа отвергает — это
                 // ошибка, а не «Да»/«Нет». Поток снят фикстурой
@@ -1181,7 +1210,14 @@ impl BslValue {
                 | BslObject::DataReadResult(..)
                 | BslObject::DomBuilder
                 | BslObject::DomWriter
-                | BslObject::DomNode(..) => {
+                | BslObject::DomNode(..)
+                // Модель схемы устроена так же: коллекции судятся по длине
+                // (выше), а компонента, построитель, набор схем и
+                // расширенное имя заполненности не имеют.
+                | BslObject::XsBuilder
+                | BslObject::XsSchemaSet(..)
+                | BslObject::XsComponent(..)
+                | BslObject::XmlExpandedName(..) => {
                     return Err(RtError::TypeError {
                         expected: "Значение, у которого есть признак заполненности",
                         op: "ЗначениеЗаполнено",
@@ -1267,6 +1303,15 @@ impl BslValue {
                     crate::dom::DomListKind::Nodes(_) => TypeId::DomNodeList,
                     crate::dom::DomListKind::Attributes(_) => TypeId::DomAttributeMap,
                     crate::dom::DomListKind::Elements(_) => TypeId::DomElementList,
+                },
+                obj @ (BslObject::XsBuilder
+                | BslObject::XsSchemaSet(_)
+                | BslObject::XsComponent(..)
+                | BslObject::XsList(..)
+                | BslObject::XmlExpandedName(_)
+                | BslObject::XmlExpandedNameList(_)) => match crate::xsd::type_id_of(obj) {
+                    Some(id) => id,
+                    None => unreachable!("вид проверен объемлющим match"),
                 },
             },
             BslValue::Skipped => {
@@ -1409,6 +1454,40 @@ impl BslValue {
     /// приходят аргументами `Записать`.
     pub fn new_dom_writer() -> Self {
         dom::new_writer()
+    }
+
+    /// `Новый ПостроительСхемXML` — схему целиком строит его
+    /// `СоздатьСхемуXML`, состояния у построителя нет.
+    pub fn new_xs_builder() -> Self {
+        xsd::new_builder()
+    }
+
+    /// `Новый СхемаXML` — пустая схема: все коллекции пусты, а
+    /// `ЭлементDOM` — `Неопределено` (измерено).
+    pub fn new_xml_schema() -> Self {
+        xsd::new_schema()
+    }
+
+    /// `Новый НаборСхемXML`.
+    pub fn new_xml_schema_set() -> Self {
+        xsd::new_schema_set()
+    }
+
+    /// `Новый РасширенноеИмяXML(URI, ЛокальноеИмя)` — ровно два аргумента,
+    /// оба строки (измерено: одноаргументная форма отвергается).
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::TypeError`], если аргумент не строка.
+    pub fn new_expanded_name(uri: &BslValue, local: &BslValue) -> RtResult<Self> {
+        let text = |v: &BslValue| match v {
+            BslValue::Str(s) => Ok(s.to_string()),
+            _ => Err(RtError::TypeError {
+                expected: "Строка",
+                op: "Новый РасширенноеИмяXML",
+            }),
+        };
+        Ok(xsd::new_expanded_name(&text(uri)?, &text(local)?))
     }
 
     /// `Новый ПараметрыЗаписиXML([Кодировка][, Версия][, ИспользоватьОтступ])`.
@@ -1953,6 +2032,16 @@ impl BslValue {
                     })?;
                     Ok(dom::node_value(&node, doc))
                 }
+                // Индекс за границей у коллекций модели схемы — тоже
+                // ошибка, а не `Неопределено`: измерено на `Фасеты[9]`,
+                // `ОбъявленияЭлементов[9]` и `Набор[5]`.
+                BslObject::XsList(schema, kind) => {
+                    xsd::list_get(schema, kind, Self::index_as_usize(idx)?)
+                }
+                BslObject::XmlExpandedNameList(names) => {
+                    xsd::name_list_get(names, Self::index_as_usize(idx)?)
+                }
+                BslObject::XsSchemaSet(_) => xsd::schema_set_get(self, Self::index_as_usize(idx)?),
                 _ => Err(RtError::NotIndexable),
             },
             _ => Err(RtError::NotIndexable),
@@ -2017,6 +2106,15 @@ impl BslValue {
                 BslObject::DomBuilder | BslObject::DomWriter | BslObject::DomNode(..) => {
                     Err(RtError::NotIndexable)
                 }
+                // Коллекции модели схемы — настоящие коллекции: и
+                // `Количество()`, и `Для Каждого` по ним измерены; набор
+                // схем тоже обходится (`Для Каждого С Из Наб`).
+                BslObject::XsList(_, kind) => Ok(kind.len()),
+                BslObject::XmlExpandedNameList(names) => Ok(names.len()),
+                BslObject::XsSchemaSet(list) => Ok(list.borrow().len()),
+                BslObject::XsBuilder
+                | BslObject::XsComponent(..)
+                | BslObject::XmlExpandedName(..) => Err(RtError::NotIndexable),
                 BslObject::TextWriter(..)
                 | BslObject::JsonReader(..)
                 | BslObject::JsonWriter(..)
@@ -2491,6 +2589,9 @@ impl BslValue {
                 BslObject::SpreadDrawing(data, i) => spreadsheet::drawing_property(data, *i, name),
                 BslObject::TextDocParams(_) => textdoc::get_parameter(self, name),
                 BslObject::DomNode(..) => dom::get_property(self, name),
+                BslObject::XsComponent(..) | BslObject::XmlExpandedName(_) => {
+                    xsd::get_property(self, name)
+                }
                 BslObject::KeyValuePair(k, v) => {
                     if name.eq_ignore_ascii_case("Ключ") || name.eq_ignore_ascii_case("Key") {
                         Ok(k.clone())
@@ -3222,6 +3323,18 @@ impl PartialEq for BslValue {
                 // обращения к `ДочерниеУзлы` дают «Нет», поэтому у
                 // `DomList` такой ветки НЕТ намеренно.
                 (BslObject::DomNode(x, _), BslObject::DomNode(y, _)) => Rc::ptr_eq(x, y),
+                // Компоненты схемы — ССЫЛКИ на место в модели: обёртка
+                // каждый раз новая, а равенство идёт по паре «та же схема,
+                // тот же узел». ИЗМЕРЕНО: два `Получить("root")` равны, а
+                // схемы, построенные двумя вызовами из одного дерева, —
+                // нет.
+                (BslObject::XsComponent(a, i), BslObject::XsComponent(b, j)) => {
+                    i == j && Rc::ptr_eq(a, b)
+                }
+                // Расширенное имя — ЗНАЧЕНИЕ: два отдельно построенных
+                // имени с одинаковыми URI и локальным именем равны
+                // (измерено).
+                (BslObject::XmlExpandedName(x), BslObject::XmlExpandedName(y)) => x == y,
                 _ => false,
             },
             _ => false,
@@ -3380,6 +3493,19 @@ impl fmt::Display for BslValue {
                 BslObject::DataReader(_) => write!(f, "ЧтениеДанных"),
                 BslObject::DataWriter(_) => write!(f, "ЗаписьДанных"),
                 BslObject::DataReadResult(_) => write!(f, "РезультатЧтенияДанных"),
+                // Расширенное имя — единственное значение модели схемы,
+                // которое печатается СОДЕРЖИМЫМ, а не именем типа:
+                // `{urn:t}а`, а при пустом URI — одно локальное имя
+                // (измерено).
+                BslObject::XmlExpandedName(n) => write!(f, "{}", n.display_text()),
+                obj @ (BslObject::XsBuilder
+                | BslObject::XsSchemaSet(_)
+                | BslObject::XsComponent(..)
+                | BslObject::XsList(..)
+                | BslObject::XmlExpandedNameList(_)) => match crate::xsd::type_name_of(obj) {
+                    Some(name) => write!(f, "{name}"),
+                    None => unreachable!("вид проверен объемлющим match"),
+                },
             },
             // Никогда не должно реально дойти до печати (см. doc comment
             // на варианте) — но `Display` обязан быть тотальным.

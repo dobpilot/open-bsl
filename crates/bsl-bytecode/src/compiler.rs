@@ -659,6 +659,27 @@ impl<'a> Compiler<'a> {
             RExpr::NewDomWriter => {
                 self.emit(Instr::NewDomWriter { dst });
             }
+            RExpr::NewXsBuilder => {
+                self.emit(Instr::NewXsBuilder { dst });
+            }
+            RExpr::NewXmlSchema => {
+                self.emit(Instr::NewXmlSchema { dst });
+            }
+            RExpr::NewXmlSchemaSet => {
+                self.emit(Instr::NewXmlSchemaSet { dst });
+            }
+            RExpr::NewXmlExpandedName { uri, local } => {
+                let uri_reg = self.alloc_temp()?;
+                self.compile_expr(uri, uri_reg)?;
+                let local_reg = self.alloc_temp()?;
+                self.compile_expr(local, local_reg)?;
+                self.emit(Instr::NewXmlExpandedName {
+                    dst,
+                    uri: uri_reg,
+                    local: local_reg,
+                });
+                self.free_temp(2);
+            }
             RExpr::NewXmlReader => {
                 self.emit(Instr::NewXmlReader { dst });
             }

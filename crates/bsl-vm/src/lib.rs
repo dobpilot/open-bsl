@@ -1140,6 +1140,10 @@ fn step(
             | Instr::NewDomBuilder { .. }
             | Instr::NewDomDocument { .. }
             | Instr::NewDomWriter { .. }
+            | Instr::NewXsBuilder { .. }
+            | Instr::NewXmlSchema { .. }
+            | Instr::NewXmlSchemaSet { .. }
+            | Instr::NewXmlExpandedName { .. }
             | Instr::NewXmlWriterSettings { .. }
             | Instr::NewTextWriter { .. }
             | Instr::NewBinaryBuffer { .. }
@@ -1354,6 +1358,29 @@ fn step_cold(
         Instr::NewDomWriter { dst } => {
             let d = frames[frame_idx].reg_index(dst);
             reg_store(stack, d, BslValue::new_dom_writer())?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewXsBuilder { dst } => {
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, BslValue::new_xs_builder())?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewXmlSchema { dst } => {
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, BslValue::new_xml_schema())?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewXmlSchemaSet { dst } => {
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, BslValue::new_xml_schema_set())?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewXmlExpandedName { dst, uri, local } => {
+            let uri = reg_load(stack, frames[frame_idx].reg_index(uri))?;
+            let local = reg_load(stack, frames[frame_idx].reg_index(local))?;
+            let name = BslValue::new_expanded_name(&uri, &local)?;
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, name)?;
             frames[frame_idx].pc += 1;
         }
         Instr::NewXmlWriterSettings {

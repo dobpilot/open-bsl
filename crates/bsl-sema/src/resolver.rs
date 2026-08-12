@@ -327,6 +327,18 @@ pub const NEW_TYPES: &[&str] = &[
     "DOMDocument",
     "ЗаписьDOM",
     "DOMWriter",
+    // Объектная модель XML-схемы. Все написания ИЗМЕРЕНЫ через `Тип(...)`
+    // и `Новый`: английские имена у трёх первых есть, а `РасширенноеИмяXML`
+    // строится РОВНО двумя аргументами (URI и локальное имя) —
+    // одноаргументную форму платформа отвергает.
+    "ПостроительСхемXML",
+    "XMLSchemaBuilder",
+    "СхемаXML",
+    "XMLSchema",
+    "НаборСхемXML",
+    "XMLSchemaSet",
+    "РасширенноеИмяXML",
+    "XMLExpandedName",
     "ПараметрыЗаписиXML",
     "XMLWriterSettings",
     "ТекстовыйДокумент",
@@ -1001,6 +1013,55 @@ impl<'a> Resolver<'a> {
                 }
                 Ok(RExpr::NewDomWriter)
             }
+            // Аргументов нет ни у построителя схем, ни у пустой схемы,
+            // ни у набора: `Новый ПостроительСхемXML("x")`, `Новый
+            // СхемаXML("urn:test")` и `Новый НаборСхемXML("x")` платформа
+            // отвергает (измерено все три).
+            "ПОСТРОИТЕЛЬСХЕМXML" | "XMLSCHEMABUILDER" => {
+                if !args.is_empty() {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый ПостроительСхемXML".to_string(),
+                        expected: 0,
+                        found: args.len(),
+                    });
+                }
+                Ok(RExpr::NewXsBuilder)
+            }
+            "СХЕМАXML" | "XMLSCHEMA" => {
+                if !args.is_empty() {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый СхемаXML".to_string(),
+                        expected: 0,
+                        found: args.len(),
+                    });
+                }
+                Ok(RExpr::NewXmlSchema)
+            }
+            "НАБОРСХЕМXML" | "XMLSCHEMASET" => {
+                if !args.is_empty() {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый НаборСхемXML".to_string(),
+                        expected: 0,
+                        found: args.len(),
+                    });
+                }
+                Ok(RExpr::NewXmlSchemaSet)
+            }
+            // Ровно два аргумента: URI и локальное имя (измерено, что
+            // одноаргументная форма и форма без аргументов отвергаются).
+            "РАСШИРЕННОЕИМЯXML" | "XMLEXPANDEDNAME" => {
+                if args.len() != 2 {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый РасширенноеИмяXML".to_string(),
+                        expected: 2,
+                        found: args.len(),
+                    });
+                }
+                Ok(RExpr::NewXmlExpandedName {
+                    uri: Box::new(self.resolve_expr(&args[0])?),
+                    local: Box::new(self.resolve_expr(&args[1])?),
+                })
+            }
             "ЗАПИСЬXML" | "XMLWRITER" => {
                 if !args.is_empty() {
                     return Err(SemaError::ArgumentCountMismatch {
@@ -1203,7 +1264,16 @@ impl<'a> Resolver<'a> {
                     // аргумент платформа отвергает (проба
                     // `BIN.SIZE.EXTRAARG`) — арность фиксированная.
                     bsl_rt::BuiltinMethod::Size => Some(0),
-                    bsl_rt::BuiltinMethod::Delete | bsl_rt::BuiltinMethod::Get => Some(1),
+                    bsl_rt::BuiltinMethod::Delete => Some(1),
+                    // `Получить` полиморфен, как и `Добавить`: у
+                    // `Соответствие` и буфера это один аргумент, а у
+                    // именованной коллекции компонент схемы — ещё и пара
+                    // (URI, имя) (измерено). Арность решает рантайм.
+                    bsl_rt::BuiltinMethod::Get => None,
+                    // `СоздатьСхемуXML` — строго один аргумент: ни без
+                    // аргументов, ни с двумя платформа его не берёт
+                    // (измерено).
+                    bsl_rt::BuiltinMethod::CreateXmlSchema => Some(1),
                     // Методы буфера. `Установить` и побитовые — строго два
                     // аргумента, `Разделить`/`Соединить` — один (измерено:
                     // ни без аргументов, ни с двумя платформа их не берёт).

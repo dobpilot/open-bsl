@@ -130,6 +130,70 @@ pub enum EnumValue {
     StreamPositionBegin,
     StreamPositionCurrent,
     StreamPositionEnd,
+
+    // --- ТипКомпонентыXS ---------------------------------------------------
+    // Заведены ВСЕ члены, которые платформа признала (перебором имён из
+    // словаря `xml2.so`), а не только те, что отдаёт наша модель: член,
+    // который есть у платформы, обязан сравниваться и здесь.
+    XsCompSchema,
+    XsCompElementDeclaration,
+    XsCompAttributeDeclaration,
+    XsCompSimpleTypeDefinition,
+    XsCompComplexTypeDefinition,
+    XsCompParticle,
+    XsCompModelGroup,
+    XsCompAttributeUse,
+    XsCompModelGroupDefinition,
+    XsCompAttributeGroupDefinition,
+    XsCompNotationDeclaration,
+    XsCompAnnotation,
+    XsCompDocumentation,
+    XsCompAppInfo,
+    XsCompWildcard,
+    XsCompImport,
+    XsCompInclude,
+    XsCompRedefine,
+    XsCompLengthFacet,
+    XsCompMinLengthFacet,
+    XsCompMaxLengthFacet,
+    XsCompPatternFacet,
+    XsCompEnumerationFacet,
+    XsCompWhitespaceFacet,
+    XsCompTotalDigitsFacet,
+    XsCompFractionDigitsFacet,
+    XsCompMinInclusiveFacet,
+    XsCompMaxInclusiveFacet,
+    XsCompMinExclusiveFacet,
+    XsCompMaxExclusiveFacet,
+    XsCompIdentityConstraintDefinition,
+    XsCompXPathDefinition,
+
+    // --- ФормаПредставленияXS ---------------------------------------------
+    XsFormQualified,
+    XsFormUnqualified,
+
+    // --- ВариантПростогоТипаXS --------------------------------------------
+    XsVarietyAtomic,
+    XsVarietyList,
+    XsVarietyUnion,
+
+    // --- ВидГруппыМоделиXS -------------------------------------------------
+    XsGroupSequence,
+    XsGroupChoice,
+    XsGroupAll,
+
+    // --- МетодНаследованияXS -----------------------------------------------
+    XsDerivationExtension,
+    XsDerivationRestriction,
+
+    // --- ОграничениеЗначенияXS ---------------------------------------------
+    XsConstraintDefault,
+    XsConstraintFixed,
+
+    // --- ОбработкаПробельныхСимволовXS -------------------------------------
+    XsWhitespacePreserve,
+    XsWhitespaceReplace,
+    XsWhitespaceCollapse,
 }
 
 /// К какому перечислению принадлежит член — это же имя стоит слева от
@@ -173,6 +237,29 @@ pub enum EnumKind {
     /// самого перечисления — `PositionInStream`, а не `StreamPosition`:
     /// измерено.
     StreamPosition,
+
+    // --- перечисления объектной модели XML-схемы ------------------------
+    // Английские написания САМИХ перечислений измерены через `Тип(...)`:
+    // `XSComponentType`, `XSForm`, `XSSimpleTypeVariety`,
+    // `XSDerivationMethod`, `XSWhitespaceHandling` — есть, а вот у
+    // `ВидГруппыМоделиXS` и `ОграничениеЗначенияXS` английского имени НЕТ
+    // (`XSModelGroupType` и `XSValueConstraint` платформа не знает), и
+    // тогда вторым написанием стоит то же русское.
+    /// `ТипКомпонентыXS` — вид компоненты схемы; его отдаёт свойство
+    /// `ТипКомпоненты` у каждой компоненты.
+    XsComponentType,
+    /// `ФормаПредставленияXS` — `elementFormDefault`/`form`.
+    XsForm,
+    /// `ВариантПростогоТипаXS` — `Атомарная`/`Список`/`Объединение`.
+    XsSimpleTypeVariety,
+    /// `ВидГруппыМоделиXS` — `Последовательность`/`Выбор`/`Все`.
+    XsModelGroupKind,
+    /// `МетодНаследованияXS` — `Расширение`/`Ограничение`.
+    XsDerivationMethod,
+    /// `ОграничениеЗначенияXS` — вид значения по умолчанию у объявления.
+    XsValueConstraint,
+    /// `ОбработкаПробельныхСимволовXS` — значение фасета `whiteSpace`.
+    XsWhitespaceHandling,
 }
 
 impl EnumKind {
@@ -197,6 +284,15 @@ impl EnumKind {
             EnumKind::FileOpenMode => ("РежимОткрытияФайла", "FileOpenMode"),
             EnumKind::FileAccess => ("ДоступКФайлу", "FileAccess"),
             EnumKind::StreamPosition => ("ПозицияВПотоке", "PositionInStream"),
+            EnumKind::XsComponentType => ("ТипКомпонентыXS", "XSComponentType"),
+            EnumKind::XsForm => ("ФормаПредставленияXS", "XSForm"),
+            EnumKind::XsSimpleTypeVariety => ("ВариантПростогоТипаXS", "XSSimpleTypeVariety"),
+            EnumKind::XsModelGroupKind => ("ВидГруппыМоделиXS", "ВидГруппыМоделиXS"),
+            EnumKind::XsDerivationMethod => ("МетодНаследованияXS", "XSDerivationMethod"),
+            EnumKind::XsValueConstraint => ("ОграничениеЗначенияXS", "ОграничениеЗначенияXS"),
+            EnumKind::XsWhitespaceHandling => {
+                ("ОбработкаПробельныхСимволовXS", "XSWhitespaceHandling")
+            }
         }
     }
 
@@ -228,6 +324,16 @@ impl EnumKind {
             EnumKind::FileOpenMode => "ПеречислениеРежимОткрытияФайла",
             EnumKind::FileAccess => "ПеречислениеДоступКФайлу",
             EnumKind::StreamPosition => "ПеречислениеПозицияВПотоке",
+            // Перечисления модели схемы — тот же префикс по образцу, под
+            // тем же маркером `JSON.ENUM.BARE_NAME`: голое имя ни у одного
+            // из них не мерилось.
+            EnumKind::XsComponentType => "ПеречислениеТипКомпонентыXS",
+            EnumKind::XsForm => "ПеречислениеФормаПредставленияXS",
+            EnumKind::XsSimpleTypeVariety => "ПеречислениеВариантПростогоТипаXS",
+            EnumKind::XsModelGroupKind => "ПеречислениеВидГруппыМоделиXS",
+            EnumKind::XsDerivationMethod => "ПеречислениеМетодНаследованияXS",
+            EnumKind::XsValueConstraint => "ПеречислениеОграничениеЗначенияXS",
+            EnumKind::XsWhitespaceHandling => "ПеречислениеОбработкаПробельныхСимволовXS",
         }
     }
 
@@ -762,6 +868,348 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "End",
         "Конец",
     ),
+    // --- перечисления модели схемы -----------------------------------------
+    // Английские написания ЧЛЕНОВ ИЗМЕРЕНЫ перебором всех сорока семи:
+    // платформа принимает `ФормаПредставленияXS.Qualified`,
+    // `ТипКомпонентыXS.MinInclusiveFacet` и так далее. Пятая колонка — то,
+    // что печатает `Строка()`: у `ТипКомпонентыXS` это человеческий текст с
+    // пробелами, у остальных совпадает с русским идентификатором, кроме
+    // `ПоУмолчанию` -> «По умолчанию».
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompSchema,
+        "Схема",
+        "Schema",
+        "Схема",
+    ),
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompElementDeclaration,
+        "ОбъявлениеЭлемента",
+        "ElementDeclaration",
+        "Объявление элемента",
+    ),
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompAttributeDeclaration,
+        "ОбъявлениеАтрибута",
+        "AttributeDeclaration",
+        "Объявление атрибута",
+    ),
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompSimpleTypeDefinition,
+        "ОпределениеПростогоТипа",
+        "SimpleTypeDefinition",
+        "Определение простого типа",
+    ),
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompComplexTypeDefinition,
+        "ОпределениеСоставногоТипа",
+        "ComplexTypeDefinition",
+        "Определение составного типа",
+    ),
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompParticle,
+        "Фрагмент",
+        "Particle",
+        "Фрагмент",
+    ),
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompModelGroup,
+        "ГруппаМодели",
+        "ModelGroup",
+        "Группа модели",
+    ),
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompAttributeUse,
+        "ИспользованиеАтрибута",
+        "AttributeUse",
+        "Использование атрибута",
+    ),
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompModelGroupDefinition,
+        "ОпределениеГруппыМодели",
+        "ModelGroupDefinition",
+        "Определение группы модели",
+    ),
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompAttributeGroupDefinition,
+        "ОпределениеГруппыАтрибутов",
+        "AttributeGroupDefinition",
+        "Определение группы атрибутов",
+    ),
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompNotationDeclaration,
+        "ОбъявлениеНотации",
+        "NotationDeclaration",
+        "Объявление нотации",
+    ),
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompAnnotation,
+        "Аннотация",
+        "Annotation",
+        "Аннотация",
+    ),
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompDocumentation,
+        "Документация",
+        "Documentation",
+        "Документация",
+    ),
+    // Имя члена — `ИнформацияПриложения`, хотя тип называется
+    // `ИнформацияДляПриложенияXS`: `ТипКомпонентыXS.ИнформацияДляПриложения`
+    // платформа отвергает (измерено).
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompAppInfo,
+        "ИнформацияПриложения",
+        "AppInfo",
+        "Информация приложения",
+    ),
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompWildcard,
+        "Маска",
+        "Wildcard",
+        "Маска",
+    ),
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompImport,
+        "Импорт",
+        "Import",
+        "Импорт",
+    ),
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompInclude,
+        "Включение",
+        "Include",
+        "Включение",
+    ),
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompRedefine,
+        "Переопределение",
+        "Redefine",
+        "Переопределение",
+    ),
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompLengthFacet,
+        "ФасетДлины",
+        "LengthFacet",
+        "Фасет длины",
+    ),
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompMinLengthFacet,
+        "ФасетМинимальнойДлины",
+        "MinLengthFacet",
+        "Фасет минимальной длины",
+    ),
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompMaxLengthFacet,
+        "ФасетМаксимальнойДлины",
+        "MaxLengthFacet",
+        "Фасет максимальной длины",
+    ),
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompPatternFacet,
+        "ФасетОбразца",
+        "PatternFacet",
+        "Фасет образца",
+    ),
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompEnumerationFacet,
+        "ФасетПеречисления",
+        "EnumerationFacet",
+        "Фасет перечисления",
+    ),
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompWhitespaceFacet,
+        "ФасетПробельныхСимволов",
+        "WhitespaceFacet",
+        "Фасет пробельных символов",
+    ),
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompTotalDigitsFacet,
+        "ФасетОбщегоКоличестваРазрядов",
+        "TotalDigitsFacet",
+        "Фасет общего количества разрядов",
+    ),
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompFractionDigitsFacet,
+        "ФасетКоличестваРазрядовДробнойЧасти",
+        "FractionDigitsFacet",
+        "Фасет количества разрядов дробной части",
+    ),
+    // Четыре граничных фасета названы у платформы ИНАЧЕ, чем остальные:
+    // прилагательное впереди («МинимальноВключающийФасет»), а не «Фасет…».
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompMinInclusiveFacet,
+        "МинимальноВключающийФасет",
+        "MinInclusiveFacet",
+        "Минимально включающий фасет",
+    ),
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompMaxInclusiveFacet,
+        "МаксимальноВключающийФасет",
+        "MaxInclusiveFacet",
+        "Максимально включающий фасет",
+    ),
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompMinExclusiveFacet,
+        "МинимальноИсключающийФасет",
+        "MinExclusiveFacet",
+        "Минимально исключающий фасет",
+    ),
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompMaxExclusiveFacet,
+        "МаксимальноИсключающийФасет",
+        "MaxExclusiveFacet",
+        "Максимально исключающий фасет",
+    ),
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompIdentityConstraintDefinition,
+        "ОпределениеОграниченияИдентичности",
+        "IdentityConstraintDefinition",
+        "Определение ограничения идентичности",
+    ),
+    (
+        EnumKind::XsComponentType,
+        EnumValue::XsCompXPathDefinition,
+        "ОпределениеXPath",
+        "XPathDefinition",
+        "Определение XPath",
+    ),
+    (
+        EnumKind::XsForm,
+        EnumValue::XsFormQualified,
+        "Квалифицированная",
+        "Qualified",
+        "Квалифицированная",
+    ),
+    (
+        EnumKind::XsForm,
+        EnumValue::XsFormUnqualified,
+        "Неквалифицированная",
+        "Unqualified",
+        "Неквалифицированная",
+    ),
+    (
+        EnumKind::XsSimpleTypeVariety,
+        EnumValue::XsVarietyAtomic,
+        "Атомарная",
+        "Atomic",
+        "Атомарная",
+    ),
+    (
+        EnumKind::XsSimpleTypeVariety,
+        EnumValue::XsVarietyList,
+        "Список",
+        "List",
+        "Список",
+    ),
+    (
+        EnumKind::XsSimpleTypeVariety,
+        EnumValue::XsVarietyUnion,
+        "Объединение",
+        "Union",
+        "Объединение",
+    ),
+    (
+        EnumKind::XsModelGroupKind,
+        EnumValue::XsGroupSequence,
+        "Последовательность",
+        "Sequence",
+        "Последовательность",
+    ),
+    (
+        EnumKind::XsModelGroupKind,
+        EnumValue::XsGroupChoice,
+        "Выбор",
+        "Choice",
+        "Выбор",
+    ),
+    (
+        EnumKind::XsModelGroupKind,
+        EnumValue::XsGroupAll,
+        "Все",
+        "All",
+        "Все",
+    ),
+    (
+        EnumKind::XsDerivationMethod,
+        EnumValue::XsDerivationExtension,
+        "Расширение",
+        "Extension",
+        "Расширение",
+    ),
+    (
+        EnumKind::XsDerivationMethod,
+        EnumValue::XsDerivationRestriction,
+        "Ограничение",
+        "Restriction",
+        "Ограничение",
+    ),
+    // Печатается с ПРОБЕЛОМ — «По умолчанию», хотя пишется слитно.
+    (
+        EnumKind::XsValueConstraint,
+        EnumValue::XsConstraintDefault,
+        "ПоУмолчанию",
+        "Default",
+        "По умолчанию",
+    ),
+    (
+        EnumKind::XsValueConstraint,
+        EnumValue::XsConstraintFixed,
+        "Фиксированное",
+        "Fixed",
+        "Фиксированное",
+    ),
+    (
+        EnumKind::XsWhitespaceHandling,
+        EnumValue::XsWhitespacePreserve,
+        "Сохранять",
+        "Preserve",
+        "Сохранять",
+    ),
+    (
+        EnumKind::XsWhitespaceHandling,
+        EnumValue::XsWhitespaceReplace,
+        "Заменять",
+        "Replace",
+        "Заменять",
+    ),
+    (
+        EnumKind::XsWhitespaceHandling,
+        EnumValue::XsWhitespaceCollapse,
+        "Сворачивать",
+        "Collapse",
+        "Сворачивать",
+    ),
 ];
 
 /// Имена всех перечислений — для автодополнения REPL и для резолвера,
@@ -793,6 +1241,21 @@ pub const ENUM_NAMES: &[(&str, EnumKind)] = &[
     ("FileAccess", EnumKind::FileAccess),
     ("ПозицияВПотоке", EnumKind::StreamPosition),
     ("PositionInStream", EnumKind::StreamPosition),
+    ("ТипКомпонентыXS", EnumKind::XsComponentType),
+    ("XSComponentType", EnumKind::XsComponentType),
+    ("ФормаПредставленияXS", EnumKind::XsForm),
+    ("XSForm", EnumKind::XsForm),
+    ("ВариантПростогоТипаXS", EnumKind::XsSimpleTypeVariety),
+    ("XSSimpleTypeVariety", EnumKind::XsSimpleTypeVariety),
+    ("ВидГруппыМоделиXS", EnumKind::XsModelGroupKind),
+    ("МетодНаследованияXS", EnumKind::XsDerivationMethod),
+    ("XSDerivationMethod", EnumKind::XsDerivationMethod),
+    ("ОграничениеЗначенияXS", EnumKind::XsValueConstraint),
+    (
+        "ОбработкаПробельныхСимволовXS",
+        EnumKind::XsWhitespaceHandling,
+    ),
+    ("XSWhitespaceHandling", EnumKind::XsWhitespaceHandling),
 ];
 
 /// Перечисление по имени слева от точки. Регистронезависимо и на обоих

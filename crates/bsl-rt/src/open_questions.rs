@@ -321,6 +321,21 @@ pub const OPEN_QUESTIONS: &[OpenQuestion] = &[
                  dom_document_deeper_than_the_limit_is_an_error_not_a_crash и \
                  dom_document_at_the_depth_limit_still_works",
     },
+    OpenQuestion {
+        id: "XSD.TYPED_VALUE",
+        what: "в какой тип платформа приводит `default`/`fixed` объявления \
+               схемы для встроенных типов XML Schema, кроме измеренных трёх \
+               (`xs:string` -> `Строка`, `xs:int` -> `Число`, `xs:boolean` \
+               -> `Булево`)",
+        chosen: "числовыми считаются все целые и дробные встроенные типы \
+                 (`decimal`, `long`, `unsignedInt`, `positiveInteger`, …), \
+                 остальное — `xs:date`, `xs:base64Binary`, типы самой схемы \
+                 — остаётся строкой, как записано. Обратное (отдавать всё \
+                 строкой) разошлось бы с измеренным `xs:int`, а угадывать \
+                 дату без замера нельзя: у неё и форма записи своя",
+        blocks: "bsl-rt/src/xsd.rs::typed_value; свойство `Значение` у \
+                 объявлений элемента и атрибута и у использования атрибута",
+    },
 ];
 
 /// Уже измеренные значения — якоря сеанса. Менять их можно только новым

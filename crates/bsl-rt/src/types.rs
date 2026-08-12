@@ -103,6 +103,54 @@ pub enum TypeId {
     /// Тип ЧЛЕНА перечисления `ТипУзлаDOM` — как `XmlNodeType`.
     DomNodeType,
 
+    // --- Объектная модель XML-схемы ------------------------------------
+    // Написания сняты пробами (`measure-xsd.bsl`) и в двух местах не такие,
+    // как подсказала бы аналогия: русского имени `ОпределениеКомплексного\
+    // ТипаXS` у платформы НЕТ (тип зовётся `ОпределениеСоставногоТипаXS`), а
+    // `XSParticle` печатается «Фрагмент XML Schema», то есть частица здесь
+    // называется фрагментом. Английские написания — тоже пробами: у трёх
+    // коллекций это `XSComponentFixedList`, `XSNamedComponentMap` и
+    // `XSComponentList`, а `xs:appinfo` зовётся `XSAppInfo`
+    // (`XSApplicationInformation` платформа НЕ знает).
+    XmlSchema,
+    XmlSchemaSet,
+    XmlSchemaBuilder,
+    XsElementDeclaration,
+    XsAttributeDeclaration,
+    XsSimpleTypeDefinition,
+    XsComplexTypeDefinition,
+    XsParticle,
+    XsModelGroup,
+    XsAttributeUse,
+    XsAnnotation,
+    XsDocumentation,
+    XsAppInfo,
+    XsLengthFacet,
+    XsMinLengthFacet,
+    XsMaxLengthFacet,
+    XsPatternFacet,
+    XsEnumerationFacet,
+    XsWhitespaceFacet,
+    XsTotalDigitsFacet,
+    XsFractionDigitsFacet,
+    XsMinInclusiveFacet,
+    XsMaxInclusiveFacet,
+    XsMinExclusiveFacet,
+    XsMaxExclusiveFacet,
+    XsComponentFixedList,
+    XsNamedComponentMap,
+    XsComponentList,
+    XmlExpandedName,
+    XmlExpandedNameList,
+    /// Типы ЧЛЕНОВ перечислений модели схемы — как `DomNodeType`.
+    XsComponentType,
+    XsForm,
+    XsSimpleTypeVariety,
+    XsModelGroupKind,
+    XsDerivationMethod,
+    XsValueConstraint,
+    XsWhitespaceHandling,
+
     // --- ТабличныйДокумент ---------------------------------------------
     // Та же пара написаний, что у остальных: тип печатается с пробелом
     // («Табличный документ»), значение — без. Измерено на 8.3.27.
@@ -270,6 +318,176 @@ const NAMES: &[(TypeId, &str, &str)] = &[
         "DOMElementList",
     ),
     (TypeId::DomNodeType, "ТипУзлаDOM", "DOMNodeType"),
+    (TypeId::XmlSchema, "Схема XML", "XMLSchema"),
+    (TypeId::XmlSchemaSet, "Набор схем XML", "XMLSchemaSet"),
+    (
+        TypeId::XmlSchemaBuilder,
+        "Построитель схем XML",
+        "XMLSchemaBuilder",
+    ),
+    (
+        TypeId::XsElementDeclaration,
+        "Объявление элемента XML Schema",
+        "XSElementDeclaration",
+    ),
+    (
+        TypeId::XsAttributeDeclaration,
+        "Объявление атрибута XML Schema",
+        "XSAttributeDeclaration",
+    ),
+    (
+        TypeId::XsSimpleTypeDefinition,
+        "Определение простого типа XML Schema",
+        "XSSimpleTypeDefinition",
+    ),
+    // «Составного», не «комплексного»: русского имени с «комплексным»
+    // платформа не знает (измерено).
+    (
+        TypeId::XsComplexTypeDefinition,
+        "Определение составного типа XML Schema",
+        "XSComplexTypeDefinition",
+    ),
+    (TypeId::XsParticle, "Фрагмент XML Schema", "XSParticle"),
+    (
+        TypeId::XsModelGroup,
+        "Группа модели XML Schema",
+        "XSModelGroup",
+    ),
+    (
+        TypeId::XsAttributeUse,
+        "Использование атрибута XML Schema",
+        "XSAttributeUse",
+    ),
+    (TypeId::XsAnnotation, "Аннотация XML Schema", "XSAnnotation"),
+    (
+        TypeId::XsDocumentation,
+        "Документация XML Schema",
+        "XSDocumentation",
+    ),
+    (
+        TypeId::XsAppInfo,
+        "Информация для приложения XML Schema",
+        "XSAppInfo",
+    ),
+    (
+        TypeId::XsLengthFacet,
+        "Фасет длины значения XML Schema",
+        "XSLengthFacet",
+    ),
+    (
+        TypeId::XsMinLengthFacet,
+        "Фасет минимальной длины значения XML Schema",
+        "XSMinLengthFacet",
+    ),
+    (
+        TypeId::XsMaxLengthFacet,
+        "Фасет максимальной длины значения XML Schema",
+        "XSMaxLengthFacet",
+    ),
+    (
+        TypeId::XsPatternFacet,
+        "Фасет образца значения XML Schema",
+        "XSPatternFacet",
+    ),
+    (
+        TypeId::XsEnumerationFacet,
+        "Фасет перечисления значения XML Schema",
+        "XSEnumerationFacet",
+    ),
+    (
+        TypeId::XsWhitespaceFacet,
+        "Фасет пробельных символов XML Schema",
+        "XSWhitespaceFacet",
+    ),
+    (
+        TypeId::XsTotalDigitsFacet,
+        "Фасет общего количества разрядов значения XML Schema",
+        "XSTotalDigitsFacet",
+    ),
+    (
+        TypeId::XsFractionDigitsFacet,
+        "Фасет количества разрядов дробной части значения XML Schema",
+        "XSFractionDigitsFacet",
+    ),
+    (
+        TypeId::XsMinInclusiveFacet,
+        "Фасет минимального включающего значения XML Schema",
+        "XSMinInclusiveFacet",
+    ),
+    (
+        TypeId::XsMaxInclusiveFacet,
+        "Фасет максимального включающего значения XML Schema",
+        "XSMaxInclusiveFacet",
+    ),
+    (
+        TypeId::XsMinExclusiveFacet,
+        "Фасет минимального исключающего значения XML Schema",
+        "XSMinExclusiveFacet",
+    ),
+    (
+        TypeId::XsMaxExclusiveFacet,
+        "Фасет максимального исключающего значения XML Schema",
+        "XSMaxExclusiveFacet",
+    ),
+    (
+        TypeId::XsComponentFixedList,
+        "Фиксированный список компонент XML Schema",
+        "XSComponentFixedList",
+    ),
+    (
+        TypeId::XsNamedComponentMap,
+        "Коллекция именованных компонент XML Schema",
+        "XSNamedComponentMap",
+    ),
+    (
+        TypeId::XsComponentList,
+        "Список компонент XML Schema",
+        "XSComponentList",
+    ),
+    (
+        TypeId::XmlExpandedName,
+        "Расширенное имя XML",
+        "XMLExpandedName",
+    ),
+    (
+        TypeId::XmlExpandedNameList,
+        "Список расширенных имен XML",
+        "XMLExpandedNameList",
+    ),
+    (
+        TypeId::XsComponentType,
+        "ТипКомпонентыXS",
+        "XSComponentType",
+    ),
+    (TypeId::XsForm, "ФормаПредставленияXS", "XSForm"),
+    (
+        TypeId::XsSimpleTypeVariety,
+        "ВариантПростогоТипаXS",
+        "XSSimpleTypeVariety",
+    ),
+    // Английского имени у этого перечисления НЕТ: `XSModelGroupType`
+    // платформа не знает, а русское — `ВидГруппыМоделиXS` (измерено).
+    (
+        TypeId::XsModelGroupKind,
+        "ВидГруппыМоделиXS",
+        "ВидГруппыМоделиXS",
+    ),
+    (
+        TypeId::XsDerivationMethod,
+        "МетодНаследованияXS",
+        "XSDerivationMethod",
+    ),
+    // `XSValueConstraint` платформа тоже не знает — только русское имя.
+    (
+        TypeId::XsValueConstraint,
+        "ОграничениеЗначенияXS",
+        "ОграничениеЗначенияXS",
+    ),
+    (
+        TypeId::XsWhitespaceHandling,
+        "ОбработкаПробельныхСимволовXS",
+        "XSWhitespaceHandling",
+    ),
     (
         TypeId::SpreadFileType,
         "ТипФайлаТабличногоДокумента",
@@ -349,6 +567,70 @@ const DISPLAY: &[(TypeId, &str)] = &[
     (TypeId::FileStream, "Файловый поток"),
 ];
 
+/// Второе русское написание типов модели XML-схемы — ИДЕНТИФИКАТОР.
+///
+/// У них представление и имя, которым тип пишут в коде, — разные строки, а
+/// не одна с пробелами: `Строка(ТипЗнч(Объявление))` даёт «Объявление
+/// элемента XML Schema», но ищется тип как `Тип("ОбъявлениеЭлементаXS")`
+/// (ИЗМЕРЕНО обе стороны). У DOM такого нет — там «Элемент DOM» отличается
+/// от `ЭлементDOM` только пробелом, который поиск и так не считает
+/// значимым. Печатью эта таблица не служит: [`NAMES`] остаётся
+/// единственным источником представлений.
+const XS_IDENTIFIERS: &[(TypeId, &str)] = &[
+    (TypeId::XsElementDeclaration, "ОбъявлениеЭлементаXS"),
+    (TypeId::XsAttributeDeclaration, "ОбъявлениеАтрибутаXS"),
+    (TypeId::XsSimpleTypeDefinition, "ОпределениеПростогоТипаXS"),
+    (
+        TypeId::XsComplexTypeDefinition,
+        "ОпределениеСоставногоТипаXS",
+    ),
+    (TypeId::XsParticle, "ФрагментXS"),
+    (TypeId::XsModelGroup, "ГруппаМоделиXS"),
+    (TypeId::XsAttributeUse, "ИспользованиеАтрибутаXS"),
+    (TypeId::XsAnnotation, "АннотацияXS"),
+    (TypeId::XsDocumentation, "ДокументацияXS"),
+    (TypeId::XsAppInfo, "ИнформацияДляПриложенияXS"),
+    (TypeId::XsLengthFacet, "ФасетДлиныXS"),
+    (TypeId::XsMinLengthFacet, "ФасетМинимальнойДлиныXS"),
+    (TypeId::XsMaxLengthFacet, "ФасетМаксимальнойДлиныXS"),
+    (TypeId::XsPatternFacet, "ФасетОбразцаXS"),
+    (TypeId::XsEnumerationFacet, "ФасетПеречисленияXS"),
+    (TypeId::XsWhitespaceFacet, "ФасетПробельныхСимволовXS"),
+    (
+        TypeId::XsTotalDigitsFacet,
+        "ФасетОбщегоКоличестваРазрядовXS",
+    ),
+    (
+        TypeId::XsFractionDigitsFacet,
+        "ФасетКоличестваРазрядовДробнойЧастиXS",
+    ),
+    (
+        TypeId::XsMinInclusiveFacet,
+        "ФасетМинимальногоВключающегоЗначенияXS",
+    ),
+    (
+        TypeId::XsMaxInclusiveFacet,
+        "ФасетМаксимальногоВключающегоЗначенияXS",
+    ),
+    (
+        TypeId::XsMinExclusiveFacet,
+        "ФасетМинимальногоИсключающегоЗначенияXS",
+    ),
+    (
+        TypeId::XsMaxExclusiveFacet,
+        "ФасетМаксимальногоИсключающегоЗначенияXS",
+    ),
+    (
+        TypeId::XsComponentFixedList,
+        "ФиксированныйСписокКомпонентXS",
+    ),
+    (
+        TypeId::XsNamedComponentMap,
+        "КоллекцияИменованныхКомпонентXS",
+    ),
+    (TypeId::XsComponentList, "СписокКомпонентXS"),
+];
+
 impl TypeId {
     /// Каноническое (русское) имя типа — то, что печатает `Строка()`.
     pub fn name(self) -> &'static str {
@@ -378,6 +660,12 @@ impl TypeId {
             .iter()
             .find(|(_, ru, en)| squash(ru) == key || squash(en) == key)
             .map(|(id, _, _)| *id)
+            .or_else(|| {
+                XS_IDENTIFIERS
+                    .iter()
+                    .find(|(_, id_name)| squash(id_name) == key)
+                    .map(|(id, _)| *id)
+            })
     }
 }
 

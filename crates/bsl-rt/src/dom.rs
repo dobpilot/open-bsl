@@ -330,6 +330,56 @@ impl DomNode {
         self.kind
     }
 
+    /// Разбор схемы (`xsd.rs`) читает готовое дерево, а поля узла закрыты
+    /// модулем — вот доступ ровно к тому, что ему нужно: имя, URI, дети,
+    /// значение атрибута и подъём к родителю (для поиска объявлений
+    /// `xmlns` в области видимости). Только чтение: модель схемы дерево не
+    /// меняет.
+    pub(crate) fn xs_local_name(&self) -> &str {
+        &self.local
+    }
+
+    /// `URIПространстваИмен` узла: по нему `xsd.rs` и узнаёт элементы
+    /// схемы — по пространству имён, а НЕ по префиксу `xs:`.
+    pub(crate) fn xs_uri(&self) -> &str {
+        &self.uri
+    }
+
+    pub(crate) fn xs_children(&self) -> Vec<Rc<DomNode>> {
+        self.children.borrow().clone()
+    }
+
+    /// Значение атрибута с пустым пространством имён по локальному имени —
+    /// именно так записаны все атрибуты XSD (`name`, `type`, `use`).
+    pub(crate) fn xs_attribute(&self, local: &str) -> Option<String> {
+        self.attrs
+            .borrow()
+            .iter()
+            .find(|a| a.uri.is_empty() && a.local == local)
+            .map(|a| a.attr_value())
+    }
+
+    /// URI объявления пространства имён, действующего на этом узле:
+    /// `xmlns:префикс` при непустом префиксе и `xmlns` при пустом.
+    pub(crate) fn xs_namespace_declaration(&self, prefix: &str) -> Option<String> {
+        self.attrs
+            .borrow()
+            .iter()
+            .find(|a| {
+                a.uri == XMLNS_URI
+                    && if prefix.is_empty() {
+                        a.name == "xmlns"
+                    } else {
+                        a.prefix == "xmlns" && a.local == prefix
+                    }
+            })
+            .map(|a| a.attr_value())
+    }
+
+    pub(crate) fn xs_parent(&self) -> Option<Rc<DomNode>> {
+        self.parent.borrow().upgrade()
+    }
+
     /// Добавить ребёнка, проставив ему родителя и документ.
     fn append(parent: &Rc<DomNode>, child: &Rc<DomNode>, doc: &Rc<DomNode>) {
         *child.parent.borrow_mut() = Rc::downgrade(parent);
@@ -523,6 +573,13 @@ pub fn read(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
     Ok(node_value(&doc, &doc))
 }
 
+/// Построение дерева для тестов разбора схемы: `xsd.rs` идёт тем же путём,
+/// что и `Прочитать`, но без обёртки-значения `ЧтениеXML`.
+#[cfg(test)]
+pub(crate) fn build_for_tests(state: &mut XmlReaderState) -> RtResult<Rc<DomNode>> {
+    build(state)
+}
+
 /// Собрать документ из состояния читателя, оставив читателя исчерпанным
 /// (измерено: после построения `Прочитать()` отдаёт «Нет», а `ТипУзла` —
 /// «Ничего»).
@@ -682,6 +739,12 @@ fn attach_attribute(
     *attr.parent.borrow_mut() = Rc::downgrade(el);
     *attr.owner.borrow_mut() = Rc::downgrade(doc);
     el.attrs.borrow_mut().push(attr);
+}
+
+/// Корневой элемент документа — для разбора схемы (`xsd.rs`), которому
+/// `СоздатьСхемуXML` даёт документ, а работать надо с его корнем.
+pub(crate) fn xs_document_element(doc: &Rc<DomNode>) -> Option<Rc<DomNode>> {
+    document_element(doc)
 }
 
 /// Корневой элемент документа, если он уже есть.

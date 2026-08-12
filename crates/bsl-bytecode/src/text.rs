@@ -36,7 +36,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 8;
+pub const FORMAT_VERSION: u32 = 9;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -102,6 +102,10 @@ pub const OPCODES: &[&str] = &[
     "NewXmlReader",
     "NewXmlWriter",
     "NewXmlWriterSettings",
+    "NewXsBuilder",
+    "NewXmlSchema",
+    "NewXmlSchemaSet",
+    "NewXmlExpandedName",
     "CollectionLen",
     "Raise",
     "CallBuiltin",
@@ -480,6 +484,12 @@ fn write_instr(instr: &Instr) -> String {
             version,
             indent,
         } => format!("NewXmlWriterSettings dst={dst} enc={encoding} ver={version} indent={indent}"),
+        Instr::NewXsBuilder { dst } => format!("NewXsBuilder dst={dst}"),
+        Instr::NewXmlSchema { dst } => format!("NewXmlSchema dst={dst}"),
+        Instr::NewXmlSchemaSet { dst } => format!("NewXmlSchemaSet dst={dst}"),
+        Instr::NewXmlExpandedName { dst, uri, local } => {
+            format!("NewXmlExpandedName dst={dst} uri={uri} local={local}")
+        }
         Instr::CollectionLen { dst, obj } => format!("CollectionLen dst={dst} obj={obj}"),
         Instr::Raise { src } => match src {
             Some(src) => format!("Raise src={src}"),
@@ -1268,6 +1278,14 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
             version: field_u8(&f, no, "ver")?,
             indent: field_u8(&f, no, "indent")?,
         },
+        "NewXsBuilder" => Instr::NewXsBuilder { dst: dst(&f)? },
+        "NewXmlSchema" => Instr::NewXmlSchema { dst: dst(&f)? },
+        "NewXmlSchemaSet" => Instr::NewXmlSchemaSet { dst: dst(&f)? },
+        "NewXmlExpandedName" => Instr::NewXmlExpandedName {
+            dst: dst(&f)?,
+            uri: field_u8(&f, no, "uri")?,
+            local: field_u8(&f, no, "local")?,
+        },
         "NewTextWriter" => Instr::NewTextWriter {
             dst: dst(&f)?,
             path: field_u8(&f, no, "path")?,
@@ -1418,6 +1436,14 @@ mod tests {
         "д = Новый ДокументDOM;\nзд = Новый ЗаписьDOM;\nз = Новый ЗаписьXML;\nз.УстановитьСтроку();\n\
          к = д.СоздатьЭлемент(\"к\");\nд.ДобавитьДочерний(к);\nк.УстановитьАтрибут(\"а\", \"1\");\n\
          зд.Записать(д, з);\nс = з.Закрыть();\n",
+        // Объектная модель XML-схемы: свои опкоды у всех четырёх
+        // конструкторов, причём у расширенного имени он ЕДИНСТВЕННЫЙ в
+        // семействе с аргументами — печать регистров у него своя.
+        "пс = Новый ПостроительСхемXML;\nп = Новый ПостроительDOM;\nч = Новый ЧтениеXML;\n\
+         ч.УстановитьСтроку(\"<xs:schema xmlns:xs=\"\"http://www.w3.org/2001/XMLSchema\"\"/>\");\n\
+         сх = пс.СоздатьСхемуXML(п.Прочитать(ч));\nпустая = Новый СхемаXML;\n\
+         набор = Новый НаборСхемXML;\nнабор.Добавить(пустая);\n\
+         имя = Новый РасширенноеИмяXML(\"urn:т\", \"а\");\nл = имя.ЛокальноеИмя;\n",
         // Динамическое исполнение — обе формы.
         "х = 1;\nВыполнить(\"х = 2\");\nу = Вычислить(\"х + 1\");\n",
         // Переменные уровня модуля: чтение и запись из процедуры.
