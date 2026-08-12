@@ -27,6 +27,13 @@ BENCH = ROOT / "benchmarks"
 RELATIVE_OUTPUT = '"test.csv"'
 SCRATCH_OUTPUT = '"/tmp/onec-bench-scratch/csv_write.1c.out"'
 
+# По той же причине переписывается путь к входному файлу parquet: сценарий
+# `simple_parquet_reader` берёт его от корня дерева, а платформа стартует со
+# своим текущим каталогом. Здесь он превращается в абсолютный — тот же файл,
+# та же работа.
+RELATIVE_INPUT = '"benchmarks/data/simple.parquet"'
+ABSOLUTE_INPUT = f'"{ROOT / "benchmarks" / "data" / "simple.parquet"}"'
+
 DECL = re.compile(
     r"^(Процедура|Функция)\s+([A-Za-zА-Яа-яЁё_][\w]*)", re.MULTILINE
 )
@@ -61,8 +68,10 @@ def main():
         name = path.stem
         if only and name not in only:
             continue
-        text = path.read_text(encoding="utf-8").replace(
-            RELATIVE_OUTPUT, SCRATCH_OUTPUT
+        text = (
+            path.read_text(encoding="utf-8")
+            .replace(RELATIVE_OUTPUT, SCRATCH_OUTPUT)
+            .replace(RELATIVE_INPUT, ABSOLUTE_INPUT)
         )
         decls, body, names = split_declarations(text)
         # Уникализируем имена бенчмарка: два сценария объявляют
