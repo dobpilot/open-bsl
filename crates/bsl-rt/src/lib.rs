@@ -375,18 +375,20 @@ impl BslValue {
                 // DOM», «Документ  DOM» с ДВУМЯ пробелами) живут в
                 // `types.rs`. Обе колонки измерены.
                 BslObject::DomBuilder => "ПостроительDOM",
+                BslObject::DomWriter => "ЗаписьDOM",
                 BslObject::DomNode(n, _) => match n.kind() {
                     crate::dom::DomKind::Document => "ДокументDOM",
                     crate::dom::DomKind::Element => "ЭлементDOM",
                     crate::dom::DomKind::Attribute => "АтрибутDOM",
                     crate::dom::DomKind::Text => "ТекстDOM",
+                    crate::dom::DomKind::CdataSection => "СекцияCDATADOM",
                     crate::dom::DomKind::Comment => "КомментарийDOM",
                     crate::dom::DomKind::ProcessingInstruction => "ИнструкцияОбработкиDOM",
                 },
-                BslObject::DomList(kind, _, _) => match kind {
-                    crate::dom::DomListKind::Nodes => "СписокУзловDOM",
-                    crate::dom::DomListKind::Attributes => "КоллекцияАтрибутовDOM",
-                    crate::dom::DomListKind::Elements => "СписокЭлементовDOM",
+                BslObject::DomList(kind, _) => match kind {
+                    crate::dom::DomListKind::Nodes(_) => "СписокУзловDOM",
+                    crate::dom::DomListKind::Attributes(_) => "КоллекцияАтрибутовDOM",
+                    crate::dom::DomListKind::Elements(_) => "СписокЭлементовDOM",
                 },
                 BslObject::SpreadDocument(_) => "ТабличныйДокумент",
                 BslObject::SpreadDrawings(_) => "КоллекцияРисунковТабличногоДокумента",
@@ -1158,7 +1160,7 @@ impl BslValue {
                 // `ДочерниеУзлы` дают «Да», а пустые `Атрибуты` — «Нет».
                 // Сам узел и построитель заполненности не имеют вовсе (см.
                 // ниже).
-                BslObject::DomList(_, items, _) => !items.is_empty(),
+                BslObject::DomList(kind, _) => !kind.is_empty(),
                 // ИЗМЕРЕНО, и для потока, и для менеджера:
                 // `ЗначениеЗаполнено` от них платформа отвергает — это
                 // ошибка, а не «Да»/«Нет». Поток снят фикстурой
@@ -1178,6 +1180,7 @@ impl BslValue {
                 | BslObject::DataWriter(..)
                 | BslObject::DataReadResult(..)
                 | BslObject::DomBuilder
+                | BslObject::DomWriter
                 | BslObject::DomNode(..) => {
                     return Err(RtError::TypeError {
                         expected: "Значение, у которого есть признак заполненности",
@@ -1250,18 +1253,20 @@ impl BslValue {
                 BslObject::DataWriter(..) => TypeId::DataWriter,
                 BslObject::DataReadResult(..) => TypeId::DataReadResult,
                 BslObject::DomBuilder => TypeId::DomBuilder,
+                BslObject::DomWriter => TypeId::DomWriter,
                 BslObject::DomNode(n, _) => match n.kind() {
                     crate::dom::DomKind::Document => TypeId::DomDocument,
                     crate::dom::DomKind::Element => TypeId::DomElement,
                     crate::dom::DomKind::Attribute => TypeId::DomAttribute,
                     crate::dom::DomKind::Text => TypeId::DomText,
+                    crate::dom::DomKind::CdataSection => TypeId::DomCdataSection,
                     crate::dom::DomKind::Comment => TypeId::DomComment,
                     crate::dom::DomKind::ProcessingInstruction => TypeId::DomProcessingInstruction,
                 },
-                BslObject::DomList(kind, _, _) => match kind {
-                    crate::dom::DomListKind::Nodes => TypeId::DomNodeList,
-                    crate::dom::DomListKind::Attributes => TypeId::DomAttributeMap,
-                    crate::dom::DomListKind::Elements => TypeId::DomElementList,
+                BslObject::DomList(kind, _) => match kind {
+                    crate::dom::DomListKind::Nodes(_) => TypeId::DomNodeList,
+                    crate::dom::DomListKind::Attributes(_) => TypeId::DomAttributeMap,
+                    crate::dom::DomListKind::Elements(_) => TypeId::DomElementList,
                 },
             },
             BslValue::Skipped => {
@@ -1392,6 +1397,18 @@ impl BslValue {
     /// происходит в `Прочитать(ЧтениеXML)`.
     pub fn new_dom_builder() -> Self {
         BslValue::Object(Rc::new(BslObject::DomBuilder))
+    }
+
+    /// `Новый ДокументDOM` — пустой документ: приёмник фабричных методов и
+    /// мутации. ИЗМЕРЕНО, что платформа его строит и что детей у него ноль.
+    pub fn new_dom_document() -> Self {
+        dom::new_document()
+    }
+
+    /// `Новый ЗаписьDOM`. Состояния у писателя нет — узел и приёмник
+    /// приходят аргументами `Записать`.
+    pub fn new_dom_writer() -> Self {
+        dom::new_writer()
     }
 
     /// `Новый ПараметрыЗаписиXML([Кодировка][, Версия][, ИспользоватьОтступ])`.
@@ -1928,13 +1945,13 @@ impl BslValue {
                 // Индекс за границей списка DOM — ошибка, а не
                 // `Неопределено` (измерено на `ДочерниеУзлы[99]`,
                 // `Атрибуты[9]` и на отрицательном индексе).
-                BslObject::DomList(_, items, doc) => {
+                BslObject::DomList(kind, doc) => {
                     let i = Self::index_as_usize(idx)?;
-                    let node = items.get(i).ok_or(RtError::IndexOutOfBounds {
+                    let node = kind.get(i).ok_or(RtError::IndexOutOfBounds {
                         index: i as i64,
-                        len: items.len(),
+                        len: kind.len(),
                     })?;
-                    Ok(dom::node_value(node, doc))
+                    Ok(dom::node_value(&node, doc))
                 }
                 _ => Err(RtError::NotIndexable),
             },
@@ -1996,8 +2013,10 @@ impl BslValue {
                 // и `Для Каждого` по ним платформа принимает (измерено на
                 // `ДочерниеУзлы`, `Атрибуты` и результате поиска). Сам
                 // узел и построитель — нет.
-                BslObject::DomList(_, items, _) => Ok(items.len()),
-                BslObject::DomBuilder | BslObject::DomNode(..) => Err(RtError::NotIndexable),
+                BslObject::DomList(kind, _) => Ok(kind.len()),
+                BslObject::DomBuilder | BslObject::DomWriter | BslObject::DomNode(..) => {
+                    Err(RtError::NotIndexable)
+                }
                 BslObject::TextWriter(..)
                 | BslObject::JsonReader(..)
                 | BslObject::JsonWriter(..)
@@ -2543,6 +2562,10 @@ impl BslValue {
                         Err(RtError::UnknownColumn(name.to_string()))
                     }
                 }
+                // Узлы DOM: пишутся значение, данные и текстовое
+                // содержимое, а имя узла только читается — см.
+                // `dom::set_property`.
+                BslObject::DomNode(..) => dom::set_property(self, name, &val),
                 BslObject::TableRow(data, row_id) => {
                     let mut data = data.borrow_mut();
                     let col = data
@@ -3322,7 +3345,10 @@ impl fmt::Display for BslValue {
                 BslObject::TextWriter(_) => write!(f, "ЗаписьТекста"),
                 // Узлы и коллекции DOM печатаются слитным именем — то же,
                 // что отдаёт `type_name`, поэтому одна ветка на всех.
-                BslObject::DomBuilder | BslObject::DomNode(..) | BslObject::DomList(..) => {
+                BslObject::DomBuilder
+                | BslObject::DomWriter
+                | BslObject::DomNode(..)
+                | BslObject::DomList(..) => {
                     write!(f, "{}", self.type_name())
                 }
                 // Единственный объект, который печатается СОДЕРЖИМЫМ, а не

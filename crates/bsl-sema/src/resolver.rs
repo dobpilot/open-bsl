@@ -320,6 +320,13 @@ pub const NEW_TYPES: &[&str] = &[
     // принимает и отдаёт тот же тип, что и `Новый ПостроительDOM`.
     "ПостроительDOM",
     "DOMBuilder",
+    // `Новый ДокументDOM` и `Новый ЗаписьDOM` — ИЗМЕРЕНО, что платформа
+    // строит оба (справка называет писателя иначе, см. `dom.rs`), и
+    // английские написания `DOMDocument`/`DOMWriter` тоже принимает.
+    "ДокументDOM",
+    "DOMDocument",
+    "ЗаписьDOM",
+    "DOMWriter",
     "ПараметрыЗаписиXML",
     "XMLWriterSettings",
     "ТекстовыйДокумент",
@@ -971,6 +978,29 @@ impl<'a> Resolver<'a> {
                 }
                 Ok(RExpr::NewDomBuilder)
             }
+            // Ни у документа, ни у писателя аргументов нет: измерено, что
+            // `Новый ДокументDOM("а")` и `Новый ЗаписьDOM("а")` платформа
+            // отвергает.
+            "ДОКУМЕНТDOM" | "DOMDOCUMENT" => {
+                if !args.is_empty() {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый ДокументDOM".to_string(),
+                        expected: 0,
+                        found: args.len(),
+                    });
+                }
+                Ok(RExpr::NewDomDocument)
+            }
+            "ЗАПИСЬDOM" | "DOMWRITER" => {
+                if !args.is_empty() {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый ЗаписьDOM".to_string(),
+                        expected: 0,
+                        found: args.len(),
+                    });
+                }
+                Ok(RExpr::NewDomWriter)
+            }
             "ЗАПИСЬXML" | "XMLWRITER" => {
                 if !args.is_empty() {
                     return Err(SemaError::ArgumentCountMismatch {
@@ -1142,6 +1172,26 @@ impl<'a> Resolver<'a> {
                     bsl_rt::BuiltinMethod::DomHasChildNodes
                     | bsl_rt::BuiltinMethod::DomHasAttributes => Some(0),
                     bsl_rt::BuiltinMethod::DomGetElementById => Some(1),
+                    // Фабрики узлов и мутация. Строго один аргумент — у
+                    // текстоподобных фабрик и у операций с одним узлом,
+                    // строго два — у инструкции обработки, вставки перед,
+                    // замены; у форм с пространством имён (`СоздатьЭлемент`,
+                    // `СоздатьАтрибут`, `УстановитьАтрибут`,
+                    // `УдалитьАтрибут`) арность решает рантайм.
+                    bsl_rt::BuiltinMethod::DomCreateTextNode
+                    | bsl_rt::BuiltinMethod::DomCreateCdataSection
+                    | bsl_rt::BuiltinMethod::DomCreateComment
+                    | bsl_rt::BuiltinMethod::DomAppendChild
+                    | bsl_rt::BuiltinMethod::DomRemoveChild
+                    | bsl_rt::BuiltinMethod::DomSetAttributeNode
+                    | bsl_rt::BuiltinMethod::DomRemoveAttributeNode => Some(1),
+                    bsl_rt::BuiltinMethod::DomCreateProcessingInstruction
+                    | bsl_rt::BuiltinMethod::DomInsertBefore
+                    | bsl_rt::BuiltinMethod::DomReplaceChild => Some(2),
+                    bsl_rt::BuiltinMethod::DomCreateElement
+                    | bsl_rt::BuiltinMethod::DomCreateAttribute
+                    | bsl_rt::BuiltinMethod::DomSetAttribute
+                    | bsl_rt::BuiltinMethod::DomRemoveAttribute => None,
                     bsl_rt::BuiltinMethod::DomGetAttribute
                     | bsl_rt::BuiltinMethod::DomHasAttribute
                     | bsl_rt::BuiltinMethod::DomGetAttributeNode

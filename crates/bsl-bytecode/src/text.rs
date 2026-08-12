@@ -36,7 +36,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 7;
+pub const FORMAT_VERSION: u32 = 8;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -97,6 +97,8 @@ pub const OPCODES: &[&str] = &[
     "NewTextDocument",
     "NewSpreadDocument",
     "NewDomBuilder",
+    "NewDomDocument",
+    "NewDomWriter",
     "NewXmlReader",
     "NewXmlWriter",
     "NewXmlWriterSettings",
@@ -468,6 +470,8 @@ fn write_instr(instr: &Instr) -> String {
         Instr::NewTextDocument { dst } => format!("NewTextDocument dst={dst}"),
         Instr::NewSpreadDocument { dst } => format!("NewSpreadDocument dst={dst}"),
         Instr::NewDomBuilder { dst } => format!("NewDomBuilder dst={dst}"),
+        Instr::NewDomDocument { dst } => format!("NewDomDocument dst={dst}"),
+        Instr::NewDomWriter { dst } => format!("NewDomWriter dst={dst}"),
         Instr::NewXmlReader { dst } => format!("NewXmlReader dst={dst}"),
         Instr::NewXmlWriter { dst } => format!("NewXmlWriter dst={dst}"),
         Instr::NewXmlWriterSettings {
@@ -1254,6 +1258,8 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
         "NewTextDocument" => Instr::NewTextDocument { dst: dst(&f)? },
         "NewSpreadDocument" => Instr::NewSpreadDocument { dst: dst(&f)? },
         "NewDomBuilder" => Instr::NewDomBuilder { dst: dst(&f)? },
+        "NewDomDocument" => Instr::NewDomDocument { dst: dst(&f)? },
+        "NewDomWriter" => Instr::NewDomWriter { dst: dst(&f)? },
         "NewXmlReader" => Instr::NewXmlReader { dst: dst(&f)? },
         "NewXmlWriter" => Instr::NewXmlWriter { dst: dst(&f)? },
         "NewXmlWriterSettings" => Instr::NewXmlWriterSettings {
@@ -1407,6 +1413,11 @@ mod tests {
         "п = Новый ПостроительDOM;\nч = Новый ЧтениеXML;\nч.УстановитьСтроку(\"<а х=\"\"1\"\"/>\");\n\
          д = п.Прочитать(ч);\nэ = д.ЭлементДокумента;\nн = э.ПолучитьАтрибут(\"х\");\n\
          с = э.ПолучитьЭлементыПоИмени(\"*\");\nб = э.ЕстьАтрибуты();\n",
+        // DOM на запись: свои опкоды у конструкторов документа и писателя,
+        // остальное — те же CallMethod.
+        "д = Новый ДокументDOM;\nзд = Новый ЗаписьDOM;\nз = Новый ЗаписьXML;\nз.УстановитьСтроку();\n\
+         к = д.СоздатьЭлемент(\"к\");\nд.ДобавитьДочерний(к);\nк.УстановитьАтрибут(\"а\", \"1\");\n\
+         зд.Записать(д, з);\nс = з.Закрыть();\n",
         // Динамическое исполнение — обе формы.
         "х = 1;\nВыполнить(\"х = 2\");\nу = Вычислить(\"х + 1\");\n",
         // Переменные уровня модуля: чтение и запись из процедуры.

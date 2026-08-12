@@ -54,6 +54,11 @@ pub const COMMENT_NODE_NAME: &str = "#comment";
 /// Имя узла документа в дереве DOM (`ДокументDOM.ИмяУзла` — измерено).
 pub const DOCUMENT_NODE_NAME: &str = "#document";
 
+/// Имя узла-секции CDATA в дереве DOM. РАЗБОР такого узла не создаёт (секция
+/// вливается в текст), но `СоздатьСекциюCDATA` создаёт, и `ИмяУзла` у него
+/// именно это (измерено).
+pub const CDATA_NODE_NAME: &str = "#cdata-section";
+
 /// Атрибут начального тега.
 #[derive(Debug, Clone, PartialEq)]
 pub struct XmlAttr {
@@ -612,6 +617,13 @@ impl XmlWriter {
         self.path.is_some()
     }
 
+    /// Есть ли открытый элемент. Нужно записи дерева DOM: текстоподобный
+    /// узел вне элемента платформа отвергает (измерено на секции CDATA), а
+    /// сам `write_cdata` о вложенности не судит.
+    pub fn in_element(&self) -> bool {
+        !self.stack.is_empty()
+    }
+
     /// Перевод строки и отступ по глубине. Один таб на уровень — измерено.
     fn newline(&mut self, depth: usize) {
         if !self.settings.indent {
@@ -621,6 +633,23 @@ impl XmlWriter {
         for _ in 0..depth {
             self.out.push('\t');
         }
+    }
+
+    /// Отбить очередной УЗЕЛ от предыдущего вывода.
+    ///
+    /// Перевод строки принадлежит НАЧАЛУ узла, а не концу предыдущего, и
+    /// перед самым первым узлом его нет вовсе. Различить две модели прямая
+    /// запись не позволяла (`ЗаписатьОбъявлениеXML` + элемент даёт
+    /// `<?xml ...?>` + перевод строки + элемент при любой из них), а запись
+    /// ДЕРЕВА позволила: документ без корня платформа отдаёт как
+    /// `<?xml version="1.0"?>` БЕЗ хвостового перевода строки, а одиночный
+    /// комментарий — как `<!--к-->` без ведущего.
+    fn newline_before_node(&mut self) {
+        if self.out.is_empty() {
+            return;
+        }
+        let depth = self.stack.len();
+        self.newline(depth);
     }
 
     /// Дописать `>` у висящего начального тега: содержимое элемента
@@ -654,11 +683,6 @@ impl XmlWriter {
             self.out.push('"');
         }
         self.out.push_str("?>");
-        // Перевод строки после объявления — часть форматирования, поэтому
-        // подчиняется тому же флагу (измерено при включённом отступе).
-        if self.settings.indent {
-            self.out.push('\n');
-        }
         Ok(())
     }
 
@@ -670,10 +694,7 @@ impl XmlWriter {
             return Err(bad("корневой элемент уже записан"));
         }
         self.close_pending();
-        if !self.stack.is_empty() {
-            let depth = self.stack.len();
-            self.newline(depth);
-        }
+        self.newline_before_node();
         self.mark_content(false);
         self.out.push('<');
         self.out.push_str(name);
@@ -751,8 +772,7 @@ impl XmlWriter {
     /// Не отказывает; `Result` — ради единообразия с остальными методами.
     pub fn write_comment(&mut self, text: &str) -> RtResult<()> {
         self.close_pending();
-        let depth = self.stack.len();
-        self.newline(depth);
+        self.newline_before_node();
         self.out.push_str("<!--");
         self.out.push_str(text);
         self.out.push_str("-->");
@@ -765,8 +785,7 @@ impl XmlWriter {
     /// Не отказывает; `Result` — ради единообразия.
     pub fn write_processing_instruction(&mut self, target: &str, data: &str) -> RtResult<()> {
         self.close_pending();
-        let depth = self.stack.len();
-        self.newline(depth);
+        self.newline_before_node();
         self.out.push_str("<?");
         self.out.push_str(target);
         if !data.is_empty() {
@@ -787,8 +806,7 @@ impl XmlWriter {
     /// Не отказывает; `Result` — ради единообразия.
     pub fn write_cdata(&mut self, text: &str) -> RtResult<()> {
         self.close_pending();
-        let depth = self.stack.len();
-        self.newline(depth);
+        self.newline_before_node();
         self.out.push_str("<![CDATA[");
         self.out.push_str(text);
         self.out.push_str("]]>");
@@ -1264,7 +1282,12 @@ fn index_arg(arg: Option<&BslValue>) -> RtResult<usize> {
 
 // --- Методы записи ------------------------------------------------------
 
-fn with_writer<R>(obj: &BslValue, f: impl FnOnce(&mut XmlWriter) -> RtResult<R>) -> RtResult<R> {
+/// Доступ к писателю получателя. `pub(crate)`, потому что тем же писателем
+/// пишет дерево DOM (`dom::write`): второго сериализатора XML в рантайме нет.
+pub(crate) fn with_writer<R>(
+    obj: &BslValue,
+    f: impl FnOnce(&mut XmlWriter) -> RtResult<R>,
+) -> RtResult<R> {
     let writer = as_writer(obj)?;
     let mut slot = writer.borrow_mut();
     let w = slot

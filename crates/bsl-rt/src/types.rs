@@ -84,10 +84,17 @@ pub enum TypeId {
     // `DOMBuilder`, а у коллекции атрибутов — `DOMAttributeMap`
     // (`DOMNamedNodeMap` и `DOMAttributeCollection` платформа НЕ знает).
     DomBuilder,
+    /// `ЗаписьDOM` — сериализатор дерева. Оба написания ИЗМЕРЕНЫ:
+    /// `Тип("ЗаписьDOM")` и `Тип("DOMWriter")` дают один тип, печатающийся
+    /// «Запись DOM» (справка называет его иначе — см. заголовок `dom.rs`).
+    DomWriter,
     DomDocument,
     DomElement,
     DomAttribute,
     DomText,
+    /// `СекцияCDATADOM` — узел, который создаёт `СоздатьСекциюCDATA`. Разбор
+    /// такого узла НЕ создаёт: секция вливается в текст (измерено).
+    DomCdataSection,
     DomComment,
     DomProcessingInstruction,
     DomNodeList,
@@ -231,11 +238,20 @@ const NAMES: &[(TypeId, &str, &str)] = &[
     ),
     (TypeId::XmlNodeType, "ТипУзлаXML", "XMLNodeType"),
     (TypeId::DomBuilder, "Построитель DOM", "DOMBuilder"),
+    (TypeId::DomWriter, "Запись DOM", "DOMWriter"),
     // Двойной пробел ИЗМЕРЕН, см. комментарий у вариантов выше.
     (TypeId::DomDocument, "Документ  DOM", "DOMDocument"),
     (TypeId::DomElement, "Элемент DOM", "DOMElement"),
     (TypeId::DomAttribute, "Атрибут DOM", "DOMAttribute"),
     (TypeId::DomText, "Текст DOM", "DOMText"),
+    // Оба написания ИЗМЕРЕНЫ: `Строка(Тип("СекцияCDATADOM"))` и
+    // `Строка(Тип("DOMCDATASection"))` дают «Секция CDATA DOM», и тот же тип
+    // отдаёт `ТипЗнч(Док.СоздатьСекциюCDATA("ц"))`.
+    (
+        TypeId::DomCdataSection,
+        "Секция CDATA DOM",
+        "DOMCDATASection",
+    ),
     (TypeId::DomComment, "Комментарий  DOM", "DOMComment"),
     (
         TypeId::DomProcessingInstruction,

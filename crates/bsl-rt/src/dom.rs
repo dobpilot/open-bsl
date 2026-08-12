@@ -1,7 +1,13 @@
-//! DOM на чтение: `ПостроительDOM` строит дерево узлов из `ЧтениеXML`.
+//! DOM: `ПостроительDOM` строит дерево узлов из `ЧтениеXML`, `ДокументDOM`
+//! создаёт узлы и меняет дерево, `ЗаписьDOM` сериализует его назад в XML
+//! через `ЗаписьXML`.
 //!
 //! Второго разборщика здесь нет — дерево собирается из событий того же
-//! [`XmlParser`](crate::xml::XmlParser), что питает `ЧтениеXML`. Отсюда
+//! [`XmlParser`](crate::xml::XmlParser), что питает `ЧтениеXML`. Второго
+//! сериализатора тоже нет: обход дерева пишет через тот же
+//! [`XmlWriter`](crate::xml::XmlWriter), что питает `ЗаписьXML`, поэтому всё
+//! измеренное форматирование (отступ в один таб, закрывающий тег вплотную
+//! после текста, экранирование) достаётся записи дерева бесплатно. Отсюда
 //! бесплатно наследуются его измеренные правила: секция CDATA вливается в
 //! соседний текст, целиком пробельный текстовый прогон выбрасывается, а
 //! пробел вокруг значащего текста сохраняется, ссылки на сущности
@@ -51,6 +57,107 @@
 //! * битый XML, пустой ввод, два корня, неизвестная сущность и читатель
 //!   без источника — ошибка.
 //!
+//! # Что ИЗМЕРЕНО про создание, мутацию и запись
+//!
+//! Снято пробами `tests/conformance/measure/measure-dom-write.bsl`. Справка
+//! здесь врёт дважды: методов `СоздатьЭлементNS`/`СоздатьАтрибутNS` у
+//! платформы НЕТ (пространство имён задаёт ВТОРАЯ форма того же
+//! `СоздатьЭлемент`/`СоздатьАтрибут`), а тип-писатель называется `ЗаписьDOM`,
+//! и `Записать` у него принимает узел ПЕРВЫМ аргументом.
+//!
+//! * `Новый ДокументDOM` (`DOMDocument`) — пустой документ: `ИмяУзла` —
+//!   `#document`, детей ноль, `ЭлементДокумента` — `Неопределено`,
+//!   `ВерсияXML` — `1.0`, `ДокументВладелец` — сам он;
+//! * фабрики есть ТОЛЬКО у документа (`Э.СоздатьЭлемент(...)` — ошибка):
+//!   `СоздатьЭлемент(Имя)` / `(URI, Имя)`, `СоздатьТекстовыйУзел(Текст)`,
+//!   `СоздатьКомментарий(Текст)`, `СоздатьСекциюCDATA(Текст)`,
+//!   `СоздатьИнструкциюОбработки(Цель, Данные)` (ровно два аргумента),
+//!   `СоздатьАтрибут(Имя)` / `(URI, Имя)`. Пустое и негодное имя — ошибка
+//!   (`СоздатьАтрибут("а", "1")` отвергается именно поэтому: это форма
+//!   `(URI, Имя)` с именем `1`), три аргумента — ошибка. Годность имени
+//!   измерена по краям: `а б` и `-а` отвергаются, `а.б` и даже `а:б:в`
+//!   принимаются;
+//! * созданный узел ничей: `РодительскийУзел` — `Неопределено`, а
+//!   `ДокументВладелец` — создавший документ;
+//! * **`ЛокальноеИмя` и `Префикс` у созданных узлов НЕ выводятся из имени.**
+//!   Одноаргументная форма даёт узел БЕЗ пространства имён (DOM уровня 1), и
+//!   платформа отдаёт у такого ЭЛЕМЕНТА `ЛокальноеИмя` и `Префикс` пустыми
+//!   даже для имени `п:а`, а у АТРИБУТА — `ЛокальноеИмя`, равное ПОЛНОМУ
+//!   имени (`п:а`), и пустой `Префикс`. Двухаргументная форма разбирает имя:
+//!   `СоздатьЭлемент("urn:х", "п:а")` даёт `Префикс` `п`, `ЛокальноеИмя` `а`,
+//!   URI `urn:х`. Пустой URI с префиксом в имени — ошибка, а без префикса
+//!   (`СоздатьЭлемент("", "а")`) принимается;
+//! * **элемент, созданный формой `(URI, Имя)`, СРАЗУ несёт объявление
+//!   пространства имён атрибутом:** `xmlns:п` для имени с префиксом и
+//!   `xmlns` для имени без него, URI у объявления —
+//!   `http://www.w3.org/2000/xmlns/`, а локальное имя и префикс те же, что у
+//!   разобранного объявления. У одноаргументной формы атрибутов ноль. А вот
+//!   `УстановитьАтрибут(URI, Имя, Значение)` объявления НЕ добавляет —
+//!   атрибут остаётся один, и объявление для него выдумывает уже писатель;
+//! * `ДочерниеУзлы` и `Атрибуты` — ЖИВЫЕ окна: список, взятый до
+//!   `ДобавитьДочерний`, показывает уже двоих детей, а коллекция, взятая до
+//!   `УстановитьАтрибут`, — уже два атрибута. Результат
+//!   `ПолучитьЭлементыПоИмени`, наоборот, СНИМОК: он остаётся прежним, тогда
+//!   как свежий запрос находит на один элемент больше;
+//! * `ДобавитьДочерний(Узел)` возвращает ТОТ ЖЕ узел, `ВставитьПеред(Новый,
+//!   Опорный)` — вставленный, `УдалитьДочерний(Узел)` — удалённый (родитель
+//!   у него становится `Неопределено`, а документ-владелец остаётся),
+//!   `ЗаменитьДочерний(Новый, Старый)` — СТАРЫЙ. `ВставитьПеред` с
+//!   `Неопределено` вместо опорного узла — ошибка, а не «добавить в конец»;
+//! * узел, у которого уже есть родитель, при вставке ПЕРЕЕЗЖАЕТ (у прежнего
+//!   родителя его больше нет). Узел ЧУЖОГО документа — ошибка, и созданный
+//!   чужим документом тоже; вставка себя в своего потомка, документа,
+//!   атрибута, `Неопределено` и строки — ошибка; удаление и замена узла,
+//!   который этому родителю не ребёнок, — ошибка;
+//! * что чему разрешено быть ребёнком: у ДОКУМЕНТА — элемент, комментарий и
+//!   инструкция обработки (текст и секция CDATA — ошибка), причём ВТОРОЙ
+//!   корневой элемент документ принимает молча (`ЭлементДокумента` остаётся
+//!   первым); у ЭЛЕМЕНТА — всё перечисленное плюс текст и секция CDATA; у
+//!   АТРИБУТА — текстовый узел (значение атрибута после этого дописывается);
+//!   у текста, комментария, инструкции обработки и секции CDATA детей быть
+//!   не может;
+//! * `УстановитьАтрибут(Имя, Значение)` / `(URI, Имя, Значение)` — ПРОЦЕДУРА
+//!   (`Р = Э.УстановитьАтрибут(...)` платформа отвергает), как и
+//!   `УдалитьАтрибут(Имя)` / `(URI, ЛокальноеИмя)`. Значение обязано быть
+//!   строкой (число — ошибка), пустое имя — ошибка, повторная установка
+//!   меняет значение НА МЕСТЕ, не переставляя атрибут в конец. Трёхаргументная
+//!   форма с именем БЕЗ префикса кладёт атрибут без пространства имён —
+//!   URI из первого аргумента при этом ТЕРЯЕТСЯ (измерено);
+//! * `УстановитьУзелАтрибута(Атрибут)` отдаёт ЗАМЕЩЁННЫЙ атрибут либо
+//!   `Неопределено`, `УдалитьУзелАтрибута(Атрибут)` — удалённый. Чужой
+//!   документ, чужой элемент-владелец и удаление не своего атрибута — ошибка;
+//! * значение атрибута — это склейка его ТЕКСТОВЫХ детей: у созданного
+//!   `СоздатьАтрибут` детей ноль и `Значение` пусто, у разобранного — один
+//!   текстовый ребёнок, а присваивание `Значение`/`ЗначениеУзла` заменяет
+//!   детей одним текстовым узлом (`дитя=9` после `А.Значение = "9"`);
+//! * пишутся `Значение`, `ЗначениеУзла`, `Данные` и `ТекстовоеСодержимое`
+//!   (последнее заменяет ВСЕХ детей одним текстовым узлом, а пустая строка
+//!   оставляет ноль детей); `ИмяУзла` присвоить нельзя — ошибка;
+//!   присваивание `ЗначениеУзла` элементу и `ТекстовоеСодержимое` документу
+//!   платформа принимает и НИЧЕГО не делает;
+//! * `ЗаписьDOM.Записать(Узел, ЗаписьXML)` — ровно два аргумента в этом
+//!   порядке (обратный — ошибка), английское имя `Write`. ДОКУМЕНТ пишется
+//!   вместе с объявлением XML, которое берётся из настроек ПИСАТЕЛЯ, а не из
+//!   `ВерсияXML` документа (документ версии 1.1 всё равно даёт
+//!   `version="1.0"`), поэтому явный `ЗаписатьОбъявлениеXML()` перед записью
+//!   документа — ошибка (объявление шло бы вторым). Любой другой узел
+//!   пишется без объявления; АТРИБУТ не пишется вовсе (пустой результат, не
+//!   ошибка); текстовый узел и секция CDATA вне элемента — ошибка;
+//!   комментарий и инструкция обработки вне элемента пишутся;
+//! * объявления пространств имён писатель расставляет САМ: они собираются из
+//!   объявлений-атрибутов элемента И из URI самого элемента и его атрибутов,
+//!   печатаются ПЕРЕД обычными атрибутами и отсортированными по имени
+//!   (`xmlns` раньше `xmlns:а` раньше `xmlns:я`), тогда как обычные атрибуты
+//!   сохраняют порядок документа. Лишнее опускается: то, что уже действует в
+//!   области видимости с тем же URI, второй раз не печатается — даже если у
+//!   элемента есть свой атрибут-объявление (элемент, созданный формой
+//!   `(URI, Имя)` внутри родителя с тем же объявлением, выходит как
+//!   `<к:цена/>`). Наоборот, отдельно записанный потомок получает объявление
+//!   своего пространства имён заново (`<б xmlns="urn:по"/>`);
+//! * объявление-атрибут с ПУСТЫМ URI (такой получается из
+//!   `УстановитьАтрибут("xmlns:к", "urn:к")`, где URI не проставляется) при
+//!   записи — ошибка.
+//!
 //! # Сознательные расхождения
 //!
 //! * **Узел `ОпределениеТипаДокумента` не строится.** Платформа кладёт в
@@ -69,6 +176,23 @@
 //!   неизвестен в принципе. Здесь второй вызов видит исчерпанного
 //!   читателя и отдаёт пустой документ — ровно то же, что измерено для
 //!   любого другого исчерпанного читателя.
+//! * **Клонирование, импорт, фрагмент документа и ссылка на сущность не
+//!   реализованы.** Платформа их знает — измерено, что `КлонироватьУзел(Да)`
+//!   копирует детей И атрибуты, `КлонироватьУзел(Нет)` не копирует НИ детей,
+//!   НИ атрибутов (а не «атрибуты да, дети нет», как в спецификации DOM),
+//!   `ИмпортироватьУзел(Узел, Глубоко)` — единственный законный путь взять
+//!   узел из чужого документа, `СоздатьФрагментДокумента()` даёт контейнер,
+//!   чьи дети при вставке ПЕРЕЕЗЖАЮТ в приёмник (сам фрагмент остаётся
+//!   пустым), а `СоздатьСсылкуНаСущность("amp")` даёт узел
+//!   `СсылкаНаСущностьDOM`. Всё это лежит за границей задачи (создание,
+//!   мутация и запись) и оставлено на потом ВМЕСТЕ со снятыми замерами —
+//!   contract-скрипт их хранит, так что переизмерять не придётся.
+//! * **Присваивание результата процедуры.** Платформа отвергает
+//!   `Р = Э.УстановитьАтрибут("а", "1")`, потому что это процедура. Здесь,
+//!   как и у всех прочих встроенных методов-процедур этого интерпретатора,
+//!   такой вызов вернёт `Неопределено`: различия «процедура/функция» у
+//!   встроенных методов нет во всей реализации, и заводить его ради одного
+//!   семейства нельзя.
 //! * **Префиксы атрибутов у предков, восстановленных из стека читателя.**
 //!   Дерево «с глубины» достраивает предков из `open_elements()`, и
 //!   префикс их атрибута разрешается через `parser.namespace_of`, то есть
@@ -78,13 +202,13 @@
 //!   вернёт внутреннее объявление. На платформе случай не мерился —
 //!   контрактная проба «с глубины» переобъявления не содержит.
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
 use crate::object::{BslObject, XmlReaderState};
 use crate::string::BslString;
-use crate::xml::{local_of, prefix_of, XmlEvent, XmlParser};
-use crate::xml::{COMMENT_NODE_NAME, DOCUMENT_NODE_NAME, TEXT_NODE_NAME};
+use crate::xml::{local_of, prefix_of, XmlEvent, XmlParser, XmlWriter};
+use crate::xml::{CDATA_NODE_NAME, COMMENT_NODE_NAME, DOCUMENT_NODE_NAME, TEXT_NODE_NAME};
 use crate::{BslValue, EnumValue, RtError, RtResult};
 
 /// URI, который платформа приписывает объявлениям пространств имён
@@ -92,15 +216,18 @@ use crate::{BslValue, EnumValue, RtError, RtResult};
 /// Namespaces, но здесь оно ИЗМЕРЕНО, а не процитировано.
 const XMLNS_URI: &str = "http://www.w3.org/2000/xmlns/";
 
-/// Вид узла. Ровно те виды, которые построитель умеет создавать; секции
-/// CDATA среди них нет намеренно — она вливается в текст (измерено), а
-/// определения типа документа нет по причине из заголовка модуля.
+/// Вид узла. Ровно те виды, которые умеют появиться в дереве: РАЗБОР секции
+/// CDATA не создаёт (она вливается в текст — измерено), но
+/// `СоздатьСекциюCDATA` создаёт, поэтому вид у неё свой. Определения типа
+/// документа, фрагмента и ссылки на сущность здесь нет по причинам из
+/// заголовка модуля.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DomKind {
     Document,
     Element,
     Attribute,
     Text,
+    CdataSection,
     Comment,
     ProcessingInstruction,
 }
@@ -113,29 +240,45 @@ impl DomKind {
             DomKind::Element => EnumValue::DomElement,
             DomKind::Attribute => EnumValue::DomAttribute,
             DomKind::Text => EnumValue::DomText,
+            DomKind::CdataSection => EnumValue::DomCdataSection,
             DomKind::Comment => EnumValue::DomComment,
             DomKind::ProcessingInstruction => EnumValue::DomProcessingInstruction,
         }
+    }
+
+    /// Текстоподобен ли узел: даёт ли он вклад в `ТекстовоеСодержимое` и
+    /// запрещён ли вне элемента при записи. ИЗМЕРЕНО, что секция CDATA в
+    /// склейку входит (`раз` + CDATA `два` дают «раздва») и что записать её
+    /// вне элемента — ошибка, ровно как текст.
+    fn is_text_like(self) -> bool {
+        matches!(self, DomKind::Text | DomKind::CdataSection)
     }
 }
 
 /// Узел дерева.
 ///
-/// Дети и атрибуты складываются на месте при разборе, поэтому лежат в
-/// `RefCell`; после того как построение кончилось, дерево только читается.
-/// Ссылки вверх — слабые: иначе документ с детьми образовал бы цикл `Rc` и
-/// не освобождался бы никогда.
+/// Дети, атрибуты и значение лежат в `RefCell`: дерево складывается на месте
+/// при разборе, а после разбора его меняют фабрики и мутирующие методы
+/// документа. Ссылки вверх — слабые: иначе документ с детьми образовал бы
+/// цикл `Rc` и не освобождался бы никогда.
 #[derive(Debug)]
 pub struct DomNode {
     kind: DomKind,
     /// `ИмяУзла`: полное имя элемента или атрибута, `#document`, `#text`,
-    /// `#comment` либо цель инструкции обработки.
+    /// `#cdata-section`, `#comment` либо цель инструкции обработки. Имя
+    /// неизменяемо: присвоить `ИмяУзла` платформа не даёт (измерено).
     name: String,
+    /// `ЛокальноеИмя` и `Префикс` — ХРАНИМЫЕ, а не выведенные из имени: у
+    /// узлов без пространства имён платформа отдаёт совсем не то, что дало бы
+    /// расщепление имени по двоеточию (см. заголовок модуля).
+    local: String,
+    prefix: String,
     /// `URIПространстваИмен`; пусто, если пространства имён нет.
     uri: String,
-    /// `ЗначениеУзла`/`Данные`: текст, комментарий, значение атрибута,
-    /// данные инструкции обработки. У документа и элемента значения нет.
-    value: Option<String>,
+    /// `ЗначениеУзла`/`Данные`: текст, секция CDATA, комментарий, данные
+    /// инструкции обработки. У документа, элемента и АТРИБУТА значения здесь
+    /// нет: значение атрибута — это склейка его текстовых детей (измерено).
+    value: RefCell<Option<String>>,
     children: RefCell<Vec<Rc<DomNode>>>,
     attrs: RefCell<Vec<Rc<DomNode>>>,
     /// Родитель по дереву. У атрибута здесь лежит ВЛАДЕЮЩИЙ ЭЛЕМЕНТ, но
@@ -143,24 +286,42 @@ pub struct DomNode {
     /// у атрибута `Неопределено` (измерено).
     parent: RefCell<Weak<DomNode>>,
     owner: RefCell<Weak<DomNode>>,
-    /// Номер среди детей родителя — по нему ищутся соседи.
-    index: Cell<usize>,
     /// `ВерсияXML` — заполняется только у документа, из объявления.
     xml_version: RefCell<String>,
 }
 
 impl DomNode {
+    /// Узел, каким его делает РАЗБОР: локальное имя и префикс расщеплением
+    /// полного имени, как их отдаёт платформа у разобранного дерева.
     fn new(kind: DomKind, name: String, uri: String, value: Option<String>) -> Rc<DomNode> {
+        let (local, prefix) = match kind {
+            DomKind::Element | DomKind::Attribute => {
+                (local_of(&name).to_string(), prefix_of(&name).to_string())
+            }
+            _ => (String::new(), String::new()),
+        };
+        DomNode::raw(kind, name, local, prefix, uri, value)
+    }
+
+    fn raw(
+        kind: DomKind,
+        name: String,
+        local: String,
+        prefix: String,
+        uri: String,
+        value: Option<String>,
+    ) -> Rc<DomNode> {
         Rc::new(DomNode {
             kind,
             name,
+            local,
+            prefix,
             uri,
-            value,
+            value: RefCell::new(value),
             children: RefCell::new(Vec::new()),
             attrs: RefCell::new(Vec::new()),
             parent: RefCell::new(Weak::new()),
             owner: RefCell::new(Weak::new()),
-            index: Cell::new(0),
             xml_version: RefCell::new(String::from("1.0")),
         })
     }
@@ -169,34 +330,26 @@ impl DomNode {
         self.kind
     }
 
-    /// Добавить ребёнка, проставив ему родителя, документ и номер.
+    /// Добавить ребёнка, проставив ему родителя и документ.
     fn append(parent: &Rc<DomNode>, child: &Rc<DomNode>, doc: &Rc<DomNode>) {
-        let mut kids = parent.children.borrow_mut();
-        child.index.set(kids.len());
         *child.parent.borrow_mut() = Rc::downgrade(parent);
         *child.owner.borrow_mut() = Rc::downgrade(doc);
-        kids.push(child.clone());
+        parent.children.borrow_mut().push(child.clone());
     }
 
-    /// `ЛокальноеИмя`. У всего, кроме элемента и атрибута, платформа
-    /// отдаёт пустую строку — измерено на документе, тексте и комментарии.
+    /// `ЛокальноеИмя`.
     fn local_name(&self) -> &str {
-        match self.kind {
-            DomKind::Element | DomKind::Attribute => local_of(&self.name),
-            _ => "",
-        }
+        &self.local
     }
 
-    /// `Префикс` — по тому же правилу, что и локальное имя.
+    /// `Префикс`.
     fn prefix(&self) -> &str {
-        match self.kind {
-            DomKind::Element | DomKind::Attribute => prefix_of(&self.name),
-            _ => "",
-        }
+        &self.prefix
     }
 
     /// `ТекстовоеСодержимое`: склейка ТЕКСТОВЫХ потомков. Комментарии в
-    /// неё не входят (измерено: `<ком>раз<!--к-->два</ком>` даёт «раздва»).
+    /// неё не входят (измерено: `<ком>раз<!--к-->два</ком>` даёт «раздва»),
+    /// а секции CDATA входят (измерено).
     fn text_content(&self) -> String {
         let mut out = String::new();
         self.collect_text(&mut out);
@@ -204,14 +357,56 @@ impl DomNode {
     }
 
     fn collect_text(&self, out: &mut String) {
-        if self.kind == DomKind::Text {
-            if let Some(v) = &self.value {
+        if self.kind.is_text_like() {
+            if let Some(v) = self.value.borrow().as_ref() {
                 out.push_str(v);
             }
         }
         for c in self.children.borrow().iter() {
             c.collect_text(out);
         }
+    }
+
+    /// `ЗначениеУзла`/`Значение` у атрибута — склейка его текстовых детей
+    /// (измерено: у созданного атрибута детей ноль и значение пусто, а
+    /// дописанный текстовый ребёнок дописывает и значение).
+    fn attr_value(&self) -> String {
+        self.text_content()
+    }
+
+    /// Заменить всех детей одним текстовым узлом; пустая строка оставляет
+    /// узел вовсе без детей (измерено на `ТекстовоеСодержимое`).
+    fn set_text_children(node: &Rc<DomNode>, text: &str, doc: &Rc<DomNode>) {
+        Self::detach_children(node);
+        if text.is_empty() {
+            return;
+        }
+        let child = DomNode::new(
+            DomKind::Text,
+            TEXT_NODE_NAME.to_string(),
+            String::new(),
+            Some(text.to_string()),
+        );
+        DomNode::append(node, &child, doc);
+    }
+
+    /// Отцепить всех детей: родителя им обнулить, список очистить.
+    fn detach_children(node: &Rc<DomNode>) {
+        let old = std::mem::take(&mut *node.children.borrow_mut());
+        for child in old {
+            *child.parent.borrow_mut() = Weak::new();
+        }
+    }
+
+    /// Номер узла среди детей его родителя. Ищется каждый раз, а не
+    /// хранится: мутация переставляет детей, и хранимый номер устарел бы
+    /// молча — в отличие от поиска, который не может разойтись с деревом.
+    fn index_in(node: &Rc<DomNode>, parent: &Rc<DomNode>) -> Option<usize> {
+        parent
+            .children
+            .borrow()
+            .iter()
+            .position(|c| Rc::ptr_eq(c, node))
     }
 
     /// Элементы-потомки в порядке документа. Сам узел в результат не
@@ -232,15 +427,15 @@ impl DomNode {
         wanted == "*" || self.name == wanted || self.local_name() == wanted
     }
 
-    fn sibling(&self, forward: bool) -> Option<Rc<DomNode>> {
+    fn sibling(node: &Rc<DomNode>, forward: bool) -> Option<Rc<DomNode>> {
         // У атрибута соседей нет: он не лежит среди детей своего элемента,
         // и `РодительскийУзел` у него `Неопределено` (измерено).
-        if self.kind == DomKind::Attribute {
+        if node.kind == DomKind::Attribute {
             return None;
         }
-        let parent = self.parent.borrow().upgrade()?;
+        let parent = node.parent.borrow().upgrade()?;
+        let i = DomNode::index_in(node, &parent)?;
         let kids = parent.children.borrow();
-        let i = self.index.get();
         let j = if forward {
             i.checked_add(1)?
         } else {
@@ -261,13 +456,19 @@ fn bad(what: impl Into<String>) -> RtError {
 /// Само построение итеративно, а вот всё, что с готовым деревом потом
 /// происходит, — нет: рекурсивны и `Drop` для `Rc<DomNode>` с детьми в
 /// `RefCell<Vec<..>>`, и [`DomNode::collect_text`], и
-/// [`DomNode::descendants`]. Без предела документ вида `<а><а><а>…` валил
-/// бы процесс переполнением стека вместо перехватываемой ошибки — причём
-/// на разрушении дерева, то есть уже после того, как скрипт напечатал весь
-/// свой вывод. Предел ставится в одной точке — на построении, — и этого
-/// достаточно: мутационного API у дерева нет, другого способа получить
-/// узел, кроме чтения, тоже, поэтому переделывать обход и разрушение в
-/// итеративные незачем — 500 кадров держит даже стек debug-сборки.
+/// [`DomNode::descendants`], и обход при записи. Без предела документ вида
+/// `<а><а><а>…` валил бы процесс переполнением стека вместо перехватываемой
+/// ошибки — причём на разрушении дерева, то есть уже после того, как скрипт
+/// напечатал весь свой вывод.
+///
+/// Точек, где дерево растёт, ДВЕ: построение и вставка. Обе считают одной
+/// мерой — уровнями элементов, где у документа 0, а у корневого элемента 1, —
+/// поэтому [`check_insert`] складывает уровень приёмника с высотой
+/// вставляемого поддерева и сравнивает с тем же числом. Инвариант
+/// поддерживается по индукции: раз в дереве не больше `MAX_DOM_DEPTH`
+/// уровней, то и высота любого его поддерева не больше, а значит рекурсия в
+/// [`element_height`] тоже ограничена. 500 кадров держит даже стек
+/// debug-сборки.
 // НЕ ИЗМЕРЕНО(DOM.MAX_DEPTH) — какую глубину вложенности допускает
 // `ПостроительDOM` на платформе; растущий зонд намеренно не ставится: если
 // платформа на нём падает, он уносит весь сеанс замеров. Замер даёт нижнюю
@@ -480,7 +681,6 @@ fn attach_attribute(
     DomNode::append(&attr, &text, doc);
     *attr.parent.borrow_mut() = Rc::downgrade(el);
     *attr.owner.borrow_mut() = Rc::downgrade(doc);
-    attr.index.set(el.attrs.borrow().len());
     el.attrs.borrow_mut().push(attr);
 }
 
@@ -495,15 +695,59 @@ fn document_element(doc: &Rc<DomNode>) -> Option<Rc<DomNode>> {
 
 // --- Склейка с объектами BSL --------------------------------------------
 
-/// Какой из трёх коллекций-типов платформы соответствует список узлов.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Какой из трёх коллекций-типов платформы соответствует список узлов — и
+/// откуда он берёт содержимое.
+///
+/// Тут ИЗМЕРЕНА тонкость, которую видно только вместе с мутацией: две первые
+/// коллекции — ЖИВЫЕ окна, а третья — снимок. Список, взятый до
+/// `ДобавитьДочерний`, показывает уже двоих детей, коллекция атрибутов,
+/// взятая до `УстановитьАтрибут`, — уже два атрибута, а вот результат
+/// `ПолучитьЭлементыПоИмени("*")` остаётся прежним, тогда как свежий запрос
+/// находит на один элемент больше. Поэтому первые две помнят УЗЕЛ, а третья —
+/// найденное.
+#[derive(Debug, Clone)]
 pub enum DomListKind {
-    /// `СписокУзловDOM` — `ДочерниеУзлы`.
-    Nodes,
-    /// `КоллекцияАтрибутовDOM` — `Атрибуты`.
-    Attributes,
-    /// `СписокЭлементовDOM` — результат `ПолучитьЭлементыПоИмени`.
-    Elements,
+    /// `СписокУзловDOM` — `ДочерниеУзлы` этого узла.
+    Nodes(Rc<DomNode>),
+    /// `КоллекцияАтрибутовDOM` — `Атрибуты` этого элемента.
+    Attributes(Rc<DomNode>),
+    /// `СписокЭлементовDOM` — снимок результата `ПолучитьЭлементыПоИмени`.
+    Elements(Vec<Rc<DomNode>>),
+}
+
+impl DomListKind {
+    /// Содержимое коллекции на СЕЙЧАС. Живые окна перечитывают узел, снимок
+    /// отдаёт своё.
+    pub fn items(&self) -> Vec<Rc<DomNode>> {
+        match self {
+            DomListKind::Nodes(node) => node.children.borrow().clone(),
+            DomListKind::Attributes(el) => el.attrs.borrow().clone(),
+            DomListKind::Elements(found) => found.clone(),
+        }
+    }
+
+    /// Длина без копирования содержимого.
+    pub fn len(&self) -> usize {
+        match self {
+            DomListKind::Nodes(node) => node.children.borrow().len(),
+            DomListKind::Attributes(el) => el.attrs.borrow().len(),
+            DomListKind::Elements(found) => found.len(),
+        }
+    }
+
+    /// Пуста ли коллекция — `ЗначениеЗаполнено` спрашивает именно это.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Узел по номеру.
+    pub fn get(&self, i: usize) -> Option<Rc<DomNode>> {
+        match self {
+            DomListKind::Nodes(node) => node.children.borrow().get(i).cloned(),
+            DomListKind::Attributes(el) => el.attrs.borrow().get(i).cloned(),
+            DomListKind::Elements(found) => found.get(i).cloned(),
+        }
+    }
 }
 
 /// Обёртка узла в значение BSL. Каждый вызов даёт НОВЫЙ объект-обёртку,
@@ -518,8 +762,8 @@ pub fn node_value(node: &Rc<DomNode>, doc: &Rc<DomNode>) -> BslValue {
     BslValue::Object(Rc::new(BslObject::DomNode(node.clone(), doc.clone())))
 }
 
-fn list_value(kind: DomListKind, items: Vec<Rc<DomNode>>, doc: &Rc<DomNode>) -> BslValue {
-    BslValue::Object(Rc::new(BslObject::DomList(kind, items, doc.clone())))
+fn list_value(kind: DomListKind, doc: &Rc<DomNode>) -> BslValue {
+    BslValue::Object(Rc::new(BslObject::DomList(kind, doc.clone())))
 }
 
 fn opt_node(node: Option<Rc<DomNode>>, doc: &Rc<DomNode>) -> BslValue {
@@ -607,18 +851,25 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
         // У документа, элемента и инструкции обработки значения нет —
         // измерено все три.
         return Ok(match node.kind {
-            DomKind::Text | DomKind::Comment | DomKind::Attribute => opt_str(node.value.as_ref()),
-            _ => BslValue::Undefined,
+            DomKind::Text | DomKind::CdataSection | DomKind::Comment => {
+                opt_str(node.value.borrow().as_ref())
+            }
+            DomKind::Attribute => str_value(&node.attr_value()),
+            DomKind::Document | DomKind::Element | DomKind::ProcessingInstruction => {
+                BslValue::Undefined
+            }
         });
     }
     if is("ТекстовоеСодержимое", "TextContent") {
         return Ok(match node.kind {
             // У документа и инструкции обработки — `Неопределено`
-            // (измерено), у комментария и атрибута — их собственные
-            // данные, у элемента и текста — склейка текста.
+            // (измерено), у комментария — его собственные данные, у
+            // остальных — склейка текста.
             DomKind::Document | DomKind::ProcessingInstruction => BslValue::Undefined,
-            DomKind::Attribute | DomKind::Comment => opt_str(node.value.as_ref()),
-            DomKind::Element | DomKind::Text => str_value(&node.text_content()),
+            DomKind::Comment => opt_str(node.value.borrow().as_ref()),
+            DomKind::Attribute | DomKind::Element | DomKind::Text | DomKind::CdataSection => {
+                str_value(&node.text_content())
+            }
         });
     }
     if is("ЛокальноеИмя", "LocalName") {
@@ -648,17 +899,13 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
         return Ok(opt_node(node.children.borrow().last().cloned(), &doc));
     }
     if is("СледующийСоседний", "NextSibling") {
-        return Ok(opt_node(node.sibling(true), &doc));
+        return Ok(opt_node(DomNode::sibling(&node, true), &doc));
     }
     if is("ПредыдущийСоседний", "PreviousSibling") {
-        return Ok(opt_node(node.sibling(false), &doc));
+        return Ok(opt_node(DomNode::sibling(&node, false), &doc));
     }
     if is("ДочерниеУзлы", "ChildNodes") {
-        return Ok(list_value(
-            DomListKind::Nodes,
-            node.children.borrow().clone(),
-            &doc,
-        ));
+        return Ok(list_value(DomListKind::Nodes(node.clone()), &doc));
     }
     if is("Атрибуты", "Attributes") {
         // Коллекция есть только у элемента — у документа и у текста
@@ -666,11 +913,7 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
         if node.kind != DomKind::Element {
             return Ok(BslValue::Undefined);
         }
-        return Ok(list_value(
-            DomListKind::Attributes,
-            node.attrs.borrow().clone(),
-            &doc,
-        ));
+        return Ok(list_value(DomListKind::Attributes(node.clone()), &doc));
     }
     if is("ЭлементДокумента", "DocumentElement") {
         if node.kind != DomKind::Document {
@@ -698,7 +941,7 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
         if node.kind != DomKind::Attribute {
             return Err(unknown());
         }
-        return Ok(opt_str(node.value.as_ref()));
+        return Ok(str_value(&node.attr_value()));
     }
     if is("ЭлементВладелец", "OwnerElement") {
         if node.kind != DomKind::Attribute {
@@ -710,9 +953,10 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
         // `Данные` есть у текста, комментария и инструкции обработки;
         // у элемента платформа отвергает (измерено).
         return match node.kind {
-            DomKind::Text | DomKind::Comment | DomKind::ProcessingInstruction => {
-                Ok(opt_str(node.value.as_ref()))
-            }
+            DomKind::Text
+            | DomKind::CdataSection
+            | DomKind::Comment
+            | DomKind::ProcessingInstruction => Ok(opt_str(node.value.borrow().as_ref())),
             _ => Err(unknown()),
         };
     }
@@ -785,7 +1029,7 @@ pub fn get_attribute(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
     let (el, _) = as_element(obj, "ПолучитьАтрибут")?;
     let found = find_attribute(&el, args, "ПолучитьАтрибут")?;
     Ok(match found {
-        Some(a) => opt_str(a.value.as_ref()),
+        Some(a) => str_value(&a.attr_value()),
         None => BslValue::Undefined,
     })
 }
@@ -851,7 +1095,7 @@ pub fn get_elements_by_name(obj: &BslValue, args: &[BslValue]) -> RtResult<BslVa
     let mut all = Vec::new();
     node.descendants(&mut all);
     all.retain(|e| e.name_matches(&wanted));
-    Ok(list_value(DomListKind::Elements, all, &doc))
+    Ok(list_value(DomListKind::Elements(all), &doc))
 }
 
 /// `ПолучитьЭлементПоИдентификатору(Идентификатор)`.
@@ -881,6 +1125,983 @@ pub fn get_element_by_id(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue
         });
     }
     need_str(args.first(), "ПолучитьЭлементПоИдентификатору")?;
+    Ok(BslValue::Undefined)
+}
+
+// --- Создание узлов -----------------------------------------------------
+
+/// `Новый ДокументDOM` — пустой документ.
+///
+/// ИЗМЕРЕНО: детей ноль, `ЭлементДокумента` — `Неопределено`, `ВерсияXML` —
+/// `1.0`, а `ДокументВладелец` — сам документ.
+pub fn new_document() -> BslValue {
+    let doc = DomNode::new(
+        DomKind::Document,
+        DOCUMENT_NODE_NAME.to_string(),
+        String::new(),
+        None,
+    );
+    *doc.owner.borrow_mut() = Rc::downgrade(&doc);
+    node_value(&doc, &doc)
+}
+
+/// `Новый ЗаписьDOM`.
+pub fn new_writer() -> BslValue {
+    BslValue::Object(Rc::new(BslObject::DomWriter))
+}
+
+pub fn is_dom_writer(v: &BslValue) -> bool {
+    matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::DomWriter))
+}
+
+/// Годится ли строка как имя XML.
+///
+/// Платформа отвергает и пустое имя, и `1` — именно поэтому
+/// `СоздатьАтрибут("а", "1")` ошибка: это форма `(URI, Имя)` с именем `1`.
+/// Правило то же, что в XML: каждый отрезок между двоеточиями начинается с
+/// буквы или подчёркивания, а дальше идут ещё цифры, дефис и точка. ИЗМЕРЕНО,
+/// что `а б` и `-а` платформа отвергает, а `а.б` и даже `а:б:в` принимает —
+/// поэтому число двоеточий не ограничено (префикс при этом отрезается по
+/// ПЕРВОМУ, как в остальном коде).
+fn valid_name(name: &str) -> bool {
+    let part_ok = |part: &str| {
+        let mut chars = part.chars();
+        let Some(first) = chars.next() else {
+            return false;
+        };
+        if !(first.is_alphabetic() || first == '_') {
+            return false;
+        }
+        chars.all(|c| c.is_alphanumeric() || matches!(c, '_' | '-' | '.'))
+    };
+    !name.is_empty() && name.split(':').all(part_ok)
+}
+
+/// Получатель фабричного метода. ИЗМЕРЕНО, что фабрики есть только у
+/// документа: `Э.СоздатьЭлемент("а")` платформа отвергает.
+fn as_document(v: &BslValue, method: &'static str) -> RtResult<Rc<DomNode>> {
+    let (node, _) = as_node(v, method)?;
+    if node.kind != DomKind::Document {
+        return Err(RtError::MethodNotApplicable {
+            method,
+            receiver: v.type_name(),
+        });
+    }
+    Ok(node)
+}
+
+/// Разобрать аргументы формы `(Имя)` либо `(URI, Имя)`.
+///
+/// Одноаргументная форма даёт узел БЕЗ пространства имён, и локальное имя у
+/// него платформозависимое: у элемента пустое, у атрибута — всё имя целиком
+/// (измерено оба). Двухаргументная расщепляет имя по двоеточию.
+fn named_parts(
+    kind: DomKind,
+    args: &[BslValue],
+    op: &'static str,
+) -> RtResult<(String, String, String, String)> {
+    let bad_name = || RtError::TypeError {
+        expected: "имя XML",
+        op,
+    };
+    match args.len() {
+        1 => {
+            let name = need_str(args.first(), op)?;
+            if !valid_name(&name) {
+                return Err(bad_name());
+            }
+            let local = if kind == DomKind::Attribute {
+                name.clone()
+            } else {
+                String::new()
+            };
+            Ok((name, local, String::new(), String::new()))
+        }
+        2 => {
+            let uri = need_str(args.first(), op)?;
+            let name = need_str(args.get(1), op)?;
+            if !valid_name(&name) {
+                return Err(bad_name());
+            }
+            let prefix = prefix_of(&name).to_string();
+            // ИЗМЕРЕНО: `СоздатьЭлемент("", "п:а")` — ошибка, префикс без
+            // пространства имён платформа не принимает.
+            if uri.is_empty() && !prefix.is_empty() {
+                return Err(RtError::TypeError {
+                    expected: "непустой URI для имени с префиксом",
+                    op,
+                });
+            }
+            Ok((name.clone(), local_of(&name).to_string(), prefix, uri))
+        }
+        _ => Err(RtError::TypeError {
+            expected: "один или два аргумента",
+            op,
+        }),
+    }
+}
+
+/// `ДокументDOM.СоздатьЭлемент(Имя)` / `(URI, Имя)`.
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель не документ;
+/// [`RtError::TypeError`] при негодном имени или неверной арности.
+pub fn create_element(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let doc = as_document(obj, "СоздатьЭлемент")?;
+    let (name, local, prefix, uri) = named_parts(DomKind::Element, args, "СоздатьЭлемент")?;
+    let el = DomNode::raw(
+        DomKind::Element,
+        name,
+        local,
+        prefix.clone(),
+        uri.clone(),
+        None,
+    );
+    *el.owner.borrow_mut() = Rc::downgrade(&doc);
+    // ИЗМЕРЕНО: у элемента, созданного формой `(URI, Имя)`, объявление
+    // пространства имён сразу ВИДНО как атрибут — `xmlns:п` для имени с
+    // префиксом и `xmlns` для имени без него, с URI пространства объявлений.
+    // Писатель его оттуда и берёт; выдумывать объявление приходится только
+    // там, где атрибута нет (узел разобран или пишется в одиночку).
+    if !uri.is_empty() {
+        // Локальное имя и префикс у объявления — те же, что у РАЗОБРАННОГО
+        // объявления (измерено на дереве из разбора: у `xmlns:к` лок «к» и
+        // префикс «xmlns», у `xmlns` лок «xmlns» и пустой префикс), поэтому
+        // узел заводится обычным путём, с расщеплением имени.
+        let decl = DomNode::new(
+            DomKind::Attribute,
+            decl_name(&prefix),
+            XMLNS_URI.to_string(),
+            None,
+        );
+        *decl.parent.borrow_mut() = Rc::downgrade(&el);
+        *decl.owner.borrow_mut() = Rc::downgrade(&doc);
+        DomNode::set_text_children(&decl, &uri, &doc);
+        el.attrs.borrow_mut().push(decl);
+    }
+    Ok(node_value(&el, &doc))
+}
+
+/// `ДокументDOM.СоздатьАтрибут(Имя)` / `(URI, Имя)`.
+///
+/// Значения у созданного атрибута нет вовсе: ИЗМЕРЕНО, что детей у него
+/// ноль, а `Значение` пусто.
+///
+/// # Errors
+///
+/// Как у [`create_element`].
+pub fn create_attribute(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let doc = as_document(obj, "СоздатьАтрибут")?;
+    let (name, local, prefix, uri) = named_parts(DomKind::Attribute, args, "СоздатьАтрибут")?;
+    let attr = DomNode::raw(DomKind::Attribute, name, local, prefix, uri, None);
+    *attr.owner.borrow_mut() = Rc::downgrade(&doc);
+    Ok(node_value(&attr, &doc))
+}
+
+/// Общая фабрика узлов, у которых вместо имени данные: текст, секция CDATA
+/// и комментарий. Имя узла у них служебное (`#text`, `#cdata-section`,
+/// `#comment`) — измерено.
+fn create_char_data(
+    obj: &BslValue,
+    args: &[BslValue],
+    kind: DomKind,
+    node_name: &str,
+    op: &'static str,
+) -> RtResult<BslValue> {
+    let doc = as_document(obj, op)?;
+    if args.len() != 1 {
+        return Err(RtError::TypeError {
+            expected: "ровно один аргумент",
+            op,
+        });
+    }
+    let text = need_str(args.first(), op)?;
+    let node = DomNode::new(kind, node_name.to_string(), String::new(), Some(text));
+    *node.owner.borrow_mut() = Rc::downgrade(&doc);
+    Ok(node_value(&node, &doc))
+}
+
+/// `ДокументDOM.СоздатьТекстовыйУзел(Текст)`.
+///
+/// # Errors
+///
+/// Как у [`create_element`]; пустая строка допустима (измерено).
+pub fn create_text_node(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    create_char_data(
+        obj,
+        args,
+        DomKind::Text,
+        TEXT_NODE_NAME,
+        "СоздатьТекстовыйУзел",
+    )
+}
+
+/// `ДокументDOM.СоздатьСекциюCDATA(Текст)`.
+///
+/// # Errors
+///
+/// Как у [`create_element`].
+pub fn create_cdata_section(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    create_char_data(
+        obj,
+        args,
+        DomKind::CdataSection,
+        CDATA_NODE_NAME,
+        "СоздатьСекциюCDATA",
+    )
+}
+
+/// `ДокументDOM.СоздатьКомментарий(Текст)`.
+///
+/// # Errors
+///
+/// Как у [`create_element`].
+pub fn create_comment(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    create_char_data(
+        obj,
+        args,
+        DomKind::Comment,
+        COMMENT_NODE_NAME,
+        "СоздатьКомментарий",
+    )
+}
+
+/// `ДокументDOM.СоздатьИнструкциюОбработки(Цель, Данные)`.
+///
+/// Ровно два аргумента: ИЗМЕРЕНО, что одноаргументную форму платформа
+/// отвергает.
+///
+/// # Errors
+///
+/// Как у [`create_element`].
+pub fn create_processing_instruction(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let op = "СоздатьИнструкциюОбработки";
+    let doc = as_document(obj, op)?;
+    if args.len() != 2 {
+        return Err(RtError::TypeError {
+            expected: "ровно два аргумента — цель и данные",
+            op,
+        });
+    }
+    let target = need_str(args.first(), op)?;
+    if !valid_name(&target) {
+        return Err(RtError::TypeError {
+            expected: "имя XML",
+            op,
+        });
+    }
+    let data = need_str(args.get(1), op)?;
+    let node = DomNode::new(
+        DomKind::ProcessingInstruction,
+        target,
+        String::new(),
+        Some(data),
+    );
+    *node.owner.borrow_mut() = Rc::downgrade(&doc);
+    Ok(node_value(&node, &doc))
+}
+
+// --- Мутация дерева -----------------------------------------------------
+
+/// Может ли узел вида `child` лежать в детях узла вида `parent`. Таблица
+/// целиком ИЗМЕРЕНА (см. заголовок модуля): текст и секция CDATA в документ
+/// не идут, атрибут и документ не идут никуда, а у текстоподобных узлов и
+/// инструкции обработки детей не бывает.
+fn may_contain(parent: DomKind, child: DomKind) -> bool {
+    match parent {
+        DomKind::Document => matches!(
+            child,
+            DomKind::Element | DomKind::Comment | DomKind::ProcessingInstruction
+        ),
+        DomKind::Element => matches!(
+            child,
+            DomKind::Element
+                | DomKind::Text
+                | DomKind::CdataSection
+                | DomKind::Comment
+                | DomKind::ProcessingInstruction
+        ),
+        // У атрибута дети — текст: ИЗМЕРЕНО, что дописанный текстовый узел
+        // платформа принимает и дописывает им значение атрибута.
+        DomKind::Attribute => child == DomKind::Text,
+        DomKind::Text | DomKind::CdataSection | DomKind::Comment => false,
+        DomKind::ProcessingInstruction => false,
+    }
+}
+
+/// Узел из аргумента: не узел DOM — ошибка, ровно как на платформе, где
+/// `ДобавитьДочерний(Неопределено)` и `ДобавитьДочерний("т")` отвергаются.
+fn need_node(arg: Option<&BslValue>, op: &'static str) -> RtResult<Rc<DomNode>> {
+    let Some(v) = arg else {
+        return Err(RtError::TypeError {
+            expected: "узел DOM",
+            op,
+        });
+    };
+    match v {
+        BslValue::Object(o) => match &**o {
+            BslObject::DomNode(n, _) => Ok(n.clone()),
+            _ => Err(RtError::TypeError {
+                expected: "узел DOM",
+                op,
+            }),
+        },
+        _ => Err(RtError::TypeError {
+            expected: "узел DOM",
+            op,
+        }),
+    }
+}
+
+/// Один и тот же ли документ владеет обоими узлами. ИЗМЕРЕНО, что узел
+/// чужого документа платформа не принимает — ни разобранный, ни созданный
+/// чужой фабрикой.
+fn same_document(a: &Rc<DomNode>, b: &Rc<DomNode>) -> bool {
+    match (a.owner.borrow().upgrade(), b.owner.borrow().upgrade()) {
+        (Some(x), Some(y)) => Rc::ptr_eq(&x, &y),
+        _ => false,
+    }
+}
+
+/// Является ли `candidate` самим `node` или его предком. Проверка не ради
+/// совместимости, а ради целостности: вставка узла в своего потомка
+/// замкнула бы цикл сильных ссылок, и дерево не освободилось бы никогда.
+/// Платформа такую вставку тоже отвергает (измерено).
+fn is_self_or_ancestor(candidate: &Rc<DomNode>, node: &Rc<DomNode>) -> bool {
+    let mut cur = Some(node.clone());
+    while let Some(n) = cur {
+        if Rc::ptr_eq(&n, candidate) {
+            return true;
+        }
+        cur = n.parent.borrow().upgrade();
+    }
+    false
+}
+
+/// Уровень узла в ЭЛЕМЕНТАХ: у документа 0, у корневого элемента 1 — та же
+/// мера, которой считает предел построение (см. [`MAX_DOM_DEPTH`]).
+fn element_depth(node: &Rc<DomNode>) -> usize {
+    let mut depth = 0;
+    let mut cur = Some(node.clone());
+    while let Some(n) = cur {
+        if n.kind == DomKind::Element {
+            depth += 1;
+        }
+        cur = n.parent.borrow().upgrade();
+    }
+    depth
+}
+
+/// Высота поддерева в тех же элементных уровнях. Рекурсия здесь безопасна:
+/// поддерево уже подчиняется [`MAX_DOM_DEPTH`], иначе его не удалось бы
+/// собрать.
+fn element_height(node: &Rc<DomNode>) -> usize {
+    let mut deepest = 0;
+    for c in node.children.borrow().iter() {
+        deepest = deepest.max(element_height(c));
+    }
+    deepest + usize::from(node.kind == DomKind::Element)
+}
+
+/// Все проверки вставки, общие для добавления, вставки перед и замены.
+fn check_insert(parent: &Rc<DomNode>, child: &Rc<DomNode>, op: &'static str) -> RtResult<()> {
+    if !may_contain(parent.kind, child.kind) {
+        return Err(RtError::TypeError {
+            expected: "узел, допустимый в этом родителе",
+            op,
+        });
+    }
+    if !same_document(parent, child) {
+        return Err(RtError::TypeError {
+            expected: "узел того же документа",
+            op,
+        });
+    }
+    if is_self_or_ancestor(child, parent) {
+        return Err(RtError::TypeError {
+            expected: "узел, не являющийся предком приёмника",
+            op,
+        });
+    }
+    if element_depth(parent) + element_height(child) > MAX_DOM_DEPTH {
+        return Err(too_deep());
+    }
+    Ok(())
+}
+
+/// Отцепить узел от нынешнего родителя. Узел, у которого родитель уже есть,
+/// при вставке ПЕРЕЕЗЖАЕТ (измерено), поэтому это не ошибка, а шаг вставки.
+fn detach(node: &Rc<DomNode>) {
+    let parent = node.parent.borrow().upgrade();
+    if let Some(p) = parent {
+        let mut kids = p.children.borrow_mut();
+        if let Some(i) = kids.iter().position(|c| Rc::ptr_eq(c, node)) {
+            kids.remove(i);
+        }
+    }
+    *node.parent.borrow_mut() = Weak::new();
+}
+
+/// Ребёнок ли `child` у `parent` — с ошибкой, если нет. Так платформа
+/// отвечает и на удаление, и на замену, и на опорный узел вставки
+/// (измерено все три).
+fn child_index(parent: &Rc<DomNode>, child: &Rc<DomNode>, op: &'static str) -> RtResult<usize> {
+    DomNode::index_in(child, parent).ok_or(RtError::TypeError {
+        expected: "узел из детей этого родителя",
+        op,
+    })
+}
+
+/// `ДобавитьДочерний(Узел)` -> тот же узел (измерено).
+///
+/// # Errors
+///
+/// [`RtError::TypeError`], если аргумент не узел DOM, вид узла в этом
+/// родителе недопустим, узел из другого документа или является предком
+/// приёмника; [`RtError::StackOverflow`] при превышении предела вложенности.
+pub fn append_child(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let op = "ДобавитьДочерний";
+    let (parent, doc) = as_node(obj, op)?;
+    if args.len() != 1 {
+        return Err(RtError::TypeError {
+            expected: "ровно один аргумент — узел DOM",
+            op,
+        });
+    }
+    let child = need_node(args.first(), op)?;
+    check_insert(&parent, &child, op)?;
+    detach(&child);
+    DomNode::append(&parent, &child, &doc);
+    Ok(node_value(&child, &doc))
+}
+
+/// `ВставитьПеред(Новый, Опорный)` -> вставленный узел.
+///
+/// Опорный узел ОБЯЗАТЕЛЕН: `Неопределено` вместо него платформа отвергает,
+/// а не трактует как «добавить в конец» (измерено).
+///
+/// # Errors
+///
+/// Как у [`append_child`], плюс если опорный узел не ребёнок получателя.
+pub fn insert_before(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let op = "ВставитьПеред";
+    let (parent, doc) = as_node(obj, op)?;
+    if args.len() != 2 {
+        return Err(RtError::TypeError {
+            expected: "ровно два аргумента — новый и опорный узлы",
+            op,
+        });
+    }
+    let fresh = need_node(args.first(), op)?;
+    let anchor = need_node(args.get(1), op)?;
+    child_index(&parent, &anchor, op)?;
+    check_insert(&parent, &fresh, op)?;
+    // Порядок важен: отцепить нужно ДО поиска места, иначе номер опорного
+    // узла сдвинется, если вставляемый лежал перед ним у того же родителя.
+    detach(&fresh);
+    let at = child_index(&parent, &anchor, op)?;
+    *fresh.parent.borrow_mut() = Rc::downgrade(&parent);
+    *fresh.owner.borrow_mut() = Rc::downgrade(&doc);
+    parent.children.borrow_mut().insert(at, fresh.clone());
+    Ok(node_value(&fresh, &doc))
+}
+
+/// `УдалитьДочерний(Узел)` -> удалённый узел.
+///
+/// ИЗМЕРЕНО: родитель у него становится `Неопределено`, а документ-владелец
+/// остаётся тем же.
+///
+/// # Errors
+///
+/// [`RtError::TypeError`], если аргумент не узел DOM или не ребёнок
+/// получателя.
+pub fn remove_child(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let op = "УдалитьДочерний";
+    let (parent, doc) = as_node(obj, op)?;
+    if args.len() != 1 {
+        return Err(RtError::TypeError {
+            expected: "ровно один аргумент — узел DOM",
+            op,
+        });
+    }
+    let child = need_node(args.first(), op)?;
+    let at = child_index(&parent, &child, op)?;
+    parent.children.borrow_mut().remove(at);
+    *child.parent.borrow_mut() = Weak::new();
+    Ok(node_value(&child, &doc))
+}
+
+/// `ЗаменитьДочерний(Новый, Старый)` -> СТАРЫЙ узел (измерено).
+///
+/// # Errors
+///
+/// Как у [`append_child`], плюс если старый узел не ребёнок получателя.
+pub fn replace_child(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let op = "ЗаменитьДочерний";
+    let (parent, doc) = as_node(obj, op)?;
+    if args.len() != 2 {
+        return Err(RtError::TypeError {
+            expected: "ровно два аргумента — новый и старый узлы",
+            op,
+        });
+    }
+    let fresh = need_node(args.first(), op)?;
+    let old = need_node(args.get(1), op)?;
+    child_index(&parent, &old, op)?;
+    check_insert(&parent, &fresh, op)?;
+    // Как и у вставки: сначала отцепить, потом искать место старого.
+    detach(&fresh);
+    let at = child_index(&parent, &old, op)?;
+    *fresh.parent.borrow_mut() = Rc::downgrade(&parent);
+    *fresh.owner.borrow_mut() = Rc::downgrade(&doc);
+    parent.children.borrow_mut()[at] = fresh;
+    *old.parent.borrow_mut() = Weak::new();
+    Ok(node_value(&old, &doc))
+}
+
+// --- Атрибуты элемента ---------------------------------------------------
+
+/// Пара «URI, локальное имя», по которой атрибут ищется среди своих.
+fn attr_key(uri: &str, local: &str, list: &[Rc<DomNode>]) -> Option<usize> {
+    list.iter()
+        .position(|a| a.uri == uri && a.local_name() == local)
+}
+
+/// `УстановитьАтрибут(Имя, Значение)` / `(URI, Имя, Значение)`.
+///
+/// На платформе это ПРОЦЕДУРА; здесь, как и все встроенные методы без
+/// результата, отдаёт `Неопределено` (см. заголовок модуля).
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель не элемент;
+/// [`RtError::TypeError`] при негодном имени, нестроковом значении или
+/// неверной арности.
+pub fn set_attribute(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let op = "УстановитьАтрибут";
+    let (el, doc) = as_element(obj, op)?;
+    let (head, value) = match args.len() {
+        2 => (&args[..1], need_str(args.get(1), op)?),
+        3 => (&args[..2], need_str(args.get(2), op)?),
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "два или три аргумента",
+                op,
+            })
+        }
+    };
+    let (name, local, prefix, uri) = named_parts(DomKind::Attribute, head, op)?;
+    // ИЗМЕРЕНО: у трёхаргументной формы с именем БЕЗ префикса URI теряется —
+    // пространство имён по умолчанию на атрибуты не распространяется.
+    let (local, uri) = if prefix.is_empty() {
+        (name.clone(), String::new())
+    } else {
+        (local, uri)
+    };
+    let existing = attr_key(&uri, &local, &el.attrs.borrow());
+    match existing {
+        // ИЗМЕРЕНО: повторная установка меняет значение НА МЕСТЕ — атрибут
+        // не уезжает в конец коллекции.
+        Some(i) => {
+            let attr = el.attrs.borrow()[i].clone();
+            DomNode::set_text_children(&attr, &value, &doc);
+        }
+        None => {
+            let attr = DomNode::raw(DomKind::Attribute, name, local, prefix, uri, None);
+            *attr.parent.borrow_mut() = Rc::downgrade(&el);
+            *attr.owner.borrow_mut() = Rc::downgrade(&doc);
+            DomNode::set_text_children(&attr, &value, &doc);
+            el.attrs.borrow_mut().push(attr);
+        }
+    }
+    Ok(BslValue::Undefined)
+}
+
+/// `УдалитьАтрибут(Имя)` / `(URI, ЛокальноеИмя)`.
+///
+/// Атрибут, которого нет, — не ошибка (измерено). Как и
+/// [`set_attribute`], на платформе это процедура.
+///
+/// # Errors
+///
+/// Как у [`get_attribute`].
+pub fn remove_attribute(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let op = "УдалитьАтрибут";
+    let (el, _) = as_element(obj, op)?;
+    if let Some(attr) = find_attribute(&el, args, op)? {
+        let mut attrs = el.attrs.borrow_mut();
+        if let Some(i) = attrs.iter().position(|a| Rc::ptr_eq(a, &attr)) {
+            attrs.remove(i);
+        }
+        drop(attrs);
+        *attr.parent.borrow_mut() = Weak::new();
+    }
+    Ok(BslValue::Undefined)
+}
+
+/// `УстановитьУзелАтрибута(Атрибут)` -> ЗАМЕЩЁННЫЙ атрибут либо
+/// `Неопределено` (измерено).
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель не элемент;
+/// [`RtError::TypeError`], если аргумент не атрибут, атрибут из другого
+/// документа или уже висит на элементе.
+pub fn set_attribute_node(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let op = "УстановитьУзелАтрибута";
+    let (el, doc) = as_element(obj, op)?;
+    if args.len() != 1 {
+        return Err(RtError::TypeError {
+            expected: "ровно один аргумент — атрибут DOM",
+            op,
+        });
+    }
+    let attr = need_node(args.first(), op)?;
+    if attr.kind != DomKind::Attribute {
+        return Err(RtError::TypeError {
+            expected: "атрибут DOM",
+            op,
+        });
+    }
+    if !same_document(&el, &attr) {
+        return Err(RtError::TypeError {
+            expected: "атрибут того же документа",
+            op,
+        });
+    }
+    // ИЗМЕРЕНО: атрибут, у которого элемент-владелец уже есть, платформа не
+    // перевешивает, а отвергает — в отличие от детей, которые переезжают.
+    if attr.parent.borrow().upgrade().is_some() {
+        return Err(RtError::TypeError {
+            expected: "атрибут без элемента-владельца",
+            op,
+        });
+    }
+    let replaced = attr_key(&attr.uri, attr.local_name(), &el.attrs.borrow());
+    *attr.parent.borrow_mut() = Rc::downgrade(&el);
+    *attr.owner.borrow_mut() = Rc::downgrade(&doc);
+    match replaced {
+        Some(i) => {
+            let old = el.attrs.borrow()[i].clone();
+            el.attrs.borrow_mut()[i] = attr;
+            *old.parent.borrow_mut() = Weak::new();
+            Ok(node_value(&old, &doc))
+        }
+        None => {
+            el.attrs.borrow_mut().push(attr);
+            Ok(BslValue::Undefined)
+        }
+    }
+}
+
+/// `УдалитьУзелАтрибута(Атрибут)` -> удалённый атрибут (измерено).
+///
+/// # Errors
+///
+/// [`RtError::TypeError`], если аргумент не атрибут этого элемента.
+pub fn remove_attribute_node(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let op = "УдалитьУзелАтрибута";
+    let (el, doc) = as_element(obj, op)?;
+    if args.len() != 1 {
+        return Err(RtError::TypeError {
+            expected: "ровно один аргумент — атрибут DOM",
+            op,
+        });
+    }
+    let attr = need_node(args.first(), op)?;
+    let mut attrs = el.attrs.borrow_mut();
+    let Some(i) = attrs.iter().position(|a| Rc::ptr_eq(a, &attr)) else {
+        return Err(RtError::TypeError {
+            expected: "атрибут этого элемента",
+            op,
+        });
+    };
+    attrs.remove(i);
+    drop(attrs);
+    *attr.parent.borrow_mut() = Weak::new();
+    Ok(node_value(&attr, &doc))
+}
+
+// --- Присваивание свойств ------------------------------------------------
+
+/// `Узел.Свойство = Значение`.
+///
+/// Пишутся `Значение`, `ЗначениеУзла`, `Данные` и `ТекстовоеСодержимое`;
+/// `ИмяУзла` только читается (измерено). Присваивание `ЗначениеУзла`
+/// элементу и `ТекстовоеСодержимое` документу платформа принимает и ничего
+/// не делает — здесь так же.
+///
+/// # Errors
+///
+/// [`RtError::UnknownColumn`], если такого свойства у узла этого вида нет;
+/// [`RtError::TypeError`] при нестроковом значении и при попытке записать
+/// `ИмяУзла`.
+pub fn set_property(obj: &BslValue, name: &str, val: &BslValue) -> RtResult<()> {
+    let (node, doc) = as_node(obj, "свойство узла DOM")?;
+    let unknown = || RtError::UnknownColumn(name.to_string());
+    let is = |ru: &str, en: &str| name.eq_ignore_ascii_case(ru) || name.eq_ignore_ascii_case(en);
+    let text = |op: &'static str| match val {
+        BslValue::Str(s) => Ok(s.to_string()),
+        // ИЗМЕРЕНО: `А.Значение = 5` платформа отвергает — число здесь не
+        // приводится к строке.
+        _ => Err(RtError::TypeError {
+            expected: "Строка",
+            op,
+        }),
+    };
+
+    if is("ИмяУзла", "NodeName") {
+        return Err(RtError::TypeError {
+            expected: "Свойство, доступное для записи",
+            op: "ИмяУзла",
+        });
+    }
+    if is("Значение", "Value") {
+        if node.kind != DomKind::Attribute {
+            return Err(unknown());
+        }
+        DomNode::set_text_children(&node, &text("Значение")?, &doc);
+        return Ok(());
+    }
+    if is("ЗначениеУзла", "NodeValue") {
+        return match node.kind {
+            DomKind::Attribute => {
+                DomNode::set_text_children(&node, &text("ЗначениеУзла")?, &doc);
+                Ok(())
+            }
+            DomKind::Text | DomKind::CdataSection | DomKind::Comment => {
+                *node.value.borrow_mut() = Some(text("ЗначениеУзла")?);
+                Ok(())
+            }
+            // Элемент, документ и инструкция обработки: значения у них нет,
+            // и присваивание платформа молча проглатывает (измерено на
+            // элементе).
+            DomKind::Element | DomKind::Document | DomKind::ProcessingInstruction => Ok(()),
+        };
+    }
+    if is("Данные", "Data") {
+        return match node.kind {
+            DomKind::Text
+            | DomKind::CdataSection
+            | DomKind::Comment
+            | DomKind::ProcessingInstruction => {
+                *node.value.borrow_mut() = Some(text("Данные")?);
+                Ok(())
+            }
+            _ => Err(unknown()),
+        };
+    }
+    if is("ТекстовоеСодержимое", "TextContent") {
+        return match node.kind {
+            // ИЗМЕРЕНО: у элемента заменяет ВСЕХ детей одним текстовым
+            // узлом, а пустая строка оставляет его вовсе без детей.
+            DomKind::Element | DomKind::Attribute => {
+                DomNode::set_text_children(&node, &text("ТекстовоеСодержимое")?, &doc);
+                Ok(())
+            }
+            DomKind::Text | DomKind::CdataSection | DomKind::Comment => {
+                *node.value.borrow_mut() = Some(text("ТекстовоеСодержимое")?);
+                Ok(())
+            }
+            // У документа читается `Неопределено`, и присваивание ничего не
+            // делает (измерено).
+            DomKind::Document | DomKind::ProcessingInstruction => Ok(()),
+        };
+    }
+    Err(unknown())
+}
+
+// --- Сериализация --------------------------------------------------------
+
+/// Объявление ли это пространства имён.
+fn is_xmlns_attr(name: &str) -> bool {
+    name == "xmlns" || prefix_of(name) == "xmlns"
+}
+
+/// Обход дерева, пишущий через `XmlWriter`.
+///
+/// Второго сериализатора нет: всё форматирование — отступ, поведение
+/// закрывающего тега после текста, экранирование — приходит из уже
+/// измеренного [`XmlWriter`](crate::xml::XmlWriter).
+struct DomSerializer<'a> {
+    w: &'a mut XmlWriter,
+    /// На каждый открытый элемент — объявленные им пары «префикс, URI».
+    /// Ищется с конца: внутреннее объявление того же префикса перекрывает
+    /// внешнее.
+    scopes: Vec<Vec<(String, String)>>,
+}
+
+impl DomSerializer<'_> {
+    /// Связан ли префикс с этим URI в текущей области видимости.
+    fn bound(&self, prefix: &str, uri: &str) -> bool {
+        for scope in self.scopes.iter().rev() {
+            for (p, u) in scope.iter().rev() {
+                if p == prefix {
+                    return u == uri;
+                }
+            }
+        }
+        false
+    }
+
+    /// Объявления, которые надо напечатать у этого элемента.
+    ///
+    /// Собираются из двух источников (оба ИЗМЕРЕНЫ): из объявлений-атрибутов
+    /// самого элемента и из URI, которые нужны элементу и его атрибутам.
+    /// Лишнее не печатается: объявление, которое уже действует в области
+    /// видимости с тем же URI, писатель опускает — ИЗМЕРЕНО, что элемент,
+    /// созданный формой `(URI, Имя)` внутри родителя с тем же объявлением,
+    /// выходит как `<к:цена/>`, хотя атрибут-объявление у него свой. Порядок
+    /// — по имени атрибута: `xmlns` раньше `xmlns:а` раньше `xmlns:я`.
+    fn declarations(&self, el: &Rc<DomNode>) -> RtResult<Vec<(String, String)>> {
+        let mut decls: Vec<(String, String)> = Vec::new();
+        let add = |prefix: &str, uri: &str, decls: &mut Vec<(String, String)>| {
+            if !decls.iter().any(|(p, _)| p == prefix) {
+                decls.push((prefix.to_string(), uri.to_string()));
+            }
+        };
+        for a in el.attrs.borrow().iter() {
+            if !is_xmlns_attr(&a.name) {
+                continue;
+            }
+            // ИЗМЕРЕНО: объявление с пустым URI (какое получается из
+            // `УстановитьАтрибут("xmlns:к", "urn:к")`) при записи — ошибка.
+            if a.uri != XMLNS_URI {
+                return Err(bad(
+                    "объявление пространства имён без URI пространства имён объявлений",
+                ));
+            }
+            let prefix = if a.name == "xmlns" {
+                ""
+            } else {
+                local_of(&a.name)
+            };
+            let uri = a.attr_value();
+            if self.bound(prefix, &uri) {
+                continue;
+            }
+            add(prefix, &uri, &mut decls);
+        }
+        let mut needed: Vec<(String, String)> = vec![(el.prefix.clone(), el.uri.clone())];
+        for a in el.attrs.borrow().iter() {
+            // Атрибут без префикса пространства имён не имеет (измерено),
+            // поэтому объявления не требует.
+            if !is_xmlns_attr(&a.name) && !a.prefix.is_empty() {
+                needed.push((a.prefix.clone(), a.uri.clone()));
+            }
+        }
+        for (prefix, uri) in needed {
+            if uri.is_empty() || self.bound(&prefix, &uri) {
+                continue;
+            }
+            add(&prefix, &uri, &mut decls);
+        }
+        decls.sort_by_key(|(prefix, _)| decl_name(prefix));
+        Ok(decls)
+    }
+
+    fn write_element(&mut self, el: &Rc<DomNode>) -> RtResult<()> {
+        let decls = self.declarations(el)?;
+        self.w.write_start_element(&el.name)?;
+        for (prefix, uri) in &decls {
+            self.w.write_attribute(&decl_name(prefix), uri)?;
+        }
+        for a in el.attrs.borrow().iter() {
+            if !is_xmlns_attr(&a.name) {
+                self.w.write_attribute(&a.name, &a.attr_value())?;
+            }
+        }
+        self.scopes.push(decls);
+        let kids = el.children.borrow().clone();
+        for c in kids.iter() {
+            self.write_node(c)?;
+        }
+        self.scopes.pop();
+        self.w.write_end_element()
+    }
+
+    fn write_node(&mut self, node: &Rc<DomNode>) -> RtResult<()> {
+        let value = node.value.borrow().clone().unwrap_or_default();
+        match node.kind {
+            DomKind::Document => {
+                let kids = node.children.borrow().clone();
+                for c in kids.iter() {
+                    self.write_node(c)?;
+                }
+                Ok(())
+            }
+            DomKind::Element => self.write_element(node),
+            DomKind::Text => self.w.write_text(&value),
+            DomKind::CdataSection => {
+                // ИЗМЕРЕНО: секцию CDATA вне элемента платформа отвергает —
+                // ровно как текст, о котором судит сам писатель.
+                if !self.w.in_element() {
+                    return Err(bad("секция CDATA вне элемента"));
+                }
+                self.w.write_cdata(&value)
+            }
+            DomKind::Comment => self.w.write_comment(&value),
+            DomKind::ProcessingInstruction => {
+                self.w.write_processing_instruction(&node.name, &value)
+            }
+            // ИЗМЕРЕНО: атрибут не пишется вовсе — результат пустой, и это
+            // не ошибка.
+            DomKind::Attribute => Ok(()),
+        }
+    }
+}
+
+/// Имя атрибута-объявления для префикса.
+fn decl_name(prefix: &str) -> String {
+    if prefix.is_empty() {
+        "xmlns".to_string()
+    } else {
+        format!("xmlns:{prefix}")
+    }
+}
+
+/// `ЗаписьDOM.Записать(Узел, ЗаписьXML)`.
+///
+/// ДОКУМЕНТ пишется вместе с объявлением XML, и объявление берётся из
+/// настроек ПИСАТЕЛЯ, а не из `ВерсияXML` документа (измерено: документ
+/// версии 1.1 всё равно даёт `version="1.0"`). Любой другой узел пишется без
+/// объявления.
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель не `ЗаписьDOM` или
+/// второй аргумент не `ЗаписьXML`; [`RtError::TypeError`] при неверной
+/// арности или если первый аргумент не узел DOM; [`RtError::Xml`], если
+/// приёмник писателя не задан, дерево не укладывается в XML (второй корень,
+/// текстоподобный узел вне элемента) или несёт объявление пространства имён
+/// с пустым URI.
+pub fn write(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let op = "ЗаписьDOM.Записать";
+    if !is_dom_writer(obj) {
+        return Err(RtError::MethodNotApplicable {
+            method: "Записать",
+            receiver: obj.type_name(),
+        });
+    }
+    if args.len() != 2 {
+        return Err(RtError::TypeError {
+            expected: "ровно два аргумента — узел DOM и ЗаписьXML",
+            op,
+        });
+    }
+    let node = need_node(args.first(), op)?;
+    let target = &args[1];
+    crate::xml::with_writer(target, |w| {
+        let mut ser = DomSerializer {
+            w,
+            scopes: Vec::new(),
+        };
+        if node.kind == DomKind::Document {
+            ser.w.write_declaration()?;
+        }
+        ser.write_node(&node)
+    })?;
     Ok(BslValue::Undefined)
 }
 
@@ -1021,7 +2242,7 @@ mod tests {
         assert_eq!(kids.len(), 2, "комментарий до корня в дерево не идёт");
         assert_eq!(kids[0].kind, DomKind::Element);
         assert_eq!(kids[1].kind, DomKind::Comment);
-        assert_eq!(kids[1].value.as_deref(), Some("после"));
+        assert_eq!(kids[1].value.borrow().as_deref(), Some("после"));
         let root = kids[0].clone();
         assert_eq!(root.children.borrow().len(), 3, "комментарий рвёт текст");
         assert_eq!(text_of(&prop(&root, "ТекстовоеСодержимое")), "раздва");
@@ -1046,7 +2267,7 @@ mod tests {
         let doc = node_value(&tree, &tree);
         let count = |args: &[BslValue]| match get_elements_by_name(&doc, args).unwrap() {
             BslValue::Object(o) => match &*o {
-                BslObject::DomList(_, items, _) => items.len(),
+                BslObject::DomList(kind, _) => kind.len(),
                 _ => panic!("ожидался список"),
             },
             other => panic!("ожидался список, получено {other:?}"),
@@ -1161,7 +2382,9 @@ mod tests {
         let via_property = prop(&root, "ПервыйДочерний");
         let via_list = match prop(&root, "ДочерниеУзлы") {
             BslValue::Object(o) => match &*o {
-                BslObject::DomList(_, items, list_doc) => node_value(&items[0], list_doc),
+                BslObject::DomList(kind, list_doc) => {
+                    node_value(&kind.get(0).expect("список не пуст"), list_doc)
+                }
                 _ => panic!("ожидался список"),
             },
             other => panic!("ожидался список, получено {other:?}"),
@@ -1244,5 +2467,493 @@ mod tests {
         }
         let err = build(&mut from_inside).expect_err("предки глубже предела — тоже ошибка");
         assert!(matches!(err, RtError::StackOverflow { .. }));
+    }
+
+    // --- Создание, мутация и запись -------------------------------------
+
+    /// Пустой документ вместе с его значением: фабрики вызываются через
+    /// значение, потому что получателем работает `BslValue`.
+    fn fresh_document() -> BslValue {
+        new_document()
+    }
+
+    fn call(
+        obj: &BslValue,
+        f: fn(&BslValue, &[BslValue]) -> RtResult<BslValue>,
+        args: &[BslValue],
+    ) -> BslValue {
+        f(obj, args).expect("вызов обязан пройти")
+    }
+
+    /// Вызов с ОДНИМ аргументом-узлом. Отдельный помощник — чтобы не плодить
+    /// `&[узел.clone()]`, на который clippy справедливо ворчит.
+    fn call1(
+        obj: &BslValue,
+        f: fn(&BslValue, &[BslValue]) -> RtResult<BslValue>,
+        arg: &BslValue,
+    ) -> BslValue {
+        f(obj, std::slice::from_ref(arg)).expect("вызов обязан пройти")
+    }
+
+    fn kids_names(node: &BslValue) -> String {
+        let list = get_property(node, "ДочерниеУзлы").expect("дети обязаны читаться");
+        let (kind, _) = match &list {
+            BslValue::Object(o) => match &**o {
+                BslObject::DomList(kind, doc) => (kind.clone(), doc.clone()),
+                _ => panic!("ожидался список"),
+            },
+            other => panic!("ожидался список, получено {other:?}"),
+        };
+        kind.items()
+            .iter()
+            .map(|n| n.name.clone())
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    /// Записать узел через `ЗаписьDOM` и отдать накопленный текст.
+    fn serialize(node: &BslValue) -> RtResult<String> {
+        let target = BslValue::new_xml_writer();
+        crate::xml::set_string(&target, &[])?;
+        write(&new_writer(), &[node.clone(), target.clone()])?;
+        match crate::xml::close_writer(&target)? {
+            BslValue::Str(s) => Ok(s.to_string()),
+            other => panic!("ожидалась строка, получено {other:?}"),
+        }
+    }
+
+    #[test]
+    fn dom_created_nodes_carry_the_platform_names() {
+        let doc = fresh_document();
+        let el = call(&doc, create_element, &[str_value("а")]);
+        // ИЗМЕРЕНО: у одноаргументной формы локальное имя и префикс ПУСТЫ
+        // даже для имени с двоеточием, а у атрибута локальное имя — всё имя.
+        assert_eq!(text_of(&get_property(&el, "ЛокальноеИмя").unwrap()), "");
+        let pref = call(&doc, create_element, &[str_value("п:а")]);
+        assert_eq!(text_of(&get_property(&pref, "ИмяУзла").unwrap()), "п:а");
+        assert_eq!(text_of(&get_property(&pref, "Префикс").unwrap()), "");
+        let attr = call(&doc, create_attribute, &[str_value("п:а")]);
+        assert_eq!(
+            text_of(&get_property(&attr, "ЛокальноеИмя").unwrap()),
+            "п:а"
+        );
+        // Двухаргументная форма имя расщепляет и вешает объявление атрибутом.
+        let ns = call(
+            &doc,
+            create_element,
+            &[str_value("urn:х"), str_value("п:а")],
+        );
+        assert_eq!(text_of(&get_property(&ns, "ЛокальноеИмя").unwrap()), "а");
+        assert_eq!(text_of(&get_property(&ns, "Префикс").unwrap()), "п");
+        let attrs = get_property(&ns, "Атрибуты").unwrap();
+        assert_eq!(attrs.collection_len().unwrap(), 1, "объявление xmlns:п");
+        let decl = match &attrs {
+            BslValue::Object(o) => match &**o {
+                BslObject::DomList(kind, list_doc) => {
+                    node_value(&kind.get(0).expect("объявление на месте"), list_doc)
+                }
+                _ => panic!("ожидалась коллекция атрибутов"),
+            },
+            other => panic!("ожидалась коллекция, получено {other:?}"),
+        };
+        assert_eq!(text_of(&get_property(&decl, "ИмяУзла").unwrap()), "xmlns:п");
+        assert_eq!(text_of(&get_property(&decl, "Значение").unwrap()), "urn:х");
+        assert_eq!(
+            text_of(&get_property(&decl, "URIПространстваИмен").unwrap()),
+            XMLNS_URI
+        );
+        // Секция CDATA — свой вид узла с собственным служебным именем.
+        let cdata = call(&doc, create_cdata_section, &[str_value("ц")]);
+        assert_eq!(
+            text_of(&get_property(&cdata, "ИмяУзла").unwrap()),
+            CDATA_NODE_NAME
+        );
+        assert_eq!(cdata.type_name(), "СекцияCDATADOM");
+    }
+
+    #[test]
+    fn dom_bad_names_and_arities_are_rejected() {
+        let doc = fresh_document();
+        // ИЗМЕРЕНО: пустое имя, имя с пробелом и имя с дефиса платформа не
+        // берёт, а имя с точкой и с двумя двоеточиями берёт.
+        assert!(create_element(&doc, &[str_value("")]).is_err());
+        assert!(create_element(&doc, &[str_value("а б")]).is_err());
+        assert!(create_element(&doc, &[str_value("-а")]).is_err());
+        assert!(create_element(&doc, &[str_value("а.б")]).is_ok());
+        assert!(create_element(&doc, &[str_value("а:б:в")]).is_ok());
+        assert!(create_element(&doc, &[]).is_err());
+        assert!(create_element(&doc, &[str_value(""), str_value("п:а")]).is_err());
+        assert!(create_element(&doc, &[str_value(""), str_value("а")]).is_ok());
+        // `СоздатьАтрибут("а", "1")` — это форма (URI, Имя) с негодным именем.
+        assert!(create_attribute(&doc, &[str_value("а"), str_value("1")]).is_err());
+        // Инструкция обработки — ровно два аргумента.
+        assert!(create_processing_instruction(&doc, &[str_value("пи")]).is_err());
+        // Фабрик у элемента нет.
+        let el = call(&doc, create_element, &[str_value("а")]);
+        assert!(create_element(&el, &[str_value("б")]).is_err());
+    }
+
+    #[test]
+    fn dom_children_are_inserted_removed_and_replaced() {
+        let doc = fresh_document();
+        let root = call(&doc, create_element, &[str_value("к")]);
+        call1(&doc, append_child, &root);
+        let first = call(&doc, create_element, &[str_value("а")]);
+        let second = call(&doc, create_element, &[str_value("б")]);
+        // ИЗМЕРЕНО: `ДобавитьДочерний` отдаёт ТОТ ЖЕ узел.
+        assert_eq!(call1(&root, append_child, &first), first);
+        call1(&root, append_child, &second);
+        assert_eq!(kids_names(&root), "а б");
+        // Вставка перед опорным узлом.
+        let mid = call(&doc, create_element, &[str_value("м")]);
+        call(&root, insert_before, &[mid.clone(), second.clone()]);
+        assert_eq!(kids_names(&root), "а м б");
+        // Удаление отдаёт удалённый узел и обнуляет ему родителя.
+        let gone = call1(&root, remove_child, &mid);
+        assert_eq!(gone, mid);
+        assert_eq!(
+            get_property(&mid, "РодительскийУзел").unwrap(),
+            BslValue::Undefined
+        );
+        assert_eq!(get_property(&mid, "ДокументВладелец").unwrap(), doc);
+        assert_eq!(kids_names(&root), "а б");
+        // Замена отдаёт СТАРЫЙ узел (измерено).
+        let fresh = call(&doc, create_element, &[str_value("н")]);
+        let old = call(&root, replace_child, &[fresh, first.clone()]);
+        assert_eq!(old, first);
+        assert_eq!(kids_names(&root), "н б");
+    }
+
+    #[test]
+    fn dom_inserting_a_node_with_a_parent_moves_it() {
+        let doc = fresh_document();
+        let root = call(&doc, create_element, &[str_value("к")]);
+        call1(&doc, append_child, &root);
+        let a = call(&doc, create_element, &[str_value("а")]);
+        let b = call(&doc, create_element, &[str_value("б")]);
+        call1(&root, append_child, &a);
+        call1(&root, append_child, &b);
+        // Переезд: у прежнего родителя узла больше нет (измерено).
+        call1(&b, append_child, &a);
+        assert_eq!(kids_names(&root), "б");
+        assert_eq!(kids_names(&b), "а");
+        // Замена узлом, который уже ребёнок того же родителя, — тоже переезд.
+        let c = call(&doc, create_element, &[str_value("в")]);
+        call1(&root, append_child, &c);
+        assert_eq!(kids_names(&root), "б в");
+        call(&root, replace_child, &[c, b]).type_name();
+        assert_eq!(kids_names(&root), "в");
+    }
+
+    #[test]
+    fn dom_insertion_rules_match_the_platform() {
+        let doc = fresh_document();
+        let root = call(&doc, create_element, &[str_value("к")]);
+        call1(&doc, append_child, &root);
+        let text = call(&doc, create_text_node, &[str_value("т")]);
+        // Текст в ДОКУМЕНТ не идёт, а комментарий идёт (измерено).
+        assert!(append_child(&doc, std::slice::from_ref(&text)).is_err());
+        let comment = call(&doc, create_comment, &[str_value("к")]);
+        assert!(append_child(&doc, &[comment]).is_ok());
+        // Второй корневой элемент документ принимает молча.
+        let second_root = call(&doc, create_element, &[str_value("второй")]);
+        assert!(append_child(&doc, &[second_root]).is_ok());
+        // Документ, атрибут, не-узел и предок — ошибка.
+        assert!(append_child(&root, std::slice::from_ref(&doc)).is_err());
+        let attr = call(&doc, create_attribute, &[str_value("а")]);
+        assert!(append_child(&root, std::slice::from_ref(&attr)).is_err());
+        assert!(append_child(&root, &[BslValue::Undefined]).is_err());
+        assert!(append_child(&root, &[str_value("т")]).is_err());
+        let inner = call(&doc, create_element, &[str_value("вн")]);
+        call1(&root, append_child, &inner);
+        assert!(append_child(&inner, std::slice::from_ref(&root)).is_err());
+        // У текста детей не бывает, а у атрибута бывает ТЕКСТ (измерено),
+        // но не элемент.
+        call1(&root, append_child, &text);
+        assert!(append_child(&text, &[call(&doc, create_element, &[str_value("х")])]).is_err());
+        assert!(append_child(&attr, &[call(&doc, create_text_node, &[str_value("х")])]).is_ok());
+        assert!(append_child(&attr, &[call(&doc, create_element, &[str_value("х")])]).is_err());
+        // Узел чужого документа — ошибка.
+        let other = fresh_document();
+        assert!(append_child(
+            &root,
+            &[call(&other, create_element, &[str_value("чужой")])]
+        )
+        .is_err());
+        // Опорный узел вставки обязан быть ребёнком.
+        let orphan = call(&doc, create_element, &[str_value("сирота")]);
+        let some = call(&doc, create_element, &[str_value("нов")]);
+        assert!(insert_before(&root, &[some.clone(), orphan.clone()]).is_err());
+        assert!(insert_before(&root, &[some.clone(), BslValue::Undefined]).is_err());
+        assert!(remove_child(&root, std::slice::from_ref(&orphan)).is_err());
+        assert!(replace_child(&root, &[some, orphan]).is_err());
+    }
+
+    #[test]
+    fn dom_attributes_are_set_and_removed() {
+        let doc = fresh_document();
+        let root = call(&doc, create_element, &[str_value("к")]);
+        call1(&doc, append_child, &root);
+        call(&root, set_attribute, &[str_value("а"), str_value("1")]);
+        call(&root, set_attribute, &[str_value("б"), str_value("2")]);
+        // Повторная установка меняет значение НА МЕСТЕ (измерено).
+        call(&root, set_attribute, &[str_value("а"), str_value("9")]);
+        let attrs = get_property(&root, "Атрибуты").unwrap();
+        assert_eq!(attrs.collection_len().unwrap(), 2);
+        assert_eq!(
+            get_attribute(&root, &[str_value("а")]).unwrap(),
+            str_value("9")
+        );
+        let node = get_attribute_node(&root, &[str_value("а")]).unwrap();
+        // Значение атрибута живёт в текстовом ребёнке (измерено).
+        assert_eq!(
+            get_property(&node, "ДочерниеУзлы")
+                .unwrap()
+                .collection_len()
+                .unwrap(),
+            1
+        );
+        // Трёхаргументная форма без префикса URI ТЕРЯЕТ (измерено).
+        call(
+            &root,
+            set_attribute,
+            &[str_value("urn:х"), str_value("в"), str_value("3")],
+        );
+        let plain = get_attribute_node(&root, &[str_value("в")]).unwrap();
+        assert_eq!(
+            text_of(&get_property(&plain, "URIПространстваИмен").unwrap()),
+            ""
+        );
+        // Нестроковое значение и пустое имя — ошибка.
+        assert!(set_attribute(&root, &[str_value("а"), BslValue::Boolean(true)]).is_err());
+        assert!(set_attribute(&root, &[str_value(""), str_value("1")]).is_err());
+        // `УдалитьАтрибут` берёт и имя, и пару URI с локальным именем;
+        // отсутствующий атрибут — не ошибка (измерено).
+        call(&root, remove_attribute, &[str_value("нет")]);
+        call(&root, remove_attribute, &[str_value("б")]);
+        assert_eq!(
+            get_property(&root, "Атрибуты")
+                .unwrap()
+                .collection_len()
+                .unwrap(),
+            2
+        );
+        // Узел атрибута: занятый и чужой — ошибка, замещённый возвращается.
+        let free = call(&doc, create_attribute, &[str_value("а")]);
+        set_property(&free, "Значение", &str_value("7")).unwrap();
+        let replaced = call1(&root, set_attribute_node, &free);
+        assert_eq!(replaced, node, "замещён прежний узел атрибута");
+        assert!(
+            set_attribute_node(&root, std::slice::from_ref(&free)).is_err(),
+            "уже занят"
+        );
+        let removed = call1(&root, remove_attribute_node, &free);
+        assert_eq!(removed, free);
+        assert!(remove_attribute_node(&root, &[free]).is_err(), "уже не наш");
+    }
+
+    #[test]
+    fn dom_writable_properties_follow_the_platform() {
+        let doc = fresh_document();
+        let root = call(&doc, create_element, &[str_value("к")]);
+        call1(&doc, append_child, &root);
+        call(
+            &root,
+            append_child,
+            &[call(&doc, create_element, &[str_value("а")])],
+        );
+        call(
+            &root,
+            append_child,
+            &[call(&doc, create_text_node, &[str_value("т")])],
+        );
+        // ИЗМЕРЕНО: заменяет ВСЕХ детей одним текстовым узлом.
+        set_property(&root, "ТекстовоеСодержимое", &str_value("всё")).unwrap();
+        assert_eq!(kids_names(&root), TEXT_NODE_NAME);
+        assert_eq!(
+            text_of(&get_property(&root, "ТекстовоеСодержимое").unwrap()),
+            "всё"
+        );
+        // Пустая строка оставляет узел вовсе без детей.
+        set_property(&root, "ТекстовоеСодержимое", &str_value("")).unwrap();
+        assert_eq!(kids_names(&root), "");
+        // Имя узла только читается; присваивание элементу `ЗначениеУзла` и
+        // документу `ТекстовоеСодержимое` платформа принимает и не делает
+        // ничего.
+        assert!(set_property(&root, "ИмяУзла", &str_value("другое")).is_err());
+        set_property(&root, "ЗначениеУзла", &str_value("х")).unwrap();
+        assert_eq!(
+            get_property(&root, "ЗначениеУзла").unwrap(),
+            BslValue::Undefined
+        );
+        set_property(&doc, "ТекстовоеСодержимое", &str_value("х")).unwrap();
+        assert_eq!(kids_names(&doc), "к");
+        // Число значением не годится (измерено).
+        let text = call(&doc, create_text_node, &[str_value("т")]);
+        assert!(set_property(&text, "Данные", &BslValue::Boolean(true)).is_err());
+        set_property(&text, "Данные", &str_value("новый")).unwrap();
+        assert_eq!(
+            text_of(&get_property(&text, "ЗначениеУзла").unwrap()),
+            "новый"
+        );
+    }
+
+    #[test]
+    fn dom_child_and_attribute_collections_are_live() {
+        // ИЗМЕРЕНО: список, взятый ДО мутации, показывает уже двоих детей, а
+        // снимок поиска остаётся прежним.
+        let doc = fresh_document();
+        let root = call(&doc, create_element, &[str_value("к")]);
+        call1(&doc, append_child, &root);
+        call(
+            &root,
+            append_child,
+            &[call(&doc, create_element, &[str_value("а")])],
+        );
+        let kids = get_property(&root, "ДочерниеУзлы").unwrap();
+        let found = get_elements_by_name(&doc, &[str_value("*")]).unwrap();
+        let attrs = get_property(&root, "Атрибуты").unwrap();
+        call(
+            &root,
+            append_child,
+            &[call(&doc, create_element, &[str_value("б")])],
+        );
+        call(&root, set_attribute, &[str_value("х"), str_value("1")]);
+        assert_eq!(kids.collection_len().unwrap(), 2, "дети — живое окно");
+        assert_eq!(attrs.collection_len().unwrap(), 1, "атрибуты — живое окно");
+        // Поиск от документа нашёл корень и его дитя — снимок так и остаётся
+        // на двух, тогда как свежий запрос видит троих (измерено).
+        assert_eq!(found.collection_len().unwrap(), 2, "поиск — снимок");
+        assert_eq!(
+            get_elements_by_name(&doc, &[str_value("*")])
+                .unwrap()
+                .collection_len()
+                .unwrap(),
+            3,
+            "свежий поиск видит нового"
+        );
+    }
+
+    #[test]
+    fn dom_serialization_matches_the_platform_shape() {
+        let doc = fresh_document();
+        // Пустой документ — только объявление, БЕЗ хвостового перевода
+        // строки (измерено).
+        assert_eq!(serialize(&doc).unwrap(), "<?xml version=\"1.0\"?>");
+        let root = call(&doc, create_element, &[str_value("корень")]);
+        call1(&doc, append_child, &root);
+        call(&root, set_attribute, &[str_value("а"), str_value("1")]);
+        call(
+            &root,
+            append_child,
+            &[call(&doc, create_text_node, &[str_value("текст")])],
+        );
+        let inner = call(&doc, create_element, &[str_value("вн")]);
+        call1(&root, append_child, &inner);
+        call(
+            &inner,
+            append_child,
+            &[call(&doc, create_comment, &[str_value("к")])],
+        );
+        assert_eq!(
+            serialize(&doc).unwrap(),
+            "<?xml version=\"1.0\"?>\n<корень а=\"1\">текст\n\t<вн>\n\t\t<!--к-->\n\t</вн>\n</корень>"
+        );
+        // Отдельный узел пишется без объявления, атрибут — не пишется вовсе,
+        // текстоподобный узел вне элемента — ошибка (измерено все три).
+        assert_eq!(serialize(&inner).unwrap(), "<вн>\n\t<!--к-->\n</вн>");
+        let attr = get_attribute_node(&root, &[str_value("а")]).unwrap();
+        assert_eq!(serialize(&attr).unwrap(), "");
+        assert!(serialize(&call(&doc, create_text_node, &[str_value("т")])).is_err());
+        assert!(serialize(&call(&doc, create_cdata_section, &[str_value("ц")])).is_err());
+        // Комментарий и инструкция обработки в одиночку пишутся, и ведущего
+        // перевода строки у них нет.
+        assert_eq!(
+            serialize(&call(&doc, create_comment, &[str_value("сам")])).unwrap(),
+            "<!--сам-->"
+        );
+        assert_eq!(
+            serialize(&call(
+                &doc,
+                create_processing_instruction,
+                &[str_value("пи"), str_value("д")]
+            ))
+            .unwrap(),
+            "<?пи д?>"
+        );
+        // Второй корень записи не даётся.
+        call(
+            &doc,
+            append_child,
+            &[call(&doc, create_element, &[str_value("второй")])],
+        );
+        assert!(serialize(&doc).is_err());
+    }
+
+    #[test]
+    fn dom_serialization_places_namespace_declarations() {
+        let doc = fresh_document();
+        let root = call(
+            &doc,
+            create_element,
+            &[str_value("urn:раз"), str_value("р:корень")],
+        );
+        call1(&doc, append_child, &root);
+        // Объявление для атрибута с URI писатель выдумывает сам, и
+        // объявления идут ПЕРЕД обычными атрибутами, отсортированные по имени.
+        call(
+            &root,
+            set_attribute,
+            &[str_value("urn:два"), str_value("д:атр"), str_value("з")],
+        );
+        // Потомку с тем же пространством имён объявление не повторяется.
+        call(
+            &root,
+            append_child,
+            &[call(
+                &doc,
+                create_element,
+                &[str_value("urn:раз"), str_value("р:дитя")],
+            )],
+        );
+        assert_eq!(
+            serialize(&doc).unwrap(),
+            "<?xml version=\"1.0\"?>\n<р:корень xmlns:д=\"urn:два\" xmlns:р=\"urn:раз\" д:атр=\"з\">\n\t<р:дитя/>\n</р:корень>"
+        );
+        // Отдельно записанный потомок объявление получает заново.
+        let child = get_property(&root, "ПоследнийДочерний").unwrap();
+        assert_eq!(serialize(&child).unwrap(), "<р:дитя xmlns:р=\"urn:раз\"/>");
+        // Объявление-атрибут с ПУСТЫМ URI (какой ставит `УстановитьАтрибут`)
+        // при записи — ошибка (измерено).
+        let plain = fresh_document();
+        let bare = call(&plain, create_element, &[str_value("к")]);
+        call1(&plain, append_child, &bare);
+        call(
+            &bare,
+            set_attribute,
+            &[str_value("xmlns:к"), str_value("urn:к")],
+        );
+        assert!(serialize(&plain).is_err());
+    }
+
+    /// Вставка тоже держит предел вложенности: без этого скрипт мог бы
+    /// собрать мутацией дерево, которое потом уронит процесс на разрушении.
+    #[test]
+    fn dom_insertion_respects_the_depth_limit() {
+        let doc = fresh_document();
+        let mut deepest = doc.clone();
+        for _ in 0..MAX_DOM_DEPTH {
+            let el = call(&doc, create_element, &[str_value("а")]);
+            call1(&deepest, append_child, &el);
+            deepest = el;
+        }
+        // Уровень ровно по пределу — текст ещё влезает, элемент уже нет.
+        assert!(append_child(&deepest, &[call(&doc, create_text_node, &[str_value("х")])]).is_ok());
+        let over = call(&doc, create_element, &[str_value("лишний")]);
+        let err = append_child(&deepest, &[over]).expect_err("глубже предела — ошибка");
+        assert!(
+            matches!(err, RtError::StackOverflow { .. }),
+            "ожидалась StackOverflow, получено {err:?}"
+        );
     }
 }

@@ -728,6 +728,38 @@ pub enum BuiltinMethod {
     /// `ДокументDOM.ПолучитьЭлементПоИдентификатору(Ид)`.
     DomGetElementById,
 
+    // Фабрики узлов есть ТОЛЬКО у документа, и формы с пространством имён —
+    // это ВТОРЫЕ формы тех же методов, а не отдельные `...NS`: справка врёт,
+    // измерено перебором на 8.3.27.
+    /// `ДокументDOM.СоздатьЭлемент(Имя)` / `(URI, Имя)`.
+    DomCreateElement,
+    /// `ДокументDOM.СоздатьАтрибут(Имя)` / `(URI, Имя)`.
+    DomCreateAttribute,
+    /// `ДокументDOM.СоздатьТекстовыйУзел(Текст)`.
+    DomCreateTextNode,
+    /// `ДокументDOM.СоздатьСекциюCDATA(Текст)`.
+    DomCreateCdataSection,
+    /// `ДокументDOM.СоздатьКомментарий(Текст)`.
+    DomCreateComment,
+    /// `ДокументDOM.СоздатьИнструкциюОбработки(Цель, Данные)`.
+    DomCreateProcessingInstruction,
+    /// `ДобавитьДочерний(Узел)` -> тот же узел.
+    DomAppendChild,
+    /// `ВставитьПеред(Новый, Опорный)` -> вставленный узел.
+    DomInsertBefore,
+    /// `УдалитьДочерний(Узел)` -> удалённый узел.
+    DomRemoveChild,
+    /// `ЗаменитьДочерний(Новый, Старый)` -> СТАРЫЙ узел.
+    DomReplaceChild,
+    /// `ЭлементDOM.УстановитьАтрибут(Имя, Значение)` / `(URI, Имя, Значение)`.
+    DomSetAttribute,
+    /// `ЭлементDOM.УдалитьАтрибут(Имя)` / `(URI, ЛокальноеИмя)`.
+    DomRemoveAttribute,
+    /// `ЭлементDOM.УстановитьУзелАтрибута(Атрибут)` -> замещённый атрибут.
+    DomSetAttributeNode,
+    /// `ЭлементDOM.УдалитьУзелАтрибута(Атрибут)` -> удалённый атрибут.
+    DomRemoveAttributeNode,
+
     // --- ТекстовыйДокумент ---------------------------------------------
     // `Прочитать`, `Записать` и `Очистить` переиспользуются: у платформы
     // это те же имена, что у JSON/XML/ЗаписьТекста, а смысл выбирается по
@@ -1103,6 +1135,40 @@ pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
         BuiltinMethod::DomGetElementById,
     ),
     ("GetElementById", BuiltinMethod::DomGetElementById),
+    ("СоздатьЭлемент", BuiltinMethod::DomCreateElement),
+    ("CreateElement", BuiltinMethod::DomCreateElement),
+    ("СоздатьАтрибут", BuiltinMethod::DomCreateAttribute),
+    ("CreateAttribute", BuiltinMethod::DomCreateAttribute),
+    ("СоздатьТекстовыйУзел", BuiltinMethod::DomCreateTextNode),
+    ("CreateTextNode", BuiltinMethod::DomCreateTextNode),
+    ("СоздатьСекциюCDATA", BuiltinMethod::DomCreateCdataSection),
+    ("CreateCDATASection", BuiltinMethod::DomCreateCdataSection),
+    ("СоздатьКомментарий", BuiltinMethod::DomCreateComment),
+    ("CreateComment", BuiltinMethod::DomCreateComment),
+    (
+        "СоздатьИнструкциюОбработки",
+        BuiltinMethod::DomCreateProcessingInstruction,
+    ),
+    (
+        "CreateProcessingInstruction",
+        BuiltinMethod::DomCreateProcessingInstruction,
+    ),
+    ("ДобавитьДочерний", BuiltinMethod::DomAppendChild),
+    ("AppendChild", BuiltinMethod::DomAppendChild),
+    ("ВставитьПеред", BuiltinMethod::DomInsertBefore),
+    ("InsertBefore", BuiltinMethod::DomInsertBefore),
+    ("УдалитьДочерний", BuiltinMethod::DomRemoveChild),
+    ("RemoveChild", BuiltinMethod::DomRemoveChild),
+    ("ЗаменитьДочерний", BuiltinMethod::DomReplaceChild),
+    ("ReplaceChild", BuiltinMethod::DomReplaceChild),
+    ("УстановитьАтрибут", BuiltinMethod::DomSetAttribute),
+    ("SetAttribute", BuiltinMethod::DomSetAttribute),
+    ("УдалитьАтрибут", BuiltinMethod::DomRemoveAttribute),
+    ("RemoveAttribute", BuiltinMethod::DomRemoveAttribute),
+    ("УстановитьУзелАтрибута", BuiltinMethod::DomSetAttributeNode),
+    ("SetAttributeNode", BuiltinMethod::DomSetAttributeNode),
+    ("УдалитьУзелАтрибута", BuiltinMethod::DomRemoveAttributeNode),
+    ("RemoveAttributeNode", BuiltinMethod::DomRemoveAttributeNode),
 ];
 
 impl BuiltinMethod {
@@ -1712,7 +1778,12 @@ pub fn call_builtin_method(
         // `ТекстовыйДокумент` — сохранить файл. Одно имя, разный смысл по
         // получателю, как и у `Закрыть`.
         BuiltinMethod::Write => {
-            if crate::binbuf::is_buffer(obj) {
+            if crate::dom::is_dom_writer(obj) {
+                // У `ЗаписьDOM` `Записать(Узел, ЗаписьXML)` — ровно два
+                // аргумента, и узел ПЕРВЫМ (измерено: обратный порядок
+                // платформа отвергает).
+                crate::dom::write(obj, args)
+            } else if crate::binbuf::is_buffer(obj) {
                 // У буфера `Записать(Позиция, Источник[, Количество])` —
                 // блочная запись; арность и границы проверяет он сам.
                 crate::binbuf::write_buffer(obj, args)
@@ -1942,6 +2013,22 @@ pub fn call_builtin_method(
         BuiltinMethod::DomGetAttributeNode => crate::dom::get_attribute_node(obj, args),
         BuiltinMethod::DomGetElementsByName => crate::dom::get_elements_by_name(obj, args),
         BuiltinMethod::DomGetElementById => crate::dom::get_element_by_id(obj, args),
+        BuiltinMethod::DomCreateElement => crate::dom::create_element(obj, args),
+        BuiltinMethod::DomCreateAttribute => crate::dom::create_attribute(obj, args),
+        BuiltinMethod::DomCreateTextNode => crate::dom::create_text_node(obj, args),
+        BuiltinMethod::DomCreateCdataSection => crate::dom::create_cdata_section(obj, args),
+        BuiltinMethod::DomCreateComment => crate::dom::create_comment(obj, args),
+        BuiltinMethod::DomCreateProcessingInstruction => {
+            crate::dom::create_processing_instruction(obj, args)
+        }
+        BuiltinMethod::DomAppendChild => crate::dom::append_child(obj, args),
+        BuiltinMethod::DomInsertBefore => crate::dom::insert_before(obj, args),
+        BuiltinMethod::DomRemoveChild => crate::dom::remove_child(obj, args),
+        BuiltinMethod::DomReplaceChild => crate::dom::replace_child(obj, args),
+        BuiltinMethod::DomSetAttribute => crate::dom::set_attribute(obj, args),
+        BuiltinMethod::DomRemoveAttribute => crate::dom::remove_attribute(obj, args),
+        BuiltinMethod::DomSetAttributeNode => crate::dom::set_attribute_node(obj, args),
+        BuiltinMethod::DomRemoveAttributeNode => crate::dom::remove_attribute_node(obj, args),
         BuiltinMethod::WriteXmlDeclaration => {
             crate::xml::write_declaration(obj)?;
             Ok(BslValue::Undefined)
