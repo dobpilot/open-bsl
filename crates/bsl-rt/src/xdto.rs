@@ -1,6 +1,6 @@
-//! Модель типов XDTO поверх компонентной модели XSD: `ТипЗначенияXDTO`,
-//! `ТипОбъектаXDTO`, `СвойствоXDTO` и соответствие встроенных типов XML
-//! Schema типам BSL.
+//! Модель типов XDTO поверх компонентной модели XSD: `ФабрикаXDTO`,
+//! `ТипЗначенияXDTO`, `ТипОбъектаXDTO`, `СвойствоXDTO` и соответствие
+//! встроенных типов XML Schema типам BSL.
 //!
 //! Второго разборщика схем здесь нет: на вход идёт готовая `XsSchemaData`
 //! из [`crate::xsd`], а этот модуль превращает ЛЕКСИЧЕСКУЮ модель схемы в
@@ -23,6 +23,28 @@
 //! `СвойствоXDTO` — `Владелец`, `Нулевой`, `Обязательный`, `Фиксированный`,
 //! `Локальный`, `Порядок`, `ЛексическоеЗначениеПоУмолчанию`, `ФормаXML`.
 //!
+//! * **фабрика строится ровно двумя способами, и они не взаимозаменяемы.**
+//!   `СоздатьФабрикуXDTO(Путь)` берёт ТОЛЬКО путь к файлу XSD: от схемы, от
+//!   набора схем, от текста схемы, от числа и без аргументов — ошибка, от
+//!   двух аргументов — тоже, и на несуществующем пути — тоже ошибка (текст
+//!   отказа не снят: обвязка замеров видит только сам факт исключения).
+//!   `Новый ФабрикаXDTO(...)` — наоборот, берёт ТОЛЬКО `НаборСхемXML`
+//!   (или ничего): путь, схема, текст, массив и два аргумента отвергаются.
+//!   Английские написания есть у обоих
+//!   (`CreateXDTOFactory`, `Новый XDTOFactory`). Фабрика — СНИМОК:
+//!   схема, добавленная в набор после её создания, ей не видна, а две
+//!   фабрики от одного файла НЕ равны;
+//! * `Строка()` фабрики — `ФабрикаXDTO`, `ТипЗнч()` — «Фабрика XDTO»;
+//!   `ЗначениеЗаполнено` от неё — ошибка, посторонний член — ошибка.
+//!   Методов у фабрики два, оба с английскими написаниями: `Тип`/`Type` и
+//!   `Создать`/`Create`;
+//! * `Создать` от типа ЗНАЧЕНИЯ без лексической формы — `Неопределено`, с
+//!   формой — `ЗначениеXDTO`; третий аргумент платформа принимает
+//!   (четвёртый уже нет), и что он значит — не измерено. `Создать` от типа
+//!   ОБЪЕКТА даёт `ОбъектXDTO` и лексической формы не терпит, а
+//!   абстрактный тип отвергает совсем. У самого экземпляра `Строка()` —
+//!   `ОбъектXDTO`, свой тип он отдаёт МЕТОДОМ `Тип()` (обращение к `Тип`
+//!   как к свойству — ошибка), и два экземпляра одного типа не равны;
 //! * все три типа существуют под двумя написаниями и печатаются с
 //!   пробелами: `ТипЗначенияXDTO`/`XDTOValueType` -> «Тип значения XDTO»,
 //!   `ТипОбъектаXDTO`/`XDTOObjectType` -> «Тип объекта XDTO»,
@@ -107,6 +129,22 @@
 //!   префикса (`Создать` от `xs:string` — ошибка, от `просто` —
 //!   расширенное имя с пустым URI). Здесь так же: префикс — ошибка, а не
 //!   попытка разрешить его по объявлениям схемы.
+//! * **Лексическая форма — только строка.** Платформа принимает и число
+//!   (`Создать(Тип, 42)` отдаёт `ЗначениеXDTO`), но какую именно запись она
+//!   из числа делает — не измерено, а разница видна сразу: `Строка(12.75)`
+//!   в 1С — это «12,75» с запятой, а лексическая форма `xs:decimal` — с
+//!   точкой. Гадать здесь дороже, чем отказать, поэтому нестроковый
+//!   аргумент — ошибка.
+//! * **`Пакеты` фабрики не поддержаны.** Платформа отдаёт
+//!   `КоллекциюПакетовXDTO` (у фабрики от нашей схемы их два: своё
+//!   пространство имён и пространство XML Schema), но пакет — это отдельная
+//!   сущность со своим содержимым, и она сюда не входит.
+//! * **У экземпляра нет хранилища.** `ОбъектXDTO` здесь умеет только то,
+//!   что измерено на нём самом: печататься и отдавать свой тип `Тип()`.
+//!   Чтение свойства платформа поддерживает (незаполненное —
+//!   `Неопределено`, объявленное с `default`/`fixed` — сразу значение,
+//!   поиск имени регистронезависим, постороннее имя — ошибка), и здесь это
+//!   честная ошибка до отдельной работы про экземпляры.
 
 use std::rc::Rc;
 
@@ -548,7 +586,7 @@ fn broken(what: &str) -> RtError {
 
 // --- построение ----------------------------------------------------------
 
-/// Модель типов по разобранной схеме.
+/// Модель типов по одной разобранной схеме.
 ///
 /// # Errors
 ///
@@ -556,7 +594,30 @@ fn broken(what: &str) -> RtError {
 /// цикл наследования либо значение по умолчанию, которое не разбирается в
 /// объявленном типе.
 pub fn model_of_schema(schema: &Rc<XsSchemaData>) -> RtResult<Rc<XdtoModel>> {
-    let mut builder = Builder::new(schema);
+    model_of_schemas(std::slice::from_ref(schema))
+}
+
+/// Модель типов по НАБОРУ схем — то, что стоит за `Новый
+/// ФабрикаXDTO(НаборСхемXML)`.
+///
+/// Встроенные типы XML Schema объявляются один раз на всю модель, а имена в
+/// ссылках (`base`, `type`, `itemType`, `memberTypes`) разрешаются по всем
+/// схемам набора сразу: схема из одного пространства имён вправе ссылаться
+/// на тип из другой схемы того же набора. Двусмысленности это не создаёт —
+/// `НаборСхемXML` держит не больше одной схемы на пространство имён
+/// (измерено, см. [`crate::xsd`]).
+///
+/// Пустой набор даёт фабрику с одними встроенными типами — ровно то же, что
+/// `Новый ФабрикаXDTO` без аргументов (измерено: у такой фабрики
+/// `Тип({...}string)` есть, а `Тип({urn:test}RootType)` — `Неопределено`).
+///
+/// # Errors
+///
+/// [`RtError::Xdto`], если какая-нибудь схема набора ссылается на неизвестный
+/// тип, содержит цикл наследования либо значение по умолчанию, которое не
+/// разбирается в объявленном типе.
+pub fn model_of_schemas(schemas: &[Rc<XsSchemaData>]) -> RtResult<Rc<XdtoModel>> {
+    let mut builder = Builder::new(schemas);
     builder.declare_builtins();
     builder.declare_schema_types()?;
     builder.link_bases()?;
@@ -564,13 +625,17 @@ pub fn model_of_schema(schema: &Rc<XsSchemaData>) -> RtResult<Rc<XdtoModel>> {
     Ok(Rc::new(builder.model))
 }
 
+/// Место узла в наборе схем: номер схемы и номер узла в ней. Номера узлов
+/// у схем свои, поэтому по всему набору однозначна только пара.
+type XsPlace = (usize, usize);
+
 struct Builder<'a> {
-    schema: &'a XsSchemaData,
+    schemas: &'a [Rc<XsSchemaData>],
     model: XdtoModel,
-    /// Номер узла XSD -> номер типа модели, для типов, объявленных схемой.
-    from_xs: Vec<(usize, usize)>,
-    /// Номер типа модели -> номер узла XSD, откуда он построен.
-    to_xs: Vec<Option<usize>>,
+    /// Место узла XSD -> номер типа модели, для типов, объявленных схемами.
+    from_xs: Vec<(XsPlace, usize)>,
+    /// Номер типа модели -> место узла XSD, откуда он построен.
+    to_xs: Vec<Option<XsPlace>>,
     /// Тип, чьи свойства сейчас считаются, — страховка от цикла
     /// наследования.
     busy: Vec<bool>,
@@ -578,9 +643,9 @@ struct Builder<'a> {
 }
 
 impl<'a> Builder<'a> {
-    fn new(schema: &'a XsSchemaData) -> Builder<'a> {
+    fn new(schemas: &'a [Rc<XsSchemaData>]) -> Builder<'a> {
         Builder {
-            schema,
+            schemas,
             model: XdtoModel {
                 types: Vec::new(),
                 properties: Vec::new(),
@@ -592,13 +657,24 @@ impl<'a> Builder<'a> {
         }
     }
 
-    fn push_type(&mut self, data: XdtoTypeData, xs: Option<usize>) -> usize {
+    /// Схема по номеру. Номер приходит только изнутри — из `to_xs` или из
+    /// перебора набора, — но подтверждать это `unwrap`ом на
+    /// пользовательских данных незачем: испорченный номер значит, что
+    /// испорчена сама модель, и об этом есть [`broken`].
+    fn schema_at(&self, si: usize) -> RtResult<&XsSchemaData> {
+        self.schemas
+            .get(si)
+            .map(Rc::as_ref)
+            .ok_or_else(|| broken("схема"))
+    }
+
+    fn push_type(&mut self, data: XdtoTypeData, xs: Option<XsPlace>) -> usize {
         self.model.types.push(data);
         self.to_xs.push(xs);
         self.busy.push(false);
         self.done.push(false);
-        if let Some(node) = xs {
-            self.from_xs.push((node, self.model.types.len() - 1));
+        if let Some(place) = xs {
+            self.from_xs.push((place, self.model.types.len() - 1));
         }
         self.model.types.len() - 1
     }
@@ -638,32 +714,36 @@ impl<'a> Builder<'a> {
         }
     }
 
-    /// Именованные глобальные типы схемы. Анонимные объявляются позже, при
-    /// разборе свойств: на них ссылается только своё свойство.
+    /// Именованные глобальные типы каждой схемы набора. Анонимные
+    /// объявляются позже, при разборе свойств: на них ссылается только своё
+    /// свойство.
     fn declare_schema_types(&mut self) -> RtResult<()> {
-        // Номера копируются, потому что `declare_type` берёт `&mut self`,
-        // а список живёт в схеме за общей ссылкой.
-        let nodes: Vec<usize> = self.schema.global_types().to_vec();
-        for node in nodes {
-            self.declare_type(node)?;
+        for si in 0..self.schemas.len() {
+            // Номера копируются, потому что `declare_type` берёт `&mut
+            // self`, а список живёт в схеме за общей ссылкой.
+            let nodes: Vec<usize> = self.schema_at(si)?.global_types().to_vec();
+            for node in nodes {
+                self.declare_type(si, node)?;
+            }
         }
         Ok(())
     }
 
-    fn declare_type(&mut self, node: usize) -> RtResult<usize> {
-        if let Some((_, idx)) = self.from_xs.iter().find(|(n, _)| *n == node) {
+    fn declare_type(&mut self, si: usize, node: usize) -> RtResult<usize> {
+        if let Some((_, idx)) = self.from_xs.iter().find(|(p, _)| *p == (si, node)) {
             return Ok(*idx);
         }
+        let schema = self.schema_at(si)?;
         // Пространство имён у типа модели — ЦЕЛЕВОЕ пространство схемы, и
         // у анонимного тоже, хотя имя у него пусто (измерено: у типа
         // безымянного `<xs:complexType>` внутри объявления `URI` —
         // `urn:test`). Лексическая модель XSD здесь другая: там у
         // анонимного типа пространство имён пусто.
-        let target_ns = self.schema.target_namespace().to_string();
-        let name = self.schema.name_of(node).to_string();
-        let data = match self.schema.kind_of(node) {
+        let target_ns = schema.target_namespace().to_string();
+        let name = schema.name_of(node).to_string();
+        let data = match schema.kind_of(node) {
             XsKind::SimpleType => {
-                let shape = match self.schema.simple_variety_of(node) {
+                let shape = match schema.simple_variety_of(node) {
                     Some((EnumValue::XsVarietyList, _, _)) => ValueShape::List(None),
                     Some((EnumValue::XsVarietyUnion, _, _)) => ValueShape::Union(Vec::new()),
                     _ => ValueShape::Atomic,
@@ -673,8 +753,7 @@ impl<'a> Builder<'a> {
                     ns: target_ns,
                     base: None,
                     shape: Some(shape),
-                    facets: self
-                        .schema
+                    facets: schema
                         .facets_of(node)
                         .into_iter()
                         .map(|(k, v)| (k, v.to_string()))
@@ -691,7 +770,7 @@ impl<'a> Builder<'a> {
                 }
             }
             XsKind::ComplexType => {
-                let (mixed, is_abstract) = self.schema.complex_flags_of(node);
+                let (mixed, is_abstract) = schema.complex_flags_of(node);
                 XdtoTypeData {
                     name,
                     ns: target_ns,
@@ -701,7 +780,7 @@ impl<'a> Builder<'a> {
                     properties: Vec::new(),
                     open: false,
                     is_abstract,
-                    ordered: self.content_is_ordered(node),
+                    ordered: content_is_ordered(schema, node),
                     mixed,
                 }
             }
@@ -712,34 +791,19 @@ impl<'a> Builder<'a> {
                 )))
             }
         };
-        Ok(self.push_type(data, Some(node)))
+        Ok(self.push_type(data, Some((si, node))))
     }
 
-    /// `Упорядоченный` — «Да» у последовательности и у типа без модели
-    /// содержимого, «Нет» у `xs:choice` и `xs:all` (измерено на пяти
-    /// типах).
-    fn content_is_ordered(&self, node: usize) -> bool {
-        let Some(particle) = self.schema.complex_content_of(node) else {
-            return true;
-        };
-        let Some((term, _, _)) = self.schema.particle_of(particle) else {
-            return true;
-        };
-        match self.schema.model_group_of(term) {
-            Some((EnumValue::XsGroupSequence, _)) => true,
-            Some(_) => false,
-            None => true,
-        }
-    }
-
-    /// Базовые типы схемных типов: имя из `base` разрешается в номер.
+    /// Базовые типы схемных типов: имя из `base` разрешается в номер. Имя
+    /// ищется по ВСЕМУ набору, а не только в своей схеме, — иначе ссылка на
+    /// соседнее пространство имён обрывалась бы.
     fn link_bases(&mut self) -> RtResult<()> {
         for i in 0..self.model.types.len() {
-            let Some(node) = self.to_xs[i] else {
+            let Some((si, node)) = self.to_xs[i] else {
                 continue;
             };
             let base = if self.model.types[i].is_value() {
-                let name = self.schema.simple_base_of(node).cloned();
+                let name = self.schema_at(si)?.simple_base_of(node).cloned();
                 match name {
                     Some(n) => Some(self.require_type(&n)?),
                     // Тип значения без явного базового наследует
@@ -751,7 +815,7 @@ impl<'a> Builder<'a> {
                 // базовый тип: у составного типа с простым содержимым
                 // платформа отдаёт `anyType`, а простой базовый тип
                 // виден свойством `__content` (измерено).
-                let name = self.schema.complex_base_of(node).cloned();
+                let name = self.schema_at(si)?.complex_base_of(node).cloned();
                 let resolved = match name {
                     Some(n) => Some(self.require_type(&n)?),
                     None => None,
@@ -765,10 +829,10 @@ impl<'a> Builder<'a> {
         }
         // Тип элемента списка и члены объединения — по тем же именам.
         for i in 0..self.model.types.len() {
-            let Some(node) = self.to_xs[i] else {
+            let Some((si, node)) = self.to_xs[i] else {
                 continue;
             };
-            let Some((variety, item, members)) = self.schema.simple_variety_of(node) else {
+            let Some((variety, item, members)) = self.schema_at(si)?.simple_variety_of(node) else {
                 continue;
             };
             let shape = match variety {
@@ -796,7 +860,7 @@ impl<'a> Builder<'a> {
 
     /// Тип по имени — с ошибкой вместо `Неопределено`: ссылка на
     /// несуществующий тип делает модель неполной, и молчать об этом хуже,
-    /// чем отказать.
+    /// чем отказать. Ищется по всем схемам набора сразу.
     fn require_type(&self, name: &XName) -> RtResult<usize> {
         self.model.find(&name.uri, &name.local).ok_or_else(|| {
             RtError::Xdto(format!(
@@ -833,10 +897,10 @@ impl<'a> Builder<'a> {
                 props.extend_from_slice(&self.model.types[base].properties);
             }
         }
-        if let Some(node) = self.to_xs[index] {
+        if let Some((si, node)) = self.to_xs[index] {
             if !self.model.types[index].is_value() {
-                self.collect_attributes(node, &mut props)?;
-                self.collect_content(node, &mut props)?;
+                self.collect_attributes(si, node, &mut props)?;
+                self.collect_content(si, node, &mut props)?;
             }
         }
         self.model.types[index].properties = props;
@@ -847,10 +911,11 @@ impl<'a> Builder<'a> {
 
     /// Собственные атрибуты составного типа. Обязательный атрибут даёт
     /// границы `1..1`, необязательный — `0..1` (измерено).
-    fn collect_attributes(&mut self, node: usize, out: &mut Vec<usize>) -> RtResult<()> {
-        let uses: Vec<usize> = self.schema.complex_attribute_uses_of(node).to_vec();
+    fn collect_attributes(&mut self, si: usize, node: usize, out: &mut Vec<usize>) -> RtResult<()> {
+        let uses: Vec<usize> = self.schema_at(si)?.complex_attribute_uses_of(node).to_vec();
         for use_node in uses {
-            let Some(view) = self.schema.attribute_use_of(use_node) else {
+            let schema = self.schema_at(si)?;
+            let Some(view) = schema.attribute_use_of(use_node) else {
                 continue;
             };
             let (decl_node, required, lexical, has_constraint) = (
@@ -859,11 +924,11 @@ impl<'a> Builder<'a> {
                 view.lexical.to_string(),
                 view.has_constraint,
             );
-            let Some(decl) = self.schema.decl_of(decl_node) else {
+            let Some(decl) = schema.decl_of(decl_node) else {
                 continue;
             };
             let (name, ns) = (decl.name.to_string(), decl.ns.to_string());
-            let type_index = self.property_type(decl_node)?;
+            let type_index = self.property_type(si, decl_node)?;
             let default = if has_constraint {
                 Some(self.value_of(type_index, &lexical)?)
             } else {
@@ -886,9 +951,9 @@ impl<'a> Builder<'a> {
 
     /// Собственное содержимое: либо элементы модели содержимого, либо
     /// текстовое свойство `__content` у типа с простым содержимым.
-    fn collect_content(&mut self, node: usize, out: &mut Vec<usize>) -> RtResult<()> {
-        if let Some(particle) = self.schema.complex_content_of(node) {
-            return self.collect_elements(particle, Some(1), Some(1), out);
+    fn collect_content(&mut self, si: usize, node: usize, out: &mut Vec<usize>) -> RtResult<()> {
+        if let Some(particle) = self.schema_at(si)?.complex_content_of(node) {
+            return self.collect_elements(si, particle, Some(1), Some(1), out);
         }
         // Простое содержимое: базовый тип — простой, и платформа
         // показывает его свойством `__content` с формой `Текст`
@@ -898,7 +963,7 @@ impl<'a> Builder<'a> {
         // сделаны выше. СМЕШАННЫЙ тип сюда не доходит: модель содержимого
         // у него есть, и своего текстового свойства платформа ему не даёт
         // (измерено на `mixed="true"` — там только объявленный элемент).
-        let Some(base_name) = self.schema.complex_base_of(node).cloned() else {
+        let Some(base_name) = self.schema_at(si)?.complex_base_of(node).cloned() else {
             return Ok(());
         };
         let base = self.require_type(&base_name)?;
@@ -922,24 +987,26 @@ impl<'a> Builder<'a> {
     /// вложенным группам модели.
     fn collect_elements(
         &mut self,
+        si: usize,
         particle: usize,
         outer_lower: Option<u32>,
         outer_upper: Option<u32>,
         out: &mut Vec<usize>,
     ) -> RtResult<()> {
-        let Some((term, min, max)) = self.schema.particle_of(particle) else {
+        let schema = self.schema_at(si)?;
+        let Some((term, min, max)) = schema.particle_of(particle) else {
             return Ok(());
         };
         let lower = fold_bounds(outer_lower, bound_of(min, 1));
         let upper = fold_bounds(outer_upper, bound_of(max, 1));
-        if let Some((_, particles)) = self.schema.model_group_of(term) {
+        if let Some((_, particles)) = schema.model_group_of(term) {
             let inner: Vec<usize> = particles.to_vec();
             for p in inner {
-                self.collect_elements(p, lower, upper, out)?;
+                self.collect_elements(si, p, lower, upper, out)?;
             }
             return Ok(());
         }
-        let Some(decl) = self.schema.decl_of(term) else {
+        let Some(decl) = schema.decl_of(term) else {
             return Err(RtError::Xdto(
                 "термом фрагмента может быть объявление элемента или группа модели".to_string(),
             ));
@@ -950,7 +1017,7 @@ impl<'a> Builder<'a> {
             decl.lexical.to_string(),
             decl.has_constraint,
         );
-        let type_index = self.property_type(term)?;
+        let type_index = self.property_type(si, term)?;
         let default = if has_constraint {
             Some(self.value_of(type_index, &lexical)?)
         } else {
@@ -972,8 +1039,8 @@ impl<'a> Builder<'a> {
     /// Тип свойства: объявленный `type`, встроенный анонимный тип или —
     /// если ни того, ни другого нет — `anyType` (измерено на
     /// `<xs:element name="notype"/>`).
-    fn property_type(&mut self, decl_node: usize) -> RtResult<usize> {
-        let (type_name, anonymous) = match self.schema.decl_of(decl_node) {
+    fn property_type(&mut self, si: usize, decl_node: usize) -> RtResult<usize> {
+        let (type_name, anonymous) = match self.schema_at(si)?.decl_of(decl_node) {
             Some(d) => (d.type_name.cloned(), d.anonymous_type),
             None => (None, None),
         };
@@ -981,10 +1048,10 @@ impl<'a> Builder<'a> {
             return self.require_type(&name);
         }
         if let Some(node) = anonymous {
-            let index = self.declare_type(node)?;
+            let index = self.declare_type(si, node)?;
             // Анонимный тип объявлен уже после связывания базовых типов,
             // поэтому его база и свойства достраиваются здесь же.
-            self.link_one_base(index, node)?;
+            self.link_one_base(si, index, node)?;
             self.ensure_properties(index)?;
             return Ok(index);
         }
@@ -995,17 +1062,17 @@ impl<'a> Builder<'a> {
 
     /// Базовый тип одного (анонимного) типа — та же логика, что в
     /// [`Builder::link_bases`], но для типа, объявленного позже.
-    fn link_one_base(&mut self, index: usize, node: usize) -> RtResult<()> {
+    fn link_one_base(&mut self, si: usize, index: usize, node: usize) -> RtResult<()> {
         if self.model.types[index].base.is_some() {
             return Ok(());
         }
         let base = if self.model.types[index].is_value() {
-            match self.schema.simple_base_of(node).cloned() {
+            match self.schema_at(si)?.simple_base_of(node).cloned() {
                 Some(n) => Some(self.require_type(&n)?),
                 None => self.model.find(XSD_NS, "anySimpleType"),
             }
         } else {
-            let resolved = match self.schema.complex_base_of(node).cloned() {
+            let resolved = match self.schema_at(si)?.complex_base_of(node).cloned() {
                 Some(n) => Some(self.require_type(&n)?),
                 None => None,
             };
@@ -1029,6 +1096,22 @@ impl<'a> Builder<'a> {
 /// Имя свойства, которым платформа показывает текст типа с простым
 /// содержимым (измерено).
 const CONTENT_PROPERTY: &str = "__content";
+
+/// `Упорядоченный` — «Да» у последовательности и у типа без модели
+/// содержимого, «Нет» у `xs:choice` и `xs:all` (измерено на пяти типах).
+fn content_is_ordered(schema: &XsSchemaData, node: usize) -> bool {
+    let Some(particle) = schema.complex_content_of(node) else {
+        return true;
+    };
+    let Some((term, _, _)) = schema.particle_of(particle) else {
+        return true;
+    };
+    match schema.model_group_of(term) {
+        Some((EnumValue::XsGroupSequence, _)) => true,
+        Some(_) => false,
+        None => true,
+    }
+}
 
 /// Граница вхождения из лексической модели XSD: отсутствующий атрибут —
 /// это `default`, а `unbounded` (то есть `u32::MAX`) — `None`.
@@ -1461,10 +1544,15 @@ pub fn display_text(obj: &BslObject) -> Option<String> {
             Some(data) => data.name.clone(),
             None => String::new(),
         },
+        // Фабрика и экземпляр печатаются именем своего типа — измерено
+        // обоих: `Строка(Фаб)` -> `ФабрикаXDTO`, `Строка(Объект)` ->
+        // `ОбъектXDTO`.
         BslObject::XdtoProperties(..)
         | BslObject::XdtoFacets(..)
         | BslObject::XdtoFacet(..)
-        | BslObject::XdtoValue(_) => type_name_of(obj)?.to_string(),
+        | BslObject::XdtoValue(_)
+        | BslObject::XdtoFactory(_)
+        | BslObject::XdtoObject(..) => type_name_of(obj)?.to_string(),
         _ => return None,
     })
 }
@@ -1482,6 +1570,8 @@ pub fn type_name_of(obj: &BslObject) -> Option<&'static str> {
         BslObject::XdtoFacets(..) => "КоллекцияФасетовXDTO",
         BslObject::XdtoFacet(..) => "ФасетXDTO",
         BslObject::XdtoValue(_) => "ЗначениеXDTO",
+        BslObject::XdtoFactory(_) => "ФабрикаXDTO",
+        BslObject::XdtoObject(..) => "ОбъектXDTO",
         _ => return None,
     })
 }
@@ -1499,8 +1589,241 @@ pub fn type_id_of(obj: &BslObject) -> Option<TypeId> {
         BslObject::XdtoFacets(..) => TypeId::XdtoFacetCollection,
         BslObject::XdtoFacet(..) => TypeId::XdtoFacet,
         BslObject::XdtoValue(_) => TypeId::XdtoDataValue,
+        BslObject::XdtoFactory(_) => TypeId::XdtoFactory,
+        BslObject::XdtoObject(..) => TypeId::XdtoDataObject,
         _ => return None,
     })
+}
+
+// --- фабрика -------------------------------------------------------------
+
+/// `ФабрикаXDTO` над готовой моделью типов.
+///
+/// Фабрика — это СНИМОК: `Новый ФабрикаXDTO(Наб)` строит модель на месте, и
+/// схема, добавленная в тот же набор позже, ей уже не видна (измерено:
+/// `Ф = Новый ФабрикаXDTO(Н); Н.Добавить(Схема); Ф.Тип(...)` ->
+/// `Неопределено` — промах поиска, а не ошибка). Отсюда и `Rc<XdtoModel>`
+/// вместо ссылки на набор.
+pub fn factory_value(model: Rc<XdtoModel>) -> BslValue {
+    BslValue::Object(Rc::new(BslObject::XdtoFactory(model)))
+}
+
+/// `ОбъектXDTO` — экземпляр типа объекта.
+fn object_value(model: &Rc<XdtoModel>, index: usize) -> BslValue {
+    BslValue::Object(Rc::new(BslObject::XdtoObject(model.clone(), index)))
+}
+
+/// `СоздатьФабрикуXDTO(Путь)` — фабрика по файлу XSD.
+///
+/// Источник у этой функции ровно один — путь к файлу: схему, набор схем,
+/// текст схемы, число и вызов без аргументов платформа отвергает
+/// (измерено все пять). Схема разбирается тем же путём, что и
+/// `ПостроительСхемXML.СоздатьСхемуXML`, — второго разборщика в проекте
+/// нет.
+///
+/// # Errors
+///
+/// [`RtError::Xdto`], если аргумент не строка или файла нет;
+/// [`RtError::Xsd`] и [`RtError::Xml`], если содержимое файла — не схема.
+pub fn factory_of_file(args: &[BslValue]) -> RtResult<BslValue> {
+    let [BslValue::Str(path)] = args else {
+        return Err(RtError::Xdto(
+            "СоздатьФабрикуXDTO берёт один аргумент — путь к файлу XSD".to_string(),
+        ));
+    };
+    let path = path.to_string();
+    let text = std::fs::read_to_string(&path)
+        .map_err(|e| RtError::Xdto(format!("файл схемы «{path}» не прочитан: {e}")))?;
+    // Сигнатуру UTF-8 разборщик видит как символ перед `<` — снимаем её
+    // так же, как `ЧтениеXML.ОткрытьФайл`.
+    let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
+    let schema = crate::xsd::schema_of_text(text)?;
+    Ok(factory_value(model_of_schemas(&[schema])?))
+}
+
+/// `Новый ФабрикаXDTO([НаборСхемXML])` — фабрика по набору схем.
+///
+/// Аргумент необязателен: без него получается фабрика с одними встроенными
+/// типами XML Schema (измерено). Пустой набор даёт ровно её же. Всё
+/// остальное — путь, схема, текст, массив — платформа отвергает
+/// (измерено), и здесь так же.
+///
+/// # Errors
+///
+/// [`RtError::Xdto`], если аргумент не `НаборСхемXML`; ошибки построения
+/// модели — из [`model_of_schemas`].
+pub fn factory_of_schema_set(arg: &BslValue) -> RtResult<BslValue> {
+    let schemas: Vec<Rc<XsSchemaData>> = match arg {
+        BslValue::Undefined => Vec::new(),
+        BslValue::Object(o) => match &**o {
+            BslObject::XsSchemaSet(set) => set.borrow().clone(),
+            _ => return Err(bad_factory_source()),
+        },
+        _ => return Err(bad_factory_source()),
+    };
+    Ok(factory_value(model_of_schemas(&schemas)?))
+}
+
+fn bad_factory_source() -> RtError {
+    RtError::Xdto(
+        "Новый ФабрикаXDTO берёт либо ничего, либо НаборСхемXML; \
+         фабрику по файлу XSD строит СоздатьФабрикуXDTO"
+            .to_string(),
+    )
+}
+
+/// Фабрика ли это — нужно диспетчеру методов: имя `Создать` делят фабрика
+/// и менеджер файловых потоков.
+pub fn is_factory(v: &BslValue) -> bool {
+    matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::XdtoFactory(_)))
+}
+
+/// Экземпляр `ОбъектXDTO` ли это.
+pub fn is_object(v: &BslValue) -> bool {
+    matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::XdtoObject(..)))
+}
+
+fn not_applicable(obj: &BslValue, method: &'static str) -> RtError {
+    RtError::MethodNotApplicable {
+        method,
+        receiver: obj.type_name(),
+    }
+}
+
+/// Модель фабрики-получателя.
+fn factory_model<'a>(obj: &'a BslValue, method: &'static str) -> RtResult<&'a Rc<XdtoModel>> {
+    match obj {
+        BslValue::Object(o) => match &**o {
+            BslObject::XdtoFactory(model) => Ok(model),
+            _ => Err(not_applicable(obj, method)),
+        },
+        _ => Err(not_applicable(obj, method)),
+    }
+}
+
+/// `ФабрикаXDTO.Тип(URI, Имя)` и `ФабрикаXDTO.Тип(РасширенноеИмяXML)`.
+///
+/// Неизвестное имя — `Неопределено`, а не ошибка (измерено, как и то, что
+/// объявление глобального ЭЛЕМЕНТА типом не является). Одна строка вместо
+/// пары, три аргумента, числа вместо имён — ошибка (измерено все четыре
+/// пробы).
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель не фабрика либо
+/// аргументы не той формы.
+pub fn factory_type(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let model = factory_model(obj, "Тип")?;
+    let found = match args {
+        [BslValue::Str(uri), BslValue::Str(name)] => {
+            model.find(&uri.to_string(), &name.to_string())
+        }
+        [BslValue::Object(o)] => match &**o {
+            BslObject::XmlExpandedName(name) => model.find(&name.uri, &name.local),
+            _ => return Err(not_applicable(obj, "Тип")),
+        },
+        _ => return Err(not_applicable(obj, "Тип")),
+    };
+    Ok(match found {
+        Some(index) => type_value(model, index),
+        None => BslValue::Undefined,
+    })
+}
+
+/// `ФабрикаXDTO.Создать(Тип[, Лексика])`.
+///
+/// Смысл вызова решает вид типа, и оба измерены. У типа ЗНАЧЕНИЯ вызов без
+/// лексической формы отдаёт `Неопределено`, а с формой — `ЗначениеXDTO`,
+/// разобранное тем же путём, что и `ЗначениеПоУмолчанию` свойства. У типа
+/// ОБЪЕКТА лексической формы быть не должно (`Создать(ТипОбъекта, "аб")` —
+/// ошибка), а результат — `ОбъектXDTO`; абстрактный тип платформа
+/// инстанцировать отказывается.
+///
+/// ФАСЕТЫ ЗДЕСЬ НЕ ПРОВЕРЯЮТСЯ. Платформа по ним лексическую форму
+/// проверяет (измерено: `Создать` от `Small` с «1000» и от `Code` с «аб» —
+/// ошибка), и это сознательно отложено до задачи проверки значений — см.
+/// «Фасеты только хранятся» в шапке модуля.
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель не фабрика, первый
+/// аргумент не тип XDTO либо аргументов не то количество;
+/// [`RtError::Xdto`], если лексическая форма не разбирается в этом типе или
+/// тип объекта абстрактный.
+pub fn factory_create(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    factory_model(obj, "Создать")?;
+    let [first, rest @ ..] = args else {
+        return Err(not_applicable(obj, "Создать"));
+    };
+    // Третий аргумент платформа принимает (измерено: `Создать(Тип, "42",
+    // 1)` отдаёт `ЗначениеXDTO`), а четвёртый уже нет. Что он значит, не
+    // измерено, поэтому здесь он принимается и ни на что не влияет:
+    // додумывать ему смысл хуже, чем отвергать программу, которая на
+    // платформе работает.
+    if rest.len() > 2 {
+        return Err(not_applicable(obj, "Создать"));
+    }
+    let BslValue::Object(o) = first else {
+        return Err(not_applicable(obj, "Создать"));
+    };
+    let BslObject::XdtoType(model, index) = &**o else {
+        return Err(not_applicable(obj, "Создать"));
+    };
+    // Модель берётся у САМОГО типа, а не у фабрики-получателя: тип и так
+    // несёт свою модель, и чужой тип строил бы значение по своей. Что
+    // платформа делает с типом из другой фабрики, не измерено.
+    let data = model.type_at(*index)?;
+    if !data.is_value() {
+        if !rest.is_empty() {
+            return Err(not_applicable(obj, "Создать"));
+        }
+        if data.is_abstract {
+            return Err(RtError::Xdto(format!(
+                "абстрактный тип «{}» экземпляров не имеет",
+                type_display(data)
+            )));
+        }
+        return Ok(object_value(model, *index));
+    }
+    let Some(lexical) = rest.first() else {
+        // Тип значения без лексической формы — `Неопределено` (измерено).
+        return Ok(BslValue::Undefined);
+    };
+    let BslValue::Str(text) = lexical else {
+        return Err(RtError::Xdto(
+            "лексическая форма значения XDTO — это строка".to_string(),
+        ));
+    };
+    let text = text.to_string();
+    Ok(data_value(&Rc::new(XdtoValueData {
+        value: value_from_lexical(model, *index, &text)?,
+        lexical: text,
+    })))
+}
+
+/// `ОбъектXDTO.Тип()` — свой тип XDTO. Именно МЕТОД: обращение к `Тип` как
+/// к свойству платформа отвергает, а `Тип()` отдаёт тот же тип, что и
+/// `Фабрика.Тип(URI, Имя)` (измерено обе стороны, включая равенство).
+/// Аргументов у него нет — `Тип(1)` платформа не берёт.
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель не `ОбъектXDTO` либо
+/// вызов с аргументами.
+pub fn object_type(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let BslValue::Object(o) = obj else {
+        return Err(not_applicable(obj, "Тип"));
+    };
+    let BslObject::XdtoObject(model, index) = &**o else {
+        return Err(not_applicable(obj, "Тип"));
+    };
+    if !args.is_empty() {
+        return Err(not_applicable(obj, "Тип"));
+    }
+    // Номер проверяется до построения значения: испорченная модель обязана
+    // отвечать ошибкой, а не типом, которого нет.
+    model.type_at(*index)?;
+    Ok(type_value(model, *index))
 }
 
 /// Член `ВидФасетаXDTO` по виду фасета лексической модели XSD.
@@ -1638,6 +1961,22 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
             }
             Err(unknown())
         }
+        // Своих читаемых членов у фабрики нет: `Тип` и `Создать` — методы,
+        // а на постороннее имя платформа отвечает ошибкой (измерено
+        // `Фаб.НетТакогоЧлена`). `Пакеты` этой реализацией не поддержаны.
+        BslObject::XdtoFactory(_) => Err(unknown()),
+        // Свойства экземпляра ЗДЕСЬ НЕ ЧИТАЮТСЯ, и это честный отказ, а не
+        // забытая ветка: платформа отдаёт незаполненному свойству
+        // `Неопределено`, а свойству с `default`/`fixed` — сразу
+        // подставленное значение (измерено `def` -> 7, `fx` -> 9, поиск
+        // имени регистронезависим), то есть у экземпляра есть ХРАНИЛИЩЕ с
+        // предзаполнением. Заводить его вместе с чтением и записью —
+        // отдельная работа; пока экземпляр умеет ровно то, что измерено
+        // здесь: печататься и отдавать свой тип методом `Тип()`.
+        BslObject::XdtoObject(..) => Err(RtError::Xdto(format!(
+            "свойства «ОбъектXDTO» эта реализация пока не читает (обращение к «{name}»); \
+             у экземпляра поддержан только метод «Тип()»"
+        ))),
         _ => Err(unknown()),
     }
 }
@@ -1749,7 +2088,7 @@ mod tests {
     /// Модель типов из текста XSD — тем же путём, что и в бою: дерево
     /// строит `dom`, схему — `xsd`, а типы — этот модуль.
     fn model(text: &str) -> Rc<XdtoModel> {
-        let schema = crate::xsd::build_for_tests(text).expect("схема обязана разбираться");
+        let schema = crate::xsd::schema_of_text(text).expect("схема обязана разбираться");
         model_of_schema(&schema).expect("модель обязана строиться")
     }
 
@@ -2524,7 +2863,7 @@ mod tests {
     #[test]
     fn broken_schemas_report_errors_instead_of_panicking() {
         // Ссылка на несуществующий тип.
-        let schema = crate::xsd::build_for_tests(concat!(
+        let schema = crate::xsd::schema_of_text(concat!(
             r#"<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t">"#,
             r#"<xs:complexType name="T"><xs:sequence>"#,
             r#"<xs:element name="a" type="xs:нетТакого"/>"#,
@@ -2540,7 +2879,7 @@ mod tests {
         // Кольцо в цепочке базовых типов простого типа: разбор
         // лексической формы обязан отвечать ошибкой, а не переполнением
         // стека.
-        let schema = crate::xsd::build_for_tests(concat!(
+        let schema = crate::xsd::schema_of_text(concat!(
             r#"<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="urn:t" "#,
             r#"targetNamespace="urn:t">"#,
             r#"<xs:simpleType name="A"><xs:restriction base="t:A"/></xs:simpleType>"#,
@@ -2554,7 +2893,7 @@ mod tests {
         assert!(cyclic.builtin_of(a).is_none(), "кольцо не даёт отображения");
 
         // Цикл наследования типов ОБЪЕКТА ловится при построении модели.
-        let schema = crate::xsd::build_for_tests(concat!(
+        let schema = crate::xsd::schema_of_text(concat!(
             r#"<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="urn:t" "#,
             r#"targetNamespace="urn:t">"#,
             r#"<xs:complexType name="A"><xs:complexContent>"#,
@@ -2571,7 +2910,7 @@ mod tests {
         );
 
         // Значение по умолчанию, не разбирающееся в своём типе.
-        let schema = crate::xsd::build_for_tests(concat!(
+        let schema = crate::xsd::schema_of_text(concat!(
             r#"<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t">"#,
             r#"<xs:complexType name="T"><xs:sequence>"#,
             r#"<xs:element name="a" type="xs:int" default="ерунда"/>"#,
@@ -2585,7 +2924,7 @@ mod tests {
         // десяти байт, и десятый байт лежит внутри «я». Схема доходит сюда
         // сама (`collect_elements` -> `has_constraint` -> `value_of`), так
         // что ответом обязана быть ошибка, а не паника процесса.
-        let schema = crate::xsd::build_for_tests(concat!(
+        let schema = crate::xsd::schema_of_text(concat!(
             r#"<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t">"#,
             r#"<xs:complexType name="T"><xs:sequence>"#,
             r#"<xs:element name="a" type="xs:date" default="2026-08-1я"/>"#,
@@ -2604,5 +2943,275 @@ mod tests {
         // Члены типа ЗНАЧЕНИЯ на типе объекта не отвечают, и наоборот.
         assert!(get_property(&root, "Фасеты").is_err());
         assert!(get_property(&type_of(&m, "urn:test", "Code"), "Свойства").is_err());
+    }
+
+    // --- фабрика -----------------------------------------------------------
+
+    /// Фабрика над моделью одной схемы — то, что получается из
+    /// `СоздатьФабрикуXDTO`, только без файла на диске.
+    fn factory(text: &str) -> BslValue {
+        factory_value(model(text))
+    }
+
+    fn factory_of_texts(texts: &[&str]) -> BslValue {
+        let schemas: Vec<Rc<XsSchemaData>> = texts
+            .iter()
+            .map(|t| crate::xsd::schema_of_text(t).expect("схема обязана разбираться"))
+            .collect();
+        factory_value(model_of_schemas(&schemas).expect("модель обязана строиться"))
+    }
+
+    /// Набор схем даёт ОДНУ модель: типы всех схем видны через одну
+    /// фабрику, а ссылка по имени разрешается через границу схемы.
+    #[test]
+    fn a_factory_over_a_schema_set_resolves_names_across_schemas() {
+        let a = concat!(
+            r#"<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:a">"#,
+            r#"<xs:simpleType name="Code"><xs:restriction base="xs:string">"#,
+            r#"<xs:minLength value="2"/></xs:restriction></xs:simpleType></xs:schema>"#,
+        );
+        let b = concat!(
+            r#"<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:a="urn:a" "#,
+            r#"targetNamespace="urn:b"><xs:complexType name="Row"><xs:sequence>"#,
+            r#"<xs:element name="code" type="a:Code"/>"#,
+            r#"</xs:sequence></xs:complexType></xs:schema>"#,
+        );
+        let f = factory_of_texts(&[a, b]);
+        let row = factory_type(&f, &[str_value("urn:b"), str_value("Row")]).expect("тип");
+        assert_eq!(row.to_string(), "{urn:b}Row");
+        let code = factory_type(&f, &[str_value("urn:a"), str_value("Code")]).expect("тип");
+        assert_eq!(code.to_string(), "{urn:a}Code");
+        // Свойство схемы B ссылается на тип схемы A — и ссылка связана.
+        let by_name =
+            collection_lookup(&prop(&row, "Свойства"), &[str_value("code")]).expect("поиск");
+        assert_eq!(prop(&by_name, "Тип"), code);
+        // Порядок схем в наборе на разрешение не влияет.
+        let reversed = factory_of_texts(&[b, a]);
+        assert_eq!(
+            factory_type(&reversed, &[str_value("urn:a"), str_value("Code")])
+                .expect("тип")
+                .to_string(),
+            "{urn:a}Code"
+        );
+        // Встроенные типы объявлены ОДИН раз на всю модель, а не по разу
+        // на схему: иначе `find` возвращал бы первый из двух одинаковых.
+        let string = factory_type(&f, &[str_value(XSD_NS), str_value("string")]).expect("тип");
+        assert_eq!(string.to_string(), format!("{{{XSD_NS}}}string"));
+        // Пустой набор — это фабрика с одними встроенными типами.
+        let empty = factory_of_texts(&[]);
+        assert_eq!(
+            factory_type(&empty, &[str_value(XSD_NS), str_value("string")]).expect("тип"),
+            factory_type(&empty, &[str_value(XSD_NS), str_value("string")]).expect("тип")
+        );
+        assert_eq!(
+            factory_type(&empty, &[str_value("urn:a"), str_value("Code")]).expect("тип"),
+            BslValue::Undefined
+        );
+    }
+
+    /// `Тип` берёт пару (URI, имя) или расширенное имя, неизвестное имя
+    /// даёт `Неопределено`, а два обращения за одним именем — равные
+    /// значения (всё измерено).
+    #[test]
+    fn factory_type_takes_a_pair_or_an_expanded_name() {
+        let f = factory(SAMPLE);
+        let pair = factory_type(&f, &[str_value("urn:test"), str_value("RootType")]).expect("тип");
+        assert_eq!(pair.to_string(), "{urn:test}RootType");
+        let expanded = crate::xsd::new_expanded_name("urn:test", "RootType");
+        assert_eq!(factory_type(&f, &[expanded]).expect("тип"), pair);
+        // Два обращения за одним именем равны — тип это ссылка в модель.
+        assert_eq!(
+            factory_type(&f, &[str_value("urn:test"), str_value("RootType")]).expect("тип"),
+            pair
+        );
+        // Неизвестное имя и чужой URI — `Неопределено`, а не ошибка.
+        for args in [
+            [str_value("urn:test"), str_value("НетТакого")],
+            [str_value("urn:нет"), str_value("RootType")],
+            // Пустой URI (измерено на `Тип("", "RootType")`).
+            [str_value(""), str_value("RootType")],
+        ] {
+            assert_eq!(factory_type(&f, &args).expect("поиск"), BslValue::Undefined);
+        }
+        // Одна строка, три аргумента, числа вместо имён и вызов без
+        // аргументов — ошибка (измерено все четыре).
+        assert!(factory_type(&f, &[str_value("RootType")]).is_err());
+        assert!(factory_type(
+            &f,
+            &[
+                str_value("urn:test"),
+                str_value("RootType"),
+                number_value(1)
+            ]
+        )
+        .is_err());
+        assert!(factory_type(&f, &[number_value(5), number_value(5)]).is_err());
+        assert!(factory_type(&f, &[]).is_err());
+        // Получатель обязан быть фабрикой.
+        assert!(factory_type(&pair, &[str_value("urn:test"), str_value("RootType")]).is_err());
+    }
+
+    /// `Создать` от типа ЗНАЧЕНИЯ: без лексики — `Неопределено`, с
+    /// лексикой — `ЗначениеXDTO` с обоими членами.
+    #[test]
+    fn factory_create_builds_a_value_from_its_lexical_form() {
+        let f = factory(SAMPLE);
+        let code = factory_type(&f, &[str_value("urn:test"), str_value("Code")]).expect("тип");
+        let value = factory_create(&f, &[code.clone(), str_value("AB")]).expect("значение");
+        assert_eq!(
+            value.type_of().unwrap(),
+            BslValue::Type(TypeId::XdtoDataValue)
+        );
+        assert_eq!(text_of(&prop(&value, "Значение")), "AB");
+        assert_eq!(text_of(&prop(&value, "ЛексическоеЗначение")), "AB");
+        // Лексическая форма разбирается по ТИПУ: свой тип наследует
+        // отображение базового, а встроенный числовой даёт число.
+        let int = factory_type(&f, &[str_value(XSD_NS), str_value("int")]).expect("тип");
+        let number = factory_create(&f, &[int.clone(), str_value("-42")]).expect("значение");
+        assert_eq!(number_of(&prop(&number, "Значение")), -42);
+        // Без лексической формы — `Неопределено` (измерено).
+        assert_eq!(
+            factory_create(&f, std::slice::from_ref(&int)).expect("вызов"),
+            BslValue::Undefined
+        );
+        // Третий аргумент платформа принимает, четвёртый — уже нет.
+        assert!(factory_create(&f, &[int.clone(), str_value("1"), number_value(1)]).is_ok());
+        assert!(factory_create(
+            &f,
+            &[
+                int.clone(),
+                str_value("1"),
+                number_value(1),
+                number_value(1)
+            ]
+        )
+        .is_err());
+        // Не разбирающаяся форма — ошибка, а не подстановка.
+        assert!(factory_create(&f, &[int, str_value("ерунда")]).is_err());
+        // Первый аргумент — обязательно тип XDTO, а лексическая форма —
+        // обязательно строка (нестроковую см. в шапке модуля).
+        assert!(factory_create(&f, &[str_value("string"), str_value("аб")]).is_err());
+        assert!(factory_create(&f, &[code, number_value(42)]).is_err());
+        assert!(factory_create(&f, &[]).is_err());
+    }
+
+    /// `Создать` от типа ОБЪЕКТА даёт экземпляр: он печатается своим
+    /// именем и отдаёт свой тип методом `Тип()`.
+    #[test]
+    fn factory_create_builds_an_object_that_knows_its_type() {
+        let f = factory(SAMPLE);
+        let root = factory_type(&f, &[str_value("urn:test"), str_value("RootType")]).expect("тип");
+        let object = factory_create(&f, std::slice::from_ref(&root)).expect("экземпляр");
+        assert_eq!(object.to_string(), "ОбъектXDTO");
+        assert_eq!(
+            object.type_of().unwrap(),
+            BslValue::Type(TypeId::XdtoDataObject)
+        );
+        assert_eq!(TypeId::XdtoDataObject.name(), "Объект XDTO");
+        assert_eq!(object_type(&object, &[]).expect("тип"), root);
+        // Аргументов у `Тип()` нет, а два экземпляра одного типа не равны
+        // (измерено обе стороны).
+        assert!(object_type(&object, &[number_value(1)]).is_err());
+        assert_ne!(object, factory_create(&f, &[root]).expect("экземпляр"));
+        // Лексической формы тип объекта не берёт, абстрактный тип
+        // экземпляров не имеет (измерено).
+        let abstr =
+            factory_type(&f, &[str_value("urn:test"), str_value("AbstrType")]).expect("тип");
+        assert!(factory_create(&f, &[abstr]).is_err());
+        let empty =
+            factory_type(&f, &[str_value("urn:test"), str_value("EmptyType")]).expect("тип");
+        assert!(factory_create(&f, &[empty.clone(), str_value("аб")]).is_err());
+        assert!(factory_create(&f, &[empty]).is_ok());
+        // Свойства экземпляра — честный отказ, а не молчаливое
+        // `Неопределено`: хранилища у него пока нет (см. шапку модуля).
+        let error = get_property(&object, "name").expect_err("свойства не читаются");
+        assert!(
+            error.to_string().contains("ОбъектXDTO"),
+            "в тексте отказа нет имени типа: {error}"
+        );
+        // `Тип` у экземпляра — метод, а не член: обращение как к свойству
+        // отвечает ошибкой (измерено).
+        assert!(get_property(&object, "Тип").is_err());
+    }
+
+    /// Фабрика по набору схем строится только из набора: путь, схема и
+    /// прочее — ошибка (измерено), а `Неопределено` значит «без схем».
+    #[test]
+    fn a_factory_is_built_from_a_schema_set_or_from_nothing() {
+        let empty = factory_of_schema_set(&BslValue::Undefined).expect("фабрика без схем");
+        assert_eq!(empty.to_string(), "ФабрикаXDTO");
+        assert_eq!(
+            empty.type_of().unwrap(),
+            BslValue::Type(TypeId::XdtoFactory)
+        );
+        assert_eq!(TypeId::XdtoFactory.name(), "Фабрика XDTO");
+        assert!(is_factory(&empty));
+        let set = crate::xsd::new_schema_set();
+        assert!(factory_of_schema_set(&set).is_ok());
+        // Путь к файлу, схема и число сюда не годятся.
+        for wrong in [
+            str_value("/tmp/схема.xsd"),
+            crate::xsd::new_schema(),
+            number_value(1),
+        ] {
+            assert!(factory_of_schema_set(&wrong).is_err(), "{wrong:?}");
+        }
+        // Две фабрики от одного и того же набора не равны (измерено на
+        // двух фабриках от одного файла).
+        assert_ne!(
+            factory_of_schema_set(&set).expect("фабрика"),
+            factory_of_schema_set(&set).expect("фабрика")
+        );
+        // `ЗначениеЗаполнено` от фабрики — ошибка (измерено).
+        assert!(empty.is_filled().is_err());
+        // Постороннего члена у фабрики нет.
+        assert!(get_property(&empty, "Пакеты").is_err());
+    }
+
+    /// `СоздатьФабрикуXDTO` читает файл: несуществующий путь, нестроковый
+    /// аргумент и содержимое, которое схемой не является, — ошибки.
+    #[test]
+    fn a_factory_from_a_file_reports_a_missing_or_broken_source() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("open-bsl-xdto-factory-test.xsd");
+        std::fs::write(
+            &path,
+            concat!(
+                r#"<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:f">"#,
+                r#"<xs:simpleType name="Code"><xs:restriction base="xs:string"/>"#,
+                r#"</xs:simpleType></xs:schema>"#,
+            ),
+        )
+        .expect("временный файл пишется");
+        let f = factory_of_file(&[str_value(&path.to_string_lossy())]).expect("фабрика");
+        assert_eq!(
+            factory_type(&f, &[str_value("urn:f"), str_value("Code")])
+                .expect("тип")
+                .to_string(),
+            "{urn:f}Code"
+        );
+        let missing = dir.join("open-bsl-xdto-factory-нет-такого.xsd");
+        let error = factory_of_file(&[str_value(&missing.to_string_lossy())])
+            .expect_err("файла нет — ошибка");
+        assert!(
+            error
+                .to_string()
+                .contains("open-bsl-xdto-factory-нет-такого"),
+            "в тексте ошибки нет пути: {error}"
+        );
+        // Не схема и не разметка вовсе.
+        let broken = dir.join("open-bsl-xdto-factory-test-broken.xsd");
+        std::fs::write(&broken, "<чепуха/>").expect("временный файл пишется");
+        assert!(factory_of_file(&[str_value(&broken.to_string_lossy())]).is_err());
+        // Ни без аргумента, ни с двумя, ни с нестроковым (измерено).
+        assert!(factory_of_file(&[]).is_err());
+        assert!(factory_of_file(&[number_value(1)]).is_err());
+        assert!(factory_of_file(&[
+            str_value(&path.to_string_lossy()),
+            str_value(&path.to_string_lossy())
+        ])
+        .is_err());
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(&broken);
     }
 }

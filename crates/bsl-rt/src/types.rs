@@ -144,6 +144,8 @@ pub enum TypeId {
     XmlExpandedNameList,
 
     // --- модель типов XDTO --------------------------------------------
+    XdtoFactory,
+    XdtoDataObject,
     XdtoValueType,
     XdtoObjectType,
     XdtoProperty,
@@ -505,6 +507,11 @@ const NAMES: &[(TypeId, &str, &str)] = &[
     // (`ТипЗначенияXDTO`) находится и так — поиск пробелы не считает
     // значимыми, поэтому отдельной строки в `XS_IDENTIFIERS` этим типам
     // не нужно.
+    // Имена фабрики и экземпляра ИЗМЕРЕНЫ так же, как остальные семь:
+    // `Тип("ФабрикаXDTO")` и `Тип("XDTOFactory")` дают «Фабрика XDTO»,
+    // `Тип("ОбъектXDTO")` и `Тип("XDTODataObject")` — «Объект XDTO».
+    (TypeId::XdtoFactory, "Фабрика XDTO", "XDTOFactory"),
+    (TypeId::XdtoDataObject, "Объект XDTO", "XDTODataObject"),
     (TypeId::XdtoValueType, "Тип значения XDTO", "XDTOValueType"),
     (TypeId::XdtoObjectType, "Тип объекта XDTO", "XDTOObjectType"),
     (TypeId::XdtoProperty, "Свойство XDTO", "XDTOProperty"),

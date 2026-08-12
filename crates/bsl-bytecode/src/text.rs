@@ -36,7 +36,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 9;
+pub const FORMAT_VERSION: u32 = 10;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -105,6 +105,7 @@ pub const OPCODES: &[&str] = &[
     "NewXsBuilder",
     "NewXmlSchema",
     "NewXmlSchemaSet",
+    "NewXdtoFactory",
     "NewXmlExpandedName",
     "CollectionLen",
     "Raise",
@@ -487,6 +488,9 @@ fn write_instr(instr: &Instr) -> String {
         Instr::NewXsBuilder { dst } => format!("NewXsBuilder dst={dst}"),
         Instr::NewXmlSchema { dst } => format!("NewXmlSchema dst={dst}"),
         Instr::NewXmlSchemaSet { dst } => format!("NewXmlSchemaSet dst={dst}"),
+        Instr::NewXdtoFactory { dst, schemas } => {
+            format!("NewXdtoFactory dst={dst} schemas={schemas}")
+        }
         Instr::NewXmlExpandedName { dst, uri, local } => {
             format!("NewXmlExpandedName dst={dst} uri={uri} local={local}")
         }
@@ -1281,6 +1285,10 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
         "NewXsBuilder" => Instr::NewXsBuilder { dst: dst(&f)? },
         "NewXmlSchema" => Instr::NewXmlSchema { dst: dst(&f)? },
         "NewXmlSchemaSet" => Instr::NewXmlSchemaSet { dst: dst(&f)? },
+        "NewXdtoFactory" => Instr::NewXdtoFactory {
+            dst: dst(&f)?,
+            schemas: field_u8(&f, no, "schemas")?,
+        },
         "NewXmlExpandedName" => Instr::NewXmlExpandedName {
             dst: dst(&f)?,
             uri: field_u8(&f, no, "uri")?,
@@ -1444,6 +1452,12 @@ mod tests {
          сх = пс.СоздатьСхемуXML(п.Прочитать(ч));\nпустая = Новый СхемаXML;\n\
          набор = Новый НаборСхемXML;\nнабор.Добавить(пустая);\n\
          имя = Новый РасширенноеИмяXML(\"urn:т\", \"а\");\nл = имя.ЛокальноеИмя;\n",
+        // Модель типов XDTO: у `Новый ФабрикаXDTO` свой опкод, и обе его
+        // формы — с набором схем и без него — печатают регистр аргумента,
+        // а голая `ФабрикаXDTO` идёт обычным CallBuiltin.
+        "набор = Новый НаборСхемXML;\nф = Новый ФабрикаXDTO(набор);\nп = Новый ФабрикаXDTO;\n\
+         т = ф.Тип(\"http://www.w3.org/2001/XMLSchema\", \"string\");\nз = ф.Создать(т, \"аб\");\n\
+         Попытка\n  г = ФабрикаXDTO;\nИсключение\nКонецПопытки;\n",
         // Динамическое исполнение — обе формы.
         "х = 1;\nВыполнить(\"х = 2\");\nу = Вычислить(\"х + 1\");\n",
         // Переменные уровня модуля: чтение и запись из процедуры.

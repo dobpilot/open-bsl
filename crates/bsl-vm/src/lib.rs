@@ -1143,6 +1143,7 @@ fn step(
             | Instr::NewXsBuilder { .. }
             | Instr::NewXmlSchema { .. }
             | Instr::NewXmlSchemaSet { .. }
+            | Instr::NewXdtoFactory { .. }
             | Instr::NewXmlExpandedName { .. }
             | Instr::NewXmlWriterSettings { .. }
             | Instr::NewTextWriter { .. }
@@ -1373,6 +1374,15 @@ fn step_cold(
         Instr::NewXmlSchemaSet { dst } => {
             let d = frames[frame_idx].reg_index(dst);
             reg_store(stack, d, BslValue::new_xml_schema_set())?;
+            frames[frame_idx].pc += 1;
+        }
+        // Разбор набора схем в модель типов — работа не на один такт, и
+        // место этой инструкции в холодной части безоговорочно.
+        Instr::NewXdtoFactory { dst, schemas } => {
+            let set = reg_load(stack, frames[frame_idx].reg_index(schemas))?;
+            let factory = BslValue::new_xdto_factory(&set)?;
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, factory)?;
             frames[frame_idx].pc += 1;
         }
         Instr::NewXmlExpandedName { dst, uri, local } => {

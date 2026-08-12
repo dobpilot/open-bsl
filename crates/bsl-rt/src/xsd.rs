@@ -2176,17 +2176,17 @@ impl XsSchemaData {
     }
 }
 
-/// Схема из текста XSD — тем же путём, что и в бою: дерево строит
-/// [`crate::dom`], а разбирает уже готовое дерево этот модуль. Только для
-/// тестов внутри крейта: снаружи схему строит `СоздатьСхемуXML`.
+/// Схема из текста XSD — тем же путём, каким её строит BSL-код: дерево
+/// строит [`crate::dom`], а разбирает уже готовое дерево этот модуль.
+/// Второго разборщика схем в проекте нет, поэтому этой же дорогой ходит
+/// `СоздатьФабрикуXDTO`, прочитав файл (см. [`crate::xdto`]).
 ///
 /// # Errors
 ///
 /// Всё, чем отвечает [`create_schema`], плюс ошибка разбора XML.
-#[cfg(test)]
-pub(crate) fn build_for_tests(text: &str) -> RtResult<Rc<XsSchemaData>> {
+pub(crate) fn schema_of_text(text: &str) -> RtResult<Rc<XsSchemaData>> {
     let mut state = crate::object::XmlReaderState::over(crate::xml::XmlParser::new(text));
-    let doc = crate::dom::build_for_tests(&mut state)?;
+    let doc = crate::dom::build_tree(&mut state)?;
     let value = crate::dom::node_value(&doc, &doc);
     match as_component(&create_schema(&new_builder(), &[value])?) {
         Some((schema, 0)) => Ok(schema),
@@ -2390,11 +2390,11 @@ mod tests {
 
     /// Схема из текста XSD — тем же путём, что и в бою: дерево строит
     /// `dom`, а разбирает уже готовое дерево этот модуль. В отличие от
-    /// [`build_for_tests`], отдаёт результат `СоздатьСхемуXML` как есть,
+    /// [`schema_of_text`], отдаёт результат `СоздатьСхемуXML` как есть,
     /// включая `Неопределено` на корне, который схемой не является.
     fn schema_of(text: &str) -> RtResult<BslValue> {
         let mut state = crate::object::XmlReaderState::over(crate::xml::XmlParser::new(text));
-        let doc = crate::dom::build_for_tests(&mut state).expect("дерево обязано строиться");
+        let doc = crate::dom::build_tree(&mut state).expect("дерево обязано строиться");
         let value = crate::dom::node_value(&doc, &doc);
         create_schema(&new_builder(), &[value])
     }

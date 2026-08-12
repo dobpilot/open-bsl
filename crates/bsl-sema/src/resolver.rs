@@ -337,6 +337,13 @@ pub const NEW_TYPES: &[&str] = &[
     "XMLSchema",
     "НаборСхемXML",
     "XMLSchemaSet",
+    // `Новый ФабрикаXDTO` строит фабрику по НАБОРУ СХЕМ (или, без
+    // аргумента, только по встроенным типам XML Schema) — измерено, что
+    // ни путь к файлу, ни схема, ни текст схемы сюда не годятся: файл
+    // берёт глобальная `СоздатьФабрикуXDTO`. Английское написание
+    // `Новый XDTOFactory` тоже измерено.
+    "ФабрикаXDTO",
+    "XDTOFactory",
     "РасширенноеИмяXML",
     "XMLExpandedName",
     "ПараметрыЗаписиXML",
@@ -562,6 +569,22 @@ impl<'a> Resolver<'a> {
                     {
                         Ok(RExpr::CallBuiltinFn {
                             builtin: bsl_rt::BuiltinFn::CommandLineArguments,
+                            args: Vec::new(),
+                        })
+                    }
+                    // `ФабрикаXDTO` у платформы — свойство глобального
+                    // контекста (фабрика КОНФИГУРАЦИИ), поэтому пишется без
+                    // скобок и разрешается тем же приёмом, что и
+                    // `АргументыКоманднойСтроки`: голое имя становится
+                    // вызовом встроенной функции с нулём аргументов.
+                    // Функция всегда отвечает ловимой ошибкой — метаданных
+                    // конфигурации здесь нет (см. `bsl_rt::BuiltinFn`).
+                    // Переменная с тем же именем побеждает: проверки выше.
+                    None if bsl_rt::BuiltinFn::lookup(name)
+                        == Some(bsl_rt::BuiltinFn::XdtoConfigurationFactory) =>
+                    {
+                        Ok(RExpr::CallBuiltinFn {
+                            builtin: bsl_rt::BuiltinFn::XdtoConfigurationFactory,
                             args: Vec::new(),
                         })
                     }
@@ -1047,6 +1070,27 @@ impl<'a> Resolver<'a> {
                 }
                 Ok(RExpr::NewXmlSchemaSet)
             }
+            // Набор схем необязателен: без него получается фабрика с
+            // одними встроенными типами XML Schema (измерено), и
+            // пропущенная позиция уходит вниз как `Неопределено` — так же,
+            // как хвостовые аргументы `Новый ПараметрыЗаписиJSON`. Двух
+            // аргументов платформа не берёт (измерено).
+            "ФАБРИКАXDTO" | "XDTOFACTORY" => {
+                if args.len() > 1 {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый ФабрикаXDTO".to_string(),
+                        expected: 1,
+                        found: args.len(),
+                    });
+                }
+                let schemas = match args.first() {
+                    Some(a) => self.resolve_expr(a)?,
+                    None => RExpr::Undefined,
+                };
+                Ok(RExpr::NewXdtoFactory {
+                    schemas: Box::new(schemas),
+                })
+            }
             // Ровно два аргумента: URI и локальное имя (измерено, что
             // одноаргументная форма и форма без аргументов отвергаются).
             "РАСШИРЕННОЕИМЯXML" | "XMLEXPANDEDNAME" => {
@@ -1397,13 +1441,19 @@ impl<'a> Resolver<'a> {
                     bsl_rt::BuiltinMethod::CurrentPosition => Some(0),
                     bsl_rt::BuiltinMethod::Seek => Some(2),
                     // У `Открыть` доступ необязателен (2..3), поэтому
-                    // арность решает рантайм; остальные четыре метода
+                    // арность решает рантайм; остальные три метода
                     // менеджера берут ровно имя файла.
                     bsl_rt::BuiltinMethod::StreamOpen => None,
                     bsl_rt::BuiltinMethod::StreamOpenForRead
                     | bsl_rt::BuiltinMethod::StreamOpenForWrite
-                    | bsl_rt::BuiltinMethod::StreamOpenForAppend
-                    | bsl_rt::BuiltinMethod::StreamCreate => Some(1),
+                    | bsl_rt::BuiltinMethod::StreamOpenForAppend => Some(1),
+                    // `Создать` и `Тип` полиморфны по получателю, как
+                    // `Получить` и `Добавить`: у менеджера потоков
+                    // `Создать` — один аргумент, у фабрики XDTO — от одного
+                    // до трёх; `Тип` у фабрики — пара (URI, имя) либо
+                    // расширенное имя, а у экземпляра `ОбъектXDTO` —
+                    // вообще без аргументов. Всё измерено, и решает рантайм.
+                    bsl_rt::BuiltinMethod::Create | bsl_rt::BuiltinMethod::XdtoType => None,
                 };
                 if let Some(expected) = expected {
                     if args.len() != expected {

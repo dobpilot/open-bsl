@@ -668,6 +668,12 @@ impl<'a> Compiler<'a> {
             RExpr::NewXmlSchemaSet => {
                 self.emit(Instr::NewXmlSchemaSet { dst });
             }
+            RExpr::NewXdtoFactory { schemas } => {
+                let set = self.alloc_temp()?;
+                self.compile_expr(schemas, set)?;
+                self.emit(Instr::NewXdtoFactory { dst, schemas: set });
+                self.free_temp(1);
+            }
             RExpr::NewXmlExpandedName { uri, local } => {
                 let uri_reg = self.alloc_temp()?;
                 self.compile_expr(uri, uri_reg)?;

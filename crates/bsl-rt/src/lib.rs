@@ -437,7 +437,9 @@ impl BslValue {
                 | BslObject::XdtoProperties(..)
                 | BslObject::XdtoFacets(..)
                 | BslObject::XdtoFacet(..)
-                | BslObject::XdtoValue(_)) => match crate::xdto::type_name_of(obj) {
+                | BslObject::XdtoValue(_)
+                | BslObject::XdtoFactory(_)
+                | BslObject::XdtoObject(..)) => match crate::xdto::type_name_of(obj) {
                     Some(name) => name,
                     None => "ТипЗначенияXDTO",
                 },
@@ -1253,17 +1255,20 @@ impl BslValue {
                 | BslObject::XsComponent(..)
                 | BslObject::XmlExpandedName(..)
                 // Модель типов XDTO делится так же, как модель схемы:
-                // ИЗМЕРЕНО, что тип, свойство и фасет отвечают на
-                // `ЗначениеЗаполнено` ошибкой, а обе коллекции — «Да» и
-                // «Нет» по длине (см. ветку выше). А вот `ЗначениеXDTO`
-                // измерить не удалось: проба на нём вешает платформу
-                // модальным окном, и здесь оно отнесено к своим четырём
+                // ИЗМЕРЕНО, что тип, свойство, фасет и сама ФАБРИКА
+                // отвечают на `ЗначениеЗаполнено` ошибкой, а обе коллекции —
+                // «Да» и «Нет» по длине (см. ветку выше). А вот про
+                // ЭКЗЕМПЛЯРЫ — `ЗначениеXDTO` и `ОбъектXDTO` — замера нет:
+                // проба на значении вешает платформу модальным окном, и
+                // обоих ждала бы та же судьба, поэтому они отнесены к своим
                 // соседям по аналогии, а не по замеру.
                 // НЕ ИЗМЕРЕНО(XDTO.VALUE.FILLED)
                 | BslObject::XdtoType(..)
                 | BslObject::XdtoProperty(..)
                 | BslObject::XdtoFacet(..)
-                | BslObject::XdtoValue(..) => {
+                | BslObject::XdtoValue(..)
+                | BslObject::XdtoFactory(..)
+                | BslObject::XdtoObject(..) => {
                     return Err(RtError::TypeError {
                         expected: "Значение, у которого есть признак заполненности",
                         op: "ЗначениеЗаполнено",
@@ -1364,7 +1369,9 @@ impl BslValue {
                 | BslObject::XdtoProperties(..)
                 | BslObject::XdtoFacets(..)
                 | BslObject::XdtoFacet(..)
-                | BslObject::XdtoValue(_)) => match crate::xdto::type_id_of(obj) {
+                | BslObject::XdtoValue(_)
+                | BslObject::XdtoFactory(_)
+                | BslObject::XdtoObject(..)) => match crate::xdto::type_id_of(obj) {
                     Some(id) => id,
                     None => TypeId::XdtoValueType,
                 },
@@ -1526,6 +1533,18 @@ impl BslValue {
     /// `Новый НаборСхемXML`.
     pub fn new_xml_schema_set() -> Self {
         xsd::new_schema_set()
+    }
+
+    /// `Новый ФабрикаXDTO([НаборСхемXML])` — модель типов по набору схем.
+    /// Без аргумента (тогда сюда приходит `Неопределено`) получается
+    /// фабрика с одними встроенными типами XML Schema.
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::Xdto`], если аргумент не набор схем либо модель по схемам
+    /// не строится.
+    pub fn new_xdto_factory(schemas: &BslValue) -> RtResult<Self> {
+        xdto::factory_of_schema_set(schemas)
     }
 
     /// `Новый РасширенноеИмяXML(URI, ЛокальноеИмя)` — ровно два аргумента,
@@ -2186,7 +2205,9 @@ impl BslValue {
                 BslObject::XdtoType(..)
                 | BslObject::XdtoProperty(..)
                 | BslObject::XdtoFacet(..)
-                | BslObject::XdtoValue(..) => Err(RtError::NotIndexable),
+                | BslObject::XdtoValue(..)
+                | BslObject::XdtoFactory(..)
+                | BslObject::XdtoObject(..) => Err(RtError::NotIndexable),
                 BslObject::TextWriter(..)
                 | BslObject::JsonReader(..)
                 | BslObject::JsonWriter(..)
@@ -3597,7 +3618,9 @@ impl fmt::Display for BslValue {
                 | BslObject::XdtoProperties(..)
                 | BslObject::XdtoFacets(..)
                 | BslObject::XdtoFacet(..)
-                | BslObject::XdtoValue(_)) => match crate::xdto::display_text(obj) {
+                | BslObject::XdtoValue(_)
+                | BslObject::XdtoFactory(_)
+                | BslObject::XdtoObject(..)) => match crate::xdto::display_text(obj) {
                     Some(text) => write!(f, "{text}"),
                     None => unreachable!("вид проверен объемлющим match"),
                 },

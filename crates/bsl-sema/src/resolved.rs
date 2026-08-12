@@ -136,6 +136,13 @@ pub enum RExpr {
     NewXmlSchema,
     /// `Новый НаборСхемXML` — схемы по одной на пространство имён.
     NewXmlSchemaSet,
+    /// `Новый ФабрикаXDTO([НаборСхемXML])` — модель типов по набору схем.
+    /// Аргумент необязателен, и пропущенный приходит сюда как
+    /// [`RExpr::Undefined`] — так же, как необязательные позиции
+    /// `Новый ПараметрыЗаписиJSON`.
+    NewXdtoFactory {
+        schemas: Box<RExpr>,
+    },
     /// `Новый РасширенноеИмяXML(URI, ЛокальноеИмя)` — ровно два аргумента
     /// (измерено: одноаргументную форму платформа отвергает).
     NewXmlExpandedName {
@@ -419,6 +426,7 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
         RExpr::NewXmlExpandedName { uri, local } => {
             expr_uses_dynamic(uri) || expr_uses_dynamic(local)
         }
+        RExpr::NewXdtoFactory { schemas } => expr_uses_dynamic(schemas),
         RExpr::NewXmlWriterSettings {
             encoding,
             version,

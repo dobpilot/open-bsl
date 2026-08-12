@@ -461,6 +461,18 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
             read!(local);
             write!(dst);
         }
+        // Набор схем только ЧИТАЕТСЯ: фабрика снимает с него модель на
+        // месте и сам набор не меняет (измерено — добавленная позже схема
+        // фабрике не видна). Но это чтение — именно чтение КУЧИ: содержимое
+        // схем берётся из-под `Rc`/`RefCell`, то есть ровно то изменяемое
+        // состояние, за которое `GetProp` и `GetIndex` ставят `heap_read`.
+        // (Соседний `NewMemoryStream` его не ставит потому, что берёт тот же
+        // `Rc` и байтов не читает, — к фабрике это обоснование не подходит.)
+        Instr::NewXdtoFactory { dst, schemas } => {
+            read!(schemas);
+            write!(dst);
+            e.heap_read = true;
+        }
         Instr::NewTypeDescription { dst, names } => {
             read!(names);
             write!(dst);

@@ -231,6 +231,16 @@ pub enum BuiltinFn {
     /// обычный `Массив`, построенный заново на каждое чтение, — правки не
     /// переживают следующее обращение.
     CommandLineArguments,
+
+    /// `СоздатьФабрикуXDTO(ПутьКФайлуXSD)` — фабрика по файлу схемы.
+    /// Единственный измеренный источник у этой функции: набор схем берёт
+    /// конструктор `Новый ФабрикаXDTO`, а не она (см. модуль `xdto`).
+    CreateXdtoFactory,
+    /// Голое имя `ФабрикаXDTO` — фабрика КОНФИГУРАЦИИ. Функция всегда
+    /// отвечает ошибкой: конфигурации у этой реализации нет, а значит нет
+    /// и её пакетов XDTO. Ошибка ловимая (`Попытка`), как и всё
+    /// остальное, — это честный отказ, а не паника.
+    XdtoConfigurationFactory,
 }
 
 /// Написания встроенных ФУНКЦИЙ: `(имя, вариант)` в каноническом
@@ -420,6 +430,17 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("ValueFromFile", BuiltinFn::ValueFromFile),
     ("АргументыКоманднойСтроки", BuiltinFn::CommandLineArguments),
     ("CommandLineArguments", BuiltinFn::CommandLineArguments),
+    // Оба написания ИЗМЕРЕНЫ на файле схемы: и `СоздатьФабрикуXDTO`, и
+    // `CreateXDTOFactory` отдают фабрику.
+    ("СоздатьФабрикуXDTO", BuiltinFn::CreateXdtoFactory),
+    ("CreateXDTOFactory", BuiltinFn::CreateXdtoFactory),
+    // `ФабрикаXDTO` у платформы — СВОЙСТВО глобального контекста, а не
+    // функция, и резолвер разрешает именно голое имя (как
+    // `АргументыКоманднойСтроки`). Строка в таблице всё равно нужна:
+    // текстовый формат байт-кода печатает и разбирает встроенную функцию
+    // по имени, а безымянный вариант не пережил бы round-trip.
+    ("ФабрикаXDTO", BuiltinFn::XdtoConfigurationFactory),
+    ("XDTOFactory", BuiltinFn::XdtoConfigurationFactory),
     ("РазделитьДвоичныеДанные", BuiltinFn::SplitBinaryData),
     ("SplitBinaryData", BuiltinFn::SplitBinaryData),
     ("СоединитьДвоичныеДанные", BuiltinFn::ConcatBinaryData),
@@ -532,7 +553,13 @@ impl BuiltinFn {
             BuiltinFn::MakeDate => (1, 6),
             BuiltinFn::CurrentDate
             | BuiltinFn::CurrentUniversalDateInMilliseconds
-            | BuiltinFn::CommandLineArguments => (0, 0),
+            | BuiltinFn::CommandLineArguments
+            // Голое имя глобальной фабрики аргументов не берёт: у
+            // платформы это свойство, а не функция.
+            | BuiltinFn::XdtoConfigurationFactory => (0, 0),
+            // Ровно один аргумент — путь к файлу XSD: и `СоздатьФабрикуXDTO()`,
+            // и вызов с двумя аргументами платформа отвергает (измерено).
+            BuiltinFn::CreateXdtoFactory => (1, 1),
             // Оба списка свойств необязательны; недостающие позиции
             // резолвер добьёт `Неопределено`, что и значит «не задан».
             BuiltinFn::FillPropertyValues => (2, 4),
@@ -860,8 +887,19 @@ pub enum BuiltinMethod {
     StreamOpenForWrite,
     /// `ОткрытьДляДописывания(Имя)` — `Дописать` плюс доступ `Запись`.
     StreamOpenForAppend,
-    /// `Создать(Имя)` — `Создать` с доступом по умолчанию.
-    StreamCreate,
+    /// `Тип`/`Type` — тоже полиморфное имя: у `ФабрикаXDTO` это поиск типа
+    /// по паре (URI, имя) или по расширенному имени, у `ОбъектXDTO` —
+    /// собственный тип экземпляра БЕЗ аргументов. Обращение к `Тип` как к
+    /// СВОЙСТВУ у экземпляра — ошибка (измерено), поэтому вариант метода
+    /// здесь и нужен.
+    XdtoType,
+    /// `Создать`/`Create` — имя ПОЛИМОРФНОЕ, как `Получить` и `Добавить`:
+    /// у менеджера файловых потоков это `Создать(Имя)` (создать файл с
+    /// доступом по умолчанию), у `ФабрикаXDTO` — `Создать(Тип[, Лексика])`.
+    /// Кто именно имелся в виду, решает получатель в
+    /// [`call_builtin_method`], а арность — он же: у менеджера аргумент
+    /// один, у фабрики их от одного до трёх (измерено).
+    Create,
 
     // --- ЧтениеДанных / ЗаписьДанных ----------------------------------------
     // `Прочитать`, `Записать`, `Закрыть`, `Пропустить` и шесть
@@ -1083,8 +1121,13 @@ pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
     ("OpenForWrite", BuiltinMethod::StreamOpenForWrite),
     ("ОткрытьДляДописывания", BuiltinMethod::StreamOpenForAppend),
     ("OpenForAppend", BuiltinMethod::StreamOpenForAppend),
-    ("Создать", BuiltinMethod::StreamCreate),
-    ("Create", BuiltinMethod::StreamCreate),
+    ("Создать", BuiltinMethod::Create),
+    ("Create", BuiltinMethod::Create),
+    // Модель типов XDTO. Английские написания обоих методов фабрики
+    // ИЗМЕРЕНЫ: `Фаб.Type("urn:test", "RootType")` и
+    // `Фаб.Create(Тип, "аб")` платформа принимает.
+    ("Тип", BuiltinMethod::XdtoType),
+    ("Type", BuiltinMethod::XdtoType),
     // `ЧтениеДанных`/`ЗаписьДанных`/`РезультатЧтенияДанных`. Английские
     // написания ИЗМЕРЕНЫ перебором: каждое вызвано на живом объекте, и
     // отсутствующее имя платформа отличает («Метод объекта не обнаружен»)
@@ -1247,6 +1290,20 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
                 .iter()
                 .map(|a| BslValue::Str(BslString::from_str(a)))
                 .collect(),
+        )),
+        BuiltinFn::CreateXdtoFactory => crate::xdto::factory_of_file(args),
+        // Глобальная `ФабрикаXDTO` — фабрика КОНФИГУРАЦИИ, а конфигурации
+        // здесь нет: скрипт исполняется сам по себе, метаданных с пакетами
+        // XDTO у него нет и взяться им неоткуда. Платформа в этом месте
+        // отдаёт живую фабрику (измерено, `Тип({...}string)` у неё есть), и
+        // расхождение сознательное: отдать ПУСТУЮ фабрику было бы хуже —
+        // код молча получал бы `Неопределено` вместо своих типов вместо
+        // внятного «фабрики конфигурации нет».
+        BuiltinFn::XdtoConfigurationFactory => Err(RtError::Xdto(
+            "глобальная ФабрикаXDTO — фабрика конфигурации, а метаданных конфигурации \
+             у этой реализации нет; фабрику по схеме строят СоздатьФабрикуXDTO(ПутьКXSD) \
+             и Новый ФабрикаXDTO(НаборСхемXML)"
+                .to_string(),
         )),
         BuiltinFn::DatePartOf(part) => args[0].date_component(part),
         BuiltinFn::DateBoundaryOf(which) => args[0].date_boundary(which),
@@ -2175,7 +2232,18 @@ pub fn call_builtin_method(
             crate::stream::manager_open_for_append,
             args,
         ),
-        BuiltinMethod::StreamCreate => manager(obj, "Создать", crate::stream::manager_create, args),
+        // `Создать` делят менеджер файловых потоков и фабрика XDTO —
+        // получатель решает, что это значит.
+        BuiltinMethod::Create if crate::xdto::is_factory(obj) => {
+            crate::xdto::factory_create(obj, args)
+        }
+        BuiltinMethod::Create => manager(obj, "Создать", crate::stream::manager_create, args),
+        // `Тип` — то же самое: у фабрики это поиск типа, у экземпляра —
+        // его собственный тип.
+        BuiltinMethod::XdtoType if crate::xdto::is_object(obj) => {
+            crate::xdto::object_type(obj, args)
+        }
+        BuiltinMethod::XdtoType => crate::xdto::factory_type(obj, args),
     }
 }
 

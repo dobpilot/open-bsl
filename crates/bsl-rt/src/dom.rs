@@ -573,10 +573,15 @@ pub fn read(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
     Ok(node_value(&doc, &doc))
 }
 
-/// Построение дерева для тестов разбора схемы: `xsd.rs` идёт тем же путём,
-/// что и `Прочитать`, но без обёртки-значения `ЧтениеXML`.
-#[cfg(test)]
-pub(crate) fn build_for_tests(state: &mut XmlReaderState) -> RtResult<Rc<DomNode>> {
+/// Дерево по готовому состоянию читателя — тот же путь, что и у
+/// `Прочитать`, но без обёртки-значения `ЧтениеXML`. Этим ходит `xsd.rs`,
+/// когда схему просят разобрать из текста, а не из переданного BSL-кодом
+/// дерева.
+///
+/// # Errors
+///
+/// Всё, чем отвечает разбор XML.
+pub(crate) fn build_tree(state: &mut XmlReaderState) -> RtResult<Rc<DomNode>> {
     build(state)
 }
 
