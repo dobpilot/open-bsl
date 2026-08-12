@@ -172,6 +172,25 @@ pub enum EnumValue {
     XsFormQualified,
     XsFormUnqualified,
 
+    // --- ФормаXML (модель типов XDTO) ---------------------------------
+    XmlFormElement,
+    XmlFormAttribute,
+    XmlFormText,
+
+    // --- ВидФасетаXDTO -------------------------------------------------
+    XdtoFacetLength,
+    XdtoFacetMinLength,
+    XdtoFacetMaxLength,
+    XdtoFacetPattern,
+    XdtoFacetEnumeration,
+    XdtoFacetWhiteSpace,
+    XdtoFacetTotalDigits,
+    XdtoFacetFractionDigits,
+    XdtoFacetMinInclusive,
+    XdtoFacetMaxInclusive,
+    XdtoFacetMinExclusive,
+    XdtoFacetMaxExclusive,
+
     // --- ВариантПростогоТипаXS --------------------------------------------
     XsVarietyAtomic,
     XsVarietyList,
@@ -260,6 +279,15 @@ pub enum EnumKind {
     XsValueConstraint,
     /// `ОбработкаПробельныхСимволовXS` — значение фасета `whiteSpace`.
     XsWhitespaceHandling,
+    /// `ФормаXML` — `Свойство.Форма` модели типов XDTO: `Элемент`,
+    /// `Атрибут`, `Текст`. Английские написания есть и у самого
+    /// перечисления (`XMLForm`), и у всех трёх членов (измерено).
+    XmlForm,
+    /// `ВидФасетаXDTO` — `Фасет.Вид`. Русские написания членов измерены
+    /// поимённо и НЕ выводятся из представлений: у члена с
+    /// представлением «Минимальная длина» имя `МинДлина`, а
+    /// `МинимальнаяДлина` платформа отвергает.
+    XdtoFacetKind,
 }
 
 impl EnumKind {
@@ -293,6 +321,8 @@ impl EnumKind {
             EnumKind::XsWhitespaceHandling => {
                 ("ОбработкаПробельныхСимволовXS", "XSWhitespaceHandling")
             }
+            EnumKind::XmlForm => ("ФормаXML", "XMLForm"),
+            EnumKind::XdtoFacetKind => ("ВидФасетаXDTO", "XDTOFacetType"),
         }
     }
 
@@ -334,6 +364,8 @@ impl EnumKind {
             EnumKind::XsDerivationMethod => "ПеречислениеМетодНаследованияXS",
             EnumKind::XsValueConstraint => "ПеречислениеОграничениеЗначенияXS",
             EnumKind::XsWhitespaceHandling => "ПеречислениеОбработкаПробельныхСимволовXS",
+            EnumKind::XmlForm => "ПеречислениеФормаXML",
+            EnumKind::XdtoFacetKind => "ПеречислениеВидФасетаXDTO",
         }
     }
 
@@ -1210,6 +1242,117 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "Collapse",
         "Сворачивать",
     ),
+    (
+        EnumKind::XmlForm,
+        EnumValue::XmlFormElement,
+        "Элемент",
+        "Element",
+        "Элемент",
+    ),
+    (
+        EnumKind::XmlForm,
+        EnumValue::XmlFormAttribute,
+        "Атрибут",
+        "Attribute",
+        "Атрибут",
+    ),
+    (
+        EnumKind::XmlForm,
+        EnumValue::XmlFormText,
+        "Текст",
+        "Text",
+        "Текст",
+    ),
+    // `ВидФасетаXDTO`: русские написания членов НЕ выводятся из
+    // представлений — они короче и местами неожиданны (`МинДлина` при
+    // представлении «Минимальная длина», `РазрядовВсего` при «Количество
+    // разрядов»). Каждое проверено отдельной пробой, как и то, что
+    // «длинные» написания (`МинимальнаяДлина`, `ОбщееКоличествоРазрядов`,
+    // `МинимальноеВключающееЗначение`) платформа отвергает.
+    (
+        EnumKind::XdtoFacetKind,
+        EnumValue::XdtoFacetLength,
+        "Длина",
+        "Length",
+        "Длина",
+    ),
+    (
+        EnumKind::XdtoFacetKind,
+        EnumValue::XdtoFacetMinLength,
+        "МинДлина",
+        "MinLength",
+        "Минимальная длина",
+    ),
+    (
+        EnumKind::XdtoFacetKind,
+        EnumValue::XdtoFacetMaxLength,
+        "МаксДлина",
+        "MaxLength",
+        "Максимальная длина",
+    ),
+    (
+        EnumKind::XdtoFacetKind,
+        EnumValue::XdtoFacetPattern,
+        "Образец",
+        "Pattern",
+        "Образец",
+    ),
+    (
+        EnumKind::XdtoFacetKind,
+        EnumValue::XdtoFacetEnumeration,
+        "Перечисление",
+        "Enumeration",
+        "Перечисление",
+    ),
+    (
+        EnumKind::XdtoFacetKind,
+        EnumValue::XdtoFacetWhiteSpace,
+        "ПробельныеСимволы",
+        "WhiteSpace",
+        "Пробельные символы",
+    ),
+    (
+        EnumKind::XdtoFacetKind,
+        EnumValue::XdtoFacetTotalDigits,
+        "РазрядовВсего",
+        "TotalDigits",
+        "Количество разрядов",
+    ),
+    (
+        EnumKind::XdtoFacetKind,
+        EnumValue::XdtoFacetFractionDigits,
+        "РазрядовДробнойЧасти",
+        "FractionDigits",
+        "Количество разрядов дробной части",
+    ),
+    (
+        EnumKind::XdtoFacetKind,
+        EnumValue::XdtoFacetMinInclusive,
+        "МинВключающее",
+        "MinInclusive",
+        "Минимальное включающее значение",
+    ),
+    (
+        EnumKind::XdtoFacetKind,
+        EnumValue::XdtoFacetMaxInclusive,
+        "МаксВключающее",
+        "MaxInclusive",
+        "Максимальное включающее значение",
+    ),
+    (
+        EnumKind::XdtoFacetKind,
+        EnumValue::XdtoFacetMinExclusive,
+        "МинИсключающее",
+        "MinExclusive",
+        "Минимальное исключающее значение",
+    ),
+    (
+        EnumKind::XdtoFacetKind,
+        EnumValue::XdtoFacetMaxExclusive,
+        "МаксИсключающее",
+        "MaxExclusive",
+        "Максимальное исключающее значение",
+    ),
 ];
 
 /// Имена всех перечислений — для автодополнения REPL и для резолвера,
@@ -1256,6 +1399,10 @@ pub const ENUM_NAMES: &[(&str, EnumKind)] = &[
         EnumKind::XsWhitespaceHandling,
     ),
     ("XSWhitespaceHandling", EnumKind::XsWhitespaceHandling),
+    ("ФормаXML", EnumKind::XmlForm),
+    ("XMLForm", EnumKind::XmlForm),
+    ("ВидФасетаXDTO", EnumKind::XdtoFacetKind),
+    ("XDTOFacetType", EnumKind::XdtoFacetKind),
 ];
 
 /// Перечисление по имени слева от точки. Регистронезависимо и на обоих

@@ -1481,7 +1481,7 @@ fn parse_json_date(text: &str) -> Option<crate::BslDate> {
 /// не настоящий момент UTC, — этого достаточно для смещения (оно меняется
 /// не чаще раза в сутки), но не гарантирует секундной точности РОВНО в
 /// момент перехода на летнее/зимнее время.
-fn pseudo_unix_seconds(date: crate::BslDate) -> i64 {
+pub(crate) fn pseudo_unix_seconds(date: crate::BslDate) -> i64 {
     date.seconds() - crate::date::UNIX_EPOCH_SECONDS
 }
 
@@ -1637,15 +1637,24 @@ fn bad_date_representation() -> RtError {
 
 /// Секунды Unix-эпохи UTC -> локальная (машинная) `BslDate` — прибавляет
 /// смещение, действующее в этот момент.
-fn utc_millis_to_local_date(ms: i64) -> RtResult<crate::BslDate> {
-    let utc_unix = ms.div_euclid(1000);
-    let offset = crate::tz::local_offset_seconds(utc_unix);
-    let local_unix = utc_unix
+///
+/// Тем же пересчётом пользуется модель типов XDTO: у `xs:dateTime` с
+/// поясом платформа отдаёт местное время (измерено), и второй копии
+/// этого правила заводить незачем — отсюда `pub(crate)` и параметр `op`,
+/// который называет операцию в тексте ошибки.
+pub(crate) fn local_date_from_utc_seconds(
+    unix_seconds: i64,
+    op: &'static str,
+) -> RtResult<crate::BslDate> {
+    let offset = crate::tz::local_offset_seconds(unix_seconds);
+    let local_unix = unix_seconds
         .checked_add(i64::from(offset))
-        .ok_or(RtError::DateOutOfRange {
-            op: "ПрочитатьДатуJSON",
-        })?;
-    unix_to_bsl_date(local_unix, "ПрочитатьДатуJSON")
+        .ok_or(RtError::DateOutOfRange { op })?;
+    unix_to_bsl_date(local_unix, op)
+}
+
+fn utc_millis_to_local_date(ms: i64) -> RtResult<crate::BslDate> {
+    local_date_from_utc_seconds(ms.div_euclid(1000), "ПрочитатьДатуJSON")
 }
 
 /// `+ЧЧ:ММ`/`-ЧЧ:ММ` -> секунды. `None` — не разобралось.

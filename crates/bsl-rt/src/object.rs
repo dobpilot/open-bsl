@@ -190,6 +190,23 @@ pub enum BslObject {
     /// `СписокРасширенныхИменXML` — `ИменаТиповОбъединения` простого типа.
     XmlExpandedNameList(Rc<Vec<crate::xsd::XName>>),
 
+    /// `ТипЗначенияXDTO` или `ТипОбъектаXDTO` — модель типов целиком плюс
+    /// номер типа в ней. Разницу между двумя типами несёт сама модель, а
+    /// не вариант: тождество типа — это пара «та же модель, тот же
+    /// номер» (измерено: два обращения к `Тип` за одним именем равны).
+    XdtoType(Rc<crate::xdto::XdtoModel>, usize),
+    /// `СвойствоXDTO` — номер свойства в той же модели.
+    XdtoProperty(Rc<crate::xdto::XdtoModel>, usize),
+    /// `КоллекцияСвойствXDTO` — свойства одного типа объекта.
+    XdtoProperties(Rc<crate::xdto::XdtoModel>, usize),
+    /// `КоллекцияФасетовXDTO` — фасеты одного типа значения.
+    XdtoFacets(Rc<crate::xdto::XdtoModel>, usize),
+    /// `ФасетXDTO` — номер фасета внутри типа значения.
+    XdtoFacet(Rc<crate::xdto::XdtoModel>, usize, usize),
+    /// `ЗначениеXDTO` — значение вместе с лексической формой, из которой
+    /// оно построено.
+    XdtoValue(Rc<crate::xdto::XdtoValueData>),
+
     /// `ТабличныйДокумент`.
     SpreadDocument(Rc<RefCell<crate::spreadsheet::SpreadDocData>>),
     /// `ОбластьЯчеекТабличногоДокумента` — ССЫЛКА на прямоугольник в том же

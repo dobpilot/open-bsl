@@ -1689,6 +1689,17 @@ pub fn call_builtin_method(
             BslValue::Object(o) if matches!(&**o, BslObject::XsList(..)) => {
                 crate::xsd::list_lookup(obj, args)
             }
+            // Модель типов XDTO: у коллекции свойств `Получить` берёт имя
+            // или номер, у коллекции фасетов — только номер (измерено:
+            // `Фасеты.Получить("minLength")` платформа отвергает).
+            BslValue::Object(o)
+                if matches!(
+                    &**o,
+                    BslObject::XdtoProperties(..) | BslObject::XdtoFacets(..)
+                ) =>
+            {
+                crate::xdto::collection_lookup(obj, args)
+            }
             BslValue::Object(o) if matches!(&**o, BslObject::XsSchemaSet(_)) => match args {
                 [BslValue::Number(n)] => {
                     let i = n

@@ -32,6 +32,7 @@ mod textdoc;
 mod types;
 mod tz;
 mod vstr;
+mod xdto;
 mod xlsx;
 mod xml;
 mod xsd;
@@ -86,6 +87,10 @@ pub use textdoc::{
 };
 pub use types::TypeId;
 pub use vstr::{value_from_string_internal, value_to_string_internal};
+// Модель типов XDTO наружу крейта нужна целиком: строит её фабрика,
+// которой в этой реализации ещё нет, а до тех пор единственный её
+// потребитель — собственные тесты модуля.
+pub use xdto::{model_of_schema, type_value, value_from_lexical, BuiltinBsl, XdtoModel};
 pub use xlsx::to_xlsx_bytes;
 pub use xml::{XmlAttr, XmlEvent, XmlParser, XmlWriter, XmlWriterSettings};
 
@@ -180,6 +185,12 @@ pub enum RtError {
     /// разбор схемы — свой слой поверх готового дерева DOM, и по типу
     /// ошибки должно быть видно, чей это отказ.
     Xsd(String),
+    /// Модель типов XDTO поверх модели схемы: ссылка на тип, которого в
+    /// схеме нет, цикл наследования, лексическая форма, не разбирающаяся
+    /// в своём типе. Отдельно от [`RtError::Xsd`] по той же причине, по
+    /// какой тот отделён от [`RtError::Xml`]: разрешённая модель типов —
+    /// слой поверх лексической модели схемы, и отказы у них разные.
+    Xdto(String),
     /// `ТекстовыйДокумент`: области макета и его параметры. Отдельно от
     /// [`RtError::Xml`] — слой другой, и по типу ошибки это должно быть
     /// видно.
@@ -276,6 +287,7 @@ impl fmt::Display for RtError {
             RtError::Json(msg) => write!(f, "{msg}"),
             RtError::Xml(msg) => write!(f, "{msg}"),
             RtError::Xsd(msg) => write!(f, "{msg}"),
+            RtError::Xdto(msg) => write!(f, "{msg}"),
             RtError::TextDoc(msg) => write!(f, "{msg}"),
             RtError::Spread(msg) => write!(f, "{msg}"),
             RtError::Vstr(msg) => write!(f, "{msg}"),
@@ -330,6 +342,8 @@ fn enum_kind_type_id(kind: EnumKind) -> TypeId {
         EnumKind::XsDerivationMethod => TypeId::XsDerivationMethod,
         EnumKind::XsValueConstraint => TypeId::XsValueConstraint,
         EnumKind::XsWhitespaceHandling => TypeId::XsWhitespaceHandling,
+        EnumKind::XmlForm => TypeId::XmlForm,
+        EnumKind::XdtoFacetKind => TypeId::XdtoFacetKind,
     }
 }
 
@@ -415,6 +429,17 @@ impl BslValue {
                 | BslObject::XmlExpandedNameList(_)) => match crate::xsd::type_name_of(obj) {
                     Some(name) => name,
                     None => unreachable!("вид проверен объемлющим match"),
+                },
+                // Имена значений модели типов XDTO — одной таблицей в
+                // `xdto.rs`, рядом с их `ТипЗнч()`.
+                obj @ (BslObject::XdtoType(..)
+                | BslObject::XdtoProperty(..)
+                | BslObject::XdtoProperties(..)
+                | BslObject::XdtoFacets(..)
+                | BslObject::XdtoFacet(..)
+                | BslObject::XdtoValue(_)) => match crate::xdto::type_name_of(obj) {
+                    Some(name) => name,
+                    None => "ТипЗначенияXDTO",
                 },
                 BslObject::SpreadDocument(_) => "ТабличныйДокумент",
                 BslObject::SpreadDrawings(_) => "КоллекцияРисунковТабличногоДокумента",
@@ -1189,6 +1214,15 @@ impl BslValue {
                 BslObject::DomList(kind, _) => !kind.is_empty(),
                 // Коллекции модели схемы — по тому же критерию длины.
                 BslObject::XsList(_, kind) => !kind.is_empty(),
+                // Коллекции модели типов XDTO — тоже по длине: измерено,
+                // что непустые `Свойства` и `Фасеты` дают «Да», а пустые
+                // `Свойства` типа без содержимого — «Нет».
+                obj @ (BslObject::XdtoProperties(..) | BslObject::XdtoFacets(..)) => {
+                    match crate::xdto::collection_len(obj) {
+                        Some(len) => len? != 0,
+                        None => false,
+                    }
+                }
                 BslObject::XmlExpandedNameList(names) => !names.is_empty(),
                 // ИЗМЕРЕНО, и для потока, и для менеджера:
                 // `ЗначениеЗаполнено` от них платформа отвергает — это
@@ -1217,7 +1251,19 @@ impl BslValue {
                 | BslObject::XsBuilder
                 | BslObject::XsSchemaSet(..)
                 | BslObject::XsComponent(..)
-                | BslObject::XmlExpandedName(..) => {
+                | BslObject::XmlExpandedName(..)
+                // Модель типов XDTO делится так же, как модель схемы:
+                // ИЗМЕРЕНО, что тип, свойство и фасет отвечают на
+                // `ЗначениеЗаполнено` ошибкой, а обе коллекции — «Да» и
+                // «Нет» по длине (см. ветку выше). А вот `ЗначениеXDTO`
+                // измерить не удалось: проба на нём вешает платформу
+                // модальным окном, и здесь оно отнесено к своим четырём
+                // соседям по аналогии, а не по замеру.
+                // НЕ ИЗМЕРЕНО(XDTO.VALUE.FILLED)
+                | BslObject::XdtoType(..)
+                | BslObject::XdtoProperty(..)
+                | BslObject::XdtoFacet(..)
+                | BslObject::XdtoValue(..) => {
                     return Err(RtError::TypeError {
                         expected: "Значение, у которого есть признак заполненности",
                         op: "ЗначениеЗаполнено",
@@ -1312,6 +1358,15 @@ impl BslValue {
                 | BslObject::XmlExpandedNameList(_)) => match crate::xsd::type_id_of(obj) {
                     Some(id) => id,
                     None => unreachable!("вид проверен объемлющим match"),
+                },
+                obj @ (BslObject::XdtoType(..)
+                | BslObject::XdtoProperty(..)
+                | BslObject::XdtoProperties(..)
+                | BslObject::XdtoFacets(..)
+                | BslObject::XdtoFacet(..)
+                | BslObject::XdtoValue(_)) => match crate::xdto::type_id_of(obj) {
+                    Some(id) => id,
+                    None => TypeId::XdtoValueType,
                 },
             },
             BslValue::Skipped => {
@@ -2042,6 +2097,9 @@ impl BslValue {
                     xsd::name_list_get(names, Self::index_as_usize(idx)?)
                 }
                 BslObject::XsSchemaSet(_) => xsd::schema_set_get(self, Self::index_as_usize(idx)?),
+                obj @ (BslObject::XdtoProperties(..) | BslObject::XdtoFacets(..)) => {
+                    xdto::collection_get(obj, Self::index_as_usize(idx)?)
+                }
                 _ => Err(RtError::NotIndexable),
             },
             _ => Err(RtError::NotIndexable),
@@ -2115,6 +2173,20 @@ impl BslValue {
                 BslObject::XsBuilder
                 | BslObject::XsComponent(..)
                 | BslObject::XmlExpandedName(..) => Err(RtError::NotIndexable),
+                // Коллекции модели типов XDTO — настоящие коллекции:
+                // `Количество()` и `Для Каждого` по свойствам и по
+                // фасетам измерены. Сами тип, свойство, фасет и значение
+                // — нет.
+                obj @ (BslObject::XdtoProperties(..) | BslObject::XdtoFacets(..)) => {
+                    match xdto::collection_len(obj) {
+                        Some(len) => len,
+                        None => Err(RtError::NotIndexable),
+                    }
+                }
+                BslObject::XdtoType(..)
+                | BslObject::XdtoProperty(..)
+                | BslObject::XdtoFacet(..)
+                | BslObject::XdtoValue(..) => Err(RtError::NotIndexable),
                 BslObject::TextWriter(..)
                 | BslObject::JsonReader(..)
                 | BslObject::JsonWriter(..)
@@ -2592,6 +2664,10 @@ impl BslValue {
                 BslObject::XsComponent(..) | BslObject::XmlExpandedName(_) => {
                     xsd::get_property(self, name)
                 }
+                BslObject::XdtoType(..)
+                | BslObject::XdtoProperty(..)
+                | BslObject::XdtoFacet(..)
+                | BslObject::XdtoValue(_) => xdto::get_property(self, name),
                 BslObject::KeyValuePair(k, v) => {
                     if name.eq_ignore_ascii_case("Ключ") || name.eq_ignore_ascii_case("Key") {
                         Ok(k.clone())
@@ -3335,6 +3411,14 @@ impl PartialEq for BslValue {
                 // имени с одинаковыми URI и локальным именем равны
                 // (измерено).
                 (BslObject::XmlExpandedName(x), BslObject::XmlExpandedName(y)) => x == y,
+                // Типы и свойства XDTO — тоже ССЫЛКИ на место в модели, и
+                // тождество у них такое же: та же модель, тот же номер.
+                // ИЗМЕРЕНО: два `Тип("urn:test", "RootType")` одной
+                // фабрики равны.
+                (BslObject::XdtoType(a, i), BslObject::XdtoType(b, j))
+                | (BslObject::XdtoProperty(a, i), BslObject::XdtoProperty(b, j)) => {
+                    i == j && Rc::ptr_eq(a, b)
+                }
                 _ => false,
             },
             _ => false,
@@ -3504,6 +3588,17 @@ impl fmt::Display for BslValue {
                 | BslObject::XsList(..)
                 | BslObject::XmlExpandedNameList(_)) => match crate::xsd::type_name_of(obj) {
                     Some(name) => write!(f, "{name}"),
+                    None => unreachable!("вид проверен объемлющим match"),
+                },
+                // Тип XDTO печатается расширенным именем, свойство —
+                // своим именем, остальные — именем типа (измерено).
+                obj @ (BslObject::XdtoType(..)
+                | BslObject::XdtoProperty(..)
+                | BslObject::XdtoProperties(..)
+                | BslObject::XdtoFacets(..)
+                | BslObject::XdtoFacet(..)
+                | BslObject::XdtoValue(_)) => match crate::xdto::display_text(obj) {
+                    Some(text) => write!(f, "{text}"),
                     None => unreachable!("вид проверен объемлющим match"),
                 },
             },

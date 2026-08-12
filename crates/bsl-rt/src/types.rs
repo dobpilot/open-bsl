@@ -142,6 +142,15 @@ pub enum TypeId {
     XsComponentList,
     XmlExpandedName,
     XmlExpandedNameList,
+
+    // --- модель типов XDTO --------------------------------------------
+    XdtoValueType,
+    XdtoObjectType,
+    XdtoProperty,
+    XdtoPropertyCollection,
+    XdtoFacet,
+    XdtoFacetCollection,
+    XdtoDataValue,
     /// Типы ЧЛЕНОВ перечислений модели схемы — как `DomNodeType`.
     XsComponentType,
     XsForm,
@@ -150,6 +159,9 @@ pub enum TypeId {
     XsDerivationMethod,
     XsValueConstraint,
     XsWhitespaceHandling,
+    /// Типы ЧЛЕНОВ перечислений модели типов XDTO.
+    XmlForm,
+    XdtoFacetKind,
 
     // --- ТабличныйДокумент ---------------------------------------------
     // Та же пара написаний, что у остальных: тип печатается с пробелом
@@ -488,6 +500,28 @@ const NAMES: &[(TypeId, &str, &str)] = &[
         "ОбработкаПробельныхСимволовXS",
         "XSWhitespaceHandling",
     ),
+    // Модель типов XDTO. Все семь представлений и оба написания каждого
+    // ИЗМЕРЕНЫ через `Тип("...")`: русское имя без пробелов
+    // (`ТипЗначенияXDTO`) находится и так — поиск пробелы не считает
+    // значимыми, поэтому отдельной строки в `XS_IDENTIFIERS` этим типам
+    // не нужно.
+    (TypeId::XdtoValueType, "Тип значения XDTO", "XDTOValueType"),
+    (TypeId::XdtoObjectType, "Тип объекта XDTO", "XDTOObjectType"),
+    (TypeId::XdtoProperty, "Свойство XDTO", "XDTOProperty"),
+    (
+        TypeId::XdtoPropertyCollection,
+        "Коллекция свойств XDTO",
+        "XDTOPropertyCollection",
+    ),
+    (TypeId::XdtoFacet, "Фасет XDTO", "XDTOFacet"),
+    (
+        TypeId::XdtoFacetCollection,
+        "Коллекция фасетов XDTO",
+        "XDTOFacetCollection",
+    ),
+    (TypeId::XdtoDataValue, "Значение XDTO", "XDTODataValue"),
+    (TypeId::XmlForm, "ФормаXML", "XMLForm"),
+    (TypeId::XdtoFacetKind, "ВидФасетаXDTO", "XDTOFacetType"),
     (
         TypeId::SpreadFileType,
         "ТипФайлаТабличногоДокумента",
