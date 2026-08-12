@@ -1137,6 +1137,7 @@ fn step(
             | Instr::NewTextDocument { .. }
             | Instr::NewXmlReader { .. }
             | Instr::NewXmlWriter { .. }
+            | Instr::NewDomBuilder { .. }
             | Instr::NewXmlWriterSettings { .. }
             | Instr::NewTextWriter { .. }
             | Instr::NewBinaryBuffer { .. }
@@ -1336,6 +1337,11 @@ fn step_cold(
         Instr::NewXmlWriter { dst } => {
             let d = frames[frame_idx].reg_index(dst);
             reg_store(stack, d, BslValue::new_xml_writer())?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewDomBuilder { dst } => {
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, BslValue::new_dom_builder())?;
             frames[frame_idx].pc += 1;
         }
         Instr::NewXmlWriterSettings {

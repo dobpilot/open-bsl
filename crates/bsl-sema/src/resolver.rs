@@ -316,6 +316,10 @@ pub const NEW_TYPES: &[&str] = &[
     "XMLReader",
     "ЗаписьXML",
     "XMLWriter",
+    // Английское написание ИЗМЕРЕНО: `Новый DOMBuilder` платформа
+    // принимает и отдаёт тот же тип, что и `Новый ПостроительDOM`.
+    "ПостроительDOM",
+    "DOMBuilder",
     "ПараметрыЗаписиXML",
     "XMLWriterSettings",
     "ТекстовыйДокумент",
@@ -955,6 +959,18 @@ impl<'a> Resolver<'a> {
                 }
                 Ok(RExpr::NewXmlReader)
             }
+            // Аргументов у построителя нет: `Новый ПостроительDOM("x")`
+            // платформа отвергает (измерено).
+            "ПОСТРОИТЕЛЬDOM" | "DOMBUILDER" => {
+                if !args.is_empty() {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый ПостроительDOM".to_string(),
+                        expected: 0,
+                        found: args.len(),
+                    });
+                }
+                Ok(RExpr::NewDomBuilder)
+            }
             "ЗАПИСЬXML" | "XMLWRITER" => {
                 if !args.is_empty() {
                     return Err(SemaError::ArgumentCountMismatch {
@@ -1117,6 +1133,19 @@ impl<'a> Resolver<'a> {
                 // `bsl_rt::call_builtin_method`). Для остальных методов
                 // арность фиксирована и проверяется сразу.
                 let expected: Option<usize> = match method {
+                    // DOM. Признаки — строго без аргументов, поиск
+                    // элемента по идентификатору — строго с одним, а у
+                    // четырёх «атрибутных» методов форм две (имя либо
+                    // URI и локальное имя), поэтому их арность решает
+                    // рантайм. Всё измерено: платформа отвергает и
+                    // `ЕстьАтрибут()`, и `ЕстьАтрибут("а", "б", "в")`.
+                    bsl_rt::BuiltinMethod::DomHasChildNodes
+                    | bsl_rt::BuiltinMethod::DomHasAttributes => Some(0),
+                    bsl_rt::BuiltinMethod::DomGetElementById => Some(1),
+                    bsl_rt::BuiltinMethod::DomGetAttribute
+                    | bsl_rt::BuiltinMethod::DomHasAttribute
+                    | bsl_rt::BuiltinMethod::DomGetAttributeNode
+                    | bsl_rt::BuiltinMethod::DomGetElementsByName => None,
                     bsl_rt::BuiltinMethod::Count
                     | bsl_rt::BuiltinMethod::Clear
                     | bsl_rt::BuiltinMethod::Close => Some(0),

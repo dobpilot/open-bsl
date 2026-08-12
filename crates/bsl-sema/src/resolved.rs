@@ -123,6 +123,9 @@ pub enum RExpr {
     NewSpreadDocument,
     NewXmlReader,
     NewXmlWriter,
+    /// `Новый ПостроительDOM` — без аргументов: документ строится
+    /// отдельным вызовом `Прочитать(ЧтениеXML)`.
+    NewDomBuilder,
     NewXmlWriterSettings {
         encoding: Box<RExpr>,
         version: Box<RExpr>,
@@ -390,6 +393,7 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
         | RExpr::NewSpreadDocument
         | RExpr::NewXmlReader
         | RExpr::NewXmlWriter
+        | RExpr::NewDomBuilder
         | RExpr::NewFileStreamsManager => false,
         RExpr::NewXmlWriterSettings {
             encoding,

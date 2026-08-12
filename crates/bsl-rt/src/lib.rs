@@ -10,6 +10,7 @@ mod builtin;
 mod datarw;
 mod date;
 mod deflate;
+mod dom;
 pub mod encoding;
 mod enums;
 mod fill;
@@ -306,6 +307,7 @@ fn enum_kind_type_id(kind: EnumKind) -> TypeId {
         EnumKind::JsonDateFormat => TypeId::JsonDateFormat,
         EnumKind::JsonDateWritingVariant => TypeId::JsonDateWritingVariant,
         EnumKind::XmlNodeType => TypeId::XmlNodeType,
+        EnumKind::DomNodeType => TypeId::DomNodeType,
         EnumKind::SpreadFileType => TypeId::SpreadFileType,
         EnumKind::DrawingKind => TypeId::DrawingKind,
         EnumKind::TextEncoding => TypeId::TextEncoding,
@@ -369,6 +371,23 @@ impl BslValue {
                 BslObject::XmlReader(_) => "ЧтениеXML",
                 BslObject::XmlWriter(_) => "ЗаписьXML",
                 BslObject::XmlWriterSettings(_) => "ПараметрыЗаписиXML",
+                // Имена ЗНАЧЕНИЙ узлов DOM — слитные, имена ТИПОВ («Элемент
+                // DOM», «Документ  DOM» с ДВУМЯ пробелами) живут в
+                // `types.rs`. Обе колонки измерены.
+                BslObject::DomBuilder => "ПостроительDOM",
+                BslObject::DomNode(n, _) => match n.kind() {
+                    crate::dom::DomKind::Document => "ДокументDOM",
+                    crate::dom::DomKind::Element => "ЭлементDOM",
+                    crate::dom::DomKind::Attribute => "АтрибутDOM",
+                    crate::dom::DomKind::Text => "ТекстDOM",
+                    crate::dom::DomKind::Comment => "КомментарийDOM",
+                    crate::dom::DomKind::ProcessingInstruction => "ИнструкцияОбработкиDOM",
+                },
+                BslObject::DomList(kind, _, _) => match kind {
+                    crate::dom::DomListKind::Nodes => "СписокУзловDOM",
+                    crate::dom::DomListKind::Attributes => "КоллекцияАтрибутовDOM",
+                    crate::dom::DomListKind::Elements => "СписокЭлементовDOM",
+                },
                 BslObject::SpreadDocument(_) => "ТабличныйДокумент",
                 BslObject::SpreadDrawings(_) => "КоллекцияРисунковТабличногоДокумента",
                 BslObject::SpreadDrawing(..) => "РисунокТабличногоДокумента",
@@ -1134,6 +1153,12 @@ impl BslValue {
                 | BslObject::SpreadDrawings(..)
                 | BslObject::TextDocument(..)
                 | BslObject::TextDocParams(..) => true,
+                // Коллекции DOM заполненность имеют, и критерий у них
+                // ДЛИНА, как у массива: измерено, что непустые
+                // `ДочерниеУзлы` дают «Да», а пустые `Атрибуты` — «Нет».
+                // Сам узел и построитель заполненности не имеют вовсе (см.
+                // ниже).
+                BslObject::DomList(_, items, _) => !items.is_empty(),
                 // ИЗМЕРЕНО, и для потока, и для менеджера:
                 // `ЗначениеЗаполнено` от них платформа отвергает — это
                 // ошибка, а не «Да»/«Нет». Поток снят фикстурой
@@ -1142,12 +1167,18 @@ impl BslValue {
                 //
                 // Читатель, писатель и результат чтения ведут себя так же —
                 // измерено на каждом из трёх отдельной пробой.
+                //
+                // Построитель DOM и любой узел дерева ведут себя так же —
+                // измерено на построителе, документе и элементе: у всех
+                // трёх `ЗначениеЗаполнено` даёт ошибку, а не «Да».
                 BslObject::MemoryStream(..)
                 | BslObject::FileStream(..)
                 | BslObject::FileStreamsManager
                 | BslObject::DataReader(..)
                 | BslObject::DataWriter(..)
-                | BslObject::DataReadResult(..) => {
+                | BslObject::DataReadResult(..)
+                | BslObject::DomBuilder
+                | BslObject::DomNode(..) => {
                     return Err(RtError::TypeError {
                         expected: "Значение, у которого есть признак заполненности",
                         op: "ЗначениеЗаполнено",
@@ -1218,6 +1249,20 @@ impl BslValue {
                 BslObject::DataReader(..) => TypeId::DataReader,
                 BslObject::DataWriter(..) => TypeId::DataWriter,
                 BslObject::DataReadResult(..) => TypeId::DataReadResult,
+                BslObject::DomBuilder => TypeId::DomBuilder,
+                BslObject::DomNode(n, _) => match n.kind() {
+                    crate::dom::DomKind::Document => TypeId::DomDocument,
+                    crate::dom::DomKind::Element => TypeId::DomElement,
+                    crate::dom::DomKind::Attribute => TypeId::DomAttribute,
+                    crate::dom::DomKind::Text => TypeId::DomText,
+                    crate::dom::DomKind::Comment => TypeId::DomComment,
+                    crate::dom::DomKind::ProcessingInstruction => TypeId::DomProcessingInstruction,
+                },
+                BslObject::DomList(kind, _, _) => match kind {
+                    crate::dom::DomListKind::Nodes => TypeId::DomNodeList,
+                    crate::dom::DomListKind::Attributes => TypeId::DomAttributeMap,
+                    crate::dom::DomListKind::Elements => TypeId::DomElementList,
+                },
             },
             BslValue::Skipped => {
                 return Err(RtError::TypeError {
@@ -1341,6 +1386,12 @@ impl BslValue {
 
     pub fn new_xml_writer() -> Self {
         BslValue::Object(Rc::new(BslObject::XmlWriter(std::cell::RefCell::new(None))))
+    }
+
+    /// `Новый ПостроительDOM`. Состояния у построителя нет — вся работа
+    /// происходит в `Прочитать(ЧтениеXML)`.
+    pub fn new_dom_builder() -> Self {
+        BslValue::Object(Rc::new(BslObject::DomBuilder))
     }
 
     /// `Новый ПараметрыЗаписиXML([Кодировка][, Версия][, ИспользоватьОтступ])`.
@@ -1874,6 +1925,17 @@ impl BslValue {
                 // общий `index_as_usize`: у буфера дробная позиция не
                 // ошибка, а отбрасывается к нулю (измерено).
                 BslObject::BinaryBuffer(_) => binbuf::get_byte(self, idx),
+                // Индекс за границей списка DOM — ошибка, а не
+                // `Неопределено` (измерено на `ДочерниеУзлы[99]`,
+                // `Атрибуты[9]` и на отрицательном индексе).
+                BslObject::DomList(_, items, doc) => {
+                    let i = Self::index_as_usize(idx)?;
+                    let node = items.get(i).ok_or(RtError::IndexOutOfBounds {
+                        index: i as i64,
+                        len: items.len(),
+                    })?;
+                    Ok(dom::node_value(node, doc))
+                }
                 _ => Err(RtError::NotIndexable),
             },
             _ => Err(RtError::NotIndexable),
@@ -1930,6 +1992,12 @@ impl BslValue {
                 // здесь не заведён, потому что в задачу этого типа он не
                 // входит, и своего эталона у него ещё нет.)
                 BslObject::BinaryBuffer(..) => Err(RtError::NotIndexable),
+                // Три коллекции DOM — настоящие коллекции: `Количество()`
+                // и `Для Каждого` по ним платформа принимает (измерено на
+                // `ДочерниеУзлы`, `Атрибуты` и результате поиска). Сам
+                // узел и построитель — нет.
+                BslObject::DomList(_, items, _) => Ok(items.len()),
+                BslObject::DomBuilder | BslObject::DomNode(..) => Err(RtError::NotIndexable),
                 BslObject::TextWriter(..)
                 | BslObject::JsonReader(..)
                 | BslObject::JsonWriter(..)
@@ -2403,6 +2471,7 @@ impl BslValue {
                 BslObject::SpreadArea(..) => spreadsheet::get_property(self, name),
                 BslObject::SpreadDrawing(data, i) => spreadsheet::drawing_property(data, *i, name),
                 BslObject::TextDocParams(_) => textdoc::get_parameter(self, name),
+                BslObject::DomNode(..) => dom::get_property(self, name),
                 BslObject::KeyValuePair(k, v) => {
                     if name.eq_ignore_ascii_case("Ключ") || name.eq_ignore_ascii_case("Key") {
                         Ok(k.clone())
@@ -3124,6 +3193,12 @@ impl PartialEq for BslValue {
                 // (пробы `BIN.EQ`/`BIN.EQ.DIFF`), что два `Новый
                 // ДвоичныеДанные` от ОДНОГО файла равны, а от разных — нет.
                 (BslObject::BinaryData(x), BslObject::BinaryData(y)) => x == y,
+                // Узлы DOM — ССЫЛКИ на место в дереве: обёртка каждый раз
+                // новая, а равенство идёт по самому узлу. ИЗМЕРЕНО:
+                // `Э.ПервыйДочерний = Э.ДочерниеУзлы[0]` — «Да», а два
+                // обращения к `ДочерниеУзлы` дают «Нет», поэтому у
+                // `DomList` такой ветки НЕТ намеренно.
+                (BslObject::DomNode(x, _), BslObject::DomNode(y, _)) => Rc::ptr_eq(x, y),
                 _ => false,
             },
             _ => false,
@@ -3161,6 +3236,10 @@ impl Hash for BslValue {
             BslValue::Object(o) => match &**o {
                 BslObject::VstrOpaque(text) => text.hash(state),
                 BslObject::BinaryData(bytes) => bytes.hash(state),
+                // Узел хэширует АДРЕС УЗЛА, а не обёртки: иначе два равных
+                // по `PartialEq` выше значения давали бы разные хэши и
+                // ключ `Соответствие` терялся бы.
+                BslObject::DomNode(n, _) => Rc::as_ptr(n).hash(state),
                 _ => Rc::as_ptr(o).hash(state),
             },
             BslValue::Skipped => {}
@@ -3241,6 +3320,11 @@ impl fmt::Display for BslValue {
                 BslObject::Map(_) => write!(f, "Соответствие"),
                 BslObject::KeyValuePair(_, _) => write!(f, "КлючИЗначение"),
                 BslObject::TextWriter(_) => write!(f, "ЗаписьТекста"),
+                // Узлы и коллекции DOM печатаются слитным именем — то же,
+                // что отдаёт `type_name`, поэтому одна ветка на всех.
+                BslObject::DomBuilder | BslObject::DomNode(..) | BslObject::DomList(..) => {
+                    write!(f, "{}", self.type_name())
+                }
                 // Единственный объект, который печатается СОДЕРЖИМЫМ, а не
                 // именем: см. `binary_data_display`.
                 BslObject::BinaryData(bytes) => write!(f, "{}", binary_data_display(bytes)),

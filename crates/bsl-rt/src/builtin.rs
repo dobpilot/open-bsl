@@ -706,6 +706,28 @@ pub enum BuiltinMethod {
     WriteXmlProcessingInstruction,
     WriteXmlRaw,
 
+    // --- DOM ------------------------------------------------------------
+    // `Прочитать` у `ПостроительDOM` переиспользует общий `ReadNext`: имя
+    // у платформы то же, а смысл выбирается по получателю. Остальные
+    // шесть имён — свои, и все они измерены на 8.3.27.
+    /// `ЭлементDOM.ЕстьДочерниеУзлы()` / `ДокументDOM.ЕстьДочерниеУзлы()`
+    /// — есть у любого узла.
+    DomHasChildNodes,
+    /// `ЕстьАтрибуты()` — тоже у любого узла: у документа и у текста
+    /// платформа отвечает «Нет», а не ошибкой (измерено).
+    DomHasAttributes,
+    /// `ПолучитьАтрибут(Имя)` / `(URI, ЛокальноеИмя)` -> значение либо
+    /// `Неопределено`.
+    DomGetAttribute,
+    /// `ЕстьАтрибут(Имя)` / `(URI, ЛокальноеИмя)` -> `Булево`.
+    DomHasAttribute,
+    /// `ПолучитьУзелАтрибута(Имя)` / `(URI, ЛокальноеИмя)` -> `АтрибутDOM`.
+    DomGetAttributeNode,
+    /// `ПолучитьЭлементыПоИмени(Имя)` / `(URI, Имя)` -> `СписокЭлементовDOM`.
+    DomGetElementsByName,
+    /// `ДокументDOM.ПолучитьЭлементПоИдентификатору(Ид)`.
+    DomGetElementById,
+
     // --- ТекстовыйДокумент ---------------------------------------------
     // `Прочитать`, `Записать` и `Очистить` переиспользуются: у платформы
     // это те же имена, что у JSON/XML/ЗаписьТекста, а смысл выбирается по
@@ -1059,6 +1081,28 @@ pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
         BuiltinMethod::GetBinaryDataBuffer,
     ),
     ("GetBinaryDataBuffer", BuiltinMethod::GetBinaryDataBuffer),
+    // DOM. Английские написания ИЗМЕРЕНЫ перебором на 8.3.27 вместе с
+    // русскими — платформа принимает обе формы.
+    ("ЕстьДочерниеУзлы", BuiltinMethod::DomHasChildNodes),
+    ("HasChildNodes", BuiltinMethod::DomHasChildNodes),
+    ("ЕстьАтрибуты", BuiltinMethod::DomHasAttributes),
+    ("HasAttributes", BuiltinMethod::DomHasAttributes),
+    ("ПолучитьАтрибут", BuiltinMethod::DomGetAttribute),
+    ("GetAttribute", BuiltinMethod::DomGetAttribute),
+    ("ЕстьАтрибут", BuiltinMethod::DomHasAttribute),
+    ("HasAttribute", BuiltinMethod::DomHasAttribute),
+    ("ПолучитьУзелАтрибута", BuiltinMethod::DomGetAttributeNode),
+    ("GetAttributeNode", BuiltinMethod::DomGetAttributeNode),
+    (
+        "ПолучитьЭлементыПоИмени",
+        BuiltinMethod::DomGetElementsByName,
+    ),
+    ("GetElementByTagName", BuiltinMethod::DomGetElementsByName),
+    (
+        "ПолучитьЭлементПоИдентификатору",
+        BuiltinMethod::DomGetElementById,
+    ),
+    ("GetElementById", BuiltinMethod::DomGetElementById),
 ];
 
 impl BuiltinMethod {
@@ -1727,7 +1771,11 @@ pub fn call_builtin_method(
             Ok(BslValue::Undefined)
         }
         BuiltinMethod::ReadNext => {
-            if crate::spreadsheet::is_spread_document(obj) {
+            if crate::dom::is_dom_builder(obj) {
+                // У построителя DOM `Прочитать(ЧтениеXML)` — не шаг по
+                // потоку, а разбор всего остатка документа в дерево.
+                crate::dom::read(obj, args)
+            } else if crate::spreadsheet::is_spread_document(obj) {
                 crate::spreadsheet::read(obj, args)?;
                 Ok(BslValue::Undefined)
             } else if crate::textdoc::is_text_document(obj) {
@@ -1887,6 +1935,13 @@ pub fn call_builtin_method(
         BuiltinMethod::XmlAttributeName => crate::xml::attribute_name(obj, args),
         BuiltinMethod::XmlAttributeValue => crate::xml::attribute_value(obj, args),
         BuiltinMethod::XmlMoveToContent => crate::xml::move_to_content(obj),
+        BuiltinMethod::DomHasChildNodes => crate::dom::has_child_nodes(obj),
+        BuiltinMethod::DomHasAttributes => crate::dom::has_attributes(obj),
+        BuiltinMethod::DomGetAttribute => crate::dom::get_attribute(obj, args),
+        BuiltinMethod::DomHasAttribute => crate::dom::has_attribute(obj, args),
+        BuiltinMethod::DomGetAttributeNode => crate::dom::get_attribute_node(obj, args),
+        BuiltinMethod::DomGetElementsByName => crate::dom::get_elements_by_name(obj, args),
+        BuiltinMethod::DomGetElementById => crate::dom::get_element_by_id(obj, args),
         BuiltinMethod::WriteXmlDeclaration => {
             crate::xml::write_declaration(obj)?;
             Ok(BslValue::Undefined)

@@ -73,6 +73,29 @@ pub enum TypeId {
     XmlWriterSettings,
     XmlNodeType,
 
+    // --- DOM -----------------------------------------------------------
+    // Та же пара написаний, что у JSON и XML, но с двумя измеренными
+    // неожиданностями: у «Документ  DOM» и «Комментарий  DOM» между словом
+    // и `DOM` ДВА пробела, а не один. Это не описка — так печатает
+    // 8.3.27 и в `Строка(ТипЗнч(...))`, и в `Строка(Тип("ДокументDOM"))`.
+    // Английские написания измерены через `Тип(...)`: `DOMDocument`,
+    // `DOMElement`, `DOMAttribute`, `DOMText`, `DOMComment`,
+    // `DOMProcessingInstruction`, `DOMNodeList`, `DOMElementList`,
+    // `DOMBuilder`, а у коллекции атрибутов — `DOMAttributeMap`
+    // (`DOMNamedNodeMap` и `DOMAttributeCollection` платформа НЕ знает).
+    DomBuilder,
+    DomDocument,
+    DomElement,
+    DomAttribute,
+    DomText,
+    DomComment,
+    DomProcessingInstruction,
+    DomNodeList,
+    DomAttributeMap,
+    DomElementList,
+    /// Тип ЧЛЕНА перечисления `ТипУзлаDOM` — как `XmlNodeType`.
+    DomNodeType,
+
     // --- ТабличныйДокумент ---------------------------------------------
     // Та же пара написаний, что у остальных: тип печатается с пробелом
     // («Табличный документ»), значение — без. Измерено на 8.3.27.
@@ -207,6 +230,30 @@ const NAMES: &[(TypeId, &str, &str)] = &[
         "XMLWriterSettings",
     ),
     (TypeId::XmlNodeType, "ТипУзлаXML", "XMLNodeType"),
+    (TypeId::DomBuilder, "Построитель DOM", "DOMBuilder"),
+    // Двойной пробел ИЗМЕРЕН, см. комментарий у вариантов выше.
+    (TypeId::DomDocument, "Документ  DOM", "DOMDocument"),
+    (TypeId::DomElement, "Элемент DOM", "DOMElement"),
+    (TypeId::DomAttribute, "Атрибут DOM", "DOMAttribute"),
+    (TypeId::DomText, "Текст DOM", "DOMText"),
+    (TypeId::DomComment, "Комментарий  DOM", "DOMComment"),
+    (
+        TypeId::DomProcessingInstruction,
+        "Инструкция обработки DOM",
+        "DOMProcessingInstruction",
+    ),
+    (TypeId::DomNodeList, "Список узлов DOM", "DOMNodeList"),
+    (
+        TypeId::DomAttributeMap,
+        "Коллекция атрибутов DOM",
+        "DOMAttributeMap",
+    ),
+    (
+        TypeId::DomElementList,
+        "Список элементов DOM",
+        "DOMElementList",
+    ),
+    (TypeId::DomNodeType, "ТипУзлаDOM", "DOMNodeType"),
     (
         TypeId::SpreadFileType,
         "ТипФайлаТабличногоДокумента",

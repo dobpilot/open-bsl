@@ -134,6 +134,10 @@ fn parse_tree(text: &str) -> RtResult<El> {
                     .children
                     .push(done);
             }
+            // Комментарии сюда не приходят: разборщик отдаёт их только с
+            // включённым `set_report_comments`, а макет читается обычным
+            // способом.
+            XmlEvent::Comment(_) => {}
             XmlEvent::Text(t) => {
                 if let Some(top) = stack.last_mut() {
                     top.text.push_str(&t);

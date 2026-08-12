@@ -77,6 +77,26 @@ pub enum EnumValue {
     XmlDocumentType,
     XmlNotation,
 
+    // --- ТипУзлаDOM ----------------------------------------------------
+    // Двенадцать членов, состав ВЫЯСНЕН перебором на 8.3.27: `ТипДокумента`,
+    // `Пробелы` и `ЗначащиеПробелы` платформа не знает, зато знает
+    // `ОпределениеТипаДокумента`, `ФрагментДокумента`, `Нотация`,
+    // `Сущность` и `СсылкаНаСущность`. Заведены все двенадцать, хотя
+    // построитель создаёт узлы только шести видов: член перечисления —
+    // это то, с чем сравнивают, и «нет такого члена» было бы неправдой.
+    DomElement,
+    DomAttribute,
+    DomText,
+    DomCdataSection,
+    DomComment,
+    DomProcessingInstruction,
+    DomDocument,
+    DomDocumentType,
+    DomDocumentFragment,
+    DomNotation,
+    DomEntity,
+    DomEntityReference,
+
     // --- КодировкаТекста ------------------------------------------------
     // Ровно пять членов, состав проверен перебором.
     TextEncodingAnsi,
@@ -128,6 +148,9 @@ pub enum EnumKind {
     /// ниже — ИЗМЕРЕНО (`JSON.DATE_VARIANT_EN_NAMES`).
     JsonDateWritingVariant,
     XmlNodeType,
+    /// `ТипУзлаDOM`. Английское написание `DOMNodeType` ИЗМЕРЕНО:
+    /// `Тип("DOMNodeType") = ТипЗнч(ТипУзлаDOM.Элемент)` — «Да».
+    DomNodeType,
     SpreadFileType,
     DrawingKind,
     TextEncoding,
@@ -161,6 +184,7 @@ impl EnumKind {
             EnumKind::JsonDateFormat => ("ФорматДатыJSON", "JSONDateFormat"),
             EnumKind::JsonDateWritingVariant => ("ВариантЗаписиДатыJSON", "JSONDateWritingVariant"),
             EnumKind::XmlNodeType => ("ТипУзлаXML", "XMLNodeType"),
+            EnumKind::DomNodeType => ("ТипУзлаDOM", "DOMNodeType"),
             EnumKind::SpreadFileType => {
                 ("ТипФайлаТабличногоДокумента", "SpreadsheetDocumentFileType")
             }
@@ -190,6 +214,7 @@ impl EnumKind {
             EnumKind::JsonDateFormat => "ПеречислениеФорматДатыJSON",
             EnumKind::JsonDateWritingVariant => "ПеречислениеВариантЗаписиДатыJSON",
             EnumKind::XmlNodeType => "ПеречислениеТипУзлаXML",
+            EnumKind::DomNodeType => "ПеречислениеТипУзлаDOM",
             EnumKind::SpreadFileType => "ПеречислениеТипФайлаТабличногоДокумента",
             EnumKind::DrawingKind => "ПеречислениеТипРисункаТабличногоДокумента",
             EnumKind::TextEncoding => "ПеречислениеКодировкаТекста",
@@ -465,6 +490,97 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "Notation",
         "Нотация",
     ),
+    // ТипУзлаDOM. Пятая колонка снова измерена целиком: «Секция CDATA»,
+    // «Инструкция обработки», «Определение типа документа», «Фрагмент
+    // документа» и «Ссылка на сущность» печатаются человеческим текстом с
+    // пробелами. Английские написания членов ИЗМЕРЕНЫ перебором
+    // (`ТипУзлаDOM.Element` и остальные одиннадцать платформа принимает).
+    (
+        EnumKind::DomNodeType,
+        EnumValue::DomElement,
+        "Элемент",
+        "Element",
+        "Элемент",
+    ),
+    (
+        EnumKind::DomNodeType,
+        EnumValue::DomAttribute,
+        "Атрибут",
+        "Attribute",
+        "Атрибут",
+    ),
+    (
+        EnumKind::DomNodeType,
+        EnumValue::DomText,
+        "Текст",
+        "Text",
+        "Текст",
+    ),
+    (
+        EnumKind::DomNodeType,
+        EnumValue::DomCdataSection,
+        "СекцияCDATA",
+        "CDATASection",
+        "Секция CDATA",
+    ),
+    (
+        EnumKind::DomNodeType,
+        EnumValue::DomComment,
+        "Комментарий",
+        "Comment",
+        "Комментарий",
+    ),
+    (
+        EnumKind::DomNodeType,
+        EnumValue::DomProcessingInstruction,
+        "ИнструкцияОбработки",
+        "ProcessingInstruction",
+        "Инструкция обработки",
+    ),
+    (
+        EnumKind::DomNodeType,
+        EnumValue::DomDocument,
+        "Документ",
+        "Document",
+        "Документ",
+    ),
+    (
+        EnumKind::DomNodeType,
+        EnumValue::DomDocumentType,
+        "ОпределениеТипаДокумента",
+        // Не `DocumentTypeDefinition`: такого члена платформа не знает —
+        // измерено обоими написаниями.
+        "DocumentType",
+        "Определение типа документа",
+    ),
+    (
+        EnumKind::DomNodeType,
+        EnumValue::DomDocumentFragment,
+        "ФрагментДокумента",
+        "DocumentFragment",
+        "Фрагмент документа",
+    ),
+    (
+        EnumKind::DomNodeType,
+        EnumValue::DomNotation,
+        "Нотация",
+        "Notation",
+        "Нотация",
+    ),
+    (
+        EnumKind::DomNodeType,
+        EnumValue::DomEntity,
+        "Сущность",
+        "Entity",
+        "Сущность",
+    ),
+    (
+        EnumKind::DomNodeType,
+        EnumValue::DomEntityReference,
+        "СсылкаНаСущность",
+        "EntityReference",
+        "Ссылка на сущность",
+    ),
     // Печатаются идентификатором, без «человеческого» варианта — измерено.
     (
         EnumKind::TextEncoding,
@@ -661,6 +777,8 @@ pub const ENUM_NAMES: &[(&str, EnumKind)] = &[
     ("JSONDateWritingVariant", EnumKind::JsonDateWritingVariant),
     ("ТипУзлаXML", EnumKind::XmlNodeType),
     ("XMLNodeType", EnumKind::XmlNodeType),
+    ("ТипУзлаDOM", EnumKind::DomNodeType),
+    ("DOMNodeType", EnumKind::DomNodeType),
     ("КодировкаТекста", EnumKind::TextEncoding),
     ("TextEncoding", EnumKind::TextEncoding),
     ("ТипФайлаТабличногоДокумента", EnumKind::SpreadFileType),

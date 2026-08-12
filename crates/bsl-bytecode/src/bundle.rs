@@ -447,7 +447,8 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
         | Instr::NewTextDocument { dst }
         | Instr::NewSpreadDocument { dst }
         | Instr::NewXmlReader { dst }
-        | Instr::NewXmlWriter { dst } => {
+        | Instr::NewXmlWriter { dst }
+        | Instr::NewDomBuilder { dst } => {
             write!(dst);
         }
         Instr::NewTypeDescription { dst, names } => {

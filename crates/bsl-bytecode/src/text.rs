@@ -36,7 +36,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 6;
+pub const FORMAT_VERSION: u32 = 7;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -96,6 +96,7 @@ pub const OPCODES: &[&str] = &[
     "NewJsonSerializerSettings",
     "NewTextDocument",
     "NewSpreadDocument",
+    "NewDomBuilder",
     "NewXmlReader",
     "NewXmlWriter",
     "NewXmlWriterSettings",
@@ -305,8 +306,14 @@ fn short_value(v: &BslValue) -> String {
     match v {
         BslValue::Str(s) => {
             let s = s.to_string();
-            if s.chars().count() > 40 {
-                format!("{:.40}…", s)
+            // Обрезанное значение печатается ЧЕРЕЗ `{:?}`, как и целое:
+            // комментарий обязан уместиться в ОДНУ строку, а перевод строки
+            // внутри константы разрывал её и ломал обратный разбор
+            // листинга (`--run-bytecode`) — комментарии парсер отбрасывает
+            // построчно.
+            let shown: String = s.chars().take(40).collect();
+            if shown.chars().count() < s.chars().count() {
+                format!("{shown:?}…")
             } else {
                 format!("{s:?}")
             }
@@ -460,6 +467,7 @@ fn write_instr(instr: &Instr) -> String {
         }
         Instr::NewTextDocument { dst } => format!("NewTextDocument dst={dst}"),
         Instr::NewSpreadDocument { dst } => format!("NewSpreadDocument dst={dst}"),
+        Instr::NewDomBuilder { dst } => format!("NewDomBuilder dst={dst}"),
         Instr::NewXmlReader { dst } => format!("NewXmlReader dst={dst}"),
         Instr::NewXmlWriter { dst } => format!("NewXmlWriter dst={dst}"),
         Instr::NewXmlWriterSettings {
@@ -1245,6 +1253,7 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
         "NewJsonSerializerSettings" => Instr::NewJsonSerializerSettings { dst: dst(&f)? },
         "NewTextDocument" => Instr::NewTextDocument { dst: dst(&f)? },
         "NewSpreadDocument" => Instr::NewSpreadDocument { dst: dst(&f)? },
+        "NewDomBuilder" => Instr::NewDomBuilder { dst: dst(&f)? },
         "NewXmlReader" => Instr::NewXmlReader { dst: dst(&f)? },
         "NewXmlWriter" => Instr::NewXmlWriter { dst: dst(&f)? },
         "NewXmlWriterSettings" => Instr::NewXmlWriterSettings {
@@ -1392,6 +1401,12 @@ mod tests {
         // Встроенные функции и методы объектов.
         "х = Sqrt(2);\nс = Формат(1/3, \"ЧГ=0\");\n\
          т = Новый ТаблицаЗначений;\nт.Колонки.Добавить(\"ц\");\nт.Свернуть(\"ц\");\n",
+        // DOM: NewDomBuilder плюс разбор через `Прочитать` и один метод
+        // узла — печать имён у них общая с остальными CallMethod, но
+        // опкод конструктора свой.
+        "п = Новый ПостроительDOM;\nч = Новый ЧтениеXML;\nч.УстановитьСтроку(\"<а х=\"\"1\"\"/>\");\n\
+         д = п.Прочитать(ч);\nэ = д.ЭлементДокумента;\nн = э.ПолучитьАтрибут(\"х\");\n\
+         с = э.ПолучитьЭлементыПоИмени(\"*\");\nб = э.ЕстьАтрибуты();\n",
         // Динамическое исполнение — обе формы.
         "х = 1;\nВыполнить(\"х = 2\");\nу = Вычислить(\"х + 1\");\n",
         // Переменные уровня модуля: чтение и запись из процедуры.

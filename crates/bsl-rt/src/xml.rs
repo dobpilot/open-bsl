@@ -33,6 +33,7 @@
 //!   ошибка.
 
 use std::path::PathBuf;
+use std::rc::Rc;
 
 use crate::string::BslString;
 use crate::{BslValue, RtError, RtResult};
@@ -46,6 +47,12 @@ fn bad(what: impl Into<String>) -> RtError {
 /// Имя текстового узла. Не наша выдумка: `Ч.Имя` на тексте отдаёт именно
 /// это (измерено).
 pub const TEXT_NODE_NAME: &str = "#text";
+
+/// Имя узла-комментария в дереве DOM (`ИмяУзла` — измерено).
+pub const COMMENT_NODE_NAME: &str = "#comment";
+
+/// Имя узла документа в дереве DOM (`ДокументDOM.ИмяУзла` — измерено).
+pub const DOCUMENT_NODE_NAME: &str = "#document";
 
 /// Атрибут начального тега.
 #[derive(Debug, Clone, PartialEq)]
@@ -63,7 +70,11 @@ pub enum XmlEvent {
     ElementStart {
         name: String,
         uri: String,
-        attrs: Vec<XmlAttr>,
+        /// Атрибуты РАЗДЕЛЯЮТСЯ с записью в стеке открытых элементов
+        /// (`OpenElement::attrs`): построителю DOM они нужны там, а
+        /// копировать их на каждый начальный тег — измеримая плата на
+        /// разборе (`xml_parse` теряет около двух процентов).
+        attrs: Rc<Vec<XmlAttr>>,
     },
     ElementEnd {
         name: String,
@@ -74,15 +85,26 @@ pub enum XmlEvent {
         target: String,
         data: String,
     },
+    /// Комментарий. Отдаётся ТОЛЬКО при включённом
+    /// [`XmlParser::set_report_comments`], то есть построителю DOM: сам
+    /// `ЧтениеXML` комментарии не показывает (измерено), а в дереве DOM
+    /// они узлы — тоже измерено.
+    Comment(String),
 }
 
 // --- Разбор -------------------------------------------------------------
 
 /// Открытый элемент и объявленные ИМЕННО НА НЁМ префиксы.
 #[derive(Debug)]
-struct OpenElement {
-    name: String,
-    uri: String,
+pub struct OpenElement {
+    pub name: String,
+    pub uri: String,
+    /// Атрибуты начального тега — тот же `Rc`, что унесло событие.
+    /// Разборщику они не нужны, но нужны построителю DOM: он вправе
+    /// начать с середины документа, и тогда предки восстанавливаются из
+    /// этого стека ВМЕСТЕ со своими атрибутами (измерено на 8.3.27, см.
+    /// `dom.rs`).
+    pub attrs: Rc<Vec<XmlAttr>>,
     /// `(префикс, URI)`; пустой префикс — объявление по умолчанию.
     ns: Vec<(String, String)>,
 }
@@ -96,6 +118,14 @@ pub struct XmlParser {
     root_done: bool,
     /// `<а/>`: начало отдано, конец ждёт следующего вызова.
     pending_end: Option<(String, String)>,
+    /// Отдавать ли комментарии отдельным событием. По умолчанию нет —
+    /// таково поведение `ЧтениеXML` (измерено); включает его только
+    /// построитель DOM.
+    report_comments: bool,
+    /// Версия из объявления `<?xml version="..."?>`, если оно было.
+    /// Нужна `ДокументDOM.ВерсияXML`: измерено, что документ, объявленный
+    /// версией `1.1`, отдаёт именно `1.1`, а без объявления — `1.0`.
+    xml_version: Option<String>,
 }
 
 impl XmlParser {
@@ -106,7 +136,33 @@ impl XmlParser {
             open: Vec::new(),
             root_done: false,
             pending_end: None,
+            report_comments: false,
+            xml_version: None,
         }
+    }
+
+    /// Версия из объявления XML — `None`, если объявления не было.
+    pub fn xml_version(&self) -> Option<&str> {
+        self.xml_version.as_deref()
+    }
+
+    /// Включить или выключить события [`XmlEvent::Comment`].
+    pub fn set_report_comments(&mut self, on: bool) {
+        self.report_comments = on;
+    }
+
+    /// Ещё не закрытые элементы, от корня к текущему. Построитель DOM
+    /// достраивает по ним цепочку предков, когда читатель отдан ему уже
+    /// внутри документа.
+    pub fn open_elements(&self) -> &[OpenElement] {
+        &self.open
+    }
+
+    /// URI префикса в области видимости ТЕКУЩЕГО стека открытых элементов.
+    /// Нужен построителю DOM: у атрибутов пространство имён разрешается по
+    /// тем же объявлениям, что и у элемента, но само событие их не несёт.
+    pub fn namespace_of(&self, prefix: &str) -> String {
+        self.resolve_prefix(prefix)
     }
 
     fn peek(&self) -> Option<char> {
@@ -342,7 +398,10 @@ impl XmlParser {
             // обработки.
             if self.starts_with("<?xml") {
                 self.pos += 2;
-                self.skip_until("?>")?;
+                let decl = self.skip_until("?>")?;
+                if self.xml_version.is_none() {
+                    self.xml_version = declared_version(&decl);
+                }
                 continue;
             }
             if self.starts_with("<?") {
@@ -357,10 +416,14 @@ impl XmlParser {
             }
             // Комментарий не отдаётся, но текст вокруг себя РАЗРЫВАЕТ:
             // выход из `read_text_run` уже произошёл, а новый прогон
-            // начнётся после `-->` (измерено).
+            // начнётся после `-->` (измерено). Построителю DOM он всё же
+            // нужен узлом — тогда включён `report_comments`.
             if self.starts_with("<!--") {
                 self.pos += 4;
-                self.skip_until("-->")?;
+                let text = self.skip_until("-->")?;
+                if self.report_comments {
+                    return Ok(Some(XmlEvent::Comment(text)));
+                }
                 continue;
             }
             // Объявление типа документа узлом не отдаётся — измерено на
@@ -419,9 +482,11 @@ impl XmlParser {
                 _ => return Err(bad(format!("тег «{name}» не закрыт"))),
             };
             let ns = Self::split_namespaces(&attrs);
+            let attrs = Rc::new(attrs);
             self.open.push(OpenElement {
                 name: name.clone(),
                 uri: String::new(),
+                attrs: Rc::clone(&attrs),
                 ns,
             });
             // Префикс резолвится ПОСЛЕ помещения в стек: элемент вправе
@@ -443,6 +508,22 @@ impl XmlParser {
     pub fn depth(&self) -> usize {
         self.open.len()
     }
+}
+
+/// Значение псевдоатрибута `version` из текста объявления XML.
+///
+/// Разбирается отдельной функцией, а не общим `read_attributes`: объявление
+/// — не элемент, и его псевдоатрибуты платформа не проверяет вовсе
+/// (измерено: `version="1.1"` она принимает и отдаёт как есть).
+fn declared_version(decl: &str) -> Option<String> {
+    let rest = decl.split_once("version")?.1;
+    let rest = rest.trim_start().strip_prefix('=')?.trim_start();
+    let quote = rest.chars().next()?;
+    if quote != '"' && quote != '\'' {
+        return None;
+    }
+    let value = rest[quote.len_utf8()..].split(quote).next()?;
+    Some(value.to_string())
 }
 
 /// Часть имени до двоеточия; без двоеточия префикса нет.
@@ -1009,6 +1090,10 @@ pub fn node_type(obj: &BslValue) -> RtResult<BslValue> {
         Some(XmlEvent::ElementEnd { .. }) => EnumValue::XmlElementEnd,
         Some(XmlEvent::Text(_)) => EnumValue::XmlText,
         Some(XmlEvent::ProcessingInstruction { .. }) => EnumValue::XmlProcessingInstruction,
+        // Недостижимо: комментарии разборщик отдаёт только построителю
+        // DOM, а тот не оставляет их в состоянии читателя. Ветка написана
+        // явно, чтобы `match` оставался исчерпывающим.
+        Some(XmlEvent::Comment(_)) => EnumValue::XmlComment,
     };
     Ok(BslValue::Enum(v))
 }
@@ -1031,6 +1116,8 @@ pub fn name(obj: &BslValue) -> RtResult<BslValue> {
         }
         Some(XmlEvent::Text(_)) => TEXT_NODE_NAME.to_string(),
         Some(XmlEvent::ProcessingInstruction { target, .. }) => target.clone(),
+        // Недостижимо — см. `node_type`.
+        Some(XmlEvent::Comment(_)) => COMMENT_NODE_NAME.to_string(),
     };
     Ok(BslValue::Str(BslString::from_str(&s)))
 }
@@ -1331,7 +1418,7 @@ mod tests {
         XmlEvent::ElementStart {
             name: name.into(),
             uri: String::new(),
-            attrs: Vec::new(),
+            attrs: Rc::new(Vec::new()),
         }
     }
 

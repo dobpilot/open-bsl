@@ -650,6 +650,9 @@ impl<'a> Compiler<'a> {
             RExpr::NewTextDocument => {
                 self.emit(Instr::NewTextDocument { dst });
             }
+            RExpr::NewDomBuilder => {
+                self.emit(Instr::NewDomBuilder { dst });
+            }
             RExpr::NewXmlReader => {
                 self.emit(Instr::NewXmlReader { dst });
             }
