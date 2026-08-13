@@ -50,6 +50,13 @@ NUM.POW.TEN_TO_30	1000000000000000000000000000000
 NUM.ROUND.DEFAULT_MODE	3 4 -3
 NUM.ROUND.MODE_CODES	2 3 3 4
 NUM.STRLEN_OF_THIRD	29
+REGEX.ANCHOR.EOL	хвост=Да|пустая=Нет
+REGEX.CLASS.SPACE	вертикальная=Да|нел=Да
+REGEX.CLASS.WORD	ударение=Да|надстрочная=Нет
+REGEX.FLAG.SCOPE	доФлага=Нет|изГруппы=Нет
+REGEX.FOLD.SIMPLE	ё=Да|эсцет=Нет
+REGEX.LINE.TERMINATORS	вертикальная=Нет|нел=Нет
+REGEX.REPEAT.EMPTY	всёСовпадение=[ббв]|двеБуквы=[бб]|однаБуква=[б]
 SCOPE.MODULE_VARS	изменено процедурой|изменено процедурой
 SCOPE.MODULE_VARS_IN_EXEC	изменено фрагментом
 SCOPE.MODULE_VAR_SHADOW	локальная|изменено фрагментом
