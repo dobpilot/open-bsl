@@ -1664,11 +1664,7 @@ fn component_property(schema: &Rc<XsSchemaData>, index: usize, name: &str) -> Rt
                 return Ok(opt_enum(d.constraint));
             }
             if is("Значение", "Value") {
-                let type_name = match &schema.node(d.declaration).data {
-                    XsData::Attribute(decl) => decl.type_name.clone(),
-                    _ => None,
-                };
-                return Ok(typed_value(&d.lexical, type_name.as_ref(), d.constraint));
+                return Ok(typed_value(&d.lexical, d.constraint));
             }
             Err(unknown())
         }
@@ -1818,7 +1814,7 @@ fn declaration_property(
         return Ok(opt_enum(d.constraint));
     }
     if is("Значение", "Value") {
-        return Ok(typed_value(&d.lexical, d.type_name.as_ref(), d.constraint));
+        return Ok(typed_value(&d.lexical, d.constraint));
     }
     if is("ЭтоГлобальноеОбъявление", "IsGlobalDeclaration") {
         return Ok(BslValue::Boolean(d.global));
@@ -1933,46 +1929,78 @@ fn complex_type_property(
     Err(unknown())
 }
 
-/// Типизированное `Значение` объявления: платформа приводит
-/// `default`/`fixed` к типу, объявленному в `type`.
+/// `Значение` объявления: платформа угадывает тип по САМОЙ записи
+/// `default`/`fixed`, а объявленный `type` при этом не смотрит вовсе.
 ///
-/// Измерены три приведения — `xs:string` -> `Строка`, `xs:int` -> `Число`,
-/// `xs:boolean` -> `Булево`. `НЕ ИЗМЕРЕНО(XSD.TYPED_VALUE)`: во что
-/// превращаются значения остальных встроенных типов (дата, десятичное,
-/// `base64Binary`) и типов самой схемы; здесь всё прочее остаётся строкой,
-/// то есть текстом, как записано.
-fn typed_value(
-    lexical: &str,
-    type_name: Option<&XName>,
-    constraint: Option<EnumValue>,
-) -> BslValue {
+/// Измерено на 8.3.27 одной пробой из 28 объявлений (строка
+/// `XSD.TYPED_VALUE` в `tests/conformance/measure/platform.tsv`). Порядок
+/// ровно такой:
+///
+/// 1. `true`/`false` без учёта регистра и `1`/`0` целиком дают `Булево`, и
+///    объявленный тип тут ни при чём: `xs:string` со значением `1` — это
+///    `Булево` (`Да`), а `xs:int` со значением `0` — `Булево` (`Нет`);
+/// 2. иначе берётся наибольший ЧИСЛОВОЙ ПРЕФИКС записи, и если в нём есть
+///    хоть одна цифра — выходит `Число`: `xs:date` с `2021-07-05` даёт
+///    `2021`, `xs:time` с `08:30:00` — `8`, `xs:double` с `1.5e3` — `1,5`
+///    (показатель степени не разбирается), `xs:hexBinary` с `0A0B` — `0`,
+///    `xs:string` с `1,5` — `1` (запятая разделителем не считается);
+/// 3. всё остальное остаётся строкой, как записано: `AQI=` при
+///    `xs:base64Binary`, `urn:x` при `xs:anyURI`.
+///
+/// Из-за этого `type_name` здесь и не нужен — параметра у функции нет.
+fn typed_value(lexical: &str, constraint: Option<EnumValue>) -> BslValue {
     if constraint.is_none() {
         // Значения нет вовсе: `ЛексическоеЗначение` пусто, а `Значение` —
         // `Неопределено` (измерено на объявлении без `default`/`fixed`).
         return BslValue::Undefined;
     }
-    let Some(name) = type_name else {
-        return str_value(lexical);
-    };
-    if name.uri != XSD_NS {
-        return str_value(lexical);
+    // Пробелы по краям платформа игнорирует: `xs:string` со значением
+    // « 7 » (пробелы сохраняет сама схема) отдан числом `7`.
+    let text = lexical.trim();
+    if text.eq_ignore_ascii_case("true") || text == "1" {
+        return BslValue::Boolean(true);
     }
-    match name.local.as_str() {
-        "boolean" => match lexical {
-            "true" | "1" => BslValue::Boolean(true),
-            "false" | "0" => BslValue::Boolean(false),
-            _ => str_value(lexical),
+    if text.eq_ignore_ascii_case("false") || text == "0" {
+        return BslValue::Boolean(false);
+    }
+    match numeric_prefix(text) {
+        Some(prefix) => match bsl_number::BslNumber::parse_canonical(prefix) {
+            Ok(n) => BslValue::Number(n),
+            // Префикс состоит из знака, цифр и не более чем одной точки,
+            // поэтому разбор отказывает только на переполнении разрядности;
+            // такое значение остаётся текстом, как записано.
+            Err(_) => str_value(lexical),
         },
-        "int" | "integer" | "long" | "short" | "byte" | "decimal" | "float" | "double"
-        | "nonNegativeInteger" | "positiveInteger" | "nonPositiveInteger" | "negativeInteger"
-        | "unsignedInt" | "unsignedLong" | "unsignedShort" | "unsignedByte" => {
-            match bsl_number::BslNumber::parse_canonical(lexical) {
-                Ok(n) => BslValue::Number(n),
-                Err(_) => str_value(lexical),
-            }
-        }
-        _ => str_value(lexical),
+        None => str_value(lexical),
     }
+}
+
+/// Наибольший числовой префикс записи: знак, цифры и не более одной точки.
+///
+/// `None`, когда цифр в префиксе нет вовсе, — тогда значение остаётся
+/// строкой. Измеренные границы: `+3` -> `3`, `.5` -> `0,5`, `1.2.3` -> `1,2`
+/// (вторая точка обрывает префикс), `1,5` -> `1` (запятая обрывает),
+/// `2021-07-05` -> `2021`, `1.5e3` -> `1,5`.
+fn numeric_prefix(text: &str) -> Option<&str> {
+    let bytes = text.as_bytes();
+    let mut end = 0;
+    if matches!(bytes.first(), Some(b'+' | b'-')) {
+        end = 1;
+    }
+    let mut digits = 0;
+    let mut dot = false;
+    while end < bytes.len() {
+        match bytes[end] {
+            b'0'..=b'9' => digits += 1,
+            b'.' if !dot => dot = true,
+            _ => break,
+        }
+        end += 1;
+    }
+    if digits == 0 {
+        return None;
+    }
+    Some(&text[..end])
 }
 
 /// `Значение` фасета: у строковых фасетов это сама строка, у `whiteSpace` —
@@ -2608,16 +2636,32 @@ mod tests {
         assert_eq!(bounds(8), (num(0), BslValue::Undefined));
     }
 
-    /// `Значение` типизировано объявленным типом: `xs:int` даёт число,
-    /// `xs:boolean` — булево (измерено), остальное остаётся строкой
-    /// (`НЕ ИЗМЕРЕНО(XSD.TYPED_VALUE)`).
+    /// `Значение` угадывается по САМОЙ записи, а не по объявленному типу:
+    /// булев литерал даёт `Булево` даже под `xs:string`, числовой префикс —
+    /// `Число` даже под `xs:date`, а запись без цифр остаётся строкой.
+    /// Все проверяемые здесь пары измерены строкой `XSD.TYPED_VALUE`.
     #[test]
-    fn typed_value_follows_the_declared_type() {
+    fn typed_value_is_read_from_the_lexical_form_not_the_declared_type() {
         let s = schema(concat!(
             r#"<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">"#,
             r#"<xs:element name="ч" type="xs:int" default="5"/>"#,
             r#"<xs:element name="л" type="xs:boolean" default="true"/>"#,
             r#"<xs:element name="д" type="xs:date" default="2026-08-12"/>"#,
+            r#"<xs:element name="вр" type="xs:time" default="08:30:00"/>"#,
+            r#"<xs:element name="эксп" type="xs:double" default="1.5e3"/>"#,
+            r#"<xs:element name="шест" type="xs:hexBinary" default="0A0B"/>"#,
+            r#"<xs:element name="дво" type="xs:base64Binary" default="AQI="/>"#,
+            r#"<xs:element name="урл" type="xs:anyURI" default="urn:x"/>"#,
+            r#"<xs:element name="стрч" type="xs:string" default="7"/>"#,
+            r#"<xs:element name="стрл" type="xs:string" default="True"/>"#,
+            r#"<xs:element name="ноль" type="xs:int" default="0"/>"#,
+            r#"<xs:element name="един" type="xs:string" default="1"/>"#,
+            r#"<xs:element name="плюс" type="xs:int" default="+3"/>"#,
+            r#"<xs:element name="точка" type="xs:decimal" default=".5"/>"#,
+            r#"<xs:element name="дветочки" type="xs:string" default="1.2.3"/>"#,
+            r#"<xs:element name="пробелы" type="xs:string" default=" 7 "/>"#,
+            r#"<xs:element name="запятая" type="xs:string" default="1,5"/>"#,
+            r#"<xs:element name="без" type="xs:int"/>"#,
             r#"</xs:schema>"#,
         ));
         let elements = prop(&s, "ОбъявленияЭлементов");
@@ -2625,12 +2669,30 @@ mod tests {
             let d = list_lookup(&elements, &[BslValue::Str(BslString::from_str(name))]).unwrap();
             prop(&d, "Значение")
         };
-        assert_eq!(
-            get("ч"),
-            BslValue::Number(bsl_number::BslNumber::from_i64(5))
-        );
+        let num = |s: &str| BslValue::Number(bsl_number::BslNumber::parse_canonical(s).unwrap());
+        assert_eq!(get("ч"), num("5"));
         assert_eq!(get("л"), BslValue::Boolean(true));
-        assert_eq!(text_of(&get("д")), "2026-08-12");
+        // Дата, время и показатель степени числами не остаются целиком:
+        // берётся числовой префикс записи.
+        assert_eq!(get("д"), num("2026"));
+        assert_eq!(get("вр"), num("8"));
+        assert_eq!(get("эксп"), num("1.5"));
+        assert_eq!(get("шест"), num("0"));
+        // Записи без цифр в префиксе остаются строками.
+        assert_eq!(text_of(&get("дво")), "AQI=");
+        assert_eq!(text_of(&get("урл")), "urn:x");
+        // Объявленный тип не участвует ни в одну сторону.
+        assert_eq!(get("стрч"), num("7"));
+        assert_eq!(get("стрл"), BslValue::Boolean(true));
+        assert_eq!(get("ноль"), BslValue::Boolean(false));
+        assert_eq!(get("един"), BslValue::Boolean(true));
+        assert_eq!(get("плюс"), num("3"));
+        assert_eq!(get("точка"), num("0.5"));
+        assert_eq!(get("дветочки"), num("1.2"));
+        assert_eq!(get("пробелы"), num("7"));
+        assert_eq!(get("запятая"), num("1"));
+        // Без `default`/`fixed` значения нет вовсе.
+        assert_eq!(get("без"), BslValue::Undefined);
     }
 
     #[test]

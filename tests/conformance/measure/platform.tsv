@@ -71,4 +71,4 @@ TYPE.IS_FILLED.BOOLEAN	Да|Да
 TYPE.IS_FILLED.EMPTY_COLLECTION	Нет|Нет
 XDTO.MAX_DEPTH	Ок
 XDTO.VALUE.FILLED	Ошибка признака
-XSD.TYPED_VALUE	Число:1,5
+XSD.TYPED_VALUE	decimal=Число:1,5|long=Число:1 234 567 890 123|positiveInteger=Число:42|unsignedInt=Число:4 294 967 295|double=Число:1,5|float=Число:0,25|date=Число:2 021|dateTime=Число:2 021|time=Число:8|base64Binary=Строка:AQI=|hexBinary=Число:0|anyURI=Строка:urn:x|string=Число:7|boolean=Булево:Да|свой=Число:5|stringTrue=Булево:Да|stringOne=Булево:Да|booleanOne=Булево:Да|stringFalse=Булево:Нет|intZero=Булево:Нет|intNegative=Число:-3|booleanFalse=Булево:Нет|intPlus=Число:3|dotFive=Число:0,5|twoDots=Число:1,2|spaced=Число:7|trueUpper=Булево:Да|comma=Число:1

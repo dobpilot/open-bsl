@@ -69,7 +69,7 @@ Line format (order top-to-bottom by priority):
       типов и экземпляров (имя измерить), проверка фасетов при чтении и
       записи; фасет `pattern` без движка регулярных выражений — честная
       ошибка «не поддерживается», не молчаливый пропуск.
-- [ ] (xdto-measure) сводный tests/conformance/measure/measure-xdto.bsl
+- [x] (xdto-measure) сводный tests/conformance/measure/measure-xdto.bsl
       по всем открытым `DOM.*`/`XSD.*`/`XDTO.*`/`XPATH.*` вопросам — по
       пяти правилам из AGENTS.md; закрытие замерами, перенос анкеров в
       `MEASURED_ANCHORS`.
