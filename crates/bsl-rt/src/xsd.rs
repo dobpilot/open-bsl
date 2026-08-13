@@ -1279,7 +1279,14 @@ impl Parser {
                         }
                     }
                 }
-                "group" | "attributeGroup" | "anyAttribute" => {
+                // НЕ ИЗМЕРЕНО(XSD.WILDCARD.COMPONENT): как платформа
+                // представляет маску `xs:anyAttribute` в компонентах типа.
+                // Здесь маска пропускается: открытого содержимого в этой
+                // реализации нет (см. шапку `xdto.rs`), запись объектов
+                // масок не порождает, а чтение постороннего атрибута
+                // остаётся ошибкой, как и раньше.
+                "anyAttribute" => {}
+                "group" | "attributeGroup" => {
                     return Err(unsupported(child.xs_local_name()));
                 }
                 _ => {}
@@ -1390,7 +1397,12 @@ impl Parser {
                         particles.push(inner);
                     }
                 }
-                "group" | "any" => return Err(unsupported(child.xs_local_name())),
+                // НЕ ИЗМЕРЕНО(XSD.WILDCARD.COMPONENT): `xs:any` пропускается
+                // так же, как `xs:anyAttribute` в теле типа — маска не
+                // попадает ни в дерево компонент, ни в модель содержимого,
+                // открытое содержимое остаётся нереализованным.
+                "any" => {}
+                "group" => return Err(unsupported(child.xs_local_name())),
                 _ => {}
             }
         }
@@ -1505,7 +1517,15 @@ fn build_schema(root: &Rc<DomNode>, doc: &Rc<DomNode>) -> RtResult<BslValue> {
                     types.push(i);
                 }
             }
-            "import" | "include" | "redefine" | "group" | "attributeGroup" | "notation" => {
+            // НЕ ИЗМЕРЕНО(XSD.IMPORT.COMPONENT): как платформа представляет
+            // `xs:import` в компонентах схемы и загружает ли она
+            // `schemaLocation` сама. Здесь директива пропускается: имена
+            // чужого пространства имён разрешаются через общий
+            // `НаборСхемXML`, а узла в дереве компонент не остаётся —
+            // схема без пары в наборе честно упадёт неразрешённым именем
+            // при построении фабрики.
+            "import" => {}
+            "include" | "redefine" | "group" | "attributeGroup" | "notation" => {
                 return Err(unsupported(child.xs_local_name()));
             }
             // Незнакомый элемент в пространстве имён схемы платформа
@@ -3024,6 +3044,37 @@ mod tests {
     /// Конструкции за границей модели — честная ошибка с именем
     /// конструкции, а не молчаливый пропуск.
     #[test]
+    fn skipped_constructs_load_without_component_nodes() {
+        // `xs:import` и маски `xs:any`/`xs:anyAttribute` пропускаются без
+        // узла в дереве — сознательное расхождение с платформой, у которой
+        // они остаются компонентами (`XSD.IMPORT.COMPONENT`,
+        // `XSD.WILDCARD.COMPONENT`: «компонент 2» там против «компонент 1»
+        // здесь). Схема при этом обязана загружаться: на этом стоит разбор
+        // EnterpriseData_1_0_1.xsd в `benchmarks/edata_writer.bsl`.
+        let cases = [
+            r#"<xs:import namespace="urn:ч"/><xs:element name="э" type="xs:string"/>"#,
+            r#"<xs:complexType name="т"><xs:sequence><xs:element name="э" type="xs:string"/><xs:any/></xs:sequence></xs:complexType>"#,
+            r#"<xs:complexType name="т"><xs:sequence><xs:element name="э" type="xs:string"/></xs:sequence><xs:anyAttribute/></xs:complexType>"#,
+        ];
+        for body in cases {
+            let text = format!(
+                r#"<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="urn:t">{body}</xs:schema>"#
+            );
+            let schema = schema_of(&text).unwrap_or_else(|e| {
+                panic!("схема с пропускаемой конструкцией не загрузилась: {e}")
+            });
+            // Пропущенная конструкция не оставляет узла: единственная
+            // компонента схемы — объявление элемента либо составной тип.
+            let components = prop(&schema, "Компоненты");
+            assert_eq!(
+                count(&components),
+                1,
+                "лишний узел от пропущенной конструкции"
+            );
+        }
+    }
+
+    #[test]
     fn constructs_outside_the_model_are_named_errors() {
         let cases = [
             (
@@ -3031,18 +3082,9 @@ mod tests {
                 "xs:group",
             ),
             (r#"<xs:attributeGroup name="г"/>"#, "xs:attributeGroup"),
-            (r#"<xs:import namespace="urn:ч"/>"#, "xs:import"),
             (r#"<xs:include schemaLocation="а.xsd"/>"#, "xs:include"),
             (r#"<xs:redefine schemaLocation="а.xsd"/>"#, "xs:redefine"),
             (r#"<xs:notation name="н" public="п"/>"#, "xs:notation"),
-            (
-                r#"<xs:complexType name="т"><xs:sequence><xs:any/></xs:sequence></xs:complexType>"#,
-                "xs:any",
-            ),
-            (
-                r#"<xs:complexType name="т"><xs:anyAttribute/></xs:complexType>"#,
-                "xs:anyAttribute",
-            ),
             (
                 r#"<xs:complexType name="т"><xs:sequence><xs:group ref="t:г"/></xs:sequence></xs:complexType>"#,
                 "xs:group",

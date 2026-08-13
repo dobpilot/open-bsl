@@ -634,9 +634,21 @@ impl XmlWriter {
     }
 
     /// Перевод строки и отступ по глубине. Один таб на уровень — измерено.
+    ///
+    /// Файловый приёмник платформы разделяет строки CRLF, строковый — LF;
+    /// оба измерены: строковый — построчными фикстурами `xdto-xml-io`,
+    /// файловый — побайтным сличением выгрузки `benchmarks/edata_writer.bsl`
+    /// с платформенной (размер сошёлся ровно на сигнатуре UTF-8 и по байту
+    /// CR на каждый из 111 007 переводов). Перевод строки внутри ТЕКСТА
+    /// узла при этом не преобразуется — записанный `Символ(10)` остаётся
+    /// одиночным LF; платформа поступает так же (якорь
+    /// `XML.FILE_NEWLINE_IN_TEXT`: CR 2, LF 3).
     fn newline(&mut self, depth: usize) {
         if !self.settings.indent {
             return;
+        }
+        if self.path.is_some() {
+            self.out.push('\r');
         }
         self.out.push('\n');
         for _ in 0..depth {
@@ -1432,7 +1444,12 @@ pub fn close_writer(obj: &BslValue) -> RtResult<BslValue> {
     };
     let text = w.finish();
     if let Some(path) = w.take_path() {
-        std::fs::write(&path, text.as_bytes()).map_err(|e| RtError::IoError(e.to_string()))?;
+        // Файл платформа начинает сигнатурой UTF-8 — измерено побайтным
+        // сличением выгрузки `edata_writer` (первые три байта EF BB BF).
+        let mut bytes = Vec::with_capacity(3 + text.len());
+        bytes.extend_from_slice(b"\xef\xbb\xbf");
+        bytes.extend_from_slice(text.as_bytes());
+        std::fs::write(&path, bytes).map_err(|e| RtError::IoError(e.to_string()))?;
         *slot = None;
         return Ok(BslValue::Str(BslString::from_str("")));
     }
@@ -1613,6 +1630,23 @@ mod tests {
             w.write_end_element().unwrap();
         });
         assert_eq!(deep, "<а>\n\t<б>\n\t\t<в/>\n\t</б>\n</а>");
+    }
+
+    #[test]
+    fn file_target_uses_crlf_for_structure_but_not_inside_text() {
+        // Файловый приёмник разделяет строки CRLF (измерено выгрузкой
+        // `edata_writer`), а перевод внутри текста узла не преобразует —
+        // как и платформа (якорь `XML.FILE_NEWLINE_IN_TEXT`).
+        let mut w = XmlWriter::to_file(
+            PathBuf::from("/nonexistent/unused.xml"),
+            XmlWriterSettings::default(),
+        );
+        w.write_start_element("а").unwrap();
+        w.write_start_element("б").unwrap();
+        w.write_text("т\nт").unwrap();
+        w.write_end_element().unwrap();
+        w.write_end_element().unwrap();
+        assert_eq!(w.finish(), "<а>\r\n\t<б>т\nт</б>\r\n</а>");
     }
 
     #[test]
