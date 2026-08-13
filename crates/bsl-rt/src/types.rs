@@ -119,6 +119,21 @@ pub enum TypeId {
     /// Тип ЧЛЕНА перечисления `ТипРезультатаDOMXPath` — как `DomNodeType`.
     DomXPathResultType,
 
+    // --- Регулярные выражения --------------------------------------------
+    // Представления ИЗМЕРЕНЫ: `Тип("РезультатПоискаПоРегулярномуВыражению")`
+    // печатается «Результат поиска по регулярному выражению», а
+    // `Тип("ГруппаРезультатаПоискаПоРегулярномуВыражению")` — «Группа
+    // результата поиска по регулярному выражению». Английские написания
+    // `ResultOfSearchByRegularExpression` и
+    // `ResultOfSearchByRegularExpressionGroup` находят те же типы. Второго
+    // русского написания (`IDENTIFIERS`) им не нужно: от представления имя
+    // отличается только пробелами и регистром, а поиск не считает значимым
+    // ни то, ни другое.
+    RegexMatch,
+    RegexMatchGroup,
+    /// Тип ЧЛЕНА перечисления `НаправлениеПоиска` — как `DomNodeType`.
+    SearchDirection,
+
     // --- Объектная модель XML-схемы ------------------------------------
     // Написания сняты пробами (`measure-xsd.bsl`) и в двух местах не такие,
     // как подсказала бы аналогия: русского имени `ОпределениеКомплексного\
@@ -355,6 +370,21 @@ const NAMES: &[(TypeId, &str, &str)] = &[
         "DOMElementList",
     ),
     (TypeId::DomNodeType, "ТипУзлаDOM", "DOMNodeType"),
+    (
+        TypeId::RegexMatch,
+        "Результат поиска по регулярному выражению",
+        "ResultOfSearchByRegularExpression",
+    ),
+    (
+        TypeId::RegexMatchGroup,
+        "Группа результата поиска по регулярному выражению",
+        "ResultOfSearchByRegularExpressionGroup",
+    ),
+    (
+        TypeId::SearchDirection,
+        "НаправлениеПоиска",
+        "SearchDirection",
+    ),
     (TypeId::XPathResult, "Результат DOM XPath", "XPathResult"),
     (
         TypeId::XPathExpression,

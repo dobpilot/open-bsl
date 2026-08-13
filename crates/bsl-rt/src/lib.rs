@@ -21,12 +21,8 @@ mod locale;
 mod map;
 mod object;
 pub mod open_questions;
-// Движок регулярных выражений пока никем не вызывается: поверхность BSL
-// (`СтрНайтиПоРегулярномуВыражению` и соседи) приходит следующей задачей, а
-// разбор шаблонов и матчинг уже покрыты юнит-тестами внутри модуля. Снять
-// разрешение — там же, где появится первый вызов.
-#[allow(dead_code)]
 mod regex;
+mod regex_api;
 mod runtime_shapes;
 mod shape;
 mod spreadsheet;
@@ -371,6 +367,7 @@ fn enum_kind_type_id(kind: EnumKind) -> TypeId {
         EnumKind::XmlForm => TypeId::XmlForm,
         EnumKind::XdtoFacetKind => TypeId::XdtoFacetKind,
         EnumKind::DomXPathResultType => TypeId::DomXPathResultType,
+        EnumKind::SearchDirection => TypeId::SearchDirection,
     }
 }
 
@@ -450,6 +447,8 @@ impl BslValue {
                 BslObject::XPathResolver(_) => "РазыменовательПространствИменDOM",
                 BslObject::XPathExpression(_) => "ВыражениеXPath",
                 BslObject::XPathResult(_) => "РезультатXPath",
+                BslObject::RegexMatch(_) => "РезультатПоискаПоРегулярномуВыражению",
+                BslObject::RegexGroup(..) => "ГруппаРезультатаПоискаПоРегулярномуВыражению",
                 BslObject::DomList(kind, _) => match kind {
                     crate::dom::DomListKind::Nodes(_) => "СписокУзловDOM",
                     crate::dom::DomListKind::Attributes(_) => "КоллекцияАтрибутовDOM",
@@ -1295,6 +1294,13 @@ impl BslValue {
                 | BslObject::XPathResolver(_)
                 | BslObject::XPathExpression(_)
                 | BslObject::XPathResult(_)
+                // Результат поиска по регулярному выражению и его группа —
+                // туда же, и это ИЗМЕРЕНО отдельно, а не выведено по
+                // соседству: `ЗначениеЗаполнено` от результата отвечает
+                // «Проверка мутабельных значений на заполненность не
+                // поддерживается».
+                | BslObject::RegexMatch(_)
+                | BslObject::RegexGroup(..)
                 // Модель схемы устроена так же: коллекции судятся по длине
                 // (выше), а компонента, построитель, набор схем и
                 // расширенное имя заполненности не имеют.
@@ -1413,6 +1419,8 @@ impl BslValue {
                 BslObject::XPathResolver(_) => TypeId::DomNamespaceResolver,
                 BslObject::XPathExpression(_) => TypeId::XPathExpression,
                 BslObject::XPathResult(_) => TypeId::XPathResult,
+                BslObject::RegexMatch(_) => TypeId::RegexMatch,
+                BslObject::RegexGroup(..) => TypeId::RegexMatchGroup,
                 BslObject::DomList(kind, _) => match kind {
                     crate::dom::DomListKind::Nodes(_) => TypeId::DomNodeList,
                     crate::dom::DomListKind::Attributes(_) => TypeId::DomAttributeMap,
@@ -2299,7 +2307,12 @@ impl BslValue {
                 // — тем более.
                 BslObject::XPathResolver(_)
                 | BslObject::XPathExpression(_)
-                | BslObject::XPathResult(_) => Err(RtError::NotIndexable),
+                | BslObject::XPathResult(_)
+                // Результат поиска по регулярному выражению коллекцией
+                // тоже не считается: группы отдаёт `ПолучитьГруппы()`, а
+                // считает их уже полученный МАССИВ.
+                | BslObject::RegexMatch(_)
+                | BslObject::RegexGroup(..) => Err(RtError::NotIndexable),
                 // Коллекции модели схемы — настоящие коллекции: и
                 // `Количество()`, и `Для Каждого` по ним измерены; набор
                 // схем тоже обходится (`Для Каждого С Из Наб`).
@@ -2808,6 +2821,9 @@ impl BslValue {
                 BslObject::TextDocParams(_) => textdoc::get_parameter(self, name),
                 BslObject::DomNode(..) => dom::get_property(self, name),
                 BslObject::XPathResult(_) => xpath::get_property(self, name),
+                BslObject::RegexMatch(_) | BslObject::RegexGroup(..) => {
+                    regex_api::get_property(self, name)
+                }
                 BslObject::XsComponent(..) | BslObject::XmlExpandedName(_) => {
                     xsd::get_property(self, name)
                 }
@@ -3736,7 +3752,15 @@ impl fmt::Display for BslValue {
                 // «РазыменовательПространствИменDOM»).
                 | BslObject::XPathResolver(_)
                 | BslObject::XPathExpression(_)
-                | BslObject::XPathResult(_) => {
+                | BslObject::XPathResult(_)
+                // Результат поиска по регулярному выражению и его группа
+                // печатаются так же — СЛИТНЫМ именем, хотя представление
+                // типа у них с пробелами: измерено, что `Строка(результат)`
+                // даёт «РезультатПоискаПоРегулярномуВыражению», тогда как
+                // `Строка(ТипЗнч(результат))` — «Результат поиска по
+                // регулярному выражению».
+                | BslObject::RegexMatch(_)
+                | BslObject::RegexGroup(..) => {
                     write!(f, "{}", self.type_name())
                 }
                 // Единственный объект, который печатается СОДЕРЖИМЫМ, а не

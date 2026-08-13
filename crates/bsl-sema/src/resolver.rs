@@ -1375,6 +1375,9 @@ impl<'a> Resolver<'a> {
                     bsl_rt::BuiltinMethod::XPathLookupNamespaceUri
                     | bsl_rt::BuiltinMethod::XPathSnapshotItem => Some(1),
                     bsl_rt::BuiltinMethod::XPathNext => Some(0),
+                    // `ПолучитьГруппы()` аргументов не берёт: измерено, что
+                    // синтаксис статьи 16.5.4 — ровно пустые скобки.
+                    bsl_rt::BuiltinMethod::RegexGetGroups => Some(0),
                     bsl_rt::BuiltinMethod::XPathEvaluate
                     | bsl_rt::BuiltinMethod::XPathCreateNsResolver
                     | bsl_rt::BuiltinMethod::XPathEvaluateExpression => None,

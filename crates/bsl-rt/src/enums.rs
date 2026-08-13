@@ -230,6 +230,15 @@ pub enum EnumValue {
     XPathOrderedNodeSnapshot,
     XPathAnyUnorderedNode,
     XPathFirstOrderedNode,
+
+    // --- НаправлениеПоиска -------------------------------------------------
+    // Оба члена и оба их написания ИЗМЕРЕНЫ на 8.3.27:
+    // `НаправлениеПоиска.СНачала` печатается «С начала», `.СКонца` — «С
+    // конца», а `SearchDirection.FromBegin`/`.FromEnd` платформа принимает
+    // и считает теми же значениями. Третьего члена нет: `.СЛева` — «Поле
+    // объекта не обнаружено».
+    SearchFromBegin,
+    SearchFromEnd,
 }
 
 /// К какому перечислению принадлежит член — это же имя стоит слева от
@@ -310,6 +319,11 @@ pub enum EnumKind {
     /// написание `DOMXPathResultType` ИЗМЕРЕНО (`XPathResultType` и
     /// `ТипРезультатаXPathDOM` платформа не знает).
     DomXPathResultType,
+    /// `НаправлениеПоиска` — третий аргумент
+    /// `СтрНайтиПоРегулярномуВыражению`. Английское написание
+    /// `SearchDirection` ИЗМЕРЕНО, как и то, что `Тип("НаправлениеПоиска")`
+    /// и `Тип("SearchDirection")` дают один и тот же тип.
+    SearchDirection,
 }
 
 impl EnumKind {
@@ -346,6 +360,7 @@ impl EnumKind {
             EnumKind::XmlForm => ("ФормаXML", "XMLForm"),
             EnumKind::XdtoFacetKind => ("ВидФасетаXDTO", "XDTOFacetType"),
             EnumKind::DomXPathResultType => ("ТипРезультатаDOMXPath", "DOMXPathResultType"),
+            EnumKind::SearchDirection => ("НаправлениеПоиска", "SearchDirection"),
         }
     }
 
@@ -393,6 +408,9 @@ impl EnumKind {
             // и `Строка(ТипЗнч(ТипРезультатаDOMXPath))` оба дают
             // «ПеречислениеТипРезультатаDOMXPath».
             EnumKind::DomXPathResultType => "ПеречислениеТипРезультатаDOMXPath",
+            // Тоже ИЗМЕРЕНО: `Строка(ТипЗнч(НаправлениеПоиска))` даёт
+            // «ПеречислениеНаправлениеПоиска».
+            EnumKind::SearchDirection => "ПеречислениеНаправлениеПоиска",
         }
     }
 
@@ -1455,6 +1473,22 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "FirstOrderedNode",
         "Первый упорядоченный узел",
     ),
+    // НаправлениеПоиска. Пятая колонка измерена: имя пишется слитно
+    // (`СНачала`), а печатается с пробелом («С начала»).
+    (
+        EnumKind::SearchDirection,
+        EnumValue::SearchFromBegin,
+        "СНачала",
+        "FromBegin",
+        "С начала",
+    ),
+    (
+        EnumKind::SearchDirection,
+        EnumValue::SearchFromEnd,
+        "СКонца",
+        "FromEnd",
+        "С конца",
+    ),
 ];
 
 /// Имена всех перечислений — для автодополнения REPL и для резолвера,
@@ -1507,6 +1541,8 @@ pub const ENUM_NAMES: &[(&str, EnumKind)] = &[
     ("XDTOFacetType", EnumKind::XdtoFacetKind),
     ("ТипРезультатаDOMXPath", EnumKind::DomXPathResultType),
     ("DOMXPathResultType", EnumKind::DomXPathResultType),
+    ("НаправлениеПоиска", EnumKind::SearchDirection),
+    ("SearchDirection", EnumKind::SearchDirection),
 ];
 
 /// Перечисление по имени слева от точки. Регистронезависимо и на обоих

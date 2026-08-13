@@ -3,10 +3,11 @@
 //!
 //! Внешних крейтов в этом дереве не бывает (правило рабочей области), а
 //! регулярные выражения нужны целиком — поэтому и разбор шаблона, и матчинг
-//! написаны здесь. Поверхности BSL у движка пока нет:
-//! `СтрНайтиПоРегулярномуВыражению` и соседи приходят следующей задачей,
-//! этот модуль — только машинерия под ними. Отсюда `pub(crate)` и
-//! `#[allow(dead_code)]` на объявлении модуля в `lib.rs`.
+//! написаны здесь. Этот модуль — только машинерия: поверхность BSL
+//! (`СтрНайтиПоРегулярномуВыражению` и соседи, объекты результата и групп,
+//! грамматика строки замены) живёт в [`crate::regex_api`] и обращается сюда
+//! за тремя вещами — [`Regex::parse_with`], [`Regex::find_at`] и
+//! [`Regex::matches_full`].
 //!
 //! # Устройство
 //!
@@ -88,6 +89,8 @@ use crate::{RtError, RtResult};
 use std::collections::HashMap;
 use tables::{in_ranges, DIGIT_RANGES, LETTER_RANGES};
 
+pub(crate) use tables::decimal_digit_value;
+
 /// Кодовая точка. Именно `u32`, а не `char`: непарный суррогат — законная
 /// точка этого движка, а `char` его не представляет.
 type Cp = u32;
@@ -139,7 +142,7 @@ const CP_PS: Cp = 0x2029;
 
 /// Кодовая точка, начинающаяся в позиции `i`, и её ширина в код-юнитах.
 /// `None` — за концом строки.
-fn cp_at(units: &[u16], i: usize) -> Option<(Cp, usize)> {
+pub(crate) fn cp_at(units: &[u16], i: usize) -> Option<(Cp, usize)> {
     let first = Cp::from(*units.get(i)?);
     if (0xD800..0xDC00).contains(&first) {
         if let Some(low) = units.get(i + 1).copied().map(Cp::from) {
@@ -153,7 +156,7 @@ fn cp_at(units: &[u16], i: usize) -> Option<(Cp, usize)> {
 
 /// Кодовая точка, ЗАКАНЧИВАЮЩАЯСЯ в позиции `i`, и её ширина. Нужна
 /// границам слова и якорям: они смотрят назад.
-fn cp_before(units: &[u16], i: usize) -> Option<(Cp, usize)> {
+pub(crate) fn cp_before(units: &[u16], i: usize) -> Option<(Cp, usize)> {
     if i == 0 {
         return None;
     }
@@ -1251,7 +1254,17 @@ enum Step {
 }
 
 impl Regex {
-    /// Разобрать и скомпилировать шаблон.
+    /// Разобрать и скомпилировать шаблон с флагами, ЗАДАННЫМИ СНАРУЖИ.
+    ///
+    /// Платформа принимает регистронезависимость и многострочность двумя
+    /// путями сразу: инлайн-флагами `(?i)`/`(?m)` внутри шаблона и
+    /// отдельными аргументами `ИгнорироватьРегистр`/`МногострочныйПоиск` у
+    /// всех четырёх функций поиска. Второй путь заведён здесь начальным
+    /// состоянием [`Flags`], а не дописыванием `(?i)` к тексту шаблона:
+    /// приписка сдвинула бы позиции в сообщениях об ошибках разбора и
+    /// зависела бы от области действия инлайн-флага — вопроса, который сам
+    /// ещё открыт (`REGEX.FLAG.SCOPE`). Начальные флаги от такой области не
+    /// зависят по построению: они действуют ровно на всё.
     ///
     /// # Errors
     ///
@@ -1261,9 +1274,10 @@ impl Regex {
     /// вперёд, обратная ссылка, операции над множествами), а также на
     /// превышении пределов реализации — вложенности [`MAX_DEPTH`],
     /// счётчика [`MAX_REPEAT`] и длины программы [`MAX_PROGRAM`].
-    pub(crate) fn parse(pattern: &[u16]) -> RtResult<Regex> {
+    pub(crate) fn parse_with(pattern: &[u16], icase: bool, multiline: bool) -> RtResult<Regex> {
         let src = decode(pattern);
         let mut parser = Parser::new(&src);
+        parser.flags = Flags { icase, multiline };
         let tree = parser.alternation()?;
         if parser.pos < src.len() {
             // Сюда приводит только лишняя закрывающая скобка: остальное
@@ -1290,6 +1304,11 @@ impl Regex {
     }
 
     /// Сколько групп у выражения, считая нулевую.
+    ///
+    /// Поверхности BSL это число незачем — она берёт длину `Match::spans`
+    /// уже найденного совпадения, — а вот разбору шаблона оно нужно как
+    /// проверяемый инвариант, отсюда `#[cfg(test)]`.
+    #[cfg(test)]
     pub(crate) fn group_count(&self) -> usize {
         self.group_count
     }
@@ -1309,7 +1328,8 @@ impl Regex {
         let mut stack: Vec<Backtrack> = Vec::new();
         let mut pos = start;
         loop {
-            if let Some(found) = self.run_at(haystack, pos, &mut regs, &mut undo, &mut stack) {
+            if let Some(found) = self.run_at(haystack, pos, false, &mut regs, &mut undo, &mut stack)
+            {
                 return Some(found);
             }
             match cp_at(haystack, pos) {
@@ -1321,11 +1341,55 @@ impl Regex {
         }
     }
 
+    /// Совпадение, НАЧИНАЮЩЕЕСЯ ровно в `at`, — без поиска правее.
+    ///
+    /// Нужно проходу справа налево (`НаправлениеПоиска.СКонца`): он
+    /// перебирает позиции начала сам, и [`Regex::find_at`] тут не годится
+    /// не только по смыслу, но и по цене — на каждой позиции он
+    /// досматривал бы строку до конца, превращая один проход в
+    /// квадратичный.
+    pub(crate) fn match_at(&self, haystack: &[u16], at: usize) -> Option<Match> {
+        if at > haystack.len() {
+            return None;
+        }
+        let mut regs: Vec<Option<usize>> = vec![None; self.reg_count];
+        let mut undo: Vec<(usize, Option<usize>)> = Vec::new();
+        let mut stack: Vec<Backtrack> = Vec::new();
+        self.run_at(haystack, at, false, &mut regs, &mut undo, &mut stack)
+    }
+
+    /// Совпадает ли выражение со ВСЕЙ строкой целиком.
+    ///
+    /// Это не то же, что `find_at(hay, 0)` с проверкой границ постфактум, и
+    /// не то же, что обёртка `^(?:…)$`. Постфактум-проверка проиграла бы на
+    /// `а|аб` ~ «аб»: перебор отдаёт ПЕРВУЮ по приоритету ветвь («а»), и
+    /// сравнение её конца с длиной строки ответило бы «не подходит», тогда
+    /// как платформа отвечает «подходит» — она продолжает бэктрекинг, пока
+    /// не найдёт ветвь, съедающую строку целиком. Обёртка с якорями тоже не
+    /// годится: `$` совпадает и ПЕРЕД хвостовым переводом строки (измерено:
+    /// «аб» + `Символ(10)` ~ `б$` даёт позицию 2), а
+    /// `СтрПодобнаПоРегулярномуВыражению("аб" + Символ(10), "аб")` — «Нет».
+    /// Поэтому требование «конец совпадения равен концу входа» встроено в
+    /// сам перебор: несовпавшая длина — это `Fail`, за которым идёт откат к
+    /// следующей точке возврата.
+    pub(crate) fn matches_full(&self, haystack: &[u16]) -> bool {
+        let mut regs: Vec<Option<usize>> = vec![None; self.reg_count];
+        let mut undo: Vec<(usize, Option<usize>)> = Vec::new();
+        let mut stack: Vec<Backtrack> = Vec::new();
+        self.run_at(haystack, 0, true, &mut regs, &mut undo, &mut stack)
+            .is_some()
+    }
+
     /// Попытка совпадения, НАЧИНАЮЩЕГОСЯ ровно в `start`.
+    ///
+    /// `require_end` — принимать только совпадение, кончающееся на конце
+    /// входа; иначе перебор продолжается, а не останавливается на первом
+    /// удачном разборе.
     fn run_at(
         &self,
         hay: &[u16],
         start: usize,
+        require_end: bool,
         regs: &mut [Option<usize>],
         undo: &mut Vec<(usize, Option<usize>)>,
         stack: &mut Vec<Backtrack>,
@@ -1423,7 +1487,13 @@ impl Regex {
                         Step::Fail
                     }
                 }
-                Instr::Match => Step::Done,
+                Instr::Match => {
+                    if require_end && pos != hay.len() {
+                        Step::Fail
+                    } else {
+                        Step::Done
+                    }
+                }
             };
             match step {
                 Step::Advance(width) => {
@@ -1538,7 +1608,7 @@ mod tests {
     }
 
     fn compile(pattern: &str) -> Regex {
-        match Regex::parse(&utf16(pattern)) {
+        match Regex::parse_with(&utf16(pattern), false, false) {
             Ok(regex) => regex,
             Err(e) => panic!("шаблон «{pattern}» не разобрался: {e}"),
         }
@@ -1568,7 +1638,7 @@ mod tests {
 
     /// Текст ошибки разбора; шаблон, который разобрался, — провал теста.
     fn parse_error(pattern: &str) -> String {
-        match Regex::parse(&utf16(pattern)) {
+        match Regex::parse_with(&utf16(pattern), false, false) {
             Ok(_) => panic!("шаблон «{pattern}» разобрался, а должен был не суметь"),
             Err(e) => e.to_string(),
         }

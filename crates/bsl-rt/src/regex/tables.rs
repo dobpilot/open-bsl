@@ -34,6 +34,27 @@
 //! [`in_ranges`] полагается на это и ищет двоичным поиском. Инвариант
 //! проверяется тестом `the_ranges_are_sorted_and_disjoint`.
 
+/// Числовое значение десятичной цифры — любой, не только ASCII.
+///
+/// Нужно грамматике строки замены: измерено, что после `$` платформа
+/// считает цифрой и арабо-индийскую единицу U+0661 (`$` + U+0661 при двух
+/// группах подставляет первую группу), а римскую единицу U+2170 категории
+/// Nl — уже нет.
+///
+/// Значение считается как `(cp - начало) % 10`: каждый блок Nd — это ровно
+/// десять точек подряд от нуля до девятки, а склеенные соседние блоки в
+/// [`DIGIT_RANGES`] сохраняют это по построению. Инвариант «длина каждого
+/// диапазона кратна десяти» проверяет тест
+/// `every_digit_range_is_whole_blocks_of_ten`.
+pub(crate) fn decimal_digit_value(cp: u32) -> Option<u32> {
+    let index = DIGIT_RANGES.partition_point(|(from, _)| *from <= cp);
+    let (from, to) = *DIGIT_RANGES.get(index.checked_sub(1)?)?;
+    if cp > to {
+        return None;
+    }
+    Some((cp - from) % 10)
+}
+
 /// Принадлежит ли кодовая точка отсортированному набору диапазонов.
 ///
 /// `partition_point` даёт индекс первого диапазона, НАЧАЛО которого больше
@@ -801,6 +822,24 @@ pub(crate) const DIGIT_RANGES: &[(u32, u32)] = &[
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn every_digit_range_is_whole_blocks_of_ten() {
+        // На этом держится `decimal_digit_value`: склеенные диапазоны
+        // (например 0x116D0..0x116E3) обязаны оставаться целым числом
+        // десятичных блоков, иначе остаток от деления соврёт.
+        for (from, to) in super::DIGIT_RANGES {
+            assert_eq!(
+                (to - from + 1) % 10,
+                0,
+                "диапазон {from:#x}..={to:#x} не кратен десяти"
+            );
+        }
+        assert_eq!(super::decimal_digit_value(u32::from(b'7')), Some(7));
+        assert_eq!(super::decimal_digit_value(0x0661), Some(1));
+        assert_eq!(super::decimal_digit_value(0x2170), None);
+        assert_eq!(super::decimal_digit_value(u32::from(b'x')), None);
+    }
     use super::*;
 
     #[test]

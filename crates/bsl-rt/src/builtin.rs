@@ -90,6 +90,21 @@ pub enum BuiltinFn {
     StrSplit,
     /// `СтрСоединить`/`StrConcat(массив, разделитель)` -> `Строка`.
     StrConcat,
+    /// `СтрНайтиПоРегулярномуВыражению`/`StrFindByRegularExpression` —
+    /// строка, шаблон и до пяти необязательных: направление, начальная
+    /// позиция, номер вхождения, игнорировать регистр, многострочный
+    /// поиск. Возвращает `РезультатПоискаПоРегулярномуВыражению` ВСЕГДА,
+    /// даже когда ничего не найдено (см. `crate::regex_api`).
+    StrFindByRegex,
+    /// `СтрНайтиВсеПоРегулярномуВыражению`/`StrFindAllByRegularExpression`
+    /// -> `Массив` результатов.
+    StrFindAllByRegex,
+    /// `СтрЗаменитьПоРегулярномуВыражению`/`StrReplaceByRegularExpression`
+    /// — со ссылками на группы `$0`..`$n` в строке замены.
+    StrReplaceByRegex,
+    /// `СтрПодобнаПоРегулярномуВыражению`/`StrLikeByRegularExpression` —
+    /// совпадение строки ЦЕЛИКОМ, а не вхождение.
+    StrLikeByRegex,
     /// `СтрЧислоСтрок`/`StrLineCount`.
     StrLineCount,
     /// `СтрПолучитьСтроку`/`StrGetLine(строка, номер)`.
@@ -303,6 +318,29 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("StrSplit", BuiltinFn::StrSplit),
     ("СтрСоединить", BuiltinFn::StrConcat),
     ("StrConcat", BuiltinFn::StrConcat),
+    ("СтрНайтиПоРегулярномуВыражению", BuiltinFn::StrFindByRegex),
+    ("StrFindByRegularExpression", BuiltinFn::StrFindByRegex),
+    (
+        "СтрНайтиВсеПоРегулярномуВыражению",
+        BuiltinFn::StrFindAllByRegex,
+    ),
+    (
+        "StrFindAllByRegularExpression",
+        BuiltinFn::StrFindAllByRegex,
+    ),
+    (
+        "СтрЗаменитьПоРегулярномуВыражению",
+        BuiltinFn::StrReplaceByRegex,
+    ),
+    (
+        "StrReplaceByRegularExpression",
+        BuiltinFn::StrReplaceByRegex,
+    ),
+    (
+        "СтрПодобнаПоРегулярномуВыражению",
+        BuiltinFn::StrLikeByRegex,
+    ),
+    ("StrLikeByRegularExpression", BuiltinFn::StrLikeByRegex),
     ("СтрЧислоСтрок", BuiltinFn::StrLineCount),
     ("StrLineCount", BuiltinFn::StrLineCount),
     ("СтрПолучитьСтроку", BuiltinFn::StrGetLine),
@@ -537,6 +575,13 @@ impl BuiltinFn {
             | BuiltinFn::StrConcat
             | BuiltinFn::StrGetLine => (2, 2),
             BuiltinFn::StrReplace => (3, 3),
+            // Границы ИЗМЕРЕНЫ перебором числа аргументов на 8.3.27: при
+            // меньшем платформа отвечает «Недостаточно фактических
+            // параметров», при большем — «Слишком много фактических
+            // параметров».
+            BuiltinFn::StrFindByRegex => (2, 7),
+            BuiltinFn::StrFindAllByRegex | BuiltinFn::StrLikeByRegex => (2, 4),
+            BuiltinFn::StrReplaceByRegex => (3, 5),
             BuiltinFn::Round => (3, 3),
             // Длину можно не указывать — до конца строки.
             BuiltinFn::Mid => (2, 3),
@@ -805,6 +850,10 @@ pub enum BuiltinMethod {
     XPathLookupNamespaceUri,
     /// `РезультатXPath.ПолучитьСледующий()` — обход узлов результата.
     XPathNext,
+    /// `РезультатПоискаПоРегулярномуВыражению.ПолучитьГруппы()` -> `Массив`
+    /// групп БЕЗ нулевой (измерено: у `б(в)` на «абвг» массив длиной 1).
+    /// Аргументов не берёт.
+    RegexGetGroups,
     /// `РезультатXPath.ЭлементСнимка(Номер)`.
     XPathSnapshotItem,
     /// `ВыражениеXPath.Вычислить(Узел[, Вид])`. Имя совпадает с
@@ -1355,6 +1404,8 @@ pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
     ("LookupNamespaceURI", BuiltinMethod::XPathLookupNamespaceUri),
     ("ПолучитьСледующий", BuiltinMethod::XPathNext),
     ("IterateNext", BuiltinMethod::XPathNext),
+    ("ПолучитьГруппы", BuiltinMethod::RegexGetGroups),
+    ("GetGroups", BuiltinMethod::RegexGetGroups),
     ("ЭлементСнимка", BuiltinMethod::XPathSnapshotItem),
     ("SnapshotItem", BuiltinMethod::XPathSnapshotItem),
     ("Вычислить", BuiltinMethod::XPathEvaluateExpression),
@@ -1410,6 +1461,10 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         BuiltinFn::TrimRight => args[0].str_trim_right(),
         BuiltinFn::StrFind => args[0].str_find(&args[1]),
         BuiltinFn::StrReplace => args[0].str_replace(&args[1], &args[2]),
+        BuiltinFn::StrFindByRegex => crate::regex_api::find(args),
+        BuiltinFn::StrFindAllByRegex => crate::regex_api::find_all(args),
+        BuiltinFn::StrReplaceByRegex => crate::regex_api::replace(args),
+        BuiltinFn::StrLikeByRegex => crate::regex_api::like(args),
         BuiltinFn::StrSplit => args[0].str_split(&args[1]),
         BuiltinFn::StrConcat => args[0].str_join(&args[1]),
         BuiltinFn::StrLineCount => args[0].str_line_count(),
@@ -2307,6 +2362,7 @@ pub fn call_builtin_method(
         BuiltinMethod::XPathCreateNsResolver => crate::xpath::create_ns_resolver(obj, args),
         BuiltinMethod::XPathLookupNamespaceUri => crate::xpath::lookup_namespace_uri(obj, args),
         BuiltinMethod::XPathNext => crate::xpath::next_node(obj, args),
+        BuiltinMethod::RegexGetGroups => crate::regex_api::get_groups(obj),
         BuiltinMethod::XPathSnapshotItem => crate::xpath::snapshot_item(obj, args),
         BuiltinMethod::XPathEvaluateExpression => crate::xpath::evaluate_expression(obj, args),
         BuiltinMethod::CreateXmlSchema => crate::xsd::create_schema(obj, args),
