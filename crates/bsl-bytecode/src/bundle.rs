@@ -473,6 +473,14 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
             write!(dst);
             e.heap_read = true;
         }
+        // Сериализатор берёт у фабрики готовую модель тем же `Rc` и
+        // ничего в ней не читает — модель уже построена. Поэтому здесь,
+        // в отличие от соседа сверху, `heap_read` не ставится: это тот же
+        // случай, что `NewMemoryStream` и `NewDomNsResolver`.
+        Instr::NewXdtoSerializer { dst, factory } => {
+            read!(factory);
+            write!(dst);
+        }
         // Разыменователь ЗАПОМИНАЕТ узел, а дерево не трогает: область
         // видимости он читает не сейчас, а на каждом
         // `НайтиURIПространстваИмен`. Поэтому здесь только чтение

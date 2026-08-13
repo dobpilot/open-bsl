@@ -143,6 +143,10 @@ pub enum RExpr {
     NewXdtoFactory {
         schemas: Box<RExpr>,
     },
+    /// `Новый СериализаторXDTO(ФабрикаXDTO)` — ровно один аргумент, и он
+    /// обязателен (измерено: без фабрики платформа отвечает «Конструктор
+    /// не найден»).
+    NewXdtoSerializer(Box<RExpr>),
     /// `Новый РазыменовательПространствИменDOM(Узел)` — ровно один
     /// аргумент (измерено: без узла платформа конструктор отвергает, в
     /// отличие от метода документа `СоздатьРазыменовательПИ`).
@@ -431,6 +435,7 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
             expr_uses_dynamic(uri) || expr_uses_dynamic(local)
         }
         RExpr::NewXdtoFactory { schemas } => expr_uses_dynamic(schemas),
+        RExpr::NewXdtoSerializer(factory) => expr_uses_dynamic(factory),
         RExpr::NewDomNsResolver(node) => expr_uses_dynamic(node),
         RExpr::NewXmlWriterSettings {
             encoding,

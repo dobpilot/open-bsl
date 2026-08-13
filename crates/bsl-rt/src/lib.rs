@@ -456,6 +456,7 @@ impl BslValue {
                 | BslObject::XdtoFacet(..)
                 | BslObject::XdtoValue(..)
                 | BslObject::XdtoFactory(_)
+                | BslObject::XdtoSerializer(_)
                 | BslObject::XdtoObject(..)
                 | BslObject::XdtoList(..)
                 | BslObject::XdtoSequence(..)) => match crate::xdto::type_name_of(obj) {
@@ -1291,12 +1292,17 @@ impl BslValue {
                 // по той же причине: их `Количество()` измерено, а
                 // `ЗначениеЗаполнено` от них — нет и не будет, пока проба
                 // вешает платформу.
+                //
+                // Сериализатор к неизмеренным НЕ относится: у него проба
+                // прошла и дала ошибку «Проверка мутабельных значений на
+                // заполненность не поддерживается».
                 // НЕ ИЗМЕРЕНО(XDTO.VALUE.FILLED)
                 | BslObject::XdtoType(..)
                 | BslObject::XdtoProperty(..)
                 | BslObject::XdtoFacet(..)
                 | BslObject::XdtoValue(..)
                 | BslObject::XdtoFactory(..)
+                | BslObject::XdtoSerializer(..)
                 | BslObject::XdtoObject(..)
                 | BslObject::XdtoList(..)
                 | BslObject::XdtoSequence(..) => {
@@ -1405,6 +1411,7 @@ impl BslValue {
                 | BslObject::XdtoFacet(..)
                 | BslObject::XdtoValue(..)
                 | BslObject::XdtoFactory(_)
+                | BslObject::XdtoSerializer(_)
                 | BslObject::XdtoObject(..)
                 | BslObject::XdtoList(..)
                 | BslObject::XdtoSequence(..)) => match crate::xdto::type_id_of(obj) {
@@ -1581,6 +1588,15 @@ impl BslValue {
     /// не строится.
     pub fn new_xdto_factory(schemas: &BslValue) -> RtResult<Self> {
         xdto::factory_of_schema_set(schemas)
+    }
+
+    /// `Новый СериализаторXDTO(ФабрикаXDTO)` — фабрика обязательна.
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::Xdto`], если аргумент не фабрика XDTO.
+    pub fn new_xdto_serializer(factory: &BslValue) -> RtResult<Self> {
+        xdto::serializer_of_factory(factory)
     }
 
     /// `Новый РасширенноеИмяXML(URI, ЛокальноеИмя)` — ровно два аргумента,
@@ -2256,6 +2272,7 @@ impl BslValue {
                 | BslObject::XdtoFacet(..)
                 | BslObject::XdtoValue(..)
                 | BslObject::XdtoFactory(..)
+                | BslObject::XdtoSerializer(..)
                 | BslObject::XdtoObject(..) => Err(RtError::NotIndexable),
                 BslObject::TextWriter(..)
                 | BslObject::JsonReader(..)
@@ -3707,6 +3724,7 @@ impl fmt::Display for BslValue {
                 | BslObject::XdtoFacet(..)
                 | BslObject::XdtoValue(..)
                 | BslObject::XdtoFactory(_)
+                | BslObject::XdtoSerializer(_)
                 | BslObject::XdtoObject(..)
                 | BslObject::XdtoList(..)
                 | BslObject::XdtoSequence(..)) => match crate::xdto::display_text(obj) {

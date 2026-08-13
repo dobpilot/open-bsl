@@ -351,6 +351,12 @@ pub const NEW_TYPES: &[&str] = &[
     // `Новый XDTOFactory` тоже измерено.
     "ФабрикаXDTO",
     "XDTOFactory",
+    // `Новый СериализаторXDTO(Фабрика)` — фабрика ОБЯЗАТЕЛЬНА: измерено,
+    // что без аргумента платформа отвечает «Конструктор не найден», а
+    // два аргумента, строку, число и тип XDTO отвергает. Английское
+    // написание `Новый XDTOSerializer` тоже измерено.
+    "СериализаторXDTO",
+    "XDTOSerializer",
     "РасширенноеИмяXML",
     "XMLExpandedName",
     "ПараметрыЗаписиXML",
@@ -1111,6 +1117,22 @@ impl<'a> Resolver<'a> {
                     schemas: Box::new(schemas),
                 })
             }
+            // Фабрика здесь, в отличие от `Новый ФабрикаXDTO`,
+            // ОБЯЗАТЕЛЬНА: измерено, что вызов без аргумента платформа
+            // отвергает на компиляции («Конструктор не найден»), а двух
+            // аргументов не берёт.
+            "СЕРИАЛИЗАТОРXDTO" | "XDTOSERIALIZER" => {
+                if args.len() != 1 {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый СериализаторXDTO".to_string(),
+                        expected: 1,
+                        found: args.len(),
+                    });
+                }
+                Ok(RExpr::NewXdtoSerializer(Box::new(
+                    self.resolve_expr(&args[0])?,
+                )))
+            }
             // Ровно два аргумента: URI и локальное имя (измерено, что
             // одноаргументная форма и форма без аргументов отвергаются).
             "РАСШИРЕННОЕИМЯXML" | "XMLEXPANDEDNAME" => {
@@ -1518,6 +1540,15 @@ impl<'a> Resolver<'a> {
                     bsl_rt::BuiltinMethod::XdtoReadXml | bsl_rt::BuiltinMethod::XdtoWriteXml => {
                         None
                     }
+                    // Три члена сериализатора, которых здесь нет: они
+                    // не поддержаны ни при какой арности, и проверять её
+                    // значило бы отвечать на `Сер.XMLТип()` рассказом про
+                    // число аргументов вместо главного — что метода нет.
+                    // Отказ даёт рантайм, и он перехватывается `Попытка`,
+                    // как на платформе.
+                    bsl_rt::BuiltinMethod::XdtoXmlTypeOfType
+                    | bsl_rt::BuiltinMethod::XdtoXmlTypeOfValue
+                    | bsl_rt::BuiltinMethod::XdtoCanReadXml => None,
                 };
                 if let Some(expected) = expected {
                     if args.len() != expected {

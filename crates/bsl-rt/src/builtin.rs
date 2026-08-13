@@ -987,13 +987,27 @@ pub enum BuiltinMethod {
     XdtoSequenceValue,
     /// `ПоследовательностьXDTO.ПолучитьСвойство(i)` -> `СвойствоXDTO`.
     XdtoSequenceProperty,
-    /// `ФабрикаXDTO.ПрочитатьXML(ЧтениеXML[, Тип])` — разбор документа в
-    /// экземпляр. Имя занято ТОЛЬКО фабрикой: у `ЧтениеXML` метод обхода
-    /// называется `Прочитать`, поэтому конфликта получателей нет, но
-    /// диспетчер всё равно проверяет получателя.
+    /// `ПрочитатьXML` — разбор документа. Имя делят ровно два получателя:
+    /// у фабрики это разбор в экземпляр XDTO по типу схемы, у
+    /// `СериализаторXDTO` — разбор в значение BSL. У `ЧтениеXML` метод
+    /// обхода называется `Прочитать`, так что больше на имя никто не
+    /// претендует, но диспетчер всё равно проверяет получателя.
     XdtoReadXml,
-    /// `ФабрикаXDTO.ЗаписатьXML(ЗаписьXML, Значение[, Имя[, УРИ]])`.
+    /// `ЗаписатьXML` — та же пара получателей: `ФабрикаXDTO.ЗаписатьXML(
+    /// ЗаписьXML, Значение[, Имя[, УРИ]])` пишет экземпляр XDTO, а
+    /// `СериализаторXDTO.ЗаписатьXML(ЗаписьXML, Значение[, Имя[, УРИ]])` —
+    /// значение BSL.
     XdtoWriteXml,
+    /// `СериализаторXDTO.XMLТип(Тип)` — отображение типа BSL в тип XML.
+    /// ИЗМЕРЕН существующим (отдаёт `ТипДанныхXML`), но здесь не
+    /// поддержан: вызов даёт перехватываемый отказ «не поддерживается»
+    /// (`xdto::serializer_unsupported`).
+    XdtoXmlTypeOfType,
+    /// `СериализаторXDTO.XMLТипЗнч(Значение)` — то же от значения.
+    XdtoXmlTypeOfValue,
+    /// `СериализаторXDTO.ВозможностьЧтенияXML(ЧтениеXML)` — прочитается ли
+    /// текущий элемент. ИЗМЕРЕН существующим, здесь не поддержан.
+    XdtoCanReadXml,
 }
 
 /// Написания МЕТОДОВ объектов — тот же принцип, что и у
@@ -1218,6 +1232,15 @@ pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
     ("ReadXML", BuiltinMethod::XdtoReadXml),
     ("ЗаписатьXML", BuiltinMethod::XdtoWriteXml),
     ("WriteXML", BuiltinMethod::XdtoWriteXml),
+    // Английские написания трёх членов сериализатора ИЗМЕРЕНЫ поимённо:
+    // `XMLType`, `XMLTypeOf` и `CanReadXML` платформа принимает и отвечает
+    // тем же, что и на русские.
+    ("XMLТип", BuiltinMethod::XdtoXmlTypeOfType),
+    ("XMLType", BuiltinMethod::XdtoXmlTypeOfType),
+    ("XMLТипЗнч", BuiltinMethod::XdtoXmlTypeOfValue),
+    ("XMLTypeOf", BuiltinMethod::XdtoXmlTypeOfValue),
+    ("ВозможностьЧтенияXML", BuiltinMethod::XdtoCanReadXml),
+    ("CanReadXML", BuiltinMethod::XdtoCanReadXml),
     // `ЧтениеДанных`/`ЗаписьДанных`/`РезультатЧтенияДанных`. Английские
     // написания ИЗМЕРЕНЫ перебором: каждое вызвано на живом объекте, и
     // отсутствующее имя платформа отличает («Метод объекта не обнаружен»)
@@ -2400,13 +2423,24 @@ pub fn call_builtin_method(
         BuiltinMethod::XdtoSequenceOf => crate::xdto::object_sequence(obj, args),
         BuiltinMethod::XdtoSequenceValue => crate::xdto::sequence_value(obj, args),
         BuiltinMethod::XdtoSequenceProperty => crate::xdto::sequence_property(obj, args),
-        // Оба имени принадлежат ФАБРИКЕ и никому больше: чужой получатель
-        // получает ту же ошибку «метод неприменим», что и всегда.
+        // --- ввод-вывод: фабрика и сериализатор -----------------------------
+        //
+        // Оба имени принадлежат этим двум получателям и никому больше;
+        // любой другой получает ту же ошибку «метод неприменим», что и
+        // всегда. Семантика у них РАЗНАЯ: фабрика ходит по типам схемы и
+        // строит `ОбъектXDTO`/`ЗначениеXDTO`, сериализатор переводит
+        // значения BSL, — поэтому разбор идёт по получателю, а не по имени.
         BuiltinMethod::XdtoReadXml if crate::xdto::is_factory(obj) => {
             crate::xdto::factory_read_xml(obj, args)
         }
         BuiltinMethod::XdtoWriteXml if crate::xdto::is_factory(obj) => {
             crate::xdto::factory_write_xml(obj, args).map(|()| BslValue::Undefined)
+        }
+        BuiltinMethod::XdtoReadXml if crate::xdto::is_serializer(obj) => {
+            crate::xdto::serializer_read_xml(obj, args)
+        }
+        BuiltinMethod::XdtoWriteXml if crate::xdto::is_serializer(obj) => {
+            crate::xdto::serializer_write_xml(obj, args).map(|()| BslValue::Undefined)
         }
         BuiltinMethod::XdtoReadXml => Err(RtError::MethodNotApplicable {
             method: "ПрочитатьXML",
@@ -2416,6 +2450,17 @@ pub fn call_builtin_method(
             method: "ЗаписатьXML",
             receiver: obj.type_name(),
         }),
+        // Три измеренных члена сериализатора, до которых очередь не дошла:
+        // у своего получателя — честный отказ «не поддерживается», у
+        // чужого — обычное «метод неприменим».
+        BuiltinMethod::XdtoXmlTypeOfType => Err(crate::xdto::serializer_unsupported(obj, "XMLТип")),
+        BuiltinMethod::XdtoXmlTypeOfValue => {
+            Err(crate::xdto::serializer_unsupported(obj, "XMLТипЗнч"))
+        }
+        BuiltinMethod::XdtoCanReadXml => Err(crate::xdto::serializer_unsupported(
+            obj,
+            "ВозможностьЧтенияXML",
+        )),
     }
 }
 

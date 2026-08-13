@@ -367,6 +367,124 @@
 //! `anyType` внутри документа: измеренный случай (текст, читаемый строкой)
 //! поддержан, а вложенные элементы и атрибуты в нём — отказ.
 //!
+//! # `СериализаторXDTO`: что ИЗМЕРЕНО
+//!
+//! Пробы — `tests/conformance/measure/measure-xdto-serializer.bsl`, рядом
+//! снятый `measure-xdto-serializer.platform.txt`; фикстура —
+//! `tests/conformance/fixtures/xdto-serializer.bsl`. Всё снято через
+//! фабрику из ФАЙЛА XSD, то есть без единого типа конфигурации.
+//!
+//! * **конструктор берёт ровно фабрику.** `Новый СериализаторXDTO(Фаб)`
+//!   (и `Новый XDTOSerializer(Фаб)`) — единственная работающая форма: без
+//!   аргумента платформа отвечает «Конструктор не найден», а два
+//!   аргумента, строку, число и тип XDTO отвергает. `Тип(
+//!   "СериализаторXDTO")` и `Тип("XDTOSerializer")` дают «Сериализатор
+//!   XDTO», `Строка()` — `СериализаторXDTO`, `ЗначениеЗаполнено` от него —
+//!   ошибка («Проверка мутабельных значений на заполненность не
+//!   поддерживается»), два сериализатора над одной фабрикой НЕ равны;
+//! * **свойства `ФабрикаXDTO` у него НЕТ.** Ни русского, ни английского:
+//!   «Поле объекта не обнаружено (ФабрикаXDTO)». Справка называет такой
+//!   член, платформа — нет; тот же случай, что `ФорматСериализацииДаты` в
+//!   этапе 0. Наружу торчат только методы;
+//! * **`ЗаписатьXML(ЗаписьXML, Значение[, Имя[, УРИ]])`** — от двух до
+//!   четырёх аргументов (`WriteXML` тоже есть), пятый отвергается. Имя и
+//!   URI ведут себя НЕ как у фабрики: пустое имя и `Неопределено` вместо
+//!   него значат «имя по умолчанию» (а не ошибку), пустое имя отбрасывает
+//!   ЗАОДНО и заданный URI, заданное имя без URI сбрасывает пространство
+//!   имён в пустое (`<мой xmlns="">`), а имя с двоеточием пишется как
+//!   есть — `<t:мой xmlns="">` с необъявленным префиксом, там, где
+//!   фабрика двоеточие отвергает. Нестроковые имя и URI — ошибка. Ровно
+//!   одно сочетание выпадает из этой сетки: имя `Неопределено` ВМЕСТЕ с
+//!   URI-строкой платформа отвергает — «Несоответствие типов (параметр
+//!   номер '4')», — притом что пустое имя с тем же URI проходит, а
+//!   `Неопределено` в обоих аргументах сразу снова даёт умолчание;
+//! * **`xmlns:xsi` объявляется всегда, кроме одного случая**: когда
+//!   умолчательным стало само пространство экземпляров XML Schema
+//!   (`ЗаписатьXML(Зп, 42, "мой", "…XMLSchema-instance")` ->
+//!   `<мой xmlns="…instance" xmlns:xs="…">42</мой>`). Если при этом нужна
+//!   пометка `nil`, платформа заводит для ТОГО ЖЕ URI порождённый префикс
+//!   и метит атрибут им — `xmlns:d1p1="…instance" d1p1:nil="true"`, а на
+//!   втором уровне `d2p1`, то есть по общему правилу `d<глубина>p<номер>`;
+//! * **элемент значения** — это локальное имя его типа XML в
+//!   умолчательном пространстве имён этого типа: число ->
+//!   `<decimal xmlns="…XMLSchema" xmlns:xsi="…instance">42</decimal>`,
+//!   строка -> `<string>`, дата -> `<dateTime>` (всегда с секундами),
+//!   булево -> `<boolean>`, двоичные данные -> `<base64Binary>` строками
+//!   по 64 символа. Правило объявлений то же, что у записи фабрики: `xs`
+//!   не объявляется, когда пространство XML Schema и так умолчательное.
+//!   Лексические формы — те же, что у фабрики (`12.50` -> `12.5`, `1/3` ->
+//!   27 знаков, пустая строка -> схлопнутый `<string/>`);
+//! * **`Неопределено` и `Null` пишутся, а коллекции — нет.**
+//!   `Неопределено` -> `<Undefined xmlns="" … xsi:nil="true"/>` (именно с
+//!   ПУСТЫМ пространством имён, хотя `Тип("Неопределено")` та же платформа
+//!   пишет как `{http://v8.1c.ru/8.2/data/types}Undefined`), `Null` ->
+//!   `<Null xmlns="http://v8.1c.ru/8.1/data/core"/>`. А `Массив`,
+//!   `Структура`, `Соответствие` и `ТаблицаЗначений` через фабрику из XSD
+//!   она уже отвергает — «Несоответствие типов (параметр номер '2')», —
+//!   притом что ГЛОБАЛЬНЫЙ сериализатор конфигурации пишет тот же массив
+//!   как `<Array xmlns="http://v8.1c.ru/8.1/data/core">` со вложенными
+//!   `<Value xsi:type="xs:decimal">`. Разница — ровно в метаданных
+//!   конфигурации, и отказ здесь называет её вслух;
+//! * **`ПрочитатьXML(ЧтениеXML[, Тип])`** — один или два аргумента
+//!   (`ReadXML` тоже есть), третий отвергается («Слишком много фактических
+//!   параметров»). Второй аргумент — значение `Тип` (тип BSL), и он
+//!   отменяет имя элемента: `<int>42</int>` с `Тип("Число")` даёт 42.
+//!   Отображения нет у `Тип("Массив")`, `Тип("УникальныйИдентификатор")` и
+//!   `Тип("Неопределено")` — «Отсутствует отображение для типа»;
+//! * **без типа решает имя элемента**, и всё, чего в модели фабрики нет,
+//!   читается СТРОКОЙ: `<чужой>привет</чужой>` -> «привет», `<decimal>` БЕЗ
+//!   пространства имён -> «42», а `{…/data/core}UUID`, `Null` и `Type` ->
+//!   свои тексты строкой. Отсюда и несимметричный круг: `Null`,
+//!   `УникальныйИдентификатор` и `Тип` записываются, но обратно приходят
+//!   строками (измерено). Составной тип схемы, наоборот, ошибка:
+//!   `<RootType xmlns="urn:test">` -> «Отсутствует отображение для типа
+//!   '{urn:test}RootType'», и то же самое у типа с ПРОСТЫМ содержимым
+//!   (`{urn:test}SimpContent`). А вот СВОЙ простой тип схемы читается
+//!   своим отображением: `<Code xmlns="urn:test">аб</Code>` (ограничение
+//!   `xs:string`) даёт строку, и через `xsi:type="t:Code"` — тоже. Одно
+//!   расхождение здесь не новое: списочный простой тип платформа отдаёт
+//!   `ФиксированныйМассив`, а тут получается обычный `Массив` — то же, что
+//!   описано у `value_from_lexical_at`;
+//! * **`xsi:nil="true"` перевешивает имя** — и у известного типа, и у
+//!   чужого — и даёт `Неопределено`; без пометки тот же `<Undefined/>` —
+//!   просто пустая строка. **`xsi:type` у сериализатора действует ПРЯМО на
+//!   читаемом элементе** (в отличие от фабрики, где на нём он не значит
+//!   ничего), а неизвестное имя типа платформа молча игнорирует;
+//! * **позиция читателя та же, что у фабрики**: разбор идёт с первого
+//!   начального тега и оставляет читателя на следующем узле, так что два
+//!   соседних элемента читаются двумя вызовами без `Прочитать()` между
+//!   ними, а после корня читатель исчерпан.
+//!
+//! Сознательно за бортом этой задачи — четыре измеренных члена и один тип
+//! значений:
+//!
+//! * `XMLТип`/`XMLType`, `XMLТипЗнч`/`XMLTypeOf` и
+//!   `ВозможностьЧтенияXML`/`CanReadXML` существуют, но упираются в
+//!   РАЗНОЕ. Первые два отдают `ТипДанныхXML` (у строки — `string`
+//!   пространства XML Schema, у числа — `decimal`, у даты — `dateTime`),
+//!   и реализовать их — значит сперва завести этот тип, а это отдельная
+//!   работа. Третий отдаёт БУЛЕВО: «Да» на `<decimal>` этого пространства,
+//!   «Нет» на чужое имя и на читателя, ещё не сделавшего `Прочитать()`, —
+//!   нового типа ему не нужно, и не поддержан он по объёму задачи: трёх
+//!   точек мало, чтобы знать, когда именно платформа отвечает «Да». Вызов
+//!   любого из трёх даёт перехватываемую ошибку «не поддерживается» с той
+//!   причиной, которая у него настоящая, а не тишину;
+//! * `XMLСтрока`/`XMLString`, `XMLЗначение`/`XMLValue`,
+//!   `ЗаписатьJSON`/`WriteJSON` и `ПрочитатьJSON`/`ReadJSON` у
+//!   сериализатора тоже есть (измерено: `XMLСтрока(Дата(2026,8,13,10,20,30))`
+//!   — `2026-08-13T10:20:30`, `XMLСтрока(12.50)` — `12.5`,
+//!   `ЗаписатьJSON(Зп, 42)` — `{"#value": 42}`). В таблицу методов они не
+//!   заводились: в отличие от трёх названных выше, задача их не касается,
+//!   и имя, которого в таблице нет, отвергается на разборе;
+//! * значение `Тип` платформа пишет как `<Type
+//!   xmlns="http://v8.1c.ru/8.1/data/core">xs:decimal</Type>`, порождая
+//!   при надобности префикс для чужого пространства (`Тип("Неопределено")`
+//!   -> `d1p1:Undefined` при `xmlns:d1p1="http://v8.1c.ru/8.2/data/types"`).
+//!   Здесь его нет: полное отображение типов BSL в имена XML замером не
+//!   снято, а угадывать дороже, чем отказать. `УникальныйИдентификатор`
+//!   пишется как `<UUID xmlns="…/data/core">`, но такого типа в этом
+//!   рантайме пока нет вовсе, так что писать нечего.
+//!
 //! Единственное, что тут осталось неизмеренным, — нумерация ВТОРОГО
 //! порождённого префикса на одном элементе, `НЕ ИЗМЕРЕНО(XDTO.IO.PREFIX)`:
 //! чтобы её увидеть, нужен тип с двумя квалифицированными атрибутами из
@@ -1796,6 +1914,7 @@ pub fn display_text(obj: &BslObject) -> Option<String> {
         | BslObject::XdtoFacet(..)
         | BslObject::XdtoValue(..)
         | BslObject::XdtoFactory(_)
+        | BslObject::XdtoSerializer(_)
         | BslObject::XdtoObject(..)
         | BslObject::XdtoList(..)
         | BslObject::XdtoSequence(..) => type_name_of(obj)?.to_string(),
@@ -1817,6 +1936,8 @@ pub fn type_name_of(obj: &BslObject) -> Option<&'static str> {
         BslObject::XdtoFacet(..) => "ФасетXDTO",
         BslObject::XdtoValue(..) => "ЗначениеXDTO",
         BslObject::XdtoFactory(_) => "ФабрикаXDTO",
+        // Измерено: `Строка(Сер)` -> `СериализаторXDTO`, как у фабрики.
+        BslObject::XdtoSerializer(_) => "СериализаторXDTO",
         BslObject::XdtoObject(..) => "ОбъектXDTO",
         BslObject::XdtoList(..) => "СписокXDTO",
         BslObject::XdtoSequence(..) => "ПоследовательностьXDTO",
@@ -1838,6 +1959,7 @@ pub fn type_id_of(obj: &BslObject) -> Option<TypeId> {
         BslObject::XdtoFacet(..) => TypeId::XdtoFacet,
         BslObject::XdtoValue(..) => TypeId::XdtoDataValue,
         BslObject::XdtoFactory(_) => TypeId::XdtoFactory,
+        BslObject::XdtoSerializer(_) => TypeId::XdtoSerializer,
         BslObject::XdtoObject(..) => TypeId::XdtoDataObject,
         BslObject::XdtoList(..) => TypeId::XdtoList,
         BslObject::XdtoSequence(..) => TypeId::XdtoSequence,
@@ -3363,37 +3485,9 @@ fn read_document(
     model: &Rc<XdtoModel>,
     type_index: usize,
 ) -> RtResult<BslValue> {
-    let mut current = state.current.take();
-    let parser = state
-        .parser
-        .as_mut()
-        .ok_or_else(|| RtError::Xdto("источник для ЧтениеXML не задан".to_string()))?;
-    // Если читатель стоит не на начальном теге, он до него доводится:
-    // измерено, что и свежий читатель, и читатель после `Прочитать()`, и
-    // после `ПерейтиКСодержимому()` дают один и тот же результат.
-    let head = loop {
-        match current {
-            Some(crate::xml::XmlEvent::ElementStart { name, uri, attrs }) => {
-                break ElementHead { name, uri, attrs }
-            }
-            _ => match parser.read()? {
-                Some(event) => current = Some(event),
-                None => {
-                    return Err(RtError::Xdto(
-                        "ПрочитатьXML: в источнике не осталось элементов".to_string(),
-                    ))
-                }
-            },
-        }
-    };
-    let out = read_element(parser, model, type_index, &head, 0)?;
-    let next = parser.read()?;
-    state.depth = state
-        .parser
-        .as_ref()
-        .map_or(0, crate::xml::XmlParser::depth);
-    state.current = next;
-    state.attr_cursor = None;
+    let out = read_one(state, |parser, head| {
+        read_element(parser, model, type_index, head, 0)
+    })?;
     match out {
         ReadOut::Nil => Ok(BslValue::Undefined),
         ReadOut::Object(value) => Ok(value),
@@ -3411,6 +3505,55 @@ fn read_document(
                 .to_string(),
         )),
     }
+}
+
+/// Обвязка одного чтения, общая у фабрики и у сериализатора: довести
+/// читателя до первого начального тега, разобрать ровно один элемент и
+/// оставить читателя на СЛЕДУЮЩЕМ за ним узле.
+///
+/// Позиция измерена и на той, и на другой стороне: и свежий читатель, и
+/// читатель после `Прочитать()`, и после `ПерейтиКСодержимому()` дают один
+/// и тот же результат, а после разбора корня читатель исчерпан
+/// («Ничего», `Прочитать()` — «Нет»). Отсюда и два соседних элемента,
+/// читаемых двумя вызовами без `Прочитать()` между ними.
+///
+/// # Errors
+///
+/// [`RtError::Xdto`], если источник не задан или в нём не осталось
+/// элементов; ошибка самого разбора приходит из `read`.
+fn read_one<T>(
+    state: &mut crate::object::XmlReaderState,
+    read: impl FnOnce(&mut crate::xml::XmlParser, &ElementHead) -> RtResult<T>,
+) -> RtResult<T> {
+    let mut current = state.current.take();
+    let parser = state
+        .parser
+        .as_mut()
+        .ok_or_else(|| RtError::Xdto("источник для ЧтениеXML не задан".to_string()))?;
+    let head = loop {
+        match current {
+            Some(crate::xml::XmlEvent::ElementStart { name, uri, attrs }) => {
+                break ElementHead { name, uri, attrs }
+            }
+            _ => match parser.read()? {
+                Some(event) => current = Some(event),
+                None => {
+                    return Err(RtError::Xdto(
+                        "ПрочитатьXML: в источнике не осталось элементов".to_string(),
+                    ))
+                }
+            },
+        }
+    };
+    let out = read(parser, &head)?;
+    let next = parser.read()?;
+    state.depth = state
+        .parser
+        .as_ref()
+        .map_or(0, crate::xml::XmlParser::depth);
+    state.current = next;
+    state.attr_cursor = None;
+    Ok(out)
 }
 
 /// Разбор элемента, начальный тег которого уже прочитан: разбор идёт до
@@ -4482,6 +4625,432 @@ fn encode_base64(bytes: &[u8]) -> String {
         out.push_str(&chunk);
     }
     out
+}
+
+// --- СериализаторXDTO ----------------------------------------------------
+
+/// Пространство имён базовых типов данных 1С. Из него сериализатору здесь
+/// нужен ровно один элемент — `Null`; `UUID`, `Type` и коллекции (`Array`,
+/// `Structure`, ...) в это пространство тоже попадают, но не поддержаны
+/// (см. заголовок модуля).
+const V8_CORE_NS: &str = "http://v8.1c.ru/8.1/data/core";
+
+/// `СериализаторXDTO` над готовой моделью типов.
+pub fn serializer_value(model: Rc<XdtoModel>) -> BslValue {
+    BslValue::Object(Rc::new(BslObject::XdtoSerializer(model)))
+}
+
+/// `Новый СериализаторXDTO(ФабрикаXDTO)`.
+///
+/// Фабрика ОБЯЗАТЕЛЬНА и других источников у конструктора нет: измерено,
+/// что 8.3.27 отвергает и `Новый СериализаторXDTO` без аргумента
+/// («Конструктор не найден»), и два аргумента, и строку, и число, и тип
+/// XDTO — принимается только сама фабрика. Английское написание `Новый
+/// XDTOSerializer(Фаб)` тоже измерено.
+///
+/// # Errors
+///
+/// [`RtError::Xdto`], если аргумент — не `ФабрикаXDTO`.
+pub fn serializer_of_factory(factory: &BslValue) -> RtResult<BslValue> {
+    match factory {
+        BslValue::Object(o) => match &**o {
+            BslObject::XdtoFactory(model) => Ok(serializer_value(model.clone())),
+            _ => Err(bad_serializer_factory(factory)),
+        },
+        _ => Err(bad_serializer_factory(factory)),
+    }
+}
+
+fn bad_serializer_factory(arg: &BslValue) -> RtError {
+    RtError::Xdto(format!(
+        "«Новый СериализаторXDTO» строится по «ФабрикаXDTO», а не по «{}»",
+        arg.type_name()
+    ))
+}
+
+/// `СериализаторXDTO` ли это — нужно диспетчеру методов: имена
+/// `ПрочитатьXML` и `ЗаписатьXML` делят с фабрикой.
+pub fn is_serializer(v: &BslValue) -> bool {
+    matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::XdtoSerializer(_)))
+}
+
+/// Модель сериализатора-получателя.
+fn serializer_model<'a>(obj: &'a BslValue, method: &'static str) -> RtResult<&'a Rc<XdtoModel>> {
+    match obj {
+        BslValue::Object(o) => match &**o {
+            BslObject::XdtoSerializer(model) => Ok(model),
+            _ => Err(not_applicable(obj, method)),
+        },
+        _ => Err(not_applicable(obj, method)),
+    }
+}
+
+/// Члены сериализатора, до которых эта задача не дошла, — с РАЗНЫМИ
+/// причинами.
+///
+/// Все три измерены существующими, но упираются они в разное.
+/// `XMLТип(Тип)` и `XMLТипЗнч(Значение)` отдают `ТипДанныхXML` (у строки —
+/// `string` в пространстве XML Schema, у числа — `decimal`, у даты —
+/// `dateTime`), то есть реализовать их — значит сперва завести этот тип, а
+/// это отдельная работа. `ВозможностьЧтенияXML(Чт)` никакого нового типа не
+/// требует: измерено, что он отдаёт БУЛЕВО — «Да» на `<decimal>`
+/// пространства XML Schema, «Нет» на чужое имя и на читателя, ещё не
+/// сделавшего `Прочитать()`. Он не поддержан по объёму задачи: трёх точек
+/// мало, чтобы знать, когда именно платформа отвечает «Да». Молча отвечать
+/// чем попало нельзя ни там, ни там, поэтому вызов даёт перехватываемую
+/// ошибку, а не тишину, — и она называет ту причину, которая есть на самом
+/// деле.
+pub fn serializer_unsupported(obj: &BslValue, method: &'static str) -> RtError {
+    if !is_serializer(obj) {
+        return not_applicable(obj, method);
+    }
+    // Список написаний закрыт: сюда приходят ровно три литерала из
+    // `call_builtin_method`. Незнакомое имя не получает чужую причину —
+    // лучше отказ без объяснения, чем отказ с неверным.
+    let reason = match method {
+        "XMLТип" | "XMLТипЗнч" => ": он отдаёт «ТипДанныхXML», а этого типа здесь нет",
+        "ВозможностьЧтенияXML" => {
+            ": по замеру он отдаёт булево, но в этой задаче не реализован"
+        }
+        _ => "",
+    };
+    RtError::Xdto(format!(
+        "«СериализаторXDTO.{method}» не поддерживается{reason}"
+    ))
+}
+
+/// Элемент, которым сериализатор пишет значение BSL: имя, пространство
+/// имён, признак `xsi:nil` и текст.
+///
+/// Таблица снята поимённо с 8.3.27 через фабрику из ФАЙЛА XSD, то есть без
+/// каких бы то ни было типов конфигурации: число -> `<decimal>` в
+/// пространстве XML Schema, строка -> `<string>`, дата -> `<dateTime>`,
+/// булево -> `<boolean>`, двоичные данные -> `<base64Binary>`,
+/// `Неопределено` -> `<Undefined xsi:nil="true"/>` с ПУСТЫМ пространством
+/// имён, `Null` -> `<Null>` в пространстве базовых типов 1С.
+///
+/// # Errors
+///
+/// [`RtError::Xdto`], если значению соответствия нет.
+fn serialized_of(
+    model: &Rc<XdtoModel>,
+    value: &BslValue,
+) -> RtResult<(String, String, bool, String)> {
+    match value {
+        // Пространство имён у этого элемента ПУСТОЕ — и это не описка
+        // замера: `Тип("Неопределено")` та же платформа пишет как
+        // `{http://v8.1c.ru/8.2/data/types}Undefined`, то есть сама себе
+        // не соответствует. Воспроизводится измеренное.
+        BslValue::Undefined => Ok(("Undefined".to_string(), String::new(), true, String::new())),
+        BslValue::Null => Ok((
+            "Null".to_string(),
+            V8_CORE_NS.to_string(),
+            false,
+            String::new(),
+        )),
+        _ => {
+            let index = builtin_index_for(model, value).ok_or_else(|| unsupported_value(value))?;
+            let data = model.type_at(index)?;
+            Ok((
+                data.name.clone(),
+                data.ns.clone(),
+                false,
+                lexical_for_write(model, index, value)?,
+            ))
+        }
+    }
+}
+
+/// Отказ на значении, которого сериализатор над фабрикой из XSD не пишет.
+///
+/// Коллекции названы отдельной строкой потому, что причина у них другая и
+/// она измерена с обеих сторон: ГЛОБАЛЬНЫЙ сериализатор платформы пишет
+/// `Массив` как `<Array xmlns="http://v8.1c.ru/8.1/data/core">` со
+/// вложенными `<Value xsi:type="xs:decimal">`, а тот же самый `Массив`
+/// через фабрику из нашего XSD 8.3.27 уже отвергает — «Несоответствие
+/// типов (параметр номер '2') (Ошибка отображения типов)». Пакет
+/// `http://v8.1c.ru/8.1/data/core` приходит из метаданных конфигурации,
+/// которых здесь нет и не будет (см. `docs/std-library-plan.md`).
+fn unsupported_value(value: &BslValue) -> RtError {
+    let collection = matches!(
+        value,
+        BslValue::Object(o) if matches!(
+            &**o,
+            BslObject::Array(..)
+                | BslObject::Structure(..)
+                | BslObject::Map(..)
+                | BslObject::ValueTable(..)
+        )
+    );
+    if collection {
+        return RtError::Xdto(format!(
+            "«{}» не поддерживается: коллекции сериализуются типами пакета \
+             «{V8_CORE_NS}», а он берётся из метаданных конфигурации, которых здесь нет",
+            value.type_name()
+        ));
+    }
+    RtError::Xdto(format!(
+        "«СериализаторXDTO.ЗаписатьXML» не умеет писать «{}»: поддержаны значения \
+         встроенных типов XML Schema, «Неопределено» и «Null»",
+        value.type_name()
+    ))
+}
+
+/// Записать элемент сериализатора: имя, объявления, `xsi:nil` и текст.
+///
+/// Область объявлений здесь СВОЯ, а не та, что у `write_node`, и правило
+/// умолчательного объявления другое. Фабрика объявление опускает, когда
+/// URI уже привязан (а вне всяких объявлений привязан пустой URI), —
+/// сериализатор же пишет `xmlns` ВСЕГДА, включая `xmlns=""` (измерено:
+/// `<Undefined xmlns="" …>` и `<мой xmlns="" …>` при заданном имени).
+/// Остальное совпадает: `xs` не объявляется, если пространство XML Schema
+/// и так стало умолчательным, `xsi` объявляется всегда.
+///
+/// Имя пишется КАК ЗАДАНО, включая двоеточие: измерено, что
+/// `ЗаписатьXML(Зп, 42, "t:мой")` даёт `<t:мой xmlns="">` с необъявленным
+/// префиксом — там, где та же проба у фабрики отвергается.
+///
+/// Вырожденный случай — заданный вручную URI, РАВНЫЙ пространству
+/// экземпляров XML Schema, — тоже измерен, и рассуждение тут не помогло бы:
+/// `xmlns:xsi` платформа не объявляет вовсе (`<мой xmlns="…instance"
+/// xmlns:xs="…">42</мой>`), а когда пометку `nil` писать всё-таки надо,
+/// заводит для того же URI ПОРОЖДЁННЫЙ префикс и метит атрибут им — `<мой
+/// xmlns="…instance" xmlns:d1p1="…instance" xmlns:xs="…" d1p1:nil="true"/>`.
+/// Имя префикса подчиняется правилу записи фабрики, `d<глубина>p<номер>`, и
+/// глубина считается ПО ДОКУМЕНТУ: та же проба внутри открытого элемента
+/// даёт `d2p1`. Причина у обхода общая с фабрикой — умолчательное
+/// объявление на атрибуты не распространяется.
+///
+/// # Errors
+///
+/// [`RtError::Xml`], если писатель уже закрыт.
+fn write_serialized(
+    w: &mut crate::xml::XmlWriter,
+    name: &str,
+    uri: &str,
+    nil: bool,
+    text: &str,
+) -> RtResult<()> {
+    // Префикс порождается до начала тега — как и у `write_node`, где
+    // глубина берётся у писателя ещё не открытого элемента.
+    let generated = (uri == XSI_NS && nil).then(|| format!("d{}p1", w.depth() + 1));
+    w.write_start_element(name)?;
+    w.write_attribute("xmlns", uri)?;
+    if let Some(prefix) = &generated {
+        w.write_attribute(&format!("xmlns:{prefix}"), XSI_NS)?;
+    }
+    if uri != XSD_NS {
+        w.write_attribute("xmlns:xs", XSD_NS)?;
+    }
+    if uri != XSI_NS {
+        w.write_attribute("xmlns:xsi", XSI_NS)?;
+    }
+    if nil {
+        let prefix = generated.as_deref().unwrap_or("xsi");
+        w.write_attribute(&format!("{prefix}:nil"), "true")?;
+    }
+    // Пустая лексическая форма даёт схлопнутый `<имя/>` — то же правило,
+    // что у записи фабрики.
+    if !text.is_empty() {
+        w.write_text(text)?;
+    }
+    w.write_end_element()
+}
+
+/// `СериализаторXDTO.ЗаписатьXML(ЗаписьXML, Значение[, Имя[, УРИ]])`.
+///
+/// Арность измерена: одного аргумента платформа не берёт, пятый отвергает.
+/// Имя и URI ведут себя не так, как у фабрики, и это тоже измерено. И
+/// пустое имя, и `Неопределено` вместо него значат «имя по умолчанию»
+/// (`<decimal …>`, а не ошибка), причём пустое имя отбрасывает и заданный
+/// URI (`("", "urn:иное")` -> всё то же умолчание). А вот заданное имя,
+/// наоборот, сбрасывает пространство имён в ПУСТОЕ, если URI не назван
+/// (`ЗаписатьXML(Зп, 42, "мой")` -> `<мой xmlns="">`), и `Неопределено`
+/// вместо URI при этом равно неназванному (`("мой", Неопределено)` ->
+/// `<мой xmlns="">`).
+///
+/// Одно сочетание из этой сетки платформа отвергает, и правило тут не
+/// продолжается, а ломается: имя `Неопределено` ВМЕСТЕ с URI, заданным
+/// строкой, — «Несоответствие типов (параметр номер '4')», хотя пустое имя
+/// с тем же URI проходит, а `Неопределено` в обоих аргументах сразу снова
+/// даёт умолчание. То есть `Неопределено` в имени — это не «имя не
+/// задано», а значение, под которое четвёртый параметр не подходит по
+/// типу; воспроизводится измеренное, а не логика.
+///
+/// Различить эти случаи можно только ДО того, как имя и URI станут
+/// строками: `Неопределено` и пустая строка сходятся в `optional_text`,
+/// поэтому проверка стоит раньше него и смотрит на сами значения.
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель не сериализатор;
+/// [`RtError::Xdto`], если аргументы не те или значение не сериализуется;
+/// [`RtError::Xml`], если писатель уже закрыт.
+pub fn serializer_write_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+    let model = serializer_model(obj, "ЗаписатьXML")?;
+    let (writer, value, name, uri) = match args {
+        [writer, value] => (writer, value, None, None),
+        [writer, value, name] => (writer, value, Some(name), None),
+        [writer, value, name, uri] => (writer, value, Some(name), Some(uri)),
+        _ => return Err(not_applicable(obj, "ЗаписатьXML")),
+    };
+    if !crate::xml::is_xml_writer(writer) {
+        return Err(RtError::Xdto("ЗаписатьXML пишет в «ЗаписьXML»".to_string()));
+    }
+    if matches!(name, Some(BslValue::Undefined)) && matches!(uri, Some(BslValue::Str(_))) {
+        return Err(RtError::Xdto(
+            "«СериализаторXDTO.ЗаписатьXML»: имя «Неопределено» вместе с заданным URI \
+             платформа отвергает — «Несоответствие типов (параметр номер '4')»"
+                .to_string(),
+        ));
+    }
+    let given_name = optional_text(name, "ЗаписатьXML")?.filter(|n| !n.is_empty());
+    let given_uri = optional_text(uri, "ЗаписатьXML")?;
+    let (default_name, default_uri, nil, text) = serialized_of(model, value)?;
+    let (name, uri) = match given_name {
+        Some(name) => (name, given_uri.unwrap_or_default()),
+        None => (default_name, default_uri),
+    };
+    crate::xml::with_writer(writer, |w| write_serialized(w, &name, &uri, nil, &text))
+}
+
+/// Встроенный тип XML Schema, лексической формой которого сериализатор
+/// читает элемент, когда тип назван вторым аргументом ЗНАЧЕНИЕМ `Тип`.
+///
+/// Таблица обратна [`builtin_index_for`] и измерена с той же стороны:
+/// `ПрочитатьXML(Чт, Тип("Число"))` разбирает текст как `xs:decimal`
+/// (`<int>42</int>` тоже даёт 42 — имя элемента при заданном типе не
+/// смотрится вовсе), `Тип("Дата")` — как `xs:dateTime`, `Тип("Булево")` —
+/// как `xs:boolean`, `Тип("ДвоичныеДанные")` — как `xs:base64Binary`. Для
+/// `Тип("Массив")`, `Тип("УникальныйИдентификатор")` и
+/// `Тип("Неопределено")` платформа отвечает «Отсутствует отображение для
+/// типа», то есть отображения нет и у неё.
+fn builtin_index_of_type(model: &Rc<XdtoModel>, id: TypeId) -> Option<usize> {
+    let name = match id {
+        TypeId::String => "string",
+        TypeId::Number => "decimal",
+        TypeId::Boolean => "boolean",
+        TypeId::Date => "dateTime",
+        TypeId::BinaryData => "base64Binary",
+        _ => return None,
+    };
+    model.find(XSD_NS, name)
+}
+
+/// `СериализаторXDTO.ПрочитатьXML(ЧтениеXML[, Тип])`.
+///
+/// Второй аргумент — ЗНАЧЕНИЕ `Тип` (тип BSL), а не тип XDTO: измерено,
+/// что `Тип("Число")` принимается, а третий аргумент платформа отвергает
+/// («Слишком много фактических параметров»).
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель не сериализатор;
+/// [`RtError::Xdto`], если аргументы не те, отображения для типа нет либо
+/// текст не разбирается; [`RtError::Xml`] на битой разметке.
+pub fn serializer_read_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let model = serializer_model(obj, "ПрочитатьXML")?.clone();
+    let (reader, type_arg) = match args {
+        [reader] => (reader, None),
+        [reader, ty] => (reader, Some(ty)),
+        _ => return Err(not_applicable(obj, "ПрочитатьXML")),
+    };
+    if !crate::xml::is_xml_reader(reader) {
+        return Err(RtError::Xdto(
+            "ПрочитатьXML читает из «ЧтениеXML»".to_string(),
+        ));
+    }
+    let want = match type_arg {
+        None | Some(BslValue::Undefined) => None,
+        Some(BslValue::Type(id)) => Some(*id),
+        Some(other) => {
+            return Err(RtError::Xdto(format!(
+                "второй аргумент «СериализаторXDTO.ПрочитатьXML» — значение «Тип», \
+                 а не «{}»",
+                other.type_name()
+            )))
+        }
+    };
+    crate::xml::with_reader(reader, |state| {
+        read_one(state, |parser, head| {
+            serializer_read_element(parser, &model, head, want)
+        })
+    })
+}
+
+/// Разбор одного элемента в значение BSL.
+///
+/// Порядок решений измерен построчно:
+///
+/// * `xsi:nil="true"` перевешивает всё и даёт `Неопределено` — и у
+///   известного имени (`<decimal xsi:nil="true"/>`), и у чужого;
+/// * заданный вторым аргументом тип BSL отменяет и имя элемента, и
+///   `xsi:type`;
+/// * иначе тип ищется по `xsi:type` (он у сериализатора действует ПРЯМО
+///   на читаемом элементе — в отличие от фабрики, где пометка на нём не
+///   значит ничего), а неизвестное имя типа платформа молча игнорирует;
+/// * иначе — по расширенному имени самого элемента;
+/// * если тип не нашёлся, элемент читается СТРОКОЙ: так читаются и
+///   `<чужой>привет</чужой>`, и `<decimal>42</decimal>` без пространства
+///   имён, и `{http://v8.1c.ru/8.1/data/core}UUID`, и `Null`, и `Type`,
+///   то есть круг у них лексикой не замыкается (измерено);
+/// * если тип нашёлся, но он ОБЪЕКТНЫЙ, — ошибка: измерено, что
+///   `<RootType xmlns="urn:test">` даёт «Отсутствует отображение для типа
+///   '{urn:test}RootType'», а не строку.
+fn serializer_read_element(
+    parser: &mut crate::xml::XmlParser,
+    model: &Rc<XdtoModel>,
+    head: &ElementHead,
+    want: Option<TypeId>,
+) -> RtResult<BslValue> {
+    if reads_as_nil(parser, head) {
+        skip_element(parser)?;
+        return Ok(BslValue::Undefined);
+    }
+    if let Some(id) = want {
+        let Some(index) = builtin_index_of_type(model, id) else {
+            return Err(RtError::Xdto(format!(
+                "отсутствует отображение для типа «{}»",
+                id.name()
+            )));
+        };
+        let text = read_text_only(parser, head)?;
+        return value_from_lexical(model, index, &text);
+    }
+    let Some(index) = serializer_type_of(parser, model, head) else {
+        let text = read_text_only(parser, head)?;
+        return Ok(BslValue::Str(BslString::from_str(&text)));
+    };
+    let data = model.type_at(index)?;
+    if !data.is_value() {
+        return Err(RtError::Xdto(format!(
+            "отсутствует отображение для типа «{}»",
+            type_display(data)
+        )));
+    }
+    let text = read_text_only(parser, head)?;
+    value_from_lexical(model, index, &text)
+}
+
+/// Тип элемента: сначала `xsi:type`, потом собственное имя.
+fn serializer_type_of(
+    parser: &crate::xml::XmlParser,
+    model: &Rc<XdtoModel>,
+    head: &ElementHead,
+) -> Option<usize> {
+    let marked = head.attrs.iter().find(|a| {
+        attribute_uri(parser, &a.name) == XSI_NS && crate::xml::local_of(&a.name) == "type"
+    });
+    if let Some(qname) = marked {
+        let uri = parser.namespace_of(crate::xml::prefix_of(&qname.value));
+        if let Some(index) = model.find(&uri, crate::xml::local_of(&qname.value)) {
+            return Some(index);
+        }
+        // Неизвестное имя типа платформа ИГНОРИРУЕТ и читает дальше как
+        // ни в чём не бывало (измерено: `xsi:type="xs:чепуха"` на
+        // элементе `<мой>` дало строку «42», а не ошибку).
+    }
+    model.find(&head.uri, crate::xml::local_of(&head.name))
 }
 
 #[cfg(test)]
@@ -6487,5 +7056,524 @@ mod tests {
         // отвергает (`чв Создать пустой dbl`, `чв пустое dbl`).
         let double = m.find(XSD_NS, "double").expect("double");
         assert!(value_from_lexical(&m, double, "").is_err());
+    }
+
+    // --- СериализаторXDTO ---------------------------------------------
+
+    /// Сериализатор над фабрикой из `IO_SAMPLE`. Схема тут ни при чём —
+    /// примитивы идут встроенными типами XML Schema, которые есть у любой
+    /// модели, — но фабрика конструктору обязательна.
+    fn serializer() -> BslValue {
+        serializer_of_factory(&factory(IO_SAMPLE)).expect("сериализатор")
+    }
+
+    /// Запись значения сериализатором и снятие текста.
+    fn serialize(value: &BslValue, args: &[BslValue]) -> RtResult<String> {
+        let w = writer();
+        let mut call = vec![w.clone(), value.clone()];
+        call.extend(args.iter().cloned());
+        serializer_write_xml(&serializer(), &call)?;
+        match crate::xml::close_writer(&w)? {
+            BslValue::Str(s) => Ok(s.to_string()),
+            other => panic!("писатель отдал не строку: {other:?}"),
+        }
+    }
+
+    /// Обратное чтение текста сериализатором.
+    fn deserialize(text: &str, args: &[BslValue]) -> RtResult<BslValue> {
+        let mut call = vec![reader(text)];
+        call.extend(args.iter().cloned());
+        serializer_read_xml(&serializer(), &call)
+    }
+
+    /// Дата как значение — тем же путём, что и разбор лексики.
+    fn date_value(y: i64, m: u32, d: u32, hh: u32, mm: u32, ss: u32) -> BslValue {
+        BslValue::Date(crate::BslDate::from_civil(y, m, d, hh, mm, ss).expect("дата"))
+    }
+
+    /// `ДвоичныеДанные` из байтов.
+    fn binary_value(bytes: &[u8]) -> BslValue {
+        BslValue::Object(Rc::new(BslObject::BinaryData(Rc::from(bytes))))
+    }
+
+    #[test]
+    fn xdto_serializer_needs_a_factory() {
+        // Измерено: конструктор берёт ТОЛЬКО фабрику — ни строки, ни
+        // числа, ни типа XDTO, ни пустого вызова.
+        assert!(serializer_of_factory(&factory(IO_SAMPLE)).is_ok());
+        assert!(serializer_of_factory(&BslValue::Undefined).is_err());
+        assert!(serializer_of_factory(&str_value("urn:test")).is_err());
+        assert!(serializer_of_factory(&number_value(5)).is_err());
+        let f = factory(IO_SAMPLE);
+        assert!(serializer_of_factory(&type_of_factory(&f, "RootType")).is_err());
+        // Два сериализатора над одной фабрикой не равны (измерено «Нет»),
+        // а сам он печатается своим именем типа.
+        let a = serializer_of_factory(&f).expect("первый");
+        let b = serializer_of_factory(&f).expect("второй");
+        assert!(a != b);
+        assert_eq!(a.to_string(), "СериализаторXDTO");
+        assert_eq!(
+            a.type_of().expect("ТипЗнч"),
+            BslValue::Type(TypeId::XdtoSerializer)
+        );
+    }
+
+    #[test]
+    fn xdto_serializer_writes_the_measured_element_for_every_primitive() {
+        // Каждая строка снята с 8.3.27 (`measure-xdto-serializer.bsl`,
+        // пробы `зап …`) через фабрику из ФАЙЛА XSD, то есть без единого
+        // типа конфигурации.
+        let xsd = r#" xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance""#;
+        let both = r#" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance""#;
+        assert_eq!(
+            serialize(&number_value(42), &[]).expect("число"),
+            format!("<decimal{xsd}>42</decimal>")
+        );
+        assert_eq!(
+            serialize(&str_value("аб"), &[]).expect("строка"),
+            format!("<string{xsd}>аб</string>")
+        );
+        // Пустая лексическая форма схлопывает элемент — то же правило, что
+        // у записи фабрики.
+        assert_eq!(
+            serialize(&str_value(""), &[]).expect("пустая строка"),
+            format!("<string{xsd}/>")
+        );
+        assert_eq!(
+            serialize(&date_value(2026, 8, 13, 10, 20, 30), &[]).expect("дата"),
+            format!("<dateTime{xsd}>2026-08-13T10:20:30</dateTime>")
+        );
+        assert_eq!(
+            serialize(&BslValue::Boolean(true), &[]).expect("истина"),
+            format!("<boolean{xsd}>true</boolean>")
+        );
+        assert_eq!(
+            serialize(&BslValue::Boolean(false), &[]).expect("ложь"),
+            format!("<boolean{xsd}>false</boolean>")
+        );
+        assert_eq!(
+            serialize(&binary_value(&[0xD0, 0xB0, 0xD0, 0xB1]), &[]).expect("двоичные"),
+            format!("<base64Binary{xsd}>0LDQsQ==</base64Binary>")
+        );
+        // У этих двух пространство имён СВОЁ, и оба объявления `xs` и
+        // `xsi` появляются, потому что умолчательным стал не XML Schema.
+        assert_eq!(
+            serialize(&BslValue::Undefined, &[]).expect("неопределено"),
+            format!(r#"<Undefined xmlns=""{both} xsi:nil="true"/>"#)
+        );
+        assert_eq!(
+            serialize(&BslValue::Null, &[]).expect("null"),
+            format!(r#"<Null xmlns="{V8_CORE_NS}"{both}/>"#)
+        );
+    }
+
+    #[test]
+    fn xdto_serializer_round_trips_every_supported_primitive() {
+        // Круг замыкается лексикой: записанное читается обратно тем же
+        // значением (измерено — `круг число`, `круг строка`, `круг дата`,
+        // `круг булево`, `круг неопределено`, `круг двоичные`).
+        for value in [
+            number_value(42),
+            BslValue::Number(bsl_number::BslNumber::parse_canonical("12.5").expect("12.5")),
+            str_value("аб"),
+            str_value(""),
+            date_value(2026, 8, 13, 10, 20, 30),
+            date_value(2026, 8, 13, 0, 0, 0),
+            BslValue::Boolean(true),
+            BslValue::Boolean(false),
+            BslValue::Undefined,
+            binary_value(&[0xD0, 0xB0, 0xD0, 0xB1]),
+        ] {
+            let text = serialize(&value, &[]).expect("запись");
+            let back = deserialize(&text, &[]).expect("чтение");
+            assert_eq!(back, value, "круг по {text}");
+        }
+        // А `Null` кругом НЕ замыкается, и это измерено: `<Null/>`
+        // пространства базовых типов 1С в модели фабрики из XSD не
+        // значится, поэтому обратно приходит пустая строка («круг NULL» ->
+        // `Строка []`).
+        let text = serialize(&BslValue::Null, &[]).expect("запись null");
+        assert_eq!(deserialize(&text, &[]).expect("чтение null"), str_value(""));
+    }
+
+    #[test]
+    fn xdto_serializer_takes_the_element_name_and_uri_from_the_arguments() {
+        let both = r#" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance""#;
+        // Заданное имя сбрасывает пространство имён в ПУСТОЕ, если URI не
+        // назван, — не в пространство типа (измерено).
+        assert_eq!(
+            serialize(&number_value(42), &[str_value("мой")]).expect("имя"),
+            format!(r#"<мой xmlns=""{both}>42</мой>"#)
+        );
+        assert_eq!(
+            serialize(
+                &number_value(42),
+                &[str_value("мой"), str_value("urn:иное")]
+            )
+            .expect("имя и URI"),
+            format!(r#"<мой xmlns="urn:иное"{both}>42</мой>"#)
+        );
+        // Пустое имя и `Неопределено` вместо него — это «имя по
+        // умолчанию», а не ошибка, и пустое имя отбрасывает ЗАОДНО и URI
+        // (измерено обе пробы).
+        let default = concat!(
+            r#"<decimal xmlns="http://www.w3.org/2001/XMLSchema" "#,
+            r#"xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</decimal>"#
+        );
+        assert_eq!(
+            serialize(&number_value(42), &[str_value("")]).expect("пустое имя"),
+            default
+        );
+        assert_eq!(
+            serialize(&number_value(42), &[BslValue::Undefined]).expect("имя Неопределено"),
+            default
+        );
+        assert_eq!(
+            serialize(&number_value(42), &[str_value(""), str_value("urn:иное")])
+                .expect("пустое имя с URI"),
+            default
+        );
+        // URI `Неопределено` при заданном имени — это пустой URI.
+        assert_eq!(
+            serialize(&number_value(42), &[str_value("мой"), BslValue::Undefined])
+                .expect("URI Неопределено"),
+            format!(r#"<мой xmlns=""{both}>42</мой>"#)
+        );
+        // Имя с двоеточием сериализатор пишет КАК ЕСТЬ — там, где фабрика
+        // его отвергает (измерено обе стороны).
+        assert_eq!(
+            serialize(&number_value(42), &[str_value("t:мой")]).expect("имя с двоеточием"),
+            format!(r#"<t:мой xmlns=""{both}>42</t:мой>"#)
+        );
+        // Нестроковые имя и URI — ошибка, как на платформе.
+        assert!(serialize(&number_value(42), &[number_value(5)]).is_err());
+        assert!(serialize(&number_value(42), &[str_value("мой"), number_value(5)]).is_err());
+        // Арность: одного аргумента мало, пятого не бывает.
+        let s = serializer();
+        assert!(serializer_write_xml(&s, &[writer()]).is_err());
+        assert!(serializer_write_xml(
+            &s,
+            &[
+                writer(),
+                number_value(42),
+                str_value("м"),
+                str_value("u"),
+                str_value("лишний"),
+            ]
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn xdto_serializer_reads_by_element_name_and_falls_back_to_a_string() {
+        let xsd = r#" xmlns="http://www.w3.org/2001/XMLSchema""#;
+        // Имя элемента — это расширенное имя типа в модели.
+        assert_eq!(
+            deserialize(&format!("<decimal{xsd}>42</decimal>"), &[]).expect("decimal"),
+            number_value(42)
+        );
+        assert_eq!(
+            deserialize(&format!("<int{xsd}>42</int>"), &[]).expect("int"),
+            number_value(42)
+        );
+        // Пустая лексическая форма числа — ноль (измерено).
+        assert_eq!(
+            deserialize(&format!("<decimal{xsd}/>"), &[]).expect("пустой decimal"),
+            number_value(0)
+        );
+        // Цифровая запись булева — та же, что у `xs:boolean` вообще.
+        assert_eq!(
+            deserialize(&format!("<boolean{xsd}>1</boolean>"), &[]).expect("boolean"),
+            BslValue::Boolean(true)
+        );
+        // Текст простого элемента сохраняется как есть, включая краевые
+        // пробелы (измерено `[ аб ]`).
+        assert_eq!(
+            deserialize(&format!("<string{xsd}> аб </string>"), &[]).expect("string"),
+            str_value(" аб ")
+        );
+        // Всё, чему в модели типа не нашлось, читается СТРОКОЙ: и чужое
+        // имя, и то же имя без пространства имён, и элементы пакета
+        // базовых типов 1С, которых в фабрике из XSD нет.
+        assert_eq!(
+            deserialize("<чужой>привет</чужой>", &[]).expect("чужой"),
+            str_value("привет")
+        );
+        assert_eq!(
+            deserialize("<decimal>42</decimal>", &[]).expect("без пространства"),
+            str_value("42")
+        );
+        assert_eq!(
+            deserialize(
+                &format!(
+                    r#"<UUID xmlns="{V8_CORE_NS}">01234567-89ab-cdef-0123-456789abcdef</UUID>"#
+                ),
+                &[]
+            )
+            .expect("UUID"),
+            str_value("01234567-89ab-cdef-0123-456789abcdef")
+        );
+        // `xsi:nil` перевешивает имя — и у известного типа, и у чужого.
+        let nil = r#" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:nil="true""#;
+        assert_eq!(
+            deserialize(&format!("<decimal{xsd}{nil}/>"), &[]).expect("nil у decimal"),
+            BslValue::Undefined
+        );
+        assert_eq!(
+            deserialize(&format!("<чужой{nil}/>"), &[]).expect("nil у чужого"),
+            BslValue::Undefined
+        );
+        // А без пометки тот же `<Undefined/>` — просто пустая строка.
+        assert_eq!(
+            deserialize(r#"<Undefined xmlns=""/>"#, &[]).expect("Undefined без nil"),
+            str_value("")
+        );
+    }
+
+    #[test]
+    fn xdto_serializer_honours_xsi_type_on_the_element_it_reads() {
+        // У сериализатора пометка действует ПРЯМО на читаемом элементе —
+        // в отличие от `ФабрикаXDTO.ПрочитатьXML`, где на нём она не
+        // значит ничего (измерено обе стороны).
+        let head = concat!(
+            r#" xmlns:xs="http://www.w3.org/2001/XMLSchema""#,
+            r#" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance""#
+        );
+        assert_eq!(
+            deserialize(
+                &format!(r#"<мой{head} xsi:type="xs:decimal">42</мой>"#),
+                &[]
+            )
+            .expect("xsi:type"),
+            number_value(42)
+        );
+        // Неизвестное имя типа платформа ИГНОРИРУЕТ, а не ругается.
+        assert_eq!(
+            deserialize(&format!(r#"<мой{head} xsi:type="xs:чепуха">42</мой>"#), &[])
+                .expect("неизвестный xsi:type"),
+            str_value("42")
+        );
+    }
+
+    #[test]
+    fn xdto_serializer_reads_by_an_explicit_bsl_type() {
+        // Заданный тип отменяет имя элемента: `<int>` с `Тип("Число")`
+        // разбирается как `xs:decimal` и даёт 42 (измерено).
+        assert_eq!(
+            deserialize("<что>42</что>", &[BslValue::Type(TypeId::Number)]).expect("число"),
+            number_value(42)
+        );
+        assert_eq!(
+            deserialize(
+                "<когда>2026-08-13T10:20:30</когда>",
+                &[BslValue::Type(TypeId::Date)]
+            )
+            .expect("дата"),
+            date_value(2026, 8, 13, 10, 20, 30)
+        );
+        assert_eq!(
+            deserialize("<флаг>true</флаг>", &[BslValue::Type(TypeId::Boolean)]).expect("булево"),
+            BslValue::Boolean(true)
+        );
+        assert_eq!(
+            deserialize("<что>аб</что>", &[BslValue::Type(TypeId::String)]).expect("строка"),
+            str_value("аб")
+        );
+        assert_eq!(
+            deserialize("<что>0LDQsQ==</что>", &[BslValue::Type(TypeId::BinaryData)])
+                .expect("двоичные"),
+            binary_value(&[0xD0, 0xB0, 0xD0, 0xB1])
+        );
+        // Отображения нет — платформа отвечает «Отсутствует отображение
+        // для типа», и здесь то же (измерено на трёх типах).
+        for id in [TypeId::Array, TypeId::Null, TypeId::Undefined] {
+            let err = deserialize("<м/>", &[BslValue::Type(id)]).expect_err("нет отображения");
+            assert!(err.to_string().contains("отсутствует отображение"), "{err}");
+        }
+        // Лексическая форма проверяется и при заданном типе.
+        assert!(deserialize("<что>аб</что>", &[BslValue::Type(TypeId::Number)]).is_err());
+        // Второй аргумент — именно значение `Тип`, а не тип XDTO.
+        let f = factory(IO_SAMPLE);
+        assert!(deserialize("<м/>", &[type_of_factory(&f, "RootType")]).is_err());
+        // Третьего аргумента у чтения нет.
+        assert!(deserialize(
+            "<м/>",
+            &[BslValue::Type(TypeId::Number), str_value("лишний")]
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn xdto_serializer_refuses_what_needs_configuration_metadata() {
+        // Коллекции 1С платформа пишет типами пакета
+        // `http://v8.1c.ru/8.1/data/core`: глобальный сериализатор выдаёт
+        // `<Array xmlns="http://v8.1c.ru/8.1/data/core">`, а тот же массив
+        // через фабрику из XSD она уже отвергает (измерено оба раза).
+        // Отказ обязан НАЗЫВАТЬ причину — метаданные конфигурации.
+        let collections = [
+            BslValue::new_array(vec![number_value(1)]),
+            BslValue::new_structure(crate::shape::ShapeTable::default().empty(), Vec::new()),
+            BslValue::new_map(),
+            BslValue::new_table(),
+        ];
+        for value in collections {
+            let err = serialize(&value, &[]).expect_err("коллекция не пишется");
+            let text = err.to_string();
+            assert!(text.contains("метаданных конфигурации"), "{text}");
+            assert!(text.contains(V8_CORE_NS), "{text}");
+        }
+        // Экземпляры XDTO сериализатор тоже не пишет — измерено, что
+        // 8.3.27 отвечает «Несоответствие типов (параметр номер '2')», —
+        // но причина у них другая, и текст отказа другой.
+        let f = factory(IO_SAMPLE);
+        let o = factory_create(&f, &[type_of_factory(&f, "RootType")]).expect("экземпляр");
+        let err = serialize(&o, &[]).expect_err("экземпляр не пишется");
+        assert!(err.to_string().contains("не умеет писать"), "{err}");
+        // Составной тип схемы не читается тоже — и здесь платформа как раз
+        // называет отсутствующее отображение.
+        let err = deserialize(
+            r#"<RootType xmlns="urn:test"><name>аб</name></RootType>"#,
+            &[],
+        )
+        .expect_err("тип схемы не читается");
+        assert!(err.to_string().contains("отсутствует отображение"), "{err}");
+    }
+
+    #[test]
+    fn xdto_serializer_leaves_the_reader_on_the_next_node() {
+        // Позиция та же, что у фабрики: два соседних элемента читаются
+        // двумя вызовами без `Прочитать()` между ними (измерено «42|аб»).
+        let s = serializer();
+        let doc = concat!(
+            "<об>",
+            r#"<decimal xmlns="http://www.w3.org/2001/XMLSchema">42</decimal>"#,
+            r#"<string xmlns="http://www.w3.org/2001/XMLSchema">аб</string>"#,
+            "</об>"
+        );
+        let r = reader(doc);
+        crate::xml::with_reader(&r, |state| {
+            state.parser.as_mut().expect("разборщик").read()?;
+            Ok(())
+        })
+        .expect("шаг к корню");
+        let first = serializer_read_xml(&s, std::slice::from_ref(&r)).expect("первый");
+        let second = serializer_read_xml(&s, std::slice::from_ref(&r)).expect("второй");
+        assert_eq!(first, number_value(42));
+        assert_eq!(second, str_value("аб"));
+        // После корня читатель исчерпан, и следующее чтение — ошибка.
+        assert!(serializer_read_xml(&s, &[r]).is_err());
+    }
+
+    #[test]
+    fn xdto_serializer_says_plainly_what_it_does_not_implement() {
+        // Три члена ИЗМЕРЕНЫ существующими у 8.3.27, и отказ — не «метод
+        // не обнаружен» на компиляции, а перехватываемая ошибка. Причины у
+        // них РАЗНЫЕ, и текст обязан их различать.
+        let s = serializer();
+        // Этим двум нужен тип `ТипДанныхXML`, которого здесь нет.
+        for method in ["XMLТип", "XMLТипЗнч"] {
+            let err = serializer_unsupported(&s, method).to_string();
+            assert!(err.contains("не поддерживается"), "{err}");
+            assert!(err.contains("ТипДанныхXML"), "{err}");
+        }
+        // А этому — нет: измерено, что он отдаёт булево (снимок
+        // `measure-xdto-serializer.platform.txt`, строки 33, 133, 134, 140,
+        // 152, 153). Ссылаться на `ТипДанныхXML` здесь значило бы записать
+        // в диагностику то, что опровергается собственным замером.
+        let err = serializer_unsupported(&s, "ВозможностьЧтенияXML").to_string();
+        assert!(err.contains("не поддерживается"), "{err}");
+        assert!(err.contains("булево"), "{err}");
+        assert!(!err.contains("ТипДанныхXML"), "{err}");
+        // У чужого получателя это обычное «метод неприменим».
+        let err = serializer_unsupported(&factory(IO_SAMPLE), "XMLТип");
+        assert!(matches!(err, RtError::MethodNotApplicable { .. }), "{err}");
+    }
+
+    #[test]
+    fn xdto_serializer_refuses_an_undefined_name_that_comes_with_a_uri() {
+        // Снимок, строка 108: `ЗаписатьXML(Зпис, 42, Неопределено,
+        // "urn:иное")` -> «Несоответствие типов (параметр номер '4')».
+        let s = serializer();
+        let w = writer();
+        let err = serializer_write_xml(
+            &s,
+            &[
+                w.clone(),
+                number_value(42),
+                BslValue::Undefined,
+                str_value("urn:иное"),
+            ],
+        )
+        .expect_err("имя «Неопределено» вместе с URI отвергается");
+        assert!(err.to_string().contains("параметр номер '4'"), "{err}");
+        // Соседи по сетке измерены иначе, и отказ не должен задеть их.
+        // Пустое имя с тем же URI — умолчание (строка 158).
+        assert_eq!(
+            serialize(&number_value(42), &[str_value(""), str_value("urn:иное")])
+                .expect("умолчание"),
+            r#"<decimal xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</decimal>"#
+        );
+        // `Неопределено` в обоих аргументах сразу — тоже умолчание
+        // (строка 179), как и имя `Неопределено` без URI (строка 107).
+        assert_eq!(
+            serialize(
+                &number_value(42),
+                &[BslValue::Undefined, BslValue::Undefined]
+            )
+            .expect("умолчание"),
+            r#"<decimal xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</decimal>"#
+        );
+        // А заданное имя с `Неопределено` вместо URI — пустое пространство
+        // имён (строка 159).
+        assert_eq!(
+            serialize(&number_value(42), &[str_value("мой"), BslValue::Undefined])
+                .expect("пустое пространство"),
+            r#"<мой xmlns="" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</мой>"#
+        );
+    }
+
+    #[test]
+    fn xdto_serializer_generates_a_prefix_when_the_uri_is_the_instance_namespace() {
+        // Строки 178 и 180 снимка: `xmlns:xsi` не объявляется вовсе, когда
+        // умолчательным стало само пространство экземпляров, а пометке
+        // `nil` платформа заводит порождённый префикс для того же URI.
+        assert_eq!(
+            serialize(&number_value(42), &[str_value("мой"), str_value(XSI_NS)]).expect("без xsi"),
+            r#"<мой xmlns="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema">42</мой>"#
+        );
+        assert_eq!(
+            serialize(&BslValue::Undefined, &[str_value("мой"), str_value(XSI_NS)])
+                .expect("порождённый префикс"),
+            concat!(
+                r#"<мой xmlns="http://www.w3.org/2001/XMLSchema-instance" "#,
+                r#"xmlns:d1p1="http://www.w3.org/2001/XMLSchema-instance" "#,
+                r#"xmlns:xs="http://www.w3.org/2001/XMLSchema" d1p1:nil="true"/>"#
+            )
+        );
+        // Глубина считается ПО ДОКУМЕНТУ, включая элемент, открытый до
+        // вызова: строка 181 снимка даёт на втором уровне `d2p1`.
+        let s = serializer();
+        let w = writer();
+        crate::xml::write_start_element(&w, &[str_value("об")]).expect("обёртка");
+        serializer_write_xml(
+            &s,
+            &[
+                w.clone(),
+                BslValue::Undefined,
+                str_value("мой"),
+                str_value(XSI_NS),
+            ],
+        )
+        .expect("запись внутрь");
+        crate::xml::write_end_element(&w).expect("конец обёртки");
+        let text = match crate::xml::close_writer(&w).expect("закрытие") {
+            BslValue::Str(s) => s.to_string(),
+            other => panic!("писатель отдал не строку: {other:?}"),
+        };
+        assert!(
+            text.contains(r#"xmlns:d2p1="http://www.w3.org/2001/XMLSchema-instance""#),
+            "{text}"
+        );
+        assert!(text.contains(r#"d2p1:nil="true""#), "{text}");
     }
 }

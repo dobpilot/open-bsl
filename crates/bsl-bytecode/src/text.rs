@@ -36,7 +36,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 11;
+pub const FORMAT_VERSION: u32 = 12;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -106,6 +106,7 @@ pub const OPCODES: &[&str] = &[
     "NewXmlSchema",
     "NewXmlSchemaSet",
     "NewXdtoFactory",
+    "NewXdtoSerializer",
     "NewDomNsResolver",
     "NewXmlExpandedName",
     "CollectionLen",
@@ -491,6 +492,9 @@ fn write_instr(instr: &Instr) -> String {
         Instr::NewXmlSchemaSet { dst } => format!("NewXmlSchemaSet dst={dst}"),
         Instr::NewXdtoFactory { dst, schemas } => {
             format!("NewXdtoFactory dst={dst} schemas={schemas}")
+        }
+        Instr::NewXdtoSerializer { dst, factory } => {
+            format!("NewXdtoSerializer dst={dst} factory={factory}")
         }
         Instr::NewDomNsResolver { dst, node } => {
             format!("NewDomNsResolver dst={dst} node={node}")
@@ -1293,6 +1297,10 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
             dst: dst(&f)?,
             schemas: field_u8(&f, no, "schemas")?,
         },
+        "NewXdtoSerializer" => Instr::NewXdtoSerializer {
+            dst: dst(&f)?,
+            factory: field_u8(&f, no, "factory")?,
+        },
         "NewDomNsResolver" => Instr::NewDomNsResolver {
             dst: dst(&f)?,
             node: field_u8(&f, no, "node")?,
@@ -1465,7 +1473,10 @@ mod tests {
         // а голая `ФабрикаXDTO` идёт обычным CallBuiltin.
         "набор = Новый НаборСхемXML;\nф = Новый ФабрикаXDTO(набор);\nп = Новый ФабрикаXDTO;\n\
          т = ф.Тип(\"http://www.w3.org/2001/XMLSchema\", \"string\");\nз = ф.Создать(т, \"аб\");\n\
-         Попытка\n  г = ФабрикаXDTO;\nИсключение\nКонецПопытки;\n",
+         Попытка\n  г = ФабрикаXDTO;\nИсключение\nКонецПопытки;\n\
+         сер = Новый СериализаторXDTO(ф);\nзп = Новый ЗаписьXML;\nзп.УстановитьСтроку();\n\
+         сер.ЗаписатьXML(зп, 42);\nтекст = зп.Закрыть();\n\
+         чт = Новый ЧтениеXML;\nчт.УстановитьСтроку(текст);\nр = сер.ПрочитатьXML(чт);\n",
         // XPath над DOM: свой опкод только у конструктора
         // разыменователя, остальные шесть имён — обычные CallMethod, но
         // корпус обязан задеть и их.

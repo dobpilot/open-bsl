@@ -1,0 +1,80 @@
+тип: Сериализатор XDTO
+строка: СериализаторXDTO
+тип по имени: Сериализатор XDTO
+тип по имени англ: Сериализатор XDTO
+английский конструктор: Сериализатор XDTO
+два не равны: Нет
+равен себе: Да
+число: <decimal xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</decimal>
+число дробное: <decimal xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">12.5</decimal>
+число длинное: <decimal xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">0.333333333333333333333333333</decimal>
+число отрицательное: <decimal xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">-0.25</decimal>
+число ноль: <decimal xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">0</decimal>
+строка значение: <string xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">аб</string>
+строка пустая: <string xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"/>
+строка с разметкой: <string xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">&lt;&amp;&gt;"</string>
+дата: <dateTime xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">2026-08-13T00:00:00</dateTime>
+дата со временем: <dateTime xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">2026-08-13T10:20:30</dateTime>
+дата пустая: <dateTime xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">0001-01-01T00:00:00</dateTime>
+булево истина: <boolean xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">true</boolean>
+булево ложь: <boolean xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">false</boolean>
+неопределено: <Undefined xmlns="" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:nil="true"/>
+null: <Null xmlns="http://v8.1c.ru/8.1/data/core" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"/>
+двоичные: <base64Binary xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">0LDQsQ==</base64Binary>
+двоичные 48: <base64Binary xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3</base64Binary>
+двоичные 49: <base64Binary xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3<ВК><ПС>OA==</base64Binary>
+с именем: <мой xmlns="" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</мой>
+с именем и URI: <мой xmlns="urn:иное" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</мой>
+с пустым именем: <decimal xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</decimal>
+с пустым именем и URI: <decimal xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</decimal>
+с именем и пустым URI: <мой xmlns="" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</мой>
+имя с двоеточием: <t:мой xmlns="" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</t:мой>
+неопределено с именем: <мой xmlns="" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:nil="true"/>
+null с именем: <мой xmlns="" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"/>
+массив: ошибка
+структура: ошибка
+соответствие: ошибка
+таблица значений: ошибка
+объект XDTO: ошибка
+значение XDTO: ошибка
+чт decimal: Число
+чт int: 42
+чт string: [ аб ]
+чт string пустой: []
+чт decimal пустой: 0
+чт boolean: Да
+чт boolean единицей: Да
+чт date: 13.08.2026 0:00:00
+чт dateTime: 13.08.2026 10:20:30
+чт base64: 4
+чт чужое имя: Строка [привет]
+чт без пространства: Строка [42]
+чт UUID: Строка
+чт Null: Строка
+чт тип схемы: ошибка
+чт вложенный элемент: ошибка
+чт битая лексика: ошибка
+чт nil у decimal: Не определено
+чт nil у чужого: Не определено
+чт Undefined без nil: Строка
+чт xsi:type: Число
+чт xsi:type неизвестный: Строка
+чт типом Число: 42
+чт типом Число из int: 42
+чт типом Строка: [аб]
+чт типом Дата: 13.08.2026 10:20:30
+чт типом Булево: Да
+чт типом ДвоичныеДанные: 4
+чт типом Массив: ошибка
+чт типом Неопределено: ошибка
+чт типом битая лексика: ошибка
+круг число: Число [42]
+круг дробное: Число [12,5]
+круг строка: Строка [аб]
+круг дата: Дата [13.08.2026 10:20:30]
+круг булево: Булево [Да]
+круг неопределено: Не определено []
+круг null: Строка []
+круг двоичные: Двоичные данные
+двух подряд: 42|аб
+позиция после корня: Ничего

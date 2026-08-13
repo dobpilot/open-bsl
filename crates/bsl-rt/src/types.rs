@@ -161,6 +161,7 @@ pub enum TypeId {
 
     // --- модель типов XDTO --------------------------------------------
     XdtoFactory,
+    XdtoSerializer,
     XdtoDataObject,
     XdtoValueType,
     XdtoObjectType,
@@ -545,6 +546,13 @@ const NAMES: &[(TypeId, &str, &str)] = &[
     // `Тип("ФабрикаXDTO")` и `Тип("XDTOFactory")` дают «Фабрика XDTO»,
     // `Тип("ОбъектXDTO")` и `Тип("XDTODataObject")` — «Объект XDTO».
     (TypeId::XdtoFactory, "Фабрика XDTO", "XDTOFactory"),
+    // Сериализатор ИЗМЕРЕН тем же способом: `Тип("СериализаторXDTO")` и
+    // `Тип("XDTOSerializer")` дают «Сериализатор XDTO».
+    (
+        TypeId::XdtoSerializer,
+        "Сериализатор XDTO",
+        "XDTOSerializer",
+    ),
     (TypeId::XdtoDataObject, "Объект XDTO", "XDTODataObject"),
     (TypeId::XdtoValueType, "Тип значения XDTO", "XDTOValueType"),
     (TypeId::XdtoObjectType, "Тип объекта XDTO", "XDTOObjectType"),

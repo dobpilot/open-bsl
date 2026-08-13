@@ -1,0 +1,181 @@
+схема записана	Строка [/tmp/open-bsl-measure-xdto-serializer.xsd]
+фабрика	Фабрика XDTO [ФабрикаXDTO]
+тип корня	Тип объекта XDTO [{urn:test}RootType]
+сер новый без скобок	<ошибка>
+сер новый пустые скобки	<ошибка>
+сер новый с фабрикой	Сериализатор XDTO [СериализаторXDTO]
+сер новый два аргумента	<ошибка>
+сер новый строкой	<ошибка>
+сер новый числом	<ошибка>
+сер новый типом	<ошибка>
+сер новый англ	Сериализатор XDTO [СериализаторXDTO]
+сер тип по имени	Тип [Сериализатор XDTO]
+сер тип по имени англ	Тип [Сериализатор XDTO]
+сер ЗначениеЗаполнено	<ошибка>
+сер два не равны	Строка [Нет]
+глоб сер	Сериализатор XDTO [СериализаторXDTO]
+глоб сер фабрика	<ошибка>
+глоб зап числа	<decimal xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</decimal>
+глоб зап строки	<string xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">аб</string>
+глоб зап массива	<Array xmlns="http://v8.1c.ru/8.1/data/core" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><ПС><Т><Value xsi:type="xs:decimal">1</Value><ПС><Т><Value xsi:type="xs:string">аб</Value><ПС></Array>
+глоб зап структуры	<Structure xmlns="http://v8.1c.ru/8.1/data/core" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><ПС><Т><Property name="а"><ПС><Т><Т><Value xsi:type="xs:decimal">1</Value><ПС><Т></Property><ПС><Т><Property name="б"><ПС><Т><Т><Value xsi:type="xs:string">вг</Value><ПС><Т></Property><ПС></Structure>
+сер ФабрикаXDTO	<ошибка>
+сер XDTOFactory	<ошибка>
+сер фабрика та же	<ошибка>
+сер фабрика на запись	<ошибка>
+сер посторонний член	<ошибка>
+сер XMLТип	Тип данных XML [ТипДанныхXML]
+сер XMLТипЗнч	Тип данных XML [ТипДанныхXML]
+сер XMLЗначение	Число [42]
+сер XMLСтрока	Строка [42]
+сер ЗаписатьJSON	<ошибка>
+сер ПрочитатьJSON	<ошибка>
+сер ВозможностьЧтенияXML	Нет
+зап без аргументов	<ошибка>
+зап один аргумент	<ошибка>
+зап три аргумента	<мой xmlns="" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</мой>
+зап четыре аргумента	<мой xmlns="urn:иное" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</мой>
+зап пять аргументов	<ошибка>
+зап шесть аргументов	<ошибка>
+зап WriteXML англ	<decimal xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</decimal>
+зап число	<decimal xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</decimal>
+зап число дробное	<decimal xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">12.5</decimal>
+зап число длинное	<decimal xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">0.333333333333333333333333333</decimal>
+зап число отрицательное	<decimal xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">-0.25</decimal>
+зап строка	<string xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">аб</string>
+зап строка пустая	<string xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"/>
+зап строка с разметкой	<string xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">&lt;&amp;&gt;"</string>
+зап дата	<dateTime xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">2026-08-13T00:00:00</dateTime>
+зап дата со временем	<dateTime xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">2026-08-13T10:20:30</dateTime>
+зап дата пустая	<dateTime xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">0001-01-01T00:00:00</dateTime>
+зап булево истина	<boolean xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">true</boolean>
+зап булево ложь	<boolean xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">false</boolean>
+зап неопределено	<Undefined xmlns="" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:nil="true"/>
+зап NULL	<Null xmlns="http://v8.1c.ru/8.1/data/core" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"/>
+зап GUID	<UUID xmlns="http://v8.1c.ru/8.1/data/core" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">01234567-89ab-cdef-0123-456789abcdef</UUID>
+зап двоичные	<base64Binary xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">0LDQsQ==</base64Binary>
+зап тип	<Type xmlns="http://v8.1c.ru/8.1/data/core" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">xs:string</Type>
+зап массив	<ошибка>
+зап структура	<ошибка>
+зап соответствие	<ошибка>
+зап таблица значений	<ошибка>
+зап объект XDTO	<ошибка>
+зап значение XDTO	<ошибка>
+зап в открытый элемент	<обёртка><ПС><Т><decimal xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</decimal><ПС></обёртка>
+зап двух подряд	<об><ПС><Т><decimal xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</decimal><ПС><Т><string xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">аб</string><ПС></об>
+чт без аргументов	<ошибка>
+чт строкой	<ошибка>
+чт три аргумента	<ошибка>
+чт ReadXML англ	42
+круг число	Число [42]
+круг число дробное	Число [12.5]
+круг строка	Строка [аб]
+круг дата	Дата [2026-08-13 10:20:30]
+круг булево	Булево [Да]
+круг неопределено	Не определено []
+круг GUID	Строка [01234567-89ab-cdef-0123-456789abcdef]
+круг двоичные	Двоичные данные [4]
+круг объект XDTO	<ошибка>
+чт с типом BSL	Число [42]
+чт с типом XDTO	<ошибка>
+чт позиция ТипУзла	Ничего
+чт двух подряд	42|аб
+чт чужой элемент	Строка
+оп зап массив прямо	{<Неизвестный модуль>(1)}: Ошибка при вызове метода контекста (ЗаписатьXML): Несоответствие типов (параметр номер '2') (Ошибка отображения типов)
+оп зап структура прямо	<ошибка>
+оп зап объект XDTO	{<Неизвестный модуль>(1)}: Ошибка при вызове метода контекста (ЗаписатьXML): Несоответствие типов (параметр номер '2') (Ошибка отображения типов)
+оп сер ФабрикаXDTO	{<Неизвестный модуль>(1)}: Поле объекта не обнаружено (ФабрикаXDTO)
+оп сер ЗначениеЗаполнено	{<Неизвестный модуль>(1)}: Ошибка при вызове метода контекста (ЗначениеЗаполнено): Проверка мутабельных значений на заполненность не поддерживается
+оп чт три аргумента	{<Неизвестный модуль>(1)}: Слишком много фактических параметров
+оп сер ЗаписатьJSON	{<ПС>"#value": 42<ПС>}
+оп конструктор без фабрики	{<Неизвестный модуль>(1)}: Ошибка компиляции при вычислении выражения или выполнении фрагмента кода: {<Неизвестный модуль>(1,12)}: Конструктор не найден
+чт Undefined	Не определено []
+чт Null	Строка []
+чт UUID	Строка [01234567-89ab-cdef-0123-456789abcdef]
+чт Type	Строка [xs:string]
+чт decimal без пространства	Строка [42]
+чт int	Число [42]
+чт date	Дата [2026-08-13 00:00:00]
+чт чужое имя с текстом	Строка [привет]
+чт xsi:type у корня	Число [42]
+чт битая лексика	{<Неизвестный модуль>(1)}: Ошибка при вызове метода контекста (ПрочитатьXML): Ошибка преобразования данных XDTO:<ПС>Значение: аб<Т>Тип: {http://www.w3.org/2001/XMLSchema}decimal: Ошибка отображения типов:<ПС>Отображение типа '{http://www.w3.org/2001/XMLSchema}decimal' в тип 'Число'
+чт пустой decimal	Число [0]
+чт с типом Дата	Дата [2026-08-13 10:20:30]
+чт с типом Булево	Булево [Да]
+чт с типом Массив	{<Неизвестный модуль>(1)}: Ошибка при вызове метода контекста (ПрочитатьXML): Ошибка отображения типов:<ПС>Отсутствует отображение для типа 'Массив'
+зап имя пустое	<decimal xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</decimal>
+зап имя Неопределено	<decimal xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</decimal>
+зап имя Неопределено с URI	{<Неизвестный модуль>(1)}: Ошибка при вызове метода контекста (ЗаписатьXML): Несоответствие типов (параметр номер '4')
+зап имя с двоеточием	<t:мой xmlns="" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</t:мой>
+зап имя числом	{<Неизвестный модуль>(1)}: Ошибка при вызове метода контекста (ЗаписатьXML): Несоответствие типов (параметр номер '3')
+зап имя с URI XSD	<decimal xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</decimal>
+зап неопределено с именем	<мой xmlns="" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:nil="true"/>
+зап NULL с именем	<мой xmlns="" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"/>
+зап тип числа	<Type xmlns="http://v8.1c.ru/8.1/data/core" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">xs:decimal</Type>
+зап тип даты	<Type xmlns="http://v8.1c.ru/8.1/data/core" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">xs:dateTime</Type>
+зап тип массива	<Type xmlns="http://v8.1c.ru/8.1/data/core" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">Array</Type>
+зап тип Неопределено	<Type xmlns="http://v8.1c.ru/8.1/data/core" xmlns:d1p1="http://v8.1c.ru/8.2/data/types" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">d1p1:Undefined</Type>
+зап число большое	<decimal xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">100000000000000000000</decimal>
+зап после объявления	<?xml version="1.0"?><ПС><decimal xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</decimal>
+круг тип	Строка [xs:decimal]
+круг NULL	Строка []
+XMLТип строки	Строка [string]
+XMLТип строки URI	Строка [http://www.w3.org/2001/XMLSchema]
+XMLТип числа	Строка [decimal]
+XMLТип даты	Строка [dateTime]
+XMLТип массива	<ошибка>
+XMLТипЗнч числа	Строка [decimal]
+XMLТипЗнч неопределено	<ошибка>
+XMLСтрока даты	Строка [2026-08-13T10:20:30]
+XMLСтрока булева	Строка [true]
+XMLСтрока дробного	Строка [12.5]
+XMLЗначение даты	Строка [2026-08-13 10:20:30]
+возм чтения decimal	Да
+возм чтения без Прочитать	Нет
+возм чтения без аргументов	<ошибка>
+сер XMLType англ	Строка [string]
+сер XMLTypeOf англ	Строка [decimal]
+сер XMLString англ	Строка [42]
+сер XMLValue англ	Число [42]
+сер CanReadXML англ	Да
+сер WriteJSON англ	{<ПС>"#value": 42<ПС>}
+сер ReadJSON англ	{<Неизвестный модуль>(1)}: Ошибка при вызове метода контекста (ПрочитатьJSON): Недопустимый тип значения
+сер над пустой фабрикой	<decimal xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</decimal>
+чт тип схемы без типа	{<Неизвестный модуль>(1)}: Ошибка при вызове метода контекста (ПрочитатьXML): Ошибка преобразования данных XDTO:<ПС>НачалоСвойства: {urn:test}RootType<Т>Форма: Элемент<Т>Тип: {http://www.w3.org/2001/XMLSchema}anyType: Ошибка отображения типов:<ПС>Отсутствует отображение для типа '{urn:test}RootType'
+чт с типом Строка	Строка [аб]
+чт с типом ДвоичныеДанные	Двоичные данные [4]
+чт с типом УникальныйИдентификатор	{<Неизвестный модуль>(1)}: Ошибка при вызове метода контекста (ПрочитатьXML): Ошибка отображения типов:<ПС>Отсутствует отображение для типа 'УникальныйИдентификатор'
+чт с типом Неопределено	{<Неизвестный модуль>(1)}: Ошибка при вызове метода контекста (ПрочитатьXML): Ошибка отображения типов:<ПС>Отсутствует отображение для типа 'Неопределено'
+чт string с пробелами	[ аб ]
+чт boolean единицей	Булево [Да]
+чт xsi:type неизвестный	Строка [42]
+возм чтения чужого	Нет
+возм чтения Undefined	Нет
+зап строка с переводом	<string xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">а<ПС>б</string>
+зап двоичные 48	<base64Binary xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3</base64Binary>
+зап двоичные 49	<base64Binary xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3<ВК><ПС>OA==</base64Binary>
+зап число ноль	<decimal xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">0</decimal>
+зап пустое имя с URI	<decimal xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</decimal>
+зап URI Неопределено	<мой xmlns="" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</мой>
+зап URI числом	{<Неизвестный модуль>(1)}: Ошибка при вызове метода контекста (ЗаписатьXML): Несоответствие типов (параметр номер '4')
+зап URI пустой	<мой xmlns="" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</мой>
+чт пустой string	Строка []
+чт nil у decimal	Не определено []
+чт Undefined без nil	Строка []
+чт nil у чужого имени	Не определено []
+чт с типом Число битая	{<Неизвестный модуль>(1)}: Ошибка при вызове метода контекста (ПрочитатьXML): Ошибка преобразования данных XDTO:<ПС>Значение: аб<Т>Тип: {http://www.w3.org/2001/XMLSchema}decimal: Ошибка отображения типов:<ПС>Отображение типа '{http://www.w3.org/2001/XMLSchema}decimal' в тип 'Число'
+чт с обёртки	{<Неизвестный модуль>(1)}: Ошибка при вызове метода контекста (ПрочитатьXML): Ошибка преобразования данных XDTO:<ПС>НачалоСвойства: об<Т>Форма: Элемент<Т>Тип: {http://www.w3.org/2001/XMLSchema}anyType: Ошибка преобразования данных XDTO:<ПС>НачалоСвойства: {http://www.w3.org/2001/XMLSchema}decimal<Т>Форма: Элемент<Т>Тип: {http://www.w3.org/2001/XMLSchema}anyType
+чт после исчерпания	{<Неизвестный модуль>(1)}: Ошибка при вызове метода контекста (ПрочитатьXML): Ошибка преобразования данных XDTO
+чт boolean ложь	Булево [Нет]
+чт dateTime без времени	Дата [2026-08-13 00:00:00]
+чт base64	Двоичные данные [4]
+чт с типом Число из int	Число [42]
+зап значение из чужой фабрики	<dateTime xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">2026-08-13T00:00:00</dateTime>
+чт свой простой тип	Строка [аб]
+чт свой списочный тип	Фиксированный массив
+чт своё простое содержимое	{<Неизвестный модуль>(1)}: Ошибка при вызове метода контекста (ПрочитатьXML): Ошибка преобразования данных XDTO:<ПС>НачалоСвойства: {urn:test}SimpContent<Т>Форма: Элемент<Т>Тип: {http://www.w3.org/2001/XMLSchema}anyType: Ошибка отображения типов:<ПС>Отсутствует отображение для типа '{urn:test}SimpContent'
+чт своим типом через xsi:type	Строка [аб]
+зап URI как у xsi	<мой xmlns="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema">42</мой>
+зап имя и URI Неопределено	<decimal xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</decimal>
+зап URI как у xsi с nil	<мой xmlns="http://www.w3.org/2001/XMLSchema-instance" xmlns:d1p1="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" d1p1:nil="true"/>
+зап URI как у xsi с nil внутри	<об><ПС><Т><мой xmlns="http://www.w3.org/2001/XMLSchema-instance" xmlns:d2p1="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" d2p1:nil="true"/><ПС></об>

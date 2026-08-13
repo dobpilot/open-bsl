@@ -674,6 +674,12 @@ impl<'a> Compiler<'a> {
                 self.emit(Instr::NewXdtoFactory { dst, schemas: set });
                 self.free_temp(1);
             }
+            RExpr::NewXdtoSerializer(factory) => {
+                let reg = self.alloc_temp()?;
+                self.compile_expr(factory, reg)?;
+                self.emit(Instr::NewXdtoSerializer { dst, factory: reg });
+                self.free_temp(1);
+            }
             RExpr::NewDomNsResolver(node) => {
                 let reg = self.alloc_temp()?;
                 self.compile_expr(node, reg)?;

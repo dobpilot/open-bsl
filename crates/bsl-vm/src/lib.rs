@@ -1144,6 +1144,7 @@ fn step(
             | Instr::NewXmlSchema { .. }
             | Instr::NewXmlSchemaSet { .. }
             | Instr::NewXdtoFactory { .. }
+            | Instr::NewXdtoSerializer { .. }
             | Instr::NewDomNsResolver { .. }
             | Instr::NewXmlExpandedName { .. }
             | Instr::NewXmlWriterSettings { .. }
@@ -1384,6 +1385,17 @@ fn step_cold(
             let factory = BslValue::new_xdto_factory(&set)?;
             let d = frames[frame_idx].reg_index(dst);
             reg_store(stack, d, factory)?;
+            frames[frame_idx].pc += 1;
+        }
+        // Модель уже построена фабрикой — сериализатор только берёт её
+        // `Rc`, так что работа тут копеечная. Место всё равно холодное:
+        // соседство важнее, а конструктор в горячем цикле не стоит своего
+        // места в кэше микроопераций.
+        Instr::NewXdtoSerializer { dst, factory } => {
+            let factory = reg_load(stack, frames[frame_idx].reg_index(factory))?;
+            let serializer = BslValue::new_xdto_serializer(&factory)?;
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, serializer)?;
             frames[frame_idx].pc += 1;
         }
         Instr::NewDomNsResolver { dst, node } => {
