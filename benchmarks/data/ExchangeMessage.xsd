@@ -1,0 +1,27 @@
+﻿<xs:schema xmlns:tns="http://www.1c.ru/SSL/Exchange/Message" xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="http://www.1c.ru/SSL/Exchange/Message" attributeFormDefault="unqualified" elementFormDefault="qualified">
+	<xs:complexType name="Confirmation">
+		<xs:sequence>
+			<xs:element name="ExchangePlan" type="xs:string"/>
+			<xs:element name="To" type="xs:string"/>
+			<xs:element name="From" type="xs:string"/>
+			<xs:element name="MessageNo" type="xs:integer"/>
+			<xs:element name="ReceivedNo" type="xs:integer"/>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:complexType name="Header">
+		<xs:sequence>
+			<xs:element name="Format" type="xs:string"/>
+			<xs:element name="CreationDate" type="xs:dateTime"/>
+			<xs:element name="Confirmation" type="tns:Confirmation" minOccurs="0"/>
+			<xs:element name="AvailableVersion" type="xs:string" maxOccurs="100"/>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:complexType name="Object" abstract="true">
+		<xs:sequence>
+			<xs:element name="AdditionalInfo" minOccurs="0"/>
+		</xs:sequence>
+	</xs:complexType>
+	<xs:simpleType name="Ref">
+		<xs:restriction base="xs:string"/>
+	</xs:simpleType>
+</xs:schema>

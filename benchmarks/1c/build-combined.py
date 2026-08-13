@@ -27,12 +27,17 @@ BENCH = ROOT / "benchmarks"
 RELATIVE_OUTPUT = '"test.csv"'
 SCRATCH_OUTPUT = '"/tmp/onec-bench-scratch/csv_write.1c.out"'
 
-# По той же причине переписывается путь к входному файлу parquet: сценарий
-# `simple_parquet_reader` берёт его от корня дерева, а платформа стартует со
-# своим текущим каталогом. Здесь он превращается в абсолютный — тот же файл,
-# та же работа.
-RELATIVE_INPUT = '"benchmarks/data/simple.parquet"'
-ABSOLUTE_INPUT = f'"{ROOT / "benchmarks" / "data" / "simple.parquet"}"'
+# По той же причине переписывается каталог входных данных: сценарии
+# (`simple_parquet_reader`, `edata_writer`) берут файлы от корня дерева
+# (`benchmarks/data/...`), а платформа стартует со своим текущим каталогом.
+# Префикс превращается в абсолютный — те же файлы, та же работа.
+DATA_PREFIX = '"benchmarks/data/'
+ABSOLUTE_DATA_PREFIX = f'"{ROOT / "benchmarks" / "data"}/'
+
+# Файловый выход edata_writer — в тот же scratch-каталог, что и у
+# csv_write: получившийся XML можно сличить с нашим побайтно.
+RELATIVE_EDATA_OUTPUT = '"benchmarks/edata_writer.xml"'
+SCRATCH_EDATA_OUTPUT = '"/tmp/onec-bench-scratch/edata_writer.1c.xml"'
 
 DECL = re.compile(
     r"^(Процедура|Функция)\s+([A-Za-zА-Яа-яЁё_][\w]*)", re.MULTILINE
@@ -71,7 +76,8 @@ def main():
         text = (
             path.read_text(encoding="utf-8")
             .replace(RELATIVE_OUTPUT, SCRATCH_OUTPUT)
-            .replace(RELATIVE_INPUT, ABSOLUTE_INPUT)
+            .replace(RELATIVE_EDATA_OUTPUT, SCRATCH_EDATA_OUTPUT)
+            .replace(DATA_PREFIX, ABSOLUTE_DATA_PREFIX)
         )
         decls, body, names = split_declarations(text)
         # Уникализируем имена бенчмарка: два сценария объявляют
