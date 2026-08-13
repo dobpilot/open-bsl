@@ -36,7 +36,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 12;
+pub const FORMAT_VERSION: u32 = 13;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -86,6 +86,7 @@ pub const OPCODES: &[&str] = &[
     "NewBinaryData",
     "NewBinaryBuffer",
     "NewMemoryStream",
+    "NewUuid",
     "NewFileStream",
     "NewFileStreamsManager",
     "NewDataReader",
@@ -439,6 +440,7 @@ fn write_instr(instr: &Instr) -> String {
             format!("NewBinaryBuffer dst={dst} size={size} order={order}")
         }
         Instr::NewMemoryStream { dst, arg } => format!("NewMemoryStream dst={dst} arg={arg}"),
+        Instr::NewUuid { dst, arg } => format!("NewUuid dst={dst} arg={arg}"),
         Instr::NewFileStream {
             dst,
             path,
@@ -1327,6 +1329,10 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
             dst: dst(&f)?,
             arg: field_u8(&f, no, "arg")?,
         },
+        "NewUuid" => Instr::NewUuid {
+            dst: dst(&f)?,
+            arg: field_u8(&f, no, "arg")?,
+        },
         "NewFileStream" => Instr::NewFileStream {
             dst: dst(&f)?,
             path: field_u8(&f, no, "path")?,
@@ -1525,6 +1531,10 @@ mod tests {
          ф = Новый ФайловыйПоток(\"/dev/null\", РежимОткрытияФайла.Открыть);\n\
          г = Новый ФайловыйПоток(\"/dev/null\", РежимОткрытияФайла.Открыть, ДоступКФайлу.Чтение);\n\
          м = ФайловыеПотоки;\nо = м.ОткрытьДляЧтения(\"/dev/null\");\n",
+        // УИД: обе формы конструктора — случайный и разбор строки.
+        "у = Новый УникальныйИдентификатор;\n\
+         ф = Новый УникальныйИдентификатор(\"abcdef12-3456-7890-abcd-ef1234567890\");\n\
+         с = Строка(ф);\n",
         // Читатель и писатель данных: обе формы конструктора (только
         // источник и все четыре аргумента) плюс методы, чьи имена общие с
         // буфером и потоками, но получатель новый.

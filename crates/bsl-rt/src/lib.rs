@@ -31,6 +31,7 @@ mod table;
 mod textdoc;
 mod types;
 mod tz;
+mod uuid;
 mod vstr;
 mod xdto;
 mod xlsx;
@@ -402,6 +403,10 @@ impl BslValue {
                 // данных» в `types.rs` и в отличие от соседа сверху,
                 // который печатается дампом байтов.
                 BslObject::BinaryBuffer(_) => "БуферДвоичныхДанных",
+                // Имя ЗНАЧЕНИЯ здесь не наблюдаемо: `Строка(УИД)` печатает
+                // саму каноническую форму, а не имя (фикстура `uuid`).
+                // Строка ниже живёт в диагностике `RtError`.
+                BslObject::Uuid(_) => "УникальныйИдентификатор",
                 // Имя ЗНАЧЕНИЯ — без пробелов; имя ТИПА («Чтение JSON») в
                 // `types.rs`. Измерено: `Строка(Новый ЧтениеJSON)` даёт
                 // «ЧтениеJSON», а `Строка(ТипЗнч(...))` — «Чтение JSON».
@@ -1205,6 +1210,9 @@ impl BslValue {
                 // измерено, что четырёхбайтовый НУЛЕВОЙ буфер считается
                 // заполненным («Да»), а буфер нулевого размера — нет.
                 BslObject::BinaryBuffer(d) => !d.borrow().is_empty(),
+                // ИЗМЕРЕНО (фикстура `uuid`): нулевой идентификатор не
+                // заполнен, любой другой — заполнен.
+                BslObject::Uuid(b) => *b != [0; 16],
                 // У строки таблицы и пары ключ-значение «длины» нет: сам
                 // факт существования объекта и есть заполненность.
                 BslObject::TableRow(..)
@@ -1357,6 +1365,7 @@ impl BslValue {
                 }
                 BslObject::BinaryData(..) => TypeId::BinaryData,
                 BslObject::BinaryBuffer(..) => TypeId::BinaryDataBuffer,
+                BslObject::Uuid(..) => TypeId::Uuid,
                 BslObject::JsonReader(..) => TypeId::JsonReader,
                 BslObject::JsonWriter(..) => TypeId::JsonWriter,
                 BslObject::JsonWriterSettings(..) => TypeId::JsonWriterSettings,
@@ -1895,6 +1904,41 @@ impl BslValue {
         stream::new_memory_stream(arg)
     }
 
+    /// `Новый УникальныйИдентификатор([СтрокаЛибоУИД])`. Без аргумента —
+    /// случайный идентификатор версии 4, со строкой — разбор канонической
+    /// формы `8-4-4-4-12` (регистр цифр безразличен), с другим
+    /// идентификатором — равная копия (обе формы измерены фикстурой
+    /// `uuid`).
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::TypeError`], если аргумент не строка, не идентификатор и
+    /// не `Неопределено`, либо строка не в канонической форме.
+    pub fn new_uuid(arg: &BslValue) -> RtResult<Self> {
+        let bytes = match arg {
+            BslValue::Undefined => uuid::random_v4(),
+            BslValue::Str(s) => uuid::parse(&s.to_string())?,
+            // Конструктор от другого идентификатора платформа принимает и
+            // отдаёт равное значение (измерено фикстурой `uuid`).
+            BslValue::Object(o) => match &**o {
+                BslObject::Uuid(b) => *b,
+                _ => {
+                    return Err(RtError::TypeError {
+                        expected: "Строка",
+                        op: "Новый УникальныйИдентификатор",
+                    })
+                }
+            },
+            _ => {
+                return Err(RtError::TypeError {
+                    expected: "Строка",
+                    op: "Новый УникальныйИдентификатор",
+                })
+            }
+        };
+        Ok(BslValue::Object(Rc::new(BslObject::Uuid(bytes))))
+    }
+
     /// `Новый ФайловыйПоток(Имя, Режим[, Доступ])`. Доступ по умолчанию —
     /// `ЧтениеИЗапись`; таблица совместимости режима с доступом измерена
     /// целиком и описана в заголовке модуля `stream`.
@@ -2250,7 +2294,8 @@ impl BslValue {
                 BslObject::XsSchemaSet(list) => Ok(list.borrow().len()),
                 BslObject::XsBuilder
                 | BslObject::XsComponent(..)
-                | BslObject::XmlExpandedName(..) => Err(RtError::NotIndexable),
+                | BslObject::XmlExpandedName(..)
+                | BslObject::Uuid(..) => Err(RtError::NotIndexable),
                 // Коллекции модели типов XDTO — настоящие коллекции:
                 // `Количество()` и `Для Каждого` по свойствам и по
                 // фасетам измерены. Сами тип, свойство, фасет и значение
@@ -3498,6 +3543,9 @@ impl PartialEq for BslValue {
                 // (пробы `BIN.EQ`/`BIN.EQ.DIFF`), что два `Новый
                 // ДвоичныеДанные` от ОДНОГО файла равны, а от разных — нет.
                 (BslObject::BinaryData(x), BslObject::BinaryData(y)) => x == y,
+                // УИД — значение: два идентификатора с одними байтами
+                // равны, откуда бы они ни пришли.
+                (BslObject::Uuid(x), BslObject::Uuid(y)) => x == y,
                 // Узлы DOM — ССЫЛКИ на место в дереве: обёртка каждый раз
                 // новая, а равенство идёт по самому узлу. ИЗМЕРЕНО:
                 // `Э.ПервыйДочерний = Э.ДочерниеУзлы[0]` — «Да», а два
@@ -3659,6 +3707,10 @@ impl fmt::Display for BslValue {
                 BslObject::Map(_) => write!(f, "Соответствие"),
                 BslObject::KeyValuePair(_, _) => write!(f, "КлючИЗначение"),
                 BslObject::TextWriter(_) => write!(f, "ЗаписьТекста"),
+                // УИД печатается своей канонической формой, а не именем
+                // типа: `Строка(УИД)` — это и есть его строка (фикстура
+                // `uuid`, эталон с платформы).
+                BslObject::Uuid(b) => write!(f, "{}", uuid::format(b)),
                 // Узлы и коллекции DOM печатаются слитным именем — то же,
                 // что отдаёт `type_name`, поэтому одна ветка на всех.
                 BslObject::DomBuilder

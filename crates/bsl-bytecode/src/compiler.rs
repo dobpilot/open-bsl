@@ -750,6 +750,12 @@ impl<'a> Compiler<'a> {
                 self.emit(Instr::NewMemoryStream { dst, arg: arg_reg });
                 self.free_temp(1);
             }
+            RExpr::NewUuid { arg } => {
+                let arg_reg = self.alloc_temp()?;
+                self.compile_expr(arg, arg_reg)?;
+                self.emit(Instr::NewUuid { dst, arg: arg_reg });
+                self.free_temp(1);
+            }
             RExpr::NewFileStream { path, mode, access } => {
                 let path_reg = self.alloc_temp()?;
                 self.compile_expr(path, path_reg)?;

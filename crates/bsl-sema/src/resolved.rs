@@ -187,6 +187,11 @@ pub enum RExpr {
     NewMemoryStream {
         arg: Box<RExpr>,
     },
+    /// `Новый УникальныйИдентификатор([Строка])` — аргумент необязателен:
+    /// без него порождается случайный идентификатор, со строкой — разбор.
+    NewUuid {
+        arg: Box<RExpr>,
+    },
     /// `Новый ФайловыйПоток(Имя, Режим[, Доступ])` — доступ необязателен и
     /// по умолчанию `ЧтениеИЗапись` (измерено).
     NewFileStream {
@@ -456,7 +461,7 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
         RExpr::NewBinaryBuffer { size, order } => {
             expr_uses_dynamic(size) || expr_uses_dynamic(order)
         }
-        RExpr::NewMemoryStream { arg } => expr_uses_dynamic(arg),
+        RExpr::NewMemoryStream { arg } | RExpr::NewUuid { arg } => expr_uses_dynamic(arg),
         RExpr::NewFileStream { path, mode, access } => {
             expr_uses_dynamic(path) || expr_uses_dynamic(mode) || expr_uses_dynamic(access)
         }

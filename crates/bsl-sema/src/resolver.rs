@@ -373,6 +373,8 @@ pub const NEW_TYPES: &[&str] = &[
     // принимает.
     "БуферДвоичныхДанных",
     "BinaryDataBuffer",
+    "УникальныйИдентификатор",
+    "UUID",
     // Английские написания обоих потоков ИЗМЕРЕНЫ: `Тип("MemoryStream")` и
     // `Тип("FileStream")` платформа разрешает и считает равными русским.
     "ПотокВПамяти",
@@ -839,6 +841,22 @@ impl<'a> Resolver<'a> {
                     size: Box::new(size),
                     order: Box::new(order),
                 })
+            }
+            // Аргумент необязателен: без него — случайный идентификатор,
+            // со строкой — разбор канонической формы.
+            "УНИКАЛЬНЫЙИДЕНТИФИКАТОР" | "UUID" => {
+                if args.len() > 1 {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый УникальныйИдентификатор".to_string(),
+                        expected: 1,
+                        found: args.len(),
+                    });
+                }
+                let arg = match args.first() {
+                    Some(a) => self.resolve_expr(a)?,
+                    None => RExpr::Undefined,
+                };
+                Ok(RExpr::NewUuid { arg: Box::new(arg) })
             }
             // Единственный аргумент необязателен: пустой конструктор
             // платформа принимает, а второй аргумент отвергает (измерено).

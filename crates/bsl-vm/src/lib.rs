@@ -1151,6 +1151,7 @@ fn step(
             | Instr::NewTextWriter { .. }
             | Instr::NewBinaryBuffer { .. }
             | Instr::NewMemoryStream { .. }
+            | Instr::NewUuid { .. }
             | Instr::NewFileStream { .. }
             | Instr::NewDataReader { .. }
             | Instr::NewDataWriter { .. }
@@ -1447,6 +1448,13 @@ fn step_cold(
             let stream = BslValue::new_memory_stream(&arg)?;
             let d = frames[frame_idx].reg_index(dst);
             reg_store(stack, d, stream)?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewUuid { dst, arg } => {
+            let arg = reg_load(stack, frames[frame_idx].reg_index(arg))?;
+            let uuid = BslValue::new_uuid(&arg)?;
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, uuid)?;
             frames[frame_idx].pc += 1;
         }
         Instr::NewFileStream {
