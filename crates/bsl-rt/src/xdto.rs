@@ -197,12 +197,84 @@
 //!   значит, поведение `Удалить` у последовательности не измерено и
 //!   здесь его нет.
 //!
+//! # Проверка по фасетам: что ИЗМЕРЕНО
+//!
+//! Пробы — `tests/conformance/measure/measure-xdto-validation.bsl`, рядом
+//! снятый `measure-xdto-validation.platform.txt`; фикстура —
+//! `tests/conformance/fixtures/xdto-validation.bsl`. Схема там устроена
+//! так, что на каждый вид фасета приходится СВОЙ тип: по отказу должно
+//! быть видно, какой именно фасет сработал.
+//!
+//! * **отдельного метода проверки НЕТ ни у типа, ни у значения.**
+//!   Отвергнуты все кандидаты: `Проверить` и `Validate` у
+//!   `ТипЗначенияXDTO` и у `ТипОбъектаXDTO` (и с аргументом-значением, и
+//!   без), `ПроверитьЗначение` у типа значения, `Проверить`/`Validate` у
+//!   `ЗначениеXDTO`. Проверка живёт не в отдельном члене, а в тех местах,
+//!   где значение появляется;
+//! * **проверяются четыре места, и все четыре измерены**: `Создать`
+//!   фабрики, ЗАПИСЬ свойства (и присваиванием, и `Установить`),
+//!   наполнение списка (`Добавить`, `Установить`, `Вставить`) и ЧТЕНИЕ
+//!   документа с типом. Значение приводится к лексической форме ДО
+//!   проверки, поэтому `О.el = 42` в свойство длины 2..5 проходит («42» —
+//!   два символа), а `О.el = 5` — нет;
+//! * **пятое место — сама СХЕМА.** Умолчание, нарушающее фасет
+//!   (`default="а"` у типа с `minLength="2"`), валит построение ФАБРИКИ
+//!   целиком: `СоздатьФабрикуXDTO` от такой схемы отвечает ошибкой, а не
+//!   отдаёт фабрику с негодным умолчанием;
+//! * **чтение СЕРИАЛИЗАТОРА фасеты НЕ проверяет** —
+//!   `СериализаторXDTO.ПрочитатьXML` от `<Len xmlns="urn:v">а</Len>` при
+//!   `minLength="2"` отдаёт «а» без ошибки, в отличие от чтения фабрики.
+//!   Здесь так же;
+//! * **фасеты НАСЛЕДУЮТСЯ по всей цепочке.** У ограничения, наложенного
+//!   на ограничение, работают обе границы — `minLength` от базового типа и
+//!   свой `maxLength`, — а у встроенных типов — вся табличная цепочка: `int` с
+//!   «3000000000», `byte` с «200», `unsignedByte` с «-1»,
+//!   `positiveInteger` с «0» и `integer` с «1.5» — ошибка, а `decimal` с
+//!   «1.5» — нет;
+//! * **перечисление сравнивает ЗНАЧЕНИЯ, а не записи**: при перечисленных
+//!   «1.0» и «2» у десятичного типа проходят и «1», и «2.00», а «3» — нет.
+//!   Регистр при этом значим («RED» при перечисленном «red» — ошибка), и
+//!   пустая запись сама по себе не разрешена;
+//! * **длина считается по виду значения**: у строки — в символах
+//!   (кириллица не удваивается), у `base64Binary` — в БАЙТАХ
+//!   (`maxLength="2"` пропускает «0LA=» и отвергает «0LDQsQ==»), у
+//!   списочного типа — в ЭЛЕМЕНТАХ, причём сами элементы проверяются
+//!   типом элемента;
+//! * **границы сравниваются не только у чисел**: у ограничения `xs:date`
+//!   `minInclusive="2020-01-01"` отвергает «2019-01-01», а
+//!   `maxExclusive="2030-01-01"` — саму «2030-01-01»;
+//! * **разряды считаются по ЗНАЧЕНИЮ**: `totalDigits="4"` пропускает
+//!   «12.34» и «1234», но не «123.45» и не «12345», а `fractionDigits="2"`
+//!   пропускает «1.200» (хвостовые нули в значение не входят) и отвергает
+//!   «1.234»;
+//! * **`whiteSpace` платформа не применяет**: `Создать` от `xs:token` и от
+//!   `xs:string` с « аб  вг » отдаёт строку с теми же пробелами, хотя
+//!   фасет у `token` — `collapse`;
+//! * **член объединения выбирается С УЧЁТОМ фасетов**: у `union
+//!   memberTypes="t:Col xs:int"`, где `Col` — перечисление `red|green`,
+//!   запись «5» даёт ЧИСЛО, хотя строкой она разбирается первым членом;
+//! * **`Проверить()` экземпляра проверять фасетами нечего**: значение,
+//!   нарушающее фасет, в экземпляр не попадает ни одним измеренным путём
+//!   (суррогатная проба перебирает их все и отвечает «закрыто»). Отсюда
+//!   `НЕ ИЗМЕРЕНО(XDTO.VALIDATION.VALIDATE_FACETS)`.
+//!
 //! # Сознательные расхождения и незакрытые углы
 //!
-//! * **Фасеты только хранятся.** Платформа ПРОВЕРЯЕТ по ним лексическую
-//!   форму (измерено: `Создать` от `Small` с «1000» и от `Code` с «аб» —
-//!   ошибка). Здесь фасет только читается: проверка образца требует
-//!   движка регулярных выражений и делается отдельной задачей.
+//! * **Фасет `pattern` — честная ошибка, и расхождение двустороннее.**
+//!   Движка регулярных выражений в дереве нет (это отдельная задача), а
+//!   частично истолкованный образец хуже названной вслух неподдержки:
+//!   проверка значения по типу СХЕМЫ с образцом отвечает ошибкой «не
+//!   поддерживается» — в том числе на значении, которое платформа
+//!   принимает. Образцы ВСТРОЕННЫХ типов, наоборот, пропускаются: отказ по
+//!   ним съел бы любую запись в `xs:int`, чей предок `xs:integer` несёт
+//!   образец `[\-+]?[0-9]+`. Лексическое пространство целых и без образца
+//!   задаёт разбор, а вот `xs:Name`, `xs:NCName` и `xs:language`
+//!   отображаются в `Строка` и потому терпят то, что платформа отвергает
+//!   (измерено: `Создать` от `Name` с «1имя» и с «имя два», от `NCName` с
+//!   «а:б» — ошибка). Расходятся ровно эти шесть строк
+//!   `measure-xdto-validation.bsl`, и они перечислены в её шапке. В
+//!   конформанс-фикстуре типов с образцом нет вовсе, а поведение закрыто
+//!   тестом `pattern_facet_is_an_honest_unsupported_error`;
 //! * **Двоичные лексические формы.** `base64Binary` и `hexBinary`
 //!   отображаются в `ДвоичныеДанные` (измерено), и разбор обеих записей
 //!   здесь есть, но обратной операции — двоичные данные в лексическую
@@ -221,18 +293,32 @@
 //!   `КоллекциюПакетовXDTO` (у фабрики от нашей схемы их два: своё
 //!   пространство имён и пространство XML Schema), но пакет — это отдельная
 //!   сущность со своим содержимым, и она сюда не входит.
-//! * **Фасеты не проверяются и на записи**, и это ровно та же отложенная
-//!   работа, что и в `Создать`. Ими объясняются ПЯТЬ из шести расхождений
-//!   экземплярной части `measure-xdto.bsl`: платформа отвергает
-//!   `О.color = "синий"` (перечисление `red|green`), `code.Добавить("аб")`
-//!   и `code.Добавить(5)` (образец `[A-Z]+` и длина 2..5), `О.hl = 5` (тот
-//!   же образец у элемента списочного типа) и `О.id = 1.5` (у
-//!   `xs:integer` фасет «разрядов дробной части» — ноль), а здесь все пять
-//!   проходят. Шестое к фасетам отношения не имеет: в пробе «объект запись
-//!   в список строкой» платформа отдаёт `ФиксированныйМассив`, а здесь
-//!   получается обычный `Массив` — то самое списочное расхождение,
-//!   описанное у `value_from_lexical_at` (неизменяемого вида в этой
-//!   реализации нет).
+//! * **Цена образца видна на `measure-xdto.bsl`.** Пять расхождений его
+//!   экземплярной части, которые объяснялись непроверяемыми фасетами,
+//!   закрылись: `О.color = "синий"` (перечисление `red|green`),
+//!   `code.Добавить(5)` и `О.hl = 5` (длина 2..5 у элемента и у элемента
+//!   списочного типа), `О.id = 1.5` («разрядов дробной части» — ноль у
+//!   `xs:integer`) и `code.Добавить("аб")` — последнее отказом «образец не
+//!   поддерживается», то есть по другой причине, чем у платформы, но с тем
+//!   же наблюдаемым фактом. Заодно закрылись `Создать` от `Small` с «1000»
+//!   и от `Code` с «аб». Плата — 21 строка ТОЙ ЖЕ пробы, где через
+//!   `Code` проверялось совсем другое: окно списка, `Получить`/`Установить`
+//!   /`Вставить`/`Удалить`, обход и `Установлено`. Все они теперь отвечают
+//!   отказом по образцу. Схема того скрипта не трогалась намеренно — она
+//!   контракт платформы, снятый её же прогоном, — а списочная семантика не
+//!   потерялась: она измерена заново на `ml` в
+//!   `measure-xdto-validation.bsl`, где тип элемента без образца, и
+//!   проверена юнит-тестами. Шестое расхождение к фасетам отношения не
+//!   имело, а теперь его не видно вовсе: проба «объект запись в список
+//!   строкой» пишет «AB CD» в `hl` списочного типа `Codes` над образцовым
+//!   `Code`, и раньше платформенному `ФиксированныйМассив` отвечал здесь
+//!   обычный `Массив`, а теперь — отказ по образцу. В плату в 21 строку
+//!   она не вошла: расходилась и до проверки фасетов, сменилась лишь
+//!   причина, и ровно так же сменила её «вст своего типа Codes» — это две
+//!   строки, которые отказ поглотил, ничего не добавив к счёту. Сам факт
+//!   при этом остался, он просто больше не виден ни на одной пробе этого
+//!   файла: своего неизменяемого вида массива в реализации нет, см.
+//!   `value_from_lexical_at`.
 //! * **Английские написания разбираются по имени, а не по получателю.**
 //!   Таблица `BUILTIN_METHOD_NAMES` — одна на весь рантайм, и «Вставить»
 //!   делит вариант с `Insert`, поэтому `Список.Insert(...)` здесь имя
@@ -492,6 +578,7 @@
 //! `СоздатьФабрикуXDTO` (один файл XSD) взять неоткуда.
 
 use std::cell::RefCell;
+use std::cmp::Ordering;
 use std::rc::{Rc, Weak};
 
 use crate::object::BslObject;
@@ -1435,9 +1522,17 @@ impl<'a> Builder<'a> {
         Ok(())
     }
 
+    /// Значение по умолчанию свойства — из `default` или `fixed` схемы.
+    ///
+    /// Проверяется по фасетам, потому что платформа проверяет их ЗДЕСЬ, а
+    /// не при чтении свойства: фабрика над схемой, где `default="а"` стоит
+    /// у типа с `minLength="2"`, не строится вовсе (измерено —
+    /// `СоздатьФабрикуXDTO` от такой схемы отвечает ошибкой). Так что
+    /// негодное умолчание валит построение модели целиком, а не всплывает
+    /// потом на первом же чтении.
     fn value_of(&self, type_index: usize, lexical: &str) -> RtResult<Rc<XdtoValueData>> {
         Ok(Rc::new(XdtoValueData {
-            value: value_from_lexical(&self.model, type_index, lexical)?,
+            value: value_from_lexical_checked(&self.model, type_index, lexical)?,
             lexical: lexical.to_string(),
             type_index,
         }))
@@ -1488,7 +1583,13 @@ fn fold_bounds(outer: Option<u32>, inner: Option<u32>) -> Option<u32> {
 
 // --- лексические формы ---------------------------------------------------
 
-/// Значение BSL из лексической формы по типу модели.
+/// Значение BSL из лексической формы по типу модели, БЕЗ проверки фасетов.
+///
+/// Так разбираются значения самих фасетов и то, что читает
+/// `СериализаторXDTO` (измерено: его чтение фасеты не проверяет), — то есть
+/// места, где проверять нечего или не по чему. Всё, что приходит от
+/// программы, из документа или из умолчания схемы, идёт через проверяющий
+/// разбор `value_from_lexical_checked`.
 ///
 /// # Errors
 ///
@@ -1505,14 +1606,39 @@ pub fn value_from_lexical(
     // по шагу на уровень вложенности. Ограничение здесь не оптимизация, а
     // страховка: `<xs:restriction base="t:A"/>` внутри самого `A` даёт
     // КОЛЬЦО, и без счётчика разбор ушёл бы в переполнение стека.
-    value_from_lexical_at(model, type_index, lexical, model.types.len() + 8)
+    value_from_lexical_at(model, type_index, lexical, model.types.len() + 8, false)
 }
 
+/// То же с ПРОВЕРКОЙ ПО ФАСЕТАМ — путь всех измеренных точек, где платформа
+/// значение проверяет: `ФабрикаXDTO.Создать`, запись свойства, наполнение
+/// списка и чтение документа с типом.
+///
+/// # Errors
+///
+/// То же, что у [`value_from_lexical`], плюс [`RtError::Xdto`] на любом
+/// нарушенном фасете и на фасете образца (см. [`check_pattern`]).
+fn value_from_lexical_checked(
+    model: &XdtoModel,
+    type_index: usize,
+    lexical: &str,
+) -> RtResult<BslValue> {
+    value_from_lexical_at(model, type_index, lexical, model.types.len() + 8, true)
+}
+
+/// Разбор лексической формы; при `checked` — заодно проверка по фасетам.
+///
+/// Фасеты НАСЛЕДУЮТСЯ, и цепочку обходит сам разбор: производный тип
+/// спускается к базовому, а на обратном ходе каждый уровень проверяет свои
+/// фасеты — те самые, что платформа показывает членом `Фасеты`. Отдельного
+/// обхода требует только встроенная часть цепочки (`int` -> `long` ->
+/// `integer` -> `decimal`): в неё разбор не спускается, лексическая форма
+/// встроенного типа разбирается на месте.
 fn value_from_lexical_at(
     model: &XdtoModel,
     type_index: usize,
     lexical: &str,
     depth: usize,
+    checked: bool,
 ) -> RtResult<BslValue> {
     let data = model.type_at(type_index)?;
     let Some(depth) = depth.checked_sub(1) else {
@@ -1527,13 +1653,19 @@ fn value_from_lexical_at(
             data.name
         )));
     };
-    match shape {
-        ValueShape::Builtin(bsl) => builtin_from_lexical(*bsl, lexical),
+    let value = match shape {
+        ValueShape::Builtin(bsl) => {
+            let value = builtin_from_lexical(*bsl, lexical)?;
+            if checked {
+                check_facet_chain(model, data.base, lexical, &value)?;
+            }
+            value
+        }
         ValueShape::Atomic => {
             let base = data.base.ok_or_else(|| {
                 RtError::Xdto(format!("у типа значения «{}» нет базового типа", data.name))
             })?;
-            value_from_lexical_at(model, base, lexical, depth)
+            value_from_lexical_at(model, base, lexical, depth, checked)?
         }
         // Список: лексическая форма делится пробельными символами.
         // Платформа отдаёт `ФиксированныйМассив` (измерено), а здесь это
@@ -1549,24 +1681,341 @@ fn value_from_lexical_at(
             })?;
             let mut items = Vec::new();
             for part in lexical.split_whitespace() {
-                items.push(value_from_lexical_at(model, item, part, depth)?);
+                items.push(value_from_lexical_at(model, item, part, depth, checked)?);
             }
-            Ok(BslValue::new_array(items))
+            BslValue::new_array(items)
         }
         // Объединение: первый член, который принял форму (измерено на
-        // `union memberTypes="xs:int xs:string"`).
+        // `union memberTypes="xs:int xs:string"`). При проверке «принял» —
+        // это ещё и фасеты члена: у объединения `t:Col xs:int` лексическая
+        // форма «5» разбирается СТРОКОЙ первым членом, но перечисление
+        // `red|green` её отвергает, и платформа отдаёт число (измерено).
         ValueShape::Union(members) => {
+            let mut found = None;
             for member in members {
-                if let Ok(v) = value_from_lexical_at(model, *member, lexical, depth) {
-                    return Ok(v);
+                if let Ok(v) = value_from_lexical_at(model, *member, lexical, depth, checked) {
+                    found = Some(v);
+                    break;
                 }
             }
-            Err(RtError::Xdto(format!(
-                "лексическую форму «{lexical}» не принял ни один член объединения «{}»",
-                data.name
-            )))
+            found.ok_or_else(|| {
+                RtError::Xdto(format!(
+                    "лексическую форму «{lexical}» не принял ни один член объединения «{}»",
+                    data.name
+                ))
+            })?
+        }
+    };
+    if checked {
+        check_facets(model, type_index, lexical, &value)?;
+    }
+    Ok(value)
+}
+
+// --- проверка по фасетам --------------------------------------------------
+
+/// Фасеты ЦЕПОЧКИ базовых типов, начиная с `from`.
+///
+/// Нужен там, где цепочку не обходит сам разбор. Таких мест два. Первое —
+/// встроенные типы: их наследование — это таблица [`BUILTIN_TYPES`], а не
+/// разбор, `xs:int` разбирает лексическую форму сам и ни к какому предку
+/// за ней не спускается. Собственные фасеты типа ловит и без обхода
+/// замыкающий вызов [`check_facets`] в [`value_from_lexical_at`] —
+/// границы диапазона лежат у самих `int` (-2147483648..2147483647) и
+/// `byte` (-128..127), `minInclusive` — у самого `positiveInteger`,
+/// «разряды дробной части» — у самого `integer`. Отсюда видны фасеты
+/// ПРЕДКОВ, и без обхода пропали бы ровно они (измерено: `Создать` от
+/// `unsignedByte` с «-1» — ошибка, хотя нижняя граница живёт у
+/// `nonNegativeInteger` четырьмя уровнями выше, и от `int` с «1.5» —
+/// ошибка по «разрядам дробной части» у `integer` двумя уровнями выше).
+/// Второе — значения, у которых лексической формы здесь нет вовсе
+/// (двоичные данные и расширенное имя, см. шапку модуля): их проверяет
+/// [`coerce_to_value_type`], подставляя пустую лексическую форму, отчего
+/// перечисление сравнивается ровно по значению.
+fn check_facet_chain(
+    model: &XdtoModel,
+    from: Option<usize>,
+    lexical: &str,
+    value: &BslValue,
+) -> RtResult<()> {
+    let mut cur = from;
+    // Длина модели — верхняя граница цепочки и заодно страховка от кольца
+    // в испорченной модели.
+    for _ in 0..=model.types.len() {
+        let Some(index) = cur else {
+            return Ok(());
+        };
+        check_facets(model, index, lexical, value)?;
+        cur = model.type_at(index)?.base;
+    }
+    Ok(())
+}
+
+/// Проверка значения по СОБСТВЕННЫМ фасетам одного типа.
+///
+/// Перебор исчерпывающий: все двенадцать видов [`FacetKind`] названы явно,
+/// потому что молчаливо пропущенный вид — это молчаливо принятое значение.
+/// Два из них проверкой не являются: `whiteSpace` — сознательный no-op
+/// (измерено: `Создать` от `xs:token` и от `xs:string` с « аб  вг »
+/// отдаёт строку с теми же пробелами, платформа их не сворачивает), а
+/// `pattern` — честный отказ, см. [`check_pattern`].
+///
+/// # Errors
+///
+/// [`RtError::Xdto`] на нарушенном фасете, на фасете образца и на фасете,
+/// применённом к значению не того вида (длина у числа, границы у двоичных
+/// данных): такая схема сама себе противоречит, и молчать об этом хуже,
+/// чем отказать.
+fn check_facets(model: &XdtoModel, index: usize, lexical: &str, value: &BslValue) -> RtResult<()> {
+    let data = model.type_at(index)?;
+    if data.facets.is_empty() {
+        return Ok(());
+    }
+    // Перечисление — единственный вид, у которого несколько записей значат
+    // ВЫБОР, а не несколько условий подряд, поэтому оно собирается целиком
+    // и проверяется после перебора.
+    let mut enumeration: Vec<&str> = Vec::new();
+    for (kind, spec) in &data.facets {
+        match kind {
+            FacetKind::Enumeration => enumeration.push(spec),
+            FacetKind::WhiteSpace => {}
+            FacetKind::Pattern => check_pattern(data, spec)?,
+            FacetKind::Length => check_length(data, value, spec, |len, want| len == want, "ровно")?,
+            FacetKind::MinLength => {
+                check_length(data, value, spec, |len, want| len >= want, "не меньше")?;
+            }
+            FacetKind::MaxLength => {
+                check_length(data, value, spec, |len, want| len <= want, "не больше")?;
+            }
+            FacetKind::MinInclusive => {
+                check_bound(
+                    model,
+                    index,
+                    value,
+                    spec,
+                    |o| o != Ordering::Less,
+                    "не меньше",
+                )?;
+            }
+            FacetKind::MaxInclusive => {
+                check_bound(
+                    model,
+                    index,
+                    value,
+                    spec,
+                    |o| o != Ordering::Greater,
+                    "не больше",
+                )?;
+            }
+            FacetKind::MinExclusive => {
+                check_bound(
+                    model,
+                    index,
+                    value,
+                    spec,
+                    |o| o == Ordering::Greater,
+                    "больше",
+                )?;
+            }
+            FacetKind::MaxExclusive => {
+                check_bound(model, index, value, spec, |o| o == Ordering::Less, "меньше")?;
+            }
+            FacetKind::TotalDigits => {
+                check_digits(data, value, spec, "разрядов", |total, _| total)?;
+            }
+            FacetKind::FractionDigits => {
+                check_digits(data, value, spec, "разрядов дробной части", |_, frac| frac)?;
+            }
         }
     }
+    if !enumeration.is_empty() {
+        check_enumeration(model, index, lexical, value, &enumeration)?;
+    }
+    Ok(())
+}
+
+/// Фасет образца — ЧЕСТНЫЙ ОТКАЗ: движка регулярных выражений в дереве нет
+/// (это отдельная задача), а частично истолкованный образец хуже, чем
+/// названная вслух неподдержка.
+///
+/// Исключение ровно одно и вынужденное: образцы ВСТРОЕННЫХ типов XML
+/// Schema. У `xs:integer` образец `[\-+]?[0-9]+`, и отказывать по нему
+/// значило бы отвергать любую запись в `xs:int`, то есть почти всякую
+/// схему. Лексическое пространство встроенных типов и без образца задаёт
+/// [`builtin_from_lexical`] — кроме `xs:Name`, `xs:NCName` и
+/// `xs:language`, которые отображаются в `Строка` и потому принимают
+/// здесь то, что платформа отвергает (измерено: `Создать` от `Name` с
+/// «1имя» и с «имя два», от `NCName` с «а:б» — ошибка). Это расхождение
+/// названо в шапке модуля.
+fn check_pattern(data: &XdtoTypeData, spec: &str) -> RtResult<()> {
+    if matches!(data.shape, Some(ValueShape::Builtin(_))) {
+        return Ok(());
+    }
+    Err(RtError::Xdto(format!(
+        "фасет образца «{spec}» у типа «{}» не поддерживается: движка \
+         регулярных выражений здесь нет",
+        type_display(data)
+    )))
+}
+
+/// Числовое значение фасета — длина или число разрядов.
+fn facet_count(data: &XdtoTypeData, spec: &str) -> RtResult<usize> {
+    spec.trim().parse::<usize>().map_err(|_| {
+        RtError::Xdto(format!(
+            "значение фасета «{spec}» у типа «{}» — не целое число",
+            type_display(data)
+        ))
+    })
+}
+
+/// Длина значения: у строки — в символах (тем же счётом, что `СтрДлина`), у
+/// двоичных данных — в БАЙТАХ, у списочного типа — в ЭЛЕМЕНТАХ (измерено:
+/// `maxLength=2` у ограничения `xs:base64Binary` пропускает «0LA=» и
+/// отвергает «0LDQsQ==», а у ограничения списка — отвергает третий
+/// элемент).
+fn value_length(data: &XdtoTypeData, value: &BslValue) -> RtResult<usize> {
+    match value {
+        BslValue::Str(s) => Ok(s.len_utf16()),
+        BslValue::Object(o) => match &**o {
+            BslObject::BinaryData(bytes) => Ok(bytes.len()),
+            BslObject::Array(items) => Ok(items.borrow().len()),
+            _ => Err(facet_not_applicable(data, value, "длины")),
+        },
+        _ => Err(facet_not_applicable(data, value, "длины")),
+    }
+}
+
+fn check_length(
+    data: &XdtoTypeData,
+    value: &BslValue,
+    spec: &str,
+    ok: impl Fn(usize, usize) -> bool,
+    what: &str,
+) -> RtResult<()> {
+    let want = facet_count(data, spec)?;
+    let len = value_length(data, value)?;
+    if ok(len, want) {
+        return Ok(());
+    }
+    Err(RtError::Xdto(format!(
+        "длина значения типа «{}» обязана быть {what} {want}, а она {len}",
+        type_display(data)
+    )))
+}
+
+/// Значение фасета, разобранное ТЕМ ЖЕ типом, что и проверяемое значение:
+/// у `xs:decimal` граница — число, у ограничения `xs:date` — дата
+/// (измерено: `minInclusive="2020-01-01"` отвергает «2019-01-01»).
+/// Разбирается оно БЕЗ проверки фасетов — иначе граница проверяла бы сама
+/// себя.
+fn facet_operand(model: &XdtoModel, index: usize, spec: &str) -> RtResult<BslValue> {
+    value_from_lexical(model, index, spec).map_err(|_| {
+        let name = model
+            .type_at(index)
+            .map(type_display)
+            .unwrap_or_else(|_| String::new());
+        RtError::Xdto(format!(
+            "значение фасета «{spec}» не разбирается типом «{name}»"
+        ))
+    })
+}
+
+fn check_bound(
+    model: &XdtoModel,
+    index: usize,
+    value: &BslValue,
+    spec: &str,
+    ok: impl Fn(Ordering) -> bool,
+    what: &str,
+) -> RtResult<()> {
+    let bound = facet_operand(model, index, spec)?;
+    let data = model.type_at(index)?;
+    let ordering = value
+        .compare(&bound, "фасет границы XDTO")
+        .map_err(|_| facet_not_applicable(data, value, "границы"))?;
+    if ok(ordering) {
+        return Ok(());
+    }
+    Err(RtError::Xdto(format!(
+        "значение типа «{}» обязано быть {what} «{spec}»",
+        type_display(data)
+    )))
+}
+
+/// Разряды канонической записи числа: всего и в дробной части. Знак, точка
+/// и ведущие нули не считаются, а хвостовые нули дробной части снимает сама
+/// нормализация числа — отсюда и измеренное «1.200» у типа с
+/// `fractionDigits="2"`, которое платформа принимает.
+fn digit_counts(canonical: &str) -> (usize, usize) {
+    let body = canonical.strip_prefix('-').unwrap_or(canonical);
+    let (int_part, frac_part) = match body.split_once('.') {
+        Some((int_part, frac_part)) => (int_part, frac_part),
+        None => (body, ""),
+    };
+    let int_digits = int_part.trim_start_matches('0').len();
+    (int_digits + frac_part.len(), frac_part.len())
+}
+
+fn check_digits(
+    data: &XdtoTypeData,
+    value: &BslValue,
+    spec: &str,
+    what: &str,
+    pick: impl Fn(usize, usize) -> usize,
+) -> RtResult<()> {
+    let want = facet_count(data, spec)?;
+    let BslValue::Number(number) = value else {
+        return Err(facet_not_applicable(data, value, what));
+    };
+    let (total, frac) = digit_counts(&number.to_canonical());
+    let got = pick(total, frac);
+    if got <= want {
+        return Ok(());
+    }
+    Err(RtError::Xdto(format!(
+        "у значения типа «{}» {what} не больше {want}, а их {got}",
+        type_display(data)
+    )))
+}
+
+/// Перечисление: значение обязано совпасть с одним из перечисленных ПО
+/// ЗНАЧЕНИЮ, а не по записи (измерено на перечислении десятичного типа:
+/// при перечисленных «1.0» и «2» проходят и «1», и «2.00», а «3» — нет).
+/// Совпадение самих записей остаётся запасным путём — для значений,
+/// которые сравнивать по значению нечем (двоичные данные, расширенное имя).
+fn check_enumeration(
+    model: &XdtoModel,
+    index: usize,
+    lexical: &str,
+    value: &BslValue,
+    specs: &[&str],
+) -> RtResult<()> {
+    for spec in specs {
+        if lexical == *spec {
+            return Ok(());
+        }
+        if let Ok(allowed) = value_from_lexical(model, index, spec) {
+            if *value == allowed {
+                return Ok(());
+            }
+        }
+    }
+    Err(RtError::Xdto(format!(
+        "«{lexical}» не входит в перечисление типа «{}»: {}",
+        type_display(model.type_at(index)?),
+        specs.join(", ")
+    )))
+}
+
+/// Фасет, применённый к значению не того вида: длина у числа, границы у
+/// двоичных данных, разряды у строки. Это противоречие внутри самой схемы,
+/// и отказ называет его вслух.
+fn facet_not_applicable(data: &XdtoTypeData, value: &BslValue, what: &str) -> RtError {
+    RtError::Xdto(format!(
+        "фасет {what} у типа «{}» не применим к значению типа «{}»",
+        type_display(data),
+        value.type_name()
+    ))
 }
 
 fn bad_lexical(lexical: &str, what: &str) -> RtError {
@@ -2138,17 +2587,17 @@ pub fn factory_type(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
 /// ошибка), а результат — `ОбъектXDTO`; абстрактный тип платформа
 /// инстанцировать отказывается.
 ///
-/// ФАСЕТЫ ЗДЕСЬ НЕ ПРОВЕРЯЮТСЯ. Платформа по ним лексическую форму
-/// проверяет (измерено: `Создать` от `Small` с «1000» и от `Code` с «аб» —
-/// ошибка), и это сознательно отложено до задачи проверки значений — см.
-/// «Фасеты только хранятся» в шапке модуля.
+/// ФАСЕТЫ ЗДЕСЬ ПРОВЕРЯЮТСЯ — платформа проверяет их именно тут (измерено:
+/// `Создать` от типа с перечислением `red|green` с «синий», от ограничения
+/// длины с «а», от ограничения диапазона с «-1» и от `xs:int` с
+/// «3000000000» — ошибка).
 ///
 /// # Errors
 ///
 /// [`RtError::MethodNotApplicable`], если получатель не фабрика, первый
 /// аргумент не тип XDTO либо аргументов не то количество;
-/// [`RtError::Xdto`], если лексическая форма не разбирается в этом типе или
-/// тип объекта абстрактный.
+/// [`RtError::Xdto`], если лексическая форма не разбирается в этом типе,
+/// нарушает его фасет или тип объекта абстрактный.
 pub fn factory_create(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
     factory_model(obj, "Создать")?;
     let [first, rest @ ..] = args else {
@@ -2197,7 +2646,7 @@ pub fn factory_create(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
     Ok(data_value(
         model,
         &Rc::new(XdtoValueData {
-            value: value_from_lexical(model, *index, &text)?,
+            value: value_from_lexical_checked(model, *index, &text)?,
             lexical: text,
             type_index: *index,
         }),
@@ -2744,16 +3193,25 @@ fn coerce_to_value_type(
     // Двоичные данные и расширенное имя проходят без круга: обратной
     // лексической формы у них здесь нет (см. «Двоичные лексические формы» и
     // «QName с префиксом» в шапке модуля), а значение уже нужного вида.
+    // Фасеты им всё равно достаются — по цепочке типа и по самому
+    // значению: длина двоичных данных считается в байтах и без лексической
+    // формы.
     if let BslValue::Object(o) = &value {
         match (builtin, &**o) {
             (Some(BuiltinBsl::Base64 | BuiltinBsl::Hex), BslObject::BinaryData(_))
-            | (Some(BuiltinBsl::QName), BslObject::XmlExpandedName(_)) => return Ok(value),
+            | (Some(BuiltinBsl::QName), BslObject::XmlExpandedName(_)) => {
+                check_facet_chain(model, Some(target), "", &value)?;
+                return Ok(value);
+            }
             _ => {}
         }
     }
     let lexical = lexical_of_value(&value, builtin)
         .ok_or_else(|| bad_property_value(model, target, &value))?;
-    value_from_lexical(model, target, &lexical)
+    // С проверкой по фасетам: платформа не пускает нарушающее значение уже
+    // в запись (измерено на присваивании, на `Установить` и на
+    // `Добавить`/`Установить`/`Вставить` списка).
+    value_from_lexical_checked(model, target, &lexical)
 }
 
 /// Лексическая форма значения BSL для типа-приёмника. `None` — значение,
@@ -3009,9 +3467,12 @@ pub fn object_owner(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
 /// `ВерхняяГраница`, а вложенные объекты — и в свойстве, и в списке —
 /// проверяются рекурсивно.
 ///
-/// ФАСЕТЫ здесь не проверяются, как и в `Создать`: значение, нарушающее
-/// фасет, платформа не пускает уже в запись, а этой реализации проверять
-/// образцы нечем (см. «Фасеты только хранятся» в шапке модуля).
+/// ФАСЕТЫ здесь не перепроверяются, и измерить, перепроверяет ли их
+/// платформа, не вышло: значение, нарушающее фасет, в экземпляр не
+/// попадает ни одним измеренным путём — его отвергают и присваивание, и
+/// `Установить`, и `Добавить`/`Установить`/`Вставить` списка, и чтение
+/// документа, — так что проверять `Проверить()` не на чем.
+/// `НЕ ИЗМЕРЕНО(XDTO.VALIDATION.VALIDATE_FACETS)`.
 ///
 /// # Errors
 ///
@@ -3673,7 +4134,11 @@ fn read_simple(
         )));
     }
     let text = read_text_only(parser, head)?;
-    let value = value_from_lexical(model, type_index, &text)?;
+    // Чтение с типом ПРОВЕРЯЕТ документ по фасетам так же, как запись
+    // проверяет присваивание (измерено: элемент со значением вне
+    // перечисления, вне длины, вне диапазона и с лишними разрядами
+    // платформа отвергает).
+    let value = value_from_lexical_checked(model, type_index, &text)?;
     Ok(ReadOut::Simple(value, text))
 }
 
@@ -3753,7 +4218,7 @@ fn read_object(
         };
         let prop = props[k];
         let target = model.property_at(prop)?.type_index;
-        let value = value_from_lexical(model, target, &attr.value)?;
+        let value = value_from_lexical_checked(model, target, &attr.value)?;
         push_entry(&instance, prop, value);
     }
 
@@ -3839,7 +4304,7 @@ fn read_object(
 
     if let Some(prop) = content_prop {
         let target = model.property_at(prop)?.type_index;
-        let value = value_from_lexical(model, target, &content)?;
+        let value = value_from_lexical_checked(model, target, &content)?;
         push_entry(&instance, prop, value);
     }
     for &prop in &props {
@@ -4997,6 +5462,11 @@ pub fn serializer_read_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<BslVal
 /// * если тип нашёлся, но он ОБЪЕКТНЫЙ, — ошибка: измерено, что
 ///   `<RootType xmlns="urn:test">` даёт «Отсутствует отображение для типа
 ///   '{urn:test}RootType'», а не строку.
+///
+/// ФАСЕТЫ здесь не проверяются, и это тоже измерено: чтение
+/// сериализатором `<Len xmlns="urn:v">а</Len>` при `minLength="2"` у
+/// `Len` отдаёт «а» без ошибки, тогда как то же чтение ФАБРИКОЙ — ошибка.
+/// Поэтому разбор идёт через непроверяющий `value_from_lexical`.
 fn serializer_read_element(
     parser: &mut crate::xml::XmlParser,
     model: &Rc<XdtoModel>,
@@ -5067,12 +5537,22 @@ mod tests {
     /// Схема из `measure-xdto.bsl`, сокращённая до того, что проверяют
     /// тесты ниже. Имена и порядок объявлений — те же, поэтому измеренные
     /// строки платформы читаются рядом с ожиданиями.
+    ///
+    /// ОДНО ОТЛИЧИЕ ОТ `measure-xdto.bsl`: у `Code` здесь нет фасета
+    /// образца, он вынесен в отдельный тип `Pat`. Иначе `Code` стал бы
+    /// непригоден целиком — проверка по образцу отвечает честной ошибкой
+    /// «не поддерживается» (см. [`check_pattern`]), — а через `code`
+    /// проверяется совсем другое: окно списка, порядок заполнения и
+    /// приведение при записи. Раздельные типы на каждый вид фасета — то же
+    /// устройство, что у схемы `measure-xdto-validation.bsl`.
     const SAMPLE: &str = concat!(
         r#"<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="urn:test" "#,
         r#"targetNamespace="urn:test" elementFormDefault="qualified" "#,
         r#"attributeFormDefault="unqualified">"#,
         r#"<xs:simpleType name="Code"><xs:restriction base="xs:string">"#,
         r#"<xs:minLength value="2"/><xs:maxLength value="5"/>"#,
+        r#"</xs:restriction></xs:simpleType>"#,
+        r#"<xs:simpleType name="Pat"><xs:restriction base="xs:string">"#,
         r#"<xs:pattern value="[A-Z]+"/></xs:restriction></xs:simpleType>"#,
         r#"<xs:simpleType name="Codes"><xs:list itemType="t:Code"/></xs:simpleType>"#,
         r#"<xs:simpleType name="Either2"><xs:union memberTypes="xs:int xs:string"/></xs:simpleType>"#,
@@ -5409,11 +5889,16 @@ mod tests {
                     BslValue::Enum(EnumValue::XdtoFacetMaxLength),
                     "5".to_string()
                 ),
-                (
-                    BslValue::Enum(EnumValue::XdtoFacetPattern),
-                    "[A-Z]+".to_string()
-                ),
             ]
+        );
+        // Образец ЧИТАЕТСЯ как всякий другой фасет — отказывает только
+        // проверка по нему (см. `pattern_facet_is_an_honest_unsupported_error`).
+        assert_eq!(
+            facets_of("urn:test", "Pat"),
+            vec![(
+                BslValue::Enum(EnumValue::XdtoFacetPattern),
+                "[A-Z]+".to_string()
+            )]
         );
         // Встроенные типы несут измеренные фасеты.
         assert_eq!(
@@ -5441,6 +5926,278 @@ mod tests {
             prop(&type_of(&m, XSD_NS, "date"), "Фасеты"),
             BslValue::Undefined
         );
+    }
+
+    // --- проверка по фасетам ---------------------------------------------
+    //
+    // Схема ниже — та же, что у `measure-xdto-validation.bsl`: на каждый
+    // вид фасета свой тип, чтобы отказ нельзя было списать на соседний
+    // фасет, — поэтому ожидания тестов читаются прямо рядом со снятыми
+    // строками `measure-xdto-validation.platform.txt`.
+
+    const FACETS: &str = concat!(
+        r#"<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="urn:v" "#,
+        r#"targetNamespace="urn:v" elementFormDefault="qualified" "#,
+        r#"attributeFormDefault="unqualified">"#,
+        r#"<xs:simpleType name="Col"><xs:restriction base="xs:string">"#,
+        r#"<xs:enumeration value="red"/><xs:enumeration value="green"/>"#,
+        r#"</xs:restriction></xs:simpleType>"#,
+        r#"<xs:simpleType name="Len"><xs:restriction base="xs:string">"#,
+        r#"<xs:minLength value="2"/><xs:maxLength value="5"/>"#,
+        r#"</xs:restriction></xs:simpleType>"#,
+        r#"<xs:simpleType name="Len2"><xs:restriction base="t:Len">"#,
+        r#"<xs:maxLength value="3"/></xs:restriction></xs:simpleType>"#,
+        r#"<xs:simpleType name="Fix"><xs:restriction base="xs:string">"#,
+        r#"<xs:length value="3"/></xs:restriction></xs:simpleType>"#,
+        r#"<xs:simpleType name="Rng"><xs:restriction base="xs:decimal">"#,
+        r#"<xs:minInclusive value="0"/><xs:maxExclusive value="100"/>"#,
+        r#"</xs:restriction></xs:simpleType>"#,
+        r#"<xs:simpleType name="Rng2"><xs:restriction base="xs:decimal">"#,
+        r#"<xs:minExclusive value="0"/><xs:maxInclusive value="100"/>"#,
+        r#"</xs:restriction></xs:simpleType>"#,
+        r#"<xs:simpleType name="Dig"><xs:restriction base="xs:decimal">"#,
+        r#"<xs:totalDigits value="4"/><xs:fractionDigits value="2"/>"#,
+        r#"</xs:restriction></xs:simpleType>"#,
+        r#"<xs:simpleType name="Pat"><xs:restriction base="xs:string">"#,
+        r#"<xs:pattern value="[A-Z]+"/></xs:restriction></xs:simpleType>"#,
+        r#"<xs:simpleType name="Lst"><xs:list itemType="t:Len"/></xs:simpleType>"#,
+        r#"<xs:simpleType name="LstMax"><xs:restriction base="t:Lst">"#,
+        r#"<xs:maxLength value="2"/></xs:restriction></xs:simpleType>"#,
+        r#"<xs:simpleType name="Uni"><xs:union memberTypes="t:Col xs:int"/></xs:simpleType>"#,
+        r#"<xs:simpleType name="ColN"><xs:restriction base="xs:decimal">"#,
+        r#"<xs:enumeration value="1.0"/><xs:enumeration value="2"/>"#,
+        r#"</xs:restriction></xs:simpleType>"#,
+        r#"<xs:simpleType name="Bin"><xs:restriction base="xs:base64Binary">"#,
+        r#"<xs:maxLength value="2"/></xs:restriction></xs:simpleType>"#,
+        r#"<xs:simpleType name="Dt"><xs:restriction base="xs:date">"#,
+        r#"<xs:minInclusive value="2020-01-01"/><xs:maxExclusive value="2030-01-01"/>"#,
+        r#"</xs:restriction></xs:simpleType>"#,
+        r#"<xs:complexType name="T"><xs:sequence>"#,
+        r#"<xs:element name="el" type="t:Len" minOccurs="0"/>"#,
+        r#"<xs:element name="ml" type="t:Len" minOccurs="0" maxOccurs="unbounded"/>"#,
+        r#"<xs:element name="ip" type="xs:int" minOccurs="0"/>"#,
+        r#"<xs:element name="pt" type="t:Pat" minOccurs="0"/>"#,
+        r#"<xs:element name="bn" type="t:Bin" minOccurs="0"/>"#,
+        r#"</xs:sequence>"#,
+        r#"<xs:attribute name="ac" type="t:Col"/>"#,
+        r#"</xs:complexType>"#,
+        r#"</xs:schema>"#,
+    );
+
+    /// Значение своего типа из лексической формы — тем же путём, что и
+    /// `ФабрикаXDTO.Создать`, то есть С проверкой фасетов.
+    fn checked(f: &BslValue, name: &str, lexical: &str) -> RtResult<BslValue> {
+        let t = factory_type(f, &[str_value("urn:v"), str_value(name)])?;
+        let value = factory_create(f, &[t, str_value(lexical)])?;
+        get_property(&value, "Значение")
+    }
+
+    /// Значение встроенного типа тем же путём.
+    fn checked_builtin(f: &BslValue, name: &str, lexical: &str) -> RtResult<BslValue> {
+        let t = factory_type(f, &[str_value(XSD_NS), str_value(name)])?;
+        let value = factory_create(f, &[t, str_value(lexical)])?;
+        get_property(&value, "Значение")
+    }
+
+    /// Перечисление, длины и границы — та же сетка принятых и отвергнутых
+    /// значений, что снята на платформе.
+    #[test]
+    fn facet_checks_follow_the_measured_grid() {
+        let f = factory(FACETS);
+        // Перечисление: только перечисленные записи, с учётом регистра.
+        assert_eq!(text_of(&checked(&f, "Col", "red").expect("red")), "red");
+        assert!(checked(&f, "Col", "синий").is_err());
+        assert!(checked(&f, "Col", "RED").is_err());
+        assert!(checked(&f, "Col", "").is_err());
+        // Длины: обе границы включающие, пустая строка короче двух.
+        for lexical in ["аб", "абв", "абвгд"] {
+            assert!(checked(&f, "Len", lexical).is_ok(), "{lexical}");
+        }
+        for lexical in ["а", "абвгде", ""] {
+            assert!(checked(&f, "Len", lexical).is_err(), "{lexical}");
+        }
+        // `length` — ровно столько символов.
+        assert!(checked(&f, "Fix", "абв").is_ok());
+        assert!(checked(&f, "Fix", "аб").is_err());
+        assert!(checked(&f, "Fix", "абвг").is_err());
+        // Границы: включающая пропускает саму себя, исключающая — нет.
+        assert!(checked(&f, "Rng", "0").is_ok());
+        assert!(checked(&f, "Rng", "99.5").is_ok());
+        assert!(checked(&f, "Rng", "-1").is_err());
+        assert!(checked(&f, "Rng", "100").is_err());
+        assert!(checked(&f, "Rng2", "0").is_err());
+        assert!(checked(&f, "Rng2", "100").is_ok());
+        assert!(checked(&f, "Rng2", "101").is_err());
+        // Разряды: всего и в дробной части; хвостовые нули не считаются,
+        // потому что их снимает нормализация числа.
+        assert!(checked(&f, "Dig", "12.34").is_ok());
+        assert!(checked(&f, "Dig", "1234").is_ok());
+        assert!(checked(&f, "Dig", "1.200").is_ok());
+        assert!(checked(&f, "Dig", "123.45").is_err());
+        assert!(checked(&f, "Dig", "1.234").is_err());
+        assert!(checked(&f, "Dig", "12345").is_err());
+        // Границы у ДАТЫ сравниваются так же, как у числа (измерено).
+        assert!(checked(&f, "Dt", "2026-01-01").is_ok());
+        assert!(checked(&f, "Dt", "2019-01-01").is_err());
+        assert!(checked(&f, "Dt", "2030-01-01").is_err());
+    }
+
+    /// Фасеты НАСЛЕДУЮТСЯ: и по цепочке схемы, и по табличной цепочке
+    /// встроенных типов, куда разбор лексической формы не спускается.
+    #[test]
+    fn facets_are_inherited_along_the_whole_chain() {
+        let f = factory(FACETS);
+        // `Len2` ограничивает `Len`: своя верхняя граница строже, нижняя
+        // досталась от базового типа.
+        assert!(checked(&f, "Len2", "абв").is_ok());
+        assert!(checked(&f, "Len2", "абвг").is_err());
+        assert!(checked(&f, "Len2", "а").is_err());
+        // Встроенная цепочка: диапазон у `int` от него самого, у `byte` —
+        // от `byte`, «разряды дробной части» у `integer` — от `integer`.
+        assert!(checked_builtin(&f, "int", "42").is_ok());
+        assert!(checked_builtin(&f, "int", "3000000000").is_err());
+        assert!(checked_builtin(&f, "int", "-3000000000").is_err());
+        assert!(checked_builtin(&f, "byte", "200").is_err());
+        assert!(checked_builtin(&f, "unsignedByte", "-1").is_err());
+        assert!(checked_builtin(&f, "positiveInteger", "0").is_err());
+        assert!(checked_builtin(&f, "integer", "1.5").is_err());
+        // А у самого `decimal` разрядов не ограничено.
+        assert!(checked_builtin(&f, "decimal", "1.5").is_ok());
+    }
+
+    /// Длина считается по виду значения: символы у строки, БАЙТЫ у
+    /// двоичных данных, ЭЛЕМЕНТЫ у списочного типа (измерено).
+    #[test]
+    fn facet_length_counts_characters_bytes_and_items() {
+        let f = factory(FACETS);
+        // Кириллица — по символам, а не по байтам UTF-8: «аб» проходит
+        // нижнюю границу в два символа.
+        assert!(checked(&f, "Len", "аб").is_ok());
+        // Двоичные данные: «0LA=» — два байта, «0LDQsQ==» — четыре.
+        assert!(checked(&f, "Bin", "0LA=").is_ok());
+        assert!(checked(&f, "Bin", "0LDQsQ==").is_err());
+        // ЗАПИСЬ двоичных данных идёт мимо лексической формы (обратной у
+        // них здесь нет), и фасет достаётся им по самому значению.
+        let t = factory_type(&f, &[str_value("urn:v"), str_value("T")]).expect("тип");
+        let o = factory_create(&f, std::slice::from_ref(&t)).expect("экземпляр");
+        let two = checked_builtin(&f, "base64Binary", "0LA=").expect("два байта");
+        let four = checked_builtin(&f, "base64Binary", "0LDQsQ==").expect("четыре байта");
+        assert!(set_property(&o, "bn", two).is_ok());
+        assert!(set_property(&o, "bn", four).is_err());
+        // Списочный тип: длина — число элементов, а сами элементы
+        // проверяются типом элемента.
+        assert!(checked(&f, "Lst", "аб вг").is_ok());
+        assert!(checked(&f, "Lst", "аб в").is_err());
+        assert!(checked(&f, "LstMax", "аб вг").is_ok());
+        assert!(checked(&f, "LstMax", "аб вг де").is_err());
+    }
+
+    /// Перечисление сравнивает ЗНАЧЕНИЯ, а не записи: при перечисленных
+    /// «1.0» и «2» проходят и «1», и «2.00» (измерено).
+    #[test]
+    fn enumeration_facet_compares_values_not_spelling() {
+        let f = factory(FACETS);
+        assert!(checked(&f, "ColN", "1.0").is_ok());
+        assert!(checked(&f, "ColN", "1").is_ok());
+        assert!(checked(&f, "ColN", "2.00").is_ok());
+        assert!(checked(&f, "ColN", "3").is_err());
+    }
+
+    /// Член объединения выбирается С УЧЁТОМ фасетов: «5» разбирается
+    /// строкой первым членом, но его перечисление эту строку отвергает, и
+    /// значением выходит число (измерено).
+    #[test]
+    fn union_picks_the_first_member_whose_facets_accept() {
+        let f = factory(FACETS);
+        assert_eq!(text_of(&checked(&f, "Uni", "red").expect("red")), "red");
+        assert_eq!(number_of(&checked(&f, "Uni", "5").expect("5")), 5);
+        assert!(checked(&f, "Uni", "синий").is_err());
+    }
+
+    /// Проверка стоит во всех измеренных точках: запись свойства, список,
+    /// чтение документа.
+    #[test]
+    fn facet_checks_reach_writes_and_reads() {
+        let f = factory(FACETS);
+        let t = factory_type(&f, &[str_value("urn:v"), str_value("T")]).expect("тип");
+        let o = factory_create(&f, std::slice::from_ref(&t)).expect("экземпляр");
+        // Присваивание и `Установить`.
+        assert!(set_property(&o, "el", str_value("аб")).is_ok());
+        assert!(set_property(&o, "el", str_value("а")).is_err());
+        assert!(object_set(&o, &[str_value("ac"), str_value("green")]).is_ok());
+        assert!(object_set(&o, &[str_value("ac"), str_value("синий")]).is_err());
+        // Приведение к лексической форме идёт ДО проверки: число 5
+        // становится строкой «5», и она короче двух символов.
+        assert!(set_property(&o, "el", number_value(42)).is_ok());
+        assert!(set_property(&o, "el", number_value(5)).is_err());
+        // Встроенные фасеты на записи: «1.5» не целое, 3000000000 вне
+        // диапазона `xs:int`.
+        assert!(set_property(&o, "ip", number_value(42)).is_ok());
+        assert!(set_property(&o, "ip", number_value(3_000_000_000)).is_err());
+        // Список: `Добавить`, `Установить` и `Вставить` проверяют так же.
+        let list = get_property(&o, "ml").expect("список");
+        assert!(list_add(&list, &[str_value("аб")]).is_ok());
+        assert!(list_add(&list, &[str_value("а")]).is_err());
+        assert!(list_set(&list, &[number_value(0), str_value("вгд")]).is_ok());
+        assert!(list_set(&list, &[number_value(0), str_value("в")]).is_err());
+        assert!(list_insert(&list, &[number_value(0), str_value("вг")]).is_ok());
+        assert!(list_insert(&list, &[number_value(0), str_value("в")]).is_err());
+        // Чтение документа с типом проверяет и элемент, и атрибут, а
+        // валидный документ читается по-прежнему.
+        let read = |text: &str| factory_read_xml(&f, &[reader(text), t.clone()]);
+        let ok = read(r#"<т xmlns="urn:v" ac="red"><el>аб</el></т>"#).expect("валидный документ");
+        assert_eq!(text_of(&get_property(&ok, "el").expect("el")), "аб");
+        assert!(read(r#"<т xmlns="urn:v" ac="синий"/>"#).is_err());
+        assert!(read(r#"<т xmlns="urn:v"><el>а</el></т>"#).is_err());
+        assert!(read(r#"<т xmlns="urn:v"><ip>3000000000</ip></т>"#).is_err());
+    }
+
+    /// Умолчание схемы, нарушающее фасет, валит построение ФАБРИКИ целиком
+    /// (измерено: `СоздатьФабрикуXDTO` от такой схемы — ошибка).
+    #[test]
+    fn a_facet_violating_default_breaks_the_whole_factory() {
+        let bad = concat!(
+            r#"<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="urn:w" "#,
+            r#"targetNamespace="urn:w" elementFormDefault="qualified">"#,
+            r#"<xs:simpleType name="Len"><xs:restriction base="xs:string">"#,
+            r#"<xs:minLength value="2"/></xs:restriction></xs:simpleType>"#,
+            r#"<xs:complexType name="T2"><xs:sequence>"#,
+            r#"<xs:element name="bad" type="t:Len" default="а" minOccurs="0"/>"#,
+            r#"</xs:sequence></xs:complexType></xs:schema>"#,
+        );
+        let schema = crate::xsd::schema_of_text(bad).expect("схема разбирается");
+        assert!(model_of_schema(&schema).is_err());
+        // Годное умолчание того же вида модель строит.
+        let good = bad.replace(r#"default="а""#, r#"default="аб""#);
+        let schema = crate::xsd::schema_of_text(&good).expect("схема разбирается");
+        assert!(model_of_schema(&schema).is_ok());
+    }
+
+    /// Фасет образца — честная ошибка «не поддерживается», и она
+    /// одинакова для годного и негодного значения: разбирать образец
+    /// нечем, а частично истолкованный образец хуже отказа.
+    ///
+    /// Образцы ВСТРОЕННЫХ типов из-под этого правила выведены: иначе
+    /// отказом отвечала бы любая запись в `xs:int`, чей предок `xs:integer`
+    /// несёт образец `[\-+]?[0-9]+`.
+    #[test]
+    fn pattern_facet_is_an_honest_unsupported_error() {
+        let f = factory(FACETS);
+        let err = checked(&f, "Pat", "AB").expect_err("образец не поддерживается");
+        let text = err.to_string();
+        assert!(text.contains("не поддерживается"), "текст отказа: {text}");
+        assert!(text.contains("образц"), "текст отказа: {text}");
+        assert!(checked(&f, "Pat", "аб").is_err());
+        // Запись в свойство такого типа — тот же отказ.
+        let t = factory_type(&f, &[str_value("urn:v"), str_value("T")]).expect("тип");
+        let o = factory_create(&f, std::slice::from_ref(&t)).expect("экземпляр");
+        assert!(set_property(&o, "pt", str_value("AB")).is_err());
+        // Встроенные типы с образцом работают: целые — по своему разбору,
+        // `xs:Name` — с ЗАВЫШЕННОЙ терпимостью (платформа отвергает «1имя»,
+        // здесь оно проходит; расхождение названо в шапке модуля).
+        assert!(checked_builtin(&f, "int", "42").is_ok());
+        assert!(checked_builtin(&f, "Name", "имя").is_ok());
+        assert!(checked_builtin(&f, "Name", "1имя").is_ok());
     }
 
     /// Значение по умолчанию — `ЗначениеXDTO` из `default` и из `fixed`.
