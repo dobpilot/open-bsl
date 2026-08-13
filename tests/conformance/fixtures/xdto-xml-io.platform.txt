@@ -1,0 +1,99 @@
+объект: Объект XDTO
+тип объекта: {urn:test}RootType
+строка: [аб] Строка
+атрибут: [7] Число
+целое: [42] Число
+дробное: [12,5] Число
+дата: [13.08.2026 0:00:00] Дата
+момент: [13.08.2026 10:20:30]
+время суток: [01.01.0001 10:20:30]
+булево: [Да] Булево
+base64: Двоичные данные 4
+hex: Двоичные данные 4
+список: 3
+множественное: Список XDTO 2 [один|два]
+вложенное: {urn:test}Inner [вг]
+вложенный атрибут: [х]
+неквалифицированное: [де]
+пропущенное: [Нет]
+не встретилось: Нет
+встретилось: Да
+свойств у типа: 17
+последовательность: 
+владелец вложенного: Да
+пробелы между тегами: [ аб ]
+комментарий внутри: [аб]
+секция CDATA: [аб]
+ссылки на сущности: [<&>]
+объявление XML: [аб]
+пустой элемент строки: []
+пустой элемент числа: [0]
+булево единицей: [Да]
+nil значение: [] Не определено
+nil установлено: Да
+nil обратно: <к xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><ПС><Т><name>а</name><ПС><Т><nilt xsi:nil="true"/><ПС></к>
+xsi:type префиксом: {urn:test}InnerExt [г]
+xsi:type умолчанием: {urn:test}InnerExt
+xsi:type неизвестный: {urn:test}Inner
+xsi:type на корне: {urn:test}Inner
+anyType текстом: [5] Строка
+anyType с xsi:type: [5] Число
+лишний элемент: ошибка
+лишний атрибут: ошибка
+битая лексика: ошибка
+обратный порядок: ошибка
+повтор одиночного: ошибка
+множественное вразбивку: ошибка
+текст в составном: ошибка
+нет обязательного: ошибка
+чужой элемент: ошибка
+пропуск необязательного: прочитано
+дата со временем: ошибка
+атрибут у значения: ошибка
+позиция после первого: Начало элемента [t:root]
+два подряд: 1|2
+позиция после второго: Начало элемента [хвост]
+позиция после корня: Ничего
+читатель исчерпан: Нет
+значение: Значение XDTO [42] лексика=[42]
+значение даты: Дата лексика=[2026-08-13]
+значение битое: ошибка
+запись объекта: <RootType xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="7"><ПС><Т><name>аб</name><ПС></RootType>
+запись с именем: <мой xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="7"><ПС><Т><name>аб</name><ПС></мой>
+запись с именем и URI: <мой xmlns="urn:иное" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="7"><ПС><Т><name xmlns="urn:test">аб</name><ПС></мой>
+запись недозаполненного: <к xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"/>
+квалифицированный атрибут: <к xmlns="urn:test" xmlns:d1p1="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="7" d1p1:qa="де"><ПС><Т><name>аб</name><ПС></к>
+тот же атрибут с чужим URI: <к xmlns="urn:иное" xmlns:d1p1="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="7" d1p1:qa="де"><ПС><Т><d1p1:name>аб</d1p1:name><ПС></к>
+неквалифицированный элемент: <к xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="7"><ПС><Т><name>аб</name><ПС><Т><uq xmlns="">де</uq><ПС></к>
+префикс в глубине: <к xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="7"><ПС><Т><name>аб</name><ПС><Т><d2p1:nested xmlns:d2p1="urn:test" d2p1:qi="х"><ПС><Т><Т><d2p1:in>вг</d2p1:in><ПС><Т></d2p1:nested><ПС></к>
+дата отбрасывает время: <к xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="7"><ПС><Т><name>аб</name><ПС><Т><when>2026-08-13</when><ПС></к>
+момент всегда с секундами: <к xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="7"><ПС><Т><name>аб</name><ПС><Т><stamp>2026-08-13T00:00:00</stamp><ПС></к>
+время суток: <к xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="7"><ПС><Т><name>аб</name><ПС><Т><hour>10:20:30</hour><ПС></к>
+хвостовой ноль срезан: <к xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="7"><ПС><Т><name>аб</name><ПС><Т><dec>12.5</dec><ПС></к>
+отрицательное дробное: <к xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="7"><ПС><Т><name>аб</name><ПС><Т><dec>-0.25</dec><ПС></к>
+деление на три: <к xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="7"><ПС><Т><name>аб</name><ПС><Т><dec>0.333333333333333333333333333</dec><ПС></к>
+булево ложь: <к xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="7"><ПС><Т><name>аб</name><ПС><Т><flag>false</flag><ПС></к>
+разметка в тексте: <к xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="7"><ПС><Т><name>&lt;&amp;&gt;"</name><ПС></к>
+пустая строка: <к xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="7"><ПС><Т><name/><ПС></к>
+список: <к xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="7"><ПС><Т><name>аб</name><ПС><Т><codes>1 2 3</codes><ПС></к>
+шестнадцатеричное: <к xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="7"><ПС><Т><name>аб</name><ПС><Т><hex>D0B0D0B1</hex><ПС></к>
+base64 ровно строка: <к xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="7"><ПС><Т><name>аб</name><ПС><Т><bin>MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3</bin><ПС></к>
+base64 с переносом: <к xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="7"><ПС><Т><name>аб</name><ПС><Т><bin>MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3<ВК><ПС>OA==</bin><ПС></к>
+наследник в свойстве: <к xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="7"><ПС><Т><name>аб</name><ПС><Т><nested xsi:type="InnerExt"><ПС><Т><Т><in>вг</in><ПС><Т><Т><more>де</more><ПС><Т></nested><ПС></к>
+anyType числом: <к xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><ПС><Т><name>аб</name><ПС><Т><notype xsi:type="xs:decimal">5</notype><ПС></к>
+anyType булевым: <к xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><ПС><Т><name>аб</name><ПС><Т><notype xsi:type="xs:boolean">true</notype><ПС></к>
+anyType строкой: <к xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><ПС><Т><name>аб</name><ПС><Т><notype xsi:type="xs:string">аб</notype><ПС></к>
+anyType датой: <к xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><ПС><Т><name>аб</name><ПС><Т><notype xsi:type="xs:dateTime">2026-08-13T10:20:30</notype><ПС></к>
+anyType объектом: <к xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><ПС><Т><name>аб</name><ПС><Т><notype xsi:type="Inner"><ПС><Т><Т><in>вг</in><ПС><Т></notype><ПС></к>
+значение XDTO: <int xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</int>
+значение с именем: <число xmlns="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</число>
+значение с URI: <с xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">аб</с>
+порядок модельный: <к xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="7"><ПС><Т><name>аб</name><ПС><Т><num>42</num><ПС></к>
+порядок заполнения: <в xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><ПС><Т><cb>б1</cb><ПС><Т><ca>а1</ca><ПС><Т><cb>б2</cb><ПС></в>
+выбор прочитан: 1/2 последовательность=3
+выбор обратно: <в xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><ПС><Т><cb>б1</cb><ПС><Т><ca>а1</ca><ПС><Т><cb>б2</cb><ПС></в>
+две записи в один писатель: <обёртка><ПС><Т><RootType xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="7"><ПС><Т><Т><name>аб</name><ПС><Т></RootType><ПС><Т><RootType xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="7"><ПС><Т><Т><name>аб</name><ПС><Т></RootType><ПС></обёртка>
+пустое имя: ошибка
+число вместо экземпляра: ошибка
+круг: <root xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="7"><ПС><Т><name>аб</name><ПС><Т><num>42</num><ПС><Т><dec>12.5</dec><ПС><Т><when>2026-08-13</when><ПС><Т><stamp>2026-08-13T10:20:30</stamp><ПС><Т><hour>10:20:30</hour><ПС><Т><flag>true</flag><ПС><Т><bin>0LDQsQ==</bin><ПС><Т><hex>D0B2D0B3</hex><ПС><Т><codes>1 2 3</codes><ПС><Т><tag>один</tag><ПС><Т><tag>два</tag><ПС><Т><d2p1:nested xmlns:d2p1="urn:test" d2p1:qi="х"><ПС><Т><Т><d2p1:in>вг</d2p1:in><ПС><Т></d2p1:nested><ПС><Т><uq xmlns="">де</uq><ПС></root>
+круг устойчив: Да

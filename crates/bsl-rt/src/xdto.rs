@@ -248,6 +248,130 @@
 //!   же, что у индексации. Отдельной пробы на «список после `Вставить` в
 //!   середину» нет: измерено только, куда `Вставить` встаёт в
 //!   ПОСЛЕДОВАТЕЛЬНОСТИ.
+//!
+//! # Ввод-вывод: что ИЗМЕРЕНО про `ПрочитатьXML`/`ЗаписатьXML`
+//!
+//! Пробы — `tests/conformance/measure/measure-xdto-io.bsl`, рядом снятый
+//! `measure-xdto-io.platform.txt`; круговая фикстура —
+//! `tests/conformance/fixtures/xdto-xml-io.bsl`.
+//!
+//! * **арности.** `ПрочитатьXML(ЧтениеXML[, Тип])` — один или два
+//!   аргумента, третий платформа отвергает; `ЗаписатьXML(ЗаписьXML,
+//!   Значение[, Имя[, УРИ]])` — от двух до четырёх, ПЯТЫЙ отвергает, так
+//!   что «ТипXML» и «ФормаXML» из справки пятым и шестым параметрами не
+//!   существуют. Английские написания есть у обоих (`ReadXML`, `WriteXML`).
+//!   Тип чтения берётся только значением `ТипЗначенияXDTO`/`ТипОбъектаXDTO`:
+//!   имя строкой и `РасширенноеИмяXML` вторым аргументом — ошибка;
+//! * **чтение БЕЗ типа — это не поиск по объявлению элемента.** Платформа
+//!   разбирает документ в ОТКРЫТОЕ содержимое `anyType`: `Тип()` результата
+//!   — `{...}anyType`, у самого типа свойств ноль, а у ЭКЗЕМПЛЯРА их
+//!   одиннадцать — заведённых по ходу разбора, с формой и URI каждого
+//!   (`[id Атрибут ][name Элемент urn:test]…[uq Элемент ]`). Значения при
+//!   этом остаются СТРОКАМИ («12.50», «true», «2026-08-13»), повторяющийся
+//!   элемент даёт `СписокXDTO`, вложенный — снова `anyType`, а посторонний
+//!   корень (`<чужой xmlns="urn:иное"/>`) читается без ошибки. Текст
+//!   элемента при этом ТЕРЯЕТСЯ: у `<голый>42</голый>` свойств ноль.
+//!   Открытого содержимого здесь нет, поэтому вызов с одним аргументом
+//!   отвечает отказом — см. «Сознательные расхождения» ниже;
+//! * **чтение С ТИПОМ типизирует значения и ПРОВЕРЯЕТ документ.**
+//!   `xs:int` -> `Число`, `xs:decimal` -> `Число` (12.50 -> 12,5),
+//!   `xs:date` -> `Дата`, `xs:boolean` -> `Булево`, `xs:base64Binary` ->
+//!   `ДвоичныеДанные`, множественное свойство -> `СписокXDTO`, вложенный
+//!   элемент -> `ОбъектXDTO`. Отвергаются: элемент и атрибут, которых у
+//!   типа нет; лексическая форма, не разбирающаяся объявленным типом;
+//!   повтор одиночного свойства; отсутствие обязательного свойства. У
+//!   УПОРЯДОЧЕННОГО типа проверяется и ПОРЯДОК — `<num>` перед `<name>`
+//!   отвергается, как и второе вхождение `<tag>` после `<nested>`, —
+//!   а необязательное свойство пропускать можно;
+//! * **пробельный текст между элементами пропускается**, значащий текст в
+//!   составном типе — ошибка; комментарии, секции CDATA, ссылки на
+//!   сущности и объявление XML перед корнем разбор не смущают. Текст
+//!   ВНУТРИ простого элемента сохраняется как есть, включая краевые
+//!   пробелы;
+//! * **`xsi:nil="true"`** заполняет свойство ПУСТЫМ значением:
+//!   `Установлено` — «Да», само свойство — `Неопределено`, и обратная
+//!   запись даёт тот же `<nilt xsi:nil="true"/>`;
+//! * **`xsi:type` действует у СВОЙСТВА, но не у элемента, с которого
+//!   начинается чтение.** Имя типа разрешается как QName в содержимом
+//!   атрибута — и с префиксом (`t:InnerExt`), и без него по
+//!   умолчательному объявлению (`InnerExt`), — а неизвестное имя
+//!   платформа молча игнорирует и читает объявленным типом. На самом
+//!   читаемом элементе пометка не действует вовсе: `<точка
+//!   xsi:type="InnerExt">` с типом `Inner` даёт `Inner`;
+//! * **пустая лексическая форма** у десятичных чисел — это НОЛЬ (`<num/>`
+//!   -> 0, и `Создать(xs:int, "")` — тоже 0), у `base64Binary` — пустые
+//!   двоичные данные, а у `xs:double`, даты, времени и булева — ошибка;
+//! * **позиция читателя.** Разбор начинается с первого начального тега (и
+//!   свежий читатель, и читатель после `Прочитать()`, и после
+//!   `ПерейтиКСодержимому()` дают одно и то же), а заканчивается на
+//!   СЛЕДУЮЩЕМ узле за прочитанным элементом: два соседних элемента
+//!   читаются двумя вызовами без `Прочитать()` между ними, а на документе
+//!   из одного корня читатель после разбора исчерпан («Ничего»,
+//!   `Прочитать()` — «Нет»);
+//! * **запись: имя и пространства имён.** Имя по умолчанию — ИМЯ ТИПА
+//!   значения (`<RootType …>`), а не имя объявленного в схеме элемента; у
+//!   анонимного типа имя пусто и вызов без имени — ошибка, как и вызов с
+//!   пустым именем. На элементе, с которого начинается запись, объявляются
+//!   умолчательное пространство (URI из аргумента либо пространство типа),
+//!   `xmlns:xs` и `xmlns:xsi`; `xs` не объявляется, если пространство XML
+//!   Schema и так стало умолчательным. Внутри объявления не повторяются, а
+//!   свойство с ДРУГИМ URI объявляет своё (`<name xmlns="urn:test">`,
+//!   `<uq xmlns="">`);
+//! * **квалифицированный атрибут требует префикса** — умолчательное
+//!   объявление на атрибуты не распространяется. Префикс порождается как
+//!   `d<глубина>p<номер>`, где глубина — глубина элемента у писателя:
+//!   `d1p1` у корня документа, `d2p1` у второго уровня, `d3p1` у третьего.
+//!   Выбор имени элемента подчиняется одному правилу: побеждает САМОЕ
+//!   ВНУТРЕННЕЕ объявление, а внутри одного элемента умолчательное идёт
+//!   перед префиксным. Отсюда и `<к xmlns="urn:test" xmlns:d1p1="urn:test"
+//!   … d1p1:qa="де">` с обычным `<name>`, и `<d2p1:nested
+//!   xmlns:d2p1="urn:test" d2p1:qi="х">` с `<d2p1:in>` внутри;
+//! * **лексические формы записи.** `xs:date` — `2026-08-13` (время
+//!   отбрасывается), `xs:dateTime` — всегда с секундами
+//!   (`2026-08-13T00:00:00`), `xs:time` — `10:20:30`, десятичное — с
+//!   точкой и без хвостовых нулей (12,50 -> `12.5`, 1/3 ->
+//!   `0.333333333333333333333333333`), `xs:double` — тоже без показателя
+//!   степени (1E20 -> `100000000000000000000`), булево — `true`/`false`,
+//!   `hexBinary` — ЗАГЛАВНЫМИ и одной строкой, `base64Binary` — строками
+//!   по 64 символа через CR LF (48 байт дают ровно 64 символа без
+//!   переноса, 49 — уже с переносом), значение списочного простого типа —
+//!   формы элементов через пробел (`1 2 3`). Пустая строка даёт
+//!   схлопнутый `<name/>`;
+//! * **порядок свойств при записи** зависит от типа: у УПОРЯДОЧЕННОГО он
+//!   модельный (заполненные как `num`, потом `name`, вышли как `name`,
+//!   потом `num`), у ПОСЛЕДОВАТЕЛЬНОГО — порядок заполнения (у
+//!   `xs:choice` `cb`, `ca`, `cb` вышли ровно так). Незаполненное свойство
+//!   не пишется вовсе, и значение по умолчанию за него не подставляется:
+//!   пустой экземпляр даёт `<к …/>`. Проверок при записи нет никаких —
+//!   недозаполненный объект пишется молча;
+//! * **`xsi:type` при записи** появляется там, где объявленный тип —
+//!   ОБЪЕКТНЫЙ, а фактический другой: наследник в свойстве
+//!   (`<nested xsi:type="InnerExt">`) и любое значение в свойстве
+//!   `anyType`, где тип берётся у самого значения BSL — строка ->
+//!   `xs:string`, число -> `xs:decimal`, булево -> `xs:boolean`, дата ->
+//!   `xs:dateTime`, двоичные данные -> `xs:base64Binary`, экземпляр ->
+//!   его собственный тип. У свойства ПРОСТОГО типа пометки не бывает
+//!   никогда: число в свойстве `xs:int` пишется как `<num>42</num>`;
+//! * **круг устойчив со второго прохода**: чтение с типом и обратная
+//!   запись дают документ, который читается и пишется уже без изменений
+//!   («Да» на платформе). Первый проход канонизует лексику — `12.50`
+//!   становится `12.5`.
+//!
+//! Отдельная сознательная граница ввода-вывода — ЧТЕНИЕ БЕЗ ТИПА. Оно
+//! измерено полностью (см. выше), но открытое содержимое `anyType`
+//! потребовало бы свойств, заводимых на самом экземпляре, а вся модель
+//! здесь неизменяема и разделяется фабрикой. Молчаливая подмена открытого
+//! разбора разбором по схеме дала бы ДРУГОЙ результат — строки вместо
+//! чисел и терпимость к постороннему элементу, — поэтому вызов с одним
+//! аргументом отвечает честной ошибкой. То же и с элементом типа
+//! `anyType` внутри документа: измеренный случай (текст, читаемый строкой)
+//! поддержан, а вложенные элементы и атрибуты в нём — отказ.
+//!
+//! Единственное, что тут осталось неизмеренным, — нумерация ВТОРОГО
+//! порождённого префикса на одном элементе, `НЕ ИЗМЕРЕНО(XDTO.IO.PREFIX)`:
+//! чтобы её увидеть, нужен тип с двумя квалифицированными атрибутами из
+//! РАЗНЫХ пространств имён, а это требует межсхемной ссылки, которой у
+//! `СоздатьФабрикуXDTO` (один файл XSD) взять неоткуда.
 
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
@@ -1341,6 +1465,15 @@ fn builtin_from_lexical(bsl: BuiltinBsl, lexical: &str) -> RtResult<BslValue> {
         // пробелами — это пробелы (фасет `whiteSpace` их не трогает, он
         // только описан).
         BuiltinBsl::Str => Ok(BslValue::Str(BslString::from_str(lexical))),
+        // ПУСТАЯ лексическая форма ДЕСЯТИЧНОГО числа — это НОЛЬ, а не
+        // ошибка (измерено: `Создать(xs:int, "")` даёт 0, и пустые элементы
+        // `<num/>`, `<dec/>` при чтении с типом — тоже 0). На `xs:double`
+        // поблажка НЕ распространяется: обе его пробы отвечают ошибкой
+        // (измерено — `чв Создать пустой dbl` и `чв пустое dbl`), как у
+        // даты, времени и булева, поэтому double уходит в общий разбор.
+        BuiltinBsl::Number if lexical.trim().is_empty() => {
+            Ok(BslValue::Number(bsl_number::BslNumber::from_i64(0)))
+        }
         BuiltinBsl::Number => match bsl_number::BslNumber::parse_canonical(lexical.trim()) {
             Ok(n) => Ok(BslValue::Number(n)),
             Err(_) => Err(bad_lexical(lexical, "числа")),
@@ -3125,6 +3258,1232 @@ pub fn sequence_clear(obj: &BslValue) -> RtResult<()> {
     Ok(())
 }
 
+// --- чтение XML в экземпляры ---------------------------------------------
+
+/// Пространство имён экземпляров XML Schema: `xsi:nil` и `xsi:type`.
+const XSI_NS: &str = "http://www.w3.org/2001/XMLSchema-instance";
+
+/// Предел вложенности экземпляра — общий для разбора документа и для
+/// обратной записи. Оба спуска рекурсивные, и без предела документ на
+/// тысячи уровней (а при записи ещё и цикл в графе экземпляров) уронил бы
+/// стек процесса вместо честной ошибки.
+// НЕ ИЗМЕРЕНО(XDTO.MAX_DEPTH) — как глубоко 8.3.27 позволяет вкладывать
+// экземпляр в `ПрочитатьXML`/`ЗаписатьXML` фабрики и что платформа делает
+// с циклическим графом экземпляров при записи; ни растущий, ни циклический
+// зонд намеренно не ставятся: если платформа на них падает, они уносят
+// весь сеанс замеров. Замер даёт нижнюю границу: 400 уровней обязаны
+// записываться.
+const MAX_XDTO_DEPTH: usize = 500;
+
+/// Голова начального тега — ровно то, что несёт событие `ЧтениеXML`.
+struct ElementHead {
+    name: String,
+    uri: String,
+    attrs: Rc<Vec<crate::xml::XmlAttr>>,
+}
+
+/// Что вышло из одного элемента.
+enum ReadOut {
+    /// `xsi:nil="true"`: свойство заполнено, а значения нет (измерено —
+    /// `Установлено` даёт «Да», само свойство — `Неопределено`).
+    Nil,
+    /// Значение простого типа вместе с лексической формой, из которой оно
+    /// получено: наверху из пары строится `ЗначениеXDTO`, а в свойстве
+    /// остаётся одно значение (измерено: `О.num` после чтения — `Число`,
+    /// а `ПрочитатьXML(Чт, xs:int)` — `ЗначениеXDTO`).
+    Simple(BslValue, String),
+    /// Экземпляр объекта.
+    Object(BslValue),
+    /// Текст элемента типа `anyType` — платформа кладёт его СТРОКОЙ
+    /// (измерено: `<notype>5</notype>` в свойстве типа `anyType` читается
+    /// как строка «5», а с `xsi:type="xs:decimal"` — как число).
+    Open(String),
+}
+
+/// `ФабрикаXDTO.ПрочитатьXML(ЧтениеXML, Тип)`.
+///
+/// Тип обязателен, хотя платформа принимает и вызов с одним аргументом:
+/// без типа она читает документ в ОТКРЫТОЕ содержимое `anyType`, где
+/// свойства заводятся по ходу разбора, а значения остаются строками
+/// (измерено, см. заголовок модуля). Открытого содержимого в этой
+/// реализации нет, и молчаливая подмена его разбором по схеме означала бы
+/// другой результат, поэтому вызов без типа отвечает отказом.
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель не фабрика;
+/// [`RtError::Xdto`], если аргументы не те, документ не соответствует типу
+/// или в нём нет элементов; [`RtError::Xml`] на битой разметке.
+pub fn factory_read_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    factory_model(obj, "ПрочитатьXML")?;
+    let (reader, type_arg) = match args {
+        [reader] => (reader, None),
+        [reader, ty] => (reader, Some(ty)),
+        _ => return Err(not_applicable(obj, "ПрочитатьXML")),
+    };
+    if !crate::xml::is_xml_reader(reader) {
+        return Err(RtError::Xdto(
+            "ПрочитатьXML читает из «ЧтениеXML»".to_string(),
+        ));
+    }
+    let Some(type_arg) = type_arg else {
+        return Err(RtError::Xdto(
+            "ПрочитатьXML без типа читает документ в открытое содержимое \
+             «anyType», а оно здесь не поддержано: передайте тип из \
+             «ФабрикаXDTO.Тип»"
+                .to_string(),
+        ));
+    };
+    let (model, type_index) = match type_arg {
+        BslValue::Object(o) => match &**o {
+            BslObject::XdtoType(model, i) => (model.clone(), *i),
+            _ => return Err(bad_read_type(type_arg)),
+        },
+        _ => return Err(bad_read_type(type_arg)),
+    };
+    crate::xml::with_reader(reader, |state| read_document(state, &model, type_index))
+}
+
+fn bad_read_type(arg: &BslValue) -> RtError {
+    RtError::Xdto(format!(
+        "второй аргумент «ПрочитатьXML» — тип XDTO, а не «{}»",
+        arg.type_name()
+    ))
+}
+
+/// Разбор одного элемента источника в значение указанного типа.
+///
+/// Читатель встаёт на СЛЕДУЮЩИЙ за прочитанным элементом узел — измерено:
+/// после чтения вложенного элемента `ТипУзла` показывает начало соседа, а
+/// после чтения корня документа читатель исчерпан («Ничего», `Прочитать()`
+/// — «Нет»). Поэтому два элемента подряд читаются двумя вызовами без
+/// `Прочитать()` между ними.
+fn read_document(
+    state: &mut crate::object::XmlReaderState,
+    model: &Rc<XdtoModel>,
+    type_index: usize,
+) -> RtResult<BslValue> {
+    let mut current = state.current.take();
+    let parser = state
+        .parser
+        .as_mut()
+        .ok_or_else(|| RtError::Xdto("источник для ЧтениеXML не задан".to_string()))?;
+    // Если читатель стоит не на начальном теге, он до него доводится:
+    // измерено, что и свежий читатель, и читатель после `Прочитать()`, и
+    // после `ПерейтиКСодержимому()` дают один и тот же результат.
+    let head = loop {
+        match current {
+            Some(crate::xml::XmlEvent::ElementStart { name, uri, attrs }) => {
+                break ElementHead { name, uri, attrs }
+            }
+            _ => match parser.read()? {
+                Some(event) => current = Some(event),
+                None => {
+                    return Err(RtError::Xdto(
+                        "ПрочитатьXML: в источнике не осталось элементов".to_string(),
+                    ))
+                }
+            },
+        }
+    };
+    let out = read_element(parser, model, type_index, &head, 0)?;
+    let next = parser.read()?;
+    state.depth = state
+        .parser
+        .as_ref()
+        .map_or(0, crate::xml::XmlParser::depth);
+    state.current = next;
+    state.attr_cursor = None;
+    match out {
+        ReadOut::Nil => Ok(BslValue::Undefined),
+        ReadOut::Object(value) => Ok(value),
+        ReadOut::Simple(value, lexical) => Ok(data_value(
+            model,
+            &Rc::new(XdtoValueData {
+                value,
+                lexical,
+                type_index,
+            }),
+        )),
+        ReadOut::Open(_) => Err(RtError::Xdto(
+            "чтение в тип «anyType» — это открытое содержимое, оно здесь не \
+             поддержано"
+                .to_string(),
+        )),
+    }
+}
+
+/// Разбор элемента, начальный тег которого уже прочитан: разбор идёт до
+/// парного закрывающего тега включительно.
+fn read_element(
+    parser: &mut crate::xml::XmlParser,
+    model: &Rc<XdtoModel>,
+    type_index: usize,
+    head: &ElementHead,
+    depth: usize,
+) -> RtResult<ReadOut> {
+    if depth > MAX_XDTO_DEPTH {
+        return Err(RtError::Xdto(format!(
+            "документ вложен глубже предела разбора XDTO ({MAX_XDTO_DEPTH})"
+        )));
+    }
+    if reads_as_nil(parser, head) {
+        skip_element(parser)?;
+        return Ok(ReadOut::Nil);
+    }
+    let data = model.type_at(type_index)?;
+    if is_any_type(data) {
+        return read_open(parser, head);
+    }
+    if data.is_value() {
+        return read_simple(parser, model, type_index, head);
+    }
+    read_object(parser, model, type_index, head, depth)
+}
+
+/// `xsi:nil="true"` у элемента. Цифровая запись `1` — та же, что у
+/// `xs:boolean`, где обе формы измерены.
+fn reads_as_nil(parser: &crate::xml::XmlParser, head: &ElementHead) -> bool {
+    head.attrs.iter().any(|a| {
+        attribute_uri(parser, &a.name) == XSI_NS
+            && crate::xml::local_of(&a.name) == "nil"
+            && (a.value == "true" || a.value == "1")
+    })
+}
+
+/// URI атрибута: у атрибута без префикса пространства имён нет НИКОГДА —
+/// умолчательное объявление на атрибуты не распространяется.
+fn attribute_uri(parser: &crate::xml::XmlParser, name: &str) -> String {
+    let prefix = crate::xml::prefix_of(name);
+    if prefix.is_empty() {
+        String::new()
+    } else {
+        parser.namespace_of(prefix)
+    }
+}
+
+/// Объявление пространства имён, а не атрибут данных.
+fn is_ns_declaration(name: &str) -> bool {
+    name == "xmlns" || crate::xml::prefix_of(name) == "xmlns"
+}
+
+/// Проглотить остаток текущего элемента вместе с его закрывающим тегом.
+fn skip_element(parser: &mut crate::xml::XmlParser) -> RtResult<()> {
+    let target = parser.depth().saturating_sub(1);
+    while let Some(event) = parser.read()? {
+        if matches!(event, crate::xml::XmlEvent::ElementEnd { .. }) && parser.depth() == target {
+            return Ok(());
+        }
+    }
+    Err(RtError::Xdto(
+        "документ оборвался внутри элемента".to_string(),
+    ))
+}
+
+/// Собрать текст элемента. Вложенный элемент — ошибка: у простого типа
+/// содержимого быть не может.
+fn read_text_only(parser: &mut crate::xml::XmlParser, head: &ElementHead) -> RtResult<String> {
+    let target = parser.depth().saturating_sub(1);
+    let mut text = String::new();
+    loop {
+        let Some(event) = parser.read()? else {
+            return Err(RtError::Xdto(format!(
+                "документ оборвался внутри элемента «{}»",
+                head.name
+            )));
+        };
+        match event {
+            crate::xml::XmlEvent::ElementEnd { .. } if parser.depth() == target => return Ok(text),
+            crate::xml::XmlEvent::Text(t) => text.push_str(&t),
+            crate::xml::XmlEvent::ElementStart { name, .. } => {
+                return Err(RtError::Xdto(format!(
+                    "элемент «{}» простого типа не может содержать элемент «{name}»",
+                    head.name
+                )))
+            }
+            // Инструкции обработки и комментарии значения не несут;
+            // чужого закрывающего тега разборщик не отдаёт.
+            crate::xml::XmlEvent::ElementEnd { .. }
+            | crate::xml::XmlEvent::ProcessingInstruction { .. }
+            | crate::xml::XmlEvent::Comment(_) => {}
+        }
+    }
+}
+
+/// Элемент типа ЗНАЧЕНИЯ. Посторонний атрибут платформа отвергает
+/// (измерено: `<число а="1">42</число>` при чтении с типом `xs:int` —
+/// ошибка), поэтому пропускаются только объявления пространств имён и
+/// служебные `xsi:*`.
+fn read_simple(
+    parser: &mut crate::xml::XmlParser,
+    model: &Rc<XdtoModel>,
+    type_index: usize,
+    head: &ElementHead,
+) -> RtResult<ReadOut> {
+    for attr in head.attrs.iter() {
+        if is_ns_declaration(&attr.name) || attribute_uri(parser, &attr.name) == XSI_NS {
+            continue;
+        }
+        return Err(RtError::Xdto(format!(
+            "у элемента «{}» простого типа не может быть атрибута «{}»",
+            head.name, attr.name
+        )));
+    }
+    let text = read_text_only(parser, head)?;
+    let value = value_from_lexical(model, type_index, &text)?;
+    Ok(ReadOut::Simple(value, text))
+}
+
+/// Элемент типа `anyType`. Поддержан ровно измеренный случай — текст,
+/// который платформа отдаёт строкой; всё остальное (атрибуты и вложенные
+/// элементы) — это уже открытое содержимое.
+fn read_open(parser: &mut crate::xml::XmlParser, head: &ElementHead) -> RtResult<ReadOut> {
+    for attr in head.attrs.iter() {
+        if is_ns_declaration(&attr.name) || attribute_uri(parser, &attr.name) == XSI_NS {
+            continue;
+        }
+        return Err(open_content(&head.name));
+    }
+    let target = parser.depth().saturating_sub(1);
+    let mut text = String::new();
+    loop {
+        let Some(event) = parser.read()? else {
+            return Err(RtError::Xdto(format!(
+                "документ оборвался внутри элемента «{}»",
+                head.name
+            )));
+        };
+        match event {
+            crate::xml::XmlEvent::ElementEnd { .. } if parser.depth() == target => {
+                return Ok(ReadOut::Open(text))
+            }
+            crate::xml::XmlEvent::Text(t) => text.push_str(&t),
+            crate::xml::XmlEvent::ElementStart { .. } => return Err(open_content(&head.name)),
+            crate::xml::XmlEvent::ElementEnd { .. }
+            | crate::xml::XmlEvent::ProcessingInstruction { .. }
+            | crate::xml::XmlEvent::Comment(_) => {}
+        }
+    }
+}
+
+fn open_content(name: &str) -> RtError {
+    RtError::Xdto(format!(
+        "содержимое элемента «{name}» типа «anyType» — открытое, а открытое \
+         содержимое здесь не поддержано"
+    ))
+}
+
+/// Элемент типа ОБЪЕКТА: атрибуты, содержимое, проверка порядка и
+/// обязательных свойств — всё так, как это делает платформа.
+fn read_object(
+    parser: &mut crate::xml::XmlParser,
+    model: &Rc<XdtoModel>,
+    type_index: usize,
+    head: &ElementHead,
+    depth: usize,
+) -> RtResult<ReadOut> {
+    let instance = Rc::new(XdtoObjectData {
+        model: model.clone(),
+        type_index,
+        owner: RefCell::new(Weak::new()),
+        entries: RefCell::new(Vec::new()),
+    });
+    let props = model.type_at(type_index)?.properties.clone();
+    let ordered = model.type_at(type_index)?.ordered;
+
+    for attr in head.attrs.iter() {
+        if is_ns_declaration(&attr.name) {
+            continue;
+        }
+        let uri = attribute_uri(parser, &attr.name);
+        if uri == XSI_NS {
+            continue;
+        }
+        let local = crate::xml::local_of(&attr.name);
+        let Some(k) = find_property(model, &props, local, &uri, EnumValue::XmlFormAttribute)?
+        else {
+            return Err(RtError::Xdto(format!(
+                "у типа «{}» нет свойства-атрибута «{}»",
+                type_display(model.type_at(type_index)?),
+                attr.name
+            )));
+        };
+        let prop = props[k];
+        let target = model.property_at(prop)?.type_index;
+        let value = value_from_lexical(model, target, &attr.value)?;
+        push_entry(&instance, prop, value);
+    }
+
+    // Текстовое свойство `__content` бывает только у типа с простым
+    // содержимым, и текст в нём — это ВЕСЬ текст элемента.
+    let content_prop = find_property(model, &props, CONTENT_PROPERTY, "", EnumValue::XmlFormText)?
+        .map(|k| props[k]);
+    let mut content = String::new();
+    // Позиция последнего совпавшего свойства-элемента: по ней проверяется
+    // порядок у УПОРЯДОЧЕННОГО типа (измерено: `<num>` перед `<name>` в
+    // типе-последовательности — ошибка, как и второй `<tag>` после
+    // `<nested>`).
+    let mut matched: Option<usize> = None;
+    let end_depth = parser.depth().saturating_sub(1);
+    loop {
+        let Some(event) = parser.read()? else {
+            return Err(RtError::Xdto(format!(
+                "документ оборвался внутри элемента «{}»",
+                head.name
+            )));
+        };
+        match event {
+            crate::xml::XmlEvent::ElementEnd { .. } if parser.depth() == end_depth => break,
+            crate::xml::XmlEvent::Text(text) => {
+                if content_prop.is_some() {
+                    content.push_str(&text);
+                } else if !text.trim().is_empty() {
+                    // Пробельный текст между дочерними элементами
+                    // платформа пропускает, значащий — отвергает
+                    // (измерено на обоих).
+                    return Err(RtError::Xdto(format!(
+                        "элемент «{}» составного типа не может содержать текст",
+                        head.name
+                    )));
+                }
+            }
+            crate::xml::XmlEvent::ElementStart { name, uri, attrs } => {
+                let child = ElementHead { name, uri, attrs };
+                let local = crate::xml::local_of(&child.name);
+                let Some(k) =
+                    find_property(model, &props, local, &child.uri, EnumValue::XmlFormElement)?
+                else {
+                    return Err(RtError::Xdto(format!(
+                        "у типа «{}» нет свойства-элемента «{}»",
+                        type_display(model.type_at(type_index)?),
+                        child.name
+                    )));
+                };
+                let prop = props[k];
+                if ordered {
+                    check_order(model, &instance, &props, matched, k)?;
+                }
+                matched = Some(k);
+                if !is_multiple(model.property_at(prop)?) && occupied(&instance, prop) {
+                    return Err(RtError::Xdto(format!(
+                        "свойство «{}» одиночное, а элемент «{}» встретился второй раз",
+                        model.property_at(prop)?.name,
+                        child.name
+                    )));
+                }
+                let child_type = child_type_of(parser, model, prop, &child)?;
+                let out = read_element(parser, model, child_type, &child, depth + 1)?;
+                let value = match out {
+                    ReadOut::Nil => BslValue::Undefined,
+                    ReadOut::Simple(value, _) => value,
+                    ReadOut::Open(text) => str_value(&text),
+                    ReadOut::Object(value) => {
+                        if let BslValue::Object(o) = &value {
+                            if let BslObject::XdtoObject(inner) = &**o {
+                                *inner.owner.borrow_mut() = Rc::downgrade(&instance);
+                            }
+                        }
+                        value
+                    }
+                };
+                push_entry(&instance, prop, value);
+            }
+            crate::xml::XmlEvent::ElementEnd { .. }
+            | crate::xml::XmlEvent::ProcessingInstruction { .. }
+            | crate::xml::XmlEvent::Comment(_) => {}
+        }
+    }
+
+    if let Some(prop) = content_prop {
+        let target = model.property_at(prop)?.type_index;
+        let value = value_from_lexical(model, target, &content)?;
+        push_entry(&instance, prop, value);
+    }
+    for &prop in &props {
+        let data = model.property_at(prop)?;
+        if data.lower.unwrap_or(0) >= 1 && !occupied(&instance, prop) {
+            return Err(RtError::Xdto(format!(
+                "в элементе «{}» нет обязательного свойства «{}»",
+                head.name, data.name
+            )));
+        }
+    }
+    Ok(ReadOut::Object(instance_value(&instance)))
+}
+
+/// Номер свойства в СПЛЮЩЕННОМ списке типа по имени, пространству имён и
+/// форме. Сравнение имён точное: имена XML регистр различают, и свёртка
+/// здесь дала бы совпадение там, где документ его не даёт.
+fn find_property(
+    model: &Rc<XdtoModel>,
+    props: &[usize],
+    name: &str,
+    uri: &str,
+    form: EnumValue,
+) -> RtResult<Option<usize>> {
+    for (k, &prop) in props.iter().enumerate() {
+        let data = model.property_at(prop)?;
+        if data.form == form && data.name == name && data.ns == uri {
+            return Ok(Some(k));
+        }
+    }
+    Ok(None)
+}
+
+/// Проверка порядка у упорядоченного типа: назад ходить нельзя, а всё
+/// пропущенное по дороге обязано быть необязательным.
+fn check_order(
+    model: &Rc<XdtoModel>,
+    instance: &Rc<XdtoObjectData>,
+    props: &[usize],
+    matched: Option<usize>,
+    k: usize,
+) -> RtResult<()> {
+    if let Some(prev) = matched {
+        if k < prev {
+            return Err(RtError::Xdto(format!(
+                "свойство «{}» стоит в типе раньше уже прочитанного «{}»",
+                model.property_at(props[k])?.name,
+                model.property_at(props[prev])?.name
+            )));
+        }
+        if k == prev {
+            return Ok(());
+        }
+    }
+    let from = matched.map_or(0, |prev| prev + 1);
+    for &prop in props.iter().take(k).skip(from) {
+        let data = model.property_at(prop)?;
+        if data.form == EnumValue::XmlFormElement
+            && data.lower.unwrap_or(0) >= 1
+            && !occupied(instance, prop)
+        {
+            return Err(RtError::Xdto(format!(
+                "не заполнено обязательное свойство «{}»",
+                data.name
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Тип дочернего элемента: объявленный, а при `xsi:type` — названный им,
+/// если он и правда наследник объявленного. Неизвестное имя платформа
+/// ИГНОРИРУЕТ и читает объявленным типом (измерено).
+fn child_type_of(
+    parser: &crate::xml::XmlParser,
+    model: &Rc<XdtoModel>,
+    prop: usize,
+    head: &ElementHead,
+) -> RtResult<usize> {
+    let declared = model.property_at(prop)?.type_index;
+    let Some(qname) = head.attrs.iter().find(|a| {
+        attribute_uri(parser, &a.name) == XSI_NS && crate::xml::local_of(&a.name) == "type"
+    }) else {
+        return Ok(declared);
+    };
+    // Имя типа — это QName в СОДЕРЖИМОМ атрибута, и запись без префикса
+    // разрешается умолчательным объявлением (измерено обе записи:
+    // `t:InnerExt` при префиксном объявлении и `InnerExt` при
+    // умолчательном дают один и тот же тип).
+    let prefix = crate::xml::prefix_of(&qname.value);
+    let uri = parser.namespace_of(prefix);
+    let local = crate::xml::local_of(&qname.value);
+    match model.find(&uri, local) {
+        Some(actual) if derives_from(model, actual, declared) => Ok(actual),
+        _ => Ok(declared),
+    }
+}
+
+/// Заполнение свойства при разборе. Приведение здесь не нужно и вредно:
+/// значение уже получено из лексической формы ИМЕННО того типа, которым
+/// элемент читался, а `xsi:type` мог сделать этот тип уже объявленного.
+fn push_entry(instance: &Rc<XdtoObjectData>, prop: usize, value: BslValue) {
+    instance
+        .entries
+        .borrow_mut()
+        .push(XdtoEntry { prop, value });
+}
+
+/// Заполнено ли свойство хотя бы раз.
+fn occupied(instance: &Rc<XdtoObjectData>, prop: usize) -> bool {
+    instance.entries.borrow().iter().any(|e| e.prop == prop)
+}
+
+// --- запись экземпляров в XML --------------------------------------------
+
+/// Что пишется одним элементом.
+enum Slot<'a> {
+    /// Экземпляр объекта — со своей моделью: свойства читаются по ней.
+    Object(&'a Rc<XdtoObjectData>),
+    /// Значение простого типа: тип, чьей лексической формой его писать, и
+    /// само значение.
+    Simple {
+        model: &'a Rc<XdtoModel>,
+        type_index: usize,
+        value: &'a BslValue,
+    },
+    /// `xsi:nil="true"` — свойство заполнено, а значения нет.
+    Nil,
+}
+
+/// Тип, который уходит в `xsi:type`: пара «модель и номер типа в ней».
+/// Модель здесь своя у каждого значения, потому что вложенный экземпляр
+/// вправе прийти из другой фабрики.
+type Annotation<'a> = Option<(&'a Rc<XdtoModel>, usize)>;
+
+/// Объявления пространств имён, действующие на текущем элементе.
+#[derive(Default)]
+struct NsFrame {
+    /// Объявление по умолчанию, если элемент его сделал.
+    default: Option<String>,
+    /// `(префикс, URI)` в порядке объявления.
+    prefixes: Vec<(String, String)>,
+}
+
+impl NsFrame {
+    fn prefix_of(&self, uri: &str) -> Option<&str> {
+        self.prefixes
+            .iter()
+            .find(|(_, u)| u == uri)
+            .map(|(p, _)| p.as_str())
+    }
+}
+
+/// Стек объявлений: у каждого записанного элемента свой уровень.
+///
+/// Область НЕ наследуется от того, что писали в `ЗаписьXML` руками до
+/// вызова: измерено, что `ЗаписатьXML` внутри открытого чужого элемента
+/// объявляет всё заново, и два вызова подряд в один писатель повторяют
+/// объявления оба раза.
+#[derive(Default)]
+struct NsScope {
+    frames: Vec<NsFrame>,
+}
+
+/// К чему привязан URI в области видимости.
+enum NsUse {
+    /// К объявлению по умолчанию — имя пишется без префикса.
+    Default,
+    /// К префиксу.
+    Prefix(String),
+}
+
+impl NsScope {
+    /// Действующее объявление по умолчанию; вне всяких объявлений это
+    /// пустой URI.
+    fn default_uri(&self) -> &str {
+        self.frames
+            .iter()
+            .rev()
+            .find_map(|f| f.default.as_deref())
+            .unwrap_or("")
+    }
+
+    fn prefix_of(&self, uri: &str) -> Option<&str> {
+        self.frames.iter().rev().find_map(|f| f.prefix_of(uri))
+    }
+
+    /// Привязан ли URI хоть чем-нибудь.
+    fn binds(&self, uri: &str) -> bool {
+        self.default_uri() == uri || self.prefix_of(uri).is_some()
+    }
+
+    /// Чем пользоваться для URI, если объявления текущего элемента —
+    /// `frame`.
+    ///
+    /// Побеждает САМОЕ ВНУТРЕННЕЕ объявление, а внутри одного элемента —
+    /// умолчательное перед префиксным. Правило снято с четырёх измеренных
+    /// случаев сразу: элемент, объявивший умолчание и заодно префикс для
+    /// того же URI, пишется без префикса (`<к xmlns="urn:test"
+    /// xmlns:d1p1="urn:test" d1p1:qa="де">`), а элемент, которому
+    /// умолчание досталось от родителя и который объявил префикс сам, —
+    /// уже с префиксом (`<d2p1:nested xmlns:d2p1="urn:test"
+    /// d2p1:qi="х">`), и его дети наследуют этот выбор (`<d2p1:in>`).
+    fn resolve(&self, frame: &NsFrame, uri: &str) -> NsUse {
+        if frame.default.as_deref() == Some(uri) {
+            return NsUse::Default;
+        }
+        if let Some(p) = frame.prefix_of(uri) {
+            return NsUse::Prefix(p.to_string());
+        }
+        for f in self.frames.iter().rev() {
+            if f.default.as_deref() == Some(uri) {
+                return NsUse::Default;
+            }
+            if let Some(p) = f.prefix_of(uri) {
+                return NsUse::Prefix(p.to_string());
+            }
+        }
+        NsUse::Default
+    }
+}
+
+/// Имя, которым элемент или тип пишется в текущей области.
+fn qualified(scope: &NsScope, frame: &NsFrame, uri: &str, local: &str) -> String {
+    match scope.resolve(frame, uri) {
+        NsUse::Default => local.to_string(),
+        NsUse::Prefix(p) => format!("{p}:{local}"),
+    }
+}
+
+/// Имя АТРИБУТА: умолчательное объявление на атрибуты не
+/// распространяется, поэтому пространству имён обязателен префикс. Он
+/// всегда есть — его завёл вызывающий, увидев атрибут с непустым URI
+/// (измерено: `<к xmlns="urn:test" xmlns:d1p1="urn:test" … d1p1:qa="де">`
+/// — элемент по умолчанию, атрибут того же пространства по префиксу).
+///
+/// # Errors
+///
+/// [`RtError::Xdto`], если префикса всё-таки нет: это значило бы, что
+/// объявления и имена разошлись.
+fn attribute_qname(scope: &NsScope, frame: &NsFrame, uri: &str, local: &str) -> RtResult<String> {
+    if uri.is_empty() {
+        return Ok(local.to_string());
+    }
+    match frame.prefix_of(uri).or_else(|| scope.prefix_of(uri)) {
+        Some(prefix) => Ok(format!("{prefix}:{local}")),
+        None => Err(RtError::Xdto(format!(
+            "для атрибута «{local}» нет префикса пространства имён «{uri}»"
+        ))),
+    }
+}
+
+/// `ФабрикаXDTO.ЗаписатьXML(ЗаписьXML, Значение[, ИмяЭлемента[, УРИ]])`.
+///
+/// Аргументов не больше четырёх: пятый платформа отвергает (измерено —
+/// справочные «ТипXML» и «ФормаXML» пятым и шестым она не берёт). Имя по
+/// умолчанию — ИМЯ ТИПА значения, а не имя объявленного в схеме элемента:
+/// `ЗаписатьXML(Зп, Объект)` для типа `RootType` даёт `<RootType …>`, а у
+/// анонимного типа имя пусто и вызов без имени — ошибка (измерено).
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель не фабрика;
+/// [`RtError::Xdto`], если аргументы не те, имя элемента пусто или содержит
+/// двоеточие, у значения нет лексической формы либо экземпляр вложен глубже
+/// `MAX_XDTO_DEPTH` (в том числе когда он ссылается сам на себя);
+/// [`RtError::Xml`], если писатель уже закрыт.
+pub fn factory_write_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+    factory_model(obj, "ЗаписатьXML")?;
+    let (writer, value, name, uri) = match args {
+        [writer, value] => (writer, value, None, None),
+        [writer, value, name] => (writer, value, Some(name), None),
+        [writer, value, name, uri] => (writer, value, Some(name), Some(uri)),
+        _ => return Err(not_applicable(obj, "ЗаписатьXML")),
+    };
+    if !crate::xml::is_xml_writer(writer) {
+        return Err(RtError::Xdto("ЗаписатьXML пишет в «ЗаписьXML»".to_string()));
+    }
+    let name = optional_text(name, "ЗаписатьXML")?;
+    // Имя с двоеточием платформа отвергает целиком (измерено — проба `зп
+    // имя с двоеточием`: `ЗаписатьXML(Зпис, ОбП, "t:мой")` даёт ошибку).
+    // Записать его как есть значило бы выпустить документ с необъявленным
+    // префиксом. Проверяется РОВНО двоеточие: остальные требования к имени
+    // XML не измерены, и расширять запрет без замера нечем.
+    if let Some(given) = &name {
+        if given.contains(':') {
+            return Err(RtError::Xdto(format!(
+                "имя элемента «{given}» содержит двоеточие, а префикс в имени \
+                 ЗаписатьXML не объявляет"
+            )));
+        }
+    }
+    let uri = optional_text(uri, "ЗаписатьXML")?;
+    let (model, type_index, slot) = match value {
+        BslValue::Object(o) => match &**o {
+            BslObject::XdtoObject(data) => (&data.model, data.type_index, Slot::Object(data)),
+            BslObject::XdtoValue(model, data) => (
+                model,
+                data.type_index,
+                Slot::Simple {
+                    model,
+                    type_index: data.type_index,
+                    value: &data.value,
+                },
+            ),
+            _ => return Err(bad_write_value(value)),
+        },
+        _ => return Err(bad_write_value(value)),
+    };
+    let type_data = model.type_at(type_index)?;
+    let name = match name {
+        Some(name) => name,
+        None => type_data.name.clone(),
+    };
+    if name.is_empty() {
+        return Err(RtError::Xdto(
+            "у типа значения нет имени (тип анонимный), поэтому имя элемента \
+             обязательно"
+                .to_string(),
+        ));
+    }
+    let uri = uri.unwrap_or_else(|| type_data.ns.clone());
+    crate::xml::with_writer(writer, |w| {
+        let mut scope = NsScope::default();
+        write_node(w, &mut scope, &name, &uri, None, &slot, 0)
+    })
+}
+
+fn bad_write_value(value: &BslValue) -> RtError {
+    RtError::Xdto(format!(
+        "ЗаписатьXML пишет «ОбъектXDTO» или «ЗначениеXDTO», а не «{}»",
+        value.type_name()
+    ))
+}
+
+/// Необязательный строковый аргумент.
+fn optional_text(arg: Option<&BslValue>, method: &'static str) -> RtResult<Option<String>> {
+    match arg {
+        None | Some(BslValue::Undefined) => Ok(None),
+        Some(BslValue::Str(s)) => Ok(Some(s.to_string())),
+        Some(other) => Err(RtError::Xdto(format!(
+            "{method}: имя элемента и URI — строки, а не «{}»",
+            other.type_name()
+        ))),
+    }
+}
+
+/// Записать один элемент вместе с содержимым.
+///
+/// `annotate` — тип, которым значение отличается от объявленного: он
+/// уходит в `xsi:type`. У свойства ПРОСТОГО типа его не бывает никогда
+/// (измерено: число в свойстве `xs:int` пишется просто `<num>42</num>`), а
+/// у свойства типа объекта — как только фактический тип другой, включая
+/// свойство типа `anyType`, где тип берётся у самого значения BSL.
+///
+/// `depth` — глубина спуска ПО ЭКЗЕМПЛЯРУ, не по документу: она считается
+/// от начала записи, тогда как `w.depth()` знает и про элементы, открытые
+/// вызывающим кодом до `ЗаписатьXML`.
+fn write_node(
+    w: &mut crate::xml::XmlWriter,
+    scope: &mut NsScope,
+    name: &str,
+    uri: &str,
+    annotate: Annotation<'_>,
+    slot: &Slot,
+    depth: usize,
+) -> RtResult<()> {
+    // Спуск рекурсивный, а экземпляр — граф, а не дерево: свойство типа
+    // объекта (в том числе `anyType`) вправе указывать на самого владельца.
+    // Без предела такой цикл и честная цепочка на тысячи уровней одинаково
+    // роняют стек процесса вместо перехватываемой ошибки, поэтому предел
+    // тот же, что у разбора, и отдельного обнаружения циклов не заводится.
+    if depth > MAX_XDTO_DEPTH {
+        return Err(RtError::Xdto(format!(
+            "экземпляр вложен глубже предела записи XDTO ({MAX_XDTO_DEPTH})"
+        )));
+    }
+    let xml_depth = w.depth() + 1;
+    let mut frame = NsFrame::default();
+    let mut generated = 0usize;
+
+    // Атрибуты собираются ДО начала тега: их пространства имён могут
+    // потребовать префиксов, а те объявляются на этом же элементе.
+    let attributes = attributes_of(slot)?;
+    for (attr_uri, _, _) in &attributes {
+        if attr_uri.is_empty() || scope.prefix_of(attr_uri).is_some() {
+            continue;
+        }
+        if frame.prefix_of(attr_uri).is_none() {
+            // Первый порождённый префикс элемента измерен на трёх
+            // глубинах — `d1p1`, `d2p1`, `d3p1`. `НЕ ИЗМЕРЕНО(XDTO.IO.PREFIX)`:
+            // как нумеруется ВТОРОЙ префикс на том же элементе. Чтобы
+            // это увидеть, нужен тип с двумя квалифицированными
+            // атрибутами из РАЗНЫХ пространств имён, а фабрика строится
+            // из одного файла XSD, и межсхемной ссылки взять неоткуда.
+            generated += 1;
+            frame
+                .prefixes
+                .push((format!("d{xml_depth}p{generated}"), attr_uri.clone()));
+        }
+    }
+    // Умолчательное объявление делается только там, где URI ещё не привязан
+    // ничем: иначе элемент пользуется уже действующим объявлением.
+    if !scope.binds(uri) {
+        frame.default = Some(uri.to_string());
+    }
+    // `xs` нужен `xsi:type` встроенных типов, `xsi` — самим `xsi:type` и
+    // `xsi:nil`. Платформа объявляет оба на элементе, с которого начинает
+    // запись, и не объявляет `xs`, если пространство XML Schema и так
+    // умолчательное (измерено).
+    if !scope.binds(XSD_NS) && frame.default.as_deref() != Some(XSD_NS) {
+        frame.prefixes.push(("xs".to_string(), XSD_NS.to_string()));
+    }
+    if !scope.binds(XSI_NS) && frame.default.as_deref() != Some(XSI_NS) {
+        frame.prefixes.push(("xsi".to_string(), XSI_NS.to_string()));
+    }
+
+    let element_name = qualified(scope, &frame, uri, name);
+    let type_name = match annotate {
+        Some((model, index)) => {
+            let data = model.type_at(index)?;
+            Some(qualified(scope, &frame, &data.ns, &data.name))
+        }
+        None => None,
+    };
+
+    w.write_start_element(&element_name)?;
+    if let Some(default) = &frame.default {
+        w.write_attribute("xmlns", default)?;
+    }
+    for (prefix, prefix_uri) in &frame.prefixes {
+        w.write_attribute(&format!("xmlns:{prefix}"), prefix_uri)?;
+    }
+    if matches!(slot, Slot::Nil) {
+        w.write_attribute(&attribute_qname(scope, &frame, XSI_NS, "nil")?, "true")?;
+    }
+    if let Some(type_name) = type_name {
+        w.write_attribute(&attribute_qname(scope, &frame, XSI_NS, "type")?, &type_name)?;
+    }
+    for (attr_uri, attr_name, lexical) in &attributes {
+        let written = attribute_qname(scope, &frame, attr_uri, attr_name)?;
+        w.write_attribute(&written, lexical)?;
+    }
+
+    scope.frames.push(frame);
+    let result = write_content(w, scope, slot, depth);
+    scope.frames.pop();
+    result?;
+    w.write_end_element()
+}
+
+/// Атрибуты элемента: только у экземпляра объекта и только заполненные, в
+/// порядке модели типа.
+fn attributes_of(slot: &Slot) -> RtResult<Vec<(String, String, String)>> {
+    let Slot::Object(data) = slot else {
+        return Ok(Vec::new());
+    };
+    let model = &data.model;
+    let mut out = Vec::new();
+    for &prop in &model.type_at(data.type_index)?.properties {
+        let info = model.property_at(prop)?;
+        if info.form != EnumValue::XmlFormAttribute {
+            continue;
+        }
+        for value in occurrences_of(data, prop) {
+            out.push((
+                info.ns.clone(),
+                info.name.clone(),
+                lexical_for_write(model, info.type_index, &value)?,
+            ));
+        }
+    }
+    Ok(out)
+}
+
+/// Значения свойства в порядке заполнения.
+fn occurrences_of(data: &Rc<XdtoObjectData>, prop: usize) -> Vec<BslValue> {
+    data.entries
+        .borrow()
+        .iter()
+        .filter(|e| e.prop == prop)
+        .map(|e| e.value.clone())
+        .collect()
+}
+
+/// Содержимое элемента: текст простого значения либо свойства объекта.
+fn write_content(
+    w: &mut crate::xml::XmlWriter,
+    scope: &mut NsScope,
+    slot: &Slot,
+    depth: usize,
+) -> RtResult<()> {
+    match slot {
+        Slot::Nil => Ok(()),
+        Slot::Simple {
+            model,
+            type_index,
+            value,
+        } => {
+            let lexical = lexical_for_write(model, *type_index, value)?;
+            // Пустая лексическая форма — это `<имя/>`, а не `<имя></имя>`
+            // (измерено на пустой строке).
+            if lexical.is_empty() {
+                return Ok(());
+            }
+            w.write_text(&lexical)
+        }
+        Slot::Object(data) => write_properties(w, scope, data, depth),
+    }
+}
+
+/// Свойства экземпляра: сначала текст простого содержимого, потом
+/// элементы.
+///
+/// Порядок элементов зависит от типа: у УПОРЯДОЧЕННОГО он модельный
+/// (измерено: записанные как `num`, потом `name`, свойства вышли как
+/// `name`, потом `num`), у ПОСЛЕДОВАТЕЛЬНОГО — порядок заполнения
+/// (измерено на `xs:choice`: `cb`, `ca`, `cb` вышли ровно так).
+fn write_properties(
+    w: &mut crate::xml::XmlWriter,
+    scope: &mut NsScope,
+    data: &Rc<XdtoObjectData>,
+    depth: usize,
+) -> RtResult<()> {
+    let model = &data.model;
+    let type_data = model.type_at(data.type_index)?;
+    let props = type_data.properties.clone();
+    let sequenced = type_data.sequenced();
+    for &prop in &props {
+        if model.property_at(prop)?.form != EnumValue::XmlFormText {
+            continue;
+        }
+        let info = model.property_at(prop)?;
+        for value in occurrences_of(data, prop) {
+            let lexical = lexical_for_write(model, info.type_index, &value)?;
+            if !lexical.is_empty() {
+                w.write_text(&lexical)?;
+            }
+        }
+    }
+    let plan: Vec<(usize, BslValue)> = if sequenced {
+        let entries = data.entries.borrow();
+        let mut out = Vec::with_capacity(entries.len());
+        for entry in entries.iter() {
+            if model.property_at(entry.prop)?.form == EnumValue::XmlFormElement {
+                out.push((entry.prop, entry.value.clone()));
+            }
+        }
+        out
+    } else {
+        let mut out = Vec::new();
+        for &prop in &props {
+            if model.property_at(prop)?.form != EnumValue::XmlFormElement {
+                continue;
+            }
+            for value in occurrences_of(data, prop) {
+                out.push((prop, value));
+            }
+        }
+        out
+    };
+    for (prop, value) in plan {
+        let info = model.property_at(prop)?;
+        let (slot, annotate) = slot_for(model, info.type_index, &value)?;
+        write_node(w, scope, &info.name, &info.ns, annotate, &slot, depth + 1)?;
+    }
+    Ok(())
+}
+
+/// Как записывать значение, лежащее в свойстве объявленного типа.
+fn slot_for<'a>(
+    model: &'a Rc<XdtoModel>,
+    declared: usize,
+    value: &'a BslValue,
+) -> RtResult<(Slot<'a>, Annotation<'a>)> {
+    if matches!(value, BslValue::Undefined) {
+        return Ok((Slot::Nil, None));
+    }
+    if model.type_at(declared)?.is_value() {
+        return Ok((
+            Slot::Simple {
+                model,
+                type_index: declared,
+                value,
+            },
+            None,
+        ));
+    }
+    // Свойство типа ОБЪЕКТА: фактический тип значения виден в самом
+    // значении, и если он не объявленный — платформа помечает элемент
+    // `xsi:type` (измерено и на наследнике, и на каждом типе BSL в
+    // свойстве `anyType`).
+    let annotate = |index: usize| {
+        if index == declared {
+            None
+        } else {
+            Some((model, index))
+        }
+    };
+    if let BslValue::Object(o) = value {
+        match &**o {
+            BslObject::XdtoObject(inner) => {
+                let same_model = Rc::ptr_eq(&inner.model, model);
+                let mark = if same_model && inner.type_index == declared {
+                    None
+                } else {
+                    Some((&inner.model, inner.type_index))
+                };
+                return Ok((Slot::Object(inner), mark));
+            }
+            BslObject::XdtoValue(value_model, data) => {
+                return Ok((
+                    Slot::Simple {
+                        model: value_model,
+                        type_index: data.type_index,
+                        value: &data.value,
+                    },
+                    if Rc::ptr_eq(value_model, model) {
+                        annotate(data.type_index)
+                    } else {
+                        Some((value_model, data.type_index))
+                    },
+                ))
+            }
+            _ => {}
+        }
+    }
+    let index = builtin_index_for(model, value).ok_or_else(|| {
+        RtError::Xdto(format!(
+            "у значения «{}» нет лексической формы для записи в XML",
+            value.type_name()
+        ))
+    })?;
+    Ok((
+        Slot::Simple {
+            model,
+            type_index: index,
+            value,
+        },
+        annotate(index),
+    ))
+}
+
+/// Встроенный тип XML Schema, которым платформа помечает значение BSL в
+/// свойстве типа `anyType` (измерено поимённо: строка -> `xs:string`,
+/// число -> `xs:decimal`, булево -> `xs:boolean`, дата -> `xs:dateTime`,
+/// двоичные данные -> `xs:base64Binary`).
+fn builtin_index_for(model: &Rc<XdtoModel>, value: &BslValue) -> Option<usize> {
+    let name = match value {
+        BslValue::Str(_) => "string",
+        BslValue::Number(_) => "decimal",
+        BslValue::Boolean(_) => "boolean",
+        BslValue::Date(_) => "dateTime",
+        BslValue::Object(o) => match &**o {
+            BslObject::BinaryData(_) => "base64Binary",
+            _ => return None,
+        },
+        _ => return None,
+    };
+    model.find(XSD_NS, name)
+}
+
+/// Лексическая форма значения для записи — обратная к
+/// [`value_from_lexical`].
+///
+/// # Errors
+///
+/// [`RtError::Xdto`], если у значения такой формы нет (`Неопределено`,
+/// `Null`, посторонний объект) либо модель повреждена.
+fn lexical_for_write(
+    model: &Rc<XdtoModel>,
+    type_index: usize,
+    value: &BslValue,
+) -> RtResult<String> {
+    let builtin = model.builtin_of(type_index);
+    if let BslValue::Object(o) = value {
+        match &**o {
+            BslObject::BinaryData(bytes) => {
+                // `hexBinary` платформа пишет ЗАГЛАВНЫМИ и одной строкой, а
+                // `base64Binary` — с переносами по 64 символа, разделёнными
+                // CR LF (измерено на 48 и 49 байтах: 64 символа ровно
+                // переноса не получают, 68 — получают).
+                return Ok(match builtin {
+                    Some(BuiltinBsl::Hex) => encode_hex(bytes),
+                    _ => encode_base64(bytes),
+                });
+            }
+            BslObject::XmlExpandedName(name) => return Ok(name.local.clone()),
+            // Значение СПИСОЧНОГО простого типа — это массив (у платформы
+            // фиксированный, см. «Двоичные лексические формы» в шапке
+            // модуля).
+            BslObject::Array(items) => {
+                return join_list(model, type_index, &items.borrow());
+            }
+            _ => {}
+        }
+    }
+    match lexical_of_value(value, builtin) {
+        Some(lexical) => Ok(lexical),
+        None => Err(RtError::Xdto(format!(
+            "у значения «{}» нет лексической формы типа «{}»",
+            value.type_name(),
+            type_display(model.type_at(type_index)?)
+        ))),
+    }
+}
+
+/// Лексическая форма СПИСОЧНОГО простого типа: формы элементов через
+/// пробел (измерено: свойство типа `xs:list` пишется как `1 2 3`).
+fn join_list(model: &Rc<XdtoModel>, type_index: usize, items: &[BslValue]) -> RtResult<String> {
+    let item_type = list_item_of(model, type_index).unwrap_or(type_index);
+    let mut out = String::new();
+    for item in items {
+        if !out.is_empty() {
+            out.push(' ');
+        }
+        out.push_str(&lexical_for_write(model, item_type, item)?);
+    }
+    Ok(out)
+}
+
+/// Тип элемента списочного простого типа — по цепочке базовых, как это
+/// делает [`XdtoModel::builtin_of`].
+fn list_item_of(model: &XdtoModel, index: usize) -> Option<usize> {
+    let mut cur = index;
+    for _ in 0..=model.types.len() {
+        match model.types.get(cur)?.shape.as_ref()? {
+            ValueShape::List(item) => return *item,
+            ValueShape::Builtin(_) | ValueShape::Union(_) => return None,
+            ValueShape::Atomic => cur = model.types.get(cur)?.base?,
+        }
+    }
+    None
+}
+
+/// `hexBinary`: заглавные шестнадцатеричные цифры без переносов.
+fn encode_hex(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        out.push_str(&format!("{byte:02X}"));
+    }
+    out
+}
+
+/// Ширина строки base64 при записи — измерено на 48 и 49 байтах.
+const BASE64_LINE: usize = 64;
+
+/// `base64Binary`: стандартный алфавит с дополнением, строками по
+/// [`BASE64_LINE`] символов через CR LF.
+fn encode_base64(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut chars = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let (b0, b1, b2) = (
+            u32::from(chunk[0]),
+            chunk.get(1).map_or(0, |b| u32::from(*b)),
+            chunk.get(2).map_or(0, |b| u32::from(*b)),
+        );
+        let bits = (b0 << 16) | (b1 << 8) | b2;
+        chars.push(ALPHABET[(bits >> 18) as usize & 63] as char);
+        chars.push(ALPHABET[(bits >> 12) as usize & 63] as char);
+        chars.push(if chunk.len() > 1 {
+            ALPHABET[(bits >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        chars.push(if chunk.len() > 2 {
+            ALPHABET[bits as usize & 63] as char
+        } else {
+            '='
+        });
+    }
+    let mut out = String::with_capacity(chars.len() + chars.len() / BASE64_LINE * 2);
+    for (i, chunk) in chars
+        .as_bytes()
+        .chunks(BASE64_LINE)
+        .map(String::from_utf8_lossy)
+        .enumerate()
+    {
+        if i > 0 {
+            out.push_str("\r\n");
+        }
+        out.push_str(&chunk);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4538,5 +5897,595 @@ mod tests {
         assert_eq!(seq.collection_len().expect("длина"), 0);
         assert_eq!(prop(&o, "ca"), BslValue::Undefined);
         assert_eq!(text_of(&prop(&o, "cat")), "атрибут");
+    }
+
+    // --- чтение и запись XML ---------------------------------------------
+
+    /// Схема ввода-вывода — та же, что у фикстуры `xdto-xml-io`, и потому
+    /// ожидания ниже читаются рядом с её эталоном, снятым с платформы.
+    const IO_SAMPLE: &str = concat!(
+        r#"<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="urn:test" "#,
+        r#"targetNamespace="urn:test" elementFormDefault="qualified" "#,
+        r#"attributeFormDefault="unqualified">"#,
+        r#"<xs:simpleType name="Codes"><xs:list itemType="xs:int"/></xs:simpleType>"#,
+        r#"<xs:complexType name="Inner"><xs:sequence>"#,
+        r#"<xs:element name="in" type="xs:string"/></xs:sequence>"#,
+        r#"<xs:attribute name="qi" type="xs:string" form="qualified"/></xs:complexType>"#,
+        r#"<xs:complexType name="InnerExt"><xs:complexContent>"#,
+        r#"<xs:extension base="t:Inner"><xs:sequence>"#,
+        r#"<xs:element name="more" type="xs:string"/>"#,
+        r#"</xs:sequence></xs:extension></xs:complexContent></xs:complexType>"#,
+        r#"<xs:complexType name="RootType"><xs:sequence>"#,
+        r#"<xs:element name="name" type="xs:string"/>"#,
+        r#"<xs:element name="num" type="xs:int" minOccurs="0"/>"#,
+        r#"<xs:element name="dec" type="xs:decimal" minOccurs="0"/>"#,
+        r#"<xs:element name="when" type="xs:date" minOccurs="0"/>"#,
+        r#"<xs:element name="flag" type="xs:boolean" minOccurs="0"/>"#,
+        r#"<xs:element name="bin" type="xs:base64Binary" minOccurs="0"/>"#,
+        r#"<xs:element name="codes" type="t:Codes" minOccurs="0"/>"#,
+        r#"<xs:element name="tag" type="xs:string" minOccurs="0" maxOccurs="unbounded"/>"#,
+        r#"<xs:element name="nested" type="t:Inner" minOccurs="0"/>"#,
+        r#"<xs:element name="nilt" type="xs:int" minOccurs="0" nillable="true"/>"#,
+        r#"<xs:element name="uq" type="xs:string" minOccurs="0" form="unqualified"/>"#,
+        r#"<xs:element name="notype" minOccurs="0"/></xs:sequence>"#,
+        r#"<xs:attribute name="id" type="xs:int"/>"#,
+        r#"<xs:attribute name="qa" type="xs:string" form="qualified"/></xs:complexType>"#,
+        r#"<xs:complexType name="ChoiceType"><xs:choice minOccurs="0" maxOccurs="unbounded">"#,
+        r#"<xs:element name="ca" type="xs:string"/>"#,
+        r#"<xs:element name="cb" type="xs:string"/></xs:choice></xs:complexType>"#,
+        "</xs:schema>",
+    );
+
+    /// Составной документ по этой схеме — тот же, что в фикстуре.
+    const IO_DOC: &str = concat!(
+        r#"<t:root xmlns:t="urn:test" id="7">"#,
+        r#"<t:name>аб</t:name><t:num>42</t:num><t:dec>12.50</t:dec>"#,
+        r#"<t:when>2026-08-13</t:when><t:flag>true</t:flag>"#,
+        r#"<t:bin>0LDQsQ==</t:bin><t:codes>1 2 3</t:codes>"#,
+        r#"<t:tag>один</t:tag><t:tag>два</t:tag>"#,
+        r#"<t:nested t:qi="х"><t:in>вг</t:in></t:nested>"#,
+        r#"<uq>де</uq></t:root>"#,
+    );
+
+    /// Читатель над текстом.
+    fn reader(text: &str) -> BslValue {
+        let value = BslValue::new_xml_reader();
+        crate::xml::set_string(&value, &[str_value(text)]).expect("источник");
+        value
+    }
+
+    /// Писатель в строку.
+    fn writer() -> BslValue {
+        let value = BslValue::new_xml_writer();
+        crate::xml::set_string(&value, &[]).expect("приёмник");
+        value
+    }
+
+    /// Разбор текста типом схемы.
+    fn read_with(f: &BslValue, type_name: &str, text: &str) -> RtResult<BslValue> {
+        factory_read_xml(f, &[reader(text), type_of_factory(f, type_name)])
+    }
+
+    /// Тип фабрики по имени в `urn:test`.
+    fn type_of_factory(f: &BslValue, name: &str) -> BslValue {
+        factory_type(f, &[str_value("urn:test"), str_value(name)]).expect("тип")
+    }
+
+    /// Запись значения и снятие получившегося текста.
+    fn write_out(f: &BslValue, value: &BslValue, args: &[&str]) -> RtResult<String> {
+        let w = writer();
+        let mut call = vec![w.clone(), value.clone()];
+        for a in args {
+            call.push(str_value(a));
+        }
+        factory_write_xml(f, &call)?;
+        match crate::xml::close_writer(&w)? {
+            BslValue::Str(s) => Ok(s.to_string()),
+            other => panic!("писатель отдал не строку: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn reading_a_composite_document_maps_every_lexical_form() {
+        let f = factory(IO_SAMPLE);
+        let o = read_with(&f, "RootType", IO_DOC).expect("документ обязан читаться");
+        // Значения приходят ТИПИЗИРОВАННЫМИ — это и отличает чтение с
+        // типом от чтения без него (измерено: без типа те же свойства
+        // остаются строками «12.50» и «true»).
+        assert_eq!(text_of(&prop(&o, "name")), "аб");
+        assert_eq!(number_of(&prop(&o, "id")), 7);
+        assert_eq!(number_of(&prop(&o, "num")), 42);
+        assert_eq!(decimal_of(&prop(&o, "dec")), "12.5");
+        assert_eq!(prop(&o, "flag"), BslValue::Boolean(true));
+        assert_eq!(
+            prop(&o, "when").type_of().unwrap(),
+            BslValue::Type(TypeId::Date)
+        );
+        assert_eq!(
+            prop(&o, "bin").type_of().unwrap(),
+            BslValue::Type(TypeId::BinaryData)
+        );
+        // Множественное свойство накапливается в списке, вложенное —
+        // рекурсивно, и владельцем ему становится родитель.
+        let tags = prop(&o, "tag");
+        assert_eq!(tags.collection_len().expect("длина"), 2);
+        assert_eq!(text_of(&list_get(&tags, 0).expect("первый")), "один");
+        assert_eq!(text_of(&list_get(&tags, 1).expect("второй")), "два");
+        let nested = prop(&o, "nested");
+        assert_eq!(text_of(&prop(&nested, "in")), "вг");
+        assert_eq!(text_of(&prop(&nested, "qi")), "х");
+        assert_eq!(object_owner(&nested, &[]).expect("владелец"), o);
+        // Неквалифицированное свойство ищется по ПУСТОМУ пространству
+        // имён, квалифицированное — по целевому.
+        assert_eq!(text_of(&prop(&o, "uq")), "де");
+        // Списочный простой тип разворачивается в массив значений.
+        assert_eq!(prop(&o, "codes").collection_len().expect("длина"), 3);
+        // Не встретившееся свойство остаётся НЕзаполненным.
+        assert_eq!(
+            object_is_set(&o, &[str_value("nilt")]).expect("признак"),
+            BslValue::Boolean(false)
+        );
+    }
+
+    #[test]
+    fn reading_rejects_a_document_that_does_not_match_the_type() {
+        let f = factory(IO_SAMPLE);
+        let bad = [
+            // Элемент, которого у типа нет.
+            r#"<t:root xmlns:t="urn:test"><t:name>а</t:name><t:чужое>б</t:чужое></t:root>"#,
+            // Атрибут, которого у типа нет.
+            r#"<t:root xmlns:t="urn:test" чужой="1"><t:name>а</t:name></t:root>"#,
+            // Лексическая форма не разбирается объявленным типом.
+            r#"<t:root xmlns:t="urn:test"><t:name>а</t:name><t:num>ab</t:num></t:root>"#,
+            // Порядок в типе-последовательности нарушен.
+            r#"<t:root xmlns:t="urn:test"><t:num>42</t:num><t:name>а</t:name></t:root>"#,
+            // Одиночное свойство встретилось дважды.
+            r#"<t:root xmlns:t="urn:test"><t:name>а</t:name><t:name>б</t:name></t:root>"#,
+            // Множественное свойство разорвано соседним элементом.
+            concat!(
+                r#"<t:root xmlns:t="urn:test"><t:name>а</t:name><t:tag>1</t:tag>"#,
+                r#"<t:nested><t:in>в</t:in></t:nested><t:tag>2</t:tag></t:root>"#,
+            ),
+            // Значащий текст в составном типе.
+            r#"<t:root xmlns:t="urn:test">мусор<t:name>а</t:name></t:root>"#,
+            // Обязательного свойства нет вовсе.
+            r#"<t:root xmlns:t="urn:test"/>"#,
+            // Чужой корень читается тем же типом и спотыкается на том же.
+            r#"<чужой xmlns="urn:иное"/>"#,
+        ];
+        for text in bad {
+            let err = read_with(&f, "RootType", text);
+            assert!(
+                matches!(err, Err(RtError::Xdto(_))),
+                "документ обязан быть отвергнут: {text}"
+            );
+        }
+        // А необязательное свойство пропускать можно.
+        assert!(read_with(
+            &f,
+            "RootType",
+            r#"<t:root xmlns:t="urn:test"><t:name>а</t:name><t:flag>true</t:flag></t:root>"#,
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn reading_without_a_type_refuses_instead_of_guessing() {
+        let f = factory(IO_SAMPLE);
+        // Платформа читает такой вызов в ОТКРЫТОЕ содержимое `anyType`;
+        // здесь его нет, и отказ честнее подмены разбором по схеме.
+        let err = factory_read_xml(&f, &[reader(IO_DOC)]);
+        assert!(matches!(err, Err(RtError::Xdto(_))));
+        // Тип обязан быть типом, а источник — читателем.
+        assert!(factory_read_xml(&f, &[reader(IO_DOC), str_value("RootType")]).is_err());
+        assert!(factory_read_xml(&f, &[str_value(IO_DOC)]).is_err());
+    }
+
+    #[test]
+    fn reading_leaves_the_reader_on_the_next_node() {
+        let f = factory(IO_SAMPLE);
+        let r = reader(concat!(
+            r#"<об xmlns:t="urn:test"><t:root id="1"><t:name>а</t:name></t:root>"#,
+            r#"<t:root id="2"><t:name>б</t:name></t:root><хвост/></об>"#,
+        ));
+        // Обёртку читатель проходит сам, а дальше два элемента подряд
+        // читаются двумя вызовами БЕЗ `Прочитать()` между ними —
+        // измерено, что после разбора читатель стоит на следующем узле.
+        crate::xml::read(&r).expect("обёртка");
+        crate::xml::read(&r).expect("первый корень");
+        let t = type_of_factory(&f, "RootType");
+        let first = factory_read_xml(&f, &[r.clone(), t.clone()]).expect("первый");
+        assert_eq!(text_of(&crate::xml::name(&r).expect("имя")), "t:root");
+        let second = factory_read_xml(&f, &[r.clone(), t]).expect("второй");
+        assert_eq!(number_of(&prop(&first, "id")), 1);
+        assert_eq!(number_of(&prop(&second, "id")), 2);
+        assert_eq!(text_of(&crate::xml::name(&r).expect("имя")), "хвост");
+        // На документе из одного корня читатель после разбора исчерпан.
+        let single = reader(IO_DOC);
+        let t = type_of_factory(&f, "RootType");
+        factory_read_xml(&f, &[single.clone(), t]).expect("корень");
+        assert_eq!(
+            crate::xml::read(&single).expect("шаг"),
+            BslValue::Boolean(false)
+        );
+    }
+
+    #[test]
+    fn nil_and_xsi_type_survive_the_round_trip() {
+        let f = factory(IO_SAMPLE);
+        // `xsi:nil` заполняет свойство ПУСТЫМ значением и обратно
+        // пишется тем же атрибутом (измерено).
+        let o = read_with(
+            &f,
+            "RootType",
+            concat!(
+                r#"<t:root xmlns:t="urn:test" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">"#,
+                r#"<t:name>а</t:name><t:nilt xsi:nil="true"/></t:root>"#,
+            ),
+        )
+        .expect("документ с nil");
+        assert_eq!(prop(&o, "nilt"), BslValue::Undefined);
+        assert_eq!(
+            object_is_set(&o, &[str_value("nilt")]).expect("признак"),
+            BslValue::Boolean(true)
+        );
+        assert!(write_out(&f, &o, &["к"])
+            .expect("запись")
+            .contains(r#"<nilt xsi:nil="true"/>"#));
+        // `xsi:type` у СВОЙСТВА выбирает наследника, а неизвестное имя
+        // платформа игнорирует (измерено обе стороны).
+        let derived = read_with(
+            &f,
+            "RootType",
+            concat!(
+                r#"<t:root xmlns:t="urn:test" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">"#,
+                r#"<t:name>а</t:name><t:nested xsi:type="t:InnerExt">"#,
+                r#"<t:in>в</t:in><t:more>г</t:more></t:nested></t:root>"#,
+            ),
+        )
+        .expect("документ с xsi:type");
+        let nested = prop(&derived, "nested");
+        assert_eq!(
+            object_type(&nested, &[]).expect("тип").to_string(),
+            "{urn:test}InnerExt"
+        );
+        assert!(write_out(&f, &derived, &["к"])
+            .expect("запись")
+            .contains(r#"<nested xsi:type="InnerExt">"#));
+        let unknown = read_with(
+            &f,
+            "Inner",
+            concat!(
+                r#"<точка xmlns="urn:test" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" "#,
+                r#"xsi:type="НетТакого"><in>в</in></точка>"#,
+            ),
+        )
+        .expect("неизвестный xsi:type игнорируется");
+        assert_eq!(
+            object_type(&unknown, &[]).expect("тип").to_string(),
+            "{urn:test}Inner"
+        );
+    }
+
+    #[test]
+    fn writing_follows_the_measured_lexical_forms() {
+        let f = factory(IO_SAMPLE);
+        let o = factory_create(&f, &[type_of_factory(&f, "RootType")]).expect("экземпляр");
+        set_property(&o, "name", str_value("аб")).expect("строка");
+        set_property(&o, "dec", str_value("12.50")).expect("дробное");
+        set_property(&o, "when", str_value("2026-08-13")).expect("дата");
+        set_property(&o, "flag", BslValue::Boolean(true)).expect("булево");
+        set_property(&o, "bin", str_value("0LDQsQ==")).expect("двоичное");
+        let text = write_out(&f, &o, &["к"]).expect("запись");
+        // Хвостовой ноль срезан, дата без времени, булево словом,
+        // двоичное — base64 (всё измерено).
+        assert!(text.contains("<dec>12.5</dec>"), "{text}");
+        assert!(text.contains("<when>2026-08-13</when>"), "{text}");
+        assert!(text.contains("<flag>true</flag>"), "{text}");
+        assert!(text.contains("<bin>0LDQsQ==</bin>"), "{text}");
+        // Объявления на элементе, с которого начинается запись: своё
+        // умолчательное плюс `xs` и `xsi`.
+        assert!(
+            text.starts_with(concat!(
+                r#"<к xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" "#,
+                r#"xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">"#,
+            )),
+            "{text}"
+        );
+        // Имя по умолчанию — имя ТИПА, а не объявленного элемента.
+        assert!(write_out(&f, &o, &[])
+            .expect("запись")
+            .starts_with("<RootType "));
+        // Пустая строка даёт схлопнутый элемент, а не пару тегов.
+        set_property(&o, "name", str_value("")).expect("пустая строка");
+        assert!(write_out(&f, &o, &["к"])
+            .expect("запись")
+            .contains("<name/>"));
+        // Записывать можно только экземпляры.
+        assert!(factory_write_xml(&f, &[writer(), number_value(5)]).is_err());
+        // Пустое имя платформа отвергает — и здесь тоже.
+        assert!(factory_write_xml(&f, &[writer(), o.clone(), str_value("")]).is_err());
+    }
+
+    #[test]
+    fn write_rejects_element_name_with_colon() {
+        let f = factory(IO_SAMPLE);
+        let o = factory_create(&f, &[type_of_factory(&f, "RootType")]).expect("экземпляр");
+        set_property(&o, "name", str_value("аб")).expect("строка");
+        // Измерено (`зп имя с двоеточием`): `ЗаписатьXML(Зпис, ОбП,
+        // "t:мой")` на 8.3.27 — ошибка, а не документ с префиксом `t`,
+        // который никто не объявлял.
+        assert!(
+            matches!(write_out(&f, &o, &["t:мой"]), Err(RtError::Xdto(_))),
+            "имя с двоеточием обязано быть отвергнуто"
+        );
+        // Имя без двоеточия по-прежнему пишется.
+        assert!(write_out(&f, &o, &["мой"])
+            .expect("запись")
+            .starts_with("<мой "));
+    }
+
+    /// Тесты на предел глубины гоняются в потоке со стеком главного
+    /// (8 МиБ): предел калиброван под него, а libtest даёт тестовому
+    /// потоку 2 МиБ, и запись на полной глубине туда честно не помещается
+    /// — кадр спуска в debug-сборке стоит около 8 КиБ, то есть все
+    /// `MAX_XDTO_DEPTH` уровней съедают порядка 4 МиБ.
+    fn on_main_sized_stack(body: impl FnOnce() + Send + 'static) {
+        std::thread::Builder::new()
+            .stack_size(8 * 1024 * 1024)
+            .spawn(body)
+            .expect("поток не создался")
+            .join()
+            .expect("тест в потоке упал");
+    }
+
+    #[test]
+    fn write_of_cyclic_instance_is_a_catchable_error() {
+        on_main_sized_stack(|| {
+            let f = factory(IO_SAMPLE);
+            let o = factory_create(&f, &[type_of_factory(&f, "RootType")]).expect("экземпляр");
+            set_property(&o, "name", str_value("аб")).expect("строка");
+            // `notype` объявлен без типа, то есть `anyType`, и принимает
+            // любое значение — в том числе своего же владельца. Такой цикл
+            // обязан упереться в предел глубины и вернуться ошибкой, а не
+            // уронить стек процесса.
+            set_property(&o, "notype", o.clone()).expect("ссылка на себя");
+            assert!(
+                matches!(write_out(&f, &o, &["к"]), Err(RtError::Xdto(_))),
+                "циклический экземпляр обязан давать перехватываемую ошибку"
+            );
+        });
+    }
+
+    #[test]
+    fn write_deeper_than_limit_is_a_catchable_error() {
+        on_main_sized_stack(|| {
+            let f = factory(IO_SAMPLE);
+            let root = factory_create(&f, &[type_of_factory(&f, "RootType")]).expect("экземпляр");
+            set_property(&root, "name", str_value("аб")).expect("строка");
+            // Честная цепочка без цикла, но глубже предела: спуск записи
+            // рекурсивный, и ограничение у него то же, что у разбора.
+            let mut current = root.clone();
+            for _ in 0..MAX_XDTO_DEPTH + 5 {
+                let next =
+                    factory_create(&f, &[type_of_factory(&f, "RootType")]).expect("экземпляр");
+                set_property(&next, "name", str_value("аб")).expect("строка");
+                set_property(&current, "notype", next.clone()).expect("вложение");
+                current = next;
+            }
+            assert!(
+                matches!(write_out(&f, &root, &["к"]), Err(RtError::Xdto(_))),
+                "цепочка глубже предела обязана давать перехватываемую ошибку"
+            );
+        });
+    }
+
+    #[test]
+    fn writing_orders_properties_by_the_type_or_by_the_filling() {
+        let f = factory(IO_SAMPLE);
+        // У УПОРЯДОЧЕННОГО типа порядок модельный, независимо от того, в
+        // каком порядке свойства заполняли (измерено).
+        let o = factory_create(&f, &[type_of_factory(&f, "RootType")]).expect("экземпляр");
+        set_property(&o, "num", number_value(42)).expect("число");
+        set_property(&o, "name", str_value("аб")).expect("строка");
+        set_property(&o, "id", number_value(7)).expect("атрибут");
+        assert_eq!(
+            write_out(&f, &o, &["к"]).expect("запись"),
+            concat!(
+                r#"<к xmlns="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" "#,
+                "xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" id=\"7\">\n",
+                "\t<name>аб</name>\n\t<num>42</num>\n</к>",
+            )
+        );
+        // У ПОСЛЕДОВАТЕЛЬНОГО (`xs:choice`) — порядок заполнения.
+        let c = factory_create(&f, &[type_of_factory(&f, "ChoiceType")]).expect("экземпляр");
+        list_add(&prop(&c, "cb"), &[str_value("б1")]).expect("добавление");
+        list_add(&prop(&c, "ca"), &[str_value("а1")]).expect("добавление");
+        list_add(&prop(&c, "cb"), &[str_value("б2")]).expect("добавление");
+        let text = write_out(&f, &c, &["в"]).expect("запись");
+        assert!(
+            text.contains("\t<cb>б1</cb>\n\t<ca>а1</ca>\n\t<cb>б2</cb>\n"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn writing_declares_namespaces_the_way_the_platform_does() {
+        let f = factory(IO_SAMPLE);
+        let o = factory_create(&f, &[type_of_factory(&f, "RootType")]).expect("экземпляр");
+        set_property(&o, "name", str_value("аб")).expect("строка");
+        set_property(&o, "uq", str_value("де")).expect("неквалифицированное");
+        // Неквалифицированное свойство отменяет умолчательное объявление.
+        assert!(write_out(&f, &o, &["к"])
+            .expect("запись")
+            .contains(r#"<uq xmlns="">де</uq>"#));
+        // Квалифицированному АТРИБУТУ умолчательное объявление не годится
+        // — ему заводится префикс `d<глубина>p<номер>`, а сам элемент
+        // остаётся на умолчании (измерено).
+        set_property(&o, "qa", str_value("де")).expect("атрибут");
+        let text = write_out(&f, &o, &["к"]).expect("запись");
+        assert!(
+            text.starts_with(r#"<к xmlns="urn:test" xmlns:d1p1="urn:test" "#),
+            "{text}"
+        );
+        assert!(text.contains(r#" d1p1:qa="де""#), "{text}");
+        // На втором уровне номер глубины другой, и там уже сам элемент
+        // уходит под префикс, а за ним и его дети (измерено).
+        let o2 = factory_create(&f, &[type_of_factory(&f, "RootType")]).expect("экземпляр");
+        set_property(&o2, "name", str_value("аб")).expect("строка");
+        let inner = factory_create(&f, &[type_of_factory(&f, "Inner")]).expect("вложенный");
+        set_property(&inner, "in", str_value("вг")).expect("строка");
+        set_property(&inner, "qi", str_value("х")).expect("атрибут");
+        set_property(&o2, "nested", inner).expect("вложение");
+        let text = write_out(&f, &o2, &["к"]).expect("запись");
+        assert!(
+            text.contains(r#"<d2p1:nested xmlns:d2p1="urn:test" d2p1:qi="х">"#),
+            "{text}"
+        );
+        assert!(text.contains("<d2p1:in>вг</d2p1:in>"), "{text}");
+        // Чужой URI элемента заставляет объявиться и свойства.
+        let o3 = factory_create(&f, &[type_of_factory(&f, "RootType")]).expect("экземпляр");
+        set_property(&o3, "name", str_value("аб")).expect("строка");
+        let text = write_out(&f, &o3, &["мой", "urn:иное"]).expect("запись");
+        assert!(text.starts_with(r#"<мой xmlns="urn:иное" "#), "{text}");
+        assert!(
+            text.contains(r#"<name xmlns="urn:test">аб</name>"#),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn any_type_properties_carry_the_type_of_their_value() {
+        let f = factory(IO_SAMPLE);
+        let o = factory_create(&f, &[type_of_factory(&f, "RootType")]).expect("экземпляр");
+        set_property(&o, "name", str_value("аб")).expect("строка");
+        // Свойство типа `anyType` принимает что угодно, и запись
+        // помечает элемент типом ЗНАЧЕНИЯ (измерено поимённо).
+        for (value, marked) in [
+            (
+                number_value(5),
+                r#"<notype xsi:type="xs:decimal">5</notype>"#,
+            ),
+            (
+                BslValue::Boolean(true),
+                r#"<notype xsi:type="xs:boolean">true</notype>"#,
+            ),
+            (
+                str_value("аб"),
+                r#"<notype xsi:type="xs:string">аб</notype>"#,
+            ),
+        ] {
+            set_property(&o, "notype", value).expect("любое значение");
+            let text = write_out(&f, &o, &["к"]).expect("запись");
+            assert!(text.contains(marked), "{text}");
+        }
+        // Обратно: текст без пометки читается СТРОКОЙ, с пометкой —
+        // значением помеченного типа.
+        let plain = read_with(
+            &f,
+            "RootType",
+            r#"<t:root xmlns:t="urn:test"><t:name>а</t:name><t:notype>5</t:notype></t:root>"#,
+        )
+        .expect("без пометки");
+        assert_eq!(text_of(&prop(&plain, "notype")), "5");
+        let typed = read_with(
+            &f,
+            "RootType",
+            concat!(
+                r#"<t:root xmlns:t="urn:test" xmlns:xs="http://www.w3.org/2001/XMLSchema" "#,
+                r#"xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">"#,
+                r#"<t:name>а</t:name><t:notype xsi:type="xs:decimal">5</t:notype></t:root>"#,
+            ),
+        )
+        .expect("с пометкой");
+        assert_eq!(number_of(&prop(&typed, "notype")), 5);
+    }
+
+    #[test]
+    fn the_round_trip_is_stable_after_the_first_pass() {
+        let f = factory(IO_SAMPLE);
+        let first = read_with(&f, "RootType", IO_DOC).expect("разбор");
+        let once = write_out(&f, &first, &["root", "urn:test"]).expect("запись");
+        // Второй круг обязан дать ТО ЖЕ САМОЕ: лексические формы уже
+        // канонические (у платформы измерено то же — «Да»).
+        let second = read_with(&f, "RootType", &once).expect("повторный разбор");
+        let twice = write_out(&f, &second, &["root", "urn:test"]).expect("повторная запись");
+        assert_eq!(once, twice);
+        // Первый круг уже канонизует запись: «12.50» становится «12.5».
+        assert!(once.contains("<dec>12.5</dec>"), "{once}");
+        assert!(once.contains("<codes>1 2 3</codes>"), "{once}");
+        assert!(once.contains(r#"<uq xmlns="">де</uq>"#), "{once}");
+    }
+
+    #[test]
+    fn values_of_simple_types_read_and_write_as_values() {
+        let f = factory(IO_SAMPLE);
+        let xsd = factory_type(
+            &f,
+            &[
+                str_value("http://www.w3.org/2001/XMLSchema"),
+                str_value("int"),
+            ],
+        )
+        .expect("тип");
+        let value = factory_read_xml(&f, &[reader("<число>42</число>"), xsd.clone()])
+            .expect("значение обязано читаться");
+        assert_eq!(number_of(&prop(&value, "Значение")), 42);
+        assert_eq!(text_of(&prop(&value, "ЛексическоеЗначение")), "42");
+        // Обратно значение пишется своим типом, а пространство XML Schema
+        // становится умолчательным, поэтому `xs` не объявляется.
+        assert_eq!(
+            write_out(&f, &value, &[]).expect("запись"),
+            concat!(
+                r#"<int xmlns="http://www.w3.org/2001/XMLSchema" "#,
+                r#"xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">42</int>"#,
+            )
+        );
+        // Посторонний атрибут у элемента простого типа платформа
+        // отвергает (измерено), и битая лексика — тоже.
+        assert!(factory_read_xml(&f, &[reader(r#"<ч а="1">42</ч>"#), xsd.clone()]).is_err());
+        assert!(factory_read_xml(&f, &[reader("<ч>ab</ч>"), xsd]).is_err());
+    }
+
+    #[test]
+    fn base64_wraps_at_the_measured_width() {
+        // 48 байт дают ровно 64 символа и переноса не получают, 49 —
+        // получают, и разделитель именно CR LF (измерено).
+        let short = vec![b'0'; 48];
+        let long = vec![b'0'; 49];
+        assert_eq!(encode_base64(&short).len(), 64);
+        assert!(!encode_base64(&short).contains('\r'));
+        assert!(encode_base64(&long).contains("\r\n"));
+        assert_eq!(encode_base64(&long).lines().count(), 2);
+        assert_eq!(encode_base64(&[]), "");
+        // Круг с разборщиком: перенос при чтении игнорируется.
+        assert_eq!(decode_base64(&encode_base64(&long)), Some(long));
+        // `hexBinary` пишется ЗАГЛАВНЫМИ и одной строкой (измерено).
+        assert_eq!(encode_hex(&[0xd0, 0xb0, 0xd0, 0xb1]), "D0B0D0B1");
+        assert_eq!(
+            decode_hex(&encode_hex(&[0x0f, 0xff])),
+            Some(vec![0x0f, 0xff])
+        );
+    }
+
+    #[test]
+    fn an_empty_lexical_form_is_zero_only_for_numbers() {
+        let m = model(IO_SAMPLE);
+        // Измерено: `Создать(xs:int, "")` даёт 0, а пустой элемент числа
+        // читается тем же нулём; у даты и булева пустая запись — ошибка.
+        let int = m.find(XSD_NS, "int").expect("int");
+        assert_eq!(
+            decimal_of(&value_from_lexical(&m, int, "").expect("ноль")),
+            "0"
+        );
+        let date = m.find(XSD_NS, "date").expect("date");
+        assert!(value_from_lexical(&m, date, "").is_err());
+        let boolean = m.find(XSD_NS, "boolean").expect("boolean");
+        assert!(value_from_lexical(&m, boolean, "").is_err());
+        // А `xs:double` поблажки не получил: измерено, что и
+        // `Создать(xs:double, "")`, и пустой элемент этого типа платформа
+        // отвергает (`чв Создать пустой dbl`, `чв пустое dbl`).
+        let double = m.find(XSD_NS, "double").expect("double");
+        assert!(value_from_lexical(&m, double, "").is_err());
     }
 }

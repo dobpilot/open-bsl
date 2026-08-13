@@ -624,6 +624,15 @@ impl XmlWriter {
         !self.stack.is_empty()
     }
 
+    /// Глубина открытых элементов: у корня документа она нулевая, а у
+    /// элемента, который сейчас будет записан, — на единицу больше. Нужна
+    /// записи XDTO: платформа строит имена порождённых префиксов как
+    /// `d<глубина>p<номер>` и считает глубину именно так (измерено — см.
+    /// заголовок модуля `xdto`).
+    pub fn depth(&self) -> usize {
+        self.stack.len()
+    }
+
     /// Перевод строки и отступ по глубине. Один таб на уровень — измерено.
     fn newline(&mut self, depth: usize) {
         if !self.settings.indent {
@@ -1294,6 +1303,25 @@ pub(crate) fn with_writer<R>(
         .as_mut()
         .ok_or_else(|| bad("приёмник для ЗаписьXML не задан"))?;
     f(w)
+}
+
+/// Доступ к состоянию читателя. `pub(crate)` по той же причине, что и
+/// [`with_writer`]: разбор XML в экземпляры XDTO (`xdto::factory_read_xml`)
+/// идёт по СОБЫТИЯМ того же `ЧтениеXML`, и второго разборщика для этого
+/// заводить не за чем. Читатель после вызова остаётся там, куда его
+/// подвинул `f`, — позиция наблюдаема из BSL.
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель не `ЧтениеXML`, плюс
+/// всё, чем ответит `f`.
+pub(crate) fn with_reader<R>(
+    obj: &BslValue,
+    f: impl FnOnce(&mut XmlReaderState) -> RtResult<R>,
+) -> RtResult<R> {
+    let reader = as_reader(obj)?;
+    let mut state = reader.borrow_mut();
+    f(&mut state)
 }
 
 /// `ЗаписатьОбъявлениеXML()`.

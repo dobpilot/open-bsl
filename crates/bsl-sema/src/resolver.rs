@@ -1510,6 +1510,14 @@ impl<'a> Resolver<'a> {
                     | bsl_rt::BuiltinMethod::XdtoObjectProperties
                     | bsl_rt::BuiltinMethod::XdtoOwner
                     | bsl_rt::BuiltinMethod::XdtoSequenceOf => Some(0),
+                    // Ввод-вывод фабрики: у `ПрочитатьXML` форм две
+                    // (читатель и читатель с типом), у `ЗаписатьXML` три
+                    // (писатель со значением, плюс имя, плюс URI) —
+                    // измерено, что третий аргумент чтения и пятый записи
+                    // платформа отвергает. Арность решает рантайм.
+                    bsl_rt::BuiltinMethod::XdtoReadXml | bsl_rt::BuiltinMethod::XdtoWriteXml => {
+                        None
+                    }
                 };
                 if let Some(expected) = expected {
                     if args.len() != expected {

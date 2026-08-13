@@ -987,6 +987,13 @@ pub enum BuiltinMethod {
     XdtoSequenceValue,
     /// `ПоследовательностьXDTO.ПолучитьСвойство(i)` -> `СвойствоXDTO`.
     XdtoSequenceProperty,
+    /// `ФабрикаXDTO.ПрочитатьXML(ЧтениеXML[, Тип])` — разбор документа в
+    /// экземпляр. Имя занято ТОЛЬКО фабрикой: у `ЧтениеXML` метод обхода
+    /// называется `Прочитать`, поэтому конфликта получателей нет, но
+    /// диспетчер всё равно проверяет получателя.
+    XdtoReadXml,
+    /// `ФабрикаXDTO.ЗаписатьXML(ЗаписьXML, Значение[, Имя[, УРИ]])`.
+    XdtoWriteXml,
 }
 
 /// Написания МЕТОДОВ объектов — тот же принцип, что и у
@@ -1207,6 +1214,10 @@ pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
     ("GetValue", BuiltinMethod::XdtoSequenceValue),
     ("ПолучитьСвойство", BuiltinMethod::XdtoSequenceProperty),
     ("GetProperty", BuiltinMethod::XdtoSequenceProperty),
+    ("ПрочитатьXML", BuiltinMethod::XdtoReadXml),
+    ("ReadXML", BuiltinMethod::XdtoReadXml),
+    ("ЗаписатьXML", BuiltinMethod::XdtoWriteXml),
+    ("WriteXML", BuiltinMethod::XdtoWriteXml),
     // `ЧтениеДанных`/`ЗаписьДанных`/`РезультатЧтенияДанных`. Английские
     // написания ИЗМЕРЕНЫ перебором: каждое вызвано на живом объекте, и
     // отсутствующее имя платформа отличает («Метод объекта не обнаружен»)
@@ -2389,6 +2400,22 @@ pub fn call_builtin_method(
         BuiltinMethod::XdtoSequenceOf => crate::xdto::object_sequence(obj, args),
         BuiltinMethod::XdtoSequenceValue => crate::xdto::sequence_value(obj, args),
         BuiltinMethod::XdtoSequenceProperty => crate::xdto::sequence_property(obj, args),
+        // Оба имени принадлежат ФАБРИКЕ и никому больше: чужой получатель
+        // получает ту же ошибку «метод неприменим», что и всегда.
+        BuiltinMethod::XdtoReadXml if crate::xdto::is_factory(obj) => {
+            crate::xdto::factory_read_xml(obj, args)
+        }
+        BuiltinMethod::XdtoWriteXml if crate::xdto::is_factory(obj) => {
+            crate::xdto::factory_write_xml(obj, args).map(|()| BslValue::Undefined)
+        }
+        BuiltinMethod::XdtoReadXml => Err(RtError::MethodNotApplicable {
+            method: "ПрочитатьXML",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::XdtoWriteXml => Err(RtError::MethodNotApplicable {
+            method: "ЗаписатьXML",
+            receiver: obj.type_name(),
+        }),
     }
 }
 
