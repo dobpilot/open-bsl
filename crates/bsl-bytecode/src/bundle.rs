@@ -473,6 +473,15 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
             write!(dst);
             e.heap_read = true;
         }
+        // Разыменователь ЗАПОМИНАЕТ узел, а дерево не трогает: область
+        // видимости он читает не сейчас, а на каждом
+        // `НайтиURIПространстваИмен`. Поэтому здесь только чтение
+        // регистра и запись назначения — `heap_read` ставить не за что,
+        // как и у `NewMemoryStream`, который тоже лишь берёт чужой `Rc`.
+        Instr::NewDomNsResolver { dst, node } => {
+            read!(node);
+            write!(dst);
+        }
         Instr::NewTypeDescription { dst, names } => {
             read!(names);
             write!(dst);

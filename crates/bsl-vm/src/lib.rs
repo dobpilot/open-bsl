@@ -1144,6 +1144,7 @@ fn step(
             | Instr::NewXmlSchema { .. }
             | Instr::NewXmlSchemaSet { .. }
             | Instr::NewXdtoFactory { .. }
+            | Instr::NewDomNsResolver { .. }
             | Instr::NewXmlExpandedName { .. }
             | Instr::NewXmlWriterSettings { .. }
             | Instr::NewTextWriter { .. }
@@ -1383,6 +1384,13 @@ fn step_cold(
             let factory = BslValue::new_xdto_factory(&set)?;
             let d = frames[frame_idx].reg_index(dst);
             reg_store(stack, d, factory)?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewDomNsResolver { dst, node } => {
+            let node = reg_load(stack, frames[frame_idx].reg_index(node))?;
+            let resolver = bsl_rt::xpath::new_ns_resolver(&node)?;
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, resolver)?;
             frames[frame_idx].pc += 1;
         }
         Instr::NewXmlExpandedName { dst, uri, local } => {

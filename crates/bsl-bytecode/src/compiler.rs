@@ -674,6 +674,12 @@ impl<'a> Compiler<'a> {
                 self.emit(Instr::NewXdtoFactory { dst, schemas: set });
                 self.free_temp(1);
             }
+            RExpr::NewDomNsResolver(node) => {
+                let reg = self.alloc_temp()?;
+                self.compile_expr(node, reg)?;
+                self.emit(Instr::NewDomNsResolver { dst, node: reg });
+                self.free_temp(1);
+            }
             RExpr::NewXmlExpandedName { uri, local } => {
                 let uri_reg = self.alloc_temp()?;
                 self.compile_expr(uri, uri_reg)?;

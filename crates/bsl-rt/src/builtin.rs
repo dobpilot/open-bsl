@@ -787,6 +787,32 @@ pub enum BuiltinMethod {
     /// `ЭлементDOM.УдалитьУзелАтрибута(Атрибут)` -> удалённый атрибут.
     DomRemoveAttributeNode,
 
+    // --- XPath над DOM ---------------------------------------------------
+    // Все семь имён и их английские синонимы ИЗМЕРЕНЫ перебором: у
+    // документа живут три метода, у разыменователя, выражения и
+    // результата — по одному-два. Ни `ВычислитьВыражение`, ни `Evaluate`
+    // у документа, ни `СоздатьРазыменовательПространствИмен` платформа не
+    // знает.
+    /// `ДокументDOM.ВычислитьВыражениеXPath(Выражение, Узел, Разыменователь[, Вид])`.
+    XPathEvaluate,
+    /// `ДокументDOM.СоздатьВыражениеXPath(Выражение, Разыменователь)`.
+    XPathCreateExpression,
+    /// `ДокументDOM.СоздатьРазыменовательПИ([Узел])` — имя именно такое,
+    /// сокращённое: полное `СоздатьРазыменовательПространствИмен`
+    /// платформа отвергает (измерено).
+    XPathCreateNsResolver,
+    /// `РазыменовательПространствИменDOM.НайтиURIПространстваИмен(Префикс)`.
+    XPathLookupNamespaceUri,
+    /// `РезультатXPath.ПолучитьСледующий()` — обход узлов результата.
+    XPathNext,
+    /// `РезультатXPath.ЭлементСнимка(Номер)`.
+    XPathSnapshotItem,
+    /// `ВыражениеXPath.Вычислить(Узел[, Вид])`. Имя совпадает с
+    /// ГЛОБАЛЬНОЙ `Вычислить(Текст)`, но пересечься они не могут:
+    /// глобальную резолвер разбирает голым вызовом, а сюда попадает
+    /// только вызов через точку.
+    XPathEvaluateExpression,
+
     // --- объектная модель XML-схемы ------------------------------------
     /// `ПостроительСхемXML.СоздатьСхемуXML(ДокументDOM | ЭлементDOM)` ->
     /// `СхемаXML` либо `Неопределено`, если корень — не схема.
@@ -1272,6 +1298,33 @@ pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
     ("RemoveAttributeNode", BuiltinMethod::DomRemoveAttributeNode),
     ("СоздатьСхемуXML", BuiltinMethod::CreateXmlSchema),
     ("CreateXMLSchema", BuiltinMethod::CreateXmlSchema),
+    // XPath. Английские написания ИЗМЕРЕНЫ вместе с русскими.
+    ("ВычислитьВыражениеXPath", BuiltinMethod::XPathEvaluate),
+    ("EvaluateXPathExpression", BuiltinMethod::XPathEvaluate),
+    (
+        "СоздатьВыражениеXPath",
+        BuiltinMethod::XPathCreateExpression,
+    ),
+    (
+        "CreateXPathExpression",
+        BuiltinMethod::XPathCreateExpression,
+    ),
+    (
+        "СоздатьРазыменовательПИ",
+        BuiltinMethod::XPathCreateNsResolver,
+    ),
+    ("CreateNSResolver", BuiltinMethod::XPathCreateNsResolver),
+    (
+        "НайтиURIПространстваИмен",
+        BuiltinMethod::XPathLookupNamespaceUri,
+    ),
+    ("LookupNamespaceURI", BuiltinMethod::XPathLookupNamespaceUri),
+    ("ПолучитьСледующий", BuiltinMethod::XPathNext),
+    ("IterateNext", BuiltinMethod::XPathNext),
+    ("ЭлементСнимка", BuiltinMethod::XPathSnapshotItem),
+    ("SnapshotItem", BuiltinMethod::XPathSnapshotItem),
+    ("Вычислить", BuiltinMethod::XPathEvaluateExpression),
+    ("Evaluate", BuiltinMethod::XPathEvaluateExpression),
 ];
 
 impl BuiltinMethod {
@@ -2215,6 +2268,13 @@ pub fn call_builtin_method(
         BuiltinMethod::DomRemoveAttribute => crate::dom::remove_attribute(obj, args),
         BuiltinMethod::DomSetAttributeNode => crate::dom::set_attribute_node(obj, args),
         BuiltinMethod::DomRemoveAttributeNode => crate::dom::remove_attribute_node(obj, args),
+        BuiltinMethod::XPathEvaluate => crate::xpath::evaluate(obj, args),
+        BuiltinMethod::XPathCreateExpression => crate::xpath::create_expression(obj, args),
+        BuiltinMethod::XPathCreateNsResolver => crate::xpath::create_ns_resolver(obj, args),
+        BuiltinMethod::XPathLookupNamespaceUri => crate::xpath::lookup_namespace_uri(obj, args),
+        BuiltinMethod::XPathNext => crate::xpath::next_node(obj, args),
+        BuiltinMethod::XPathSnapshotItem => crate::xpath::snapshot_item(obj, args),
+        BuiltinMethod::XPathEvaluateExpression => crate::xpath::evaluate_expression(obj, args),
         BuiltinMethod::CreateXmlSchema => crate::xsd::create_schema(obj, args),
         BuiltinMethod::WriteXmlDeclaration => {
             crate::xml::write_declaration(obj)?;

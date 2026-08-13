@@ -103,6 +103,22 @@ pub enum TypeId {
     /// Тип ЧЛЕНА перечисления `ТипУзлаDOM` — как `XmlNodeType`.
     DomNodeType,
 
+    // --- XPath над DOM ---------------------------------------------------
+    // У всех трёх представление и имя поиска — РАЗНЫЕ строки, а не одна с
+    // пробелами: `Тип("РезультатXPath")` печатается «Результат DOM XPath»,
+    // `Тип("ВыражениеXPath")` — «Выражение DOM XPath», а
+    // `Тип("РазыменовательПространствИменDOM")` — «Разыменователь
+    // пространств имен DOM XPath» (без «ё», измерено). Поэтому имена
+    // поиска лежат в [`IDENTIFIERS`], как у модели схемы. Английские
+    // написания — `XPathResult`, `XPathExpression`, `DOMNamespaceResolver`;
+    // `РезультатXPathDOM`, `XPathResultType` и `XPathNSResolver` платформа
+    // НЕ знает.
+    XPathResult,
+    XPathExpression,
+    DomNamespaceResolver,
+    /// Тип ЧЛЕНА перечисления `ТипРезультатаDOMXPath` — как `DomNodeType`.
+    DomXPathResultType,
+
     // --- Объектная модель XML-схемы ------------------------------------
     // Написания сняты пробами (`measure-xsd.bsl`) и в двух местах не такие,
     // как подсказала бы аналогия: русского имени `ОпределениеКомплексного\
@@ -334,6 +350,22 @@ const NAMES: &[(TypeId, &str, &str)] = &[
         "DOMElementList",
     ),
     (TypeId::DomNodeType, "ТипУзлаDOM", "DOMNodeType"),
+    (TypeId::XPathResult, "Результат DOM XPath", "XPathResult"),
+    (
+        TypeId::XPathExpression,
+        "Выражение DOM XPath",
+        "XPathExpression",
+    ),
+    (
+        TypeId::DomNamespaceResolver,
+        "Разыменователь пространств имен DOM XPath",
+        "DOMNamespaceResolver",
+    ),
+    (
+        TypeId::DomXPathResultType,
+        "ТипРезультатаDOMXPath",
+        "DOMXPathResultType",
+    ),
     (TypeId::XmlSchema, "Схема XML", "XMLSchema"),
     (TypeId::XmlSchemaSet, "Набор схем XML", "XMLSchemaSet"),
     (
@@ -619,16 +651,24 @@ const DISPLAY: &[(TypeId, &str)] = &[
     (TypeId::FileStream, "Файловый поток"),
 ];
 
-/// Второе русское написание типов модели XML-схемы — ИДЕНТИФИКАТОР.
+/// Второе русское написание — ИДЕНТИФИКАТОР — для типов, у которых
+/// представление и имя в коде не совпадают.
 ///
-/// У них представление и имя, которым тип пишут в коде, — разные строки, а
-/// не одна с пробелами: `Строка(ТипЗнч(Объявление))` даёт «Объявление
-/// элемента XML Schema», но ищется тип как `Тип("ОбъявлениеЭлементаXS")`
-/// (ИЗМЕРЕНО обе стороны). У DOM такого нет — там «Элемент DOM» отличается
-/// от `ЭлементDOM` только пробелом, который поиск и так не считает
-/// значимым. Печатью эта таблица не служит: [`NAMES`] остаётся
-/// единственным источником представлений.
-const XS_IDENTIFIERS: &[(TypeId, &str)] = &[
+/// Так устроена вся модель XML-схемы: `Строка(ТипЗнч(Объявление))` даёт
+/// «Объявление элемента XML Schema», но ищется тип как
+/// `Тип("ОбъявлениеЭлементаXS")` (ИЗМЕРЕНО обе стороны). У DOM такого нет —
+/// там «Элемент DOM» отличается от `ЭлементDOM` только пробелом, который
+/// поиск и так не считает значимым, — а вот у трёх типов XPath снова есть:
+/// `Тип("РезультатXPath")` печатается «Результат DOM XPath». Печатью эта
+/// таблица не служит: [`NAMES`] остаётся единственным источником
+/// представлений.
+const IDENTIFIERS: &[(TypeId, &str)] = &[
+    (TypeId::XPathResult, "РезультатXPath"),
+    (TypeId::XPathExpression, "ВыражениеXPath"),
+    (
+        TypeId::DomNamespaceResolver,
+        "РазыменовательПространствИменDOM",
+    ),
     (TypeId::XsElementDeclaration, "ОбъявлениеЭлементаXS"),
     (TypeId::XsAttributeDeclaration, "ОбъявлениеАтрибутаXS"),
     (TypeId::XsSimpleTypeDefinition, "ОпределениеПростогоТипаXS"),
@@ -713,7 +753,7 @@ impl TypeId {
             .find(|(_, ru, en)| squash(ru) == key || squash(en) == key)
             .map(|(id, _, _)| *id)
             .or_else(|| {
-                XS_IDENTIFIERS
+                IDENTIFIERS
                     .iter()
                     .find(|(_, id_name)| squash(id_name) == key)
                     .map(|(id, _)| *id)

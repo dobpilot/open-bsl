@@ -380,6 +380,43 @@ impl DomNode {
         self.parent.borrow().upgrade()
     }
 
+    /// Доступ для вычислителя XPath (`xpath.rs`). Ему дерево нужно только
+    /// на чтение, и нужно ему то, чего разбору схемы не требовалось: полное
+    /// имя, атрибуты и строковое значение узла. Общее (локальное имя, URI,
+    /// дети, родитель) он берёт теми же `xs_*` — второе имя на тот же
+    /// геттер только развело бы их со временем.
+    pub(crate) fn xp_node_name(&self) -> &str {
+        &self.name
+    }
+
+    pub(crate) fn xp_attributes(&self) -> Vec<Rc<DomNode>> {
+        self.attrs.borrow().clone()
+    }
+
+    /// Объявление ли это пространства имён (`xmlns` либо `xmlns:префикс`).
+    /// В дереве такие объявления — обычные атрибуты (измерено), но на оси
+    /// `attribute::` их у платформы НЕТ: `/*/@*` у корня с двумя
+    /// объявлениями и одним обычным атрибутом отдаёт ровно один узел.
+    pub(crate) fn xp_is_namespace_declaration(&self) -> bool {
+        self.kind == DomKind::Attribute && (self.uri == XMLNS_URI || self.name == "xmlns")
+    }
+
+    /// Строковое значение узла в смысле XPath: у элемента и документа —
+    /// склейка текстовых потомков, у атрибута — его значение, у текста,
+    /// комментария и инструкции обработки — их собственные данные. Всё
+    /// четыре случая измерены (`string(/)`, `string(.)` от атрибута,
+    /// `string(//comment())`, `string(//processing-instruction())`).
+    pub(crate) fn xp_string_value(&self) -> String {
+        match self.kind {
+            DomKind::Document | DomKind::Element => self.text_content(),
+            DomKind::Attribute => self.attr_value(),
+            DomKind::Text | DomKind::CdataSection | DomKind::Comment => {
+                self.value.borrow().clone().unwrap_or_default()
+            }
+            DomKind::ProcessingInstruction => self.value.borrow().clone().unwrap_or_default(),
+        }
+    }
+
     /// Добавить ребёнка, проставив ему родителя и документ.
     fn append(parent: &Rc<DomNode>, child: &Rc<DomNode>, doc: &Rc<DomNode>) {
         *child.parent.borrow_mut() = Rc::downgrade(parent);

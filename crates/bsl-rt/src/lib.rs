@@ -35,6 +35,7 @@ mod vstr;
 mod xdto;
 mod xlsx;
 mod xml;
+pub mod xpath;
 mod xsd;
 mod zip;
 
@@ -193,6 +194,13 @@ pub enum RtError {
     /// какой тот отделён от [`RtError::Xml`]: разрешённая модель типов —
     /// слой поверх лексической модели схемы, и отказы у них разные.
     Xdto(String),
+    /// Выражение XPath над деревом DOM: негодный синтаксис, неизвестная
+    /// функция или ось, неразыменованный префикс, неподходящий контекстный
+    /// узел. Отдельно от [`RtError::Xml`] по той же причине, по какой
+    /// отделены разбор схемы и модель типов: вычислитель выражений — свой
+    /// слой поверх готового дерева, и его отказы не спутать с разбором
+    /// разметки.
+    XPath(String),
     /// `ТекстовыйДокумент`: области макета и его параметры. Отдельно от
     /// [`RtError::Xml`] — слой другой, и по типу ошибки это должно быть
     /// видно.
@@ -290,6 +298,7 @@ impl fmt::Display for RtError {
             RtError::Xml(msg) => write!(f, "{msg}"),
             RtError::Xsd(msg) => write!(f, "{msg}"),
             RtError::Xdto(msg) => write!(f, "{msg}"),
+            RtError::XPath(msg) => write!(f, "{msg}"),
             RtError::TextDoc(msg) => write!(f, "{msg}"),
             RtError::Spread(msg) => write!(f, "{msg}"),
             RtError::Vstr(msg) => write!(f, "{msg}"),
@@ -346,6 +355,7 @@ fn enum_kind_type_id(kind: EnumKind) -> TypeId {
         EnumKind::XsWhitespaceHandling => TypeId::XsWhitespaceHandling,
         EnumKind::XmlForm => TypeId::XmlForm,
         EnumKind::XdtoFacetKind => TypeId::XdtoFacetKind,
+        EnumKind::DomXPathResultType => TypeId::DomXPathResultType,
     }
 }
 
@@ -416,6 +426,11 @@ impl BslValue {
                     crate::dom::DomKind::Comment => "КомментарийDOM",
                     crate::dom::DomKind::ProcessingInstruction => "ИнструкцияОбработкиDOM",
                 },
+                // Имена значений XPath — тоже слитные, а типы у них
+                // печатаются иначе («Результат DOM XPath»), см. `types.rs`.
+                BslObject::XPathResolver(_) => "РазыменовательПространствИменDOM",
+                BslObject::XPathExpression(_) => "ВыражениеXPath",
+                BslObject::XPathResult(_) => "РезультатXPath",
                 BslObject::DomList(kind, _) => match kind {
                     crate::dom::DomListKind::Nodes(_) => "СписокУзловDOM",
                     crate::dom::DomListKind::Attributes(_) => "КоллекцияАтрибутовDOM",
@@ -1251,6 +1266,12 @@ impl BslValue {
                 | BslObject::DomBuilder
                 | BslObject::DomWriter
                 | BslObject::DomNode(..)
+                // Значения XPath отнесены к соседям по DOM: измерено, что
+                // `ЗначениеЗаполнено` от разыменователя, выражения и
+                // результата — ошибка, ровно как от построителя и узла.
+                | BslObject::XPathResolver(_)
+                | BslObject::XPathExpression(_)
+                | BslObject::XPathResult(_)
                 // Модель схемы устроена так же: коллекции судятся по длине
                 // (выше), а компонента, построитель, набор схем и
                 // расширенное имя заполненности не имеют.
@@ -1360,6 +1381,9 @@ impl BslValue {
                     crate::dom::DomKind::Comment => TypeId::DomComment,
                     crate::dom::DomKind::ProcessingInstruction => TypeId::DomProcessingInstruction,
                 },
+                BslObject::XPathResolver(_) => TypeId::DomNamespaceResolver,
+                BslObject::XPathExpression(_) => TypeId::XPathExpression,
+                BslObject::XPathResult(_) => TypeId::XPathResult,
                 BslObject::DomList(kind, _) => match kind {
                     crate::dom::DomListKind::Nodes(_) => TypeId::DomNodeList,
                     crate::dom::DomListKind::Attributes(_) => TypeId::DomAttributeMap,
@@ -2195,6 +2219,13 @@ impl BslValue {
                 BslObject::DomBuilder | BslObject::DomWriter | BslObject::DomNode(..) => {
                     Err(RtError::NotIndexable)
                 }
+                // Результат XPath коллекцией не считается: `Количество()`
+                // у него платформа отвергает (измерено), а число узлов в
+                // снимке отдаёт `РазмерСнимка`. Разыменователь и выражение
+                // — тем более.
+                BslObject::XPathResolver(_)
+                | BslObject::XPathExpression(_)
+                | BslObject::XPathResult(_) => Err(RtError::NotIndexable),
                 // Коллекции модели схемы — настоящие коллекции: и
                 // `Количество()`, и `Для Каждого` по ним измерены; набор
                 // схем тоже обходится (`Для Каждого С Из Наб`).
@@ -2700,6 +2731,7 @@ impl BslValue {
                 BslObject::SpreadDrawing(data, i) => spreadsheet::drawing_property(data, *i, name),
                 BslObject::TextDocParams(_) => textdoc::get_parameter(self, name),
                 BslObject::DomNode(..) => dom::get_property(self, name),
+                BslObject::XPathResult(_) => xpath::get_property(self, name),
                 BslObject::XsComponent(..) | BslObject::XmlExpandedName(_) => {
                     xsd::get_property(self, name)
                 }
@@ -3615,7 +3647,13 @@ impl fmt::Display for BslValue {
                 BslObject::DomBuilder
                 | BslObject::DomWriter
                 | BslObject::DomNode(..)
-                | BslObject::DomList(..) => {
+                | BslObject::DomList(..)
+                // Значения XPath тоже печатаются слитным именем: измерено
+                // на всех трёх («РезультатXPath», «ВыражениеXPath»,
+                // «РазыменовательПространствИменDOM»).
+                | BslObject::XPathResolver(_)
+                | BslObject::XPathExpression(_)
+                | BslObject::XPathResult(_) => {
                     write!(f, "{}", self.type_name())
                 }
                 // Единственный объект, который печатается СОДЕРЖИМЫМ, а не

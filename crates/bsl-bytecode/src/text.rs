@@ -36,7 +36,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 10;
+pub const FORMAT_VERSION: u32 = 11;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -106,6 +106,7 @@ pub const OPCODES: &[&str] = &[
     "NewXmlSchema",
     "NewXmlSchemaSet",
     "NewXdtoFactory",
+    "NewDomNsResolver",
     "NewXmlExpandedName",
     "CollectionLen",
     "Raise",
@@ -490,6 +491,9 @@ fn write_instr(instr: &Instr) -> String {
         Instr::NewXmlSchemaSet { dst } => format!("NewXmlSchemaSet dst={dst}"),
         Instr::NewXdtoFactory { dst, schemas } => {
             format!("NewXdtoFactory dst={dst} schemas={schemas}")
+        }
+        Instr::NewDomNsResolver { dst, node } => {
+            format!("NewDomNsResolver dst={dst} node={node}")
         }
         Instr::NewXmlExpandedName { dst, uri, local } => {
             format!("NewXmlExpandedName dst={dst} uri={uri} local={local}")
@@ -1289,6 +1293,10 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
             dst: dst(&f)?,
             schemas: field_u8(&f, no, "schemas")?,
         },
+        "NewDomNsResolver" => Instr::NewDomNsResolver {
+            dst: dst(&f)?,
+            node: field_u8(&f, no, "node")?,
+        },
         "NewXmlExpandedName" => Instr::NewXmlExpandedName {
             dst: dst(&f)?,
             uri: field_u8(&f, no, "uri")?,
@@ -1458,6 +1466,16 @@ mod tests {
         "набор = Новый НаборСхемXML;\nф = Новый ФабрикаXDTO(набор);\nп = Новый ФабрикаXDTO;\n\
          т = ф.Тип(\"http://www.w3.org/2001/XMLSchema\", \"string\");\nз = ф.Создать(т, \"аб\");\n\
          Попытка\n  г = ФабрикаXDTO;\nИсключение\nКонецПопытки;\n",
+        // XPath над DOM: свой опкод только у конструктора
+        // разыменователя, остальные шесть имён — обычные CallMethod, но
+        // корпус обязан задеть и их.
+        "п = Новый ПостроительDOM;\nч = Новый ЧтениеXML;\nч.УстановитьСтроку(\"<а><б/></а>\");\n\
+         д = п.Прочитать(ч);\nр = Новый РазыменовательПространствИменDOM(д.ЭлементДокумента);\n\
+         у = р.НайтиURIПространстваИмен(\"нет\");\nрез = д.ВычислитьВыражениеXPath(\"//б\", д, р);\n\
+         п1 = рез.ПолучитьСледующий();\nв = д.СоздатьВыражениеXPath(\"count(//*)\", р);\n\
+         сн = д.ВычислитьВыражениеXPath(\"//б\", д, д.СоздатьРазыменовательПИ(),\n\
+         ТипРезультатаDOMXPath.УпорядоченныйСнимокУзлов);\nэс = сн.ЭлементСнимка(0);\n\
+         ч1 = в.Вычислить(д).ЧисловоеЗначение;\n",
         // Динамическое исполнение — обе формы.
         "х = 1;\nВыполнить(\"х = 2\");\nу = Вычислить(\"х + 1\");\n",
         // Переменные уровня модуля: чтение и запись из процедуры.

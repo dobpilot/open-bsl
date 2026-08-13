@@ -143,6 +143,10 @@ pub enum RExpr {
     NewXdtoFactory {
         schemas: Box<RExpr>,
     },
+    /// `Новый РазыменовательПространствИменDOM(Узел)` — ровно один
+    /// аргумент (измерено: без узла платформа конструктор отвергает, в
+    /// отличие от метода документа `СоздатьРазыменовательПИ`).
+    NewDomNsResolver(Box<RExpr>),
     /// `Новый РасширенноеИмяXML(URI, ЛокальноеИмя)` — ровно два аргумента
     /// (измерено: одноаргументную форму платформа отвергает).
     NewXmlExpandedName {
@@ -427,6 +431,7 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
             expr_uses_dynamic(uri) || expr_uses_dynamic(local)
         }
         RExpr::NewXdtoFactory { schemas } => expr_uses_dynamic(schemas),
+        RExpr::NewDomNsResolver(node) => expr_uses_dynamic(node),
         RExpr::NewXmlWriterSettings {
             encoding,
             version,

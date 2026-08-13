@@ -327,6 +327,13 @@ pub const NEW_TYPES: &[&str] = &[
     "DOMDocument",
     "ЗаписьDOM",
     "DOMWriter",
+    // `Новый РазыменовательПространствИменDOM(Узел)` — ИЗМЕРЕНО, что
+    // платформа строит разыменователь и конструктором тоже, но РОВНО с
+    // одним аргументом: без узла (в отличие от метода документа
+    // `СоздатьРазыменовательПИ`) он не создаётся. Английское написание
+    // `DOMNamespaceResolver` тоже измерено.
+    "РазыменовательПространствИменDOM",
+    "DOMNamespaceResolver",
     // Объектная модель XML-схемы. Все написания ИЗМЕРЕНЫ через `Тип(...)`
     // и `Новый`: английские имена у трёх первых есть, а `РасширенноеИмяXML`
     // строится РОВНО двумя аргументами (URI и локальное имя) —
@@ -1026,6 +1033,19 @@ impl<'a> Resolver<'a> {
                 }
                 Ok(RExpr::NewDomDocument)
             }
+            "РАЗЫМЕНОВАТЕЛЬПРОСТРАНСТВИМЕНDOM" | "DOMNAMESPACERESOLVER" =>
+            {
+                if args.len() != 1 {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый РазыменовательПространствИменDOM".to_string(),
+                        expected: 1,
+                        found: args.len(),
+                    });
+                }
+                Ok(RExpr::NewDomNsResolver(Box::new(
+                    self.resolve_expr(&args[0])?,
+                )))
+            }
             "ЗАПИСЬDOM" | "DOMWRITER" => {
                 if !args.is_empty() {
                     return Err(SemaError::ArgumentCountMismatch {
@@ -1301,6 +1321,23 @@ impl<'a> Resolver<'a> {
                     | bsl_rt::BuiltinMethod::DomHasAttribute
                     | bsl_rt::BuiltinMethod::DomGetAttributeNode
                     | bsl_rt::BuiltinMethod::DomGetElementsByName => None,
+                    // XPath. Строго фиксированы три имени: создание
+                    // выражения — ровно два аргумента, поиск URI — один,
+                    // обход — ноль (измерено, что платформа отвергает и
+                    // `СоздатьВыражениеXPath(в)`, и
+                    // `НайтиURIПространстваИмен()`). У вычисления форм две
+                    // (три аргумента и четыре), у создания разыменователя
+                    // — три (ноль, один и два), у `Вычислить` — две (узел
+                    // и узел с видом), у `ЭлементСнимка` имя совпало бы с
+                    // чужим, будь оно у кого-то ещё; всё это решает
+                    // рантайм.
+                    bsl_rt::BuiltinMethod::XPathCreateExpression => Some(2),
+                    bsl_rt::BuiltinMethod::XPathLookupNamespaceUri
+                    | bsl_rt::BuiltinMethod::XPathSnapshotItem => Some(1),
+                    bsl_rt::BuiltinMethod::XPathNext => Some(0),
+                    bsl_rt::BuiltinMethod::XPathEvaluate
+                    | bsl_rt::BuiltinMethod::XPathCreateNsResolver
+                    | bsl_rt::BuiltinMethod::XPathEvaluateExpression => None,
                     bsl_rt::BuiltinMethod::Count
                     | bsl_rt::BuiltinMethod::Clear
                     | bsl_rt::BuiltinMethod::Close => Some(0),

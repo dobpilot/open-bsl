@@ -213,6 +213,23 @@ pub enum EnumValue {
     XsWhitespacePreserve,
     XsWhitespaceReplace,
     XsWhitespaceCollapse,
+
+    // --- ТипРезультатаDOMXPath ---------------------------------------------
+    // Все десять членов и оба их написания ИЗМЕРЕНЫ перебором на 8.3.27:
+    // `МножествоУзлов`, `НаборУзлов`, `Узел`, `Итератор`, `Снимок` и
+    // `NodeSet` платформа НЕ знает, а вот `Любой`/`Any`,
+    // `НеупорядоченныйИтераторУзлов`/`UnorderedNodeIterator` и остальные
+    // восемь — знает.
+    XPathAny,
+    XPathNumber,
+    XPathString,
+    XPathBoolean,
+    XPathUnorderedNodeIterator,
+    XPathOrderedNodeIterator,
+    XPathUnorderedNodeSnapshot,
+    XPathOrderedNodeSnapshot,
+    XPathAnyUnorderedNode,
+    XPathFirstOrderedNode,
 }
 
 /// К какому перечислению принадлежит член — это же имя стоит слева от
@@ -288,6 +305,11 @@ pub enum EnumKind {
     /// представлением «Минимальная длина» имя `МинДлина`, а
     /// `МинимальнаяДлина` платформа отвергает.
     XdtoFacetKind,
+    /// `ТипРезультатаDOMXPath` — вид результата `ВычислитьВыражениеXPath`;
+    /// его же принимает необязательный четвёртый аргумент. Английское
+    /// написание `DOMXPathResultType` ИЗМЕРЕНО (`XPathResultType` и
+    /// `ТипРезультатаXPathDOM` платформа не знает).
+    DomXPathResultType,
 }
 
 impl EnumKind {
@@ -323,6 +345,7 @@ impl EnumKind {
             }
             EnumKind::XmlForm => ("ФормаXML", "XMLForm"),
             EnumKind::XdtoFacetKind => ("ВидФасетаXDTO", "XDTOFacetType"),
+            EnumKind::DomXPathResultType => ("ТипРезультатаDOMXPath", "DOMXPathResultType"),
         }
     }
 
@@ -366,6 +389,10 @@ impl EnumKind {
             EnumKind::XsWhitespaceHandling => "ПеречислениеОбработкаПробельныхСимволовXS",
             EnumKind::XmlForm => "ПеречислениеФормаXML",
             EnumKind::XdtoFacetKind => "ПеречислениеВидФасетаXDTO",
+            // ИЗМЕРЕНО, а не достроено по образцу: `Строка(ТипРезультатаDOMXPath)`
+            // и `Строка(ТипЗнч(ТипРезультатаDOMXPath))` оба дают
+            // «ПеречислениеТипРезультатаDOMXPath».
+            EnumKind::DomXPathResultType => "ПеречислениеТипРезультатаDOMXPath",
         }
     }
 
@@ -1353,6 +1380,81 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "MaxExclusive",
         "Максимальное исключающее значение",
     ),
+    // ТипРезультатаDOMXPath. Пятая колонка измерена целиком: шесть узловых
+    // членов печатаются человеческим текстом («Неупорядоченный итератор
+    // узлов»), а четыре простых — как пишутся. Английские написания
+    // измерены перебором: `ТипРезультатаDOMXPath.Any` и остальные девять
+    // платформа принимает и считает равными русским.
+    (
+        EnumKind::DomXPathResultType,
+        EnumValue::XPathAny,
+        "Любой",
+        "Any",
+        "Любой",
+    ),
+    (
+        EnumKind::DomXPathResultType,
+        EnumValue::XPathNumber,
+        "Число",
+        "Number",
+        "Число",
+    ),
+    (
+        EnumKind::DomXPathResultType,
+        EnumValue::XPathString,
+        "Строка",
+        "String",
+        "Строка",
+    ),
+    (
+        EnumKind::DomXPathResultType,
+        EnumValue::XPathBoolean,
+        "Булево",
+        "Boolean",
+        "Булево",
+    ),
+    (
+        EnumKind::DomXPathResultType,
+        EnumValue::XPathUnorderedNodeIterator,
+        "НеупорядоченныйИтераторУзлов",
+        "UnorderedNodeIterator",
+        "Неупорядоченный итератор узлов",
+    ),
+    (
+        EnumKind::DomXPathResultType,
+        EnumValue::XPathOrderedNodeIterator,
+        "УпорядоченныйИтераторУзлов",
+        "OrderedNodeIterator",
+        "Упорядоченный итератор узлов",
+    ),
+    (
+        EnumKind::DomXPathResultType,
+        EnumValue::XPathUnorderedNodeSnapshot,
+        "НеупорядоченныйСнимокУзлов",
+        "UnorderedNodeSnapshot",
+        "Неупорядоченный снимок узлов",
+    ),
+    (
+        EnumKind::DomXPathResultType,
+        EnumValue::XPathOrderedNodeSnapshot,
+        "УпорядоченныйСнимокУзлов",
+        "OrderedNodeSnapshot",
+        "Упорядоченный снимок узлов",
+    ),
+    (
+        EnumKind::DomXPathResultType,
+        EnumValue::XPathAnyUnorderedNode,
+        "ЛюбойНеупорядоченныйУзел",
+        "AnyUnorderedNode",
+        "Любой неупорядоченный узел",
+    ),
+    (
+        EnumKind::DomXPathResultType,
+        EnumValue::XPathFirstOrderedNode,
+        "ПервыйУпорядоченныйУзел",
+        "FirstOrderedNode",
+        "Первый упорядоченный узел",
+    ),
 ];
 
 /// Имена всех перечислений — для автодополнения REPL и для резолвера,
@@ -1403,6 +1505,8 @@ pub const ENUM_NAMES: &[(&str, EnumKind)] = &[
     ("XMLForm", EnumKind::XmlForm),
     ("ВидФасетаXDTO", EnumKind::XdtoFacetKind),
     ("XDTOFacetType", EnumKind::XdtoFacetKind),
+    ("ТипРезультатаDOMXPath", EnumKind::DomXPathResultType),
+    ("DOMXPathResultType", EnumKind::DomXPathResultType),
 ];
 
 /// Перечисление по имени слева от точки. Регистронезависимо и на обоих
