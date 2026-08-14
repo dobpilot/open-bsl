@@ -92,7 +92,7 @@ pub use textdoc::{
 };
 pub use types::TypeId;
 pub use vstr::{value_from_string_internal, value_to_string_internal};
-pub use zip::{new_archive_reader, ArchiveKind, ArchiveState};
+pub use zip::{new_archive_reader, new_archive_writer, ArchiveKind, ArchiveState, WriterState};
 // Модель типов XDTO наружу крейта нужна целиком: строит её фабрика,
 // которой в этой реализации ещё нет, а до тех пор единственный её
 // потребитель — собственные тесты модуля.
@@ -381,6 +381,12 @@ fn enum_kind_type_id(kind: EnumKind) -> TypeId {
         EnumKind::SearchDirection => TypeId::SearchDirection,
         EnumKind::ZipRestorePathsMode => TypeId::ZipRestorePathsMode,
         EnumKind::ArchiveFileType => TypeId::ArchiveFileType,
+        EnumKind::ZipCompressionMethod => TypeId::ZipCompressionMethod,
+        EnumKind::ZipCompressionLevel => TypeId::ZipCompressionLevel,
+        EnumKind::ZipStorePathMode => TypeId::ZipStorePathMode,
+        EnumKind::ZipSubDirProcessingMode => TypeId::ZipSubDirProcessingMode,
+        EnumKind::ZipEncryptionMethod => TypeId::ZipEncryptionMethod,
+        EnumKind::ZipFileNamesEncoding => TypeId::ZipFileNamesEncoding,
     }
 }
 
@@ -509,6 +515,8 @@ impl BslValue {
                 BslObject::ArchiveReader(zip::ArchiveKind::Archive, _) => "ЧтениеФайлаАрхива",
                 BslObject::ArchiveEntries(zip::ArchiveKind::Archive, _) => "ЭлементыФайлаАрхива",
                 BslObject::ArchiveEntry(zip::ArchiveKind::Archive, ..) => "ЭлементФайлаАрхива",
+                BslObject::ArchiveWriter(zip::ArchiveKind::Zip, _) => "ЗаписьZipФайла",
+                BslObject::ArchiveWriter(zip::ArchiveKind::Archive, _) => "ЗаписьФайлаАрхива",
                 // Имена ЗНАЧЕНИЙ у потоков — слитные и РАЗНЫЕ, в отличие от
                 // имени их типа, которое у обоих одно («Файловый поток»,
                 // см. `types.rs`). Измерено обеими сторонами.
@@ -1305,12 +1313,20 @@ impl BslValue {
                 // Читатель, писатель и результат чтения ведут себя так же —
                 // измерено на каждом из трёх отдельной пробой.
                 //
+                // Писатель архива — туда же, и это ИЗМЕРЕНО отдельно от
+                // читателя, потому что ответы у них РАЗНЫЕ:
+                // `ЗначениеЗаполнено(Новый ЧтениеZipФайла(файл))` — «Да», а
+                // от `Новый ЗаписьZipФайла(файл)` платформа отвечает
+                // ошибкой «Проверка мутабельных значений на заполненность
+                // не поддерживается».
+                //
                 // Построитель DOM и любой узел дерева ведут себя так же —
                 // измерено на построителе, документе и элементе: у всех
                 // трёх `ЗначениеЗаполнено` даёт ошибку, а не «Да».
                 BslObject::MemoryStream(..)
                 | BslObject::FileStream(..)
                 | BslObject::FileStreamsManager
+                | BslObject::ArchiveWriter(..)
                 | BslObject::DataReader(..)
                 | BslObject::DataWriter(..)
                 | BslObject::DataReadResult(..)
@@ -1436,6 +1452,8 @@ impl BslValue {
                     TypeId::ArchiveFileEntries
                 }
                 BslObject::ArchiveEntry(zip::ArchiveKind::Archive, ..) => TypeId::ArchiveFileEntry,
+                BslObject::ArchiveWriter(zip::ArchiveKind::Zip, _) => TypeId::ZipFileWriter,
+                BslObject::ArchiveWriter(zip::ArchiveKind::Archive, _) => TypeId::ArchiveFileWriter,
                 BslObject::MemoryStream(..) => TypeId::MemoryStream,
                 BslObject::FileStream(..) => TypeId::FileStream,
                 BslObject::FileStreamsManager => TypeId::FileStreamsManager,
@@ -2410,6 +2428,7 @@ impl BslValue {
                 | BslObject::TextDocParams(..)
                 | BslObject::ArchiveReader(..)
                 | BslObject::ArchiveEntry(..)
+                | BslObject::ArchiveWriter(..)
                 // Число байтов потока отдаёт МЕТОД `Размер()`, а
                 // `Количество()` платформа отвергает и на потоке, и на
                 // менеджере — измерено на обоих. `Для Каждого` по ним
@@ -3851,7 +3870,8 @@ impl fmt::Display for BslValue {
                 BslObject::TextDocParams(_) => write!(f, "ПараметрыМакетаТекстовогоДокумента"),
                 BslObject::ArchiveReader(..)
                 | BslObject::ArchiveEntries(..)
-                | BslObject::ArchiveEntry(..) => write!(f, "{}", self.type_name()),
+                | BslObject::ArchiveEntry(..)
+                | BslObject::ArchiveWriter(..) => write!(f, "{}", self.type_name()),
                 // Потоки печатаются ИМЕНЕМ ЗНАЧЕНИЯ, и закрытие его не
                 // меняет: `Строка(Зкр)` после `Закрыть()` — по-прежнему
                 // «ПотокВПамяти» (измерено).

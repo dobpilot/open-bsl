@@ -1595,6 +1595,910 @@ fn relative_path(item: &ArchiveItem) -> std::path::PathBuf {
     path
 }
 
+// --------------------------------------------------------------------------
+// Писатель встроенного языка
+// --------------------------------------------------------------------------
+
+/// Куда писатель денет архив по `Записать()`.
+///
+/// Цель ЛЕНИВА: измерено, что после `Новый ЗаписьZipФайла(имя)` файла ещё
+/// нет и появляется он только на `Записать()`, а несуществующий каталог
+/// платформа не заводит, а объявляет ошибкой («Каталог не обнаружен»).
+enum WriteTarget {
+    /// Имя файла. Существующий файл перезаписывается (измерено на цели,
+    /// в которой лежал посторонний текст).
+    File(std::path::PathBuf),
+    /// Поток. `Записать()` его НЕ закрывает — измерено: после `Записать`
+    /// ручной `Закрыть` потока проходит.
+    Stream(BslValue),
+}
+
+/// Способ сжатия из `МетодСжатияZIP`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum WriteMethod {
+    /// `Сжатие` / `Deflate` — способ хранения 8, умолчание конструктора.
+    #[default]
+    Deflate,
+    /// `Копирование` / `Copy` — способ хранения 0, данные как есть
+    /// (измерено: `сжат` совпадает с `разм` до байта).
+    Stored,
+}
+
+/// Режим сохранения путей (`РежимСохраненияПутейZIP`).
+///
+/// Умолчание ИЗМЕРЕНО и оно неочевидно: пропущенный аргумент ведёт себя как
+/// `НеСохранятьПути`, а не как `СохранятьОтносительныеПути`. На одном и том
+/// же дереве `Добавить(маска, , Рекурсивно)` даёт плоские `f1.txt`,
+/// `f2.txt`, а `Добавить(маска, СохранятьОтносительныеПути, Рекурсивно)` —
+/// `a/f1.txt`, `a/b/f2.txt`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PathMode {
+    /// Путь относительно каталога маски.
+    Relative,
+    /// Полный путь без ведущего слэша (измерено: `/tmp/x/f.txt` ложится
+    /// как `tmp/x/f.txt`).
+    Full,
+    /// Только имя файла.
+    Flat,
+}
+
+/// Режим обхода подкаталогов (`РежимОбработкиПодкаталоговZIP`).
+/// Умолчание — `НеОбрабатывать` (измерено).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SubdirMode {
+    Skip,
+    Recurse,
+}
+
+/// Запись, накопленная `Добавить` и ещё не выложенная в архив.
+///
+/// Данные сжимаются сразу в `Добавить`, а не в `Записать`: у платформы
+/// `Добавить` тоже читает файл немедленно — она отвечает «Файл не
+/// обнаружен» в момент вызова, а не при записи архива.
+struct PendingEntry {
+    /// Имя в архиве: прямые слэши, у каталога — слэш на конце.
+    name: String,
+    packed: Vec<u8>,
+    method: u16,
+    raw_len: u32,
+    crc: u32,
+    /// Время и дата MS-DOS из времени изменения исходного файла.
+    time: u16,
+    date: u16,
+    /// Запись-каталог: данных нет, а внешние атрибуты помечают её каталогом.
+    directory: bool,
+}
+
+/// Состояние писателя — `ЗаписьZipФайла` либо `ЗаписьФайлаАрхива`.
+///
+/// Отличий от читателя два, и оба измерены. Во-первых, «открыт» здесь
+/// значит «есть цель»: `ПолучитьДвоичныеДанные()` на писателе с целью
+/// отвечает «Архив уже открыт!», а `Записать()` на писателе без цели —
+/// «Архив не открыт!». Во-вторых, `Записать()` не только выкладывает
+/// архив, но и ОЧИЩАЕТ накопленное: после него тот же файл добавляется
+/// повторно без ошибки о дубле, а `ПолучитьДвоичныеДанные()` отдаёт архив
+/// только из того, что добавлено после.
+#[derive(Default)]
+pub struct WriterState {
+    target: Option<WriteTarget>,
+    method: WriteMethod,
+    comment: String,
+    entries: Vec<PendingEntry>,
+    /// Имена, ПО КОТОРЫМ проверяется уникальность, — до подстановки полного
+    /// пути пустому имени (см. [`plan_name`]). Именно поэтому два пустых
+    /// каталога в плоском режиме сталкиваются друг с другом, хотя в архив
+    /// легли бы с разными полными путями.
+    used: Vec<String>,
+}
+
+impl std::fmt::Debug for WriterState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WriterState")
+            .field("open", &self.target.is_some())
+            .field("method", &self.method)
+            .field("entries", &self.entries.len())
+            .finish()
+    }
+}
+
+/// Состояние писателя за значением.
+fn writer_state<'a>(v: &'a BslValue, op: &'static str) -> RtResult<&'a Rc<RefCell<WriterState>>> {
+    match v {
+        BslValue::Object(o) => match &**o {
+            BslObject::ArchiveWriter(_, s) => Ok(s),
+            _ => Err(RtError::MethodNotApplicable {
+                method: op,
+                receiver: v.type_name(),
+            }),
+        },
+        _ => Err(RtError::MethodNotApplicable {
+            method: op,
+            receiver: v.type_name(),
+        }),
+    }
+}
+
+/// Тег писателя: он решает, какой у конструктора и у `Открыть` хвост
+/// аргументов.
+fn writer_kind(v: &BslValue) -> RtResult<ArchiveKind> {
+    match v {
+        BslValue::Object(o) => match &**o {
+            BslObject::ArchiveWriter(kind, _) => Ok(*kind),
+            _ => Err(RtError::NotAnObject),
+        },
+        _ => Err(RtError::NotAnObject),
+    }
+}
+
+/// Объект записи ли это (`ЗаписьZipФайла` либо `ЗаписьФайлаАрхива`).
+pub fn is_writer(v: &BslValue) -> bool {
+    matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::ArchiveWriter(..)))
+}
+
+/// `Новый ЗаписьZipФайла([Файл][, Пароль][, Комментарий][, МетодСжатия]
+/// [, УровеньСжатия][, МетодШифрования][, КодировкаИмён])` и
+/// `Новый ЗаписьФайлаАрхива([Файл][, Пароль][, ТипФайлаАрхива]
+/// [, Комментарий][, ...])`.
+///
+/// Хвосты у двух типов РАЗНЫЕ, и это измерено по одному аргументу: у
+/// zip-варианта третий — комментарий (строка проходит и оказывается
+/// комментарием архива), у архивного третий — `ТипФайлаАрхива` (строка,
+/// число, булево и члены остальных перечислений отвергаются с
+/// «Несоответствие типов (параметр номер '3')»), а комментарий у него
+/// четвёртый. Восьмой аргумент оба встречают «Конструктор не найден».
+///
+/// # Errors
+///
+/// [`RtError::Zip`] на непустом пароле, на любом методе шифрования, на
+/// методе сжатия BZIP2 и на формате архива, кроме ZIP: всё это платформа
+/// умеет, а здесь честный отказ вместо тихой подмены;
+/// [`RtError::TypeError`], если аргумент не того типа.
+pub fn new_archive_writer(zip: bool, args: &[BslValue]) -> RtResult<BslValue> {
+    let kind = if zip {
+        ArchiveKind::Zip
+    } else {
+        ArchiveKind::Archive
+    };
+    let state = Rc::new(RefCell::new(WriterState::default()));
+    configure(kind, &state, args, "ЗаписьZipФайла")?;
+    Ok(BslValue::Object(Rc::new(BslObject::ArchiveWriter(
+        kind, state,
+    ))))
+}
+
+/// `Открыть(Файл[, ...])` у писателя — те же аргументы, что у его
+/// конструктора.
+///
+/// # Errors
+///
+/// [`RtError::Zip`], если архив уже открыт (измерено: «Архив уже открыт!:
+/// <путь>») либо если запрошено неподдержанное; [`RtError::TypeError`] на
+/// аргументе не того типа.
+pub fn writer_open(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+    let kind = writer_kind(obj)?;
+    let state = writer_state(obj, "Открыть")?.clone();
+    if args.is_empty() {
+        return Err(RtError::MethodNotApplicable {
+            method: "Открыть",
+            receiver: obj.type_name(),
+        });
+    }
+    if state.borrow().target.is_some() {
+        return Err(zip_err("архив уже открыт"));
+    }
+    configure(kind, &state, args, "Открыть")
+}
+
+/// Разобрать общий для конструктора и `Открыть` список аргументов.
+fn configure(
+    kind: ArchiveKind,
+    state: &Rc<RefCell<WriterState>>,
+    args: &[BslValue],
+    op: &'static str,
+) -> RtResult<()> {
+    let arg = |i: usize| args.get(i).unwrap_or(&BslValue::Undefined);
+    let target = write_target(arg(0), op)?;
+    check_password(arg(1))?;
+
+    let (comment, method) = match kind {
+        // `ЗаписьZipФайла`: комментарий, метод, уровень, шифрование,
+        // кодировка имён.
+        ArchiveKind::Zip => {
+            let comment = optional_text(arg(2), op)?;
+            let method = write_method(arg(3), op)?;
+            check_level(arg(4), op)?;
+            check_encryption(arg(5), op)?;
+            check_names_encoding(arg(6), op)?;
+            (comment, method)
+        }
+        // `ЗаписьФайлаАрхива`: тип архива, комментарий — и хвост, о котором
+        // замер говорит только одно: платформа отвергает там всё, что можно
+        // построить. `НЕ ИЗМЕРЕНО(ZIP.WRITER.TAIL)`
+        ArchiveKind::Archive => {
+            check_archive_type(arg(2))?;
+            let comment = optional_text(arg(3), op)?;
+            for (i, value) in args.iter().enumerate().skip(4) {
+                if !matches!(value, BslValue::Undefined) {
+                    return Err(RtError::TypeError {
+                        expected: "Неопределено",
+                        op: match i {
+                            4 => "ЗаписьФайлаАрхива (аргумент 5)",
+                            5 => "ЗаписьФайлаАрхива (аргумент 6)",
+                            _ => "ЗаписьФайлаАрхива (аргумент 7)",
+                        },
+                    });
+                }
+            }
+            (comment, WriteMethod::Deflate)
+        }
+    };
+
+    let mut state = state.borrow_mut();
+    state.target = target;
+    state.method = method;
+    state.comment = comment;
+    Ok(())
+}
+
+/// Первый аргумент: имя файла, поток либо ничего.
+///
+/// `ДвоичныеДанные` платформа НЕ принимает (измерено: «Несоответствие типов
+/// (параметр номер '1') (Некорректное имя файла)»), пустую строку — тоже
+/// («Некорректное имя файла»).
+fn write_target(source: &BslValue, op: &'static str) -> RtResult<Option<WriteTarget>> {
+    match source {
+        BslValue::Undefined => Ok(None),
+        BslValue::Str(s) => {
+            let path = s.to_string();
+            if path.is_empty() {
+                return Err(zip_err("некорректное имя файла"));
+            }
+            Ok(Some(WriteTarget::File(std::path::PathBuf::from(path))))
+        }
+        _ if crate::stream::is_stream(source) => Ok(Some(WriteTarget::Stream(source.clone()))),
+        _ => Err(RtError::TypeError {
+            expected: "Строка или Поток",
+            op,
+        }),
+    }
+}
+
+/// Пароль. Шифрования здесь нет ни одного вида, поэтому непустой пароль —
+/// отказ, а не молчаливо НЕзашифрованный архив: платформа с паролем пишет
+/// архив, у которого `Зашифрован` = «Да» (измерено), и отдать вместо него
+/// открытые данные было бы худшим из возможных ответов.
+fn check_password(password: &BslValue) -> RtResult<()> {
+    match password {
+        BslValue::Undefined => Ok(()),
+        BslValue::Str(s) if s.to_string().is_empty() => Ok(()),
+        BslValue::Str(_) => Err(zip_err(
+            "шифрование архива не поддерживается: уберите пароль",
+        )),
+        _ => Err(RtError::TypeError {
+            expected: "Строка",
+            op: "Пароль",
+        }),
+    }
+}
+
+/// Необязательный строковый аргумент — у обоих писателей это комментарий
+/// архива, только на разных местах.
+fn optional_text(value: &BslValue, op: &'static str) -> RtResult<String> {
+    match value {
+        BslValue::Undefined => Ok(String::new()),
+        BslValue::Str(s) => Ok(s.to_string()),
+        _ => Err(RtError::TypeError {
+            expected: "Строка",
+            op,
+        }),
+    }
+}
+
+/// `МетодСжатияZIP`. BZIP2 платформа умеет (измерено: 25 байт данных легли
+/// в 60), а здесь его нет — честный отказ.
+fn write_method(value: &BslValue, op: &'static str) -> RtResult<WriteMethod> {
+    match value {
+        BslValue::Undefined => Ok(WriteMethod::Deflate),
+        BslValue::Enum(crate::EnumValue::ZipMethodDeflate) => Ok(WriteMethod::Deflate),
+        BslValue::Enum(crate::EnumValue::ZipMethodCopy) => Ok(WriteMethod::Stored),
+        BslValue::Enum(crate::EnumValue::ZipMethodBzip2) => Err(zip_err(
+            "метод сжатия BZIP2 не поддерживается, доступны «Сжатие» и «Копирование»",
+        )),
+        _ => Err(RtError::TypeError {
+            expected: "МетодСжатияZIP",
+            op,
+        }),
+    }
+}
+
+/// `УровеньСжатияZIP` принимается и на байты НЕ влияет.
+///
+/// Уровни у платформы различимы, и разница измерена на 19297 байтах:
+/// `Минимальный` — 623 байта, `Оптимальный` — 628, `Максимальный` — 633
+/// (да, именно в таком порядке). Здесь deflate один — LZ77 с
+/// фиксированными кодами Хаффмана (см. [`crate::deflate`]), — поэтому все
+/// три уровня дают одни и те же байты. Совместимости это не касается:
+/// уровень не записывается в формат и на распаковку не влияет.
+fn check_level(value: &BslValue, op: &'static str) -> RtResult<()> {
+    match value {
+        BslValue::Undefined => Ok(()),
+        BslValue::Enum(e) if e.kind() == crate::EnumKind::ZipCompressionLevel => Ok(()),
+        _ => Err(RtError::TypeError {
+            expected: "УровеньСжатияZIP",
+            op,
+        }),
+    }
+}
+
+/// `МетодШифрованияZIP` — любой означает шифрование, которого здесь нет.
+fn check_encryption(value: &BslValue, op: &'static str) -> RtResult<()> {
+    match value {
+        BslValue::Undefined => Ok(()),
+        BslValue::Enum(e) if e.kind() == crate::EnumKind::ZipEncryptionMethod => Err(zip_err(
+            &format!("шифрование «{}» не поддерживается", e.display_text()),
+        )),
+        _ => Err(RtError::TypeError {
+            expected: "МетодШифрованияZIP",
+            op,
+        }),
+    }
+}
+
+/// `КодировкаИменФайловВZipФайле`. Имена здесь всегда UTF-8 с битом 11 —
+/// ровно то, что платформа пишет и по умолчанию (`Авто`), и по явному
+/// `UTF8`: в её собственном архиве имя записи лежит в UTF-8, флаг 0x0800
+/// выставлен.
+fn check_names_encoding(value: &BslValue, op: &'static str) -> RtResult<()> {
+    match value {
+        BslValue::Undefined => Ok(()),
+        BslValue::Enum(e) if e.kind() == crate::EnumKind::ZipFileNamesEncoding => Ok(()),
+        _ => Err(RtError::TypeError {
+            expected: "КодировкаИменФайловВZipФайле",
+            op,
+        }),
+    }
+}
+
+/// `Добавить(Путь[, РежимСохраненияПутей][, РежимОбработкиПодкаталогов])`.
+///
+/// Арность ИЗМЕРЕНА: четвёртый аргумент — «Слишком много фактических
+/// параметров». Пропущенные режимы — не `Неопределено`: переданное
+/// `Неопределено` платформа отвергает («Несоответствие типов (параметр
+/// номер '2')»), а пропуск означает `НеСохранятьПути` и
+/// `НеОбрабатывать`.
+///
+/// # Errors
+///
+/// [`RtError::Zip`], если файла или каталога маски нет, если имя в архиве
+/// уже занято (измерено: «Файл с таким именем в архиве уже существует») или
+/// если файл не читается; [`RtError::TypeError`] на режиме не того типа.
+pub fn writer_add(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+    let state = writer_state(obj, "Добавить")?;
+    let (path, mode, subdirs) = match args {
+        [path] => (path, None, None),
+        [path, mode] => (path, Some(mode), None),
+        [path, mode, subdirs] => (path, Some(mode), Some(subdirs)),
+        _ => {
+            return Err(RtError::MethodNotApplicable {
+                method: "Добавить",
+                receiver: obj.type_name(),
+            })
+        }
+    };
+    let path = add_path(path)?;
+    let mode = path_mode(mode)?;
+    let subdirs = subdir_mode(subdirs)?;
+    let mut state = state.borrow_mut();
+    add_by_pattern(&mut state, &path, mode, subdirs)
+}
+
+/// Путь или маска первым аргументом `Добавить`.
+///
+/// Строгой типизации здесь у платформы НЕТ: `Добавить(1)` она встречает не
+/// «Несоответствием типов», а «Файл не обнаружен '1'» — то есть число
+/// становится именем. Пустая строка и `Неопределено` — «Некорректное имя
+/// файла».
+fn add_path(value: &BslValue) -> RtResult<String> {
+    let text = match value {
+        BslValue::Str(s) => s.to_string(),
+        BslValue::Number(n) => n.to_string(),
+        _ => return Err(zip_err("некорректное имя файла")),
+    };
+    if text.is_empty() {
+        return Err(zip_err("некорректное имя файла"));
+    }
+    Ok(text)
+}
+
+/// Второй аргумент `Добавить`.
+fn path_mode(mode: Option<&BslValue>) -> RtResult<PathMode> {
+    match mode {
+        None => Ok(PathMode::Flat),
+        Some(BslValue::Enum(crate::EnumValue::ZipStoreRelativePath)) => Ok(PathMode::Relative),
+        Some(BslValue::Enum(crate::EnumValue::ZipStoreFullPath)) => Ok(PathMode::Full),
+        Some(BslValue::Enum(crate::EnumValue::ZipDontStorePath)) => Ok(PathMode::Flat),
+        Some(_) => Err(RtError::TypeError {
+            expected: "РежимСохраненияПутейZIP",
+            op: "Добавить",
+        }),
+    }
+}
+
+/// Третий аргумент `Добавить`.
+fn subdir_mode(mode: Option<&BslValue>) -> RtResult<SubdirMode> {
+    match mode {
+        None => Ok(SubdirMode::Skip),
+        Some(BslValue::Enum(crate::EnumValue::ZipDontProcessSubdirs)) => Ok(SubdirMode::Skip),
+        Some(BslValue::Enum(crate::EnumValue::ZipProcessSubdirsRecursively)) => {
+            Ok(SubdirMode::Recurse)
+        }
+        Some(_) => Err(RtError::TypeError {
+            expected: "РежимОбработкиПодкаталоговZIP",
+            op: "Добавить",
+        }),
+    }
+}
+
+/// Маска ли это — знаки `*` и `?` ищутся только в ПОСЛЕДНЕЙ компоненте.
+///
+/// ИЗМЕРЕНО, что маска в середине пути маской не считается:
+/// `Добавить("/т/*/*.txt")` не находит ничего (и кладёт запись-каталог
+/// самого `/т/`), а `Добавить("/т/по?/вложенный.txt")` отвечает «Файл не
+/// обнаружен» с этим самым путём, знаки вопроса и всё.
+fn split_pattern(path: &str) -> (String, String) {
+    // Обратный слэш считается разделителем, как и у читателя, где это
+    // измерено на именах записей. Побочное следствие: файл, в имени
+    // которого на этой файловой системе законно стоит `\`, ляжет в архив
+    // под именем после последнего такого знака.
+    let normalized = path.replace('\\', "/");
+    match normalized.rfind('/') {
+        Some(at) => (
+            normalized[..at + 1].to_string(),
+            normalized[at + 1..].to_string(),
+        ),
+        None => (String::new(), normalized),
+    }
+}
+
+/// Совпадение имени с маской `*`/`?`.
+///
+/// Сравнение с учётом регистра: на этой платформе имена файлов
+/// регистрозависимы, и маска `*.txt` файла `ВЕРХ.TXT` не находит
+/// (измерено).
+fn mask_matches(mask: &str, name: &str) -> bool {
+    let mask: Vec<char> = mask.chars().collect();
+    let name: Vec<char> = name.chars().collect();
+    // Классический двухуказательный разбор со звёздочкой-точкой возврата:
+    // рекурсия по маске из чужого ввода могла бы уйти сколь угодно глубоко.
+    let (mut m, mut n) = (0usize, 0usize);
+    let (mut star, mut back) = (usize::MAX, 0usize);
+    while n < name.len() {
+        if m < mask.len() && (mask[m] == '?' || mask[m] == name[n]) {
+            m += 1;
+            n += 1;
+        } else if m < mask.len() && mask[m] == '*' {
+            star = m;
+            back = n;
+            m += 1;
+        } else if star != usize::MAX {
+            back += 1;
+            m = star + 1;
+            n = back;
+        } else {
+            return false;
+        }
+    }
+    while m < mask.len() && mask[m] == '*' {
+        m += 1;
+    }
+    m == mask.len()
+}
+
+/// Разложить `Добавить` на записи и сложить их в состояние.
+fn add_by_pattern(
+    state: &mut WriterState,
+    path: &str,
+    mode: PathMode,
+    subdirs: SubdirMode,
+) -> RtResult<()> {
+    let (base, mut pattern) = split_pattern(path);
+    // Слэш на конце — это ИЗМЕРЕННОЕ сокращение для `<каталог>/*`:
+    // `Добавить("/т/под/")` кладёт ровно то же, что `Добавить("/т/под/*")`,
+    // тогда как тот же каталог, названный без слэша, платформа молча
+    // пропускает. Разбор оставил здесь пустую маску, поэтому подставляем
+    // всесовпадающую и уходим в общую ветку маски — с тем же базовым
+    // каталогом и тем же режимом подкаталогов.
+    if pattern.is_empty()
+        && (path.ends_with('/') || path.ends_with('\\'))
+        && std::fs::metadata(&base).is_ok_and(|meta| meta.is_dir())
+    {
+        pattern = "*".to_string();
+    }
+    if !pattern.contains('*') && !pattern.contains('?') {
+        // Не маска, а имя. Каталог по такому имени платформа молча
+        // пропускает: `Добавить("/т/под")` — «прошло» и ноль записей, даже
+        // с рекурсией.
+        let full = std::path::PathBuf::from(path);
+        let meta = std::fs::metadata(&full)
+            .map_err(|_| zip_err(&format!("файл не обнаружен «{path}»")))?;
+        if meta.is_dir() {
+            return Ok(());
+        }
+        let name = plan_name(mode, &pattern, &pattern, path, false);
+        return add_file(state, &full, name, &meta);
+    }
+
+    let dir = if base.is_empty() {
+        std::path::PathBuf::from(".")
+    } else {
+        std::path::PathBuf::from(&base)
+    };
+    let meta = std::fs::metadata(&dir).map_err(|_| {
+        // Платформа называет в этой ошибке каталог со слэшем, а не всю
+        // маску (измерено).
+        zip_err(&format!("файл не обнаружен «{base}»"))
+    })?;
+    if !meta.is_dir() {
+        return Err(zip_err(&format!("файл не обнаружен «{base}»")));
+    }
+    walk_dir(state, &dir, &base, "", &pattern, mode, subdirs, true)
+}
+
+/// Обойти один каталог: файлы по маске, подкаталоги — вглубь на месте.
+///
+/// Порядок обхода — тот, что отдаёт файловая система, и это ИЗМЕРЕНО: на
+/// каталоге, где `ls -U` показывает `данные.dat`, `файл2.txt`, `файл1.txt`,
+/// платформа кладёт записи в этом же порядке, а не по алфавиту и не по
+/// времени. Подкаталог обходится ровно на своём месте в этом порядке.
+///
+/// `selected` — каталог назван самой маской (или это её базовый каталог).
+/// От этого зависит запись-каталог: ПУСТОЙ выбранный каталог не даёт
+/// ничего, а пустой каталог, до которого дошла рекурсия, даёт запись
+/// (измерено обоими способами на одном дереве).
+#[allow(clippy::too_many_arguments)]
+fn walk_dir(
+    state: &mut WriterState,
+    dir: &std::path::Path,
+    dir_display: &str,
+    rel: &str,
+    mask: &str,
+    mode: PathMode,
+    subdirs: SubdirMode,
+    selected: bool,
+) -> RtResult<()> {
+    let reader = std::fs::read_dir(dir).map_err(|e| {
+        zip_err(&format!(
+            "не удалось прочитать каталог «{dir_display}»: {e}"
+        ))
+    })?;
+    let mut matched_here = 0usize;
+    let mut children = 0usize;
+    for entry in reader {
+        let entry = entry.map_err(|e| {
+            zip_err(&format!(
+                "не удалось прочитать каталог «{dir_display}»: {e}"
+            ))
+        })?;
+        children += 1;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let path = entry.path();
+        // Каталог ли это — решается по САМОМУ элементу каталога, без
+        // перехода по символической ссылке. Иначе ссылка на предка
+        // зациклила бы рекурсию и уронила процесс переполнением стека, а
+        // вход здесь чужой: маску задаёт скрипт, дерево — файловая система.
+        let Ok(kind) = entry.file_type() else {
+            continue;
+        };
+        if kind.is_dir() {
+            if subdirs == SubdirMode::Recurse {
+                let child_rel = format!("{rel}{name}/");
+                let child_display = format!("{dir_display}{name}/");
+                walk_dir(
+                    state,
+                    &path,
+                    &child_display,
+                    &child_rel,
+                    mask,
+                    mode,
+                    subdirs,
+                    mask_matches(mask, &name),
+                )?;
+            }
+            continue;
+        }
+        if !mask_matches(mask, &name) {
+            continue;
+        }
+        // А вот содержимое и время берутся по ПУТИ: ссылка на файл ложится
+        // в архив тем, на что указывает.
+        let Ok(meta) = std::fs::metadata(&path) else {
+            continue;
+        };
+        matched_here += 1;
+        let rel_name = format!("{rel}{name}");
+        let full = format!("{dir_display}{name}");
+        let planned = plan_name(mode, &name, &rel_name, &full, false);
+        add_file(state, &path, planned, &meta)?;
+    }
+
+    // Каталог, в котором маска не нашла ни одного файла, платформа
+    // записывает САМА — записью-каталогом. Исключение одно: выбранный
+    // маской (или заданный ею базовый) каталог, оказавшийся пустым, не даёт
+    // ничего.
+    if matched_here == 0 && !(selected && children == 0) {
+        let planned = plan_name(mode, "", rel, dir_display, true);
+        let stamp = std::fs::metadata(dir).ok();
+        add_directory(state, planned, stamp.as_ref())?;
+    }
+    Ok(())
+}
+
+/// Имя записи по режиму путей: `(ключ, имя в архиве)`.
+///
+/// Ключ — то, по чему проверяется уникальность, а имя — то, что ложится в
+/// архив. Расходятся они на пустом ключе: у записи-каталога в плоском
+/// режиме и у базового каталога в относительном имя пусто, и платформа
+/// подставляет вместо него ПОЛНЫЙ путь, продолжая при этом считать занятым
+/// пустое имя. Отсюда измеренное: два пустых каталога в плоском режиме
+/// сталкиваются («Файл с таким именем в архиве уже существует:  -
+/// /т/пусто»), хотя в архив легли бы под разными полными путями.
+fn plan_name(
+    mode: PathMode,
+    file_name: &str,
+    rel: &str,
+    full: &str,
+    directory: bool,
+) -> (String, String) {
+    let full_key = {
+        let stripped = full.strip_prefix('/').unwrap_or(full);
+        if directory && !stripped.is_empty() && !stripped.ends_with('/') {
+            format!("{stripped}/")
+        } else {
+            stripped.to_string()
+        }
+    };
+    let key = match mode {
+        PathMode::Flat => file_name.to_string(),
+        PathMode::Relative => rel.to_string(),
+        PathMode::Full => full_key.clone(),
+    };
+    let name = if key.is_empty() {
+        full_key
+    } else {
+        key.clone()
+    };
+    (key, name)
+}
+
+/// Занять имя или отказать так же, как платформа.
+fn reserve(state: &mut WriterState, key: String, source: &str) -> RtResult<()> {
+    if state.used.contains(&key) {
+        return Err(zip_err(&format!(
+            "файл с таким именем в архиве уже существует: {key} — {source}"
+        )));
+    }
+    state.used.push(key);
+    Ok(())
+}
+
+/// Прочитать файл, сжать и запомнить запись.
+fn add_file(
+    state: &mut WriterState,
+    path: &std::path::Path,
+    planned: (String, String),
+    meta: &std::fs::Metadata,
+) -> RtResult<()> {
+    let (key, name) = planned;
+    reserve(state, key, &path.display().to_string())?;
+    let data = std::fs::read(path)
+        .map_err(|e| zip_err(&format!("не удалось прочитать «{}»: {e}", path.display())))?;
+    let raw_len = u32::try_from(data.len())
+        .map_err(|_| zip_err(&format!("файл «{}» больше 4 ГиБ", path.display())))?;
+    let crc = crc32(&data);
+    let (method, packed) = match state.method {
+        WriteMethod::Stored => (METHOD_STORED, data),
+        // В отличие от [`ZipWriter::add`], который выбирает способ по
+        // результату, здесь способ задан конструктором: платформа с
+        // `МетодСжатияZIP.Сжатие` пишет deflate даже там, где он длиннее
+        // исходных данных (измерено: 13 байт легли в 16).
+        WriteMethod::Deflate => (METHOD_DEFLATED, crate::deflate::deflate(&data)),
+    };
+    let (time, date) = dos_fields(meta);
+    state.entries.push(PendingEntry {
+        name,
+        packed,
+        method,
+        raw_len,
+        crc,
+        time,
+        date,
+        directory: false,
+    });
+    Ok(())
+}
+
+/// Запомнить запись-каталог: имя со слэшем, нулевые данные и время
+/// изменения самого каталога.
+fn add_directory(
+    state: &mut WriterState,
+    planned: (String, String),
+    meta: Option<&std::fs::Metadata>,
+) -> RtResult<()> {
+    let (key, mut name) = planned;
+    reserve(state, key, &name.clone())?;
+    if !name.ends_with('/') {
+        name.push('/');
+    }
+    let (time, date) = match meta {
+        Some(meta) => dos_fields(meta),
+        None => (0, 0),
+    };
+    state.entries.push(PendingEntry {
+        name,
+        packed: Vec::new(),
+        method: METHOD_STORED,
+        raw_len: 0,
+        crc: 0,
+        time,
+        date,
+        directory: true,
+    });
+    Ok(())
+}
+
+/// Время изменения файла в полях MS-DOS.
+///
+/// Момент берётся БЕЗ поправки на зону — так же, как его отдаёт
+/// `ТекущаяДата` (см. `BslValue::current_date`): в `std` нет способа узнать
+/// смещение локальной зоны, а тип даты в 1С зоны не хранит вовсе. Файл
+/// раньше 1980 года формату не представим, поэтому такие даты зажимаются в
+/// начало 1980-го — иначе поле года ушло бы в минус.
+fn dos_fields(meta: &std::fs::Metadata) -> (u16, u16) {
+    let Ok(modified) = meta.modified() else {
+        return (0, 0);
+    };
+    let Ok(since) = modified.duration_since(std::time::UNIX_EPOCH) else {
+        return (0, 0);
+    };
+    let secs = since.as_secs() as i64 + crate::date::UNIX_EPOCH_SECONDS;
+    let Some(date) = crate::BslDate::from_seconds(secs) else {
+        return (0, 0);
+    };
+    let civil = date.to_civil();
+    if civil.year < 1980 {
+        // 1980-01-01 00:00:00 — наименьшее, что поля MS-DOS выражают.
+        return (0, (1 << 5) | 1);
+    }
+    let year = u16::try_from(civil.year - 1980).unwrap_or(0) & 0x7F;
+    let dos_date = (year << 9) | ((civil.month as u16 & 0xF) << 5) | (civil.day as u16 & 0x1F);
+    let dos_time = ((civil.hour as u16 & 0x1F) << 11)
+        | ((civil.minute as u16 & 0x3F) << 5)
+        | ((civil.second as u16 / 2) & 0x1F);
+    (dos_time, dos_date)
+}
+
+/// `Записать()` — выложить архив в цель и закрыть его.
+///
+/// # Errors
+///
+/// [`RtError::Zip`], если архив не открыт (измерено: «Архив не открыт!» —
+/// в том числе на втором `Записать` подряд) либо если цель не пишется.
+pub fn writer_write(obj: &BslValue) -> RtResult<()> {
+    let state = writer_state(obj, "Записать")?;
+    let mut state = state.borrow_mut();
+    let Some(target) = state.target.take() else {
+        return Err(zip_err("архив не открыт"));
+    };
+    let bytes = build_archive(&state.entries, &state.comment)?;
+    // Цель снята со состояния ДО записи, поэтому неудачная запись тоже
+    // оставляет архив закрытым. Что делает в этом случае платформа, НЕ
+    // измерено (снят только сам отказ на несуществующем каталоге, без
+    // повторной попытки); выбрано закрывать, потому что иначе повторный
+    // `Записать` молча пытался бы писать туда же второй раз.
+    state.entries.clear();
+    state.used.clear();
+    match target {
+        WriteTarget::File(path) => std::fs::write(&path, &bytes)
+            .map_err(|e| zip_err(&format!("не удалось записать «{}»: {e}", path.display()))),
+        WriteTarget::Stream(stream) => crate::stream::write_all(&stream, &bytes, "Записать"),
+    }
+}
+
+/// `ПолучитьДвоичныеДанные()` — архив из накопленного, не трогая цель.
+///
+/// # Errors
+///
+/// [`RtError::Zip`], если архив открыт: измерено, что на писателе с целью
+/// платформа отвечает «Архив уже открыт!», и только после `Записать()` (или
+/// у писателя, созданного без цели) отдаёт данные.
+pub fn writer_binary_data(obj: &BslValue) -> RtResult<BslValue> {
+    let state = writer_state(obj, "ПолучитьДвоичныеДанные")?;
+    let state = state.borrow();
+    if state.target.is_some() {
+        return Err(zip_err("архив уже открыт"));
+    }
+    let bytes = build_archive(&state.entries, &state.comment)?;
+    Ok(BslValue::Object(Rc::new(BslObject::BinaryData(
+        bytes.into(),
+    ))))
+}
+
+/// Собрать архив из накопленных записей.
+///
+/// Zip64 здесь нет намеренно, как и в [`ZipWriter`]: за границей в четыре
+/// гигабайта честный отказ, а не молчаливо испорченный каталог.
+fn build_archive(entries: &[PendingEntry], comment: &str) -> RtResult<Vec<u8>> {
+    let too_big = || zip_err("архив больше 4 ГиБ не поддерживается");
+    let mut out: Vec<u8> = Vec::new();
+    let mut offsets: Vec<u32> = Vec::with_capacity(entries.len());
+    for e in entries {
+        offsets.push(u32::try_from(out.len()).map_err(|_| too_big())?);
+        let packed_len = u32::try_from(e.packed.len()).map_err(|_| too_big())?;
+        let name = e.name.as_bytes();
+        let name_len = u16::try_from(name.len())
+            .map_err(|_| zip_err(&format!("имя записи «{}» длиннее 65535 байт", e.name)))?;
+        out.extend_from_slice(&SIG_LOCAL.to_le_bytes());
+        out.extend_from_slice(&20u16.to_le_bytes());
+        out.extend_from_slice(&FLAG_UTF8_NAME.to_le_bytes());
+        out.extend_from_slice(&e.method.to_le_bytes());
+        out.extend_from_slice(&e.time.to_le_bytes());
+        out.extend_from_slice(&e.date.to_le_bytes());
+        out.extend_from_slice(&e.crc.to_le_bytes());
+        out.extend_from_slice(&packed_len.to_le_bytes());
+        out.extend_from_slice(&e.raw_len.to_le_bytes());
+        out.extend_from_slice(&name_len.to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes());
+        out.extend_from_slice(name);
+        out.extend_from_slice(&e.packed);
+    }
+
+    let start = u32::try_from(out.len()).map_err(|_| too_big())?;
+    for (e, offset) in entries.iter().zip(&offsets) {
+        let packed_len = u32::try_from(e.packed.len()).map_err(|_| too_big())?;
+        let name = e.name.as_bytes();
+        let name_len = name.len() as u16;
+        out.extend_from_slice(&SIG_CENTRAL.to_le_bytes());
+        out.extend_from_slice(&20u16.to_le_bytes());
+        out.extend_from_slice(&20u16.to_le_bytes());
+        out.extend_from_slice(&FLAG_UTF8_NAME.to_le_bytes());
+        out.extend_from_slice(&e.method.to_le_bytes());
+        out.extend_from_slice(&e.time.to_le_bytes());
+        out.extend_from_slice(&e.date.to_le_bytes());
+        out.extend_from_slice(&e.crc.to_le_bytes());
+        out.extend_from_slice(&packed_len.to_le_bytes());
+        out.extend_from_slice(&e.raw_len.to_le_bytes());
+        out.extend_from_slice(&name_len.to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes()); // extra
+        out.extend_from_slice(&0u16.to_le_bytes()); // комментарий записи
+        out.extend_from_slice(&0u16.to_le_bytes()); // номер диска
+        out.extend_from_slice(&0u16.to_le_bytes()); // внутренние атрибуты
+                                                    // Внешние атрибуты: у каталога поднят бит `FILE_ATTRIBUTE_DIRECTORY`,
+                                                    // чтобы посторонние распаковщики видели каталог не только по слэшу
+                                                    // в имени.
+        let external: u32 = if e.directory { 0x10 } else { 0 };
+        out.extend_from_slice(&external.to_le_bytes());
+        out.extend_from_slice(&offset.to_le_bytes());
+        out.extend_from_slice(name);
+    }
+    let size = u32::try_from(out.len()).map_err(|_| too_big())? - start;
+    let count = u16::try_from(entries.len())
+        .map_err(|_| zip_err("в архиве больше 65535 записей, что требует Zip64"))?;
+    let comment = comment.as_bytes();
+    if comment.len() > MAX_COMMENT {
+        return Err(zip_err("комментарий архива длиннее 65535 байт"));
+    }
+    out.extend_from_slice(&SIG_EOCD.to_le_bytes());
+    out.extend_from_slice(&0u16.to_le_bytes());
+    out.extend_from_slice(&0u16.to_le_bytes());
+    out.extend_from_slice(&count.to_le_bytes());
+    out.extend_from_slice(&count.to_le_bytes());
+    out.extend_from_slice(&size.to_le_bytes());
+    out.extend_from_slice(&start.to_le_bytes());
+    out.extend_from_slice(&(comment.len() as u16).to_le_bytes());
+    out.extend_from_slice(comment);
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3196,5 +4100,521 @@ mod tests {
         assert!(
             new_archive_reader(true, &missing, &BslValue::Undefined, &BslValue::Undefined).is_err()
         );
+    }
+    // --- писатель ------------------------------------------------------------
+
+    /// Дерево для проб писателя: `f0.txt`, `a/f1.txt`, `a/b/f2.txt`,
+    /// `c/f3.dat` и пустой `пуст`. Имя каталога уникально на тест, иначе
+    /// параллельные тесты растащили бы друг у друга файлы.
+    fn write_tree(tag: &str) -> std::path::PathBuf {
+        let root = std::env::temp_dir().join(format!("open-bsl-zipw-{}-{tag}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("a/b")).unwrap();
+        std::fs::create_dir_all(root.join("c")).unwrap();
+        std::fs::create_dir_all(root.join("пуст")).unwrap();
+        std::fs::write(root.join("f0.txt"), b"nol").unwrap();
+        std::fs::write(root.join("a/f1.txt"), b"odin").unwrap();
+        std::fs::write(root.join("a/b/f2.txt"), b"dva").unwrap();
+        std::fs::write(root.join("c/f3.dat"), b"tri").unwrap();
+        root
+    }
+
+    fn writer(target: &std::path::Path) -> BslValue {
+        new_archive_writer(
+            true,
+            &[BslValue::Str(crate::BslString::from_str(
+                target.to_str().unwrap(),
+            ))],
+        )
+        .expect("писатель строится")
+    }
+
+    fn str_value(text: &str) -> BslValue {
+        BslValue::Str(crate::BslString::from_str(text))
+    }
+
+    /// Имена записей собранного архива — по каталогу, а не по локальным
+    /// заголовкам.
+    fn entry_names(bytes: &[u8]) -> Vec<String> {
+        let (entries, _) = ZipArchive::parse(bytes)
+            .expect("свой архив читается")
+            .into_parts();
+        entries
+            .iter()
+            .map(|e| String::from_utf8_lossy(e.name_bytes()).into_owned())
+            .collect()
+    }
+
+    /// Собрать архив писателем и вернуть его байты, не трогая файловую
+    /// систему целью.
+    fn built(state_owner: &BslValue) -> Vec<u8> {
+        match writer_binary_data(state_owner).expect("данные отдаются") {
+            BslValue::Object(o) => match &*o {
+                BslObject::BinaryData(bytes) => bytes.to_vec(),
+                _ => panic!("не двоичные данные"),
+            },
+            _ => panic!("не объект"),
+        }
+    }
+
+    /// Три режима путей на ОДНОМ файле дают три разных имени, и все три
+    /// измерены на 8.3.27.
+    #[test]
+    fn the_three_path_modes_name_one_file_the_measured_way() {
+        let root = write_tree("modes");
+        let file = root.join("f0.txt");
+        let file = str_value(file.to_str().unwrap());
+
+        let flat = new_archive_writer(true, &[]).unwrap();
+        writer_add(&flat, std::slice::from_ref(&file)).unwrap();
+        assert_eq!(entry_names(&built(&flat)), vec!["f0.txt"]);
+
+        let relative = new_archive_writer(true, &[]).unwrap();
+        writer_add(
+            &relative,
+            &[
+                file.clone(),
+                BslValue::Enum(crate::EnumValue::ZipStoreRelativePath),
+            ],
+        )
+        .unwrap();
+        assert_eq!(entry_names(&built(&relative)), vec!["f0.txt"]);
+
+        let full = new_archive_writer(true, &[]).unwrap();
+        writer_add(
+            &full,
+            &[file, BslValue::Enum(crate::EnumValue::ZipStoreFullPath)],
+        )
+        .unwrap();
+        // Полный путь ложится БЕЗ ведущего слэша — измерено.
+        let names = entry_names(&built(&full));
+        assert_eq!(names.len(), 1);
+        assert!(!names[0].starts_with('/'), "имя: {}", names[0]);
+        assert!(names[0].ends_with("/f0.txt"), "имя: {}", names[0]);
+    }
+
+    /// Маска берёт только последнюю компоненту пути, `?` — ровно один знак,
+    /// регистр значим.
+    #[test]
+    fn the_mask_matches_the_measured_way() {
+        assert!(mask_matches("*", "f0.txt"));
+        assert!(mask_matches("*.txt", "f0.txt"));
+        assert!(!mask_matches("*.txt", "f0.dat"));
+        assert!(mask_matches("f?.txt", "f0.txt"));
+        assert!(!mask_matches("f?.txt", "f10.txt"));
+        assert!(mask_matches("*.*", "a.b"));
+        assert!(!mask_matches("*.txt", "ВЕРХ.TXT"));
+        assert!(mask_matches("*a*b*", "xxayybzz"));
+        assert!(!mask_matches("*a*b*c", "ab"));
+        // Маска ищется только в последней компоненте.
+        assert_eq!(
+            split_pattern("/т/каталог/*.txt"),
+            ("/т/каталог/".to_string(), "*.txt".to_string())
+        );
+    }
+
+    /// Рекурсия с относительными путями сохраняет подкаталоги, плоский
+    /// режим их роняет — оба ответа измерены на одном дереве.
+    #[test]
+    fn recursion_keeps_subpaths_only_in_the_relative_mode() {
+        let root = write_tree("recurse");
+        let mask = str_value(&format!("{}/*", root.display()));
+
+        let relative = new_archive_writer(true, &[]).unwrap();
+        writer_add(
+            &relative,
+            &[
+                mask.clone(),
+                BslValue::Enum(crate::EnumValue::ZipStoreRelativePath),
+                BslValue::Enum(crate::EnumValue::ZipProcessSubdirsRecursively),
+            ],
+        )
+        .unwrap();
+        let mut names = entry_names(&built(&relative));
+        names.sort();
+        assert_eq!(names, vec!["a/b/f2.txt", "a/f1.txt", "c/f3.dat", "f0.txt"]);
+
+        let flat = new_archive_writer(true, &[]).unwrap();
+        writer_add(
+            &flat,
+            &[
+                mask,
+                BslValue::Enum(crate::EnumValue::ZipDontStorePath),
+                BslValue::Enum(crate::EnumValue::ZipProcessSubdirsRecursively),
+            ],
+        )
+        .unwrap();
+        let mut names = entry_names(&built(&flat));
+        names.sort();
+        assert_eq!(names, vec!["f0.txt", "f1.txt", "f2.txt", "f3.dat"]);
+    }
+
+    /// Без третьего аргумента подкаталоги не обходятся вовсе.
+    #[test]
+    fn without_the_subdirectory_mode_only_the_named_directory_is_taken() {
+        let root = write_tree("flat");
+        let writer = new_archive_writer(true, &[]).unwrap();
+        writer_add(&writer, &[str_value(&format!("{}/*", root.display()))]).unwrap();
+        assert_eq!(entry_names(&built(&writer)), vec!["f0.txt"]);
+    }
+
+    /// Каталог, в котором маска ничего не нашла, платформа записывает
+    /// записью-каталогом — но только если до него дошла РЕКУРСИЯ, а не сама
+    /// маска. Обе половины измерены: `*` не оставляет от пустого `пуст`
+    /// ничего, `*.txt` оставляет запись `пуст/`.
+    #[test]
+    fn a_directory_without_matches_becomes_an_entry_unless_it_was_selected() {
+        let root = write_tree("dirs");
+
+        let selected = new_archive_writer(true, &[]).unwrap();
+        writer_add(
+            &selected,
+            &[
+                str_value(&format!("{}/*", root.display())),
+                BslValue::Enum(crate::EnumValue::ZipStoreRelativePath),
+                BslValue::Enum(crate::EnumValue::ZipProcessSubdirsRecursively),
+            ],
+        )
+        .unwrap();
+        let names = entry_names(&built(&selected));
+        assert!(
+            !names.iter().any(|n| n.ends_with("пуст/")),
+            "имена: {names:?}"
+        );
+
+        let unselected = new_archive_writer(true, &[]).unwrap();
+        writer_add(
+            &unselected,
+            &[
+                str_value(&format!("{}/*.txt", root.display())),
+                BslValue::Enum(crate::EnumValue::ZipStoreRelativePath),
+                BslValue::Enum(crate::EnumValue::ZipProcessSubdirsRecursively),
+            ],
+        )
+        .unwrap();
+        let mut names = entry_names(&built(&unselected));
+        names.sort();
+        assert_eq!(
+            names,
+            vec!["a/b/f2.txt", "a/f1.txt", "c/", "f0.txt", "пуст/"]
+        );
+
+        // Пустой каталог, названный САМОЙ маской, не даёт ничего — тоже
+        // измерено.
+        let empty_base = new_archive_writer(true, &[]).unwrap();
+        writer_add(
+            &empty_base,
+            &[
+                str_value(&format!("{}/пуст/*", root.display())),
+                BslValue::Enum(crate::EnumValue::ZipStoreRelativePath),
+                BslValue::Enum(crate::EnumValue::ZipProcessSubdirsRecursively),
+            ],
+        )
+        .unwrap();
+        assert!(entry_names(&built(&empty_base)).is_empty());
+    }
+
+    /// Столкновение имён — ошибка, и она останавливает `Добавить`, оставляя
+    /// в архиве всё, что успело лечь до неё. Ключ уникальности — ИМЯ ДО
+    /// подстановки полного пути, поэтому два пустых каталога в плоском
+    /// режиме сталкиваются пустыми именами.
+    #[test]
+    fn colliding_names_stop_the_add_and_keep_what_came_before() {
+        let root = write_tree("dup");
+        std::fs::create_dir_all(root.join("пуст2")).unwrap();
+
+        let writer = new_archive_writer(true, &[]).unwrap();
+        let file = str_value(root.join("f0.txt").to_str().unwrap());
+        writer_add(&writer, std::slice::from_ref(&file)).unwrap();
+        let e = writer_add(&writer, &[file]).expect_err("второй раз то же имя");
+        assert!(e.to_string().contains("уже существует"), "текст: {e}");
+        assert_eq!(entry_names(&built(&writer)), vec!["f0.txt"]);
+
+        let flat = new_archive_writer(true, &[]).unwrap();
+        let e = writer_add(
+            &flat,
+            &[
+                str_value(&format!("{}/*.нет", root.display())),
+                BslValue::Enum(crate::EnumValue::ZipDontStorePath),
+                BslValue::Enum(crate::EnumValue::ZipProcessSubdirsRecursively),
+            ],
+        )
+        .expect_err("два пустых имени подряд");
+        assert!(e.to_string().contains("уже существует"), "текст: {e}");
+    }
+
+    /// `Копирование` кладёт данные как есть, `Сжатие` — deflate даже там,
+    /// где он длиннее (измерено: 13 байт легли в 16).
+    #[test]
+    fn the_compression_method_decides_the_storage_method() {
+        let root = write_tree("method");
+        let file = str_value(root.join("f0.txt").to_str().unwrap());
+
+        let stored = new_archive_writer(
+            true,
+            &[
+                BslValue::Undefined,
+                BslValue::Undefined,
+                BslValue::Undefined,
+                BslValue::Enum(crate::EnumValue::ZipMethodCopy),
+            ],
+        )
+        .unwrap();
+        writer_add(&stored, std::slice::from_ref(&file)).unwrap();
+        let bytes = built(&stored);
+        let (entries, _) = ZipArchive::parse(&bytes).unwrap().into_parts();
+        assert_eq!(entries[0].method(), METHOD_STORED);
+        assert_eq!(entries[0].compressed_size(), entries[0].size());
+
+        let deflated = new_archive_writer(true, &[]).unwrap();
+        writer_add(&deflated, &[file]).unwrap();
+        let bytes = built(&deflated);
+        let (entries, _) = ZipArchive::parse(&bytes).unwrap().into_parts();
+        assert_eq!(entries[0].method(), METHOD_DEFLATED);
+        assert_eq!(read_entry(&bytes, &entries[0]).unwrap(), b"nol");
+    }
+
+    /// Всё, чего здесь нет, отвергается в конструкторе — молча открытый
+    /// архив вместо зашифрованного был бы худшим ответом.
+    #[test]
+    fn encryption_and_bzip2_are_refused_instead_of_silently_dropped() {
+        let password = new_archive_writer(true, &[BslValue::Undefined, str_value("секрет")])
+            .expect_err("пароль здесь не работает");
+        assert!(
+            password.to_string().contains("шифрование"),
+            "текст: {password}"
+        );
+
+        // Пустой пароль шифрованием не считается.
+        assert!(new_archive_writer(true, &[BslValue::Undefined, str_value("")]).is_ok());
+
+        let method = new_archive_writer(
+            true,
+            &[
+                BslValue::Undefined,
+                BslValue::Undefined,
+                BslValue::Undefined,
+                BslValue::Enum(crate::EnumValue::ZipMethodBzip2),
+            ],
+        )
+        .expect_err("BZIP2 здесь не пишется");
+        assert!(method.to_string().contains("BZIP2"), "текст: {method}");
+
+        let encryption = new_archive_writer(
+            true,
+            &[
+                BslValue::Undefined,
+                BslValue::Undefined,
+                BslValue::Undefined,
+                BslValue::Undefined,
+                BslValue::Undefined,
+                BslValue::Enum(crate::EnumValue::ZipEncryptionAes256),
+            ],
+        )
+        .expect_err("шифрования нет");
+        assert!(
+            encryption.to_string().contains("не поддерживается"),
+            "текст: {encryption}"
+        );
+
+        // Уровень сжатия, наоборот, принимается — он на байты не влияет.
+        assert!(new_archive_writer(
+            true,
+            &[
+                BslValue::Undefined,
+                BslValue::Undefined,
+                BslValue::Undefined,
+                BslValue::Undefined,
+                BslValue::Enum(crate::EnumValue::ZipLevelMaximal),
+            ]
+        )
+        .is_ok());
+    }
+
+    /// У архивного писателя третий аргумент — тип архива, четвёртый —
+    /// комментарий, а хвост платформа отвергает целиком.
+    #[test]
+    fn the_archive_writer_has_its_own_argument_tail() {
+        let ok = new_archive_writer(
+            false,
+            &[
+                BslValue::Undefined,
+                BslValue::Undefined,
+                BslValue::Enum(crate::EnumValue::ArchiveTypeZip),
+                str_value("комментарий"),
+            ],
+        )
+        .expect("ZIP и комментарий");
+        assert_eq!(ok.type_name(), "ЗаписьФайлаАрхива");
+        let bytes = built(&ok);
+        let (_, comment) = ZipArchive::parse(&bytes).unwrap().into_parts();
+        assert_eq!(String::from_utf8_lossy(&comment), "комментарий");
+
+        assert!(new_archive_writer(
+            false,
+            &[
+                BslValue::Undefined,
+                BslValue::Undefined,
+                BslValue::Enum(crate::EnumValue::ArchiveTypeTar)
+            ]
+        )
+        .is_err());
+        assert!(new_archive_writer(
+            false,
+            &[
+                BslValue::Undefined,
+                BslValue::Undefined,
+                BslValue::Undefined,
+                BslValue::Undefined,
+                str_value("пятый")
+            ]
+        )
+        .is_err());
+    }
+
+    /// Состояние: `Записать` требует цели, отдаёт архив ОДИН раз и
+    /// очищает накопленное, а `ПолучитьДвоичныеДанные` работает только на
+    /// закрытом архиве.
+    #[test]
+    fn writing_closes_the_archive_and_clears_the_entries() {
+        let root = write_tree("state");
+        let target = root.join("out.zip");
+        let file = str_value(root.join("f0.txt").to_str().unwrap());
+
+        let w = writer(&target);
+        writer_add(&w, std::slice::from_ref(&file)).unwrap();
+        // Пока цель есть — данных не отдаём: измерено «Архив уже открыт!».
+        assert!(writer_binary_data(&w).is_err());
+        writer_write(&w).unwrap();
+        assert_eq!(
+            entry_names(&std::fs::read(&target).unwrap()),
+            vec!["f0.txt"]
+        );
+        // Второй `Записать` — «Архив не открыт!».
+        assert!(writer_write(&w).is_err());
+        // Список записей очищен: тот же файл добавляется снова без ошибки о
+        // дубле, и в данных он один.
+        writer_add(&w, &[file]).unwrap();
+        assert_eq!(entry_names(&built(&w)), vec!["f0.txt"]);
+
+        // `Открыть` даёт цель заново, повторный — ошибка.
+        let reopened = str_value(root.join("out2.zip").to_str().unwrap());
+        writer_open(&w, std::slice::from_ref(&reopened)).unwrap();
+        assert!(writer_open(&w, &[reopened]).is_err());
+        writer_write(&w).unwrap();
+        assert_eq!(
+            entry_names(&std::fs::read(root.join("out2.zip")).unwrap()),
+            vec!["f0.txt"]
+        );
+    }
+
+    /// Отсутствующий файл и отсутствующий каталог маски — ошибки, а
+    /// каталог по имени без маски платформа молча пропускает.
+    #[test]
+    fn missing_paths_are_errors_and_a_plain_directory_is_skipped() {
+        let root = write_tree("missing");
+        let w = new_archive_writer(true, &[]).unwrap();
+
+        assert!(writer_add(&w, &[str_value(&format!("{}/нет.txt", root.display()))]).is_err());
+        assert!(writer_add(&w, &[str_value(&format!("{}/нет/*", root.display()))]).is_err());
+        // Каталог без маски: ни ошибки, ни записей.
+        writer_add(&w, &[str_value(root.join("a").to_str().unwrap())]).unwrap();
+        assert!(entry_names(&built(&w)).is_empty());
+        // Пустое имя и не-строка — «некорректное имя файла».
+        assert!(writer_add(&w, &[str_value("")]).is_err());
+        assert!(writer_add(&w, &[BslValue::Undefined]).is_err());
+        // Режим не того типа — ошибка типа, и переданное `Неопределено`
+        // режимом не считается (измерено на платформе).
+        let file = str_value(root.join("f0.txt").to_str().unwrap());
+        assert!(writer_add(&w, &[file.clone(), BslValue::Undefined]).is_err());
+        assert!(writer_add(&w, &[file, BslValue::Boolean(true)]).is_err());
+    }
+
+    /// Слэш на конце превращает каталог в маску `*`: измерено, что
+    /// `Добавить("/т/a/")` кладёт то же, что `Добавить("/т/a/*")`, тогда как
+    /// `Добавить("/т/a")` не кладёт ничего.
+    #[test]
+    fn a_trailing_slash_on_a_directory_means_the_all_matching_mask() {
+        let root = write_tree("slash");
+        let dir = root.join("a");
+
+        let slashed = new_archive_writer(true, &[]).unwrap();
+        writer_add(
+            &slashed,
+            &[
+                str_value(&format!("{}/", dir.display())),
+                BslValue::Enum(crate::EnumValue::ZipStoreRelativePath),
+                BslValue::Enum(crate::EnumValue::ZipProcessSubdirsRecursively),
+            ],
+        )
+        .unwrap();
+        let mut names = entry_names(&built(&slashed));
+        names.sort();
+        assert_eq!(names, vec!["b/f2.txt", "f1.txt"]);
+
+        // Тот же каталог без слэша — по-прежнему ноль записей и никакой
+        // ошибки, даже с рекурсией.
+        let plain = new_archive_writer(true, &[]).unwrap();
+        writer_add(
+            &plain,
+            &[
+                str_value(dir.to_str().unwrap()),
+                BslValue::Enum(crate::EnumValue::ZipStoreRelativePath),
+                BslValue::Enum(crate::EnumValue::ZipProcessSubdirsRecursively),
+            ],
+        )
+        .unwrap();
+        assert!(entry_names(&built(&plain)).is_empty());
+
+        // Слэш на конце НЕ существующего каталога остаётся ошибкой, а не
+        // пустой удачей.
+        let missing = new_archive_writer(true, &[]).unwrap();
+        assert!(writer_add(&missing, &[str_value(&format!("{}/нет/", root.display()))]).is_err());
+    }
+
+    /// Комментарий архива ложится в запись конца каталога, и наш же
+    /// читатель его оттуда достаёт.
+    #[test]
+    fn the_comment_survives_a_round_trip() {
+        let w = new_archive_writer(
+            true,
+            &[
+                BslValue::Undefined,
+                BslValue::Undefined,
+                str_value("комментарий архива"),
+            ],
+        )
+        .unwrap();
+        let bytes = built(&w);
+        let (_, comment) = ZipArchive::parse(&bytes).unwrap().into_parts();
+        assert_eq!(String::from_utf8_lossy(&comment), "комментарий архива");
+    }
+
+    /// Записи-каталоги узнаются читателем как каталоги, а не как пустые
+    /// файлы.
+    #[test]
+    fn directory_entries_read_back_as_directories() {
+        let root = write_tree("dirent");
+        let w = new_archive_writer(true, &[]).unwrap();
+        writer_add(
+            &w,
+            &[
+                str_value(&format!("{}/*.txt", root.display())),
+                BslValue::Enum(crate::EnumValue::ZipStoreRelativePath),
+                BslValue::Enum(crate::EnumValue::ZipProcessSubdirsRecursively),
+            ],
+        )
+        .unwrap();
+        let bytes = built(&w);
+        let (entries, _) = ZipArchive::parse(&bytes).unwrap().into_parts();
+        // Порядок записей — файловой системы (см. `walk_dir`), поэтому
+        // сравнивается СОСТАВ, а не последовательность.
+        let mut dirs: Vec<String> = entries
+            .iter()
+            .filter(|e| e.is_directory())
+            .map(|e| String::from_utf8_lossy(e.name_bytes()).into_owned())
+            .collect();
+        dirs.sort();
+        assert_eq!(dirs, vec!["c/", "пуст/"]);
     }
 }

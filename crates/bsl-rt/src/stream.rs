@@ -984,6 +984,22 @@ pub(crate) fn read_all(v: &BslValue, op: &'static str) -> RtResult<Vec<u8>> {
     bytes
 }
 
+/// Записать байты в поток с текущей позиции — приёмник архива для
+/// `ЗаписьZipФайла.Записать()`.
+///
+/// Поток НЕ закрывается: измерено, что после `Записать` архива ручной
+/// `Закрыть` потока проходит, то есть платформа его тоже оставляет
+/// открытым.
+///
+/// # Errors
+///
+/// [`RtError::IoError`], если поток закрыт, открыт без доступа на запись
+/// или носитель не пишется.
+pub(crate) fn write_all(v: &BslValue, bytes: &[u8], op: &'static str) -> RtResult<()> {
+    let d = data(v, op)?;
+    d.borrow_mut().write_bytes(bytes, op)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -229,6 +229,20 @@ pub enum RExpr {
         password: Box<RExpr>,
         archive_type: Box<RExpr>,
     },
+    /// `Новый ЗаписьZipФайла([Файл][, Пароль][, Комментарий][, Метод]
+    /// [, Уровень][, Шифрование][, Кодировка])` и
+    /// `Новый ЗаписьФайлаАрхива([Файл][, Пароль][, ТипАрхива][, Комментарий]
+    /// [, ...])`.
+    ///
+    /// Аргументы лежат СПИСКОМ, а не отдельными полями, как у читателя: их
+    /// семь, хвост у двух типов разный, и разбирает его рантайм — иначе
+    /// инструкция VM выросла бы на семь регистров, а вместе с ней и весь
+    /// массив инструкций. Значение `zip` решает, который из двух типов
+    /// строится и как понимать хвост.
+    NewArchiveWriter {
+        zip: bool,
+        args: Vec<RExpr>,
+    },
     /// Голое имя `ФайловыеПотоки` как выражение. В отличие от
     /// [`RExpr::EnumTypeRef`] это НЕ константа: `ФайловыеПотоки =
     /// ФайловыеПотоки` платформа считает ложью (измерено), значит каждое
@@ -479,6 +493,7 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
         RExpr::NewFileStream { path, mode, access } => {
             expr_uses_dynamic(path) || expr_uses_dynamic(mode) || expr_uses_dynamic(access)
         }
+        RExpr::NewArchiveWriter { args, .. } => args.iter().any(expr_uses_dynamic),
         RExpr::NewArchiveReader {
             source,
             password,

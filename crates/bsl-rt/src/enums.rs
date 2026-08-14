@@ -255,6 +255,46 @@ pub enum EnumValue {
     ArchiveTypeSevenZip,
     ArchiveTypeTar,
     ArchiveTypeXz,
+
+    // --- МетодСжатияZIP -----------------------------------------------------
+    // Три члена; `Deflate64`, `LZMA` и `PPMd` — «Поле объекта не
+    // обнаружено» (проверено перебором).
+    ZipMethodDeflate,
+    ZipMethodCopy,
+    ZipMethodBzip2,
+
+    // --- УровеньСжатияZIP ---------------------------------------------------
+    // Ровно три: ни `БезСжатия`, ни `Нет`, ни `Никакой`, ни `Отсутствует`,
+    // ни `Быстрый` платформа не знает.
+    ZipLevelMinimal,
+    ZipLevelOptimal,
+    ZipLevelMaximal,
+
+    // --- РежимСохраненияПутейZIP --------------------------------------------
+    // Имя третьего члена — `НеСохранятьПути`, а не `НеСохранять`
+    // (измерено: второе — «Поле объекта не обнаружено»).
+    ZipStoreRelativePath,
+    ZipStoreFullPath,
+    ZipDontStorePath,
+
+    // --- РежимОбработкиПодкаталоговZIP ---------------------------------------
+    ZipDontProcessSubdirs,
+    ZipProcessSubdirsRecursively,
+
+    // --- МетодШифрованияZIP --------------------------------------------------
+    // Четыре члена, представление каждого измерено — `AES192` отдельной
+    // пробой, потому что между 128 и 256 он не подразумевается. Шифрования
+    // здесь нет ни одного: члены заведены для честного отказа вместо
+    // молчаливо открытого архива.
+    ZipEncryptionAes128,
+    ZipEncryptionAes192,
+    ZipEncryptionAes256,
+    ZipEncryptionZip20,
+
+    // --- КодировкаИменФайловВZipФайле -----------------------------------------
+    // Два члена: `КодировкаОС`, `OEM` и `ANSI` платформа не знает.
+    ZipNamesAuto,
+    ZipNamesUtf8,
 }
 
 /// К какому перечислению принадлежит член — это же имя стоит слева от
@@ -353,6 +393,22 @@ pub enum EnumKind {
     /// чтобы `ЧтениеФайлаАрхива(файл, , ТипФайлаАрхива.TAR)` отвечал
     /// «формат не поддерживается», а не разбирал TAR как ZIP.
     ArchiveFileType,
+
+    // --- перечисления записи архивов ---------------------------------------
+    /// `МетодСжатияZIP` — четвёртый аргумент `Новый ЗаписьZipФайла`.
+    /// Английское написание `ZIPCompressionMethod` ИЗМЕРЕНО.
+    ZipCompressionMethod,
+    /// `УровеньСжатияZIP` — пятый аргумент того же конструктора.
+    ZipCompressionLevel,
+    /// `РежимСохраненияПутейZIP` — второй аргумент `Добавить`.
+    ZipStorePathMode,
+    /// `РежимОбработкиПодкаталоговZIP` — третий аргумент `Добавить`.
+    ZipSubDirProcessingMode,
+    /// `МетодШифрованияZIP` — шестой аргумент конструктора; шифрования
+    /// здесь нет, члены нужны для отказа.
+    ZipEncryptionMethod,
+    /// `КодировкаИменФайловВZipФайле` — седьмой аргумент конструктора.
+    ZipFileNamesEncoding,
 }
 
 impl EnumKind {
@@ -395,6 +451,20 @@ impl EnumKind {
                 "ZIPRestoreFilePathsMode",
             ),
             EnumKind::ArchiveFileType => ("ТипФайлаАрхива", "ArchiveFileType"),
+            EnumKind::ZipCompressionMethod => ("МетодСжатияZIP", "ZIPCompressionMethod"),
+            EnumKind::ZipCompressionLevel => ("УровеньСжатияZIP", "ZIPCompressionLevel"),
+            EnumKind::ZipStorePathMode => ("РежимСохраненияПутейZIP", "ZIPStorePathMode"),
+            EnumKind::ZipSubDirProcessingMode => {
+                ("РежимОбработкиПодкаталоговZIP", "ZIPSubDirProcessingMode")
+            }
+            EnumKind::ZipEncryptionMethod => ("МетодШифрованияZIP", "ZIPEncryptionMethod"),
+            // Английское написание тут не по образцу соседей, а измерено:
+            // `Тип("FileNamesEncodingInZipFile")` даёт это перечисление, а
+            // `ZipFileNamesEncodingMode`, `ZIPFileNamesEncodingMode` и
+            // `ZipFileNamesEncoding` — «Тип не определен».
+            EnumKind::ZipFileNamesEncoding => {
+                ("КодировкаИменФайловВZipФайле", "FileNamesEncodingInZipFile")
+            }
         }
     }
 
@@ -450,6 +520,12 @@ impl EnumKind {
             // мерилось.
             EnumKind::ZipRestorePathsMode => "ПеречислениеРежимВосстановленияПутейФайловZIP",
             EnumKind::ArchiveFileType => "ПеречислениеТипФайлаАрхива",
+            EnumKind::ZipCompressionMethod => "ПеречислениеМетодСжатияZIP",
+            EnumKind::ZipCompressionLevel => "ПеречислениеУровеньСжатияZIP",
+            EnumKind::ZipStorePathMode => "ПеречислениеРежимСохраненияПутейZIP",
+            EnumKind::ZipSubDirProcessingMode => "ПеречислениеРежимОбработкиПодкаталоговZIP",
+            EnumKind::ZipEncryptionMethod => "ПеречислениеМетодШифрованияZIP",
+            EnumKind::ZipFileNamesEncoding => "ПеречислениеКодировкаИменФайловВZipФайле",
         }
     }
 
@@ -1597,6 +1673,129 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "XZ",
         "Тип архива XZ",
     ),
+    // Перечисления записи. Пятая колонка везде измерена и нигде не
+    // выводится из имени: у `Сжатие` печатается «Метод сжатия сжатием», у
+    // `BZIP2` — «Метод сжатия BZIP» (без двойки), у `ОбрабатыватьРекурсивно`
+    // — просто «Обрабатывать».
+    (
+        EnumKind::ZipCompressionMethod,
+        EnumValue::ZipMethodDeflate,
+        "Сжатие",
+        "Deflate",
+        "Метод сжатия сжатием",
+    ),
+    (
+        EnumKind::ZipCompressionMethod,
+        EnumValue::ZipMethodCopy,
+        "Копирование",
+        "Copy",
+        "Метод сжатия копированием",
+    ),
+    (
+        EnumKind::ZipCompressionMethod,
+        EnumValue::ZipMethodBzip2,
+        "BZIP2",
+        "BZip2",
+        "Метод сжатия BZIP",
+    ),
+    (
+        EnumKind::ZipCompressionLevel,
+        EnumValue::ZipLevelMinimal,
+        "Минимальный",
+        "Minimum",
+        "Минимальный уровень сжатия",
+    ),
+    (
+        EnumKind::ZipCompressionLevel,
+        EnumValue::ZipLevelOptimal,
+        "Оптимальный",
+        "Optimal",
+        "Оптимальный уровень сжатия",
+    ),
+    (
+        EnumKind::ZipCompressionLevel,
+        EnumValue::ZipLevelMaximal,
+        "Максимальный",
+        "Maximum",
+        "Максимальный уровень сжатия",
+    ),
+    (
+        EnumKind::ZipStorePathMode,
+        EnumValue::ZipStoreRelativePath,
+        "СохранятьОтносительныеПути",
+        "StoreRelativePath",
+        "Сохранять относительные пути",
+    ),
+    (
+        EnumKind::ZipStorePathMode,
+        EnumValue::ZipStoreFullPath,
+        "СохранятьПолныеПути",
+        "StoreFullPath",
+        "Сохранять полные пути",
+    ),
+    (
+        EnumKind::ZipStorePathMode,
+        EnumValue::ZipDontStorePath,
+        "НеСохранятьПути",
+        "DontStorePath",
+        "Не сохранять пути",
+    ),
+    (
+        EnumKind::ZipSubDirProcessingMode,
+        EnumValue::ZipDontProcessSubdirs,
+        "НеОбрабатывать",
+        "DontProcess",
+        "Не обрабатывать",
+    ),
+    (
+        EnumKind::ZipSubDirProcessingMode,
+        EnumValue::ZipProcessSubdirsRecursively,
+        "ОбрабатыватьРекурсивно",
+        "ProcessRecursively",
+        "Обрабатывать",
+    ),
+    (
+        EnumKind::ZipEncryptionMethod,
+        EnumValue::ZipEncryptionAes128,
+        "AES128",
+        "AES128",
+        "Шифрование методом AES 128 бит",
+    ),
+    (
+        EnumKind::ZipEncryptionMethod,
+        EnumValue::ZipEncryptionAes192,
+        "AES192",
+        "AES192",
+        "Шифрование методом AES 192 бит",
+    ),
+    (
+        EnumKind::ZipEncryptionMethod,
+        EnumValue::ZipEncryptionAes256,
+        "AES256",
+        "AES256",
+        "Шифрование методом AES 256 бит",
+    ),
+    (
+        EnumKind::ZipEncryptionMethod,
+        EnumValue::ZipEncryptionZip20,
+        "Zip20",
+        "Zip20",
+        "Шифрование методом ZIP 2.0",
+    ),
+    (
+        EnumKind::ZipFileNamesEncoding,
+        EnumValue::ZipNamesAuto,
+        "Авто",
+        "Auto",
+        "Авто",
+    ),
+    (
+        EnumKind::ZipFileNamesEncoding,
+        EnumValue::ZipNamesUtf8,
+        "UTF8",
+        "Utf8",
+        "UTF8",
+    ),
 ];
 
 /// Имена всех перечислений — для автодополнения REPL и для резолвера,
@@ -1658,6 +1857,24 @@ pub const ENUM_NAMES: &[(&str, EnumKind)] = &[
     ("ZIPRestoreFilePathsMode", EnumKind::ZipRestorePathsMode),
     ("ТипФайлаАрхива", EnumKind::ArchiveFileType),
     ("ArchiveFileType", EnumKind::ArchiveFileType),
+    ("МетодСжатияZIP", EnumKind::ZipCompressionMethod),
+    ("ZIPCompressionMethod", EnumKind::ZipCompressionMethod),
+    ("УровеньСжатияZIP", EnumKind::ZipCompressionLevel),
+    ("ZIPCompressionLevel", EnumKind::ZipCompressionLevel),
+    ("РежимСохраненияПутейZIP", EnumKind::ZipStorePathMode),
+    ("ZIPStorePathMode", EnumKind::ZipStorePathMode),
+    (
+        "РежимОбработкиПодкаталоговZIP",
+        EnumKind::ZipSubDirProcessingMode,
+    ),
+    ("ZIPSubDirProcessingMode", EnumKind::ZipSubDirProcessingMode),
+    ("МетодШифрованияZIP", EnumKind::ZipEncryptionMethod),
+    ("ZIPEncryptionMethod", EnumKind::ZipEncryptionMethod),
+    (
+        "КодировкаИменФайловВZipФайле",
+        EnumKind::ZipFileNamesEncoding,
+    ),
+    ("FileNamesEncodingInZipFile", EnumKind::ZipFileNamesEncoding),
 ];
 
 /// Перечисление по имени слева от точки. Регистронезависимо и на обоих

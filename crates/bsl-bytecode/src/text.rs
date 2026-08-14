@@ -36,7 +36,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 14;
+pub const FORMAT_VERSION: u32 = 15;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -90,6 +90,7 @@ pub const OPCODES: &[&str] = &[
     "NewFileStream",
     "NewFileStreamsManager",
     "NewArchiveReader",
+    "NewArchiveWriter",
     "NewDataReader",
     "NewDataWriter",
     "NewJsonReader",
@@ -449,6 +450,12 @@ fn write_instr(instr: &Instr) -> String {
             access,
         } => format!("NewFileStream dst={dst} path={path} mode={mode} access={access}"),
         Instr::NewFileStreamsManager { dst } => format!("NewFileStreamsManager dst={dst}"),
+        Instr::NewArchiveWriter {
+            dst,
+            zip,
+            base,
+            count,
+        } => format!("NewArchiveWriter dst={dst} zip={zip} base={base} count={count}"),
         Instr::NewArchiveReader {
             dst,
             zip,
@@ -1351,6 +1358,12 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
             access: field_u8(&f, no, "access")?,
         },
         "NewFileStreamsManager" => Instr::NewFileStreamsManager { dst: dst(&f)? },
+        "NewArchiveWriter" => Instr::NewArchiveWriter {
+            dst: dst(&f)?,
+            zip: field_bool(&f, no, "zip")?,
+            base: field_u8(&f, no, "base")?,
+            count: field_u8(&f, no, "count")?,
+        },
         "NewArchiveReader" => Instr::NewArchiveReader {
             dst: dst(&f)?,
             zip: field_bool(&f, no, "zip")?,
@@ -1563,6 +1576,21 @@ mod tests {
          ч.Извлечь(э, \"/tmp\", РежимВосстановленияПутейФайловZIP.Восстанавливать);\n\
          ч.ИзвлечьВсе(\"/tmp\", РежимВосстановленияПутейФайловZIP.НеВосстанавливать);\n\
          м = ч.Комментарий;\nч.Закрыть();\n",
+        // Писатели архива: обе формы конструктора, разный хвост у двух
+        // типов, `Открыть`, `Добавить` всеми тремя арностями, `Записать` и
+        // `ПолучитьДвоичныеДанные`, а с ними все шесть перечислений записи.
+        "п = Новый ЗаписьZipФайла;\n\
+         з = Новый ЗаписьZipФайла(\"/tmp/а.zip\", Неопределено, \"комментарий\", \
+         МетодСжатияZIP.Копирование, УровеньСжатияZIP.Максимальный, Неопределено, \
+         КодировкаИменФайловВZipФайле.UTF8);\n\
+         а = Новый ЗаписьФайлаАрхива(\"/tmp/б.zip\", Неопределено, ТипФайлаАрхива.Zip, \"к\");\n\
+         п.Открыть(\"/tmp/в.zip\");\n\
+         п.Добавить(\"/tmp/ф.txt\");\n\
+         п.Добавить(\"/tmp/*.txt\", РежимСохраненияПутейZIP.СохранятьОтносительныеПути);\n\
+         п.Добавить(\"/tmp/*\", РежимСохраненияПутейZIP.НеСохранятьПути, \
+         РежимОбработкиПодкаталоговZIP.ОбрабатыватьРекурсивно);\n\
+         п.Записать();\nд = п.ПолучитьДвоичныеДанные();\n\
+         ш = МетодШифрованияZIP.AES256;\n",
         // УИД: обе формы конструктора — случайный и разбор строки.
         "у = Новый УникальныйИдентификатор;\n\
          ф = Новый УникальныйИдентификатор(\"abcdef12-3456-7890-abcd-ef1234567890\");\n\

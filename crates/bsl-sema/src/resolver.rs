@@ -445,6 +445,13 @@ pub const NEW_TYPES: &[&str] = &[
     "ZipFileReader",
     "ЧтениеФайлаАрхива",
     "ArchiveFileReader",
+    // Писателей тоже два, и оба английских написания измерены:
+    // `Тип("ZipFileWriter")` — «Запись ZIP файла», `Тип("ArchiveFileWriter")`
+    // — «Запись файла архива».
+    "ЗаписьZipФайла",
+    "ZipFileWriter",
+    "ЗаписьФайлаАрхива",
+    "ArchiveFileWriter",
 ];
 
 struct Resolver<'a> {
@@ -1083,6 +1090,36 @@ impl<'a> Resolver<'a> {
                     source,
                     password,
                     archive_type,
+                })
+            }
+            // Оба писателя архива: аргументов не больше СЕМИ у каждого —
+            // измерено, что восьмой оба встречают «Конструктор не найден»,
+            // — а вот значат они разное, и разбирает их рантайм.
+            "ЗАПИСЬZIPФАЙЛА" | "ZIPFILEWRITER" | "ЗАПИСЬФАЙЛААРХИВА" | "ARCHIVEFILEWRITER" =>
+            {
+                let zip = matches!(
+                    type_name.to_uppercase().as_str(),
+                    "ЗАПИСЬZIPФАЙЛА" | "ZIPFILEWRITER"
+                );
+                const LIMIT: usize = 7;
+                if args.len() > LIMIT {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: if zip {
+                            "Новый ЗаписьZipФайла".to_string()
+                        } else {
+                            "Новый ЗаписьФайлаАрхива".to_string()
+                        },
+                        expected: LIMIT,
+                        found: args.len(),
+                    });
+                }
+                let mut resolved = Vec::with_capacity(args.len());
+                for a in args {
+                    resolved.push(self.resolve_expr(a)?);
+                }
+                Ok(RExpr::NewArchiveWriter {
+                    zip,
+                    args: resolved,
                 })
             }
             "ЧТЕНИЕJSON" | "JSONREADER" => {

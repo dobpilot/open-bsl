@@ -283,6 +283,27 @@ pub enum TypeId {
     ZipRestorePathsMode,
     /// Тип ЧЛЕНА перечисления `ТипФайлаАрхива`.
     ArchiveFileType,
+
+    // --- запись архивов ---------------------------------------------------
+    // Писателей, как и читателей, ДВА, и они тоже разные типы: измерено, что
+    // `Тип("ЗаписьZipФайла")` печатается «Запись ZIP файла», а
+    // `Тип("ЗаписьФайлаАрхива")` — «Запись файла архива». Английские
+    // написания измерены оба (`ZipFileWriter`, `ArchiveFileWriter`);
+    // `ZipFileWrite` и `ArchiveFileWrite` платформа не знает.
+    ZipFileWriter,
+    ArchiveFileWriter,
+    /// Тип ЧЛЕНА перечисления `МетодСжатияZIP`.
+    ZipCompressionMethod,
+    /// Тип ЧЛЕНА перечисления `УровеньСжатияZIP`.
+    ZipCompressionLevel,
+    /// Тип ЧЛЕНА перечисления `РежимСохраненияПутейZIP`.
+    ZipStorePathMode,
+    /// Тип ЧЛЕНА перечисления `РежимОбработкиПодкаталоговZIP`.
+    ZipSubDirProcessingMode,
+    /// Тип ЧЛЕНА перечисления `МетодШифрованияZIP`.
+    ZipEncryptionMethod,
+    /// Тип ЧЛЕНА перечисления `КодировкаИменФайловВZipФайле`.
+    ZipFileNamesEncoding,
 }
 
 /// `(русское, английское)`. Русское — каноническое: именно оно уходит в
@@ -729,6 +750,48 @@ const NAMES: &[(TypeId, &str, &str)] = &[
         "ZIPRestoreFilePathsMode",
     ),
     (TypeId::ArchiveFileType, "ТипФайлаАрхива", "ArchiveFileType"),
+    // Представления писателей ИЗМЕРЕНЫ через `Строка(Тип(...))`.
+    (TypeId::ZipFileWriter, "Запись ZIP файла", "ZipFileWriter"),
+    (
+        TypeId::ArchiveFileWriter,
+        "Запись файла архива",
+        "ArchiveFileWriter",
+    ),
+    // Перечисления записи: имя типа члена — имя самого перечисления,
+    // измерено на каждом (`Строка(ТипЗнч(МетодСжатияZIP.Сжатие))` даёт
+    // «МетодСжатияZIP»). Английское написание `КодировкаИменФайловВZipФайле`
+    // — `FileNamesEncodingInZipFile`, а не `ZipFileNamesEncodingMode`:
+    // проверено перебором трёх правдоподобных вариантов.
+    (
+        TypeId::ZipCompressionMethod,
+        "МетодСжатияZIP",
+        "ZIPCompressionMethod",
+    ),
+    (
+        TypeId::ZipCompressionLevel,
+        "УровеньСжатияZIP",
+        "ZIPCompressionLevel",
+    ),
+    (
+        TypeId::ZipStorePathMode,
+        "РежимСохраненияПутейZIP",
+        "ZIPStorePathMode",
+    ),
+    (
+        TypeId::ZipSubDirProcessingMode,
+        "РежимОбработкиПодкаталоговZIP",
+        "ZIPSubDirProcessingMode",
+    ),
+    (
+        TypeId::ZipEncryptionMethod,
+        "МетодШифрованияZIP",
+        "ZIPEncryptionMethod",
+    ),
+    (
+        TypeId::ZipFileNamesEncoding,
+        "КодировкаИменФайловВZipФайле",
+        "FileNamesEncodingInZipFile",
+    ),
 ];
 
 /// Типы, чьё ПРЕДСТАВЛЕНИЕ не совпадает с именем, по которому тип ищется.

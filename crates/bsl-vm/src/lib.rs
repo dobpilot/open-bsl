@@ -1157,6 +1157,7 @@ fn step(
             | Instr::NewDataWriter { .. }
             | Instr::NewFileStreamsManager { .. }
             | Instr::NewArchiveReader { .. }
+            | Instr::NewArchiveWriter { .. }
             | Instr::NewBinaryData { .. }
             | Instr::Raise { .. }
             | Instr::CloseText { .. }
@@ -1470,6 +1471,18 @@ fn step_cold(
             let stream = BslValue::new_file_stream(&path, &mode, &access)?;
             let d = frames[frame_idx].reg_index(dst);
             reg_store(stack, d, stream)?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewArchiveWriter {
+            dst,
+            zip,
+            base,
+            count,
+        } => {
+            let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
+            let writer = bsl_rt::new_archive_writer(zip, args.as_slice())?;
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, writer)?;
             frames[frame_idx].pc += 1;
         }
         Instr::NewArchiveReader {

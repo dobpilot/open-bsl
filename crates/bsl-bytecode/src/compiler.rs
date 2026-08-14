@@ -774,6 +774,24 @@ impl<'a> Compiler<'a> {
             RExpr::NewFileStreamsManager => {
                 self.emit(Instr::NewFileStreamsManager { dst });
             }
+            RExpr::NewArchiveWriter { zip, args } => {
+                let base = self.next_reg;
+                for a in args {
+                    let r = self.alloc_temp()?;
+                    self.compile_expr(a, r)?;
+                }
+                let count: u8 = args
+                    .len()
+                    .try_into()
+                    .map_err(|_| CompileError::TooManyRegisters)?;
+                self.free_temp(count);
+                self.emit(Instr::NewArchiveWriter {
+                    dst,
+                    zip: *zip,
+                    base,
+                    count,
+                });
+            }
             RExpr::NewArchiveReader {
                 zip,
                 source,

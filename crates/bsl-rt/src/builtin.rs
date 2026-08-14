@@ -1977,6 +1977,13 @@ pub fn call_builtin_method(
             // имя, разная арность, разводится получателем.
             _ if crate::xdto::is_list(obj) => crate::xdto::list_add(obj, args),
             _ if crate::xdto::is_sequence(obj) => crate::xdto::sequence_add(obj, args),
+            // `ЗаписьZipФайла.Добавить(Путь[, РежимПутей][, РежимПодкаталогов])`
+            // — то же имя, свои три арности; разводится получателем, как
+            // всё остальное в этой ветке.
+            _ if crate::zip::is_writer(obj) => {
+                crate::zip::writer_add(obj, args)?;
+                Ok(BslValue::Undefined)
+            }
             [] => obj.table_add_row(),
             [v] => match obj.push_element(v.clone()) {
                 Ok(()) => Ok(BslValue::Undefined),
@@ -2223,6 +2230,18 @@ pub fn call_builtin_method(
             } else if crate::textdoc::is_text_document(obj) {
                 crate::textdoc::write_file(obj, args)?;
                 Ok(BslValue::Undefined)
+            } else if crate::zip::is_writer(obj) {
+                // У писателя архива `Записать()` без аргументов: измерено,
+                // что `Записать(имя)` платформа встречает «Слишком много
+                // фактических параметров».
+                if !args.is_empty() {
+                    return Err(RtError::MethodNotApplicable {
+                        method: "Записать",
+                        receiver: obj.type_name(),
+                    });
+                }
+                crate::zip::writer_write(obj)?;
+                Ok(BslValue::Undefined)
             } else if crate::stream::is_stream(obj) {
                 // У потока `Записать(Буфер, СмещениеВБуфере, Количество)` —
                 // ровно три аргумента, и проверяет их сам `stream::write`:
@@ -2418,6 +2437,11 @@ pub fn call_builtin_method(
             crate::datarw::write_line(obj, args)?;
             Ok(BslValue::Undefined)
         }
+        // Имя делят результат чтения данных и писатель архива — ветвление
+        // по получателю.
+        BuiltinMethod::GetBinaryData if crate::zip::is_writer(obj) => {
+            crate::zip::writer_binary_data(obj)
+        }
         BuiltinMethod::GetBinaryData => crate::datarw::result_binary_data(obj),
         BuiltinMethod::GetBinaryDataBuffer => crate::datarw::result_binary_buffer(obj),
         BuiltinMethod::BufSplit => crate::binbuf::split(obj, &args[0]),
@@ -2546,6 +2570,10 @@ pub fn call_builtin_method(
         // `Поток.ОткрытьДляЧтения` на `ПотокВПамяти` дают ошибку).
         // Имя `Открыть` делят менеджер файловых потоков и читатель архива —
         // ветвление по получателю, как у `Прочитать`.
+        BuiltinMethod::StreamOpen if crate::zip::is_writer(obj) => {
+            crate::zip::writer_open(obj, args)?;
+            Ok(BslValue::Undefined)
+        }
         BuiltinMethod::StreamOpen if crate::zip::is_reader(obj) => {
             crate::zip::open(obj, args)?;
             Ok(BslValue::Undefined)
