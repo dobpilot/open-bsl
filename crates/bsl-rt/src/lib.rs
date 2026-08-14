@@ -15,6 +15,7 @@ pub mod encoding;
 mod enums;
 mod fill;
 mod fold;
+mod inflate;
 mod interner;
 mod json;
 mod locale;
@@ -224,6 +225,14 @@ pub enum RtError {
     /// вид объекта, которого в этой реализации нет. Отдельно от соседей
     /// по той же причине, что и они: свой слой — свой тип ошибки.
     Vstr(String),
+    /// Архив: поток deflate не разбирается — обрезан, зарезервированный тип
+    /// блока, неверный код Хаффмана, ссылка за начало распакованных данных,
+    /// превышен заявленный размер. Отдельно от [`RtError::IoError`]
+    /// намеренно: тот означает отказ файловой ОПЕРАЦИИ (открыть, прочитать,
+    /// закрыть), а здесь байты прочитаны успешно и не годится их
+    /// СОДЕРЖИМОЕ — по типу ошибки это должно быть видно так же, как у XML,
+    /// XSD и XDTO.
+    Zip(String),
     /// Имя из `СписокСвойств` в `ЗаполнитьЗначенияСвойств`, которого нет у
     /// источника или у приёмника. Отдельно от [`RtError::UnknownField`] и
     /// [`RtError::UnknownColumn`], потому что имя тут пришло СТРОКОЙ из
@@ -313,6 +322,7 @@ impl fmt::Display for RtError {
             RtError::Spread(msg) => write!(f, "{msg}"),
             RtError::Regex(msg) => write!(f, "{msg}"),
             RtError::Vstr(msg) => write!(f, "{msg}"),
+            RtError::Zip(msg) => write!(f, "{msg}"),
             RtError::UnknownType(name) => write!(f, "тип «{name}» не определён"),
             RtError::DateOutOfRange { op } => write!(
                 f,
