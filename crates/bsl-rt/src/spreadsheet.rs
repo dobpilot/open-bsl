@@ -798,6 +798,14 @@ pub struct SpreadDocData {
     pub print_scale: Option<i64>,
     /// `ОриентацияСтраницы.Ландшафт` — пара с идентификатором 1 и значением 2.
     pub landscape: bool,
+    /// Поля страницы в миллиметрах (`ПолеСлева` и три соседа). В MXL это
+    /// пары `6..9` списка параметров страницы в сотых долях миллиметра,
+    /// причём порядок идентификаторов свой — сверху, слева, снизу, справа
+    /// (измерено на 8.3.27, файл `tests/conformance/pdf/probe-margins.mxl`);
+    /// чтение возвращает их обратно. Что значат соседние пары 10 и 11, не
+    /// измерено — они всегда пишутся как 1000. Те же поля доходят и до
+    /// записи в PDF.
+    pub margins: crate::PageMargins,
     /// `ОбластьПечати` — прямоугольник 0-based; `None` пишется как
     /// `{0,-1,-1,-1,-1,...}`.
     pub print_area: Option<(u32, u32, u32, u32)>,
@@ -1979,7 +1987,14 @@ fn mxl_body(doc: &SpreadDocData) -> String {
     // Это СПИСОК пар «идентификатор — значение», отсортированный по
     // идентификатору, а не запись с фиксированными полями: `ОриентацияСтраницы
     // .Ландшафт` добавляет пару `1 -> 2`, `МасштабПечати = 80` — пару `2 -> 80`,
-    // а шесть пар `6..11 -> 1000` есть всегда (измерено).
+    // а шесть пар `6..11` есть всегда (измерено).
+    //
+    // Четыре из них — ПОЛЯ СТРАНИЦЫ в сотых долях миллиметра, и порядок
+    // идентификаторов не тот, что у свойств: документ с полями 33, 31, 34
+    // и 32 мм (сверху, слева, снизу, справа) дал `6 -> 3300, 7 -> 3100,
+    // 8 -> 3400, 9 -> 3200` (измерено на 8.3.27). Что значат пары 10 и 11,
+    // не измерено: у документа с любыми полями обе равны 1000.
+    let mm100 = |mm: f64| (mm * 100.0).round() as i64;
     let mut page: Vec<(i64, i64)> = Vec::new();
     if doc.landscape {
         page.push((1, 2));
@@ -1987,7 +2002,12 @@ fn mxl_body(doc: &SpreadDocData) -> String {
     if let Some(scale) = doc.print_scale {
         page.push((2, scale));
     }
-    page.extend((6..=11).map(|id| (id, 1000)));
+    page.push((6, mm100(doc.margins.top)));
+    page.push((7, mm100(doc.margins.left)));
+    page.push((8, mm100(doc.margins.bottom)));
+    page.push((9, mm100(doc.margins.right)));
+    page.push((10, 1000));
+    page.push((11, 1000));
     out.push_str(&format!("{{\n{{0,{},", page.len()));
     for (i, (id, value)) in page.iter().enumerate() {
         out.push_str(&format!("{id},\n{{\"N\",{value}}}"));
@@ -2106,6 +2126,7 @@ pub fn write_file(doc: &SpreadDocData, path: &str, kind: FileKind) -> RtResult<(
         FileKind::Mxl => to_mxl_bytes(doc),
         FileKind::Txt => to_txt_bytes(doc),
         FileKind::Xlsx => crate::xlsx::to_xlsx_bytes(doc),
+        FileKind::Pdf => crate::spreadsheet_pdf::to_pdf_bytes(doc)?,
     };
     std::fs::write(path, bytes).map_err(|e| bad(format!("не удалось записать {path}: {e}")))
 }
@@ -2118,6 +2139,7 @@ pub enum FileKind {
     Mxl,
     Txt,
     Xlsx,
+    Pdf,
 }
 
 // --- мост к значениям BSL -------------------------------------------------
@@ -2139,6 +2161,43 @@ fn number(v: &BslValue, what: &str) -> RtResult<i64> {
 
 fn int_value(n: i64) -> BslValue {
     BslValue::Number(bsl_number::BslNumber::from_i64(n))
+}
+
+/// Число с дробной частью — им наружу отдаются поля страницы
+/// (`ТипЗнч(ТабДок.ПолеСлева)` — «Число», измерено).
+///
+/// `from_f64` отказывает только на нечисле и бесконечности, а в поле
+/// попадает лишь проверенное [`number_f64`] либо сотая доля целого из MXL,
+/// поэтому запасной ноль недостижим.
+fn mm_value(mm: f64) -> BslValue {
+    BslValue::Number(bsl_number::BslNumber::from_f64(mm).unwrap_or(bsl_number::BslNumber::ZERO))
+}
+
+/// Прочитать число, допуская дробное: `ПолеСлева = 12.7` — законное
+/// значение, а `number` требует целого.
+///
+/// Строка тоже принимается, и это не вольность: платформа на
+/// `ПолеСлева = "10"` кладёт в свойство ЧИСЛО 10 (измерено — `ТипЗнч`
+/// после присваивания даёт «Число»), на `"12,7"` — 12,7, то есть
+/// разделителем дробной части служит ЗАПЯТАЯ, а на `"не число"` отвечает
+/// ошибкой. Точка тоже разбирается: у платформы это не проверялось, но
+/// отказывать в записи из-за разделителя было бы хуже.
+fn number_f64(v: &BslValue, what: &str) -> RtResult<f64> {
+    let x = match v {
+        BslValue::Number(n) => n.to_f64(),
+        BslValue::Str(s) => s
+            .to_string()
+            .trim()
+            .replace(',', ".")
+            .parse::<f64>()
+            .map_err(|_| bad(format!("{what}: строка не преобразуется в число")))?,
+        _ => return Err(bad(format!("{what}: ожидалось число"))),
+    };
+    if x.is_finite() {
+        Ok(x)
+    } else {
+        Err(bad(format!("{what}: ожидалось конечное число")))
+    }
 }
 
 /// Данные документа у значения — и у самого документа, и у его области.
@@ -2519,6 +2578,7 @@ pub fn write(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
             crate::EnumValue::SpreadFileMxl => FileKind::Mxl,
             crate::EnumValue::SpreadFileTxt => FileKind::Txt,
             crate::EnumValue::SpreadFileXlsx => FileKind::Xlsx,
+            crate::EnumValue::SpreadFilePdf => FileKind::Pdf,
             _ => return Err(bad("Записать: неподдерживаемый тип файла")),
         },
         Some(_) => return Err(bad("Записать: ожидался ТипФайлаТабличногоДокумента")),
@@ -2626,6 +2686,37 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
         {
             Ok(int_value(d.fix_left))
         }
+        // Поля страницы — в миллиметрах, умолчание 10 у каждого (измерено
+        // на пустом документе 8.3.27).
+        // Английские написания измерены перебором в
+        // `tests/conformance/measure/measure-pdf-write.bsl`: платформа
+        // знает `LeftMargin` и его собратьев, а `FieldLeft`, `MarginLeft` и
+        // `FieldOnLeft` отвергает — все три пробы дали ошибку.
+        _ if name.eq_ignore_ascii_case("ПолеСлева") || name.eq_ignore_ascii_case("LeftMargin") => {
+            Ok(mm_value(d.margins.left))
+        }
+        _ if name.eq_ignore_ascii_case("ПолеСправа")
+            || name.eq_ignore_ascii_case("RightMargin") =>
+        {
+            Ok(mm_value(d.margins.right))
+        }
+        _ if name.eq_ignore_ascii_case("ПолеСверху") || name.eq_ignore_ascii_case("TopMargin") => {
+            Ok(mm_value(d.margins.top))
+        }
+        _ if name.eq_ignore_ascii_case("ПолеСнизу")
+            || name.eq_ignore_ascii_case("BottomMargin") =>
+        {
+            Ok(mm_value(d.margins.bottom))
+        }
+        _ if name.eq_ignore_ascii_case("ОриентацияСтраницы")
+            || name.eq_ignore_ascii_case("PageOrientation") =>
+        {
+            Ok(BslValue::Enum(if d.landscape {
+                crate::EnumValue::PageOrientationLandscape
+            } else {
+                crate::EnumValue::PageOrientationPortrait
+            }))
+        }
         _ => Err(RtError::UnknownColumn(name.to_string())),
     }
 }
@@ -2720,6 +2811,39 @@ pub fn set_property(obj: &BslValue, name: &str, val: BslValue) -> RtResult<()> {
         d.fix_left = number(&val, "ФиксацияСлева")?;
         return Ok(());
     }
+    // Поля страницы в миллиметрах. Значение принимается как есть, без
+    // ограничения снизу: платформа его тоже не поджимает (измерено —
+    // `ПолеСлева = -5` читается обратно как -5, а 500 как 500). Не измерено
+    // другое — как отрицательное поле ложится в РАСКЛАДКУ её печати; тихо
+    // подменять пользовательское число из-за этого нельзя.
+    for (ru, en, field) in [
+        ("ПолеСлева", "LeftMargin", 0),
+        ("ПолеСправа", "RightMargin", 1),
+        ("ПолеСверху", "TopMargin", 2),
+        ("ПолеСнизу", "BottomMargin", 3),
+    ] {
+        if name.eq_ignore_ascii_case(ru) || name.eq_ignore_ascii_case(en) {
+            let mm = number_f64(&val, ru)?;
+            let margins = &mut d.margins;
+            match field {
+                0 => margins.left = mm,
+                1 => margins.right = mm,
+                2 => margins.top = mm,
+                _ => margins.bottom = mm,
+            }
+            return Ok(());
+        }
+    }
+    if name.eq_ignore_ascii_case("ОриентацияСтраницы")
+        || name.eq_ignore_ascii_case("PageOrientation")
+    {
+        d.landscape = match val {
+            BslValue::Enum(crate::EnumValue::PageOrientationLandscape) => true,
+            BslValue::Enum(crate::EnumValue::PageOrientationPortrait) => false,
+            _ => return Err(bad("ОриентацияСтраницы: ожидался член ОриентацияСтраницы")),
+        };
+        return Ok(());
+    }
     Err(RtError::UnknownColumn(name.to_string()))
 }
 
@@ -2750,6 +2874,129 @@ mod tests {
         assert_eq!((doc.height(), doc.width()), (3, 5));
         doc.set_cell_text(2, 4, "");
         assert_eq!((doc.height(), doc.width()), (3, 5));
+    }
+
+    /// `Записать` разбирает второй аргумент по перечислению, и член, в
+    /// который мы писать не умеем, обязан дать ошибку, а не тихий MXL.
+    /// Фикстура этого проверить не может: платформа такие форматы УМЕЕТ, и
+    /// строка вышла бы разной не из-за ошибки, а из-за объёма.
+    #[test]
+    fn write_refuses_a_file_type_it_cannot_produce() {
+        let doc = new_document();
+        let path = std::env::temp_dir().join(format!("open-bsl-spread-{}.bin", std::process::id()));
+        let path = BslValue::Str(BslString::from_str(&path.to_string_lossy()));
+        for (kind, ok) in [
+            (crate::EnumValue::SpreadFileMxl, true),
+            (crate::EnumValue::SpreadFileTxt, true),
+            (crate::EnumValue::SpreadFileXlsx, true),
+            (crate::EnumValue::SpreadFilePdf, true),
+            (crate::EnumValue::JsonBoolean, false),
+        ] {
+            let args = [path.clone(), BslValue::Enum(kind)];
+            assert_eq!(write(&doc, &args).is_ok(), ok, "{kind:?}");
+        }
+        // Не член перечисления вовсе — тоже ошибка.
+        assert!(write(&doc, &[path.clone(), BslValue::Boolean(true)]).is_err());
+        if let BslValue::Str(s) = &path {
+            std::fs::remove_file(s.to_string()).ok();
+        }
+    }
+
+    /// Поля страницы и ориентация — свойства ДОКУМЕНТА: умолчания
+    /// измерены (10 мм и «Портрет»), строка приводится к числу, а
+    /// не-число отвергается.
+    #[test]
+    fn page_properties_round_trip_through_bsl() {
+        let doc = new_document();
+        assert_eq!(
+            get_property(&doc, "ПолеСлева").unwrap().to_string(),
+            "10",
+            "умолчание поля"
+        );
+        assert!(matches!(
+            get_property(&doc, "ОриентацияСтраницы").unwrap(),
+            BslValue::Enum(crate::EnumValue::PageOrientationPortrait)
+        ));
+
+        set_property(&doc, "ПолеСлева", int_value(30)).unwrap();
+        set_property(
+            &doc,
+            "BottomMargin",
+            BslValue::Str(BslString::from_str("12,7")),
+        )
+        .unwrap();
+        set_property(
+            &doc,
+            "ОриентацияСтраницы",
+            BslValue::Enum(crate::EnumValue::PageOrientationLandscape),
+        )
+        .unwrap();
+        assert_eq!(get_property(&doc, "LeftMargin").unwrap().to_string(), "30");
+        // `Display` у `BslValue` отладочный, с точкой; запятую пользователь
+        // видит через `bsl_format` — это проверяет фикстура `pdf-write`.
+        assert_eq!(get_property(&doc, "ПолеСнизу").unwrap().to_string(), "12.7");
+        assert!(matches!(
+            get_property(&doc, "PageOrientation").unwrap(),
+            BslValue::Enum(crate::EnumValue::PageOrientationLandscape)
+        ));
+
+        assert!(set_property(
+            &doc,
+            "ПолеСлева",
+            BslValue::Str(BslString::from_str("не число"))
+        )
+        .is_err());
+        assert!(set_property(&doc, "ОриентацияСтраницы", int_value(1)).is_err());
+    }
+
+    /// Поля переживают круг через MXL: идентификаторы пар 6..9 измерены
+    /// (сверху, слева, снизу, справа) и лежат в сотых долях миллиметра.
+    #[test]
+    fn margins_survive_the_mxl_round_trip() {
+        let mut doc = SpreadDocData::new();
+        doc.set_cell_text(0, 0, "A");
+        doc.margins.top = 33.0;
+        doc.margins.left = 31.0;
+        doc.margins.bottom = 34.0;
+        doc.margins.right = 32.5;
+        let bytes = to_mxl_bytes(&doc);
+        let text = String::from_utf8_lossy(&bytes).to_string();
+        assert!(text.contains("{\"N\",3300}"), "{text}");
+        assert!(text.contains("{\"N\",3250}"), "{text}");
+        let back = from_mxl_bytes(&bytes).unwrap();
+        assert_eq!(back.margins, doc.margins);
+        // Умолчательный документ пишется теми же 1000, что и раньше, —
+        // иначе разъехался бы весь корпус MXL.
+        let plain = to_mxl_bytes(&SpreadDocData::new());
+        assert_eq!(
+            String::from_utf8_lossy(&plain)
+                .matches("{\"N\",1000}")
+                .count(),
+            6
+        );
+    }
+
+    /// Тот же круг, но с ФАЙЛОМ ПЛАТФОРМЫ. `tests/conformance/pdf/
+    /// probe-margins.mxl` записан 8.3.27 при полях 31, 32, 33 и 34 мм
+    /// (съёмка `capture-platform-pdf-layout.bsl`, её вывод помнит длину:
+    /// «probe-margins.mxl: Да, 1 085»), и порядок идентификаторов пар —
+    /// 6 сверху, 7 слева, 8 снизу, 9 справа — прочитан именно из него.
+    /// Проба закоммичена рядом со скриптом, чтобы это утверждение
+    /// проверялось, а не пересказывалось.
+    #[test]
+    fn margins_come_back_from_the_mxl_written_by_the_platform() {
+        let bytes = std::fs::read("../../tests/conformance/pdf/probe-margins.mxl")
+            .expect("проба съёмки лежит рядом со скриптом");
+        let doc = from_mxl_bytes(&bytes).expect("файл платформы читается");
+        assert_eq!(
+            doc.margins,
+            crate::PageMargins {
+                left: 31.0,
+                right: 32.0,
+                top: 33.0,
+                bottom: 34.0,
+            }
+        );
     }
 
     #[test]
@@ -3223,9 +3470,16 @@ pub fn from_mxl_bytes(bytes: &[u8]) -> RtResult<SpreadDocData> {
             let id = list[i].number().unwrap_or(0);
             if let Node::Group(val) = &list[i + 1] {
                 let value = val.get(1).map_or(Ok(0), Node::number)?;
+                // Поля страницы лежат в сотых долях миллиметра, и порядок
+                // идентификаторов свой: сверху, слева, снизу, справа.
+                let mm = |v: i64| v as f64 / 100.0;
                 match id {
                     1 => doc.landscape = value == 2,
                     2 => doc.print_scale = Some(value),
+                    6 => doc.margins.top = mm(value),
+                    7 => doc.margins.left = mm(value),
+                    8 => doc.margins.bottom = mm(value),
+                    9 => doc.margins.right = mm(value),
                     _ => {}
                 }
             }

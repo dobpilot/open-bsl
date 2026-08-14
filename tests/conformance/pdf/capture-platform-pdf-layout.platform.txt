@@ -1,0 +1,33 @@
+PDF строкой: PDF
+PDF тип: ТипФайлаТабличногоДокумента
+PDF англ: PDF
+умолч ШиринаКолонки: 9
+умолч ВысотаСтроки: 0
+умолч поля: 10 10 10 10
+умолч поле тип: Число
+умолч ориентация: Портрет
+умолч ориентация тип: ОриентацияСтраницы
+ориентация члены: Портрет / Ландшафт
+ориентация англ: Ландшафт
+ориентация метатип: ПеречислениеОриентацияСтраницы
+умолч РазмерСтраницы: 
+probe-grid.pdf: Да, 4 784
+probe-colwidth.pdf: Да, 4 794
+probe-rowheight.pdf: Да, 4 801
+probe-merge.pdf: Да, 4 784
+probe-font.pdf: Да, 11 883
+probe-border.pdf: Да, 4 854
+probe-align.pdf: Да, 4 808
+probe-landscape.pdf: Да, 4 785
+поля прочитались: 30 10 25 5
+probe-margins.pdf: Да, 4 785
+probe-pages.pdf: Да, 7 800
+probe-empty.pdf: Да, 877
+probe-fit.pdf: Да, 8 048
+probe-numeric.pdf: Да, 4 793
+probe-line.pdf: Да, 4 874
+probe-number.pdf: Да, 4 990
+probe-wide.pdf: Да, 6 322
+probe-big.pdf: Да, 21 251
+probe-margins.mxl: Да, 1 085
+probe-color.pdf: Да, 4 812

@@ -969,11 +969,15 @@ impl PaintMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PageId(usize);
 
-/// Страница: размер и накопленный контент-поток.
+/// Страница: размер, накопленный контент-поток и глубина сохранённого
+/// графического состояния.
 struct Page {
     width: f64,
     height: f64,
     content: Vec<u8>,
+    /// Сколько `q` выведено без парного `Q`. Незакрытая скобка — это битый
+    /// файл, поэтому глубина считается и проверяется при записи.
+    clip_depth: usize,
 }
 
 /// Проверка входного числа: NaN и бесконечность в файл не попадают — их
@@ -1046,6 +1050,7 @@ impl PdfDocument {
             width,
             height,
             content: Vec::new(),
+            clip_depth: 0,
         });
         Ok(PageId(self.pages.len() - 1))
     }
@@ -1076,6 +1081,90 @@ impl PdfDocument {
         }
         let page = self.page_mut(page)?;
         push_op(&mut page.content, &[fmt_real(width)], "w");
+        Ok(())
+    }
+
+    /// Штриховка последующих обводок: длины отрезков и пробелов в точках и
+    /// сдвиг начала узора. Пустой узор — сплошная линия.
+    ///
+    /// Платформа рисует точечную границу ячейки как `[1] 0 d` при толщине
+    /// 0.75 (измерено на 8.3.27, `tests/conformance/pdf/probe-line.pdf`).
+    ///
+    /// # Errors
+    ///
+    /// Длина не конечна или отрицательна, сдвиг не конечен либо страницы
+    /// нет в документе.
+    pub fn set_dash(&mut self, page: PageId, pattern: &[f64], phase: f64) -> RtResult<()> {
+        let phase = finite("сдвиг штриховки", phase)?;
+        let mut parts = Vec::with_capacity(pattern.len());
+        for length in pattern {
+            let length = finite("длина штриха", *length)?;
+            if length < 0.0 {
+                return Err(RtError::Pdf(format!(
+                    "длина штриха не может быть отрицательной, получено {}",
+                    fmt_real(length)
+                )));
+            }
+            parts.push(fmt_real(length));
+        }
+        let page = self.page_mut(page)?;
+        push_op(
+            &mut page.content,
+            &[format!("[{}]", parts.join(" ")), fmt_real(phase)],
+            "d",
+        );
+        Ok(())
+    }
+
+    /// Сохранить графическое состояние и обрезать вывод прямоугольником —
+    /// `q x y w h re W n`. До парного [`PdfDocument::pop_clip`] всё, что
+    /// выходит за прямоугольник, на странице не появится.
+    ///
+    /// Отдельный примитив здесь потому, что отсечение — это решение
+    /// РАСКЛАДКИ (текст не должен вылезать из ячейки), а не формата, и
+    /// принимает его вызывающий; платформа обставляет отсечением каждую
+    /// ячейку (измерено).
+    ///
+    /// # Errors
+    ///
+    /// Координата или размер не конечны либо страницы нет в документе.
+    pub fn push_clip(
+        &mut self,
+        page: PageId,
+        x: f64,
+        y: f64,
+        width: f64,
+        height: f64,
+    ) -> RtResult<()> {
+        let box_ = [
+            finite("X отсечения", x)?,
+            finite("Y отсечения", y)?,
+            finite("ширина отсечения", width)?,
+            finite("высота отсечения", height)?,
+        ];
+        let page = self.page_mut(page)?;
+        push_op(&mut page.content, &[], "q");
+        push_op(&mut page.content, &box_.map(fmt_real), "re");
+        push_op(&mut page.content, &[], "W");
+        push_op(&mut page.content, &[], "n");
+        page.clip_depth += 1;
+        Ok(())
+    }
+
+    /// Вернуть графическое состояние, сохранённое [`PdfDocument::push_clip`].
+    ///
+    /// # Errors
+    ///
+    /// Парного `push_clip` не было либо страницы нет в документе.
+    pub fn pop_clip(&mut self, page: PageId) -> RtResult<()> {
+        let page = self.page_mut(page)?;
+        if page.clip_depth == 0 {
+            return Err(RtError::Pdf(
+                "снятие отсечения без парного наложения".to_string(),
+            ));
+        }
+        page.clip_depth -= 1;
+        push_op(&mut page.content, &[], "Q");
         Ok(())
     }
 
@@ -1266,13 +1355,27 @@ impl PdfDocument {
     ///
     /// # Errors
     ///
-    /// В документе нет ни одной страницы: `/Pages` с пустым `/Kids` —
-    /// документ, который просмотрщики отвергают.
+    /// В документе нет ни одной страницы (`/Pages` с пустым `/Kids` —
+    /// документ, который просмотрщики отвергают) либо на какой-то странице
+    /// осталось незакрытое отсечение: `q` без `Q` просмотрщик считает
+    /// повреждением потока.
     pub fn write(&self) -> RtResult<Vec<u8>> {
         if self.pages.is_empty() {
             return Err(RtError::Pdf(
                 "в документе PDF нет ни одной страницы".to_string(),
             ));
+        }
+        if let Some((index, page)) = self
+            .pages
+            .iter()
+            .enumerate()
+            .find(|(_, page)| page.clip_depth != 0)
+        {
+            return Err(RtError::Pdf(format!(
+                "на странице {} осталось {} незакрытых отсечений",
+                index + 1,
+                page.clip_depth
+            )));
         }
 
         let pages = self.pages.len();

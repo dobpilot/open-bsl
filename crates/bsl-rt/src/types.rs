@@ -208,6 +208,7 @@ pub enum TypeId {
     SpreadDrawing,
     SpreadFileType,
     DrawingKind,
+    PageOrientation,
 
     // --- ТекстовыйДокумент ---------------------------------------------
     // Та же пара написаний: тип с пробелом («Текстовый документ»),
@@ -663,6 +664,11 @@ const NAMES: &[(TypeId, &str, &str)] = &[
         TypeId::DrawingKind,
         "ТипРисункаТабличногоДокумента",
         "SpreadsheetDocumentDrawingType",
+    ),
+    (
+        TypeId::PageOrientation,
+        "ОриентацияСтраницы",
+        "PageOrientation",
     ),
     (
         TypeId::SpreadDocument,

@@ -51,13 +51,22 @@ pub enum EnumValue {
     // --- ТипФайлаТабличногоДокумента -----------------------------------
     // Членов у платформы четырнадцать (MXL, MXL7, XLS, XLS95, XLSX, ODS,
     // TXT, ANSITXT, HTML, HTML3, HTML4, HTML5, PDF, DOCX; `MXLX` НЕТ —
-    // измерено перебором). Здесь заведены только те, в которые мы умеем
-    // писать: остальные лучше не знать вовсе, чем принять и записать не то.
+    // измерено перебором). Здесь заведены те, в которые мы умеем писать:
+    // остальные лучше не знать вовсе, чем принять и записать не то.
     SpreadFileMxl,
     SpreadFileTxt,
     SpreadFileXlsx,
+    SpreadFilePdf,
     /// Единственный поддержанный вид рисунка.
     DrawingRectangle,
+
+    // --- ОриентацияСтраницы ---------------------------------------------
+    // Оба члена ИЗМЕРЕНЫ на 8.3.27: `Строка(ОриентацияСтраницы.Портрет)` —
+    // «Портрет», `.Ландшафт` — «Ландшафт», метатип —
+    // «ПеречислениеОриентацияСтраницы», а `PageOrientation.Landscape`
+    // платформа принимает и печатает тем же русским представлением.
+    PageOrientationPortrait,
+    PageOrientationLandscape,
 
     // --- ТипУзлаXML ----------------------------------------------------
     // Состав ВЫЯСНЕН перебором на 8.3.27, а не взят из документации:
@@ -318,6 +327,9 @@ pub enum EnumKind {
     DomNodeType,
     SpreadFileType,
     DrawingKind,
+    /// `ОриентацияСтраницы` — свойство `ТабличныйДокумент.ОриентацияСтраницы`
+    /// и пара с идентификатором 1 в параметрах страницы MXL.
+    PageOrientation,
     TextEncoding,
     /// `ПорядокБайтов` — порядок байтов многобайтового целого в
     /// `БуферДвоичныхДанных`. Английское написание `ByteOrder` ИЗМЕРЕНО
@@ -428,6 +440,7 @@ impl EnumKind {
                 "ТипРисункаТабличногоДокумента",
                 "SpreadsheetDocumentDrawingType",
             ),
+            EnumKind::PageOrientation => ("ОриентацияСтраницы", "PageOrientation"),
             EnumKind::TextEncoding => ("КодировкаТекста", "TextEncoding"),
             EnumKind::ByteOrder => ("ПорядокБайтов", "ByteOrder"),
             EnumKind::FileOpenMode => ("РежимОткрытияФайла", "FileOpenMode"),
@@ -485,6 +498,9 @@ impl EnumKind {
             EnumKind::DomNodeType => "ПеречислениеТипУзлаDOM",
             EnumKind::SpreadFileType => "ПеречислениеТипФайлаТабличногоДокумента",
             EnumKind::DrawingKind => "ПеречислениеТипРисункаТабличногоДокумента",
+            // ИЗМЕРЕНО, а не достроено по образцу: `Строка(ТипЗнч(
+            // ОриентацияСтраницы))` на 8.3.27 даёт «ПеречислениеОриентацияСтраницы».
+            EnumKind::PageOrientation => "ПеречислениеОриентацияСтраницы",
             EnumKind::TextEncoding => "ПеречислениеКодировкаТекста",
             // Здесь префикс не предположение по образцу, а ИЗМЕРЕНО:
             // `Строка(ПорядокБайтов)` и `Строка(ТипЗнч(ПорядокБайтов))`
@@ -689,11 +705,32 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "XLSX",
     ),
     (
+        EnumKind::SpreadFileType,
+        EnumValue::SpreadFilePdf,
+        "PDF",
+        "PDF",
+        "PDF",
+    ),
+    (
         EnumKind::DrawingKind,
         EnumValue::DrawingRectangle,
         "Прямоугольник",
         "Rectangle",
         "Прямоугольник",
+    ),
+    (
+        EnumKind::PageOrientation,
+        EnumValue::PageOrientationPortrait,
+        "Портрет",
+        "Portrait",
+        "Портрет",
+    ),
+    (
+        EnumKind::PageOrientation,
+        EnumValue::PageOrientationLandscape,
+        "Ландшафт",
+        "Landscape",
+        "Ландшафт",
     ),
     // Пятая колонка снова не производная от третьей: платформа печатает
     // «Начало элемента», а не «НачалоЭлемента». Всё измерено.
@@ -1819,6 +1856,8 @@ pub const ENUM_NAMES: &[(&str, EnumKind)] = &[
     ("SpreadsheetDocumentFileType", EnumKind::SpreadFileType),
     ("ТипРисункаТабличногоДокумента", EnumKind::DrawingKind),
     ("SpreadsheetDocumentDrawingType", EnumKind::DrawingKind),
+    ("ОриентацияСтраницы", EnumKind::PageOrientation),
+    ("PageOrientation", EnumKind::PageOrientation),
     ("ПорядокБайтов", EnumKind::ByteOrder),
     ("ByteOrder", EnumKind::ByteOrder),
     ("РежимОткрытияФайла", EnumKind::FileOpenMode),

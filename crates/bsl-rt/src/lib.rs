@@ -28,6 +28,7 @@ mod regex_api;
 mod runtime_shapes;
 mod shape;
 mod spreadsheet;
+mod spreadsheet_pdf;
 mod spreadsheet_template;
 mod stream;
 mod string;
@@ -83,6 +84,7 @@ pub use spreadsheet::{
     write as spread_write, write_file as spread_write_file, AreaKind, Color, FileKind, Font,
     HAlign, Line, LineStyle, Merge, NamedArea, Rect, SpreadDocData, VAlign,
 };
+pub use spreadsheet_pdf::{to_pdf_bytes, PageMargins, DEFAULT_MARGIN_MM};
 pub use spreadsheet_template::from_template_xml;
 pub use stream::{is_stream, write as stream_write, StreamData};
 pub use string::{BslString, MAX_TEMPLATE_ARGS};
@@ -371,6 +373,7 @@ fn enum_kind_type_id(kind: EnumKind) -> TypeId {
         EnumKind::DomNodeType => TypeId::DomNodeType,
         EnumKind::SpreadFileType => TypeId::SpreadFileType,
         EnumKind::DrawingKind => TypeId::DrawingKind,
+        EnumKind::PageOrientation => TypeId::PageOrientation,
         EnumKind::TextEncoding => TypeId::TextEncoding,
         EnumKind::ByteOrder => TypeId::ByteOrder,
         EnumKind::FileOpenMode => TypeId::FileOpenMode,
