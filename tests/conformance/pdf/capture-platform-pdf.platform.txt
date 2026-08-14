@@ -1,0 +1,5 @@
+запись: да
+существует: Да
+полное имя: tests/conformance/pdf/platform-simple.pdf
+размер: 8 045
+первая строка: %PDF-1.7

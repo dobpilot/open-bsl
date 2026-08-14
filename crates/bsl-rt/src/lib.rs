@@ -22,6 +22,7 @@ mod locale;
 mod map;
 mod object;
 pub mod open_questions;
+pub mod pdf;
 mod regex;
 mod regex_api;
 mod runtime_shapes;
@@ -234,6 +235,12 @@ pub enum RtError {
     /// СОДЕРЖИМОЕ — по типу ошибки это должно быть видно так же, как у XML,
     /// XSD и XDTO.
     Zip(String),
+    /// Писатель PDF: испорченный вход его API — координата NaN, цвет вне
+    /// диапазона, документ без страниц, управляющий знак в тексте.
+    /// Отдельно от [`RtError::Spread`] намеренно: `pdf` — слой формата
+    /// файла, а не табличного документа, и пользоваться им будет не
+    /// только он.
+    Pdf(String),
     /// Имя из `СписокСвойств` в `ЗаполнитьЗначенияСвойств`, которого нет у
     /// источника или у приёмника. Отдельно от [`RtError::UnknownField`] и
     /// [`RtError::UnknownColumn`], потому что имя тут пришло СТРОКОЙ из
@@ -324,6 +331,7 @@ impl fmt::Display for RtError {
             RtError::Regex(msg) => write!(f, "{msg}"),
             RtError::Vstr(msg) => write!(f, "{msg}"),
             RtError::Zip(msg) => write!(f, "{msg}"),
+            RtError::Pdf(msg) => write!(f, "{msg}"),
             RtError::UnknownType(name) => write!(f, "тип «{name}» не определён"),
             RtError::DateOutOfRange { op } => write!(
                 f,
