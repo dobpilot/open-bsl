@@ -1026,7 +1026,9 @@ pub enum BuiltinMethod {
 
     // --- ФайловыеПотоки (менеджер) ------------------------------------------
     /// `ФайловыеПотоки.Открыть(Имя, Режим[, Доступ])` — то же, что
-    /// конструктор `ФайловыйПоток`.
+    /// конструктор `ФайловыйПоток`. Имя делит с читателем архива
+    /// (`ЧтениеZipФайла.Открыть(Источник[, Пароль])`), поэтому диспетчер
+    /// смотрит на получателя, как у `Прочитать` и `Закрыть`.
     StreamOpen,
     /// `ОткрытьДляЧтения(Имя)` — `Открыть` плюс доступ `Чтение`.
     StreamOpenForRead,
@@ -1130,6 +1132,13 @@ pub enum BuiltinMethod {
     /// `СериализаторXDTO.ВозможностьЧтенияXML(ЧтениеXML)` — прочитается ли
     /// текущий элемент. ИЗМЕРЕН существующим, здесь не поддержан.
     XdtoCanReadXml,
+
+    /// `ЧтениеZipФайла.Извлечь(Элемент, Каталог[, Режим][, Пароль])` —
+    /// распаковка ОДНОЙ записи. Имя ничьё больше: `Извлечь` есть только у
+    /// читателей архива.
+    ArchiveExtract,
+    /// `ЧтениеZipФайла.ИзвлечьВсе(Каталог[, Режим])`.
+    ArchiveExtractAll,
 }
 
 /// Написания МЕТОДОВ объектов — тот же принцип, что и у
@@ -1324,6 +1333,12 @@ pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
     ("OpenForAppend", BuiltinMethod::StreamOpenForAppend),
     ("Создать", BuiltinMethod::Create),
     ("Create", BuiltinMethod::Create),
+    // Английские написания обоих методов распаковки ИЗМЕРЕНЫ: `Extract` и
+    // `ExtractAll` платформа принимает и делает ими то же самое.
+    ("Извлечь", BuiltinMethod::ArchiveExtract),
+    ("Extract", BuiltinMethod::ArchiveExtract),
+    ("ИзвлечьВсе", BuiltinMethod::ArchiveExtractAll),
+    ("ExtractAll", BuiltinMethod::ArchiveExtractAll),
     // Модель типов XDTO. Английские написания обоих методов фабрики
     // ИЗМЕРЕНЫ: `Фаб.Type("urn:test", "RootType")` и
     // `Фаб.Create(Тип, "аб")` платформа принимает.
@@ -2068,6 +2083,13 @@ pub fn call_builtin_method(
                     receiver: obj.type_name(),
                 }),
             },
+            _ if crate::zip::is_entries(obj) => match args {
+                [index] => crate::zip::get(obj, BslValue::index_as_usize(index)?),
+                _ => Err(RtError::MethodNotApplicable {
+                    method: "Получить",
+                    receiver: obj.type_name(),
+                }),
+            },
             _ => Err(RtError::MethodNotApplicable {
                 method: "Получить",
                 receiver: obj.type_name(),
@@ -2099,6 +2121,18 @@ pub fn call_builtin_method(
                     method: "Найти",
                     receiver: obj.type_name(),
                 });
+            }
+            // У коллекции элементов архива аргумент РОВНО один: измерено,
+            // что `Элементы.Найти("шум.bin", 1)` платформа отвергает —
+            // «Слишком много фактических параметров».
+            if crate::zip::is_entries(obj) {
+                if args.len() != 1 {
+                    return Err(RtError::MethodNotApplicable {
+                        method: "Найти",
+                        receiver: obj.type_name(),
+                    });
+                }
+                return crate::zip::find(obj, value);
             }
             obj.table_find(value, args.get(1).unwrap_or(&BslValue::Undefined))
         }
@@ -2510,7 +2544,21 @@ pub fn call_builtin_method(
         // проверки `Поток.Создать("файл")` завёл бы файл. Что платформа
         // такой вызов отвергает — ИЗМЕРЕНО (`Поток.Создать` и
         // `Поток.ОткрытьДляЧтения` на `ПотокВПамяти` дают ошибку).
+        // Имя `Открыть` делят менеджер файловых потоков и читатель архива —
+        // ветвление по получателю, как у `Прочитать`.
+        BuiltinMethod::StreamOpen if crate::zip::is_reader(obj) => {
+            crate::zip::open(obj, args)?;
+            Ok(BslValue::Undefined)
+        }
         BuiltinMethod::StreamOpen => manager(obj, "Открыть", crate::stream::manager_open, args),
+        BuiltinMethod::ArchiveExtract => {
+            crate::zip::extract(obj, args)?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinMethod::ArchiveExtractAll => {
+            crate::zip::extract_all(obj, args)?;
+            Ok(BslValue::Undefined)
+        }
         BuiltinMethod::StreamOpenForRead => manager(
             obj,
             "ОткрытьДляЧтения",

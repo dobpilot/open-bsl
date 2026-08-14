@@ -562,6 +562,22 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
         Instr::NewFileStreamsManager { dst } => {
             write!(dst);
         }
+        // Читатель архива с источником открывает и вычитывает файл целиком,
+        // а с источником-потоком двигает и возвращает его позицию — порядок
+        // наблюдаем в обоих случаях.
+        Instr::NewArchiveReader {
+            dst,
+            zip: _,
+            source,
+            password,
+            archive_type,
+        } => {
+            read!(source);
+            read!(password);
+            read!(archive_type);
+            write!(dst);
+            e.io = true;
+        }
         // Читатель и писатель данных: источником бывает ИМЯ ФАЙЛА, и тогда
         // конструктор открывает файл (а у писателя — создаёт, если файла нет;
         // существующий не обрезает — измерено). Кроме того оба запоминают

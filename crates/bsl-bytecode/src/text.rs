@@ -36,7 +36,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 13;
+pub const FORMAT_VERSION: u32 = 14;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -89,6 +89,7 @@ pub const OPCODES: &[&str] = &[
     "NewUuid",
     "NewFileStream",
     "NewFileStreamsManager",
+    "NewArchiveReader",
     "NewDataReader",
     "NewDataWriter",
     "NewJsonReader",
@@ -448,6 +449,16 @@ fn write_instr(instr: &Instr) -> String {
             access,
         } => format!("NewFileStream dst={dst} path={path} mode={mode} access={access}"),
         Instr::NewFileStreamsManager { dst } => format!("NewFileStreamsManager dst={dst}"),
+        Instr::NewArchiveReader {
+            dst,
+            zip,
+            source,
+            password,
+            archive_type,
+        } => format!(
+            "NewArchiveReader dst={dst} zip={zip} source={source} password={password} \
+             archive_type={archive_type}"
+        ),
         Instr::NewDataReader {
             dst,
             source,
@@ -1340,6 +1351,13 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
             access: field_u8(&f, no, "access")?,
         },
         "NewFileStreamsManager" => Instr::NewFileStreamsManager { dst: dst(&f)? },
+        "NewArchiveReader" => Instr::NewArchiveReader {
+            dst: dst(&f)?,
+            zip: field_bool(&f, no, "zip")?,
+            source: field_u8(&f, no, "source")?,
+            password: field_u8(&f, no, "password")?,
+            archive_type: field_u8(&f, no, "archive_type")?,
+        },
         "NewDataReader" => Instr::NewDataReader {
             dst: dst(&f)?,
             source: field_u8(&f, no, "source")?,
@@ -1531,6 +1549,20 @@ mod tests {
          ф = Новый ФайловыйПоток(\"/dev/null\", РежимОткрытияФайла.Открыть);\n\
          г = Новый ФайловыйПоток(\"/dev/null\", РежимОткрытияФайла.Открыть, ДоступКФайлу.Чтение);\n\
          м = ФайловыеПотоки;\nо = м.ОткрытьДляЧтения(\"/dev/null\");\n",
+        // Читатели архива: обе формы конструктора у каждого (пустая и со
+        // всеми аргументами), свойства, четыре метода и оба перечисления
+        // чтения. Корпус только компилируется, поэтому архива на диске
+        // здесь не нужно.
+        "ч = Новый ЧтениеZipФайла;\n\
+         з = Новый ЧтениеZipФайла(\"/dev/null\", \"пароль\");\n\
+         а = Новый ЧтениеФайлаАрхива(\"/dev/null\", \"пароль\", ТипФайлаАрхива.Zip);\n\
+         ч.Открыть(\"/dev/null\");\n\
+         к = ч.Элементы;\nн = к.Количество();\nэ = к[0];\n\
+         ф = к.Найти(\"а.txt\");\nг = к.Получить(0);\n\
+         ип = э.ИсходноеПолноеИмя;\nр = э.РазмерНесжатого;\nв = э.ВремяИзменения;\n\
+         ч.Извлечь(э, \"/tmp\", РежимВосстановленияПутейФайловZIP.Восстанавливать);\n\
+         ч.ИзвлечьВсе(\"/tmp\", РежимВосстановленияПутейФайловZIP.НеВосстанавливать);\n\
+         м = ч.Комментарий;\nч.Закрыть();\n",
         // УИД: обе формы конструктора — случайный и разбор строки.
         "у = Новый УникальныйИдентификатор;\n\
          ф = Новый УникальныйИдентификатор(\"abcdef12-3456-7890-abcd-ef1234567890\");\n\

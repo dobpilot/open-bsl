@@ -15,8 +15,20 @@
 //! Не поддерживается намеренно: шифрование (бит 0 — честная ошибка, а не
 //! попытка расшифровать), многотомные архивы и способы хранения, кроме 0 и 8;
 //! всё это распознаётся и называется в тексте ошибки.
+//!
+//! Поверх читателя во второй половине файла лежит поверхность встроенного
+//! языка — `ЧтениеZipФайла` и `ЧтениеФайлаАрхива` со своими коллекциями и
+//! элементами ([`ArchiveState`]). Между ней и форматом проходит важная
+//! граница: формат хранит имя записи БАЙТАМИ, а всё, что платформа делает с
+//! именем дальше — декодирование как UTF-8 с заменяющими символами,
+//! подстановка недопустимых в имени файла знаков, срез хвостовых точек и
+//! пробелов, разрешение столкновений суффиксом `(N)` и разделение на пару
+//! `Имя`/`ИсходноеИмя`, — измерено на 8.3.27 и живёт уже там.
 
-use crate::RtError;
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use crate::{BslObject, BslValue, RtError, RtResult};
 
 /// CRC-32 (полином `0xEDB88320`) — тот же, что у ZIP и PNG. Таблица
 /// строится на первом обращении: 256 слов дешевле, чем побитовый цикл на
@@ -234,11 +246,21 @@ fn to_usize(value: u64) -> Result<usize, RtError> {
 
 /// Одна запись архива — так, как её описывает центральный каталог.
 ///
-/// Имя хранится СЫРЫМИ байтами: в однобайтовых архивах кодовая страница
-/// именем не задана, а какую из них берёт платформа 1С — вопрос отдельной
-/// задачи, и угадывать его здесь нечего. Декодированное имя отдаётся только
-/// когда его объявил сам архив, битом 11 общих флагов.
+/// Имя хранится СЫРЫМИ байтами, а декодированное отдаётся только когда его
+/// объявил сам архив, битом 11 общих флагов. Платформа, как выяснилось
+/// замером, поступает иначе: она декодирует имя КАК UTF-8 независимо от
+/// бита 11, подставляя `U+FFFD` на негодных байтах (имя `привет.txt` в
+/// CP866 8.3.27 показывает как `\u{FFFD}\u{A22}\u{FFFD}\u{FFFD}.txt` — это
+/// ровно `String::from_utf8_lossy` от тех же байтов). Это решение
+/// поверхности встроенного языка, а не формата, поэтому оно и живёт ниже,
+/// в [`ArchiveState`], а здесь имя остаётся байтами.
+///
+/// Часть полей и разборщиков читают только юнит-тесты: поверхности BSL
+/// хватает размеров, шифрования и даты, а способ хранения, CRC и смещение
+/// она смотрит уже внутри [`read_entry`]. Проверять их снаружи всё равно
+/// нужно — иначе разбор каталога держался бы на одном лишь чтении данных.
 #[cfg_attr(not(test), allow(dead_code))]
+#[derive(Debug)]
 pub(crate) struct ZipEntry {
     name: Vec<u8>,
     utf8_name: bool,
@@ -249,6 +271,11 @@ pub(crate) struct ZipEntry {
     local_offset: u64,
     encrypted: bool,
     data_descriptor: bool,
+    /// Поля времени и даты MS-DOS как они лежат в каталоге. Разбираются
+    /// не здесь, а в [`dos_datetime`]: правило нормализации у платформы
+    /// своё и измерено отдельно.
+    mod_time: u16,
+    mod_date: u16,
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
@@ -313,6 +340,11 @@ impl ZipEntry {
         self.name.last() == Some(&b'/')
     }
 
+    /// Время изменения записи так, как его показывает встроенный язык.
+    pub(crate) fn modified(&self) -> crate::BslDate {
+        dos_datetime(self.mod_time, self.mod_date)
+    }
+
     /// Имя для текста ошибки. Не подменяет [`ZipEntry::name`]: однобайтовые
     /// имена здесь показываются с заменяющими символами, и это годится
     /// только для сообщения человеку.
@@ -325,10 +357,14 @@ impl ZipEntry {
 ///
 /// Данные не копируются — [`ZipArchive`] живёт не дольше среза, из которого
 /// разобран, — а распаковка происходит в [`ZipArchive::read`] по требованию.
-#[cfg_attr(not(test), allow(dead_code))]
+/// Объекту встроенного языка срез не годится (он переживает и файл, и
+/// поток, из которых прочитан), поэтому [`ArchiveState`] ниже забирает
+/// записи себе через [`ZipArchive::into_parts`] и распаковывает уже
+/// свободной функцией [`read_entry`].
 pub(crate) struct ZipArchive<'a> {
     data: &'a [u8],
     entries: Vec<ZipEntry>,
+    comment: Vec<u8>,
 }
 
 /// Короткая форма для сообщений: сами байты архива в отладочном выводе не
@@ -432,12 +468,28 @@ impl<'a> ZipArchive<'a> {
             )));
         }
 
-        Ok(ZipArchive { data, entries })
+        // Комментарий архива лежит сразу за записью конца каталога, и его
+        // длина уже проверена в `find_eocd`: кандидат считается настоящим
+        // только тогда, когда она доводит ровно до конца файла.
+        let comment_len = usize::from(u16_at(data, eocd + 20)?);
+        let comment = slice_at(data, eocd + EOCD_LEN, comment_len)?.to_vec();
+
+        Ok(ZipArchive {
+            data,
+            entries,
+            comment,
+        })
     }
 
     /// Записи в порядке центрального каталога.
     pub(crate) fn entries(&self) -> &[ZipEntry] {
         &self.entries
+    }
+
+    /// Отдать записи и комментарий наружу: объекту встроенного языка нужны
+    /// собственные данные, а не заимствованные у среза.
+    pub(crate) fn into_parts(self) -> (Vec<ZipEntry>, Vec<u8>) {
+        (self.entries, self.comment)
     }
 
     /// Прочитать и распаковать запись с номером `index`.
@@ -457,77 +509,92 @@ impl<'a> ZipArchive<'a> {
             .entries
             .get(index)
             .ok_or_else(|| zip_err(&format!("в архиве нет записи с номером {index}")))?;
-
-        // Отказ до всякого чтения данных: расшифровки здесь нет, и делать
-        // вид, что данные прочитаны, нельзя.
-        if entry.encrypted {
-            return Err(zip_err(&format!(
-                "запись «{}» зашифрована, а зашифрованные архивы не поддерживаются",
-                entry.name_for_message()
-            )));
-        }
-
-        let header = to_usize(entry.local_offset)?;
-        if u32_at(self.data, header)? != SIG_LOCAL {
-            return Err(zip_err(&format!(
-                "у записи «{}» нет локального заголовка по объявленному смещению",
-                entry.name_for_message()
-            )));
-        }
-        // Длины имени и extra берутся из локального заголовка: они законно
-        // отличаются от каталожных (Zip64 и метки времени пишут в extra
-        // по-разному в двух местах).
-        let name_len = usize::from(u16_at(self.data, header + 26)?);
-        let extra_len = usize::from(u16_at(self.data, header + 28)?);
-        let at = header
-            .checked_add(LOCAL_HEADER_LEN)
-            .and_then(|v| v.checked_add(name_len))
-            .and_then(|v| v.checked_add(extra_len))
-            .ok_or_else(truncated)?;
-
-        let size = to_usize(entry.size)?;
-        let packed = slice_at(self.data, at, to_usize(entry.compressed_size)?)?;
-
-        let out = match entry.method {
-            METHOD_STORED => {
-                if packed.len() != size {
-                    return Err(zip_err(&format!(
-                        "у записи «{}» способ хранения 0, но размеры не совпадают",
-                        entry.name_for_message()
-                    )));
-                }
-                packed.to_vec()
-            }
-            METHOD_DEFLATED => {
-                let out = crate::inflate::inflate(packed, size)?;
-                // Предел в `inflate` не даёт распаковать больше объявленного,
-                // а вот меньше — признак того, что поток обрезан по границе
-                // блока, и молчать об этом нельзя.
-                if out.len() != size {
-                    return Err(zip_err(&format!(
-                        "у записи «{}» размер не совпал: распаковано {} байт вместо {size}",
-                        entry.name_for_message(),
-                        out.len()
-                    )));
-                }
-                out
-            }
-            other => {
-                return Err(zip_err(&format!(
-                    "у записи «{}» способ хранения {other} не поддерживается",
-                    entry.name_for_message()
-                )))
-            }
-        };
-
-        if crc32(&out) != entry.crc {
-            return Err(zip_err(&format!(
-                "у записи «{}» не совпала контрольная сумма CRC-32",
-                entry.name_for_message()
-            )));
-        }
-        Ok(out)
+        read_entry(self.data, entry)
     }
+}
+
+/// Прочитать и распаковать одну запись из байтов архива.
+///
+/// Тело [`ZipArchive::read`], вынесенное отдельно: объект встроенного языка
+/// владеет байтами и записями порознь (см. [`ZipArchive::into_parts`]), и
+/// собирать ради чтения временный [`ZipArchive`] ему незачем.
+///
+/// # Errors
+///
+/// [`RtError::Zip`], если данные зашифрованы, способ хранения не 0 и не 8,
+/// локальный заголовок не на месте, данные выходят за границу файла,
+/// распакованное короче объявленного или контрольная сумма не совпала с
+/// каталожной.
+pub(crate) fn read_entry(data: &[u8], entry: &ZipEntry) -> Result<Vec<u8>, RtError> {
+    // Отказ до всякого чтения данных: расшифровки здесь нет, и делать
+    // вид, что данные прочитаны, нельзя.
+    if entry.encrypted {
+        return Err(zip_err(&format!(
+            "запись «{}» зашифрована, а зашифрованные архивы не поддерживаются",
+            entry.name_for_message()
+        )));
+    }
+
+    let header = to_usize(entry.local_offset)?;
+    if u32_at(data, header)? != SIG_LOCAL {
+        return Err(zip_err(&format!(
+            "у записи «{}» нет локального заголовка по объявленному смещению",
+            entry.name_for_message()
+        )));
+    }
+    // Длины имени и extra берутся из локального заголовка: они законно
+    // отличаются от каталожных (Zip64 и метки времени пишут в extra
+    // по-разному в двух местах).
+    let name_len = usize::from(u16_at(data, header + 26)?);
+    let extra_len = usize::from(u16_at(data, header + 28)?);
+    let at = header
+        .checked_add(LOCAL_HEADER_LEN)
+        .and_then(|v| v.checked_add(name_len))
+        .and_then(|v| v.checked_add(extra_len))
+        .ok_or_else(truncated)?;
+
+    let size = to_usize(entry.size)?;
+    let packed = slice_at(data, at, to_usize(entry.compressed_size)?)?;
+
+    let out = match entry.method {
+        METHOD_STORED => {
+            if packed.len() != size {
+                return Err(zip_err(&format!(
+                    "у записи «{}» способ хранения 0, но размеры не совпадают",
+                    entry.name_for_message()
+                )));
+            }
+            packed.to_vec()
+        }
+        METHOD_DEFLATED => {
+            let out = crate::inflate::inflate(packed, size)?;
+            // Предел в `inflate` не даёт распаковать больше объявленного,
+            // а вот меньше — признак того, что поток обрезан по границе
+            // блока, и молчать об этом нельзя.
+            if out.len() != size {
+                return Err(zip_err(&format!(
+                    "у записи «{}» размер не совпал: распаковано {} байт вместо {size}",
+                    entry.name_for_message(),
+                    out.len()
+                )));
+            }
+            out
+        }
+        other => {
+            return Err(zip_err(&format!(
+                "у записи «{}» способ хранения {other} не поддерживается",
+                entry.name_for_message()
+            )))
+        }
+    };
+
+    if crc32(&out) != entry.crc {
+        return Err(zip_err(&format!(
+            "у записи «{}» не совпала контрольная сумма CRC-32",
+            entry.name_for_message()
+        )));
+    }
+    Ok(out)
 }
 
 /// Найти запись конца центрального каталога.
@@ -568,6 +635,8 @@ fn parse_central_entry(region: &[u8], at: usize) -> Result<(ZipEntry, usize), Rt
     }
     let flags = u16_at(region, at + 8)?;
     let method = u16_at(region, at + 10)?;
+    let mod_time = u16_at(region, at + 12)?;
+    let mod_date = u16_at(region, at + 14)?;
     let crc = u32_at(region, at + 16)?;
     let compressed = u32_at(region, at + 20)?;
     let size = u32_at(region, at + 24)?;
@@ -597,6 +666,8 @@ fn parse_central_entry(region: &[u8], at: usize) -> Result<(ZipEntry, usize), Rt
         local_offset: u64::from(offset),
         encrypted: flags & FLAG_ENCRYPTED != 0,
         data_descriptor: flags & FLAG_DATA_DESCRIPTOR != 0,
+        mod_time,
+        mod_date,
     };
 
     read_zip64_extra(extra, &mut entry, &mut disk, compressed, size, offset)?;
@@ -656,6 +727,872 @@ fn take_zip64_u64(body: &[u8], cursor: &mut usize) -> Result<u64, RtError> {
     let value = u64_at(body, *cursor).map_err(|_| zip_err("поле Zip64 записи обрезано"))?;
     *cursor += 8;
     Ok(value)
+}
+
+// --------------------------------------------------------------------------
+// Поверхность встроенного языка
+// --------------------------------------------------------------------------
+
+/// Который из двух платформенных читателей стоит за объектом.
+///
+/// На 8.3.27 их ДВА, и это измерено: `ЧтениеZipФайла` и `ЧтениеФайлаАрхива`
+/// — разные типы (`Тип("ЧтениеZipФайла") = Тип("ЧтениеФайлаАрхива")` —
+/// «Нет»), у каждого своя пара «коллекция + элемент», а поверхность у них с
+/// точностью до имён одна: те же четыре метода, те же свойства элемента.
+/// Отсюда один набор объектов с этим тегом вместо двух параллельных: тег
+/// решает только имя типа и третий параметр конструктора, которого у
+/// `ЧтениеZipФайла` нет вовсе (`Новый ЧтениеZipФайла(файл, пароль, тип)` —
+/// «Конструктор не найден»).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ArchiveKind {
+    /// `ЧтениеZipФайла` / `ЭлементыZipФайла` / `ЭлементZipФайла`.
+    Zip,
+    /// `ЧтениеФайлаАрхива` / `ЭлементыФайлаАрхива` / `ЭлементФайлаАрхива`.
+    Archive,
+}
+
+/// Один элемент архива глазами встроенного языка.
+///
+/// Имена посчитаны один раз при открытии, а не при каждом обращении:
+/// разрешение дублей зависит от УЖЕ разобранных соседей (см.
+/// [`build_items`]), так что позаписной пересчёт дал бы другой ответ.
+#[derive(Debug)]
+pub struct ArchiveItem {
+    entry: ZipEntry,
+    /// `Имя` — короткое имя после подстановки и разрешения дублей.
+    name: String,
+    /// `Путь` — каталоги, со слэшем на конце; у записи в корне пусто.
+    path: String,
+    /// `ИсходноеИмя` — то же место в архиве, но без подстановки.
+    orig_name: String,
+    /// `ИсходныйПуть`.
+    orig_path: String,
+}
+
+impl ArchiveItem {
+    /// `ПолноеИмя` — измерено, что это ровно `Путь` + `Имя`, включая
+    /// запись-каталог (`папка/` + `` = `папка/`).
+    fn full_name(&self) -> String {
+        format!("{}{}", self.path, self.name)
+    }
+
+    fn orig_full_name(&self) -> String {
+        format!("{}{}", self.orig_path, self.orig_name)
+    }
+}
+
+/// Открытый архив: собственные байты, комментарий и разобранные элементы.
+#[derive(Debug)]
+struct OpenArchive {
+    data: Vec<u8>,
+    /// Откуда открыт — только для текста ошибки «архив уже открыт».
+    source: String,
+    comment: String,
+    items: Vec<ArchiveItem>,
+}
+
+/// Состояние объекта чтения. Пустое до `Открыть` и после `Закрыть`:
+/// измерено, что на закрытом архиве и `Элементы`, и `Закрыть`, и
+/// `ИзвлечьВсе` отвечают ошибкой «Архив не открыт!», а `Открыть` на уже
+/// открытом — «Архив уже открыт!».
+#[derive(Debug, Default)]
+pub struct ArchiveState {
+    open: Option<OpenArchive>,
+    /// Номер текущего открытия, растёт на каждом успешном `Открыть`.
+    ///
+    /// Состояние переживает `Закрыть`/`Открыть` — это один и тот же `Rc`, —
+    /// а состав архива при этом меняется целиком, так что номер записи,
+    /// выданный до переоткрытия, к новому архиву не относится. Элемент
+    /// запоминает номер открытия, при котором получен, и [`Self::item`]
+    /// сверяет его с текущим: иначе `Извлечь` либо вылетала бы за границу
+    /// более короткого каталога, либо — что хуже, потому что незаметно —
+    /// молча распаковывала чужую запись, занявшую этот номер.
+    generation: u64,
+}
+
+impl ArchiveState {
+    fn opened(&self, op: &'static str) -> RtResult<&OpenArchive> {
+        self.open
+            .as_ref()
+            .ok_or_else(|| zip_err(&format!("архив не открыт, «{op}» недоступно")))
+    }
+
+    /// Запись по номеру, выданному при открытии `generation`.
+    ///
+    /// Закрытый архив проверяется ПЕРВЫМ: на нём измеренный ответ — «архив
+    /// не открыт», и устаревший элемент не должен его подменять.
+    fn item(&self, index: usize, generation: u64, op: &'static str) -> RtResult<&ArchiveItem> {
+        let open = self.opened(op)?;
+        if generation != self.generation {
+            return Err(zip_err(&format!(
+                "элемент получен при другом открытии архива, «{op}» недоступно"
+            )));
+        }
+        open.items
+            .get(index)
+            .ok_or_else(|| zip_err(&format!("в архиве нет записи с номером {index}")))
+    }
+}
+
+/// Символы, недопустимые в имени файла: платформа заменяет каждый из них
+/// подчёркиванием (ИЗМЕРЕНО поимённо на архиве с именами `a:b.txt`,
+/// `a*b.txt`, `a?b.txt`, `a<b>c.txt`, `a|b.txt`, `a"b.txt` — вышли
+/// `a_b.txt`, `a_b(1).txt`, `a_b(2).txt`, `a_b_c.txt`, `a_b(3).txt`,
+/// `a_b(4).txt`). Управляющие символы в этот список НЕ входят: имя с
+/// байтом `01`, `09`, `1F` или `7F` платформа оставляет как есть — это
+/// проверено не по печати, а по именам файлов, которые она создала при
+/// распаковке.
+const FORBIDDEN_IN_NAME: [char; 7] = [':', '*', '?', '"', '<', '>', '|'];
+
+/// Одна компонента пути после подстановки.
+///
+/// Хвостовые точки и пробелы платформа срезает (измерено: `dot.` -> `dot`,
+/// `two..` -> `two`, `trail ` -> `trail`, `dir /f.txt` -> `dir/f.txt`), а
+/// вот ведущий пробел и точка остаются (` lead.txt` и `.hidden` приходят
+/// как есть). Побочное следствие среза — то, что компонента `..` целиком
+/// превращается в пустую (измерено: `../up.txt` -> `/up.txt`), поэтому
+/// выйти распаковкой вверх по дереву через имя записи нельзя.
+fn sanitize_component(component: &str) -> String {
+    let mut out: String = component
+        .chars()
+        .map(|c| {
+            if FORBIDDEN_IN_NAME.contains(&c) {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect();
+    while out.ends_with('.') || out.ends_with(' ') {
+        out.pop();
+    }
+    out
+}
+
+/// Разбить имя на «без последнего расширения» и «расширение».
+///
+/// Измерено на 8.3.27: `вложенный.txt` -> (`вложенный`, `txt`), `a.b.c.txt`
+/// -> (`a.b.c`, `txt`), `noext` -> (`noext`, ``), `.hidden` -> (``,
+/// `hidden`) — то есть точка ищется ПОСЛЕДНЯЯ и ведущая точка расширением
+/// не считается особым случаем.
+fn split_extension(name: &str) -> (&str, &str) {
+    match name.rfind('.') {
+        Some(at) => (&name[..at], &name[at + 1..]),
+        None => (name, ""),
+    }
+}
+
+/// Свободное имя среди соседей: занятое дополняется `(N)` перед последней
+/// точкой.
+///
+/// ИЗМЕРЕНО, что суффикс встаёт именно перед расширением и что нумерация
+/// сквозная по всем столкновениям с одним и тем же именем: `same.txt`
+/// дважды дают `same.txt` и `same(1).txt`, `noext` — `noext` и `noext(1)`,
+/// `.hidden` — `.hidden` и `(1).hidden`, а шесть имён, схлопнувшихся в
+/// `a_b.txt`, получают `(1)`..`(4)` в порядке каталога.
+fn unique_among(used: &mut Vec<String>, base: String) -> String {
+    if !used.contains(&base) {
+        used.push(base.clone());
+        return base;
+    }
+    // Точки в имени здесь уже нет только у имени без расширения: хвостовые
+    // точки срезаны подстановкой, так что `stem` + `(N)` + `.ext` собирается
+    // без оговорок.
+    let (stem, ext) = split_extension(&base);
+    for n in 1u32.. {
+        let candidate = if ext.is_empty() {
+            format!("{stem}({n})")
+        } else {
+            format!("{stem}({n}).{ext}")
+        };
+        if !used.contains(&candidate) {
+            used.push(candidate.clone());
+            return candidate;
+        }
+    }
+    unreachable!("свободный номер находится всегда: имён конечное число")
+}
+
+/// Узел дерева каталогов, которое строится по именам записей.
+struct DirNode {
+    /// Подкаталоги по ИСХОДНОМУ имени компоненты. Именно по исходному:
+    /// измерено, что `папка/` и `папка/вложенный.txt` дают ОДИН каталог,
+    /// а две РАЗНЫЕ компоненты, схлопнувшиеся в одно имя (`..` и пустая),
+    /// остаются разными каталогами и второй получает `(1)`.
+    children: Vec<(String, usize)>,
+    /// Занятые отображаемые имена среди детей этого узла.
+    used: Vec<String>,
+    /// Отображаемый путь до узла включительно, со слэшем на конце.
+    display: String,
+    /// Он же исходный.
+    original: String,
+}
+
+/// Посчитать отображаемые имена всех записей архива.
+///
+/// Порядок обхода — каталожный, и это существенно: разрешение дублей
+/// зависит от того, кто занял имя раньше.
+fn build_items(entries: Vec<ZipEntry>) -> Vec<ArchiveItem> {
+    let mut nodes = vec![DirNode {
+        children: Vec::new(),
+        used: Vec::new(),
+        display: String::new(),
+        original: String::new(),
+    }];
+    let mut items = Vec::with_capacity(entries.len());
+
+    for entry in entries {
+        // Обратный слэш платформа считает разделителем, а не знаком имени:
+        // измерено, что `dir\back.txt` приходит как `dir/back.txt` ОБОИМИ
+        // именами, и исходным тоже.
+        let raw = String::from_utf8_lossy(entry.name_bytes()).replace('\\', "/");
+        let is_dir = raw.ends_with('/');
+        let trimmed = if is_dir {
+            raw.strip_suffix('/').unwrap_or(&raw)
+        } else {
+            &raw
+        };
+        let mut parts: Vec<&str> = trimmed.split('/').collect();
+        // У записи-каталога собственного короткого имени нет: измерено, что
+        // у `папка/` `Имя` пустое, а `ПолноеИмя` и `Путь` — оба `папка/`.
+        let leaf = if is_dir {
+            ""
+        } else {
+            parts.pop().unwrap_or("")
+        };
+
+        let mut node = 0usize;
+        for part in parts {
+            node = resolve_dir(&mut nodes, node, part);
+        }
+
+        let (name, orig_name) = if is_dir {
+            (String::new(), String::new())
+        } else {
+            let display = unique_among(&mut nodes[node].used, sanitize_component(leaf));
+            (display, leaf.to_string())
+        };
+        items.push(ArchiveItem {
+            entry,
+            name,
+            path: nodes[node].display.clone(),
+            orig_name,
+            orig_path: nodes[node].original.clone(),
+        });
+    }
+    items
+}
+
+/// Найти или завести подкаталог `part` у узла `parent`.
+fn resolve_dir(nodes: &mut Vec<DirNode>, parent: usize, part: &str) -> usize {
+    if let Some((_, at)) = nodes[parent].children.iter().find(|(orig, _)| orig == part) {
+        return *at;
+    }
+    let display = unique_among(&mut nodes[parent].used, sanitize_component(part));
+    let node = DirNode {
+        children: Vec::new(),
+        used: Vec::new(),
+        display: format!("{}{display}/", nodes[parent].display),
+        original: format!("{}{part}/", nodes[parent].original),
+    };
+    nodes.push(node);
+    let at = nodes.len() - 1;
+    nodes[parent].children.push((part.to_string(), at));
+    at
+}
+
+/// Время изменения записи из полей MS-DOS.
+///
+/// Правило ИЗМЕРЕНО по краям всех полей, и оно арифметическое, а не
+/// зажимающее: компоненты нормализуются, как если бы их сложили. Месяц 0
+/// уходит в декабрь прошлого года, месяц 13 — в январь следующего, день 0 —
+/// в последний день предыдущего месяца, 30 февраля — во 2 марта, а час 25
+/// добавляет сутки (2000-й год: месяц 13 -> `2001-01-01`, месяц 0 ->
+/// `1999-12-01`, день 0 января -> `1999-12-31`, `2001-02-30` ->
+/// `2001-03-02`, час 25 -> `2000-01-02 01:00`, минута 61 -> `01:01`,
+/// поле секунд 31 -> `00:01:02`). Нулевые поля целиком дают `1979-11-30`.
+fn dos_datetime(time: u16, date: u16) -> crate::BslDate {
+    let year = 1980 + i64::from(date >> 9);
+    let month = i64::from((date >> 5) & 0xF);
+    let day = i64::from(date & 0x1F);
+    let hour = i64::from(time >> 11);
+    let minute = i64::from((time >> 5) & 0x3F);
+    let second = i64::from(time & 0x1F) * 2;
+
+    // Месяц нормализуется в паре с годом, остальное — простым сложением
+    // секунд поверх первого числа этого месяца.
+    let months = year * 12 + month - 1;
+    let (y, m) = (months.div_euclid(12), months.rem_euclid(12) + 1);
+    let Some(first) = crate::BslDate::from_civil(y, m as u32, 1, 0, 0, 0) else {
+        return crate::BslDate::empty();
+    };
+    let shift = (day - 1) * 86_400 + hour * 3600 + minute * 60 + second;
+    crate::BslDate::from_seconds(first.seconds() + shift).unwrap_or_else(crate::BslDate::empty)
+}
+
+// --- доступ к объектам --------------------------------------------------------
+
+/// Состояние читателя за значением любого из трёх видов.
+fn state<'a>(v: &'a BslValue, op: &'static str) -> RtResult<&'a Rc<RefCell<ArchiveState>>> {
+    match v {
+        BslValue::Object(o) => match &**o {
+            BslObject::ArchiveReader(_, s)
+            | BslObject::ArchiveEntries(_, s)
+            | BslObject::ArchiveEntry(_, s, ..) => Ok(s),
+            _ => Err(RtError::MethodNotApplicable {
+                method: op,
+                receiver: v.type_name(),
+            }),
+        },
+        _ => Err(RtError::MethodNotApplicable {
+            method: op,
+            receiver: v.type_name(),
+        }),
+    }
+}
+
+/// Объект чтения ли это (`ЧтениеZipФайла` либо `ЧтениеФайлаАрхива`).
+pub fn is_reader(v: &BslValue) -> bool {
+    matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::ArchiveReader(..)))
+}
+
+/// Коллекция элементов ли это.
+pub fn is_entries(v: &BslValue) -> bool {
+    matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::ArchiveEntries(..)))
+}
+
+// --- конструкторы и методы -----------------------------------------------------
+
+/// `Новый ЧтениеZipФайла([Источник][, Пароль])` и
+/// `Новый ЧтениеФайлаАрхива([Источник][, Пароль][, ТипФайлаАрхива])`.
+///
+/// Источник — имя файла либо поток; `ДвоичныеДанные` платформа НЕ принимает
+/// (измерено: «Несоответствие типов (параметр номер '1') (Некорректное имя
+/// файла)»), и здесь их тоже нет. Без источника объект создаётся закрытым —
+/// это законная форма (`Новый ЧтениеZipФайла()` с последующим `Открыть`).
+///
+/// Пароль ПРИНИМАЕТСЯ И НЕ ИСПОЛЬЗУЕТСЯ: расшифровки здесь нет вовсе, а до
+/// первой попытки прочитать зашифрованную запись он не нужен и платформе
+/// (измерено: на незашифрованном архиве `Новый ЧтениеZipФайла(файл,
+/// "пусто")` проходит молча).
+///
+/// # Errors
+///
+/// [`RtError::Zip`], если источник не читается или не является архивом ZIP;
+/// [`RtError::TypeError`], если третьим аргументом передан не член
+/// `ТипФайлаАрхива`.
+pub fn new_archive_reader(
+    zip: bool,
+    source: &BslValue,
+    password: &BslValue,
+    archive_type: &BslValue,
+) -> RtResult<BslValue> {
+    let kind = if zip {
+        ArchiveKind::Zip
+    } else {
+        ArchiveKind::Archive
+    };
+    check_archive_type(archive_type)?;
+    let state = Rc::new(RefCell::new(ArchiveState::default()));
+    if !matches!(source, BslValue::Undefined) {
+        let (bytes, from) = read_source(source, "ЧтениеZipФайла")?;
+        open_bytes(&state, bytes, from)?;
+    }
+    // Пароль хранить негде и незачем — см. doc comment.
+    let _ = password;
+    Ok(BslValue::Object(Rc::new(BslObject::ArchiveReader(
+        kind, state,
+    ))))
+}
+
+/// Третий аргумент конструктора `ЧтениеФайлаАрхива`.
+///
+/// ИЗМЕРЕНО, что он типизирован: `Неопределено` платформа принимает, член
+/// `ТипФайлаАрхива` тоже, а строку, число, булево и члена ЧУЖОГО
+/// перечисления отвергает с «Несоответствие типов (параметр номер '3')».
+/// Читаем мы только ZIP, поэтому всякий другой объявленный формат — честный
+/// отказ, а не молчаливая попытка разобрать файл как ZIP.
+fn check_archive_type(value: &BslValue) -> RtResult<()> {
+    match value {
+        BslValue::Undefined => Ok(()),
+        BslValue::Enum(crate::EnumValue::ArchiveTypeZip) => Ok(()),
+        BslValue::Enum(e) if e.kind() == crate::EnumKind::ArchiveFileType => Err(zip_err(
+            &format!("формат архива «{}» не поддерживается", e.display_text()),
+        )),
+        _ => Err(RtError::TypeError {
+            expected: "ТипФайлаАрхива",
+            op: "ЧтениеФайлаАрхива",
+        }),
+    }
+}
+
+/// Байты источника вместе с его именем для сообщений.
+fn read_source(source: &BslValue, op: &'static str) -> RtResult<(Vec<u8>, String)> {
+    match source {
+        BslValue::Str(s) => {
+            let path = s.to_string();
+            let bytes = std::fs::read(&path)
+                .map_err(|e| zip_err(&format!("не удалось прочитать файл «{path}»: {e}")))?;
+            Ok((bytes, path))
+        }
+        _ if crate::stream::is_stream(source) => {
+            let bytes = crate::stream::read_all(source, op)?;
+            Ok((bytes, "поток".to_string()))
+        }
+        _ => Err(RtError::TypeError {
+            expected: "Строка или Поток",
+            op,
+        }),
+    }
+}
+
+/// Разобрать байты и сделать их состоянием открытого архива.
+fn open_bytes(state: &Rc<RefCell<ArchiveState>>, data: Vec<u8>, source: String) -> RtResult<()> {
+    let (entries, comment) = ZipArchive::parse(&data)?.into_parts();
+    let items = build_items(entries);
+    // Комментарий декодируется так же, как имена, — lossy UTF-8 (измерено
+    // на архиве с комментарием `привет-комментарий`).
+    let comment = String::from_utf8_lossy(&comment).into_owned();
+    let mut state = state.borrow_mut();
+    state.open = Some(OpenArchive {
+        data,
+        source,
+        comment,
+        items,
+    });
+    // Номер открытия растёт только здесь и только после успешного разбора:
+    // неудачное `Открыть` состав архива не меняет, а `Закрыть` его не
+    // трогает — элементы закрытого архива и так отвергаются по `opened`.
+    state.generation += 1;
+    Ok(())
+}
+
+/// `Открыть(Источник[, Пароль])`.
+///
+/// # Errors
+///
+/// [`RtError::Zip`], если архив уже открыт или источник не является
+/// читаемым архивом ZIP.
+pub fn open(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+    let state = state(obj, "Открыть")?.clone();
+    if let Some(open) = &state.borrow().open {
+        return Err(zip_err(&format!("архив уже открыт: {}", open.source)));
+    }
+    let source = args.first().ok_or_else(|| RtError::MethodNotApplicable {
+        method: "Открыть",
+        receiver: obj.type_name(),
+    })?;
+    let (bytes, from) = read_source(source, "Открыть")?;
+    open_bytes(&state, bytes, from)
+}
+
+/// `Закрыть()`.
+///
+/// # Errors
+///
+/// [`RtError::Zip`], если архив уже закрыт: измерено, что второй `Закрыть`
+/// подряд платформа считает ошибкой, а не тихим повтором.
+pub fn close(obj: &BslValue) -> RtResult<()> {
+    let state = state(obj, "Закрыть")?;
+    let mut state = state.borrow_mut();
+    state.opened("Закрыть")?;
+    state.open = None;
+    Ok(())
+}
+
+/// Свойство `Элементы`.
+///
+/// # Errors
+///
+/// [`RtError::Zip`], если архив не открыт — измерено, что чтение свойства
+/// на закрытом объекте это ошибка, а не пустая коллекция.
+pub fn entries(obj: &BslValue) -> RtResult<BslValue> {
+    let state = state(obj, "Элементы")?;
+    state.borrow().opened("Элементы")?;
+    let kind = reader_kind(obj)?;
+    Ok(BslValue::Object(Rc::new(BslObject::ArchiveEntries(
+        kind,
+        state.clone(),
+    ))))
+}
+
+/// Свойство `Комментарий` — комментарий всего архива.
+///
+/// # Errors
+///
+/// [`RtError::Zip`], если архив не открыт.
+pub fn comment(obj: &BslValue) -> RtResult<BslValue> {
+    let state = state(obj, "Комментарий")?;
+    let state = state.borrow();
+    Ok(BslValue::Str(crate::BslString::from_str(
+        &state.opened("Комментарий")?.comment,
+    )))
+}
+
+/// Тег объекта — он же решает имена типов коллекции и элемента.
+fn reader_kind(obj: &BslValue) -> RtResult<ArchiveKind> {
+    match obj {
+        BslValue::Object(o) => match &**o {
+            BslObject::ArchiveReader(kind, _)
+            | BslObject::ArchiveEntries(kind, _)
+            | BslObject::ArchiveEntry(kind, ..) => Ok(*kind),
+            _ => Err(RtError::NotAnObject),
+        },
+        _ => Err(RtError::NotAnObject),
+    }
+}
+
+/// Число элементов открытого архива.
+///
+/// # Errors
+///
+/// [`RtError::Zip`], если архив не открыт.
+pub fn count(obj: &BslValue) -> RtResult<usize> {
+    let state = state(obj, "Количество")?;
+    let state = state.borrow();
+    Ok(state.opened("Количество")?.items.len())
+}
+
+/// Элемент по номеру — общий путь `Коллекция[i]` и `Получить(i)`.
+///
+/// # Errors
+///
+/// [`RtError::Zip`], если архив не открыт; [`RtError::IndexOutOfBounds`],
+/// если номера в архиве нет.
+pub fn get(obj: &BslValue, index: usize) -> RtResult<BslValue> {
+    let state = state(obj, "Получить")?;
+    let (len, generation) = {
+        let state = state.borrow();
+        (state.opened("Получить")?.items.len(), state.generation)
+    };
+    if index >= len {
+        return Err(RtError::IndexOutOfBounds {
+            index: index as i64,
+            len,
+        });
+    }
+    Ok(BslValue::Object(Rc::new(BslObject::ArchiveEntry(
+        reader_kind(obj)?,
+        state.clone(),
+        index,
+        generation,
+    ))))
+}
+
+/// `Найти(Имя)` — первый элемент с таким ИСХОДНЫМ коротким именем,
+/// `Неопределено`, если такого нет.
+///
+/// Сравнение идёт с `ИсходноеИмя` и без учёта регистра — измерено:
+/// `Найти("ШУМ.BIN")` находит `шум.bin`, `Найти("вложенный.txt")` находит
+/// запись `папка/вложенный.txt` (то есть ищется короткое имя, а не полное),
+/// `Найти("")` находит запись-каталог `папка/`, а `Найти("отчёт:2026.txt")`
+/// находит запись с этим ИСХОДНЫМ именем, хотя её `Имя` после подстановки —
+/// `отчёт_2026.txt`. Обратное не работает: `Найти("отчёт_2026.txt")`,
+/// `Найти("дубль(1).txt")` и `Найти("папка/вложенный.txt")` дают
+/// `Неопределено` — по отображаемому имени, по имени после разрешения
+/// дублей и по полному имени платформа не ищет.
+///
+/// ОДНА измеренная точка сюда не укладывается, и правила за ней найти не
+/// удалось: на архиве с записью `a:b.txt` платформа не находит её ни по
+/// `a:b.txt`, ни по `a_b.txt`, тогда как `отчёт:2026.txt` по исходному
+/// имени находится. Похоже на разбор `a:` как имени диска, но проверить
+/// это нечем, и здесь работает общее правило — такая запись находится.
+///
+/// # Errors
+///
+/// [`RtError::Zip`], если архив не открыт.
+pub fn find(obj: &BslValue, name: &BslValue) -> RtResult<BslValue> {
+    let wanted = name.as_str("Найти")?.to_string().to_uppercase();
+    let state = state(obj, "Найти")?;
+    let (found, generation) = {
+        let state = state.borrow();
+        let open = state.opened("Найти")?;
+        (
+            open.items
+                .iter()
+                .position(|i| i.orig_name.to_uppercase() == wanted),
+            state.generation,
+        )
+    };
+    match found {
+        Some(index) => Ok(BslValue::Object(Rc::new(BslObject::ArchiveEntry(
+            reader_kind(obj)?,
+            state.clone(),
+            index,
+            generation,
+        )))),
+        None => Ok(BslValue::Undefined),
+    }
+}
+
+/// Свойства элемента архива.
+///
+/// Набор ИЗМЕРЕН перебором кандидатов: `Размер`, `МетодСжатия`,
+/// `УровеньСжатия`, `Комментарий`, `ДатаМодификации`, `КонтрольнаяСумма`,
+/// `CRC`, `Атрибуты`, `ЭтоКаталог` и `Индекс` платформа не знает вовсе.
+/// Английского имени у `ВремяИзменения` нет: восемь правдоподобных
+/// написаний (`ModificationTime`, `ModifiedAt`, `ModificationDate`,
+/// `LastModified`, `DateModified`, `ModifiedTime`, `ChangeTime`,
+/// `ModifiedDate`) 8.3.27 отвергает.
+///
+/// # Errors
+///
+/// [`RtError::UnknownColumn`], если такого свойства у элемента нет;
+/// [`RtError::Zip`], если архив уже закрыт либо элемент получен при
+/// предыдущем его открытии.
+pub fn entry_prop(obj: &BslValue, prop: &str) -> RtResult<BslValue> {
+    let (state, index, generation) = match obj {
+        BslValue::Object(o) => match &**o {
+            BslObject::ArchiveEntry(_, s, i, g) => (s, *i, *g),
+            _ => return Err(RtError::NotAnObject),
+        },
+        _ => return Err(RtError::NotAnObject),
+    };
+    let state = state.borrow();
+    let item = state.item(index, generation, "ЭлементZipФайла")?;
+
+    let text = |s: String| Ok(BslValue::Str(crate::BslString::from_str(&s)));
+    // Размеры записи приходят из чужого каталога: у Zip64 это произвольные
+    // восемь байт, ничем не ограниченные (см. `read_zip64_extra`). Через
+    // `i64` их пускать нельзя — старший бит завернулся бы в знак, и
+    // `РазмерНесжатого` отдал бы отрицательное число, которого платформа
+    // дать не может; `i128` вмещает любой `u64` без потерь.
+    let number = |n: u64| {
+        Ok(BslValue::Number(bsl_number::BslNumber::from_parts(
+            i128::from(n),
+            0,
+        )))
+    };
+    match prop {
+        _ if eq(prop, "Имя", "Name") => text(item.name.clone()),
+        _ if eq(prop, "ПолноеИмя", "FullName") => text(item.full_name()),
+        _ if eq(prop, "Путь", "Path") => text(item.path.clone()),
+        _ if eq(prop, "ИмяБезРасширения", "BaseName") => {
+            text(split_extension(&item.name).0.to_string())
+        }
+        _ if eq(prop, "Расширение", "Extension") => {
+            text(split_extension(&item.name).1.to_string())
+        }
+        _ if eq(prop, "ИсходноеИмя", "OriginalName") => text(item.orig_name.clone()),
+        _ if eq(prop, "ИсходноеПолноеИмя", "OriginalFullName") => {
+            text(item.orig_full_name())
+        }
+        _ if eq(prop, "ИсходныйПуть", "OriginalPath") => text(item.orig_path.clone()),
+        _ if eq(prop, "ИсходноеИмяБезРасширения", "OriginalBaseName") => {
+            text(split_extension(&item.orig_name).0.to_string())
+        }
+        _ if eq(prop, "ИсходноеРасширение", "OriginalExtension") => {
+            text(split_extension(&item.orig_name).1.to_string())
+        }
+        _ if eq(prop, "РазмерНесжатого", "UncompressedSize") => {
+            number(item.entry.size())
+        }
+        _ if eq(prop, "РазмерСжатого", "CompressedSize") => {
+            number(item.entry.compressed_size())
+        }
+        _ if eq(prop, "Зашифрован", "Encrypted") => {
+            Ok(BslValue::Boolean(item.entry.is_encrypted()))
+        }
+        // Английского написания у этого свойства нет — измерено.
+        _ if prop.eq_ignore_ascii_case("ВремяИзменения") => {
+            Ok(BslValue::Date(item.entry.modified()))
+        }
+        _ => Err(RtError::UnknownColumn(prop.to_string())),
+    }
+}
+
+/// Оба написания одного свойства.
+fn eq(name: &str, ru: &str, en: &str) -> bool {
+    name.eq_ignore_ascii_case(ru) || name.eq_ignore_ascii_case(en)
+}
+
+/// `Извлечь(Элемент, Каталог[, Режим][, Пароль])`.
+///
+/// Арность ИЗМЕРЕНА: два аргумента обязательны, пятый платформа отвергает,
+/// а четвёртый — это пароль (на зашифрованном архиве, открытом без пароля,
+/// `Извлечь(Э, Куда, Режим, "pass123")` распаковывает запись). Расшифровки
+/// здесь нет, поэтому пароль принимается и не используется.
+///
+/// # Errors
+///
+/// [`RtError::Zip`] на закрытом архиве, на элементе чужого архива, на
+/// элементе, полученном при другом открытии ЭТОГО архива, на зашифрованной
+/// записи, на неподдержанном способе хранения и на любой ошибке записи
+/// файла; [`RtError::TypeError`], если первым аргументом передан не элемент
+/// архива, а вторым — не строка.
+pub fn extract(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+    let state = state(obj, "Извлечь")?;
+    let (item, dir, mode) = match args {
+        [item, dir] => (item, dir, None),
+        [item, dir, mode] => (item, dir, Some(mode)),
+        // Четвёртый аргумент — пароль; см. doc comment.
+        [item, dir, mode, _] => (item, dir, Some(mode)),
+        _ => {
+            return Err(RtError::MethodNotApplicable {
+                method: "Извлечь",
+                receiver: obj.type_name(),
+            })
+        }
+    };
+    let (index, generation) = match item {
+        BslValue::Object(o) => match &**o {
+            // Элемент обязан быть из ЭТОГО архива: сам он свой читатель
+            // помнит, но `Извлечь` — метод читателя, и распаковывать чужую
+            // запись, ничего не сказав, хуже, чем отказать. Тождества
+            // состояния для этого мало — оно переживает переоткрытие, — и
+            // номер открытия сверяет `ArchiveState::item` ниже.
+            BslObject::ArchiveEntry(_, s, i, g) if Rc::ptr_eq(s, state) => (*i, *g),
+            BslObject::ArchiveEntry(..) => {
+                return Err(zip_err("элемент принадлежит другому архиву"))
+            }
+            _ => {
+                return Err(RtError::TypeError {
+                    expected: "ЭлементZipФайла",
+                    op: "Извлечь",
+                })
+            }
+        },
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "ЭлементZipФайла",
+                op: "Извлечь",
+            })
+        }
+    };
+
+    let restore = restore_paths(mode, "Извлечь")?;
+    let dir = destination(dir, "Извлечь")?;
+    let state = state.borrow();
+    let open = state.opened("Извлечь")?;
+    extract_item(
+        open,
+        state.item(index, generation, "Извлечь")?,
+        &dir,
+        restore,
+    )
+}
+
+/// `ИзвлечьВсе(Каталог[, Режим])`.
+///
+/// # Errors
+///
+/// Те же, что у [`extract`], плюс [`RtError::Zip`] на записи с пустым
+/// именем: распаковать её некуда (платформа на таком архиве тоже
+/// отказывает).
+pub fn extract_all(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+    let state = state(obj, "ИзвлечьВсе")?;
+    let (dir, mode) = match args {
+        [dir] => (dir, None),
+        [dir, mode] => (dir, Some(mode)),
+        _ => {
+            return Err(RtError::MethodNotApplicable {
+                method: "ИзвлечьВсе",
+                receiver: obj.type_name(),
+            })
+        }
+    };
+    let restore = restore_paths(mode, "ИзвлечьВсе")?;
+    let dir = destination(dir, "ИзвлечьВсе")?;
+    let state = state.borrow();
+    let open = state.opened("ИзвлечьВсе")?;
+    for item in &open.items {
+        extract_item(open, item, &dir, restore)?;
+    }
+    Ok(())
+}
+
+/// Режим восстановления путей.
+///
+/// Умолчание — восстанавливать: измерено, что `ИзвлечьВсе(Куда)` без режима
+/// создаёт подкаталоги. А вот ПЕРЕДАННОЕ `Неопределено` здесь не проходит —
+/// тоже измерено, обоими методами сразу («Несоответствие типов (параметр
+/// номер \'2\')» у `ИзвлечьВсе` и «номер \'3\'» у `Извлечь`), в отличие от
+/// пароля, который `Неопределено` принимает. Поэтому пропущенный аргумент
+/// это `None`, а не `Undefined`: у платформы «не передан» и «передано
+/// Неопределено» — разные вещи, и различить их можно только по числу
+/// фактических аргументов (пропуск в середине, `Ф(а, , б)`, эта реализация
+/// не поддерживает вовсе).
+fn restore_paths(mode: Option<&BslValue>, op: &'static str) -> RtResult<bool> {
+    match mode {
+        None => Ok(true),
+        Some(BslValue::Enum(crate::EnumValue::RestorePaths)) => Ok(true),
+        Some(BslValue::Enum(crate::EnumValue::DontRestorePaths)) => Ok(false),
+        Some(_) => Err(RtError::TypeError {
+            expected: "РежимВосстановленияПутейФайловZIP",
+            op,
+        }),
+    }
+}
+
+/// Каталог назначения. Пустая строка — ошибка (измерено: «Некорректный путь
+/// для распаковки»), а несуществующий каталог создаётся (тоже измерено).
+fn destination(dir: &BslValue, op: &'static str) -> RtResult<std::path::PathBuf> {
+    let dir = dir.as_str(op)?.to_string();
+    if dir.is_empty() {
+        return Err(zip_err("некорректный путь для распаковки"));
+    }
+    Ok(std::path::PathBuf::from(dir))
+}
+
+/// Распаковать одну запись.
+fn extract_item(
+    open: &OpenArchive,
+    item: &ArchiveItem,
+    dir: &std::path::Path,
+    restore: bool,
+) -> RtResult<()> {
+    let mkdir = |path: &std::path::Path| {
+        std::fs::create_dir_all(path).map_err(|e| {
+            zip_err(&format!(
+                "не удалось создать каталог «{}»: {e}",
+                path.display()
+            ))
+        })
+    };
+
+    if item.entry.is_directory() {
+        // В плоском режиме каталоги не создаются вовсе — измерено:
+        // `ИзвлечьВсе(Куда, НеВосстанавливать)` на архиве с записью
+        // `папка/` не оставляет никакой `папка`.
+        if restore {
+            mkdir(&dir.join(relative_path(item)))?;
+        }
+        return Ok(());
+    }
+    if item.name.is_empty() {
+        return Err(zip_err("у записи архива пустое имя, распаковать её некуда"));
+    }
+
+    let target = if restore {
+        dir.join(relative_path(item))
+    } else {
+        dir.join(&item.name)
+    };
+    if let Some(parent) = target.parent() {
+        mkdir(parent)?;
+    }
+    let bytes = read_entry(&open.data, &item.entry)?;
+    std::fs::write(&target, bytes)
+        .map_err(|e| zip_err(&format!("не удалось записать «{}»: {e}", target.display())))
+}
+
+/// Путь записи относительно каталога распаковки.
+///
+/// Пустые компоненты выбрасываются — измерено, что `папка//двойной.txt`
+/// платформа кладёт в `папка/двойной.txt`, хотя `ПолноеИмя` показывает обе
+/// подряд идущие черты. Компоненты `.` и `..` после подстановки не
+/// возникают (см. [`sanitize_component`]), но проверка оставлена: путь
+/// строится из чужих данных, и выход вверх по дереву не должен зависеть от
+/// рассуждения о другой функции.
+fn relative_path(item: &ArchiveItem) -> std::path::PathBuf {
+    let mut path = std::path::PathBuf::new();
+    for part in item.full_name().split('/') {
+        if part.is_empty() || part == "." || part == ".." {
+            continue;
+        }
+        path.push(part);
+    }
+    path
 }
 
 #[cfg(test)]
@@ -1655,6 +2592,609 @@ mod tests {
         assert_eq!(
             archive.read(1).expect("данные не тронуты"),
             reference_noise()
+        );
+    }
+
+    // ---------------------------------------------------------------------
+    // Поверхность встроенного языка
+    //
+    // Ожидаемые значения ниже — не рассуждение, а вывод 8.3.27 на тех же
+    // именах: те же архивы собирались python3 zipfile, читались платформой
+    // и печатались по свойствам `Имя`/`ПолноеИмя`/`Путь`/`Исходное*`.
+    // ---------------------------------------------------------------------
+
+    /// Отображаемые и исходные имена всех записей архива, собранного
+    /// здешним писателем из перечисленных имён.
+    fn names_of(names: &[&str]) -> Vec<(String, String)> {
+        let mut z = ZipWriter::new();
+        for name in names {
+            z.add(name, b"x");
+        }
+        let bytes = z.finish();
+        let (entries, _) = ZipArchive::parse(&bytes)
+            .expect("собственный архив читается")
+            .into_parts();
+        build_items(entries)
+            .iter()
+            .map(|i| (i.full_name(), i.orig_full_name()))
+            .collect()
+    }
+
+    fn shown(names: &[&str]) -> Vec<String> {
+        names_of(names).into_iter().map(|(full, _)| full).collect()
+    }
+
+    /// Недопустимые в имени файла знаки становятся подчёркиванием, а
+    /// столкнувшиеся имена получают `(N)` перед расширением. Обратный слэш
+    /// при этом РАЗДЕЛИТЕЛЬ, а не знак имени, и виден таким даже в
+    /// `ИсходноеПолноеИмя`.
+    #[test]
+    fn forbidden_characters_and_collisions_match_the_platform() {
+        let pairs = names_of(&[
+            "a:b.txt",
+            "a*b.txt",
+            "a?b.txt",
+            "a<b>c.txt",
+            "a|b.txt",
+            "a\"b.txt",
+            "dir\\back.txt",
+            "../up.txt",
+            "/abs.txt",
+        ]);
+        let shown: Vec<&str> = pairs.iter().map(|(full, _)| full.as_str()).collect();
+        assert_eq!(
+            shown,
+            [
+                "a_b.txt",
+                "a_b(1).txt",
+                "a_b(2).txt",
+                "a_b_c.txt",
+                "a_b(3).txt",
+                "a_b(4).txt",
+                "dir/back.txt",
+                // Компонента `..` срезается вместе с точками и остаётся
+                // пустой, а пустая компонента следующей записи с ней уже
+                // сталкивается — отсюда `(1)`.
+                "/up.txt",
+                "(1)/abs.txt",
+            ]
+        );
+        let original: Vec<&str> = pairs.iter().map(|(_, orig)| orig.as_str()).collect();
+        assert_eq!(
+            original,
+            [
+                "a:b.txt",
+                "a*b.txt",
+                "a?b.txt",
+                "a<b>c.txt",
+                "a|b.txt",
+                "a\"b.txt",
+                "dir/back.txt",
+                "../up.txt",
+                "/abs.txt",
+            ]
+        );
+    }
+
+    /// Суффикс встаёт перед ПОСЛЕДНЕЙ точкой, а у имени без точки —
+    /// в конец. Ведущая точка расширением считается (`.hidden` ->
+    /// `(1).hidden`), хвостовая срезается вместе с пробелами.
+    #[test]
+    fn the_collision_suffix_goes_before_the_last_dot() {
+        assert_eq!(
+            shown(&[
+                "noext",
+                "noext",
+                "a.b.c.txt",
+                "a.b.c.txt",
+                ".hidden",
+                ".hidden",
+                "x.",
+                "x."
+            ]),
+            [
+                "noext",
+                "noext(1)",
+                "a.b.c.txt",
+                "a.b.c(1).txt",
+                ".hidden",
+                "(1).hidden",
+                "x",
+                "x(1)",
+            ]
+        );
+        assert_eq!(
+            shown(&["trail .txt", "trail ", "two..", "dir /f.txt"]),
+            ["trail .txt", "trail", "two", "dir/f.txt"]
+        );
+    }
+
+    /// Один и тот же каталог у записи-каталога и у файла внутри него —
+    /// ОДИН узел: `(1)` здесь не появляется. У самой записи-каталога
+    /// короткого имени нет, а `ПолноеИмя` совпадает с `Путь`.
+    #[test]
+    fn a_directory_entry_and_a_file_inside_it_share_one_node() {
+        let mut z = ZipWriter::new();
+        z.add("папка/", b"");
+        z.add("папка/вложенный.txt", b"x");
+        z.add("папка//двойной.txt", b"x");
+        let bytes = z.finish();
+        let (entries, _) = ZipArchive::parse(&bytes).unwrap().into_parts();
+        let items = build_items(entries);
+
+        assert_eq!(items[0].name, "");
+        assert_eq!(items[0].path, "папка/");
+        assert_eq!(items[0].full_name(), "папка/");
+        assert_eq!(items[1].name, "вложенный.txt");
+        assert_eq!(items[1].path, "папка/");
+        assert_eq!(items[1].full_name(), "папка/вложенный.txt");
+        // Пустая компонента сохраняется в имени, но каталогом на диске не
+        // становится — см. `relative_path`.
+        assert_eq!(items[2].full_name(), "папка//двойной.txt");
+        assert_eq!(
+            relative_path(&items[2]),
+            std::path::Path::new("папка/двойной.txt")
+        );
+    }
+
+    /// Имя без бита 11 всё равно декодируется как UTF-8 — с заменяющими
+    /// символами на негодных байтах. Это НЕ догадка: платформа на имени
+    /// «привет.txt» в CP866 показывает ровно эти шесть кодовых точек.
+    #[test]
+    fn a_single_byte_name_is_decoded_as_lossy_utf8() {
+        const CP866: [u8; 10] = [0xAF, 0xE0, 0xA8, 0xA2, 0xA5, 0xE2, 0x2E, 0x74, 0x78, 0x74];
+        let mut data = REF_MIXED.to_vec();
+        let central = central_at(&data, "шум.bin".as_bytes());
+        let local = local_at(&data, central);
+        data[central + CENTRAL_HEADER_LEN..central + CENTRAL_HEADER_LEN + CP866.len()]
+            .copy_from_slice(&CP866);
+        data[local + LOCAL_HEADER_LEN..local + LOCAL_HEADER_LEN + CP866.len()]
+            .copy_from_slice(&CP866);
+        set_flags(&mut data, central, 0, FLAG_UTF8_NAME);
+
+        let (entries, _) = ZipArchive::parse(&data).unwrap().into_parts();
+        let items = build_items(entries);
+        assert_eq!(items[1].name, "\u{FFFD}\u{A22}\u{FFFD}\u{FFFD}.txt");
+    }
+
+    /// Разбор даты MS-DOS по краям всех полей — таблица снята на платформе
+    /// архивом, у которого поля выставлены руками.
+    #[test]
+    fn dos_dates_are_normalized_arithmetically() {
+        let date = |y: i64, m: u16, d: u16| ((y as u16 - 1980) << 9) | (m << 5) | d;
+        let time = |h: u16, mi: u16, s2: u16| (h << 11) | (mi << 5) | s2;
+        let civil = |t: u16, d: u16| {
+            let c = dos_datetime(t, d).to_civil();
+            (c.year, c.month, c.day, c.hour, c.minute, c.second)
+        };
+
+        assert_eq!(
+            civil(time(23, 59, 29), date(2000, 12, 31)),
+            (2000, 12, 31, 23, 59, 58)
+        );
+        assert_eq!(civil(0, date(2000, 13, 1)), (2001, 1, 1, 0, 0, 0));
+        assert_eq!(civil(0, date(2000, 0, 1)), (1999, 12, 1, 0, 0, 0));
+        assert_eq!(civil(0, date(2000, 1, 0)), (1999, 12, 31, 0, 0, 0));
+        assert_eq!(civil(0, date(2001, 2, 30)), (2001, 3, 2, 0, 0, 0));
+        assert_eq!(
+            civil(time(25, 0, 0), date(2000, 1, 1)),
+            (2000, 1, 2, 1, 0, 0)
+        );
+        assert_eq!(
+            civil(time(0, 61, 0), date(2000, 1, 1)),
+            (2000, 1, 1, 1, 1, 0)
+        );
+        assert_eq!(
+            civil(time(0, 0, 31), date(2000, 1, 1)),
+            (2000, 1, 1, 0, 1, 2)
+        );
+        // Оба поля нулевые — это самый частый мусор в чужих архивах.
+        assert_eq!(civil(0, 0), (1979, 11, 30, 0, 0, 0));
+    }
+
+    /// Имя без расширения и расширение — по последней точке.
+    #[test]
+    fn the_extension_is_taken_from_the_last_dot() {
+        assert_eq!(split_extension("вложенный.txt"), ("вложенный", "txt"));
+        assert_eq!(split_extension("a.b.c.txt"), ("a.b.c", "txt"));
+        assert_eq!(split_extension("noext"), ("noext", ""));
+        assert_eq!(split_extension(".hidden"), ("", "hidden"));
+        assert_eq!(split_extension(""), ("", ""));
+    }
+
+    /// Готовый архив на диске — его путь как строка встроенного языка,
+    /// пригодная и для конструктора, и для `Открыть`.
+    fn archive_file(bytes: &[u8], name: &str) -> BslValue {
+        let dir = std::env::temp_dir().join(format!("open-bsl-zip-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(name);
+        std::fs::write(&path, bytes).unwrap();
+        BslValue::Str(crate::BslString::from_str(path.to_str().unwrap()))
+    }
+
+    /// Объект чтения над готовым архивом — то, что видит встроенный язык.
+    fn reader_over(bytes: &[u8], name: &str) -> BslValue {
+        new_archive_reader(
+            true,
+            &archive_file(bytes, name),
+            &BslValue::Undefined,
+            &BslValue::Undefined,
+        )
+        .expect("архив открывается")
+    }
+
+    /// Пустой каталог для распаковки, свой у каждой пробы.
+    fn output_dir(name: &str) -> std::path::PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("open-bsl-zip-out-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        dir
+    }
+
+    fn prop(entry: &BslValue, name: &str) -> String {
+        entry_prop(entry, name).unwrap().to_string()
+    }
+
+    /// Свойства элемента и `Найти` — против измеренного вывода платформы.
+    #[test]
+    fn entry_properties_and_find_follow_the_platform() {
+        let reader = reader_over(&REF_MIXED, "props.zip");
+        let items = entries(&reader).expect("архив открыт");
+        assert_eq!(count(&items).unwrap(), 2);
+
+        let first = get(&items, 0).unwrap();
+        assert_eq!(prop(&first, "Имя"), "накладная.txt");
+        assert_eq!(prop(&first, "FullName"), "накладная.txt");
+        assert_eq!(prop(&first, "Путь"), "");
+        assert_eq!(prop(&first, "ИмяБезРасширения"), "накладная");
+        assert_eq!(prop(&first, "Расширение"), "txt");
+        assert_eq!(prop(&first, "ИсходноеИмя"), "накладная.txt");
+        assert_eq!(prop(&first, "РазмерНесжатого"), "234");
+        assert_eq!(prop(&first, "Зашифрован"), "Нет");
+        assert!(
+            entry_prop(&first, "Размер").is_err(),
+            "у платформы такого свойства нет"
+        );
+
+        // Регистр в имени не значим, а искать надо по короткому имени.
+        let found = find(
+            &items,
+            &BslValue::Str(crate::BslString::from_str("ШУМ.BIN")),
+        )
+        .unwrap();
+        assert_eq!(prop(&found, "Имя"), "шум.bin");
+        let missing = find(
+            &items,
+            &BslValue::Str(crate::BslString::from_str("нет.txt")),
+        )
+        .unwrap();
+        assert!(matches!(missing, BslValue::Undefined));
+    }
+
+    /// Подстановка недопустимого знака `Найти` не мешает: ищется ИСХОДНОЕ
+    /// имя, а не отображаемое. Обе строки измерены на платформе фикстурой
+    /// `zip-read`.
+    #[test]
+    fn find_matches_the_original_name_not_the_substituted_one() {
+        let mut z = ZipWriter::new();
+        z.add("отчёт:2026.txt", b"x");
+        let reader = reader_over(&z.finish(), "find.zip");
+        let items = entries(&reader).unwrap();
+
+        let by_original = find(
+            &items,
+            &BslValue::Str(crate::BslString::from_str("отчёт:2026.txt")),
+        )
+        .unwrap();
+        assert_eq!(prop(&by_original, "Имя"), "отчёт_2026.txt");
+        let by_shown = find(
+            &items,
+            &BslValue::Str(crate::BslString::from_str("отчёт_2026.txt")),
+        )
+        .unwrap();
+        assert!(matches!(by_shown, BslValue::Undefined));
+    }
+
+    /// Закрытый архив отвечает ошибкой на всё, а повторное открытие —
+    /// работает.
+    #[test]
+    fn a_closed_archive_refuses_everything_and_reopens() {
+        let reader = reader_over(&REF_MIXED, "closed.zip");
+        close(&reader).expect("первый Закрыть проходит");
+        assert!(close(&reader).is_err(), "второй Закрыть — ошибка");
+        assert!(entries(&reader).is_err(), "Элементы на закрытом — ошибка");
+
+        let dir = std::env::temp_dir().join(format!("open-bsl-zip-{}", std::process::id()));
+        let path = dir.join("closed.zip");
+        let source = BslValue::Str(crate::BslString::from_str(path.to_str().unwrap()));
+        open(&reader, std::slice::from_ref(&source)).expect("после Закрыть открывается снова");
+        assert!(
+            open(&reader, &[source]).is_err(),
+            "открытый второй раз — ошибка"
+        );
+        assert_eq!(count(&entries(&reader).unwrap()).unwrap(), 2);
+    }
+
+    /// Распаковка обоими режимами: с путями и плоско. Запись-каталог
+    /// создаёт каталог только в первом режиме.
+    #[test]
+    fn extract_all_honours_the_path_mode() {
+        let mut z = ZipWriter::new();
+        z.add("папка/", b"");
+        z.add("папка/вложенный.txt", "содержимое".as_bytes());
+        z.add("верхний.txt", b"top");
+        let reader = reader_over(&z.finish(), "extract.zip");
+
+        let root = std::env::temp_dir().join(format!("open-bsl-zip-out-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let deep = root.join("сПутями");
+        let flat = root.join("плоско");
+        let arg =
+            |p: &std::path::Path| BslValue::Str(crate::BslString::from_str(p.to_str().unwrap()));
+
+        // Каталога назначения ещё нет — измерено, что он создаётся.
+        extract_all(&reader, &[arg(&deep)]).expect("распаковка с путями");
+        assert!(deep.join("папка").is_dir());
+        assert_eq!(
+            std::fs::read(deep.join("папка/вложенный.txt")).unwrap(),
+            "содержимое".as_bytes()
+        );
+        assert!(deep.join("верхний.txt").is_file());
+
+        extract_all(
+            &reader,
+            &[
+                arg(&flat),
+                BslValue::Enum(crate::EnumValue::DontRestorePaths),
+            ],
+        )
+        .expect("плоская распаковка");
+        assert!(flat.join("вложенный.txt").is_file());
+        assert!(!flat.join("папка").exists(), "каталогов быть не должно");
+
+        // Пустая строка каталога — ошибка, а `Неопределено` режимом не
+        // считается (оба измерены).
+        assert!(extract_all(&reader, &[BslValue::Str(crate::BslString::from_str(""))]).is_err());
+        assert!(extract_all(&reader, &[arg(&flat), BslValue::Undefined]).is_err());
+    }
+
+    /// Извлечение одной записи: элемент чужого архива не принимается, а
+    /// зашифрованная запись даёт внятный отказ, а не пустой файл.
+    #[test]
+    fn extract_checks_the_element_and_refuses_encrypted_entries() {
+        let reader = reader_over(&REF_MIXED, "one.zip");
+        let other = reader_over(&REF_MIXED, "one-more.zip");
+        let items = entries(&reader).unwrap();
+        let dir = std::env::temp_dir().join(format!("open-bsl-zip-one-{}", std::process::id()));
+        let arg = BslValue::Str(crate::BslString::from_str(dir.to_str().unwrap()));
+
+        let alien = get(&entries(&other).unwrap(), 0).unwrap();
+        let e = extract(&reader, &[alien, arg.clone()]).expect_err("элемент чужого архива");
+        assert!(e.to_string().contains("другому архиву"), "текст: {e}");
+        assert!(extract(&reader, &[BslValue::Undefined, arg.clone()]).is_err());
+
+        let first = get(&items, 0).unwrap();
+        extract(&reader, &[first, arg.clone()]).expect("своя запись распаковывается");
+        assert!(dir.join("накладная.txt").is_file());
+
+        let mut data = REF_MIXED.to_vec();
+        let central = central_at(&data, "накладная.txt".as_bytes());
+        set_flags(&mut data, central, FLAG_ENCRYPTED, 0);
+        let locked = reader_over(&data, "locked.zip");
+        let entry = get(&entries(&locked).unwrap(), 0).unwrap();
+        let e = extract(&locked, &[entry, arg]).expect_err("расшифровки здесь нет");
+        assert!(e.to_string().contains("зашифрован"), "текст: {e}");
+    }
+
+    /// Архив на одну запись — короче эталона, поэтому номер из эталона в
+    /// него не попадает.
+    fn one_entry_archive(name: &str) -> BslValue {
+        let mut z = ZipWriter::new();
+        z.add("один.txt", "один".as_bytes());
+        archive_file(&z.finish(), name)
+    }
+
+    /// Элемент, взятый до `Закрыть`, после переоткрытия на БОЛЕЕ КОРОТКИЙ
+    /// архив отвечает ошибкой, а не паникой: номер записи действителен
+    /// только внутри того открытия, при котором элемент выдан.
+    #[test]
+    fn extract_of_a_stale_entry_errors_instead_of_panicking() {
+        let reader = reader_over(&REF_MIXED, "stale.zip");
+        let stale = get(&entries(&reader).unwrap(), 1).unwrap();
+        assert_eq!(prop(&stale, "Имя"), "шум.bin");
+
+        let smaller = one_entry_archive("stale-small.zip");
+        close(&reader).expect("Закрыть проходит");
+        open(&reader, std::slice::from_ref(&smaller)).expect("открывается снова");
+        assert_eq!(count(&entries(&reader).unwrap()).unwrap(), 1);
+
+        let dir = output_dir("stale");
+        let arg = BslValue::Str(crate::BslString::from_str(dir.to_str().unwrap()));
+        let e = extract(&reader, &[stale, arg]).expect_err("элемент от прошлого открытия");
+        assert!(e.to_string().contains("другом открытии"), "текст: {e}");
+        assert!(!dir.exists(), "распаковывать было нечего");
+    }
+
+    /// Тот же элемент, но новый архив НЕ короче: номер в него попадает, и
+    /// молчаливая выдача занявшей его чужой записи была бы хуже отказа.
+    #[test]
+    fn a_stale_entry_never_extracts_the_record_that_took_its_number() {
+        let reader = reader_over(&REF_MIXED, "stale-same.zip");
+        let stale = get(&entries(&reader).unwrap(), 0).unwrap();
+        assert_eq!(prop(&stale, "Имя"), "накладная.txt");
+
+        let mut z = ZipWriter::new();
+        z.add("подмена.txt", "чужое".as_bytes());
+        z.add("вторая.txt", "ещё чужое".as_bytes());
+        let other = archive_file(&z.finish(), "stale-same-other.zip");
+        close(&reader).expect("Закрыть проходит");
+        open(&reader, std::slice::from_ref(&other)).expect("открывается снова");
+        assert_eq!(count(&entries(&reader).unwrap()).unwrap(), 2);
+
+        let dir = output_dir("stale-same");
+        let arg = BslValue::Str(crate::BslString::from_str(dir.to_str().unwrap()));
+        let e = extract(&reader, &[stale, arg.clone()]).expect_err("элемент от прошлого открытия");
+        assert!(e.to_string().contains("другом открытии"), "текст: {e}");
+        assert!(
+            !dir.join("подмена.txt").exists(),
+            "чужая запись под тем же номером распакована не была"
+        );
+        assert!(!dir.join("накладная.txt").exists());
+
+        // Свежий элемент того же читателя работает как обычно.
+        let fresh = get(&entries(&reader).unwrap(), 0).unwrap();
+        extract(&reader, &[fresh, arg]).expect("своя запись распаковывается");
+        assert_eq!(
+            std::fs::read(dir.join("подмена.txt")).unwrap(),
+            "чужое".as_bytes()
+        );
+    }
+
+    /// Свойства устаревшего элемента тоже отвергаются — и на закрытом
+    /// архиве это по-прежнему измеренная ошибка «архив не открыт».
+    #[test]
+    fn properties_of_a_stale_entry_are_refused() {
+        let reader = reader_over(&REF_MIXED, "stale-prop.zip");
+        let stale = get(&entries(&reader).unwrap(), 1).unwrap();
+        assert_eq!(prop(&stale, "Имя"), "шум.bin");
+
+        let smaller = one_entry_archive("stale-prop-small.zip");
+        close(&reader).expect("Закрыть проходит");
+        let e = entry_prop(&stale, "Имя").expect_err("на закрытом архиве свойств нет");
+        assert!(e.to_string().contains("не открыт"), "текст: {e}");
+
+        open(&reader, std::slice::from_ref(&smaller)).expect("открывается снова");
+        let e = entry_prop(&stale, "Имя").expect_err("элемент от прошлого открытия");
+        assert!(e.to_string().contains("другом открытии"), "текст: {e}");
+        let fresh = find(
+            &entries(&reader).unwrap(),
+            &BslValue::Str(crate::BslString::from_str("один.txt")),
+        )
+        .unwrap();
+        assert_eq!(prop(&fresh, "Имя"), "один.txt");
+    }
+
+    /// Размеры Zip64 приходят из каталога произвольными восемью байтами:
+    /// размер со старшим битом обязан остаться ПОЛОЖИТЕЛЬНЫМ числом, а не
+    /// завернуться в знак. Поле 0x0001 приписано к записи руками — здешний
+    /// писатель extra не пишет, а `zipfile` выносит размеры в него только
+    /// выше четырёх гигабайт.
+    #[test]
+    fn a_zip64_size_that_does_not_fit_i64_stays_positive() {
+        let mut z = ZipWriter::new();
+        z.add("огромный.bin", "x".as_bytes());
+        let bytes = z.finish();
+        let central = central_at(&bytes, "огромный.bin".as_bytes());
+        let name_len = usize::from(u16::from_le_bytes([
+            bytes[central + 28],
+            bytes[central + 29],
+        ]));
+        assert_eq!(
+            u16::from_le_bytes([bytes[central + 30], bytes[central + 31]]),
+            0,
+            "здешний писатель extra-полей не пишет"
+        );
+
+        // Заголовок поля (идентификатор 0x0001 и длина) плюс одно
+        // восьмибайтовое значение: вынесен ТОЛЬКО несжатый размер, поэтому
+        // в теле поля он и стоит первым и единственным.
+        let mut field = vec![0x01, 0x00, 0x08, 0x00];
+        field.extend_from_slice(&0x8000_0000_0000_0000u64.to_le_bytes());
+        let field_len = u16::try_from(field.len()).unwrap();
+        let insert_at = central + CENTRAL_HEADER_LEN + name_len;
+        let mut data = bytes[..insert_at].to_vec();
+        data.extend_from_slice(&field);
+        data.extend_from_slice(&bytes[insert_at..]);
+        // Признак выноса — максимум на месте самого размера в записи.
+        data[central + 24..central + 28].copy_from_slice(&MAX_U32.to_le_bytes());
+        data[central + 30..central + 32].copy_from_slice(&field_len.to_le_bytes());
+        // Каталог вырос ровно на длину поля; без правки записи конца
+        // каталога проба упёрлась бы в ошибку разбора, а не в размер.
+        let eocd = eocd_at(&data);
+        let cd_size = u32::from_le_bytes([
+            data[eocd + 12],
+            data[eocd + 13],
+            data[eocd + 14],
+            data[eocd + 15],
+        ]) + u32::from(field_len);
+        data[eocd + 12..eocd + 16].copy_from_slice(&cd_size.to_le_bytes());
+
+        let reader = reader_over(&data, "zip64-size.zip");
+        let entry = get(&entries(&reader).unwrap(), 0).unwrap();
+        assert_eq!(prop(&entry, "РазмерНесжатого"), "9223372036854775808");
+        assert_eq!(prop(&entry, "UncompressedSize"), "9223372036854775808");
+    }
+
+    /// Комментарий архива читается и декодируется как UTF-8.
+    #[test]
+    fn the_archive_comment_is_readable() {
+        let mut bytes = ZipWriter::new().finish();
+        let comment = "привет-комментарий".as_bytes();
+        let at = bytes.len() - 2;
+        bytes[at..].copy_from_slice(&(comment.len() as u16).to_le_bytes());
+        bytes.extend_from_slice(comment);
+
+        let reader = reader_over(&bytes, "comment.zip");
+        assert_eq!(comment_of(&reader), "привет-комментарий");
+        assert_eq!(count(&entries(&reader).unwrap()).unwrap(), 0);
+    }
+
+    fn comment_of(reader: &BslValue) -> String {
+        comment(reader).unwrap().to_string()
+    }
+
+    /// Третий аргумент конструктора: `Zip` проходит, остальные форматы —
+    /// честный отказ, чужой тип — ошибка типа.
+    #[test]
+    fn the_archive_type_argument_only_accepts_zip() {
+        let dir = std::env::temp_dir().join(format!("open-bsl-zip-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("kind.zip");
+        std::fs::write(&path, REF_MIXED).unwrap();
+        let source = BslValue::Str(crate::BslString::from_str(path.to_str().unwrap()));
+
+        let ok = new_archive_reader(
+            false,
+            &source,
+            &BslValue::Undefined,
+            &BslValue::Enum(crate::EnumValue::ArchiveTypeZip),
+        )
+        .expect("ZIP поддержан");
+        assert_eq!(ok.type_name(), "ЧтениеФайлаАрхива");
+
+        let e = new_archive_reader(
+            false,
+            &source,
+            &BslValue::Undefined,
+            &BslValue::Enum(crate::EnumValue::ArchiveTypeTar),
+        )
+        .expect_err("TAR здесь не читается");
+        assert!(e.to_string().contains("не поддерживается"), "текст: {e}");
+        assert!(new_archive_reader(
+            false,
+            &source,
+            &BslValue::Undefined,
+            &BslValue::Boolean(true)
+        )
+        .is_err());
+    }
+
+    /// Испорченный вход не открывается вовсе — ошибка приходит из
+    /// конструктора, а не из первой попытки прочитать запись.
+    #[test]
+    fn a_broken_archive_fails_in_the_constructor() {
+        let dir = std::env::temp_dir().join(format!("open-bsl-zip-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("broken.zip");
+        std::fs::write(&path, b"not a zip at all, not even close").unwrap();
+        let source = BslValue::Str(crate::BslString::from_str(path.to_str().unwrap()));
+        assert!(
+            new_archive_reader(true, &source, &BslValue::Undefined, &BslValue::Undefined).is_err()
+        );
+
+        let missing = BslValue::Str(crate::BslString::from_str("/несуществующий/архив.zip"));
+        assert!(
+            new_archive_reader(true, &missing, &BslValue::Undefined, &BslValue::Undefined).is_err()
         );
     }
 }

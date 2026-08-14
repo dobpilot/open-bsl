@@ -437,6 +437,14 @@ pub const NEW_TYPES: &[&str] = &[
     "DataReader",
     "ЗаписьДанных",
     "DataWriter",
+    // Читателей архива на 8.3.27 ДВА, и оба английских написания измерены:
+    // `Тип("ZipFileReader")` даёт «Чтение ZIP файла», а
+    // `Тип("ArchiveFileReader")` — «Чтение файла архива», то есть это
+    // разные типы, а не два имени одного.
+    "ЧтениеZipФайла",
+    "ZipFileReader",
+    "ЧтениеФайлаАрхива",
+    "ArchiveFileReader",
 ];
 
 struct Resolver<'a> {
@@ -1035,6 +1043,46 @@ impl<'a> Resolver<'a> {
                         order,
                         separator,
                     }
+                })
+            }
+            // Оба читателя архива: все аргументы необязательны, но у
+            // zip-варианта их не больше двух — ИЗМЕРЕНО, что
+            // `Новый ЧтениеZipФайла(файл, пароль, тип)` платформа встречает
+            // «Конструктор не найден», тогда как
+            // `Новый ЧтениеФайлаАрхива(файл, пароль, ТипФайлаАрхива.Zip)`
+            // принимает.
+            "ЧТЕНИЕZIPФАЙЛА" | "ZIPFILEREADER" | "ЧТЕНИЕФАЙЛААРХИВА" | "ARCHIVEFILEREADER" =>
+            {
+                let zip = matches!(
+                    type_name.to_uppercase().as_str(),
+                    "ЧТЕНИЕZIPФАЙЛА" | "ZIPFILEREADER"
+                );
+                let limit = if zip { 2 } else { 3 };
+                if args.len() > limit {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: if zip {
+                            "Новый ЧтениеZipФайла".to_string()
+                        } else {
+                            "Новый ЧтениеФайлаАрхива".to_string()
+                        },
+                        expected: limit,
+                        found: args.len(),
+                    });
+                }
+                let mut arg = |i: usize| -> Result<Box<RExpr>, SemaError> {
+                    Ok(Box::new(match args.get(i) {
+                        Some(a) => self.resolve_expr(a)?,
+                        None => RExpr::Undefined,
+                    }))
+                };
+                let source = arg(0)?;
+                let password = arg(1)?;
+                let archive_type = arg(2)?;
+                Ok(RExpr::NewArchiveReader {
+                    zip,
+                    source,
+                    password,
+                    archive_type,
                 })
             }
             "ЧТЕНИЕJSON" | "JSONREADER" => {
@@ -1673,6 +1721,11 @@ impl<'a> Resolver<'a> {
                     bsl_rt::BuiltinMethod::XdtoXmlTypeOfType
                     | bsl_rt::BuiltinMethod::XdtoXmlTypeOfValue
                     | bsl_rt::BuiltinMethod::XdtoCanReadXml => None,
+                    // Распаковка. У `Извлечь` форм три (элемент с
+                    // каталогом, с режимом и с паролем), у `ИзвлечьВсе` —
+                    // две; всё измерено, и обе арности решает рантайм.
+                    bsl_rt::BuiltinMethod::ArchiveExtract
+                    | bsl_rt::BuiltinMethod::ArchiveExtractAll => None,
                 };
                 if let Some(expected) = expected {
                     if args.len() != expected {

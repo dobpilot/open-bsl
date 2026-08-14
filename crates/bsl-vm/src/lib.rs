@@ -1156,6 +1156,7 @@ fn step(
             | Instr::NewDataReader { .. }
             | Instr::NewDataWriter { .. }
             | Instr::NewFileStreamsManager { .. }
+            | Instr::NewArchiveReader { .. }
             | Instr::NewBinaryData { .. }
             | Instr::Raise { .. }
             | Instr::CloseText { .. }
@@ -1469,6 +1470,21 @@ fn step_cold(
             let stream = BslValue::new_file_stream(&path, &mode, &access)?;
             let d = frames[frame_idx].reg_index(dst);
             reg_store(stack, d, stream)?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewArchiveReader {
+            dst,
+            zip,
+            source,
+            password,
+            archive_type,
+        } => {
+            let source = reg_load(stack, frames[frame_idx].reg_index(source))?;
+            let password = reg_load(stack, frames[frame_idx].reg_index(password))?;
+            let archive_type = reg_load(stack, frames[frame_idx].reg_index(archive_type))?;
+            let reader = bsl_rt::new_archive_reader(zip, &source, &password, &archive_type)?;
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, reader)?;
             frames[frame_idx].pc += 1;
         }
         Instr::NewDataReader {

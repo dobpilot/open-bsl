@@ -92,6 +92,7 @@ pub use textdoc::{
 };
 pub use types::TypeId;
 pub use vstr::{value_from_string_internal, value_to_string_internal};
+pub use zip::{new_archive_reader, ArchiveKind, ArchiveState};
 // Модель типов XDTO наружу крейта нужна целиком: строит её фабрика,
 // которой в этой реализации ещё нет, а до тех пор единственный её
 // потребитель — собственные тесты модуля.
@@ -378,6 +379,8 @@ fn enum_kind_type_id(kind: EnumKind) -> TypeId {
         EnumKind::XdtoFacetKind => TypeId::XdtoFacetKind,
         EnumKind::DomXPathResultType => TypeId::DomXPathResultType,
         EnumKind::SearchDirection => TypeId::SearchDirection,
+        EnumKind::ZipRestorePathsMode => TypeId::ZipRestorePathsMode,
+        EnumKind::ArchiveFileType => TypeId::ArchiveFileType,
     }
 }
 
@@ -497,6 +500,15 @@ impl BslValue {
                 BslObject::SpreadArea(..) => "ОбластьЯчеекТабличногоДокумента",
                 BslObject::TextDocument(_) => "ТекстовыйДокумент",
                 BslObject::TextDocParams(_) => "ПараметрыМакетаТекстовогоДокумента",
+                // Имена ЗНАЧЕНИЙ читателей архива — слитные, имена ТИПОВ
+                // («Чтение ZIP файла») с пробелами, см. `types.rs`. Обе
+                // колонки измерены на 8.3.27.
+                BslObject::ArchiveReader(zip::ArchiveKind::Zip, _) => "ЧтениеZipФайла",
+                BslObject::ArchiveEntries(zip::ArchiveKind::Zip, _) => "ЭлементыZipФайла",
+                BslObject::ArchiveEntry(zip::ArchiveKind::Zip, ..) => "ЭлементZipФайла",
+                BslObject::ArchiveReader(zip::ArchiveKind::Archive, _) => "ЧтениеФайлаАрхива",
+                BslObject::ArchiveEntries(zip::ArchiveKind::Archive, _) => "ЭлементыФайлаАрхива",
+                BslObject::ArchiveEntry(zip::ArchiveKind::Archive, ..) => "ЭлементФайлаАрхива",
                 // Имена ЗНАЧЕНИЙ у потоков — слитные и РАЗНЫЕ, в отличие от
                 // имени их типа, которое у обоих одно («Файловый поток»,
                 // см. `types.rs`). Измерено обеими сторонами.
@@ -1258,7 +1270,14 @@ impl BslValue {
                 | BslObject::SpreadDrawing(..)
                 | BslObject::SpreadDrawings(..)
                 | BslObject::TextDocument(..)
-                | BslObject::TextDocParams(..) => true,
+                | BslObject::TextDocParams(..)
+                // ИЗМЕРЕНО: `ЗначениеЗаполнено(Новый ЧтениеZipФайла(файл))`
+                // — «Да». Ни у читателя, ни у элемента длины нет, а
+                // коллекция элементов отдельно не мерилась и идёт сюда же:
+                // ошибка на закрытом архиве важнее, чем ноль элементов.
+                | BslObject::ArchiveReader(..)
+                | BslObject::ArchiveEntries(..)
+                | BslObject::ArchiveEntry(..) => true,
                 // Коллекции DOM заполненность имеют, и критерий у них
                 // ДЛИНА, как у массива: измерено, что непустые
                 // `ДочерниеУзлы` дают «Да», а пустые `Атрибуты` — «Нет».
@@ -1409,6 +1428,14 @@ impl BslValue {
                 BslObject::SpreadArea(..) => TypeId::SpreadArea,
                 BslObject::TextDocument(..) => TypeId::TextDocument,
                 BslObject::TextDocParams(..) => TypeId::TextDocParams,
+                BslObject::ArchiveReader(zip::ArchiveKind::Zip, _) => TypeId::ZipFileReader,
+                BslObject::ArchiveEntries(zip::ArchiveKind::Zip, _) => TypeId::ZipFileEntries,
+                BslObject::ArchiveEntry(zip::ArchiveKind::Zip, ..) => TypeId::ZipFileEntry,
+                BslObject::ArchiveReader(zip::ArchiveKind::Archive, _) => TypeId::ArchiveFileReader,
+                BslObject::ArchiveEntries(zip::ArchiveKind::Archive, _) => {
+                    TypeId::ArchiveFileEntries
+                }
+                BslObject::ArchiveEntry(zip::ArchiveKind::Archive, ..) => TypeId::ArchiveFileEntry,
                 BslObject::MemoryStream(..) => TypeId::MemoryStream,
                 BslObject::FileStream(..) => TypeId::FileStream,
                 BslObject::FileStreamsManager => TypeId::FileStreamsManager,
@@ -1541,7 +1568,12 @@ impl BslValue {
     ///
     /// Ошибку ввода-вывода либо неприменимость метода к получателю.
     pub fn close_object(&self) -> RtResult<BslValue> {
-        if datarw::is_data_reader(self) || datarw::is_data_writer(self) {
+        if zip::is_reader(self) {
+            // У читателя архива `Закрыть` отпускает архив целиком, и
+            // повторный вызов — уже ошибка (измерено: «Архив не открыт!»).
+            zip::close(self)?;
+            Ok(BslValue::Undefined)
+        } else if datarw::is_data_reader(self) || datarw::is_data_writer(self) {
             // У читателя и писателя данных `Закрыть` ничего не закрывает:
             // целевой поток остаётся живым, а сами они продолжают работать
             // (измерено). Сбрасывать тоже нечего — собственного буфера у
@@ -2142,6 +2174,9 @@ impl BslValue {
                         row_id,
                     ))))
                 }
+                // `Элементы[i]` — тот же путь, что и `Получить(i)`
+                // (измерено, что есть оба).
+                BslObject::ArchiveEntries(..) => zip::get(self, Self::index_as_usize(idx)?),
                 BslObject::TableColumns(data) => {
                     let i = Self::index_as_usize(idx)?;
                     let name = {
@@ -2356,6 +2391,10 @@ impl BslValue {
                 | BslObject::XdtoFactory(..)
                 | BslObject::XdtoSerializer(..)
                 | BslObject::XdtoObject(..) => Err(RtError::NotIndexable),
+                // Коллекция элементов архива — коллекция и по индексу, и
+                // по `Для Каждого`, и по `Количество()` (измерено все
+                // три); сам читатель и отдельный элемент — нет.
+                BslObject::ArchiveEntries(..) => zip::count(self),
                 BslObject::TextWriter(..)
                 | BslObject::JsonReader(..)
                 | BslObject::JsonWriter(..)
@@ -2369,6 +2408,8 @@ impl BslValue {
                 | BslObject::SpreadDrawing(..)
                 | BslObject::TextDocument(..)
                 | BslObject::TextDocParams(..)
+                | BslObject::ArchiveReader(..)
+                | BslObject::ArchiveEntry(..)
                 // Число байтов потока отдаёт МЕТОД `Размер()`, а
                 // `Количество()` платформа отвергает и на потоке, и на
                 // менеджере — измерено на обоих. `Для Каждого` по ним
@@ -2829,6 +2870,22 @@ impl BslValue {
                 BslObject::SpreadArea(..) => spreadsheet::get_property(self, name),
                 BslObject::SpreadDrawing(data, i) => spreadsheet::drawing_property(data, *i, name),
                 BslObject::TextDocParams(_) => textdoc::get_parameter(self, name),
+                // У читателя архива свойств ровно два, и оба измерены;
+                // `Кодировка`, `Формат`, `ИмяФайла` и `РазмерАрхива`
+                // платформа не знает.
+                BslObject::ArchiveReader(..) => {
+                    if name.eq_ignore_ascii_case("Элементы") || name.eq_ignore_ascii_case("Items")
+                    {
+                        zip::entries(self)
+                    } else if name.eq_ignore_ascii_case("Комментарий")
+                        || name.eq_ignore_ascii_case("Comment")
+                    {
+                        zip::comment(self)
+                    } else {
+                        Err(RtError::UnknownColumn(name.to_string()))
+                    }
+                }
+                BslObject::ArchiveEntry(..) => zip::entry_prop(self, name),
                 BslObject::DomNode(..) => dom::get_property(self, name),
                 BslObject::XPathResult(_) => xpath::get_property(self, name),
                 BslObject::RegexMatch(_) | BslObject::RegexGroup(..) => {
@@ -3792,6 +3849,9 @@ impl fmt::Display for BslValue {
                 BslObject::SpreadArea(..) => write!(f, "ОбластьЯчеекТабличногоДокумента"),
                 BslObject::TextDocument(_) => write!(f, "ТекстовыйДокумент"),
                 BslObject::TextDocParams(_) => write!(f, "ПараметрыМакетаТекстовогоДокумента"),
+                BslObject::ArchiveReader(..)
+                | BslObject::ArchiveEntries(..)
+                | BslObject::ArchiveEntry(..) => write!(f, "{}", self.type_name()),
                 // Потоки печатаются ИМЕНЕМ ЗНАЧЕНИЯ, и закрытие его не
                 // меняет: `Строка(Зкр)` после `Закрыть()` — по-прежнему
                 // «ПотокВПамяти» (измерено).

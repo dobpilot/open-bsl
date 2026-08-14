@@ -215,6 +215,20 @@ pub enum RExpr {
         order: Box<RExpr>,
         separator: Box<RExpr>,
     },
+    /// `Новый ЧтениеZipФайла([Источник][, Пароль])` и
+    /// `Новый ЧтениеФайлаАрхива([Источник][, Пароль][, ТипФайлаАрхива])`.
+    ///
+    /// Оба аргумента и весь конструктор необязательны: `Новый
+    /// ЧтениеZipФайла()` платформа принимает и оставляет архив закрытым до
+    /// `Открыть`. Третий аргумент есть ТОЛЬКО у `ЧтениеФайлаАрхива`
+    /// (измерено: `Новый ЧтениеZipФайла(файл, пароль, тип)` — «Конструктор
+    /// не найден»), поэтому у zip-варианта он всегда `Undefined`.
+    NewArchiveReader {
+        zip: bool,
+        source: Box<RExpr>,
+        password: Box<RExpr>,
+        archive_type: Box<RExpr>,
+    },
     /// Голое имя `ФайловыеПотоки` как выражение. В отличие от
     /// [`RExpr::EnumTypeRef`] это НЕ константа: `ФайловыеПотоки =
     /// ФайловыеПотоки` платформа считает ложью (измерено), значит каждое
@@ -464,6 +478,16 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
         RExpr::NewMemoryStream { arg } | RExpr::NewUuid { arg } => expr_uses_dynamic(arg),
         RExpr::NewFileStream { path, mode, access } => {
             expr_uses_dynamic(path) || expr_uses_dynamic(mode) || expr_uses_dynamic(access)
+        }
+        RExpr::NewArchiveReader {
+            source,
+            password,
+            archive_type,
+            ..
+        } => {
+            expr_uses_dynamic(source)
+                || expr_uses_dynamic(password)
+                || expr_uses_dynamic(archive_type)
         }
         RExpr::NewDataReader {
             source,

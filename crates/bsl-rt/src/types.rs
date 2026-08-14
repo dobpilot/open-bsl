@@ -264,6 +264,25 @@ pub enum TypeId {
     /// разрешает, а `DataReadResult`, `DataReaderResult`, `DataReadingResult`
     /// и `ReadResult` — нет.
     DataReadResult,
+
+    // --- чтение архивов ---------------------------------------------------
+    // ШЕСТЬ типов, а не три: на 8.3.27 рядом живут два читателя архивов со
+    // своими коллекциями и элементами, и это ИЗМЕРЕНО —
+    // `Тип("ЧтениеZipФайла")` печатается «Чтение ZIP файла», а
+    // `Тип("ЧтениеФайлаАрхива")` — «Чтение файла архива». Английские
+    // написания измерены все шесть; `ZipFileReader` и `ZIPFileReader`
+    // платформа считает одним и тем же типом (у нас это выходит само:
+    // поиск регистронезависим).
+    ZipFileReader,
+    ZipFileEntries,
+    ZipFileEntry,
+    ArchiveFileReader,
+    ArchiveFileEntries,
+    ArchiveFileEntry,
+    /// Тип ЧЛЕНА перечисления `РежимВосстановленияПутейФайловZIP`.
+    ZipRestorePathsMode,
+    /// Тип ЧЛЕНА перечисления `ТипФайлаАрхива`.
+    ArchiveFileType,
 }
 
 /// `(русское, английское)`. Русское — каноническое: именно оно уходит в
@@ -679,6 +698,37 @@ const NAMES: &[(TypeId, &str, &str)] = &[
         "Результат чтения данных",
         "ReadDataResult",
     ),
+    // Представления всех шести ИЗМЕРЕНЫ через `Строка(ТипЗнч(...))`.
+    // Отдельной строки в `IDENTIFIERS` им не нужно: имя в коде отличается
+    // от представления только пробелами, а поиск их не считает значимыми.
+    (TypeId::ZipFileReader, "Чтение ZIP файла", "ZipFileReader"),
+    (
+        TypeId::ZipFileEntries,
+        "Элементы ZIP файла",
+        "ZipFileEntries",
+    ),
+    (TypeId::ZipFileEntry, "Элемент ZIP файла", "ZipFileEntry"),
+    (
+        TypeId::ArchiveFileReader,
+        "Чтение файла архива",
+        "ArchiveFileReader",
+    ),
+    (
+        TypeId::ArchiveFileEntries,
+        "Элементы файла архива",
+        "ArchiveFileEntries",
+    ),
+    (
+        TypeId::ArchiveFileEntry,
+        "Элемент файла архива",
+        "ArchiveFileEntry",
+    ),
+    (
+        TypeId::ZipRestorePathsMode,
+        "РежимВосстановленияПутейФайловZIP",
+        "ZIPRestoreFilePathsMode",
+    ),
+    (TypeId::ArchiveFileType, "ТипФайлаАрхива", "ArchiveFileType"),
 ];
 
 /// Типы, чьё ПРЕДСТАВЛЕНИЕ не совпадает с именем, по которому тип ищется.

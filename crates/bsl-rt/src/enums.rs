@@ -239,6 +239,22 @@ pub enum EnumValue {
     // объекта не обнаружено».
     SearchFromBegin,
     SearchFromEnd,
+
+    // --- РежимВосстановленияПутейФайловZIP ----------------------------------
+    // Членов ровно два: `.НетТакого` — «Поле объекта не обнаружено»
+    // (измерено).
+    RestorePaths,
+    DontRestorePaths,
+
+    // --- ТипФайлаАрхива -----------------------------------------------------
+    // Семь членов, снятых перебором; из них поддержан только `Zip`.
+    ArchiveTypeZip,
+    ArchiveTypeBzip2,
+    ArchiveTypeGzip,
+    ArchiveTypeRar,
+    ArchiveTypeSevenZip,
+    ArchiveTypeTar,
+    ArchiveTypeXz,
 }
 
 /// К какому перечислению принадлежит член — это же имя стоит слева от
@@ -324,6 +340,19 @@ pub enum EnumKind {
     /// `SearchDirection` ИЗМЕРЕНО, как и то, что `Тип("НаправлениеПоиска")`
     /// и `Тип("SearchDirection")` дают один и тот же тип.
     SearchDirection,
+
+    // --- перечисления чтения архивов -------------------------------------
+    /// `РежимВосстановленияПутейФайловZIP` — необязательный аргумент
+    /// `Извлечь` и `ИзвлечьВсе`. Английское написание
+    /// `ZIPRestoreFilePathsMode` ИЗМЕРЕНО (`ZIPRestorePathsMode` платформа
+    /// не знает), как и то, что членов ровно два.
+    ZipRestorePathsMode,
+    /// `ТипФайлаАрхива` — третий аргумент `Новый ЧтениеФайлаАрхива`.
+    /// Английское написание `ArchiveFileType` ИЗМЕРЕНО. Членов семь, и
+    /// читаем мы ровно один из них: остальные шесть заведены для того,
+    /// чтобы `ЧтениеФайлаАрхива(файл, , ТипФайлаАрхива.TAR)` отвечал
+    /// «формат не поддерживается», а не разбирал TAR как ZIP.
+    ArchiveFileType,
 }
 
 impl EnumKind {
@@ -361,6 +390,11 @@ impl EnumKind {
             EnumKind::XdtoFacetKind => ("ВидФасетаXDTO", "XDTOFacetType"),
             EnumKind::DomXPathResultType => ("ТипРезультатаDOMXPath", "DOMXPathResultType"),
             EnumKind::SearchDirection => ("НаправлениеПоиска", "SearchDirection"),
+            EnumKind::ZipRestorePathsMode => (
+                "РежимВосстановленияПутейФайловZIP",
+                "ZIPRestoreFilePathsMode",
+            ),
+            EnumKind::ArchiveFileType => ("ТипФайлаАрхива", "ArchiveFileType"),
         }
     }
 
@@ -411,6 +445,11 @@ impl EnumKind {
             // Тоже ИЗМЕРЕНО: `Строка(ТипЗнч(НаправлениеПоиска))` даёт
             // «ПеречислениеНаправлениеПоиска».
             EnumKind::SearchDirection => "ПеречислениеНаправлениеПоиска",
+            // Тот же префикс по образцу и под тем же маркером
+            // `JSON.ENUM.BARE_NAME`: голое имя ни у одного из двух не
+            // мерилось.
+            EnumKind::ZipRestorePathsMode => "ПеречислениеРежимВосстановленияПутейФайловZIP",
+            EnumKind::ArchiveFileType => "ПеречислениеТипФайлаАрхива",
         }
     }
 
@@ -1489,6 +1528,75 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "FromEnd",
         "С конца",
     ),
+    // Представления обоих режимов ИЗМЕРЕНЫ и, как обычно, не выводятся из
+    // имён: у `НеВосстанавливать` печатается «Не восстанавливать пути».
+    (
+        EnumKind::ZipRestorePathsMode,
+        EnumValue::RestorePaths,
+        "Восстанавливать",
+        "Restore",
+        "Восстанавливать пути",
+    ),
+    (
+        EnumKind::ZipRestorePathsMode,
+        EnumValue::DontRestorePaths,
+        "НеВосстанавливать",
+        "DontRestore",
+        "Не восстанавливать пути",
+    ),
+    // У членов `ТипФайлаАрхива` написание латинское и на обоих языках
+    // одинаковое; представление снова измерено — у `SevenZip` печатается
+    // «Тип архива 7Z», а не «7Zip». `Deflate64` и `SevenZ` платформа не
+    // знает — проверено перебором.
+    (
+        EnumKind::ArchiveFileType,
+        EnumValue::ArchiveTypeZip,
+        "Zip",
+        "Zip",
+        "Тип архива ZIP",
+    ),
+    (
+        EnumKind::ArchiveFileType,
+        EnumValue::ArchiveTypeBzip2,
+        "BZIP2",
+        "BZIP2",
+        "Тип архива BZIP2",
+    ),
+    (
+        EnumKind::ArchiveFileType,
+        EnumValue::ArchiveTypeGzip,
+        "GZIP",
+        "GZIP",
+        "Тип архива GZIP",
+    ),
+    (
+        EnumKind::ArchiveFileType,
+        EnumValue::ArchiveTypeRar,
+        "RAR",
+        "RAR",
+        "Тип архива RAR",
+    ),
+    (
+        EnumKind::ArchiveFileType,
+        EnumValue::ArchiveTypeSevenZip,
+        "SevenZip",
+        "SevenZip",
+        "Тип архива 7Z",
+    ),
+    (
+        EnumKind::ArchiveFileType,
+        EnumValue::ArchiveTypeTar,
+        "TAR",
+        "TAR",
+        "Тип архива TAR",
+    ),
+    (
+        EnumKind::ArchiveFileType,
+        EnumValue::ArchiveTypeXz,
+        "XZ",
+        "XZ",
+        "Тип архива XZ",
+    ),
 ];
 
 /// Имена всех перечислений — для автодополнения REPL и для резолвера,
@@ -1543,6 +1651,13 @@ pub const ENUM_NAMES: &[(&str, EnumKind)] = &[
     ("DOMXPathResultType", EnumKind::DomXPathResultType),
     ("НаправлениеПоиска", EnumKind::SearchDirection),
     ("SearchDirection", EnumKind::SearchDirection),
+    (
+        "РежимВосстановленияПутейФайловZIP",
+        EnumKind::ZipRestorePathsMode,
+    ),
+    ("ZIPRestoreFilePathsMode", EnumKind::ZipRestorePathsMode),
+    ("ТипФайлаАрхива", EnumKind::ArchiveFileType),
+    ("ArchiveFileType", EnumKind::ArchiveFileType),
 ];
 
 /// Перечисление по имени слева от точки. Регистронезависимо и на обоих

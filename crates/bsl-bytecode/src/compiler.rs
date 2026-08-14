@@ -774,6 +774,27 @@ impl<'a> Compiler<'a> {
             RExpr::NewFileStreamsManager => {
                 self.emit(Instr::NewFileStreamsManager { dst });
             }
+            RExpr::NewArchiveReader {
+                zip,
+                source,
+                password,
+                archive_type,
+            } => {
+                let source_reg = self.alloc_temp()?;
+                self.compile_expr(source, source_reg)?;
+                let password_reg = self.alloc_temp()?;
+                self.compile_expr(password, password_reg)?;
+                let type_reg = self.alloc_temp()?;
+                self.compile_expr(archive_type, type_reg)?;
+                self.emit(Instr::NewArchiveReader {
+                    dst,
+                    zip: *zip,
+                    source: source_reg,
+                    password: password_reg,
+                    archive_type: type_reg,
+                });
+                self.free_temp(3);
+            }
             RExpr::NewDataReader {
                 source,
                 encoding,

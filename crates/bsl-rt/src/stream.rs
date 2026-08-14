@@ -960,6 +960,30 @@ pub fn close(v: &BslValue) -> RtResult<()> {
     Ok(())
 }
 
+/// Весь носитель потока целиком, с начала и независимо от текущей позиции.
+///
+/// Нужен читателю архива: `Новый ЧтениеZipФайла(Поток)` платформа принимает
+/// (измерено), а разбирать архив по кускам этот читатель не умеет — ему
+/// нужны все байты сразу. Позиция потока при этом сохраняется: сдвигать её
+/// у чужого объекта нечестно, а измерений на этот счёт нет.
+///
+/// # Errors
+///
+/// [`RtError::IoError`], если поток закрыт, открыт без доступа на чтение
+/// или носитель не читается.
+pub(crate) fn read_all(v: &BslValue, op: &'static str) -> RtResult<Vec<u8>> {
+    let d = data(v, op)?;
+    let mut d = d.borrow_mut();
+    let len = d.len(op)?;
+    let count = usize::try_from(len)
+        .map_err(|_| RtError::IoError(format!("{op}: поток не помещается в память")))?;
+    let was = d.position();
+    d.set_position(0);
+    let bytes = d.read_bytes(count, op);
+    d.set_position(was);
+    bytes
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
