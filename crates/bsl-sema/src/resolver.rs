@@ -1092,24 +1092,30 @@ impl<'a> Resolver<'a> {
                     archive_type,
                 })
             }
-            // Оба писателя архива: аргументов не больше СЕМИ у каждого —
-            // измерено, что восьмой оба встречают «Конструктор не найден»,
-            // — а вот значат они разное, и разбирает их рантайм.
+            // Мест у писателей РАЗНОЕ число, и это измерено с настоящим
+            // путём первым аргументом: у zip-варианта их семь (восьмой —
+            // «Конструктор не найден»), у архивного восемь (девятый —
+            // «Конструктор не найден»), ровно на вставленный третьим
+            // `ТипФайлаАрхива` больше. Прежний общий предел 7 держался на
+            // пробе с `Неопределено` первым: там платформа отвечает
+            // «Конструктор не найден» уже потому, что подходящей перегрузки
+            // с таким первым аргументом нет вовсе. Значат места разное, и
+            // разбирает их рантайм.
             "ЗАПИСЬZIPФАЙЛА" | "ZIPFILEWRITER" | "ЗАПИСЬФАЙЛААРХИВА" | "ARCHIVEFILEWRITER" =>
             {
                 let zip = matches!(
                     type_name.to_uppercase().as_str(),
                     "ЗАПИСЬZIPФАЙЛА" | "ZIPFILEWRITER"
                 );
-                const LIMIT: usize = 7;
-                if args.len() > LIMIT {
+                let limit = if zip { 7 } else { 8 };
+                if args.len() > limit {
                     return Err(SemaError::ArgumentCountMismatch {
                         name: if zip {
                             "Новый ЗаписьZipФайла".to_string()
                         } else {
                             "Новый ЗаписьФайлаАрхива".to_string()
                         },
-                        expected: LIMIT,
+                        expected: limit,
                         found: args.len(),
                     });
                 }
@@ -1963,6 +1969,56 @@ mod tests {
                     builtin: bsl_rt::BuiltinFn::Sqrt,
                     args: vec![RExpr::Number(BslNumber::from_i64(4))],
                 },
+            }
+        );
+    }
+
+    /// Мест у писателей архива разное число, и обе границы ИЗМЕРЕНЫ с
+    /// настоящим путём первым аргументом: zip-вариант принимает семь и
+    /// отвергает восьмой, архивный принимает восемь и отвергает девятый.
+    /// Разница ровно в одно место — на вставленный третьим
+    /// `ТипФайлаАрхива`.
+    #[test]
+    fn the_two_archive_writers_have_different_argument_limits() {
+        let empty = |n: usize| -> String { ", Неопределено".repeat(n) };
+        let resolve = |src: &str| {
+            let prog = parse(src).unwrap();
+            resolve_script(&items_to_stmts(prog.items))
+        };
+
+        assert!(resolve(&format!(
+            "x = Новый ЗаписьZipФайла(\"/tmp/а.zip\"{});",
+            empty(6)
+        ))
+        .is_ok());
+        assert_eq!(
+            resolve(&format!(
+                "x = Новый ЗаписьZipФайла(\"/tmp/а.zip\"{});",
+                empty(7)
+            ))
+            .unwrap_err(),
+            SemaError::ArgumentCountMismatch {
+                name: "Новый ЗаписьZipФайла".to_string(),
+                expected: 7,
+                found: 8,
+            }
+        );
+
+        assert!(resolve(&format!(
+            "x = Новый ЗаписьФайлаАрхива(\"/tmp/а.zip\"{});",
+            empty(7)
+        ))
+        .is_ok());
+        assert_eq!(
+            resolve(&format!(
+                "x = Новый ЗаписьФайлаАрхива(\"/tmp/а.zip\"{});",
+                empty(8)
+            ))
+            .unwrap_err(),
+            SemaError::ArgumentCountMismatch {
+                name: "Новый ЗаписьФайлаАрхива".to_string(),
+                expected: 8,
+                found: 9,
             }
         );
     }
