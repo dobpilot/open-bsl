@@ -1,0 +1,3 @@
+CALL.STMT.INTRINSIC	отвергнут
+CALL.STMT.PLAIN	выполнен
+CALL.EXPR.PROCEDURE	отвергнут

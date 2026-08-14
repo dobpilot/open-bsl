@@ -250,7 +250,7 @@ fn eval_repl_line(line: &str, session: &mut Session) -> Result<BslValue, String>
         }
     }
 
-    let (new_locals, body) = bsl_sema::resolve_snippet_stmts(&session.locals, &[], &stmts, &[])
+    let (new_locals, body) = bsl_sema::resolve_repl_stmts(&session.locals, &[], &stmts, &[])
         .map_err(|e| format!("{e:?}"))?;
     // Формы — ВСЕГДА свежие для этой строки (см. doc comment на
     // `compile_snippet`): shape-индексы внутри `chunk` ссылаются на них, а

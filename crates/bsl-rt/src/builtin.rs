@@ -554,6 +554,79 @@ impl BuiltinFn {
             .map(|(_, f)| *f)
     }
 
+    /// Функция ВСТРОЕННОГО ЯЗЫКА — в отличие от функции глобального
+    /// контекста. Разница видна только в позиции оператора: `Строка(1);`
+    /// платформа отказывается компилировать («Встроенная функция может
+    /// быть использована только в выражении»), а `СтрНайти("а", "б");` —
+    /// обычный вызов с отброшенным результатом, и нуль-арная
+    /// `ТекущаяУниверсальнаяДатаВМиллисекундах();` оператором просто
+    /// выполняется.
+    ///
+    /// ИЗМЕРЕНО на 8.3.27 (2026-08-14) полным перебором таблицы
+    /// [`BUILTIN_FN_NAMES`]: каждое имя вызвано оператором
+    /// (`Выполнить("Имя();")`) и в выражении (`Вычислить("Имя()")`), классы
+    /// сняты по текстам ошибок компиляции; русское и английское написания
+    /// каждого варианта ответили одинаково. Канарейки правила — якоря
+    /// `CALL.*` в `open_questions.rs` и скрипт
+    /// `tests/conformance/measure/measure-builtin-call.bsl`.
+    /// `Вычислить`/`Eval` — тоже функция языка, но в этой таблице её нет:
+    /// у резолвера это отдельная форма `DynEval`. Расширения, которых у
+    /// платформы нет (`CommandLineArguments`, `XdtoConfigurationFactory` —
+    /// «Процедура или функция с указанным именем не определена»), правилом
+    /// не связаны и остаются обычными функциями.
+    pub fn is_intrinsic(self) -> bool {
+        matches!(
+            self,
+            BuiltinFn::Acos
+                | BuiltinFn::AddMonth
+                | BuiltinFn::Asin
+                | BuiltinFn::Atan
+                | BuiltinFn::Char
+                | BuiltinFn::CharCode
+                | BuiltinFn::Cos
+                | BuiltinFn::CurrentDate
+                | BuiltinFn::DateBoundaryOf(..)
+                | BuiltinFn::DatePartOf(..)
+                | BuiltinFn::Exp
+                | BuiltinFn::Format
+                | BuiltinFn::Left
+                | BuiltinFn::Ln
+                | BuiltinFn::Log10
+                | BuiltinFn::Lower
+                | BuiltinFn::MakeDate
+                | BuiltinFn::Mid
+                | BuiltinFn::Pow
+                | BuiltinFn::Right
+                | BuiltinFn::Round
+                | BuiltinFn::Sin
+                | BuiltinFn::Sqrt
+                | BuiltinFn::StrGetLine
+                | BuiltinFn::StrLen
+                | BuiltinFn::StrLineCount
+                | BuiltinFn::StrReplace
+                | BuiltinFn::Tan
+                | BuiltinFn::ToNumber
+                | BuiltinFn::ToString
+                | BuiltinFn::TrimAll
+                | BuiltinFn::TrimLeft
+                | BuiltinFn::TrimRight
+                | BuiltinFn::Trunc
+                | BuiltinFn::TypeByName
+                | BuiltinFn::TypeOf
+                | BuiltinFn::Upper
+        )
+    }
+
+    /// Глобальная ПРОЦЕДУРА: оператором звать можно, а в позиции выражения
+    /// платформа отвечает «Обращение к процедуре как к функции». Замер тот
+    /// же, что у [`BuiltinFn::is_intrinsic`].
+    pub fn is_procedure(self) -> bool {
+        matches!(
+            self,
+            BuiltinFn::Message | BuiltinFn::FillPropertyValues | BuiltinFn::WriteJson
+        )
+    }
+
     /// `(минимум, максимум)` аргументов. У большинства встроенных они
     /// совпадают — необязательные аргументы есть у меньшинства, и раньше
     /// их не было вовсе (`arity()` возвращала одно число).

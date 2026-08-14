@@ -24,6 +24,18 @@ pub enum SemaError {
         name: String,
         position: usize,
     },
+    /// Функция встроенного языка (`Строка`, `СтрДлина`, `Вычислить`, …)
+    /// вызвана отдельным оператором. Платформа отказывается компилировать
+    /// такой модуль — «Встроенная функция может быть использована только в
+    /// выражении», — но правило касается лишь функций ЯЗЫКА: обычную
+    /// функцию глобального контекста (`СтрНайти`, `ПрочитатьJSON`, …)
+    /// оператором звать можно. Деление измерено полным перебором — см.
+    /// [`bsl_rt::BuiltinFn::is_intrinsic`].
+    BuiltinFunctionAsStatement(String),
+    /// Глобальная процедура (`Сообщить`, `ЗаписатьJSON`,
+    /// `ЗаполнитьЗначенияСвойств`) в позиции выражения: платформа отвечает
+    /// «Обращение к процедуре как к функции».
+    ProcedureAsFunction(String),
     /// `'20240230'` — литерал прошёл лексер (цифры, верная длина), но
     /// такой календарной даты не существует.
     BadDateLiteral(String),
@@ -120,6 +132,8 @@ pub fn resolve_program(items: &[Item]) -> Result<ResolvedProgram, SemaError> {
             index: HashMap::new(),
             funcs: &sigs,
             module_index: &module_index,
+            strict_stmt_calls: true,
+            stmt_call: false,
         };
         for p in params {
             r.declare(&p.name);
@@ -158,6 +172,8 @@ pub fn resolve_program(items: &[Item]) -> Result<ResolvedProgram, SemaError> {
         index: HashMap::new(),
         funcs: &sigs,
         module_index: &empty_module_index,
+        strict_stmt_calls: true,
+        stmt_call: false,
     };
     for name in &module_vars {
         r.declare(name);
@@ -205,6 +221,8 @@ pub fn resolve_script(stmts: &[AStmt]) -> Result<Resolved, SemaError> {
         index: HashMap::new(),
         funcs: &empty_funcs,
         module_index: &empty_module,
+        strict_stmt_calls: true,
+        stmt_call: false,
     };
     let body = r.resolve_block(stmts)?;
     Ok(Resolved {
@@ -240,6 +258,36 @@ pub fn resolve_snippet_stmts(
     module_vars: &[String],
     stmts: &[AStmt],
     signatures: &[(String, usize)],
+) -> Result<(Vec<String>, Vec<RStmt>), SemaError> {
+    resolve_snippet_stmts_mode(existing_locals, module_vars, stmts, signatures, true)
+}
+
+/// То же, что [`resolve_snippet_stmts`], но для строки REPL: голый вызов
+/// функции встроенного языка (`СтрДлина("аб")`) не отвергается — REPL
+/// печатает его значение. Платформенное правило про оператор относится к
+/// компиляции модуля, а строка REPL модулем не является; фрагменты
+/// `Выполнить` остаются строгими, как на платформе (ИЗМЕРЕНО, якорь
+/// `CALL.STMT.INTRINSIC`).
+///
+/// # Errors
+///
+/// Возвращает [`SemaError`] по тем же причинам, что и
+/// [`resolve_snippet_stmts`], кроме [`SemaError::BuiltinFunctionAsStatement`].
+pub fn resolve_repl_stmts(
+    existing_locals: &[String],
+    module_vars: &[String],
+    stmts: &[AStmt],
+    signatures: &[(String, usize)],
+) -> Result<(Vec<String>, Vec<RStmt>), SemaError> {
+    resolve_snippet_stmts_mode(existing_locals, module_vars, stmts, signatures, false)
+}
+
+fn resolve_snippet_stmts_mode(
+    existing_locals: &[String],
+    module_vars: &[String],
+    stmts: &[AStmt],
+    signatures: &[(String, usize)],
+    strict_stmt_calls: bool,
 ) -> Result<(Vec<String>, Vec<RStmt>), SemaError> {
     let empty_funcs: HashMap<String, FuncSig> = signatures
         .iter()
@@ -278,6 +326,8 @@ pub fn resolve_snippet_stmts(
         index,
         funcs: &empty_funcs,
         module_index: &module_index,
+        strict_stmt_calls,
+        stmt_call: false,
     };
     let body = r.resolve_block(stmts)?;
     Ok((r.locals, body))
@@ -402,6 +452,15 @@ struct Resolver<'a> {
     /// явной `Перем` того же имени работает со своей копией, а модульная
     /// после вызова цела.
     module_index: &'a HashMap<String, u32>,
+    /// Отвергать ли функции встроенного языка в позиции оператора. В
+    /// модулях и фрагментах `Выполнить` — да, как на платформе; в REPL —
+    /// нет: голый вызов `СтрДлина("аб")` там печатает значение, и лишать
+    /// REPL этого ради правила о компиляции модулей незачем.
+    strict_stmt_calls: bool,
+    /// Взводится веткой `ExprStmt` на время разрешения верхнего выражения
+    /// оператора-вызова и потребляется входом в `resolve_expr`: только в
+    /// этой позиции легальна глобальная процедура.
+    stmt_call: bool,
 }
 
 impl<'a> Resolver<'a> {
@@ -470,7 +529,34 @@ impl<'a> Resolver<'a> {
                     "присваивание поддержано только в переменную, индекс или поле",
                 )),
             },
-            AStmt::ExprStmt(e) => Ok(Some(RStmt::ExprStmt(self.resolve_expr(e)?))),
+            AStmt::ExprStmt(e) => {
+                // Позиция оператора: единственное место, где легальна
+                // глобальная процедура, — и запретное для функций
+                // встроенного языка. Проверка второго — по РЕЗУЛЬТАТУ
+                // разрешения, а не по имени: пользовательская функция,
+                // затеняющая встроенное имя, разрешится в `RExpr::Call` и
+                // под правило не попадёт.
+                self.stmt_call = true;
+                let r = self.resolve_expr(e)?;
+                let forbidden = match &r {
+                    RExpr::CallBuiltinFn { builtin, .. } => builtin.is_intrinsic(),
+                    RExpr::DynEval(_) => true,
+                    _ => false,
+                };
+                if self.strict_stmt_calls && forbidden {
+                    // Обе запретные формы — вызовы по имени-идентификатору;
+                    // другие выражения сюда не приводят.
+                    let shown = match e {
+                        AExpr::Call { callee, .. } => match callee.as_ref() {
+                            AExpr::Ident(n) => n.clone(),
+                            _ => String::new(),
+                        },
+                        _ => String::new(),
+                    };
+                    return Err(SemaError::BuiltinFunctionAsStatement(shown));
+                }
+                Ok(Some(RStmt::ExprStmt(r)))
+            }
             AStmt::If {
                 cond,
                 then_branch,
@@ -561,6 +647,11 @@ impl<'a> Resolver<'a> {
     }
 
     fn resolve_expr(&mut self, e: &AExpr) -> Result<RExpr, SemaError> {
+        // Потребляем флаг позиции оператора: он относится ровно к ЭТОМУ
+        // выражению. Вложенные выражения — аргументы, индексы, объекты
+        // цепочек — заходят сюда уже с погашенным флагом, поэтому
+        // процедура в аргументе (`Сообщить(Сообщить(1))`) не проскочит.
+        let stmt_call = std::mem::take(&mut self.stmt_call);
         match e {
             AExpr::Number(text) => {
                 let n = BslNumber::parse_canonical(text).unwrap_or_else(|err| {
@@ -640,7 +731,7 @@ impl<'a> Resolver<'a> {
                 lhs: Box::new(self.resolve_expr(lhs)?),
                 rhs: Box::new(self.resolve_expr(rhs)?),
             }),
-            AExpr::Call { callee, args } => self.resolve_call(callee, args),
+            AExpr::Call { callee, args } => self.resolve_call(callee, args, stmt_call),
             AExpr::Str(s) => Ok(RExpr::Str(s.clone())),
             // Литерал `'ГГГГММДД'`/`'ГГГГММДДЧЧММСС'`. Лексер уже проверил,
             // что внутри только цифры и их 8 или 14, — но НЕ проверил, что
@@ -1209,7 +1300,12 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn resolve_call(&mut self, callee: &AExpr, args: &[Option<AExpr>]) -> Result<RExpr, SemaError> {
+    fn resolve_call(
+        &mut self,
+        callee: &AExpr,
+        args: &[Option<AExpr>],
+        stmt_call: bool,
+    ) -> Result<RExpr, SemaError> {
         match callee {
             AExpr::Ident(name) => {
                 if let Some((index, has_default)) = self
@@ -1279,6 +1375,13 @@ impl<'a> Resolver<'a> {
                     });
                 }
                 if let Some(builtin) = bsl_rt::BuiltinFn::lookup(name) {
+                    // Глобальная процедура легальна только оператором:
+                    // `Х = Сообщить(1)` платформа отвергает («Обращение к
+                    // процедуре как к функции») — ИЗМЕРЕНО, якорь
+                    // `CALL.EXPR.PROCEDURE`.
+                    if builtin.is_procedure() && !stmt_call {
+                        return Err(SemaError::ProcedureAsFunction(name.clone()));
+                    }
                     let (min, max) = builtin.arity_range();
                     if args.len() < min || args.len() > max {
                         return Err(SemaError::ArgumentCountMismatch {
@@ -1903,6 +2006,70 @@ mod tests {
             matches!(args[3], RExpr::Str(_)),
             "последняя позиция на месте"
         );
+    }
+
+    /// Правило платформы о позиции вызова трёхчастное — снято полным
+    /// перебором таблицы имён, деление хранит `BuiltinFn::is_intrinsic`.
+    /// Функция встроенного языка оператором — отказ компиляции.
+    #[test]
+    fn an_intrinsic_call_as_a_statement_is_rejected() {
+        for src in [
+            "Строка(1);",
+            "СтрЗаменить(\"а\", \"а\", \"б\");",
+            "ТекущаяДата();",
+            "Вычислить(\"1\");",
+            "StrLen(\"аб\");",
+        ] {
+            let prog = parse(src).unwrap();
+            let err = resolve_script(&items_to_stmts(prog.items)).unwrap_err();
+            assert!(
+                matches!(err, SemaError::BuiltinFunctionAsStatement(_)),
+                "{src}: {err:?}"
+            );
+        }
+    }
+
+    /// Функция глобального контекста оператором законна — платформа зовёт
+    /// её и отбрасывает результат, а нуль-арная просто выполняется.
+    /// Процедуры оператором — тем более.
+    #[test]
+    fn a_context_function_call_as_a_statement_is_allowed() {
+        resolve_src("СтрНайти(\"а\", \"б\");");
+        resolve_src("ТекущаяУниверсальнаяДатаВМиллисекундах();");
+        resolve_src("Сообщить(1);");
+        resolve_src("ЗаписатьJSON(1, 2);");
+    }
+
+    /// Глобальная процедура в позиции выражения — «Обращение к процедуре
+    /// как к функции», в том числе аргументом другого вызова.
+    #[test]
+    fn a_procedure_in_an_expression_is_rejected() {
+        for src in [
+            "Х = Сообщить(1);",
+            "Сообщить(Сообщить(1));",
+            "Х = ЗаполнитьЗначенияСвойств(1, 2);",
+        ] {
+            let prog = parse(src).unwrap();
+            let err = resolve_script(&items_to_stmts(prog.items)).unwrap_err();
+            assert!(
+                matches!(err, SemaError::ProcedureAsFunction(_)),
+                "{src}: {err:?}"
+            );
+        }
+    }
+
+    /// REPL мягче модуля: голый вызов функции языка там печатает значение,
+    /// а строгий фрагмент `Выполнить` идёт через `resolve_snippet_stmts` и
+    /// отвергает его, как платформа.
+    #[test]
+    fn the_repl_keeps_bare_intrinsic_calls() {
+        let prog = parse("СтрДлина(\"аб\");").unwrap();
+        let stmts = items_to_stmts(prog.items);
+        assert!(resolve_repl_stmts(&[], &[], &stmts, &[]).is_ok());
+        assert!(matches!(
+            resolve_snippet_stmts(&[], &[], &stmts, &[]),
+            Err(SemaError::BuiltinFunctionAsStatement(_))
+        ));
     }
 
     #[test]
