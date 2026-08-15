@@ -1,0 +1,4 @@
+PDF.ATTACH_STR_ESCAPES_READ	прямо [a(b)c\d.txt] круг [па(ра)\кет.txt]
+PDF.ATTACH_NAME_NON_UTF8	8: 65533 65533 65533 65533 46 116 120 116
+PDF.ATTACH_INSERT	нет
+PDF.SIGN_MEMBER_ERROR	свойство [Поле объекта не обнаружено (ЭлектронныеПодписи)] метод [Метод объекта не обнаружен (Подписать)]
