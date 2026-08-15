@@ -1,0 +1,26 @@
+Closed: открытый=Нет упорядоченный=Да последовательный=Нет
+Opened: открытый=Да упорядоченный=Да последовательный=Да
+OpenElem: открытый=Да упорядоченный=Да последовательный=Да
+OpenAttr: открытый=Да упорядоченный=Да последовательный=Да
+ExtOpen: открытый=Да упорядоченный=Да последовательный=Да
+ExtClosed: открытый=Нет упорядоченный=Да последовательный=Нет
+DeepAny: открытый=Да упорядоченный=Да последовательный=Да
+ExtAny: открытый=Нет упорядоченный=Да последовательный=Нет
+Host: открытый=Нет упорядоченный=Да последовательный=Нет
+зап Closed: <к xmlns="urn:order" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><ПС><Т><a>а</a><ПС><Т><b>бэ</b><ПС></к>
+зап Opened: <к xmlns="urn:order" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><ПС><Т><b>бэ</b><ПС><Т><a>а</a><ПС></к>
+зап OpenElem: <к xmlns="urn:order" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><ПС><Т><b>бэ</b><ПС><Т><a>а</a><ПС></к>
+зап OpenAttr: <к xmlns="urn:order" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><ПС><Т><b>бэ</b><ПС><Т><a>а</a><ПС></к>
+зап ExtOpen: <к xmlns="urn:order" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><ПС><Т><b>бэ</b><ПС><Т><a>а</a><ПС></к>
+зап ExtClosed: <к xmlns="urn:order" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><ПС><Т><a>а</a><ПС><Т><b>бэ</b><ПС></к>
+зап DeepAny: <к xmlns="urn:order" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><ПС><Т><b>бэ</b><ПС><Т><a>а</a><ПС></к>
+зап ExtAny: <к xmlns="urn:order" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><ПС><Т><a>а</a><ПС><Т><b>бэ</b><ПС></к>
+зап Closed повтор: <к xmlns="urn:order" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><ПС><Т><a>а2</a><ПС><Т><b>бэ</b><ПС></к>
+зап Opened повтор: <к xmlns="urn:order" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><ПС><Т><a>а2</a><ПС><Т><b>бэ</b><ПС></к>
+зап Closed множественное: <к xmlns="urn:order" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><ПС><Т><a>а</a><ПС><Т><c>це1</c><ПС><Т><c>це2</c><ПС></к>
+зап Opened множественное: <к xmlns="urn:order" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><ПС><Т><c>це1</c><ПС><Т><c>це2</c><ПС><Т><a>а</a><ПС></к>
+зап вложенного открытого: <к xmlns="urn:order" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><ПС><Т><x>икс</x><ПС><Т><inner><ПС><Т><Т><b>бэ</b><ПС><Т><Т><a>а</a><ПС><Т></inner><ПС></к>
+посл Closed: Неопределено
+посл Opened: [b=бэ][a=а]
+посл OpenElem: [b=бэ][a=а]
+посл ExtOpen: [b=бэ][a=а]

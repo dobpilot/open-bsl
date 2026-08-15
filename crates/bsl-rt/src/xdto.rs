@@ -93,9 +93,14 @@
 //! * `Упорядоченный` — «Да» у последовательности, у пустого типа и у
 //!   простого содержимого, «Нет» у `xs:choice` и `xs:all`;
 //!   `Последовательный` во всех измеренных случаях равен «НЕ
-//!   Упорядоченный ИЛИ Смешанный» (проверено на семи типах, включая
-//!   `anyType`, у которого «Да» и то и другое). `Открытый` — «Да» ровно у
-//!   `anyType`;
+//!   Упорядоченный ИЛИ Смешанный ИЛИ Открытый» (проверено на
+//!   одиннадцати типах, включая `anyType`, у которого «Да» все три).
+//!   `Открытый` — «Да» у `anyType` и у типа с МАСКОЙ: `xs:any` и
+//!   `xs:anyAttribute` поодиночке дают «Да», маска во вложенной группе
+//!   модели тоже, и наследник открытого типа открыт без своих масок
+//!   (замер `measure-xdto-order.bsl`). Это не косметика: открытость через
+//!   `Последовательный` решает ПОРЯДОК записи свойств — см.
+//!   [`write_properties`];
 //! * `Фасеты` типа значения — `КоллекцияФасетовXDTO`, но у типа БЕЗ
 //!   фасетов это `Неопределено`, а не пустая коллекция (измерено на
 //!   `xs:date`). `ФасетXDTO` отдаёт ровно два члена: `Вид` (член
@@ -937,10 +942,16 @@ impl XdtoTypeData {
     }
 
     /// `Последовательный` — во всех измеренных случаях «НЕ Упорядоченный
-    /// ИЛИ Смешанный»: последовательность даёт «Нет», `xs:choice` и
-    /// `xs:all` — «Да», смешанный тип и `anyType` — «Да».
+    /// ИЛИ Смешанный ИЛИ Открытый»: последовательность даёт «Нет»,
+    /// `xs:choice` и `xs:all` — «Да», смешанный тип и `anyType` — «Да»,
+    /// тип с маской — «Да» при `Упорядоченный` «Да» и `Смешанный` «Нет»
+    /// (`XDTO.WRITE_ORDER.FLAGS`; последнее слагаемое и добавлено этим
+    /// замером).
+    ///
+    /// Флаг не косметический: от него зависит ПОРЯДОК записи свойств в
+    /// [`write_properties`] и наличие `Последовательность()`.
     fn sequenced(&self) -> bool {
-        !self.ordered || self.mixed
+        !self.ordered || self.mixed || self.open
     }
 }
 
@@ -1215,7 +1226,12 @@ impl<'a> Builder<'a> {
                     shape: None,
                     facets: Vec::new(),
                     properties: Vec::new(),
-                    open: false,
+                    // `Открытый` — это МАСКА в объявлении типа, и любая из
+                    // двух: `xs:any` и `xs:anyAttribute` поодиночке дают
+                    // «Да» (измерено, `XDTO.WRITE_ORDER.FLAGS` и
+                    // `XDTO.WRITE_ORDER.WILDCARD`). Унаследованная маска
+                    // добавляется в [`Builder::ensure_properties`].
+                    open: schema.complex_has_wildcard(node),
                     is_abstract,
                     ordered: content_is_ordered(schema, node),
                     mixed,
@@ -1316,6 +1332,19 @@ impl<'a> Builder<'a> {
 
     /// Свойства типа объекта: сначала унаследованные, потом собственные
     /// атрибуты, потом собственные элементы (измеренный порядок).
+    ///
+    /// Здесь же достраивается ОТКРЫТОСТЬ: маска базового типа делает
+    /// открытым и наследника (измерено на `ExtOpen`, расширяющем тип с
+    /// масками и не несущем своих, — `Открытый` «Да»). Идёт она тем же
+    /// путём, что и свойства, и по той же причине: наследование в этой
+    /// модели плоское, а расширение и ограничение не различаются.
+    ///
+    /// Единственное исключение — `anyType`. Сам он открыт, но открытости
+    /// не передаёт: тип, ЯВНО его расширяющий, платформа отдаёт закрытым
+    /// (`XDTO.WRITE_ORDER.EXT_ANY` — `Нет|Да|Нет` и схемный порядок
+    /// записи). Правило это ещё и необходимое: базовый тип у составного
+    /// заполнен ВСЕГДА — при отсутствии явного подставляется `anyType`,
+    /// — так что без исключения открытым стал бы каждый тип.
     fn ensure_properties(&mut self, index: usize) -> RtResult<()> {
         if self.done[index] {
             return Ok(());
@@ -1332,6 +1361,16 @@ impl<'a> Builder<'a> {
             if !self.model.types[base].is_value() {
                 self.ensure_properties(base)?;
                 props.extend_from_slice(&self.model.types[base].properties);
+                // Открытость идёт следом за свойствами, но `anyType`
+                // её НЕ передаёт: он открыт сам (измерено), однако
+                // ни подставленный заглушкой, ни выписанный в схеме
+                // явно наследника не открывает — `Closed` и `ExtAny`
+                // оба «Нет» (`XDTO.WRITE_ORDER.EXT_ANY`). Иначе
+                // открытым стал бы каждый составной тип: базовый у
+                // них заполнен всегда.
+                if !is_any_type(&self.model.types[base]) && self.model.types[base].open {
+                    self.model.types[index].open = true;
+                }
             }
         }
         if let Some((si, node)) = self.to_xs[index] {
@@ -4819,10 +4858,28 @@ fn write_content(
 /// Свойства экземпляра: сначала текст простого содержимого, потом
 /// элементы.
 ///
-/// Порядок элементов зависит от типа: у УПОРЯДОЧЕННОГО он модельный
-/// (измерено: записанные как `num`, потом `name`, свойства вышли как
-/// `name`, потом `num`), у ПОСЛЕДОВАТЕЛЬНОГО — порядок заполнения
-/// (измерено на `xs:choice`: `cb`, `ca`, `cb` вышли ровно так).
+/// Порядок элементов выбирает [`XdtoTypeData::sequenced`], и ничто иное:
+/// у НЕ последовательного типа он модельный (измерено: записанные как
+/// `num`, потом `name`, свойства вышли как `name`, потом `num`), у
+/// ПОСЛЕДОВАТЕЛЬНОГО — порядок заполнения (измерено на `xs:choice`: `cb`,
+/// `ca`, `cb` вышли ровно так).
+///
+/// Развилка выглядит узкой, пока не вспомнить, что маска `xs:any` или
+/// `xs:anyAttribute` делает тип ОТКРЫТЫМ, а открытый — последовательным.
+/// Отсюда весь EnterpriseData: его 348 масок означают, что реальный обмен
+/// пишется в порядке ЗАПОЛНЕНИЯ, а не схемы. Измерено на четырёх типах
+/// одной формы, различающихся только масками
+/// (`XDTO.WRITE_ORDER.CLOSED` — `[a][b]`, `XDTO.WRITE_ORDER.OPEN` —
+/// `[b][a]` при одном и том же заполнении `b`, потом `a`), и подтверждено
+/// на настоящей схеме EnterpriseData 1.0.1 (`XDTO.WRITE_ORDER.EDATA`).
+///
+/// Упорядочивает платформа именно при ЗАПИСИ, а не при установке:
+/// `Последовательность()` открытого типа показывает порядок заполнения
+/// (`XDTO.WRITE_ORDER.OPEN_SEQ` — `[b=бэ][a=а]`), поэтому [`set_single`]
+/// трогать было не нужно. Повторное присваивание своё место сохраняет
+/// (`XDTO.WRITE_ORDER.REASSIGN`), а вхождения множественного свойства
+/// перемежаются с одиночными по месту `Добавить`
+/// (`XDTO.WRITE_ORDER.MULTI` — `[c][c][a]`).
 fn write_properties(
     w: &mut crate::xml::XmlWriter,
     scope: &mut NsScope,
@@ -7309,6 +7366,95 @@ mod tests {
             BslValue::Str(s) => Ok(s.to_string()),
             other => panic!("писатель отдал не строку: {other:?}"),
         }
+    }
+
+    /// Схема из `measure-xdto-order.bsl`: пять типов одной формы,
+    /// различающихся ровно масками и наследованием.
+    const ORDER_SAMPLE: &str = concat!(
+        r#"<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="urn:test" "#,
+        r#"targetNamespace="urn:test" elementFormDefault="qualified">"#,
+        r#"<xs:complexType name="Closed"><xs:sequence>"#,
+        r#"<xs:element name="a" type="xs:string" minOccurs="0"/>"#,
+        r#"<xs:element name="b" type="xs:string" minOccurs="0"/>"#,
+        r#"</xs:sequence></xs:complexType>"#,
+        r#"<xs:complexType name="OpenElem"><xs:sequence>"#,
+        r#"<xs:element name="a" type="xs:string" minOccurs="0"/>"#,
+        r#"<xs:element name="b" type="xs:string" minOccurs="0"/>"#,
+        r###"<xs:any namespace="##any" processContents="lax" minOccurs="0"/>"###,
+        r#"</xs:sequence></xs:complexType>"#,
+        r#"<xs:complexType name="OpenAttr"><xs:sequence>"#,
+        r#"<xs:element name="a" type="xs:string" minOccurs="0"/>"#,
+        r#"<xs:element name="b" type="xs:string" minOccurs="0"/>"#,
+        r#"</xs:sequence>"#,
+        r###"<xs:anyAttribute namespace="##any" processContents="lax"/>"###,
+        r#"</xs:complexType>"#,
+        r#"<xs:complexType name="DeepAny"><xs:sequence>"#,
+        r#"<xs:element name="a" type="xs:string" minOccurs="0"/>"#,
+        r#"<xs:sequence>"#,
+        r###"<xs:any namespace="##any" processContents="lax" minOccurs="0"/>"###,
+        r#"</xs:sequence>"#,
+        r#"<xs:element name="b" type="xs:string" minOccurs="0"/>"#,
+        r#"</xs:sequence></xs:complexType>"#,
+        r#"<xs:complexType name="ExtOpen"><xs:complexContent>"#,
+        r#"<xs:extension base="t:OpenElem"><xs:sequence>"#,
+        r#"<xs:element name="d" type="xs:string" minOccurs="0"/>"#,
+        r#"</xs:sequence></xs:extension></xs:complexContent></xs:complexType>"#,
+        r#"<xs:complexType name="ExtClosed"><xs:complexContent>"#,
+        r#"<xs:extension base="t:Closed"><xs:sequence>"#,
+        r#"<xs:element name="d" type="xs:string" minOccurs="0"/>"#,
+        r#"</xs:sequence></xs:extension></xs:complexContent></xs:complexType>"#,
+        r#"<xs:complexType name="ExtAny"><xs:complexContent>"#,
+        r#"<xs:extension base="xs:anyType"><xs:sequence>"#,
+        r#"<xs:element name="a" type="xs:string" minOccurs="0"/>"#,
+        r#"<xs:element name="b" type="xs:string" minOccurs="0"/>"#,
+        r#"</xs:sequence></xs:extension></xs:complexContent></xs:complexType>"#,
+        r#"</xs:schema>"#,
+    );
+
+    /// Маска делает тип ОТКРЫТЫМ, а открытый пишется в порядке
+    /// ЗАПОЛНЕНИЯ, тогда как закрытый — в схемном (измерено, якоря
+    /// `XDTO.WRITE_ORDER.*`; фикстура — xdto-write-order).
+    ///
+    /// Заполнение везде одно: сначала `b`, потом `a`.
+    #[test]
+    fn a_wildcard_opens_the_type_and_switches_the_write_order() {
+        let f = factory(ORDER_SAMPLE);
+        let filled = |name: &str| {
+            let o = factory_create(&f, &[type_of_factory(&f, name)]).expect("экземпляр");
+            set_property(&o, "b", str_value("бэ")).expect("b");
+            set_property(&o, "a", str_value("а")).expect("a");
+            o
+        };
+        let is_open = |name: &str| prop(&type_of_factory(&f, name), "Открытый");
+        let is_sequenced = |name: &str| prop(&type_of_factory(&f, name), "Последовательный");
+        // Порядок элементов виден и без разбора разметки: у закрытого
+        // типа `a` идёт раньше `b`.
+        let schema_order = |name: &str| {
+            let text = write_out(&f, &filled(name), &["к"]).expect("запись");
+            let at = |tag: &str| text.find(tag).expect("элемент в выгрузке");
+            at("<a>") < at("<b>")
+        };
+        let yes = BslValue::Boolean(true);
+        let no = BslValue::Boolean(false);
+
+        // `ExtAny` расширяет `anyType` ЯВНО: сам `anyType` открыт, но
+        // открытости не передаёт (иначе открытым стал бы каждый тип —
+        // базовый заполнен всегда).
+        for name in ["Closed", "ExtClosed", "ExtAny"] {
+            assert_eq!(is_open(name), no, "{name}");
+            assert_eq!(is_sequenced(name), no, "{name}");
+            assert!(schema_order(name), "{name}: ожидался схемный порядок");
+        }
+        // Любая из двух масок поодиночке, маска на глубине и маска,
+        // унаследованная от базового типа.
+        for name in ["OpenElem", "OpenAttr", "DeepAny", "ExtOpen"] {
+            assert_eq!(is_open(name), yes, "{name}");
+            assert_eq!(is_sequenced(name), yes, "{name}");
+            assert!(!schema_order(name), "{name}: ожидался порядок заполнения");
+        }
+        // Упорядоченность маска НЕ трогает: тип остаётся
+        // последовательностью.
+        assert_eq!(prop(&type_of_factory(&f, "OpenElem"), "Упорядоченный"), yes);
     }
 
     #[test]

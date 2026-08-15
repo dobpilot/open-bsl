@@ -1,0 +1,11 @@
+XDTO.WRITE_ORDER.FLAGS	Открытый|Упорядоченный|Последовательный: Closed Нет|Да|Нет, Opened Да|Да|Да, OpenElem Да|Да|Да, OpenAttr Да|Да|Да
+XDTO.WRITE_ORDER.CLOSED	<к xmlns="urn:order" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><ПС><Т><a>а</a><ПС><Т><b>бэ</b><ПС></к>
+XDTO.WRITE_ORDER.OPEN	<к xmlns="urn:order" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><ПС><Т><b>бэ</b><ПС><Т><a>а</a><ПС></к>
+XDTO.WRITE_ORDER.WILDCARD	OpenElem [b][a] OpenAttr [b][a]
+XDTO.WRITE_ORDER.INHERIT	ExtOpen Да|Да|Да [b][a], DeepAny Да|Да|Да [b][a]
+XDTO.WRITE_ORDER.EXT_ANY	Нет|Да|Нет [a][b]
+XDTO.WRITE_ORDER.CLOSED_SEQ	Неопределено
+XDTO.WRITE_ORDER.OPEN_SEQ	[b=бэ][a=а]
+XDTO.WRITE_ORDER.REASSIGN	<к xmlns="urn:order" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><ПС><Т><a>а2</a><ПС><Т><b>бэ</b><ПС></к>
+XDTO.WRITE_ORDER.MULTI	<к xmlns="urn:order" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><ПС><Т><c>це1</c><ПС><Т><c>це2</c><ПС><Т><a>а</a><ПС></к>
+XDTO.WRITE_ORDER.EDATA	Да|Да|Да [Цена][Количество]
