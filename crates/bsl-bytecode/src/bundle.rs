@@ -447,6 +447,7 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
         | Instr::NewTextDocument { dst }
         | Instr::NewSpreadDocument { dst }
         | Instr::NewPdfDocument { dst }
+        | Instr::NewPdfAttachments { dst }
         | Instr::NewXmlReader { dst }
         | Instr::NewXmlWriter { dst }
         | Instr::NewDomBuilder { dst }

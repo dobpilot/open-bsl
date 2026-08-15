@@ -393,6 +393,11 @@ pub enum Instr {
     NewPdfDocument {
         dst: u8,
     },
+    /// `Новый КоллекцияВложенийPDF` — тоже без аргументов: коллекция
+    /// вложений, не привязанная ни к какому документу.
+    NewPdfAttachments {
+        dst: u8,
+    },
     NewXmlReader {
         dst: u8,
     },

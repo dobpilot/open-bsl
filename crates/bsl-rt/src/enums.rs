@@ -255,6 +255,17 @@ pub enum EnumValue {
     RestorePaths,
     DontRestorePaths,
 
+    // --- ТипСвязиВложенияPDF ------------------------------------------------
+    // Пять членов, снятых перебором. Спецификация PDF (таблица 43) знает
+    // ещё `Schema`, `FormData` и `EncryptedPayload` — платформа их НЕ
+    // знает, поэтому их нет и здесь: член перечисления, которого у неё
+    // нет, был бы неправдой.
+    PdfRelationSource,
+    PdfRelationData,
+    PdfRelationAlternative,
+    PdfRelationSupplement,
+    PdfRelationUnspecified,
+
     // --- ТипФайлаАрхива -----------------------------------------------------
     // Семь членов, снятых перебором; из них поддержан только `Zip`.
     ArchiveTypeZip,
@@ -399,6 +410,13 @@ pub enum EnumKind {
     /// `ZIPRestoreFilePathsMode` ИЗМЕРЕНО (`ZIPRestorePathsMode` платформа
     /// не знает), как и то, что членов ровно два.
     ZipRestorePathsMode,
+    /// `ТипСвязиВложенияPDF` — четвёртый аргумент
+    /// `КоллекцияВложенийPDF.Добавить` и свойство `ВложениеPDF.ТипСвязи`.
+    /// Английского написания у самого перечисления НЕТ:
+    /// `PDFAttachmentRelationship`, `СвязьВложенияPDF` и
+    /// `ОтношениеВложенияPDF` платформа не знает (проверено перебором), а
+    /// у членов оно есть.
+    PdfAttachmentRelation,
     /// `ТипФайлаАрхива` — третий аргумент `Новый ЧтениеФайлаАрхива`.
     /// Английское написание `ArchiveFileType` ИЗМЕРЕНО. Членов семь, и
     /// читаем мы ровно один из них: остальные шесть заведены для того,
@@ -463,6 +481,7 @@ impl EnumKind {
                 "РежимВосстановленияПутейФайловZIP",
                 "ZIPRestoreFilePathsMode",
             ),
+            EnumKind::PdfAttachmentRelation => ("ТипСвязиВложенияPDF", "ТипСвязиВложенияPDF"),
             EnumKind::ArchiveFileType => ("ТипФайлаАрхива", "ArchiveFileType"),
             EnumKind::ZipCompressionMethod => ("МетодСжатияZIP", "ZIPCompressionMethod"),
             EnumKind::ZipCompressionLevel => ("УровеньСжатияZIP", "ZIPCompressionLevel"),
@@ -535,6 +554,7 @@ impl EnumKind {
             // `JSON.ENUM.BARE_NAME`: голое имя ни у одного из двух не
             // мерилось.
             EnumKind::ZipRestorePathsMode => "ПеречислениеРежимВосстановленияПутейФайловZIP",
+            EnumKind::PdfAttachmentRelation => "ПеречислениеТипСвязиВложенияPDF",
             EnumKind::ArchiveFileType => "ПеречислениеТипФайлаАрхива",
             EnumKind::ZipCompressionMethod => "ПеречислениеМетодСжатияZIP",
             EnumKind::ZipCompressionLevel => "ПеречислениеУровеньСжатияZIP",
@@ -1657,6 +1677,44 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "DontRestore",
         "Не восстанавливать пути",
     ),
+    // Члены `ТипСвязиВложенияPDF`. Английские написания есть у всех пяти,
+    // и представление снова измерено: у `НеУстановлено` печатается «Не
+    // указано» — ни «НеУстановлено», ни «Unspecified».
+    (
+        EnumKind::PdfAttachmentRelation,
+        EnumValue::PdfRelationSource,
+        "Источник",
+        "Source",
+        "Источник",
+    ),
+    (
+        EnumKind::PdfAttachmentRelation,
+        EnumValue::PdfRelationData,
+        "Данные",
+        "Data",
+        "Данные",
+    ),
+    (
+        EnumKind::PdfAttachmentRelation,
+        EnumValue::PdfRelationAlternative,
+        "Альтернатива",
+        "Alternative",
+        "Альтернатива",
+    ),
+    (
+        EnumKind::PdfAttachmentRelation,
+        EnumValue::PdfRelationSupplement,
+        "Дополнение",
+        "Supplement",
+        "Дополнение",
+    ),
+    (
+        EnumKind::PdfAttachmentRelation,
+        EnumValue::PdfRelationUnspecified,
+        "НеУстановлено",
+        "Unspecified",
+        "Не указано",
+    ),
     // У членов `ТипФайлаАрхива` написание латинское и на обоих языках
     // одинаковое; представление снова измерено — у `SevenZip` печатается
     // «Тип архива 7Z», а не «7Zip». `Deflate64` и `SevenZ` платформа не
@@ -1894,6 +1952,7 @@ pub const ENUM_NAMES: &[(&str, EnumKind)] = &[
         EnumKind::ZipRestorePathsMode,
     ),
     ("ZIPRestoreFilePathsMode", EnumKind::ZipRestorePathsMode),
+    ("ТипСвязиВложенияPDF", EnumKind::PdfAttachmentRelation),
     ("ТипФайлаАрхива", EnumKind::ArchiveFileType),
     ("ArchiveFileType", EnumKind::ArchiveFileType),
     ("МетодСжатияZIP", EnumKind::ZipCompressionMethod),

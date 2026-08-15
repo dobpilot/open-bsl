@@ -650,6 +650,9 @@ impl<'a> Compiler<'a> {
             RExpr::NewPdfDocument => {
                 self.emit(Instr::NewPdfDocument { dst });
             }
+            RExpr::NewPdfAttachments => {
+                self.emit(Instr::NewPdfAttachments { dst });
+            }
             RExpr::NewTextDocument => {
                 self.emit(Instr::NewTextDocument { dst });
             }

@@ -1968,6 +1968,12 @@ pub fn call_builtin_method(
             _ if crate::spreadsheet::is_drawings(obj) => {
                 crate::spreadsheet::drawings_add(obj, args)
             }
+            // `Вложения.Добавить(Имя, Данные[, ТипСодержимого[, ТипСвязи]])`
+            // — процедура с четырьмя арностями, разводится получателем.
+            _ if crate::pdf::is_pdf_attachments(obj) => {
+                crate::pdf::attachment_add(obj, args)?;
+                Ok(BslValue::Undefined)
+            }
             // `НаборСхемXML.Добавить(Схема)` — процедура: та же схема
             // второй раз проходит молча, а другая схема того же
             // пространства имён — ошибка (измерено).
@@ -2003,10 +2009,21 @@ pub fn call_builtin_method(
             }),
         },
         BuiltinMethod::Delete => {
+            // `Вложения.Удалить` берёт номер ЛИБО само вложение, и номер
+            // вне диапазона у неё не ошибка (измерено), поэтому общий путь
+            // удаления элемента коллекции здесь не годится.
+            if crate::pdf::is_pdf_attachments(obj) {
+                crate::pdf::attachment_delete(obj, args)?;
+                return Ok(BslValue::Undefined);
+            }
             obj.delete_element(&args[0])?;
             Ok(BslValue::Undefined)
         }
         BuiltinMethod::Clear => {
+            if crate::pdf::is_pdf_attachments(obj) {
+                crate::pdf::attachment_clear(obj)?;
+                return Ok(BslValue::Undefined);
+            }
             if crate::spreadsheet::is_spread_document(obj) {
                 crate::spreadsheet::clear(obj)?;
             } else if crate::textdoc::is_text_document(obj) {
@@ -2044,6 +2061,15 @@ pub fn call_builtin_method(
             // ветка, а не общий путь индексации.
             _ if crate::pdf::is_pdf_pages(obj) => match args {
                 [index] => crate::pdf::page_get(obj, index),
+                _ => Err(RtError::MethodNotApplicable {
+                    method: "Получить",
+                    receiver: obj.type_name(),
+                }),
+            },
+            // У вложений `Получить` вне диапазона тоже отдаёт
+            // `Неопределено` (измерено на 99 и -1).
+            _ if crate::pdf::is_pdf_attachments(obj) => match args {
+                [index] => crate::pdf::attachment_get(obj, index),
                 _ => Err(RtError::MethodNotApplicable {
                     method: "Получить",
                     receiver: obj.type_name(),
@@ -2151,6 +2177,12 @@ pub fn call_builtin_method(
                 }
                 return crate::zip::find(obj, value);
             }
+            // У коллекции вложений PDF аргумент тоже РОВНО один
+            // (измерено: `Найти(имя, 1)` — «Слишком много фактических
+            // параметров»), а ищет она по `ИмяФайла`.
+            if crate::pdf::is_pdf_attachments(obj) {
+                return crate::pdf::attachment_find(obj, args);
+            }
             obj.table_find(value, args.get(1).unwrap_or(&BslValue::Undefined))
         }
         // `НайтиСтроки` перехвачен в `call_builtin_method_ctx` — ему нужен
@@ -2213,6 +2245,9 @@ pub fn call_builtin_method(
             if crate::pdf::is_pdf_pages(obj) {
                 return crate::pdf::page_index_of(obj, &args[0]);
             }
+            if crate::pdf::is_pdf_attachments(obj) {
+                return crate::pdf::attachment_index_of(obj, &args[0]);
+            }
             obj.table_index_of(&args[0])
         }
         BuiltinMethod::Collapse => {
@@ -2230,6 +2265,12 @@ pub fn call_builtin_method(
         // `ТекстовыйДокумент` — сохранить файл. Одно имя, разный смысл по
         // получателю, как и у `Закрыть`.
         BuiltinMethod::Write => {
+            if crate::pdf::is_pdf_document(obj) {
+                // `ДокументPDF.Записать(ИмяФайла[, Пароль])` — процедура;
+                // арность и типы проверяет он сам.
+                crate::pdf::write(obj, args)?;
+                return Ok(BslValue::Undefined);
+            }
             if crate::dom::is_dom_writer(obj) {
                 // У `ЗаписьDOM` `Записать(Узел, ЗаписьXML)` — ровно два
                 // аргумента, и узел ПЕРВЫМ (измерено: обратный порядок

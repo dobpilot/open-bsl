@@ -100,6 +100,7 @@ pub const OPCODES: &[&str] = &[
     "NewTextDocument",
     "NewSpreadDocument",
     "NewPdfDocument",
+    "NewPdfAttachments",
     "NewDomBuilder",
     "NewDomDocument",
     "NewDomWriter",
@@ -498,6 +499,7 @@ fn write_instr(instr: &Instr) -> String {
         Instr::NewTextDocument { dst } => format!("NewTextDocument dst={dst}"),
         Instr::NewSpreadDocument { dst } => format!("NewSpreadDocument dst={dst}"),
         Instr::NewPdfDocument { dst } => format!("NewPdfDocument dst={dst}"),
+        Instr::NewPdfAttachments { dst } => format!("NewPdfAttachments dst={dst}"),
         Instr::NewDomBuilder { dst } => format!("NewDomBuilder dst={dst}"),
         Instr::NewDomDocument { dst } => format!("NewDomDocument dst={dst}"),
         Instr::NewDomWriter { dst } => format!("NewDomWriter dst={dst}"),
@@ -1302,6 +1304,7 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
         "NewTextDocument" => Instr::NewTextDocument { dst: dst(&f)? },
         "NewSpreadDocument" => Instr::NewSpreadDocument { dst: dst(&f)? },
         "NewPdfDocument" => Instr::NewPdfDocument { dst: dst(&f)? },
+        "NewPdfAttachments" => Instr::NewPdfAttachments { dst: dst(&f)? },
         "NewDomBuilder" => Instr::NewDomBuilder { dst: dst(&f)? },
         "NewDomDocument" => Instr::NewDomDocument { dst: dst(&f)? },
         "NewDomWriter" => Instr::NewDomWriter { dst: dst(&f)? },
@@ -1462,6 +1465,12 @@ mod tests {
         // коллекции страниц через свойство.
         "д = Новый ДокументPDF;\nд.Прочитать(\"/tmp/нет.pdf\");\nс = д.Страницы;\n\
          к = с.Количество();\nп = с.Получить(0);\nн = с.Индекс(п);\n",
+        // Вложения PDF: свой конструктор у коллекции, добавление,
+        // поиск по имени и запись документа.
+        "в = Новый КоллекцияВложенийPDF;\nв.Добавить(\"а.txt\", \
+         ПолучитьДвоичныеДанныеИзСтроки(\"текст\"), \"text/plain\");\n\
+         н = в.Найти(\"а.txt\");\nв.Удалить(0);\nв.Очистить();\n\
+         д = Новый ДокументPDF;\nд.Записать(\"/tmp/нет.pdf\");\n",
         "д = Новый ТекстовыйДокумент;\nд.УстановитьТекст(\"#Область Т\");\n\
          о = д.ПолучитьОбласть(\"Т\");\nр = Новый ТекстовыйДокумент;\nр.Вывести(о);\n\
          н = д.КоличествоСтрок();\n",

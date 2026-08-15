@@ -276,6 +276,15 @@ pub enum TypeId {
     PdfDocument,
     PdfPage,
     PdfPagesCollection,
+    // Ещё два типа и одно перечисление — вложения. Английские написания
+    // измерены: `Тип("PDFAttachment")` и `Тип("PDFAttachmentCollection")`
+    // платформа разрешает в те же типы, а `PDFAttachmentsCollection` не
+    // знает. У перечисления `ТипСвязиВложенияPDF` английского написания
+    // НЕТ (проверено перебором), поэтому обе колонки у него одинаковы.
+    PdfAttachment,
+    PdfAttachmentCollection,
+    /// Тип ЧЛЕНА перечисления `ТипСвязиВложенияPDF`.
+    PdfAttachmentRelation,
 
     // --- чтение архивов ---------------------------------------------------
     // ШЕСТЬ типов, а не три: на 8.3.27 рядом живут два читателя архивов со
@@ -744,6 +753,19 @@ const NAMES: &[(TypeId, &str, &str)] = &[
         TypeId::PdfPagesCollection,
         "КоллекцияСтраницPDF",
         "PDFPagesCollection",
+    ),
+    // Представления обоих ИЗМЕРЕНЫ через `Строка(Тип(...))` — они совпадают
+    // с именами в коде.
+    (TypeId::PdfAttachment, "ВложениеPDF", "PDFAttachment"),
+    (
+        TypeId::PdfAttachmentCollection,
+        "КоллекцияВложенийPDF",
+        "PDFAttachmentCollection",
+    ),
+    (
+        TypeId::PdfAttachmentRelation,
+        "ТипСвязиВложенияPDF",
+        "ТипСвязиВложенияPDF",
     ),
     // Представления всех шести ИЗМЕРЕНЫ через `Строка(ТипЗнч(...))`.
     // Отдельной строки в `IDENTIFIERS` им не нужно: имя в коде отличается

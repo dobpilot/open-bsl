@@ -1635,10 +1635,159 @@ impl PdfPageInfo {
     }
 }
 
-/// Разобранный файл PDF.
+/// Предел на число вложений. Как и [`MAX_PAGES`], он нужен ради записей,
+/// вписанных в дерево имён словарём на месте, а не ссылкой: их множество
+/// посещённых номеров не ловит.
+const MAX_ATTACHMENTS: usize = 1 << 16;
+
+/// Связь вложения с документом — `/AFRelationship` файловой спецификации,
+/// она же свойство `ТипСвязи`.
+///
+/// Членов ровно пять, и это ИЗМЕРЕНО перебором на 8.3.27: перечисление
+/// называется `ТипСвязиВложенияPDF`, у него есть `Источник`/`Source`,
+/// `Данные`/`Data`, `Альтернатива`/`Alternative`, `Дополнение`/`Supplement`
+/// и `НеУстановлено`/`Unspecified`, а `Схема`, `ДанныеФормы` и
+/// `ЗашифрованныеДанные` (они есть в таблице 43 спецификации) платформа не
+/// знает. Неизвестное имя в файле читается как `НеУстановлено` — измерено
+/// на `/AFRelationship /Nonsense`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PdfRelation {
+    /// `/Source` — вложение является источником документа.
+    Source,
+    /// `/Data` — данные, по которым документ построен.
+    Data,
+    /// `/Alternative` — альтернативное представление.
+    Alternative,
+    /// `/Supplement` — дополнение к документу.
+    Supplement,
+    /// `/Unspecified` — связь не указана; ею же читается и неизвестное имя.
+    #[default]
+    Unspecified,
+}
+
+impl PdfRelation {
+    /// Связь по имени из файла. Всё неизвестное — `Unspecified` (измерено).
+    fn from_pdf_name(name: &str) -> PdfRelation {
+        match name {
+            "Source" => PdfRelation::Source,
+            "Data" => PdfRelation::Data,
+            "Alternative" => PdfRelation::Alternative,
+            "Supplement" => PdfRelation::Supplement,
+            _ => PdfRelation::Unspecified,
+        }
+    }
+
+    /// Имя `/AFRelationship`, каким его пишет и платформа.
+    pub fn pdf_name(self) -> &'static str {
+        match self {
+            PdfRelation::Source => "Source",
+            PdfRelation::Data => "Data",
+            PdfRelation::Alternative => "Alternative",
+            PdfRelation::Supplement => "Supplement",
+            PdfRelation::Unspecified => "Unspecified",
+        }
+    }
+}
+
+/// Вложение PDF — то, что платформа отдаёт как `ВложениеPDF`.
+///
+/// Наружу видны ровно четыре свойства, и все четыре ИЗМЕРЕНЫ перебором:
+/// `ИмяФайла`, `ТипСодержимого`, `Содержимое` и `ТипСвязи`. Ни `Имя`, ни
+/// `Описание`, ни `Размер`, ни `ДатаСоздания` платформа не знает, поэтому
+/// `/Desc` и `/Params` из файла сюда не попадают вовсе.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct PdfAttachment {
+    name: String,
+    content_type: String,
+    relation: PdfRelation,
+    data: Vec<u8>,
+}
+
+impl PdfAttachment {
+    /// Собрать вложение из имени, типа содержимого, связи и байтов.
+    pub fn new(
+        name: String,
+        content_type: String,
+        relation: PdfRelation,
+        data: Vec<u8>,
+    ) -> PdfAttachment {
+        PdfAttachment {
+            name,
+            content_type,
+            relation,
+            data,
+        }
+    }
+
+    /// `ИмяФайла` — имя из `/UF`, а если его нет, из `/F`.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// `ТипСодержимого` — `/Subtype` потока встроенного файла. Пустая
+    /// строка, если его в файле нет (измерено).
+    pub fn content_type(&self) -> &str {
+        &self.content_type
+    }
+
+    /// `ТипСвязи` — `/AFRelationship`.
+    pub fn relation(&self) -> PdfRelation {
+        self.relation
+    }
+
+    /// `Содержимое` — распакованные байты встроенного файла.
+    pub fn data(&self) -> &[u8] {
+        &self.data
+    }
+
+    /// Задать имя (свойство доступно на запись — измерено).
+    pub fn set_name(&mut self, name: String) {
+        self.name = name;
+    }
+
+    /// Задать тип содержимого.
+    pub fn set_content_type(&mut self, content_type: String) {
+        self.content_type = content_type;
+    }
+
+    /// Задать связь.
+    pub fn set_relation(&mut self, relation: PdfRelation) {
+        self.relation = relation;
+    }
+
+    /// Задать байты содержимого.
+    pub fn set_data(&mut self, data: Vec<u8>) {
+        self.data = data;
+    }
+}
+
+/// Разобранный файл PDF.
+///
+/// Кроме страниц и вложений здесь лежат ИСХОДНЫЕ БАЙТЫ файла и всё, что
+/// нужно, чтобы дописать к ним инкрементальное обновление: номер объекта
+/// каталога, сам каталог, его словарь `/Names` и смещение последней
+/// таблицы перекрёстных ссылок. Держать файл целиком в памяти — плата за
+/// запись, которая ничего не теряет: страницы, шрифты и содержимое
+/// остаются ровно теми байтами, что пришли с диска.
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct PdfFile {
     pages: Vec<PdfPageInfo>,
+    attachments: Vec<PdfAttachment>,
+    source: Vec<u8>,
+    /// Номер объекта каталога. `None`, если `/Root` в трейлере — словарь на
+    /// месте, а не ссылка: такой каталог инкрементальным обновлением не
+    /// переписать.
+    catalog_number: Option<u32>,
+    catalog: Vec<(String, PdfValue)>,
+    /// Разрешённый словарь каталога `/Names` без `/EmbeddedFiles`: при
+    /// записи он переносится целиком, чтобы не потерять чужие деревья имён
+    /// (`/Dests`, `/JavaScript`).
+    names_dict: Vec<(String, PdfValue)>,
+    /// Смещение таблицы перекрёстных ссылок, с которой начался разбор, —
+    /// оно же `/Prev` нового обновления.
+    startxref: usize,
+    /// Номер, с которого можно заводить новые объекты.
+    next_object: u32,
 }
 
 impl PdfFile {
@@ -1649,10 +1798,11 @@ impl PdfFile {
     /// [`RtError::Pdf`] на любом входе, который не является читаемым PDF:
     /// нет заголовка `%PDF-`, нет или испорчен `startxref`, битая таблица
     /// перекрёстных ссылок, неизвестный фильтр или предиктор, цикл в
-    /// ссылках или в дереве страниц, отсутствующий `/Root`. Отдельным
-    /// текстом сообщается о зашифрованном файле: расшифровки здесь нет.
+    /// ссылках, в дереве страниц или в дереве имён вложений, отсутствующий
+    /// `/Root`. Отдельным текстом сообщается о зашифрованном файле:
+    /// расшифровки здесь нет.
     pub fn parse(data: &[u8]) -> RtResult<PdfFile> {
-        Reader::new(data)?.read_pages()
+        Reader::new(data)?.read_file()
     }
 
     /// Число страниц.
@@ -1664,10 +1814,255 @@ impl PdfFile {
     pub fn page(&self, index: usize) -> Option<&PdfPageInfo> {
         self.pages.get(index)
     }
+
+    /// Вложения в порядке обхода дерева имён.
+    pub fn attachments(&self) -> &[PdfAttachment] {
+        &self.attachments
+    }
 }
 
 fn pdf_err(text: impl Into<String>) -> RtError {
     RtError::Pdf(text.into())
+}
+
+/// Байты ТЕКСТОВОЙ строки PDF (раздел 7.9.2.2) в строку языка: с меткой
+/// `FE FF` это UTF-16BE, иначе UTF-8.
+///
+/// Спецификация на месте UTF-8 называет `PDFDocEncoding`, но платформа
+/// читает именно UTF-8. Измерены ровно пять написаний имени (строки
+/// «имя 0» — «имя 4» в `measure-pdf-attachments.platform.txt`): хекс-строка
+/// `/F <6865782E747874>` возвращается как есть, «6865782e747874»;
+/// восьмеричные экраны в `/UF` — тоже как есть, с обратными косыми; сырые
+/// байты UTF-8 в `/F` дают «сырой.txt»; сырой UTF-16BE с меткой `FE FF` в
+/// `/UF` — «шестнадцать.txt»; при обоих ключах сразу побеждает `/UF`.
+/// Что платформа делает с байтами, которые не UTF-8 (например с cp1251),
+/// не измерено; здесь такой вход не роняет разбор: и `from_utf16_lossy`,
+/// и `from_utf8_lossy` ставят U+FFFD.
+fn decode_text_string(bytes: &[u8]) -> String {
+    if bytes.len() >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF {
+        let units: Vec<u16> = bytes[2..]
+            .chunks_exact(2)
+            .map(|pair| u16::from_be_bytes([pair[0], pair[1]]))
+            .collect();
+        return String::from_utf16_lossy(&units);
+    }
+    String::from_utf8_lossy(bytes).into_owned()
+}
+
+/// Записать строку файловой спецификации СЫРЫМИ байтами: экранируются
+/// только три знака, обязательных для того, чтобы строка кончилась там,
+/// где надо.
+///
+/// Отличие от [`write_str`] измерено и существенно: разбор строк у
+/// платформы неполон. Восьмеричные экраны `\ooo` она НЕ снимает, а
+/// шестнадцатеричную форму `<...>` НЕ разбирает — и то и другое отдаёт
+/// текстом как есть (пробы «имя 1» и «имя 0» в
+/// `measure-pdf-attachments.platform.txt`). Поэтому имя, записанное
+/// через `write_str`, который уводит всё непечатное в `\ooo`, вернулось
+/// бы к ней как «\376\377\000i\000n\000c», а не как «inc.txt».
+/// Снимает ли платформа `\\`, `\(` и `\)` — не пробовали: ни в корпусе
+/// фикстур, ни в её собственном выводе нет ни одного имени с этими
+/// байтами. Экранирование трёх разделителей здесь — не воспроизведение
+/// замера, а синтаксическая необходимость записи, названная в первом
+/// абзаце. Сама платформа пишет `/F` в UTF-8 и `/UF` в UTF-16BE, оба
+/// сырыми байтами, — здесь ровно то же самое.
+fn write_raw_str(out: &mut Vec<u8>, bytes: &[u8]) {
+    out.push(b'(');
+    for &b in bytes {
+        if matches!(b, b'(' | b')' | b'\\') {
+            out.push(b'\\');
+        }
+        out.push(b);
+    }
+    out.push(b')');
+}
+
+/// Занять следующий номер объекта. Проверенное сложение: номера растут от
+/// того, что было в чужом файле, и упереться в потолок `u32` они обязаны
+/// ошибкой, а не заворачиванием на уже занятый объект.
+fn take_object_number(next: &mut u32) -> RtResult<u32> {
+    let taken = *next;
+    *next = next
+        .checked_add(1)
+        .ok_or_else(|| pdf_err("в файле кончились номера объектов"))?;
+    Ok(taken)
+}
+
+/// Имя вложения в UTF-16BE с меткой порядка байтов — то, что идёт в `/UF`.
+fn utf16be_with_bom(text: &str) -> Vec<u8> {
+    let mut out = vec![0xFE, 0xFF];
+    for unit in text.encode_utf16() {
+        out.extend_from_slice(&unit.to_be_bytes());
+    }
+    out
+}
+
+impl PdfFile {
+    /// Записать документ с ЭТИМ набором вложений — инкрементальным
+    /// обновлением поверх исходных байт (раздел 7.5.6).
+    ///
+    /// # Почему обновление, а не перезапись
+    ///
+    /// Платформа поступает иначе: `ДокументPDF.Записать` собирает файл
+    /// заново. В снятом образце `tests/conformance/pdf/attach-platform.pdf`
+    /// объекты перенумерованы с единицы подряд (с `1 0 obj` по `23 0 obj`),
+    /// каталог — `14 0 obj` с `/PageMode /UseAttachments` и
+    /// `/AF [ 7 0 R 8 0 R 9 0 R ]`, добавлен `/Metadata` с XMP
+    /// «1C:Enterprise (8.3.27.2130)», а таблица `xref` классическая, с CRLF
+    /// и одной секцией `0 24` при `/Size 24` в трейлере.
+    /// Повторить это можно только удержав в памяти ВЕСЬ граф объектов
+    /// файла, а читатель здесь берёт из него лишь геометрию страниц и
+    /// вложения: всё остальное — шрифты, содержимое страниц, аннотации —
+    /// он не разбирает и разбирать не должен. Инкрементальное обновление
+    /// сохраняет их точно, потому что не трогает ни одного байта исходного
+    /// файла, и ИЗМЕРЕНО, что платформа такой файл читает: собранное этим
+    /// способом обновление она открыла как «страниц 1, вложений 2» и
+    /// отдала оба вложения с верным содержимым.
+    ///
+    /// Плата — размер: байты старых встроенных файлов остаются в файле
+    /// мусором, а новые пишутся заново даже для неизменённых вложений.
+    /// Взамен запись не зависит от того, что читатель умеет разбирать.
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::Pdf`], если `/Root` в трейлере был словарём на месте, а
+    /// не ссылкой (такой каталог нечем заменить), или если номера объектов
+    /// не помещаются в `u32`.
+    pub fn write_with_attachments(&self, attachments: &[PdfAttachment]) -> RtResult<Vec<u8>> {
+        let Some(catalog_number) = self.catalog_number else {
+            return Err(pdf_err(
+                "каталог документа записан словарём на месте, а не объектом: \
+                 такой файл нечем обновить",
+            ));
+        };
+        let mut out = self.source.clone();
+        if !out.ends_with(b"\n") {
+            out.push(b'\n');
+        }
+        let mut next = self.next_object;
+        // Порядок записи в `/Names` — по имени, как требует раздел 7.9.6 и
+        // как пишет платформа (измерено: её вывод отсортирован по
+        // кодовым единицам UTF-16).
+        let mut ordered: Vec<&PdfAttachment> = attachments.iter().collect();
+        ordered.sort_by_key(|item| item.name.encode_utf16().collect::<Vec<u16>>());
+        let mut offsets: Vec<(u32, usize)> = Vec::new();
+        let mut names: Vec<(Vec<u8>, u32)> = Vec::new();
+        for item in &ordered {
+            let stream_number = take_object_number(&mut next)?;
+            let spec_number = take_object_number(&mut next)?;
+            let packed = zlib_compress(&item.data);
+            offsets.push((stream_number, out.len()));
+            let mut dict = vec![
+                (
+                    "Type".to_string(),
+                    PdfValue::Name("EmbeddedFile".to_string()),
+                ),
+                (
+                    "Filter".to_string(),
+                    PdfValue::Name("FlateDecode".to_string()),
+                ),
+            ];
+            // Пустой `/Subtype` платформа при записи заменяет на
+            // `application/octet-stream` (измерено на её собственном
+            // выводе), и здесь то же самое: иначе перечитанное вложение
+            // меняло бы тип на пустой.
+            let content_type = if item.content_type.is_empty() {
+                "application/octet-stream"
+            } else {
+                item.content_type.as_str()
+            };
+            dict.push((
+                "Subtype".to_string(),
+                PdfValue::Name(content_type.to_string()),
+            ));
+            dict.push((
+                "Params".to_string(),
+                PdfValue::Dict(vec![(
+                    "Size".to_string(),
+                    PdfValue::Integer(item.data.len() as i64),
+                )]),
+            ));
+            out.extend_from_slice(format!("{stream_number} 0 obj\n").as_bytes());
+            write_value(&mut out, &PdfValue::Stream { dict, data: packed });
+            out.extend_from_slice(b"\nendobj\n");
+
+            offsets.push((spec_number, out.len()));
+            out.extend_from_slice(
+                format!("{spec_number} 0 obj\n<< /Type /Filespec /F ").as_bytes(),
+            );
+            write_raw_str(&mut out, item.name.as_bytes());
+            out.extend_from_slice(b" /UF ");
+            write_raw_str(&mut out, &utf16be_with_bom(&item.name));
+            out.extend_from_slice(
+                format!(
+                    " /EF << /F {stream_number} 0 R >> /AFRelationship /{} >>\nendobj\n",
+                    item.relation.pdf_name()
+                )
+                .as_bytes(),
+            );
+            names.push((utf16be_with_bom(&item.name), spec_number));
+        }
+
+        let names_number = take_object_number(&mut next)?;
+        offsets.push((names_number, out.len()));
+        out.extend_from_slice(format!("{names_number} 0 obj\n<< /Names [").as_bytes());
+        for (key, spec_number) in &names {
+            out.push(b' ');
+            write_raw_str(&mut out, key);
+            out.extend_from_slice(format!(" {spec_number} 0 R").as_bytes());
+        }
+        out.extend_from_slice(b" ] >>\nendobj\n");
+
+        let names_dict_number = take_object_number(&mut next)?;
+        offsets.push((names_dict_number, out.len()));
+        let mut names_dict: Vec<(String, PdfValue)> = self
+            .names_dict
+            .iter()
+            .filter(|(key, _)| key != "EmbeddedFiles")
+            .cloned()
+            .collect();
+        names_dict.push(("EmbeddedFiles".to_string(), PdfValue::Ref(names_number)));
+        out.extend_from_slice(format!("{names_dict_number} 0 obj\n").as_bytes());
+        write_value(&mut out, &PdfValue::Dict(names_dict));
+        out.extend_from_slice(b"\nendobj\n");
+
+        let mut catalog: Vec<(String, PdfValue)> = self
+            .catalog
+            .iter()
+            .filter(|(key, _)| key != "Names")
+            .cloned()
+            .collect();
+        catalog.push(("Names".to_string(), PdfValue::Ref(names_dict_number)));
+        offsets.push((catalog_number, out.len()));
+        out.extend_from_slice(format!("{catalog_number} 0 obj\n").as_bytes());
+        write_value(&mut out, &PdfValue::Dict(catalog));
+        out.extend_from_slice(b"\nendobj\n");
+
+        let xref_at = out.len();
+        offsets.sort_unstable();
+        out.extend_from_slice(b"xref\n");
+        let mut at = 0;
+        while at < offsets.len() {
+            let mut end = at + 1;
+            while end < offsets.len() && offsets[end].0 == offsets[end - 1].0 + 1 {
+                end += 1;
+            }
+            out.extend_from_slice(format!("{} {}\n", offsets[at].0, end - at).as_bytes());
+            for (_, offset) in &offsets[at..end] {
+                out.extend_from_slice(format!("{offset:010} 00000 n \n").as_bytes());
+            }
+            at = end;
+        }
+        out.extend_from_slice(
+            format!(
+                "trailer\n<< /Size {next} /Root {catalog_number} 0 R /Prev {} >>\n\
+                 startxref\n{xref_at}\n%%EOF\n",
+                self.startxref
+            )
+            .as_bytes(),
+        );
+        Ok(out)
+    }
 }
 
 /// Пробельные знаки PDF (таблица 1 спецификации).
@@ -2064,6 +2459,9 @@ struct Reader<'a> {
     /// Стек номеров разбираемых сейчас объектов — защита от `1 0 obj 1 0 R`.
     active: Vec<u32>,
     streams: std::collections::HashMap<u32, std::rc::Rc<ObjStm>>,
+    /// Смещение таблицы, с которой начался разбор: `/Prev` будущего
+    /// инкрементального обновления.
+    startxref: usize,
 }
 
 impl<'a> Reader<'a> {
@@ -2081,8 +2479,10 @@ impl<'a> Reader<'a> {
             cache: std::collections::HashMap::new(),
             active: Vec::new(),
             streams: std::collections::HashMap::new(),
+            startxref: 0,
         };
         let start = reader.find_startxref()?;
+        reader.startxref = start;
         reader.load_xref_chain(start)?;
         if dict_get(&reader.trailer, "Encrypt").is_some() {
             return Err(pdf_err(
@@ -2667,13 +3067,19 @@ impl<'a> Reader<'a> {
         Ok(out)
     }
 
-    /// Дерево страниц: `/Root` -> `/Pages` -> `/Kids`.
-    fn read_pages(mut self) -> RtResult<PdfFile> {
-        let root = match dict_get(&self.trailer, "Root").cloned() {
-            Some(value) => self.resolve(&value)?,
+    /// Всё, что берётся из файла: дерево страниц `/Root` -> `/Pages` ->
+    /// `/Kids`, дерево имён вложений и то, что понадобится инкрементальной
+    /// записи.
+    fn read_file(mut self) -> RtResult<PdfFile> {
+        let root_value = match dict_get(&self.trailer, "Root").cloned() {
+            Some(value) => value,
             None => return Err(pdf_err("в трейлере нет /Root")),
         };
-        let PdfValue::Dict(root) = root else {
+        let catalog_number = match root_value {
+            PdfValue::Ref(number) => Some(number),
+            _ => None,
+        };
+        let PdfValue::Dict(root) = self.resolve(&root_value)? else {
             return Err(pdf_err("/Root указывает не на словарь каталога"));
         };
         let pages = match dict_get(&root, "Pages").cloned() {
@@ -2683,7 +3089,214 @@ impl<'a> Reader<'a> {
         let mut out = Vec::new();
         let mut seen = std::collections::HashSet::new();
         self.walk_pages(&pages, Inherited::default(), 0, &mut seen, &mut out)?;
-        Ok(PdfFile { pages: out })
+        let attachments = self.read_attachments(&root)?;
+        let names_dict = match dict_get(&root, "Names").cloned() {
+            Some(value) => match self.resolve(&value)? {
+                PdfValue::Dict(dict) => dict,
+                _ => Vec::new(),
+            },
+            None => Vec::new(),
+        };
+        // Номер первого свободного объекта. `/Size` трейлера — это заявка
+        // файла, таблица — то, что в нём есть на самом деле; берётся
+        // максимум, потому что новый объект не должен наступить ни на одно
+        // из двух даже во лгущем файле.
+        let mut next_object = match dict_get(&self.trailer, "Size") {
+            Some(PdfValue::Integer(size)) => u32::try_from(*size).unwrap_or(1),
+            _ => 1,
+        };
+        for number in self.xref.keys() {
+            next_object = next_object.max(number.saturating_add(1));
+        }
+        if let Some(number) = catalog_number {
+            next_object = next_object.max(number.saturating_add(1));
+        }
+        Ok(PdfFile {
+            pages: out,
+            attachments,
+            source: self.data.to_vec(),
+            catalog_number,
+            catalog: root,
+            names_dict,
+            startxref: self.startxref,
+            next_object: next_object.max(1),
+        })
+    }
+
+    /// Вложения: `/Root` -> `/Names` -> `/EmbeddedFiles` -> дерево имён.
+    ///
+    /// Одноимённые записи схлопываются, и побеждает ПОСЛЕДНЯЯ — измерено на
+    /// файле с двумя записями `dup.txt`: платформа отдаёт одно вложение с
+    /// содержимым второй.
+    fn read_attachments(&mut self, root: &[(String, PdfValue)]) -> RtResult<Vec<PdfAttachment>> {
+        let Some(names) = dict_get(root, "Names").cloned() else {
+            return Ok(Vec::new());
+        };
+        let PdfValue::Dict(names) = self.resolve(&names)? else {
+            return Ok(Vec::new());
+        };
+        let Some(embedded) = dict_get(&names, "EmbeddedFiles").cloned() else {
+            return Ok(Vec::new());
+        };
+        let mut out: Vec<PdfAttachment> = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        self.walk_name_tree(&embedded, 0, &mut seen, &mut out)?;
+        let mut unique: Vec<PdfAttachment> = Vec::with_capacity(out.len());
+        for item in out {
+            match unique.iter_mut().find(|kept| kept.name == item.name) {
+                Some(kept) => *kept = item,
+                None => unique.push(item),
+            }
+        }
+        Ok(unique)
+    }
+
+    /// Обход дерева имён (раздел 7.9.6): узел либо промежуточный с
+    /// `/Kids`, либо лист с `/Names`. `/Limits` не читается вовсе — он
+    /// нужен для ДВОИЧНОГО поиска по дереву, а нам нужны все записи
+    /// подряд, и доверять ему в чужом файле незачем.
+    ///
+    /// Вход враждебный, поэтому ограничений три: множество посещённых
+    /// номеров объектов, предел глубины и предел числа записей.
+    fn walk_name_tree(
+        &mut self,
+        node: &PdfValue,
+        depth: usize,
+        seen: &mut std::collections::HashSet<u32>,
+        out: &mut Vec<PdfAttachment>,
+    ) -> RtResult<()> {
+        if depth > MAX_DEPTH {
+            return Err(pdf_err("слишком глубокое дерево имён вложений"));
+        }
+        let node = match node {
+            PdfValue::Ref(number) => {
+                if !seen.insert(*number) {
+                    return Err(pdf_err(format!(
+                        "цикл в дереве имён вложений: объект {number} встретился дважды"
+                    )));
+                }
+                self.object(*number)?
+            }
+            other => other.clone(),
+        };
+        let PdfValue::Dict(node) = node else {
+            return Err(pdf_err("узел дерева имён вложений — не словарь"));
+        };
+        if let Some(kids) = dict_get(&node, "Kids").cloned() {
+            let PdfValue::Array(kids) = self.resolve(&kids)? else {
+                return Err(pdf_err("/Kids дерева имён вложений — не массив"));
+            };
+            for kid in kids {
+                self.walk_name_tree(&kid, depth + 1, seen, out)?;
+            }
+            return Ok(());
+        }
+        let Some(names) = dict_get(&node, "Names").cloned() else {
+            // Лист без `/Names` и без `/Kids` — пустое дерево имён, а не
+            // поломка: так выглядит документ, у которого вложения удалили.
+            return Ok(());
+        };
+        let PdfValue::Array(names) = self.resolve(&names)? else {
+            return Err(pdf_err("/Names дерева имён вложений — не массив"));
+        };
+        if names.len() % 2 != 0 {
+            return Err(pdf_err(
+                "в /Names дерева имён вложений нечётное число элементов",
+            ));
+        }
+        for pair in names.chunks(2) {
+            if out.len() >= MAX_ATTACHMENTS {
+                return Err(pdf_err("в дереве имён вложений слишком много записей"));
+            }
+            // Ключ дерева не читается: имя вложения платформа берёт из
+            // самой файловой спецификации (измерено — запись с ключом
+            // «a-key» и `/F (a-file.txt)` отдала «a-file.txt»).
+            if let Some(attachment) = self.filespec(&pair[1])? {
+                out.push(attachment);
+            }
+        }
+        Ok(())
+    }
+
+    /// Одна файловая спецификация (раздел 7.11.3). `None` — запись, которую
+    /// платформа молча пропускает: без `/EF`, с висящей ссылкой в нём или
+    /// вовсе без имени.
+    fn filespec(&mut self, value: &PdfValue) -> RtResult<Option<PdfAttachment>> {
+        let PdfValue::Dict(spec) = self.resolve(value)? else {
+            return Ok(None);
+        };
+        // `/UF` — текстовая строка (UTF-16BE с меткой или UTF-8), `/F` —
+        // строка файловой спецификации; при обеих побеждает `/UF`. Всё
+        // измерено: файл с `/F (b-f.txt)` и `/UF` отдал имя из `/UF`.
+        let name = match self.string_value(&spec, "UF")? {
+            Some(bytes) => decode_text_string(&bytes),
+            None => match self.string_value(&spec, "F")? {
+                Some(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
+                None => return Ok(None),
+            },
+        };
+        let relation = match dict_get(&spec, "AFRelationship").cloned() {
+            Some(value) => match self.resolve(&value)? {
+                PdfValue::Name(name) => PdfRelation::from_pdf_name(&name),
+                _ => PdfRelation::Unspecified,
+            },
+            None => PdfRelation::Unspecified,
+        };
+        let Some(ef) = dict_get(&spec, "EF").cloned() else {
+            return Ok(None);
+        };
+        let PdfValue::Dict(ef) = self.resolve(&ef)? else {
+            return Ok(None);
+        };
+        // В `/EF` спецификация разрешает те же ключи, что и в самой
+        // файловой спецификации; берётся первый попавшийся поток.
+        let mut stream = None;
+        for key in ["F", "UF", "DOS", "Mac", "Unix"] {
+            let Some(value) = dict_get(&ef, key).cloned() else {
+                continue;
+            };
+            if let PdfValue::Stream { dict, data } = self.resolve(&value)? {
+                stream = Some((dict, data));
+                break;
+            }
+        }
+        let Some((dict, data)) = stream else {
+            return Ok(None);
+        };
+        let content_type = match dict_get(&dict, "Subtype") {
+            Some(PdfValue::Name(name)) => name.clone(),
+            _ => String::new(),
+        };
+        // Фильтр, которого мы не умеем (`/LZWDecode`), НЕ должен уносить
+        // весь документ: измерено, что платформа такой файл читает и
+        // вложение из него показывает. Отдаются сырые байты потока —
+        // единственное, что у нас есть; потерять вместе с ними страницы
+        // и остальные вложения было бы заметно хуже.
+        let data = match self.decode_stream(&dict, &data) {
+            Ok(decoded) => decoded,
+            Err(_) => data,
+        };
+        Ok(Some(PdfAttachment {
+            name,
+            content_type,
+            relation,
+            data,
+        }))
+    }
+
+    /// Строковое значение словаря, в том числе через косвенную ссылку.
+    fn string_value(
+        &mut self,
+        dict: &[(String, PdfValue)],
+        key: &str,
+    ) -> RtResult<Option<Vec<u8>>> {
+        let Some(value) = dict_get(dict, key).cloned() else {
+            return Ok(None);
+        };
+        match self.resolve(&value)? {
+            PdfValue::Str(bytes) => Ok(Some(bytes)),
+            _ => Ok(None),
+        }
     }
 
     fn walk_pages(
@@ -2924,12 +3537,49 @@ fn inflate_pdf_stream(data: &[u8]) -> RtResult<Vec<u8>> {
 //   отдаёт `Неопределено` (и на 99, и на -1), а `[i]` — ошибку;
 // * `КоличествоСтраниц` у документа НЕТ (ошибка);
 // * страница только ЧИТАЕТСЯ: присваивание в `Ширина` — ошибка.
+//
+// Вложения сняты тем же способом (скрипт задачи —
+// `tests/conformance/measure/measure-pdf-attachments.bsl`), и устроены они
+// НЕ так, как страницы:
+//
+// * `Вложения` есть ВСЕГДА, в том числе до `Прочитать`: это пустая
+//   `КоллекцияВложенийPDF`, а не `Неопределено`, и в неё уже можно
+//   добавлять;
+// * `Новый КоллекцияВложенийPDF` платформа строит, а `Новый ВложениеPDF` —
+//   нет: вложение появляется только через `Добавить`;
+// * коллекция умеет `Количество()`, `Получить(i)`, `[i]`, `Индекс(Влож)`,
+//   `Найти(Имя)`, `Добавить(Имя, Данные[, ТипСодержимого[, ТипСвязи]])`,
+//   `Удалить(i)`, `Очистить()` и `Для Каждого`; `Вставить` не пробовали, а
+//   потому и не заявляем — здесь его нет до замера;
+// * у вложения ровно четыре свойства — `ИмяФайла`, `ТипСодержимого`,
+//   `Содержимое`, `ТипСвязи`, — и все ЧЕТЫРЕ ПИШУТСЯ (в отличие от
+//   страницы, которая только читается);
+// * `Записать(ИмяФайла[, Пароль])` у документа — процедура;
+// * членов про ЭЛЕКТРОННУЮ ПОДПИСЬ у «ДокументPDF» на 8.3.27 НЕТ вовсе:
+//   пробовано шесть написаний — чтения свойств `ЭлектронныеПодписи` и
+//   `Подписи`, вызовы `ПолучитьЭлектронныеПодписи()`,
+//   `ДобавитьЭлектроннуюПодпись()`, `ПроверитьЭлектроннуюПодпись()` и
+//   `Подписать()`, — и все шесть кончаются исключением (текст ошибки
+//   скрипт не печатает, только «нет» из ветки `Исключение`); четырёх типов
+//   `ПодписьPDF`, `ЭлектроннаяПодписьPDF`, `PDFSignature` и
+//   `КоллекцияПодписейPDF` платформа не знает. Поэтому здесь их тоже нет:
+//   честная ошибка «нет такого метода» приходит сама, из общих таблиц, и
+//   заводить ради неё пустую заглушку значило бы придумать платформе
+//   поверхность, которой у неё нет.
 
 /// Состояние `ДокументPDF`: разобранный файл либо ничего, если чтения ещё
 /// не было или последнее чтение не удалось.
+///
+/// Вложения живут ОТДЕЛЬНО от разобранного файла, и это не украшение:
+/// измерено, что `Вложения` у свежего документа — пустая коллекция, в
+/// которую можно добавлять ещё до `Прочитать`. Коллекция и её элементы
+/// держат тот же `Rc`, поэтому `Док.Вложения = Док.Вложения` — «Да»
+/// (измерено), а `Прочитать` заменяет СОДЕРЖИМОЕ вектора, из-за чего уже
+/// полученная коллекция видит новые вложения.
 #[derive(Debug, Default)]
 pub struct PdfDocState {
     file: Option<PdfFile>,
+    attachments: Rc<RefCell<Vec<PdfAttachment>>>,
 }
 
 impl PdfDocState {
@@ -2943,6 +3593,19 @@ impl PdfDocState {
 pub fn new_pdf_document() -> BslValue {
     BslValue::Object(Rc::new(BslObject::PdfDocument(Rc::new(RefCell::new(
         PdfDocState::default(),
+    )))))
+}
+
+/// `Новый КоллекцияВложенийPDF` — коллекция сама по себе, без документа.
+///
+/// Платформа такой конструктор ЗНАЕТ (измерено), хотя присоединить готовую
+/// коллекцию к документу нечем: `Вложения` только читается. Значит, всё,
+/// что с ней можно делать, — наполнять и разглядывать; ровно это здесь и
+/// получается, потому что коллекция документа отличается от отдельной лишь
+/// тем, кто ещё держит тот же `Rc`.
+pub fn new_pdf_attachments() -> BslValue {
+    BslValue::Object(Rc::new(BslObject::PdfAttachments(Rc::new(RefCell::new(
+        Vec::new(),
     )))))
 }
 
@@ -2980,13 +3643,39 @@ pub fn is_pdf_pages(value: &BslValue) -> bool {
     matches!(value, BslValue::Object(o) if matches!(&**o, BslObject::PdfPages(_)))
 }
 
+/// Коллекция вложений ли это.
+pub fn is_pdf_attachments(value: &BslValue) -> bool {
+    matches!(value, BslValue::Object(o) if matches!(&**o, BslObject::PdfAttachments(_)))
+}
+
+/// Вектор вложений за коллекцией или за самим вложением.
+fn attachments_of<'a>(
+    value: &'a BslValue,
+    method: &'static str,
+) -> RtResult<&'a Rc<RefCell<Vec<PdfAttachment>>>> {
+    match value {
+        BslValue::Object(o) => match &**o {
+            BslObject::PdfAttachments(items) | BslObject::PdfAttachment(items, _) => Ok(items),
+            _ => Err(RtError::MethodNotApplicable {
+                method,
+                receiver: value.type_name(),
+            }),
+        },
+        _ => Err(RtError::MethodNotApplicable {
+            method,
+            receiver: value.type_name(),
+        }),
+    }
+}
+
 /// `ДокументPDF.Прочитать(ИмяФайла[, Пароль])`.
 ///
 /// Пароль ПРИНИМАЕТСЯ И НЕ ИСПОЛЬЗУЕТСЯ, как у `Новый ЧтениеZipФайла`:
 /// расшифровки здесь нет, и зашифрованный файл отвергается независимо от
 /// того, назвали пароль или нет. Платформа с паролем такой файл читает
 /// (измерено: `Прочитать(файл, "secret")` на RC4-40 отдало одну страницу),
-/// и это единственное объявленное расхождение скрипта замеров.
+/// и это единственное объявленное расхождение скрипта замеров чтения.
+/// Симметричная граница на записи — в [`fn@write`].
 ///
 /// Источником может быть ТОЛЬКО имя файла: `ДвоичныеДанные` платформа
 /// отвергает (измерено). Принимает ли она ПОТОК, выяснить этой оснасткой
@@ -3001,12 +3690,20 @@ pub fn is_pdf_pages(value: &BslValue) -> bool {
 /// файла, если файл не читается с диска или не разбирается как PDF. При
 /// любой ошибке документ возвращается в НЕПРОЧИТАННОЕ состояние — измерено,
 /// что после неудачного чтения платформа снова отдаёт на `Страницы`
-/// `Неопределено`, а ошибку даёт уже `Количество()` на нём.
+/// `Неопределено`, а ошибку даёт уже `Количество()` на нём. Вложения при
+/// этом тоже забываются: измерено, что после неудачного чтения коллекция
+/// пуста, а удачное чтение заменяет её содержимым нового файла.
 pub fn read(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
     let state = doc_state(obj, "Прочитать")?;
     // Сначала забываем прежнее, потом читаем: иначе неудача оставила бы
-    // документ с чужими страницами.
-    state.borrow_mut().file = None;
+    // документ с чужими страницами. Вложения забываются тем же движением —
+    // уже полученная коллекция при этом остаётся той же самой, меняется
+    // только её содержимое.
+    {
+        let mut state = state.borrow_mut();
+        state.file = None;
+        state.attachments.borrow_mut().clear();
+    }
     let (Some(source), true) = (args.first(), args.len() <= 2) else {
         return Err(pdf_err(
             "ДокументPDF.Прочитать ожидает имя файла и необязательный пароль",
@@ -3022,7 +3719,66 @@ pub fn read(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
     let bytes = std::fs::read(&name)
         .map_err(|e| pdf_err(format!("не удалось прочитать файл «{name}»: {e}")))?;
     let file = PdfFile::parse(&bytes)?;
-    state.borrow_mut().file = Some(file);
+    {
+        let mut state = state.borrow_mut();
+        state.attachments.borrow_mut().clone_from(&file.attachments);
+        state.file = Some(file);
+    }
+    Ok(())
+}
+
+/// `ДокументPDF.Записать(ИмяФайла[, Пароль])` — процедура (измерено:
+/// обращение к ней как к функции платформа отвергает).
+///
+/// Пишется ИНКРЕМЕНТАЛЬНОЕ ОБНОВЛЕНИЕ поверх прочитанных байт, см.
+/// [`PdfFile::write_with_attachments`]; поэтому документ, который ничего не
+/// читал, записать нечем. Платформа в этом случае тоже отвечает ошибкой,
+/// хотя и оставляет на диске файл с одной пустой страницей A4 — этого
+/// последнего мы не делаем сознательно: пустую страницу неоткуда взять, а
+/// придумать её значило бы записать не тот документ, который просили.
+///
+/// # Errors
+///
+/// [`RtError::Pdf`], если аргументов нет или их больше двух, если имя файла
+/// не строка, если документ ещё ничего не прочитал, если задан непустой
+/// пароль (шифрования здесь нет) или если файл не записался на диск.
+pub fn write(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+    let state = doc_state(obj, "Записать")?;
+    let (Some(target), true) = (args.first(), args.len() <= 2) else {
+        return Err(pdf_err(
+            "ДокументPDF.Записать ожидает имя файла и необязательный пароль",
+        ));
+    };
+    let BslValue::Str(name) = target else {
+        return Err(pdf_err(format!(
+            "ДокументPDF.Записать ожидает имя файла строкой, получено «{}»",
+            target.type_name()
+        )));
+    };
+    // Пароль ПРИНИМАЕТСЯ, но работать с ним нечем: шифрования здесь нет ни
+    // на чтении, ни на записи. Платформа на незашифрованном документе
+    // отвечает на любой непустой пароль «Неверный пароль», то есть тоже
+    // ошибкой.
+    if let Some(password) = args.get(1) {
+        let empty = match password {
+            BslValue::Str(text) => text.len_utf16() == 0,
+            BslValue::Undefined => true,
+            _ => false,
+        };
+        if !empty {
+            return Err(pdf_err(
+                "ДокументPDF.Записать: шифрование PDF не поддерживается, пароль неприменим",
+            ));
+        }
+    }
+    let state = state.borrow();
+    let file = state.file.as_ref().ok_or_else(|| {
+        pdf_err("ДокументPDF.Записать: документ ничего не прочитал, записывать нечего")
+    })?;
+    let bytes = file.write_with_attachments(&state.attachments.borrow())?;
+    let name = name.to_string();
+    std::fs::write(&name, bytes)
+        .map_err(|e| pdf_err(format!("не удалось записать файл «{name}»: {e}")))?;
     Ok(())
 }
 
@@ -3040,6 +3796,14 @@ pub fn read(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
 /// свойств у документа нет (измерено — `КоличествоСтраниц` платформа не
 /// знает).
 pub fn document_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
+    if name.eq_ignore_ascii_case("Вложения") || name.eq_ignore_ascii_case("Attachments") {
+        // В отличие от `Страницы`, коллекция вложений есть и до чтения:
+        // измерено, что у свежего документа это `КоллекцияВложенийPDF` с
+        // нулём элементов, а не `Неопределено`.
+        let state = doc_state(obj, "Вложения")?;
+        let items = state.borrow().attachments.clone();
+        return Ok(BslValue::Object(Rc::new(BslObject::PdfAttachments(items))));
+    }
     if !name.eq_ignore_ascii_case("Страницы") && !name.eq_ignore_ascii_case("Pages") {
         return Err(RtError::UnknownColumn(name.to_string()));
     }
@@ -3050,6 +3814,443 @@ pub fn document_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
     Ok(BslValue::Object(Rc::new(BslObject::PdfPages(
         state.clone(),
     ))))
+}
+
+/// Число вложений — общий путь `Количество()` и `Для Каждого`.
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель — не коллекция
+/// вложений и не вложение.
+pub fn attachment_count(obj: &BslValue) -> RtResult<usize> {
+    Ok(attachments_of(obj, "Количество")?.borrow().len())
+}
+
+/// `Вложения[Номер]` — вне диапазона ОШИБКА (измерено: `Вложения[99]`
+/// платформа отвергает).
+///
+/// # Errors
+///
+/// [`RtError::IndexOutOfBounds`], если такого вложения нет.
+pub fn attachment_at(obj: &BslValue, index: usize) -> RtResult<BslValue> {
+    let items = attachments_of(obj, "Получить")?;
+    let len = items.borrow().len();
+    if index >= len {
+        return Err(RtError::IndexOutOfBounds {
+            index: index as i64,
+            len,
+        });
+    }
+    Ok(BslValue::Object(Rc::new(BslObject::PdfAttachment(
+        items.clone(),
+        index,
+    ))))
+}
+
+/// `Вложения.Получить(Номер)` — вне диапазона `Неопределено`, и на 99, и
+/// на -1 (измерено), ровно как у страниц.
+///
+/// # Errors
+///
+/// [`RtError::TypeError`], если номер не число.
+pub fn attachment_get(obj: &BslValue, index: &BslValue) -> RtResult<BslValue> {
+    let len = attachment_count(obj)?;
+    let BslValue::Number(number) = index else {
+        return Err(RtError::TypeError {
+            expected: "Число",
+            op: "КоллекцияВложенийPDF.Получить",
+        });
+    };
+    let Some(number) = number.to_i64_exact() else {
+        return Ok(BslValue::Undefined);
+    };
+    match usize::try_from(number) {
+        Ok(i) if i < len => attachment_at(obj, i),
+        _ => Ok(BslValue::Undefined),
+    }
+}
+
+/// `Вложения.Индекс(Вложение)` — номер в этой же коллекции.
+///
+/// Строже, чем у страниц: чужое ЗНАЧЕНИЕ (число, массив) платформа
+/// отвергает ошибкой типа, а не отдаёт -1 (измерено). Вложение из другой
+/// коллекции — как раз тот случай, когда -1 законно.
+///
+/// # Errors
+///
+/// [`RtError::TypeError`], если аргумент не `ВложениеPDF`.
+pub fn attachment_index_of(obj: &BslValue, item: &BslValue) -> RtResult<BslValue> {
+    let items = attachments_of(obj, "Индекс")?;
+    let len = items.borrow().len();
+    let found = match item {
+        BslValue::Object(o) => match &**o {
+            BslObject::PdfAttachment(other, index) if Rc::ptr_eq(items, other) && *index < len => {
+                *index as i64
+            }
+            BslObject::PdfAttachment(..) => -1,
+            _ => {
+                return Err(RtError::TypeError {
+                    expected: "ВложениеPDF",
+                    op: "КоллекцияВложенийPDF.Индекс",
+                })
+            }
+        },
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "ВложениеPDF",
+                op: "КоллекцияВложенийPDF.Индекс",
+            })
+        }
+    };
+    Ok(BslValue::Number(bsl_number::BslNumber::from_i64(found)))
+}
+
+/// Имя вложения из аргумента: строка как есть, число — своим
+/// представлением, пустое имя — ошибка.
+///
+/// Так меряется платформа, и правило у `Найти` и `Добавить` одно:
+/// `Найти(1)` отвечает `Неопределено` (то есть 1 стало именем «1» и не
+/// нашлось), а `Найти("")` и `Добавить("", Данные)` — «Несоответствие
+/// типов (параметр номер '1')».
+fn attachment_name_arg(value: &BslValue, op: &'static str) -> RtResult<String> {
+    let name = match value {
+        BslValue::Str(text) => text.to_string(),
+        // Целое число платформа принимает и превращает в имя (измерено:
+        // после `ИмяФайла = 1` свойство отдаёт «1»). Дробное отвергается
+        // здесь же: у него представление зависит от разделителя, и
+        // придумывать его имени файла незачем.
+        BslValue::Number(number) => match number.to_i64_exact() {
+            Some(number) => number.to_string(),
+            None => {
+                return Err(RtError::TypeError {
+                    expected: "Строка",
+                    op,
+                })
+            }
+        },
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "Строка",
+                op,
+            })
+        }
+    };
+    if name.is_empty() {
+        return Err(RtError::TypeError {
+            expected: "непустое имя файла",
+            op,
+        });
+    }
+    Ok(name)
+}
+
+/// `Вложения.Найти(Имя)` — вложение с таким `ИмяФайла` либо
+/// `Неопределено`. Аргумент ровно один (измерено).
+///
+/// # Errors
+///
+/// [`RtError::TypeError`], если имя пустое или не приводится к строке.
+pub fn attachment_find(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let items = attachments_of(obj, "Найти")?;
+    let [name] = args else {
+        return Err(pdf_err(
+            "КоллекцияВложенийPDF.Найти ожидает ровно одно имя файла",
+        ));
+    };
+    // Нестроковое и нечисловое значение платформа не бракует, а просто не
+    // находит (измерено на `Найти(Новый Массив)` — «Не определено»).
+    let name = match name {
+        BslValue::Str(_) | BslValue::Number(_) => {
+            attachment_name_arg(name, "КоллекцияВложенийPDF.Найти")?
+        }
+        _ => return Ok(BslValue::Undefined),
+    };
+    let found = items.borrow().iter().position(|item| item.name == name);
+    match found {
+        Some(index) => Ok(BslValue::Object(Rc::new(BslObject::PdfAttachment(
+            items.clone(),
+            index,
+        )))),
+        None => Ok(BslValue::Undefined),
+    }
+}
+
+/// `Вложения.Добавить(Имя, Данные[, ТипСодержимого[, ТипСвязи]])` —
+/// процедура.
+///
+/// Одноимённое вложение СНИМАЕТСЯ, а новое дописывается В КОНЕЦ — то
+/// есть коллекция ведёт себя как дерево имён, которым она и станет при
+/// записи. Измерено: после `Добавить("а")`, `Добавить("б")` и повторного
+/// `Добавить("а")` вложений двое, и порядок «б», «а», причём у «а» новые
+/// тип содержимого и данные.
+///
+/// # Errors
+///
+/// [`RtError::Pdf`], если аргументов меньше двух или больше четырёх;
+/// [`RtError::TypeError`], если имя пустое, если данные не
+/// `ДвоичныеДанные`, если тип содержимого не строка или связь — не член
+/// `ТипСвязиВложенияPDF`.
+pub fn attachment_add(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+    let items = attachments_of(obj, "Добавить")?;
+    if args.len() < 2 || args.len() > 4 {
+        return Err(pdf_err(
+            "КоллекцияВложенийPDF.Добавить ожидает имя файла, данные и \
+             необязательные тип содержимого и тип связи",
+        ));
+    }
+    let name = attachment_name_arg(&args[0], "КоллекцияВложенийPDF.Добавить")?;
+    let data = match &args[1] {
+        BslValue::Object(o) => match &**o {
+            BslObject::BinaryData(bytes) => bytes.to_vec(),
+            _ => {
+                return Err(RtError::TypeError {
+                    expected: "ДвоичныеДанные",
+                    op: "КоллекцияВложенийPDF.Добавить",
+                })
+            }
+        },
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "ДвоичныеДанные",
+                op: "КоллекцияВложенийPDF.Добавить",
+            })
+        }
+    };
+    let content_type = match args.get(2) {
+        None | Some(BslValue::Undefined) => String::new(),
+        Some(BslValue::Str(text)) => text.to_string(),
+        Some(_) => {
+            return Err(RtError::TypeError {
+                expected: "Строка",
+                op: "КоллекцияВложенийPDF.Добавить",
+            })
+        }
+    };
+    let relation = match args.get(3) {
+        None => PdfRelation::Unspecified,
+        Some(value) => relation_of(value, "КоллекцияВложенийPDF.Добавить")?,
+    };
+    let mut items = items.borrow_mut();
+    let fresh = PdfAttachment {
+        name,
+        content_type,
+        relation,
+        data,
+    };
+    items.retain(|item| item.name != fresh.name);
+    items.push(fresh);
+    Ok(())
+}
+
+/// Член перечисления `ТипСвязиВложенияPDF` из значения языка.
+fn relation_of(value: &BslValue, op: &'static str) -> RtResult<PdfRelation> {
+    let BslValue::Enum(member) = value else {
+        return Err(RtError::TypeError {
+            expected: "ТипСвязиВложенияPDF",
+            op,
+        });
+    };
+    match member {
+        crate::enums::EnumValue::PdfRelationSource => Ok(PdfRelation::Source),
+        crate::enums::EnumValue::PdfRelationData => Ok(PdfRelation::Data),
+        crate::enums::EnumValue::PdfRelationAlternative => Ok(PdfRelation::Alternative),
+        crate::enums::EnumValue::PdfRelationSupplement => Ok(PdfRelation::Supplement),
+        crate::enums::EnumValue::PdfRelationUnspecified => Ok(PdfRelation::Unspecified),
+        _ => Err(RtError::TypeError {
+            expected: "ТипСвязиВложенияPDF",
+            op,
+        }),
+    }
+}
+
+/// Член перечисления по связи — обратное [`relation_of`].
+fn relation_enum(relation: PdfRelation) -> crate::enums::EnumValue {
+    match relation {
+        PdfRelation::Source => crate::enums::EnumValue::PdfRelationSource,
+        PdfRelation::Data => crate::enums::EnumValue::PdfRelationData,
+        PdfRelation::Alternative => crate::enums::EnumValue::PdfRelationAlternative,
+        PdfRelation::Supplement => crate::enums::EnumValue::PdfRelationSupplement,
+        PdfRelation::Unspecified => crate::enums::EnumValue::PdfRelationUnspecified,
+    }
+}
+
+/// `Вложения.Удалить(Номер)` либо `Удалить(Вложение)`.
+///
+/// Номер ВНЕ ДИАПАЗОНА не ошибка: измерено, что и `Удалить(99)`, и
+/// `Удалить(-1)` удаляют ПОСЛЕДНЕЕ вложение, а не жалуются.
+///
+/// Что делает платформа с ПУСТОЙ коллекцией, этой оснасткой не выяснить:
+/// `Удалить(0)` на пустой она встречает модальным окном, то есть немым
+/// таймаутом, и `Попытка` его не ловит (проверено отдельной пробой —
+/// вывод обрывается ровно перед вызовом). Строке в реестре открытых
+/// вопросов там не место: она унесла бы весь сеанс замеров. Здесь пустая
+/// коллекция остаётся пустой — это единственное продолжение правила
+/// «номер вне диапазона удаляет последнее» на случай, когда последнего
+/// нет.
+///
+/// # Errors
+///
+/// [`RtError::Pdf`], если аргумент не один;
+/// [`RtError::TypeError`], если это не число и не `ВложениеPDF`.
+pub fn attachment_delete(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+    let items = attachments_of(obj, "Удалить")?;
+    let [what] = args else {
+        return Err(pdf_err(
+            "КоллекцияВложенийPDF.Удалить ожидает ровно один аргумент",
+        ));
+    };
+    let len = items.borrow().len();
+    if len == 0 {
+        return Ok(());
+    }
+    let index = match what {
+        BslValue::Number(number) => match number.to_i64_exact() {
+            Some(number) => match usize::try_from(number) {
+                Ok(index) if index < len => index,
+                _ => len - 1,
+            },
+            None => len - 1,
+        },
+        BslValue::Object(o) => match &**o {
+            BslObject::PdfAttachment(other, index) if Rc::ptr_eq(items, other) && *index < len => {
+                *index
+            }
+            BslObject::PdfAttachment(..) => {
+                return Err(RtError::TypeError {
+                    expected: "ВложениеPDF этой же коллекции",
+                    op: "КоллекцияВложенийPDF.Удалить",
+                })
+            }
+            _ => {
+                return Err(RtError::TypeError {
+                    expected: "Число или ВложениеPDF",
+                    op: "КоллекцияВложенийPDF.Удалить",
+                })
+            }
+        },
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "Число или ВложениеPDF",
+                op: "КоллекцияВложенийPDF.Удалить",
+            })
+        }
+    };
+    items.borrow_mut().remove(index);
+    Ok(())
+}
+
+/// `Вложения.Очистить()` — аргументов не берёт (измерено).
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель не коллекция вложений.
+pub fn attachment_clear(obj: &BslValue) -> RtResult<()> {
+    attachments_of(obj, "Очистить")?.borrow_mut().clear();
+    Ok(())
+}
+
+/// Свойства `ВложениеPDF`. Все четыре имени и все четыре английских
+/// синонима измерены: `FileName`, `MIMEType`, `Content` и
+/// `RelationshipType`. Перебором проверено и то, чего у платформы НЕТ:
+/// `ContentType`, `MediaType`, `Mime`, `Relationship`, `AFRelationship`,
+/// `Relation`, `Имя`, `Описание`, `Размер` и `Данные`.
+///
+/// # Errors
+///
+/// [`RtError::Pdf`], если вложение уже удалено из коллекции;
+/// [`RtError::UnknownColumn`] на неизвестном имени.
+pub fn attachment_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
+    let (items, index) = attachment_slot(obj, name)?;
+    let items = items.borrow();
+    let item = items
+        .get(index)
+        .ok_or_else(|| pdf_err("вложение уже удалено из коллекции"))?;
+    if name.eq_ignore_ascii_case("ИмяФайла") || name.eq_ignore_ascii_case("FileName") {
+        return Ok(BslValue::Str(crate::BslString::from_str(&item.name)));
+    }
+    if name.eq_ignore_ascii_case("ТипСодержимого") || name.eq_ignore_ascii_case("MIMEType")
+    {
+        return Ok(BslValue::Str(crate::BslString::from_str(
+            &item.content_type,
+        )));
+    }
+    if name.eq_ignore_ascii_case("Содержимое") || name.eq_ignore_ascii_case("Content") {
+        return Ok(BslValue::binary_data_of(item.data.clone()));
+    }
+    if name.eq_ignore_ascii_case("ТипСвязи") || name.eq_ignore_ascii_case("RelationshipType")
+    {
+        return Ok(BslValue::Enum(relation_enum(item.relation)));
+    }
+    Err(RtError::UnknownColumn(name.to_string()))
+}
+
+/// Присваивание в свойство `ВложениеPDF`. Пишутся ВСЕ ЧЕТЫРЕ (измерено —
+/// в отличие от страницы, которая только читается).
+///
+/// # Errors
+///
+/// [`RtError::Pdf`], если вложение уже удалено из коллекции;
+/// [`RtError::TypeError`] на значении не того типа;
+/// [`RtError::UnknownColumn`] на неизвестном имени.
+pub fn set_attachment_property(obj: &BslValue, name: &str, value: &BslValue) -> RtResult<()> {
+    let (items, index) = attachment_slot(obj, name)?;
+    let mut items = items.borrow_mut();
+    let item = items
+        .get_mut(index)
+        .ok_or_else(|| pdf_err("вложение уже удалено из коллекции"))?;
+    if name.eq_ignore_ascii_case("ИмяФайла") || name.eq_ignore_ascii_case("FileName") {
+        // Число платформа принимает и превращает в строку (измерено:
+        // после `ИмяФайла = 1` свойство отдаёт «1»).
+        item.name = attachment_name_arg(value, "ВложениеPDF.ИмяФайла")?;
+        return Ok(());
+    }
+    if name.eq_ignore_ascii_case("ТипСодержимого") || name.eq_ignore_ascii_case("MIMEType")
+    {
+        let BslValue::Str(text) = value else {
+            return Err(RtError::TypeError {
+                expected: "Строка",
+                op: "ВложениеPDF.ТипСодержимого",
+            });
+        };
+        item.content_type = text.to_string();
+        return Ok(());
+    }
+    if name.eq_ignore_ascii_case("Содержимое") || name.eq_ignore_ascii_case("Content") {
+        let BslValue::Object(o) = value else {
+            return Err(RtError::TypeError {
+                expected: "ДвоичныеДанные",
+                op: "ВложениеPDF.Содержимое",
+            });
+        };
+        let BslObject::BinaryData(bytes) = &**o else {
+            return Err(RtError::TypeError {
+                expected: "ДвоичныеДанные",
+                op: "ВложениеPDF.Содержимое",
+            });
+        };
+        item.data = bytes.to_vec();
+        return Ok(());
+    }
+    if name.eq_ignore_ascii_case("ТипСвязи") || name.eq_ignore_ascii_case("RelationshipType")
+    {
+        item.relation = relation_of(value, "ВложениеPDF.ТипСвязи")?;
+        return Ok(());
+    }
+    Err(RtError::UnknownColumn(name.to_string()))
+}
+
+/// Вектор и номер за значением `ВложениеPDF`.
+fn attachment_slot<'a>(
+    obj: &'a BslValue,
+    name: &str,
+) -> RtResult<(&'a Rc<RefCell<Vec<PdfAttachment>>>, usize)> {
+    let BslValue::Object(o) = obj else {
+        return Err(RtError::UnknownColumn(name.to_string()));
+    };
+    let BslObject::PdfAttachment(items, index) = &**o else {
+        return Err(RtError::UnknownColumn(name.to_string()));
+    };
+    Ok((items, *index))
 }
 
 /// Число страниц — общий путь `Количество()` и `Для Каждого`.
@@ -3743,6 +4944,12 @@ mod tests {
     #[test]
     fn pdf_reader_reads_every_committed_platform_file() {
         let expected: &[(&str, usize)] = &[
+            // Три файла задачи о вложениях: снятый с платформы и два
+            // собранных НАШИМ писателем поверх чужой основы (см.
+            // `make-open-bsl-attachments.bsl`).
+            ("attach-platform.pdf", 1),
+            ("attach-open-bsl.pdf", 1),
+            ("attach-open-bsl-xrefstream.pdf", 2),
             ("platform-simple.pdf", 1),
             ("probe-align.pdf", 1),
             ("probe-big.pdf", 4),
@@ -4821,6 +6028,465 @@ mod tests {
         assert!(
             text.contains('9'),
             "номер типа строки обязан быть в тексте: {text}"
+        );
+    }
+
+    // -----------------------------------------------------------------
+    // Вложения
+    // -----------------------------------------------------------------
+
+    /// Однолистовой файл с деревом имён вложений: `spec` — тело
+    /// `/EmbeddedFiles`, `objects` — всё остальное, что ему нужно.
+    fn with_attachments(tree: &str, objects: &[(u32, Vec<u8>)]) -> Vec<u8> {
+        let mut all = vec![
+            (
+                1,
+                format!("<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles {tree} >> >>")
+                    .into_bytes(),
+            ),
+            (
+                2,
+                b"<< /Type /Pages /Kids [ 3 0 R ] /Count 1 /MediaBox [ 0 0 595.32 841.92 ] >>"
+                    .to_vec(),
+            ),
+            (
+                3,
+                b"<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>".to_vec(),
+            ),
+            (4, empty_content()),
+        ];
+        all.extend_from_slice(objects);
+        all.sort_by_key(|(number, _)| *number);
+        build_classic(&all, "")
+    }
+
+    /// Пара объектов «поток встроенного файла + файловая спецификация»
+    /// под номерами `number` и `number + 1`.
+    fn filespec_pair(number: u32, head: &str, data: &[u8]) -> Vec<(u32, Vec<u8>)> {
+        let mut stream = format!(
+            "<< /Type /EmbeddedFile /Subtype /text#2Fplain /Length {} >>\nstream\n",
+            data.len()
+        )
+        .into_bytes();
+        stream.extend_from_slice(data);
+        stream.extend_from_slice(b"\nendstream");
+        vec![
+            (number, stream),
+            (
+                number + 1,
+                format!("<< /Type /Filespec {head} /EF << /F {number} 0 R >> >>").into_bytes(),
+            ),
+        ]
+    }
+
+    /// Файл с xref-ПОТОКОМ вместо классической таблицы: объекты пишутся
+    /// подряд, а таблица — поток `/XRef` шириной `[1 4 2]` без предиктора.
+    fn build_xref_stream(objects: &[(u32, Vec<u8>)]) -> Vec<u8> {
+        let mut out = b"%PDF-1.5\n%\xe2\xe3\xcf\xd3\n".to_vec();
+        let size = objects.iter().map(|(n, _)| *n).max().unwrap_or(0) + 2;
+        let mut offsets = vec![0usize; size as usize];
+        for (number, body) in objects {
+            offsets[*number as usize] = out.len();
+            out.extend_from_slice(format!("{number} 0 obj\n").as_bytes());
+            out.extend_from_slice(body);
+            out.extend_from_slice(b"\nendobj\n");
+        }
+        let at_xref = out.len();
+        let table_number = size - 1;
+        offsets[table_number as usize] = at_xref;
+        let mut rows = Vec::new();
+        for (index, offset) in offsets.iter().enumerate() {
+            if index == 0 {
+                rows.push(0u8);
+                rows.extend_from_slice(&0u32.to_be_bytes());
+                rows.extend_from_slice(&65535u16.to_be_bytes());
+                continue;
+            }
+            rows.push(1u8);
+            rows.extend_from_slice(&(*offset as u32).to_be_bytes());
+            rows.extend_from_slice(&0u16.to_be_bytes());
+        }
+        let packed = zlib_compress(&rows);
+        out.extend_from_slice(
+            format!(
+                "{table_number} 0 obj\n<< /Type /XRef /Size {size} /W [ 1 4 2 ] /Root 1 0 R \
+                 /Filter /FlateDecode /Length {} >>\nstream\n",
+                packed.len()
+            )
+            .as_bytes(),
+        );
+        out.extend_from_slice(&packed);
+        out.extend_from_slice(b"\nendstream\nendobj\n");
+        out.extend_from_slice(format!("startxref\n{at_xref}\n%%EOF\n").as_bytes());
+        out
+    }
+
+    fn names_tree(entries: &[(&str, u32)]) -> String {
+        let mut out = String::from("<< /Names [");
+        for (name, number) in entries {
+            out.push_str(&format!(" ({name}) {number} 0 R"));
+        }
+        out.push_str(" ] >>");
+        out
+    }
+
+    /// Круг «добавить — записать — прочитать своим же читателем» на ОБОИХ
+    /// видах таблицы перекрёстных ссылок: инкрементальное обновление
+    /// дописывается и поверх классической `xref`, и поверх xref-потока, а
+    /// страницы исходного файла при этом остаются на месте.
+    #[test]
+    fn pdf_attachments_round_trip_over_both_xref_kinds() {
+        let mut objects = filespec_pair(10, "/F (первое.txt)", "было".as_bytes());
+        let tree = names_tree(&[("первое.txt", 11)]);
+        let classic = with_attachments(&tree, &objects);
+
+        objects.sort_by_key(|(number, _)| *number);
+        let mut stream_objects = vec![
+            (
+                1,
+                format!("<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles {tree} >> >>")
+                    .into_bytes(),
+            ),
+            (
+                2,
+                b"<< /Type /Pages /Kids [ 3 0 R ] /Count 1 /MediaBox [ 0 0 595.32 841.92 ] >>"
+                    .to_vec(),
+            ),
+            (
+                3,
+                b"<< /Type /Page /Parent 2 0 R /Contents 4 0 R >>".to_vec(),
+            ),
+            (4, empty_content()),
+        ];
+        stream_objects.extend(objects);
+        stream_objects.sort_by_key(|(number, _)| *number);
+        let with_stream = build_xref_stream(&stream_objects);
+
+        for (kind, base) in [("классическая xref", classic), ("xref-поток", with_stream)]
+        {
+            let file = PdfFile::parse(&base).unwrap_or_else(|e| panic!("{kind}: {e:?}"));
+            assert_eq!(file.page_count(), 1, "{kind}: страница");
+            assert_eq!(file.attachments().len(), 1, "{kind}: вложение из основы");
+
+            let mut attachments = file.attachments().to_vec();
+            attachments.push(PdfAttachment::new(
+                "второе.bin".to_string(),
+                "application/octet-stream".to_string(),
+                PdfRelation::Data,
+                vec![0, 1, 2, 250, 251, 252],
+            ));
+            let updated = file
+                .write_with_attachments(&attachments)
+                .unwrap_or_else(|e| panic!("{kind}: запись {e:?}"));
+            // Исходные байты остаются началом файла: обновление ТОЛЬКО
+            // дописывает.
+            assert!(updated.starts_with(&base), "{kind}: основа переписана");
+
+            let back =
+                PdfFile::parse(&updated).unwrap_or_else(|e| panic!("{kind}: перечтение {e:?}"));
+            assert_eq!(back.page_count(), 1, "{kind}: страница после записи");
+            let names: Vec<&str> = back.attachments().iter().map(|a| a.name()).collect();
+            // Порядок — по имени: так пишется дерево имён.
+            assert_eq!(names, ["второе.bin", "первое.txt"], "{kind}: имена");
+            assert_eq!(
+                back.attachments()[0].data(),
+                &[0, 1, 2, 250, 251, 252],
+                "{kind}"
+            );
+            assert_eq!(
+                back.attachments()[0].relation(),
+                PdfRelation::Data,
+                "{kind}"
+            );
+            assert_eq!(
+                back.attachments()[0].content_type(),
+                "application/octet-stream",
+                "{kind}"
+            );
+            assert_eq!(back.attachments()[1].data(), "было".as_bytes(), "{kind}");
+
+            // И ещё круг: обновление поверх обновления.
+            let mut again = back.attachments().to_vec();
+            again.retain(|item| item.name() != "первое.txt");
+            let twice = back
+                .write_with_attachments(&again)
+                .expect("второе обновление");
+            let last = PdfFile::parse(&twice).expect("перечтение второго обновления");
+            assert_eq!(last.attachments().len(), 1, "{kind}: после удаления");
+            assert_eq!(last.attachments()[0].name(), "второе.bin", "{kind}");
+            assert_eq!(last.page_count(), 1, "{kind}: страница цела");
+        }
+    }
+
+    /// Дерево имён с промежуточными узлами `/Kids` обходится целиком, а
+    /// `/Limits` при этом не читается вовсе — нам нужны все записи.
+    #[test]
+    fn pdf_attachments_walk_a_name_tree_with_kids() {
+        let mut objects = Vec::new();
+        objects.extend(filespec_pair(10, "/F (a.txt)", b"A"));
+        objects.extend(filespec_pair(12, "/F (b.txt)", b"B"));
+        objects.extend(filespec_pair(14, "/F (c.txt)", b"C"));
+        objects.push((
+            30,
+            b"<< /Limits [ (a.txt) (b.txt) ] /Names [ (a.txt) 11 0 R (b.txt) 13 0 R ] >>".to_vec(),
+        ));
+        objects.push((
+            31,
+            b"<< /Limits [ (c.txt) (c.txt) ] /Names [ (c.txt) 15 0 R ] >>".to_vec(),
+        ));
+        objects.push((32, b"<< /Kids [ 30 0 R 31 0 R ] >>".to_vec()));
+        let bytes = with_attachments("32 0 R", &objects);
+
+        let file = PdfFile::parse(&bytes).expect("дерево с /Kids обязано читаться");
+        let names: Vec<&str> = file.attachments().iter().map(|a| a.name()).collect();
+        assert_eq!(names, ["a.txt", "b.txt", "c.txt"]);
+        assert_eq!(file.attachments()[2].data(), b"C");
+    }
+
+    /// Битое дерево имён — `RtError` с внятным текстом, а не паника и не
+    /// молчаливый пропуск. Вход враждебный: цикл, лишняя глубина,
+    /// нечётный `/Names`, не тот тип узла.
+    #[test]
+    fn pdf_attachments_reject_a_broken_name_tree() {
+        let cycle = with_attachments("32 0 R", &[(32, b"<< /Kids [ 32 0 R ] >>".to_vec())]);
+        let not_a_dict = with_attachments("32 0 R", &[(32, b"[ 1 2 3 ]".to_vec())]);
+        let odd = with_attachments(
+            "32 0 R",
+            &[(32, "<< /Names [ (одно) ] >>".as_bytes().to_vec())],
+        );
+        let kids_not_array = with_attachments("32 0 R", &[(32, b"<< /Kids 7 >>".to_vec())]);
+        let names_not_array = with_attachments("32 0 R", &[(32, b"<< /Names 7 >>".to_vec())]);
+
+        // Глубина: цепочка `/Kids` длиннее предела.
+        let mut deep: Vec<(u32, Vec<u8>)> = Vec::new();
+        let depth = MAX_DEPTH as u32 + 5;
+        for i in 0..depth {
+            deep.push((
+                100 + i,
+                format!("<< /Kids [ {} 0 R ] >>", 100 + i + 1).into_bytes(),
+            ));
+        }
+        deep.push((100 + depth, b"<< /Names [ ] >>".to_vec()));
+        let too_deep = with_attachments("100 0 R", &deep);
+
+        for (what, bytes) in [
+            ("цикл", cycle),
+            ("узел не словарь", not_a_dict),
+            ("нечётный /Names", odd),
+            ("/Kids не массив", kids_not_array),
+            ("/Names не массив", names_not_array),
+            ("слишком глубоко", too_deep),
+        ] {
+            let err = PdfFile::parse(&bytes)
+                .expect_err(&format!("{what}: разбор обязан кончиться ошибкой"));
+            let RtError::Pdf(text) = err else {
+                panic!("{what}: ожидался RtError::Pdf, получено {err:?}");
+            };
+            assert!(!text.is_empty(), "{what}: пустой текст ошибки");
+        }
+    }
+
+    /// Записи без данных платформа молча пропускает — и мы тоже: без
+    /// `/EF`, с висящей ссылкой в нём и без имени вовсе.
+    #[test]
+    fn pdf_attachments_skip_entries_without_data_or_name() {
+        let mut objects = Vec::new();
+        objects.push((11, b"<< /Type /Filespec /F (noef.txt) >>".to_vec()));
+        objects.push((
+            13,
+            b"<< /Type /Filespec /F (dangling.txt) /EF << /F 99 0 R >> >>".to_vec(),
+        ));
+        objects.extend(filespec_pair(
+            14,
+            "/Type /Filespec",
+            "безымянное".as_bytes(),
+        ));
+        objects.extend(filespec_pair(16, "/F (живое.txt)", "живое".as_bytes()));
+        let tree = names_tree(&[("noef", 11), ("dangling", 13), ("noname", 15), ("ok", 17)]);
+        let bytes = with_attachments(&tree, &objects);
+
+        let file = PdfFile::parse(&bytes).expect("файл с битыми записями обязан читаться");
+        let names: Vec<&str> = file.attachments().iter().map(|a| a.name()).collect();
+        assert_eq!(names, ["живое.txt"]);
+    }
+
+    /// Имя берётся из `/UF`, а без него из `/F`; байты со знаком порядка
+    /// FE FF читаются как UTF-16BE, остальные — как UTF-8. Одноимённые
+    /// записи схлопываются, и побеждает ПОСЛЕДНЯЯ.
+    #[test]
+    fn pdf_attachments_decode_names_and_collapse_duplicates() {
+        let utf16: String = "юникод.txt"
+            .encode_utf16()
+            .map(|unit| {
+                let [hi, lo] = unit.to_be_bytes();
+                format!("\\{hi:03o}\\{lo:03o}")
+            })
+            .collect();
+        let mut objects = Vec::new();
+        objects.extend(filespec_pair(10, "/F (только-f.txt)", b"1"));
+        objects.extend(filespec_pair(12, "/F (не-это.txt) /UF (это.txt)", b"2"));
+        objects.extend(filespec_pair(14, &format!("/UF (\\376\\377{utf16})"), b"3"));
+        objects.extend(filespec_pair(16, "/F (дубль.txt)", "первое".as_bytes()));
+        objects.extend(filespec_pair(18, "/F (дубль.txt)", "второе".as_bytes()));
+        let tree = names_tree(&[("a", 11), ("b", 13), ("c", 15), ("d", 17), ("e", 19)]);
+        let bytes = with_attachments(&tree, &objects);
+
+        let file = PdfFile::parse(&bytes).expect("файл обязан читаться");
+        let names: Vec<&str> = file.attachments().iter().map(|a| a.name()).collect();
+        assert_eq!(
+            names,
+            ["только-f.txt", "это.txt", "юникод.txt", "дубль.txt"]
+        );
+        assert_eq!(file.attachments()[3].data(), "второе".as_bytes());
+    }
+
+    /// Поток встроенного файла с фильтром, которого мы не умеем, не
+    /// уносит документ: вложение остаётся, содержимое — сырые байты.
+    #[test]
+    fn pdf_attachments_survive_an_unsupported_filter() {
+        let objects = vec![
+            (
+                10,
+                b"<< /Type /EmbeddedFile /Filter /LZWDecode /Length 3 >>\nstream\n\x80\x0b\x60\nendstream"
+                    .to_vec(),
+            ),
+            (
+                11,
+                b"<< /Type /Filespec /F (lzw.txt) /EF << /F 10 0 R >> >>".to_vec(),
+            ),
+        ];
+        let bytes = with_attachments(&names_tree(&[("lzw", 11)]), &objects);
+
+        let file = PdfFile::parse(&bytes).expect("неизвестный фильтр не должен ронять документ");
+        assert_eq!(file.page_count(), 1);
+        assert_eq!(file.attachments().len(), 1);
+        assert_eq!(file.attachments()[0].data(), b"\x80\x0b\x60");
+    }
+
+    /// Связь читается из `/AFRelationship`, а неизвестное имя — это
+    /// `НеУстановлено` (измерено на `/AFRelationship /Nonsense`).
+    #[test]
+    fn pdf_attachments_read_the_relationship() {
+        let mut objects = Vec::new();
+        objects.extend(filespec_pair(
+            10,
+            "/F (s.txt) /AFRelationship /Source",
+            b"1",
+        ));
+        objects.extend(filespec_pair(12, "/F (d.txt) /AFRelationship /Data", b"2"));
+        objects.extend(filespec_pair(
+            14,
+            "/F (a.txt) /AFRelationship /Alternative",
+            b"3",
+        ));
+        objects.extend(filespec_pair(
+            16,
+            "/F (u.txt) /AFRelationship /Supplement",
+            b"4",
+        ));
+        objects.extend(filespec_pair(
+            18,
+            "/F (n.txt) /AFRelationship /Nonsense",
+            b"5",
+        ));
+        objects.extend(filespec_pair(20, "/F (empty.txt)", b"6"));
+        let tree = names_tree(&[
+            ("a", 11),
+            ("b", 13),
+            ("c", 15),
+            ("d", 17),
+            ("e", 19),
+            ("f", 21),
+        ]);
+        let bytes = with_attachments(&tree, &objects);
+
+        let file = PdfFile::parse(&bytes).expect("файл обязан читаться");
+        let relations: Vec<PdfRelation> = file.attachments().iter().map(|a| a.relation()).collect();
+        assert_eq!(
+            relations,
+            [
+                PdfRelation::Source,
+                PdfRelation::Data,
+                PdfRelation::Alternative,
+                PdfRelation::Supplement,
+                PdfRelation::Unspecified,
+                PdfRelation::Unspecified,
+            ]
+        );
+    }
+
+    /// Имена в записанном дереве экранируются РОВНО тремя знаками и
+    /// уходят сырыми байтами: `/F` в UTF-8, `/UF` в UTF-16BE. Иначе
+    /// платформа, которая не снимает восьмеричные экраны, прочитала бы
+    /// вместо имени его запись.
+    #[test]
+    fn pdf_attachments_are_written_with_raw_name_bytes() {
+        let base = with_attachments("32 0 R", &[(32, b"<< /Names [ ] >>".to_vec())]);
+        let file = PdfFile::parse(&base).expect("основа обязана читаться");
+        let written = file
+            .write_with_attachments(&[PdfAttachment::new(
+                "имя (со скобкой).txt".to_string(),
+                "text/plain".to_string(),
+                PdfRelation::Unspecified,
+                b"data".to_vec(),
+            )])
+            .expect("запись");
+
+        assert!(
+            find(&written, "имя \\(со скобкой\\).txt".as_bytes()).is_some(),
+            "имя обязано быть записано сырыми байтами UTF-8 со скобочным экранированием"
+        );
+        assert!(
+            find(&written, &[0xFE, 0xFF, 0x04, 0x38, 0x04, 0x3C, 0x04, 0x4F]).is_some(),
+            "/UF обязан быть UTF-16BE с меткой порядка байтов"
+        );
+        assert!(
+            find(&written, b"\\376\\377").is_none(),
+            "восьмеричных экранов в имени быть не должно"
+        );
+        let back = PdfFile::parse(&written).expect("перечтение");
+        assert_eq!(back.attachments()[0].name(), "имя (со скобкой).txt");
+    }
+
+    /// Шестнадцатеричная строка в фикстуре `pdf-attachments.bsl` — это
+    /// РОВНО байты снятого с платформы `attach-platform.pdf`.
+    ///
+    /// Копия нужна оснастке (конформанс-раннер запускает фикстуру из
+    /// каталога крейта, платформенный — из корня репозитория, и одному
+    /// относительному пути с обоими не сойтись), но копия, которая молча
+    /// разъехалась с оригиналом, — это фикстура, проверяющая не то.
+    #[test]
+    fn pdf_attachments_fixture_hex_matches_the_captured_file() {
+        let fixture =
+            std::fs::read_to_string("../../tests/conformance/fixtures/pdf-attachments.bsl")
+                .expect("фикстура вложений обязана лежать в дереве");
+        let mut hex = String::new();
+        for line in fixture.lines() {
+            if !line.starts_with("ШестнПлатформа") {
+                continue;
+            }
+            let mut parts = line.split('"');
+            parts.next();
+            for (index, part) in parts.enumerate() {
+                if index % 2 == 0 {
+                    hex.push_str(part);
+                }
+            }
+        }
+        assert!(!hex.is_empty(), "в фикстуре не нашлось строки с байтами");
+        let bytes: Vec<u8> = hex
+            .as_bytes()
+            .chunks(2)
+            .map(|pair| {
+                u8::from_str_radix(std::str::from_utf8(pair).unwrap(), 16)
+                    .expect("в строке фикстуры обязаны быть только шестнадцатеричные цифры")
+            })
+            .collect();
+        let captured = std::fs::read("../../tests/conformance/pdf/attach-platform.pdf")
+            .expect("снимок платформы обязан лежать в дереве");
+        assert_eq!(
+            bytes, captured,
+            "байты в фикстуре разошлись со снимком attach-platform.pdf"
         );
     }
 }

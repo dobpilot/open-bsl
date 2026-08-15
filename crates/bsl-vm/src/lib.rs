@@ -1092,6 +1092,11 @@ fn step(
                     } else if bsl_rt::textdoc_is_document(ov) {
                         bsl_rt::textdoc_write_file(ov, std::slice::from_ref(sv))?;
                         BslValue::Undefined
+                    } else if bsl_rt::pdf::is_pdf_document(ov) {
+                        // `ДокументPDF.Записать(ИмяФайла)` — тот же случай:
+                        // один аргумент, а получатель не `ЗаписьТекста`.
+                        bsl_rt::pdf::write(ov, std::slice::from_ref(sv))?;
+                        BslValue::Undefined
                     } else if bsl_rt::is_stream(ov) {
                         // Поток берёт ровно три аргумента, так что сюда он
                         // попадает только вызовом с одним аргументом, то
@@ -1135,6 +1140,7 @@ fn step(
             | Instr::NewJsonSerializerSettings { .. }
             | Instr::NewSpreadDocument { .. }
             | Instr::NewPdfDocument { .. }
+            | Instr::NewPdfAttachments { .. }
             | Instr::NewTextDocument { .. }
             | Instr::NewXmlReader { .. }
             | Instr::NewXmlWriter { .. }
@@ -1340,6 +1346,11 @@ fn step_cold(
         Instr::NewPdfDocument { dst } => {
             let d = frames[frame_idx].reg_index(dst);
             reg_store(stack, d, bsl_rt::pdf::new_pdf_document())?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewPdfAttachments { dst } => {
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, bsl_rt::pdf::new_pdf_attachments())?;
             frames[frame_idx].pc += 1;
         }
         Instr::NewTextDocument { dst } => {
