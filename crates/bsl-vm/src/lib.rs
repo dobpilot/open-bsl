@@ -1134,6 +1134,7 @@ fn step(
             | Instr::NewJsonWriterSettings { .. }
             | Instr::NewJsonSerializerSettings { .. }
             | Instr::NewSpreadDocument { .. }
+            | Instr::NewPdfDocument { .. }
             | Instr::NewTextDocument { .. }
             | Instr::NewXmlReader { .. }
             | Instr::NewXmlWriter { .. }
@@ -1334,6 +1335,11 @@ fn step_cold(
         Instr::NewSpreadDocument { dst } => {
             let d = frames[frame_idx].reg_index(dst);
             reg_store(stack, d, bsl_rt::new_spread_document())?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::NewPdfDocument { dst } => {
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, bsl_rt::pdf::new_pdf_document())?;
             frames[frame_idx].pc += 1;
         }
         Instr::NewTextDocument { dst } => {

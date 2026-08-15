@@ -446,6 +446,7 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
         | Instr::NewJsonSerializerSettings { dst }
         | Instr::NewTextDocument { dst }
         | Instr::NewSpreadDocument { dst }
+        | Instr::NewPdfDocument { dst }
         | Instr::NewXmlReader { dst }
         | Instr::NewXmlWriter { dst }
         | Instr::NewDomBuilder { dst }

@@ -520,6 +520,13 @@ impl BslValue {
                 // Имена ЗНАЧЕНИЙ читателей архива — слитные, имена ТИПОВ
                 // («Чтение ZIP файла») с пробелами, см. `types.rs`. Обе
                 // колонки измерены на 8.3.27.
+                // Имена ЗНАЧЕНИЙ у трёх видов PDF совпадают с именами их
+                // типов, кроме документа: `Строка(Новый ДокументPDF)` —
+                // «ДокументPDF», а `Строка(ТипЗнч(...))` — «Документ PDF»
+                // (измерено обе колонки).
+                BslObject::PdfDocument(_) => "ДокументPDF",
+                BslObject::PdfPages(_) => "КоллекцияСтраницPDF",
+                BslObject::PdfPage(..) => "СтраницаPDF",
                 BslObject::ArchiveReader(zip::ArchiveKind::Zip, _) => "ЧтениеZipФайла",
                 BslObject::ArchiveEntries(zip::ArchiveKind::Zip, _) => "ЭлементыZipФайла",
                 BslObject::ArchiveEntry(zip::ArchiveKind::Zip, ..) => "ЭлементZipФайла",
@@ -1305,6 +1312,8 @@ impl BslValue {
                 BslObject::DomList(kind, _) => !kind.is_empty(),
                 // Коллекции модели схемы — по тому же критерию длины.
                 BslObject::XsList(_, kind) => !kind.is_empty(),
+                // Коллекция страниц PDF — тоже по длине (измерено).
+                BslObject::PdfPages(_) => self.collection_len()? > 0,
                 // Коллекции модели типов XDTO — тоже по длине: измерено,
                 // что непустые `Свойства` и `Фасеты` дают «Да», а пустые
                 // `Свойства` типа без содержимого — «Нет».
@@ -1334,7 +1343,15 @@ impl BslValue {
                 // Построитель DOM и любой узел дерева ведут себя так же —
                 // измерено на построителе, документе и элементе: у всех
                 // трёх `ЗначениеЗаполнено` даёт ошибку, а не «Да».
-                BslObject::MemoryStream(..)
+                // ИЗМЕРЕНО каждой пробой отдельно, и ответы РАЗНЫЕ:
+                // `ЗначениеЗаполнено(Новый ДокументPDF)` — ошибка, от
+                // страницы — тоже ошибка, а вот коллекция страниц судится
+                // ПО ДЛИНЕ: три страницы дали «Да», пустое дерево — «Нет».
+                // Поэтому коллекция стоит выше, рядом с `DomList`, а
+                // документ и страница — здесь.
+                BslObject::PdfDocument(..)
+                | BslObject::PdfPage(..)
+                | BslObject::MemoryStream(..)
                 | BslObject::FileStream(..)
                 | BslObject::FileStreamsManager
                 | BslObject::ArchiveWriter(..)
@@ -1455,6 +1472,9 @@ impl BslValue {
                 BslObject::SpreadArea(..) => TypeId::SpreadArea,
                 BslObject::TextDocument(..) => TypeId::TextDocument,
                 BslObject::TextDocParams(..) => TypeId::TextDocParams,
+                BslObject::PdfDocument(_) => TypeId::PdfDocument,
+                BslObject::PdfPages(_) => TypeId::PdfPagesCollection,
+                BslObject::PdfPage(..) => TypeId::PdfPage,
                 BslObject::ArchiveReader(zip::ArchiveKind::Zip, _) => TypeId::ZipFileReader,
                 BslObject::ArchiveEntries(zip::ArchiveKind::Zip, _) => TypeId::ZipFileEntries,
                 BslObject::ArchiveEntry(zip::ArchiveKind::Zip, ..) => TypeId::ZipFileEntry,
@@ -2206,6 +2226,11 @@ impl BslValue {
                 // `Элементы[i]` — тот же путь, что и `Получить(i)`
                 // (измерено, что есть оба).
                 BslObject::ArchiveEntries(..) => zip::get(self, Self::index_as_usize(idx)?),
+                // `Страницы[i]` — тот же путь, что и `Для Каждого`, но,
+                // в отличие от `Получить(i)`, вне диапазона это ОШИБКА
+                // (измерено: `Страницы[-1]` платформа отвергает, а
+                // `Получить(-1)` отдаёт `Неопределено`).
+                BslObject::PdfPages(_) => pdf::page_at(self, Self::index_as_usize(idx)?),
                 BslObject::TableColumns(data) => {
                     let i = Self::index_as_usize(idx)?;
                     let name = {
@@ -2424,6 +2449,10 @@ impl BslValue {
                 // по `Для Каждого`, и по `Количество()` (измерено все
                 // три); сам читатель и отдельный элемент — нет.
                 BslObject::ArchiveEntries(..) => zip::count(self),
+                // `Количество()` и `Для Каждого` есть только у КОЛЛЕКЦИИ
+                // страниц; у самого документа и у страницы длины нет
+                // (`КоличествоСтраниц` платформа не знает — измерено).
+                BslObject::PdfPages(_) => pdf::page_count(self),
                 BslObject::TextWriter(..)
                 | BslObject::JsonReader(..)
                 | BslObject::JsonWriter(..)
@@ -2440,6 +2469,11 @@ impl BslValue {
                 | BslObject::ArchiveReader(..)
                 | BslObject::ArchiveEntry(..)
                 | BslObject::ArchiveWriter(..)
+                // У документа PDF и у отдельной страницы длины нет:
+                // `КоличествоСтраниц` платформа не знает, и `Для Каждого`
+                // по документу тоже нет — считает только коллекция.
+                | BslObject::PdfDocument(..)
+                | BslObject::PdfPage(..)
                 // Число байтов потока отдаёт МЕТОД `Размер()`, а
                 // `Количество()` платформа отвергает и на потоке, и на
                 // менеджере — измерено на обоих. `Для Каждого` по ним
@@ -2916,6 +2950,13 @@ impl BslValue {
                     }
                 }
                 BslObject::ArchiveEntry(..) => zip::entry_prop(self, name),
+                // У документа PDF свойство ровно одно — `Страницы`, у
+                // страницы их восемь; у самой коллекции свойств нет
+                // (измерено: `КоличествоСтраниц` документа платформа не
+                // знает, а всё, что есть у страницы, перечислено в
+                // `pdf::page_property`).
+                BslObject::PdfDocument(_) => pdf::document_property(self, name),
+                BslObject::PdfPage(..) => pdf::page_property(self, name),
                 BslObject::DomNode(..) => dom::get_property(self, name),
                 BslObject::XPathResult(_) => xpath::get_property(self, name),
                 BslObject::RegexMatch(_) | BslObject::RegexGroup(..) => {
@@ -3713,6 +3754,15 @@ impl PartialEq for BslValue {
                 (BslObject::XdtoList(a, i), BslObject::XdtoList(b, j)) => {
                     i == j && Rc::ptr_eq(a, b)
                 }
+                // Страница PDF — ССЫЛКА на место в документе: обёртку
+                // строит каждое обращение к коллекции, а равенство идёт по
+                // паре «тот же документ, тот же номер». ИЗМЕРЕНО:
+                // `Страницы[0] = Страницы[0]` — «Да», `Страницы[0] =
+                // Страницы[1]` — «Нет».
+                (BslObject::PdfPage(a, i), BslObject::PdfPage(b, j)) => i == j && Rc::ptr_eq(a, b),
+                // Сама коллекция — окно в тот же документ, и два отдельных
+                // чтения `Док.Страницы` равны (измерено).
+                (BslObject::PdfPages(a), BslObject::PdfPages(b)) => Rc::ptr_eq(a, b),
                 _ => false,
             },
             _ => false,
@@ -3883,6 +3933,11 @@ impl fmt::Display for BslValue {
                 | BslObject::ArchiveEntries(..)
                 | BslObject::ArchiveEntry(..)
                 | BslObject::ArchiveWriter(..) => write!(f, "{}", self.type_name()),
+                // Три вида PDF печатаются именем ЗНАЧЕНИЯ — «ДокументPDF»,
+                // «КоллекцияСтраницPDF», «СтраницаPDF» (измерено).
+                BslObject::PdfDocument(_)
+                | BslObject::PdfPages(_)
+                | BslObject::PdfPage(..) => write!(f, "{}", self.type_name()),
                 // Потоки печатаются ИМЕНЕМ ЗНАЧЕНИЯ, и закрытие его не
                 // меняет: `Строка(Зкр)` после `Закрыть()` — по-прежнему
                 // «ПотокВПамяти» (измерено).

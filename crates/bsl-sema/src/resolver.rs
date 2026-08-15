@@ -415,6 +415,10 @@ pub const NEW_TYPES: &[&str] = &[
     "TextDocument",
     "ТабличныйДокумент",
     "SpreadsheetDocument",
+    // Английское написание ИЗМЕРЕНО: `Новый PDFDocument` платформа
+    // принимает и отдаёт тот же тип «Документ PDF».
+    "ДокументPDF",
+    "PDFDocument",
     // Английское написание проверено пробой `BIN.NEW.EN` на платформе:
     // `Новый BinaryData(Путь)` принимается.
     "ДвоичныеДанные",
@@ -1193,6 +1197,19 @@ impl<'a> Resolver<'a> {
                     });
                 }
                 Ok(RExpr::NewSpreadDocument)
+            }
+            // Аргументов у конструктора НЕТ: измерено, что и путь, и
+            // `ДвоичныеДанные` платформа отвергает — источник назначается
+            // отдельным `Прочитать`.
+            "ДОКУМЕНТPDF" | "PDFDOCUMENT" => {
+                if !args.is_empty() {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: "Новый ДокументPDF".to_string(),
+                        expected: 0,
+                        found: args.len(),
+                    });
+                }
+                Ok(RExpr::NewPdfDocument)
             }
             "ТЕКСТОВЫЙДОКУМЕНТ" | "TEXTDOCUMENT" => {
                 if !args.is_empty() {

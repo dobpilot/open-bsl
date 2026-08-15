@@ -99,6 +99,7 @@ pub const OPCODES: &[&str] = &[
     "NewJsonSerializerSettings",
     "NewTextDocument",
     "NewSpreadDocument",
+    "NewPdfDocument",
     "NewDomBuilder",
     "NewDomDocument",
     "NewDomWriter",
@@ -496,6 +497,7 @@ fn write_instr(instr: &Instr) -> String {
         }
         Instr::NewTextDocument { dst } => format!("NewTextDocument dst={dst}"),
         Instr::NewSpreadDocument { dst } => format!("NewSpreadDocument dst={dst}"),
+        Instr::NewPdfDocument { dst } => format!("NewPdfDocument dst={dst}"),
         Instr::NewDomBuilder { dst } => format!("NewDomBuilder dst={dst}"),
         Instr::NewDomDocument { dst } => format!("NewDomDocument dst={dst}"),
         Instr::NewDomWriter { dst } => format!("NewDomWriter dst={dst}"),
@@ -1299,6 +1301,7 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
         "NewJsonSerializerSettings" => Instr::NewJsonSerializerSettings { dst: dst(&f)? },
         "NewTextDocument" => Instr::NewTextDocument { dst: dst(&f)? },
         "NewSpreadDocument" => Instr::NewSpreadDocument { dst: dst(&f)? },
+        "NewPdfDocument" => Instr::NewPdfDocument { dst: dst(&f)? },
         "NewDomBuilder" => Instr::NewDomBuilder { dst: dst(&f)? },
         "NewDomDocument" => Instr::NewDomDocument { dst: dst(&f)? },
         "NewDomWriter" => Instr::NewDomWriter { dst: dst(&f)? },
@@ -1455,6 +1458,10 @@ mod tests {
         "т = Новый ТабличныйДокумент;\nт.Область(1, 1, 1, 2).Текст = \"шапка\";\n\
          т.Область(1, 1, 1, 2).Объединить();\nо = т.ПолучитьОбласть(1, 1, 1, 2);\n\
          п = Новый ТабличныйДокумент;\nп.Вывести(о);\nп.Очистить();\n",
+        // Чтение PDF: конструктор без аргументов, разбор файла и обход
+        // коллекции страниц через свойство.
+        "д = Новый ДокументPDF;\nд.Прочитать(\"/tmp/нет.pdf\");\nс = д.Страницы;\n\
+         к = с.Количество();\nп = с.Получить(0);\nн = с.Индекс(п);\n",
         "д = Новый ТекстовыйДокумент;\nд.УстановитьТекст(\"#Область Т\");\n\
          о = д.ПолучитьОбласть(\"Т\");\nр = Новый ТекстовыйДокумент;\nр.Вывести(о);\n\
          н = д.КоличествоСтрок();\n",

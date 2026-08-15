@@ -2039,6 +2039,16 @@ pub fn call_builtin_method(
         // аргументов обязано стать понятной ошибкой, а не паникой на
         // `args[0]`.
         BuiltinMethod::Get => match obj {
+            // `Страницы.Получить(i)` вне диапазона отдаёт `Неопределено`,
+            // а не ошибку (измерено и на 99, и на -1), поэтому у него своя
+            // ветка, а не общий путь индексации.
+            _ if crate::pdf::is_pdf_pages(obj) => match args {
+                [index] => crate::pdf::page_get(obj, index),
+                _ => Err(RtError::MethodNotApplicable {
+                    method: "Получить",
+                    receiver: obj.type_name(),
+                }),
+            },
             BslValue::Object(o) if matches!(&**o, BslObject::XsList(..)) => {
                 crate::xsd::list_lookup(obj, args)
             }
@@ -2199,7 +2209,12 @@ pub fn call_builtin_method(
             obj.table_move(&args[0], &args[1])?;
             Ok(BslValue::Undefined)
         }
-        BuiltinMethod::IndexOf => obj.table_index_of(&args[0]),
+        BuiltinMethod::IndexOf => {
+            if crate::pdf::is_pdf_pages(obj) {
+                return crate::pdf::page_index_of(obj, &args[0]);
+            }
+            obj.table_index_of(&args[0])
+        }
         BuiltinMethod::Collapse => {
             too_many(obj, "Свернуть", args, 2)?;
             let Some(group) = args.first() else {
@@ -2291,7 +2306,12 @@ pub fn call_builtin_method(
             Ok(BslValue::Undefined)
         }
         BuiltinMethod::ReadNext => {
-            if crate::dom::is_dom_builder(obj) {
+            if crate::pdf::is_pdf_document(obj) {
+                // У `ДокументPDF` `Прочитать(ИмяФайла[, Пароль])` — разбор
+                // всего файла, а не шаг по потоку событий.
+                crate::pdf::read(obj, args)?;
+                Ok(BslValue::Undefined)
+            } else if crate::dom::is_dom_builder(obj) {
                 // У построителя DOM `Прочитать(ЧтениеXML)` — не шаг по
                 // потоку, а разбор всего остатка документа в дерево.
                 crate::dom::read(obj, args)

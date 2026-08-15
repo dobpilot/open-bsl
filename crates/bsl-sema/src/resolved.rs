@@ -121,6 +121,9 @@ pub enum RExpr {
     },
     NewTextDocument,
     NewSpreadDocument,
+    /// `Новый ДокументPDF` — без аргументов: файл назначается
+    /// `Прочитать(ИмяФайла)`.
+    NewPdfDocument,
     NewXmlReader,
     NewXmlWriter,
     /// `Новый ПостроительDOM` — без аргументов: документ строится
@@ -455,6 +458,7 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
         | RExpr::NewJsonSerializerSettings
         | RExpr::NewTextDocument
         | RExpr::NewSpreadDocument
+        | RExpr::NewPdfDocument
         | RExpr::NewXmlReader
         | RExpr::NewXmlWriter
         | RExpr::NewDomBuilder

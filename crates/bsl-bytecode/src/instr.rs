@@ -388,6 +388,11 @@ pub enum Instr {
     NewSpreadDocument {
         dst: u8,
     },
+    /// `Новый ДокументPDF` — без аргументов, как и `NewSpreadDocument`:
+    /// файл документу назначает отдельный `Прочитать`.
+    NewPdfDocument {
+        dst: u8,
+    },
     NewXmlReader {
         dst: u8,
     },
