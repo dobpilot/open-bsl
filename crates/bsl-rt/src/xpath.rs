@@ -2257,7 +2257,8 @@ fn context_node(arg: Option<&BslValue>, doc: &Rc<DomNode>) -> RtResult<Rc<DomNod
         | DomKind::Text
         | DomKind::CdataSection
         | DomKind::Comment
-        | DomKind::ProcessingInstruction => Ok(node),
+        | DomKind::ProcessingInstruction
+        | DomKind::EntityReference => Ok(node),
     }
 }
 

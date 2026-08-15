@@ -97,6 +97,7 @@ pub enum TypeId {
     DomCdataSection,
     DomComment,
     DomProcessingInstruction,
+    DomEntityReference,
     DomNodeList,
     DomAttributeMap,
     DomElementList,
@@ -418,6 +419,11 @@ const NAMES: &[(TypeId, &str, &str)] = &[
         TypeId::DomProcessingInstruction,
         "Инструкция обработки DOM",
         "DOMProcessingInstruction",
+    ),
+    (
+        TypeId::DomEntityReference,
+        "Ссылка на сущность DOM",
+        "DOMEntityReference",
     ),
     (TypeId::DomNodeList, "Список узлов DOM", "DOMNodeList"),
     (

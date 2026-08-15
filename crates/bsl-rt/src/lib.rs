@@ -472,6 +472,7 @@ impl BslValue {
                     crate::dom::DomKind::CdataSection => "СекцияCDATADOM",
                     crate::dom::DomKind::Comment => "КомментарийDOM",
                     crate::dom::DomKind::ProcessingInstruction => "ИнструкцияОбработкиDOM",
+                    crate::dom::DomKind::EntityReference => "СсылкаНаСущностьDOM",
                 },
                 // Имена значений XPath — тоже слитные, а типы у них
                 // печатаются иначе («Результат DOM XPath»), см. `types.rs`.
@@ -1514,6 +1515,7 @@ impl BslValue {
                     crate::dom::DomKind::CdataSection => TypeId::DomCdataSection,
                     crate::dom::DomKind::Comment => TypeId::DomComment,
                     crate::dom::DomKind::ProcessingInstruction => TypeId::DomProcessingInstruction,
+                    crate::dom::DomKind::EntityReference => TypeId::DomEntityReference,
                 },
                 BslObject::XPathResolver(_) => TypeId::DomNamespaceResolver,
                 BslObject::XPathExpression(_) => TypeId::XPathExpression,

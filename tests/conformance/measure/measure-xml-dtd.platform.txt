@@ -1,0 +1,83 @@
+DTD.HEADER.SYSTEM	Начало элемента имя=[к] знач=[] | Конец элемента имя=[к] знач=[]
+DTD.HEADER.SYSTEM_APOS	Начало элемента имя=[к] знач=[] | Конец элемента имя=[к] знач=[]
+DTD.HEADER.SYSTEM_GT	Начало элемента имя=[к] знач=[] | Конец элемента имя=[к] знач=[]
+DTD.HEADER.SYSTEM_SUBSET	Начало элемента имя=[к] знач=[] | Конец элемента имя=[к] знач=[]
+DTD.HEADER.PUBLIC	Начало элемента имя=[к] знач=[] | Конец элемента имя=[к] знач=[]
+DTD.HEADER.PUBLIC_CYRILLIC	<ошибка>
+DTD.HEADER.PUBLIC_ONE_LITERAL	<ошибка>
+DTD.HEADER.NO_NAME	<ошибка>
+DTD.HEADER.NAME_SPACE	Начало элемента имя=[к] знач=[] | Конец элемента имя=[к] знач=[]
+DTD.HEADER.TIGHT_SUBSET	Начало элемента имя=[к] знач=[] | Конец элемента имя=[к] знач=[]
+DTD.HEADER.LOWERCASE	<ошибка>
+DTD.HEADER.UNTERMINATED	<ошибка>
+DTD.HEADER.NAME_MISMATCH	Начало элемента имя=[б] знач=[] | Конец элемента имя=[б] знач=[]
+DTD.HEADER.INSIDE_ELEMENT	<ошибка>
+DTD.HEADER.AFTER_ROOT	<ошибка>
+DTD.HEADER.TWICE	<ошибка>
+DTD.HEADER.NO_ROOT	<ошибка>
+DTD.SUBSET.ATTLIST	Начало элемента имя=[к] знач=[] | Начало элемента имя=[т] знач=[] | Конец элемента имя=[т] знач=[] | Конец элемента имя=[к] знач=[]
+DTD.SUBSET.EMPTY	Начало элемента имя=[к] знач=[] | Конец элемента имя=[к] знач=[]
+DTD.SUBSET.ELEMENT	Начало элемента имя=[к] знач=[] | Текст имя=[#text] знач=[т] | Конец элемента имя=[к] знач=[]
+DTD.SUBSET.LITERAL_GT	Начало элемента имя=[к] знач=[] | Конец элемента имя=[к] знач=[]
+DTD.SUBSET.LITERAL_BRACKET	Начало элемента имя=[к] знач=[] | Конец элемента имя=[к] знач=[]
+DTD.SUBSET.LITERAL_APOS	Начало элемента имя=[к] знач=[] | Конец элемента имя=[к] знач=[]
+DTD.SUBSET.COMMENT	Начало элемента имя=[к] знач=[] | Конец элемента имя=[к] знач=[]
+DTD.SUBSET.COMMENT_DASHES	Начало элемента имя=[к] знач=[] | Конец элемента имя=[к] знач=[]
+DTD.SUBSET.PI	Начало элемента имя=[к] знач=[] | Конец элемента имя=[к] знач=[]
+DTD.SUBSET.MULTILINE	Начало элемента имя=[к] знач=[] | Конец элемента имя=[к] знач=[]
+DTD.SUBSET.NOTATION	Начало элемента имя=[к] знач=[] | Конец элемента имя=[к] знач=[]
+DTD.SUBSET.TWO_DECLS	Начало элемента имя=[к] знач=[] | Конец элемента имя=[к] знач=[]
+DTD.SUBSET.SPACE_BEFORE_GT	Начало элемента имя=[к] знач=[] | Конец элемента имя=[к] знач=[]
+DTD.SUBSET.UNTERMINATED	<ошибка>
+DTD.SUBSET.CONDITIONAL	<ошибка>
+DTD.SUBSET.UNKNOWN_DECL	<ошибка>
+DTD.SUBSET.LOWERCASE_DECL	<ошибка>
+DTD.SUBSET.GARBAGE	<ошибка>
+DTD.SUBSET.ENTITY_NO_VALUE	<ошибка>
+DTD.SUBSET.ENTITY_NO_NAME	<ошибка>
+DTD.SUBSET.ATTLIST_EMPTY	<ошибка>
+DTD.SUBSET.ELEMENT_NO_MODEL	<ошибка>
+DTD.PE.DECLARATION	Начало элемента имя=[к] знач=[] | Конец элемента имя=[к] знач=[]
+DTD.PE.BAD_REPLACEMENT	<ошибка>
+DTD.PE.UNDECLARED	<ошибка>
+DTD.PE.RECURSION	<ошибка>
+DTD.ENTITY.CONTENT	Начало элемента имя=[к] знач=[] | Ссылка на сущность имя=[е] знач=[] | Конец элемента имя=[к] знач=[]
+DTD.ENTITY.SPLIT	Начало элемента имя=[к] знач=[] | Текст имя=[#text] знач=[раз] | Ссылка на сущность имя=[е] знач=[] | Текст имя=[#text] знач=[два] | Конец элемента имя=[к] знач=[]
+DTD.ENTITY.TWICE	Начало элемента имя=[к] знач=[] | Ссылка на сущность имя=[е] знач=[] | Ссылка на сущность имя=[е] знач=[] | Конец элемента имя=[к] знач=[]
+DTD.ENTITY.NESTED_ELEMENT	Начало элемента имя=[к] знач=[] | Начало элемента имя=[б] знач=[] | Ссылка на сущность имя=[е] знач=[] | Конец элемента имя=[б] знач=[] | Конец элемента имя=[к] знач=[]
+DTD.ENTITY.MARKUP	Начало элемента имя=[к] знач=[] | Ссылка на сущность имя=[е] знач=[] | Конец элемента имя=[к] знач=[]
+DTD.ENTITY.EXTERNAL	Начало элемента имя=[к] знач=[] | Ссылка на сущность имя=[е] знач=[] | Конец элемента имя=[к] знач=[]
+DTD.ENTITY.PREDEFINED	Начало элемента имя=[к] знач=[] | Текст имя=[#text] знач=[&] | Конец элемента имя=[к] знач=[]
+DTD.ENTITY.CHAR_REF	Начало элемента имя=[к] знач=[] | Текст имя=[#text] знач=[A] | Конец элемента имя=[к] знач=[]
+DTD.ENTITY.UNDECLARED	<ошибка>
+DTD.ENTITY.EMPTY_SUBSET	<ошибка>
+DTD.ENTITY.EXTERNAL_DTD	<ошибка>
+DTD.ENTITY.NESTED_UNDECLARED	<ошибка>
+DTD.ENTITY.SELF_DECL	Начало элемента имя=[к] знач=[] | Конец элемента имя=[к] знач=[]
+DTD.ENTITY.SELF_USE	<ошибка>
+DTD.ENTITY.MUTUAL_DECL	Начало элемента имя=[к] знач=[] | Конец элемента имя=[к] знач=[]
+DTD.ATTR.SIMPLE	[х]
+DTD.ATTR.NESTED	[ху]
+DTD.ATTR.CHAR_REF	[A]
+DTD.ATTR.AMP	[&]
+DTD.ATTR.QUOT	["]
+DTD.ATTR.APOS_VALUE	[х]
+DTD.ATTR.EMPTY	[]
+DTD.ATTR.DUPLICATE	[раз]
+DTD.ATTR.MARKUP	<ошибка>
+DTD.ATTR.EXTERNAL	<ошибка>
+DTD.ATTR.UNDECLARED	<ошибка>
+DTD.ATTR.NESTED_UNDECLARED	<ошибка>
+DTD.ATTR.RECURSION	<ошибка>
+DTD.DOM.CHILDREN	Текст имя=[#text] | Ссылка на сущность имя=[е] | Текст имя=[#text]
+DTD.DOM.ROOT_TEXT	[раздва]
+DTD.DOM.WRITE_ROOT	[<к>раз&е;два</к>]
+DTD.DOM.WRITE_ROOT_LAST	[<к>раз&е;</к>]
+DTD.DOM.REF_NAME	е
+DTD.DOM.REF_VALUE	Не определено
+DTD.DOM.REF_LOCAL	[||]
+DTD.DOM.REF_PARENT	к
+DTD.DOM.REF_TYPE	Ссылка на сущность DOM
+DTD.DOM.REF_STRING	СсылкаНаСущностьDOM
+DTD.DOM.REF_TYPE_BY_NAME	Ссылка на сущность DOM
+DTD.DOM.REF_TYPE_BY_ENGLISH	Ссылка на сущность DOM

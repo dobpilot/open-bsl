@@ -4149,6 +4149,14 @@ fn read_text_only(parser: &mut crate::xml::XmlParser, head: &ElementHead) -> RtR
             crate::xml::XmlEvent::ElementEnd { .. }
             | crate::xml::XmlEvent::ProcessingInstruction { .. }
             | crate::xml::XmlEvent::Comment(_) => {}
+            // Ссылку на сущность разборщик отдаёт узлом, а не текстом:
+            // подставить её значение здесь нечем, а молча потерять —
+            // испортить прочитанное.
+            crate::xml::XmlEvent::EntityReference { name } => {
+                return Err(RtError::Xdto(format!(
+                    "ссылка на сущность «&{name};» при чтении XDTO не поддерживается"
+                )))
+            }
         }
     }
 }
@@ -4209,6 +4217,14 @@ fn read_open(parser: &mut crate::xml::XmlParser, head: &ElementHead) -> RtResult
             crate::xml::XmlEvent::ElementEnd { .. }
             | crate::xml::XmlEvent::ProcessingInstruction { .. }
             | crate::xml::XmlEvent::Comment(_) => {}
+            // Ссылку на сущность разборщик отдаёт узлом, а не текстом:
+            // подставить её значение здесь нечем, а молча потерять —
+            // испортить прочитанное.
+            crate::xml::XmlEvent::EntityReference { name } => {
+                return Err(RtError::Xdto(format!(
+                    "ссылка на сущность «&{name};» при чтении XDTO не поддерживается"
+                )))
+            }
         }
     }
 }
@@ -4338,6 +4354,14 @@ fn read_object(
             crate::xml::XmlEvent::ElementEnd { .. }
             | crate::xml::XmlEvent::ProcessingInstruction { .. }
             | crate::xml::XmlEvent::Comment(_) => {}
+            // Ссылку на сущность разборщик отдаёт узлом, а не текстом:
+            // подставить её значение здесь нечем, а молча потерять —
+            // испортить прочитанное.
+            crate::xml::XmlEvent::EntityReference { name } => {
+                return Err(RtError::Xdto(format!(
+                    "ссылка на сущность «&{name};» при чтении XDTO не поддерживается"
+                )))
+            }
         }
     }
 

@@ -160,11 +160,35 @@
 //!
 //! # Сознательные расхождения
 //!
-//! * **Узел `ОпределениеТипаДокумента` не строится.** Платформа кладёт в
-//!   документ узел для `<!DOCTYPE а SYSTEM "вн.dtd">` (`ИмяУзла` — `а`,
-//!   `СистемныйИдентификатор` — `вн.dtd`), но разбор внутреннего
-//!   подмножества DTD — отдельная работа, а придумывать половину узла
-//!   нельзя. Здесь `<!DOCTYPE ...>` пропускается, как и в `ЧтениеXML`.
+//! * **Узел `ОпределениеТипаДокумента` не строится.** Платформа кладёт его
+//!   в документ при ЛЮБОЙ форме объявления — голой, с `SYSTEM` и с
+//!   внутренним подмножеством, — первым ребёнком перед корневым элементом.
+//!   Измерено на `<!DOCTYPE к PUBLIC "-//A//DTD B//EN" "вн.dtd" [ … ]>`:
+//!   `ИмяУзла` и `Имя` — `к`, `ЗначениеУзла` и `ТекстовоеСодержимое` —
+//!   `Неопределено`, `СистемныйИдентификатор` — `вн.dtd`,
+//!   `ПубличныйИдентификатор` — `-//A//DTD B//EN`, `Сущности` и `Нотации` —
+//!   `КоллекцияАтрибутовDOM`, `РодительскийУзел` — `#document`, а
+//!   `ВнутреннееПодмножество` — ПУСТАЯ строка даже тогда, когда
+//!   подмножество есть. `ДочерниеУзлы.Количество()` при этом отдаёт 1, но
+//!   `ПервыйДочерний` у такого узла — ошибка. `ЗаписьDOM` пишет объявление
+//!   обратно БЕЗ подмножества (`<!DOCTYPE к>`, `<!DOCTYPE к SYSTEM
+//!   "вн.dtd">`), а `Док.ОпределениеТипаДокумента` отдаёт сам узел. Строить
+//!   его здесь — отдельная работа (свой вид узла, четыре свойства и две
+//!   коллекции); замеры сложены сюда, чтобы её не начинать с них. Пока
+//!   `<!DOCTYPE ...>` в дерево не попадает, как и в `ЧтениеXML`.
+//! * **Значение атрибута, пришедшее из сущности.** Платформа хранит в
+//!   атрибуте саму ссылку и такой же ссылкой пишет его обратно
+//!   (`<к з="&е;"/>` после разбора и записи — снова `з="&е;"`), тогда как
+//!   `ЧтениеXML.ЗначениеАтрибута` отдаёт подставленный текст. Здесь
+//!   подстановка происходит в разборщике, поэтому в дереве лежит уже текст
+//!   замены, и запись отдаёт его. В СОДЕРЖИМОМ расхождения нет: там ссылка
+//!   — узел [`DomKind::EntityReference`], и писатель возвращает её ссылкой.
+//! * **`ТекстовоеСодержимое` узла-ссылки.** Платформа на нём ЗАВИСАЕТ —
+//!   прогон снят по таймауту, вывода нет, причём сущность в пробе была
+//!   объявленной и нерекурсивной. Здесь отдаётся пустая строка:
+//!   воспроизводить зависание незачем. `ДочерниеУзлы.Количество()` у
+//!   ссылки платформа считает единицей, но `ПервыйДочерний` тоже отдаёт
+//!   ошибкой; здесь детей у неё нет.
 //! * **Дети у объявления `xmlns`.** У обычного атрибута `ДочерниеУзлы` —
 //!   один текстовый узел со значением (измерено). У атрибута `xmlns:к`
 //!   платформа отвечает нестабильно: на одном и том же документе в двух
@@ -219,8 +243,7 @@ const XMLNS_URI: &str = "http://www.w3.org/2000/xmlns/";
 /// Вид узла. Ровно те виды, которые умеют появиться в дереве: РАЗБОР секции
 /// CDATA не создаёт (она вливается в текст — измерено), но
 /// `СоздатьСекциюCDATA` создаёт, поэтому вид у неё свой. Определения типа
-/// документа, фрагмента и ссылки на сущность здесь нет по причинам из
-/// заголовка модуля.
+/// документа и фрагмента здесь нет по причинам из заголовка модуля.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DomKind {
     Document,
@@ -230,6 +253,9 @@ pub enum DomKind {
     CdataSection,
     Comment,
     ProcessingInstruction,
+    /// Ссылка на объявленную сущность: `<к>раз&е;два</к>` при объявленной
+    /// `е` даёт троих детей, средний из которых — этот узел (измерено).
+    EntityReference,
 }
 
 impl DomKind {
@@ -243,6 +269,7 @@ impl DomKind {
             DomKind::CdataSection => EnumValue::DomCdataSection,
             DomKind::Comment => EnumValue::DomComment,
             DomKind::ProcessingInstruction => EnumValue::DomProcessingInstruction,
+            DomKind::EntityReference => EnumValue::DomEntityReference,
         }
     }
 
@@ -414,6 +441,10 @@ impl DomNode {
                 self.value.borrow().clone().unwrap_or_default()
             }
             DomKind::ProcessingInstruction => self.value.borrow().clone().unwrap_or_default(),
+            // У ссылки на сущность собственного текста нет: в
+            // `ТекстовоеСодержимое` родителя она не даёт ничего (измерено —
+            // `<к>раз&е;два</к>` отдаёт «раздва»).
+            DomKind::EntityReference => String::new(),
         }
     }
 
@@ -736,6 +767,15 @@ fn build_into(doc: &Rc<DomNode>, parser: &mut XmlParser) -> RtResult<()> {
                 let parent = stack.last().cloned().unwrap_or_else(|| doc.clone());
                 DomNode::append(&parent, &node, doc);
             }
+            XmlEvent::EntityReference { name } => {
+                // ИЗМЕРЕНО: ссылка ложится узлом РЯДОМ с текстом
+                // (`раз&е;два` — три ребёнка), `ИмяУзла` у неё — имя
+                // сущности, `ЗначениеУзла` — `Неопределено`, локальное имя,
+                // префикс и URI пусты, а родитель — окружающий элемент.
+                let node = DomNode::new(DomKind::EntityReference, name, String::new(), None);
+                let parent = stack.last().cloned().unwrap_or_else(|| doc.clone());
+                DomNode::append(&parent, &node, doc);
+            }
         }
     }
     Ok(())
@@ -960,9 +1000,10 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
                 opt_str(node.value.borrow().as_ref())
             }
             DomKind::Attribute => str_value(&node.attr_value()),
-            DomKind::Document | DomKind::Element | DomKind::ProcessingInstruction => {
-                BslValue::Undefined
-            }
+            DomKind::Document
+            | DomKind::Element
+            | DomKind::ProcessingInstruction
+            | DomKind::EntityReference => BslValue::Undefined,
         });
     }
     if is("ТекстовоеСодержимое", "TextContent") {
@@ -972,9 +1013,15 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
             // остальных — склейка текста.
             DomKind::Document | DomKind::ProcessingInstruction => BslValue::Undefined,
             DomKind::Comment => opt_str(node.value.borrow().as_ref()),
-            DomKind::Attribute | DomKind::Element | DomKind::Text | DomKind::CdataSection => {
-                str_value(&node.text_content())
-            }
+            DomKind::Attribute
+            | DomKind::Element
+            | DomKind::Text
+            | DomKind::CdataSection
+            // РАСХОЖДЕНИЕ: платформа на `ТекстовоеСодержимое` ссылки на
+            // сущность ЗАВИСАЕТ — прогон снят по таймауту, вывода нет
+            // (проверено на объявленной, НЕрекурсивной сущности). Здесь
+            // отдаётся пустая строка: воспроизводить зависание незачем.
+            | DomKind::EntityReference => str_value(&node.text_content()),
         });
     }
     if is("ЛокальноеИмя", "LocalName") {
@@ -1526,12 +1573,17 @@ fn may_contain(parent: DomKind, child: DomKind) -> bool {
                 | DomKind::CdataSection
                 | DomKind::Comment
                 | DomKind::ProcessingInstruction
+                | DomKind::EntityReference
         ),
         // У атрибута дети — текст: ИЗМЕРЕНО, что дописанный текстовый узел
         // платформа принимает и дописывает им значение атрибута.
         DomKind::Attribute => child == DomKind::Text,
         DomKind::Text | DomKind::CdataSection | DomKind::Comment => false,
         DomKind::ProcessingInstruction => false,
+        // Детей у ссылки на сущность здесь нет: платформа сообщает о них
+        // (`ДочерниеУзлы.Количество()` — 1), но взять первого не даёт —
+        // `ПервыйДочерний` отвечает ошибкой. См. заголовок модуля.
+        DomKind::EntityReference => false,
     }
 }
 
@@ -1982,7 +2034,10 @@ pub fn set_property(obj: &BslValue, name: &str, val: &BslValue) -> RtResult<()> 
             // Элемент, документ и инструкция обработки: значения у них нет,
             // и присваивание платформа молча проглатывает (измерено на
             // элементе).
-            DomKind::Element | DomKind::Document | DomKind::ProcessingInstruction => Ok(()),
+            DomKind::Element
+            | DomKind::Document
+            | DomKind::ProcessingInstruction
+            | DomKind::EntityReference => Ok(()),
         };
     }
     if is("Данные", "Data") {
@@ -2005,7 +2060,7 @@ pub fn set_property(obj: &BslValue, name: &str, val: &BslValue) -> RtResult<()> 
                 DomNode::set_text_children(&node, &text("ТекстовоеСодержимое")?, &doc);
                 Ok(())
             }
-            DomKind::Text | DomKind::CdataSection | DomKind::Comment => {
+            DomKind::Text | DomKind::CdataSection | DomKind::Comment | DomKind::EntityReference => {
                 *node.value.borrow_mut() = Some(text("ТекстовоеСодержимое")?);
                 Ok(())
             }
@@ -2150,6 +2205,9 @@ impl DomSerializer<'_> {
             DomKind::ProcessingInstruction => {
                 self.w.write_processing_instruction(&node.name, &value)
             }
+            // ИЗМЕРЕНО: ссылка возвращается в текст такой же ссылкой —
+            // дерево от `<к>раз&е;два</к>` писатель отдаёт байт в байт.
+            DomKind::EntityReference => self.w.write_entity_reference(&node.name),
             // ИЗМЕРЕНО: атрибут не пишется вовсе — результат пустой, и это
             // не ошибка.
             DomKind::Attribute => Ok(()),
