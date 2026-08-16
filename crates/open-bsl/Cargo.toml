@@ -5,8 +5,8 @@ edition.workspace = true
 license.workspace = true
 
 [features]
-default = ["regexp"]
-binbuf = []
+default = ["binbuf", "regexp"]
+binbuf = ["dep:bsl-binbuf", "bsl-vm/binbuf"]
 stream = []
 json = []
 xml = []
@@ -22,4 +22,5 @@ bsl-rt = { path = "../bsl-rt" }
 bsl-sema = { path = "../bsl-sema" }
 bsl-syntax = { path = "../bsl-syntax" }
 bsl-vm = { path = "../bsl-vm", default-features = false }
+bsl-binbuf = { path = "../bsl-binbuf", optional = true }
 bsl-regexp = { path = "../bsl-regexp", optional = true }

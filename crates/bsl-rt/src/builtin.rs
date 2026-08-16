@@ -1606,18 +1606,20 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         )),
         BuiltinFn::SplitBinaryData => args[0].binary_data_split(&args[1]),
         BuiltinFn::ConcatBinaryData => args[0].binary_data_combine(),
-        BuiltinFn::BitwiseAnd => crate::bitops::and(&args[0], &args[1]),
-        BuiltinFn::BitwiseOr => crate::bitops::or(&args[0], &args[1]),
-        BuiltinFn::BitwiseNot => crate::bitops::not(&args[0]),
-        BuiltinFn::BitwiseAndNot => crate::bitops::and_not(&args[0], &args[1]),
-        BuiltinFn::BitwiseXor => crate::bitops::xor(&args[0], &args[1]),
-        BuiltinFn::BitwiseShiftLeft => crate::bitops::shift_left(&args[0], &args[1]),
-        BuiltinFn::BitwiseShiftRight => crate::bitops::shift_right(&args[0], &args[1]),
-        BuiltinFn::CheckBit => crate::bitops::check_bit(&args[0], &args[1]),
-        BuiltinFn::CheckByBitMask => crate::bitops::check_by_bit_mask(&args[0], &args[1]),
-        BuiltinFn::SetBit => crate::bitops::set_bit(&args[0], &args[1], &args[2]),
-        BuiltinFn::NumberFromHexString => crate::bitops::number_from_hex_string(&args[0]),
-        BuiltinFn::NumberFromBinaryString => crate::bitops::number_from_binary_string(&args[0]),
+        BuiltinFn::BitwiseAnd
+        | BuiltinFn::BitwiseOr
+        | BuiltinFn::BitwiseNot
+        | BuiltinFn::BitwiseAndNot
+        | BuiltinFn::BitwiseXor
+        | BuiltinFn::BitwiseShiftLeft
+        | BuiltinFn::BitwiseShiftRight
+        | BuiltinFn::CheckBit
+        | BuiltinFn::CheckByBitMask
+        | BuiltinFn::SetBit
+        | BuiltinFn::NumberFromHexString
+        | BuiltinFn::NumberFromBinaryString => Err(RtError::Component(
+            "побитовые операции выполняются компонентом bsl-binbuf".to_string(),
+        )),
         BuiltinFn::GetBinaryDataFromString => crate::binbuf::binary_data_from_string(args),
         BuiltinFn::GetBinaryDataBufferFromString => crate::binbuf::binary_buffer_from_string(args),
         BuiltinFn::GetStringFromBinaryData => crate::binbuf::string_from_binary_data(args),

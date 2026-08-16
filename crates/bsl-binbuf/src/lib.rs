@@ -9,7 +9,7 @@
 //! Всё, что здесь описано, снято фикстурой `tests/conformance/fixtures/
 //! binary-bitops.bsl`; краевые случаи этого семейства платформа отвергает
 //! ПЕРЕХВАТЫВАЕМЫМ исключением, а не гибелью сеанса, — в отличие от записи в
-//! байт буфера (см. заголовок [`crate::binbuf`]), поэтому в фикстуре стоят и
+//! байт `БуфераДвоичныхДанных`, поэтому в фикстуре стоят и
 //! они.
 //!
 //! * Операнд побитовых — целое `0..=4294967295`. Отрицательное, дробное и
@@ -41,7 +41,10 @@
 
 use bsl_number::BslNumber;
 
-use crate::{BslValue, RtError, RtResult};
+use bsl_rt::{
+    Arity, BslValue, CallContext, FunctionCode, FunctionDescriptor, FunctionKind,
+    LibraryDependency, LibraryDescriptor, RtError, RtResult,
+};
 
 /// Операнд побитовой функции: целое `0..=4294967295` (измерено).
 ///
@@ -307,9 +310,175 @@ fn parse_radix(
     Ok(BslValue::Number(acc))
 }
 
+fn call_and(_context: &mut CallContext<'_>, args: &[BslValue]) -> RtResult<BslValue> {
+    and(&args[0], &args[1])
+}
+
+fn call_or(_context: &mut CallContext<'_>, args: &[BslValue]) -> RtResult<BslValue> {
+    or(&args[0], &args[1])
+}
+
+fn call_not(_context: &mut CallContext<'_>, args: &[BslValue]) -> RtResult<BslValue> {
+    not(&args[0])
+}
+
+fn call_and_not(_context: &mut CallContext<'_>, args: &[BslValue]) -> RtResult<BslValue> {
+    and_not(&args[0], &args[1])
+}
+
+fn call_xor(_context: &mut CallContext<'_>, args: &[BslValue]) -> RtResult<BslValue> {
+    xor(&args[0], &args[1])
+}
+
+fn call_shift_left(_context: &mut CallContext<'_>, args: &[BslValue]) -> RtResult<BslValue> {
+    shift_left(&args[0], &args[1])
+}
+
+fn call_shift_right(_context: &mut CallContext<'_>, args: &[BslValue]) -> RtResult<BslValue> {
+    shift_right(&args[0], &args[1])
+}
+
+fn call_check_bit(_context: &mut CallContext<'_>, args: &[BslValue]) -> RtResult<BslValue> {
+    check_bit(&args[0], &args[1])
+}
+
+fn call_check_by_bit_mask(_context: &mut CallContext<'_>, args: &[BslValue]) -> RtResult<BslValue> {
+    check_by_bit_mask(&args[0], &args[1])
+}
+
+fn call_set_bit(_context: &mut CallContext<'_>, args: &[BslValue]) -> RtResult<BslValue> {
+    set_bit(&args[0], &args[1], &args[2])
+}
+
+fn call_number_from_hex(_context: &mut CallContext<'_>, args: &[BslValue]) -> RtResult<BslValue> {
+    number_from_hex_string(&args[0])
+}
+
+fn call_number_from_binary(
+    _context: &mut CallContext<'_>,
+    args: &[BslValue],
+) -> RtResult<BslValue> {
+    number_from_binary_string(&args[0])
+}
+
+const FUNCTIONS: &[FunctionDescriptor] = &[
+    FunctionDescriptor {
+        code: FunctionCode::new(1),
+        names: &["ПобитовоеИ", "BitwiseAnd"],
+        arity: Arity::exact(2),
+        kind: FunctionKind::Function,
+        call: call_and,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(2),
+        names: &["ПобитовоеИли", "BitwiseOr"],
+        arity: Arity::exact(2),
+        kind: FunctionKind::Function,
+        call: call_or,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(3),
+        names: &["ПобитовоеНе", "BitwiseNot"],
+        arity: Arity::exact(1),
+        kind: FunctionKind::Function,
+        call: call_not,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(4),
+        names: &["ПобитовоеИНе", "BitwiseAndNot"],
+        arity: Arity::exact(2),
+        kind: FunctionKind::Function,
+        call: call_and_not,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(5),
+        names: &["ПобитовоеИсключительноеИли", "BitwiseXor"],
+        arity: Arity::exact(2),
+        kind: FunctionKind::Function,
+        call: call_xor,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(6),
+        names: &["ПобитовыйСдвигВлево", "BitwiseShiftLeft"],
+        arity: Arity::exact(2),
+        kind: FunctionKind::Function,
+        call: call_shift_left,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(7),
+        names: &["ПобитовыйСдвигВправо", "BitwiseShiftRight"],
+        arity: Arity::exact(2),
+        kind: FunctionKind::Function,
+        call: call_shift_right,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(8),
+        names: &["ПроверитьБит", "CheckBit"],
+        arity: Arity::exact(2),
+        kind: FunctionKind::Function,
+        call: call_check_bit,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(9),
+        names: &["ПроверитьПоБитовойМаске", "CheckByBitMask"],
+        arity: Arity::exact(2),
+        kind: FunctionKind::Function,
+        call: call_check_by_bit_mask,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(10),
+        names: &["УстановитьБит", "SetBit"],
+        arity: Arity::exact(3),
+        kind: FunctionKind::Function,
+        call: call_set_bit,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(11),
+        names: &["ЧислоИзШестнадцатеричнойСтроки", "NumberFromHexString"],
+        arity: Arity::exact(1),
+        kind: FunctionKind::Function,
+        call: call_number_from_hex,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(12),
+        names: &["ЧислоИзДвоичнойСтроки", "NumberFromBinaryString"],
+        arity: Arity::exact(1),
+        kind: FunctionKind::Function,
+        call: call_number_from_binary,
+    },
+];
+
+/// Дескриптор статически подключаемого компонента двоичных операций.
+///
+/// Первая стадия выноса содержит независимые глобальные функции. Объекты
+/// двоичных данных и буфера остаются в переходном слое `bsl-rt`, пока
+/// `bsl-stream`, PDF и XDTO не переведены на общий двоичный протокол.
+pub const fn library() -> LibraryDescriptor {
+    LibraryDescriptor {
+        package: env!("CARGO_PKG_NAME"),
+        version: env!("CARGO_PKG_VERSION"),
+        dependencies: &[LibraryDependency {
+            package: bsl_rt::PACKAGE_NAME,
+            version: bsl_rt::PACKAGE_VERSION,
+        }],
+        functions: FUNCTIONS,
+        constructors: &[],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn component_function_codes_are_static_and_dense() {
+        let codes = library()
+            .functions
+            .iter()
+            .map(|function| function.code.get())
+            .collect::<Vec<_>>();
+        assert_eq!(codes, (1..=12).collect::<Vec<_>>());
+    }
 
     fn n(v: i64) -> BslValue {
         BslValue::Number(BslNumber::from_i64(v))
@@ -320,7 +489,7 @@ mod tests {
     }
 
     fn s(v: &str) -> BslValue {
-        BslValue::Str(crate::string::BslString::from_str(v))
+        BslValue::Str(bsl_rt::BslString::from_str(v))
     }
 
     fn num_of(v: &BslValue) -> String {

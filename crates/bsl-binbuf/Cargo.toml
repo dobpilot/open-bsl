@@ -1,0 +1,9 @@
+[package]
+name = "bsl-binbuf"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+bsl-number = { path = "../bsl-number" }
+bsl-rt = { path = "../bsl-rt" }

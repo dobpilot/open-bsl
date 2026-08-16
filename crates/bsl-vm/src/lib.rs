@@ -2819,6 +2819,30 @@ fn call_builtin_with_format(
             };
             bsl_rt::write_json_builtin(args, runtime_shapes, Some(&mut call))
         }
+        #[cfg(feature = "binbuf")]
+        BuiltinFn::BitwiseAnd => bsl_binbuf::and(&args[0], &args[1]),
+        #[cfg(feature = "binbuf")]
+        BuiltinFn::BitwiseOr => bsl_binbuf::or(&args[0], &args[1]),
+        #[cfg(feature = "binbuf")]
+        BuiltinFn::BitwiseNot => bsl_binbuf::not(&args[0]),
+        #[cfg(feature = "binbuf")]
+        BuiltinFn::BitwiseAndNot => bsl_binbuf::and_not(&args[0], &args[1]),
+        #[cfg(feature = "binbuf")]
+        BuiltinFn::BitwiseXor => bsl_binbuf::xor(&args[0], &args[1]),
+        #[cfg(feature = "binbuf")]
+        BuiltinFn::BitwiseShiftLeft => bsl_binbuf::shift_left(&args[0], &args[1]),
+        #[cfg(feature = "binbuf")]
+        BuiltinFn::BitwiseShiftRight => bsl_binbuf::shift_right(&args[0], &args[1]),
+        #[cfg(feature = "binbuf")]
+        BuiltinFn::CheckBit => bsl_binbuf::check_bit(&args[0], &args[1]),
+        #[cfg(feature = "binbuf")]
+        BuiltinFn::CheckByBitMask => bsl_binbuf::check_by_bit_mask(&args[0], &args[1]),
+        #[cfg(feature = "binbuf")]
+        BuiltinFn::SetBit => bsl_binbuf::set_bit(&args[0], &args[1], &args[2]),
+        #[cfg(feature = "binbuf")]
+        BuiltinFn::NumberFromHexString => bsl_binbuf::number_from_hex_string(&args[0]),
+        #[cfg(feature = "binbuf")]
+        BuiltinFn::NumberFromBinaryString => bsl_binbuf::number_from_binary_string(&args[0]),
         #[cfg(feature = "regexp")]
         BuiltinFn::StrFindByRegex => bsl_regexp::find(args),
         #[cfg(feature = "regexp")]

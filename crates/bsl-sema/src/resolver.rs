@@ -1681,6 +1681,18 @@ impl<'a> Resolver<'a> {
                                 | bsl_rt::BuiltinFn::StrFindAllByRegex
                                 | bsl_rt::BuiltinFn::StrReplaceByRegex
                                 | bsl_rt::BuiltinFn::StrLikeByRegex
+                                | bsl_rt::BuiltinFn::BitwiseAnd
+                                | bsl_rt::BuiltinFn::BitwiseOr
+                                | bsl_rt::BuiltinFn::BitwiseNot
+                                | bsl_rt::BuiltinFn::BitwiseAndNot
+                                | bsl_rt::BuiltinFn::BitwiseXor
+                                | bsl_rt::BuiltinFn::BitwiseShiftLeft
+                                | bsl_rt::BuiltinFn::BitwiseShiftRight
+                                | bsl_rt::BuiltinFn::CheckBit
+                                | bsl_rt::BuiltinFn::CheckByBitMask
+                                | bsl_rt::BuiltinFn::SetBit
+                                | bsl_rt::BuiltinFn::NumberFromHexString
+                                | bsl_rt::BuiltinFn::NumberFromBinaryString
                         )
                     {
                         return Err(SemaError::UndefinedFunction(name.clone()));

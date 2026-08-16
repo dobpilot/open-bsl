@@ -134,6 +134,8 @@ impl EngineBuilder {
     pub fn new() -> Self {
         let mut runtime = bsl_rt::RuntimeBuilder::new();
         runtime.register(bsl_rt::core_library());
+        #[cfg(feature = "binbuf")]
+        runtime.register(bsl_binbuf::library());
         #[cfg(feature = "regexp")]
         runtime.register(bsl_regexp::library());
         Self { runtime }
@@ -422,6 +424,26 @@ mod tests {
             engine.new_state().run(&module).unwrap(),
             Value::Boolean(true)
         ));
+    }
+
+    #[cfg(feature = "binbuf")]
+    #[test]
+    fn binbuf_feature_records_and_executes_bit_operations_as_component_calls() {
+        let engine = Engine::builder().build().unwrap();
+        let module = engine.compile("Возврат ПобитовоеИ(12, 10);").unwrap();
+
+        assert_eq!(module.requirements().len(), 2);
+        assert_eq!(module.requirements()[1].package, "bsl-binbuf");
+        assert_eq!(module.requirements()[1].version, env!("CARGO_PKG_VERSION"));
+        assert_eq!(engine.new_state().run(&module).unwrap().to_string(), "8");
+        assert!(module.bytecode().unwrap().contains("CallComponent"));
+    }
+
+    #[cfg(not(feature = "binbuf"))]
+    #[test]
+    fn missing_binbuf_feature_is_a_compile_error_for_bit_operations() {
+        let engine = Engine::builder().build().unwrap();
+        assert!(engine.compile("Возврат ПобитовоеИ(12, 10);").is_err());
     }
 
     #[cfg(feature = "regexp")]
