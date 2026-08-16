@@ -1354,11 +1354,27 @@ fn step(
             } => {
                 let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
                 let call = linked.function(func_id, pc)?;
-                let mut context = bsl_rt::CallContext::new(
+                let mut function_caller =
+                    |name: &str,
+                     call_args: Vec<BslValue>,
+                     stdout: &mut dyn Write,
+                     stderr: &mut dyn Write| {
+                        let mut nested_host = HostIo { stdout, stderr };
+                        call_module_function_with_host(
+                            program,
+                            stack,
+                            name,
+                            call_args,
+                            linked,
+                            &mut nested_host,
+                        )
+                    };
+                let mut context = bsl_rt::CallContext::with_function_caller(
                     runtime_shapes,
                     &mut *host.stdout,
                     &mut *host.stderr,
                     bsl_format::format_value,
+                    &mut function_caller,
                 );
                 let value = call(&mut context, args.as_slice())?;
                 let destination = frames[frame_idx].reg_index(dst);
@@ -1390,7 +1406,13 @@ fn step(
             } => {
                 let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
                 let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
-                let v = if let Some(object) = ov.object_ref() {
+                #[cfg(feature = "json")]
+                let legacy_json = bsl_json::call_legacy_method(method, &ov, args.as_slice());
+                #[cfg(not(feature = "json"))]
+                let legacy_json: Option<Result<BslValue, RtError>> = None;
+                let v = if let Some(result) = legacy_json {
+                    result?
+                } else if let Some(object) = ov.object_ref() {
                     let mut context = bsl_rt::CallContext::new(
                         runtime_shapes,
                         &mut *host.stdout,
@@ -1663,31 +1685,71 @@ fn step_cold(
             frames[frame_idx].pc += 1;
         }
         Instr::NewJsonReader { dst } => {
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, BslValue::new_json_reader())?;
-            frames[frame_idx].pc += 1;
+            #[cfg(not(feature = "json"))]
+            {
+                let _ = dst;
+                return Err(RtError::Component(
+                    "ЧтениеJSON требует компонент bsl-json".to_string(),
+                ));
+            }
+            #[cfg(feature = "json")]
+            {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, bsl_json::new_json_reader())?;
+                frames[frame_idx].pc += 1;
+            }
         }
         Instr::NewJsonWriter { dst } => {
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, BslValue::new_json_writer())?;
-            frames[frame_idx].pc += 1;
+            #[cfg(not(feature = "json"))]
+            {
+                let _ = dst;
+                return Err(RtError::Component(
+                    "ЗаписьJSON требует компонент bsl-json".to_string(),
+                ));
+            }
+            #[cfg(feature = "json")]
+            {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, bsl_json::new_json_writer())?;
+                frames[frame_idx].pc += 1;
+            }
         }
         Instr::NewJsonWriterSettings {
             dst,
             line_break,
             indent,
         } => {
-            let lb = reg_load(stack, frames[frame_idx].reg_index(line_break))?;
-            let ind = reg_load(stack, frames[frame_idx].reg_index(indent))?;
-            let settings = BslValue::new_json_writer_settings(&lb, &ind)?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, settings)?;
-            frames[frame_idx].pc += 1;
+            #[cfg(not(feature = "json"))]
+            {
+                let _ = (dst, line_break, indent);
+                return Err(RtError::Component(
+                    "ПараметрыЗаписиJSON требует компонент bsl-json".to_string(),
+                ));
+            }
+            #[cfg(feature = "json")]
+            {
+                let lb = reg_load(stack, frames[frame_idx].reg_index(line_break))?;
+                let ind = reg_load(stack, frames[frame_idx].reg_index(indent))?;
+                let settings = bsl_json::new_json_writer_settings(&[lb, ind])?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, settings)?;
+                frames[frame_idx].pc += 1;
+            }
         }
         Instr::NewJsonSerializerSettings { dst } => {
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, BslValue::new_json_serializer_settings())?;
-            frames[frame_idx].pc += 1;
+            #[cfg(not(feature = "json"))]
+            {
+                let _ = dst;
+                return Err(RtError::Component(
+                    "НастройкиСериализацииJSON требует компонент bsl-json".to_string(),
+                ));
+            }
+            #[cfg(feature = "json")]
+            {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, bsl_json::new_json_serializer_settings())?;
+                frames[frame_idx].pc += 1;
+            }
         }
         Instr::NewSpreadDocument { dst } => {
             let d = frames[frame_idx].reg_index(dst);
@@ -2017,8 +2079,18 @@ fn step_cold(
         }
         Instr::CloseText { dst, obj } => {
             let obj_idx = frames[frame_idx].reg_index(obj);
-            let v =
-                at(stack, obj_idx, "чтение объекта за границей стека значений")?.close_object()?;
+            let object = at(stack, obj_idx, "чтение объекта за границей стека значений")?;
+            let v = if let Some(extension) = object.object_ref() {
+                let mut context = bsl_rt::CallContext::new(
+                    runtime_shapes,
+                    &mut *host.stdout,
+                    &mut *host.stderr,
+                    bsl_format::format_value,
+                );
+                extension.call_method("Закрыть", &[], &mut context)?
+            } else {
+                object.close_object()?
+            };
             let d = frames[frame_idx].reg_index(dst);
             reg_store(stack, d, v)?;
             frames[frame_idx].pc += 1;
@@ -2798,6 +2870,8 @@ fn call_builtin_with_format(
     host: &mut HostIo<'_>,
 ) -> Result<BslValue, RtError> {
     use bsl_rt::BuiltinFn;
+    #[cfg(not(feature = "json"))]
+    let _ = (program, stack, linked);
     // Проверка по МАКСИМУМУ, а не по минимуму: резолвер добивает
     // необязательные позиции `Неопределено` (см.
     // `BuiltinFn::arity_range`), так что корректный байт-код всегда
@@ -2849,17 +2923,46 @@ fn call_builtin_with_format(
         // Аргументы уже сняты со стека в `CallArgs` (он владеет копиями),
         // поэтому повторно взять стек по `&mut` здесь законно.
         BuiltinFn::ReadJson => {
-            let mut call = |name: &str, call_args: Vec<BslValue>| {
-                call_module_function_with_host(program, stack, name, call_args, linked, host)
-            };
-            bsl_rt::read_json_builtin(args, runtime_shapes, Some(&mut call))
+            #[cfg(not(feature = "json"))]
+            return Err(RtError::Component(
+                "ПрочитатьJSON требует компонент bsl-json".to_string(),
+            ));
+            #[cfg(feature = "json")]
+            {
+                let mut call = |name: &str, call_args: Vec<BslValue>| {
+                    call_module_function_with_host(program, stack, name, call_args, linked, host)
+                };
+                bsl_json::read_json_builtin(args, runtime_shapes, Some(&mut call))
+            }
         }
         BuiltinFn::WriteJson => {
-            let mut call = |name: &str, call_args: Vec<BslValue>| {
-                call_module_function_with_host(program, stack, name, call_args, linked, host)
-            };
-            bsl_rt::write_json_builtin(args, runtime_shapes, Some(&mut call))
+            #[cfg(not(feature = "json"))]
+            return Err(RtError::Component(
+                "ЗаписатьJSON требует компонент bsl-json".to_string(),
+            ));
+            #[cfg(feature = "json")]
+            {
+                let mut call = |name: &str, call_args: Vec<BslValue>| {
+                    call_module_function_with_host(program, stack, name, call_args, linked, host)
+                };
+                bsl_json::write_json_builtin(args, runtime_shapes, Some(&mut call))
+            }
         }
+        #[cfg(feature = "json")]
+        BuiltinFn::WriteJsonDate => bsl_json::write_json_date(&args[0], &args[1], &args[2]),
+        #[cfg(feature = "json")]
+        BuiltinFn::ReadJsonDate => bsl_json::read_json_date(&args[0], &args[1]),
+        #[cfg(feature = "json")]
+        BuiltinFn::WriteJsonValue => bsl_json::write_json_value(&args[0], runtime_shapes),
+        #[cfg(feature = "json")]
+        BuiltinFn::ReadJsonValue => bsl_json::read_json_value(&args[0], runtime_shapes),
+        #[cfg(not(feature = "json"))]
+        BuiltinFn::WriteJsonDate
+        | BuiltinFn::ReadJsonDate
+        | BuiltinFn::WriteJsonValue
+        | BuiltinFn::ReadJsonValue => Err(RtError::Component(
+            "функции JSON требуют компонент bsl-json".to_string(),
+        )),
         #[cfg(feature = "binbuf")]
         BuiltinFn::BitwiseAnd => bsl_binbuf::and(&args[0], &args[1]),
         #[cfg(feature = "binbuf")]
@@ -3707,6 +3810,7 @@ mod tests {
         assert_eq!(v, num("900"));
     }
 
+    #[cfg(feature = "json")]
     #[test]
     fn write_json_of_a_cyclic_structure_is_catchable() {
         // Сквозной вариант юнит-теста из `bsl-rt`: предел глубины JSON
@@ -5953,6 +6057,7 @@ mod tests {
         assert_eq!(v, num("3"));
     }
 
+    #[cfg(feature = "json")]
     #[test]
     fn vychislit_reads_a_property_whose_name_never_appears_in_static_code() {
         // Регрессия, тот же класс бага, что и у
@@ -6433,6 +6538,7 @@ mod tests {
     /// В позиции модуля здесь стоит `Истина`: ИЗМЕРЕНО, что значимо только
     /// её отличие от `Неопределено` (платформа ищет функцию в переданном
     /// модуле, у этого интерпретатора модуль ровно один).
+    #[cfg(feature = "json")]
     #[test]
     fn json_callback_calls_a_real_module_function_on_write() {
         let v = run_src(
@@ -6454,6 +6560,7 @@ mod tests {
     /// `Отказ` — параметр БЕЗ `Знач`, и его значение возвращается из вызова
     /// финальными слотами параметров (см. `call_module_function`). Тест
     /// бьёт именно этот канал: без него отказ не дошёл бы до рантайма.
+    #[cfg(feature = "json")]
     #[test]
     fn json_callback_refusal_travels_back_through_the_parameter_slot() {
         let v = run_src(
@@ -6474,6 +6581,7 @@ mod tests {
 
     /// Функция восстановления зовётся для каждого значения документа, и её
     /// результат попадает в собранное значение.
+    #[cfg(feature = "json")]
     #[test]
     fn json_callback_calls_a_real_module_function_on_read() {
         let v = run_src(
@@ -6494,6 +6602,7 @@ mod tests {
     /// Функция модуля, вызванная из колбэка, видит и меняет МОДУЛЬНЫЕ
     /// переменные — тот же перенос блока, что и у прямого
     /// `call_module_function`.
+    #[cfg(feature = "json")]
     #[test]
     fn json_callback_sees_module_variables() {
         let v = run_src(

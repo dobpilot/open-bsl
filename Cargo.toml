@@ -8,6 +8,7 @@ members = [
     "crates/bsl-binbuf",
     "crates/bsl-regexp",
     "crates/bsl-textdoc",
+    "crates/bsl-json",
     "crates/bsl-format",
     "crates/bsl-bytecode",
     "crates/bsl-vm",

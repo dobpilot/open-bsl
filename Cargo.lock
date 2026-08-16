@@ -118,6 +118,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "bsl-json"
+version = "0.1.0"
+dependencies = [
+ "bsl-rt",
+]
+
+[[package]]
 name = "bsl-number"
 version = "0.1.0"
 dependencies = [
@@ -172,6 +179,7 @@ dependencies = [
  "bsl-binbuf",
  "bsl-bytecode",
  "bsl-format",
+ "bsl-json",
  "bsl-number",
  "bsl-regexp",
  "bsl-rt",
@@ -616,6 +624,7 @@ version = "0.1.0"
 dependencies = [
  "bsl-binbuf",
  "bsl-bytecode",
+ "bsl-json",
  "bsl-regexp",
  "bsl-rt",
  "bsl-sema",

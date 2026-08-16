@@ -15,7 +15,6 @@ mod enums;
 mod fill;
 mod fold;
 mod interner;
-mod json;
 mod locale;
 mod map;
 mod object;
@@ -47,7 +46,8 @@ use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::rc::Rc;
 
-use bsl_number::{BslNumber, NumError};
+pub use bsl_number::BslNumber;
+use bsl_number::NumError;
 
 /// Cargo-идентичность базового runtime-компонента. Её использует манифест
 /// байт-кода; строка берётся из манифеста самого крейта, а не дублируется в
@@ -57,28 +57,25 @@ pub const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub use builtin::{
     call_builtin_fn, call_builtin_fn_ctx, call_builtin_method, call_builtin_method_ctx,
-    read_json_builtin, set_command_line_args, write_json_builtin, BuiltinFn, BuiltinMethod,
-    BUILTIN_FN_NAMES, BUILTIN_METHOD_NAMES,
+    set_command_line_args, BuiltinFn, BuiltinMethod, BUILTIN_FN_NAMES, BUILTIN_METHOD_NAMES,
 };
 pub use component::{
     core_library, Arity, CallContext, ComponentCall, ConstructorCode, ConstructorDescriptor,
-    FunctionCode, FunctionDescriptor, FunctionKind, LibraryDependency, LibraryDescriptor,
-    LibraryKey, LibraryRequirement, RegistryError, RuntimeBuilder, RuntimeRegistry, ValueFormatter,
+    FunctionCaller, FunctionCode, FunctionDescriptor, FunctionKind, LibraryDependency,
+    LibraryDescriptor, LibraryKey, LibraryRequirement, RegistryError, RuntimeBuilder,
+    RuntimeRegistry, ValueFormatter,
 };
 pub use datarw::{
     is_data_reader, is_data_writer, is_read_result, new_data_reader, new_data_writer, DataRwProp,
     DataRwState,
 };
 pub use date::{
-    format_long as format_date_long, format_pattern as format_date_pattern, BslDate, DateBoundary,
-    DatePart, DEFAULT_PATTERN as DEFAULT_DATE_PATTERN,
+    format_long as format_date_long, format_pattern as format_date_pattern,
+    local_date_from_utc_seconds, pseudo_unix_seconds, BslDate, DateBoundary, DatePart,
+    DEFAULT_PATTERN as DEFAULT_DATE_PATTERN, UNIX_EPOCH_SECONDS,
 };
 pub use enums::{lookup_enum, lookup_member, members_of, EnumKind, EnumValue, ENUM_NAMES};
 pub use interner::{NameId, NameInterner};
-pub use json::{
-    JsonCallByName, JsonConvertFn, JsonEvent, JsonLineBreak, JsonParser, JsonRestoreFn, JsonWriter,
-    JsonWriterSettings,
-};
 pub use locale::{Locale, NBSP};
 pub use map::MapData;
 pub use object::{BslObject, StructureStorage};
@@ -99,6 +96,7 @@ pub use stream::{is_stream, write as stream_write, StreamData};
 pub use string::{BslString, MAX_TEMPLATE_ARGS};
 pub use table::{ColumnVstr, ValueTableData};
 pub use types::TypeId;
+pub use tz::local_offset_seconds;
 pub use vstr::{value_from_string_internal, value_to_string_internal};
 pub use zip::{new_archive_reader, new_archive_writer, ArchiveKind, ArchiveState, WriterState};
 // Модель типов XDTO наружу крейта нужна целиком: строит её фабрика,
@@ -472,10 +470,10 @@ impl BslValue {
                 // Имя ЗНАЧЕНИЯ — без пробелов; имя ТИПА («Чтение JSON») в
                 // `types.rs`. Измерено: `Строка(Новый ЧтениеJSON)` даёт
                 // «ЧтениеJSON», а `Строка(ТипЗнч(...))` — «Чтение JSON».
-                BslObject::JsonReader(_) => "ЧтениеJSON",
-                BslObject::JsonWriter(_) => "ЗаписьJSON",
-                BslObject::JsonWriterSettings(_) => "ПараметрыЗаписиJSON",
-                BslObject::JsonSerializerSettings(_) => "НастройкиСериализацииJSON",
+                BslObject::ReservedJsonReader => "ЧтениеJSON",
+                BslObject::ReservedJsonWriter => "ЗаписьJSON",
+                BslObject::ReservedJsonWriterSettings => "ПараметрыЗаписиJSON",
+                BslObject::ReservedJsonSerializerSettings => "НастройкиСериализацииJSON",
                 BslObject::XmlReader(_) => "ЧтениеXML",
                 BslObject::XmlWriter(_) => "ЗаписьXML",
                 BslObject::XmlWriterSettings(_) => "ПараметрыЗаписиXML",
@@ -1309,10 +1307,10 @@ impl BslValue {
                 | BslObject::TextWriter(..)
                 // Объекты JSON — не коллекции: заполненность у них та же,
                 // что у ЗаписьТекста, — объект есть, значит заполнен.
-                | BslObject::JsonReader(..)
-                | BslObject::JsonWriter(..)
-                | BslObject::JsonWriterSettings(..)
-                | BslObject::JsonSerializerSettings(..)
+                | BslObject::ReservedJsonReader
+                | BslObject::ReservedJsonWriter
+                | BslObject::ReservedJsonWriterSettings
+                | BslObject::ReservedJsonSerializerSettings
                 | BslObject::XmlReader(..)
                 | BslObject::XmlWriter(..)
                 | BslObject::XmlWriterSettings(..)
@@ -1500,10 +1498,10 @@ impl BslValue {
                 BslObject::BinaryData(..) => TypeId::BinaryData,
                 BslObject::BinaryBuffer(..) => TypeId::BinaryDataBuffer,
                 BslObject::Uuid(..) => TypeId::Uuid,
-                BslObject::JsonReader(..) => TypeId::JsonReader,
-                BslObject::JsonWriter(..) => TypeId::JsonWriter,
-                BslObject::JsonWriterSettings(..) => TypeId::JsonWriterSettings,
-                BslObject::JsonSerializerSettings(..) => TypeId::JsonSerializerSettings,
+                BslObject::ReservedJsonReader => TypeId::JsonReader,
+                BslObject::ReservedJsonWriter => TypeId::JsonWriter,
+                BslObject::ReservedJsonWriterSettings => TypeId::JsonWriterSettings,
+                BslObject::ReservedJsonSerializerSettings => TypeId::JsonSerializerSettings,
                 BslObject::XmlReader(..) => TypeId::XmlReader,
                 BslObject::XmlWriter(..) => TypeId::XmlWriter,
                 BslObject::XmlWriterSettings(..) => TypeId::XmlWriterSettings,
@@ -1703,8 +1701,6 @@ impl BslValue {
             // `backing = None` внутри `StreamData`.
             stream::close(self)?;
             Ok(BslValue::Undefined)
-        } else if json::is_json_writer(self) {
-            json::close_writer(self)
         } else if xml::is_xml_writer(self) {
             xml::close_writer(self)
         } else if xml::is_xml_reader(self) {
@@ -1845,66 +1841,6 @@ impl BslValue {
         Ok(BslValue::Object(Rc::new(BslObject::XmlWriterSettings(
             settings,
         ))))
-    }
-
-    pub fn new_json_reader() -> Self {
-        BslValue::Object(Rc::new(BslObject::JsonReader(std::cell::RefCell::new(
-            crate::object::JsonReaderState::default(),
-        ))))
-    }
-
-    pub fn new_json_writer() -> Self {
-        BslValue::Object(Rc::new(BslObject::JsonWriter(std::cell::RefCell::new(
-            None,
-        ))))
-    }
-
-    /// `Новый ПараметрыЗаписиJSON([ПереносСтрок][, СимволыОтступа])`.
-    ///
-    /// # Errors
-    ///
-    /// [`RtError::TypeError`], если аргумент не того типа: перенос строк —
-    /// член `ПереносСтрокJSON`, отступ — строка.
-    pub fn new_json_writer_settings(line_break: &BslValue, indent: &BslValue) -> RtResult<Self> {
-        let lb = match line_break {
-            BslValue::Undefined => json::JsonLineBreak::Auto,
-            BslValue::Enum(EnumValue::LineBreakNone) => json::JsonLineBreak::None,
-            BslValue::Enum(EnumValue::LineBreakAuto) => json::JsonLineBreak::Auto,
-            BslValue::Enum(EnumValue::LineBreakWindows) => json::JsonLineBreak::Windows,
-            BslValue::Enum(EnumValue::LineBreakUnix) => json::JsonLineBreak::Unix,
-            _ => {
-                return Err(RtError::TypeError {
-                    expected: "ПереносСтрокJSON",
-                    op: "Новый ПараметрыЗаписиJSON",
-                })
-            }
-        };
-        let indent = match indent {
-            BslValue::Undefined => String::new(),
-            BslValue::Str(s) => s.to_string(),
-            _ => {
-                return Err(RtError::TypeError {
-                    expected: "Строка",
-                    op: "Новый ПараметрыЗаписиJSON",
-                })
-            }
-        };
-        Ok(BslValue::Object(Rc::new(BslObject::JsonWriterSettings(
-            json::JsonWriterSettings {
-                line_break: lb,
-                indent,
-            },
-        ))))
-    }
-
-    /// `Новый НастройкиСериализацииJSON` — БЕЗ аргументов конструктора: все
-    /// три свойства читаются и пишутся отдельно через точку, а не задаются
-    /// на месте создания, как у `СравнениеЗначений`/`Соответствие` выше;
-    /// умолчания — `json::JsonSerializerSettings::default`.
-    pub fn new_json_serializer_settings() -> Self {
-        BslValue::Object(Rc::new(BslObject::JsonSerializerSettings(
-            std::cell::RefCell::new(json::JsonSerializerSettings::default()),
-        )))
     }
 
     /// Создаёт объект `ЗаписьТекста` и открывает файл для буферизованной
@@ -2518,10 +2454,10 @@ impl BslValue {
                 BslObject::PdfPages(_) => pdf::page_count(self),
                 BslObject::PdfAttachments(_) => pdf::attachment_count(self),
                 BslObject::TextWriter(..)
-                | BslObject::JsonReader(..)
-                | BslObject::JsonWriter(..)
-                | BslObject::JsonWriterSettings(..)
-                | BslObject::JsonSerializerSettings(..)
+                | BslObject::ReservedJsonReader
+                | BslObject::ReservedJsonWriter
+                | BslObject::ReservedJsonWriterSettings
+                | BslObject::ReservedJsonSerializerSettings
                 | BslObject::XmlReader(..)
                 | BslObject::XmlWriter(..)
                 | BslObject::XmlWriterSettings(..)
@@ -2848,43 +2784,10 @@ impl BslValue {
                         Err(RtError::UnknownColumn(name.to_string()))
                     }
                 }
-                // `КлючИЗначение.Ключ`/`.Значение` — те же два имени всегда,
-                // ни разу не интернированные как `Shape`/`NameId`, потому
-                // что этот объект заводится ЦЕЛИКОМ в рантайме
-                // (`get_index` на `Соответствие`, см. `map.rs`), а не
-                // компилируется из литерала полей.
-                // `ЧтениеJSON.ТипТекущегоЗначения`/`.ТекущееЗначение` —
-                // СВОЙСТВА, а не методы: читатель помнит, где он стоит,
-                // между обращениями. Резолвятся строкой по той же причине,
-                // что и колонки строки таблицы: набор имён известен только
-                // рантайму.
-                BslObject::JsonReader(_) => {
-                    if name.eq_ignore_ascii_case("ТипТекущегоЗначения")
-                        || name.eq_ignore_ascii_case("CurrentValueType")
-                    {
-                        json::current_value_type(self)
-                    } else if name.eq_ignore_ascii_case("ТекущееЗначение")
-                        || name.eq_ignore_ascii_case("CurrentValue")
-                    {
-                        json::current_value(self)
-                    } else {
-                        Err(RtError::UnknownColumn(name.to_string()))
-                    }
-                }
-                // `ЗаписьJSON.ПроверятьСтруктуру` — единственное свойство
-                // писателя (см. `json::get_check_structure`); английское имя
-                // — предположение по образцу остальных пар этого файла, не
-                // измерено отдельно.
-                BslObject::JsonWriter(_) => {
-                    if name.eq_ignore_ascii_case("ПроверятьСтруктуру")
-                        || name.eq_ignore_ascii_case("CheckStructure")
-                    {
-                        json::get_check_structure(self)
-                    } else {
-                        Err(RtError::UnknownColumn(name.to_string()))
-                    }
-                }
-                BslObject::JsonSerializerSettings(_) => json::get_serializer_setting(self, name),
+                BslObject::ReservedJsonReader
+                | BslObject::ReservedJsonWriter
+                | BslObject::ReservedJsonWriterSettings
+                | BslObject::ReservedJsonSerializerSettings => Err(RtError::NotAnObject),
                 // У буфера `Размер` и `ПорядокБайтов` — именно СВОЙСТВА:
                 // `Б.Размер()` со скобками платформа отвергает (измерено),
                 // поэтому оба живут здесь, а не в таблице методов.
@@ -3067,18 +2970,10 @@ impl BslValue {
                 BslObject::ReservedTextDocument | BslObject::ReservedTextDocParams => {
                     Err(RtError::NotAnObject)
                 }
-                BslObject::JsonWriter(_) => {
-                    if name.eq_ignore_ascii_case("ПроверятьСтруктуру")
-                        || name.eq_ignore_ascii_case("CheckStructure")
-                    {
-                        json::set_check_structure(self, val)
-                    } else {
-                        Err(RtError::UnknownColumn(name.to_string()))
-                    }
-                }
-                BslObject::JsonSerializerSettings(_) => {
-                    json::set_serializer_setting(self, name, val)
-                }
+                BslObject::ReservedJsonReader
+                | BslObject::ReservedJsonWriter
+                | BslObject::ReservedJsonWriterSettings
+                | BslObject::ReservedJsonSerializerSettings => Err(RtError::NotAnObject),
                 // Все три свойства читателя и писателя данных ПИШУТСЯ. Но
                 // `ПорядокБайтов` у ЧИТАТЕЛЯ при этом меняет только то, что
                 // отдаёт геттер: чтение целых по-прежнему идёт порядком из
@@ -3977,10 +3872,10 @@ impl fmt::Display for BslValue {
                 // Буфер, в отличие от двоичных данных, печатается ИМЕНЕМ, а
                 // не содержимым (измерено): дампа байтов у него нет.
                 BslObject::BinaryBuffer(_) => write!(f, "БуферДвоичныхДанных"),
-                BslObject::JsonReader(_) => write!(f, "ЧтениеJSON"),
-                BslObject::JsonWriter(_) => write!(f, "ЗаписьJSON"),
-                BslObject::JsonWriterSettings(_) => write!(f, "ПараметрыЗаписиJSON"),
-                BslObject::JsonSerializerSettings(_) => write!(f, "НастройкиСериализацииJSON"),
+                BslObject::ReservedJsonReader => write!(f, "ЧтениеJSON"),
+                BslObject::ReservedJsonWriter => write!(f, "ЗаписьJSON"),
+                BslObject::ReservedJsonWriterSettings => write!(f, "ПараметрыЗаписиJSON"),
+                BslObject::ReservedJsonSerializerSettings => write!(f, "НастройкиСериализацииJSON"),
                 BslObject::XmlReader(_) => write!(f, "ЧтениеXML"),
                 BslObject::XmlWriter(_) => write!(f, "ЗаписьXML"),
                 BslObject::XmlWriterSettings(_) => write!(f, "ПараметрыЗаписиXML"),

@@ -5,10 +5,10 @@ edition.workspace = true
 license.workspace = true
 
 [features]
-default = ["binbuf", "regexp", "textdoc"]
+default = ["binbuf", "regexp", "textdoc", "json"]
 binbuf = ["dep:bsl-binbuf", "bsl-vm/binbuf"]
 stream = []
-json = []
+json = ["dep:bsl-json", "bsl-vm/json"]
 xml = []
 pdf = []
 zip = []
@@ -25,3 +25,4 @@ bsl-vm = { path = "../bsl-vm", default-features = false }
 bsl-binbuf = { path = "../bsl-binbuf", optional = true }
 bsl-regexp = { path = "../bsl-regexp", optional = true }
 bsl-textdoc = { path = "../bsl-textdoc", optional = true }
+bsl-json = { path = "../bsl-json", optional = true }

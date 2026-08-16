@@ -87,7 +87,7 @@ fn cache() -> &'static Option<TzTable> {
 /// быть отрицательным) для заданного момента — секунды от `1970-01-01`
 /// UTC. Ошибка чтения или разбора `/etc/localtime` — смещение `0` (см.
 /// обзор модуля).
-pub(crate) fn local_offset_seconds(unix_seconds: i64) -> i32 {
+pub fn local_offset_seconds(unix_seconds: i64) -> i32 {
     cache().as_ref().map_or(0, |t| t.offset_for(unix_seconds))
 }
 

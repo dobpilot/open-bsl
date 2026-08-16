@@ -140,6 +140,8 @@ impl EngineBuilder {
         runtime.register(bsl_regexp::library());
         #[cfg(feature = "textdoc")]
         runtime.register(bsl_textdoc::library());
+        #[cfg(feature = "json")]
+        runtime.register(bsl_json::library());
         Self { runtime }
     }
 
@@ -481,6 +483,43 @@ mod tests {
     fn missing_textdoc_feature_is_a_compile_error() {
         let engine = Engine::builder().build().unwrap();
         assert!(engine.compile("Возврат Новый ТекстовыйДокумент;").is_err());
+    }
+
+    #[cfg(feature = "json")]
+    #[test]
+    fn json_feature_registers_functions_objects_and_module_callbacks() {
+        let engine = Engine::builder().build().unwrap();
+        let module = engine
+            .compile(
+                "Функция Преобразовать(Свойство, Значение, Доп, Отказ) Экспорт\n\
+                 Возврат \"<ok>\";\n\
+                 КонецФункции\n\
+                 писатель = Новый ЗаписьJSON;\n\
+                 писатель.УстановитьСтроку();\n\
+                 ЗаписатьJSON(писатель, Новый ТаблицаЗначений, , \"Преобразовать\", Истина);\n\
+                 Возврат писатель.Закрыть();",
+            )
+            .unwrap();
+
+        assert_eq!(module.requirements().len(), 2);
+        assert_eq!(module.requirements()[1].package, "bsl-json");
+        assert_eq!(
+            engine.new_state().run(&module).unwrap().to_string(),
+            "\"<ok>\""
+        );
+        let bytecode = module.bytecode().unwrap();
+        assert!(bytecode.contains("CreateObject"));
+        assert!(bytecode.contains("CallComponent"));
+    }
+
+    #[cfg(not(feature = "json"))]
+    #[test]
+    fn missing_json_feature_rejects_functions_and_constructors() {
+        let engine = Engine::builder().build().unwrap();
+        assert!(engine.compile("Возврат Новый ЧтениеJSON;").is_err());
+        assert!(engine
+            .compile("Возврат ПрочитатьЗначениеJSON(\"1\");")
+            .is_err());
     }
 
     #[cfg(feature = "regexp")]

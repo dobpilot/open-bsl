@@ -903,7 +903,13 @@ shim!(shim_call_method, |frames,
     };
     let ov = reg_load(stack, frames[idx].reg_index(obj))?;
     let args = CallArgs::load(stack, &frames[idx], base, count)?;
-    let v = if let Some(object) = ov.object_ref() {
+    #[cfg(feature = "json")]
+    let legacy_json = bsl_json::call_legacy_method(method, &ov, args.as_slice());
+    #[cfg(not(feature = "json"))]
+    let legacy_json: Option<Result<BslValue, RtError>> = None;
+    let v = if let Some(result) = legacy_json {
+        result?
+    } else if let Some(object) = ov.object_ref() {
         let mut stdout = std::io::sink();
         let mut stderr = std::io::sink();
         let mut context =

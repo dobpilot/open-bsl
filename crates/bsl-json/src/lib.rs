@@ -25,9 +25,7 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use bsl_number::BslNumber;
-
-use crate::{BslValue, RtError, RtResult};
+use bsl_rt::{BslNumber, BslValue, RtError, RtResult};
 
 /// Событие разбора — ровно члены платформенного `ТипЗначенияJSON`, кроме
 /// `Комментарий` (комментариев в JSON нет, а расширения платформы мы не
@@ -86,7 +84,7 @@ impl JsonParser {
         Self::from_utf8(Rc::from(src))
     }
 
-    fn from_bsl_string(src: &crate::BslString) -> Self {
+    fn from_bsl_string(src: &bsl_rt::BslString) -> Self {
         Self::from_utf8(src.shared_utf8())
     }
 
@@ -757,7 +755,7 @@ impl JsonWriter {
     }
 
     /// То же имя свойства, но прямо из внутреннего UTF-16 `BslString`.
-    fn property_name_bsl(&mut self, name: &crate::BslString) -> RtResult<()> {
+    fn property_name_bsl(&mut self, name: &bsl_rt::BslString) -> RtResult<()> {
         self.begin_property_name()?;
         escape_bsl_string_into(&mut self.out, name);
         self.finish_property_name();
@@ -863,7 +861,7 @@ fn escape_into(out: &mut String, s: &str) {
 }
 
 /// Экранирует `BslString` без промежуточного UTF-8 `String`.
-fn escape_bsl_string_into(out: &mut String, s: &crate::BslString) {
+fn escape_bsl_string_into(out: &mut String, s: &bsl_rt::BslString) {
     let units = s.units();
     let mut pos = 0;
     while let Some(&unit) = units.get(pos) {
@@ -921,27 +919,70 @@ fn escape_control_into(out: &mut String, byte: u8) {
 // принадлежит этому модулю. Наружу они уходят через `builtin.rs`, как и
 // методы таблицы значений через `table.rs`.
 
-use crate::object::{BslObject, JsonReaderState, StructureStorage};
-use crate::EnumValue;
+use std::cell::RefCell;
+
+use bsl_rt::{
+    local_date_from_utc_seconds, pseudo_unix_seconds, Arity, BslObject, BuiltinMethod, CallContext,
+    ConstructorCode, ConstructorDescriptor, EnumValue, FunctionCode, FunctionDescriptor,
+    FunctionKind, LibraryDependency, LibraryDescriptor, ObjectProtocol, StructureStorage,
+    TypeDescriptor, TypeId,
+};
+
+#[derive(Debug, Default)]
+struct JsonReaderState {
+    parser: Option<JsonParser>,
+    current: Option<JsonEvent>,
+}
+
+#[derive(Debug, Default)]
+struct JsonReaderObject {
+    state: Rc<RefCell<JsonReaderState>>,
+}
+
+#[derive(Debug, Default)]
+struct JsonWriterObject {
+    writer: RefCell<Option<JsonWriter>>,
+}
+
+#[derive(Debug, Clone)]
+struct JsonWriterSettingsObject(JsonWriterSettings);
+
+#[derive(Debug, Default)]
+struct JsonSerializerSettingsObject(Rc<RefCell<JsonSerializerSettings>>);
+
+static READER_TYPE: TypeDescriptor = TypeDescriptor {
+    package: env!("CARGO_PKG_NAME"),
+    name: "ЧтениеJSON",
+    legacy_type_id: Some(TypeId::JsonReader),
+};
+static WRITER_TYPE: TypeDescriptor = TypeDescriptor {
+    package: env!("CARGO_PKG_NAME"),
+    name: "ЗаписьJSON",
+    legacy_type_id: Some(TypeId::JsonWriter),
+};
+static WRITER_SETTINGS_TYPE: TypeDescriptor = TypeDescriptor {
+    package: env!("CARGO_PKG_NAME"),
+    name: "ПараметрыЗаписиJSON",
+    legacy_type_id: Some(TypeId::JsonWriterSettings),
+};
+static SERIALIZER_SETTINGS_TYPE: TypeDescriptor = TypeDescriptor {
+    package: env!("CARGO_PKG_NAME"),
+    name: "НастройкиСериализацииJSON",
+    legacy_type_id: Some(TypeId::JsonSerializerSettings),
+};
 
 fn as_reader(v: &BslValue) -> RtResult<&std::cell::RefCell<JsonReaderState>> {
-    match v {
-        BslValue::Object(o) => match &**o {
-            BslObject::JsonReader(state) => Ok(state),
-            _ => Err(not_applicable(v, "ЧтениеJSON")),
-        },
-        _ => Err(not_applicable(v, "ЧтениеJSON")),
-    }
+    v.object_ref()
+        .and_then(|object| object.downcast_ref::<JsonReaderObject>())
+        .map(|reader| reader.state.as_ref())
+        .ok_or_else(|| not_applicable(v, "ЧтениеJSON"))
 }
 
 fn as_writer(v: &BslValue) -> RtResult<&std::cell::RefCell<Option<JsonWriter>>> {
-    match v {
-        BslValue::Object(o) => match &**o {
-            BslObject::JsonWriter(state) => Ok(state),
-            _ => Err(not_applicable(v, "ЗаписьJSON")),
-        },
-        _ => Err(not_applicable(v, "ЗаписьJSON")),
-    }
+    v.object_ref()
+        .and_then(|object| object.downcast_ref::<JsonWriterObject>())
+        .map(|writer| &writer.writer)
+        .ok_or_else(|| not_applicable(v, "ЗаписьJSON"))
 }
 
 fn not_applicable(v: &BslValue, _expected: &str) -> RtError {
@@ -956,17 +997,14 @@ fn not_applicable(v: &BslValue, _expected: &str) -> RtError {
 fn settings_from(arg: Option<&BslValue>) -> RtResult<JsonWriterSettings> {
     match arg {
         None | Some(BslValue::Undefined) => Ok(JsonWriterSettings::default()),
-        Some(BslValue::Object(o)) => match &**o {
-            BslObject::JsonWriterSettings(s) => Ok(s.clone()),
-            _ => Err(RtError::TypeError {
+        Some(value) => value
+            .object_ref()
+            .and_then(|object| object.downcast_ref::<JsonWriterSettingsObject>())
+            .map(|settings| settings.0.clone())
+            .ok_or(RtError::TypeError {
                 expected: "ПараметрыЗаписиJSON",
                 op: "УстановитьСтроку",
             }),
-        },
-        Some(_) => Err(RtError::TypeError {
-            expected: "ПараметрыЗаписиJSON",
-            op: "УстановитьСтроку",
-        }),
     }
 }
 
@@ -980,17 +1018,14 @@ fn settings_from(arg: Option<&BslValue>) -> RtResult<JsonWriterSettings> {
 pub fn serializer_settings_from(arg: Option<&BslValue>) -> RtResult<JsonSerializerSettings> {
     match arg {
         None | Some(BslValue::Undefined) => Ok(JsonSerializerSettings::default()),
-        Some(BslValue::Object(o)) => match &**o {
-            BslObject::JsonSerializerSettings(s) => Ok(s.borrow().clone()),
-            _ => Err(RtError::TypeError {
+        Some(value) => value
+            .object_ref()
+            .and_then(|object| object.downcast_ref::<JsonSerializerSettingsObject>())
+            .map(|settings| settings.0.borrow().clone())
+            .ok_or(RtError::TypeError {
                 expected: "НастройкиСериализацииJSON",
                 op: "ЗаписатьJSON",
             }),
-        },
-        Some(_) => Err(RtError::TypeError {
-            expected: "НастройкиСериализацииJSON",
-            op: "ЗаписатьJSON",
-        }),
     }
 }
 
@@ -1010,13 +1045,11 @@ pub fn serializer_settings_from(arg: Option<&BslValue>) -> RtResult<JsonSerializ
 /// [`RtError::UnknownColumn`] на неизвестном имени; [`RtError::NotAnObject`],
 /// если получатель не `НастройкиСериализацииJSON`.
 pub fn get_serializer_setting(obj: &BslValue, name: &str) -> RtResult<BslValue> {
-    let BslValue::Object(o) = obj else {
-        return Err(RtError::NotAnObject);
-    };
-    let BslObject::JsonSerializerSettings(cell) = &**o else {
-        return Err(RtError::NotAnObject);
-    };
-    let s = cell.borrow();
+    let settings = obj
+        .object_ref()
+        .and_then(|object| object.downcast_ref::<JsonSerializerSettingsObject>())
+        .ok_or(RtError::NotAnObject)?;
+    let s = settings.0.borrow();
     if name.eq_ignore_ascii_case("ФорматСериализацииДаты")
         || name.eq_ignore_ascii_case("DateSerializationFormat")
     {
@@ -1042,12 +1075,10 @@ pub fn get_serializer_setting(obj: &BslValue, name: &str) -> RtResult<BslValue> 
 /// на неизвестном имени; [`RtError::NotAnObject`], если получатель не
 /// `НастройкиСериализацииJSON`.
 pub fn set_serializer_setting(obj: &BslValue, name: &str, val: BslValue) -> RtResult<()> {
-    let BslValue::Object(o) = obj else {
-        return Err(RtError::NotAnObject);
-    };
-    let BslObject::JsonSerializerSettings(cell) = &**o else {
-        return Err(RtError::NotAnObject);
-    };
+    let settings = obj
+        .object_ref()
+        .and_then(|object| object.downcast_ref::<JsonSerializerSettingsObject>())
+        .ok_or(RtError::NotAnObject)?;
     if name.eq_ignore_ascii_case("ФорматСериализацииДаты")
         || name.eq_ignore_ascii_case("DateSerializationFormat")
     {
@@ -1061,7 +1092,7 @@ pub fn set_serializer_setting(obj: &BslValue, name: &str, val: BslValue) -> RtRe
             expected: "ФорматДатыJSON",
             op: "ФорматСериализацииДаты",
         })?;
-        cell.borrow_mut().date_format = format;
+        settings.0.borrow_mut().date_format = format;
         Ok(())
     } else if name.eq_ignore_ascii_case("ВариантЗаписиДаты")
         || name.eq_ignore_ascii_case("DateWritingVariant")
@@ -1076,7 +1107,7 @@ pub fn set_serializer_setting(obj: &BslValue, name: &str, val: BslValue) -> RtRe
             expected: "ВариантЗаписиДатыJSON",
             op: "ВариантЗаписиДаты",
         })?;
-        cell.borrow_mut().date_variant = variant;
+        settings.0.borrow_mut().date_variant = variant;
         Ok(())
     } else if name.eq_ignore_ascii_case("СериализовыватьМассивыКакОбъекты")
         || name.eq_ignore_ascii_case("SerializeArraysAsObjects")
@@ -1087,7 +1118,7 @@ pub fn set_serializer_setting(obj: &BslValue, name: &str, val: BslValue) -> RtRe
                 op: "СериализовыватьМассивыКакОбъекты",
             });
         };
-        cell.borrow_mut().arrays_as_objects = b;
+        settings.0.borrow_mut().arrays_as_objects = b;
         Ok(())
     } else {
         Err(RtError::UnknownColumn(name.to_string()))
@@ -1255,7 +1286,7 @@ pub fn current_value(obj: &BslValue) -> RtResult<BslValue> {
     let state = reader.borrow();
     match &state.current {
         Some(JsonEvent::PropertyName(s)) | Some(JsonEvent::Str(s)) => {
-            Ok(BslValue::Str(crate::BslString::from_str(s)))
+            Ok(BslValue::Str(bsl_rt::BslString::from_str(s)))
         }
         Some(JsonEvent::Number(n)) => Ok(BslValue::Number(n.clone())),
         Some(JsonEvent::Boolean(b)) => Ok(BslValue::Boolean(*b)),
@@ -1269,8 +1300,10 @@ pub fn current_value(obj: &BslValue) -> RtResult<BslValue> {
 }
 
 /// Общая часть всех пишущих методов: достать writer и применить операцию.
-fn with_writer<T>(obj: &BslValue, f: impl FnOnce(&mut JsonWriter) -> RtResult<T>) -> RtResult<T> {
-    let cell = as_writer(obj)?;
+fn with_writer_cell<T>(
+    cell: &RefCell<Option<JsonWriter>>,
+    f: impl FnOnce(&mut JsonWriter) -> RtResult<T>,
+) -> RtResult<T> {
     let mut slot = cell.borrow_mut();
     let Some(writer) = slot.as_mut() else {
         return Err(RtError::TypeError {
@@ -1279,6 +1312,20 @@ fn with_writer<T>(obj: &BslValue, f: impl FnOnce(&mut JsonWriter) -> RtResult<T>
         });
     };
     f(writer)
+}
+
+fn with_writer<T>(obj: &BslValue, f: impl FnOnce(&mut JsonWriter) -> RtResult<T>) -> RtResult<T> {
+    with_writer_cell(as_writer(obj)?, f)
+}
+
+fn close_writer_cell(cell: &RefCell<Option<JsonWriter>>) -> RtResult<BslValue> {
+    let mut slot = cell.borrow_mut();
+    let Some(writer) = slot.as_mut() else {
+        return Ok(BslValue::Str(bsl_rt::BslString::from_str("")));
+    };
+    let text = writer.finish()?;
+    *slot = None;
+    Ok(BslValue::Str(bsl_rt::BslString::from_utf8_string(text)))
 }
 
 /// # Errors
@@ -1338,20 +1385,15 @@ pub fn write_value(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
 ///
 /// [`RtError::IoError`] при неудачной записи файла.
 pub fn close_writer(obj: &BslValue) -> RtResult<BslValue> {
-    let cell = as_writer(obj)?;
-    let mut slot = cell.borrow_mut();
-    let Some(writer) = slot.as_mut() else {
-        return Ok(BslValue::Str(crate::BslString::from_str("")));
-    };
-    let text = writer.finish()?;
-    *slot = None;
-    Ok(BslValue::Str(crate::BslString::from_utf8_string(text)))
+    close_writer_cell(as_writer(obj)?)
 }
 
 /// Получатель — `ЗаписьJSON`? Нужно `BslValue::close_object`, чтобы
 /// развести одноимённый `Закрыть` у двух разных объектов.
 pub fn is_json_writer(v: &BslValue) -> bool {
-    matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::JsonWriter(_)))
+    v.object_ref()
+        .and_then(|object| object.downcast_ref::<JsonWriterObject>())
+        .is_some()
 }
 
 /// `ЗаписьJSON.ПроверятьСтруктуру` (чтение).
@@ -1383,9 +1425,524 @@ pub fn set_check_structure(obj: &BslValue, val: BslValue) -> RtResult<()> {
     })
 }
 
+fn method_is(name: &str, russian: &str, english: &str) -> bool {
+    name.eq_ignore_ascii_case(russian) || name.eq_ignore_ascii_case(english)
+}
+
+#[derive(Clone, Copy)]
+enum WriterMethod {
+    SetString,
+    OpenFile,
+    Close,
+    StartObject,
+    EndObject,
+    StartArray,
+    EndArray,
+    PropertyName,
+    Value,
+}
+
+fn writer_method(name: &str) -> Option<WriterMethod> {
+    match name {
+        "УстановитьСтроку" | "SetString" => Some(WriterMethod::SetString),
+        "ОткрытьФайл" | "OpenFile" => Some(WriterMethod::OpenFile),
+        "Закрыть" | "Close" => Some(WriterMethod::Close),
+        "ЗаписатьНачалоОбъекта" | "WriteStartObject" => {
+            Some(WriterMethod::StartObject)
+        }
+        "ЗаписатьКонецОбъекта" | "WriteEndObject" => {
+            Some(WriterMethod::EndObject)
+        }
+        "ЗаписатьНачалоМассива" | "WriteStartArray" => {
+            Some(WriterMethod::StartArray)
+        }
+        "ЗаписатьКонецМассива" | "WriteEndArray" => {
+            Some(WriterMethod::EndArray)
+        }
+        "ЗаписатьИмяСвойства" | "WritePropertyName" => {
+            Some(WriterMethod::PropertyName)
+        }
+        "ЗаписатьЗначение" | "WriteValue" => Some(WriterMethod::Value),
+        _ if name.eq_ignore_ascii_case("SetString") => Some(WriterMethod::SetString),
+        _ if name.eq_ignore_ascii_case("OpenFile") => Some(WriterMethod::OpenFile),
+        _ if name.eq_ignore_ascii_case("Close") => Some(WriterMethod::Close),
+        _ if name.eq_ignore_ascii_case("WriteStartObject") => Some(WriterMethod::StartObject),
+        _ if name.eq_ignore_ascii_case("WriteEndObject") => Some(WriterMethod::EndObject),
+        _ if name.eq_ignore_ascii_case("WriteStartArray") => Some(WriterMethod::StartArray),
+        _ if name.eq_ignore_ascii_case("WriteEndArray") => Some(WriterMethod::EndArray),
+        _ if name.eq_ignore_ascii_case("WritePropertyName") => Some(WriterMethod::PropertyName),
+        _ if name.eq_ignore_ascii_case("WriteValue") => Some(WriterMethod::Value),
+        _ => None,
+    }
+}
+
+fn exact_method_arity(_name: &str, arguments: &[BslValue], count: usize) -> RtResult<()> {
+    if arguments.len() == count {
+        Ok(())
+    } else {
+        Err(RtError::MethodNotApplicable {
+            method: "метод JSON",
+            receiver: "JSON",
+        })
+    }
+}
+
+/// Создаёт ненастроенный `ЧтениеJSON`.
+pub fn new_json_reader() -> BslValue {
+    BslValue::new_object(JsonReaderObject {
+        state: Rc::new(RefCell::new(JsonReaderState::default())),
+    })
+}
+
+/// Создаёт ненастроенный `ЗаписьJSON`.
+pub fn new_json_writer() -> BslValue {
+    BslValue::new_object(JsonWriterObject {
+        writer: RefCell::new(None),
+    })
+}
+
+/// Создаёт `ПараметрыЗаписиJSON` из нуля, одного или двух аргументов.
+///
+/// # Errors
+///
+/// Ошибка арности или [`RtError::TypeError`], если перенос строк
+/// или строка отступа имеют неверный тип.
+pub fn new_json_writer_settings(arguments: &[BslValue]) -> RtResult<BslValue> {
+    if arguments.len() > 2 {
+        return Err(RtError::MethodNotApplicable {
+            method: "Новый ПараметрыЗаписиJSON",
+            receiver: WRITER_SETTINGS_TYPE.name,
+        });
+    }
+    let line_break = arguments.first().unwrap_or(&BslValue::Undefined);
+    let indent = arguments.get(1).unwrap_or(&BslValue::Undefined);
+    let line_break = match line_break {
+        BslValue::Undefined => JsonLineBreak::Auto,
+        BslValue::Enum(EnumValue::LineBreakNone) => JsonLineBreak::None,
+        BslValue::Enum(EnumValue::LineBreakAuto) => JsonLineBreak::Auto,
+        BslValue::Enum(EnumValue::LineBreakWindows) => JsonLineBreak::Windows,
+        BslValue::Enum(EnumValue::LineBreakUnix) => JsonLineBreak::Unix,
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "ПереносСтрокJSON",
+                op: "Новый ПараметрыЗаписиJSON",
+            })
+        }
+    };
+    let indent = match indent {
+        BslValue::Undefined => String::new(),
+        BslValue::Str(value) => value.to_string(),
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "Строка",
+                op: "Новый ПараметрыЗаписиJSON",
+            })
+        }
+    };
+    Ok(BslValue::new_object(JsonWriterSettingsObject(
+        JsonWriterSettings { line_break, indent },
+    )))
+}
+
+/// Создаёт `НастройкиСериализацииJSON` с платформенными умолчаниями.
+pub fn new_json_serializer_settings() -> BslValue {
+    BslValue::new_object(JsonSerializerSettingsObject(Rc::new(RefCell::new(
+        JsonSerializerSettings::default(),
+    ))))
+}
+
+impl ObjectProtocol for JsonReaderObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &READER_TYPE
+    }
+
+    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
+        let value = BslValue::new_object(JsonReaderObject {
+            state: self.state.clone(),
+        });
+        if method_is(name, "ТипТекущегоЗначения", "CurrentValueType") {
+            current_value_type(&value)
+        } else if method_is(name, "ТекущееЗначение", "CurrentValue") {
+            current_value(&value)
+        } else {
+            Err(RtError::UnknownColumn(name.to_string()))
+        }
+    }
+
+    fn call_method(
+        &self,
+        name: &str,
+        arguments: &[BslValue],
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<BslValue> {
+        let value = BslValue::new_object(JsonReaderObject {
+            state: self.state.clone(),
+        });
+        if method_is(name, "УстановитьСтроку", "SetString") {
+            exact_method_arity(name, arguments, 1)?;
+            set_string(&value, arguments).map(|()| BslValue::Undefined)
+        } else if method_is(name, "ОткрытьФайл", "OpenFile") {
+            exact_method_arity(name, arguments, 1)?;
+            open_file(&value, arguments).map(|()| BslValue::Undefined)
+        } else if method_is(name, "Прочитать", "Read") {
+            exact_method_arity(name, arguments, 0)?;
+            read(&value).map(BslValue::Boolean)
+        } else if method_is(name, "Пропустить", "Skip") {
+            exact_method_arity(name, arguments, 0)?;
+            skip(&value).map(|()| BslValue::Undefined)
+        } else {
+            Err(RtError::UnknownMethod {
+                method: name.to_string(),
+                receiver: READER_TYPE.name,
+            })
+        }
+    }
+
+    fn is_filled(&self) -> RtResult<bool> {
+        Ok(true)
+    }
+}
+
+impl JsonWriterObject {
+    fn invoke(&self, method: WriterMethod, arguments: &[BslValue]) -> RtResult<BslValue> {
+        match method {
+            WriterMethod::SetString => {
+                if arguments.len() > 1 {
+                    return Err(RtError::MethodNotApplicable {
+                        method: "метод JSON",
+                        receiver: WRITER_TYPE.name,
+                    });
+                }
+                *self.writer.borrow_mut() = Some(JsonWriter::to_string_target(settings_from(
+                    arguments.first(),
+                )?));
+                Ok(BslValue::Undefined)
+            }
+            WriterMethod::OpenFile => {
+                if !(1..=2).contains(&arguments.len()) {
+                    return Err(RtError::MethodNotApplicable {
+                        method: "метод JSON",
+                        receiver: WRITER_TYPE.name,
+                    });
+                }
+                let BslValue::Str(path) = &arguments[0] else {
+                    return Err(RtError::TypeError {
+                        expected: "Строка",
+                        op: "ОткрытьФайл",
+                    });
+                };
+                *self.writer.borrow_mut() = Some(JsonWriter::to_file(
+                    std::path::PathBuf::from(path.to_string()),
+                    settings_from(arguments.get(1))?,
+                ));
+                Ok(BslValue::Undefined)
+            }
+            WriterMethod::Close => {
+                exact_method_arity("Закрыть", arguments, 0)?;
+                close_writer_cell(&self.writer)
+            }
+            WriterMethod::StartObject => {
+                exact_method_arity("ЗаписатьНачалоОбъекта", arguments, 0)?;
+                with_writer_cell(&self.writer, JsonWriter::begin_object)
+                    .map(|()| BslValue::Undefined)
+            }
+            WriterMethod::EndObject => {
+                exact_method_arity("ЗаписатьКонецОбъекта", arguments, 0)?;
+                with_writer_cell(&self.writer, JsonWriter::end_object).map(|()| BslValue::Undefined)
+            }
+            WriterMethod::StartArray => {
+                exact_method_arity("ЗаписатьНачалоМассива", arguments, 0)?;
+                with_writer_cell(&self.writer, JsonWriter::begin_array)
+                    .map(|()| BslValue::Undefined)
+            }
+            WriterMethod::EndArray => {
+                exact_method_arity("ЗаписатьКонецМассива", arguments, 0)?;
+                with_writer_cell(&self.writer, JsonWriter::end_array).map(|()| BslValue::Undefined)
+            }
+            WriterMethod::PropertyName => {
+                exact_method_arity("ЗаписатьИмяСвойства", arguments, 1)?;
+                let BslValue::Str(property) = &arguments[0] else {
+                    return Err(RtError::TypeError {
+                        expected: "Строка",
+                        op: "ЗаписатьИмяСвойства",
+                    });
+                };
+                with_writer_cell(&self.writer, |writer| writer.property_name_bsl(property))
+                    .map(|()| BslValue::Undefined)
+            }
+            WriterMethod::Value => {
+                exact_method_arity("ЗаписатьЗначение", arguments, 1)?;
+                with_writer_cell(&self.writer, |writer| writer.value(&arguments[0]))
+                    .map(|()| BslValue::Undefined)
+            }
+        }
+    }
+}
+
+impl ObjectProtocol for JsonWriterObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &WRITER_TYPE
+    }
+
+    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
+        if method_is(name, "ПроверятьСтруктуру", "CheckStructure") {
+            with_writer_cell(&self.writer, |writer| {
+                Ok(BslValue::Boolean(writer.check_structure()))
+            })
+        } else {
+            Err(RtError::UnknownColumn(name.to_string()))
+        }
+    }
+
+    fn set_property(
+        &self,
+        name: &str,
+        value: BslValue,
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<()> {
+        if method_is(name, "ПроверятьСтруктуру", "CheckStructure") {
+            let BslValue::Boolean(check) = value else {
+                return Err(RtError::TypeError {
+                    expected: "Булево",
+                    op: "ПроверятьСтруктуру",
+                });
+            };
+            with_writer_cell(&self.writer, |writer| {
+                writer.set_check_structure(check);
+                Ok(())
+            })
+        } else {
+            Err(RtError::UnknownColumn(name.to_string()))
+        }
+    }
+
+    fn call_method(
+        &self,
+        name: &str,
+        arguments: &[BslValue],
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<BslValue> {
+        match writer_method(name) {
+            Some(method) => self.invoke(method, arguments),
+            None => Err(RtError::UnknownMethod {
+                method: name.to_string(),
+                receiver: WRITER_TYPE.name,
+            }),
+        }
+    }
+
+    fn is_filled(&self) -> RtResult<bool> {
+        Ok(true)
+    }
+}
+
+/// Быстрый адаптер старой инструкции `CallMethod`.
+///
+/// Новый байткод вызывает [`ObjectProtocol::call_method`] по имени.
+/// Адаптер нужен только до перевода CLI на реестр и не является
+/// частью компонентного ABI.
+///
+/// Возвращает `None`, если получатель или метод не принадлежит
+/// `ЗаписьJSON`.
+pub fn call_legacy_method(
+    method: BuiltinMethod,
+    receiver: &BslValue,
+    arguments: &[BslValue],
+) -> Option<RtResult<BslValue>> {
+    let writer = receiver.object_ref()?.downcast_ref::<JsonWriterObject>()?;
+    let method = match method {
+        BuiltinMethod::SetString => WriterMethod::SetString,
+        BuiltinMethod::OpenFile => WriterMethod::OpenFile,
+        BuiltinMethod::Close => WriterMethod::Close,
+        BuiltinMethod::WriteStartObject => WriterMethod::StartObject,
+        BuiltinMethod::WriteEndObject => WriterMethod::EndObject,
+        BuiltinMethod::WriteStartArray => WriterMethod::StartArray,
+        BuiltinMethod::WriteEndArray => WriterMethod::EndArray,
+        BuiltinMethod::WritePropertyName => WriterMethod::PropertyName,
+        BuiltinMethod::WriteJsonValue => WriterMethod::Value,
+        _ => return None,
+    };
+    Some(writer.invoke(method, arguments))
+}
+
+impl ObjectProtocol for JsonWriterSettingsObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &WRITER_SETTINGS_TYPE
+    }
+
+    fn is_filled(&self) -> RtResult<bool> {
+        Ok(true)
+    }
+}
+
+impl ObjectProtocol for JsonSerializerSettingsObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &SERIALIZER_SETTINGS_TYPE
+    }
+
+    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
+        let value = BslValue::new_object(JsonSerializerSettingsObject(self.0.clone()));
+        get_serializer_setting(&value, name)
+    }
+
+    fn set_property(
+        &self,
+        name: &str,
+        value: BslValue,
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<()> {
+        let receiver = BslValue::new_object(JsonSerializerSettingsObject(self.0.clone()));
+        set_serializer_setting(&receiver, name, value)
+    }
+
+    fn is_filled(&self) -> RtResult<bool> {
+        Ok(true)
+    }
+}
+
+fn callback_name(
+    name_arg: Option<&BslValue>,
+    module_arg: Option<&BslValue>,
+    op: &'static str,
+) -> RtResult<Option<String>> {
+    let name = match name_arg {
+        None | Some(BslValue::Undefined) => return Ok(None),
+        Some(BslValue::Str(value)) => value.to_string(),
+        Some(_) => {
+            return Err(RtError::TypeError {
+                expected: "Строка",
+                op,
+            })
+        }
+    };
+    if name.is_empty() || matches!(module_arg, None | Some(BslValue::Undefined)) {
+        Ok(None)
+    } else {
+        Ok(Some(name))
+    }
+}
+
+fn name_list_arg(
+    argument: Option<&BslValue>,
+    runtime: &RuntimeShapes,
+    op: &'static str,
+) -> RtResult<Vec<String>> {
+    let Some(list) = argument else {
+        return Ok(Vec::new());
+    };
+    if matches!(list, BslValue::Undefined) {
+        return Ok(Vec::new());
+    }
+    let length = list.collection_len().map_err(|_| RtError::TypeError {
+        expected: "Массив",
+        op,
+    })?;
+    let mut names = Vec::with_capacity(length);
+    for index in 0..length {
+        let item = list.get_index(&BslValue::number_from_i64(index as i64), &runtime.names)?;
+        if let BslValue::Str(value) = item {
+            names.push(value.to_string());
+        }
+    }
+    Ok(names)
+}
+
+/// Общая реализация `ПрочитатьJSON` для нового и legacy-байткода.
+///
+/// # Errors
+///
+/// Ошибка типа, разбора JSON или вызова функции восстановления.
+pub fn read_json_builtin(
+    arguments: &[BslValue],
+    runtime: &mut RuntimeShapes,
+    call: Option<JsonCallByName<'_>>,
+) -> RtResult<BslValue> {
+    let as_map = match arguments.get(1) {
+        None | Some(BslValue::Undefined) => false,
+        Some(BslValue::Boolean(value)) => *value,
+        Some(_) => {
+            return Err(RtError::TypeError {
+                expected: "Булево",
+                op: "ПрочитатьJSON(ВозвращатьСоответствие)",
+            })
+        }
+    };
+    let date_names = name_list_arg(
+        arguments.get(2),
+        runtime,
+        "ПрочитатьJSON(ИменаСвойствСоЗначениямиДата)",
+    )?;
+    let date_format =
+        optional_date_format_from_arg(arguments.get(3), "ПрочитатьJSON(ОжидаемыйФорматДаты)")?;
+    let name = callback_name(
+        arguments.get(4),
+        arguments.get(5),
+        "ПрочитатьJSON(ИмяФункцииВосстановления)",
+    )?;
+    let restore = match (name, call) {
+        (None, _) => None,
+        (Some(name), Some(call)) => Some(JsonRestoreFn {
+            name,
+            extra: arguments.get(6).cloned().unwrap_or(BslValue::Undefined),
+            property_names: name_list_arg(
+                arguments.get(7),
+                runtime,
+                "ПрочитатьJSON(ИменаСвойствДляФункцииВосстановления)",
+            )?,
+            call,
+        }),
+        (Some(_), None) => {
+            return Err(RtError::Json(
+                "ПрочитатьJSON: функция восстановления требует исполняющей VM".to_string(),
+            ))
+        }
+    };
+    read_json(
+        &arguments[0],
+        as_map,
+        &date_names,
+        date_format,
+        restore,
+        runtime,
+    )
+}
+
+/// Общая реализация `ЗаписатьJSON` для нового и legacy-байткода.
+///
+/// # Errors
+///
+/// Ошибка типа, записи JSON или вызова функции преобразования.
+pub fn write_json_builtin(
+    arguments: &[BslValue],
+    runtime: &mut RuntimeShapes,
+    call: Option<JsonCallByName<'_>>,
+) -> RtResult<BslValue> {
+    let settings = serializer_settings_from(arguments.get(2))?;
+    let name = callback_name(
+        arguments.get(3),
+        arguments.get(4),
+        "ЗаписатьJSON(ИмяФункцииПреобразования)",
+    )?;
+    let convert = match (name, call) {
+        (None, _) => None,
+        (Some(name), Some(call)) => Some(JsonConvertFn {
+            name,
+            extra: arguments.get(5).cloned().unwrap_or(BslValue::Undefined),
+            call,
+        }),
+        (Some(_), None) => {
+            return Err(RtError::Json(
+                "ЗаписатьJSON: функция преобразования требует исполняющей VM".to_string(),
+            ))
+        }
+    };
+    write_json(&arguments[0], &arguments[1], &settings, convert, runtime)?;
+    Ok(BslValue::Undefined)
+}
+
 // --- ПрочитатьJSON / ЗаписатьJSON ---------------------------------------
 
-use crate::runtime_shapes::RuntimeShapes;
+use bsl_rt::RuntimeShapes;
 
 /// Подготовленные имена свойств в пределах одного `ПрочитатьJSON`.
 ///
@@ -1393,7 +1950,7 @@ use crate::runtime_shapes::RuntimeShapes;
 /// две записи в этом кэше, но `NameInterner` всё равно вернёт им один
 /// регистронезависимый `NameId`. Это сохраняет семантику и не требует
 /// Unicode-нормализации на каждом повторе одной и той же схемы.
-type JsonKeyCache = HashMap<Box<str>, crate::NameId>;
+type JsonKeyCache = HashMap<Box<str>, bsl_rt::NameId>;
 
 /// Итоговые формы объектов, уже встреченные в текущем документе.
 ///
@@ -1401,7 +1958,7 @@ type JsonKeyCache = HashMap<Box<str>, crate::NameId>;
 /// сохраняются порог переходов и деградация в словарь. Повторный объект
 /// получает ту же форму и готовые слоты сразу, без прохода по цепочке
 /// промежуточных форм для каждого поля.
-type JsonShapeCache = HashMap<Vec<crate::NameId>, Rc<crate::Shape>>;
+type JsonShapeCache = HashMap<Vec<bsl_rt::NameId>, Rc<bsl_rt::Shape>>;
 
 #[derive(Default)]
 struct JsonBuildCache {
@@ -1436,13 +1993,13 @@ fn is_identifier(name: &str) -> bool {
 ///
 /// `ПрочитатьДатуJSON`/`ЗаписатьДатуJSON` (см. `read_json_date`/
 /// `write_json_date` ниже) — ИСКЛЮЧЕНИЕ из этого правила, а не отказ от
-/// него: смещение машины (`crate::tz`) там нужно самой сутью функций
+/// него: смещение машины (`bsl_rt::tz`) там нужно самой сутью функций
 /// (варианты `ЛокальнаяДатаСоСмещением`/`УниверсальнаяДата`
 /// `ВариантЗаписиДатыJSON` описаны платформой именно через часовой пояс
 /// машины), это явно заказанная этим этапом способность, а не тихое
 /// распространение зоны на весь модуль `json`. `ИменаСвойствСоЗначениямиДата`
 /// здесь по-прежнему без сдвига.
-fn parse_json_date(text: &str) -> Option<crate::BslDate> {
+fn parse_json_date(text: &str) -> Option<bsl_rt::BslDate> {
     let body = text.strip_suffix('Z').unwrap_or(text);
     let (date, time) = match body.split_once('T') {
         Some((d, t)) => (d, t),
@@ -1458,13 +2015,13 @@ fn parse_json_date(text: &str) -> Option<crate::BslDate> {
     // Дробные секунды отбрасываются: у даты 1С разрешение — секунда.
     let sec_text = tp.next().unwrap_or("0");
     let second: u32 = sec_text.split('.').next()?.parse().ok()?;
-    crate::BslDate::from_civil(year, month, day, hour, minute, second)
+    bsl_rt::BslDate::from_civil(year, month, day, hour, minute, second)
 }
 
 // --- ЗаписатьДатуJSON / ПрочитатьДатуJSON -------------------------------
 //
 // Единственное место в крейте, где дата интерпретируется относительно
-// часового пояса МАШИНЫ (`crate::tz`), а не как наивный набор полей: сама
+// часового пояса МАШИНЫ (`bsl_rt::tz`), а не как наивный набор полей: сама
 // суть `ВариантЗаписиДатыJSON` — «локальная», «локальная со смещением»,
 // «универсальная» — это часовой пояс. `BslDate`, переданная сюда, читается
 // как НАИВНОЕ ЛОКАЛЬНОЕ время машины: `ЗаписатьДатуJSON` с вариантом
@@ -1473,22 +2030,10 @@ fn parse_json_date(text: &str) -> Option<crate::BslDate> {
 // так что `ПрочитатьДатуJSON(ЗаписатьДатуJSON(Д, ...), ...) = Д` на машине
 // с одним и тем же смещением в оба конца.
 
-/// Секунды нашей эпохи (`0001-01-01`), пересчитанные в СЕКУНДЫ ОТ
-/// Unix-эпохи БЕЗ смены смысла полей — то есть числа гражданского времени
-/// «как если бы» это уже был момент Unix. Только в этом виде дату можно
-/// подать в `crate::tz::local_offset_seconds`, у которого нет отдельного
-/// понятия «наивное время»: и здесь, и в остальной функции это ПСЕВДО-Unix,
-/// не настоящий момент UTC, — этого достаточно для смещения (оно меняется
-/// не чаще раза в сутки), но не гарантирует секундной точности РОВНО в
-/// момент перехода на летнее/зимнее время.
-pub(crate) fn pseudo_unix_seconds(date: crate::BslDate) -> i64 {
-    date.seconds() - crate::date::UNIX_EPOCH_SECONDS
-}
-
-fn unix_to_bsl_date(unix_seconds: i64, op: &'static str) -> RtResult<crate::BslDate> {
+fn unix_to_bsl_date(unix_seconds: i64, op: &'static str) -> RtResult<bsl_rt::BslDate> {
     unix_seconds
-        .checked_add(crate::date::UNIX_EPOCH_SECONDS)
-        .and_then(crate::BslDate::from_seconds)
+        .checked_add(bsl_rt::UNIX_EPOCH_SECONDS)
+        .and_then(bsl_rt::BslDate::from_seconds)
         .ok_or(RtError::DateOutOfRange { op })
 }
 
@@ -1513,7 +2058,7 @@ fn format_offset(offset_seconds: i32) -> String {
 /// вычитанием смещения машины ушёл за границы `0001-01-01..9999-12-31`
 /// (пустые и предельные даты около границ диапазона).
 fn format_json_date(
-    date: crate::BslDate,
+    date: bsl_rt::BslDate,
     format: JsonDateFormat,
     variant: JsonDateWritingVariant,
 ) -> RtResult<String> {
@@ -1534,7 +2079,7 @@ fn format_json_date(
         }
         JsonDateWritingVariant::LocalOffset => {
             let c = date.to_civil();
-            let offset = crate::tz::local_offset_seconds(pseudo_unix_seconds(date));
+            let offset = bsl_rt::local_offset_seconds(pseudo_unix_seconds(date));
             Ok(format!(
                 "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}{}",
                 c.year,
@@ -1548,7 +2093,7 @@ fn format_json_date(
         }
         JsonDateWritingVariant::Universal => {
             let pseudo = pseudo_unix_seconds(date);
-            let offset = crate::tz::local_offset_seconds(pseudo);
+            let offset = bsl_rt::local_offset_seconds(pseudo);
             let utc_unix = pseudo - i64::from(offset);
             // ИЗМЕРЕНО: `ЗаписатьДатуJSON(Дата(1,1,1), ISO, УниверсальнаяДата)`
             // на платформе даёт `0001-01-01T00:00:00Z`, а не ошибку — хотя
@@ -1558,7 +2103,7 @@ fn format_json_date(
             // тот же приём применён здесь. Поведение для дат ВБЛИЗИ пола,
             // но не равных ему, замером не подтверждено — фикстура несёт
             // пробу на этот случай.
-            let floor = pseudo_unix_seconds(crate::BslDate::empty());
+            let floor = pseudo_unix_seconds(bsl_rt::BslDate::empty());
             let utc_unix = utc_unix.max(floor);
             match format {
                 JsonDateFormat::Iso => {
@@ -1584,7 +2129,7 @@ fn format_json_date(
 /// # Errors
 ///
 /// [`RtError::TypeError`] на аргументах не тех типов; иначе см.
-/// [`format_json_date`].
+/// `format_json_date`.
 pub fn write_json_date(
     date: &BslValue,
     format: &BslValue,
@@ -1622,7 +2167,7 @@ pub fn write_json_date(
         }
     };
     let text = format_json_date(*d, format, variant)?;
-    Ok(BslValue::Str(crate::BslString::from_str(&text)))
+    Ok(BslValue::Str(bsl_rt::BslString::from_str(&text)))
 }
 
 /// ИЗМЕРЕНО (`JSON.READ_DATE.BAD_FORMAT_TEXT`): факт исключения на
@@ -1635,25 +2180,7 @@ fn bad_date_representation() -> RtError {
     RtError::Json("Представление даты имеет неверный формат".to_string())
 }
 
-/// Секунды Unix-эпохи UTC -> локальная (машинная) `BslDate` — прибавляет
-/// смещение, действующее в этот момент.
-///
-/// Тем же пересчётом пользуется модель типов XDTO: у `xs:dateTime` с
-/// поясом платформа отдаёт местное время (измерено), и второй копии
-/// этого правила заводить незачем — отсюда `pub(crate)` и параметр `op`,
-/// который называет операцию в тексте ошибки.
-pub(crate) fn local_date_from_utc_seconds(
-    unix_seconds: i64,
-    op: &'static str,
-) -> RtResult<crate::BslDate> {
-    let offset = crate::tz::local_offset_seconds(unix_seconds);
-    let local_unix = unix_seconds
-        .checked_add(i64::from(offset))
-        .ok_or(RtError::DateOutOfRange { op })?;
-    unix_to_bsl_date(local_unix, op)
-}
-
-fn utc_millis_to_local_date(ms: i64) -> RtResult<crate::BslDate> {
+fn utc_millis_to_local_date(ms: i64) -> RtResult<bsl_rt::BslDate> {
     local_date_from_utc_seconds(ms.div_euclid(1000), "ПрочитатьДатуJSON")
 }
 
@@ -1695,7 +2222,7 @@ fn split_iso_tail(text: &str) -> (&str, Option<IsoTail>) {
 /// Разбор ISO-представления `ПрочитатьДатуJSON` во всех трёх вариантах
 /// записи: без зоны (локальное время как есть), `Z` (UTC) и явное
 /// смещение.
-fn parse_iso_json_date(text: &str) -> Option<crate::BslDate> {
+fn parse_iso_json_date(text: &str) -> Option<bsl_rt::BslDate> {
     let (body, tail) = split_iso_tail(text);
     let (date_part, time_part) = body.split_once('T')?;
     let mut dp = date_part.split('-');
@@ -1706,7 +2233,7 @@ fn parse_iso_json_date(text: &str) -> Option<crate::BslDate> {
     let hour: u32 = tp.next()?.parse().ok()?;
     let minute: u32 = tp.next()?.parse().ok()?;
     let second: u32 = tp.next()?.split('.').next()?.parse().ok()?;
-    let wall = crate::BslDate::from_civil(year, month, day, hour, minute, second)?;
+    let wall = bsl_rt::BslDate::from_civil(year, month, day, hour, minute, second)?;
     match tail {
         // Без указания зоны — то, что и хранится: локальное время машины
         // как есть, без пересчёта (симметрично `Local` при записи).
@@ -1719,7 +2246,7 @@ fn parse_iso_json_date(text: &str) -> Option<crate::BslDate> {
     }
 }
 
-fn parse_json_date_by_format(text: &str, format: JsonDateFormat) -> Option<crate::BslDate> {
+fn parse_json_date_by_format(text: &str, format: JsonDateFormat) -> Option<bsl_rt::BslDate> {
     match format {
         JsonDateFormat::Iso => parse_iso_json_date(text),
         JsonDateFormat::JavaScript => {
@@ -1746,7 +2273,7 @@ fn parse_json_date_by_format(text: &str, format: JsonDateFormat) -> Option<crate
 /// # Errors
 ///
 /// [`RtError::TypeError`] на аргументах не тех типов;
-/// [`RtError::Json`] (см. [`bad_date_representation`]) на строке, не
+/// [`RtError::Json`] (см. `bad_date_representation`) на строке, не
 /// разобравшейся в заданном формате.
 pub fn read_json_date(text: &BslValue, format: &BslValue) -> RtResult<BslValue> {
     let BslValue::Str(s) = text else {
@@ -1888,7 +2415,7 @@ impl BuildCtx<'_, '_> {
 /// пустой строки.
 fn property_arg(property: Option<&str>) -> BslValue {
     match property {
-        Some(p) => BslValue::Str(crate::BslString::from_str(p)),
+        Some(p) => BslValue::Str(bsl_rt::BslString::from_str(p)),
         None => BslValue::Undefined,
     }
 }
@@ -1974,7 +2501,7 @@ pub fn read_json(
 ///
 /// Отсутствует (`Неопределено`) — `None`: разбор
 /// `ИменаСвойствСоЗначениямиДата` по умолчанию — ISO, но через СТАРЫЙ
-/// парсер без сдвига зоны ([`parse_json_date`], не
+/// парсер без сдвига зоны (`parse_json_date`, не
 /// `parse_json_date_by_format`) — это отдельное, ранее измеренное
 /// намеренное отклонение (см. doc comment на `parse_json_date`), не
 /// тронутое добавлением этого аргумента. ИЗМЕРЕНО: разбор СТРОГИЙ даже без
@@ -2071,7 +2598,7 @@ fn json_field_id(
     name: &str,
     rt: &mut RuntimeShapes,
     cache: &mut JsonKeyCache,
-) -> RtResult<crate::NameId> {
+) -> RtResult<bsl_rt::NameId> {
     if let Some(&id) = cache.get(name) {
         return Ok(id);
     }
@@ -2103,7 +2630,7 @@ fn build_json_structure(
 
     let mut names = Vec::with_capacity(keys.len());
     let mut slots = Vec::with_capacity(values.len());
-    let mut positions: Option<HashMap<crate::NameId, usize>> = None;
+    let mut positions: Option<HashMap<bsl_rt::NameId, usize>> = None;
     for (key, value) in keys.into_iter().zip(values) {
         let id = json_field_id(&key, rt, &mut cache.keys)?;
         let old_slot = match &positions {
@@ -2266,7 +2793,7 @@ fn build_raw_value(
             if ctx.as_map {
                 let map = BslValue::new_map();
                 for (k, v) in keys.into_iter().zip(values) {
-                    map.map_insert(BslValue::Str(crate::BslString::from_str(&k)), v)?;
+                    map.map_insert(BslValue::Str(bsl_rt::BslString::from_str(&k)), v)?;
                 }
                 Ok(map)
             } else {
@@ -2312,7 +2839,7 @@ fn build_raw_value(
                 .ok_or_else(bad_date_representation)?;
                 return Ok(BslValue::Date(d));
             }
-            Ok(BslValue::Str(crate::BslString::from_str(&s)))
+            Ok(BslValue::Str(bsl_rt::BslString::from_str(&s)))
         }
         // Число/булево на месте объявленного имени даты — заведомо не
         // текстовое представление ни одного из трёх форматов (у всех троих
@@ -2339,7 +2866,7 @@ fn build_raw_value(
         // даты, и статья не даёт для него примера — расширять список
         // отвергаемых значений домыслом не стоит.
         JsonEvent::Null => Ok(BslValue::Undefined),
-        JsonEvent::PropertyName(s) => Ok(BslValue::Str(crate::BslString::from_str(&s))),
+        JsonEvent::PropertyName(s) => Ok(BslValue::Str(bsl_rt::BslString::from_str(&s))),
         JsonEvent::ObjectEnd | JsonEvent::ArrayEnd => Ok(BslValue::Undefined),
     }
 }
@@ -2450,7 +2977,7 @@ pub fn write_json_value(value: &BslValue, rt: &RuntimeShapes) -> RtResult<BslVal
         rt,
     };
     serialize(&mut w, value, &mut ctx, 0)?;
-    Ok(BslValue::Str(crate::BslString::from_utf8_string(
+    Ok(BslValue::Str(bsl_rt::BslString::from_utf8_string(
         w.finish()?,
     )))
 }
@@ -2669,7 +3196,7 @@ fn serialize(
             // (проба уже есть в `json-dates.bsl`).
             let content =
                 format_json_date(*d, ctx.settings.date_format, ctx.settings.date_variant)?;
-            w.value(&BslValue::Str(crate::BslString::from_str(&content)))
+            w.value(&BslValue::Str(bsl_rt::BslString::from_str(&content)))
         }
         BslValue::Object(o) => match &**o {
             BslObject::Array(items) => {
@@ -2759,9 +3286,202 @@ fn serialize(
     }
 }
 
+fn component_read_json(
+    context: &mut CallContext<'_>,
+    arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    let (runtime, stdout, stderr, caller) = context.execution_parts();
+    match caller {
+        Some(caller) => {
+            let mut call = |name: &str, values: Vec<BslValue>| {
+                caller(name, values, &mut *stdout, &mut *stderr)
+            };
+            read_json_builtin(arguments, runtime, Some(&mut call))
+        }
+        None => read_json_builtin(arguments, runtime, None),
+    }
+}
+
+fn component_write_json(
+    context: &mut CallContext<'_>,
+    arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    let (runtime, stdout, stderr, caller) = context.execution_parts();
+    match caller {
+        Some(caller) => {
+            let mut call = |name: &str, values: Vec<BslValue>| {
+                caller(name, values, &mut *stdout, &mut *stderr)
+            };
+            write_json_builtin(arguments, runtime, Some(&mut call))
+        }
+        None => write_json_builtin(arguments, runtime, None),
+    }
+}
+
+fn component_write_json_date(
+    _context: &mut CallContext<'_>,
+    arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    write_json_date(
+        &arguments[0],
+        &arguments[1],
+        arguments.get(2).unwrap_or(&BslValue::Undefined),
+    )
+}
+
+fn component_read_json_date(
+    _context: &mut CallContext<'_>,
+    arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    read_json_date(&arguments[0], &arguments[1])
+}
+
+fn component_write_json_value(
+    context: &mut CallContext<'_>,
+    arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    write_json_value(&arguments[0], context.runtime_shapes())
+}
+
+fn component_read_json_value(
+    context: &mut CallContext<'_>,
+    arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    read_json_value(&arguments[0], context.runtime_shapes())
+}
+
+fn construct_reader(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
+    Ok(new_json_reader())
+}
+
+fn construct_writer(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
+    Ok(new_json_writer())
+}
+
+fn construct_writer_settings(
+    _context: &mut CallContext<'_>,
+    arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    new_json_writer_settings(arguments)
+}
+
+fn construct_serializer_settings(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    Ok(new_json_serializer_settings())
+}
+
+const FUNCTIONS: &[FunctionDescriptor] = &[
+    FunctionDescriptor {
+        code: FunctionCode::new(1),
+        names: &["ПрочитатьJSON", "ReadJSON"],
+        arity: Arity::range(1, 8),
+        kind: FunctionKind::Function,
+        call: component_read_json,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(2),
+        names: &["ЗаписатьJSON", "WriteJSON"],
+        arity: Arity::range(2, 6),
+        kind: FunctionKind::Procedure,
+        call: component_write_json,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(3),
+        names: &["ЗаписатьДатуJSON", "WriteJSONDate"],
+        arity: Arity::range(2, 3),
+        kind: FunctionKind::Function,
+        call: component_write_json_date,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(4),
+        names: &["ПрочитатьДатуJSON", "ReadJSONDate"],
+        arity: Arity::exact(2),
+        kind: FunctionKind::Function,
+        call: component_read_json_date,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(5),
+        names: &["ЗаписатьЗначениеJSON", "WriteJSONValue"],
+        arity: Arity::exact(1),
+        kind: FunctionKind::Function,
+        call: component_write_json_value,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(6),
+        names: &["ПрочитатьЗначениеJSON", "ReadJSONValue"],
+        arity: Arity::exact(1),
+        kind: FunctionKind::Function,
+        call: component_read_json_value,
+    },
+];
+
+const CONSTRUCTORS: &[ConstructorDescriptor] = &[
+    ConstructorDescriptor {
+        code: ConstructorCode::new(1),
+        names: &["ЧтениеJSON", "JSONReader"],
+        arity: Arity::exact(0),
+        call: construct_reader,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(2),
+        names: &["ЗаписьJSON", "JSONWriter"],
+        arity: Arity::exact(0),
+        call: construct_writer,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(3),
+        names: &["ПараметрыЗаписиJSON", "JSONWriterSettings"],
+        arity: Arity::range(0, 2),
+        call: construct_writer_settings,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(4),
+        names: &["НастройкиСериализацииJSON", "JSONSerializerSettings"],
+        arity: Arity::exact(0),
+        call: construct_serializer_settings,
+    },
+];
+
+/// Дескриптор статически подключаемого JSON-компонента.
+pub const fn library() -> LibraryDescriptor {
+    LibraryDescriptor {
+        package: env!("CARGO_PKG_NAME"),
+        version: env!("CARGO_PKG_VERSION"),
+        dependencies: &[LibraryDependency {
+            package: bsl_rt::PACKAGE_NAME,
+            version: bsl_rt::PACKAGE_VERSION,
+        }],
+        functions: FUNCTIONS,
+        constructors: CONSTRUCTORS,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn published_component_codes_are_stable() {
+        let descriptor = library();
+        assert_eq!(
+            descriptor
+                .functions
+                .iter()
+                .map(|function| function.code.get())
+                .collect::<Vec<_>>(),
+            [1, 2, 3, 4, 5, 6]
+        );
+        assert_eq!(
+            descriptor
+                .constructors
+                .iter()
+                .map(|constructor| constructor.code.get())
+                .collect::<Vec<_>>(),
+            [1, 2, 3, 4]
+        );
+    }
 
     fn events(text: &str) -> Vec<JsonEvent> {
         let mut p = JsonParser::new(text);
@@ -2924,7 +3644,7 @@ mod tests {
     fn oversized_json_schema_stays_dictionary_and_is_not_cached() {
         let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
         let mut cache = JsonBuildCache::default();
-        let field_count = crate::MAX_SHAPE_TRANSITIONS as usize + 1;
+        let field_count = bsl_rt::MAX_SHAPE_TRANSITIONS as usize + 1;
         let keys = (0..field_count).map(|i| format!("f{i}")).collect();
         let values = (0..field_count)
             .map(|i| BslValue::Number(num(&i.to_string())))
@@ -3015,10 +3735,10 @@ mod tests {
 
     #[test]
     fn parser_keeps_the_bsl_string_snapshot_assigned_to_it() {
-        let source = crate::BslString::from_str("[1]");
+        let source = bsl_rt::BslString::from_str("[1]");
         let mut parser = JsonParser::from_bsl_string(&source);
 
-        let changed = source.append(&crate::BslString::from_str("мусор"));
+        let changed = source.append(&bsl_rt::BslString::from_str("мусор"));
         assert_eq!(&*changed.shared_utf8(), "[1]мусор");
 
         let mut parsed = Vec::new();
@@ -3077,7 +3797,7 @@ mod tests {
         w.property_name("а").unwrap();
         w.value(&BslValue::Number(num("1"))).unwrap();
         w.property_name("б").unwrap();
-        w.value(&BslValue::Str(crate::BslString::from_str("текст")))
+        w.value(&BslValue::Str(bsl_rt::BslString::from_str("текст")))
             .unwrap();
         w.end_object().unwrap();
         assert_eq!(w.finish().unwrap(), "{\n\"а\": 1,\n\"б\": \"текст\"\n}");
@@ -3104,27 +3824,27 @@ mod tests {
     fn escaping_follows_the_measured_rules() {
         // Замеры JSON.WRITE.ESCAPES и JSON.WRITE.CONTROL_CHARS.
         let s = write_compact(|w| {
-            w.value(&BslValue::Str(crate::BslString::from_str(
+            w.value(&BslValue::Str(bsl_rt::BslString::from_str(
                 "\"\\/\n\tЁж\u{1}",
             )))
         });
         assert_eq!(s, "\"\\\"\\\\/\\n\\u0009Ёж\\u0001\"");
 
         let s = write_compact(|w| {
-            w.value(&BslValue::Str(crate::BslString::from_str(
+            w.value(&BslValue::Str(bsl_rt::BslString::from_str(
                 "\r\u{8}\u{c}\u{b}",
             )))
         });
         assert_eq!(s, "\"\\r\\u0008\\u000C\\u000B\"");
 
-        let isolated_surrogate = crate::BslString::from_str("😀").left(1);
+        let isolated_surrogate = bsl_rt::BslString::from_str("😀").left(1);
         let s = write_compact(|w| w.value(&BslValue::Str(isolated_surrogate)));
         assert_eq!(s, "\"�\"");
     }
 
     #[test]
     fn bsl_property_name_uses_the_same_escaping_rules() {
-        let name = crate::BslString::from_str("имя\"\t😀");
+        let name = bsl_rt::BslString::from_str("имя\"\t😀");
         let s = write_compact(|w| {
             w.begin_object()?;
             w.property_name_bsl(&name)?;
@@ -3158,7 +3878,7 @@ mod tests {
 
         for v in [
             BslValue::Null,
-            BslValue::Date(crate::BslDate::from_seconds(0).unwrap()),
+            BslValue::Date(bsl_rt::BslDate::from_seconds(0).unwrap()),
         ] {
             let mut w = JsonWriter::to_string_target(JsonWriterSettings::default());
             assert!(w.value(&v).is_err(), "{v:?} не должно записываться");
@@ -3204,8 +3924,8 @@ mod tests {
 
     // --- ЗаписатьДатуJSON / ПрочитатьДатуJSON --------------------------
 
-    fn civil(y: i64, m: u32, d: u32, h: u32, mi: u32, s: u32) -> crate::BslDate {
-        crate::BslDate::from_civil(y, m, d, h, mi, s).unwrap()
+    fn civil(y: i64, m: u32, d: u32, h: u32, mi: u32, s: u32) -> bsl_rt::BslDate {
+        bsl_rt::BslDate::from_civil(y, m, d, h, mi, s).unwrap()
     }
 
     #[test]
@@ -3220,7 +3940,7 @@ mod tests {
         let d = civil(2014, 5, 10, 13, 14, 15);
         let s =
             format_json_date(d, JsonDateFormat::Iso, JsonDateWritingVariant::LocalOffset).unwrap();
-        let offset = crate::tz::local_offset_seconds(pseudo_unix_seconds(d));
+        let offset = bsl_rt::local_offset_seconds(pseudo_unix_seconds(d));
         assert_eq!(s, format!("2014-05-10T13:14:15{}", format_offset(offset)));
     }
 
@@ -3228,7 +3948,7 @@ mod tests {
     fn write_json_date_universal_variant_covers_all_three_formats() {
         let d = civil(2014, 5, 10, 13, 14, 15);
         let pseudo = pseudo_unix_seconds(d);
-        let offset = crate::tz::local_offset_seconds(pseudo);
+        let offset = bsl_rt::local_offset_seconds(pseudo);
         let utc_unix = pseudo - i64::from(offset);
 
         let iso = format_json_date(d, JsonDateFormat::Iso, JsonDateWritingVariant::Universal)
@@ -3330,7 +4050,7 @@ mod tests {
     #[test]
     fn empty_date_formats_without_error_in_local_variants() {
         // Граница диапазона: пустая дата, оба варианта без пересчёта в UTC.
-        let d = crate::BslDate::empty();
+        let d = bsl_rt::BslDate::empty();
         assert_eq!(
             format_json_date(d, JsonDateFormat::Iso, JsonDateWritingVariant::Local).unwrap(),
             "0001-01-01T00:00:00"
@@ -3345,7 +4065,7 @@ mod tests {
     /// смещения машины клампится к полу диапазона.
     #[test]
     fn universal_variant_of_the_empty_date_clamps_to_the_floor_instead_of_erroring() {
-        let d = crate::BslDate::empty();
+        let d = bsl_rt::BslDate::empty();
         let text = format_json_date(d, JsonDateFormat::Iso, JsonDateWritingVariant::Universal)
             .expect("клампится, а не падает");
         assert!(
@@ -3355,7 +4075,7 @@ mod tests {
         // На восточном (неотрицательном) смещении платформа измерена ТОЧНО
         // на полу; при отрицательном смещении вычитание и так не уходит за
         // пол, кламп там — no-op, и точное значение не измерено.
-        let offset = crate::tz::local_offset_seconds(pseudo_unix_seconds(d));
+        let offset = bsl_rt::local_offset_seconds(pseudo_unix_seconds(d));
         if offset >= 0 {
             assert_eq!(text, "0001-01-01T00:00:00Z");
         }
@@ -3461,14 +4181,14 @@ mod tests {
     fn write_json_date_rejects_wrong_argument_types() {
         let format = BslValue::Enum(EnumValue::DateFormatIso);
         assert!(write_json_date(&BslValue::Undefined, &format, &BslValue::Undefined).is_err());
-        let date = BslValue::Date(crate::BslDate::empty());
+        let date = BslValue::Date(bsl_rt::BslDate::empty());
         assert!(write_json_date(&date, &BslValue::Undefined, &BslValue::Undefined).is_err());
     }
 
     #[test]
     fn read_json_date_reports_the_chosen_error_text() {
         // Замер JSON.READ_DATE.BAD_FORMAT_TEXT — фиксирует ВЫБРАННЫЙ текст.
-        let text = BslValue::Str(crate::BslString::from_str("мусор"));
+        let text = BslValue::Str(bsl_rt::BslString::from_str("мусор"));
         let format = BslValue::Enum(EnumValue::DateFormatIso);
         let e = read_json_date(&text, &format).unwrap_err();
         assert_eq!(e.to_string(), "Представление даты имеет неверный формат");
@@ -3486,9 +4206,7 @@ mod tests {
 
     #[test]
     fn serializer_setting_accessors_round_trip_every_field() {
-        let obj = BslValue::Object(std::rc::Rc::new(BslObject::JsonSerializerSettings(
-            std::cell::RefCell::new(JsonSerializerSettings::default()),
-        )));
+        let obj = new_json_serializer_settings();
         set_serializer_setting(
             &obj,
             "ФорматСериализацииДаты",
@@ -3527,9 +4245,7 @@ mod tests {
     /// «ы») — опечатка статьи, живая 8.3.27 такое имя отвергает.
     #[test]
     fn the_article_typo_spelling_of_date_format_property_is_rejected() {
-        let obj = BslValue::Object(std::rc::Rc::new(BslObject::JsonSerializerSettings(
-            std::cell::RefCell::new(JsonSerializerSettings::default()),
-        )));
+        let obj = new_json_serializer_settings();
         assert!(get_serializer_setting(&obj, "ФорматСериализацииДат").is_err());
     }
 
@@ -3538,14 +4254,18 @@ mod tests {
     #[test]
     fn write_json_value_rejects_date_at_top_level_and_nested() {
         let rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
-        let e = write_json_value(&BslValue::Date(crate::BslDate::empty()), &rt).unwrap_err();
+        let e = write_json_value(&BslValue::Date(bsl_rt::BslDate::empty()), &rt).unwrap_err();
         assert!(matches!(e, RtError::TypeError { .. }));
 
         let mut rt2 = RuntimeShapes::seeded(Vec::new(), Vec::new());
         let id = rt2.names.intern("д");
         let s = BslValue::new_structure(rt2.shapes.empty(), Vec::new());
-        s.structure_insert(id, BslValue::Date(crate::BslDate::empty()), &mut rt2.shapes)
-            .unwrap();
+        s.structure_insert(
+            id,
+            BslValue::Date(bsl_rt::BslDate::empty()),
+            &mut rt2.shapes,
+        )
+        .unwrap();
         let e2 = write_json_value(&s, &rt2).unwrap_err();
         assert!(matches!(e2, RtError::TypeError { .. }));
     }
@@ -3557,7 +4277,7 @@ mod tests {
         let rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
         let map = BslValue::new_map();
         map.map_insert(
-            BslValue::Str(crate::BslString::from_str("ключ")),
+            BslValue::Str(bsl_rt::BslString::from_str("ключ")),
             BslValue::Number(num("1")),
         )
         .unwrap();
@@ -3576,7 +4296,7 @@ mod tests {
     #[test]
     fn write_json_without_a_convert_function_keeps_the_plain_type_error() {
         let rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
-        let writer = BslValue::new_json_writer();
+        let writer = new_json_writer();
         set_string(&writer, &[]).unwrap();
         let table = BslValue::new_table();
         let e = write_json(
@@ -3596,7 +4316,7 @@ mod tests {
     fn read_json_value_rejects_an_empty_string() {
         let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
         let e =
-            read_json_value(&BslValue::Str(crate::BslString::from_str("")), &mut rt).unwrap_err();
+            read_json_value(&BslValue::Str(bsl_rt::BslString::from_str("")), &mut rt).unwrap_err();
         assert!(matches!(e, RtError::Json(_)));
     }
 
@@ -3604,7 +4324,7 @@ mod tests {
     fn write_and_read_json_value_round_trip_scalars_and_structures() {
         let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
         let s = write_json_value(&BslValue::Number(num("42")), &rt).unwrap();
-        assert_eq!(s, BslValue::Str(crate::BslString::from_str("42")));
+        assert_eq!(s, BslValue::Str(bsl_rt::BslString::from_str("42")));
 
         let id = rt.names.intern("а");
         let structure = BslValue::new_structure(rt.shapes.empty(), Vec::new());

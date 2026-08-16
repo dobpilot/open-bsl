@@ -103,6 +103,19 @@ impl Arity {
 /// `bsl-format` зависит от `bsl-rt`, а обратная зависимость запрещена.
 pub type ValueFormatter = fn(&BslValue, Option<&str>) -> RtResult<String>;
 
+/// Вызов экспортной функции исполняемого модуля по имени.
+///
+/// Потоки передаются в сам вызов, чтобы замыканию не приходилось
+/// владеть `HostIo` VM и одновременно заимствовать его для
+/// [`CallContext::stdout`] и [`CallContext::stderr`].
+pub type FunctionCaller<'a> = dyn FnMut(
+        &str,
+        Vec<BslValue>,
+        &mut dyn Write,
+        &mut dyn Write,
+    ) -> RtResult<(BslValue, Vec<BslValue>)>
+    + 'a;
+
 /// Сервисы конкретного состояния исполнения, доступные компоненту.
 ///
 /// Контекст не раскрывает стек и регистры VM. Вывод и таблицы форм
@@ -113,6 +126,7 @@ pub struct CallContext<'a> {
     stdout: &'a mut dyn Write,
     stderr: &'a mut dyn Write,
     formatter: ValueFormatter,
+    function_caller: Option<&'a mut FunctionCaller<'a>>,
 }
 
 impl<'a> CallContext<'a> {
@@ -127,6 +141,25 @@ impl<'a> CallContext<'a> {
             stdout,
             stderr,
             formatter,
+            function_caller: None,
+        }
+    }
+
+    /// Создаёт контекст, в котором компонент может вызвать функцию
+    /// текущего BSL-модуля по имени.
+    pub fn with_function_caller(
+        runtime_shapes: &'a mut RuntimeShapes,
+        stdout: &'a mut dyn Write,
+        stderr: &'a mut dyn Write,
+        formatter: ValueFormatter,
+        function_caller: &'a mut FunctionCaller<'a>,
+    ) -> Self {
+        Self {
+            runtime_shapes,
+            stdout,
+            stderr,
+            formatter,
+            function_caller: Some(function_caller),
         }
     }
 
@@ -144,6 +177,24 @@ impl<'a> CallContext<'a> {
 
     pub fn format_value(&self, value: &BslValue, spec: Option<&str>) -> RtResult<String> {
         (self.formatter)(value, spec)
+    }
+
+    /// Разделяет изменяемые сервисы для операции, которая одновременно
+    /// меняет таблицу форм и может вызвать BSL-функцию.
+    pub fn execution_parts(
+        &mut self,
+    ) -> (
+        &mut RuntimeShapes,
+        &mut dyn Write,
+        &mut dyn Write,
+        Option<&mut FunctionCaller<'a>>,
+    ) {
+        (
+            self.runtime_shapes,
+            self.stdout,
+            self.stderr,
+            self.function_caller.as_deref_mut(),
+        )
     }
 }
 

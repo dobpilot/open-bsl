@@ -25,6 +25,7 @@
 use std::fmt;
 
 use crate::locale::Locale;
+use crate::{RtError, RtResult};
 
 /// Секунд в сутках.
 pub const SECONDS_PER_DAY: i64 = 86_400;
@@ -40,6 +41,26 @@ pub const EMPTY: i64 = 0;
 /// Сколько наших секунд соответствует `1970-01-01 00:00:00`. Нужно ровно в
 /// одном месте — переводе системного времени в дату (`ТекущаяДата`).
 pub const UNIX_EPOCH_SECONDS: i64 = DAYS_FROM_0001_TO_1970 * SECONDS_PER_DAY;
+
+/// Пересчитывает гражданские поля BSL-даты в секунды Unix-эпохи
+/// без применения часового пояса.
+pub fn pseudo_unix_seconds(date: BslDate) -> i64 {
+    date.seconds() - UNIX_EPOCH_SECONDS
+}
+
+/// Переводит UTC-секунды Unix-эпохи в местную BSL-дату.
+///
+/// # Errors
+///
+/// [`RtError::DateOutOfRange`], если дата не помещается в диапазон BSL.
+pub fn local_date_from_utc_seconds(unix_seconds: i64, op: &'static str) -> RtResult<BslDate> {
+    let offset = crate::tz::local_offset_seconds(unix_seconds);
+    unix_seconds
+        .checked_add(i64::from(offset))
+        .and_then(|seconds| seconds.checked_add(UNIX_EPOCH_SECONDS))
+        .and_then(BslDate::from_seconds)
+        .ok_or(RtError::DateOutOfRange { op })
+}
 
 /// Номер дня `9999-12-31`, считая `0001-01-01` нулевым: годы `1..=9999`
 /// это `9999 * 365 + 2424` високосных дней, минус один за то, что счёт

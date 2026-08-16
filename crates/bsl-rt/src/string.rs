@@ -183,7 +183,8 @@ impl BslString {
     /// есть `String`, и выкидывать его ради немедленного обратного декодирования
     /// в `ЧтениеJSON` незачем. Обычный [`from_str`](Self::from_str) остаётся ленивым и
     /// не удваивает память каждой короткой строки.
-    pub(crate) fn from_utf8_string(s: String) -> Self {
+    /// Создаёт BSL-строку, забирая готовый UTF-8 буфер без копии.
+    pub fn from_utf8_string(s: String) -> Self {
         let units: Vec<u16> = s.encode_utf16().collect();
         let utf8 = OnceCell::new();
         let inserted = utf8.set(Rc::from(s));
@@ -245,7 +246,8 @@ impl BslString {
     /// Снимок не связан с последующей конкатенацией: `append` инвалидирует
     /// кэш в мутируемом `BslStringData`, а уже выданный `Rc<str>` остаётся
     /// неизменным снимком старого значения.
-    pub(crate) fn shared_utf8(&self) -> Rc<str> {
+    /// Возвращает разделяемое UTF-8 представление для парсеров компонентов.
+    pub fn shared_utf8(&self) -> Rc<str> {
         self.0
             .utf8
             .get_or_init(|| Rc::from(String::from_utf16_lossy(self.units())))

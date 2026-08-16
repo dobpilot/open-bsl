@@ -936,15 +936,28 @@ impl<'a> Resolver<'a> {
                 });
             }
         }
-        if self.registry.is_some()
-            && matches!(
-                type_name.to_uppercase().as_str(),
-                "ТЕКСТОВЫЙДОКУМЕНТ" | "TEXTDOCUMENT"
-            )
-        {
-            return Err(SemaError::Unsupported(
-                "ТекстовыйДокумент требует зарегистрированный компонент bsl-textdoc",
-            ));
+        if self.registry.is_some() {
+            let upper = type_name.to_uppercase();
+            if matches!(upper.as_str(), "ТЕКСТОВЫЙДОКУМЕНТ" | "TEXTDOCUMENT") {
+                return Err(SemaError::Unsupported(
+                    "ТекстовыйДокумент требует зарегистрированный компонент bsl-textdoc",
+                ));
+            }
+            if matches!(
+                upper.as_str(),
+                "ЧТЕНИЕJSON"
+                    | "JSONREADER"
+                    | "ЗАПИСЬJSON"
+                    | "JSONWRITER"
+                    | "ПАРАМЕТРЫЗАПИСИJSON"
+                    | "JSONWRITERSETTINGS"
+                    | "НАСТРОЙКИСЕРИАЛИЗАЦИИJSON"
+                    | "JSONSERIALIZERSETTINGS"
+            ) {
+                return Err(SemaError::Unsupported(
+                    "JSON-тип требует зарегистрированный компонент bsl-json",
+                ));
+            }
         }
         match type_name.to_uppercase().as_str() {
             "МАССИВ" | "ARRAY" => {
@@ -1634,7 +1647,10 @@ impl<'a> Resolver<'a> {
                                 found: args.len(),
                             });
                         }
-                        let rargs = self.resolve_required_args(args)?;
+                        // Глобальные функции компонентов имеют ту же
+                        // BSL-семантику пропущенных позиций, что и builtin:
+                        // `ПрочитатьJSON(Ч, , Имена)` передаёт `Неопределено`.
+                        let rargs = self.resolve_builtin_args(args)?;
                         let package = registry
                             .library(library_index)
                             .expect("индекс получен из таблицы имён этого реестра")
@@ -1703,6 +1719,12 @@ impl<'a> Resolver<'a> {
                                 | bsl_rt::BuiltinFn::SetBit
                                 | bsl_rt::BuiltinFn::NumberFromHexString
                                 | bsl_rt::BuiltinFn::NumberFromBinaryString
+                                | bsl_rt::BuiltinFn::ReadJson
+                                | bsl_rt::BuiltinFn::WriteJson
+                                | bsl_rt::BuiltinFn::WriteJsonDate
+                                | bsl_rt::BuiltinFn::ReadJsonDate
+                                | bsl_rt::BuiltinFn::WriteJsonValue
+                                | bsl_rt::BuiltinFn::ReadJsonValue
                         )
                     {
                         return Err(SemaError::UndefinedFunction(name.clone()));

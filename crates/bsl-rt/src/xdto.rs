@@ -2262,8 +2262,8 @@ fn split_zone(text: &str, from: usize) -> (&str, Option<i32>) {
 fn apply_zone(wall: crate::BslDate, zone: Option<i32>) -> RtResult<crate::BslDate> {
     match zone {
         None => Ok(wall),
-        Some(offset) => crate::json::local_date_from_utc_seconds(
-            crate::json::pseudo_unix_seconds(wall) - i64::from(offset),
+        Some(offset) => crate::local_date_from_utc_seconds(
+            crate::pseudo_unix_seconds(wall) - i64::from(offset),
             "лексическая форма XDTO",
         ),
     }

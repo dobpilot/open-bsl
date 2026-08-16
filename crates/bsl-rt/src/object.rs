@@ -120,20 +120,13 @@ pub enum BslObject {
     /// сравнение на равенство (по тексту) и обратная запись.
     VstrOpaque(String),
 
-    /// `ЧтениеJSON`. Разборщик появляется только после
-    /// `УстановитьСтроку`/`ОткрытьФайл` — до этого читать нечего, и
-    /// платформа на попытку тоже отвечает ошибкой.
-    JsonReader(RefCell<JsonReaderState>),
-    /// `ЗаписьJSON`. Так же: приёмник назначается отдельным вызовом.
-    JsonWriter(RefCell<Option<crate::json::JsonWriter>>),
-    /// `ПараметрыЗаписиJSON` — простой набор значений, менять его после
-    /// создания незачем, поэтому без `RefCell`.
-    JsonWriterSettings(crate::json::JsonWriterSettings),
-    /// `НастройкиСериализацииJSON` (третий аргумент `ЗаписатьJSON`) —
-    /// в отличие от `JsonWriterSettings` её поля ЧИТАЮТСЯ И ПИШУТСЯ через
-    /// точку (`Настройки.ФорматСериализацииДат = ...`) уже после создания
-    /// объекта, поэтому под `RefCell`.
-    JsonSerializerSettings(RefCell<crate::json::JsonSerializerSettings>),
+    /// Зарезервированные места прежних JSON-объектов. Они сохраняют
+    /// номера следующих legacy-тегов; значения создаёт `bsl-json`
+    /// через `ObjectProtocol`.
+    ReservedJsonReader,
+    ReservedJsonWriter,
+    ReservedJsonWriterSettings,
+    ReservedJsonSerializerSettings,
 
     /// `ЧтениеXML`. Как и у JSON, разборщик появляется только после
     /// `УстановитьСтроку`/`ОткрытьФайл`.
@@ -398,17 +391,6 @@ impl XmlReaderState {
     pub fn current_attr(&self) -> Option<&crate::xml::XmlAttr> {
         self.attr_cursor.and_then(|i| self.attrs().get(i))
     }
-}
-
-/// Состояние `ЧтениеJSON`: сам разборщик и последнее прочитанное событие.
-///
-/// Событие хранится, потому что `ТипТекущегоЗначения` и `ТекущееЗначение`
-/// — СВОЙСТВА, а не результат `Прочитать()`: читатель обязан помнить, где
-/// он стоит, между двумя обращениями к нему.
-#[derive(Debug, Default)]
-pub struct JsonReaderState {
-    pub parser: Option<crate::json::JsonParser>,
-    pub current: Option<crate::json::JsonEvent>,
 }
 
 /// Хранение полей `Структура` — двухрежимное, как в V8.
