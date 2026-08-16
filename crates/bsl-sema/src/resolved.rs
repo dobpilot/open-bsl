@@ -1,5 +1,5 @@
 use bsl_number::BslNumber;
-use bsl_rt::{BuiltinFn, BuiltinMethod, ConstructorCode, FunctionCode, FunctionKind, LibraryKey};
+use bsl_rt::{BuiltinFn, ConstructorCode, FunctionCode, FunctionKind, LibraryKey};
 use bsl_syntax::{BinaryOp, UnaryOp};
 
 /// Выражение после резолвинга: идентификаторы заменены на индексы слотов,
@@ -70,7 +70,12 @@ pub enum RExpr {
     /// длины, а не проверяется здесь же (см. `bsl_rt::call_builtin_method`).
     CallMethod {
         obj: Box<RExpr>,
-        method: BuiltinMethod,
+        /// Исходное имя метода. Применимость определяется фактическим
+        /// типом получателя, поэтому закрытое перечисление здесь не нужно.
+        method: String,
+        /// Компиляция идёт с реестром компонентов: получатель может быть
+        /// внешним, поэтому даже знакомое ядру имя нельзя специализировать.
+        open: bool,
         args: Vec<RExpr>,
     },
     Str(String),
@@ -81,6 +86,7 @@ pub enum RExpr {
     Field {
         obj: Box<RExpr>,
         name: String,
+        open: bool,
     },
     /// `Новый Массив(d1, d2, ...)` — каждое измерение вкладывает следующий
     /// уровень массивов (`Новый Массив(3, 4)` — массив из 3 массивов по 4).
@@ -293,6 +299,7 @@ pub enum RStmt {
     AssignField {
         obj: RExpr,
         name: String,
+        open: bool,
         value: RExpr,
     },
     /// Вызов процедуры/функции как оператор — результат отбрасывается.

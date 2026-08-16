@@ -1372,11 +1372,6 @@ fn step(
             } => {
                 let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
                 let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
-                // `Вывести` перехватывается здесь, а не в `bsl-rt`: подстановка
-                // параметров макета форматирует значение так же, как `Строка()`
-                // (измерено — число уходит с разделителями групп), а
-                // форматирование живёт в `bsl-format`, который зависит от
-                // `bsl-rt`, не наоборот. Тот же приём, что у `Строка`/`Формат`.
                 let v = if method == bsl_rt::BuiltinMethod::OutputArea {
                     output_area(&ov, args.as_slice())?
                 } else {
@@ -1435,10 +1430,11 @@ fn step(
             // полутора раз при том же числе исполненных инструкций.
             //
             // Граница проведена по стоимости тела, а не по редкости
-            // опкода: `CallBuiltin`, `CallMethod` и `WriteText` остались
-            // здесь, потому что исполняются миллионами и лишний вызов на
-            // каждый стоит дороже, чем занятое ими место (измерено —
-            // `csv_write` теряет 7%, если унести и их).
+            // опкода: `CallBuiltin`, `CallMethod` и `WriteText`
+            // остались здесь, потому что исполняются миллионами и лишний
+            // вызов на каждый стоит дороже, чем занятое ими место (измерено
+            // — `csv_write` теряет 7%, если унести и их). Открытый
+            // `CallObjectMethod` встречается только у компонентных методов.
             //
             // Опкоды перечислены поимённо, а не `_`, чтобы `match`
             // остался исчерпывающим и новый опкод по-прежнему ломал
@@ -1483,6 +1479,9 @@ fn step(
             | Instr::NewBinaryData { .. }
             | Instr::Raise { .. }
             | Instr::CloseText { .. }
+            | Instr::CallObjectMethod { .. }
+            | Instr::GetObjectProp { .. }
+            | Instr::SetObjectProp { .. }
             | Instr::RunDynamic { .. } => {
                 step_cold(
                     instr,
@@ -1493,6 +1492,7 @@ fn step(
                     snippets,
                     linked,
                     host,
+                    runtime_shapes,
                     frame_idx,
                     func_id,
                     chunk,
@@ -1571,6 +1571,7 @@ fn step_cold(
     snippets: &mut SnippetCache,
     linked: &LinkedComponents<'_>,
     host: &mut HostIo<'_>,
+    runtime_shapes: &mut bsl_rt::RuntimeShapes,
     frame_idx: usize,
     func_id: usize,
     chunk: &bsl_bytecode::Chunk,
@@ -1890,6 +1891,88 @@ fn step_cold(
                 None => current_exception.clone().unwrap_or(BslValue::Undefined),
             };
             return Err(RtError::Raised(value));
+        }
+        Instr::GetObjectProp { dst, obj, name } => {
+            let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
+            let name_id = bsl_rt::NameId::from_index(name as u32);
+            let property_name = field_name(program, name_id)?;
+            let value = if let Some(object) = ov.object_ref() {
+                let mut context = bsl_rt::CallContext::new(
+                    runtime_shapes,
+                    &mut *host.stdout,
+                    &mut *host.stderr,
+                    bsl_format::format_value,
+                );
+                object.get_property(property_name, &mut context)?
+            } else {
+                match ov.get_field_cached(name_id, prop_cache(chunk, frames[frame_idx].pc)?) {
+                    Err(RtError::NotAnObject) => ov.get_field_by_name(property_name)?,
+                    other => other?,
+                }
+            };
+            let destination = frames[frame_idx].reg_index(dst);
+            reg_store(stack, destination, value)?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::SetObjectProp { obj, name, src } => {
+            let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
+            let value = reg_load(stack, frames[frame_idx].reg_index(src))?;
+            let name_id = bsl_rt::NameId::from_index(name as u32);
+            let property_name = field_name(program, name_id)?;
+            if let Some(object) = ov.object_ref() {
+                let mut context = bsl_rt::CallContext::new(
+                    runtime_shapes,
+                    &mut *host.stdout,
+                    &mut *host.stderr,
+                    bsl_format::format_value,
+                );
+                object.set_property(property_name, value, &mut context)?;
+            } else if !set_spread_value(&ov, property_name, &value)? {
+                match ov.set_field_cached(
+                    name_id,
+                    value.clone(),
+                    prop_cache(chunk, frames[frame_idx].pc)?,
+                ) {
+                    Err(RtError::NotAnObject) => ov.set_field_by_name(property_name, value)?,
+                    other => other?,
+                }
+            }
+            frames[frame_idx].pc += 1;
+        }
+        Instr::CallObjectMethod {
+            dst,
+            obj,
+            method,
+            base,
+            count,
+        } => {
+            let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
+            let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
+            let method_name = field_name(program, bsl_rt::NameId::from_index(method as u32))?;
+            let value = if let Some(object) = ov.object_ref() {
+                let mut context = bsl_rt::CallContext::new(
+                    runtime_shapes,
+                    &mut *host.stdout,
+                    &mut *host.stderr,
+                    bsl_format::format_value,
+                );
+                object.call_method(method_name, args.as_slice(), &mut context)?
+            } else {
+                let builtin = bsl_rt::BuiltinMethod::lookup(method_name).ok_or_else(|| {
+                    RtError::UnknownMethod {
+                        method: method_name.to_string(),
+                        receiver: ov.type_name(),
+                    }
+                })?;
+                if builtin == bsl_rt::BuiltinMethod::OutputArea {
+                    output_area(&ov, args.as_slice())?
+                } else {
+                    bsl_rt::call_builtin_method_ctx(builtin, &ov, args.as_slice(), runtime_shapes)?
+                }
+            };
+            let destination = frames[frame_idx].reg_index(dst);
+            reg_store(stack, destination, value)?;
+            frames[frame_idx].pc += 1;
         }
         Instr::CloseText { dst, obj } => {
             let obj_idx = frames[frame_idx].reg_index(obj);
@@ -2736,6 +2819,14 @@ fn call_builtin_with_format(
             };
             bsl_rt::write_json_builtin(args, runtime_shapes, Some(&mut call))
         }
+        #[cfg(feature = "regexp")]
+        BuiltinFn::StrFindByRegex => bsl_regexp::find(args),
+        #[cfg(feature = "regexp")]
+        BuiltinFn::StrFindAllByRegex => bsl_regexp::find_all(args),
+        #[cfg(feature = "regexp")]
+        BuiltinFn::StrReplaceByRegex => bsl_regexp::replace(args),
+        #[cfg(feature = "regexp")]
+        BuiltinFn::StrLikeByRegex => bsl_regexp::like(args),
         // Не `call_builtin_fn`: `ЗаполнитьЗначенияСвойств` читает таблицу
         // имён, и путь без контекста для неё кончается ошибкой.
         other => bsl_rt::call_builtin_fn_ctx(other, args, runtime_shapes),
@@ -3024,6 +3115,124 @@ mod tests {
         Ok(num("43"))
     }
 
+    #[derive(Debug)]
+    struct HostCounter(std::cell::RefCell<i64>);
+
+    static HOST_COUNTER_TYPE: bsl_rt::TypeDescriptor = bsl_rt::TypeDescriptor {
+        package: "bsl-test-host",
+        name: "СчётчикХоста",
+        legacy_type_id: None,
+    };
+
+    impl bsl_rt::ObjectProtocol for HostCounter {
+        fn type_descriptor(&self) -> &'static bsl_rt::TypeDescriptor {
+            &HOST_COUNTER_TYPE
+        }
+
+        fn get_property(
+            &self,
+            name: &str,
+            _context: &mut bsl_rt::CallContext<'_>,
+        ) -> bsl_rt::RtResult<BslValue> {
+            if name.eq_ignore_ascii_case("Значение") || name.eq_ignore_ascii_case("Value") {
+                Ok(num(&self.0.borrow().to_string()))
+            } else {
+                Err(RtError::UnknownProperty(name.to_string()))
+            }
+        }
+
+        fn set_property(
+            &self,
+            name: &str,
+            value: BslValue,
+            _context: &mut bsl_rt::CallContext<'_>,
+        ) -> bsl_rt::RtResult<()> {
+            if !name.eq_ignore_ascii_case("Значение") && !name.eq_ignore_ascii_case("Value")
+            {
+                return Err(RtError::UnknownProperty(name.to_string()));
+            }
+            let BslValue::Number(value) = value else {
+                return Err(RtError::TypeError {
+                    expected: "Число",
+                    op: "СчётчикХоста.Значение",
+                });
+            };
+            *self.0.borrow_mut() = value.to_i64_exact().ok_or(RtError::TypeError {
+                expected: "Целое число",
+                op: "СчётчикХоста.Значение",
+            })?;
+            Ok(())
+        }
+
+        fn call_method(
+            &self,
+            name: &str,
+            arguments: &[BslValue],
+            _context: &mut bsl_rt::CallContext<'_>,
+        ) -> bsl_rt::RtResult<BslValue> {
+            if !name.eq_ignore_ascii_case("Прибавить")
+                && !name.eq_ignore_ascii_case("Add")
+                && !name.eq_ignore_ascii_case("Добавить")
+            {
+                return Err(RtError::UnknownMethod {
+                    method: name.to_string(),
+                    receiver: HOST_COUNTER_TYPE.name,
+                });
+            }
+            let [BslValue::Number(delta)] = arguments else {
+                return Err(RtError::MethodNotApplicable {
+                    method: "Прибавить",
+                    receiver: HOST_COUNTER_TYPE.name,
+                });
+            };
+            let delta = delta.to_i64_exact().ok_or(RtError::TypeError {
+                expected: "Целое число",
+                op: "СчётчикХоста.Прибавить",
+            })?;
+            *self.0.borrow_mut() += delta;
+            Ok(num(&self.0.borrow().to_string()))
+        }
+
+        fn get_index(&self, index: &BslValue) -> bsl_rt::RtResult<BslValue> {
+            if *index == num("0") {
+                Ok(num(&self.0.borrow().to_string()))
+            } else {
+                Err(RtError::BadIndex)
+            }
+        }
+
+        fn set_index(&self, index: &BslValue, value: BslValue) -> bsl_rt::RtResult<()> {
+            if *index != num("0") {
+                return Err(RtError::BadIndex);
+            }
+            let BslValue::Number(value) = value else {
+                return Err(RtError::TypeError {
+                    expected: "Число",
+                    op: "СчётчикХоста[]",
+                });
+            };
+            *self.0.borrow_mut() = value.to_i64_exact().ok_or(RtError::BadIndex)?;
+            Ok(())
+        }
+
+        fn collection_len(&self) -> bsl_rt::RtResult<usize> {
+            Ok(1)
+        }
+
+        fn display(&self) -> String {
+            format!("СчётчикХоста({})", self.0.borrow())
+        }
+    }
+
+    fn component_counter(
+        _context: &mut bsl_rt::CallContext<'_>,
+        _args: &[BslValue],
+    ) -> bsl_rt::RtResult<BslValue> {
+        Ok(BslValue::new_object(HostCounter(std::cell::RefCell::new(
+            0,
+        ))))
+    }
+
     fn component_message(
         context: &mut bsl_rt::CallContext<'_>,
         _args: &[BslValue],
@@ -3049,13 +3258,20 @@ mod tests {
             call: component_message,
         },
     ];
-    const TEST_COMPONENT_CONSTRUCTORS: &[bsl_rt::ConstructorDescriptor] =
-        &[bsl_rt::ConstructorDescriptor {
+    const TEST_COMPONENT_CONSTRUCTORS: &[bsl_rt::ConstructorDescriptor] = &[
+        bsl_rt::ConstructorDescriptor {
             code: bsl_rt::ConstructorCode::new(9),
             names: &["ТестовыйОбъект", "TestObject"],
             arity: bsl_rt::Arity::exact(0),
             call: component_construct,
-        }];
+        },
+        bsl_rt::ConstructorDescriptor {
+            code: bsl_rt::ConstructorCode::new(10),
+            names: &["СчётчикХоста", "HostCounter"],
+            arity: bsl_rt::Arity::exact(0),
+            call: component_counter,
+        },
+    ];
 
     fn test_component_registry() -> bsl_rt::RuntimeRegistry {
         let mut builder = bsl_rt::RuntimeBuilder::new();
@@ -3148,6 +3364,39 @@ mod tests {
         assert_eq!(
             run_program_with_registry(&program, &registry).unwrap(),
             num("43")
+        );
+    }
+
+    #[test]
+    fn component_object_owns_properties_methods_and_indexes() {
+        let registry = test_component_registry();
+        let program = compile_with_registry(
+            "с = Новый СчётчикХоста();\n\
+             с.Значение = 10;\n\
+             с[0] = 11;\n\
+             с.Прибавить(5);\n\
+             Возврат с.Добавить(1) + с.Значение + с[0];",
+            &registry,
+        );
+
+        let instructions = &program.chunks[0].instrs;
+        assert!(instructions
+            .iter()
+            .any(|instruction| matches!(instruction, Instr::GetObjectProp { .. })));
+        assert!(instructions
+            .iter()
+            .any(|instruction| matches!(instruction, Instr::SetObjectProp { .. })));
+        assert!(instructions
+            .iter()
+            .any(|instruction| matches!(instruction, Instr::CallObjectMethod { .. })));
+
+        assert_eq!(
+            run_program_with_registry(&program, &registry).unwrap(),
+            num("51")
+        );
+        assert_eq!(
+            run_program_jit_with_registry(&program, &registry).unwrap(),
+            num("51")
         );
     }
 

@@ -36,7 +36,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 16;
+pub const FORMAT_VERSION: u32 = 17;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -123,6 +123,9 @@ pub const OPCODES: &[&str] = &[
     "WriteText",
     "CloseText",
     "RunDynamic",
+    "CallObjectMethod",
+    "GetObjectProp",
+    "SetObjectProp",
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -311,6 +314,14 @@ fn instr_comment(instr: &Instr, chunk: &Chunk, program: &Program) -> Option<Stri
         Instr::GetProp { name, .. } | Instr::SetProp { name, .. } => {
             program.names.get(name.index()).map(|n| format!(".{n}"))
         }
+        Instr::CallObjectMethod { method, .. } => program
+            .names
+            .get(*method as usize)
+            .map(|name| format!(".{name}")),
+        Instr::GetObjectProp { name, .. } | Instr::SetObjectProp { name, .. } => program
+            .names
+            .get(*name as usize)
+            .map(|name| format!(".{name}")),
         Instr::NewStructure { shape, .. } => program
             .shapes
             .get(*shape as usize)
@@ -585,8 +596,24 @@ fn write_instr(instr: &Instr) -> String {
             count,
         } => format!(
             "CallMethod dst={dst} obj={obj} method={} base={base} count={count}",
-            method_name(*method)
+            builtin_method_name(*method)
         ),
+        Instr::CallObjectMethod {
+            dst,
+            obj,
+            method,
+            base,
+            count,
+        } => format!(
+            "CallObjectMethod dst={dst} obj={obj} method={} base={base} count={count}",
+            method
+        ),
+        Instr::GetObjectProp { dst, obj, name } => {
+            format!("GetObjectProp dst={dst} obj={obj} name={name}")
+        }
+        Instr::SetObjectProp { obj, name, src } => {
+            format!("SetObjectProp obj={obj} name={name} src={src}")
+        }
         Instr::WriteText { dst, obj, src } => format!("WriteText dst={dst} obj={obj} src={src}"),
         Instr::CloseText { dst, obj } => format!("CloseText dst={dst} obj={obj}"),
         Instr::RunDynamic { src, dst, is_eval } => {
@@ -607,12 +634,11 @@ fn builtin_name(f: bsl_rt::BuiltinFn) -> &'static str {
         .unwrap_or("?")
 }
 
-fn method_name(m: bsl_rt::BuiltinMethod) -> &'static str {
+fn builtin_method_name(method: bsl_rt::BuiltinMethod) -> &'static str {
     bsl_rt::BUILTIN_METHOD_NAMES
         .iter()
-        .find(|(_, v)| *v == m)
-        .map(|(n, _)| *n)
-        .unwrap_or("?")
+        .find_map(|(name, candidate)| (*candidate == method).then_some(*name))
+        .expect("каждый BuiltinMethod обязан иметь имя в единой таблице")
 }
 
 /// Строковый литерал с экранированием. `;` внутри кавычек не начинает
@@ -1535,6 +1561,23 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
                 count: count(&f)?,
             }
         }
+        "CallObjectMethod" => Instr::CallObjectMethod {
+            dst: dst(&f)?,
+            obj: obj(&f)?,
+            method: field_u16(&f, no, "method")?,
+            base: base(&f)?,
+            count: count(&f)?,
+        },
+        "GetObjectProp" => Instr::GetObjectProp {
+            dst: dst(&f)?,
+            obj: obj(&f)?,
+            name: field_u16(&f, no, "name")?,
+        },
+        "SetObjectProp" => Instr::SetObjectProp {
+            obj: obj(&f)?,
+            name: field_u16(&f, no, "name")?,
+            src: src(&f)?,
+        },
         "WriteText" => Instr::WriteText {
             dst: dst(&f)?,
             obj: obj(&f)?,
@@ -1762,6 +1805,9 @@ mod tests {
          з.ЗаписатьНачалоЭлемента(\"а\");\nз.ЗаписатьАтрибут(\"х\", \"1\");\n\
          з.ЗаписатьКонецЭлемента();\n\
          т = ч.ТипУзла;\n",
+        // Открытое имя метода, которого нет в таблице ядра: такой вызов
+        // предназначен для объекта статически подключённого компонента.
+        "объект = Новый Структура;\nобъект.МетодКомпонента();\n",
     ];
 
     fn compile(src: &str) -> Program {
@@ -1790,13 +1836,24 @@ mod tests {
             base: 0,
             count: 0,
         };
-        program.chunks[0].instrs[1] = Instr::CreateObject {
-            dst: 0,
-            library: 1,
-            constructor: 9,
-            base: 0,
-            count: 0,
-        };
+        let name: u16 = program.names.len().try_into().unwrap();
+        program.names.push("ПолеКомпонента".to_string());
+        program.chunks[0].instrs.extend([
+            Instr::GetObjectProp {
+                dst: 0,
+                obj: 0,
+                name,
+            },
+            Instr::SetObjectProp {
+                obj: 0,
+                name,
+                src: 0,
+            },
+        ]);
+        let instruction_count = program.chunks[0].instrs.len();
+        program.chunks[0]
+            .prop_cache
+            .resize_with(instruction_count, || RefCell::new(None));
         program.chunks[0].bundle_len = crate::bundle::compute(
             &program.chunks[0],
             crate::bundle::module_overlap(0, program.module_vars.len()),

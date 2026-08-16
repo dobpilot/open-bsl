@@ -1,7 +1,7 @@
 //! Поверхность BSL над движком регулярных выражений: четыре глобальные
 //! функции и два объекта результата.
 //!
-//! Машинерия — в [`crate::regex`]; здесь только то, что видно из BSL:
+//! Машинерия находится во внутреннем модуле `engine`; здесь только то, что видно из BSL:
 //! `СтрНайтиПоРегулярномуВыражению` / `СтрНайтиВсеПоРегулярномуВыражению` /
 //! `СтрЗаменитьПоРегулярномуВыражению` / `СтрПодобнаПоРегулярномуВыражению`,
 //! объекты `РезультатПоискаПоРегулярномуВыражению` и
@@ -82,7 +82,7 @@
 //! Не частичное: «абвг» ~ `б` — «Нет», «абвг» ~ `абвг` — «Да», «абвг» ~
 //! `аб` — «Нет». И не эмуляция через `^…$`: «аб» + перевод строки ~ `аб`
 //! даёт «Нет», хотя `б$` в той же строке находится (у `$` хвостовой
-//! перевод строки не считается). Отсюда [`crate::regex::Regex::matches_full`].
+//! перевод строки не считается). Отсюда отдельная операция `matches_full` в движке.
 //!
 //! # Направление поиска
 //!
@@ -126,7 +126,7 @@
 //! и молча бросает остаток. «вавав» ~ `(а)` со строкой замены `н$5к` даёт
 //! «вн» — текст до совпадения плюс литеральное начало замены, а хвост
 //! исходной строки в результат уже не попадает. Это воспроизведено здесь
-//! дословно ([`Replacement::Aborted`]).
+//! дословно (внутреннее состояние `Replacement::Aborted`).
 //!
 //! ЧЕГО ЗДЕСЬ СОЗНАТЕЛЬНО НЕТ — второй половины того же поведения.
 //! Измерено, что на платформе такая ссылка ОТРАВЛЯЕТ шаблон до конца
@@ -141,13 +141,16 @@
 //! копируем, вторую — нет, и это единственное сознательное расхождение
 //! этого модуля с измеренным поведением.
 
+use bsl_number::BslNumber;
+use bsl_rt::{
+    Arity, BslString, BslValue, CallContext, EnumValue, FunctionCode, FunctionDescriptor,
+    FunctionKind, LibraryDependency, LibraryDescriptor, ObjectProtocol, RtError, RtResult,
+    TypeDescriptor, TypeId,
+};
 use std::rc::Rc;
 
-use bsl_number::BslNumber;
-
-use crate::enums::EnumValue;
-use crate::regex::Regex;
-use crate::{BslObject, BslString, BslValue, RtError, RtResult};
+mod engine;
+use engine::Regex;
 
 /// Один промежуток исходной строки: то, что в BSL видно как объект с
 /// тремя свойствами.
@@ -157,7 +160,7 @@ use crate::{BslObject, BslString, BslValue, RtError, RtResult};
 /// отвечает платформа, и по этому нулю участие группы и отличается от
 /// участия с пустым значением.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RegexSpan {
+struct RegexSpan {
     value: BslString,
     start: usize,
     length: usize,
@@ -192,7 +195,7 @@ impl RegexSpan {
 /// Снимок, а не окно в исходную строку: строки BSL неизменяемы, а объект
 /// платформы сериализуется и переживает свою строку.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RegexMatchData {
+struct RegexMatchData {
     whole: RegexSpan,
     /// Группы БЕЗ нулевой — ровно то, что отдаёт `ПолучитьГруппы()`.
     groups: Vec<RegexSpan>,
@@ -206,7 +209,7 @@ impl RegexMatchData {
         }
     }
 
-    fn from_match(hay: &[u16], found: &crate::regex::Match) -> RegexMatchData {
+    fn from_match(hay: &[u16], found: &crate::engine::Match) -> RegexMatchData {
         let whole = RegexSpan::of(hay, found.spans.first().copied().flatten());
         let groups = found
             .spans
@@ -218,60 +221,85 @@ impl RegexMatchData {
     }
 }
 
-/// Свойства обоих объектов: `Значение`, `НачальнаяПозиция`, `Длина` и их
-/// английские написания. Других у платформы нет.
-///
-/// # Errors
-///
-/// [`RtError::UnknownColumn`] на любом другом имени — так же, как у
-/// соседних объектов рантайма.
-pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
-    let span = match obj {
-        BslValue::Object(o) => match &**o {
-            BslObject::RegexMatch(data) => &data.whole,
-            BslObject::RegexGroup(data, index) => {
-                data.groups.get(*index).ok_or(RtError::NotAnObject)?
-            }
-            _ => return Err(RtError::NotAnObject),
-        },
-        _ => return Err(RtError::NotAnObject),
-    };
-    if name.eq_ignore_ascii_case("Значение") || name.eq_ignore_ascii_case("Value") {
-        Ok(BslValue::Str(span.value.clone()))
-    } else if name.eq_ignore_ascii_case("НачальнаяПозиция")
-        || name.eq_ignore_ascii_case("StartIndex")
-    {
-        Ok(BslValue::Number(BslNumber::from_i64(span.start as i64)))
-    } else if name.eq_ignore_ascii_case("Длина") || name.eq_ignore_ascii_case("Length") {
-        Ok(BslValue::Number(BslNumber::from_i64(span.length as i64)))
-    } else {
-        Err(RtError::UnknownColumn(name.to_string()))
+static MATCH_TYPE: TypeDescriptor = TypeDescriptor {
+    package: env!("CARGO_PKG_NAME"),
+    name: "РезультатПоискаПоРегулярномуВыражению",
+    legacy_type_id: Some(TypeId::RegexMatch),
+};
+
+static GROUP_TYPE: TypeDescriptor = TypeDescriptor {
+    package: env!("CARGO_PKG_NAME"),
+    name: "ГруппаРезультатаПоискаПоРегулярномуВыражению",
+    legacy_type_id: Some(TypeId::RegexMatchGroup),
+};
+
+/// Результат и группа используют одну реализацию: `group = None` означает
+/// весь результат, номер — окно в соответствующую группу того же снимка.
+#[derive(Debug)]
+struct RegexObject {
+    data: Rc<RegexMatchData>,
+    group: Option<usize>,
+}
+
+impl RegexObject {
+    fn span(&self) -> RtResult<&RegexSpan> {
+        match self.group {
+            Some(index) => self.data.groups.get(index).ok_or(RtError::NotAnObject),
+            None => Ok(&self.data.whole),
+        }
     }
 }
 
-/// `ПолучитьГруппы()` — массив групп БЕЗ нулевой.
-///
-/// # Errors
-///
-/// [`RtError::MethodNotApplicable`], если получатель — не результат
-/// поиска (например, сама группа: у неё этого метода нет).
-pub fn get_groups(obj: &BslValue) -> RtResult<BslValue> {
-    let BslValue::Object(o) = obj else {
-        return Err(RtError::MethodNotApplicable {
-            method: "ПолучитьГруппы",
-            receiver: obj.type_name(),
-        });
-    };
-    let BslObject::RegexMatch(data) = &**o else {
-        return Err(RtError::MethodNotApplicable {
-            method: "ПолучитьГруппы",
-            receiver: obj.type_name(),
-        });
-    };
-    let items = (0..data.groups.len())
-        .map(|index| BslValue::Object(Rc::new(BslObject::RegexGroup(data.clone(), index))))
-        .collect();
-    Ok(BslValue::new_array(items))
+impl ObjectProtocol for RegexObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        if self.group.is_some() {
+            &GROUP_TYPE
+        } else {
+            &MATCH_TYPE
+        }
+    }
+
+    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
+        let span = self.span()?;
+        if name.eq_ignore_ascii_case("Значение") || name.eq_ignore_ascii_case("Value") {
+            Ok(BslValue::Str(span.value.clone()))
+        } else if name.eq_ignore_ascii_case("НачальнаяПозиция")
+            || name.eq_ignore_ascii_case("StartIndex")
+        {
+            Ok(BslValue::Number(BslNumber::from_i64(span.start as i64)))
+        } else if name.eq_ignore_ascii_case("Длина") || name.eq_ignore_ascii_case("Length") {
+            Ok(BslValue::Number(BslNumber::from_i64(span.length as i64)))
+        } else {
+            Err(RtError::UnknownColumn(name.to_string()))
+        }
+    }
+
+    fn call_method(
+        &self,
+        name: &str,
+        arguments: &[BslValue],
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<BslValue> {
+        if self.group.is_some()
+            || (!name.eq_ignore_ascii_case("ПолучитьГруппы")
+                && !name.eq_ignore_ascii_case("GetGroups"))
+            || !arguments.is_empty()
+        {
+            return Err(RtError::UnknownMethod {
+                method: name.to_string(),
+                receiver: self.type_descriptor().name,
+            });
+        }
+        let items = (0..self.data.groups.len())
+            .map(|index| {
+                BslValue::new_object(RegexObject {
+                    data: self.data.clone(),
+                    group: Some(index),
+                })
+            })
+            .collect();
+        Ok(BslValue::new_array(items))
+    }
 }
 
 // --- разбор аргументов ---------------------------------------------------
@@ -373,7 +401,7 @@ fn in_range(value: Option<&BslNumber>, top: usize, parameter: u32) -> RtResult<O
 /// Проверено ровно там, где это различимо: у «а» + суррогатная пара + «б»
 /// пустые совпадения стоят на 1, 2, 4 и 5 — позиции 3, середины пары,
 /// среди них нет.
-fn scan(re: &Regex, hay: &[u16], from: usize) -> Vec<crate::regex::Match> {
+fn scan(re: &Regex, hay: &[u16], from: usize) -> Vec<crate::engine::Match> {
     let mut found = Vec::new();
     let mut at = from;
     while at <= hay.len() {
@@ -385,7 +413,7 @@ fn scan(re: &Regex, hay: &[u16], from: usize) -> Vec<crate::regex::Match> {
         at = if end > start {
             end
         } else {
-            match crate::regex::cp_at(hay, start) {
+            match crate::engine::cp_at(hay, start) {
                 Some((_, width)) => start + width,
                 None => start + 1,
             }
@@ -399,7 +427,7 @@ fn scan(re: &Regex, hay: &[u16], from: usize) -> Vec<crate::regex::Match> {
 /// отвергается, если налезает на предыдущее (см. шапку модуля, «аабаа»).
 ///
 /// Останавливается, как только набрано `needed` вхождений.
-fn scan_back(re: &Regex, hay: &[u16], from: usize, needed: usize) -> Vec<crate::regex::Match> {
+fn scan_back(re: &Regex, hay: &[u16], from: usize, needed: usize) -> Vec<crate::engine::Match> {
     let mut found = Vec::new();
     let mut limit: Option<usize> = None;
     let mut at = from;
@@ -415,7 +443,7 @@ fn scan_back(re: &Regex, hay: &[u16], from: usize, needed: usize) -> Vec<crate::
                 }
             }
         }
-        match crate::regex::cp_before(hay, at) {
+        match crate::engine::cp_before(hay, at) {
             Some((_, width)) => at -= width,
             None => break,
         }
@@ -426,7 +454,10 @@ fn scan_back(re: &Regex, hay: &[u16], from: usize, needed: usize) -> Vec<crate::
 // --- четыре функции --------------------------------------------------------
 
 fn match_value(data: RegexMatchData) -> BslValue {
-    BslValue::Object(Rc::new(BslObject::RegexMatch(Rc::new(data))))
+    BslValue::new_object(RegexObject {
+        data: Rc::new(data),
+        group: None,
+    })
 }
 
 /// `СтрНайтиПоРегулярномуВыражению(<Строка>, <РегулярноеВыражение>,
@@ -549,7 +580,7 @@ fn max_capture_digits(groups: usize) -> usize {
     digits
 }
 
-fn expand(replacement: &[u16], hay: &[u16], found: &crate::regex::Match) -> Replacement {
+fn expand(replacement: &[u16], hay: &[u16], found: &crate::engine::Match) -> Replacement {
     let groups = found.spans.len().saturating_sub(1);
     let max_digits = max_capture_digits(groups);
     let mut out: Vec<u16> = Vec::new();
@@ -578,10 +609,10 @@ fn expand(replacement: &[u16], hay: &[u16], found: &crate::regex::Match) -> Repl
             // `$` + арабо-индийская единица U+0661 при двух группах
             // подставляет первую группу, а `$` + римская U+2170 остаётся
             // литеральным долларом.
-            let Some((cp, width)) = crate::regex::cp_at(replacement, j) else {
+            let Some((cp, width)) = crate::engine::cp_at(replacement, j) else {
                 break;
             };
-            let Some(digit) = crate::regex::decimal_digit_value(cp) else {
+            let Some(digit) = crate::engine::decimal_digit_value(cp) else {
                 break;
             };
             group = group * 10 + digit as usize;
@@ -646,10 +677,83 @@ pub fn replace(args: &[BslValue]) -> RtResult<BslValue> {
     Ok(BslValue::Str(BslString::from_units(out)))
 }
 
+fn call_find(_context: &mut CallContext<'_>, arguments: &[BslValue]) -> RtResult<BslValue> {
+    find(arguments)
+}
+
+fn call_find_all(_context: &mut CallContext<'_>, arguments: &[BslValue]) -> RtResult<BslValue> {
+    find_all(arguments)
+}
+
+fn call_replace(_context: &mut CallContext<'_>, arguments: &[BslValue]) -> RtResult<BslValue> {
+    replace(arguments)
+}
+
+fn call_like(_context: &mut CallContext<'_>, arguments: &[BslValue]) -> RtResult<BslValue> {
+    like(arguments)
+}
+
+const FUNCTIONS: &[FunctionDescriptor] = &[
+    FunctionDescriptor {
+        code: FunctionCode::new(1),
+        names: &[
+            "СтрНайтиПоРегулярномуВыражению",
+            "StrFindByRegularExpression",
+        ],
+        arity: Arity::range(2, 7),
+        kind: FunctionKind::Function,
+        call: call_find,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(2),
+        names: &[
+            "СтрНайтиВсеПоРегулярномуВыражению",
+            "StrFindAllByRegularExpression",
+        ],
+        arity: Arity::range(2, 4),
+        kind: FunctionKind::Function,
+        call: call_find_all,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(3),
+        names: &[
+            "СтрЗаменитьПоРегулярномуВыражению",
+            "StrReplaceByRegularExpression",
+        ],
+        arity: Arity::range(3, 5),
+        kind: FunctionKind::Function,
+        call: call_replace,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(4),
+        names: &[
+            "СтрПодобнаПоРегулярномуВыражению",
+            "StrLikeByRegularExpression",
+        ],
+        arity: Arity::range(2, 4),
+        kind: FunctionKind::Function,
+        call: call_like,
+    },
+];
+
+/// Дескриптор статически подключаемого regex-компонента.
+pub const fn library() -> LibraryDescriptor {
+    LibraryDescriptor {
+        package: env!("CARGO_PKG_NAME"),
+        version: env!("CARGO_PKG_VERSION"),
+        dependencies: &[LibraryDependency {
+            package: bsl_rt::PACKAGE_NAME,
+            version: bsl_rt::PACKAGE_VERSION,
+        }],
+        functions: FUNCTIONS,
+        constructors: &[],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::TypeId;
+    use bsl_rt::{NameInterner, RuntimeShapes};
 
     fn s(text: &str) -> BslValue {
         BslValue::Str(BslString::from_str(text))
@@ -667,6 +771,35 @@ mod tests {
         find(&padded(&[s(subject), s(pattern)], 7)).unwrap()
     }
 
+    fn get_property(value: &BslValue, name: &str) -> RtResult<BslValue> {
+        let mut shapes = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut stdout = std::io::sink();
+        let mut stderr = std::io::sink();
+        let mut context =
+            CallContext::new(&mut shapes, &mut stdout, &mut stderr, |_value, _spec| {
+                unreachable!("форматирование в regex-свойствах не используется")
+            });
+        value
+            .object_ref()
+            .ok_or(RtError::NotAnObject)?
+            .get_property(name, &mut context)
+    }
+
+    fn get_groups(value: &BslValue) -> RtResult<BslValue> {
+        let mut shapes = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut stdout = std::io::sink();
+        let mut stderr = std::io::sink();
+        let mut context =
+            CallContext::new(&mut shapes, &mut stdout, &mut stderr, |_value, _spec| {
+                unreachable!("форматирование в regex-методе не используется")
+            });
+        value.object_ref().ok_or(RtError::NotAnObject)?.call_method(
+            "ПолучитьГруппы",
+            &[],
+            &mut context,
+        )
+    }
+
     /// `(значение, начальная позиция, длина)` — три свойства объекта
     /// одним кортежем.
     fn triple(value: &BslValue) -> (String, i64, i64) {
@@ -681,22 +814,20 @@ mod tests {
         (text, number("НачальнаяПозиция"), number("Длина"))
     }
 
-    /// Содержимое `Массива` — без интернера, который нужен `get_index`.
     fn items(array: &BslValue) -> Vec<BslValue> {
-        match array {
-            BslValue::Object(o) => match &**o {
-                BslObject::Array(v) => v.borrow().clone(),
-                other => panic!("не массив: {other:?}"),
-            },
-            other => panic!("не массив: {other:?}"),
-        }
+        let names = NameInterner::new();
+        (0..array.collection_len().expect("ожидался массив"))
+            .map(|index| {
+                array
+                    .get_index(&BslValue::Number(BslNumber::from_i64(index as i64)), &names)
+                    .unwrap()
+            })
+            .collect()
     }
 
     fn groups(value: &BslValue) -> Vec<(String, i64, i64)> {
-        items(&get_groups(value).unwrap())
-            .iter()
-            .map(triple)
-            .collect()
+        let groups = get_groups(value).unwrap();
+        items(&groups).iter().map(triple).collect()
     }
 
     fn replaced(subject: &str, pattern: &str, replacement: &str) -> String {

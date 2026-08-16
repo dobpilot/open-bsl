@@ -5,6 +5,7 @@ members = [
     "crates/bsl-syntax",
     "crates/bsl-sema",
     "crates/bsl-rt",
+    "crates/bsl-regexp",
     "crates/bsl-format",
     "crates/bsl-bytecode",
     "crates/bsl-vm",

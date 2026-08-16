@@ -428,6 +428,22 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
             read!(src);
             e.heap_write = true;
         }
+        Instr::GetObjectProp { dst, obj, .. } => {
+            read!(obj);
+            write!(dst);
+            e.heap_read = true;
+            e.heap_write = true;
+            e.io = true;
+            e.ctl = Ctl::Barrier;
+        }
+        Instr::SetObjectProp { obj, src, .. } => {
+            read!(obj);
+            read!(src);
+            e.heap_read = true;
+            e.heap_write = true;
+            e.io = true;
+            e.ctl = Ctl::Barrier;
+        }
         Instr::CreateObject {
             dst, base, count, ..
         } => {
@@ -671,6 +687,21 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
             e.heap_read = true;
             e.heap_write = true;
             e.io = true;
+        }
+        Instr::CallObjectMethod {
+            dst,
+            obj,
+            base,
+            count,
+            ..
+        } => {
+            read!(obj);
+            read_range!(base, count);
+            write!(dst);
+            e.heap_read = true;
+            e.heap_write = true;
+            e.io = true;
+            e.ctl = Ctl::Barrier;
         }
         Instr::WriteText { dst, obj, src } => {
             read!(obj);

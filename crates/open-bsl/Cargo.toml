@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [features]
-default = []
+default = ["regexp"]
 binbuf = []
 stream = []
 json = []
@@ -14,11 +14,12 @@ pdf = []
 zip = []
 spreadsheet = []
 textdoc = []
-regexp = []
+regexp = ["dep:bsl-regexp", "bsl-vm/regexp"]
 
 [dependencies]
 bsl-bytecode = { path = "../bsl-bytecode" }
 bsl-rt = { path = "../bsl-rt" }
 bsl-sema = { path = "../bsl-sema" }
 bsl-syntax = { path = "../bsl-syntax" }
-bsl-vm = { path = "../bsl-vm" }
+bsl-vm = { path = "../bsl-vm", default-features = false }
+bsl-regexp = { path = "../bsl-regexp", optional = true }

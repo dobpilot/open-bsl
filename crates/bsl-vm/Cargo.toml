@@ -3,11 +3,16 @@ name = "bsl-vm"
 version.workspace = true
 edition.workspace = true
 
+[features]
+default = ["regexp"]
+regexp = ["dep:bsl-regexp"]
+
 [dependencies]
 bsl-rt = { path = "../bsl-rt" }
 bsl-bytecode = { path = "../bsl-bytecode" }
 bsl-format = { path = "../bsl-format" }
 bsl-number = { path = "../bsl-number" }
+bsl-regexp = { path = "../bsl-regexp", optional = true }
 # Выполнить/Вычислить компилируют строку в байт-код тем же движком, что и
 # статический код ("один движок, одна семантика" из брифа) — поэтому VM
 # теперь зависит от всего фронтенда, не только от bsl-bytecode.

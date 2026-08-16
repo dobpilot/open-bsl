@@ -401,6 +401,11 @@ fn compile_instr(instr: &Instr) -> Option<Compiled> {
         Instr::GetProp { .. } => s(shim_get_prop, [0, 0, 0]),
         Instr::SetProp { .. } => s(shim_set_prop, [0, 0, 0]),
         Instr::CallMethod { .. } => s(shim_call_method, [0, 0, 0]),
+        // Открытый протокол требует `CallContext` конкретного `State`.
+        // Частичный JIT безопасно отдаёт эти редкие операции интерпретатору.
+        Instr::GetObjectProp { .. }
+        | Instr::SetObjectProp { .. }
+        | Instr::CallObjectMethod { .. } => None,
         _ => None,
     }
 }
@@ -453,6 +458,7 @@ unsafe fn run_shim(
 
 macro_rules! shim {
     ($name:ident, |$frames:ident, $stack:ident, $program:ident, $idx:ident, $shapes:ident, $pc:ident, $a:ident, $b:ident, $c:ident| $body:block) => {
+        #[allow(dead_code)]
         extern "C" fn $name(ctx: *mut JitCtx, pc_arg: u32, $a: u32, $b: u32, $c: u32) -> u64 {
             unsafe {
                 run_shim(ctx, pc_arg, |$frames, $stack, $program, $idx, $shapes| {
@@ -875,14 +881,11 @@ shim!(shim_call_method, |frames,
     } = instr
     else {
         return Err(RtError::InvalidBytecode(
-            "шим метода вызван не на своей инструкции",
+            "шим встроенного метода вызван не на своей инструкции",
         ));
     };
     let ov = reg_load(stack, frames[idx].reg_index(obj))?;
     let args = CallArgs::load(stack, &frames[idx], base, count)?;
-    // `Вывести` перехватывается ТАК ЖЕ, как в ветке интерпретатора: ему
-    // нужно форматирование из `bsl-format`. Иначе режимы разъедутся —
-    // ровно это и поймал `the_jit_agrees_with_the_interpreter_on_every_script`.
     let v = if method == bsl_rt::BuiltinMethod::OutputArea {
         crate::output_area(&ov, args.as_slice())?
     } else {

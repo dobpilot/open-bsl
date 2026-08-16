@@ -12,6 +12,7 @@ pub enum CompileError {
     TooManyConstants,
     TooManyArgModeTables,
     TooManyShapes,
+    TooManyNames,
     BreakOutsideLoop,
     ContinueOutsideLoop,
     /// Фрагмент `Выполнить` зовёт функцию с номером, которого нет ни среди
@@ -270,6 +271,16 @@ struct Compiler<'a> {
     /// Общие на весь модуль — см. `compile_program`.
     names: &'a mut NameInterner,
     shapes: &'a mut ShapeTable,
+}
+
+/// До перевода `bsl-cli` на реестр regex-объекты уже живут в
+/// отдельном крейте. Их три свойства сразу кодируются открытым
+/// опкодом. Общий путь определяется `RExpr::Field::open`.
+fn is_legacy_regexp_property(name: &str) -> bool {
+    matches!(
+        name.to_uppercase().as_str(),
+        "ЗНАЧЕНИЕ" | "VALUE" | "НАЧАЛЬНАЯПОЗИЦИЯ" | "STARTINDEX" | "ДЛИНА" | "LENGTH"
+    )
 }
 
 impl<'a> Compiler<'a> {
@@ -536,7 +547,12 @@ impl<'a> Compiler<'a> {
                     count,
                 });
             }
-            RExpr::CallMethod { obj, method, args } => {
+            RExpr::CallMethod {
+                obj,
+                method,
+                open,
+                args,
+            } => {
                 let o = self.alloc_temp()?;
                 self.compile_expr(obj, o)?;
                 let base = self.next_reg;
@@ -549,25 +565,75 @@ impl<'a> Compiler<'a> {
                     .try_into()
                     .map_err(|_| CompileError::TooManyRegisters)?;
                 self.free_temp(count);
-                match (*method, args.len()) {
-                    (bsl_rt::BuiltinMethod::Write, 1) => {
-                        self.emit(Instr::WriteText {
-                            dst,
-                            obj: o,
-                            src: base,
-                        });
-                    }
-                    (bsl_rt::BuiltinMethod::Close, 0) => {
-                        self.emit(Instr::CloseText { dst, obj: o });
-                    }
-                    _ => {
-                        self.emit(Instr::CallMethod {
-                            dst,
-                            obj: o,
-                            method: *method,
-                            base,
-                            count,
-                        });
+                let builtin = bsl_rt::BuiltinMethod::lookup(method);
+                if *open {
+                    let method: u16 = self
+                        .names
+                        .intern(method)
+                        .index()
+                        .try_into()
+                        .map_err(|_| CompileError::TooManyNames)?;
+                    self.emit(Instr::CallObjectMethod {
+                        dst,
+                        obj: o,
+                        method,
+                        base,
+                        count,
+                    });
+                } else {
+                    match (builtin, args.len()) {
+                        (Some(bsl_rt::BuiltinMethod::Write), 1) => {
+                            self.emit(Instr::WriteText {
+                                dst,
+                                obj: o,
+                                src: base,
+                            });
+                        }
+                        (Some(bsl_rt::BuiltinMethod::Close), 0) => {
+                            self.emit(Instr::CloseText { dst, obj: o });
+                        }
+                        // Переходный путь `bsl-cli`: regex-объект уже
+                        // принадлежит компоненту, даже если старый CLI ещё
+                        // компилирует без `RuntimeRegistry`.
+                        (Some(bsl_rt::BuiltinMethod::RegexGetGroups), _) => {
+                            let method: u16 = self
+                                .names
+                                .intern(method)
+                                .index()
+                                .try_into()
+                                .map_err(|_| CompileError::TooManyNames)?;
+                            self.emit(Instr::CallObjectMethod {
+                                dst,
+                                obj: o,
+                                method,
+                                base,
+                                count,
+                            });
+                        }
+                        (Some(method), _) => {
+                            self.emit(Instr::CallMethod {
+                                dst,
+                                obj: o,
+                                method,
+                                base,
+                                count,
+                            });
+                        }
+                        (None, _) => {
+                            let method: u16 = self
+                                .names
+                                .intern(method)
+                                .index()
+                                .try_into()
+                                .map_err(|_| CompileError::TooManyNames)?;
+                            self.emit(Instr::CallObjectMethod {
+                                dst,
+                                obj: o,
+                                method,
+                                base,
+                                count,
+                            });
+                        }
                     }
                 }
                 self.free_temp(1);
@@ -588,15 +654,23 @@ impl<'a> Compiler<'a> {
                 });
                 self.free_temp(2);
             }
-            RExpr::Field { obj, name } => {
+            RExpr::Field { obj, name, open } => {
                 let o = self.alloc_temp()?;
                 self.compile_expr(obj, o)?;
                 let name_id = self.names.intern(name);
-                self.emit(Instr::GetProp {
-                    dst,
-                    obj: o,
-                    name: name_id,
-                });
+                if *open || is_legacy_regexp_property(name) {
+                    let name = name_id
+                        .index()
+                        .try_into()
+                        .map_err(|_| CompileError::TooManyNames)?;
+                    self.emit(Instr::GetObjectProp { dst, obj: o, name });
+                } else {
+                    self.emit(Instr::GetProp {
+                        dst,
+                        obj: o,
+                        name: name_id,
+                    });
+                }
                 self.free_temp(1);
             }
             RExpr::NewArray { dims } => {
@@ -1068,17 +1142,34 @@ impl<'a> Compiler<'a> {
                 });
                 self.free_temp(3);
             }
-            RStmt::AssignField { obj, name, value } => {
+            RStmt::AssignField {
+                obj,
+                name,
+                open,
+                value,
+            } => {
                 let o = self.alloc_temp()?;
                 self.compile_expr(obj, o)?;
                 let v = self.alloc_temp()?;
                 self.compile_expr(value, v)?;
                 let name_id = self.names.intern(name);
-                self.emit(Instr::SetProp {
-                    obj: o,
-                    name: name_id,
-                    src: v,
-                });
+                if *open {
+                    let name = name_id
+                        .index()
+                        .try_into()
+                        .map_err(|_| CompileError::TooManyNames)?;
+                    self.emit(Instr::SetObjectProp {
+                        obj: o,
+                        name,
+                        src: v,
+                    });
+                } else {
+                    self.emit(Instr::SetProp {
+                        obj: o,
+                        name: name_id,
+                        src: v,
+                    });
+                }
                 self.free_temp(2);
             }
             RStmt::ExprStmt(e) => {

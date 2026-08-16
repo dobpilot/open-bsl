@@ -636,6 +636,7 @@ impl<'a> Resolver<'a> {
                     Ok(Some(RStmt::AssignField {
                         obj,
                         name: name.clone(),
+                        open: self.registry.is_some(),
                         value,
                     }))
                 }
@@ -879,6 +880,7 @@ impl<'a> Resolver<'a> {
                 Ok(RExpr::Field {
                     obj: Box::new(self.resolve_expr(obj)?),
                     name: name.clone(),
+                    open: self.registry.is_some(),
                 })
             }
             AExpr::New { type_name, args } => self.resolve_new(type_name, args),
@@ -1668,6 +1670,21 @@ impl<'a> Resolver<'a> {
                     });
                 }
                 if let Some(builtin) = bsl_rt::BuiltinFn::lookup(name) {
+                    // При компиляции с реестром вынесенные функции не
+                    // должны проваливаться в legacy-`CallBuiltin`: иначе модуль
+                    // не попадёт в `.requires`. Путь без реестра нужен только
+                    // переходному `bsl-cli`.
+                    if self.registry.is_some()
+                        && matches!(
+                            builtin,
+                            bsl_rt::BuiltinFn::StrFindByRegex
+                                | bsl_rt::BuiltinFn::StrFindAllByRegex
+                                | bsl_rt::BuiltinFn::StrReplaceByRegex
+                                | bsl_rt::BuiltinFn::StrLikeByRegex
+                        )
+                    {
+                        return Err(SemaError::UndefinedFunction(name.clone()));
+                    }
                     // Глобальная процедура легальна только оператором:
                     // `Х = Сообщить(1)` платформа отвергает («Обращение к
                     // процедуре как к функции») — ИЗМЕРЕНО, якорь
@@ -1714,16 +1731,14 @@ impl<'a> Resolver<'a> {
                 Err(SemaError::UndefinedFunction(name.clone()))
             }
             AExpr::Field { obj, name } => {
-                let method = bsl_rt::BuiltinMethod::lookup(name).ok_or(SemaError::Unsupported(
-                    "этот метод объекта пока не поддержан",
-                ))?;
+                let method = bsl_rt::BuiltinMethod::lookup(name);
                 // `Добавить` полиморфен по типу получателя (0 аргументов —
                 // новая строка таблицы, 1 — элемент массива/колонка), а тип
                 // получателя в динамическом BSL здесь ещё не известен:
                 // финальную проверку арности для него делает рантайм (см.
                 // `bsl_rt::call_builtin_method`). Для остальных методов
                 // арность фиксирована и проверяется сразу.
-                let expected: Option<usize> = match method {
+                let expected: Option<usize> = method.and_then(|method| match method {
                     // DOM. Признаки — строго без аргументов, поиск
                     // элемента по идентификатору — строго с одним, а у
                     // четырёх «атрибутных» методов форм две (имя либо
@@ -1971,7 +1986,7 @@ impl<'a> Resolver<'a> {
                     // две; всё измерено, и обе арности решает рантайм.
                     bsl_rt::BuiltinMethod::ArchiveExtract
                     | bsl_rt::BuiltinMethod::ArchiveExtractAll => None,
-                };
+                });
                 if let Some(expected) = expected {
                     if args.len() != expected {
                         return Err(SemaError::ArgumentCountMismatch {
@@ -1985,7 +2000,8 @@ impl<'a> Resolver<'a> {
                 let obj = self.resolve_expr(obj)?;
                 Ok(RExpr::CallMethod {
                     obj: Box::new(obj),
-                    method,
+                    method: name.clone(),
+                    open: self.registry.is_some(),
                     args: rargs,
                 })
             }
@@ -2248,7 +2264,8 @@ mod tests {
                 slot: 1,
                 value: RExpr::CallMethod {
                     obj: Box::new(RExpr::Local(0)),
-                    method: bsl_rt::BuiltinMethod::Count,
+                    method: "Count".to_string(),
+                    open: false,
                     args: vec![],
                 },
             }
@@ -2256,12 +2273,16 @@ mod tests {
     }
 
     #[test]
-    fn unknown_method_call_is_unsupported() {
+    fn an_unknown_method_is_left_for_the_runtime_receiver() {
         let prog = parse("a = Новый Массив(3);\nn = a.НетТакогоМетода();").unwrap();
         let stmts = items_to_stmts(prog.items);
+        let resolved = resolve_script(&stmts).unwrap();
         assert!(matches!(
-            resolve_script(&stmts).unwrap_err(),
-            SemaError::Unsupported(_)
+            &resolved.body[1],
+            RStmt::AssignLocal {
+                value: RExpr::CallMethod { method, .. },
+                ..
+            } if method == "НетТакогоМетода"
         ));
     }
 

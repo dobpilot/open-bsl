@@ -134,6 +134,8 @@ impl EngineBuilder {
     pub fn new() -> Self {
         let mut runtime = bsl_rt::RuntimeBuilder::new();
         runtime.register(bsl_rt::core_library());
+        #[cfg(feature = "regexp")]
+        runtime.register(bsl_regexp::library());
         Self { runtime }
     }
 
@@ -420,5 +422,31 @@ mod tests {
             engine.new_state().run(&module).unwrap(),
             Value::Boolean(true)
         ));
+    }
+
+    #[cfg(feature = "regexp")]
+    #[test]
+    fn regexp_feature_registers_functions_and_external_result_objects() {
+        let engine = Engine::builder().build().unwrap();
+        let module = engine
+            .compile(
+                "р = СтрНайтиПоРегулярномуВыражению(\"абв\", \"(б)\");\n\
+                 г = р.ПолучитьГруппы();\n\
+                 Возврат г[0].Значение;",
+            )
+            .unwrap();
+
+        assert_eq!(module.requirements().len(), 2);
+        assert_eq!(module.requirements()[1].package, "bsl-regexp");
+        assert_eq!(engine.new_state().run(&module).unwrap().to_string(), "б");
+    }
+
+    #[cfg(not(feature = "regexp"))]
+    #[test]
+    fn missing_regexp_feature_is_a_compile_error() {
+        let engine = Engine::builder().build().unwrap();
+        assert!(engine
+            .compile("Возврат СтрПодобнаПоРегулярномуВыражению(\"а\", \"а\");")
+            .is_err());
     }
 }

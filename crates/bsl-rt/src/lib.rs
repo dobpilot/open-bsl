@@ -20,10 +20,9 @@ mod json;
 mod locale;
 mod map;
 mod object;
+mod object_protocol;
 pub mod open_questions;
 pub mod pdf;
-mod regex;
-mod regex_api;
 mod runtime_shapes;
 mod shape;
 mod spreadsheet;
@@ -85,6 +84,7 @@ pub use json::{
 pub use locale::{Locale, NBSP};
 pub use map::MapData;
 pub use object::{BslObject, StructureStorage};
+pub use object_protocol::{ObjectProtocol, ObjectRef, TypeDescriptor};
 pub use runtime_shapes::RuntimeShapes;
 pub use shape::{Shape, ShapeTable, MAX_SHAPE_TRANSITIONS};
 pub use spreadsheet::{
@@ -280,6 +280,13 @@ pub enum RtError {
         method: &'static str,
         receiver: &'static str,
     },
+    /// Имя метода отсутствует у фактического типа получателя. В отличие
+    /// от [`RtError::MethodNotApplicable`], имя не принадлежит закрытой
+    /// таблице ядра и поэтому хранится как строка программы.
+    UnknownMethod {
+        method: String,
+        receiver: &'static str,
+    },
     /// Ошибка лексера/парсера/резолвинга/компиляции строки, переданной в
     /// `Выполнить`/`Вычислить` — текст уже отформатирован тем слоем, что
     /// её обнаружил (`bsl-syntax`/`bsl-sema`/`bsl-bytecode`), сюда попадает
@@ -355,6 +362,9 @@ impl fmt::Display for RtError {
             ),
             RtError::MethodNotApplicable { method, receiver } => {
                 write!(f, "метод «{method}» не применим к «{receiver}»")
+            }
+            RtError::UnknownMethod { method, receiver } => {
+                write!(f, "метод «{method}» не найден у «{receiver}»")
             }
             RtError::DynamicError(msg) => write!(f, "{msg}"),
             RtError::InvalidBytecode(what) => write!(f, "некорректный байт-код: {what}"),
@@ -433,6 +443,7 @@ impl BslValue {
             // русское написание, слитно.
             BslValue::EnumType(k) => k.meta_ru_name(),
             BslValue::Object(o) => match &**o {
+                BslObject::Extension(object) => object.type_descriptor().name,
                 BslObject::Array(_) => "Массив",
                 BslObject::Structure(_) => "Структура",
                 // Служебное имя ЭТОЙ реализации: в 1С такое значение всегда
@@ -494,8 +505,7 @@ impl BslValue {
                 BslObject::XPathResolver(_) => "РазыменовательПространствИменDOM",
                 BslObject::XPathExpression(_) => "ВыражениеXPath",
                 BslObject::XPathResult(_) => "РезультатXPath",
-                BslObject::RegexMatch(_) => "РезультатПоискаПоРегулярномуВыражению",
-                BslObject::RegexGroup(..) => "ГруппаРезультатаПоискаПоРегулярномуВыражению",
+                BslObject::ReservedRegexGroup(_) => "ГруппаРезультатаПоискаПоРегулярномуВыражению",
                 BslObject::DomList(kind, _) => match kind {
                     crate::dom::DomListKind::Nodes(_) => "СписокУзловDOM",
                     crate::dom::DomListKind::Attributes(_) => "КоллекцияАтрибутовDOM",
@@ -1268,6 +1278,7 @@ impl BslValue {
             // «пустого» варианта нет (не измерено отдельно).
             BslValue::EnumType(_) => true,
             BslValue::Object(o) => match &**o {
+                BslObject::Extension(object) => object.is_filled()?,
                 // Непрозрачное значение — всегда «что-то»: судить о его
                 // заполненности, не материализуя вид, нечем.
                 BslObject::VstrOpaque(_) => true,
@@ -1396,13 +1407,12 @@ impl BslValue {
                 | BslObject::XPathResolver(_)
                 | BslObject::XPathExpression(_)
                 | BslObject::XPathResult(_)
+                | BslObject::ReservedRegexGroup(_)
                 // Результат поиска по регулярному выражению и его группа —
                 // туда же, и это ИЗМЕРЕНО отдельно, а не выведено по
                 // соседству: `ЗначениеЗаполнено` от результата отвечает
                 // «Проверка мутабельных значений на заполненность не
                 // поддерживается».
-                | BslObject::RegexMatch(_)
-                | BslObject::RegexGroup(..)
                 // Модель схемы устроена так же: коллекции судятся по длине
                 // (выше), а компонента, построитель, набор схем и
                 // расширенное имя заполненности не имеют.
@@ -1468,6 +1478,14 @@ impl BslValue {
             // `Перечисление<Имя>`, а не тип членов.
             BslValue::EnumType(k) => TypeId::EnumMeta(*k),
             BslValue::Object(o) => match &**o {
+                BslObject::Extension(object) => match object.type_descriptor().legacy_type_id {
+                    Some(type_id) => type_id,
+                    None => {
+                        return Err(RtError::UnknownType(
+                            object.type_descriptor().name.to_string(),
+                        ))
+                    }
+                },
                 BslObject::VstrOpaque(_) => TypeId::VstrOpaque,
                 BslObject::Array(_) => TypeId::Array,
                 BslObject::Structure(_) => TypeId::Structure,
@@ -1538,8 +1556,7 @@ impl BslValue {
                 BslObject::XPathResolver(_) => TypeId::DomNamespaceResolver,
                 BslObject::XPathExpression(_) => TypeId::XPathExpression,
                 BslObject::XPathResult(_) => TypeId::XPathResult,
-                BslObject::RegexMatch(_) => TypeId::RegexMatch,
-                BslObject::RegexGroup(..) => TypeId::RegexMatchGroup,
+                BslObject::ReservedRegexGroup(_) => TypeId::RegexMatchGroup,
                 BslObject::DomList(kind, _) => match kind {
                     crate::dom::DomListKind::Nodes(_) => TypeId::DomNodeList,
                     crate::dom::DomListKind::Attributes(_) => TypeId::DomAttributeMap,
@@ -1590,6 +1607,23 @@ impl BslValue {
     }
 
     // --- Коллекции ----------------------------------------------------
+
+    /// Заворачивает реализацию статически подключённого компонента в
+    /// ссылочное значение BSL.
+    pub fn new_object(object: impl ObjectProtocol + 'static) -> Self {
+        BslValue::Object(Rc::new(BslObject::Extension(ObjectRef::new(object))))
+    }
+
+    /// Возвращает расширяемый объект, не раскрывая legacy-представление.
+    pub fn object_ref(&self) -> Option<&ObjectRef> {
+        match self {
+            BslValue::Object(object) => match &**object {
+                BslObject::Extension(object) => Some(object),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
 
     pub fn new_array(items: Vec<BslValue>) -> Self {
         BslValue::Object(Rc::new(BslObject::Array(std::cell::RefCell::new(items))))
@@ -2234,6 +2268,7 @@ impl BslValue {
     pub fn get_index(&self, idx: &BslValue, names: &NameInterner) -> RtResult<BslValue> {
         match self {
             BslValue::Object(o) => match &**o {
+                BslObject::Extension(object) => object.get_index(idx),
                 BslObject::Array(v) => {
                     let v = v.borrow();
                     let i = Self::index_as_usize(idx)?;
@@ -2381,6 +2416,7 @@ impl BslValue {
     pub fn set_index(&self, idx: &BslValue, val: BslValue) -> RtResult<()> {
         match self {
             BslValue::Object(o) => match &**o {
+                BslObject::Extension(object) => object.set_index(idx, val),
                 BslObject::Array(v) => {
                     let mut v = v.borrow_mut();
                     let i = Self::index_as_usize(idx)?;
@@ -2406,6 +2442,7 @@ impl BslValue {
     pub fn collection_len(&self) -> RtResult<usize> {
         match self {
             BslValue::Object(o) => match &**o {
+                BslObject::Extension(object) => object.collection_len(),
                 BslObject::Array(v) => Ok(v.borrow().len()),
                 BslObject::Structure(s) => Ok(s.borrow().len()),
                 BslObject::ValueTable(data) => Ok(data.borrow().row_count()),
@@ -2443,11 +2480,7 @@ impl BslValue {
                 BslObject::XPathResolver(_)
                 | BslObject::XPathExpression(_)
                 | BslObject::XPathResult(_)
-                // Результат поиска по регулярному выражению коллекцией
-                // тоже не считается: группы отдаёт `ПолучитьГруппы()`, а
-                // считает их уже полученный МАССИВ.
-                | BslObject::RegexMatch(_)
-                | BslObject::RegexGroup(..) => Err(RtError::NotIndexable),
+                | BslObject::ReservedRegexGroup(_) => Err(RtError::NotIndexable),
                 // Коллекции модели схемы — настоящие коллекции: и
                 // `Количество()`, и `Для Каждого` по ним измерены; набор
                 // схем тоже обходится (`Для Каждого С Из Наб`).
@@ -3006,9 +3039,6 @@ impl BslValue {
                 BslObject::PdfAttachment(..) => pdf::attachment_property(self, name),
                 BslObject::DomNode(..) => dom::get_property(self, name),
                 BslObject::XPathResult(_) => xpath::get_property(self, name),
-                BslObject::RegexMatch(_) | BslObject::RegexGroup(..) => {
-                    regex_api::get_property(self, name)
-                }
                 BslObject::XsComponent(..) | BslObject::XmlExpandedName(_) => {
                     xsd::get_property(self, name)
                 }
@@ -3927,6 +3957,7 @@ impl fmt::Display for BslValue {
             // `type_name`).
             BslValue::EnumType(k) => write!(f, "{}", k.meta_ru_name()),
             BslValue::Object(o) => match &**o {
+                BslObject::Extension(object) => write!(f, "{}", object.display()),
                 BslObject::VstrOpaque(_) => write!(f, "НепрозрачноеЗначение"),
                 BslObject::Array(_) => write!(f, "Массив"),
                 BslObject::Structure(_) => write!(f, "Структура"),
@@ -3955,16 +3986,7 @@ impl fmt::Display for BslValue {
                 | BslObject::XPathResolver(_)
                 | BslObject::XPathExpression(_)
                 | BslObject::XPathResult(_)
-                // Результат поиска по регулярному выражению и его группа
-                // печатаются так же — СЛИТНЫМ именем, хотя представление
-                // типа у них с пробелами: измерено, что `Строка(результат)`
-                // даёт «РезультатПоискаПоРегулярномуВыражению», тогда как
-                // `Строка(ТипЗнч(результат))` — «Результат поиска по
-                // регулярному выражению».
-                | BslObject::RegexMatch(_)
-                | BslObject::RegexGroup(..) => {
-                    write!(f, "{}", self.type_name())
-                }
+                | BslObject::ReservedRegexGroup(_) => write!(f, "{}", self.type_name()),
                 // Единственный объект, который печатается СОДЕРЖИМЫМ, а не
                 // именем: см. `binary_data_display`.
                 BslObject::BinaryData(bytes) => write!(f, "{}", binary_data_display(bytes)),

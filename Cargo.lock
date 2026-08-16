@@ -118,6 +118,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "bsl-regexp"
+version = "0.1.0"
+dependencies = [
+ "bsl-number",
+ "bsl-rt",
+]
+
+[[package]]
 name = "bsl-rt"
 version = "0.1.0"
 dependencies = [
@@ -149,6 +157,7 @@ dependencies = [
  "bsl-bytecode",
  "bsl-format",
  "bsl-number",
+ "bsl-regexp",
  "bsl-rt",
  "bsl-sema",
  "bsl-syntax",
@@ -589,6 +598,7 @@ name = "open-bsl"
 version = "0.1.0"
 dependencies = [
  "bsl-bytecode",
+ "bsl-regexp",
  "bsl-rt",
  "bsl-sema",
  "bsl-syntax",

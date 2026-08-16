@@ -196,7 +196,10 @@ impl BslString {
         }))
     }
 
-    pub(crate) fn from_units(units: Vec<u16>) -> Self {
+    /// Создаёт строку из кодовых единиц UTF-16 без нормализации.
+    /// Компонентам это нужно для сохранения допустимых в BSL непарных
+    /// суррогатов и точных позиций в кодовых единицах.
+    pub fn from_units(units: Vec<u16>) -> Self {
         BslString(Rc::new(BslStringData {
             units,
             lowercase_chars: OnceCell::new(),

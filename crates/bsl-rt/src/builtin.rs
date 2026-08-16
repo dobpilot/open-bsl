@@ -1549,10 +1549,12 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         BuiltinFn::TrimRight => args[0].str_trim_right(),
         BuiltinFn::StrFind => args[0].str_find(&args[1]),
         BuiltinFn::StrReplace => args[0].str_replace(&args[1], &args[2]),
-        BuiltinFn::StrFindByRegex => crate::regex_api::find(args),
-        BuiltinFn::StrFindAllByRegex => crate::regex_api::find_all(args),
-        BuiltinFn::StrReplaceByRegex => crate::regex_api::replace(args),
-        BuiltinFn::StrLikeByRegex => crate::regex_api::like(args),
+        BuiltinFn::StrFindByRegex
+        | BuiltinFn::StrFindAllByRegex
+        | BuiltinFn::StrReplaceByRegex
+        | BuiltinFn::StrLikeByRegex => Err(RtError::Component(
+            "регулярные выражения выполняются компонентом bsl-regexp".to_string(),
+        )),
         BuiltinFn::StrSplit => args[0].str_split(&args[1]),
         BuiltinFn::StrConcat => args[0].str_join(&args[1]),
         BuiltinFn::StrLineCount => args[0].str_line_count(),
@@ -2554,7 +2556,10 @@ pub fn call_builtin_method(
         BuiltinMethod::XPathCreateNsResolver => crate::xpath::create_ns_resolver(obj, args),
         BuiltinMethod::XPathLookupNamespaceUri => crate::xpath::lookup_namespace_uri(obj, args),
         BuiltinMethod::XPathNext => crate::xpath::next_node(obj, args),
-        BuiltinMethod::RegexGetGroups => crate::regex_api::get_groups(obj),
+        BuiltinMethod::RegexGetGroups => Err(RtError::MethodNotApplicable {
+            method: "ПолучитьГруппы",
+            receiver: obj.type_name(),
+        }),
         BuiltinMethod::XPathSnapshotItem => crate::xpath::snapshot_item(obj, args),
         BuiltinMethod::XPathEvaluateExpression => crate::xpath::evaluate_expression(obj, args),
         BuiltinMethod::CreateXmlSchema => crate::xsd::create_schema(obj, args),
