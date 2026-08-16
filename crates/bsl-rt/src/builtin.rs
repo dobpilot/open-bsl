@@ -1509,6 +1509,17 @@ impl BuiltinMethod {
             .find(|(n, _)| n.to_uppercase() == upper)
             .map(|(_, m)| *m)
     }
+
+    /// Основное русское имя для перехода legacy-`CallMethod` к открытому
+    /// объектному протоколу. В таблице оно всегда предшествует английскому
+    /// синониму.
+    pub fn primary_name(self) -> &'static str {
+        BUILTIN_METHOD_NAMES
+            .iter()
+            .find(|(_, method)| *method == self)
+            .map(|(name, _)| *name)
+            .expect("каждый BuiltinMethod обязан иметь строку в таблице имён")
+    }
 }
 
 pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
@@ -2030,8 +2041,6 @@ pub fn call_builtin_method(
             }
             if crate::spreadsheet::is_spread_document(obj) {
                 crate::spreadsheet::clear(obj)?;
-            } else if crate::textdoc::is_text_document(obj) {
-                crate::textdoc::clear(obj)?;
             } else {
                 obj.clear_collection()?;
             }
@@ -2287,9 +2296,6 @@ pub fn call_builtin_method(
             } else if crate::spreadsheet::is_spread_document(obj) {
                 crate::spreadsheet::write(obj, args)?;
                 Ok(BslValue::Undefined)
-            } else if crate::textdoc::is_text_document(obj) {
-                crate::textdoc::write_file(obj, args)?;
-                Ok(BslValue::Undefined)
             } else if crate::zip::is_writer(obj) {
                 // У писателя архива `Записать()` без аргументов: измерено,
                 // что `Записать(имя)` платформа встречает «Слишком много
@@ -2363,11 +2369,6 @@ pub fn call_builtin_method(
             } else if crate::spreadsheet::is_spread_document(obj) {
                 crate::spreadsheet::read(obj, args)?;
                 Ok(BslValue::Undefined)
-            } else if crate::textdoc::is_text_document(obj) {
-                // У документа `Прочитать(Путь)` — загрузка файла, а не шаг
-                // по потоку.
-                crate::textdoc::read_file(obj, args)?;
-                Ok(BslValue::Undefined)
             } else if crate::xml::is_xml_reader(obj) {
                 crate::xml::read(obj)
             } else if crate::stream::is_stream(obj) {
@@ -2402,34 +2403,25 @@ pub fn call_builtin_method(
             }
             Ok(BslValue::Undefined)
         }
-        BuiltinMethod::SetText => {
-            crate::textdoc::set_text(obj, args)?;
-            Ok(BslValue::Undefined)
-        }
-        BuiltinMethod::GetText => crate::textdoc::get_text(obj),
-        BuiltinMethod::LineCount => crate::textdoc::line_count(obj),
-        BuiltinMethod::GetLine => crate::textdoc::get_line(obj, args),
-        BuiltinMethod::AddLine => {
-            crate::textdoc::add_line(obj, args)?;
-            Ok(BslValue::Undefined)
-        }
-        BuiltinMethod::InsertLine => {
-            crate::textdoc::insert_line(obj, args)?;
-            Ok(BslValue::Undefined)
-        }
-        BuiltinMethod::ReplaceLine => {
-            crate::textdoc::replace_line(obj, args)?;
-            Ok(BslValue::Undefined)
-        }
-        BuiltinMethod::DeleteLine => {
-            crate::textdoc::delete_line(obj, args)?;
-            Ok(BslValue::Undefined)
-        }
+        BuiltinMethod::SetText
+        | BuiltinMethod::GetText
+        | BuiltinMethod::LineCount
+        | BuiltinMethod::GetLine
+        | BuiltinMethod::AddLine
+        | BuiltinMethod::InsertLine
+        | BuiltinMethod::ReplaceLine
+        | BuiltinMethod::DeleteLine => Err(RtError::MethodNotApplicable {
+            method: "метод bsl-textdoc",
+            receiver: obj.type_name(),
+        }),
         BuiltinMethod::GetArea => {
             if crate::spreadsheet::is_spread_document(obj) {
                 crate::spreadsheet::get_area(obj, args)
             } else {
-                crate::textdoc::get_area(obj, args)
+                Err(RtError::MethodNotApplicable {
+                    method: "ПолучитьОбласть",
+                    receiver: obj.type_name(),
+                })
             }
         }
         BuiltinMethod::Region => crate::spreadsheet::region(obj, args),

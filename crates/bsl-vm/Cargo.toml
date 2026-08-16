@@ -4,9 +4,10 @@ version.workspace = true
 edition.workspace = true
 
 [features]
-default = ["binbuf", "regexp"]
+default = ["binbuf", "regexp", "textdoc"]
 binbuf = ["dep:bsl-binbuf"]
 regexp = ["dep:bsl-regexp"]
+textdoc = ["dep:bsl-textdoc"]
 
 [dependencies]
 bsl-rt = { path = "../bsl-rt" }
@@ -15,6 +16,7 @@ bsl-format = { path = "../bsl-format" }
 bsl-number = { path = "../bsl-number" }
 bsl-binbuf = { path = "../bsl-binbuf", optional = true }
 bsl-regexp = { path = "../bsl-regexp", optional = true }
+bsl-textdoc = { path = "../bsl-textdoc", optional = true }
 # Выполнить/Вычислить компилируют строку в байт-код тем же движком, что и
 # статический код ("один движок, одна семантика" из брифа) — поэтому VM
 # теперь зависит от всего фронтенда, не только от bsl-bytecode.

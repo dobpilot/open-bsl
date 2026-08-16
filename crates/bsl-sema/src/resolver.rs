@@ -936,6 +936,16 @@ impl<'a> Resolver<'a> {
                 });
             }
         }
+        if self.registry.is_some()
+            && matches!(
+                type_name.to_uppercase().as_str(),
+                "ТЕКСТОВЫЙДОКУМЕНТ" | "TEXTDOCUMENT"
+            )
+        {
+            return Err(SemaError::Unsupported(
+                "ТекстовыйДокумент требует зарегистрированный компонент bsl-textdoc",
+            ));
+        }
         match type_name.to_uppercase().as_str() {
             "МАССИВ" | "ARRAY" => {
                 let mut dims = Vec::with_capacity(args.len());

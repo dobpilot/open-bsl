@@ -159,6 +159,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "bsl-textdoc"
+version = "0.1.0"
+dependencies = [
+ "bsl-rt",
+]
+
+[[package]]
 name = "bsl-vm"
 version = "0.1.0"
 dependencies = [
@@ -170,6 +177,7 @@ dependencies = [
  "bsl-rt",
  "bsl-sema",
  "bsl-syntax",
+ "bsl-textdoc",
  "pprof",
 ]
 
@@ -612,6 +620,7 @@ dependencies = [
  "bsl-rt",
  "bsl-sema",
  "bsl-syntax",
+ "bsl-textdoc",
  "bsl-vm",
 ]
 

@@ -86,7 +86,7 @@ bsl-xml          -> bsl-rt
 bsl-pdf          -> bsl-rt + bsl-compression
 bsl-zip          -> bsl-rt + bsl-stream + bsl-compression
 bsl-spreadsheet  -> bsl-rt + bsl-xml + bsl-pdf + bsl-zip
-bsl-textdoc      -> bsl-rt + bsl-format
+bsl-textdoc      -> bsl-rt
 bsl-regexp       -> bsl-rt
 ```
 
@@ -105,6 +105,15 @@ bsl-regexp       -> bsl-rt
 XDTO. Перемещать объект раньше них через обратную зависимость
 `bsl-rt -> bsl-binbuf` нельзя. До миграции CLI аналогичный опциональный
 адаптер `bsl-vm -> bsl-binbuf` обслуживает только старый `CallBuiltin`.
+
+`bsl-textdoc` вынесен целиком: конструктор имеет статический
+`ConstructorCode` 1, а методы, свойство `Параметры` и произвольные поля
+параметров обслуживает `ObjectProtocol`. Форматирование значений для
+`Вывести` приходит через `CallContext::format_value`, поэтому компоненту
+не нужна прямая зависимость от `bsl-format`. Без feature `textdoc`
+конструктор отвергается семантическим анализом и не попадает в legacy-
+`NewTextDocument`; старый CLI временно создаёт тот же компонентный объект
+через адаптер этой инструкции.
 
 ## Объектный протокол
 

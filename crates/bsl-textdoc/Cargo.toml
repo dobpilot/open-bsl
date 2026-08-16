@@ -1,0 +1,8 @@
+[package]
+name = "bsl-textdoc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+bsl-rt = { path = "../bsl-rt" }

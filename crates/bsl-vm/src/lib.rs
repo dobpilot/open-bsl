@@ -1289,11 +1289,21 @@ fn step(
                 // этапе компиляции — для неё (и только когда кэш-путь
                 // говорит "это не такой объект") VM резолвит имя в текст
                 // через Program::names и идёт по строковому пути.
-                let v = match ov.get_field_cached(name, prop_cache(chunk, pc)?) {
-                    Err(RtError::NotAnObject) => {
-                        ov.get_field_by_name(field_name(program, name)?)?
+                let v = if let Some(object) = ov.object_ref() {
+                    let mut context = bsl_rt::CallContext::new(
+                        runtime_shapes,
+                        &mut *host.stdout,
+                        &mut *host.stderr,
+                        bsl_format::format_value,
+                    );
+                    object.get_property(field_name(program, name)?, &mut context)?
+                } else {
+                    match ov.get_field_cached(name, prop_cache(chunk, pc)?) {
+                        Err(RtError::NotAnObject) => {
+                            ov.get_field_by_name(field_name(program, name)?)?
+                        }
+                        other => other?,
                     }
-                    other => other?,
                 };
                 let d = frames[frame_idx].reg_index(dst);
                 reg_store(stack, d, v)?;
@@ -1303,7 +1313,15 @@ fn step(
                 let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
                 let sv = reg_load(stack, frames[frame_idx].reg_index(src))?;
                 let имя = field_name(program, name)?;
-                if !set_spread_value(&ov, имя, &sv)? {
+                if let Some(object) = ov.object_ref() {
+                    let mut context = bsl_rt::CallContext::new(
+                        runtime_shapes,
+                        &mut *host.stdout,
+                        &mut *host.stderr,
+                        bsl_format::format_value,
+                    );
+                    object.set_property(имя, sv, &mut context)?;
+                } else if !set_spread_value(&ov, имя, &sv)? {
                     match ov.set_field_cached(name, sv.clone(), prop_cache(chunk, pc)?) {
                         Err(RtError::NotAnObject) => ov.set_field_by_name(имя, sv)?,
                         other => other?,
@@ -1372,7 +1390,15 @@ fn step(
             } => {
                 let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
                 let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
-                let v = if method == bsl_rt::BuiltinMethod::OutputArea {
+                let v = if let Some(object) = ov.object_ref() {
+                    let mut context = bsl_rt::CallContext::new(
+                        runtime_shapes,
+                        &mut *host.stdout,
+                        &mut *host.stderr,
+                        bsl_format::format_value,
+                    );
+                    object.call_method(method.primary_name(), args.as_slice(), &mut context)?
+                } else if method == bsl_rt::BuiltinMethod::OutputArea {
                     output_area(&ov, args.as_slice())?
                 } else {
                     bsl_rt::call_builtin_method_ctx(method, &ov, args.as_slice(), runtime_shapes)?
@@ -1396,11 +1422,16 @@ fn step(
                     // Значит развести получателей надо и здесь, иначе
                     // `ТекстовыйДокумент.Записать(путь)` попадёт в чужую
                     // ветку и получит «метод не применим».
-                    if bsl_rt::spread_is_document(ov) {
+                    if let Some(object) = ov.object_ref() {
+                        let mut context = bsl_rt::CallContext::new(
+                            runtime_shapes,
+                            &mut *host.stdout,
+                            &mut *host.stderr,
+                            bsl_format::format_value,
+                        );
+                        object.call_method("Записать", std::slice::from_ref(sv), &mut context)?
+                    } else if bsl_rt::spread_is_document(ov) {
                         bsl_rt::spread_write(ov, std::slice::from_ref(sv))?;
-                        BslValue::Undefined
-                    } else if bsl_rt::textdoc_is_document(ov) {
-                        bsl_rt::textdoc_write_file(ov, std::slice::from_ref(sv))?;
                         BslValue::Undefined
                     } else if bsl_rt::pdf::is_pdf_document(ov) {
                         // `ДокументPDF.Записать(ИмяФайла)` — тот же случай:
@@ -1674,9 +1705,19 @@ fn step_cold(
             frames[frame_idx].pc += 1;
         }
         Instr::NewTextDocument { dst } => {
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, BslValue::new_text_document())?;
-            frames[frame_idx].pc += 1;
+            #[cfg(not(feature = "textdoc"))]
+            {
+                let _ = dst;
+                return Err(RtError::Component(
+                    "ТекстовыйДокумент требует компонент bsl-textdoc".to_string(),
+                ));
+            }
+            #[cfg(feature = "textdoc")]
+            {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, bsl_textdoc::new_text_document())?;
+                frames[frame_idx].pc += 1;
+            }
         }
         Instr::NewXmlReader { dst } => {
             let d = frames[frame_idx].reg_index(dst);
@@ -2897,8 +2938,8 @@ pub(crate) fn output_area(target: &BslValue, args: &[BslValue]) -> Result<BslVal
             receiver: target.type_name(),
         });
     };
-    // `Вывести` полиморфен: у табличного документа он приписывает другой
-    // ДОКУМЕНТ снизу, у текстового — подставляет параметры макета.
+    // Компонентный `ТекстовыйДокумент` обрабатывает имя через
+    // `ObjectProtocol`; здесь остаётся только legacy-табличный документ.
     if bsl_rt::spread_is_document(target) {
         // Подстановка параметров макета: значения из карты параметров
         // источника форматируются и кладутся в текст ячеек с совпадающим
@@ -2919,15 +2960,10 @@ pub(crate) fn output_area(target: &BslValue, args: &[BslValue]) -> Result<BslVal
         bsl_rt::spread_output(target, args)?;
         return Ok(BslValue::Undefined);
     }
-    let (area, params) = bsl_rt::textdoc_area_for_output(source)?;
-    // Значения параметров печатаются ровно как `Строка()`: измерено, что
-    // 1000.5 уходит в макет как «1 000,5», с разделителем групп.
-    let mut formatted = Vec::with_capacity(params.len());
-    for (name, value) in params {
-        formatted.push((name, bsl_format::format_value(&value, None)?));
-    }
-    bsl_rt::textdoc_append_rendered(target, &area.render(&formatted))?;
-    Ok(BslValue::Undefined)
+    Err(RtError::MethodNotApplicable {
+        method: "Вывести",
+        receiver: target.type_name(),
+    })
 }
 
 /// Тело инструкции `Add`.

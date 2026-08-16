@@ -825,9 +825,20 @@ shim!(shim_get_prop, |frames,
     // Инлайн-кэш — ячейка ЭТОЙ инструкции, ровно как у интерпретатора:
     // отдельного кэша у JIT-а нет и быть не должно, иначе мономорфный
     // сайт грелся бы дважды и по-разному.
-    let v = match ov.get_field_cached(name, prop_cache(chunk, pc as usize)?) {
-        Err(RtError::NotAnObject) => ov.get_field_by_name(field_name(program, name)?)?,
-        other => other?,
+    let v = if let Some(object) = ov.object_ref() {
+        // Legacy-байткод не помечает компонентное свойство открытым.
+        // Мигрированные официальные объекты не используют IO в свойствах;
+        // новый байткод получает настоящий CallContext через интерпретатор.
+        let mut stdout = std::io::sink();
+        let mut stderr = std::io::sink();
+        let mut context =
+            bsl_rt::CallContext::new(shapes, &mut stdout, &mut stderr, bsl_format::format_value);
+        object.get_property(field_name(program, name)?, &mut context)?
+    } else {
+        match ov.get_field_cached(name, prop_cache(chunk, pc as usize)?) {
+            Err(RtError::NotAnObject) => ov.get_field_by_name(field_name(program, name)?)?,
+            other => other?,
+        }
     };
     let d = frames[idx].reg_index(dst);
     reg_store(stack, d, v)?;
@@ -853,7 +864,13 @@ shim!(shim_set_prop, |frames,
     let sv = reg_load(stack, frames[idx].reg_index(src))?;
     // `Значение` перехватывается ТАК ЖЕ, как в ветке интерпретатора: ему
     // нужно форматирование из `bsl-format`.
-    if !crate::set_spread_value(&ov, field_name(program, name)?, &sv)? {
+    if let Some(object) = ov.object_ref() {
+        let mut stdout = std::io::sink();
+        let mut stderr = std::io::sink();
+        let mut context =
+            bsl_rt::CallContext::new(shapes, &mut stdout, &mut stderr, bsl_format::format_value);
+        object.set_property(field_name(program, name)?, sv, &mut context)?;
+    } else if !crate::set_spread_value(&ov, field_name(program, name)?, &sv)? {
         match ov.set_field_cached(name, sv.clone(), prop_cache(chunk, pc as usize)?) {
             Err(RtError::NotAnObject) => ov.set_field_by_name(field_name(program, name)?, sv)?,
             other => other?,
@@ -886,7 +903,13 @@ shim!(shim_call_method, |frames,
     };
     let ov = reg_load(stack, frames[idx].reg_index(obj))?;
     let args = CallArgs::load(stack, &frames[idx], base, count)?;
-    let v = if method == bsl_rt::BuiltinMethod::OutputArea {
+    let v = if let Some(object) = ov.object_ref() {
+        let mut stdout = std::io::sink();
+        let mut stderr = std::io::sink();
+        let mut context =
+            bsl_rt::CallContext::new(shapes, &mut stdout, &mut stderr, bsl_format::format_value);
+        object.call_method(method.primary_name(), args.as_slice(), &mut context)?
+    } else if method == bsl_rt::BuiltinMethod::OutputArea {
         crate::output_area(&ov, args.as_slice())?
     } else {
         bsl_rt::call_builtin_method_ctx(method, &ov, args.as_slice(), shapes)?

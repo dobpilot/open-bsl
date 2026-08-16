@@ -33,8 +33,14 @@
 //! дополняется пробелами, либо обрезается по ним (`"оченьдлинное"` в
 //! `[Имя]` даёт `очень`). Незаданный параметр превращается в пробелы.
 
-use crate::string::BslString;
-use crate::{BslValue, RtError, RtResult};
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use bsl_rt::{
+    Arity, BslString, BslValue, CallContext, ConstructorCode, ConstructorDescriptor, EnumValue,
+    LibraryDependency, LibraryDescriptor, ObjectProtocol, RtError, RtResult, TypeDescriptor,
+    TypeId,
+};
 
 fn bad(what: impl Into<String>) -> RtError {
     RtError::TextDoc(what.into())
@@ -52,8 +58,9 @@ pub struct TextDocData {
     /// хранятся отдельно: иначе `ПолучитьТекст` потерял бы `ВК`, который
     /// платформа сохраняет (измерено).
     text: String,
-    /// Документ получен через `ПолучитьОбласть`. `Вывести` принимает
-    /// ТОЛЬКО такой: обычный документ в него передать — ошибка (измерено).
+    /// Документ получен через `ПолучитьОбласть`. Только такой источник
+    /// даёт текст в `Вывести`; обычный документ даёт пустой вывод
+    /// (измерено, `TEXTDOC.OUTPUT_PLAIN_DOC`).
     is_area: bool,
     /// Значения параметров макета: `(имя, значение)`. Не `HashMap`, потому
     /// что их единицы, а порядок полезен при отладке.
@@ -375,33 +382,33 @@ impl TextDocData {
     }
 }
 
-// --- Склейка с объектами BSL --------------------------------------------
+// --- Объекты компонента --------------------------------------------------
 
-use crate::object::BslObject;
+static DOCUMENT_TYPE: TypeDescriptor = TypeDescriptor {
+    package: env!("CARGO_PKG_NAME"),
+    name: "ТекстовыйДокумент",
+    legacy_type_id: Some(TypeId::TextDocument),
+};
 
-fn as_doc(v: &BslValue) -> RtResult<&std::rc::Rc<std::cell::RefCell<TextDocData>>> {
-    match v {
-        BslValue::Object(o) => match &**o {
-            BslObject::TextDocument(d) | BslObject::TextDocParams(d) => Ok(d),
-            _ => Err(RtError::MethodNotApplicable {
-                method: "метод ТекстовыйДокумент",
-                receiver: v.type_name(),
-            }),
-        },
-        _ => Err(RtError::MethodNotApplicable {
-            method: "метод ТекстовыйДокумент",
-            receiver: v.type_name(),
-        }),
-    }
+static PARAMS_TYPE: TypeDescriptor = TypeDescriptor {
+    package: env!("CARGO_PKG_NAME"),
+    name: "ПараметрыМакетаТекстовогоДокумента",
+    legacy_type_id: Some(TypeId::TextDocParams),
+};
+
+#[derive(Debug, Clone, Default)]
+struct TextDocument {
+    data: Rc<RefCell<TextDocData>>,
 }
 
-pub fn is_text_document(v: &BslValue) -> bool {
-    matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::TextDocument(_)))
+#[derive(Debug, Clone)]
+struct TextDocParams {
+    data: Rc<RefCell<TextDocData>>,
 }
 
 fn need_str(arg: Option<&BslValue>, op: &'static str) -> RtResult<String> {
     match arg {
-        Some(BslValue::Str(s)) => Ok(s.to_string()),
+        Some(BslValue::Str(value)) => Ok(value.to_string()),
         _ => Err(RtError::TypeError {
             expected: "Строка",
             op,
@@ -411,7 +418,7 @@ fn need_str(arg: Option<&BslValue>, op: &'static str) -> RtResult<String> {
 
 fn need_number(arg: Option<&BslValue>, op: &'static str) -> RtResult<i64> {
     match arg {
-        Some(BslValue::Number(n)) => n.to_i64_exact().ok_or(RtError::BadIndex),
+        Some(BslValue::Number(value)) => value.to_i64_exact().ok_or(RtError::BadIndex),
         _ => Err(RtError::TypeError {
             expected: "Число",
             op,
@@ -419,122 +426,53 @@ fn need_number(arg: Option<&BslValue>, op: &'static str) -> RtResult<i64> {
     }
 }
 
-/// # Errors
-///
-/// [`RtError::TypeError`], если получатель не документ либо аргумент не строка.
-pub fn set_text(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
-    let text = need_str(args.first(), "УстановитьТекст")?;
-    as_doc(obj)?.borrow_mut().set_text(&text);
-    Ok(())
+fn wrong_method(name: &str, receiver: &'static str) -> RtError {
+    RtError::UnknownMethod {
+        method: name.to_string(),
+        receiver,
+    }
 }
 
-/// # Errors
-///
-/// [`RtError::MethodNotApplicable`], если получатель не документ.
-pub fn get_text(obj: &BslValue) -> RtResult<BslValue> {
-    Ok(BslValue::Str(BslString::from_str(
-        as_doc(obj)?.borrow().text(),
-    )))
+fn exact_arity(
+    name: &str,
+    arguments: &[BslValue],
+    expected: usize,
+    receiver: &'static str,
+) -> RtResult<()> {
+    if arguments.len() == expected {
+        Ok(())
+    } else {
+        Err(wrong_method(name, receiver))
+    }
 }
 
-/// # Errors
-///
-/// [`RtError::MethodNotApplicable`], если получатель не документ.
-pub fn line_count(obj: &BslValue) -> RtResult<BslValue> {
-    Ok(BslValue::Number(bsl_number::BslNumber::from_i64(
-        as_doc(obj)?.borrow().line_count() as i64,
-    )))
+fn range_arity(
+    name: &str,
+    arguments: &[BslValue],
+    min: usize,
+    max: usize,
+    receiver: &'static str,
+) -> RtResult<()> {
+    if (min..=max).contains(&arguments.len()) {
+        Ok(())
+    } else {
+        Err(wrong_method(name, receiver))
+    }
 }
 
-/// # Errors
-///
-/// [`RtError::TypeError`], если номер не число.
-pub fn get_line(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
-    let n = need_number(args.first(), "ПолучитьСтроку")?;
-    Ok(BslValue::Str(BslString::from_str(
-        &as_doc(obj)?.borrow().line(n),
-    )))
-}
+fn encoding_arg(arg: Option<&BslValue>) -> RtResult<bsl_rt::encoding::Encoding> {
+    use bsl_rt::encoding::Encoding;
 
-/// # Errors
-///
-/// [`RtError::TypeError`], если аргумент не строка.
-pub fn add_line(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
-    let line = need_str(args.first(), "ДобавитьСтроку")?;
-    as_doc(obj)?.borrow_mut().add_line(&line);
-    Ok(())
-}
-
-/// # Errors
-///
-/// [`RtError::TypeError`] при неверных аргументах.
-pub fn insert_line(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
-    let n = need_number(args.first(), "ВставитьСтроку")?;
-    let line = need_str(args.get(1), "ВставитьСтроку")?;
-    as_doc(obj)?.borrow_mut().insert_line(n, &line);
-    Ok(())
-}
-
-/// # Errors
-///
-/// [`RtError::TypeError`] при неверных аргументах.
-pub fn replace_line(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
-    let n = need_number(args.first(), "ЗаменитьСтроку")?;
-    let line = need_str(args.get(1), "ЗаменитьСтроку")?;
-    as_doc(obj)?.borrow_mut().replace_line(n, &line);
-    Ok(())
-}
-
-/// # Errors
-///
-/// [`RtError::TypeError`], если номер не число.
-pub fn delete_line(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
-    let n = need_number(args.first(), "УдалитьСтроку")?;
-    as_doc(obj)?.borrow_mut().delete_line(n);
-    Ok(())
-}
-
-/// # Errors
-///
-/// [`RtError::MethodNotApplicable`], если получатель не документ.
-pub fn clear(obj: &BslValue) -> RtResult<()> {
-    as_doc(obj)?.borrow_mut().clear();
-    Ok(())
-}
-
-/// Кодировка из второго аргумента: член `КодировкаТекста` либо строка с
-/// названием. Без аргумента — UTF-8, как у платформы.
-///
-/// # Errors
-///
-/// [`RtError::TextDoc`], если название не поддержано;
-/// [`RtError::TypeError`], если аргумент не строка и не член перечисления.
-fn encoding_arg(arg: Option<&BslValue>) -> RtResult<crate::encoding::Encoding> {
-    use crate::encoding::Encoding;
     match arg {
         None | Some(BslValue::Undefined) => Ok(Encoding::Utf8),
-        Some(BslValue::Str(s)) => Encoding::by_name(&s.to_string()),
-        Some(BslValue::Enum(e)) => match e {
-            // Оба члена сведены здесь в windows-1251, но измерен из них
-            // только `ANSI`: у `ТекстовыйДокумент.Записать` он снят
-            // дампом файла, который записала сама платформа, «Аб» ->
-            // `C0 E1` (шапка `encoding.rs`, якорь `ENC.WRITE.ANSI`);
-            // автоматическая проба удержала от этого лишь «записан», то
-            // есть приём члена (`measure-textdoc.platform.txt:76`).
-            // «Системную» в семействе `ТекстовыйДокумент` не зондировали
-            // ни разу, а у соседнего
-            // `ПолучитьБуферДвоичныхДанныхИзСтроки` (`encoding_arg` в
-            // `binbuf.rs`) она измерена как UTF-8 («Аб» ->
-            // `D0 90 D0 B1`, `measure-binary.platform.txt:5`). Опоры под
-            // windows-1251 для «Системной» здесь нет ни в одном замере:
-            // это сознательное расхождение с единственным имеющимся,
-            // ровно как у соседа.
-            crate::EnumValue::TextEncodingAnsi | crate::EnumValue::TextEncodingSystem => {
+        Some(BslValue::Str(value)) => Encoding::by_name(&value.to_string()),
+        Some(BslValue::Enum(value)) => match value {
+            EnumValue::TextEncodingAnsi | EnumValue::TextEncodingSystem => {
                 Ok(Encoding::Windows1251)
             }
-            crate::EnumValue::TextEncodingOem => Ok(Encoding::Cp866),
-            crate::EnumValue::TextEncodingUtf16 => Ok(Encoding::Utf16Le),
-            crate::EnumValue::TextEncodingUtf8 => Ok(Encoding::Utf8),
+            EnumValue::TextEncodingOem => Ok(Encoding::Cp866),
+            EnumValue::TextEncodingUtf16 => Ok(Encoding::Utf16Le),
+            EnumValue::TextEncodingUtf8 => Ok(Encoding::Utf8),
             _ => Err(RtError::TypeError {
                 expected: "КодировкаТекста",
                 op: "кодировка файла",
@@ -547,112 +485,236 @@ fn encoding_arg(arg: Option<&BslValue>) -> RtResult<crate::encoding::Encoding> {
     }
 }
 
-/// `Прочитать(Путь[, Кодировка])`.
-///
-/// # Errors
-///
-/// [`RtError::IoError`], если файл не читается.
-pub fn read_file(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
-    let path = need_str(args.first(), "Прочитать")?;
-    let encoding = encoding_arg(args.get(1))?;
-    let bytes = std::fs::read(&path).map_err(|e| RtError::IoError(e.to_string()))?;
-    as_doc(obj)?.borrow_mut().set_text(&encoding.decode(&bytes));
-    Ok(())
-}
-
-/// `Записать(Путь[, Кодировка])`.
-///
-/// # Errors
-///
-/// [`RtError::IoError`], если файл не записывается;
-/// [`RtError::TextDoc`], если кодировка не поддержана.
-pub fn write_file(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
-    let path = need_str(args.first(), "Записать")?;
-    let encoding = encoding_arg(args.get(1))?;
-    let doc = as_doc(obj)?.borrow();
-    std::fs::write(&path, encoding.encode(doc.text()))
-        .map_err(|e| RtError::IoError(e.to_string()))?;
-    Ok(())
-}
-
-/// `ПолучитьОбласть(Имя)`.
-///
-/// # Errors
-///
-/// [`RtError::TextDoc`], если области нет.
-pub fn get_area(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
-    // Арность проверяется здесь, а не резолвером: у платформы лишний
-    // аргумент — ошибка РАНТАЙМА (форма `ПолучитьОбласть(2, 3)` от
-    // табличного документа не работает и здесь), и ловится она `Попытка`.
-    if args.len() != 1 {
-        return Err(bad("ПолучитьОбласть принимает ровно одно имя области"));
+impl TextDocument {
+    fn get_area(&self, arguments: &[BslValue]) -> RtResult<BslValue> {
+        if arguments.len() != 1 {
+            return Err(bad("ПолучитьОбласть принимает ровно одно имя области"));
+        }
+        let name = need_str(arguments.first(), "ПолучитьОбласть")?;
+        let area = self.data.borrow().area(&name)?;
+        Ok(BslValue::new_object(TextDocument {
+            data: Rc::new(RefCell::new(area)),
+        }))
     }
-    let name = need_str(args.first(), "ПолучитьОбласть")?;
-    let area = as_doc(obj)?.borrow().area(&name)?;
-    Ok(BslValue::Object(std::rc::Rc::new(BslObject::TextDocument(
-        std::rc::Rc::new(std::cell::RefCell::new(area)),
-    ))))
-}
 
-/// Данные для `Вывести`: сам текст области и её параметры. Форматирование
-/// значений делает `bsl-vm` — здесь его негде взять.
-///
-/// Источник, который НЕ область, ошибкой не считается: платформа на
-/// `Вывести` обычного документа отвечает пустым выводом, а не отказом
-/// (измерено, `TEXTDOC.OUTPUT_PLAIN_DOC`). Первый замер говорил обратное,
-/// но там сама проба была написана с переменной `И` — ключевым словом, — и
-/// отказ приходил от разбора, а не от `Вывести`.
-///
-/// # Errors
-///
-/// [`RtError::MethodNotApplicable`], если источник вообще не документ.
-pub fn area_for_output(source: &BslValue) -> RtResult<(TextDocData, Vec<(String, BslValue)>)> {
-    let doc = as_doc(source)?.borrow();
-    if !doc.is_area() {
-        return Ok((TextDocData::default(), Vec::new()));
+    fn read_file(&self, arguments: &[BslValue]) -> RtResult<BslValue> {
+        range_arity("Прочитать", arguments, 1, 2, DOCUMENT_TYPE.name)?;
+        let path = need_str(arguments.first(), "Прочитать")?;
+        let encoding = encoding_arg(arguments.get(1))?;
+        let bytes = std::fs::read(&path).map_err(|error| RtError::IoError(error.to_string()))?;
+        self.data.borrow_mut().set_text(&encoding.decode(&bytes));
+        Ok(BslValue::Undefined)
     }
-    Ok((doc.clone(), doc.params.clone()))
-}
 
-/// Дописать готовый текст в конец документа-приёмника.
-///
-/// # Errors
-///
-/// [`RtError::MethodNotApplicable`], если приёмник не документ.
-pub fn append_rendered(target: &BslValue, rendered: &str) -> RtResult<()> {
-    let doc = as_doc(target)?;
-    let mut doc = doc.borrow_mut();
-    if !doc.text.is_empty() && !doc.text.ends_with('\n') {
-        doc.text.push('\n');
+    fn write_file(&self, arguments: &[BslValue]) -> RtResult<BslValue> {
+        range_arity("Записать", arguments, 1, 2, DOCUMENT_TYPE.name)?;
+        let path = need_str(arguments.first(), "Записать")?;
+        let encoding = encoding_arg(arguments.get(1))?;
+        let data = self.data.borrow();
+        std::fs::write(&path, encoding.encode(data.text()))
+            .map_err(|error| RtError::IoError(error.to_string()))?;
+        Ok(BslValue::Undefined)
     }
-    doc.text.push_str(rendered);
-    Ok(())
-}
 
-/// `Параметры.Имя = Значение` — присваивание идёт сюда.
-///
-/// # Errors
-///
-/// [`RtError::TextDoc`], если такого параметра в макете нет.
-pub fn set_parameter(obj: &BslValue, name: &str, value: BslValue) -> RtResult<()> {
-    as_doc(obj)?.borrow_mut().set_parameter(name, value)
-}
+    fn output(&self, arguments: &[BslValue], context: &mut CallContext<'_>) -> RtResult<BslValue> {
+        exact_arity("Вывести", arguments, 1, DOCUMENT_TYPE.name)?;
+        let source = arguments[0]
+            .object_ref()
+            .and_then(|object| object.downcast_ref::<TextDocument>())
+            .ok_or_else(|| RtError::MethodNotApplicable {
+                method: "Вывести",
+                receiver: arguments[0].type_name(),
+            })?;
+        let source = source.data.borrow();
+        if !source.is_area() {
+            return Ok(BslValue::Undefined);
+        }
+        let mut formatted = Vec::with_capacity(source.params.len());
+        for (name, value) in &source.params {
+            formatted.push((name.clone(), context.format_value(value, None)?));
+        }
+        let rendered = source.render(&formatted);
+        drop(source);
 
-/// Чтение `Параметры.Имя`.
-///
-/// # Errors
-///
-/// [`RtError::TextDoc`], если такого параметра в макете нет.
-pub fn get_parameter(obj: &BslValue, name: &str) -> RtResult<BslValue> {
-    let doc = as_doc(obj)?.borrow();
-    if !doc
-        .parameter_names()
-        .iter()
-        .any(|n| n.eq_ignore_ascii_case(name))
-    {
-        return Err(bad(format!("параметра «{name}» в макете нет")));
+        let mut target = self.data.borrow_mut();
+        if !target.text.is_empty() && !target.text.ends_with('\n') {
+            target.text.push('\n');
+        }
+        target.text.push_str(&rendered);
+        Ok(BslValue::Undefined)
     }
-    Ok(doc.parameter(name).cloned().unwrap_or(BslValue::Undefined))
+}
+
+impl ObjectProtocol for TextDocument {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &DOCUMENT_TYPE
+    }
+
+    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
+        if name.eq_ignore_ascii_case("Параметры") || name.eq_ignore_ascii_case("Parameters")
+        {
+            Ok(BslValue::new_object(TextDocParams {
+                data: self.data.clone(),
+            }))
+        } else {
+            Err(RtError::UnknownColumn(name.to_string()))
+        }
+    }
+
+    fn call_method(
+        &self,
+        name: &str,
+        arguments: &[BslValue],
+        context: &mut CallContext<'_>,
+    ) -> RtResult<BslValue> {
+        if name.eq_ignore_ascii_case("УстановитьТекст") || name.eq_ignore_ascii_case("SetText")
+        {
+            exact_arity(name, arguments, 1, DOCUMENT_TYPE.name)?;
+            let text = need_str(arguments.first(), "УстановитьТекст")?;
+            self.data.borrow_mut().set_text(&text);
+            Ok(BslValue::Undefined)
+        } else if name.eq_ignore_ascii_case("ПолучитьТекст") || name.eq_ignore_ascii_case("GetText")
+        {
+            exact_arity(name, arguments, 0, DOCUMENT_TYPE.name)?;
+            Ok(BslValue::Str(BslString::from_str(
+                self.data.borrow().text(),
+            )))
+        } else if name.eq_ignore_ascii_case("КоличествоСтрок")
+            || name.eq_ignore_ascii_case("LineCount")
+        {
+            exact_arity(name, arguments, 0, DOCUMENT_TYPE.name)?;
+            Ok(BslValue::number_from_i64(
+                self.data.borrow().line_count() as i64
+            ))
+        } else if name.eq_ignore_ascii_case("ПолучитьСтроку")
+            || name.eq_ignore_ascii_case("GetLine")
+        {
+            exact_arity(name, arguments, 1, DOCUMENT_TYPE.name)?;
+            let number = need_number(arguments.first(), "ПолучитьСтроку")?;
+            Ok(BslValue::Str(BslString::from_str(
+                &self.data.borrow().line(number),
+            )))
+        } else if name.eq_ignore_ascii_case("ДобавитьСтроку")
+            || name.eq_ignore_ascii_case("AddLine")
+        {
+            exact_arity(name, arguments, 1, DOCUMENT_TYPE.name)?;
+            let line = need_str(arguments.first(), "ДобавитьСтроку")?;
+            self.data.borrow_mut().add_line(&line);
+            Ok(BslValue::Undefined)
+        } else if name.eq_ignore_ascii_case("ВставитьСтроку")
+            || name.eq_ignore_ascii_case("InsertLine")
+        {
+            exact_arity(name, arguments, 2, DOCUMENT_TYPE.name)?;
+            let number = need_number(arguments.first(), "ВставитьСтроку")?;
+            let line = need_str(arguments.get(1), "ВставитьСтроку")?;
+            self.data.borrow_mut().insert_line(number, &line);
+            Ok(BslValue::Undefined)
+        } else if name.eq_ignore_ascii_case("ЗаменитьСтроку")
+            || name.eq_ignore_ascii_case("ReplaceLine")
+        {
+            exact_arity(name, arguments, 2, DOCUMENT_TYPE.name)?;
+            let number = need_number(arguments.first(), "ЗаменитьСтроку")?;
+            let line = need_str(arguments.get(1), "ЗаменитьСтроку")?;
+            self.data.borrow_mut().replace_line(number, &line);
+            Ok(BslValue::Undefined)
+        } else if name.eq_ignore_ascii_case("УдалитьСтроку")
+            || name.eq_ignore_ascii_case("DeleteLine")
+        {
+            exact_arity(name, arguments, 1, DOCUMENT_TYPE.name)?;
+            let number = need_number(arguments.first(), "УдалитьСтроку")?;
+            self.data.borrow_mut().delete_line(number);
+            Ok(BslValue::Undefined)
+        } else if name.eq_ignore_ascii_case("Очистить") || name.eq_ignore_ascii_case("Clear")
+        {
+            exact_arity(name, arguments, 0, DOCUMENT_TYPE.name)?;
+            self.data.borrow_mut().clear();
+            Ok(BslValue::Undefined)
+        } else if name.eq_ignore_ascii_case("Прочитать") || name.eq_ignore_ascii_case("Read")
+        {
+            self.read_file(arguments)
+        } else if name.eq_ignore_ascii_case("Записать") || name.eq_ignore_ascii_case("Write")
+        {
+            self.write_file(arguments)
+        } else if name.eq_ignore_ascii_case("ПолучитьОбласть")
+            || name.eq_ignore_ascii_case("GetArea")
+        {
+            self.get_area(arguments)
+        } else if name.eq_ignore_ascii_case("Вывести") || name.eq_ignore_ascii_case("Output")
+        {
+            self.output(arguments, context)
+        } else {
+            Err(wrong_method(name, DOCUMENT_TYPE.name))
+        }
+    }
+
+    fn is_filled(&self) -> RtResult<bool> {
+        Ok(true)
+    }
+}
+
+impl ObjectProtocol for TextDocParams {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &PARAMS_TYPE
+    }
+
+    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
+        let data = self.data.borrow();
+        if !data
+            .parameter_names()
+            .iter()
+            .any(|candidate| candidate.eq_ignore_ascii_case(name))
+        {
+            return Err(bad(format!("параметра «{name}» в макете нет")));
+        }
+        Ok(data.parameter(name).cloned().unwrap_or(BslValue::Undefined))
+    }
+
+    fn set_property(
+        &self,
+        name: &str,
+        value: BslValue,
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<()> {
+        self.data.borrow_mut().set_parameter(name, value)
+    }
+
+    fn is_filled(&self) -> RtResult<bool> {
+        Ok(true)
+    }
+}
+
+/// Создаёт пустой ТекстовыйДокумент.
+pub fn new_text_document() -> BslValue {
+    BslValue::new_object(TextDocument::default())
+}
+
+fn construct(_context: &mut CallContext<'_>, arguments: &[BslValue]) -> RtResult<BslValue> {
+    if arguments.is_empty() {
+        Ok(new_text_document())
+    } else {
+        Err(wrong_method("Новый ТекстовыйДокумент", DOCUMENT_TYPE.name))
+    }
+}
+
+const CONSTRUCTORS: &[ConstructorDescriptor] = &[ConstructorDescriptor {
+    code: ConstructorCode::new(1),
+    names: &["ТекстовыйДокумент", "TextDocument"],
+    arity: Arity::exact(0),
+    call: construct,
+}];
+
+/// Дескриптор статически подключаемого компонента текстовых документов.
+pub const fn library() -> LibraryDescriptor {
+    LibraryDescriptor {
+        package: env!("CARGO_PKG_NAME"),
+        version: env!("CARGO_PKG_VERSION"),
+        dependencies: &[LibraryDependency {
+            package: bsl_rt::PACKAGE_NAME,
+            version: bsl_rt::PACKAGE_VERSION,
+        }],
+        functions: &[],
+        constructors: CONSTRUCTORS,
+    }
 }
 
 #[cfg(test)]
@@ -663,6 +725,12 @@ mod tests {
         let mut d = TextDocData::default();
         d.set_text(text);
         d
+    }
+
+    #[test]
+    fn constructor_code_is_static() {
+        assert_eq!(library().constructors.len(), 1);
+        assert_eq!(library().constructors[0].code.get(), 1);
     }
 
     /// Модель строк платформы: пустой текст — ноль строк, одинокий перевод

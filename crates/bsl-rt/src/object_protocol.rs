@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::fmt;
 use std::rc::Rc;
 
@@ -14,12 +15,25 @@ pub struct TypeDescriptor {
     pub legacy_type_id: Option<TypeId>,
 }
 
+/// Служебная основа безопасного downcast без обязательного метода в
+/// каждой реализации [`ObjectProtocol`].
+#[doc(hidden)]
+pub trait ObjectDowncast {
+    fn as_any(&self) -> &dyn Any;
+}
+
+impl<T: Any> ObjectDowncast for T {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
 /// Расширяемый протокол объекта BSL.
 ///
 /// Реализация не получает стек или регистры VM. Операции, которые тип не
 /// поддерживает, оставляют реализацию по умолчанию с типизированной
 /// ошибкой.
-pub trait ObjectProtocol: fmt::Debug {
+pub trait ObjectProtocol: fmt::Debug + ObjectDowncast {
     fn type_descriptor(&self) -> &'static TypeDescriptor;
 
     fn get_property(&self, _name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
@@ -86,6 +100,11 @@ impl ObjectRef {
 
     pub fn type_descriptor(&self) -> &'static TypeDescriptor {
         self.0.type_descriptor()
+    }
+
+    /// Возвращает конкретную реализацию объекта, если она имеет тип `T`.
+    pub fn downcast_ref<T: ObjectProtocol + 'static>(&self) -> Option<&T> {
+        self.0.as_ref().as_any().downcast_ref()
     }
 
     pub fn get_property(&self, name: &str, context: &mut CallContext<'_>) -> RtResult<BslValue> {

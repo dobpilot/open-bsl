@@ -138,6 +138,8 @@ impl EngineBuilder {
         runtime.register(bsl_binbuf::library());
         #[cfg(feature = "regexp")]
         runtime.register(bsl_regexp::library());
+        #[cfg(feature = "textdoc")]
+        runtime.register(bsl_textdoc::library());
         Self { runtime }
     }
 
@@ -444,6 +446,41 @@ mod tests {
     fn missing_binbuf_feature_is_a_compile_error_for_bit_operations() {
         let engine = Engine::builder().build().unwrap();
         assert!(engine.compile("Возврат ПобитовоеИ(12, 10);").is_err());
+    }
+
+    #[cfg(feature = "textdoc")]
+    #[test]
+    fn textdoc_feature_registers_constructor_methods_and_parameters() {
+        let engine = Engine::builder().build().unwrap();
+        let module = engine
+            .compile(
+                "макет = Новый ТекстовыйДокумент;\n\
+                 макет.ДобавитьСтроку(\"#Область Тело\");\n\
+                 макет.ДобавитьСтроку(\"[Имя]\");\n\
+                 макет.ДобавитьСтроку(\"#КонецОбласти\");\n\
+                 область = макет.ПолучитьОбласть(\"Тело\");\n\
+                 область.Параметры.Имя = \"мир\";\n\
+                 результат = Новый ТекстовыйДокумент;\n\
+                 результат.Вывести(область);\n\
+                 Возврат результат.ПолучитьТекст();",
+            )
+            .unwrap();
+
+        assert_eq!(module.requirements().len(), 2);
+        assert_eq!(module.requirements()[1].package, "bsl-textdoc");
+        assert_eq!(module.requirements()[1].version, env!("CARGO_PKG_VERSION"));
+        assert_eq!(
+            engine.new_state().run(&module).unwrap().to_string(),
+            "мир  \n"
+        );
+        assert!(module.bytecode().unwrap().contains("CreateObject"));
+    }
+
+    #[cfg(not(feature = "textdoc"))]
+    #[test]
+    fn missing_textdoc_feature_is_a_compile_error() {
+        let engine = Engine::builder().build().unwrap();
+        assert!(engine.compile("Возврат Новый ТекстовыйДокумент;").is_err());
     }
 
     #[cfg(feature = "regexp")]

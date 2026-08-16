@@ -30,7 +30,6 @@ mod spreadsheet_template;
 mod stream;
 mod string;
 mod table;
-mod textdoc;
 mod types;
 mod tz;
 mod uuid;
@@ -99,10 +98,6 @@ pub use spreadsheet_template::from_template_xml;
 pub use stream::{is_stream, write as stream_write, StreamData};
 pub use string::{BslString, MAX_TEMPLATE_ARGS};
 pub use table::{ColumnVstr, ValueTableData};
-pub use textdoc::{
-    append_rendered as textdoc_append_rendered, area_for_output as textdoc_area_for_output,
-    is_text_document as textdoc_is_document, write_file as textdoc_write_file, TextDocData,
-};
 pub use types::TypeId;
 pub use vstr::{value_from_string_internal, value_to_string_internal};
 pub use zip::{new_archive_reader, new_archive_writer, ArchiveKind, ArchiveState, WriterState};
@@ -542,8 +537,8 @@ impl BslValue {
                 BslObject::SpreadDrawing(..) => "РисунокТабличногоДокумента",
                 BslObject::SpreadDocParams(_) => "ПараметрыМакетаТабличногоДокумента",
                 BslObject::SpreadArea(..) => "ОбластьЯчеекТабличногоДокумента",
-                BslObject::TextDocument(_) => "ТекстовыйДокумент",
-                BslObject::TextDocParams(_) => "ПараметрыМакетаТекстовогоДокумента",
+                BslObject::ReservedTextDocument => "ТекстовыйДокумент",
+                BslObject::ReservedTextDocParams => "ПараметрыМакетаТекстовогоДокумента",
                 // Имена ЗНАЧЕНИЙ читателей архива — слитные, имена ТИПОВ
                 // («Чтение ZIP файла») с пробелами, см. `types.rs`. Обе
                 // колонки измерены на 8.3.27.
@@ -1326,8 +1321,8 @@ impl BslValue {
                 | BslObject::SpreadDrawing(..)
                 | BslObject::SpreadDrawings(..)
                 | BslObject::SpreadDocParams(..)
-                | BslObject::TextDocument(..)
-                | BslObject::TextDocParams(..)
+                | BslObject::ReservedTextDocument
+                | BslObject::ReservedTextDocParams
                 // ИЗМЕРЕНО: `ЗначениеЗаполнено(Новый ЧтениеZipФайла(файл))`
                 // — «Да». Ни у читателя, ни у элемента длины нет, а
                 // коллекция элементов отдельно не мерилась и идёт сюда же:
@@ -1517,8 +1512,8 @@ impl BslValue {
                 BslObject::SpreadDrawing(..) => TypeId::SpreadDrawing,
                 BslObject::SpreadArea(..) => TypeId::SpreadArea,
                 BslObject::SpreadDocParams(..) => TypeId::SpreadDocParams,
-                BslObject::TextDocument(..) => TypeId::TextDocument,
-                BslObject::TextDocParams(..) => TypeId::TextDocParams,
+                BslObject::ReservedTextDocument => TypeId::TextDocument,
+                BslObject::ReservedTextDocParams => TypeId::TextDocParams,
                 BslObject::PdfDocument(_) => TypeId::PdfDocument,
                 BslObject::PdfPages(_) => TypeId::PdfPagesCollection,
                 BslObject::PdfPage(..) => TypeId::PdfPage,
@@ -1606,6 +1601,12 @@ impl BslValue {
     }
 
     // --- Коллекции ----------------------------------------------------
+
+    /// Создаёт целое число BSL без прямой зависимости компонента от
+    /// внутреннего числового крейта runtime.
+    pub fn number_from_i64(value: i64) -> Self {
+        Self::Number(BslNumber::from_i64(value))
+    }
 
     /// Заворачивает реализацию статически подключённого компонента в
     /// ссылочное значение BSL.
@@ -1713,12 +1714,6 @@ impl BslValue {
         } else {
             self.text_writer_close()
         }
-    }
-
-    pub fn new_text_document() -> Self {
-        BslValue::Object(Rc::new(BslObject::TextDocument(Rc::new(
-            std::cell::RefCell::new(textdoc::TextDocData::default()),
-        ))))
     }
 
     pub fn new_xml_reader() -> Self {
@@ -2534,8 +2529,8 @@ impl BslValue {
                 | BslObject::SpreadArea(..)
                 | BslObject::SpreadDrawing(..)
                 | BslObject::SpreadDocParams(..)
-                | BslObject::TextDocument(..)
-                | BslObject::TextDocParams(..)
+                | BslObject::ReservedTextDocument
+                | BslObject::ReservedTextDocParams
                 | BslObject::ArchiveReader(..)
                 | BslObject::ArchiveEntry(..)
                 | BslObject::ArchiveWriter(..)
@@ -2978,20 +2973,6 @@ impl BslValue {
                         Err(RtError::UnknownColumn(name.to_string()))
                     }
                 }
-                // `Документ.Параметры` — обёртка над ТЕМИ ЖЕ данными, как
-                // `Таблица.Колонки`; `Параметры.Имя` уже читает значение
-                // параметра.
-                BslObject::TextDocument(data) => {
-                    if name.eq_ignore_ascii_case("Параметры")
-                        || name.eq_ignore_ascii_case("Parameters")
-                    {
-                        Ok(BslValue::Object(Rc::new(BslObject::TextDocParams(
-                            data.clone(),
-                        ))))
-                    } else {
-                        Err(RtError::UnknownColumn(name.to_string()))
-                    }
-                }
                 BslObject::SpreadDocument(data) => {
                     if name.eq_ignore_ascii_case("Рисунки") || name.eq_ignore_ascii_case("Drawings")
                     {
@@ -3011,7 +2992,9 @@ impl BslValue {
                 BslObject::SpreadArea(..) => spreadsheet::get_property(self, name),
                 BslObject::SpreadDrawing(data, i) => spreadsheet::drawing_property(data, *i, name),
                 BslObject::SpreadDocParams(_) => spreadsheet::get_param(self, name),
-                BslObject::TextDocParams(_) => textdoc::get_parameter(self, name),
+                BslObject::ReservedTextDocument | BslObject::ReservedTextDocParams => {
+                    Err(RtError::NotAnObject)
+                }
                 // У читателя архива свойств ровно два, и оба измерены;
                 // `Кодировка`, `Формат`, `ИмяФайла` и `РазмерАрхива`
                 // платформа не знает.
@@ -3081,7 +3064,9 @@ impl BslValue {
                     spreadsheet::set_drawing_property(data, *i, name, &val)
                 }
                 BslObject::SpreadDocParams(_) => spreadsheet::set_param(self, name, val),
-                BslObject::TextDocParams(_) => textdoc::set_parameter(self, name, val),
+                BslObject::ReservedTextDocument | BslObject::ReservedTextDocParams => {
+                    Err(RtError::NotAnObject)
+                }
                 BslObject::JsonWriter(_) => {
                     if name.eq_ignore_ascii_case("ПроверятьСтруктуру")
                         || name.eq_ignore_ascii_case("CheckStructure")
@@ -4004,8 +3989,10 @@ impl fmt::Display for BslValue {
                 BslObject::SpreadDrawing(..) => write!(f, "РисунокТабличногоДокумента"),
                 BslObject::SpreadArea(..) => write!(f, "ОбластьЯчеекТабличногоДокумента"),
                 BslObject::SpreadDocParams(_) => write!(f, "ПараметрыМакетаТабличногоДокумента"),
-                BslObject::TextDocument(_) => write!(f, "ТекстовыйДокумент"),
-                BslObject::TextDocParams(_) => write!(f, "ПараметрыМакетаТекстовогоДокумента"),
+                BslObject::ReservedTextDocument => write!(f, "ТекстовыйДокумент"),
+                BslObject::ReservedTextDocParams => {
+                    write!(f, "ПараметрыМакетаТекстовогоДокумента")
+                }
                 BslObject::ArchiveReader(..)
                 | BslObject::ArchiveEntries(..)
                 | BslObject::ArchiveEntry(..)
