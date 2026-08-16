@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use bsl_rt::{BslValue, Shape};
+use bsl_rt::{BslValue, LibraryRequirement, Shape};
 
 use crate::instr::{ArgMode, Instr};
 
@@ -79,6 +79,9 @@ pub struct Chunk {
 /// строку или список полей в каждой инструкции.
 #[derive(Debug, Clone)]
 pub struct Program {
+    /// Адресуемые runtime-компоненты и их точные версии. Индекс записи —
+    /// операнд `library` универсальных инструкций компонентов.
+    pub requirements: Vec<LibraryRequirement>,
     pub chunks: Vec<Chunk>,
     pub names: Vec<String>,
     pub shapes: Vec<Rc<Shape>>,

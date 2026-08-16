@@ -1,0 +1,24 @@
+[package]
+name = "open-bsl"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = []
+binbuf = []
+stream = []
+json = []
+xml = []
+pdf = []
+zip = []
+spreadsheet = []
+textdoc = []
+regexp = []
+
+[dependencies]
+bsl-bytecode = { path = "../bsl-bytecode" }
+bsl-rt = { path = "../bsl-rt" }
+bsl-sema = { path = "../bsl-sema" }
+bsl-syntax = { path = "../bsl-syntax" }
+bsl-vm = { path = "../bsl-vm" }

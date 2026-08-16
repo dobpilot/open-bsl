@@ -19,6 +19,9 @@ pub enum CompileError {
     /// Корректный резолвинг такого не даёт — но текст фрагмента приходит из
     /// рантайма, поэтому это ошибка, а не паника.
     UnknownFunction,
+    /// Разрешённое дерево сослалось на компонент, которого нет в полном
+    /// списке требований программы.
+    UnknownLibrary(String),
 }
 
 /// Компилирует весь модуль: чанк верхнего уровня плюс чанк на каждую
@@ -46,6 +49,7 @@ pub fn compile_program(resolved: &ResolvedProgram) -> Result<Program, CompileErr
         &resolved.top_level.body,
         &resolved.functions,
         &[],
+        &resolved.requirements,
         resolved.top_level.uses_dynamic,
         &mut names,
         &mut shapes,
@@ -57,6 +61,7 @@ pub fn compile_program(resolved: &ResolvedProgram) -> Result<Program, CompileErr
             &f.body,
             &resolved.functions,
             &[],
+            &resolved.requirements,
             f.uses_dynamic,
             &mut names,
             &mut shapes,
@@ -69,6 +74,7 @@ pub fn compile_program(resolved: &ResolvedProgram) -> Result<Program, CompileErr
         );
     }
     Ok(Program {
+        requirements: resolved.requirements.clone(),
         chunks,
         names: names.into_names(),
         shapes: shapes.into_shapes(),
@@ -119,6 +125,30 @@ pub fn compile_snippet(
     program_names: &[String],
     callee_params: &[Vec<bool>],
 ) -> Result<SnippetOutput, CompileError> {
+    compile_snippet_with_requirements(
+        all_locals,
+        body,
+        program_names,
+        callee_params,
+        &[crate::LibraryRequirement::bsl_rt()],
+    )
+}
+
+/// Компилирует динамический фрагмент с его собственным замыканием
+/// runtime-компонентов.
+///
+/// # Errors
+///
+/// Возвращает [`CompileError`] по тем же причинам, что
+/// [`compile_snippet`], а также если выражение ссылается на библиотеку вне
+/// `requirements`.
+pub fn compile_snippet_with_requirements(
+    all_locals: &[String],
+    body: &[RStmt],
+    program_names: &[String],
+    callee_params: &[Vec<bool>],
+    requirements: &[crate::LibraryRequirement],
+) -> Result<SnippetOutput, CompileError> {
     let mut names = NameInterner::new();
     for n in program_names {
         names.intern(n);
@@ -132,6 +162,7 @@ pub fn compile_snippet(
         body,
         &[],
         callee_params,
+        requirements,
         true,
         &mut names,
         &mut shapes,
@@ -143,8 +174,7 @@ pub fn compile_snippet(
     Ok((chunk, names.into_names(), shapes.into_shapes()))
 }
 
-// Восемь аргументов — это и есть весь входной контекст чанка; структура
-// из тех же восьми полей ничего не упростила бы.
+// Девять аргументов — это и есть весь входной контекст чанка; структура
 #[allow(clippy::too_many_arguments)]
 fn compile_chunk(
     locals: &[String],
@@ -152,6 +182,7 @@ fn compile_chunk(
     body: &[RStmt],
     functions: &[ResolvedFunction],
     callee_params: &[Vec<bool>],
+    requirements: &[crate::LibraryRequirement],
     materialize_locals: bool,
     names: &mut NameInterner,
     shapes: &mut ShapeTable,
@@ -174,6 +205,7 @@ fn compile_chunk(
         loop_stack: Vec::new(),
         functions,
         callee_params: callee_params.to_vec(),
+        requirements,
         names,
         shapes,
     };
@@ -234,6 +266,7 @@ struct Compiler<'a> {
     /// Режимы параметров вызываемых функций по их номеру — заполняется
     /// только для фрагментов `Выполнить`, где `functions` пуст.
     callee_params: Vec<Vec<bool>>,
+    requirements: &'a [crate::LibraryRequirement],
     /// Общие на весь модуль — см. `compile_program`.
     names: &'a mut NameInterner,
     shapes: &'a mut ShapeTable,
@@ -471,6 +504,38 @@ impl<'a> Compiler<'a> {
                     count,
                 });
             }
+            RExpr::CallComponent {
+                library,
+                function,
+                args,
+                ..
+            } => {
+                let base = self.next_reg;
+                for arg in args {
+                    let register = self.alloc_temp()?;
+                    self.compile_expr(arg, register)?;
+                }
+                let count: u8 = args
+                    .len()
+                    .try_into()
+                    .map_err(|_| CompileError::TooManyRegisters)?;
+                self.free_temp(count);
+                let library_index = self
+                    .requirements
+                    .iter()
+                    .position(|requirement| requirement.package == library.as_str())
+                    .ok_or_else(|| CompileError::UnknownLibrary(library.as_str().to_string()))?;
+                let library: u8 = library_index
+                    .try_into()
+                    .map_err(|_| CompileError::TooManyRegisters)?;
+                self.emit(Instr::CallComponent {
+                    dst,
+                    library,
+                    function: function.get(),
+                    base,
+                    count,
+                });
+            }
             RExpr::CallMethod { obj, method, args } => {
                 let o = self.alloc_temp()?;
                 self.compile_expr(obj, o)?;
@@ -568,6 +633,37 @@ impl<'a> Compiler<'a> {
                 self.emit(Instr::NewStructure {
                     dst,
                     shape: shape_id,
+                    base,
+                    count,
+                });
+            }
+            RExpr::CreateObject {
+                library,
+                constructor,
+                args,
+            } => {
+                let base = self.next_reg;
+                for argument in args {
+                    let register = self.alloc_temp()?;
+                    self.compile_expr(argument, register)?;
+                }
+                let count: u8 = args
+                    .len()
+                    .try_into()
+                    .map_err(|_| CompileError::TooManyRegisters)?;
+                self.free_temp(count);
+                let library_index = self
+                    .requirements
+                    .iter()
+                    .position(|requirement| requirement.package == library.as_str())
+                    .ok_or_else(|| CompileError::UnknownLibrary(library.as_str().to_string()))?;
+                let library: u8 = library_index
+                    .try_into()
+                    .map_err(|_| CompileError::TooManyRegisters)?;
+                self.emit(Instr::CreateObject {
+                    dst,
+                    library,
+                    constructor: constructor.get(),
                     base,
                     count,
                 });

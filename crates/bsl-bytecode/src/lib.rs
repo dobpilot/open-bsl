@@ -10,7 +10,10 @@ mod compiler;
 mod instr;
 mod text;
 
+pub use bsl_rt::LibraryRequirement;
 pub use chunk::{Chunk, ExceptionRange, Program, PropCacheSlot};
-pub use compiler::{compile_program, compile_snippet, CompileError};
+pub use compiler::{
+    compile_program, compile_snippet, compile_snippet_with_requirements, CompileError,
+};
 pub use instr::{ArgMode, Instr};
 pub use text::{parse_program, write_program, TextError, FORMAT_VERSION, OPCODES};

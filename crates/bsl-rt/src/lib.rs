@@ -7,6 +7,7 @@
 mod binbuf;
 mod bitops;
 mod builtin;
+mod component;
 mod datarw;
 mod date;
 mod dom;
@@ -51,10 +52,21 @@ use std::rc::Rc;
 
 use bsl_number::{BslNumber, NumError};
 
+/// Cargo-идентичность базового runtime-компонента. Её использует манифест
+/// байт-кода; строка берётся из манифеста самого крейта, а не дублируется в
+/// компиляторе.
+pub const PACKAGE_NAME: &str = env!("CARGO_PKG_NAME");
+pub const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 pub use builtin::{
     call_builtin_fn, call_builtin_fn_ctx, call_builtin_method, call_builtin_method_ctx,
     read_json_builtin, set_command_line_args, write_json_builtin, BuiltinFn, BuiltinMethod,
     BUILTIN_FN_NAMES, BUILTIN_METHOD_NAMES,
+};
+pub use component::{
+    core_library, Arity, CallContext, ComponentCall, ConstructorCode, ConstructorDescriptor,
+    FunctionCode, FunctionDescriptor, FunctionKind, LibraryDependency, LibraryDescriptor,
+    LibraryKey, LibraryRequirement, RegistryError, RuntimeBuilder, RuntimeRegistry, ValueFormatter,
 };
 pub use datarw::{
     is_data_reader, is_data_writer, is_read_result, new_data_reader, new_data_writer, DataRwProp,
@@ -283,6 +295,9 @@ pub enum RtError {
     InvalidBytecode(&'static str),
     /// Ошибка открытия, записи или закрытия файла.
     IoError(String),
+    /// Байт-код требует отсутствующий/несовместимый runtime-компонент либо
+    /// неизвестный код функции этого компонента.
+    Component(String),
     /// Превышена глубина стека: слишком глубокая рекурсия вызовов BSL,
     /// вложенность `Выполнить`/`Вычислить` или вложенность данных при
     /// сериализации. `what` уточняет, какой именно предел задет. Это
@@ -344,6 +359,7 @@ impl fmt::Display for RtError {
             RtError::DynamicError(msg) => write!(f, "{msg}"),
             RtError::InvalidBytecode(what) => write!(f, "некорректный байт-код: {what}"),
             RtError::IoError(msg) => write!(f, "ошибка файлового ввода-вывода: {msg}"),
+            RtError::Component(msg) => write!(f, "ошибка runtime-компонента: {msg}"),
             RtError::UnsupportedLocale(code) => {
                 write!(f, "локаль «{code}» не поддержана: есть только ru и en")
             }

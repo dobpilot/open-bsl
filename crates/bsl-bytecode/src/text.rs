@@ -29,14 +29,14 @@ use std::cell::RefCell;
 use std::fmt::Write as _;
 
 use bsl_number::BslNumber;
-use bsl_rt::{BslDate, BslString, BslValue, NameId, Shape, ShapeTable};
+use bsl_rt::{BslDate, BslString, BslValue, LibraryRequirement, NameId, Shape, ShapeTable};
 
 use crate::chunk::{Chunk, ExceptionRange, Program};
 use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 15;
+pub const FORMAT_VERSION: u32 = 16;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -76,6 +76,7 @@ pub const OPCODES: &[&str] = &[
     "SetIndex",
     "GetProp",
     "SetProp",
+    "CreateObject",
     "NewArray",
     "NewStructure",
     "NewTable",
@@ -117,6 +118,7 @@ pub const OPCODES: &[&str] = &[
     "CollectionLen",
     "Raise",
     "CallBuiltin",
+    "CallComponent",
     "CallMethod",
     "WriteText",
     "CloseText",
@@ -130,6 +132,8 @@ pub enum TextError {
     At(usize, String),
     /// Заголовок отсутствует или несёт чужой номер формата.
     BadHeader(String),
+    /// Манифест компонентов пуст, неупорядочен или содержит дубликаты.
+    InvalidRequirements(String),
     /// Значение, которое не переживает печать (объект в константах).
     Unrepresentable(&'static str),
 }
@@ -139,6 +143,9 @@ impl std::fmt::Display for TextError {
         match self {
             TextError::At(line, what) => write!(f, "строка {line}: {what}"),
             TextError::BadHeader(what) => write!(f, "заголовок байт-кода: {what}"),
+            TextError::InvalidRequirements(what) => {
+                write!(f, "требования компонентов: {what}")
+            }
             TextError::Unrepresentable(what) => {
                 write!(f, "значение не представимо в текстовом байт-коде: {what}")
             }
@@ -160,10 +167,22 @@ type Result<T> = std::result::Result<T, TextError>;
 /// Возвращает [`TextError::Unrepresentable`], если константа программы не имеет текстового
 /// представления в формате байт-кода.
 pub fn write_program(program: &Program, source: Option<&str>) -> Result<String> {
+    validate_requirements(&program.requirements).map_err(TextError::InvalidRequirements)?;
     let mut out = String::with_capacity(4096);
     writeln!(out, "bslc {FORMAT_VERSION}").unwrap();
     if let Some(src) = source {
         writeln!(out, "; исходник: {src}").unwrap();
+    }
+
+    writeln!(out, "\n.requires {}", program.requirements.len()).unwrap();
+    for (i, requirement) in program.requirements.iter().enumerate() {
+        writeln!(
+            out,
+            "  {i} {} {}",
+            quote(&requirement.package),
+            quote(&requirement.version)
+        )
+        .unwrap();
     }
 
     writeln!(out, "\n.names {}", program.names.len()).unwrap();
@@ -423,6 +442,15 @@ fn write_instr(instr: &Instr) -> String {
         Instr::SetProp { obj, name, src } => {
             format!("SetProp obj={obj} name={} src={src}", name.index())
         }
+        Instr::CreateObject {
+            dst,
+            library,
+            constructor,
+            base,
+            count,
+        } => format!(
+            "CreateObject dst={dst} lib={library} ctor={constructor} base={base} count={count}"
+        ),
         Instr::NewArray { dst, base, count } => {
             format!("NewArray dst={dst} base={base} count={count}")
         }
@@ -539,6 +567,15 @@ fn write_instr(instr: &Instr) -> String {
         } => format!(
             "CallBuiltin dst={dst} builtin={} base={base} count={count}",
             builtin_name(*builtin)
+        ),
+        Instr::CallComponent {
+            dst,
+            library,
+            function,
+            base,
+            count,
+        } => format!(
+            "CallComponent dst={dst} lib={library} fn={function} base={base} count={count}"
         ),
         Instr::CallMethod {
             dst,
@@ -747,6 +784,29 @@ pub fn parse_program(src: &str) -> Result<Program> {
         }
     }
 
+    // Точные версии runtime-компонентов. Индекс строки используется
+    // инструкциями как локальный номер библиотеки, поэтому порядок
+    // проверяется так же строго, как индексы имён и форм.
+    let n = r.directive(".requires")?;
+    let mut requirements = Vec::with_capacity(n);
+    for i in 0..n {
+        let (no, text) = r.expect("требование компонента")?;
+        let (idx, rest) = text
+            .split_once(char::is_whitespace)
+            .ok_or_else(|| TextError::At(no, "ожидалось «N \"пакет\" \"версия\"»".to_string()))?;
+        parse_index(no, idx, i)?;
+        let (package, rest) = unquote(no, rest.trim())?;
+        let (version, tail) = unquote(no, rest.trim())?;
+        if !tail.is_empty() {
+            return Err(TextError::At(
+                no,
+                format!("лишнее после версии компонента: «{tail}»"),
+            ));
+        }
+        requirements.push(LibraryRequirement::new(package, version));
+    }
+    validate_requirements(&requirements).map_err(TextError::InvalidRequirements)?;
+
     // Имена.
     let n = r.directive(".names")?;
     let mut names = Vec::with_capacity(n);
@@ -840,6 +900,7 @@ pub fn parse_program(src: &str) -> Result<Program> {
     }
 
     Ok(Program {
+        requirements,
         chunks,
         names,
         shapes,
@@ -848,6 +909,43 @@ pub fn parse_program(src: &str) -> Result<Program> {
         module_vars,
         module_base: 0,
     })
+}
+
+fn validate_requirements(requirements: &[LibraryRequirement]) -> std::result::Result<(), String> {
+    if requirements.is_empty() {
+        return Err("нет обязательной записи bsl-rt".to_string());
+    }
+    if requirements.len() > u8::MAX as usize + 1 {
+        return Err("локальный индекс библиотеки не помещается в u8".to_string());
+    }
+    let core = &requirements[0];
+    if core.package != bsl_rt::PACKAGE_NAME {
+        return Err(format!(
+            "нулевой записью должен быть {}, получен {}",
+            bsl_rt::PACKAGE_NAME,
+            core.package
+        ));
+    }
+    for requirement in requirements {
+        if requirement.package.is_empty() || requirement.version.is_empty() {
+            return Err("имя пакета и версия не могут быть пустыми".to_string());
+        }
+    }
+    for pair in requirements[1..].windows(2) {
+        if pair[0].package >= pair[1].package {
+            return Err(format!(
+                "пакеты после bsl-rt должны быть уникальны и отсортированы: {} перед {}",
+                pair[0].package, pair[1].package
+            ));
+        }
+    }
+    if requirements[1..]
+        .iter()
+        .any(|requirement| requirement.package == bsl_rt::PACKAGE_NAME)
+    {
+        return Err("bsl-rt указан более одного раза".to_string());
+    }
+    Ok(())
 }
 
 fn parse_id_list(no: usize, text: &str) -> Result<Vec<u32>> {
@@ -1275,6 +1373,13 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
             name: field_name(&f, no, "name")?,
             src: src(&f)?,
         },
+        "CreateObject" => Instr::CreateObject {
+            dst: dst(&f)?,
+            library: field_u8(&f, no, "lib")?,
+            constructor: field_u16(&f, no, "ctor")?,
+            base: base(&f)?,
+            count: count(&f)?,
+        },
         "NewArray" => Instr::NewArray {
             dst: dst(&f)?,
             base: base(&f)?,
@@ -1412,6 +1517,13 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
                 count: count(&f)?,
             }
         }
+        "CallComponent" => Instr::CallComponent {
+            dst: dst(&f)?,
+            library: field_u8(&f, no, "lib")?,
+            function: field_u16(&f, no, "fn")?,
+            base: base(&f)?,
+            count: count(&f)?,
+        },
         "CallMethod" => {
             let name = field(&f, no, "method")?;
             Instr::CallMethod {
@@ -1659,6 +1771,39 @@ mod tests {
         crate::compile_program(&resolved).unwrap_or_else(|e| panic!("{src}\ncompile: {e:?}"))
     }
 
+    fn call_component_program() -> Program {
+        let mut program = compile("Возврат 1;");
+        program
+            .requirements
+            .push(LibraryRequirement::new("bsl-test-host", "1.2.3"));
+        program.chunks[0].instrs[0] = Instr::CallComponent {
+            dst: 0,
+            library: 1,
+            function: 7,
+            base: 0,
+            count: 0,
+        };
+        program.chunks[0].instrs[1] = Instr::CreateObject {
+            dst: 0,
+            library: 1,
+            constructor: 9,
+            base: 0,
+            count: 0,
+        };
+        program.chunks[0].instrs[1] = Instr::CreateObject {
+            dst: 0,
+            library: 1,
+            constructor: 9,
+            base: 0,
+            count: 0,
+        };
+        program.chunks[0].bundle_len = crate::bundle::compute(
+            &program.chunks[0],
+            crate::bundle::module_overlap(0, program.module_vars.len()),
+        );
+        program
+    }
+
     /// ГЛАВНЫЙ инвариант формата: печать -> разбор -> печать даёт ту же
     /// строку. Побайтово, а не «эквивалентно»: любое расхождение здесь
     /// значит, что часть программы потерялась при одном из переходов.
@@ -1672,6 +1817,10 @@ mod tests {
             let second = write_program(&reparsed, None).unwrap();
             assert_eq!(first, second, "round-trip разошёлся на:\n{src}");
         }
+        let program = call_component_program();
+        let first = write_program(&program, None).unwrap();
+        let second = write_program(&parse_program(&first).unwrap(), None).unwrap();
+        assert_eq!(first, second, "round-trip CallComponent разошёлся");
     }
 
     /// Разобранная программа совпадает с исходной по СУЩЕСТВУ, а не только
@@ -1727,6 +1876,17 @@ mod tests {
                 {
                     seen.push(op);
                 }
+            }
+        }
+        let text = write_program(&call_component_program(), None).unwrap();
+        for op in OPCODES {
+            if text
+                .lines()
+                .filter_map(|line| line.split_whitespace().nth(1))
+                .any(|word| word == *op)
+                && !seen.contains(op)
+            {
+                seen.push(op);
             }
         }
         let missing: Vec<&&str> = OPCODES.iter().filter(|op| !seen.contains(op)).collect();

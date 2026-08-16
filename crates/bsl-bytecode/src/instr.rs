@@ -213,6 +213,15 @@ pub enum Instr {
     /// размеры измерений (числа), а не готовые элементы — VM строит
     /// вложенные массивы из них (`Новый Массив(3, 4)` — массив из 3
     /// массивов по 4).
+    /// Универсальный конструктор runtime-компонента. Пространство кодов
+    /// конструкторов независимо от пространства кодов функций.
+    CreateObject {
+        dst: u8,
+        library: u8,
+        constructor: u16,
+        base: u8,
+        count: u8,
+    },
     NewArray {
         dst: u8,
         base: u8,
@@ -488,6 +497,16 @@ pub enum Instr {
     CallBuiltin {
         dst: u8,
         builtin: bsl_rt::BuiltinFn,
+        base: u8,
+        count: u8,
+    },
+    /// Глобальная функция runtime-компонента. `library` — локальный индекс
+    /// в `Program::requirements`, `function` — стабильный код внутри
+    /// указанного пакета.
+    CallComponent {
+        dst: u8,
+        library: u8,
+        function: u16,
         base: u8,
         count: u8,
     },

@@ -1,5 +1,5 @@
 use bsl_number::BslNumber;
-use bsl_rt::{BuiltinFn, BuiltinMethod};
+use bsl_rt::{BuiltinFn, BuiltinMethod, ConstructorCode, FunctionCode, FunctionKind, LibraryKey};
 use bsl_syntax::{BinaryOp, UnaryOp};
 
 /// Выражение после резолвинга: идентификаторы заменены на индексы слотов,
@@ -55,6 +55,15 @@ pub enum RExpr {
         builtin: BuiltinFn,
         args: Vec<RExpr>,
     },
+    /// Глобальная функция статически подключённого runtime-компонента.
+    /// Имя уже разрешено в стабильную пару «пакет, код функции»; локальный
+    /// индекс `.requires` назначит компилятор.
+    CallComponent {
+        library: LibraryKey,
+        function: FunctionCode,
+        kind: FunctionKind,
+        args: Vec<RExpr>,
+    },
     /// `объект.Метод(args)`. Арность части методов (`Добавить`) зависит от
     /// типа получателя, который в динамически типизированном BSL не
     /// известен на этапе резолвинга — поэтому здесь `args` произвольной
@@ -86,6 +95,13 @@ pub enum RExpr {
     NewStructure {
         keys: Vec<String>,
         values: Vec<RExpr>,
+    },
+    /// Конструктор статически подключённого runtime-компонента. Локальный
+    /// индекс библиотеки назначается позднее по итоговой `.requires`.
+    CreateObject {
+        library: LibraryKey,
+        constructor: ConstructorCode,
+        args: Vec<RExpr>,
     },
     /// `Новый ТаблицаЗначений()` — колонки заводятся отдельно, через
     /// `.Колонки.Добавить(имя)` (см. `CallMethod`), не в конструкторе.
@@ -379,6 +395,9 @@ pub struct Resolved {
 /// плюс операторы верхнего уровня, которые могут их вызывать.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ResolvedProgram {
+    /// Полное замыкание runtime-компонентов, фактически использованных
+    /// модулем. `bsl-rt` всегда занимает нулевую позицию.
+    pub requirements: Vec<bsl_rt::LibraryRequirement>,
     pub functions: Vec<ResolvedFunction>,
     pub top_level: Resolved,
     /// Имена переменных уровня модуля, в порядке объявления. Они же —
@@ -442,9 +461,9 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
         RExpr::ModuleVar(_) => false,
         RExpr::Unary { expr, .. } => expr_uses_dynamic(expr),
         RExpr::Binary { lhs, rhs, .. } => expr_uses_dynamic(lhs) || expr_uses_dynamic(rhs),
-        RExpr::Call { args, .. } | RExpr::CallBuiltinFn { args, .. } => {
-            args.iter().any(expr_uses_dynamic)
-        }
+        RExpr::Call { args, .. }
+        | RExpr::CallBuiltinFn { args, .. }
+        | RExpr::CallComponent { args, .. } => args.iter().any(expr_uses_dynamic),
         RExpr::CallMethod { obj, args, .. } => {
             expr_uses_dynamic(obj) || args.iter().any(expr_uses_dynamic)
         }
@@ -452,6 +471,7 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
         RExpr::Field { obj, .. } => expr_uses_dynamic(obj),
         RExpr::NewArray { dims } => dims.iter().any(expr_uses_dynamic),
         RExpr::NewStructure { values, .. } => values.iter().any(expr_uses_dynamic),
+        RExpr::CreateObject { args, .. } => args.iter().any(expr_uses_dynamic),
         RExpr::EnumMember(_)
         | RExpr::EnumTypeRef(_)
         | RExpr::NewJsonReader

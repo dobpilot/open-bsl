@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use bsl_number::BslNumber;
 use bsl_syntax::{Expr as AExpr, Item, Stmt as AStmt};
@@ -45,6 +45,10 @@ pub enum SemaError {
     Unsupported(&'static str),
 }
 
+/// Разрешённый динамический фрагмент и полное замыкание его компонентов.
+pub type ResolvedSnippetWithRequirements =
+    (Vec<String>, Vec<RStmt>, Vec<bsl_rt::LibraryRequirement>);
+
 /// Сигнатура функции/процедуры, собранная до резолвинга тел — нужна, чтобы
 /// вызовы разрешались независимо от порядка объявления (в том числе
 /// рекурсия и взаимные вызовы).
@@ -74,6 +78,27 @@ struct FuncSig {
 /// Возвращает [`SemaError`] при повторном объявлении функции, неизвестном имени, неверном
 /// числе аргументов, недопустимом литерале даты или ещё не поддерживаемой конструкции.
 pub fn resolve_program(items: &[Item]) -> Result<ResolvedProgram, SemaError> {
+    resolve_program_impl(items, None)
+}
+
+/// Разрешает модуль с каталогом функций и конструкторов собранного
+/// runtime. Старый [`resolve_program`] на время миграции сохраняет закрытые
+/// встроенные таблицы, а этот вход открывает компонентные функции.
+///
+/// # Errors
+///
+/// Возвращает [`SemaError`] по тем же правилам, что и [`resolve_program`].
+pub fn resolve_program_with_registry(
+    items: &[Item],
+    registry: &bsl_rt::RuntimeRegistry,
+) -> Result<ResolvedProgram, SemaError> {
+    resolve_program_impl(items, Some(registry))
+}
+
+fn resolve_program_impl(
+    items: &[Item],
+    registry: Option<&bsl_rt::RuntimeRegistry>,
+) -> Result<ResolvedProgram, SemaError> {
     let mut sigs: HashMap<String, FuncSig> = HashMap::new();
     let mut func_items: Vec<&Item> = Vec::new();
     let mut top_stmts: Vec<AStmt> = Vec::new();
@@ -121,6 +146,7 @@ pub fn resolve_program(items: &[Item]) -> Result<ResolvedProgram, SemaError> {
     let empty_module_index: HashMap<String, u32> = HashMap::new();
 
     let mut functions = Vec::with_capacity(func_items.len());
+    let mut used_libraries = HashSet::new();
     for item in &func_items {
         let (name, params, body) = match item {
             Item::Function(f) => (&f.name, &f.params, &f.body),
@@ -132,6 +158,8 @@ pub fn resolve_program(items: &[Item]) -> Result<ResolvedProgram, SemaError> {
             index: HashMap::new(),
             funcs: &sigs,
             module_index: &module_index,
+            registry,
+            used_libraries: HashSet::new(),
             strict_stmt_calls: true,
             stmt_call: false,
         };
@@ -155,6 +183,7 @@ pub fn resolve_program(items: &[Item]) -> Result<ResolvedProgram, SemaError> {
                 default,
             });
         }
+        used_libraries.extend(r.used_libraries.iter().cloned());
         functions.push(ResolvedFunction {
             name: name.clone(),
             uses_dynamic: crate::resolved::block_uses_dynamic(&resolved_body),
@@ -172,6 +201,8 @@ pub fn resolve_program(items: &[Item]) -> Result<ResolvedProgram, SemaError> {
         index: HashMap::new(),
         funcs: &sigs,
         module_index: &empty_module_index,
+        registry,
+        used_libraries: HashSet::new(),
         strict_stmt_calls: true,
         stmt_call: false,
     };
@@ -179,6 +210,7 @@ pub fn resolve_program(items: &[Item]) -> Result<ResolvedProgram, SemaError> {
         r.declare(name);
     }
     let top_body = r.resolve_block(&top_stmts)?;
+    used_libraries.extend(r.used_libraries.iter().cloned());
     let top_level = Resolved {
         uses_dynamic: crate::resolved::block_uses_dynamic(&top_body),
         locals: r.locals,
@@ -186,6 +218,10 @@ pub fn resolve_program(items: &[Item]) -> Result<ResolvedProgram, SemaError> {
     };
 
     Ok(ResolvedProgram {
+        requirements: match registry {
+            Some(registry) => registry.requirements_for(used_libraries),
+            None => vec![bsl_rt::LibraryRequirement::bsl_rt()],
+        },
         functions,
         top_level,
         module_vars,
@@ -221,6 +257,8 @@ pub fn resolve_script(stmts: &[AStmt]) -> Result<Resolved, SemaError> {
         index: HashMap::new(),
         funcs: &empty_funcs,
         module_index: &empty_module,
+        registry: None,
+        used_libraries: HashSet::new(),
         strict_stmt_calls: true,
         stmt_call: false,
     };
@@ -282,6 +320,30 @@ pub fn resolve_repl_stmts(
     resolve_snippet_stmts_mode(existing_locals, module_vars, stmts, signatures, false)
 }
 
+/// Разрешает динамический фрагмент с тем же каталогом компонентов, что и
+/// основную программу, и возвращает его собственное замыкание требований.
+///
+/// # Errors
+///
+/// Возвращает [`SemaError`] по тем же причинам, что
+/// [`resolve_snippet_stmts`].
+pub fn resolve_snippet_stmts_with_registry(
+    existing_locals: &[String],
+    module_vars: &[String],
+    stmts: &[AStmt],
+    signatures: &[(String, usize)],
+    registry: &bsl_rt::RuntimeRegistry,
+) -> Result<ResolvedSnippetWithRequirements, SemaError> {
+    resolve_snippet_stmts_mode_registry(
+        existing_locals,
+        module_vars,
+        stmts,
+        signatures,
+        true,
+        Some(registry),
+    )
+}
+
 fn resolve_snippet_stmts_mode(
     existing_locals: &[String],
     module_vars: &[String],
@@ -289,6 +351,25 @@ fn resolve_snippet_stmts_mode(
     signatures: &[(String, usize)],
     strict_stmt_calls: bool,
 ) -> Result<(Vec<String>, Vec<RStmt>), SemaError> {
+    let (locals, body, _) = resolve_snippet_stmts_mode_registry(
+        existing_locals,
+        module_vars,
+        stmts,
+        signatures,
+        strict_stmt_calls,
+        None,
+    )?;
+    Ok((locals, body))
+}
+
+fn resolve_snippet_stmts_mode_registry(
+    existing_locals: &[String],
+    module_vars: &[String],
+    stmts: &[AStmt],
+    signatures: &[(String, usize)],
+    strict_stmt_calls: bool,
+    registry: Option<&bsl_rt::RuntimeRegistry>,
+) -> Result<ResolvedSnippetWithRequirements, SemaError> {
     let empty_funcs: HashMap<String, FuncSig> = signatures
         .iter()
         .enumerate()
@@ -326,11 +407,17 @@ fn resolve_snippet_stmts_mode(
         index,
         funcs: &empty_funcs,
         module_index: &module_index,
+        registry,
+        used_libraries: HashSet::new(),
         strict_stmt_calls,
         stmt_call: false,
     };
     let body = r.resolve_block(stmts)?;
-    Ok((r.locals, body))
+    let requirements = match registry {
+        Some(registry) => registry.requirements_for(r.used_libraries.iter().cloned()),
+        None => vec![bsl_rt::LibraryRequirement::bsl_rt()],
+    };
+    Ok((r.locals, body, requirements))
 }
 
 /// Типы, которые умеет строить `Новый` — в каноническом написании, оба
@@ -477,6 +564,8 @@ struct Resolver<'a> {
     /// явной `Перем` того же имени работает со своей копией, а модульная
     /// после вызова цела.
     module_index: &'a HashMap<String, u32>,
+    registry: Option<&'a bsl_rt::RuntimeRegistry>,
+    used_libraries: HashSet<bsl_rt::LibraryKey>,
     /// Отвергать ли функции встроенного языка в позиции оператора. В
     /// модулях и фрагментах `Выполнить` — да, как на платформе; в REPL —
     /// нет: голый вызов `СтрДлина("аб")` там печатает значение, и лишать
@@ -565,6 +654,7 @@ impl<'a> Resolver<'a> {
                 let r = self.resolve_expr(e)?;
                 let forbidden = match &r {
                     RExpr::CallBuiltinFn { builtin, .. } => builtin.is_intrinsic(),
+                    RExpr::CallComponent { kind, .. } => *kind == bsl_rt::FunctionKind::Intrinsic,
                     RExpr::DynEval(_) => true,
                     _ => false,
                 };
@@ -807,6 +897,43 @@ impl<'a> Resolver<'a> {
     /// Разбирает известные платформенные типы из [`NEW_TYPES`]. Общие
     /// пользовательские типы пока не поддержаны.
     fn resolve_new(&mut self, type_name: &str, args: &[AExpr]) -> Result<RExpr, SemaError> {
+        if let Some(registry) = self.registry {
+            if let Some((library_index, constructor)) = registry.lookup_constructor(type_name) {
+                let descriptor = registry
+                    .constructor(library_index, constructor)
+                    .expect("индекс получен из таблицы имён этого реестра");
+                let found: u8 =
+                    args.len()
+                        .try_into()
+                        .map_err(|_| SemaError::ArgumentCountMismatch {
+                            name: format!("Новый {type_name}"),
+                            expected: descriptor.arity.max() as usize,
+                            found: args.len(),
+                        })?;
+                if !descriptor.arity.accepts(found) {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: format!("Новый {type_name}"),
+                        expected: descriptor.arity.max() as usize,
+                        found: args.len(),
+                    });
+                }
+                let mut resolved_args = Vec::with_capacity(args.len());
+                for argument in args {
+                    resolved_args.push(self.resolve_expr(argument)?);
+                }
+                let package = registry
+                    .library(library_index)
+                    .expect("индекс получен из таблицы имён этого реестра")
+                    .package;
+                let library = bsl_rt::LibraryKey::new(package);
+                self.used_libraries.insert(library.clone());
+                return Ok(RExpr::CreateObject {
+                    library,
+                    constructor,
+                    args: resolved_args,
+                });
+            }
+        }
         match type_name.to_uppercase().as_str() {
             "МАССИВ" | "ARRAY" => {
                 let mut dims = Vec::with_capacity(args.len());
@@ -1472,6 +1599,43 @@ impl<'a> Resolver<'a> {
                         func: index,
                         args: rargs,
                     });
+                }
+                if let Some(registry) = self.registry {
+                    if let Some((library_index, function)) = registry.lookup_function(name) {
+                        let descriptor = registry
+                            .function(library_index, function)
+                            .expect("индекс получен из таблицы имён этого реестра");
+                        if descriptor.kind == bsl_rt::FunctionKind::Procedure && !stmt_call {
+                            return Err(SemaError::ProcedureAsFunction(name.clone()));
+                        }
+                        let found: u8 = args.len().try_into().map_err(|_| {
+                            SemaError::ArgumentCountMismatch {
+                                name: name.clone(),
+                                expected: descriptor.arity.max() as usize,
+                                found: args.len(),
+                            }
+                        })?;
+                        if !descriptor.arity.accepts(found) {
+                            return Err(SemaError::ArgumentCountMismatch {
+                                name: name.clone(),
+                                expected: descriptor.arity.max() as usize,
+                                found: args.len(),
+                            });
+                        }
+                        let rargs = self.resolve_required_args(args)?;
+                        let package = registry
+                            .library(library_index)
+                            .expect("индекс получен из таблицы имён этого реестра")
+                            .package;
+                        let library = bsl_rt::LibraryKey::new(package);
+                        self.used_libraries.insert(library.clone());
+                        return Ok(RExpr::CallComponent {
+                            library,
+                            function,
+                            kind: descriptor.kind,
+                            args: rargs,
+                        });
+                    }
                 }
                 // `Окр(x[, ЧислоРазрядов[, Режим]])` — единственный
                 // builtin с необязательными аргументами, до генерального

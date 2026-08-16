@@ -42,6 +42,7 @@ pub(crate) mod jit {
 
 use bsl_bytecode::{ArgMode, Instr, Program};
 use bsl_rt::{BslValue, RtError};
+use std::io::Write;
 
 /// Один активный вызов. Регистры кадра не хранятся отдельным `Vec` — все
 /// кадры делят один сквозной стек значений (`Vm::stack`), кадр — это лишь
@@ -153,16 +154,49 @@ impl CallArgs {
 /// Возвращает [`RtError`], если выполнение завершилось неперехваченным исключением или
 /// программа содержит некорректный байт-код.
 pub fn run_program(program: &Program) -> Result<BslValue, RtError> {
-    let mut stack: Vec<BslValue> = Vec::new();
-    // Публичная точка входа — `Program` могли собрать и не нашим кодогеном
-    // (это `pub fn`), поэтому даже отсутствие `chunks[0]` — ошибка, а не
-    // паника.
-    push_own_registers(
-        &mut stack,
-        at(&program.chunks, 0, "в программе нет чанка верхнего уровня")?,
-    );
-    let (value, _stack) = drive(program, 0, stack)?;
-    Ok(value)
+    let mut stdout = std::io::stdout().lock();
+    let mut stderr = std::io::stderr().lock();
+    run_program_with_host(program, None, JitMode::Off, &mut stdout, &mut stderr)
+}
+
+/// Исполняет программу с неизменяемым реестром статически подключённых
+/// runtime-компонентов.
+///
+/// # Errors
+///
+/// До первой инструкции возвращает [`RtError::Component`], если требуемый
+/// пакет, версия или код функции отсутствует. Остальные ошибки совпадают с
+/// [`run_program`].
+pub fn run_program_with_registry(
+    program: &Program,
+    registry: &bsl_rt::RuntimeRegistry,
+) -> Result<BslValue, RtError> {
+    let mut stdout = std::io::stdout().lock();
+    let mut stderr = std::io::stderr().lock();
+    run_program_with_host(
+        program,
+        Some(registry),
+        JitMode::Off,
+        &mut stdout,
+        &mut stderr,
+    )
+}
+
+/// Исполняет программу с выводом в потоки, принадлежащие host-приложению.
+/// `Сообщить` пишет только в `stdout`; библиотечный API возвращает ошибки и
+/// не печатает их в `stderr` автоматически.
+///
+/// # Errors
+///
+/// Возвращает те же ошибки, что [`run_program_with_registry`], включая
+/// ошибку записи в пользовательский поток.
+pub fn run_program_with_registry_and_io(
+    program: &Program,
+    registry: &bsl_rt::RuntimeRegistry,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> Result<BslValue, RtError> {
+    run_program_with_host(program, Some(registry), JitMode::Off, stdout, stderr)
 }
 
 /// То же, что [`run_program`], но с включённым JIT.
@@ -176,12 +210,61 @@ pub fn run_program(program: &Program) -> Result<BslValue, RtError> {
 /// Те же ошибки, что и у [`run_program`]. JIT своих не добавляет: он либо
 /// исполняет инструкцию так же, как интерпретатор, либо отдаёт её ему.
 pub fn run_program_jit(program: &Program) -> Result<BslValue, RtError> {
-    let mut stack: Vec<BslValue> = Vec::new();
+    let mut stdout = std::io::stdout().lock();
+    let mut stderr = std::io::stderr().lock();
+    run_program_with_host(program, None, JitMode::On, &mut stdout, &mut stderr)
+}
+
+/// Вариант [`run_program_with_registry`] с включённым JIT.
+///
+/// # Errors
+///
+/// Возвращает те же ошибки, что [`run_program_with_registry`].
+pub fn run_program_jit_with_registry(
+    program: &Program,
+    registry: &bsl_rt::RuntimeRegistry,
+) -> Result<BslValue, RtError> {
+    let mut stdout = std::io::stdout().lock();
+    let mut stderr = std::io::stderr().lock();
+    run_program_with_host(
+        program,
+        Some(registry),
+        JitMode::On,
+        &mut stdout,
+        &mut stderr,
+    )
+}
+
+/// Исполняет программу с JIT, реестром компонентов и потоками конкретного
+/// host-состояния.
+///
+/// # Errors
+///
+/// Возвращает те же ошибки, что [`run_program_with_registry_and_io`].
+pub fn run_program_jit_with_registry_and_io(
+    program: &Program,
+    registry: &bsl_rt::RuntimeRegistry,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> Result<BslValue, RtError> {
+    run_program_with_host(program, Some(registry), JitMode::On, stdout, stderr)
+}
+
+fn run_program_with_host(
+    program: &Program,
+    registry: Option<&bsl_rt::RuntimeRegistry>,
+    jit_mode: JitMode,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> Result<BslValue, RtError> {
+    let mut stack = Vec::new();
     push_own_registers(
         &mut stack,
         at(&program.chunks, 0, "в программе нет чанка верхнего уровня")?,
     );
-    let (value, _stack) = drive_with(program, 0, stack, JitMode::On)?;
+    let linked = link_components(program, registry)?;
+    let mut host = HostIo { stdout, stderr };
+    let (value, _) = drive_linked(program, 0, stack, jit_mode, &linked, &mut host)?;
     Ok(value)
 }
 
@@ -214,6 +297,7 @@ pub fn run_repl_chunk(
     stack: Vec<BslValue>,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
     let program = Program {
+        requirements: vec![bsl_bytecode::LibraryRequirement::bsl_rt()],
         chunks: vec![chunk.clone()],
         names,
         shapes,
@@ -238,6 +322,180 @@ fn drive(
     stack: Vec<BslValue>,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
     drive_with(program, func_id, stack, JitMode::Off)
+}
+
+struct HostIo<'a> {
+    stdout: &'a mut dyn Write,
+    stderr: &'a mut dyn Write,
+}
+
+#[derive(Default)]
+struct LinkedComponents<'a> {
+    registry: Option<&'a bsl_rt::RuntimeRegistry>,
+    functions: Vec<Vec<Option<bsl_rt::ComponentCall>>>,
+    constructors: Vec<Vec<Option<bsl_rt::ComponentCall>>>,
+}
+
+impl LinkedComponents<'_> {
+    fn function(&self, func_id: usize, pc: usize) -> Result<bsl_rt::ComponentCall, RtError> {
+        self.functions
+            .get(func_id)
+            .and_then(|chunk| chunk.get(pc))
+            .and_then(|slot| *slot)
+            .ok_or(RtError::InvalidBytecode(
+                "CallComponent не связан с функцией реестра",
+            ))
+    }
+
+    fn constructor(&self, func_id: usize, pc: usize) -> Result<bsl_rt::ComponentCall, RtError> {
+        self.constructors
+            .get(func_id)
+            .and_then(|chunk| chunk.get(pc))
+            .and_then(|slot| *slot)
+            .ok_or(RtError::InvalidBytecode(
+                "CreateObject не связан с конструктором реестра",
+            ))
+    }
+}
+
+fn link_components<'a>(
+    program: &Program,
+    registry: Option<&'a bsl_rt::RuntimeRegistry>,
+) -> Result<LinkedComponents<'a>, RtError> {
+    let Some(core) = program.requirements.first() else {
+        return Err(RtError::Component(
+            "в требованиях отсутствует bsl-rt".to_string(),
+        ));
+    };
+    if core.package != bsl_rt::PACKAGE_NAME || core.version != bsl_rt::PACKAGE_VERSION {
+        return Err(RtError::Component(format!(
+            "необходим {}={}, исполнитель предоставляет {}={}",
+            core.package,
+            core.version,
+            bsl_rt::PACKAGE_NAME,
+            bsl_rt::PACKAGE_VERSION
+        )));
+    }
+
+    for requirement in &program.requirements[1..] {
+        let Some(registry) = registry else {
+            return Err(RtError::Component(format!(
+                "необходим пакет {}={}, но реестр компонентов не предоставлен",
+                requirement.package, requirement.version
+            )));
+        };
+        let Some(library) = registry.library_by_package(&requirement.package) else {
+            return Err(RtError::Component(format!(
+                "необходим пакет {}={}, но он не зарегистрирован",
+                requirement.package, requirement.version
+            )));
+        };
+        if library.version != requirement.version {
+            return Err(RtError::Component(format!(
+                "для {} требуется {}, зарегистрирована версия {}",
+                requirement.package, requirement.version, library.version
+            )));
+        }
+    }
+
+    let mut functions = Vec::with_capacity(program.chunks.len());
+    let mut constructors = Vec::with_capacity(program.chunks.len());
+    for chunk in &program.chunks {
+        let mut function_slots = vec![None; chunk.instrs.len()];
+        let mut constructor_slots = vec![None; chunk.instrs.len()];
+        for (pc, instruction) in chunk.instrs.iter().enumerate() {
+            match instruction {
+                Instr::CallComponent {
+                    library,
+                    function,
+                    count,
+                    ..
+                } => {
+                    let requirement = program.requirements.get(*library as usize).ok_or(
+                        RtError::InvalidBytecode("индекс библиотеки вне таблицы requirements"),
+                    )?;
+                    let Some(registry) = registry else {
+                        return Err(RtError::Component(format!(
+                            "функция {}/{} требует реестр компонентов",
+                            requirement.package, function
+                        )));
+                    };
+                    let library_descriptor = registry
+                        .library_by_package(&requirement.package)
+                        .ok_or_else(|| {
+                            RtError::Component(format!(
+                                "необходим пакет {}={}, но он не зарегистрирован",
+                                requirement.package, requirement.version
+                            ))
+                        })?;
+                    let descriptor = library_descriptor
+                        .functions
+                        .iter()
+                        .find(|descriptor| descriptor.code.get() == *function)
+                        .ok_or_else(|| {
+                            RtError::Component(format!(
+                                "компонент {} не содержит функцию с кодом {}",
+                                requirement.package, function
+                            ))
+                        })?;
+                    if !descriptor.arity.accepts(*count) {
+                        return Err(RtError::InvalidBytecode(
+                            "арность CallComponent не совпадает с дескриптором",
+                        ));
+                    }
+                    function_slots[pc] = Some(descriptor.call);
+                }
+                Instr::CreateObject {
+                    library,
+                    constructor,
+                    count,
+                    ..
+                } => {
+                    let requirement = program.requirements.get(*library as usize).ok_or(
+                        RtError::InvalidBytecode("индекс библиотеки вне таблицы requirements"),
+                    )?;
+                    let Some(registry) = registry else {
+                        return Err(RtError::Component(format!(
+                            "конструктор {}/{} требует реестр компонентов",
+                            requirement.package, constructor
+                        )));
+                    };
+                    let library_descriptor = registry
+                        .library_by_package(&requirement.package)
+                        .ok_or_else(|| {
+                            RtError::Component(format!(
+                                "необходим пакет {}={}, но он не зарегистрирован",
+                                requirement.package, requirement.version
+                            ))
+                        })?;
+                    let descriptor = library_descriptor
+                        .constructors
+                        .iter()
+                        .find(|descriptor| descriptor.code.get() == *constructor)
+                        .ok_or_else(|| {
+                            RtError::Component(format!(
+                                "компонент {} не содержит конструктор с кодом {}",
+                                requirement.package, constructor
+                            ))
+                        })?;
+                    if !descriptor.arity.accepts(*count) {
+                        return Err(RtError::InvalidBytecode(
+                            "арность CreateObject не совпадает с дескриптором",
+                        ));
+                    }
+                    constructor_slots[pc] = Some(descriptor.call);
+                }
+                _ => {}
+            }
+        }
+        functions.push(function_slots);
+        constructors.push(constructor_slots);
+    }
+    Ok(LinkedComponents {
+        registry,
+        functions,
+        constructors,
+    })
 }
 
 /// Предел числа одновременно активных кадров BSL. Кадры лежат в куче
@@ -303,8 +561,26 @@ pub enum JitMode {
 fn drive_with(
     program: &Program,
     func_id: usize,
+    stack: Vec<BslValue>,
+    jit_mode: JitMode,
+) -> Result<(BslValue, Vec<BslValue>), RtError> {
+    let linked = link_components(program, None)?;
+    let mut stdout = std::io::stdout().lock();
+    let mut stderr = std::io::stderr().lock();
+    let mut host = HostIo {
+        stdout: &mut stdout,
+        stderr: &mut stderr,
+    };
+    drive_linked(program, func_id, stack, jit_mode, &linked, &mut host)
+}
+
+fn drive_linked(
+    program: &Program,
+    func_id: usize,
     mut stack: Vec<BslValue>,
     jit_mode: JitMode,
+    linked: &LinkedComponents,
+    host: &mut HostIo<'_>,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
     let mut frames = vec![Frame {
         func_id,
@@ -425,6 +701,8 @@ fn drive_with(
             &mut current_exception,
             &mut runtime_shapes,
             &mut snippets,
+            linked,
+            host,
             merge_linear,
         ) {
             Ok(Step::Continue) => continue,
@@ -641,6 +919,7 @@ fn field_name(program: &Program, name: bsl_rt::NameId) -> Result<&str, RtError> 
 /// интерпретаторный режим, без JIT) исполнение продолжается и через
 /// границу бандла, пока `pc` идёт линейно: пробы `drive_with` имеют смысл
 /// только там, куда `pc` попадает переходом, вызовом или разматыванием.
+#[allow(clippy::too_many_arguments)]
 fn step(
     frames: &mut Vec<Frame>,
     stack: &mut Vec<BslValue>,
@@ -648,6 +927,8 @@ fn step(
     current_exception: &mut Option<BslValue>,
     runtime_shapes: &mut bsl_rt::RuntimeShapes,
     snippets: &mut SnippetCache,
+    linked: &LinkedComponents,
+    host: &mut HostIo<'_>,
     merge_linear: bool,
 ) -> Result<Step, RtError> {
     let frame_idx = frames.len() - 1;
@@ -1043,9 +1324,43 @@ fn step(
                     runtime_shapes,
                     program,
                     stack,
+                    linked,
+                    host,
                 )?;
                 let d = frames[frame_idx].reg_index(dst);
                 reg_store(stack, d, v)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::CallComponent {
+                dst, base, count, ..
+            } => {
+                let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
+                let call = linked.function(func_id, pc)?;
+                let mut context = bsl_rt::CallContext::new(
+                    runtime_shapes,
+                    &mut *host.stdout,
+                    &mut *host.stderr,
+                    bsl_format::format_value,
+                );
+                let value = call(&mut context, args.as_slice())?;
+                let destination = frames[frame_idx].reg_index(dst);
+                reg_store(stack, destination, value)?;
+                frames[frame_idx].pc += 1;
+            }
+            Instr::CreateObject {
+                dst, base, count, ..
+            } => {
+                let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
+                let call = linked.constructor(func_id, pc)?;
+                let mut context = bsl_rt::CallContext::new(
+                    runtime_shapes,
+                    &mut *host.stdout,
+                    &mut *host.stderr,
+                    bsl_format::format_value,
+                );
+                let value = call(&mut context, args.as_slice())?;
+                let destination = frames[frame_idx].reg_index(dst);
+                reg_store(stack, destination, value)?;
                 frames[frame_idx].pc += 1;
             }
             Instr::CallMethod {
@@ -1176,6 +1491,8 @@ fn step(
                     program,
                     current_exception,
                     snippets,
+                    linked,
+                    host,
                     frame_idx,
                     func_id,
                     chunk,
@@ -1252,6 +1569,8 @@ fn step_cold(
     program: &Program,
     current_exception: &Option<BslValue>,
     snippets: &mut SnippetCache,
+    linked: &LinkedComponents<'_>,
+    host: &mut HostIo<'_>,
     frame_idx: usize,
     func_id: usize,
     chunk: &bsl_bytecode::Chunk,
@@ -1611,6 +1930,8 @@ fn step_cold(
                 stack,
                 &frames[frame_idx],
                 snippets,
+                linked,
+                host,
             )?;
             let d = frames[frame_idx].reg_index(dst);
             reg_store(stack, d, value)?;
@@ -1651,11 +1972,20 @@ fn run_dynamic_snippet(
     stack: &mut [BslValue],
     frame: &Frame,
     snippets: &mut SnippetCache,
+    linked: &LinkedComponents<'_>,
+    host: &mut HostIo<'_>,
 ) -> Result<BslValue, RtError> {
     // Предел вложенности — на входе, до разбора: компиляция фрагмента
     // рекурсивна так же, как его исполнение, и тоже расходует стек Rust.
     let _depth = DynamicDepthGuard::enter()?;
-    let compiled = snippets.get_or_compile(code, is_eval, scope_id, scope_locals, program)?;
+    let compiled = snippets.get_or_compile(
+        code,
+        is_eval,
+        scope_id,
+        scope_locals,
+        program,
+        linked.registry,
+    )?;
 
     // Значения существующих переменных кадра переезжают во фрагмент по
     // НОМЕРУ СЛОТА: раскладка совпадает, потому что фрагмент резолвился
@@ -1701,12 +2031,16 @@ fn run_dynamic_snippet(
     // работает, а `Call func=N` у нас индексирует ровно `chunks[N]`.
     // Поэтому нумерация обязана совпасть с исходной программой.
     let mut chunks = program.chunks.clone();
+    for chunk in &mut chunks {
+        remap_chunk_libraries(chunk, &program.requirements, &compiled.requirements)?;
+    }
     if chunks.is_empty() {
         chunks.push(compiled.chunk.clone());
     } else {
         chunks[0] = compiled.chunk.clone();
     }
     let snippet_program = Program {
+        requirements: compiled.requirements.clone(),
         chunks,
         // СОБСТВЕННАЯ таблица фрагмента, не `program.names`: она — префикс
         // (те же имена, в том же порядке, значит те же `NameId`) плюс,
@@ -1723,7 +2057,15 @@ fn run_dynamic_snippet(
         module_base: module_base as u32,
     };
 
-    let (value, final_stack) = drive(&snippet_program, 0, snippet_stack)?;
+    let snippet_linked = link_components(&snippet_program, linked.registry)?;
+    let (value, final_stack) = drive_linked(
+        &snippet_program,
+        0,
+        snippet_stack,
+        JitMode::Off,
+        &snippet_linked,
+        host,
+    )?;
 
     // Обратно переносятся ТОЛЬКО уже существовавшие слоты: их номера
     // совпадают с теми, что использует окружающий скомпилированный код.
@@ -1803,6 +2145,45 @@ pub fn call_module_function(
     name: &str,
     args: Vec<BslValue>,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
+    let linked = link_components(program, None)?;
+    let mut stdout = std::io::stdout().lock();
+    let mut stderr = std::io::stderr().lock();
+    let mut host = HostIo {
+        stdout: &mut stdout,
+        stderr: &mut stderr,
+    };
+    call_module_function_with_host(program, stack, name, args, &linked, &mut host)
+}
+
+/// Вызывает функцию модуля с реестром компонентов и потоками текущего
+/// host-состояния.
+///
+/// # Errors
+///
+/// Помимо ошибок [`call_module_function`] возвращает ошибку связывания,
+/// если модулю недоступен требуемый компонент или его точная версия.
+pub fn call_module_function_with_registry_and_io(
+    program: &Program,
+    stack: &mut [BslValue],
+    name: &str,
+    args: Vec<BslValue>,
+    registry: &bsl_rt::RuntimeRegistry,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> Result<(BslValue, Vec<BslValue>), RtError> {
+    let linked = link_components(program, Some(registry))?;
+    let mut host = HostIo { stdout, stderr };
+    call_module_function_with_host(program, stack, name, args, &linked, &mut host)
+}
+
+fn call_module_function_with_host(
+    program: &Program,
+    stack: &mut [BslValue],
+    name: &str,
+    args: Vec<BslValue>,
+    linked: &LinkedComponents<'_>,
+    host: &mut HostIo<'_>,
+) -> Result<(BslValue, Vec<BslValue>), RtError> {
     let _depth = DynamicDepthGuard::enter()?;
 
     let upper = name.to_uppercase();
@@ -1858,7 +2239,14 @@ pub fn call_module_function(
         ..program.clone()
     };
 
-    let (value, final_stack) = drive(&callee_program, func_id, call_stack)?;
+    let (value, final_stack) = drive_linked(
+        &callee_program,
+        func_id,
+        call_stack,
+        JitMode::Off,
+        linked,
+        host,
+    )?;
 
     // Мутации модульных переменных обязаны пережить вызов — та же
     // дисциплина, что в `run_dynamic_snippet`.
@@ -1896,6 +2284,7 @@ struct CompiledSnippet {
     chunk: bsl_bytecode::Chunk,
     names: Vec<String>,
     shapes: Vec<std::rc::Rc<bsl_rt::Shape>>,
+    requirements: Vec<bsl_bytecode::LibraryRequirement>,
 }
 
 /// Кэш «текст фрагмента -> скомпилированный чанк» на одно исполнение
@@ -1927,6 +2316,7 @@ impl SnippetCache {
         scope_id: usize,
         scope_locals: &[String],
         program: &Program,
+        registry: Option<&bsl_rt::RuntimeRegistry>,
     ) -> Result<std::rc::Rc<CompiledSnippet>, RtError> {
         let key = (scope_id, is_eval, code.to_string());
         if let Some(hit) = self.entries.get(&key) {
@@ -1937,6 +2327,7 @@ impl SnippetCache {
             is_eval,
             scope_locals,
             program,
+            registry,
         )?);
         self.entries.insert(key, compiled.clone());
         Ok(compiled)
@@ -1952,6 +2343,7 @@ fn compile_dynamic_snippet(
     is_eval: bool,
     scope_locals: &[String],
     program: &Program,
+    registry: Option<&bsl_rt::RuntimeRegistry>,
 ) -> Result<CompiledSnippet, RtError> {
     // `is_eval` заворачивает выражение в `Возврат (...)`, чтобы получить
     // значение тем же путём, что и обычный `Возврат` — один движок на
@@ -1990,9 +2382,31 @@ fn compile_dynamic_snippet(
             (name.clone(), arity)
         })
         .collect();
-    let (all_locals, body) =
-        bsl_sema::resolve_snippet_stmts(scope_locals, &program.module_vars, &stmts, &signatures)
+    let (all_locals, body, fragment_requirements) = match registry {
+        Some(registry) => bsl_sema::resolve_snippet_stmts_with_registry(
+            scope_locals,
+            &program.module_vars,
+            &stmts,
+            &signatures,
+            registry,
+        )
+        .map_err(|e| RtError::DynamicError(format!("{e:?}")))?,
+        None => {
+            let (locals, body) = bsl_sema::resolve_snippet_stmts(
+                scope_locals,
+                &program.module_vars,
+                &stmts,
+                &signatures,
+            )
             .map_err(|e| RtError::DynamicError(format!("{e:?}")))?;
+            (
+                locals,
+                body,
+                vec![bsl_bytecode::LibraryRequirement::bsl_rt()],
+            )
+        }
+    };
+    let requirements = merge_requirements(&program.requirements, &fragment_requirements)?;
     // Режимы параметров каждой функции модуля: фрагмент может её звать, и
     // компилятору надо знать, какой аргумент идёт по ссылке.
     let callee_params: Vec<Vec<bool>> = program
@@ -2001,15 +2415,72 @@ fn compile_dynamic_snippet(
         .skip(1)
         .map(|c| c.param_by_val.clone())
         .collect();
-    let (chunk, names, shapes) =
-        bsl_bytecode::compile_snippet(&all_locals, &body, &program.names, &callee_params)
-            .map_err(|e| RtError::DynamicError(format!("{e:?}")))?;
+    let (chunk, names, shapes) = bsl_bytecode::compile_snippet_with_requirements(
+        &all_locals,
+        &body,
+        &program.names,
+        &callee_params,
+        &requirements,
+    )
+    .map_err(|e| RtError::DynamicError(format!("{e:?}")))?;
 
     Ok(CompiledSnippet {
         chunk,
         names,
         shapes,
+        requirements,
     })
+}
+
+fn merge_requirements(
+    base: &[bsl_bytecode::LibraryRequirement],
+    extra: &[bsl_bytecode::LibraryRequirement],
+) -> Result<Vec<bsl_bytecode::LibraryRequirement>, RtError> {
+    let mut merged = base.to_vec();
+    for requirement in extra {
+        match merged
+            .iter()
+            .find(|existing| existing.package == requirement.package)
+        {
+            Some(existing) if existing.version != requirement.version => {
+                return Err(RtError::Component(format!(
+                    "для {} одновременно требуются версии {} и {}",
+                    requirement.package, existing.version, requirement.version
+                )))
+            }
+            Some(_) => {}
+            None => merged.push(requirement.clone()),
+        }
+    }
+    merged[1..].sort_by(|left, right| left.package.cmp(&right.package));
+    Ok(merged)
+}
+
+fn remap_chunk_libraries(
+    chunk: &mut bsl_bytecode::Chunk,
+    from: &[bsl_bytecode::LibraryRequirement],
+    to: &[bsl_bytecode::LibraryRequirement],
+) -> Result<(), RtError> {
+    for instruction in &mut chunk.instrs {
+        let library = match instruction {
+            Instr::CallComponent { library, .. } | Instr::CreateObject { library, .. } => library,
+            _ => continue,
+        };
+        let requirement = from.get(*library as usize).ok_or(RtError::InvalidBytecode(
+            "индекс библиотеки вне таблицы requirements",
+        ))?;
+        let target = to
+            .iter()
+            .position(|candidate| candidate.package == requirement.package)
+            .ok_or(RtError::InvalidBytecode(
+                "компонент чанка отсутствует в объединённых requirements",
+            ))?;
+        *library = target.try_into().map_err(|_| {
+            RtError::InvalidBytecode("индекс библиотеки не помещается в операнд u8")
+        })?;
+    }
+    chunk.bundle_len = bsl_bytecode::bundle::compute(chunk, None);
+    Ok(())
 }
 
 /// Размерность в `Новый Массив(d1, d2, ...)` обязана быть целым
@@ -2199,6 +2670,8 @@ fn call_builtin_with_format(
     runtime_shapes: &mut bsl_rt::RuntimeShapes,
     program: &Program,
     stack: &mut [BslValue],
+    linked: &LinkedComponents<'_>,
+    host: &mut HostIo<'_>,
 ) -> Result<BslValue, RtError> {
     use bsl_rt::BuiltinFn;
     // Проверка по МАКСИМУМУ, а не по минимуму: резолвер добивает
@@ -2213,7 +2686,8 @@ fn call_builtin_with_format(
     }
     match builtin {
         BuiltinFn::Message => {
-            println!("{}", bsl_format::format_value(&args[0], None)?);
+            writeln!(host.stdout, "{}", bsl_format::format_value(&args[0], None)?)
+                .map_err(|error| RtError::IoError(error.to_string()))?;
             Ok(BslValue::Undefined)
         }
         BuiltinFn::ToString => {
@@ -2252,13 +2726,13 @@ fn call_builtin_with_format(
         // поэтому повторно взять стек по `&mut` здесь законно.
         BuiltinFn::ReadJson => {
             let mut call = |name: &str, call_args: Vec<BslValue>| {
-                call_module_function(program, stack, name, call_args)
+                call_module_function_with_host(program, stack, name, call_args, linked, host)
             };
             bsl_rt::read_json_builtin(args, runtime_shapes, Some(&mut call))
         }
         BuiltinFn::WriteJson => {
             let mut call = |name: &str, call_args: Vec<BslValue>| {
-                call_module_function(program, stack, name, call_args)
+                call_module_function_with_host(program, stack, name, call_args, linked, host)
             };
             bsl_rt::write_json_builtin(args, runtime_shapes, Some(&mut call))
         }
@@ -2534,6 +3008,218 @@ mod tests {
         let resolved = resolve_program(&prog.items).unwrap_or_else(|e| panic!("sema error: {e:?}"));
         let program = compile_program(&resolved).unwrap_or_else(|e| panic!("compile error: {e:?}"));
         run_program(&program).unwrap_or_else(|e| panic!("runtime error: {e:?}"))
+    }
+
+    fn component_answer(
+        _context: &mut bsl_rt::CallContext<'_>,
+        _args: &[BslValue],
+    ) -> bsl_rt::RtResult<BslValue> {
+        Ok(num("42"))
+    }
+
+    fn component_construct(
+        _context: &mut bsl_rt::CallContext<'_>,
+        _args: &[BslValue],
+    ) -> bsl_rt::RtResult<BslValue> {
+        Ok(num("43"))
+    }
+
+    fn component_message(
+        context: &mut bsl_rt::CallContext<'_>,
+        _args: &[BslValue],
+    ) -> bsl_rt::RtResult<BslValue> {
+        writeln!(context.stdout(), "component")
+            .map_err(|error| RtError::IoError(error.to_string()))?;
+        Ok(BslValue::Undefined)
+    }
+
+    const TEST_COMPONENT_FUNCTIONS: &[bsl_rt::FunctionDescriptor] = &[
+        bsl_rt::FunctionDescriptor {
+            code: bsl_rt::FunctionCode::new(7),
+            names: &["ОтветПриложения", "ApplicationAnswer"],
+            arity: bsl_rt::Arity::exact(0),
+            kind: bsl_rt::FunctionKind::Function,
+            call: component_answer,
+        },
+        bsl_rt::FunctionDescriptor {
+            code: bsl_rt::FunctionCode::new(8),
+            names: &["СообщитьПриложения", "ApplicationMessage"],
+            arity: bsl_rt::Arity::exact(0),
+            kind: bsl_rt::FunctionKind::Procedure,
+            call: component_message,
+        },
+    ];
+    const TEST_COMPONENT_CONSTRUCTORS: &[bsl_rt::ConstructorDescriptor] =
+        &[bsl_rt::ConstructorDescriptor {
+            code: bsl_rt::ConstructorCode::new(9),
+            names: &["ТестовыйОбъект", "TestObject"],
+            arity: bsl_rt::Arity::exact(0),
+            call: component_construct,
+        }];
+
+    fn test_component_registry() -> bsl_rt::RuntimeRegistry {
+        let mut builder = bsl_rt::RuntimeBuilder::new();
+        builder
+            .register(bsl_rt::LibraryDescriptor {
+                package: bsl_rt::PACKAGE_NAME,
+                version: bsl_rt::PACKAGE_VERSION,
+                dependencies: &[],
+                functions: &[],
+                constructors: &[],
+            })
+            .register(bsl_rt::LibraryDescriptor {
+                package: "bsl-test-host",
+                version: "1.2.3",
+                dependencies: &[bsl_rt::LibraryDependency {
+                    package: bsl_rt::PACKAGE_NAME,
+                    version: bsl_rt::PACKAGE_VERSION,
+                }],
+                functions: TEST_COMPONENT_FUNCTIONS,
+                constructors: TEST_COMPONENT_CONSTRUCTORS,
+            });
+        builder.build().unwrap()
+    }
+
+    fn compile_with_registry(src: &str, registry: &bsl_rt::RuntimeRegistry) -> Program {
+        let parsed = parse(src).unwrap_or_else(|error| panic!("parse error: {error:?}"));
+        let resolved = bsl_sema::resolve_program_with_registry(&parsed.items, registry)
+            .unwrap_or_else(|error| panic!("sema error: {error:?}"));
+        compile_program(&resolved).unwrap_or_else(|error| panic!("compile error: {error:?}"))
+    }
+
+    #[test]
+    fn component_function_resolves_compiles_links_and_runs() {
+        let registry = test_component_registry();
+        let parsed = parse("Возврат ОтветПриложения();").unwrap();
+        let resolved = bsl_sema::resolve_program_with_registry(&parsed.items, &registry).unwrap();
+        let program = compile_program(&resolved).unwrap();
+
+        assert_eq!(program.requirements.len(), 2);
+        assert_eq!(program.requirements[1].package, "bsl-test-host");
+        assert!(program.chunks[0].instrs.iter().any(|instruction| matches!(
+            instruction,
+            Instr::CallComponent {
+                library: 1,
+                function: 7,
+                count: 0,
+                ..
+            }
+        )));
+        assert_eq!(
+            run_program_with_registry(&program, &registry).unwrap(),
+            num("42")
+        );
+        assert_eq!(
+            run_program_jit_with_registry(&program, &registry).unwrap(),
+            num("42")
+        );
+    }
+
+    #[test]
+    fn component_mismatch_is_rejected_before_execution() {
+        let registry = test_component_registry();
+        let parsed = parse("Возврат ОтветПриложения();").unwrap();
+        let resolved = bsl_sema::resolve_program_with_registry(&parsed.items, &registry).unwrap();
+        let mut program = compile_program(&resolved).unwrap();
+        program.requirements[1].version = "9.9.9".to_string();
+
+        assert!(matches!(
+            run_program_with_registry(&program, &registry),
+            Err(RtError::Component(message)) if message.contains("9.9.9")
+        ));
+    }
+
+    #[test]
+    fn component_constructor_resolves_compiles_links_and_runs() {
+        let registry = test_component_registry();
+        let parsed = parse("Возврат Новый ТестовыйОбъект();").unwrap();
+        let resolved = bsl_sema::resolve_program_with_registry(&parsed.items, &registry).unwrap();
+        let program = compile_program(&resolved).unwrap();
+
+        assert!(program.chunks[0].instrs.iter().any(|instruction| matches!(
+            instruction,
+            Instr::CreateObject {
+                library: 1,
+                constructor: 9,
+                count: 0,
+                ..
+            }
+        )));
+        assert_eq!(
+            run_program_with_registry(&program, &registry).unwrap(),
+            num("43")
+        );
+    }
+
+    #[test]
+    fn dynamic_fragment_resolves_its_own_component_requirement() {
+        let registry = test_component_registry();
+        let program = compile_with_registry("Возврат Вычислить(\"ОтветПриложения()\");", &registry);
+
+        assert_eq!(program.requirements.len(), 1);
+        assert_eq!(
+            run_program_with_registry(&program, &registry).unwrap(),
+            num("42")
+        );
+    }
+
+    #[test]
+    fn host_streams_are_used_by_builtins_components_dynamic_code_and_jit() {
+        let registry = test_component_registry();
+        let program = compile_with_registry(
+            "Сообщить(\"main\");\n\
+             Выполнить(\"Сообщить(\"\"dynamic\"\")\");\n\
+             СообщитьПриложения();",
+            &registry,
+        );
+
+        for jit in [false, true] {
+            let mut stdout = Vec::new();
+            let mut stderr = Vec::new();
+            let result = if jit {
+                run_program_jit_with_registry_and_io(&program, &registry, &mut stdout, &mut stderr)
+            } else {
+                run_program_with_registry_and_io(&program, &registry, &mut stdout, &mut stderr)
+            };
+
+            assert_eq!(result.unwrap(), BslValue::Undefined);
+            assert_eq!(
+                String::from_utf8(stdout).unwrap(),
+                "main\ndynamic\ncomponent\n"
+            );
+            assert!(stderr.is_empty());
+        }
+    }
+
+    struct FailingWriter;
+
+    impl std::io::Write for FailingWriter {
+        fn write(&mut self, _buffer: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::other("test writer failed"))
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn host_writer_error_is_returned_without_a_panic() {
+        let registry = test_component_registry();
+        let program = compile_with_registry("Сообщить(\"x\");", &registry);
+        let mut stdout = FailingWriter;
+        let mut stderr = Vec::new();
+
+        assert!(matches!(
+            run_program_with_registry_and_io(
+                &program,
+                &registry,
+                &mut stdout,
+                &mut stderr,
+            ),
+            Err(RtError::IoError(message)) if message.contains("test writer failed")
+        ));
+        assert!(stderr.is_empty());
     }
 
     /// Строка СЛЕВА тянет правый операнд к себе, и приведение это ровно
@@ -3319,6 +4005,7 @@ mod tests {
     /// индексация в `step` возвращает `InvalidBytecode` вместо паники.
     fn corrupt_program(instrs: Vec<Instr>) -> Program {
         Program {
+            requirements: vec![bsl_bytecode::LibraryRequirement::bsl_rt()],
             function_names: Vec::new(),
             module_vars: Vec::new(),
             module_base: 0,

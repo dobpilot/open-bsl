@@ -428,6 +428,16 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
             read!(src);
             e.heap_write = true;
         }
+        Instr::CreateObject {
+            dst, base, count, ..
+        } => {
+            read_range!(base, count);
+            write!(dst);
+            e.heap_read = true;
+            e.heap_write = true;
+            e.io = true;
+            e.ctl = Ctl::Barrier;
+        }
         Instr::NewArray { dst, base, count } => {
             read_range!(base, count);
             write!(dst);
@@ -637,6 +647,16 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
             e.heap_read = true;
             e.heap_write = true;
             e.io = true;
+        }
+        Instr::CallComponent {
+            dst, base, count, ..
+        } => {
+            read_range!(base, count);
+            write!(dst);
+            e.heap_read = true;
+            e.heap_write = true;
+            e.io = true;
+            e.ctl = Ctl::Barrier;
         }
         Instr::CallMethod {
             dst,

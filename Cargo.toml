@@ -9,6 +9,7 @@ members = [
     "crates/bsl-bytecode",
     "crates/bsl-vm",
     "crates/bsl-cli",
+    "crates/open-bsl",
 ]
 
 [workspace.package]

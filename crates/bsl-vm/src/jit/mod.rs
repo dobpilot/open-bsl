@@ -47,7 +47,7 @@ mod x64;
 
 use crate::{
     add_op, at, binop, call_builtin_with_format, cmp, field_name, neg_op, numeric_for_next_regular,
-    prop_cache, reg_load, reg_store, CallArgs, Frame,
+    prop_cache, reg_load, reg_store, CallArgs, Frame, HostIo, LinkedComponents,
 };
 use bsl_bytecode::{Chunk, Instr, Program};
 use bsl_rt::{BslValue, RtError};
@@ -386,6 +386,14 @@ fn compile_instr(instr: &Instr) -> Option<Compiled> {
         // инструкцию сам: по `pc` он и так её находит, а `match` по одному
         // известному варианту стоит несравнимо дешевле, чем разбор всей
         // таблицы кодов операций в `step`.
+        // `Сообщить` обязан писать в поток конкретного `State`, которого у
+        // JIT-шима нет. Оставляем только этот IO-вызов интерпретатору;
+        // остальные builtin'ы не используют переданный ниже sink.
+        Instr::CallBuiltin {
+            builtin:
+                bsl_rt::BuiltinFn::Message | bsl_rt::BuiltinFn::ReadJson | bsl_rt::BuiltinFn::WriteJson,
+            ..
+        } => None,
         Instr::CallBuiltin { .. } => s(shim_call_builtin, [0, 0, 0]),
         // У этих троих операндов тоже больше трёх либо среди них есть не
         // число (`NameId`, номер метода), поэтому они, как и CallBuiltin,
@@ -753,7 +761,22 @@ shim!(shim_call_builtin, |frames,
         ));
     };
     let args = CallArgs::load(stack, &frames[idx], base, count)?;
-    let v = call_builtin_with_format(builtin, args.as_slice(), shapes, program, stack)?;
+    let mut stdout = std::io::sink();
+    let mut stderr = std::io::sink();
+    let mut host = HostIo {
+        stdout: &mut stdout,
+        stderr: &mut stderr,
+    };
+    let linked = LinkedComponents::default();
+    let v = call_builtin_with_format(
+        builtin,
+        args.as_slice(),
+        shapes,
+        program,
+        stack,
+        &linked,
+        &mut host,
+    )?;
     let d = frames[idx].reg_index(dst);
     reg_store(stack, d, v)?;
     Ok(OK)
