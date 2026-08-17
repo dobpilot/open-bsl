@@ -7,7 +7,7 @@ This repository is a Rust 2021 workspace implementing a BSL interpreter. Crates 
 - `crates/bsl-syntax`: lexer, parser, AST, and diagnostics.
 - `crates/bsl-sema`: name resolution and semantic representation.
 - `crates/bsl-bytecode`: bytecode instructions, compiler, and the textual bytecode format (`text.rs`) used by both `--emit-bytecode` and `--run-bytecode` — printing and parsing share one format, so adding an instruction means touching `write_instr`, `parse_instr`, `OPCODES`, and the round-trip corpus together, and bumping `FORMAT_VERSION` if the encoding changes. `bundle.rs` marks VLIW bundles — runs of mutually independent neighbor instructions (no RAW/WAW inside a bundle, WAR allowed) that the VM executes in one dispatch; its effects classification is an exhaustive match, so a new opcode must be classified there as well. `Chunk::bundle_len` is a derived table and is never serialized: the parser recomputes it (listings only show it as `; бандл N` comments), and `crates/bsl-cli/tests/bundles.rs` re-verifies the invariants over the whole conformance corpus with `bundle::verify`.
-- `crates/bsl-rt`, `bsl-number`, and `bsl-format`: runtime values, decimal arithmetic, and BSL formatting.
+- `crates/bsl-rt`, `bsl-number`, and `bsl-format`: runtime values, decimal arithmetic, and BSL formatting. `BslValue::Display` is debug-only and does not reproduce 1C formatting — use `bsl_format::format_value` for any user-visible or conformance-checked text (it backs `Строка`/`Формат` and the CLI).
 - `crates/bsl-vm`: bytecode execution; examples live in `examples/`.
 - `crates/bsl-cli`: script runner, REPL (syntax highlighting in `highlight.rs`, Tab completion in `complete.rs`), and end-to-end conformance runner.
 
@@ -103,3 +103,5 @@ Recent commits use short, imperative subjects such as `Add the string library...
 - `PROGRESS.md` — append-only run log; read it afterwards, never rewrite it.
 
 Prompts for the three phases live in `ralph/prompts/`; `commit-style.md` is the commit-message style the implementer follows and the reviewer checks. The model for each phase is an env knob (`PLAN_MODEL`, `IMPL_MODEL`, `REVIEW_MODEL`, `REVIEW2_MODEL`, all default `opus`), which is how a per-model usage limit is worked around without editing the script. Run from the repo root: `./ralph/ralph.sh` (tune iterations with `MAX_ITERS=40`). The current roadmap feeding the backlog is `docs/std-library-plan.md`.
+
+`CLAUDE.md` is gitignored and only re-exports this file to Claude Code via `@AGENTS.md`; team-wide conventions go in `AGENTS.md`, never in `CLAUDE.md` — edits there are silently lost.
