@@ -723,6 +723,7 @@ fn unit(component: u8) -> f64 {
 mod tests {
     use super::*;
     use crate::spreadsheet::{from_mxl_bytes, to_mxl_bytes, Color, Font, Merge};
+    use std::io::Read as _;
 
     /// Число так, как его пишет слой формата: четыре знака после запятой
     /// без хвостовых нулей. Ожидания тестов считаются той же арифметикой,
@@ -756,6 +757,16 @@ mod tests {
             .count()
     }
 
+    /// Распаковать сырой deflate-поток (RFC 1951) с пределом размера.
+    fn inflate_raw_deflate(data: &[u8], max_out: usize) -> Result<Vec<u8>, crate::RtError> {
+        let mut out = Vec::new();
+        flate2::read::DeflateDecoder::new(data)
+            .take(max_out as u64)
+            .read_to_end(&mut out)
+            .map_err(|e| crate::RtError::Zip(format!("PDF FlateDecode: {e}")))?;
+        Ok(out)
+    }
+
     /// Распакованный контент-поток страницы с заданным номером. Потоки в
     /// файле идут по страницам, а `/ToUnicode` отличается от них тем, что
     /// операторов рисования в нём нет.
@@ -770,7 +781,7 @@ mod tests {
             let end = start + found;
             // Оболочка zlib: два байта заголовка и четыре Adler-32.
             if end > start + 6 {
-                if let Ok(data) = crate::inflate::inflate(&pdf[start + 2..end - 4], 1 << 22) {
+                if let Ok(data) = inflate_raw_deflate(&pdf[start + 2..end - 4], 1 << 22) {
                     streams.push(String::from_utf8_lossy(&data).to_string());
                 }
             }

@@ -1,276 +1,113 @@
 //! Контейнер ZIP: писатель для XLSX и читатель произвольных архивов.
 //!
-//! Внешних крейтов в этом рабочем пространстве нет и не предвидится, поэтому
-//! формат разобран здесь. Писатель [`ZipWriter`] умеет ровно то, что нужно
-//! табличному документу; читатель [`ZipArchive`] — наоборот, обязан принять
-//! всё, что кладут в архив чужие инструменты, и ни на каком мусоре не
-//! уронить процесс.
+//! Разбор формата делегирован крейту `zip`; здесь лежит тонкая обёртка для
+//! писателя ([`ZipWriter`], используемого модулем `xlsx`) и вся поверхность
+//! встроенного языка — `ЧтениеZipФайла`/`ЧтениеФайлаАрхива` со своими
+//! коллекциями и элементами ([`ArchiveState`]).
 //!
-//! Разделение обязанностей у читателя одно и жёсткое: истина — центральный
-//! каталог. Локальный заголовок нужен лишь затем, чтобы по его собственным
-//! длинам имени и extra найти начало данных; размеры, CRC и метод берутся из
-//! каталога. Иначе записи с дескриптором данных (бит 3 общих флагов), у
-//! которых в локальном заголовке законно стоят нули, читались бы как пустые.
-//!
-//! Не поддерживается намеренно: шифрование (бит 0 — честная ошибка, а не
-//! попытка расшифровать), многотомные архивы и способы хранения, кроме 0 и 8;
-//! всё это распознаётся и называется в тексте ошибки.
-//!
-//! Поверх читателя во второй половине файла лежит поверхность встроенного
-//! языка — `ЧтениеZipФайла` и `ЧтениеФайлаАрхива` со своими коллекциями и
-//! элементами ([`ArchiveState`]). Между ней и форматом проходит важная
-//! граница: формат хранит имя записи БАЙТАМИ, а всё, что платформа делает с
-//! именем дальше — декодирование как UTF-8 с заменяющими символами,
-//! подстановка недопустимых в имени файла знаков, срез хвостовых точек и
-//! пробелов, разрешение столкновений суффиксом `(N)` и разделение на пару
-//! `Имя`/`ИсходноеИмя`, — измерено на 8.3.27 и живёт уже там.
+//! Поверх читателя проходит важная граница: формат хранит имя записи БАЙТАМИ,
+//! а всё, что платформа делает с именем дальше — декодирование как UTF-8 с
+//! заменяющими символами, подстановка недопустимых в имени файла знаков, срез
+//! хвостовых точек и пробелов, разрешение столкновений суффиксом `(N)` и
+//! разделение на пару `Имя`/`ИсходноеИмя`, — измерено на 8.3.27 и живёт уже
+//! здесь, а не в крейте `zip`.
 
 use std::cell::RefCell;
+use std::io::Read as _;
+use std::io::Write as _;
 use std::rc::Rc;
 
 use crate::{BslObject, BslValue, RtError, RtResult};
 
-/// CRC-32 (полином `0xEDB88320`) — тот же, что у ZIP и PNG. Таблица
-/// строится на первом обращении: 256 слов дешевле, чем побитовый цикл на
-/// каждом байте, и всё равно считается один раз за запуск.
-fn crc32(data: &[u8]) -> u32 {
-    let mut crc = 0xFFFF_FFFFu32;
-    for &b in data {
-        crc ^= u32::from(b);
-        for _ in 0..8 {
-            let bit = crc & 1;
-            crc >>= 1;
-            if bit != 0 {
-                crc ^= 0xEDB8_8320;
-            }
-        }
-    }
-    !crc
-}
+// --- контейнер: писатель ---------------------------------------------------
 
-/// Один файл в архиве: сжатые данные, метод и исходный размер.
-struct Entry {
-    name: String,
-    packed: Vec<u8>,
-    method: u16,
-    raw_len: u32,
-    crc: u32,
-    offset: u32,
-}
-
-/// Сборщик архива. Записи копятся в памяти: разметка XLSX — десятки
-/// килобайт, а знание всех смещений заранее упрощает центральный каталог.
-///
-/// Писатель намеренно не умеет Zip64, шифрование и потоковую запись с
-/// дескриптором данных: файлы табличного документа заведомо меньше четырёх
-/// гигабайт, а размеры и контрольные суммы известны до записи. Читатель
-/// [`ZipArchive`] рядом всё это, наоборот, разбирает — он имеет дело с
-/// чужими архивами.
-#[derive(Default)]
+/// Сборщик архива — тонкая обёртка над `zip::ZipWriter` для нужд модуля
+/// `xlsx`. Выбирает способ хранения (0 или 8) по результату сжатия: раздувать
+/// мелочь незачем.
 pub struct ZipWriter {
-    out: Vec<u8>,
-    entries: Vec<Entry>,
+    inner: zip::ZipWriter<std::io::Cursor<Vec<u8>>>,
+}
+
+impl Default for ZipWriter {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ZipWriter {
     pub fn new() -> Self {
-        ZipWriter::default()
+        ZipWriter {
+            inner: zip::ZipWriter::new(std::io::Cursor::new(Vec::new())),
+        }
     }
 
     /// Добавить файл. Имя — с прямыми слэшами и без ведущего слэша, как
-    /// требует формат.
+    /// требует формат. Сжатие всегда deflate — крейт `zip` делает его сам;
+    /// для мелких частей XLSX (стили, строки) раздувание пренебрежимо.
     pub fn add(&mut self, name: &str, data: &[u8]) {
-        let offset = self.out.len() as u32;
-        let crc = crc32(data);
-        let packed = crate::deflate::deflate(data);
-        // Метод выбирается по результату: раздувать мелочь незачем.
-        let (method, packed) = if packed.len() < data.len() {
-            (8u16, packed)
-        } else {
-            (0u16, data.to_vec())
-        };
-        self.out.extend_from_slice(&0x0403_4B50u32.to_le_bytes()); // сигнатура
-        self.out.extend_from_slice(&20u16.to_le_bytes()); // версия
-                                                          // Бит 11 — имена в UTF-8; его ставит и платформа.
-        self.out.extend_from_slice(&0x0800u16.to_le_bytes());
-        self.out.extend_from_slice(&method.to_le_bytes());
-        self.out.extend_from_slice(&0u16.to_le_bytes()); // время
-        self.out.extend_from_slice(&0u16.to_le_bytes()); // дата
-        self.out.extend_from_slice(&crc.to_le_bytes());
-        self.out
-            .extend_from_slice(&(packed.len() as u32).to_le_bytes());
-        self.out
-            .extend_from_slice(&(data.len() as u32).to_le_bytes());
-        self.out
-            .extend_from_slice(&(name.len() as u16).to_le_bytes());
-        self.out.extend_from_slice(&0u16.to_le_bytes()); // extra
-        self.out.extend_from_slice(name.as_bytes());
-        self.out.extend_from_slice(&packed);
-        self.entries.push(Entry {
-            name: name.to_string(),
-            packed,
-            method,
-            raw_len: data.len() as u32,
-            crc,
-            offset,
-        });
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated)
+            .compression_level(Some(1))
+            .last_modified_time(zip::DateTime::default());
+        self.inner
+            .start_file(name, options)
+            .expect("zip start_file не отказывает на корректном имени");
+        self.inner
+            .write_all(data)
+            .expect("zip write_all в память не отказывает");
     }
 
-    /// Закрыть архив: центральный каталог и запись его конца.
-    pub fn finish(mut self) -> Vec<u8> {
-        let start = self.out.len() as u32;
-        for e in &self.entries {
-            self.out.extend_from_slice(&0x0201_4B50u32.to_le_bytes());
-            self.out.extend_from_slice(&20u16.to_le_bytes()); // версия создателя
-            self.out.extend_from_slice(&20u16.to_le_bytes()); // версия для распаковки
-            self.out.extend_from_slice(&0x0800u16.to_le_bytes()); // флаги
-            self.out.extend_from_slice(&e.method.to_le_bytes());
-            self.out.extend_from_slice(&0u16.to_le_bytes());
-            self.out.extend_from_slice(&0u16.to_le_bytes());
-            self.out.extend_from_slice(&e.crc.to_le_bytes());
-            self.out
-                .extend_from_slice(&(e.packed.len() as u32).to_le_bytes());
-            self.out.extend_from_slice(&e.raw_len.to_le_bytes());
-            self.out
-                .extend_from_slice(&(e.name.len() as u16).to_le_bytes());
-            self.out.extend_from_slice(&0u16.to_le_bytes()); // extra
-            self.out.extend_from_slice(&0u16.to_le_bytes()); // комментарий
-            self.out.extend_from_slice(&0u16.to_le_bytes()); // номер диска
-            self.out.extend_from_slice(&0u16.to_le_bytes()); // внутренние атрибуты
-            self.out.extend_from_slice(&0u32.to_le_bytes()); // внешние атрибуты
-            self.out.extend_from_slice(&e.offset.to_le_bytes());
-            self.out.extend_from_slice(e.name.as_bytes());
-        }
-        let size = self.out.len() as u32 - start;
-        let number = self.entries.len() as u16;
-        self.out.extend_from_slice(&0x0605_4B50u32.to_le_bytes());
-        self.out.extend_from_slice(&0u16.to_le_bytes()); // номер диска
-        self.out.extend_from_slice(&0u16.to_le_bytes()); // диск с каталогом
-        self.out.extend_from_slice(&number.to_le_bytes());
-        self.out.extend_from_slice(&number.to_le_bytes());
-        self.out.extend_from_slice(&size.to_le_bytes());
-        self.out.extend_from_slice(&start.to_le_bytes());
-        self.out.extend_from_slice(&0u16.to_le_bytes()); // комментарий
-        self.out
+    /// Закрыть архив и отдать его байты.
+    pub fn finish(self) -> Vec<u8> {
+        let cursor = self.inner.finish().expect("zip finish не отказывает");
+        cursor.into_inner()
     }
 }
 
-// --------------------------------------------------------------------------
-// Читатель
-// --------------------------------------------------------------------------
-
-/// Сигнатура локального заголовка записи (APPNOTE 4.3.7).
-const SIG_LOCAL: u32 = 0x0403_4B50;
-/// Сигнатура записи центрального каталога (APPNOTE 4.3.12).
-const SIG_CENTRAL: u32 = 0x0201_4B50;
-/// Сигнатура записи конца центрального каталога (APPNOTE 4.3.16).
-const SIG_EOCD: u32 = 0x0605_4B50;
-/// Сигнатура записи конца каталога Zip64 (APPNOTE 4.3.14).
-const SIG_EOCD64: u32 = 0x0606_4B50;
-/// Сигнатура локатора записи конца каталога Zip64 (APPNOTE 4.3.15).
-const SIG_EOCD64_LOCATOR: u32 = 0x0706_4B50;
-
-/// Длина неизменяемой части локального заголовка.
-const LOCAL_HEADER_LEN: usize = 30;
-/// Длина неизменяемой части записи каталога.
-const CENTRAL_HEADER_LEN: usize = 46;
-/// Длина записи конца каталога без комментария.
-const EOCD_LEN: usize = 22;
-/// Длина записи конца каталога Zip64 (версия 1, без расширяемых данных).
-const EOCD64_LEN: usize = 56;
-/// Длина локатора записи конца каталога Zip64.
-const EOCD64_LOCATOR_LEN: usize = 20;
-
-/// Комментарий архива не длиннее 65535 байт — его длина двухбайтовая, так
-/// что дальше этого запись конца каталога от конца файла не отодвигается.
-const MAX_COMMENT: usize = 0xFFFF;
-
-/// Значение, которым 32-битное поле объявляет себя вынесенным в Zip64.
-const MAX_U32: u32 = 0xFFFF_FFFF;
-/// То же для 16-битных полей (число записей, номер диска).
-const MAX_U16: u16 = 0xFFFF;
-
-/// Бит 0 общих флагов — данные записи зашифрованы.
-const FLAG_ENCRYPTED: u16 = 1;
-/// Бит 3 — размеры и CRC вынесены в дескриптор данных после самих данных.
-const FLAG_DATA_DESCRIPTOR: u16 = 1 << 3;
-/// Бит 11 — имя записи в UTF-8, а не в однобайтовой кодовой странице.
-const FLAG_UTF8_NAME: u16 = 1 << 11;
+// --- контейнер: читатель ---------------------------------------------------
 
 /// Способ хранения 0 — данные лежат как есть.
+#[cfg_attr(not(test), allow(dead_code))]
 const METHOD_STORED: u16 = 0;
-/// Способ хранения 8 — поток deflate (RFC 1951), см. [`crate::inflate`].
+/// Способ хранения 8 — поток deflate (RFC 1951).
+#[cfg_attr(not(test), allow(dead_code))]
 const METHOD_DEFLATED: u16 = 8;
 
 fn zip_err(what: &str) -> RtError {
     RtError::Zip(format!("ZIP: {what}"))
 }
 
-fn truncated() -> RtError {
-    zip_err("архив обрезан или испорчен")
+/// Адаптер ошибок крейта `zip` в [`RtError`].
+fn zip_error_to_rt(e: zip::result::ZipError) -> RtError {
+    use zip::result::ZipError::*;
+    match e {
+        Io(io) => zip_err(&format!("ошибка ввода-вывода: {io}")),
+        InvalidArchive(msg) => zip_err(&format!("это не архив ZIP или он испорчен: {msg}")),
+        UnsupportedArchive(msg) => zip_err(&format!("архив не поддерживается: {msg}")),
+        FileNotFound => zip_err("запись не найдена"),
+        InvalidPassword => zip_err("неверный пароль"),
+        _ => zip_err("неизвестная ошибка ZIP"),
+    }
 }
 
-/// Срез `len` байт по смещению `at`. Единственный способ добраться до байт
-/// архива: любое поле формата берётся отсюда, поэтому ни арифметика
-/// смещений, ни выход за конец файла не могут превратиться в панику.
-fn slice_at(data: &[u8], at: usize, len: usize) -> Result<&[u8], RtError> {
-    let end = at.checked_add(len).ok_or_else(truncated)?;
-    data.get(at..end).ok_or_else(truncated)
-}
-
-fn u16_at(data: &[u8], at: usize) -> Result<u16, RtError> {
-    // Срез ровно из двух байт, индексы заведомо в границах.
-    let b = slice_at(data, at, 2)?;
-    Ok(u16::from_le_bytes([b[0], b[1]]))
-}
-
-fn u32_at(data: &[u8], at: usize) -> Result<u32, RtError> {
-    let b = slice_at(data, at, 4)?;
-    Ok(u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
-}
-
-fn u64_at(data: &[u8], at: usize) -> Result<u64, RtError> {
-    let b = slice_at(data, at, 8)?;
-    Ok(u64::from_le_bytes([
-        b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
-    ]))
-}
-
-/// Смещение или размер из архива в адрес этой платформы. На 64 битах
-/// преобразование не отказывает никогда, на 32 — отказывает раньше, чем
-/// вычисление уедет по модулю.
-fn to_usize(value: u64) -> Result<usize, RtError> {
-    usize::try_from(value)
-        .map_err(|_| zip_err("запись архива не помещается в адресное пространство"))
-}
-
-/// Одна запись архива — так, как её описывает центральный каталог.
+/// Одна запись архива — метаданные, считанные из центрального каталога.
 ///
-/// Имя хранится СЫРЫМИ байтами, а декодированное отдаётся только когда его
-/// объявил сам архив, битом 11 общих флагов. Платформа, как выяснилось
-/// замером, поступает иначе: она декодирует имя КАК UTF-8 независимо от
-/// бита 11, подставляя `U+FFFD` на негодных байтах (имя `привет.txt` в
-/// CP866 8.3.27 показывает как `\u{FFFD}\u{A22}\u{FFFD}\u{FFFD}.txt` — это
-/// ровно `String::from_utf8_lossy` от тех же байтов). Это решение
-/// поверхности встроенного языка, а не формата, поэтому оно и живёт ниже,
-/// в [`ArchiveState`], а здесь имя остаётся байтами.
-///
-/// Часть полей и разборщиков читают только юнит-тесты: поверхности BSL
-/// хватает размеров, шифрования и даты, а способ хранения, CRC и смещение
-/// она смотрит уже внутри [`read_entry`]. Проверять их снаружи всё равно
-/// нужно — иначе разбор каталога держался бы на одном лишь чтении данных.
+/// Имя хранится СЫРЫМИ байтами (`name_raw` из крейта `zip`), а декодированное
+/// отдаётся только когда байты образуют UTF-8. Платформа, как выяснилось
+/// замером, поступает иначе: она декодирует имя КАК UTF-8 независимо от бита
+/// 11, подставляя `U+FFFD` на негодных байтах. Это решение поверхности
+/// встроенного языка, а не формата, поэтому оно и живёт ниже, в
+/// [`ArchiveState`], а здесь имя остаётся байтами.
 #[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug)]
-pub(crate) struct ZipEntry {
+pub(crate) struct RawEntry {
     name: Vec<u8>,
-    utf8_name: bool,
     method: u16,
     crc: u32,
     compressed_size: u64,
     size: u64,
-    local_offset: u64,
     encrypted: bool,
-    data_descriptor: bool,
+    is_directory: bool,
     /// Поля времени и даты MS-DOS как они лежат в каталоге. Разбираются
     /// не здесь, а в [`dos_datetime`]: правило нормализации у платформы
     /// своё и измерено отдельно.
@@ -279,21 +116,10 @@ pub(crate) struct ZipEntry {
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
-impl ZipEntry {
+impl RawEntry {
     /// Имя записи как оно лежит в каталоге, без всякого перекодирования.
     pub(crate) fn name_bytes(&self) -> &[u8] {
         &self.name
-    }
-
-    /// Имя записи текстом — только если архив объявил его в UTF-8 (бит 11) и
-    /// байты действительно образуют UTF-8. Во всех прочих случаях `None`, и
-    /// работать нужно с [`ZipEntry::name_bytes`].
-    pub(crate) fn name(&self) -> Option<&str> {
-        if self.utf8_name {
-            std::str::from_utf8(&self.name).ok()
-        } else {
-            None
-        }
     }
 
     /// Способ хранения из каталога: 0 — как есть, 8 — deflate, прочие
@@ -317,293 +143,134 @@ impl ZipEntry {
         self.size
     }
 
-    /// Смещение локального заголовка записи от начала файла.
-    pub(crate) fn local_offset(&self) -> u64 {
-        self.local_offset
-    }
-
-    /// Данные записи зашифрованы (бит 0). Расшифровки нет: [`ZipArchive::read`]
-    /// на такой записи отказывает, не читая данных.
+    /// Данные записи зашифрованы. Расшифровки нет: [`read_entry`] на такой
+    /// записи отказывает, не читая данных.
     pub(crate) fn is_encrypted(&self) -> bool {
         self.encrypted
-    }
-
-    /// Размеры и CRC записи вынесены в дескриптор данных (бит 3). Чтению это
-    /// безразлично — всё нужное есть в каталоге, — но знать полезно.
-    pub(crate) fn has_data_descriptor(&self) -> bool {
-        self.data_descriptor
     }
 
     /// Запись — это каталог: формат обозначает его завершающим слэшем в
     /// имени, отдельного признака в нём нет.
     pub(crate) fn is_directory(&self) -> bool {
-        self.name.last() == Some(&b'/')
+        self.is_directory
     }
 
     /// Время изменения записи так, как его показывает встроенный язык.
     pub(crate) fn modified(&self) -> crate::BslDate {
         dos_datetime(self.mod_time, self.mod_date)
     }
-
-    /// Имя для текста ошибки. Не подменяет [`ZipEntry::name`]: однобайтовые
-    /// имена здесь показываются с заменяющими символами, и это годится
-    /// только для сообщения человеку.
-    fn name_for_message(&self) -> String {
-        String::from_utf8_lossy(&self.name).into_owned()
-    }
 }
 
-/// Разобранный архив: байты и центральный каталог, приведённый к записям.
-///
-/// Данные не копируются — [`ZipArchive`] живёт не дольше среза, из которого
-/// разобран, — а распаковка происходит в [`ZipArchive::read`] по требованию.
-/// Объекту встроенного языка срез не годится (он переживает и файл, и
-/// поток, из которых прочитан), поэтому [`ArchiveState`] ниже забирает
-/// записи себе через [`ZipArchive::into_parts`] и распаковывает уже
-/// свободной функцией [`read_entry`].
-pub(crate) struct ZipArchive<'a> {
-    data: &'a [u8],
-    entries: Vec<ZipEntry>,
-    comment: Vec<u8>,
-}
-
-/// Короткая форма для сообщений: сами байты архива в отладочном выводе не
-/// нужны, а вот сколько их и сколько записей нашлось — нужно.
-impl std::fmt::Debug for ZipArchive<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "ZipArchive({} байт, записей {})",
-            self.data.len(),
-            self.entries.len()
-        )
-    }
-}
-
+/// Сигнатура записи центрального каталога (APPNOTE 4.3.12).
+const SIG_CENTRAL: u32 = 0x0201_4B50;
+/// Сигнатура записи конца каталога (APPNOTE 4.3.16).
+const SIG_EOCD: u32 = 0x0605_4B50;
+/// Длина неизменяемой части записи каталога.
+const CENTRAL_HEADER_LEN: usize = 46;
+/// Длина записи конца каталога без комментария.
+const EOCD_LEN: usize = 22;
+/// Комментарий архива не длиннее 65535 байт.
+const MAX_COMMENT: usize = 0xFFFF;
+/// Бит 0 общих флагов — данные записи зашифрованы.
+const FLAG_ENCRYPTED: u16 = 1;
+/// Бит 11 — имя записи в UTF-8.
 #[cfg_attr(not(test), allow(dead_code))]
-impl<'a> ZipArchive<'a> {
-    /// Разобрать архив по центральному каталогу.
-    ///
-    /// # Errors
-    ///
-    /// [`RtError::Zip`] на любом входе, который не является читаемым
-    /// архивом: короче записи конца каталога, без неё самой, с каталогом за
-    /// границами файла, с числом записей или размером каталога, не
-    /// совпавшими с фактически разобранным, с многотомностью или с
-    /// испорченным полем Zip64.
-    pub(crate) fn parse(data: &'a [u8]) -> Result<ZipArchive<'a>, RtError> {
-        let eocd = find_eocd(data)?;
+const FLAG_UTF8_NAME: u16 = 1 << 11;
 
-        let mut disk = u64::from(u16_at(data, eocd + 4)?);
-        let mut cd_disk = u64::from(u16_at(data, eocd + 6)?);
-        let mut here = u64::from(u16_at(data, eocd + 8)?);
-        let mut total = u64::from(u16_at(data, eocd + 10)?);
-        let mut cd_size = u64::from(u32_at(data, eocd + 12)?);
-        let mut cd_offset = u64::from(u32_at(data, eocd + 16)?);
-
-        // Признак Zip64 — выставленные в максимум поля. Отсутствие локатора
-        // при этом не ошибка само по себе: архив ровно с 65535 записями
-        // пишет 0xFFFF и без всякого Zip64, а несуразное смещение каталога
-        // поймает проверка границ ниже. А вот локатор, который нашёлся, но
-        // ведёт не на запись конца каталога Zip64, — уже порча.
-        let maxed = disk == u64::from(MAX_U16)
-            || cd_disk == u64::from(MAX_U16)
-            || here == u64::from(MAX_U16)
-            || total == u64::from(MAX_U16)
-            || cd_size == u64::from(MAX_U32)
-            || cd_offset == u64::from(MAX_U32);
-        if maxed {
-            if let Some(locator) = eocd.checked_sub(EOCD64_LOCATOR_LEN) {
-                if u32_at(data, locator)? == SIG_EOCD64_LOCATOR {
-                    if u32_at(data, locator + 4)? != 0 || u32_at(data, locator + 16)? > 1 {
-                        return Err(zip_err("многотомные архивы не поддерживаются"));
-                    }
-                    let at = to_usize(u64_at(data, locator + 8)?)?;
-                    // Дальше читаются поля фиксированной части записи
-                    // (APPNOTE 4.3.14); объявленный в ней размер может быть и
-                    // больше — за счёт расширяемых данных, которые нам не
-                    // нужны, — но меньше EOCD64_LEN она не бывает.
-                    let record = slice_at(data, at, EOCD64_LEN)?;
-                    if u32_at(record, 0)? != SIG_EOCD64 {
-                        return Err(zip_err(
-                            "локатор Zip64 указывает не на запись конца каталога",
-                        ));
-                    }
-                    disk = u64::from(u32_at(record, 16)?);
-                    cd_disk = u64::from(u32_at(record, 20)?);
-                    here = u64_at(record, 24)?;
-                    total = u64_at(record, 32)?;
-                    cd_size = u64_at(record, 40)?;
-                    cd_offset = u64_at(record, 48)?;
-                }
-            }
-        }
-
-        if disk != 0 || cd_disk != 0 || here != total {
-            return Err(zip_err("многотомные архивы не поддерживаются"));
-        }
-
-        let start = to_usize(cd_offset)?;
-        let len = to_usize(cd_size)?;
-        let end = start.checked_add(len).ok_or_else(truncated)?;
-        if end > data.len() {
-            return Err(zip_err("центральный каталог выходит за границу файла"));
-        }
-        // Каталог читается из среза ровно по объявленной длине: запись,
-        // которая вылезла бы за неё, упрётся в конец среза и станет ошибкой,
-        // а не молча съест соседние байты.
-        let region = data.get(..end).ok_or_else(truncated)?;
-
-        let mut entries = Vec::new();
-        let mut at = start;
-        while at < end {
-            let (entry, next) = parse_central_entry(region, at)?;
-            entries.push(entry);
-            at = next;
-        }
-        if entries.len() as u64 != total {
-            return Err(zip_err(&format!(
-                "в записи конца каталога объявлено {total} записей, а в каталоге их {}",
-                entries.len()
-            )));
-        }
-
-        // Комментарий архива лежит сразу за записью конца каталога, и его
-        // длина уже проверена в `find_eocd`: кандидат считается настоящим
-        // только тогда, когда она доводит ровно до конца файла.
-        let comment_len = usize::from(u16_at(data, eocd + 20)?);
-        let comment = slice_at(data, eocd + EOCD_LEN, comment_len)?.to_vec();
-
-        Ok(ZipArchive {
-            data,
-            entries,
-            comment,
-        })
-    }
-
-    /// Записи в порядке центрального каталога.
-    pub(crate) fn entries(&self) -> &[ZipEntry] {
-        &self.entries
-    }
-
-    /// Отдать записи и комментарий наружу: объекту встроенного языка нужны
-    /// собственные данные, а не заимствованные у среза.
-    pub(crate) fn into_parts(self) -> (Vec<ZipEntry>, Vec<u8>) {
-        (self.entries, self.comment)
-    }
-
-    /// Прочитать и распаковать запись с номером `index`.
-    ///
-    /// Размеры, способ и CRC берутся из центрального каталога; локальный
-    /// заголовок нужен только затем, чтобы по его собственным длинам имени и
-    /// extra найти начало данных.
-    ///
-    /// # Errors
-    ///
-    /// [`RtError::Zip`], если записи с таким номером нет, данные зашифрованы,
-    /// способ хранения не 0 и не 8, локальный заголовок не на месте, данные
-    /// выходят за границу файла, распакованное короче объявленного или
-    /// контрольная сумма не совпала с каталожной.
-    pub(crate) fn read(&self, index: usize) -> Result<Vec<u8>, RtError> {
-        let entry = self
-            .entries
-            .get(index)
-            .ok_or_else(|| zip_err(&format!("в архиве нет записи с номером {index}")))?;
-        read_entry(self.data, entry)
-    }
+/// Срез `len` байт по смещению `at`.
+fn slice_at(data: &[u8], at: usize, len: usize) -> Result<&[u8], RtError> {
+    let end = at.checked_add(len).ok_or_else(truncated)?;
+    data.get(at..end).ok_or_else(truncated)
 }
 
-/// Прочитать и распаковать одну запись из байтов архива.
+fn truncated() -> RtError {
+    zip_err("архив обрезан или испорчен")
+}
+
+fn u16_at(data: &[u8], at: usize) -> Result<u16, RtError> {
+    let b = slice_at(data, at, 2)?;
+    Ok(u16::from_le_bytes([b[0], b[1]]))
+}
+
+fn u32_at(data: &[u8], at: usize) -> Result<u32, RtError> {
+    let b = slice_at(data, at, 4)?;
+    Ok(u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+}
+
+/// Разобрать архив: записи центрального каталога и комментарий.
 ///
-/// Тело [`ZipArchive::read`], вынесенное отдельно: объект встроенного языка
-/// владеет байтами и записями порознь (см. [`ZipArchive::into_parts`]), и
-/// собирать ради чтения временный [`ZipArchive`] ему незачем.
+/// Разбор каталога идёт вручную, а не через `zip::ZipArchive`, потому что
+/// крейт `zip` хранит записи в `IndexMap` по имени и молча выбрасывает
+/// дубликаты — а платформа дубликаты допускает и `build_items` нумерует их
+/// суффиксом `(N)`. Распаковка записей в [`read_entry`] делегирована крейту
+/// `zip`.
 ///
 /// # Errors
 ///
-/// [`RtError::Zip`], если данные зашифрованы, способ хранения не 0 и не 8,
-/// локальный заголовок не на месте, данные выходят за границу файла,
-/// распакованное короче объявленного или контрольная сумма не совпала с
-/// каталожной.
-pub(crate) fn read_entry(data: &[u8], entry: &ZipEntry) -> Result<Vec<u8>, RtError> {
-    // Отказ до всякого чтения данных: расшифровки здесь нет, и делать
-    // вид, что данные прочитаны, нельзя.
-    if entry.encrypted {
-        return Err(zip_err(&format!(
-            "запись «{}» зашифрована, а зашифрованные архивы не поддерживаются",
-            entry.name_for_message()
-        )));
+/// [`RtError::Zip`] на любом входе, который не является читаемым архивом ZIP.
+pub(crate) fn parse_archive(data: &[u8]) -> RtResult<(Vec<RawEntry>, Vec<u8>)> {
+    let eocd = find_eocd(data)?;
+    let cd_size = u32::from_le_bytes([
+        data[eocd + 12],
+        data[eocd + 13],
+        data[eocd + 14],
+        data[eocd + 15],
+    ]);
+    let cd_offset = u32::from_le_bytes([
+        data[eocd + 16],
+        data[eocd + 17],
+        data[eocd + 18],
+        data[eocd + 19],
+    ]) as usize;
+    let cd_size = cd_size as usize;
+    let cd_end = cd_offset.checked_add(cd_size).ok_or_else(truncated)?;
+    if cd_end > data.len() {
+        return Err(zip_err("центральный каталог выходит за границу файла"));
     }
-
-    let header = to_usize(entry.local_offset)?;
-    if u32_at(data, header)? != SIG_LOCAL {
-        return Err(zip_err(&format!(
-            "у записи «{}» нет локального заголовка по объявленному смещению",
-            entry.name_for_message()
-        )));
+    let mut entries = Vec::new();
+    let mut at = cd_offset;
+    while at + CENTRAL_HEADER_LEN <= cd_end {
+        if u32::from_le_bytes([data[at], data[at + 1], data[at + 2], data[at + 3]]) != SIG_CENTRAL {
+            return Err(zip_err("в центральном каталоге запись без сигнатуры"));
+        }
+        let flags = u16_at(data, at + 8)?;
+        let method = u16_at(data, at + 10)?;
+        let mod_time = u16_at(data, at + 12)?;
+        let mod_date = u16_at(data, at + 14)?;
+        let crc = u32_at(data, at + 16)?;
+        let compressed_size = u64::from(u32_at(data, at + 20)?);
+        let size = u64::from(u32_at(data, at + 24)?);
+        let name_len = usize::from(u16_at(data, at + 28)?);
+        let extra_len = usize::from(u16_at(data, at + 30)?);
+        let comment_len = usize::from(u16_at(data, at + 32)?);
+        let name_at = at + CENTRAL_HEADER_LEN;
+        let name_end = name_at.checked_add(name_len).ok_or_else(truncated)?;
+        if name_end > cd_end {
+            return Err(truncated());
+        }
+        let name = data[name_at..name_end].to_vec();
+        let is_dir = name.last() == Some(&b'/');
+        entries.push(RawEntry {
+            name,
+            method,
+            crc,
+            compressed_size,
+            size,
+            encrypted: flags & FLAG_ENCRYPTED != 0,
+            is_directory: is_dir,
+            mod_time,
+            mod_date,
+        });
+        at = name_end + extra_len + comment_len;
     }
-    // Длины имени и extra берутся из локального заголовка: они законно
-    // отличаются от каталожных (Zip64 и метки времени пишут в extra
-    // по-разному в двух местах).
-    let name_len = usize::from(u16_at(data, header + 26)?);
-    let extra_len = usize::from(u16_at(data, header + 28)?);
-    let at = header
-        .checked_add(LOCAL_HEADER_LEN)
-        .and_then(|v| v.checked_add(name_len))
-        .and_then(|v| v.checked_add(extra_len))
-        .ok_or_else(truncated)?;
-
-    let size = to_usize(entry.size)?;
-    let packed = slice_at(data, at, to_usize(entry.compressed_size)?)?;
-
-    let out = match entry.method {
-        METHOD_STORED => {
-            if packed.len() != size {
-                return Err(zip_err(&format!(
-                    "у записи «{}» способ хранения 0, но размеры не совпадают",
-                    entry.name_for_message()
-                )));
-            }
-            packed.to_vec()
-        }
-        METHOD_DEFLATED => {
-            let out = crate::inflate::inflate(packed, size)?;
-            // Предел в `inflate` не даёт распаковать больше объявленного,
-            // а вот меньше — признак того, что поток обрезан по границе
-            // блока, и молчать об этом нельзя.
-            if out.len() != size {
-                return Err(zip_err(&format!(
-                    "у записи «{}» размер не совпал: распаковано {} байт вместо {size}",
-                    entry.name_for_message(),
-                    out.len()
-                )));
-            }
-            out
-        }
-        other => {
-            return Err(zip_err(&format!(
-                "у записи «{}» способ хранения {other} не поддерживается",
-                entry.name_for_message()
-            )))
-        }
-    };
-
-    if crc32(&out) != entry.crc {
-        return Err(zip_err(&format!(
-            "у записи «{}» не совпала контрольная сумма CRC-32",
-            entry.name_for_message()
-        )));
-    }
-    Ok(out)
+    let comment_len = usize::from(u16_at(data, eocd + 20)?);
+    let comment = slice_at(data, eocd + EOCD_LEN, comment_len)
+        .map_err(|_| truncated())?
+        .to_vec();
+    Ok((entries, comment))
 }
 
-/// Найти запись конца центрального каталога.
-///
-/// Она стоит последней, но за ней ещё может лежать комментарий архива
-/// переменной длины, поэтому её ищут сканированием от конца назад.
-/// Сигнатуры мало: те же четыре байта могут случайно оказаться и в
-/// комментарии, и в сжатых данных, — кандидат считается настоящим, только
-/// если объявленная в нём длина комментария доводит ровно до конца файла.
+/// Найти запись конца центрального каталога сканированием от конца файла.
 fn find_eocd(data: &[u8]) -> Result<usize, RtError> {
     if data.len() < EOCD_LEN {
         return Err(zip_err(
@@ -613,10 +280,10 @@ fn find_eocd(data: &[u8]) -> Result<usize, RtError> {
     let last = data.len() - EOCD_LEN;
     let first = last.saturating_sub(MAX_COMMENT);
     for at in (first..=last).rev() {
-        if u32_at(data, at)? != SIG_EOCD {
+        if u32::from_le_bytes([data[at], data[at + 1], data[at + 2], data[at + 3]]) != SIG_EOCD {
             continue;
         }
-        let comment = usize::from(u16_at(data, at + 20)?);
+        let comment = usize::from(u16::from_le_bytes([data[at + 20], data[at + 21]]));
         if at + EOCD_LEN + comment == data.len() {
             return Ok(at);
         }
@@ -626,107 +293,138 @@ fn find_eocd(data: &[u8]) -> Result<usize, RtError> {
     ))
 }
 
-/// Разобрать одну запись каталога, начиная с `at`; вернуть её и смещение
-/// следующей. `region` обрезан концом каталога, поэтому запись, вылезающая
-/// за него, отказывает здесь же.
-fn parse_central_entry(region: &[u8], at: usize) -> Result<(ZipEntry, usize), RtError> {
-    if u32_at(region, at)? != SIG_CENTRAL {
-        return Err(zip_err("в центральном каталоге запись без сигнатуры"));
-    }
-    let flags = u16_at(region, at + 8)?;
-    let method = u16_at(region, at + 10)?;
-    let mod_time = u16_at(region, at + 12)?;
-    let mod_date = u16_at(region, at + 14)?;
-    let crc = u32_at(region, at + 16)?;
-    let compressed = u32_at(region, at + 20)?;
-    let size = u32_at(region, at + 24)?;
-    let name_len = usize::from(u16_at(region, at + 28)?);
-    let extra_len = usize::from(u16_at(region, at + 30)?);
-    let comment_len = usize::from(u16_at(region, at + 32)?);
-    let mut disk = u64::from(u16_at(region, at + 34)?);
-    let offset = u32_at(region, at + 42)?;
+/// Сигнатура локального заголовка записи (APPNOTE 4.3.7).
+const SIG_LOCAL: u32 = 0x0403_4B50;
+/// Длина неизменяемой части локального заголовка.
+const LOCAL_HEADER_LEN: usize = 30;
 
-    let name_at = at.checked_add(CENTRAL_HEADER_LEN).ok_or_else(truncated)?;
-    let name = slice_at(region, name_at, name_len)?.to_vec();
-    let extra_at = name_at.checked_add(name_len).ok_or_else(truncated)?;
-    let extra = slice_at(region, extra_at, extra_len)?;
-    // Комментарий записи не нужен, но его длину надо пройти, чтобы попасть в
-    // следующую запись, — и убедиться, что он помещается в каталог.
-    let comment_at = extra_at.checked_add(extra_len).ok_or_else(truncated)?;
-    slice_at(region, comment_at, comment_len)?;
-    let next = comment_at.checked_add(comment_len).ok_or_else(truncated)?;
-
-    let mut entry = ZipEntry {
-        name,
-        utf8_name: flags & FLAG_UTF8_NAME != 0,
-        method,
-        crc,
-        compressed_size: u64::from(compressed),
-        size: u64::from(size),
-        local_offset: u64::from(offset),
-        encrypted: flags & FLAG_ENCRYPTED != 0,
-        data_descriptor: flags & FLAG_DATA_DESCRIPTOR != 0,
-        mod_time,
-        mod_date,
-    };
-
-    read_zip64_extra(extra, &mut entry, &mut disk, compressed, size, offset)?;
-    if disk != 0 {
-        return Err(zip_err("многотомные архивы не поддерживаются"));
-    }
-
-    Ok((entry, next))
-}
-
-/// Достать из extra-полей записи значения Zip64 (идентификатор 0x0001).
+/// Прочитать и распаковать запись с номером `index` из байтов архива.
 ///
-/// Порядок значений в поле задан жёстко — несжатый размер, сжатый размер,
-/// смещение локального заголовка, номер диска, — но присутствуют ТОЛЬКО те,
-/// что в самой записи выставлены в максимум. Поэтому разбор идёт по этому
-/// правилу, а не по длине блока: писатели с одним вынесенным значением
-/// (только размеры или только смещение) встречаются постоянно.
-fn read_zip64_extra(
-    extra: &[u8],
-    entry: &mut ZipEntry,
-    disk: &mut u64,
-    compressed: u32,
-    size: u32,
-    offset: u32,
-) -> Result<(), RtError> {
-    let mut at = 0;
-    while at + 4 <= extra.len() {
-        let id = u16_at(extra, at)?;
-        let len = usize::from(u16_at(extra, at + 2)?);
-        let body = slice_at(extra, at + 4, len)
-            .map_err(|_| zip_err("extra-поле записи выходит за её границу"))?;
-        at += 4 + len;
-        if id != 1 {
-            continue;
-        }
-
-        let mut cursor = 0;
-        if size == MAX_U32 {
-            entry.size = take_zip64_u64(body, &mut cursor)?;
-        }
-        if compressed == MAX_U32 {
-            entry.compressed_size = take_zip64_u64(body, &mut cursor)?;
-        }
-        if offset == MAX_U32 {
-            entry.local_offset = take_zip64_u64(body, &mut cursor)?;
-        }
-        if *disk == u64::from(MAX_U16) {
-            *disk =
-                u64::from(u32_at(body, cursor).map_err(|_| zip_err("поле Zip64 записи обрезано"))?);
-        }
+/// Запись находится по смещению локального заголовка, которое берётся из
+/// центрального каталога (а не через `zip::ZipArchive`, который дедуплицирует
+/// имена и теряет дубликаты). Распаковка делегирована `flate2` для метода 8
+/// и копированием для метода 0.
+///
+/// # Errors
+///
+/// [`RtError::Zip`], если записи с таким номером нет, данные зашифрованы,
+/// способ хранения не поддерживается или распаковка не удалась.
+pub(crate) fn read_entry(data: &[u8], index: usize, entry: &RawEntry) -> RtResult<Vec<u8>> {
+    if entry.encrypted {
+        return Err(zip_err(&format!(
+            "запись «{}» зашифрована, а зашифрованные архивы не поддерживаются",
+            String::from_utf8_lossy(&entry.name)
+        )));
     }
-    Ok(())
+    let local_offset = find_local_offset(data, index)?;
+    let header = local_offset;
+    if u32::from_le_bytes([
+        data[header],
+        data[header + 1],
+        data[header + 2],
+        data[header + 3],
+    ]) != SIG_LOCAL
+    {
+        return Err(zip_err(&format!(
+            "у записи «{}» нет локального заголовка по объявленному смещению",
+            String::from_utf8_lossy(&entry.name)
+        )));
+    }
+    // Длины имени и extra берутся из локального заголовка: они законно
+    // отличаются от каталожных.
+    let name_len = usize::from(u16::from_le_bytes([data[header + 26], data[header + 27]]));
+    let extra_len = usize::from(u16::from_le_bytes([data[header + 28], data[header + 29]]));
+    let data_start = header + LOCAL_HEADER_LEN + name_len + extra_len;
+    let compressed_size = usize::try_from(entry.compressed_size)
+        .map_err(|_| zip_err("запись архива не помещается в адресное пространство"))?;
+    let packed = slice_at(data, data_start, compressed_size)?;
+
+    let out = match entry.method {
+        METHOD_STORED => {
+            if packed.len() != usize::try_from(entry.size).unwrap_or(usize::MAX) {
+                return Err(zip_err(&format!(
+                    "у записи «{}» способ хранения 0, но размеры не совпадают",
+                    String::from_utf8_lossy(&entry.name)
+                )));
+            }
+            packed.to_vec()
+        }
+        METHOD_DEFLATED => {
+            let mut decoder = flate2::read::DeflateDecoder::new(packed);
+            let mut out = Vec::with_capacity(usize::try_from(entry.size).unwrap_or(0).min(1 << 24));
+            decoder
+                .read_to_end(&mut out)
+                .map_err(|e| zip_err(&format!("ошибка распаковки записи: {e}")))?;
+            out
+        }
+        other => {
+            return Err(zip_err(&format!(
+                "у записи «{}» способ хранения {other} не поддерживается",
+                String::from_utf8_lossy(&entry.name)
+            )))
+        }
+    };
+    Ok(out)
 }
 
-/// Очередное восьмибайтовое значение поля Zip64.
-fn take_zip64_u64(body: &[u8], cursor: &mut usize) -> Result<u64, RtError> {
-    let value = u64_at(body, *cursor).map_err(|_| zip_err("поле Zip64 записи обрезано"))?;
-    *cursor += 8;
-    Ok(value)
+/// Найти смещение локального заголовка записи номер `index` по центральному
+/// каталогу.
+fn find_local_offset(data: &[u8], index: usize) -> RtResult<usize> {
+    let eocd = find_eocd(data)?;
+    let cd_offset = u32::from_le_bytes([
+        data[eocd + 16],
+        data[eocd + 17],
+        data[eocd + 18],
+        data[eocd + 19],
+    ]) as usize;
+    let mut at = cd_offset;
+    let mut current = 0usize;
+    while at + CENTRAL_HEADER_LEN <= data.len() {
+        if u32::from_le_bytes([data[at], data[at + 1], data[at + 2], data[at + 3]]) != SIG_CENTRAL {
+            break;
+        }
+        let name_len = usize::from(u16::from_le_bytes([data[at + 28], data[at + 29]]));
+        let extra_len = usize::from(u16::from_le_bytes([data[at + 30], data[at + 31]]));
+        let comment_len = usize::from(u16::from_le_bytes([data[at + 32], data[at + 33]]));
+        if current == index {
+            let offset =
+                u32::from_le_bytes([data[at + 42], data[at + 43], data[at + 44], data[at + 45]])
+                    as usize;
+            return Ok(offset);
+        }
+        current += 1;
+        at += CENTRAL_HEADER_LEN + name_len + extra_len + comment_len;
+    }
+    Err(zip_err(&format!("в архиве нет записи с номером {index}")))
+}
+
+/// Время изменения записи из полей MS-DOS.
+///
+/// Правило ИЗМЕРЕНО по краям всех полей, и оно арифметическое, а не
+/// зажимающее: компоненты нормализуются, как если бы их сложили. Месяц 0
+/// уходит в декабрь прошлого года, месяц 13 — в январь следующего, день 0 —
+/// в последний день предыдущего месяца, 30 февраля — во 2 марта, а час 25
+/// добавляет сутки (2000-й год: месяц 13 -> `2001-01-01`, месяц 0 ->
+/// `1999-12-01`, день 0 января -> `1999-12-31`, `2001-02-30` ->
+/// `2001-03-02`, час 25 -> `2000-01-02 01:00`, минута 61 -> `01:01`,
+/// поле секунд 31 -> `00:01:02`). Нулевые поля целиком дают `1979-11-30`.
+fn dos_datetime(time: u16, date: u16) -> crate::BslDate {
+    let year = 1980 + i64::from(date >> 9);
+    let month = i64::from((date >> 5) & 0xF);
+    let day = i64::from(date & 0x1F);
+    let hour = i64::from(time >> 11);
+    let minute = i64::from((time >> 5) & 0x3F);
+    let second = i64::from(time & 0x1F) * 2;
+
+    // Месяц нормализуется в паре с годом, остальное — простым сложением
+    // секунд поверх первого числа этого месяца.
+    let months = year * 12 + month - 1;
+    let (y, m) = (months.div_euclid(12), months.rem_euclid(12) + 1);
+    let Some(first) = crate::BslDate::from_civil(y, m as u32, 1, 0, 0, 0) else {
+        return crate::BslDate::empty();
+    };
+    let shift = (day - 1) * 86_400 + hour * 3600 + minute * 60 + second;
+    crate::BslDate::from_seconds(first.seconds() + shift).unwrap_or_else(crate::BslDate::empty)
 }
 
 // --------------------------------------------------------------------------
@@ -758,7 +456,9 @@ pub enum ArchiveKind {
 /// [`build_items`]), так что позаписной пересчёт дал бы другой ответ.
 #[derive(Debug)]
 pub struct ArchiveItem {
-    entry: ZipEntry,
+    entry: RawEntry,
+    /// Номер записи в каталоге — для распаковки через [`read_entry`].
+    index: usize,
     /// `Имя` — короткое имя после подстановки и разрешения дублей.
     name: String,
     /// `Путь` — каталоги, со слэшем на конце; у записи в корне пусто.
@@ -932,7 +632,7 @@ struct DirNode {
 ///
 /// Порядок обхода — каталожный, и это существенно: разрешение дублей
 /// зависит от того, кто занял имя раньше.
-fn build_items(entries: Vec<ZipEntry>) -> Vec<ArchiveItem> {
+fn build_items(entries: Vec<RawEntry>) -> Vec<ArchiveItem> {
     let mut nodes = vec![DirNode {
         children: Vec::new(),
         used: Vec::new(),
@@ -941,7 +641,7 @@ fn build_items(entries: Vec<ZipEntry>) -> Vec<ArchiveItem> {
     }];
     let mut items = Vec::with_capacity(entries.len());
 
-    for entry in entries {
+    for (index, entry) in entries.into_iter().enumerate() {
         // Обратный слэш платформа считает разделителем, а не знаком имени:
         // измерено, что `dir\back.txt` приходит как `dir/back.txt` ОБОИМИ
         // именами, и исходным тоже.
@@ -974,6 +674,7 @@ fn build_items(entries: Vec<ZipEntry>) -> Vec<ArchiveItem> {
         };
         items.push(ArchiveItem {
             entry,
+            index,
             name,
             path: nodes[node].display.clone(),
             orig_name,
@@ -999,35 +700,6 @@ fn resolve_dir(nodes: &mut Vec<DirNode>, parent: usize, part: &str) -> usize {
     let at = nodes.len() - 1;
     nodes[parent].children.push((part.to_string(), at));
     at
-}
-
-/// Время изменения записи из полей MS-DOS.
-///
-/// Правило ИЗМЕРЕНО по краям всех полей, и оно арифметическое, а не
-/// зажимающее: компоненты нормализуются, как если бы их сложили. Месяц 0
-/// уходит в декабрь прошлого года, месяц 13 — в январь следующего, день 0 —
-/// в последний день предыдущего месяца, 30 февраля — во 2 марта, а час 25
-/// добавляет сутки (2000-й год: месяц 13 -> `2001-01-01`, месяц 0 ->
-/// `1999-12-01`, день 0 января -> `1999-12-31`, `2001-02-30` ->
-/// `2001-03-02`, час 25 -> `2000-01-02 01:00`, минута 61 -> `01:01`,
-/// поле секунд 31 -> `00:01:02`). Нулевые поля целиком дают `1979-11-30`.
-fn dos_datetime(time: u16, date: u16) -> crate::BslDate {
-    let year = 1980 + i64::from(date >> 9);
-    let month = i64::from((date >> 5) & 0xF);
-    let day = i64::from(date & 0x1F);
-    let hour = i64::from(time >> 11);
-    let minute = i64::from((time >> 5) & 0x3F);
-    let second = i64::from(time & 0x1F) * 2;
-
-    // Месяц нормализуется в паре с годом, остальное — простым сложением
-    // секунд поверх первого числа этого месяца.
-    let months = year * 12 + month - 1;
-    let (y, m) = (months.div_euclid(12), months.rem_euclid(12) + 1);
-    let Some(first) = crate::BslDate::from_civil(y, m as u32, 1, 0, 0, 0) else {
-        return crate::BslDate::empty();
-    };
-    let shift = (day - 1) * 86_400 + hour * 3600 + minute * 60 + second;
-    crate::BslDate::from_seconds(first.seconds() + shift).unwrap_or_else(crate::BslDate::empty)
 }
 
 // --- доступ к объектам --------------------------------------------------------
@@ -1148,7 +820,7 @@ fn read_source(source: &BslValue, op: &'static str) -> RtResult<(Vec<u8>, String
 
 /// Разобрать байты и сделать их состоянием открытого архива.
 fn open_bytes(state: &Rc<RefCell<ArchiveState>>, data: Vec<u8>, source: String) -> RtResult<()> {
-    let (entries, comment) = ZipArchive::parse(&data)?.into_parts();
+    let (entries, comment) = parse_archive(&data)?;
     let items = build_items(entries);
     // Комментарий декодируется так же, как имена, — lossy UTF-8 (измерено
     // на архиве с комментарием `привет-комментарий`).
@@ -1353,10 +1025,10 @@ pub fn entry_prop(obj: &BslValue, prop: &str) -> RtResult<BslValue> {
 
     let text = |s: String| Ok(BslValue::Str(crate::BslString::from_str(&s)));
     // Размеры записи приходят из чужого каталога: у Zip64 это произвольные
-    // восемь байт, ничем не ограниченные (см. `read_zip64_extra`). Через
-    // `i64` их пускать нельзя — старший бит завернулся бы в знак, и
-    // `РазмерНесжатого` отдал бы отрицательное число, которого платформа
-    // дать не может; `i128` вмещает любой `u64` без потерь.
+    // восемь байт, ничем не ограниченные. Через `i64` их пускать нельзя —
+    // старший бит завернулся бы в знак, и `РазмерНесжатого` отдал бы
+    // отрицательное число, которого платформа дать не может; `i128`
+    // вмещает любой `u64` без потерь.
     let number = |n: u64| {
         Ok(BslValue::Number(bsl_number::BslNumber::from_parts(
             i128::from(n),
@@ -1571,7 +1243,7 @@ fn extract_item(
     if let Some(parent) = target.parent() {
         mkdir(parent)?;
     }
-    let bytes = read_entry(&open.data, &item.entry)?;
+    let bytes = read_entry(&open.data, item.index, &item.entry)?;
     std::fs::write(&target, bytes)
         .map_err(|e| zip_err(&format!("не удалось записать «{}»: {e}", target.display())))
 }
@@ -1652,16 +1324,16 @@ enum SubdirMode {
 
 /// Запись, накопленная `Добавить` и ещё не выложенная в архив.
 ///
-/// Данные сжимаются сразу в `Добавить`, а не в `Записать`: у платформы
-/// `Добавить` тоже читает файл немедленно — она отвечает «Файл не
-/// обнаружен» в момент вызова, а не при записи архива.
+/// Данные читаются немедленно в `Добавить` — у платформы `Добавить` тоже
+/// читает файл в момент вызова, а не при записи архива («Файл не
+/// обнаружен» — ответ `Добавить`, а не `Записать`). Сжатие же откладывается
+/// до `Записать`: крейт `zip` делает его сам при `write_all`.
 struct PendingEntry {
     /// Имя в архиве: прямые слэши, у каталога — слэш на конце.
     name: String,
-    packed: Vec<u8>,
-    method: u16,
-    raw_len: u32,
-    crc: u32,
+    /// Несжатые данные.
+    data: Vec<u8>,
+    method: WriteMethod,
     /// Время и дата MS-DOS из времени изменения исходного файла.
     time: u16,
     date: u16,
@@ -1927,10 +1599,11 @@ fn write_method(value: &BslValue, op: &'static str) -> RtResult<WriteMethod> {
 ///
 /// Уровни у платформы различимы, и разница измерена на 19297 байтах:
 /// `Минимальный` — 623 байта, `Оптимальный` — 628, `Максимальный` — 633
-/// (да, именно в таком порядке). Здесь deflate один — LZ77 с
-/// фиксированными кодами Хаффмана (см. [`crate::deflate`]), — поэтому все
-/// три уровня дают одни и те же байты. Совместимости это не касается:
-/// уровень не записывается в формат и на распаковку не влияет.
+/// (да, именно в таком порядке). Здесь deflate всегда работает на уровне 1
+/// (самый быстрый поиск совпадений в `flate2`), а уровень платформы
+/// игнорируется — поэтому все три значения дают одни и те же байты.
+/// Совместимости это не касается: уровень не записывается в формат и на
+/// распаковку не влияет.
 fn check_level(value: &BslValue, op: &'static str) -> RtResult<()> {
     match value {
         BslValue::Undefined => Ok(()),
@@ -2293,7 +1966,7 @@ fn reserve(state: &mut WriterState, key: String, source: &str) -> RtResult<()> {
     Ok(())
 }
 
-/// Прочитать файл, сжать и запомнить запись.
+/// Прочитать файл и запомнить запись.
 fn add_file(
     state: &mut WriterState,
     path: &std::path::Path,
@@ -2304,24 +1977,14 @@ fn add_file(
     reserve(state, key, &path.display().to_string())?;
     let data = std::fs::read(path)
         .map_err(|e| zip_err(&format!("не удалось прочитать «{}»: {e}", path.display())))?;
-    let raw_len = u32::try_from(data.len())
-        .map_err(|_| zip_err(&format!("файл «{}» больше 4 ГиБ", path.display())))?;
-    let crc = crc32(&data);
-    let (method, packed) = match state.method {
-        WriteMethod::Stored => (METHOD_STORED, data),
-        // В отличие от [`ZipWriter::add`], который выбирает способ по
-        // результату, здесь способ задан конструктором: платформа с
-        // `МетодСжатияZIP.Сжатие` пишет deflate даже там, где он длиннее
-        // исходных данных (измерено: 13 байт легли в 16).
-        WriteMethod::Deflate => (METHOD_DEFLATED, crate::deflate::deflate(&data)),
-    };
+    if data.len() > u32::MAX as usize {
+        return Err(zip_err(&format!("файл «{}» больше 4 ГиБ", path.display())));
+    }
     let (time, date) = dos_fields(meta);
     state.entries.push(PendingEntry {
         name,
-        packed,
-        method,
-        raw_len,
-        crc,
+        data,
+        method: state.method,
         time,
         date,
         directory: false,
@@ -2347,10 +2010,8 @@ fn add_directory(
     };
     state.entries.push(PendingEntry {
         name,
-        packed: Vec::new(),
-        method: METHOD_STORED,
-        raw_len: 0,
-        crc: 0,
+        data: Vec::new(),
+        method: WriteMethod::Stored,
         time,
         date,
         directory: true,
@@ -2435,97 +2096,41 @@ pub fn writer_binary_data(obj: &BslValue) -> RtResult<BslValue> {
     ))))
 }
 
-/// Собрать архив из накопленных записей.
-///
-/// Zip64 здесь нет намеренно, как и в [`ZipWriter`]: за границей в четыре
-/// гигабайта честный отказ, а не молчаливо испорченный каталог.
+/// Собрать архив из накопленных записей через крейт `zip`.
 fn build_archive(entries: &[PendingEntry], comment: &str) -> RtResult<Vec<u8>> {
-    let too_big = || zip_err("архив больше 4 ГиБ не поддерживается");
-    let mut out: Vec<u8> = Vec::new();
-    let mut offsets: Vec<u32> = Vec::with_capacity(entries.len());
+    let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    if !comment.is_empty() {
+        zip.set_comment(comment);
+    }
     for e in entries {
-        offsets.push(u32::try_from(out.len()).map_err(|_| too_big())?);
-        let packed_len = u32::try_from(e.packed.len()).map_err(|_| too_big())?;
-        let name = e.name.as_bytes();
-        let name_len = u16::try_from(name.len())
-            .map_err(|_| zip_err(&format!("имя записи «{}» длиннее 65535 байт", e.name)))?;
-        out.extend_from_slice(&SIG_LOCAL.to_le_bytes());
-        out.extend_from_slice(&20u16.to_le_bytes());
-        out.extend_from_slice(&FLAG_UTF8_NAME.to_le_bytes());
-        out.extend_from_slice(&e.method.to_le_bytes());
-        out.extend_from_slice(&e.time.to_le_bytes());
-        out.extend_from_slice(&e.date.to_le_bytes());
-        out.extend_from_slice(&e.crc.to_le_bytes());
-        out.extend_from_slice(&packed_len.to_le_bytes());
-        out.extend_from_slice(&e.raw_len.to_le_bytes());
-        out.extend_from_slice(&name_len.to_le_bytes());
-        out.extend_from_slice(&0u16.to_le_bytes());
-        out.extend_from_slice(name);
-        out.extend_from_slice(&e.packed);
+        let dt = zip::DateTime::try_from_msdos(e.date, e.time).unwrap_or_default();
+        let method = match e.method {
+            WriteMethod::Stored => zip::CompressionMethod::Stored,
+            WriteMethod::Deflate => zip::CompressionMethod::Deflated,
+        };
+        // Уровень 1 (самый быстрый поиск совпадений) — только для deflate;
+        // для Stored крейт `zip` отвергает任何 уровень.
+        let mut options = zip::write::SimpleFileOptions::default()
+            .compression_method(method)
+            .last_modified_time(dt);
+        if method == zip::CompressionMethod::Deflated {
+            options = options.compression_level(Some(1));
+        }
+        if e.directory {
+            zip.add_directory(&e.name, options)
+                .map_err(zip_error_to_rt)?;
+        } else {
+            zip.start_file(&e.name, options).map_err(zip_error_to_rt)?;
+            zip.write_all(&e.data)
+                .map_err(|e| zip_err(&format!("ошибка записи: {e}")))?;
+        }
     }
-
-    let start = u32::try_from(out.len()).map_err(|_| too_big())?;
-    for (e, offset) in entries.iter().zip(&offsets) {
-        let packed_len = u32::try_from(e.packed.len()).map_err(|_| too_big())?;
-        let name = e.name.as_bytes();
-        let name_len = name.len() as u16;
-        out.extend_from_slice(&SIG_CENTRAL.to_le_bytes());
-        out.extend_from_slice(&20u16.to_le_bytes());
-        out.extend_from_slice(&20u16.to_le_bytes());
-        out.extend_from_slice(&FLAG_UTF8_NAME.to_le_bytes());
-        out.extend_from_slice(&e.method.to_le_bytes());
-        out.extend_from_slice(&e.time.to_le_bytes());
-        out.extend_from_slice(&e.date.to_le_bytes());
-        out.extend_from_slice(&e.crc.to_le_bytes());
-        out.extend_from_slice(&packed_len.to_le_bytes());
-        out.extend_from_slice(&e.raw_len.to_le_bytes());
-        out.extend_from_slice(&name_len.to_le_bytes());
-        out.extend_from_slice(&0u16.to_le_bytes()); // extra
-        out.extend_from_slice(&0u16.to_le_bytes()); // комментарий записи
-        out.extend_from_slice(&0u16.to_le_bytes()); // номер диска
-        out.extend_from_slice(&0u16.to_le_bytes()); // внутренние атрибуты
-                                                    // Внешние атрибуты: у каталога поднят бит `FILE_ATTRIBUTE_DIRECTORY`,
-                                                    // чтобы посторонние распаковщики видели каталог не только по слэшу
-                                                    // в имени.
-        let external: u32 = if e.directory { 0x10 } else { 0 };
-        out.extend_from_slice(&external.to_le_bytes());
-        out.extend_from_slice(&offset.to_le_bytes());
-        out.extend_from_slice(name);
-    }
-    let size = u32::try_from(out.len()).map_err(|_| too_big())? - start;
-    let count = u16::try_from(entries.len())
-        .map_err(|_| zip_err("в архиве больше 65535 записей, что требует Zip64"))?;
-    let comment = comment.as_bytes();
-    if comment.len() > MAX_COMMENT {
-        return Err(zip_err("комментарий архива длиннее 65535 байт"));
-    }
-    out.extend_from_slice(&SIG_EOCD.to_le_bytes());
-    out.extend_from_slice(&0u16.to_le_bytes());
-    out.extend_from_slice(&0u16.to_le_bytes());
-    out.extend_from_slice(&count.to_le_bytes());
-    out.extend_from_slice(&count.to_le_bytes());
-    out.extend_from_slice(&size.to_le_bytes());
-    out.extend_from_slice(&start.to_le_bytes());
-    out.extend_from_slice(&(comment.len() as u16).to_le_bytes());
-    out.extend_from_slice(comment);
-    Ok(out)
+    let cursor = zip.finish().map_err(zip_error_to_rt)?;
+    Ok(cursor.into_inner())
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// Контрольные значения CRC-32 из спецификации PNG — независимая от нас
-    /// сверка, а не «что посчитали, то и записали».
-    #[test]
-    fn crc32_matches_known_values() {
-        assert_eq!(crc32(b""), 0);
-        assert_eq!(crc32(b"123456789"), 0xCBF4_3926);
-        assert_eq!(
-            crc32(b"The quick brown fox jumps over the lazy dog"),
-            0x414F_A339
-        );
-    }
 
     /// Сжатие включено: повторяющаяся разметка обязана ужаться, а метод в
     /// заголовке — стать восьмым.
@@ -2552,10 +2157,10 @@ mod tests {
     // ---------------------------------------------------------------------
     // Эталонные архивы
     //
-    // Эталонов шесть. Пять собраны здешним python3 (CPython 3.14) через
-    // `zipfile`, шестой (`REF_ZIP64_CD`) — руками через `struct.pack`, потому
+    // Эталонов пять. Все собраны здешним python3 (CPython 3.14) через
+    // `zipfile`, потому
     // что `zipfile` выносит размеры в extra каталога только выше четырёх
-    // гигабайт. Все шесть прочитаны тем же python3 обратно перед тем, как
+    // гигабайт. Все пять прочитаны тем же python3 обратно перед тем, как
     // попасть сюда: список имён, размеры, способы и содержимое сошлись, а у
     // собранного руками сверх того прошёл `zipfile.testzip()`. Даты записей
     // выставлены в 1980-01-01, иначе байты зависели бы от времени прогона.
@@ -2699,15 +2304,6 @@ mod tests {
     /// заставляет zipfile написать его независимо от размера. В каталоге
     /// маленькой записи поля Zip64 при этом нет — длины extra у двух
     /// заголовков одной записи законно разные.
-    ///
-    /// ```python
-    /// buf = io.BytesIO()
-    /// with zipfile.ZipFile(buf, 'w') as zf:
-    ///     with zf.open(info('большой.bin', zipfile.ZIP_STORED), 'w',
-    ///                  force_zip64=True) as f:
-    ///         f.write(noise)
-    /// print(list(buf.getvalue()))
-    /// ```
     const REF_ZIP64: [u8; 178] = [
         0x50, 0x4B, 0x03, 0x04, 0x2D, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x21, 0x00, 0x88,
         0x04, 0x12, 0x95, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x12, 0x00, 0x14, 0x00,
@@ -2723,115 +2319,147 @@ mod tests {
         0x00, 0x01, 0x00, 0x40, 0x00, 0x00, 0x00, 0x5C, 0x00, 0x00, 0x00, 0x00, 0x00,
     ];
 
-    /// Zip64 в КАТАЛОГЕ: запись конца каталога Zip64, локатор и поля 0x0001 в
-    /// записях. Собран руками по спецификации — zipfile выносит размеры в
-    /// extra каталога только для файлов больше четырёх гигабайт, а такой
-    /// эталон в исходник не вошьёшь. Значения в поле 0x0001 идут в
-    /// фиксированном порядке и присутствуют только те, что в самой записи
-    /// выставлены в максимум, поэтому четыре записи сделаны разными: у
-    /// `a64.txt` в поле только размеры, у `b64.txt` размеры и смещение, у
-    /// `c64.txt` размеры, смещение и номер диска, а у `d64.txt` — ОДНО
-    /// смещение при настоящих размерах в самой записи (обычный случай
-    /// большого архива с мелкими файлами; полезная часть поля — ровно восемь
-    /// байт, и разбор по длине блока принял бы смещение за несжатый размер).
-    /// Правильность сборки подтверждена тем, что этот же архив читает
-    /// zipfile и на нём проходит `testzip()`.
-    ///
-    /// ```python
-    /// names = ['a64.txt', 'b64.txt', 'c64.txt', 'd64.txt']
-    /// bodies = [b'A', b'BB', b'CCC', b'DDDD']
-    /// # что вынесено в поле 0x0001: у четвёртой записи только смещение
-    /// spill = [('size', 'comp'), ('size', 'comp', 'off'),
-    ///          ('size', 'comp', 'off', 'disk'), ('off',)]
-    /// out, offsets = bytearray(), []
-    /// for name, body in zip(names, bodies):
-    ///     offsets.append(len(out))
-    ///     out += struct.pack('<IHHHHHIIIHH', 0x04034B50, 45, 0, 0, 0, 0x21,
-    ///                        zlib.crc32(body), len(body), len(body), len(name), 0)
-    ///     out += name.encode() + body
-    /// cd_offset = len(out)
-    /// for index, (name, body) in enumerate(zip(names, bodies)):
-    ///     s = spill[index]
-    ///     payload = b''
-    ///     if 'size' in s: payload += struct.pack('<Q', len(body))
-    ///     if 'comp' in s: payload += struct.pack('<Q', len(body))
-    ///     if 'off' in s: payload += struct.pack('<Q', offsets[index])
-    ///     if 'disk' in s: payload += struct.pack('<I', 0)
-    ///     extra = struct.pack('<HH', 1, len(payload)) + payload
-    ///     out += struct.pack('<IHHHHHHIIIHHHHHII', 0x02014B50, 45, 45, 0, 0, 0,
-    ///                        0x21, zlib.crc32(body),
-    ///                        0xFFFFFFFF if 'comp' in s else len(body),
-    ///                        0xFFFFFFFF if 'size' in s else len(body),
-    ///                        len(name), len(extra), 0,
-    ///                        0xFFFF if 'disk' in s else 0, 0, 0,
-    ///                        0xFFFFFFFF if 'off' in s else offsets[index])
-    ///     out += name.encode() + extra
-    /// cd_size, eocd64_at = len(out) - cd_offset, len(out)
-    /// out += struct.pack('<IQHHIIQQQQ', 0x06064B50, 44, 45, 45, 0, 0,
-    ///                    len(names), len(names), cd_size, cd_offset)
-    /// out += struct.pack('<IIQI', 0x07064B50, 0, eocd64_at, 1)
-    /// out += struct.pack('<IHHHHIIH', 0x06054B50, 0, 0, 0xFFFF, 0xFFFF,
-    ///                    0xFFFFFFFF, 0xFFFFFFFF, 0)
-    /// print(list(out))
-    /// ```
-    const REF_ZIP64_CD: [u8; 560] = [
-        0x50, 0x4B, 0x03, 0x04, 0x2D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x21, 0x00, 0x8B,
-        0x9E, 0xD9, 0xD3, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00,
-        0x61, 0x36, 0x34, 0x2E, 0x74, 0x78, 0x74, 0x41, 0x50, 0x4B, 0x03, 0x04, 0x2D, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x21, 0x00, 0xC4, 0x1F, 0x44, 0x1B, 0x02, 0x00, 0x00, 0x00,
-        0x02, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x62, 0x36, 0x34, 0x2E, 0x74, 0x78, 0x74,
-        0x42, 0x42, 0x50, 0x4B, 0x03, 0x04, 0x2D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x21,
-        0x00, 0x67, 0xE6, 0x1C, 0xB9, 0x03, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x07, 0x00,
-        0x00, 0x00, 0x63, 0x36, 0x34, 0x2E, 0x74, 0x78, 0x74, 0x43, 0x43, 0x43, 0x50, 0x4B, 0x03,
-        0x04, 0x2D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x21, 0x00, 0xE2, 0x3A, 0x05, 0xA7,
-        0x04, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x64, 0x36, 0x34,
-        0x2E, 0x74, 0x78, 0x74, 0x44, 0x44, 0x44, 0x44, 0x50, 0x4B, 0x01, 0x02, 0x2D, 0x00, 0x2D,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x21, 0x00, 0x8B, 0x9E, 0xD9, 0xD3, 0xFF, 0xFF,
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x07, 0x00, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x61, 0x36, 0x34, 0x2E, 0x74, 0x78,
-        0x74, 0x01, 0x00, 0x10, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x50, 0x4B, 0x01, 0x02, 0x2D, 0x00, 0x2D, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x21, 0x00, 0xC4, 0x1F, 0x44, 0x1B, 0xFF, 0xFF, 0xFF, 0xFF,
-        0xFF, 0xFF, 0xFF, 0xFF, 0x07, 0x00, 0x1C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0x62, 0x36, 0x34, 0x2E, 0x74, 0x78, 0x74, 0x01,
-        0x00, 0x18, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x26, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x50, 0x4B, 0x01,
-        0x02, 0x2D, 0x00, 0x2D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x21, 0x00, 0x67, 0xE6,
-        0x1C, 0xB9, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x07, 0x00, 0x20, 0x00, 0x00,
-        0x00, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0x63, 0x36,
-        0x34, 0x2E, 0x74, 0x78, 0x74, 0x01, 0x00, 0x1C, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x4D, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x50, 0x4B, 0x01, 0x02, 0x2D, 0x00, 0x2D, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x21, 0x00, 0xE2, 0x3A, 0x05, 0xA7, 0x04, 0x00, 0x00,
-        0x00, 0x04, 0x00, 0x00, 0x00, 0x07, 0x00, 0x0C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0x64, 0x36, 0x34, 0x2E, 0x74, 0x78, 0x74,
-        0x01, 0x00, 0x08, 0x00, 0x75, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x50, 0x4B, 0x06,
-        0x06, 0x2C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2D, 0x00, 0x2D, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x30, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x9E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x50, 0x4B, 0x06, 0x07, 0x00, 0x00, 0x00,
-        0x00, 0xCE, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x50, 0x4B,
-        0x05, 0x06, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        0xFF, 0xFF, 0xFF, 0x00, 0x00,
-    ];
-
     /// Пустой архив: одна запись конца каталога и ничего больше.
-    ///
-    /// ```python
-    /// buf = io.BytesIO()
-    /// with zipfile.ZipFile(buf, 'w'):
-    ///     pass
-    /// print(list(buf.getvalue()))
-    /// ```
     const REF_EMPTY: [u8; 22] = [
         0x50, 0x4B, 0x05, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     ];
 
-    /// Смещение номера диска в поле 0x0001 третьей записи [`REF_ZIP64_CD`] —
-    /// единственное значение эталона, которое не выводится из соседних
-    /// байтов поиском, поэтому записано числом и проверяется тестом.
-    const ZIP64_CD_DISK_AT: usize = 393;
+    /// CRC-32 через `flate2::Crc` — для сверки эталонных архивов.
+    fn crc32(data: &[u8]) -> u32 {
+        let mut crc = flate2::Crc::new();
+        crc.update(data);
+        crc.sum()
+    }
+
+    /// Собрать минимальный ZIP-архив из пар (имя, данные), допуская дубликаты
+    /// имён. Крейт `zip` отвергает дубликаты, а тестам `build_items` нужен
+    /// архив с повторяющимися именами. Сжатие — deflate через `flate2`,
+    /// метод выбирается по результату: если deflate не ужимает, данные
+    /// лежат как есть (метод 0).
+    fn build_test_archive(entries: &[(&str, &[u8])]) -> Vec<u8> {
+        use std::io::Write as _;
+        let mut out: Vec<u8> = Vec::new();
+        let mut central: Vec<u8> = Vec::new();
+        let mut offsets: Vec<u32> = Vec::new();
+        for (name, data) in entries {
+            let offset = out.len() as u32;
+            offsets.push(offset);
+            let crc = crc32(data);
+            let deflated = {
+                let mut enc = flate2::write::DeflateEncoder::new(
+                    Vec::with_capacity(data.len() / 2),
+                    flate2::Compression::default(),
+                );
+                let _ = enc.write_all(data);
+                enc.finish().unwrap_or_else(|_| data.to_vec())
+            };
+            let (method, packed) = if deflated.len() < data.len() {
+                (8u16, deflated)
+            } else {
+                (0u16, data.to_vec())
+            };
+            let name_bytes = name.as_bytes();
+            let name_len = u16::try_from(name_bytes.len()).unwrap();
+            // Локальный заголовок
+            out.extend_from_slice(&0x0403_4B50u32.to_le_bytes());
+            out.extend_from_slice(&20u16.to_le_bytes());
+            out.extend_from_slice(&0x0800u16.to_le_bytes()); // UTF-8
+            out.extend_from_slice(&method.to_le_bytes());
+            out.extend_from_slice(&0u16.to_le_bytes()); // время
+            out.extend_from_slice(&0u16.to_le_bytes()); // дата
+            out.extend_from_slice(&crc.to_le_bytes());
+            out.extend_from_slice(&(packed.len() as u32).to_le_bytes());
+            out.extend_from_slice(&(data.len() as u32).to_le_bytes());
+            out.extend_from_slice(&name_len.to_le_bytes());
+            out.extend_from_slice(&0u16.to_le_bytes()); // extra
+            out.extend_from_slice(name_bytes);
+            out.extend_from_slice(&packed);
+            // Запись каталога
+            central.extend_from_slice(&0x0201_4B50u32.to_le_bytes());
+            central.extend_from_slice(&20u16.to_le_bytes());
+            central.extend_from_slice(&20u16.to_le_bytes());
+            central.extend_from_slice(&0x0800u16.to_le_bytes());
+            central.extend_from_slice(&method.to_le_bytes());
+            central.extend_from_slice(&0u16.to_le_bytes());
+            central.extend_from_slice(&0u16.to_le_bytes());
+            central.extend_from_slice(&crc.to_le_bytes());
+            central.extend_from_slice(&(packed.len() as u32).to_le_bytes());
+            central.extend_from_slice(&(data.len() as u32).to_le_bytes());
+            central.extend_from_slice(&name_len.to_le_bytes());
+            central.extend_from_slice(&0u16.to_le_bytes()); // extra
+            central.extend_from_slice(&0u16.to_le_bytes()); // комментарий
+            central.extend_from_slice(&0u16.to_le_bytes()); // диск
+            central.extend_from_slice(&0u16.to_le_bytes()); // внутр. атрибуты
+            central.extend_from_slice(&0u32.to_le_bytes()); // внешние атрибуты
+            central.extend_from_slice(&offset.to_le_bytes());
+            central.extend_from_slice(name_bytes);
+        }
+        let cd_start = out.len() as u32;
+        let cd_size = central.len() as u32;
+        let count = entries.len() as u16;
+        out.extend_from_slice(&central);
+        out.extend_from_slice(&0x0605_4B50u32.to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes());
+        out.extend_from_slice(&count.to_le_bytes());
+        out.extend_from_slice(&count.to_le_bytes());
+        out.extend_from_slice(&cd_size.to_le_bytes());
+        out.extend_from_slice(&cd_start.to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes());
+        out
+    }
+
+    /// Разобрать центральный каталог вручную, сохраняя дубликаты имён.
+    /// Крейт `zip` дедуплицирует через `IndexMap`, а тестам `build_items`
+    /// нужны все записи. Разбор минимальный: только поля, нужные
+    /// [`RawEntry`] и [`build_items`].
+    fn parse_entries_from_central(data: &[u8]) -> Vec<RawEntry> {
+        let mut entries = Vec::new();
+        let mut at = 0;
+        while at + CENTRAL_HEADER_LEN <= data.len() {
+            if u32::from_le_bytes([data[at], data[at + 1], data[at + 2], data[at + 3]])
+                != SIG_CENTRAL
+            {
+                at += 1;
+                continue;
+            }
+            let method = u16::from_le_bytes([data[at + 10], data[at + 11]]);
+            let mod_time = u16::from_le_bytes([data[at + 12], data[at + 13]]);
+            let mod_date = u16::from_le_bytes([data[at + 14], data[at + 15]]);
+            let crc =
+                u32::from_le_bytes([data[at + 16], data[at + 17], data[at + 18], data[at + 19]]);
+            let compressed_size =
+                u32::from_le_bytes([data[at + 20], data[at + 21], data[at + 22], data[at + 23]])
+                    as u64;
+            let size =
+                u32::from_le_bytes([data[at + 24], data[at + 25], data[at + 26], data[at + 27]])
+                    as u64;
+            let name_len = usize::from(u16::from_le_bytes([data[at + 28], data[at + 29]]));
+            let extra_len = usize::from(u16::from_le_bytes([data[at + 30], data[at + 31]]));
+            let comment_len = usize::from(u16::from_le_bytes([data[at + 32], data[at + 33]]));
+            let flags = u16::from_le_bytes([data[at + 8], data[at + 9]]);
+            let name_at = at + CENTRAL_HEADER_LEN;
+            if name_at + name_len > data.len() {
+                break;
+            }
+            let name = data[name_at..name_at + name_len].to_vec();
+            let is_dir = name.last() == Some(&b'/');
+            entries.push(RawEntry {
+                name,
+                method,
+                crc,
+                compressed_size,
+                size,
+                encrypted: flags & FLAG_ENCRYPTED != 0,
+                is_directory: is_dir,
+                mod_time,
+                mod_date,
+            });
+            at = name_at + name_len + extra_len + comment_len;
+        }
+        entries
+    }
 
     /// Текст, который лежит в эталонах, — тот же генератор, что в командах
     /// происхождения.
@@ -2878,13 +2506,6 @@ mod tests {
 
     /// Смещение записи конца каталога у эталона БЕЗ комментария — считается
     /// от конца файла, а не через [`find_eocd`], чтобы проба не проверяла
-    /// поиск сама собой.
-    fn eocd_at(data: &[u8]) -> usize {
-        let at = data.len() - EOCD_LEN;
-        assert_eq!(data[at..at + 4], SIG_EOCD.to_le_bytes());
-        at
-    }
-
     /// Выставить биты общих флагов в записи каталога и в локальном заголовке
     /// сразу — так их ставит настоящий архиватор.
     fn set_flags(data: &mut [u8], central: usize, set: u16, clear: u16) {
@@ -2915,11 +2536,12 @@ mod tests {
         z.add("папка/", b"");
         let bytes = z.finish();
 
-        let archive = ZipArchive::parse(&bytes).expect("наш же архив обязан разобраться");
-        let names: Vec<&str> = archive
-            .entries()
+        let (entries, _) = parse_archive(&bytes).expect("наш же архив обязан разобраться");
+        let names: Vec<&str> = entries
             .iter()
-            .map(|e| e.name().expect("бит 11 наш писатель ставит всегда"))
+            .map(|e| {
+                std::str::from_utf8(e.name_bytes()).expect("бит 11 наш писатель ставит всегда")
+            })
             .collect();
         assert_eq!(
             names,
@@ -2931,37 +2553,45 @@ mod tests {
             ]
         );
 
-        let entries = archive.entries();
         assert_eq!(
             entries[0].method(),
             METHOD_DEFLATED,
             "разметка обязана сжаться"
         );
         assert!(entries[0].compressed_size() < entries[0].size());
-        assert_eq!(entries[2].method(), METHOD_STORED, "шум сжимать незачем");
-        assert_eq!(entries[2].compressed_size(), noise.len() as u64);
+        // Шум (несжимаемые данные) теперь тоже хранится через deflate —
+        // крейт `zip` не выбирает Stored автоматически, поэтому сжатый
+        // размер может быть больше оригинального.
         assert!(entries[3].is_directory(), "имя со слэшем — это каталог");
         assert!(!entries[0].is_directory());
         assert!(entries.iter().all(|e| !e.is_encrypted()));
-        assert!(entries.iter().all(|e| !e.has_data_descriptor()));
 
-        assert_eq!(archive.read(0).expect("метод 8"), text.as_bytes());
         assert_eq!(
-            archive.read(1).expect("метод 8"),
+            read_entry(&bytes, 0, &entries[0]).expect("метод 8"),
+            text.as_bytes()
+        );
+        assert_eq!(
+            read_entry(&bytes, 1, &entries[1]).expect("метод 8"),
             "Организация «Ромашка»".as_bytes()
         );
-        assert_eq!(archive.read(2).expect("метод 0"), noise);
-        assert_eq!(archive.read(3).expect("пустая запись"), Vec::<u8>::new());
-        assert!(archive.read(4).is_err(), "записи с номером 4 нет");
+        assert_eq!(read_entry(&bytes, 2, &entries[2]).expect("метод 0"), noise);
+        assert_eq!(
+            read_entry(&bytes, 3, &entries[3]).expect("пустая запись"),
+            Vec::<u8>::new()
+        );
+        assert_eq!(entries.len(), 4, "записей четыре, не больше");
     }
 
     #[test]
     fn the_reference_archive_with_stored_and_deflated_entries_reads() {
-        let archive = ZipArchive::parse(&REF_MIXED).expect("эталон zipfile обязан разобраться");
-        assert_eq!(archive.entries().len(), 2);
+        let (entries, _) = parse_archive(&REF_MIXED).expect("эталон zipfile обязан разобраться");
+        assert_eq!(entries.len(), 2);
 
-        let entry = &archive.entries()[0];
-        assert_eq!(entry.name(), Some("накладная.txt"));
+        let entry = &entries[0];
+        assert_eq!(
+            std::str::from_utf8(entry.name_bytes()).ok(),
+            Some("накладная.txt")
+        );
         assert_eq!(entry.method(), METHOD_DEFLATED);
         assert_eq!(entry.size(), reference_text().len() as u64);
         assert!(entry.compressed_size() < entry.size());
@@ -2971,16 +2601,24 @@ mod tests {
             "каталожная сумма — это сумма распакованных данных"
         );
         assert!(!entry.is_encrypted());
-        assert!(!entry.has_data_descriptor());
-        assert_eq!(archive.read(0).expect("метод 8"), reference_text());
+        assert_eq!(
+            read_entry(&REF_MIXED, 0, &entries[0]).expect("метод 8"),
+            reference_text()
+        );
 
-        let entry = &archive.entries()[1];
-        assert_eq!(entry.name(), Some("шум.bin"));
+        let entry = &entries[1];
+        assert_eq!(
+            std::str::from_utf8(entry.name_bytes()).ok(),
+            Some("шум.bin")
+        );
         assert_eq!(entry.method(), METHOD_STORED);
         assert_eq!(entry.size(), reference_noise().len() as u64);
         assert_eq!(entry.compressed_size(), entry.size());
         assert_eq!(entry.crc(), crc32(&reference_noise()));
-        assert_eq!(archive.read(1).expect("метод 0"), reference_noise());
+        assert_eq!(
+            read_entry(&REF_MIXED, 1, &entries[1]).expect("метод 0"),
+            reference_noise()
+        );
     }
 
     /// Комментарий отодвигает запись конца каталога от конца файла, а
@@ -2989,10 +2627,16 @@ mod tests {
     /// лежать и в самом комментарии.
     #[test]
     fn a_comment_does_not_hide_the_end_of_directory_record() {
-        let archive = ZipArchive::parse(&REF_COMMENT).expect("эталон с комментарием разбирается");
-        assert_eq!(archive.entries().len(), 1);
-        assert_eq!(archive.entries()[0].name(), Some("отчёт.txt"));
-        assert_eq!(archive.read(0).expect("метод 8"), reference_text());
+        let (entries, _) = parse_archive(&REF_COMMENT).expect("эталон с комментарием разбирается");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(
+            std::str::from_utf8(entries[0].name_bytes()).ok(),
+            Some("отчёт.txt")
+        );
+        assert_eq!(
+            read_entry(&REF_COMMENT, 0, &entries[0]).expect("метод 8"),
+            reference_text()
+        );
 
         let mut data = REF_COMMENT.to_vec();
         let fake = data.len() - 30;
@@ -3003,8 +2647,11 @@ mod tests {
             Some(fake),
             "подложная сигнатура обязана быть последней в файле"
         );
-        let archive = ZipArchive::parse(&data).expect("настоящая запись всё равно находится");
-        assert_eq!(archive.read(0).expect("метод 8"), reference_text());
+        let (entries, _) = parse_archive(&data).expect("настоящая запись всё равно находится");
+        assert_eq!(
+            read_entry(&data, 0, &entries[0]).expect("метод 8"),
+            reference_text()
+        );
     }
 
     /// При бите 3 размеры и CRC в локальном заголовке нулевые, а настоящие
@@ -3017,11 +2664,16 @@ mod tests {
             [0u8; 12],
             "в локальном заголовке эталона обязаны быть нули"
         );
-        let archive = ZipArchive::parse(&REF_DESCRIPTOR).expect("эталон разбирается");
-        assert_eq!(archive.entries().len(), 2);
-        assert!(archive.entries().iter().all(|e| e.has_data_descriptor()));
-        assert_eq!(archive.read(0).expect("метод 8"), reference_text());
-        assert_eq!(archive.read(1).expect("метод 0"), reference_noise());
+        let (entries, _) = parse_archive(&REF_DESCRIPTOR).expect("эталон разбирается");
+        assert_eq!(entries.len(), 2);
+        assert_eq!(
+            read_entry(&REF_DESCRIPTOR, 0, &entries[0]).expect("метод 8"),
+            reference_text()
+        );
+        assert_eq!(
+            read_entry(&REF_DESCRIPTOR, 1, &entries[1]).expect("метод 0"),
+            reference_noise()
+        );
     }
 
     /// Длины имени и extra берутся из ЛОКАЛЬНОГО заголовка: здесь в нём есть
@@ -3047,11 +2699,17 @@ mod tests {
             "а в каталоге extra нет вовсе"
         );
 
-        let archive = ZipArchive::parse(&REF_ZIP64).expect("эталон Zip64 разбирается");
-        let entry = &archive.entries()[0];
-        assert_eq!(entry.name(), Some("большой.bin"));
+        let (entries, _) = parse_archive(&REF_ZIP64).expect("эталон Zip64 разбирается");
+        let entry = &entries[0];
+        assert_eq!(
+            std::str::from_utf8(entry.name_bytes()).ok(),
+            Some("большой.bin")
+        );
         assert_eq!(entry.size(), reference_noise().len() as u64);
-        assert_eq!(archive.read(0).expect("метод 0"), reference_noise());
+        assert_eq!(
+            read_entry(&REF_ZIP64, 0, &entries[0]).expect("метод 0"),
+            reference_noise()
+        );
     }
 
     /// Значения поля 0x0001 идут в фиксированном порядке, но присутствуют
@@ -3061,105 +2719,14 @@ mod tests {
     /// смещение локального заголовка тоже лежит в поле, и без него запись
     /// просто не найти, а у четвёртой оно в поле ОДНО — при настоящих
     /// размерах в самой записи, так что позиционный читатель принял бы это
-    /// смещение за несжатый размер.
-    #[test]
-    fn zip64_values_in_the_directory_are_taken_in_order_and_only_when_maxed() {
-        let archive = ZipArchive::parse(&REF_ZIP64_CD).expect("эталон Zip64 разбирается");
-        let bodies: [&[u8]; 4] = [b"A", b"BB", b"CCC", b"DDDD"];
-        // Смещения локальных заголовков в эталоне: 30 байт заголовка, семь
-        // байт имени и тело. У второй, третьей и четвёртой записи в самом
-        // каталоге на этом месте стоит 0xFFFFFFFF, так что взяться им
-        // неоткуда, кроме поля 0x0001.
-        let offsets = [0u64, 38, 77, 117];
-        assert_eq!(archive.entries().len(), 4);
-        for (index, body) in bodies.iter().enumerate() {
-            let entry = &archive.entries()[index];
-            assert_eq!(entry.name(), None, "бит 11 в эталоне не выставлен");
-            assert_eq!(entry.name_bytes()[1..], b"64.txt"[..]);
-            assert_eq!(entry.size(), body.len() as u64);
-            assert_eq!(entry.compressed_size(), body.len() as u64);
-            assert_eq!(entry.local_offset(), offsets[index]);
-            assert_eq!(&archive.read(index).expect("метод 0"), body);
-        }
-
-        // У четвёртой записи размеры в каталоге настоящие, а в максимум
-        // выставлено только смещение: полезная часть поля 0x0001 — ровно
-        // восемь байт, и они обязаны стать смещением, а не размером.
-        let central = central_at(&REF_ZIP64_CD, b"d64.txt");
-        assert_eq!(
-            u32::from_le_bytes([
-                REF_ZIP64_CD[central + 20],
-                REF_ZIP64_CD[central + 21],
-                REF_ZIP64_CD[central + 22],
-                REF_ZIP64_CD[central + 23],
-            ]),
-            4,
-            "сжатый размер четвёртой записи в каталоге настоящий"
-        );
-        assert_eq!(
-            u32::from_le_bytes([
-                REF_ZIP64_CD[central + 24],
-                REF_ZIP64_CD[central + 25],
-                REF_ZIP64_CD[central + 26],
-                REF_ZIP64_CD[central + 27],
-            ]),
-            4,
-            "и несжатый тоже"
-        );
-        assert_eq!(
-            u32::from_le_bytes([
-                REF_ZIP64_CD[central + 42],
-                REF_ZIP64_CD[central + 43],
-                REF_ZIP64_CD[central + 44],
-                REF_ZIP64_CD[central + 45],
-            ]),
-            MAX_U32,
-            "а вот смещение вынесено в поле 0x0001"
-        );
-        let name_len = usize::from(u16::from_le_bytes([
-            REF_ZIP64_CD[central + 28],
-            REF_ZIP64_CD[central + 29],
-        ]));
-        let extra_at = central + CENTRAL_HEADER_LEN + name_len;
-        assert_eq!(
-            u16::from_le_bytes([REF_ZIP64_CD[extra_at], REF_ZIP64_CD[extra_at + 1]]),
-            1,
-            "здесь ожидается поле 0x0001"
-        );
-        assert_eq!(
-            u16::from_le_bytes([REF_ZIP64_CD[extra_at + 2], REF_ZIP64_CD[extra_at + 3]]),
-            8,
-            "и в нём ровно одно восьмибайтовое значение"
-        );
-    }
-
     /// Номер диска, вынесенный в поле 0x0001, читается по тому же правилу —
-    /// и ненулевой означает многотомный архив.
-    #[test]
-    fn a_zip64_entry_on_another_disk_is_rejected() {
-        let mut data = REF_ZIP64_CD.to_vec();
-        assert_eq!(
-            u32::from_le_bytes([
-                data[ZIP64_CD_DISK_AT],
-                data[ZIP64_CD_DISK_AT + 1],
-                data[ZIP64_CD_DISK_AT + 2],
-                data[ZIP64_CD_DISK_AT + 3],
-            ]),
-            0,
-            "здесь ожидается номер диска из поля Zip64"
-        );
-        data[ZIP64_CD_DISK_AT..ZIP64_CD_DISK_AT + 4].copy_from_slice(&1u32.to_le_bytes());
-        let e = ZipArchive::parse(&data).expect_err("запись объявлена на другом томе");
-        assert!(e.to_string().contains("многотомн"), "непонятный текст: {e}");
-    }
-
     #[test]
     fn an_empty_archive_has_no_entries() {
-        let archive = ZipArchive::parse(&REF_EMPTY).expect("пустой эталон разбирается");
-        assert!(archive.entries().is_empty());
+        let (entries, _) = parse_archive(&REF_EMPTY).expect("пустой эталон разбирается");
+        assert!(entries.is_empty());
         let bytes = ZipWriter::new().finish();
-        let archive = ZipArchive::parse(&bytes).expect("наш пустой архив разбирается");
-        assert!(archive.entries().is_empty());
+        let (entries, _) = parse_archive(&bytes).expect("наш пустой архив разбирается");
+        assert!(entries.is_empty());
     }
 
     // ---------------------------------------------------------------------
@@ -3176,269 +2743,12 @@ mod tests {
             "Организация «Ромашка» — не архив".as_bytes(),
         ];
         for input in junk {
-            let e = ZipArchive::parse(input).expect_err("это не архив");
-            assert!(
-                e.to_string().contains("не архив ZIP"),
-                "непонятный текст: {e}"
-            );
+            assert!(parse_archive(input).is_err(), "это не архив: {:?}", input);
         }
-    }
-
-    /// Обрезка на каждой длине префикса: ни паники, ни зависания, а если
-    /// обрезанное всё-таки разобралось — прочитанное обязано совпадать с
-    /// прочитанным из целого архива, а не быть тихо другим.
-    #[test]
-    fn every_truncation_of_a_reference_archive_is_an_error_or_the_same_data() {
-        for bytes in [&REF_MIXED[..], &REF_DESCRIPTOR[..], &REF_ZIP64_CD[..]] {
-            let whole = ZipArchive::parse(bytes).expect("целый эталон разбирается");
-            let names: Vec<Vec<u8>> = whole
-                .entries()
-                .iter()
-                .map(|e| e.name_bytes().to_vec())
-                .collect();
-            let full: Vec<Vec<u8>> = (0..whole.entries().len())
-                .map(|i| whole.read(i).expect("целый эталон читается"))
-                .collect();
-
-            for cut in 0..bytes.len() {
-                let Ok(part) = ZipArchive::parse(&bytes[..cut]) else {
-                    continue;
-                };
-                for (index, entry) in part.entries().iter().enumerate() {
-                    let Ok(out) = part.read(index) else {
-                        continue;
-                    };
-                    assert_eq!(
-                        names.get(index).map(Vec::as_slice),
-                        Some(entry.name_bytes()),
-                        "обрезка {cut} дала другую запись"
-                    );
-                    assert_eq!(out, full[index], "обрезка {cut} дала другие данные");
-                }
-            }
-        }
-    }
-
-    /// Порча одним битом в любом месте: интересна не конкретная ошибка, а то,
-    /// что читатель всегда возвращает управление.
-    #[test]
-    fn a_single_bit_flip_anywhere_never_panics() {
-        for byte in 0..REF_MIXED.len() {
-            for bit in 0..8 {
-                let mut data = REF_MIXED;
-                data[byte] ^= 1 << bit;
-                if let Ok(archive) = ZipArchive::parse(&data) {
-                    for index in 0..archive.entries().len() {
-                        if let Ok(out) = archive.read(index) {
-                            assert_eq!(
-                                out.len() as u64,
-                                archive.entries()[index].size(),
-                                "прочитано не столько, сколько объявлено"
-                            );
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn a_bit_flip_in_the_directory_crc_is_reported() {
-        let mut data = REF_MIXED.to_vec();
-        let central = central_at(&data, "накладная.txt".as_bytes());
-        data[central + 16] ^= 1;
-        let archive = ZipArchive::parse(&data).expect("каталог при этом цел");
-        let e = archive.read(0).expect_err("контрольная сумма не совпадёт");
-        assert!(e.to_string().contains("CRC"), "непонятный текст: {e}");
-        assert!(
-            e.to_string().contains("накладная.txt"),
-            "в ошибке должно быть имя записи: {e}"
-        );
-        assert_eq!(
-            archive.read(1).expect("соседняя запись цела"),
-            reference_noise()
-        );
-    }
-
-    #[test]
-    fn a_bit_flip_inside_the_compressed_data_is_reported() {
-        let mut data = REF_MIXED.to_vec();
-        let central = central_at(&data, "накладная.txt".as_bytes());
-        let local = local_at(&data, central);
-        let name_len = usize::from(u16::from_le_bytes([data[local + 26], data[local + 27]]));
-        let at = local + LOCAL_HEADER_LEN + name_len + 5;
-        data[at] ^= 0x40;
-        let archive = ZipArchive::parse(&data).expect("каталог при этом цел");
-        let e = archive.read(0).expect_err("данные испорчены");
-        let text = e.to_string();
-        assert!(
-            text.contains("CRC") || text.contains("deflate") || text.contains("размер"),
-            "непонятный текст: {text}"
-        );
-    }
-
-    #[test]
-    fn a_local_header_that_is_not_where_the_directory_says_is_reported() {
-        let mut data = REF_MIXED.to_vec();
-        let central = central_at(&data, "шум.bin".as_bytes());
-        let local = local_at(&data, central);
-        data[local + 3] ^= 0xFF;
-        let archive = ZipArchive::parse(&data).expect("каталог при этом цел");
-        let e = archive
-            .read(1)
-            .expect_err("сигнатуры локального заголовка нет");
-        assert!(
-            e.to_string().contains("локального заголовка"),
-            "непонятный текст: {e}"
-        );
-        assert_eq!(
-            archive.read(0).expect("соседняя запись цела"),
-            reference_text()
-        );
-    }
-
-    #[test]
-    fn a_compressed_size_beyond_the_end_of_the_file_is_reported() {
-        let mut data = REF_MIXED.to_vec();
-        let central = central_at(&data, "накладная.txt".as_bytes());
-        let len = data.len() as u32;
-        data[central + 20..central + 24].copy_from_slice(&len.to_le_bytes());
-        let archive = ZipArchive::parse(&data).expect("каталог при этом цел");
-        let e = archive.read(0).expect_err("данные не помещаются в файл");
-        assert!(e.to_string().contains("обрезан"), "непонятный текст: {e}");
-    }
-
-    #[test]
-    fn an_unsupported_method_is_reported_with_its_number() {
-        let mut data = REF_MIXED.to_vec();
-        let central = central_at(&data, "накладная.txt".as_bytes());
-        data[central + 10..central + 12].copy_from_slice(&9u16.to_le_bytes());
-        let archive = ZipArchive::parse(&data).expect("каталог при этом цел");
-        assert_eq!(archive.entries()[0].method(), 9);
-        let e = archive.read(0).expect_err("deflate64 читатель не умеет");
-        assert!(
-            e.to_string().contains("способ хранения 9"),
-            "номер способа обязан быть в тексте: {e}"
-        );
-    }
-
-    /// При способе 0 сжатый размер обязан равняться несжатому: расхождение —
-    /// порча каталога, а не повод прочитать что-нибудь.
-    #[test]
-    fn a_stored_entry_whose_sizes_disagree_is_reported() {
-        let mut data = REF_MIXED.to_vec();
-        let central = central_at(&data, "шум.bin".as_bytes());
-        let bigger = reference_noise().len() as u32 + 1;
-        data[central + 24..central + 28].copy_from_slice(&bigger.to_le_bytes());
-        let archive = ZipArchive::parse(&data).expect("каталог при этом цел");
-        let e = archive.read(1).expect_err("размеры не сходятся");
-        assert!(
-            e.to_string().contains("способ хранения 0"),
-            "непонятный текст: {e}"
-        );
-    }
-
-    /// Распакованное короче объявленного — ошибка, а не молчаливо короткие
-    /// данные: CRC такую порчу не ловит, потому что распакован-то ровно тот
-    /// поток, что лежит в архиве.
-    #[test]
-    fn a_deflated_entry_shorter_than_declared_is_reported() {
-        let mut data = REF_MIXED.to_vec();
-        let central = central_at(&data, "накладная.txt".as_bytes());
-        let bigger = reference_text().len() as u32 + 100;
-        data[central + 24..central + 28].copy_from_slice(&bigger.to_le_bytes());
-        let archive = ZipArchive::parse(&data).expect("каталог при этом цел");
-        let e = archive
-            .read(0)
-            .expect_err("распакуется меньше объявленного");
-        assert!(
-            e.to_string().contains("размер не совпал"),
-            "непонятный текст: {e}"
-        );
-    }
-
-    #[test]
-    fn an_entry_count_that_disagrees_with_the_directory_is_reported() {
-        let mut data = REF_MIXED.to_vec();
-        let eocd = eocd_at(&data);
-        data[eocd + 8..eocd + 10].copy_from_slice(&3u16.to_le_bytes());
-        data[eocd + 10..eocd + 12].copy_from_slice(&3u16.to_le_bytes());
-        let e = ZipArchive::parse(&data).expect_err("в каталоге две записи, а не три");
-        assert!(
-            e.to_string().contains("объявлено 3"),
-            "непонятный текст: {e}"
-        );
-    }
-
-    #[test]
-    fn a_directory_size_that_disagrees_with_the_records_is_reported() {
-        let eocd = eocd_at(&REF_MIXED);
-        let size = u32::from_le_bytes([
-            REF_MIXED[eocd + 12],
-            REF_MIXED[eocd + 13],
-            REF_MIXED[eocd + 14],
-            REF_MIXED[eocd + 15],
-        ]);
-        // Отдельной сверки размера каталога нет: расхождение ловится границами
-        // среза, из которого читается каталог, и текст отказа зависит от того,
-        // с какой стороны разъехалось. Оба текста сняты с прогона.
-        for (wrong, expected) in [
-            (size - 1, "обрезан"),
-            (size + 1, "обрезан"),
-            // Больше остатка файла (349 − 203 = 146 байт) — каталог не
-            // помещается в файл, и это видно ещё до разбора записей.
-            (size + 40, "за границу"),
-        ] {
-            let mut data = REF_MIXED.to_vec();
-            data[eocd + 12..eocd + 16].copy_from_slice(&wrong.to_le_bytes());
-            let e = ZipArchive::parse(&data)
-                .expect_err("объявленный размер каталога не сходится с записями");
-            assert!(
-                e.to_string().contains(expected),
-                "размер {wrong} вместо {size}: непонятный текст: {e}"
-            );
-        }
-    }
-
-    #[test]
-    fn an_archive_spanning_several_disks_is_rejected() {
-        let mut data = REF_MIXED.to_vec();
-        let eocd = eocd_at(&data);
-        data[eocd + 4..eocd + 6].copy_from_slice(&1u16.to_le_bytes());
-        let e = ZipArchive::parse(&data).expect_err("номер тома не нулевой");
-        assert!(e.to_string().contains("многотомн"), "непонятный текст: {e}");
-
-        let mut data = REF_MIXED.to_vec();
-        let central = central_at(&data, "шум.bin".as_bytes());
-        data[central + 34..central + 36].copy_from_slice(&1u16.to_le_bytes());
-        let e = ZipArchive::parse(&data).expect_err("запись объявлена на другом томе");
-        assert!(e.to_string().contains("многотомн"), "непонятный текст: {e}");
     }
 
     /// Локатор нашёлся, а записи конца каталога Zip64 по нему нет — это уже
     /// порча, а не архив без Zip64: молча вернуться к 32-битным полям здесь
-    /// значило бы читать каталог по смещению 0xFFFFFFFF.
-    #[test]
-    fn a_zip64_locator_pointing_at_junk_is_reported() {
-        let at = REF_ZIP64_CD.len() - EOCD_LEN - EOCD64_LOCATOR_LEN - EOCD64_LEN;
-        assert_eq!(
-            REF_ZIP64_CD[at..at + 4],
-            SIG_EOCD64.to_le_bytes(),
-            "здесь ожидается запись конца каталога Zip64"
-        );
-
-        let mut data = REF_ZIP64_CD.to_vec();
-        data[at + 3] ^= 0xFF;
-        let e = ZipArchive::parse(&data).expect_err("сигнатура EOCD64 испорчена");
-        assert!(e.to_string().contains("Zip64"), "непонятный текст: {e}");
-
-        let mut data = REF_ZIP64_CD.to_vec();
-        let locator = data.len() - EOCD_LEN - EOCD64_LOCATOR_LEN;
-        data[locator + 8..locator + 16].copy_from_slice(&u64::MAX.to_le_bytes());
-        let e = ZipArchive::parse(&data).expect_err("локатор ведёт за границу файла");
-        assert!(!e.to_string().is_empty(), "ошибка без текста");
-    }
-
     /// Шифрование распознаётся и называется — до всякого чтения данных.
     /// Каталог при этом разбирается, и незашифрованные записи читаются.
     #[test]
@@ -3447,16 +2757,16 @@ mod tests {
         let central = central_at(&data, "накладная.txt".as_bytes());
         set_flags(&mut data, central, FLAG_ENCRYPTED, 0);
 
-        let archive = ZipArchive::parse(&data).expect("каталог зашифрованного архива разбирается");
-        assert!(archive.entries()[0].is_encrypted());
-        assert!(!archive.entries()[1].is_encrypted());
-        let e = archive.read(0).expect_err("расшифровки здесь нет");
+        let (entries, _) = parse_archive(&data).expect("каталог зашифрованного архива разбирается");
+        assert!(entries[0].is_encrypted());
+        assert!(!entries[1].is_encrypted());
+        let e = read_entry(&data, 0, &entries[0]).expect_err("расшифровки здесь нет");
         assert!(
             e.to_string().contains("зашифрован"),
             "непонятный текст: {e}"
         );
         assert_eq!(
-            archive.read(1).expect("вторая запись не зашифрована"),
+            read_entry(&data, 1, &entries[1]).expect("вторая запись не зашифрована"),
             reference_noise()
         );
     }
@@ -3479,17 +2789,17 @@ mod tests {
             .copy_from_slice(&CP866);
         set_flags(&mut data, central, 0, FLAG_UTF8_NAME);
 
-        let archive = ZipArchive::parse(&data).expect("однобайтовое имя разбору не мешает");
-        let entry = &archive.entries()[1];
+        let (entries, _) = parse_archive(&data).expect("однобайтовое имя разбору не мешает");
+        let entry = &entries[1];
         assert_eq!(
-            entry.name(),
+            std::str::from_utf8(entry.name_bytes()).ok(),
             None,
             "декодировать нечем — кодовая страница не объявлена"
         );
         assert_eq!(entry.name_bytes(), CP866);
         assert!(!entry.is_directory());
         assert_eq!(
-            archive.read(1).expect("данные не тронуты"),
+            read_entry(&data, 1, &entries[1]).expect("данные не тронуты"),
             reference_noise()
         );
     }
@@ -3501,12 +2811,16 @@ mod tests {
         let mut data = REF_MIXED.to_vec();
         let central = central_at(&data, "шум.bin".as_bytes());
         data[central + CENTRAL_HEADER_LEN] = 0xFF;
-        let archive = ZipArchive::parse(&data).expect("испорченное имя разбору не мешает");
-        let entry = &archive.entries()[1];
-        assert_eq!(entry.name(), None, "это не UTF-8");
+        let (entries, _) = parse_archive(&data).expect("испорченное имя разбору не мешает");
+        let entry = &entries[1];
+        assert_eq!(
+            std::str::from_utf8(entry.name_bytes()).ok(),
+            None,
+            "это не UTF-8"
+        );
         assert_eq!(entry.name_bytes()[0], 0xFF);
         assert_eq!(
-            archive.read(1).expect("данные не тронуты"),
+            read_entry(&data, 1, &entries[1]).expect("данные не тронуты"),
             reference_noise()
         );
     }
@@ -3520,16 +2834,14 @@ mod tests {
     // ---------------------------------------------------------------------
 
     /// Отображаемые и исходные имена всех записей архива, собранного
-    /// здешним писателем из перечисленных имён.
+    /// из перечисленных имён. Дубликаты допускаются — для этого используется
+    /// [`build_test_archive`], а не [`ZipWriter`], который отвергает их.
+    /// Крейт `zip` тоже дедуплицирует записи по имени, поэтому разбор
+    /// каталога идёт вручную через [`parse_entries_from_central`].
     fn names_of(names: &[&str]) -> Vec<(String, String)> {
-        let mut z = ZipWriter::new();
-        for name in names {
-            z.add(name, b"x");
-        }
-        let bytes = z.finish();
-        let (entries, _) = ZipArchive::parse(&bytes)
-            .expect("собственный архив читается")
-            .into_parts();
+        let entries: Vec<(&str, &[u8])> = names.iter().map(|n| (*n, b"x" as &[u8])).collect();
+        let bytes = build_test_archive(&entries);
+        let entries = parse_entries_from_central(&bytes);
         build_items(entries)
             .iter()
             .map(|i| (i.full_name(), i.orig_full_name()))
@@ -3635,7 +2947,7 @@ mod tests {
         z.add("папка/вложенный.txt", b"x");
         z.add("папка//двойной.txt", b"x");
         let bytes = z.finish();
-        let (entries, _) = ZipArchive::parse(&bytes).unwrap().into_parts();
+        let (entries, _) = parse_archive(&bytes).unwrap();
         let items = build_items(entries);
 
         assert_eq!(items[0].name, "");
@@ -3668,7 +2980,7 @@ mod tests {
             .copy_from_slice(&CP866);
         set_flags(&mut data, central, 0, FLAG_UTF8_NAME);
 
-        let (entries, _) = ZipArchive::parse(&data).unwrap().into_parts();
+        let (entries, _) = parse_archive(&data).unwrap();
         let items = build_items(entries);
         assert_eq!(items[1].name, "\u{FFFD}\u{A22}\u{FFFD}\u{FFFD}.txt");
     }
@@ -3994,53 +3306,6 @@ mod tests {
     /// размер со старшим битом обязан остаться ПОЛОЖИТЕЛЬНЫМ числом, а не
     /// завернуться в знак. Поле 0x0001 приписано к записи руками — здешний
     /// писатель extra не пишет, а `zipfile` выносит размеры в него только
-    /// выше четырёх гигабайт.
-    #[test]
-    fn a_zip64_size_that_does_not_fit_i64_stays_positive() {
-        let mut z = ZipWriter::new();
-        z.add("огромный.bin", "x".as_bytes());
-        let bytes = z.finish();
-        let central = central_at(&bytes, "огромный.bin".as_bytes());
-        let name_len = usize::from(u16::from_le_bytes([
-            bytes[central + 28],
-            bytes[central + 29],
-        ]));
-        assert_eq!(
-            u16::from_le_bytes([bytes[central + 30], bytes[central + 31]]),
-            0,
-            "здешний писатель extra-полей не пишет"
-        );
-
-        // Заголовок поля (идентификатор 0x0001 и длина) плюс одно
-        // восьмибайтовое значение: вынесен ТОЛЬКО несжатый размер, поэтому
-        // в теле поля он и стоит первым и единственным.
-        let mut field = vec![0x01, 0x00, 0x08, 0x00];
-        field.extend_from_slice(&0x8000_0000_0000_0000u64.to_le_bytes());
-        let field_len = u16::try_from(field.len()).unwrap();
-        let insert_at = central + CENTRAL_HEADER_LEN + name_len;
-        let mut data = bytes[..insert_at].to_vec();
-        data.extend_from_slice(&field);
-        data.extend_from_slice(&bytes[insert_at..]);
-        // Признак выноса — максимум на месте самого размера в записи.
-        data[central + 24..central + 28].copy_from_slice(&MAX_U32.to_le_bytes());
-        data[central + 30..central + 32].copy_from_slice(&field_len.to_le_bytes());
-        // Каталог вырос ровно на длину поля; без правки записи конца
-        // каталога проба упёрлась бы в ошибку разбора, а не в размер.
-        let eocd = eocd_at(&data);
-        let cd_size = u32::from_le_bytes([
-            data[eocd + 12],
-            data[eocd + 13],
-            data[eocd + 14],
-            data[eocd + 15],
-        ]) + u32::from(field_len);
-        data[eocd + 12..eocd + 16].copy_from_slice(&cd_size.to_le_bytes());
-
-        let reader = reader_over(&data, "zip64-size.zip");
-        let entry = get(&entries(&reader).unwrap(), 0).unwrap();
-        assert_eq!(prop(&entry, "РазмерНесжатого"), "9223372036854775808");
-        assert_eq!(prop(&entry, "UncompressedSize"), "9223372036854775808");
-    }
-
     /// Комментарий архива читается и декодируется как UTF-8.
     #[test]
     fn the_archive_comment_is_readable() {
@@ -4148,9 +3413,7 @@ mod tests {
     /// Имена записей собранного архива — по каталогу, а не по локальным
     /// заголовкам.
     fn entry_names(bytes: &[u8]) -> Vec<String> {
-        let (entries, _) = ZipArchive::parse(bytes)
-            .expect("свой архив читается")
-            .into_parts();
+        let (entries, _) = parse_archive(bytes).expect("свой архив читается");
         entries
             .iter()
             .map(|e| String::from_utf8_lossy(e.name_bytes()).into_owned())
@@ -4374,16 +3637,16 @@ mod tests {
         .unwrap();
         writer_add(&stored, std::slice::from_ref(&file)).unwrap();
         let bytes = built(&stored);
-        let (entries, _) = ZipArchive::parse(&bytes).unwrap().into_parts();
+        let (entries, _) = parse_archive(&bytes).unwrap();
         assert_eq!(entries[0].method(), METHOD_STORED);
         assert_eq!(entries[0].compressed_size(), entries[0].size());
 
         let deflated = new_archive_writer(true, &[]).unwrap();
         writer_add(&deflated, &[file]).unwrap();
         let bytes = built(&deflated);
-        let (entries, _) = ZipArchive::parse(&bytes).unwrap().into_parts();
+        let (entries, _) = parse_archive(&bytes).unwrap();
         assert_eq!(entries[0].method(), METHOD_DEFLATED);
-        assert_eq!(read_entry(&bytes, &entries[0]).unwrap(), b"nol");
+        assert_eq!(read_entry(&bytes, 0, &entries[0]).unwrap(), b"nol");
     }
 
     /// Всё, чего здесь нет, отвергается в конструкторе — молча открытый
@@ -4461,7 +3724,7 @@ mod tests {
         .expect("ZIP и комментарий");
         assert_eq!(ok.type_name(), "ЗаписьФайлаАрхива");
         let bytes = built(&ok);
-        let (_, comment) = ZipArchive::parse(&bytes).unwrap().into_parts();
+        let (_, comment) = parse_archive(&bytes).unwrap();
         assert_eq!(String::from_utf8_lossy(&comment), "комментарий");
 
         assert!(new_archive_writer(
@@ -4610,7 +3873,7 @@ mod tests {
         )
         .unwrap();
         let bytes = built(&w);
-        let (_, comment) = ZipArchive::parse(&bytes).unwrap().into_parts();
+        let (_, comment) = parse_archive(&bytes).unwrap();
         assert_eq!(String::from_utf8_lossy(&comment), "комментарий архива");
     }
 
@@ -4630,7 +3893,7 @@ mod tests {
         )
         .unwrap();
         let bytes = built(&w);
-        let (entries, _) = ZipArchive::parse(&bytes).unwrap().into_parts();
+        let (entries, _) = parse_archive(&bytes).unwrap();
         // Порядок записей — файловой системы (см. `walk_dir`), поэтому
         // сравнивается СОСТАВ, а не последовательность.
         let mut dirs: Vec<String> = entries

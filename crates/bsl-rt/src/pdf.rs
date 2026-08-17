@@ -129,9 +129,10 @@
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::io::Read as _;
+use std::io::Write as _;
 use std::rc::Rc;
 
-use crate::deflate::deflate;
 use crate::{BslObject, BslValue, RtError, RtResult};
 
 // ---------------------------------------------------------------------------
@@ -143,6 +144,7 @@ use crate::{BslObject, BslValue, RtError, RtResult};
 ///
 /// Модуль берётся не на каждом шаге, а на границе блока: 5552 — наибольшее
 /// число байтов, при котором `s2` заведомо не переполняет `u32`.
+#[cfg(test)]
 fn adler32(data: &[u8]) -> u32 {
     const BASE: u32 = 65521;
     const NMAX: usize = 5552;
@@ -164,17 +166,18 @@ fn adler32(data: &[u8]) -> u32 {
 ///
 /// Заголовок: CMF `0x78` (метод 8, окно 32 КиБ) и FLG, подобранный так,
 /// чтобы `(CMF * 256 + FLG) % 31 == 0` — распаковщики эту пару проверяют.
-/// Биты уровня сжатия в FLG носят справочный характер; здесь стоит `0x9C`
-/// (уровень «по умолчанию»), потому что [`deflate`] всегда пишет
-/// фиксированные коды. Хвост — Adler-32 РАСПАКОВАННЫХ данных, старшим
-/// байтом вперёд.
+/// Биты уровня сжатия в FLG носят справочный характер; `flate2` ставит их
+/// сам, поэтому ручная подборка не нужна. Хвост — Adler-32 РАСПАКОВАННЫХ
+/// данных, старшим байтом вперёд.
 fn zlib_compress(data: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(data.len() / 2 + 16);
-    out.push(0x78);
-    out.push(0x9C);
-    out.extend_from_slice(&deflate(data));
-    out.extend_from_slice(&adler32(data).to_be_bytes());
-    out
+    let mut encoder = flate2::write::ZlibEncoder::new(
+        Vec::with_capacity(data.len() / 2 + 16),
+        flate2::Compression::default(),
+    );
+    encoder
+        .write_all(data)
+        .expect("запись во Vec не отказывает");
+    encoder.finish().expect("flate2 ZlibEncoder не отказывает")
 }
 
 // ---------------------------------------------------------------------------
@@ -3514,12 +3517,26 @@ fn inflate_pdf_stream(data: &[u8]) -> RtResult<Vec<u8>> {
         let (cmf, flg) = (data[0], data[1]);
         let looks_zlib = cmf & 0x0F == 8 && (u16::from(cmf) * 256 + u16::from(flg)) % 31 == 0;
         if looks_zlib {
-            if let Ok(out) = crate::inflate::inflate(&data[2..], MAX_STREAM_OUT) {
+            if let Ok(out) =
+                inflate_with_limit(flate2::read::ZlibDecoder::new(data), MAX_STREAM_OUT)
+            {
                 return Ok(out);
             }
         }
     }
-    crate::inflate::inflate(data, MAX_STREAM_OUT)
+    inflate_with_limit(flate2::read::DeflateDecoder::new(data), MAX_STREAM_OUT)
+}
+
+/// Распаковать поток с пределом на размер результата. Без предела
+/// подделанный поток раздувает память: `FlateDecode` умеет отдавать
+/// гигабайты из килобайт.
+fn inflate_with_limit<R: std::io::Read>(reader: R, max_out: usize) -> RtResult<Vec<u8>> {
+    let mut out = Vec::new();
+    reader
+        .take(max_out as u64)
+        .read_to_end(&mut out)
+        .map_err(|e| RtError::Zip(format!("PDF FlateDecode: {e}")))?;
+    Ok(out)
 }
 
 // ---------------------------------------------------------------------------
@@ -4394,9 +4411,14 @@ pub fn page_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::inflate::inflate;
     use std::path::PathBuf;
     use std::process::Command;
+
+    /// Распаковать сырой deflate-поток (RFC 1951) с пределом размера —
+    /// для тестов, проверяющих содержимое потоков.
+    fn inflate(data: &[u8], max_out: usize) -> RtResult<Vec<u8>> {
+        inflate_with_limit(flate2::read::DeflateDecoder::new(data), max_out)
+    }
 
     /// Разобрать поток по имени объекта: вернуть распакованные байты.
     fn stream_data(pdf: &[u8], object: u32) -> Vec<u8> {
