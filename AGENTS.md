@@ -22,7 +22,7 @@ Unit and integration tests sit beside each crate. Shared BSL programs and oracle
 - `cargo build --workspace` builds every crate.
 - `cargo test --workspace` runs the complete test suite.
 - `cargo test -p bsl-number` runs one crate's tests while iterating; `cargo test -p bsl-number --test oracle` narrows to one integration test file, and `cargo test -p bsl-number division_half_up` to tests matching a name substring.
-- `cargo test -p bsl-number -- --ignored` includes unresolved, explicitly ignored tests.
+- The workspace's only `#[ignore]`d test is `dump_for_the_platform_crosscheck` in `crates/bsl-rt/tests/mxl_oracle.rs`: it dumps MXL files for the platform to read back rather than asserting anything, so `cargo test -p bsl-rt -- --ignored` succeeding means files were written, not that a check passed.
 - `cargo test -p bsl-cli -- --nocapture` shows the conformance run together with the skipped-fixture summary.
 - `cargo run -p bsl-cli -- path/to/script.bsl` executes a BSL script; without a path it starts the REPL, and `--help` is generated from the `COMMANDS` table in `main.rs`.
 - `cargo run -p bsl-cli -- --emit-bytecode script.bsl [out.bslc]` prints the textual bytecode; `--run-bytecode out.bslc` executes it.
@@ -61,7 +61,7 @@ Use Rust's built-in test framework. Add focused unit tests near changed logic an
 
 The only snapshot tests are the parser ones in `crates/bsl-syntax/tests/snapshots/`, taken over the n-body fixtures — a whole-AST shape check, so any grammar change shows up there first. `insta` writes `.snap.new` next to the stored snapshot; read the diff and accept it deliberately (`cargo insta review` if `cargo-insta` is installed, otherwise move the file yourself). Never accept it just to make the run green.
 
-One `bsl-cli` test is silently environment-gated: `tests/table_compare2.rs` replays the value-table diff on large confidential cases from the directory in `OPEN_BSL_TABLE_COMPARE2_CASES` (one subdirectory per case, four `ЗначениеВФайл` dumps each). Without the variable it skips with a note — a green run does not mean it ran.
+One `bsl-cli` test is silently environment-gated: `crates/bsl-cli/tests/table_compare2.rs` replays the value-table diff on large confidential cases from the directory in `OPEN_BSL_TABLE_COMPARE2_CASES` (one subdirectory per case, four `ЗначениеВФайл` dumps each). Without the variable it skips with a note — a green run does not mean it ran.
 
 Divergence between the interpreter and the JIT is caught by `the_jit_agrees_with_the_interpreter_on_every_script`, which runs the whole fixture corpus both ways.
 
@@ -92,3 +92,14 @@ Writing a new `measure-*.bsl` (the contract scripts next to `measure-all.bsl`) h
 ## Commit & Pull Request Guidelines
 
 Recent commits use short, imperative subjects such as `Add the string library...` and `Turn input-dependent VM panics into RtError...`. Keep each commit focused. Pull requests should explain behavior changes, identify affected crates, list validation commands, and link relevant issues. Include measured 1C output when changing compatibility semantics; screenshots are only useful for visible CLI or diagnostic changes.
+
+## Ralph loop (unattended plan → implement → review)
+
+`ralph/ralph.sh` runs an unattended loop over `claude -p` that drains `TASKS.md`. Its state lives on disk under repo-root filenames, and several of those files have ownership rules an agent can break by editing them directly — do not touch them outside the loop:
+
+- `TASKS.md` — the backlog. Line format `- [ ] (slug) [hard] description`; the optional `[hard]` tag triggers a two-reviewer panel (both must PASS). Only the loop's arbiter flips `- [ ]` to `- [x]` on a PASS — never tick a box by hand mid-run.
+- `PLAN.md`, `REVIEW_FABLE.md`, `REVIEW_OPUS.md` — phase hand-off state. A lingering `VERDICT: FAIL` in a `REVIEW_*.md` means the last attempt was rejected, so the next planning phase plans the fix rather than picking a new task.
+- `COMMIT_MSG.md` — the implementer's commit message for the whole task. On PASS the arbiter squashes the task's iteration checkpoints back to their base and commits once with this message; the mechanical `ralph: iter N slug PASS|FAIL` commits survive only while a task is still open. History therefore carries one commit per task, not one per iteration.
+- `PROGRESS.md` — append-only run log; read it afterwards, never rewrite it.
+
+Prompts for the three phases live in `ralph/prompts/`; `commit-style.md` is the commit-message style the implementer follows and the reviewer checks. The model for each phase is an env knob (`PLAN_MODEL`, `IMPL_MODEL`, `REVIEW_MODEL`, `REVIEW2_MODEL`, all default `opus`), which is how a per-model usage limit is worked around without editing the script. Run from the repo root: `./ralph/ralph.sh` (tune iterations with `MAX_ITERS=40`). The current roadmap feeding the backlog is `docs/std-library-plan.md`.
