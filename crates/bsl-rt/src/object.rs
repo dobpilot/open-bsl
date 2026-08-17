@@ -286,6 +286,10 @@ pub enum BslObject {
     SpreadDrawings(Rc<RefCell<crate::spreadsheet::SpreadDocData>>),
     /// `РисунокТабличногоДокумента` — документ и НОМЕР рисунка в нём.
     SpreadDrawing(Rc<RefCell<crate::spreadsheet::SpreadDocData>>, usize),
+    /// `Область.Параметры` табличного документа — обёртка над ТЕМИ ЖЕ
+    /// данными, как `TextDocParams`: присваивание в её поле задаёт
+    /// значение параметра макета, а не поле объекта.
+    SpreadDocParams(Rc<RefCell<crate::spreadsheet::SpreadDocData>>),
 
     /// `ТекстовыйДокумент`.
     TextDocument(Rc<RefCell<crate::textdoc::TextDocData>>),

@@ -219,6 +219,9 @@ pub enum TypeId {
     TextDocParams,
     TextEncoding,
 
+    // --- Параметры макета табличного документа ---
+    SpreadDocParams,
+
     // --- ДвоичныеДанные -------------------------------------------------
     // Та же пара написаний: тип печатается с пробелом («Двоичные данные»,
     // измерено пробой `BIN.TYPE`), а само ЗНАЧЕНИЕ не печатается именем
@@ -723,6 +726,11 @@ const NAMES: &[(TypeId, &str, &str)] = &[
         "TextTemplateParameters",
     ),
     (TypeId::TextEncoding, "КодировкаТекста", "TextEncoding"),
+    (
+        TypeId::SpreadDocParams,
+        "Параметры макета табличного документа",
+        "SpreadsheetDocumentTemplateParameters",
+    ),
     (TypeId::BinaryData, "Двоичные данные", "BinaryData"),
     (
         TypeId::BinaryDataBuffer,

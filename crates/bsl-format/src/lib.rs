@@ -547,6 +547,24 @@ pub fn format_value(v: &BslValue, spec: Option<&str>) -> RtResult<String> {
     }
 }
 
+/// Форматирование значения для подстановки в ячейку табличного документа.
+/// Отличается от [`format_value`] тем, что ноль НЕ пустеет: семантика
+/// `Строка`, а не `Формат`. Спецификация формата ячейки (`ЧДЦ=2` и т. п.)
+/// применяется, но `ЧН` (пустой ноль) принудительно отключён.
+pub fn format_value_for_cell(v: &BslValue, spec: Option<&str>) -> RtResult<String> {
+    match v {
+        BslValue::Number(n) => {
+            let mut fmt = match spec {
+                Some(s) => parse_number_format(s)?,
+                None => NumberFormat::default(),
+            };
+            fmt.blank_zero = false;
+            format_number(n, &fmt)
+        }
+        other => format_value(other, spec),
+    }
+}
+
 /// `Число(строка)` — обратный разбор: понимает разделитель групп (по
 /// умолчанию NBSP, но обычный пробел тоже принимается — терпимее, чем
 /// платформа, но безопасно) и разделитель дробной части. Именно это и

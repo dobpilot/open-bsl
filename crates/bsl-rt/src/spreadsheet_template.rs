@@ -60,6 +60,9 @@ struct Format {
     v_align: Option<VAlign>,
     wrap: bool,
     fill: Option<String>,
+    /// Строка формата BSL из вложенного `<format>`: «ЧДЦ=2» и т. п.
+    /// Берётся из первой локализации (`v8:content`), как и текст ячейки.
+    number_format: Option<String>,
 }
 
 /// Один разобранный элемент дерева: имя, текст и дети. `Template.xml`
@@ -109,6 +112,20 @@ impl El {
             }
         }
         (String::new(), false)
+    }
+
+    /// Первое `v8:content` из локализованной строки — для строки формата
+    /// числа, где язык не важен (берётся русское написание).
+    fn first_content(&self) -> Option<&str> {
+        for item in &self.children {
+            if let Some(c) = item.child("content") {
+                return Some(c.text.trim());
+            }
+            if let Some(s) = item.first_content() {
+                return Some(s);
+            }
+        }
+        None
     }
 }
 
@@ -207,6 +224,10 @@ pub fn from_template_xml(text: &str) -> RtResult<SpreadDocData> {
             v_align: f.text_of("verticalAlignment").and_then(v_align),
             wrap: f.text_of("textPlacement") == Some("Wrap"),
             fill: f.text_of("fillType").map(str::to_string),
+            number_format: f
+                .child("format")
+                .and_then(El::first_content)
+                .map(str::to_string),
         })
         .collect();
     let format = |index: Option<i64>| -> Option<&Format> {
@@ -279,6 +300,10 @@ pub fn from_template_xml(text: &str) -> RtResult<SpreadDocData> {
                     }
                     if f.wrap {
                         doc.set_cell_wrap(r, current, true);
+                    }
+                    if let Some(ref spec) = f.number_format {
+                        doc.set_cell_format_spec(r, current, spec);
+                        doc.set_cell_numeric(r, current);
                     }
                 }
             }

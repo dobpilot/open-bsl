@@ -76,9 +76,10 @@ pub use object::{BslObject, StructureStorage};
 pub use runtime_shapes::RuntimeShapes;
 pub use shape::{Shape, ShapeTable, MAX_SHAPE_TRANSITIONS};
 pub use spreadsheet::{
-    from_mxl_bytes, is_area as spread_is_area, is_spread_document as spread_is_document,
-    new_document as new_spread_document, output as spread_output, read as spread_read,
-    set_detail as spread_set_detail, set_value as spread_set_value, to_mxl_bytes, to_txt_bytes,
+    apply_params as spread_apply_params, from_mxl_bytes, is_area as spread_is_area,
+    is_spread_document as spread_is_document, new_document as new_spread_document,
+    output as spread_output, read as spread_read, set_detail as spread_set_detail,
+    set_value as spread_set_value, take_params as spread_take_params, to_mxl_bytes, to_txt_bytes,
     write as spread_write, write_file as spread_write_file, AreaKind, Color, FileKind, Font,
     HAlign, Line, LineStyle, Merge, NamedArea, Rect, SpreadDocData, VAlign,
 };
@@ -514,6 +515,7 @@ impl BslValue {
                 BslObject::SpreadDocument(_) => "ТабличныйДокумент",
                 BslObject::SpreadDrawings(_) => "КоллекцияРисунковТабличногоДокумента",
                 BslObject::SpreadDrawing(..) => "РисунокТабличногоДокумента",
+                BslObject::SpreadDocParams(_) => "ПараметрыМакетаТабличногоДокумента",
                 BslObject::SpreadArea(..) => "ОбластьЯчеекТабличногоДокумента",
                 BslObject::TextDocument(_) => "ТекстовыйДокумент",
                 BslObject::TextDocParams(_) => "ПараметрыМакетаТекстовогоДокумента",
@@ -1297,6 +1299,7 @@ impl BslValue {
                 | BslObject::SpreadArea(..)
                 | BslObject::SpreadDrawing(..)
                 | BslObject::SpreadDrawings(..)
+                | BslObject::SpreadDocParams(..)
                 | BslObject::TextDocument(..)
                 | BslObject::TextDocParams(..)
                 // ИЗМЕРЕНО: `ЗначениеЗаполнено(Новый ЧтениеZipФайла(файл))`
@@ -1480,6 +1483,7 @@ impl BslValue {
                 BslObject::SpreadDrawings(..) => TypeId::SpreadDrawings,
                 BslObject::SpreadDrawing(..) => TypeId::SpreadDrawing,
                 BslObject::SpreadArea(..) => TypeId::SpreadArea,
+                BslObject::SpreadDocParams(..) => TypeId::SpreadDocParams,
                 BslObject::TextDocument(..) => TypeId::TextDocument,
                 BslObject::TextDocParams(..) => TypeId::TextDocParams,
                 BslObject::PdfDocument(_) => TypeId::PdfDocument,
@@ -2481,6 +2485,7 @@ impl BslValue {
                 | BslObject::SpreadDocument(..)
                 | BslObject::SpreadArea(..)
                 | BslObject::SpreadDrawing(..)
+                | BslObject::SpreadDocParams(..)
                 | BslObject::TextDocument(..)
                 | BslObject::TextDocParams(..)
                 | BslObject::ArchiveReader(..)
@@ -2945,12 +2950,19 @@ impl BslValue {
                         Ok(BslValue::Object(Rc::new(BslObject::SpreadDrawings(
                             data.clone(),
                         ))))
+                    } else if name.eq_ignore_ascii_case("Параметры")
+                        || name.eq_ignore_ascii_case("Parameters")
+                    {
+                        Ok(BslValue::Object(Rc::new(BslObject::SpreadDocParams(
+                            data.clone(),
+                        ))))
                     } else {
                         spreadsheet::get_property(self, name)
                     }
                 }
                 BslObject::SpreadArea(..) => spreadsheet::get_property(self, name),
                 BslObject::SpreadDrawing(data, i) => spreadsheet::drawing_property(data, *i, name),
+                BslObject::SpreadDocParams(_) => spreadsheet::get_param(self, name),
                 BslObject::TextDocParams(_) => textdoc::get_parameter(self, name),
                 // У читателя архива свойств ровно два, и оба измерены;
                 // `Кодировка`, `Формат`, `ИмяФайла` и `РазмерАрхива`
@@ -3023,6 +3035,7 @@ impl BslValue {
                 BslObject::SpreadDrawing(data, i) => {
                     spreadsheet::set_drawing_property(data, *i, name, &val)
                 }
+                BslObject::SpreadDocParams(_) => spreadsheet::set_param(self, name, val),
                 BslObject::TextDocParams(_) => textdoc::set_parameter(self, name, val),
                 BslObject::JsonWriter(_) => {
                     if name.eq_ignore_ascii_case("ПроверятьСтруктуру")
@@ -3953,6 +3966,7 @@ impl fmt::Display for BslValue {
                 BslObject::SpreadDrawings(_) => write!(f, "КоллекцияРисунковТабличногоДокумента"),
                 BslObject::SpreadDrawing(..) => write!(f, "РисунокТабличногоДокумента"),
                 BslObject::SpreadArea(..) => write!(f, "ОбластьЯчеекТабличногоДокумента"),
+                BslObject::SpreadDocParams(_) => write!(f, "ПараметрыМакетаТабличногоДокумента"),
                 BslObject::TextDocument(_) => write!(f, "ТекстовыйДокумент"),
                 BslObject::TextDocParams(_) => write!(f, "ПараметрыМакетаТекстовогоДокумента"),
                 BslObject::ArchiveReader(..)

@@ -2311,6 +2311,22 @@ pub(crate) fn output_area(target: &BslValue, args: &[BslValue]) -> Result<BslVal
     // `Вывести` полиморфен: у табличного документа он приписывает другой
     // ДОКУМЕНТ снизу, у текстового — подставляет параметры макета.
     if bsl_rt::spread_is_document(target) {
+        // Подстановка параметров макета: значения из карты параметров
+        // источника форматируются и кладутся в текст ячеек с совпадающим
+        // `CellData::parameter`. Форматирование живёт в `bsl-format`,
+        // который зависит от `bsl-rt`, — поэтому перехват здесь, а не
+        // этажом ниже.
+        if bsl_rt::spread_is_document(source) {
+            let params = bsl_rt::spread_take_params(source)?;
+            if !params.is_empty() {
+                let mut formatted: Vec<(String, String)> = Vec::with_capacity(params.len());
+                for (name, value, spec) in &params {
+                    let text = bsl_format::format_value_for_cell(value, spec.as_deref())?;
+                    formatted.push((name.clone(), text));
+                }
+                bsl_rt::spread_apply_params(source, &formatted)?;
+            }
+        }
         bsl_rt::spread_output(target, args)?;
         return Ok(BslValue::Undefined);
     }
