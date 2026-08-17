@@ -1460,13 +1460,6 @@ fn step(
                         // один аргумент, а получатель не `ЗаписьТекста`.
                         bsl_rt::pdf::write(ov, std::slice::from_ref(sv))?;
                         BslValue::Undefined
-                    } else if bsl_rt::is_stream(ov) {
-                        // Поток берёт ровно три аргумента, так что сюда он
-                        // попадает только вызовом с одним аргументом, то
-                        // есть ошибочным; ошибка о потоке понятнее, чем
-                        // ошибка о `ЗаписьТекста` из ветки ниже.
-                        bsl_rt::stream_write(ov, std::slice::from_ref(sv))?;
-                        BslValue::Undefined
                     } else {
                         ov.text_writer_write(sv)?
                     }
@@ -1886,11 +1879,21 @@ fn step_cold(
             frames[frame_idx].pc += 1;
         }
         Instr::NewMemoryStream { dst, arg } => {
-            let arg = reg_load(stack, frames[frame_idx].reg_index(arg))?;
-            let stream = BslValue::new_memory_stream(&arg)?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, stream)?;
-            frames[frame_idx].pc += 1;
+            #[cfg(not(feature = "stream"))]
+            {
+                let _ = (dst, arg);
+                return Err(RtError::Component(
+                    "ПотокВПамяти требует компонент bsl-stream".to_string(),
+                ));
+            }
+            #[cfg(feature = "stream")]
+            {
+                let arg = reg_load(stack, frames[frame_idx].reg_index(arg))?;
+                let stream = bsl_stream::new_memory_stream(&arg)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, stream)?;
+                frames[frame_idx].pc += 1;
+            }
         }
         Instr::NewUuid { dst, arg } => {
             let arg = reg_load(stack, frames[frame_idx].reg_index(arg))?;
@@ -1905,13 +1908,23 @@ fn step_cold(
             mode,
             access,
         } => {
-            let path = reg_load(stack, frames[frame_idx].reg_index(path))?;
-            let mode = reg_load(stack, frames[frame_idx].reg_index(mode))?;
-            let access = reg_load(stack, frames[frame_idx].reg_index(access))?;
-            let stream = BslValue::new_file_stream(&path, &mode, &access)?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, stream)?;
-            frames[frame_idx].pc += 1;
+            #[cfg(not(feature = "stream"))]
+            {
+                let _ = (dst, path, mode, access);
+                return Err(RtError::Component(
+                    "ФайловыйПоток требует компонент bsl-stream".to_string(),
+                ));
+            }
+            #[cfg(feature = "stream")]
+            {
+                let path = reg_load(stack, frames[frame_idx].reg_index(path))?;
+                let mode = reg_load(stack, frames[frame_idx].reg_index(mode))?;
+                let access = reg_load(stack, frames[frame_idx].reg_index(access))?;
+                let stream = bsl_stream::new_file_stream(&path, &mode, &access)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, stream)?;
+                frames[frame_idx].pc += 1;
+            }
         }
         Instr::NewArchiveWriter {
             dst,
@@ -1947,14 +1960,24 @@ fn step_cold(
             order,
             separator,
         } => {
-            let source = reg_load(stack, frames[frame_idx].reg_index(source))?;
-            let encoding = reg_load(stack, frames[frame_idx].reg_index(encoding))?;
-            let order = reg_load(stack, frames[frame_idx].reg_index(order))?;
-            let separator = reg_load(stack, frames[frame_idx].reg_index(separator))?;
-            let reader = bsl_rt::new_data_reader(&source, &encoding, &order, &separator)?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, reader)?;
-            frames[frame_idx].pc += 1;
+            #[cfg(not(feature = "stream"))]
+            {
+                let _ = (dst, source, encoding, order, separator);
+                return Err(RtError::Component(
+                    "ЧтениеДанных требует компонент bsl-stream".to_string(),
+                ));
+            }
+            #[cfg(feature = "stream")]
+            {
+                let source = reg_load(stack, frames[frame_idx].reg_index(source))?;
+                let encoding = reg_load(stack, frames[frame_idx].reg_index(encoding))?;
+                let order = reg_load(stack, frames[frame_idx].reg_index(order))?;
+                let separator = reg_load(stack, frames[frame_idx].reg_index(separator))?;
+                let reader = bsl_stream::new_data_reader(&source, &encoding, &order, &separator)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, reader)?;
+                frames[frame_idx].pc += 1;
+            }
         }
         Instr::NewDataWriter {
             dst,
@@ -1963,20 +1986,40 @@ fn step_cold(
             order,
             separator,
         } => {
-            let source = reg_load(stack, frames[frame_idx].reg_index(source))?;
-            let encoding = reg_load(stack, frames[frame_idx].reg_index(encoding))?;
-            let order = reg_load(stack, frames[frame_idx].reg_index(order))?;
-            let separator = reg_load(stack, frames[frame_idx].reg_index(separator))?;
-            let writer = bsl_rt::new_data_writer(&source, &encoding, &order, &separator)?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, writer)?;
-            frames[frame_idx].pc += 1;
+            #[cfg(not(feature = "stream"))]
+            {
+                let _ = (dst, source, encoding, order, separator);
+                return Err(RtError::Component(
+                    "ЗаписьДанных требует компонент bsl-stream".to_string(),
+                ));
+            }
+            #[cfg(feature = "stream")]
+            {
+                let source = reg_load(stack, frames[frame_idx].reg_index(source))?;
+                let encoding = reg_load(stack, frames[frame_idx].reg_index(encoding))?;
+                let order = reg_load(stack, frames[frame_idx].reg_index(order))?;
+                let separator = reg_load(stack, frames[frame_idx].reg_index(separator))?;
+                let writer = bsl_stream::new_data_writer(&source, &encoding, &order, &separator)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, writer)?;
+                frames[frame_idx].pc += 1;
+            }
         }
         Instr::NewFileStreamsManager { dst } => {
-            let manager = BslValue::new_file_streams_manager();
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, manager)?;
-            frames[frame_idx].pc += 1;
+            #[cfg(not(feature = "stream"))]
+            {
+                let _ = dst;
+                return Err(RtError::Component(
+                    "ФайловыеПотоки требует компонент bsl-stream".to_string(),
+                ));
+            }
+            #[cfg(feature = "stream")]
+            {
+                let manager = bsl_stream::new_file_streams_manager();
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, manager)?;
+                frames[frame_idx].pc += 1;
+            }
         }
         Instr::NewBinaryData { dst, path } => {
             let path = reg_load(stack, frames[frame_idx].reg_index(path))?;

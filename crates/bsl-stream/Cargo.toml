@@ -1,0 +1,9 @@
+[package]
+name = "bsl-stream"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+bsl-rt = { path = "../bsl-rt" }
+bsl-binbuf = { path = "../bsl-binbuf" }

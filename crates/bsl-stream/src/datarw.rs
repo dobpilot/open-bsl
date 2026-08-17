@@ -2,7 +2,7 @@
 //!
 //! Оба типа — одна и та же надстройка над источником байтов, поэтому
 //! состояние у них общее ([`DataRwState`]), а различает их вариант
-//! [`crate::BslObject`]: `DataReader` и `DataWriter` — РАЗНЫЕ типы платформы
+//! [`Side`]: `DataReader` и `DataWriter` — РАЗНЫЕ типы платформы
 //! (`Тип("ЧтениеДанных") = Тип("ЗаписьДанных")` даёт «Нет» — измерено).
 //!
 //! # Что измерено на 8.3.27.2074
@@ -115,12 +115,99 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use bsl_number::BslNumber;
+use bsl_rt::{
+    encoding::Encoding, BslNumber, BslString, BslValue, BuiltinMethod, ByteStreamProtocol,
+    CallContext, EnumValue, ObjectProtocol, RtError, RtResult, TypeDescriptor, TypeId,
+};
 
-use crate::binbuf::{BinBufData, ByteOrder, IntWidth};
-use crate::encoding::Encoding;
-use crate::stream::StreamData;
-use crate::{BslObject, BslString, BslValue, RtError, RtResult};
+/// Порядок байтов многобайтового целого.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ByteOrder {
+    Little,
+    Big,
+}
+
+impl ByteOrder {
+    fn to_enum(self) -> EnumValue {
+        match self {
+            Self::Little => EnumValue::ByteOrderLittle,
+            Self::Big => EnumValue::ByteOrderBig,
+        }
+    }
+
+    fn from_enum(value: EnumValue) -> Option<Self> {
+        match value {
+            EnumValue::ByteOrderLittle => Some(Self::Little),
+            EnumValue::ByteOrderBig => Some(Self::Big),
+            _ => None,
+        }
+    }
+}
+
+/// Ширина беззнакового целого в байтах.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IntWidth {
+    W16,
+    W32,
+    W64,
+}
+
+impl IntWidth {
+    fn bytes(self) -> usize {
+        match self {
+            Self::W16 => 2,
+            Self::W32 => 4,
+            Self::W64 => 8,
+        }
+    }
+
+    fn max(self) -> u64 {
+        match self {
+            Self::W16 => u16::MAX as u64,
+            Self::W32 => u32::MAX as u64,
+            Self::W64 => u64::MAX,
+        }
+    }
+
+    fn read_op(self) -> &'static str {
+        match self {
+            Self::W16 => "ПрочитатьЦелое16",
+            Self::W32 => "ПрочитатьЦелое32",
+            Self::W64 => "ПрочитатьЦелое64",
+        }
+    }
+
+    fn write_op(self) -> &'static str {
+        match self {
+            Self::W16 => "ЗаписатьЦелое16",
+            Self::W32 => "ЗаписатьЦелое32",
+            Self::W64 => "ЗаписатьЦелое64",
+        }
+    }
+
+    fn decode(self, bytes: &[u8], order: ByteOrder) -> u64 {
+        let mut result = 0u64;
+        for (index, byte) in bytes.iter().enumerate() {
+            match order {
+                ByteOrder::Little => result |= u64::from(*byte) << (8 * index),
+                ByteOrder::Big => result = (result << 8) | u64::from(*byte),
+            }
+        }
+        result
+    }
+
+    fn encode(self, value: u64, order: ByteOrder) -> Vec<u8> {
+        (0..self.bytes())
+            .map(|index| {
+                let shift = match order {
+                    ByteOrder::Little => 8 * index,
+                    ByteOrder::Big => 8 * (self.bytes() - 1 - index),
+                };
+                (value >> shift) as u8
+            })
+            .collect()
+    }
+}
 
 /// Состояние читателя и писателя — общее для обоих типов.
 #[derive(Debug)]
@@ -130,7 +217,7 @@ pub struct DataRwState {
     /// файла открывается файловым потоком, который наружу не отдаётся.
     /// Сверка позиций для таких источников безвредна — подвинуть их извне
     /// всё равно некому.
-    target: Rc<RefCell<StreamData>>,
+    target: BslValue,
     /// Логическая позиция. Она же — ОЖИДАЕМАЯ фактическая позиция целевого
     /// потока: расхождение и есть чередование.
     pos: u64,
@@ -161,13 +248,7 @@ impl DataRwState {
     fn check_not_moved(&self, who: &'static str) -> RtResult<()> {
         // Заимствование короткое и не пересекается с рабочим: `position`
         // только читает поле.
-        let actual = self
-            .target
-            .try_borrow()
-            .map_err(|_| {
-                RtError::IoError(format!("{who}: целевой поток уже занят другой операцией"))
-            })?
-            .position();
+        let actual = self.stream(who)?.position(who)?;
         if actual == self.pos {
             return Ok(());
         }
@@ -205,15 +286,16 @@ impl DataRwState {
     /// снова сходилась. Нужно `Пропустить` (оно ПЕРЕВОДИТ позицию) и откату
     /// неудавшегося чтения целого.
     fn move_to(&mut self, pos: u64, op: &'static str) -> RtResult<()> {
-        self.stream(op)?.set_position(pos);
+        self.stream(op)?.set_position(pos, op)?;
         self.pos = pos;
         Ok(())
     }
 
     /// Изменяемое заимствование целевого потока.
-    fn stream(&self, op: &'static str) -> RtResult<std::cell::RefMut<'_, StreamData>> {
-        self.target.try_borrow_mut().map_err(|_| {
-            RtError::IoError(format!("{op}: целевой поток уже занят другой операцией"))
+    fn stream(&self, op: &'static str) -> RtResult<&dyn ByteStreamProtocol> {
+        self.target.byte_stream().ok_or(RtError::TypeError {
+            expected: "Байтовый поток",
+            op,
         })
     }
 }
@@ -228,6 +310,35 @@ enum Side {
     Writer,
 }
 
+static DATA_READER_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ЧтениеДанных",
+    legacy_type_id: Some(TypeId::DataReader),
+};
+
+static DATA_WRITER_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ЗаписьДанных",
+    legacy_type_id: Some(TypeId::DataWriter),
+};
+
+static DATA_READ_RESULT_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "РезультатЧтенияДанных",
+    legacy_type_id: Some(TypeId::DataReadResult),
+};
+
+#[derive(Debug)]
+struct DataRwObject {
+    side: Side,
+    state: Rc<RefCell<DataRwState>>,
+}
+
+#[derive(Debug)]
+struct DataReadResult {
+    bytes: Rc<[u8]>,
+}
+
 impl Side {
     /// Имя типа в том написании, в каком платформа ставит его в сообщение об
     /// ошибке чередования (измерено для обоих).
@@ -239,20 +350,141 @@ impl Side {
     }
 }
 
+impl ObjectProtocol for DataRwObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        match self.side {
+            Side::Reader => &DATA_READER_TYPE,
+            Side::Writer => &DATA_WRITER_TYPE,
+        }
+    }
+
+    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
+        let value = self.as_value();
+        match DataRwProp::lookup(name) {
+            Some(property) => get_prop(&value, property),
+            None => Err(RtError::UnknownColumn(name.to_string())),
+        }
+    }
+
+    fn set_property(
+        &self,
+        name: &str,
+        value: BslValue,
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<()> {
+        let receiver = self.as_value();
+        match DataRwProp::lookup(name) {
+            Some(property) => set_prop(&receiver, property, &value),
+            None => Err(RtError::UnknownColumn(name.to_string())),
+        }
+    }
+
+    fn call_method(
+        &self,
+        name: &str,
+        arguments: &[BslValue],
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<BslValue> {
+        let value = self.as_value();
+        match BuiltinMethod::lookup(name) {
+            Some(BuiltinMethod::ReadNext) => read(&value, arguments),
+            Some(BuiltinMethod::Write) => {
+                write(&value, arguments)?;
+                Ok(BslValue::Undefined)
+            }
+            Some(BuiltinMethod::Close) => {
+                close(&value)?;
+                Ok(BslValue::Undefined)
+            }
+            Some(BuiltinMethod::SkipNode) => skip(&value, arguments),
+            Some(BuiltinMethod::ReadInt16) => read_int(&value, arguments, IntWidth::W16),
+            Some(BuiltinMethod::ReadInt32) => read_int(&value, arguments, IntWidth::W32),
+            Some(BuiltinMethod::ReadInt64) => read_int(&value, arguments, IntWidth::W64),
+            Some(BuiltinMethod::WriteInt16) => {
+                write_int(&value, arguments, IntWidth::W16)?;
+                Ok(BslValue::Undefined)
+            }
+            Some(BuiltinMethod::WriteInt32) => {
+                write_int(&value, arguments, IntWidth::W32)?;
+                Ok(BslValue::Undefined)
+            }
+            Some(BuiltinMethod::WriteInt64) => {
+                write_int(&value, arguments, IntWidth::W64)?;
+                Ok(BslValue::Undefined)
+            }
+            Some(BuiltinMethod::DataReadByte) => read_byte(&value),
+            Some(BuiltinMethod::DataReadIntoBuffer) => read_into_buffer(&value, arguments),
+            Some(BuiltinMethod::DataReadChars) => read_chars(&value, arguments),
+            Some(BuiltinMethod::DataReadLine) => read_line(&value, arguments),
+            Some(BuiltinMethod::DataWriteByte) => {
+                write_byte(&value, arguments)?;
+                Ok(BslValue::Undefined)
+            }
+            Some(BuiltinMethod::DataWriteChars) => {
+                write_chars(&value, arguments)?;
+                Ok(BslValue::Undefined)
+            }
+            Some(BuiltinMethod::DataWriteLine) => {
+                write_line(&value, arguments)?;
+                Ok(BslValue::Undefined)
+            }
+            _ => Err(RtError::UnknownMethod {
+                method: name.to_string(),
+                receiver: self.type_descriptor().name,
+            }),
+        }
+    }
+}
+
+impl DataRwObject {
+    fn as_value(&self) -> BslValue {
+        BslValue::new_object(Self {
+            side: self.side,
+            state: self.state.clone(),
+        })
+    }
+}
+
+impl ObjectProtocol for DataReadResult {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &DATA_READ_RESULT_TYPE
+    }
+
+    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
+        if name.eq_ignore_ascii_case("Размер") || name.eq_ignore_ascii_case("Size") {
+            Ok(from_u64(self.bytes.len() as u64))
+        } else {
+            Err(RtError::UnknownColumn(name.to_string()))
+        }
+    }
+
+    fn call_method(
+        &self,
+        name: &str,
+        _arguments: &[BslValue],
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<BslValue> {
+        match BuiltinMethod::lookup(name) {
+            Some(BuiltinMethod::GetBinaryData) => Ok(BslValue::binary_data_of(self.bytes.to_vec())),
+            Some(BuiltinMethod::GetBinaryDataBuffer) => Ok(buffer_of_bytes(self.bytes.to_vec())),
+            _ => Err(RtError::UnknownMethod {
+                method: name.to_string(),
+                receiver: DATA_READ_RESULT_TYPE.name,
+            }),
+        }
+    }
+}
+
 /// Внутренности читателя либо писателя вместе с тем, кто из них это.
 fn data<'a>(v: &'a BslValue, op: &'static str) -> RtResult<(&'a Rc<RefCell<DataRwState>>, Side)> {
     let not_applicable = || RtError::MethodNotApplicable {
         method: op,
         receiver: v.type_name(),
     };
-    match v {
-        BslValue::Object(o) => match &**o {
-            BslObject::DataReader(d) => Ok((d, Side::Reader)),
-            BslObject::DataWriter(d) => Ok((d, Side::Writer)),
-            _ => Err(not_applicable()),
-        },
-        _ => Err(not_applicable()),
-    }
+    v.object_ref()
+        .and_then(|object| object.downcast_ref::<DataRwObject>())
+        .map(|object| (&object.state, object.side))
+        .ok_or_else(not_applicable)
 }
 
 /// Внутренности ЧИТАТЕЛЯ: методы чтения на писателе платформа не знает.
@@ -277,37 +509,16 @@ fn writer<'a>(v: &'a BslValue, op: &'static str) -> RtResult<&'a Rc<RefCell<Data
     }
 }
 
-/// Читатель ли это. Нужно диспетчеризации полиморфных имён (`Закрыть`,
-/// `Записать`, `Прочитать`), у которых получатель бывает разный.
-pub fn is_data_reader(v: &BslValue) -> bool {
-    matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::DataReader(_)))
-}
-
-/// Писатель ли это.
-pub fn is_data_writer(v: &BslValue) -> bool {
-    matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::DataWriter(_)))
-}
-
-/// Результат чтения ли это.
-pub fn is_read_result(v: &BslValue) -> bool {
-    matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::DataReadResult(_)))
-}
-
 /// Байты результата чтения.
+#[cfg(test)]
 fn result_bytes<'a>(v: &'a BslValue, op: &'static str) -> RtResult<&'a Rc<[u8]>> {
-    match v {
-        BslValue::Object(o) => match &**o {
-            BslObject::DataReadResult(b) => Ok(b),
-            _ => Err(RtError::MethodNotApplicable {
-                method: op,
-                receiver: v.type_name(),
-            }),
-        },
-        _ => Err(RtError::MethodNotApplicable {
+    v.object_ref()
+        .and_then(|object| object.downcast_ref::<DataReadResult>())
+        .map(|result| &result.bytes)
+        .ok_or_else(|| RtError::MethodNotApplicable {
             method: op,
             receiver: v.type_name(),
-        }),
-    }
+        })
 }
 
 // --- разбор аргументов ---------------------------------------------------------
@@ -458,13 +669,14 @@ fn new_state(
     };
     let bad_source = || RtError::TypeError { expected, op };
     let target = match source {
-        BslValue::Object(o) => match &**o {
-            BslObject::MemoryStream(d) | BslObject::FileStream(d) => d.clone(),
-            BslObject::BinaryData(b) if side == Side::Reader => {
-                crate::stream::data_over_bytes(b.to_vec())
-            }
-            _ => return Err(bad_source()),
-        },
+        value if value.byte_stream().is_some() => value.clone(),
+        value if side == Side::Reader && bsl_binbuf::binary_data_bytes(value).is_some() => {
+            crate::stream::data_over_bytes(
+                bsl_binbuf::binary_data_bytes(value)
+                    .expect("проверено guard'ом")
+                    .to_vec(),
+            )
+        }
         // Имя файла. У читателя измерено, что отсутствующий файл — ошибка
         // «Файл не найден», а существующий читается с первого байта; у
         // писателя — что отсутствующий файл появляется и получает ровно
@@ -494,7 +706,10 @@ fn new_state(
     };
     // Позиция стартует с ТЕКУЩЕЙ позиции потока, а не с нуля: конструктор её
     // не двигает (измерено — сразу после него поток стоит там же, где стоял).
-    let pos = target.borrow().position();
+    let pos = target
+        .byte_stream()
+        .expect("конструктор принимает только поток")
+        .position(op)?;
     let encoding_name = match encoding {
         BslValue::Undefined => "UTF-8".to_string(),
         BslValue::Str(s) => s.to_string(),
@@ -571,9 +786,10 @@ pub fn new_data_reader(
         Side::Reader,
         "Новый ЧтениеДанных",
     )?;
-    Ok(BslValue::Object(Rc::new(BslObject::DataReader(Rc::new(
-        RefCell::new(state),
-    )))))
+    Ok(BslValue::new_object(DataRwObject {
+        side: Side::Reader,
+        state: Rc::new(RefCell::new(state)),
+    }))
 }
 
 /// `Новый ЗаписьДанных(Приёмник[, КодировкаТекста][, ПорядокБайтов][, РазделительСтрок])`.
@@ -595,9 +811,10 @@ pub fn new_data_writer(
         Side::Writer,
         "Новый ЗаписьДанных",
     )?;
-    Ok(BslValue::Object(Rc::new(BslObject::DataWriter(Rc::new(
-        RefCell::new(state),
-    )))))
+    Ok(BslValue::new_object(DataRwObject {
+        side: Side::Writer,
+        state: Rc::new(RefCell::new(state)),
+    }))
 }
 
 /// Кодировка для этой операции: явный аргумент, иначе собственная. Имя,
@@ -780,9 +997,9 @@ pub fn read(v: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
     let limit = limit_arg(args.first(), OP)?;
     d.check_not_moved(Side::Reader.who())?;
     let bytes = read_limited(&mut d, limit, OP)?;
-    Ok(BslValue::Object(Rc::new(BslObject::DataReadResult(
-        bytes.into(),
-    ))))
+    Ok(BslValue::new_object(DataReadResult {
+        bytes: bytes.into(),
+    }))
 }
 
 /// `ЧтениеДанных.ПрочитатьВБуферДвоичныхДанных([Количество])` -> буфер.
@@ -811,9 +1028,7 @@ pub fn read_into_buffer(v: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
 /// Буфер двоичных данных над готовыми байтами. Порядок у него собственный,
 /// по умолчанию `LittleEndian`, как у `Новый БуферДвоичныхДанных`.
 fn buffer_of_bytes(bytes: Vec<u8>) -> BslValue {
-    BslValue::Object(Rc::new(BslObject::BinaryBuffer(Rc::new(RefCell::new(
-        BinBufData::new(bytes, ByteOrder::Little),
-    )))))
+    bsl_binbuf::binary_buffer_of(bytes)
 }
 
 /// `ЧтениеДанных.ПрочитатьБайт()` -> число либо `Неопределено` на краю.
@@ -848,7 +1063,7 @@ pub fn read_byte(v: &BslValue) -> RtResult<BslValue> {
 ///
 /// [`RtError::TypeError`], если аргумент не член `ПорядокБайтов`; ошибка
 /// чередования, как у [`read`].
-pub fn read_int(v: &BslValue, args: &[BslValue], w: IntWidth) -> RtResult<BslValue> {
+fn read_int(v: &BslValue, args: &[BslValue], w: IntWidth) -> RtResult<BslValue> {
     let op = w.read_op();
     let d = reader(v, op)?;
     at_most(v, args, 1, op)?;
@@ -1038,25 +1253,12 @@ pub fn write(v: &BslValue, args: &[BslValue]) -> RtResult<()> {
             receiver: v.type_name(),
         });
     };
-    let bytes = match data {
-        BslValue::Object(o) => match &**o {
-            BslObject::BinaryData(b) => b.clone(),
-            _ => {
-                return Err(RtError::TypeError {
-                    expected: "ДвоичныеДанные",
-                    op: OP,
-                })
-            }
-        },
-        _ => {
-            return Err(RtError::TypeError {
-                expected: "ДвоичныеДанные",
-                op: OP,
-            })
-        }
-    };
+    let bytes = bsl_binbuf::binary_data_bytes(data).ok_or(RtError::TypeError {
+        expected: "ДвоичныеДанные",
+        op: OP,
+    })?;
     d.check_not_moved(Side::Writer.who())?;
-    d.write_bytes(&bytes, OP)
+    d.write_bytes(bytes, OP)
 }
 
 /// `ЗаписьДанных.ЗаписатьБайт(Значение)`.
@@ -1092,7 +1294,7 @@ pub fn write_byte(v: &BslValue, args: &[BslValue]) -> RtResult<()> {
 /// [`RtError::TypeError`], если значение не целое из `0..=2^N-1` (измерено:
 /// `65536` и `-1` для шестнадцати бит платформа отвергает); ошибка
 /// чередования, как у [`write`].
-pub fn write_int(v: &BslValue, args: &[BslValue], w: IntWidth) -> RtResult<()> {
+fn write_int(v: &BslValue, args: &[BslValue], w: IntWidth) -> RtResult<()> {
     let op = w.write_op();
     let d = writer(v, op)?;
     at_most(v, args, 2, op)?;
@@ -1193,7 +1395,8 @@ pub fn close(v: &BslValue) -> RtResult<()> {
 /// # Errors
 ///
 /// «Метод не применим», если получатель не результат чтения.
-pub fn result_size(v: &BslValue) -> RtResult<BslValue> {
+#[cfg(test)]
+fn result_size(v: &BslValue) -> RtResult<BslValue> {
     let bytes = result_bytes(v, "Размер")?;
     Ok(from_u64(bytes.len() as u64))
 }
@@ -1203,11 +1406,10 @@ pub fn result_size(v: &BslValue) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// «Метод не применим», если получатель не результат чтения.
-pub fn result_binary_data(v: &BslValue) -> RtResult<BslValue> {
+#[cfg(test)]
+fn result_binary_data(v: &BslValue) -> RtResult<BslValue> {
     let bytes = result_bytes(v, "ПолучитьДвоичныеДанные")?;
-    Ok(BslValue::Object(Rc::new(BslObject::BinaryData(
-        bytes.clone(),
-    ))))
+    Ok(BslValue::binary_data_of(bytes.to_vec()))
 }
 
 /// `РезультатЧтенияДанных.ПолучитьБуферДвоичныхДанных()`.
@@ -1215,7 +1417,8 @@ pub fn result_binary_data(v: &BslValue) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// «Метод не применим», если получатель не результат чтения.
-pub fn result_binary_buffer(v: &BslValue) -> RtResult<BslValue> {
+#[cfg(test)]
+fn result_binary_buffer(v: &BslValue) -> RtResult<BslValue> {
     let bytes = result_bytes(v, "ПолучитьБуферДвоичныхДанных")?;
     Ok(buffer_of_bytes(bytes.to_vec()))
 }
@@ -1223,7 +1426,7 @@ pub fn result_binary_buffer(v: &BslValue) -> RtResult<BslValue> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{binbuf, stream, EnumValue};
+    use crate::stream;
 
     fn num(v: i64) -> BslValue {
         BslValue::Number(BslNumber::from_i64(v))
@@ -1238,21 +1441,11 @@ mod tests {
     }
 
     fn buffer(bytes: &[u8]) -> BslValue {
-        let b = binbuf::new_binary_buffer(&num(bytes.len() as i64), &BslValue::Undefined).unwrap();
-        for (i, byte) in bytes.iter().enumerate() {
-            binbuf::set_byte(&b, &num(i as i64), &num(*byte as i64)).unwrap();
-        }
-        b
+        bsl_binbuf::binary_buffer_of(bytes.to_vec())
     }
 
     fn bytes_of(b: &BslValue) -> Vec<u8> {
-        match b {
-            BslValue::Object(o) => match &**o {
-                BslObject::BinaryBuffer(d) => d.borrow().to_vec(),
-                _ => panic!("не буфер"),
-            },
-            _ => panic!("не буфер"),
-        }
+        bsl_binbuf::binary_buffer_bytes(b).expect("буфер")
     }
 
     fn as_u64(v: &BslValue) -> u64 {

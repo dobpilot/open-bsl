@@ -159,6 +159,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "bsl-stream"
+version = "0.1.0"
+dependencies = [
+ "bsl-binbuf",
+ "bsl-rt",
+]
+
+[[package]]
 name = "bsl-syntax"
 version = "0.1.0"
 dependencies = [
@@ -184,6 +192,7 @@ dependencies = [
  "bsl-regexp",
  "bsl-rt",
  "bsl-sema",
+ "bsl-stream",
  "bsl-syntax",
  "bsl-textdoc",
  "pprof",
@@ -628,6 +637,7 @@ dependencies = [
  "bsl-regexp",
  "bsl-rt",
  "bsl-sema",
+ "bsl-stream",
  "bsl-syntax",
  "bsl-textdoc",
  "bsl-vm",

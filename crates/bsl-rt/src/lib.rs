@@ -7,7 +7,6 @@
 mod binbuf;
 mod builtin;
 mod component;
-mod datarw;
 mod date;
 mod dom;
 pub mod encoding;
@@ -26,7 +25,6 @@ mod shape;
 mod spreadsheet;
 mod spreadsheet_pdf;
 mod spreadsheet_template;
-mod stream;
 mod string;
 mod table;
 mod types;
@@ -65,10 +63,6 @@ pub use component::{
     LibraryDescriptor, LibraryKey, LibraryRequirement, RegistryError, RuntimeBuilder,
     RuntimeRegistry, ValueFormatter,
 };
-pub use datarw::{
-    is_data_reader, is_data_writer, is_read_result, new_data_reader, new_data_writer, DataRwProp,
-    DataRwState,
-};
 pub use date::{
     format_long as format_date_long, format_pattern as format_date_pattern,
     local_date_from_utc_seconds, pseudo_unix_seconds, BslDate, DateBoundary, DatePart,
@@ -79,7 +73,7 @@ pub use interner::{NameId, NameInterner};
 pub use locale::{Locale, NBSP};
 pub use map::MapData;
 pub use object::{BslObject, StructureStorage};
-pub use object_protocol::{ObjectProtocol, ObjectRef, TypeDescriptor};
+pub use object_protocol::{ByteStreamProtocol, ObjectProtocol, ObjectRef, TypeDescriptor};
 pub use runtime_shapes::RuntimeShapes;
 pub use shape::{Shape, ShapeTable, MAX_SHAPE_TRANSITIONS};
 pub use spreadsheet::{
@@ -92,7 +86,6 @@ pub use spreadsheet::{
 };
 pub use spreadsheet_pdf::{to_pdf_bytes, PageMargins, DEFAULT_MARGIN_MM};
 pub use spreadsheet_template::from_template_xml;
-pub use stream::{is_stream, write as stream_write, StreamData};
 pub use string::{BslString, MAX_TEMPLATE_ARGS};
 pub use table::{ColumnVstr, ValueTableData};
 pub use types::TypeId;
@@ -560,15 +553,15 @@ impl BslValue {
                 // Имена ЗНАЧЕНИЙ у потоков — слитные и РАЗНЫЕ, в отличие от
                 // имени их типа, которое у обоих одно («Файловый поток»,
                 // см. `types.rs`). Измерено обеими сторонами.
-                BslObject::MemoryStream(_) => "ПотокВПамяти",
-                BslObject::FileStream(_) => "ФайловыйПоток",
-                BslObject::FileStreamsManager => "МенеджерФайловыхПотоков",
+                BslObject::ReservedMemoryStream => "ПотокВПамяти",
+                BslObject::ReservedFileStream => "ФайловыйПоток",
+                BslObject::ReservedFileStreamsManager => "МенеджерФайловыхПотоков",
                 // Имена ЗНАЧЕНИЙ слитные, имена их ТИПОВ — с пробелом
                 // («Чтение данных»), как у JSON и XML. Измерено обеими
                 // сторонами.
-                BslObject::DataReader(_) => "ЧтениеДанных",
-                BslObject::DataWriter(_) => "ЗаписьДанных",
-                BslObject::DataReadResult(_) => "РезультатЧтенияДанных",
+                BslObject::ReservedDataReader => "ЧтениеДанных",
+                BslObject::ReservedDataWriter => "ЗаписьДанных",
+                BslObject::ReservedDataReadResult => "РезультатЧтенияДанных",
             },
             BslValue::Skipped => "Skipped",
         }
@@ -1383,13 +1376,13 @@ impl BslValue {
                 // «Проверка мутабельных значений на заполненность не
                 // поддерживается».
                 | BslObject::PdfAttachment(..)
-                | BslObject::MemoryStream(..)
-                | BslObject::FileStream(..)
-                | BslObject::FileStreamsManager
+                | BslObject::ReservedMemoryStream
+                | BslObject::ReservedFileStream
+                | BslObject::ReservedFileStreamsManager
                 | BslObject::ArchiveWriter(..)
-                | BslObject::DataReader(..)
-                | BslObject::DataWriter(..)
-                | BslObject::DataReadResult(..)
+                | BslObject::ReservedDataReader
+                | BslObject::ReservedDataWriter
+                | BslObject::ReservedDataReadResult
                 | BslObject::DomBuilder
                 | BslObject::DomWriter
                 | BslObject::DomNode(..)
@@ -1527,12 +1520,12 @@ impl BslValue {
                 BslObject::ArchiveEntry(zip::ArchiveKind::Archive, ..) => TypeId::ArchiveFileEntry,
                 BslObject::ArchiveWriter(zip::ArchiveKind::Zip, _) => TypeId::ZipFileWriter,
                 BslObject::ArchiveWriter(zip::ArchiveKind::Archive, _) => TypeId::ArchiveFileWriter,
-                BslObject::MemoryStream(..) => TypeId::MemoryStream,
-                BslObject::FileStream(..) => TypeId::FileStream,
-                BslObject::FileStreamsManager => TypeId::FileStreamsManager,
-                BslObject::DataReader(..) => TypeId::DataReader,
-                BslObject::DataWriter(..) => TypeId::DataWriter,
-                BslObject::DataReadResult(..) => TypeId::DataReadResult,
+                BslObject::ReservedMemoryStream => TypeId::MemoryStream,
+                BslObject::ReservedFileStream => TypeId::FileStream,
+                BslObject::ReservedFileStreamsManager => TypeId::FileStreamsManager,
+                BslObject::ReservedDataReader => TypeId::DataReader,
+                BslObject::ReservedDataWriter => TypeId::DataWriter,
+                BslObject::ReservedDataReadResult => TypeId::DataReadResult,
                 BslObject::DomBuilder => TypeId::DomBuilder,
                 BslObject::DomWriter => TypeId::DomWriter,
                 BslObject::DomNode(n, _) => match n.kind() {
@@ -1623,6 +1616,107 @@ impl BslValue {
         }
     }
 
+    /// Возвращает байтовую потоковую возможность внешнего объекта.
+    pub fn byte_stream(&self) -> Option<&dyn ByteStreamProtocol> {
+        self.object_ref()?.byte_stream()
+    }
+
+    /// Байты `ДвоичныеДанные` без копирования.
+    pub fn binary_data_bytes(&self) -> Option<&[u8]> {
+        match self {
+            BslValue::Object(object) => match &**object {
+                BslObject::BinaryData(bytes) => Some(bytes),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Создаёт `БуферДвоичныхДанных` с готовыми байтами и малым порядком.
+    pub fn binary_buffer_of(bytes: Vec<u8>) -> Self {
+        BslValue::Object(Rc::new(BslObject::BinaryBuffer(Rc::new(
+            std::cell::RefCell::new(binbuf::BinBufData::new(bytes, binbuf::ByteOrder::Little)),
+        ))))
+    }
+
+    /// Размер буфера либо `None` для значения другого типа.
+    pub fn binary_buffer_len(&self) -> Option<usize> {
+        match self {
+            BslValue::Object(object) => match &**object {
+                BslObject::BinaryBuffer(buffer) => Some(buffer.borrow().len()),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Снимок байтов буфера.
+    pub fn binary_buffer_bytes(&self) -> Option<Vec<u8>> {
+        match self {
+            BslValue::Object(object) => match &**object {
+                BslObject::BinaryBuffer(buffer) => Some(buffer.borrow().to_vec()),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Копирует ограниченный отрезок буфера; позиция за концом даёт пустой
+    /// отрезок, как чтение потока.
+    pub fn binary_buffer_slice(&self, offset: u64, count: usize) -> Option<Vec<u8>> {
+        match self {
+            BslValue::Object(object) => match &**object {
+                BslObject::BinaryBuffer(buffer) => Some(buffer.borrow().with_bytes(|bytes| {
+                    let Ok(start) = usize::try_from(offset) else {
+                        return Vec::new();
+                    };
+                    let start = start.min(bytes.len());
+                    let end = start.saturating_add(count).min(bytes.len());
+                    bytes[start..end].to_vec()
+                })),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Записывает отрезок в существующий буфер без изменения его размера.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку типа для не-буфера или ошибку границ, если отрезок
+    /// не помещается в буфер.
+    pub fn binary_buffer_write(&self, offset: usize, bytes: &[u8]) -> RtResult<()> {
+        let buffer = match self {
+            BslValue::Object(object) => match &**object {
+                BslObject::BinaryBuffer(buffer) => buffer,
+                _ => {
+                    return Err(RtError::TypeError {
+                        expected: "БуферДвоичныхДанных",
+                        op: "Записать",
+                    })
+                }
+            },
+            _ => {
+                return Err(RtError::TypeError {
+                    expected: "БуферДвоичныхДанных",
+                    op: "Записать",
+                })
+            }
+        };
+        let end = offset.checked_add(bytes.len()).ok_or(RtError::BadIndex)?;
+        if end > buffer.borrow().len() {
+            return Err(RtError::IndexOutOfBounds {
+                index: i64::try_from(end).unwrap_or(i64::MAX),
+                len: buffer.borrow().len(),
+            });
+        }
+        buffer.borrow().with_bytes_mut(|target| {
+            target[offset..end].copy_from_slice(bytes);
+        });
+        Ok(())
+    }
+
     pub fn new_array(items: Vec<BslValue>) -> Self {
         BslValue::Object(Rc::new(BslObject::Array(std::cell::RefCell::new(items))))
     }
@@ -1686,20 +1780,6 @@ impl BslValue {
             // У читателя архива `Закрыть` отпускает архив целиком, и
             // повторный вызов — уже ошибка (измерено: «Архив не открыт!»).
             zip::close(self)?;
-            Ok(BslValue::Undefined)
-        } else if datarw::is_data_reader(self) || datarw::is_data_writer(self) {
-            // У читателя и писателя данных `Закрыть` ничего не закрывает:
-            // целевой поток остаётся живым, а сами они продолжают работать
-            // (измерено). Сбрасывать тоже нечего — собственного буфера у
-            // платформы нет.
-            datarw::close(self)?;
-            Ok(BslValue::Undefined)
-        } else if stream::is_stream(self) {
-            // Поток отпускает носитель, но остаётся живым наполовину:
-            // позиция и три признака доступности переживают закрытие
-            // (измерено), поэтому здесь не сброс объекта, а только
-            // `backing = None` внутри `StreamData`.
-            stream::close(self)?;
             Ok(BslValue::Undefined)
         } else if xml::is_xml_writer(self) {
             xml::close_writer(self)
@@ -1999,21 +2079,6 @@ impl BslValue {
         binbuf::new_binary_buffer(size, order)
     }
 
-    /// `Новый ПотокВПамяти([ЁмкостьЛибоБуфер])`.
-    ///
-    /// Без аргумента — пустой растущий поток; число — начальная ЁМКОСТЬ, а
-    /// не предел; `БуферДвоичныхДанных` — поток НАД ним, с той же памятью
-    /// и фиксированным размером. Всё измерено, подробности — в модуле
-    /// `stream`.
-    ///
-    /// # Errors
-    ///
-    /// [`RtError::TypeError`], если аргумент не число, не буфер и не
-    /// `Неопределено`, либо если ёмкость не удалось разместить в памяти.
-    pub fn new_memory_stream(arg: &BslValue) -> RtResult<Self> {
-        stream::new_memory_stream(arg)
-    }
-
     /// `Новый УникальныйИдентификатор([СтрокаЛибоУИД])`. Без аргумента —
     /// случайный идентификатор версии 4, со строкой — разбор канонической
     /// формы `8-4-4-4-12` (регистр цифр безразличен), с другим
@@ -2047,26 +2112,6 @@ impl BslValue {
             }
         };
         Ok(BslValue::Object(Rc::new(BslObject::Uuid(bytes))))
-    }
-
-    /// `Новый ФайловыйПоток(Имя, Режим[, Доступ])`. Доступ по умолчанию —
-    /// `ЧтениеИЗапись`; таблица совместимости режима с доступом измерена
-    /// целиком и описана в заголовке модуля `stream`.
-    ///
-    /// # Errors
-    ///
-    /// [`RtError::TypeError`] на аргументах не тех типов,
-    /// [`RtError::IoError`] на несовместимости режима с доступом и на
-    /// отказе файловой системы.
-    pub fn new_file_stream(path: &BslValue, mode: &BslValue, access: &BslValue) -> RtResult<Self> {
-        stream::new_file_stream(path, mode, access)
-    }
-
-    /// Голое имя `ФайловыеПотоки` как выражение. Каждое обращение даёт
-    /// НОВЫЙ объект: `ФайловыеПотоки = ФайловыеПотоки` платформа считает
-    /// ложью (измерено).
-    pub fn new_file_streams_manager() -> Self {
-        stream::new_file_streams_manager()
     }
 
     /// `ДвоичныеДанные.Размер()` — число байтов.
@@ -2480,12 +2525,12 @@ impl BslValue {
                 // `Количество()` платформа отвергает и на потоке, и на
                 // менеджере — измерено на обоих. `Для Каждого` по ним
                 // тоже нет.
-                | BslObject::MemoryStream(..)
-                | BslObject::FileStream(..)
-                | BslObject::FileStreamsManager
-                | BslObject::DataReader(..)
-                | BslObject::DataWriter(..)
-                | BslObject::DataReadResult(..) => Err(RtError::NotIndexable),
+                | BslObject::ReservedMemoryStream
+                | BslObject::ReservedFileStream
+                | BslObject::ReservedFileStreamsManager
+                | BslObject::ReservedDataReader
+                | BslObject::ReservedDataWriter
+                | BslObject::ReservedDataReadResult => Err(RtError::NotIndexable),
                 // У коллекции рисунков длина есть — это её `Количество`.
                 BslObject::SpreadDrawings(doc) => Ok(doc.borrow().drawings().len()),
             },
@@ -2813,39 +2858,11 @@ impl BslValue {
                 // байтов, кодировка текста и разделитель строк. Английское
                 // имя разделителя — `LineSplitter`, а не `LineSeparator`
                 // (измерено: второе платформа не знает).
-                BslObject::DataReader(_) | BslObject::DataWriter(_) => {
-                    match datarw::DataRwProp::lookup(name) {
-                        Some(prop) => datarw::get_prop(self, prop),
-                        None => Err(RtError::UnknownColumn(name.to_string())),
-                    }
-                }
-                // У результата чтения `Размер` — СВОЙСТВО, а не метод
-                // (измерено: вызов со скобками платформа отвергает).
-                BslObject::DataReadResult(_) => {
-                    if name.eq_ignore_ascii_case("Размер") || name.eq_ignore_ascii_case("Size")
-                    {
-                        datarw::result_size(self)
-                    } else {
-                        Err(RtError::UnknownColumn(name.to_string()))
-                    }
-                }
-                BslObject::MemoryStream(_) | BslObject::FileStream(_) => {
-                    if name.eq_ignore_ascii_case("ДоступнаЗапись")
-                        || name.eq_ignore_ascii_case("CanWrite")
-                    {
-                        stream::flag(self, stream::StreamFlag::Writable)
-                    } else if name.eq_ignore_ascii_case("ДоступноЧтение")
-                        || name.eq_ignore_ascii_case("CanRead")
-                    {
-                        stream::flag(self, stream::StreamFlag::Readable)
-                    } else if name.eq_ignore_ascii_case("ДоступноИзменениеПозиции")
-                        || name.eq_ignore_ascii_case("CanSeek")
-                    {
-                        stream::flag(self, stream::StreamFlag::Seekable)
-                    } else {
-                        Err(RtError::UnknownColumn(name.to_string()))
-                    }
-                }
+                BslObject::ReservedDataReader
+                | BslObject::ReservedDataWriter
+                | BslObject::ReservedDataReadResult
+                | BslObject::ReservedMemoryStream
+                | BslObject::ReservedFileStream => Err(RtError::NotAnObject),
                 // У `ЧтениеXML` свойств больше, но природа та же: читатель
                 // помнит текущий узел, а `ТипУзла`/`Имя`/`Значение` только
                 // показывают его с разных сторон.
@@ -2978,11 +2995,8 @@ impl BslValue {
                 // `ПорядокБайтов` у ЧИТАТЕЛЯ при этом меняет только то, что
                 // отдаёт геттер: чтение целых по-прежнему идёт порядком из
                 // конструктора (измерено, см. `datarw`).
-                BslObject::DataReader(_) | BslObject::DataWriter(_) => {
-                    match datarw::DataRwProp::lookup(name) {
-                        Some(prop) => datarw::set_prop(self, prop, &val),
-                        None => Err(RtError::UnknownColumn(name.to_string())),
-                    }
+                BslObject::ReservedDataReader | BslObject::ReservedDataWriter => {
+                    Err(RtError::NotAnObject)
                 }
                 // Пишется только `ПорядокБайтов`: `Размер` доступен лишь на
                 // чтение, присваивание в него платформа отвергает
@@ -3902,13 +3916,13 @@ impl fmt::Display for BslValue {
                 // Потоки печатаются ИМЕНЕМ ЗНАЧЕНИЯ, и закрытие его не
                 // меняет: `Строка(Зкр)` после `Закрыть()` — по-прежнему
                 // «ПотокВПамяти» (измерено).
-                BslObject::MemoryStream(_) => write!(f, "ПотокВПамяти"),
-                BslObject::FileStream(_) => write!(f, "ФайловыйПоток"),
-                BslObject::FileStreamsManager => write!(f, "МенеджерФайловыхПотоков"),
+                BslObject::ReservedMemoryStream => write!(f, "ПотокВПамяти"),
+                BslObject::ReservedFileStream => write!(f, "ФайловыйПоток"),
+                BslObject::ReservedFileStreamsManager => write!(f, "МенеджерФайловыхПотоков"),
                 // Печатаются именем ЗНАЧЕНИЯ, слитно (измерено).
-                BslObject::DataReader(_) => write!(f, "ЧтениеДанных"),
-                BslObject::DataWriter(_) => write!(f, "ЗаписьДанных"),
-                BslObject::DataReadResult(_) => write!(f, "РезультатЧтенияДанных"),
+                BslObject::ReservedDataReader => write!(f, "ЧтениеДанных"),
+                BslObject::ReservedDataWriter => write!(f, "ЗаписьДанных"),
+                BslObject::ReservedDataReadResult => write!(f, "РезультатЧтенияДанных"),
                 // Расширенное имя — единственное значение модели схемы,
                 // которое печатается СОДЕРЖИМЫМ, а не именем типа:
                 // `{urn:t}а`, а при пустом URI — одно локальное имя

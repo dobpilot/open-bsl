@@ -2,7 +2,7 @@
 //!
 //! Оба потока — один и тот же набор операций над разным носителем, поэтому
 //! состояние у них общее ([`StreamData`]), а различает их вариант
-//! [`crate::BslObject`]: `MemoryStream` и `FileStream` — РАЗНЫЕ типы
+//! [`StreamKind`]: `Memory` и `File` — РАЗНЫЕ типы
 //! платформы (`Тип("ПотокВПамяти") = Тип("ФайловыйПоток")` даёт «Нет» —
 //! измерено), и держать различие в теге объекта дешевле, чем читать поле
 //! через `RefCell` в каждом `ТипЗнч`.
@@ -63,10 +63,10 @@ use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::rc::Rc;
 
-use bsl_number::BslNumber;
-
-use crate::binbuf::BinBufData;
-use crate::{BslObject, BslValue, EnumValue, RtError, RtResult};
+use bsl_rt::{
+    BslNumber, BslValue, BuiltinMethod, ByteStreamProtocol, CallContext, EnumValue, ObjectProtocol,
+    RtError, RtResult, TypeDescriptor, TypeId,
+};
 
 /// Режим открытия файла — член `РежимОткрытияФайла`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -168,7 +168,7 @@ enum Backing {
     Owned(Vec<u8>),
     /// `Новый ПотокВПамяти(Буфер)` — ТА ЖЕ память, что у буфера, и потому
     /// фиксированный размер.
-    Buffer(Rc<RefCell<BinBufData>>),
+    Buffer(BslValue),
     File(File),
 }
 
@@ -199,7 +199,9 @@ impl StreamData {
     fn len(&self, op: &'static str) -> RtResult<u64> {
         match self.open(op)? {
             Backing::Owned(bytes) => Ok(bytes.len() as u64),
-            Backing::Buffer(buf) => Ok(buf.borrow().len() as u64),
+            Backing::Buffer(buffer) => Ok(bsl_binbuf::binary_buffer_len(buffer)
+                .expect("в носитель попадает только буфер")
+                as u64),
             Backing::File(file) => file
                 .metadata()
                 .map(|m| m.len())
@@ -237,10 +239,8 @@ impl StreamData {
         let pos = self.pos;
         let chunk: Vec<u8> = match self.open_mut(op)? {
             Backing::Owned(bytes) => slice_from(bytes, pos, count),
-            Backing::Buffer(source) => {
-                let source = source.borrow();
-                source.with_bytes(|bytes| slice_from(bytes, pos, count))
-            }
+            Backing::Buffer(source) => bsl_binbuf::binary_buffer_slice(source, pos, count)
+                .expect("в носитель попадает только буфер"),
             Backing::File(file) => {
                 file.seek(SeekFrom::Start(pos))
                     .map_err(|e| RtError::IoError(format!("{op}: {e}")))?;
@@ -322,17 +322,16 @@ impl StreamData {
                 bytes[start..end].copy_from_slice(chunk);
             }
             Backing::Buffer(target) => {
-                let target = target.borrow();
-                if end > target.len() as u64 {
+                let len = bsl_binbuf::binary_buffer_len(target)
+                    .expect("в носитель попадает только буфер");
+                if end > len as u64 {
                     return Err(RtError::IndexOutOfBounds {
                         index: end as i64,
-                        len: target.len(),
+                        len,
                     });
                 }
                 let start = pos as usize;
-                target.with_bytes_mut(|bytes| {
-                    bytes[start..start + chunk.len()].copy_from_slice(chunk);
-                });
+                bsl_binbuf::binary_buffer_write(target, start, chunk)?;
             }
             Backing::File(file) => {
                 file.seek(SeekFrom::Start(pos))
@@ -348,33 +347,141 @@ impl StreamData {
 
 // --- доступ к объекту ---------------------------------------------------------
 
-/// Внутренности потока; для любого другого значения — «метод не применим».
-fn data<'a>(v: &'a BslValue, op: &'static str) -> RtResult<&'a Rc<RefCell<StreamData>>> {
-    match v {
-        BslValue::Object(o) => match &**o {
-            BslObject::MemoryStream(d) | BslObject::FileStream(d) => Ok(d),
-            _ => Err(RtError::MethodNotApplicable {
-                method: op,
-                receiver: v.type_name(),
-            }),
-        },
-        _ => Err(RtError::MethodNotApplicable {
-            method: op,
-            receiver: v.type_name(),
-        }),
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StreamKind {
+    Memory,
+    File,
+}
+
+static MEMORY_STREAM_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ПотокВПамяти",
+    legacy_type_id: Some(TypeId::MemoryStream),
+};
+
+static FILE_STREAM_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ФайловыйПоток",
+    legacy_type_id: Some(TypeId::FileStream),
+};
+
+#[derive(Debug)]
+struct StreamObject {
+    kind: StreamKind,
+    data: Rc<RefCell<StreamData>>,
+}
+
+impl ByteStreamProtocol for StreamObject {
+    fn position(&self, op: &'static str) -> RtResult<u64> {
+        self.data
+            .try_borrow()
+            .map(|data| data.position())
+            .map_err(|_| RtError::IoError(format!("{op}: поток уже занят другой операцией")))
+    }
+
+    fn set_position(&self, position: u64, op: &'static str) -> RtResult<()> {
+        self.data
+            .try_borrow_mut()
+            .map_err(|_| RtError::IoError(format!("{op}: поток уже занят другой операцией")))?
+            .set_position(position);
+        Ok(())
+    }
+
+    fn len(&self, op: &'static str) -> RtResult<u64> {
+        self.data
+            .try_borrow()
+            .map_err(|_| RtError::IoError(format!("{op}: поток уже занят другой операцией")))?
+            .len(op)
+    }
+
+    fn read_bytes(&self, count: usize, op: &'static str) -> RtResult<Vec<u8>> {
+        self.data
+            .try_borrow_mut()
+            .map_err(|_| RtError::IoError(format!("{op}: поток уже занят другой операцией")))?
+            .read_bytes(count, op)
+    }
+
+    fn write_bytes(&self, bytes: &[u8], op: &'static str) -> RtResult<()> {
+        self.data
+            .try_borrow_mut()
+            .map_err(|_| RtError::IoError(format!("{op}: поток уже занят другой операцией")))?
+            .write_bytes(bytes, op)
     }
 }
 
-/// Поток ли это. Нужно диспетчеризации полиморфных методов (`Записать`,
-/// `Прочитать`, `Закрыть`, `Размер`), у которых разные получатели.
-pub fn is_stream(v: &BslValue) -> bool {
-    matches!(v, BslValue::Object(o)
-        if matches!(&**o, BslObject::MemoryStream(_) | BslObject::FileStream(_)))
+impl ObjectProtocol for StreamObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        match self.kind {
+            StreamKind::Memory => &MEMORY_STREAM_TYPE,
+            StreamKind::File => &FILE_STREAM_TYPE,
+        }
+    }
+
+    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
+        let data = self
+            .data
+            .try_borrow()
+            .map_err(|_| RtError::IoError(format!("{name}: поток уже занят другой операцией")))?;
+        if name.eq_ignore_ascii_case("ДоступнаЗапись") || name.eq_ignore_ascii_case("CanWrite")
+        {
+            Ok(BslValue::Boolean(data.can_write))
+        } else if name.eq_ignore_ascii_case("ДоступноЧтение")
+            || name.eq_ignore_ascii_case("CanRead")
+        {
+            Ok(BslValue::Boolean(data.can_read))
+        } else if name.eq_ignore_ascii_case("ДоступноИзменениеПозиции")
+            || name.eq_ignore_ascii_case("CanSeek")
+        {
+            Ok(BslValue::Boolean(data.can_seek))
+        } else {
+            Err(RtError::UnknownColumn(name.to_string()))
+        }
+    }
+
+    fn call_method(
+        &self,
+        name: &str,
+        arguments: &[BslValue],
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<BslValue> {
+        let value = BslValue::new_object(StreamObject {
+            kind: self.kind,
+            data: self.data.clone(),
+        });
+        match BuiltinMethod::lookup(name) {
+            Some(BuiltinMethod::Write) => {
+                write(&value, arguments)?;
+                Ok(BslValue::Undefined)
+            }
+            Some(BuiltinMethod::ReadNext) => read(&value, arguments),
+            Some(BuiltinMethod::Close) => {
+                close(&value)?;
+                Ok(BslValue::Undefined)
+            }
+            Some(BuiltinMethod::Size) => size(&value),
+            Some(BuiltinMethod::CurrentPosition) => current_position(&value),
+            Some(BuiltinMethod::Seek) => seek(&value, arguments),
+            _ => Err(RtError::UnknownMethod {
+                method: name.to_string(),
+                receiver: self.type_descriptor().name,
+            }),
+        }
+    }
+
+    fn byte_stream(&self) -> Option<&dyn ByteStreamProtocol> {
+        Some(self)
+    }
 }
 
-/// Менеджер `ФайловыеПотоки` ли это.
-pub fn is_file_streams_manager(v: &BslValue) -> bool {
-    matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::FileStreamsManager))
+/// Внутренности потока; для любого другого значения — «метод не применим».
+fn data<'a>(v: &'a BslValue, op: &'static str) -> RtResult<&'a Rc<RefCell<StreamData>>> {
+    v.object_ref()
+        .and_then(|object| object.downcast_ref::<StreamObject>())
+        .map(|object| &object.data)
+        .ok_or_else(|| RtError::MethodNotApplicable {
+            method: op,
+            receiver: v.type_name(),
+        })
 }
 
 // --- преобразование чисел --------------------------------------------------------
@@ -425,19 +532,14 @@ fn count_of(v: &BslValue, truncate: bool, op: &'static str) -> RtResult<usize> {
 
 /// Буфер двоичных данных из аргумента: `Записать`/`Прочитать` работают
 /// только с ним (измерено — число и `ДвоичныеДанные` платформа отвергает).
-fn buffer_of<'a>(v: &'a BslValue, op: &'static str) -> RtResult<&'a Rc<RefCell<BinBufData>>> {
-    match v {
-        BslValue::Object(o) => match &**o {
-            BslObject::BinaryBuffer(b) => Ok(b),
-            _ => Err(RtError::TypeError {
-                expected: "БуферДвоичныхДанных",
-                op,
-            }),
-        },
-        _ => Err(RtError::TypeError {
+fn buffer_of<'a>(v: &'a BslValue, op: &'static str) -> RtResult<&'a BslValue> {
+    if bsl_binbuf::is_binary_buffer(v) {
+        Ok(v)
+    } else {
+        Err(RtError::TypeError {
             expected: "БуферДвоичныхДанных",
             op,
-        }),
+        })
     }
 }
 
@@ -500,15 +602,7 @@ pub fn new_memory_stream(arg: &BslValue) -> RtResult<BslValue> {
                 })?;
             Backing::Owned(bytes)
         }
-        BslValue::Object(o) => match &**o {
-            BslObject::BinaryBuffer(b) => Backing::Buffer(b.clone()),
-            _ => {
-                return Err(RtError::TypeError {
-                    expected: "Число либо БуферДвоичныхДанных",
-                    op: OP,
-                })
-            }
-        },
+        value if bsl_binbuf::is_binary_buffer(value) => Backing::Buffer(value.clone()),
         _ => {
             return Err(RtError::TypeError {
                 expected: "Число либо БуферДвоичныхДанных",
@@ -516,15 +610,16 @@ pub fn new_memory_stream(arg: &BslValue) -> RtResult<BslValue> {
             })
         }
     };
-    Ok(BslValue::Object(Rc::new(BslObject::MemoryStream(Rc::new(
-        RefCell::new(StreamData {
+    Ok(stream_value(
+        StreamKind::Memory,
+        Rc::new(RefCell::new(StreamData {
             backing: Some(backing),
             pos: 0,
             can_read: true,
             can_write: true,
             can_seek: true,
-        }),
-    )))))
+        })),
+    ))
 }
 
 /// `Новый ФайловыйПоток(Имя, Режим[, Доступ])`.
@@ -539,7 +634,13 @@ pub fn new_memory_stream(arg: &BslValue) -> RtResult<BslValue> {
 /// каталога, пустое имя.
 pub fn new_file_stream(path: &BslValue, mode: &BslValue, access: &BslValue) -> RtResult<BslValue> {
     const OP: &str = "Новый ФайловыйПоток";
-    let path = path.as_str(OP)?.to_string();
+    let BslValue::Str(path) = path else {
+        return Err(RtError::TypeError {
+            expected: "Строка",
+            op: OP,
+        });
+    };
+    let path = path.to_string();
     let mode = match mode {
         BslValue::Enum(e) => FileOpenMode::from_enum(*e),
         _ => None,
@@ -569,14 +670,17 @@ pub fn new_file_stream(path: &BslValue, mode: &BslValue, access: &BslValue) -> R
 /// Поток над ГОТОВЫМИ байтами — носитель для `ЧтениеДанных` поверх
 /// `ДвоичныеДанные`: своего потока у такого источника нет, а весь остальной
 /// код читателя работает с одним видом носителя.
-pub(crate) fn data_over_bytes(bytes: Vec<u8>) -> Rc<RefCell<StreamData>> {
-    Rc::new(RefCell::new(StreamData {
-        backing: Some(Backing::Owned(bytes)),
-        pos: 0,
-        can_read: true,
-        can_write: true,
-        can_seek: true,
-    }))
+pub(crate) fn data_over_bytes(bytes: Vec<u8>) -> BslValue {
+    stream_value(
+        StreamKind::Memory,
+        Rc::new(RefCell::new(StreamData {
+            backing: Some(Backing::Owned(bytes)),
+            pos: 0,
+            can_read: true,
+            can_write: true,
+            can_seek: true,
+        })),
+    )
 }
 
 /// Внутренности файлового потока — то же, что [`open_file_stream`], но без
@@ -586,15 +690,20 @@ pub(crate) fn data_over_file(
     path: &str,
     mode: FileOpenMode,
     access: FileAccess,
-) -> RtResult<Rc<RefCell<StreamData>>> {
-    open_file_data(path, mode, access)
+) -> RtResult<BslValue> {
+    open_file_stream(path, mode, access)
 }
 
 /// Общая часть конструктора и методов менеджера.
 fn open_file_stream(path: &str, mode: FileOpenMode, access: FileAccess) -> RtResult<BslValue> {
-    Ok(BslValue::Object(Rc::new(BslObject::FileStream(
+    Ok(stream_value(
+        StreamKind::File,
         open_file_data(path, mode, access)?,
-    ))))
+    ))
+}
+
+fn stream_value(kind: StreamKind, data: Rc<RefCell<StreamData>>) -> BslValue {
+    BslValue::new_object(StreamObject { kind, data })
 }
 
 /// Открытие файла и построение состояния потока.
@@ -666,15 +775,28 @@ fn open_file_data(
 /// быть константой в таблице чанка, как голое имя перечисления, — его
 /// строит отдельная инструкция.
 pub fn new_file_streams_manager() -> BslValue {
-    BslValue::Object(Rc::new(BslObject::FileStreamsManager))
+    BslValue::new_object(FileStreamsManager)
 }
+
+static FILE_STREAMS_MANAGER_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "МенеджерФайловыхПотоков",
+    legacy_type_id: Some(TypeId::FileStreamsManager),
+};
+
+#[derive(Debug)]
+struct FileStreamsManager;
 
 // --- методы менеджера -------------------------------------------------------------
 
 /// Имя файла из аргумента метода менеджера.
 fn manager_path(args: &[BslValue], op: &'static str) -> RtResult<String> {
     match args {
-        [path] => Ok(path.as_str(op)?.to_string()),
+        [BslValue::Str(path)] => Ok(path.to_string()),
+        [_] => Err(RtError::TypeError {
+            expected: "Строка",
+            op,
+        }),
         _ => Err(RtError::MethodNotApplicable {
             method: op,
             receiver: "МенеджерФайловыхПотоков",
@@ -746,12 +868,38 @@ pub fn manager_create(args: &[BslValue]) -> RtResult<BslValue> {
     open_file_stream(&path, FileOpenMode::Create, FileAccess::ReadWrite)
 }
 
+impl ObjectProtocol for FileStreamsManager {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &FILE_STREAMS_MANAGER_TYPE
+    }
+
+    fn call_method(
+        &self,
+        name: &str,
+        arguments: &[BslValue],
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<BslValue> {
+        match BuiltinMethod::lookup(name) {
+            Some(BuiltinMethod::StreamOpen) => manager_open(arguments),
+            Some(BuiltinMethod::StreamOpenForRead) => manager_open_for_read(arguments),
+            Some(BuiltinMethod::StreamOpenForWrite) => manager_open_for_write(arguments),
+            Some(BuiltinMethod::StreamOpenForAppend) => manager_open_for_append(arguments),
+            Some(BuiltinMethod::Create) => manager_create(arguments),
+            _ => Err(RtError::UnknownMethod {
+                method: name.to_string(),
+                receiver: FILE_STREAMS_MANAGER_TYPE.name,
+            }),
+        }
+    }
+}
+
 // --- признаки доступности ------------------------------------------------------------
 
 /// Какой из трёх признаков спрашивают: `ДоступнаЗапись`, `ДоступноЧтение`
 /// либо `ДоступноИзменениеПозиции`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum StreamFlag {
+#[cfg(test)]
+enum StreamFlag {
     Writable,
     Readable,
     Seekable,
@@ -764,7 +912,8 @@ pub enum StreamFlag {
 /// # Errors
 ///
 /// «Метод не применим», если получатель не поток.
-pub fn flag(v: &BslValue, which: StreamFlag) -> RtResult<BslValue> {
+#[cfg(test)]
+fn flag(v: &BslValue, which: StreamFlag) -> RtResult<BslValue> {
     let d = data(v, "ДоступнаЗапись")?;
     let d = d.borrow();
     Ok(BslValue::Boolean(match which {
@@ -885,11 +1034,9 @@ pub fn write(v: &BslValue, args: &[BslValue]) -> RtResult<()> {
     // заимствование приёмника: у потока над буфером источник и приёмник
     // могут оказаться одним и тем же `RefCell`, и два заимствования разом
     // уронили бы процесс.
-    let chunk = {
-        let src = src.borrow();
-        let (offset, count) = slice_in_buffer(offset, count, src.len(), OP)?;
-        src.with_bytes(|bytes| bytes[offset..offset + count].to_vec())
-    };
+    let bytes = bsl_binbuf::binary_buffer_bytes(src).expect("тип проверен `buffer_of`");
+    let (offset, count) = slice_in_buffer(offset, count, bytes.len(), OP)?;
+    let chunk = bytes[offset..offset + count].to_vec();
     let d = data(v, OP)?;
     // `Перейти` разрешает уход за конец, поэтому позиция может стоять у самого
     // края `u64` (два перехода по `9223372036854775807` дают `2^64 - 2` — и у
@@ -917,22 +1064,15 @@ pub fn read(v: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
         });
     };
     let dst = buffer_of(buf, OP)?;
-    let (offset, count) = {
-        let dst = dst.borrow();
-        slice_in_buffer(offset, count, dst.len(), OP)?
-    };
+    let len = bsl_binbuf::binary_buffer_len(dst).expect("тип проверен `buffer_of`");
+    let (offset, count) = slice_in_buffer(offset, count, len, OP)?;
     let d = data(v, OP)?;
     // Байты сначала снимаются, и только потом берётся изменяемое
     // заимствование приёмника: у потока НАД БУФЕРОМ источник и приёмник могут
     // оказаться одним и тем же `RefCell`, и два заимствования разом уронили бы
     // процесс.
     let chunk = d.borrow_mut().read_bytes(count, OP)?;
-    {
-        let dst = dst.borrow();
-        dst.with_bytes_mut(|bytes| {
-            bytes[offset..offset + chunk.len()].copy_from_slice(&chunk);
-        });
-    }
+    bsl_binbuf::binary_buffer_write(dst, offset, &chunk)?;
     Ok(from_u64(chunk.len() as u64))
 }
 
@@ -960,50 +1100,9 @@ pub fn close(v: &BslValue) -> RtResult<()> {
     Ok(())
 }
 
-/// Весь носитель потока целиком, с начала и независимо от текущей позиции.
-///
-/// Нужен читателю архива: `Новый ЧтениеZipФайла(Поток)` платформа принимает
-/// (измерено), а разбирать архив по кускам этот читатель не умеет — ему
-/// нужны все байты сразу. Позиция потока при этом сохраняется: сдвигать её
-/// у чужого объекта нечестно, а измерений на этот счёт нет.
-///
-/// # Errors
-///
-/// [`RtError::IoError`], если поток закрыт, открыт без доступа на чтение
-/// или носитель не читается.
-pub(crate) fn read_all(v: &BslValue, op: &'static str) -> RtResult<Vec<u8>> {
-    let d = data(v, op)?;
-    let mut d = d.borrow_mut();
-    let len = d.len(op)?;
-    let count = usize::try_from(len)
-        .map_err(|_| RtError::IoError(format!("{op}: поток не помещается в память")))?;
-    let was = d.position();
-    d.set_position(0);
-    let bytes = d.read_bytes(count, op);
-    d.set_position(was);
-    bytes
-}
-
-/// Записать байты в поток с текущей позиции — приёмник архива для
-/// `ЗаписьZipФайла.Записать()`.
-///
-/// Поток НЕ закрывается: измерено, что после `Записать` архива ручной
-/// `Закрыть` потока проходит, то есть платформа его тоже оставляет
-/// открытым.
-///
-/// # Errors
-///
-/// [`RtError::IoError`], если поток закрыт, открыт без доступа на запись
-/// или носитель не пишется.
-pub(crate) fn write_all(v: &BslValue, bytes: &[u8], op: &'static str) -> RtResult<()> {
-    let d = data(v, op)?;
-    d.borrow_mut().write_bytes(bytes, op)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::binbuf;
 
     fn num(v: i64) -> BslValue {
         BslValue::Number(BslNumber::from_i64(v))
@@ -1014,21 +1113,11 @@ mod tests {
     }
 
     fn buffer(bytes: &[u8]) -> BslValue {
-        let b = binbuf::new_binary_buffer(&num(bytes.len() as i64), &BslValue::Undefined).unwrap();
-        for (i, byte) in bytes.iter().enumerate() {
-            binbuf::set_byte(&b, &num(i as i64), &num(*byte as i64)).unwrap();
-        }
-        b
+        bsl_binbuf::binary_buffer_of(bytes.to_vec())
     }
 
     fn bytes_of(b: &BslValue) -> Vec<u8> {
-        match b {
-            BslValue::Object(o) => match &**o {
-                BslObject::BinaryBuffer(d) => d.borrow().to_vec(),
-                _ => panic!("не буфер"),
-            },
-            _ => panic!("не буфер"),
-        }
+        bsl_binbuf::binary_buffer_bytes(b).expect("буфер")
     }
 
     fn as_u64(v: &BslValue) -> u64 {
@@ -1092,7 +1181,7 @@ mod tests {
     fn the_constructor_rejects_what_the_platform_rejects() {
         assert!(new_memory_stream(&num(-1)).is_err());
         assert!(new_memory_stream(&frac(25, 1)).is_err());
-        assert!(new_memory_stream(&BslValue::Str(crate::BslString::from_str("4"))).is_err());
+        assert!(new_memory_stream(&BslValue::Str(bsl_rt::BslString::from_str("4"))).is_err());
         assert!(new_memory_stream(&BslValue::binary_data_of(vec![1, 2])).is_err());
     }
 
@@ -1224,7 +1313,7 @@ mod tests {
         assert_eq!(as_u64(&size(&s).unwrap()), 4);
         write(&s, &[buffer(&[9, 9, 9, 9]), num(0), num(2)]).unwrap();
         assert_eq!(bytes_of(&buf), vec![9, 9, 3, 4]);
-        binbuf::set_byte(&buf, &num(3), &num(77)).unwrap();
+        bsl_binbuf::binary_buffer_write(&buf, 3, &[77]).unwrap();
         seek(&s, &[num(3), enum_val(EnumValue::StreamPositionBegin)]).unwrap();
         let dst = buffer(&[0]);
         read(&s, &[dst.clone(), num(0), num(1)]).unwrap();
@@ -1317,7 +1406,7 @@ mod tests {
 
     fn open(path: &str, mode: EnumValue, access: Option<EnumValue>) -> RtResult<BslValue> {
         new_file_stream(
-            &BslValue::Str(crate::BslString::from_str(path)),
+            &BslValue::Str(bsl_rt::BslString::from_str(path)),
             &enum_val(mode),
             &match access {
                 Some(a) => enum_val(a),
@@ -1459,7 +1548,7 @@ mod tests {
     fn the_file_constructor_rejects_what_the_platform_rejects() {
         let path = tmp("bad-args");
         write_file(&path, b"x");
-        let name = BslValue::Str(crate::BslString::from_str(&path));
+        let name = BslValue::Str(bsl_rt::BslString::from_str(&path));
         assert!(new_file_stream(&name, &num(1), &BslValue::Undefined).is_err());
         assert!(new_file_stream(&name, &enum_val(EnumValue::FileOpenModeOpen), &num(1)).is_err());
         assert!(new_file_stream(
@@ -1469,7 +1558,7 @@ mod tests {
         )
         .is_err());
         assert!(new_file_stream(
-            &BslValue::Str(crate::BslString::from_str("")),
+            &BslValue::Str(bsl_rt::BslString::from_str("")),
             &enum_val(EnumValue::FileOpenModeOpen),
             &BslValue::Undefined
         )
@@ -1482,7 +1571,7 @@ mod tests {
     fn a_file_stream_grows_over_a_hole_and_reads_it_back_as_zeroes() {
         let path = tmp("hole");
         let _ = std::fs::remove_file(&path);
-        let s = manager_create(&[BslValue::Str(crate::BslString::from_str(&path))]).unwrap();
+        let s = manager_create(&[BslValue::Str(bsl_rt::BslString::from_str(&path))]).unwrap();
         assert_eq!(as_u64(&size(&s).unwrap()), 0);
         let src = buffer(&[10, 20, 30, 40]);
         write(&s, &[src.clone(), num(0), num(4)]).unwrap();
@@ -1527,7 +1616,7 @@ mod tests {
     fn access_restricts_the_operations() {
         let path = tmp("access");
         write_file(&path, b"0123456789");
-        let name = BslValue::Str(crate::BslString::from_str(&path));
+        let name = BslValue::Str(bsl_rt::BslString::from_str(&path));
         let ro = manager_open_for_read(std::slice::from_ref(&name)).unwrap();
         assert!(write(&ro, &[buffer(&[1]), num(0), num(1)]).is_err());
         assert_eq!(
@@ -1561,7 +1650,7 @@ mod tests {
     fn the_manager_checks_its_own_arity_and_argument_types() {
         let path = tmp("manager");
         write_file(&path, b"0123456789");
-        let name = BslValue::Str(crate::BslString::from_str(&path));
+        let name = BslValue::Str(bsl_rt::BslString::from_str(&path));
         assert!(manager_open(std::slice::from_ref(&name)).is_err());
         assert!(manager_open(&[name.clone(), enum_val(EnumValue::FileOpenModeOpen)]).is_ok());
         assert!(manager_open(&[
@@ -1579,7 +1668,7 @@ mod tests {
     #[test]
     fn a_missing_directory_is_a_catchable_error() {
         let s = new_file_stream(
-            &BslValue::Str(crate::BslString::from_str(
+            &BslValue::Str(bsl_rt::BslString::from_str(
                 "/tmp/open-bsl-stream-test-no-such-dir/x.bin",
             )),
             &enum_val(EnumValue::FileOpenModeCreate),

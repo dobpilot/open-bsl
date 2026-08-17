@@ -823,6 +823,31 @@ impl<'a> Resolver<'a> {
                     None if bsl_rt::lookup_enum(name).is_some() => Ok(RExpr::EnumTypeRef(
                         bsl_rt::lookup_enum(name).expect("проверено guard'ом выше"),
                     )),
+                    None if self.registry.is_some()
+                        && matches!(
+                            name.to_uppercase().as_str(),
+                            "ФАЙЛОВЫЕПОТОКИ" | "FILESTREAMS"
+                        ) =>
+                    {
+                        let registry = self.registry.expect("проверено guard'ом");
+                        let Some((library_index, constructor)) = registry.lookup_constructor(name)
+                        else {
+                            return Err(SemaError::Unsupported(
+                                "ФайловыеПотоки требует зарегистрированный компонент bsl-stream",
+                            ));
+                        };
+                        let package = registry
+                            .library(library_index)
+                            .expect("индекс получен из таблицы имён этого реестра")
+                            .package;
+                        let library = bsl_rt::LibraryKey::new(package);
+                        self.used_libraries.insert(library.clone());
+                        Ok(RExpr::CreateObject {
+                            library,
+                            constructor,
+                            args: Vec::new(),
+                        })
+                    }
                     // Голое имя менеджера `ФайловыеПотоки` разрешается так
                     // же, как голое имя перечисления, — но НЕ в константу:
                     // измерено, что `ФайловыеПотоки = ФайловыеПотоки` —
@@ -941,6 +966,21 @@ impl<'a> Resolver<'a> {
             if matches!(upper.as_str(), "ТЕКСТОВЫЙДОКУМЕНТ" | "TEXTDOCUMENT") {
                 return Err(SemaError::Unsupported(
                     "ТекстовыйДокумент требует зарегистрированный компонент bsl-textdoc",
+                ));
+            }
+            if matches!(
+                upper.as_str(),
+                "ПОТОКВПАМЯТИ"
+                    | "MEMORYSTREAM"
+                    | "ФАЙЛОВЫЙПОТОК"
+                    | "FILESTREAM"
+                    | "ЧТЕНИЕДАННЫХ"
+                    | "DATAREADER"
+                    | "ЗАПИСЬДАННЫХ"
+                    | "DATAWRITER"
+            ) {
+                return Err(SemaError::Unsupported(
+                    "потоковый тип требует зарегистрированный компонент bsl-stream",
                 ));
             }
             if matches!(

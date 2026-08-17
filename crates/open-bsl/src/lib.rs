@@ -142,6 +142,8 @@ impl EngineBuilder {
         runtime.register(bsl_textdoc::library());
         #[cfg(feature = "json")]
         runtime.register(bsl_json::library());
+        #[cfg(feature = "stream")]
+        runtime.register(bsl_stream::library());
         Self { runtime }
     }
 
@@ -520,6 +522,42 @@ mod tests {
         assert!(engine
             .compile("Возврат ПрочитатьЗначениеJSON(\"1\");")
             .is_err());
+    }
+
+    #[cfg(feature = "stream")]
+    #[test]
+    fn stream_feature_records_constructors_and_supports_the_bare_manager() {
+        let engine = Engine::builder().build().unwrap();
+        let module = engine
+            .compile(
+                "Если ФайловыеПотоки = ФайловыеПотоки Тогда\n\
+                     Возврат 1;\n\
+                 КонецЕсли;\n\
+                 буфер = Новый БуферДвоичныхДанных(4);\n\
+                 поток = Новый ПотокВПамяти(буфер);\n\
+                 писатель = Новый ЗаписьДанных(поток);\n\
+                 писатель.ЗаписатьБайт(65);\n\
+                 поток.Перейти(0, ПозицияВПотоке.Начало);\n\
+                 читатель = Новый ЧтениеДанных(поток);\n\
+                 Возврат читатель.ПрочитатьБайт();",
+            )
+            .unwrap();
+
+        assert!(module
+            .requirements()
+            .iter()
+            .any(|requirement| requirement.package == "bsl-stream"
+                && requirement.version == env!("CARGO_PKG_VERSION")));
+        assert_eq!(engine.new_state().run(&module).unwrap().to_string(), "65");
+        assert!(module.bytecode().unwrap().contains("CreateObject"));
+    }
+
+    #[cfg(not(feature = "stream"))]
+    #[test]
+    fn missing_stream_feature_rejects_constructors_and_the_bare_manager() {
+        let engine = Engine::builder().build().unwrap();
+        assert!(engine.compile("Возврат Новый ПотокВПамяти;").is_err());
+        assert!(engine.compile("Возврат ФайловыеПотоки;").is_err());
     }
 
     #[cfg(feature = "regexp")]

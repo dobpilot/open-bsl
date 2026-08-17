@@ -1761,11 +1761,7 @@ fn read_int_by_receiver(
     args: &[BslValue],
     w: crate::binbuf::IntWidth,
 ) -> RtResult<BslValue> {
-    if crate::datarw::is_data_reader(obj) {
-        crate::datarw::read_int(obj, args, w)
-    } else {
-        crate::binbuf::read_int(obj, args, w)
-    }
+    crate::binbuf::read_int(obj, args, w)
 }
 
 /// `ЗаписатьЦелоеN` по получателю — то же различие, что и у чтения.
@@ -1774,12 +1770,7 @@ fn write_int_by_receiver(
     args: &[BslValue],
     w: crate::binbuf::IntWidth,
 ) -> RtResult<BslValue> {
-    if crate::datarw::is_data_writer(obj) {
-        crate::datarw::write_int(obj, args, w)?;
-        Ok(BslValue::Undefined)
-    } else {
-        crate::binbuf::write_int(obj, args, w)
-    }
+    crate::binbuf::write_int(obj, args, w)
 }
 
 /// Лишние аргументы у метода с переменной арностью. Тихо игнорировать их
@@ -2140,19 +2131,6 @@ pub fn call_builtin_method(
                 }
                 crate::zip::writer_write(obj)?;
                 Ok(BslValue::Undefined)
-            } else if crate::stream::is_stream(obj) {
-                // У потока `Записать(Буфер, СмещениеВБуфере, Количество)` —
-                // ровно три аргумента, и проверяет их сам `stream::write`:
-                // резолвер арность `Записать` не фиксирует (получатель у
-                // этого имени бывает пяти видов).
-                crate::stream::write(obj, args)?;
-                Ok(BslValue::Undefined)
-            } else if crate::datarw::is_data_writer(obj) {
-                // У `ЗаписьДанных` `Записать(ДвоичныеДанные)` — ровно один
-                // аргумент (измерено: трёхаргументную форму платформа
-                // отвергает «Слишком много фактических параметров»).
-                crate::datarw::write(obj, args)?;
-                Ok(BslValue::Undefined)
             } else {
                 // Получатель здесь может оказаться и не `ЗаписьТекста`:
                 // тогда индексация `args[0]` обязана быть безопасной, а
@@ -2209,14 +2187,6 @@ pub fn call_builtin_method(
                 Ok(BslValue::Undefined)
             } else if crate::xml::is_xml_reader(obj) {
                 crate::xml::read(obj)
-            } else if crate::stream::is_stream(obj) {
-                // У потока `Прочитать` не шаг по потоку событий, а чтение
-                // байтов в буфер, и он ОТДАЁТ число прочитанных байтов.
-                crate::stream::read(obj, args)
-            } else if crate::datarw::is_data_reader(obj) {
-                // У `ЧтениеДанных` `Прочитать([Количество])` отдаёт
-                // `РезультатЧтенияДанных`.
-                crate::datarw::read(obj, args)
             } else {
                 Err(RtError::MethodNotApplicable {
                     method: "Прочитать",
@@ -2228,9 +2198,6 @@ pub fn call_builtin_method(
             // У читателей JSON/XML `Пропустить()` — шаг через узел без
             // результата, у `ЧтениеДанных` — перевод позиции на заданное
             // число байтов, и он ОТДАЁТ это число.
-            if crate::datarw::is_data_reader(obj) {
-                return crate::datarw::skip(obj, args);
-            }
             // Из-за аргумента у `ЧтениеДанных` резолвер арность этого имени
             // больше не фиксирует (была `Some(0)`), поэтому у читателей
             // XML-читателя верхнюю границу проверяет рантайм — иначе
@@ -2291,13 +2258,7 @@ pub fn call_builtin_method(
         }),
         // `Размер()` — метод и у `ДвоичныеДанные`, и у потока (а вот у
         // БУФЕРА это свойство, см. `BslValue::get_field_by_name`).
-        BuiltinMethod::Size => {
-            if crate::stream::is_stream(obj) {
-                crate::stream::size(obj)
-            } else {
-                obj.binary_data_size()
-            }
-        }
+        BuiltinMethod::Size => obj.binary_data_size(),
 
         // --- БуферДвоичныхДанных ------------------------------------------
         BuiltinMethod::BufSet => match args {
@@ -2322,29 +2283,27 @@ pub fn call_builtin_method(
         BuiltinMethod::WriteInt16 => write_int_by_receiver(obj, args, crate::binbuf::IntWidth::W16),
         BuiltinMethod::WriteInt32 => write_int_by_receiver(obj, args, crate::binbuf::IntWidth::W32),
         BuiltinMethod::WriteInt64 => write_int_by_receiver(obj, args, crate::binbuf::IntWidth::W64),
-        BuiltinMethod::DataReadByte => crate::datarw::read_byte(obj),
-        BuiltinMethod::DataReadIntoBuffer => crate::datarw::read_into_buffer(obj, args),
-        BuiltinMethod::DataReadChars => crate::datarw::read_chars(obj, args),
-        BuiltinMethod::DataReadLine => crate::datarw::read_line(obj, args),
-        BuiltinMethod::DataWriteByte => {
-            crate::datarw::write_byte(obj, args)?;
-            Ok(BslValue::Undefined)
-        }
-        BuiltinMethod::DataWriteChars => {
-            crate::datarw::write_chars(obj, args)?;
-            Ok(BslValue::Undefined)
-        }
-        BuiltinMethod::DataWriteLine => {
-            crate::datarw::write_line(obj, args)?;
-            Ok(BslValue::Undefined)
-        }
+        BuiltinMethod::DataReadByte
+        | BuiltinMethod::DataReadIntoBuffer
+        | BuiltinMethod::DataReadChars
+        | BuiltinMethod::DataReadLine
+        | BuiltinMethod::DataWriteByte
+        | BuiltinMethod::DataWriteChars
+        | BuiltinMethod::DataWriteLine => Err(RtError::MethodNotApplicable {
+            method: "метод bsl-stream",
+            receiver: obj.type_name(),
+        }),
         // Имя делят результат чтения данных и писатель архива — ветвление
         // по получателю.
         BuiltinMethod::GetBinaryData if crate::zip::is_writer(obj) => {
             crate::zip::writer_binary_data(obj)
         }
-        BuiltinMethod::GetBinaryData => crate::datarw::result_binary_data(obj),
-        BuiltinMethod::GetBinaryDataBuffer => crate::datarw::result_binary_buffer(obj),
+        BuiltinMethod::GetBinaryData | BuiltinMethod::GetBinaryDataBuffer => {
+            Err(RtError::MethodNotApplicable {
+                method: "метод bsl-stream",
+                receiver: obj.type_name(),
+            })
+        }
         BuiltinMethod::BufSplit => crate::binbuf::split(obj, &args[0]),
         BuiltinMethod::BufConcat => crate::binbuf::concat(obj, &args[0]),
         BuiltinMethod::BufSlice => crate::binbuf::get_slice(obj, args),
@@ -2448,8 +2407,10 @@ pub fn call_builtin_method(
         }),
 
         // --- Потоки -------------------------------------------------------
-        BuiltinMethod::CurrentPosition => crate::stream::current_position(obj),
-        BuiltinMethod::Seek => crate::stream::seek(obj, args),
+        BuiltinMethod::CurrentPosition | BuiltinMethod::Seek => Err(RtError::MethodNotApplicable {
+            method: "метод bsl-stream",
+            receiver: obj.type_name(),
+        }),
 
         // Пять методов менеджера открывают файл, а не работают с
         // получателем, поэтому получателя надо проверить здесь: сами
@@ -2467,7 +2428,10 @@ pub fn call_builtin_method(
             crate::zip::open(obj, args)?;
             Ok(BslValue::Undefined)
         }
-        BuiltinMethod::StreamOpen => manager(obj, "Открыть", crate::stream::manager_open, args),
+        BuiltinMethod::StreamOpen => Err(RtError::MethodNotApplicable {
+            method: "Открыть",
+            receiver: obj.type_name(),
+        }),
         BuiltinMethod::ArchiveExtract => {
             crate::zip::extract(obj, args)?;
             Ok(BslValue::Undefined)
@@ -2476,30 +2440,21 @@ pub fn call_builtin_method(
             crate::zip::extract_all(obj, args)?;
             Ok(BslValue::Undefined)
         }
-        BuiltinMethod::StreamOpenForRead => manager(
-            obj,
-            "ОткрытьДляЧтения",
-            crate::stream::manager_open_for_read,
-            args,
-        ),
-        BuiltinMethod::StreamOpenForWrite => manager(
-            obj,
-            "ОткрытьДляЗаписи",
-            crate::stream::manager_open_for_write,
-            args,
-        ),
-        BuiltinMethod::StreamOpenForAppend => manager(
-            obj,
-            "ОткрытьДляДописывания",
-            crate::stream::manager_open_for_append,
-            args,
-        ),
+        BuiltinMethod::StreamOpenForRead
+        | BuiltinMethod::StreamOpenForWrite
+        | BuiltinMethod::StreamOpenForAppend => Err(RtError::MethodNotApplicable {
+            method: "метод bsl-stream",
+            receiver: obj.type_name(),
+        }),
         // `Создать` делят менеджер файловых потоков и фабрика XDTO —
         // получатель решает, что это значит.
         BuiltinMethod::Create if crate::xdto::is_factory(obj) => {
             crate::xdto::factory_create(obj, args)
         }
-        BuiltinMethod::Create => manager(obj, "Создать", crate::stream::manager_create, args),
+        BuiltinMethod::Create => Err(RtError::MethodNotApplicable {
+            method: "Создать",
+            receiver: obj.type_name(),
+        }),
         // `Тип` — то же самое: у фабрики это поиск типа, а у экземпляра и
         // у `ЗначениеXDTO` — собственный тип (измерено на обоих).
         BuiltinMethod::XdtoType if crate::xdto::is_object(obj) || crate::xdto::is_value(obj) => {
@@ -2556,23 +2511,6 @@ pub fn call_builtin_method(
             "ВозможностьЧтенияXML",
         )),
     }
-}
-
-/// Метод менеджера `ФайловыеПотоки`: получатель обязан быть самим
-/// менеджером, всё остальное решают аргументы.
-fn manager(
-    obj: &BslValue,
-    method: &'static str,
-    open: fn(&[BslValue]) -> RtResult<BslValue>,
-    args: &[BslValue],
-) -> RtResult<BslValue> {
-    if !crate::stream::is_file_streams_manager(obj) {
-        return Err(RtError::MethodNotApplicable {
-            method,
-            receiver: obj.type_name(),
-        });
-    }
-    open(args)
 }
 
 fn is_structure(obj: &BslValue) -> bool {

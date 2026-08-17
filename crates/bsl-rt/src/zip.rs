@@ -807,8 +807,11 @@ fn read_source(source: &BslValue, op: &'static str) -> RtResult<(Vec<u8>, String
                 .map_err(|e| zip_err(&format!("не удалось прочитать файл «{path}»: {e}")))?;
             Ok((bytes, path))
         }
-        _ if crate::stream::is_stream(source) => {
-            let bytes = crate::stream::read_all(source, op)?;
+        _ if source.byte_stream().is_some() => {
+            let bytes = source
+                .byte_stream()
+                .expect("условие проверило протокол")
+                .read_all(op)?;
             Ok((bytes, "поток".to_string()))
         }
         _ => Err(RtError::TypeError {
@@ -1539,7 +1542,7 @@ fn write_target(source: &BslValue, op: &'static str) -> RtResult<Option<WriteTar
             }
             Ok(Some(WriteTarget::File(std::path::PathBuf::from(path))))
         }
-        _ if crate::stream::is_stream(source) => Ok(Some(WriteTarget::Stream(source.clone()))),
+        _ if source.byte_stream().is_some() => Ok(Some(WriteTarget::Stream(source.clone()))),
         _ => Err(RtError::TypeError {
             expected: "Строка или Поток",
             op,
@@ -2073,7 +2076,10 @@ pub fn writer_write(obj: &BslValue) -> RtResult<()> {
     match target {
         WriteTarget::File(path) => std::fs::write(&path, &bytes)
             .map_err(|e| zip_err(&format!("не удалось записать «{}»: {e}", path.display()))),
-        WriteTarget::Stream(stream) => crate::stream::write_all(&stream, &bytes, "Записать"),
+        WriteTarget::Stream(stream) => stream
+            .byte_stream()
+            .expect("приёмник проверен при открытии")
+            .write_all(&bytes, "Записать"),
     }
 }
 

@@ -4,6 +4,52 @@ use std::rc::Rc;
 
 use crate::{BslValue, CallContext, RtError, RtResult, TypeId};
 
+/// Байтовый поток, который можно передать другому runtime-компоненту.
+///
+/// Протокол не раскрывает конкретный носитель: ZIP, читатели данных и
+/// host-объекты работают с одной границей, не зная о `File` или буфере.
+pub trait ByteStreamProtocol: fmt::Debug {
+    /// Текущая позиция без её изменения.
+    fn position(&self, op: &'static str) -> RtResult<u64>;
+
+    /// Переводит позицию, не меняя размер носителя.
+    fn set_position(&self, position: u64, op: &'static str) -> RtResult<()>;
+
+    /// Длина носителя в байтах.
+    fn len(&self, op: &'static str) -> RtResult<u64>;
+
+    /// Читает не больше `count` байт и сдвигает позицию.
+    fn read_bytes(&self, count: usize, op: &'static str) -> RtResult<Vec<u8>>;
+
+    /// Записывает байты с текущей позиции и сдвигает её.
+    fn write_bytes(&self, bytes: &[u8], op: &'static str) -> RtResult<()>;
+
+    /// Читает поток целиком и восстанавливает исходную позицию.
+    fn read_all(&self, op: &'static str) -> RtResult<Vec<u8>> {
+        let len = self.len(op)?;
+        let count = usize::try_from(len).map_err(|_| RtError::TypeError {
+            expected: "Поток, размер которого умещается в памяти",
+            op,
+        })?;
+        let position = self.position(op)?;
+        self.set_position(0, op)?;
+        let result = self.read_bytes(count, op);
+        let restore = self.set_position(position, op);
+        match result {
+            Err(error) => Err(error),
+            Ok(bytes) => {
+                restore?;
+                Ok(bytes)
+            }
+        }
+    }
+
+    /// Записывает готовый блок с текущей позиции, не закрывая поток.
+    fn write_all(&self, bytes: &[u8], op: &'static str) -> RtResult<()> {
+        self.write_bytes(bytes, op)
+    }
+}
+
 /// Неизменяемое описание типа объекта, принадлежащее компоненту.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TypeDescriptor {
@@ -83,6 +129,11 @@ pub trait ObjectProtocol: fmt::Debug + ObjectDowncast {
         })
     }
 
+    /// Возвращает потоковую возможность объекта, если он ею является.
+    fn byte_stream(&self) -> Option<&dyn ByteStreamProtocol> {
+        None
+    }
+
     fn display(&self) -> String {
         self.type_descriptor().name.to_string()
     }
@@ -143,6 +194,10 @@ impl ObjectRef {
 
     pub fn is_filled(&self) -> RtResult<bool> {
         self.0.is_filled()
+    }
+
+    pub fn byte_stream(&self) -> Option<&dyn ByteStreamProtocol> {
+        self.0.byte_stream()
     }
 
     pub fn display(&self) -> String {
