@@ -14,5 +14,7 @@ __pycache__/
 *.py[cod]
 # Файл, который создаёт сценарий формирования текстового документа.
 /benchmarks/textdoc_invoice.txt
+# XLSX, который создаёт сценарий формирования табличного документа.
+/benchmarks/invoice_doc.xlsx
 # Файл выгрузки, который создаёт сценарий edata_writer.
 /benchmarks/edata_writer.xml
