@@ -39,6 +39,12 @@ ABSOLUTE_DATA_PREFIX = f'"{ROOT / "benchmarks" / "data"}/'
 RELATIVE_EDATA_OUTPUT = '"benchmarks/edata_writer.xml"'
 SCRATCH_EDATA_OUTPUT = '"/tmp/onec-bench-scratch/edata_writer.1c.xml"'
 
+# Файловые выходы invoice_doc_generator (MXL, PDF, XLSX) — туда же: 1С
+# стартует со своим текущим каталогом, и относительный «benchmarks/...»
+# разрешится мимо дерева проекта.
+RELATIVE_INVOICE_OUTPUT = '"benchmarks/invoice_doc.'
+SCRATCH_INVOICE_OUTPUT = '"/tmp/onec-bench-scratch/invoice_doc.'
+
 DECL = re.compile(
     r"^(Процедура|Функция)\s+([A-Za-zА-Яа-яЁё_][\w]*)", re.MULTILINE
 )
@@ -77,6 +83,7 @@ def main():
             path.read_text(encoding="utf-8")
             .replace(RELATIVE_OUTPUT, SCRATCH_OUTPUT)
             .replace(RELATIVE_EDATA_OUTPUT, SCRATCH_EDATA_OUTPUT)
+            .replace(RELATIVE_INVOICE_OUTPUT, SCRATCH_INVOICE_OUTPUT)
             .replace(DATA_PREFIX, ABSOLUTE_DATA_PREFIX)
         )
         decls, body, names = split_declarations(text)
