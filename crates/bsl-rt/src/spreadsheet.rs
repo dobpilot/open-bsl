@@ -3666,14 +3666,34 @@ pub fn from_mxl_bytes(bytes: &[u8]) -> RtResult<SpreadDocData> {
     let font_count = cur.number()? as usize;
     let mut fonts_test: Vec<Font> = Vec::with_capacity(font_count);
     for _ in 0..font_count {
-        fonts_test.push(parse_font(cur.next()?.group()?)?);
+        let g = cur.next()?.group()?;
+        fonts_test.push(parse_font(g)?);
     }
     // Форматные строки («ЧДЦ=2» и подобные), затем описания типов и GUID —
     // все три списка переменной длины. В простом документе все три пусты, и
     // раздел выглядит как три нуля подряд; настоящий отчёт показал, что это
     // не константа.
+    // Форматные строки («ЧДЦ=2» и подобные): `{1,<кол-во языков>,
+    // {<язык>,<строка>},…}`. У пустой записи — ноль языков. Берём
+    // русскую строку, а при её отсутствии — первую попавшуюся: как и
+    // шаблон, формат хранится в `CellData::format_spec` для ВМ.
     let num_format_count = cur.number()? as usize;
-    cur.skip(num_format_count)?;
+    let mut num_formats: Vec<Option<String>> = Vec::with_capacity(num_format_count);
+    for _ in 0..num_format_count {
+        let g = cur.next()?.group()?;
+        let lang_count = g.get(1).map_or(Ok(0), Node::number)?.max(0) as usize;
+        let mut spec = None;
+        for i in 0..lang_count {
+            if let Some(Node::Group(pair)) = g.get(2 + i) {
+                let lang = pair_text(pair_get(pair, 0));
+                let value = pair_text(pair_get(pair, 1));
+                if lang == "ru" || spec.is_none() {
+                    spec = Some(value);
+                }
+            }
+        }
+        num_formats.push(spec);
+    }
     let type_count = cur.number()? as usize;
     cur.skip(type_count)?;
     let guid = cur.number()? as usize;
@@ -3695,7 +3715,13 @@ pub fn from_mxl_bytes(bytes: &[u8]) -> RtResult<SpreadDocData> {
             b: ((value >> 16) & 0xFF) as u8,
         }));
     }
-    cur.skip(3)?; // 0,0,0
+    // Палитра рисунков: счётчик и столько же групп с base64-данными.
+    // В простом документе счётчик нулевой — тогда это и есть первый из
+    // трёх нулей, которые писались раньше через `skip(3)`; поэтому чтение
+    // счётчика здесь, а не отдельного `skip`, сохраняет порядок.
+    let picture_count = cur.number()? as usize;
+    cur.skip(picture_count)?;
+    cur.skip(2)?; // 0,0
     cur.skip(1)?; // ""
     cur.skip(1)?; // 0
     if let Ok(Node::Group(settings)) = cur.next() {
@@ -3736,8 +3762,11 @@ pub fn from_mxl_bytes(bytes: &[u8]) -> RtResult<SpreadDocData> {
         if value(fmt, bits::TEXT_PLACEMENT) == Some(3) {
             doc.set_cell_wrap(r, c, true);
         }
-        if value(fmt, bits::NUMBER_FORMAT).is_some() {
+        if let Some(v) = value(fmt, bits::NUMBER_FORMAT) {
             doc.set_cell_numeric(r, c);
+            if let Some(Some(spec)) = num_formats.get(v.max(0) as usize) {
+                doc.set_cell_format_spec(r, c, spec);
+            }
         }
         if let Some(v) = value(fmt, bits::FONT) {
             if let Some(f) = fonts_test.get(v.max(0) as usize) {
@@ -3841,8 +3870,17 @@ fn parse_format(g: &[Node]) -> RtResult<Vec<(u64, i64)>> {
 }
 
 fn parse_font(g: &[Node]) -> RtResult<Font> {
+    // Второе поле — вид записи: `0` — абсолютный шрифт с полным набором
+    // полей, `2` — ссылка на другой шрифт с модификациями. У ссылки мало
+    // полей и вместо кегля — группа-указатель, поэтому читаем только то,
+    // что безопасно для обоих видов.
+    let absolute = g.get(1).is_none_or(|n| n.number().unwrap_or(0) == 0);
     Ok(Font {
-        size: g.get(3).map_or(Ok(100), Node::number)? / 10,
+        size: if absolute {
+            g.get(3).map_or(Ok(100), Node::number)? / 10
+        } else {
+            10
+        },
         bold: g.get(7).map_or(Ok(400), Node::number)? >= 700,
         italic: g.get(8).map_or(Ok(0), Node::number)? != 0,
         underline: g.get(9).map_or(Ok(0), Node::number)? != 0,
