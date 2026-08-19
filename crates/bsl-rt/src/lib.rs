@@ -432,79 +432,6 @@ impl BslValue {
                 // саму каноническую форму, а не имя (фикстура `uuid`).
                 // Строка ниже живёт в диагностике `RtError`.
                 BslObject::Uuid(_) => "УникальныйИдентификатор",
-                // Имя ЗНАЧЕНИЯ — без пробелов; имя ТИПА («Чтение JSON») в
-                // `types.rs`. Измерено: `Строка(Новый ЧтениеJSON)` даёт
-                // «ЧтениеJSON», а `Строка(ТипЗнч(...))` — «Чтение JSON».
-                BslObject::ReservedJsonReader => "ЧтениеJSON",
-                BslObject::ReservedJsonWriter => "ЗаписьJSON",
-                BslObject::ReservedJsonWriterSettings => "ПараметрыЗаписиJSON",
-                BslObject::ReservedJsonSerializerSettings => "НастройкиСериализацииJSON",
-                BslObject::ReservedXmlReader
-                | BslObject::ReservedXmlWriter
-                | BslObject::ReservedXmlWriterSettings => "",
-                // Имена ЗНАЧЕНИЙ узлов DOM — слитные, имена ТИПОВ («Элемент
-                // DOM», «Документ  DOM» с ДВУМЯ пробелами) живут в
-                // `types.rs`. Обе колонки измерены.
-                BslObject::ReservedDomBuilder
-                | BslObject::ReservedDomNode
-                | BslObject::ReservedDomWriter
-                | BslObject::ReservedDomList
-                | BslObject::ReservedXPathResolver
-                | BslObject::ReservedXPathExpression
-                | BslObject::ReservedXPathResult => "",
-                BslObject::ReservedRegexGroup(_) => "ГруппаРезультатаПоискаПоРегулярномуВыражению",
-                BslObject::ReservedXsBuilder
-                | BslObject::ReservedXsSchemaSet
-                | BslObject::ReservedXsComponent
-                | BslObject::ReservedXsList
-                | BslObject::ReservedXmlExpandedName
-                | BslObject::ReservedXmlExpandedNameList => "",
-                BslObject::ReservedXdtoType
-                | BslObject::ReservedXdtoProperty
-                | BslObject::ReservedXdtoProperties
-                | BslObject::ReservedXdtoFacets
-                | BslObject::ReservedXdtoFacet
-                | BslObject::ReservedXdtoValue
-                | BslObject::ReservedXdtoFactory
-                | BslObject::ReservedXdtoSerializer
-                | BslObject::ReservedXdtoObject
-                | BslObject::ReservedXdtoList
-                | BslObject::ReservedXdtoSequence => "",
-                BslObject::ReservedSpreadDocument
-                | BslObject::ReservedSpreadArea
-                | BslObject::ReservedSpreadDrawings
-                | BslObject::ReservedSpreadDrawing
-                | BslObject::ReservedSpreadDocParams => "",
-                BslObject::ReservedTextDocument => "ТекстовыйДокумент",
-                BslObject::ReservedTextDocParams => "ПараметрыМакетаТекстовогоДокумента",
-                // Имена ЗНАЧЕНИЙ читателей архива — слитные, имена ТИПОВ
-                // («Чтение ZIP файла») с пробелами, см. `types.rs`. Обе
-                // колонки измерены на 8.3.27.
-                // Имена ЗНАЧЕНИЙ у трёх видов PDF совпадают с именами их
-                // типов, кроме документа: `Строка(Новый ДокументPDF)` —
-                // «ДокументPDF», а `Строка(ТипЗнч(...))` — «Документ PDF»
-                // (измерено обе колонки).
-                BslObject::ReservedPdfDocument
-                | BslObject::ReservedPdfPages
-                | BslObject::ReservedPdfPage
-                | BslObject::ReservedPdfAttachments
-                | BslObject::ReservedPdfAttachment => "",
-                BslObject::ReservedArchiveReader
-                | BslObject::ReservedArchiveEntries
-                | BslObject::ReservedArchiveEntry
-                | BslObject::ReservedArchiveWriter => "",
-                // Имена ЗНАЧЕНИЙ у потоков — слитные и РАЗНЫЕ, в отличие от
-                // имени их типа, которое у обоих одно («Файловый поток»,
-                // см. `types.rs`). Измерено обеими сторонами.
-                BslObject::ReservedMemoryStream => "ПотокВПамяти",
-                BslObject::ReservedFileStream => "ФайловыйПоток",
-                BslObject::ReservedFileStreamsManager => "МенеджерФайловыхПотоков",
-                // Имена ЗНАЧЕНИЙ слитные, имена их ТИПОВ — с пробелом
-                // («Чтение данных»), как у JSON и XML. Измерено обеими
-                // сторонами.
-                BslObject::ReservedDataReader => "ЧтениеДанных",
-                BslObject::ReservedDataWriter => "ЗаписьДанных",
-                BslObject::ReservedDataReadResult => "РезультатЧтенияДанных",
             },
             BslValue::Skipped => "Skipped",
         }
@@ -1240,106 +1167,7 @@ impl BslValue {
                 | BslObject::TypeDescription(..)
                 | BslObject::ValueComparison
                 | BslObject::KeyValuePair(..)
-                | BslObject::TextWriter(..)
-                // Объекты JSON — не коллекции: заполненность у них та же,
-                // что у ЗаписьТекста, — объект есть, значит заполнен.
-                | BslObject::ReservedJsonReader
-                | BslObject::ReservedJsonWriter
-                | BslObject::ReservedJsonWriterSettings
-                | BslObject::ReservedJsonSerializerSettings
-                | BslObject::ReservedXmlReader
-                | BslObject::ReservedXmlWriter
-                | BslObject::ReservedXmlWriterSettings
-                | BslObject::ReservedSpreadDocument
-                | BslObject::ReservedSpreadArea
-                | BslObject::ReservedSpreadDrawings
-                | BslObject::ReservedSpreadDrawing
-                | BslObject::ReservedSpreadDocParams
-                | BslObject::ReservedTextDocument
-                | BslObject::ReservedTextDocParams
-                | BslObject::ReservedArchiveReader
-                | BslObject::ReservedArchiveEntries
-                | BslObject::ReservedArchiveEntry => true,
-                // ИЗМЕРЕНО, и для потока, и для менеджера:
-                // `ЗначениеЗаполнено` от них платформа отвергает — это
-                // ошибка, а не «Да»/«Нет». Поток снят фикстурой
-                // `binary-streams`, менеджер — отдельной разведочной
-                // пробой на 8.3.27.
-                //
-                // Читатель, писатель и результат чтения ведут себя так же —
-                // измерено на каждом из трёх отдельной пробой.
-                //
-                // Писатель архива — туда же, и это ИЗМЕРЕНО отдельно от
-                // читателя, потому что ответы у них РАЗНЫЕ:
-                // `ЗначениеЗаполнено(Новый ЧтениеZipФайла(файл))` — «Да», а
-                // от `Новый ЗаписьZipФайла(файл)` платформа отвечает
-                // ошибкой «Проверка мутабельных значений на заполненность
-                // не поддерживается».
-                //
-                // Построитель DOM и любой узел дерева ведут себя так же —
-                // измерено на построителе, документе и элементе: у всех
-                // трёх `ЗначениеЗаполнено` даёт ошибку, а не «Да».
-                // ИЗМЕРЕНО каждой пробой отдельно, и ответы РАЗНЫЕ:
-                BslObject::ReservedPdfDocument
-                | BslObject::ReservedPdfPages
-                | BslObject::ReservedPdfPage
-                | BslObject::ReservedPdfAttachments
-                | BslObject::ReservedPdfAttachment
-                | BslObject::ReservedMemoryStream
-                | BslObject::ReservedFileStream
-                | BslObject::ReservedFileStreamsManager
-                | BslObject::ReservedArchiveWriter
-                | BslObject::ReservedDataReader
-                | BslObject::ReservedDataWriter
-                | BslObject::ReservedDataReadResult
-                | BslObject::ReservedDomBuilder
-                | BslObject::ReservedDomNode
-                | BslObject::ReservedDomWriter
-                | BslObject::ReservedDomList
-                | BslObject::ReservedXPathResolver
-                | BslObject::ReservedXPathExpression
-                | BslObject::ReservedXPathResult
-                | BslObject::ReservedRegexGroup(_)
-                // Результат поиска по регулярному выражению и его группа —
-                // туда же, и это ИЗМЕРЕНО отдельно, а не выведено по
-                // соседству: `ЗначениеЗаполнено` от результата отвечает
-                // «Проверка мутабельных значений на заполненность не
-                // поддерживается».
-                | BslObject::ReservedXsBuilder
-                | BslObject::ReservedXsSchemaSet
-                | BslObject::ReservedXsComponent
-                | BslObject::ReservedXsList
-                | BslObject::ReservedXmlExpandedName
-                | BslObject::ReservedXmlExpandedNameList
-                // Модель типов XDTO делится так же, как модель схемы:
-                // ИЗМЕРЕНО, что тип, свойство, фасет и сама ФАБРИКА
-                // отвечают на `ЗначениеЗаполнено` ошибкой, а обе коллекции —
-                // «Да» и «Нет» по длине (см. ветку выше). А вот про
-                // ЭКЗЕМПЛЯРЫ — `ЗначениеXDTO` и `ОбъектXDTO` — замера нет:
-                // проба на значении вешает платформу модальным окном, и
-                // обоих ждала бы та же судьба, поэтому они отнесены к своим
-                // соседям по аналогии, а не по замеру.
-                // Список и последовательность экземпляра отнесены туда же и
-                // по той же причине: их `Количество()` измерено, а
-                // `ЗначениеЗаполнено` от них — нет и не будет, пока проба
-                // вешает платформу.
-                //
-                | BslObject::ReservedXdtoType
-                | BslObject::ReservedXdtoProperty
-                | BslObject::ReservedXdtoProperties
-                | BslObject::ReservedXdtoFacets
-                | BslObject::ReservedXdtoFacet
-                | BslObject::ReservedXdtoValue
-                | BslObject::ReservedXdtoFactory
-                | BslObject::ReservedXdtoSerializer
-                | BslObject::ReservedXdtoObject
-                | BslObject::ReservedXdtoList
-                | BslObject::ReservedXdtoSequence => {
-                    return Err(RtError::TypeError {
-                        expected: "Значение, у которого есть признак заполненности",
-                        op: "ЗначениеЗаполнено",
-                    })
-                }
+                | BslObject::TextWriter(..) => true,
             },
             BslValue::Skipped => {
                 return Err(RtError::TypeError {
@@ -1395,60 +1223,6 @@ impl BslValue {
                 BslObject::BinaryData(..) => TypeId::BinaryData,
                 BslObject::BinaryBuffer(..) => TypeId::BinaryDataBuffer,
                 BslObject::Uuid(..) => TypeId::Uuid,
-                BslObject::ReservedJsonReader => TypeId::JsonReader,
-                BslObject::ReservedJsonWriter => TypeId::JsonWriter,
-                BslObject::ReservedJsonWriterSettings => TypeId::JsonWriterSettings,
-                BslObject::ReservedJsonSerializerSettings => TypeId::JsonSerializerSettings,
-                BslObject::ReservedXmlReader => TypeId::XmlReader,
-                BslObject::ReservedXmlWriter => TypeId::XmlWriter,
-                BslObject::ReservedXmlWriterSettings => TypeId::XmlWriterSettings,
-                BslObject::ReservedSpreadDocument => TypeId::SpreadDocument,
-                BslObject::ReservedSpreadArea => TypeId::SpreadArea,
-                BslObject::ReservedSpreadDrawings => TypeId::SpreadDrawings,
-                BslObject::ReservedSpreadDrawing => TypeId::SpreadDrawing,
-                BslObject::ReservedSpreadDocParams => TypeId::SpreadDocParams,
-                BslObject::ReservedTextDocument => TypeId::TextDocument,
-                BslObject::ReservedTextDocParams => TypeId::TextDocParams,
-                BslObject::ReservedPdfDocument => TypeId::PdfDocument,
-                BslObject::ReservedPdfPages => TypeId::PdfPagesCollection,
-                BslObject::ReservedPdfPage => TypeId::PdfPage,
-                BslObject::ReservedPdfAttachments => TypeId::PdfAttachmentCollection,
-                BslObject::ReservedPdfAttachment => TypeId::PdfAttachment,
-                BslObject::ReservedArchiveReader => TypeId::ZipFileReader,
-                BslObject::ReservedArchiveEntries => TypeId::ZipFileEntries,
-                BslObject::ReservedArchiveEntry => TypeId::ZipFileEntry,
-                BslObject::ReservedArchiveWriter => TypeId::ZipFileWriter,
-                BslObject::ReservedMemoryStream => TypeId::MemoryStream,
-                BslObject::ReservedFileStream => TypeId::FileStream,
-                BslObject::ReservedFileStreamsManager => TypeId::FileStreamsManager,
-                BslObject::ReservedDataReader => TypeId::DataReader,
-                BslObject::ReservedDataWriter => TypeId::DataWriter,
-                BslObject::ReservedDataReadResult => TypeId::DataReadResult,
-                BslObject::ReservedDomBuilder
-                | BslObject::ReservedDomNode
-                | BslObject::ReservedDomWriter
-                | BslObject::ReservedDomList
-                | BslObject::ReservedXPathResolver
-                | BslObject::ReservedXPathExpression
-                | BslObject::ReservedXPathResult => TypeId::DomBuilder,
-                BslObject::ReservedRegexGroup(_) => TypeId::RegexMatchGroup,
-                BslObject::ReservedXsBuilder
-                | BslObject::ReservedXsSchemaSet
-                | BslObject::ReservedXsComponent
-                | BslObject::ReservedXsList
-                | BslObject::ReservedXmlExpandedName
-                | BslObject::ReservedXmlExpandedNameList => TypeId::XmlSchemaBuilder,
-                BslObject::ReservedXdtoType => TypeId::XdtoObjectType,
-                BslObject::ReservedXdtoProperty => TypeId::XdtoProperty,
-                BslObject::ReservedXdtoProperties => TypeId::XdtoPropertyCollection,
-                BslObject::ReservedXdtoFacets => TypeId::XdtoFacetCollection,
-                BslObject::ReservedXdtoFacet => TypeId::XdtoFacet,
-                BslObject::ReservedXdtoValue => TypeId::XdtoDataValue,
-                BslObject::ReservedXdtoFactory => TypeId::XdtoFactory,
-                BslObject::ReservedXdtoSerializer => TypeId::XdtoSerializer,
-                BslObject::ReservedXdtoObject => TypeId::XdtoDataObject,
-                BslObject::ReservedXdtoList => TypeId::XdtoList,
-                BslObject::ReservedXdtoSequence => TypeId::XdtoSequence,
             },
             BslValue::Skipped => {
                 return Err(RtError::TypeError {
@@ -2140,71 +1914,8 @@ impl BslValue {
                 // здесь не заведён, потому что в задачу этого типа он не
                 // входит, и своего эталона у него ещё нет.)
                 BslObject::BinaryBuffer(..) => Err(RtError::NotIndexable),
-                // Три коллекции DOM — настоящие коллекции: `Количество()`
-                BslObject::ReservedDomBuilder
-                | BslObject::ReservedDomNode
-                | BslObject::ReservedDomWriter
-                | BslObject::ReservedDomList
-                | BslObject::ReservedXPathResolver
-                | BslObject::ReservedXPathExpression
-                | BslObject::ReservedXPathResult
-                | BslObject::ReservedRegexGroup(_) => Err(RtError::NotIndexable),
-                BslObject::ReservedXsBuilder
-                | BslObject::ReservedXsSchemaSet
-                | BslObject::ReservedXsComponent
-                | BslObject::ReservedXsList
-                | BslObject::ReservedXmlExpandedName
-                | BslObject::ReservedXmlExpandedNameList
-                | BslObject::Uuid(..) => Err(RtError::NotIndexable),
-                // Коллекции модели типов XDTO — настоящие коллекции:
-                // `Количество()` и `Для Каждого` по свойствам и по
-                // фасетам измерены. Сами тип, свойство, фасет и значение
-                // — нет.
-                BslObject::ReservedXdtoType
-                | BslObject::ReservedXdtoProperty
-                | BslObject::ReservedXdtoProperties
-                | BslObject::ReservedXdtoFacets
-                | BslObject::ReservedXdtoFacet
-                | BslObject::ReservedXdtoValue
-                | BslObject::ReservedXdtoFactory
-                | BslObject::ReservedXdtoSerializer
-                | BslObject::ReservedXdtoObject
-                | BslObject::ReservedXdtoList
-                | BslObject::ReservedXdtoSequence => Err(RtError::NotIndexable),
-                BslObject::TextWriter(..)
-                | BslObject::ReservedJsonReader
-                | BslObject::ReservedJsonWriter
-                | BslObject::ReservedJsonWriterSettings
-                | BslObject::ReservedJsonSerializerSettings
-                | BslObject::ReservedXmlReader
-                | BslObject::ReservedXmlWriter
-                | BslObject::ReservedXmlWriterSettings
-                | BslObject::ReservedSpreadDocument
-                | BslObject::ReservedSpreadArea
-                | BslObject::ReservedSpreadDrawings
-                | BslObject::ReservedSpreadDrawing
-                | BslObject::ReservedSpreadDocParams
-                | BslObject::ReservedTextDocument
-                | BslObject::ReservedTextDocParams
-                | BslObject::ReservedArchiveReader
-                | BslObject::ReservedArchiveEntries
-                | BslObject::ReservedArchiveEntry
-                | BslObject::ReservedArchiveWriter
-                | BslObject::ReservedPdfDocument
-                | BslObject::ReservedPdfPages
-                | BslObject::ReservedPdfPage
-                | BslObject::ReservedPdfAttachments
-                | BslObject::ReservedPdfAttachment
-                // Число байтов потока отдаёт МЕТОД `Размер()`, а
-                // `Количество()` платформа отвергает и на потоке, и на
-                // менеджере — измерено на обоих. `Для Каждого` по ним
-                // тоже нет.
-                | BslObject::ReservedMemoryStream
-                | BslObject::ReservedFileStream
-                | BslObject::ReservedFileStreamsManager
-                | BslObject::ReservedDataReader
-                | BslObject::ReservedDataWriter
-                | BslObject::ReservedDataReadResult => Err(RtError::NotIndexable),
+                BslObject::Uuid(..) => Err(RtError::NotIndexable),
+                BslObject::TextWriter(..) => Err(RtError::NotIndexable),
             },
             _ => Err(RtError::NotIndexable),
         }
@@ -2501,10 +2212,6 @@ impl BslValue {
                         Err(RtError::UnknownColumn(name.to_string()))
                     }
                 }
-                BslObject::ReservedJsonReader
-                | BslObject::ReservedJsonWriter
-                | BslObject::ReservedJsonWriterSettings
-                | BslObject::ReservedJsonSerializerSettings => Err(RtError::NotAnObject),
                 // У буфера `Размер` и `ПорядокБайтов` — именно СВОЙСТВА:
                 // `Б.Размер()` со скобками платформа отвергает (измерено),
                 // поэтому оба живут здесь, а не в таблице методов.
@@ -2519,24 +2226,6 @@ impl BslValue {
                     } else {
                         Err(RtError::UnknownColumn(name.to_string()))
                     }
-                }
-                // У потока СВОЙСТВА — ровно три признака доступности, а
-                // `Размер` и `ТекущаяПозиция` — наоборот, МЕТОДЫ (вызов со
-                // скобками платформа принимает у них и отвергает у трёх
-                // признаков; измерено обеими формами на каждом из пяти
-                // имён). После `Закрыть()` признаки продолжают отдавать
-                // прежние значения — тоже измерено.
-                // У читателя и писателя данных СВОЙСТВА — три: порядок
-                // байтов, кодировка текста и разделитель строк. Английское
-                // имя разделителя — `LineSplitter`, а не `LineSeparator`
-                // (измерено: второе платформа не знает).
-                BslObject::ReservedDataReader
-                | BslObject::ReservedDataWriter
-                | BslObject::ReservedDataReadResult
-                | BslObject::ReservedMemoryStream
-                | BslObject::ReservedFileStream => Err(RtError::NotAnObject),
-                BslObject::ReservedTextDocument | BslObject::ReservedTextDocParams => {
-                    Err(RtError::NotAnObject)
                 }
                 BslObject::KeyValuePair(k, v) => {
                     if name.eq_ignore_ascii_case("Ключ") || name.eq_ignore_ascii_case("Key") {
@@ -2558,20 +2247,6 @@ impl BslValue {
     pub fn set_field_by_name(&self, name: &str, val: BslValue) -> RtResult<()> {
         match self {
             BslValue::Object(o) => match &**o {
-                BslObject::ReservedTextDocument | BslObject::ReservedTextDocParams => {
-                    Err(RtError::NotAnObject)
-                }
-                BslObject::ReservedJsonReader
-                | BslObject::ReservedJsonWriter
-                | BslObject::ReservedJsonWriterSettings
-                | BslObject::ReservedJsonSerializerSettings => Err(RtError::NotAnObject),
-                // Все три свойства читателя и писателя данных ПИШУТСЯ. Но
-                // `ПорядокБайтов` у ЧИТАТЕЛЯ при этом меняет только то, что
-                // отдаёт геттер: чтение целых по-прежнему идёт порядком из
-                // конструктора (измерено, см. `datarw`).
-                BslObject::ReservedDataReader | BslObject::ReservedDataWriter => {
-                    Err(RtError::NotAnObject)
-                }
                 // Пишется только `ПорядокБайтов`: `Размер` доступен лишь на
                 // чтение, присваивание в него платформа отвергает
                 // (измерено — прежний размер при этом уцелел).
@@ -3400,74 +3075,12 @@ impl fmt::Display for BslValue {
                 // типа: `Строка(УИД)` — это и есть его строка (фикстура
                 // `uuid`, эталон с платформы).
                 BslObject::Uuid(b) => write!(f, "{}", uuid::format(b)),
-                BslObject::ReservedDomBuilder
-                | BslObject::ReservedDomNode
-                | BslObject::ReservedDomWriter
-                | BslObject::ReservedDomList
-                | BslObject::ReservedXPathResolver
-                | BslObject::ReservedXPathExpression
-                | BslObject::ReservedXPathResult
-                | BslObject::ReservedRegexGroup(_) => write!(f, "{}", self.type_name()),
                 // Единственный объект, который печатается СОДЕРЖИМЫМ, а не
                 // именем: см. `binary_data_display`.
                 BslObject::BinaryData(bytes) => write!(f, "{}", binary_data_display(bytes)),
                 // Буфер, в отличие от двоичных данных, печатается ИМЕНЕМ, а
                 // не содержимым (измерено): дампа байтов у него нет.
                 BslObject::BinaryBuffer(_) => write!(f, "БуферДвоичныхДанных"),
-                BslObject::ReservedJsonReader => write!(f, "ЧтениеJSON"),
-                BslObject::ReservedJsonWriter => write!(f, "ЗаписьJSON"),
-                BslObject::ReservedJsonWriterSettings => write!(f, "ПараметрыЗаписиJSON"),
-                BslObject::ReservedJsonSerializerSettings => write!(f, "НастройкиСериализацииJSON"),
-                BslObject::ReservedXmlReader => write!(f, "ЧтениеXML"),
-                BslObject::ReservedXmlWriter => write!(f, "ЗаписьXML"),
-                BslObject::ReservedXmlWriterSettings => write!(f, "ПараметрыЗаписиXML"),
-                BslObject::ReservedSpreadDocument
-                | BslObject::ReservedSpreadArea
-                | BslObject::ReservedSpreadDrawings
-                | BslObject::ReservedSpreadDrawing
-                | BslObject::ReservedSpreadDocParams => write!(f, "{}", self.type_name()),
-                BslObject::ReservedTextDocument => write!(f, "ТекстовыйДокумент"),
-                BslObject::ReservedTextDocParams => {
-                    write!(f, "ПараметрыМакетаТекстовогоДокумента")
-                }
-                BslObject::ReservedArchiveReader
-                | BslObject::ReservedArchiveEntries
-                | BslObject::ReservedArchiveEntry
-                | BslObject::ReservedArchiveWriter => write!(f, "{}", self.type_name()),
-                BslObject::ReservedPdfDocument
-                | BslObject::ReservedPdfPages
-                | BslObject::ReservedPdfPage
-                | BslObject::ReservedPdfAttachments
-                | BslObject::ReservedPdfAttachment => write!(f, "{}", self.type_name()),
-                // Потоки печатаются ИМЕНЕМ ЗНАЧЕНИЯ, и закрытие его не
-                // меняет: `Строка(Зкр)` после `Закрыть()` — по-прежнему
-                // «ПотокВПамяти» (измерено).
-                BslObject::ReservedMemoryStream => write!(f, "ПотокВПамяти"),
-                BslObject::ReservedFileStream => write!(f, "ФайловыйПоток"),
-                BslObject::ReservedFileStreamsManager => write!(f, "МенеджерФайловыхПотоков"),
-                // Печатаются именем ЗНАЧЕНИЯ, слитно (измерено).
-                BslObject::ReservedDataReader => write!(f, "ЧтениеДанных"),
-                BslObject::ReservedDataWriter => write!(f, "ЗаписьДанных"),
-                BslObject::ReservedDataReadResult => write!(f, "РезультатЧтенияДанных"),
-                BslObject::ReservedXsBuilder
-                | BslObject::ReservedXsSchemaSet
-                | BslObject::ReservedXsComponent
-                | BslObject::ReservedXsList
-                | BslObject::ReservedXmlExpandedName
-                | BslObject::ReservedXmlExpandedNameList => {
-                    write!(f, "{}", self.type_name())
-                }
-                BslObject::ReservedXdtoType
-                | BslObject::ReservedXdtoProperty
-                | BslObject::ReservedXdtoProperties
-                | BslObject::ReservedXdtoFacets
-                | BslObject::ReservedXdtoFacet
-                | BslObject::ReservedXdtoValue
-                | BslObject::ReservedXdtoFactory
-                | BslObject::ReservedXdtoSerializer
-                | BslObject::ReservedXdtoObject
-                | BslObject::ReservedXdtoList
-                | BslObject::ReservedXdtoSequence => write!(f, "{}", self.type_name()),
             },
             // Никогда не должно реально дойти до печати (см. doc comment
             // на варианте) — но `Display` обязан быть тотальным.

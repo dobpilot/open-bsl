@@ -79,15 +79,6 @@ pub enum BslObject {
     /// регистра (см. `crate::uuid`).
     Uuid([u8; 16]),
 
-    // Теги зарезервированы, чтобы перенос типов в `bsl-stream` не менял
-    // числовое представление остальных вариантов `BslObject`.
-    ReservedMemoryStream,
-    ReservedFileStream,
-    ReservedFileStreamsManager,
-    ReservedDataReader,
-    ReservedDataWriter,
-    ReservedDataReadResult,
-
     /// Непрозрачное значение внутреннего формата (`ЗначениеИзСтрокиВнутр`):
     /// вид, который эта реализация не материализует — ссылки объектов базы
     /// (`СправочникСсылка`, `ДокументСсылка`, `ПеречислениеСсылка`),
@@ -99,89 +90,8 @@ pub enum BslObject {
     /// сравнение на равенство (по тексту) и обратная запись.
     VstrOpaque(String),
 
-    /// Зарезервированные места прежних JSON-объектов. Они сохраняют
-    /// номера следующих legacy-тегов; значения создаёт `bsl-json`
-    /// через `ObjectProtocol`.
-    ReservedJsonReader,
-    ReservedJsonWriter,
-    ReservedJsonWriterSettings,
-    ReservedJsonSerializerSettings,
-
-    // Теги зарезервированы, чтобы перенос типов в `bsl-xml` не менял
-    // числовое представление остальных вариантов `BslObject`.
-    ReservedXmlReader,
-    ReservedXmlWriter,
-    ReservedXmlWriterSettings,
-
-    // Теги зарезервированы, чтобы перенос типов в `bsl-xml` не менял
-    // числовое представление остальных вариантов `BslObject`.
-    ReservedDomBuilder,
-    ReservedDomNode,
-    ReservedDomWriter,
-    ReservedDomList,
-    ReservedXPathResolver,
-    ReservedXPathExpression,
-    ReservedXPathResult,
-
-    /// Объект статически подключённого компонента. Вариант занимает
-    /// прежний тег `RegexMatch`, чтобы не сдвигать теги горячих legacy-типов.
+    /// Объект статически подключённого компонента.
     Extension(crate::ObjectRef),
-    /// Зарезервированный тег удалённого `RegexGroup`. Не конструируется.
-    #[doc(hidden)]
-    ReservedRegexGroup(usize),
-
-    // Теги зарезервированы, чтобы перенос типов в `bsl-xml` не менял
-    // числовое представление остальных вариантов `BslObject`.
-    ReservedXsBuilder,
-    ReservedXsSchemaSet,
-    ReservedXsComponent,
-    ReservedXsList,
-    ReservedXmlExpandedName,
-    ReservedXmlExpandedNameList,
-
-    // Теги зарезервированы, чтобы перенос типов в `bsl-xml` не менял
-    // числовое представление остальных вариантов `BslObject`.
-    ReservedXdtoType,
-    ReservedXdtoProperty,
-    ReservedXdtoProperties,
-    ReservedXdtoFacets,
-    ReservedXdtoFacet,
-    ReservedXdtoValue,
-    ReservedXdtoFactory,
-    ReservedXdtoSerializer,
-    ReservedXdtoObject,
-    ReservedXdtoList,
-    ReservedXdtoSequence,
-
-    // Теги зарезервированы, чтобы перенос типов в `bsl-spreadsheet` не
-    // менял числовое представление остальных вариантов `BslObject`.
-    ReservedSpreadDocument,
-    ReservedSpreadArea,
-    ReservedSpreadDrawings,
-    ReservedSpreadDrawing,
-    ReservedSpreadDocParams,
-
-    /// Зарезервированное место прежнего `ТекстовыйДокумент`: вариант
-    /// сохраняет номера следующих legacy-тегов после выноса в
-    /// `bsl-textdoc`, но значений этого вида больше не создаётся.
-    ReservedTextDocument,
-    /// Зарезервированное место прежних параметров текстового макета.
-    ReservedTextDocParams,
-
-    // Теги зарезервированы, чтобы перенос типов в `bsl-pdf` не менял
-    // числовое представление остальных вариантов `BslObject`.
-    ReservedPdfDocument,
-    ReservedPdfPages,
-    ReservedPdfPage,
-    ReservedPdfAttachments,
-    ReservedPdfAttachment,
-
-    // Теги зарезервированы, чтобы перенос типов в `bsl-zip` не менял
-    // числовое представление остальных вариантов `BslObject`.
-    ReservedArchiveReader,
-    ReservedArchiveEntries,
-    ReservedArchiveEntry,
-    ReservedArchiveWriter,
 }
 
 /// Хранение полей `Структура` — двухрежимное, как в V8.
