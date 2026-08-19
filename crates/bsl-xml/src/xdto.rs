@@ -588,8 +588,8 @@ use std::rc::{Rc, Weak};
 
 use crate::xsd::{FacetKind, XName, XsKind, XsSchemaData, XSD_NS};
 use bsl_rt::{
-    BslNumber, BslObject, BslString, BslValue, CallContext, EnumValue, ObjectProtocol, RtError,
-    RtResult, TypeDescriptor, TypeId,
+    BslNumber, BslObject, BslString, BslValue, CallContext, EnumValue, MethodCode,
+    MethodDescriptor, ObjectProtocol, RtError, RtResult, TypeDescriptor, TypeId,
 };
 
 /// Представление объекта XDTO за оболочкой [`XdtoShell`] — прежние
@@ -5662,6 +5662,366 @@ fn as_value(shell: &XdtoShell) -> BslValue {
     })
 }
 
+// Обработчики статической таблицы методов оболочки XDTO. Таблица одна на
+// все представления, как прежний общий диспетчер: имя делится
+// получателями, получатель выбирает семантику по своему `repr`.
+fn shell_repr<'v>(receiver: &'v BslValue, method: &'static str) -> RtResult<&'v XdtoRepr> {
+    repr_of(receiver).ok_or(RtError::MethodNotApplicable {
+        method,
+        receiver: receiver.type_name(),
+    })
+}
+
+fn xdto_type(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    match shell_repr(receiver, "Тип")? {
+        XdtoRepr::Object(..) | XdtoRepr::Value(..) => object_type(receiver, arguments),
+        _ => factory_type(receiver, arguments),
+    }
+}
+
+fn xdto_create(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    factory_create(receiver, arguments)
+}
+
+fn xdto_read_xml(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    match shell_repr(receiver, "ПрочитатьXML")? {
+        XdtoRepr::Serializer(_) => serializer_read_xml(receiver, arguments),
+        _ => factory_read_xml(receiver, arguments),
+    }
+}
+
+fn xdto_write_xml(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    match shell_repr(receiver, "ЗаписатьXML")? {
+        XdtoRepr::Serializer(_) => {
+            serializer_write_xml(receiver, arguments).map(|()| BslValue::Undefined)
+        }
+        _ => factory_write_xml(receiver, arguments).map(|()| BslValue::Undefined),
+    }
+}
+
+fn xdto_get(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    match shell_repr(receiver, "Получить")? {
+        XdtoRepr::Properties(..) | XdtoRepr::Facets(..) => collection_lookup(receiver, arguments),
+        XdtoRepr::Object(..) => object_get(receiver, arguments),
+        XdtoRepr::List(..) => match arguments {
+            [index] => list_get(receiver, shell_index(index)?),
+            _ => Err(RtError::MethodNotApplicable {
+                method: "Получить",
+                receiver: receiver.type_name(),
+            }),
+        },
+        _ => Err(RtError::MethodNotApplicable {
+            method: "Получить",
+            receiver: receiver.type_name(),
+        }),
+    }
+}
+
+fn xdto_set(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    match shell_repr(receiver, "Установить")? {
+        XdtoRepr::Object(..) => object_set(receiver, arguments),
+        _ => list_set(receiver, arguments),
+    }
+}
+
+fn xdto_add(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    match shell_repr(receiver, "Добавить")? {
+        XdtoRepr::Sequence(..) => sequence_add(receiver, arguments),
+        _ => list_add(receiver, arguments),
+    }
+}
+
+fn xdto_insert(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    list_insert(receiver, arguments)
+}
+
+fn xdto_delete(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    match arguments {
+        [index] => list_delete(receiver, index).map(|()| BslValue::Undefined),
+        _ => Err(RtError::MethodNotApplicable {
+            method: "Удалить",
+            receiver: receiver.type_name(),
+        }),
+    }
+}
+
+fn xdto_clear(
+    receiver: &BslValue,
+    _arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    match shell_repr(receiver, "Очистить")? {
+        XdtoRepr::Sequence(..) => sequence_clear(receiver).map(|()| BslValue::Undefined),
+        _ => list_clear(receiver).map(|()| BslValue::Undefined),
+    }
+}
+
+fn xdto_count(
+    receiver: &BslValue,
+    _arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    match collection_len(shell_repr(receiver, "Количество")?) {
+        Some(len) => len.map(|len| BslValue::number_from_i64(len as i64)),
+        None => Err(RtError::MethodNotApplicable {
+            method: "Количество",
+            receiver: receiver.type_name(),
+        }),
+    }
+}
+
+fn xdto_get_list(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    object_get_list(receiver, arguments)
+}
+
+fn xdto_is_set(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    object_is_set(receiver, arguments)
+}
+
+fn xdto_unset(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    object_unset(receiver, arguments)
+}
+
+fn xdto_validate(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    object_validate(receiver, arguments)
+}
+
+fn xdto_properties(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    object_properties(receiver, arguments)
+}
+
+fn xdto_owner(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    object_owner(receiver, arguments)
+}
+
+fn xdto_sequence(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    object_sequence(receiver, arguments)
+}
+
+fn xdto_sequence_value(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    sequence_value(receiver, arguments)
+}
+
+fn xdto_sequence_property(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    sequence_property(receiver, arguments)
+}
+
+// Три измеренных члена сериализатора, до которых очередь не дошла: у
+// своего получателя — честный отказ «не поддерживается».
+fn xdto_xml_type(
+    receiver: &BslValue,
+    _arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    Err(serializer_unsupported(receiver, "XMLТип"))
+}
+
+fn xdto_xml_type_of(
+    receiver: &BslValue,
+    _arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    Err(serializer_unsupported(receiver, "XMLТипЗнч"))
+}
+
+fn xdto_can_read_xml(
+    receiver: &BslValue,
+    _arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    Err(serializer_unsupported(receiver, "ВозможностьЧтенияXML"))
+}
+
+const XDTO_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor {
+        code: MethodCode::new(1),
+        names: &["Тип", "Type"],
+        call: xdto_type,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(2),
+        names: &["Создать", "Create"],
+        call: xdto_create,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(3),
+        names: &["ПрочитатьXML", "ReadXML"],
+        call: xdto_read_xml,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(4),
+        names: &["ЗаписатьXML", "WriteXML"],
+        call: xdto_write_xml,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(5),
+        names: &["Получить", "Get"],
+        call: xdto_get,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(6),
+        names: &["Установить", "Set"],
+        call: xdto_set,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(7),
+        names: &["Добавить", "Add"],
+        call: xdto_add,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(8),
+        names: &["Вставить", "Insert"],
+        call: xdto_insert,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(9),
+        names: &["Удалить", "Delete"],
+        call: xdto_delete,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(10),
+        names: &["Очистить", "Clear"],
+        call: xdto_clear,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(11),
+        names: &["Количество", "Count"],
+        call: xdto_count,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(12),
+        names: &["ПолучитьСписок", "GetList"],
+        call: xdto_get_list,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(13),
+        names: &["Установлено", "IsSet"],
+        call: xdto_is_set,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(14),
+        names: &["Сбросить", "Unset"],
+        call: xdto_unset,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(15),
+        names: &["Проверить", "Validate"],
+        call: xdto_validate,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(16),
+        names: &["Свойства", "Properties"],
+        call: xdto_properties,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(17),
+        names: &["Владелец", "Owner"],
+        call: xdto_owner,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(18),
+        names: &["Последовательность", "Sequence"],
+        call: xdto_sequence,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(19),
+        names: &["ПолучитьЗначение", "GetValue"],
+        call: xdto_sequence_value,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(20),
+        names: &["ПолучитьСвойство", "GetProperty"],
+        call: xdto_sequence_property,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(21),
+        names: &["XMLТип", "XMLType"],
+        call: xdto_xml_type,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(22),
+        names: &["XMLТипЗнч", "XMLTypeOf"],
+        call: xdto_xml_type_of,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(23),
+        names: &["ВозможностьЧтенияXML", "CanReadXML"],
+        call: xdto_can_read_xml,
+    },
+];
+
 impl ObjectProtocol for XdtoShell {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         match &self.repr {
@@ -5702,136 +6062,20 @@ impl ObjectProtocol for XdtoShell {
         &self,
         name: &str,
         arguments: &[BslValue],
-        _context: &mut CallContext<'_>,
+        context: &mut CallContext<'_>,
     ) -> RtResult<BslValue> {
-        let receiver = as_value(self);
-        let eq =
-            |ru: &str, en: &str| name.eq_ignore_ascii_case(ru) || name.eq_ignore_ascii_case(en);
-        // Диспетчеризация повторяет прежние общие таблицы методов: имя
-        // делится получателями, получатель выбирает семантику.
-        if eq("Тип", "Type") {
-            return match &self.repr {
-                XdtoRepr::Object(..) | XdtoRepr::Value(..) => object_type(&receiver, arguments),
-                _ => factory_type(&receiver, arguments),
-            };
-        }
-        if eq("Создать", "Create") {
-            return factory_create(&receiver, arguments);
-        }
-        if eq("ПрочитатьXML", "ReadXML") {
-            return match &self.repr {
-                XdtoRepr::Serializer(_) => serializer_read_xml(&receiver, arguments),
-                _ => factory_read_xml(&receiver, arguments),
-            };
-        }
-        if eq("ЗаписатьXML", "WriteXML") {
-            return match &self.repr {
-                XdtoRepr::Serializer(_) => {
-                    serializer_write_xml(&receiver, arguments).map(|()| BslValue::Undefined)
-                }
-                _ => factory_write_xml(&receiver, arguments).map(|()| BslValue::Undefined),
-            };
-        }
-        if eq("Получить", "Get") {
-            return match &self.repr {
-                XdtoRepr::Properties(..) | XdtoRepr::Facets(..) => {
-                    collection_lookup(&receiver, arguments)
-                }
-                XdtoRepr::Object(..) => object_get(&receiver, arguments),
-                XdtoRepr::List(..) => match arguments {
-                    [index] => list_get(&receiver, shell_index(index)?),
-                    _ => Err(RtError::MethodNotApplicable {
-                        method: "Получить",
-                        receiver: receiver.type_name(),
-                    }),
-                },
-                _ => Err(RtError::MethodNotApplicable {
-                    method: "Получить",
-                    receiver: receiver.type_name(),
-                }),
-            };
-        }
-        if eq("Установить", "Set") {
-            return match &self.repr {
-                XdtoRepr::Object(..) => object_set(&receiver, arguments),
-                _ => list_set(&receiver, arguments),
-            };
-        }
-        if eq("Добавить", "Add") {
-            return match &self.repr {
-                XdtoRepr::Sequence(..) => sequence_add(&receiver, arguments),
-                _ => list_add(&receiver, arguments),
-            };
-        }
-        if eq("Вставить", "Insert") {
-            return list_insert(&receiver, arguments);
-        }
-        if eq("Удалить", "Delete") {
-            return match arguments {
-                [index] => list_delete(&receiver, index).map(|()| BslValue::Undefined),
-                _ => Err(RtError::MethodNotApplicable {
-                    method: "Удалить",
-                    receiver: receiver.type_name(),
-                }),
-            };
-        }
-        if eq("Очистить", "Clear") {
-            return match &self.repr {
-                XdtoRepr::Sequence(..) => sequence_clear(&receiver).map(|()| BslValue::Undefined),
-                _ => list_clear(&receiver).map(|()| BslValue::Undefined),
-            };
-        }
-        if eq("Количество", "Count") {
-            return match collection_len(&self.repr) {
-                Some(len) => len.map(|len| BslValue::number_from_i64(len as i64)),
-                None => Err(RtError::MethodNotApplicable {
-                    method: "Количество",
-                    receiver: receiver.type_name(),
-                }),
-            };
-        }
-        if eq("ПолучитьСписок", "GetList") {
-            return object_get_list(&receiver, arguments);
-        }
-        if eq("Установлено", "IsSet") {
-            return object_is_set(&receiver, arguments);
-        }
-        if eq("Сбросить", "Unset") {
-            return object_unset(&receiver, arguments);
-        }
-        if eq("Проверить", "Validate") {
-            return object_validate(&receiver, arguments);
-        }
-        if eq("Свойства", "Properties") {
-            return object_properties(&receiver, arguments);
-        }
-        if eq("Владелец", "Owner") {
-            return object_owner(&receiver, arguments);
-        }
-        if eq("Последовательность", "Sequence") {
-            return object_sequence(&receiver, arguments);
-        }
-        if eq("ПолучитьЗначение", "GetValue") {
-            return sequence_value(&receiver, arguments);
-        }
-        if eq("ПолучитьСвойство", "GetProperty") {
-            return sequence_property(&receiver, arguments);
-        }
-        // Три измеренных члена сериализатора, до которых очередь не дошла:
-        // у своего получателя — честный отказ «не поддерживается».
-        if eq("XMLТип", "XMLType") {
-            return Err(serializer_unsupported(&receiver, "XMLТип"));
-        }
-        if eq("XMLТипЗнч", "XMLTypeOf") {
-            return Err(serializer_unsupported(&receiver, "XMLТипЗнч"));
-        }
-        if eq("ВозможностьЧтенияXML", "CanReadXML") {
-            return Err(serializer_unsupported(&receiver, "ВозможностьЧтенияXML"));
-        }
-        Err(RtError::UnknownMethod {
-            method: name.to_string(),
-            receiver: self.type_descriptor().name,
-        })
+        bsl_rt::call_method_from_table(
+            XDTO_METHODS,
+            self.type_descriptor().name,
+            &as_value(self),
+            name,
+            arguments,
+            context,
+        )
+    }
+
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        XDTO_METHODS
     }
 
     fn get_index(&self, index: &BslValue) -> RtResult<BslValue> {
@@ -5898,6 +6142,18 @@ fn shell_index(index: &BslValue) -> RtResult<usize> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn method_codes_are_static_and_dense() {
+        let codes = super::XDTO_METHODS
+            .iter()
+            .map(|method| method.code.get())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            codes,
+            (1..=super::XDTO_METHODS.len() as u16).collect::<Vec<_>>()
+        );
+    }
+
     use super::*;
 
     /// Модель типов из текста XSD — тем же путём, что и в бою: дерево
