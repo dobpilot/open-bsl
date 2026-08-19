@@ -42,8 +42,8 @@
 use bsl_number::BslNumber;
 
 use bsl_rt::{
-    Arity, BslValue, CallContext, FunctionCode, FunctionDescriptor, FunctionKind,
-    LibraryDependency, LibraryDescriptor, RtError, RtResult,
+    Arity, BslValue, CallContext, ConstructorCode, ConstructorDescriptor, FunctionCode,
+    FunctionDescriptor, FunctionKind, LibraryDependency, LibraryDescriptor, RtError, RtResult,
 };
 
 /// Идентификатор компонента в заголовке байткода.
@@ -405,6 +405,30 @@ fn call_number_from_binary(
     number_from_binary_string(&args[0])
 }
 
+fn argument(arguments: &[BslValue], index: usize) -> &BslValue {
+    arguments.get(index).unwrap_or(&BslValue::Undefined)
+}
+
+/// Представление буфера временно живёт в `bsl-rt` (см. док рефакторинга:
+/// `ДвоичныеДанные` ссылается на буферы, а зависимость `bsl-rt -> bsl-binbuf`
+/// запрещена), но ТИП принадлежит этому компоненту — конструктор объявлен
+/// здесь и лишь делегирует представлению.
+fn construct_binary_buffer(
+    _context: &mut CallContext<'_>,
+    arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    BslValue::new_binary_buffer(argument(arguments, 0), argument(arguments, 1))
+}
+
+// Арность снята с платформы и повторяет прежнюю legacy-ветку `resolve_new`:
+// размер обязателен, порядок байтов необязателен (по умолчанию LittleEndian).
+const CONSTRUCTORS: &[ConstructorDescriptor] = &[ConstructorDescriptor {
+    code: ConstructorCode::new(1),
+    names: &["БуферДвоичныхДанных", "BinaryDataBuffer"],
+    arity: Arity::range(1, 2),
+    call: construct_binary_buffer,
+}];
+
 const FUNCTIONS: &[FunctionDescriptor] = &[
     FunctionDescriptor {
         code: FunctionCode::new(1),
@@ -506,7 +530,7 @@ pub const fn library() -> LibraryDescriptor {
             version: bsl_rt::PACKAGE_VERSION,
         }],
         functions: FUNCTIONS,
-        constructors: &[],
+        constructors: CONSTRUCTORS,
     }
 }
 

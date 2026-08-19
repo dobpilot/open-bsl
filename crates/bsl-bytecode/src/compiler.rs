@@ -771,27 +771,6 @@ impl<'a> Compiler<'a> {
                 let c = self.add_const(BslValue::EnumType(*k))?;
                 self.emit(Instr::LoadConst { dst, k: c });
             }
-            RExpr::NewJsonReader => {
-                self.emit(Instr::NewJsonReader { dst });
-            }
-            RExpr::NewJsonWriter => {
-                self.emit(Instr::NewJsonWriter { dst });
-            }
-            RExpr::NewJsonSerializerSettings => {
-                self.emit(Instr::NewJsonSerializerSettings { dst });
-            }
-            RExpr::NewJsonWriterSettings { line_break, indent } => {
-                let lb = self.alloc_temp()?;
-                self.compile_expr(line_break, lb)?;
-                let ind = self.alloc_temp()?;
-                self.compile_expr(indent, ind)?;
-                self.emit(Instr::NewJsonWriterSettings {
-                    dst,
-                    line_break: lb,
-                    indent: ind,
-                });
-                self.free_temp(2);
-            }
             // Тернарный оператор — короткое замыкание, как `И`/`ИЛИ`, и
             // компилируется так же: переходами, а не тремя вычисленными
             // регистрами. Невыбранная ветвь ФИЗИЧЕСКИ не исполняется —
@@ -814,91 +793,6 @@ impl<'a> Compiler<'a> {
                 self.patch_jump(to_else, else_at);
                 self.patch_jump(to_end, end);
             }
-            RExpr::NewSpreadDocument => {
-                self.emit(Instr::NewSpreadDocument { dst });
-            }
-            RExpr::NewPdfDocument => {
-                self.emit(Instr::NewPdfDocument { dst });
-            }
-            RExpr::NewPdfAttachments => {
-                self.emit(Instr::NewPdfAttachments { dst });
-            }
-            RExpr::NewTextDocument => {
-                self.emit(Instr::NewTextDocument { dst });
-            }
-            RExpr::NewDomBuilder => {
-                self.emit(Instr::NewDomBuilder { dst });
-            }
-            RExpr::NewDomDocument => {
-                self.emit(Instr::NewDomDocument { dst });
-            }
-            RExpr::NewDomWriter => {
-                self.emit(Instr::NewDomWriter { dst });
-            }
-            RExpr::NewXsBuilder => {
-                self.emit(Instr::NewXsBuilder { dst });
-            }
-            RExpr::NewXmlSchema => {
-                self.emit(Instr::NewXmlSchema { dst });
-            }
-            RExpr::NewXmlSchemaSet => {
-                self.emit(Instr::NewXmlSchemaSet { dst });
-            }
-            RExpr::NewXdtoFactory { schemas } => {
-                let set = self.alloc_temp()?;
-                self.compile_expr(schemas, set)?;
-                self.emit(Instr::NewXdtoFactory { dst, schemas: set });
-                self.free_temp(1);
-            }
-            RExpr::NewXdtoSerializer(factory) => {
-                let reg = self.alloc_temp()?;
-                self.compile_expr(factory, reg)?;
-                self.emit(Instr::NewXdtoSerializer { dst, factory: reg });
-                self.free_temp(1);
-            }
-            RExpr::NewDomNsResolver(node) => {
-                let reg = self.alloc_temp()?;
-                self.compile_expr(node, reg)?;
-                self.emit(Instr::NewDomNsResolver { dst, node: reg });
-                self.free_temp(1);
-            }
-            RExpr::NewXmlExpandedName { uri, local } => {
-                let uri_reg = self.alloc_temp()?;
-                self.compile_expr(uri, uri_reg)?;
-                let local_reg = self.alloc_temp()?;
-                self.compile_expr(local, local_reg)?;
-                self.emit(Instr::NewXmlExpandedName {
-                    dst,
-                    uri: uri_reg,
-                    local: local_reg,
-                });
-                self.free_temp(2);
-            }
-            RExpr::NewXmlReader => {
-                self.emit(Instr::NewXmlReader { dst });
-            }
-            RExpr::NewXmlWriter => {
-                self.emit(Instr::NewXmlWriter { dst });
-            }
-            RExpr::NewXmlWriterSettings {
-                encoding,
-                version,
-                indent,
-            } => {
-                let enc = self.alloc_temp()?;
-                self.compile_expr(encoding, enc)?;
-                let ver = self.alloc_temp()?;
-                self.compile_expr(version, ver)?;
-                let ind = self.alloc_temp()?;
-                self.compile_expr(indent, ind)?;
-                self.emit(Instr::NewXmlWriterSettings {
-                    dst,
-                    encoding: enc,
-                    version: ver,
-                    indent: ind,
-                });
-                self.free_temp(3);
-            }
             RExpr::NewTextWriter { path } => {
                 let path_reg = self.alloc_temp()?;
                 self.compile_expr(path, path_reg)?;
@@ -908,125 +802,11 @@ impl<'a> Compiler<'a> {
                 });
                 self.free_temp(1);
             }
-            RExpr::NewBinaryBuffer { size, order } => {
-                let size_reg = self.alloc_temp()?;
-                self.compile_expr(size, size_reg)?;
-                let order_reg = self.alloc_temp()?;
-                self.compile_expr(order, order_reg)?;
-                self.emit(Instr::NewBinaryBuffer {
-                    dst,
-                    size: size_reg,
-                    order: order_reg,
-                });
-                self.free_temp(2);
-            }
-            RExpr::NewMemoryStream { arg } => {
-                let arg_reg = self.alloc_temp()?;
-                self.compile_expr(arg, arg_reg)?;
-                self.emit(Instr::NewMemoryStream { dst, arg: arg_reg });
-                self.free_temp(1);
-            }
             RExpr::NewUuid { arg } => {
                 let arg_reg = self.alloc_temp()?;
                 self.compile_expr(arg, arg_reg)?;
                 self.emit(Instr::NewUuid { dst, arg: arg_reg });
                 self.free_temp(1);
-            }
-            RExpr::NewFileStream { path, mode, access } => {
-                let path_reg = self.alloc_temp()?;
-                self.compile_expr(path, path_reg)?;
-                let mode_reg = self.alloc_temp()?;
-                self.compile_expr(mode, mode_reg)?;
-                let access_reg = self.alloc_temp()?;
-                self.compile_expr(access, access_reg)?;
-                self.emit(Instr::NewFileStream {
-                    dst,
-                    path: path_reg,
-                    mode: mode_reg,
-                    access: access_reg,
-                });
-                self.free_temp(3);
-            }
-            RExpr::NewFileStreamsManager => {
-                self.emit(Instr::NewFileStreamsManager { dst });
-            }
-            RExpr::NewArchiveWriter { zip, args } => {
-                let base = self.next_reg;
-                for a in args {
-                    let r = self.alloc_temp()?;
-                    self.compile_expr(a, r)?;
-                }
-                let count: u8 = args
-                    .len()
-                    .try_into()
-                    .map_err(|_| CompileError::TooManyRegisters)?;
-                self.free_temp(count);
-                self.emit(Instr::NewArchiveWriter {
-                    dst,
-                    zip: *zip,
-                    base,
-                    count,
-                });
-            }
-            RExpr::NewArchiveReader {
-                zip,
-                source,
-                password,
-                archive_type,
-            } => {
-                let source_reg = self.alloc_temp()?;
-                self.compile_expr(source, source_reg)?;
-                let password_reg = self.alloc_temp()?;
-                self.compile_expr(password, password_reg)?;
-                let type_reg = self.alloc_temp()?;
-                self.compile_expr(archive_type, type_reg)?;
-                self.emit(Instr::NewArchiveReader {
-                    dst,
-                    zip: *zip,
-                    source: source_reg,
-                    password: password_reg,
-                    archive_type: type_reg,
-                });
-                self.free_temp(3);
-            }
-            RExpr::NewDataReader {
-                source,
-                encoding,
-                order,
-                separator,
-            }
-            | RExpr::NewDataWriter {
-                source,
-                encoding,
-                order,
-                separator,
-            } => {
-                let source_reg = self.alloc_temp()?;
-                self.compile_expr(source, source_reg)?;
-                let encoding_reg = self.alloc_temp()?;
-                self.compile_expr(encoding, encoding_reg)?;
-                let order_reg = self.alloc_temp()?;
-                self.compile_expr(order, order_reg)?;
-                let separator_reg = self.alloc_temp()?;
-                self.compile_expr(separator, separator_reg)?;
-                self.emit(if matches!(e, RExpr::NewDataReader { .. }) {
-                    Instr::NewDataReader {
-                        dst,
-                        source: source_reg,
-                        encoding: encoding_reg,
-                        order: order_reg,
-                        separator: separator_reg,
-                    }
-                } else {
-                    Instr::NewDataWriter {
-                        dst,
-                        source: source_reg,
-                        encoding: encoding_reg,
-                        order: order_reg,
-                        separator: separator_reg,
-                    }
-                });
-                self.free_temp(4);
             }
             RExpr::NewBinaryData { path } => {
                 let path_reg = self.alloc_temp()?;

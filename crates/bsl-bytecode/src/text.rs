@@ -36,7 +36,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 17;
+pub const FORMAT_VERSION: u32 = 18;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -85,36 +85,7 @@ pub const OPCODES: &[&str] = &[
     "NewMap",
     "NewTextWriter",
     "NewBinaryData",
-    "NewBinaryBuffer",
-    "NewMemoryStream",
     "NewUuid",
-    "NewFileStream",
-    "NewFileStreamsManager",
-    "NewArchiveReader",
-    "NewArchiveWriter",
-    "NewDataReader",
-    "NewDataWriter",
-    "NewJsonReader",
-    "NewJsonWriter",
-    "NewJsonWriterSettings",
-    "NewJsonSerializerSettings",
-    "NewTextDocument",
-    "NewSpreadDocument",
-    "NewPdfDocument",
-    "NewPdfAttachments",
-    "NewDomBuilder",
-    "NewDomDocument",
-    "NewDomWriter",
-    "NewXmlReader",
-    "NewXmlWriter",
-    "NewXmlWriterSettings",
-    "NewXsBuilder",
-    "NewXmlSchema",
-    "NewXmlSchemaSet",
-    "NewXdtoFactory",
-    "NewXdtoSerializer",
-    "NewDomNsResolver",
-    "NewXmlExpandedName",
     "CollectionLen",
     "Raise",
     "CallBuiltin",
@@ -479,92 +450,7 @@ fn write_instr(instr: &Instr) -> String {
         Instr::NewMap { dst } => format!("NewMap dst={dst}"),
         Instr::NewTextWriter { dst, path } => format!("NewTextWriter dst={dst} path={path}"),
         Instr::NewBinaryData { dst, path } => format!("NewBinaryData dst={dst} path={path}"),
-        Instr::NewBinaryBuffer { dst, size, order } => {
-            format!("NewBinaryBuffer dst={dst} size={size} order={order}")
-        }
-        Instr::NewMemoryStream { dst, arg } => format!("NewMemoryStream dst={dst} arg={arg}"),
         Instr::NewUuid { dst, arg } => format!("NewUuid dst={dst} arg={arg}"),
-        Instr::NewFileStream {
-            dst,
-            path,
-            mode,
-            access,
-        } => format!("NewFileStream dst={dst} path={path} mode={mode} access={access}"),
-        Instr::NewFileStreamsManager { dst } => format!("NewFileStreamsManager dst={dst}"),
-        Instr::NewArchiveWriter {
-            dst,
-            zip,
-            base,
-            count,
-        } => format!("NewArchiveWriter dst={dst} zip={zip} base={base} count={count}"),
-        Instr::NewArchiveReader {
-            dst,
-            zip,
-            source,
-            password,
-            archive_type,
-        } => format!(
-            "NewArchiveReader dst={dst} zip={zip} source={source} password={password} \
-             archive_type={archive_type}"
-        ),
-        Instr::NewDataReader {
-            dst,
-            source,
-            encoding,
-            order,
-            separator,
-        } => format!(
-            "NewDataReader dst={dst} source={source} encoding={encoding} order={order} separator={separator}"
-        ),
-        Instr::NewDataWriter {
-            dst,
-            source,
-            encoding,
-            order,
-            separator,
-        } => format!(
-            "NewDataWriter dst={dst} source={source} encoding={encoding} order={order} separator={separator}"
-        ),
-        Instr::NewJsonReader { dst } => format!("NewJsonReader dst={dst}"),
-        Instr::NewJsonWriter { dst } => format!("NewJsonWriter dst={dst}"),
-        Instr::NewJsonWriterSettings {
-            dst,
-            line_break,
-            indent,
-        } => format!("NewJsonWriterSettings dst={dst} break={line_break} indent={indent}"),
-        Instr::NewJsonSerializerSettings { dst } => {
-            format!("NewJsonSerializerSettings dst={dst}")
-        }
-        Instr::NewTextDocument { dst } => format!("NewTextDocument dst={dst}"),
-        Instr::NewSpreadDocument { dst } => format!("NewSpreadDocument dst={dst}"),
-        Instr::NewPdfDocument { dst } => format!("NewPdfDocument dst={dst}"),
-        Instr::NewPdfAttachments { dst } => format!("NewPdfAttachments dst={dst}"),
-        Instr::NewDomBuilder { dst } => format!("NewDomBuilder dst={dst}"),
-        Instr::NewDomDocument { dst } => format!("NewDomDocument dst={dst}"),
-        Instr::NewDomWriter { dst } => format!("NewDomWriter dst={dst}"),
-        Instr::NewXmlReader { dst } => format!("NewXmlReader dst={dst}"),
-        Instr::NewXmlWriter { dst } => format!("NewXmlWriter dst={dst}"),
-        Instr::NewXmlWriterSettings {
-            dst,
-            encoding,
-            version,
-            indent,
-        } => format!("NewXmlWriterSettings dst={dst} enc={encoding} ver={version} indent={indent}"),
-        Instr::NewXsBuilder { dst } => format!("NewXsBuilder dst={dst}"),
-        Instr::NewXmlSchema { dst } => format!("NewXmlSchema dst={dst}"),
-        Instr::NewXmlSchemaSet { dst } => format!("NewXmlSchemaSet dst={dst}"),
-        Instr::NewXdtoFactory { dst, schemas } => {
-            format!("NewXdtoFactory dst={dst} schemas={schemas}")
-        }
-        Instr::NewXdtoSerializer { dst, factory } => {
-            format!("NewXdtoSerializer dst={dst} factory={factory}")
-        }
-        Instr::NewDomNsResolver { dst, node } => {
-            format!("NewDomNsResolver dst={dst} node={node}")
-        }
-        Instr::NewXmlExpandedName { dst, uri, local } => {
-            format!("NewXmlExpandedName dst={dst} uri={uri} local={local}")
-        }
         Instr::CollectionLen { dst, obj } => format!("CollectionLen dst={dst} obj={obj}"),
         Instr::Raise { src } => match src {
             Some(src) => format!("Raise src={src}"),
@@ -585,9 +471,9 @@ fn write_instr(instr: &Instr) -> String {
             function,
             base,
             count,
-        } => format!(
-            "CallComponent dst={dst} lib={library} fn={function} base={base} count={count}"
-        ),
+        } => {
+            format!("CallComponent dst={dst} lib={library} fn={function} base={base} count={count}")
+        }
         Instr::CallMethod {
             dst,
             obj,
@@ -1424,49 +1310,6 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
         },
         "NewValueComparison" => Instr::NewValueComparison { dst: dst(&f)? },
         "NewMap" => Instr::NewMap { dst: dst(&f)? },
-        "NewJsonReader" => Instr::NewJsonReader { dst: dst(&f)? },
-        "NewJsonWriter" => Instr::NewJsonWriter { dst: dst(&f)? },
-        "NewJsonWriterSettings" => Instr::NewJsonWriterSettings {
-            dst: dst(&f)?,
-            line_break: field_u8(&f, no, "break")?,
-            indent: field_u8(&f, no, "indent")?,
-        },
-        "NewJsonSerializerSettings" => Instr::NewJsonSerializerSettings { dst: dst(&f)? },
-        "NewTextDocument" => Instr::NewTextDocument { dst: dst(&f)? },
-        "NewSpreadDocument" => Instr::NewSpreadDocument { dst: dst(&f)? },
-        "NewPdfDocument" => Instr::NewPdfDocument { dst: dst(&f)? },
-        "NewPdfAttachments" => Instr::NewPdfAttachments { dst: dst(&f)? },
-        "NewDomBuilder" => Instr::NewDomBuilder { dst: dst(&f)? },
-        "NewDomDocument" => Instr::NewDomDocument { dst: dst(&f)? },
-        "NewDomWriter" => Instr::NewDomWriter { dst: dst(&f)? },
-        "NewXmlReader" => Instr::NewXmlReader { dst: dst(&f)? },
-        "NewXmlWriter" => Instr::NewXmlWriter { dst: dst(&f)? },
-        "NewXmlWriterSettings" => Instr::NewXmlWriterSettings {
-            dst: dst(&f)?,
-            encoding: field_u8(&f, no, "enc")?,
-            version: field_u8(&f, no, "ver")?,
-            indent: field_u8(&f, no, "indent")?,
-        },
-        "NewXsBuilder" => Instr::NewXsBuilder { dst: dst(&f)? },
-        "NewXmlSchema" => Instr::NewXmlSchema { dst: dst(&f)? },
-        "NewXmlSchemaSet" => Instr::NewXmlSchemaSet { dst: dst(&f)? },
-        "NewXdtoFactory" => Instr::NewXdtoFactory {
-            dst: dst(&f)?,
-            schemas: field_u8(&f, no, "schemas")?,
-        },
-        "NewXdtoSerializer" => Instr::NewXdtoSerializer {
-            dst: dst(&f)?,
-            factory: field_u8(&f, no, "factory")?,
-        },
-        "NewDomNsResolver" => Instr::NewDomNsResolver {
-            dst: dst(&f)?,
-            node: field_u8(&f, no, "node")?,
-        },
-        "NewXmlExpandedName" => Instr::NewXmlExpandedName {
-            dst: dst(&f)?,
-            uri: field_u8(&f, no, "uri")?,
-            local: field_u8(&f, no, "local")?,
-        },
         "NewTextWriter" => Instr::NewTextWriter {
             dst: dst(&f)?,
             path: field_u8(&f, no, "path")?,
@@ -1475,52 +1318,9 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
             dst: dst(&f)?,
             path: field_u8(&f, no, "path")?,
         },
-        "NewBinaryBuffer" => Instr::NewBinaryBuffer {
-            dst: dst(&f)?,
-            size: field_u8(&f, no, "size")?,
-            order: field_u8(&f, no, "order")?,
-        },
-        "NewMemoryStream" => Instr::NewMemoryStream {
-            dst: dst(&f)?,
-            arg: field_u8(&f, no, "arg")?,
-        },
         "NewUuid" => Instr::NewUuid {
             dst: dst(&f)?,
             arg: field_u8(&f, no, "arg")?,
-        },
-        "NewFileStream" => Instr::NewFileStream {
-            dst: dst(&f)?,
-            path: field_u8(&f, no, "path")?,
-            mode: field_u8(&f, no, "mode")?,
-            access: field_u8(&f, no, "access")?,
-        },
-        "NewFileStreamsManager" => Instr::NewFileStreamsManager { dst: dst(&f)? },
-        "NewArchiveWriter" => Instr::NewArchiveWriter {
-            dst: dst(&f)?,
-            zip: field_bool(&f, no, "zip")?,
-            base: field_u8(&f, no, "base")?,
-            count: field_u8(&f, no, "count")?,
-        },
-        "NewArchiveReader" => Instr::NewArchiveReader {
-            dst: dst(&f)?,
-            zip: field_bool(&f, no, "zip")?,
-            source: field_u8(&f, no, "source")?,
-            password: field_u8(&f, no, "password")?,
-            archive_type: field_u8(&f, no, "archive_type")?,
-        },
-        "NewDataReader" => Instr::NewDataReader {
-            dst: dst(&f)?,
-            source: field_u8(&f, no, "source")?,
-            encoding: field_u8(&f, no, "encoding")?,
-            order: field_u8(&f, no, "order")?,
-            separator: field_u8(&f, no, "separator")?,
-        },
-        "NewDataWriter" => Instr::NewDataWriter {
-            dst: dst(&f)?,
-            source: field_u8(&f, no, "source")?,
-            encoding: field_u8(&f, no, "encoding")?,
-            order: field_u8(&f, no, "order")?,
-            separator: field_u8(&f, no, "separator")?,
         },
         "CollectionLen" => Instr::CollectionLen {
             dst: dst(&f)?,
@@ -1611,24 +1411,6 @@ mod tests {
         // Литералы всех видов, включая дату и строку с кавычками.
         "а = Истина; б = Ложь; в = Неопределено; г = Null;\n\
          д = '20240115103000'; е = \"строка с \"\"кавычками\"\" и ;\";\n",
-        // Текстовый документ: конструктор плюс макетная часть — область,
-        // параметр и вывод.
-        "т = Новый ТабличныйДокумент;\nт.Область(1, 1, 1, 2).Текст = \"шапка\";\n\
-         т.Область(1, 1, 1, 2).Объединить();\nо = т.ПолучитьОбласть(1, 1, 1, 2);\n\
-         п = Новый ТабличныйДокумент;\nп.Вывести(о);\nп.Очистить();\n",
-        // Чтение PDF: конструктор без аргументов, разбор файла и обход
-        // коллекции страниц через свойство.
-        "д = Новый ДокументPDF;\nд.Прочитать(\"/tmp/нет.pdf\");\nс = д.Страницы;\n\
-         к = с.Количество();\nп = с.Получить(0);\nн = с.Индекс(п);\n",
-        // Вложения PDF: свой конструктор у коллекции, добавление,
-        // поиск по имени и запись документа.
-        "в = Новый КоллекцияВложенийPDF;\nв.Добавить(\"а.txt\", \
-         ПолучитьДвоичныеДанныеИзСтроки(\"текст\"), \"text/plain\");\n\
-         н = в.Найти(\"а.txt\");\nв.Удалить(0);\nв.Очистить();\n\
-         д = Новый ДокументPDF;\nд.Записать(\"/tmp/нет.pdf\");\n",
-        "д = Новый ТекстовыйДокумент;\nд.УстановитьТекст(\"#Область Т\");\n\
-         о = д.ПолучитьОбласть(\"Т\");\nр = Новый ТекстовыйДокумент;\nр.Вывести(о);\n\
-         н = д.КоличествоСтрок();\n",
         // Тернарный оператор: своего опкода у него нет (компилируется
         // переходами), но переходы эти в корпусе должны быть — вместе с
         // булевым результатом `И`/`ИЛИ`.
@@ -1657,44 +1439,10 @@ mod tests {
         // Встроенные функции и методы объектов.
         "х = Sqrt(2);\nс = Формат(1/3, \"ЧГ=0\");\n\
          т = Новый ТаблицаЗначений;\nт.Колонки.Добавить(\"ц\");\nт.Свернуть(\"ц\");\n",
-        // DOM: NewDomBuilder плюс разбор через `Прочитать` и один метод
-        // узла — печать имён у них общая с остальными CallMethod, но
-        // опкод конструктора свой.
-        "п = Новый ПостроительDOM;\nч = Новый ЧтениеXML;\nч.УстановитьСтроку(\"<а х=\"\"1\"\"/>\");\n\
-         д = п.Прочитать(ч);\nэ = д.ЭлементДокумента;\nн = э.ПолучитьАтрибут(\"х\");\n\
-         с = э.ПолучитьЭлементыПоИмени(\"*\");\nб = э.ЕстьАтрибуты();\n",
-        // DOM на запись: свои опкоды у конструкторов документа и писателя,
-        // остальное — те же CallMethod.
-        "д = Новый ДокументDOM;\nзд = Новый ЗаписьDOM;\nз = Новый ЗаписьXML;\nз.УстановитьСтроку();\n\
-         к = д.СоздатьЭлемент(\"к\");\nд.ДобавитьДочерний(к);\nк.УстановитьАтрибут(\"а\", \"1\");\n\
-         зд.Записать(д, з);\nс = з.Закрыть();\n",
-        // Объектная модель XML-схемы: свои опкоды у всех четырёх
-        // конструкторов, причём у расширенного имени он ЕДИНСТВЕННЫЙ в
-        // семействе с аргументами — печать регистров у него своя.
-        "пс = Новый ПостроительСхемXML;\nп = Новый ПостроительDOM;\nч = Новый ЧтениеXML;\n\
-         ч.УстановитьСтроку(\"<xs:schema xmlns:xs=\"\"http://www.w3.org/2001/XMLSchema\"\"/>\");\n\
-         сх = пс.СоздатьСхемуXML(п.Прочитать(ч));\nпустая = Новый СхемаXML;\n\
-         набор = Новый НаборСхемXML;\nнабор.Добавить(пустая);\n\
-         имя = Новый РасширенноеИмяXML(\"urn:т\", \"а\");\nл = имя.ЛокальноеИмя;\n",
-        // Модель типов XDTO: у `Новый ФабрикаXDTO` свой опкод, и обе его
-        // формы — с набором схем и без него — печатают регистр аргумента,
-        // а голая `ФабрикаXDTO` идёт обычным CallBuiltin.
-        "набор = Новый НаборСхемXML;\nф = Новый ФабрикаXDTO(набор);\nп = Новый ФабрикаXDTO;\n\
-         т = ф.Тип(\"http://www.w3.org/2001/XMLSchema\", \"string\");\nз = ф.Создать(т, \"аб\");\n\
-         Попытка\n  г = ФабрикаXDTO;\nИсключение\nКонецПопытки;\n\
-         сер = Новый СериализаторXDTO(ф);\nзп = Новый ЗаписьXML;\nзп.УстановитьСтроку();\n\
-         сер.ЗаписатьXML(зп, 42);\nтекст = зп.Закрыть();\n\
-         чт = Новый ЧтениеXML;\nчт.УстановитьСтроку(текст);\nр = сер.ПрочитатьXML(чт);\n",
-        // XPath над DOM: свой опкод только у конструктора
-        // разыменователя, остальные шесть имён — обычные CallMethod, но
-        // корпус обязан задеть и их.
-        "п = Новый ПостроительDOM;\nч = Новый ЧтениеXML;\nч.УстановитьСтроку(\"<а><б/></а>\");\n\
-         д = п.Прочитать(ч);\nр = Новый РазыменовательПространствИменDOM(д.ЭлементДокумента);\n\
-         у = р.НайтиURIПространстваИмен(\"нет\");\nрез = д.ВычислитьВыражениеXPath(\"//б\", д, р);\n\
-         п1 = рез.ПолучитьСледующий();\nв = д.СоздатьВыражениеXPath(\"count(//*)\", р);\n\
-         сн = д.ВычислитьВыражениеXPath(\"//б\", д, д.СоздатьРазыменовательПИ(),\n\
-         ТипРезультатаDOMXPath.УпорядоченныйСнимокУзлов);\nэс = сн.ЭлементСнимка(0);\n\
-         ч1 = в.Вычислить(д).ЧисловоеЗначение;\n",
+        // Члены перечислений — константы: и член (`Перечисление ...` в
+        // таблице констант), и голое имя перечисления обязаны пережить
+        // печать и разбор.
+        "п = ПорядокБайтов.BigEndian;\nт = ВариантЗаписиДатыJSON;\n",
         // Динамическое исполнение — обе формы.
         "х = 1;\nВыполнить(\"х = 2\");\nу = Вычислить(\"х + 1\");\n",
         // Переменные уровня модуля: чтение и запись из процедуры.
@@ -1709,102 +1457,10 @@ mod tests {
         // остальными CallBuiltin/CallMethod, но задеть их корпус обязан.
         "д = Новый ДвоичныеДанные(\"/dev/null\");\nн = д.Размер();\n\
          ч = РазделитьДвоичныеДанные(д, 4);\nц = СоединитьДвоичныеДанные(ч);\n",
-        // Буфер двоичных данных: NewBinaryBuffer в обеих формах (с
-        // порядком байтов и без), индексация буфера на чтение и на запись,
-        // свойство `Размер` и один из методов — их печать и разбор идут
-        // общими путями, но опкод конструктора свой.
-        "б = Новый БуферДвоичныхДанных(4);\n\
-         в = Новый БуферДвоичныхДанных(2, ПорядокБайтов.BigEndian);\n\
-         б[0] = 255;\nн = б[0];\nр = б.Размер;\n\
-         б.ЗаписатьЦелое16(0, 258);\nц = б.ПрочитатьЦелое16(0);\n\
-         б.Инвертировать();\nс = б.Соединить(в);\n",
-        // Потоки: оба конструктора в обеих формах (с необязательным
-        // аргументом и без), голое имя менеджера — своя инструкция, а не
-        // константа, — и методы, у которых печать общая с остальными
-        // `CallMethod`, но получатель новый. Корпус только компилируется,
-        // поэтому открывать здесь можно и `/dev/null`.
-        "п = Новый ПотокВПамяти;\n\
-         б = Новый БуферДвоичныхДанных(4);\n\
-         н = Новый ПотокВПамяти(б);\n\
-         п.Записать(б, 0, 4);\nк = п.Прочитать(б, 0, 4);\n\
-         р = п.Размер();\nт = п.ТекущаяПозиция();\n\
-         с = п.Перейти(0, ПозицияВПотоке.Начало);\n\
-         д = п.ДоступнаЗапись;\nп.Закрыть();\n\
-         ф = Новый ФайловыйПоток(\"/dev/null\", РежимОткрытияФайла.Открыть);\n\
-         г = Новый ФайловыйПоток(\"/dev/null\", РежимОткрытияФайла.Открыть, ДоступКФайлу.Чтение);\n\
-         м = ФайловыеПотоки;\nо = м.ОткрытьДляЧтения(\"/dev/null\");\n",
-        // Читатели архива: обе формы конструктора у каждого (пустая и со
-        // всеми аргументами), свойства, четыре метода и оба перечисления
-        // чтения. Корпус только компилируется, поэтому архива на диске
-        // здесь не нужно.
-        "ч = Новый ЧтениеZipФайла;\n\
-         з = Новый ЧтениеZipФайла(\"/dev/null\", \"пароль\");\n\
-         а = Новый ЧтениеФайлаАрхива(\"/dev/null\", \"пароль\", ТипФайлаАрхива.Zip);\n\
-         ч.Открыть(\"/dev/null\");\n\
-         к = ч.Элементы;\nн = к.Количество();\nэ = к[0];\n\
-         ф = к.Найти(\"а.txt\");\nг = к.Получить(0);\n\
-         ип = э.ИсходноеПолноеИмя;\nр = э.РазмерНесжатого;\nв = э.ВремяИзменения;\n\
-         ч.Извлечь(э, \"/tmp\", РежимВосстановленияПутейФайловZIP.Восстанавливать);\n\
-         ч.ИзвлечьВсе(\"/tmp\", РежимВосстановленияПутейФайловZIP.НеВосстанавливать);\n\
-         м = ч.Комментарий;\nч.Закрыть();\n",
-        // Писатели архива: обе формы конструктора, разный хвост у двух
-        // типов, `Открыть`, `Добавить` всеми тремя арностями, `Записать` и
-        // `ПолучитьДвоичныеДанные`, а с ними все шесть перечислений записи.
-        "п = Новый ЗаписьZipФайла;\n\
-         з = Новый ЗаписьZipФайла(\"/tmp/а.zip\", Неопределено, \"комментарий\", \
-         МетодСжатияZIP.Копирование, УровеньСжатияZIP.Максимальный, Неопределено, \
-         КодировкаИменФайловВZipФайле.UTF8);\n\
-         а = Новый ЗаписьФайлаАрхива(\"/tmp/б.zip\", Неопределено, ТипФайлаАрхива.Zip, \"к\");\n\
-         п.Открыть(\"/tmp/в.zip\");\n\
-         п.Добавить(\"/tmp/ф.txt\");\n\
-         п.Добавить(\"/tmp/*.txt\", РежимСохраненияПутейZIP.СохранятьОтносительныеПути);\n\
-         п.Добавить(\"/tmp/*\", РежимСохраненияПутейZIP.НеСохранятьПути, \
-         РежимОбработкиПодкаталоговZIP.ОбрабатыватьРекурсивно);\n\
-         п.Записать();\nд = п.ПолучитьДвоичныеДанные();\n\
-         ш = МетодШифрованияZIP.AES256;\n",
         // УИД: обе формы конструктора — случайный и разбор строки.
         "у = Новый УникальныйИдентификатор;\n\
          ф = Новый УникальныйИдентификатор(\"abcdef12-3456-7890-abcd-ef1234567890\");\n\
          с = Строка(ф);\n",
-        // Читатель и писатель данных: обе формы конструктора (только
-        // источник и все четыре аргумента) плюс методы, чьи имена общие с
-        // буфером и потоками, но получатель новый.
-        "п = Новый ПотокВПамяти;\n\
-         ч = Новый ЧтениеДанных(п);\n\
-         щ = Новый ЧтениеДанных(п, \"UTF-8\", ПорядокБайтов.BigEndian, \"|\");\n\
-         з = Новый ЗаписьДанных(п);\n\
-         ы = Новый ЗаписьДанных(п, \"UTF-8\", ПорядокБайтов.LittleEndian, \"|\");\n\
-         а = ч.Прочитать(4);\nб = ч.ПрочитатьБайт();\n\
-         в = ч.ПрочитатьВБуферДвоичныхДанных(4);\n\
-         г = ч.ПрочитатьСимволы(2);\nд = ч.ПрочитатьСтроку();\n\
-         е = ч.ПрочитатьЦелое16();\nж = ч.ПрочитатьЦелое32();\n\
-         й = ч.ПрочитатьЦелое64();\nк = ч.Пропустить(2);\n\
-         л = а.Размер;\nм = а.ПолучитьДвоичныеДанные();\n\
-         н = а.ПолучитьБуферДвоичныхДанных();\n\
-         з.ЗаписатьБайт(65);\nз.ЗаписатьСимволы(\"а\");\n\
-         з.ЗаписатьСтроку(\"а\");\nз.ЗаписатьЦелое16(1);\n\
-         з.ЗаписатьЦелое32(1);\nз.ЗаписатьЦелое64(1);\n\
-         з.ПорядокБайтов = ПорядокБайтов.BigEndian;\n\
-         о = з.РазделительСтрок;\nч.Закрыть();\nз.Закрыть();\n",
-        // JSON: все три конструктора плюс член перечисления константой
-        // (`Перечисление ...` в таблице констант тоже обязан пережить
-        // печать и разбор).
-        "ч = Новый ЧтениеJSON;\nч.УстановитьСтроку(\"[1]\");\n\
-         н = Новый ПараметрыЗаписиJSON(ПереносСтрокJSON.Нет, \"  \");\n\
-         з = Новый ЗаписьJSON;\nз.УстановитьСтроку(н);\n\
-         з.ЗаписатьНачалоМассива();\nз.ЗаписатьЗначение(1);\nз.ЗаписатьКонецМассива();\n\
-         т = ч.ТипТекущегоЗначения;\n\
-         нс = Новый НастройкиСериализацииJSON;\n\
-         нс.СериализовыватьМассивыКакОбъекты = Истина;\n",
-        // XML: те же три конструктора. `ПараметрыЗаписиXML` берёт три
-        // аргумента, а не два, поэтому своя строка корпуса, а не довесок
-        // к JSON.
-        "ч = Новый ЧтениеXML;\nч.УстановитьСтроку(\"<а/>\");\n\
-         н = Новый ПараметрыЗаписиXML(\"UTF-8\", \"1.0\", Ложь);\n\
-         з = Новый ЗаписьXML;\nз.УстановитьСтроку(н);\n\
-         з.ЗаписатьНачалоЭлемента(\"а\");\nз.ЗаписатьАтрибут(\"х\", \"1\");\n\
-         з.ЗаписатьКонецЭлемента();\n\
-         т = ч.ТипУзла;\n",
         // Открытое имя метода, которого нет в таблице ядра: такой вызов
         // предназначен для объекта статически подключённого компонента.
         "объект = Новый Структура;\nобъект.МетодКомпонента();\n",

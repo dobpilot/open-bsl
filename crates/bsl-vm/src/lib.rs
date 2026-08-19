@@ -1516,37 +1516,8 @@ fn step(
             | Instr::NewTypeDescription { .. }
             | Instr::NewValueComparison { .. }
             | Instr::NewMap { .. }
-            | Instr::NewJsonReader { .. }
-            | Instr::NewJsonWriter { .. }
-            | Instr::NewJsonWriterSettings { .. }
-            | Instr::NewJsonSerializerSettings { .. }
-            | Instr::NewSpreadDocument { .. }
-            | Instr::NewPdfDocument { .. }
-            | Instr::NewPdfAttachments { .. }
-            | Instr::NewTextDocument { .. }
-            | Instr::NewXmlReader { .. }
-            | Instr::NewXmlWriter { .. }
-            | Instr::NewDomBuilder { .. }
-            | Instr::NewDomDocument { .. }
-            | Instr::NewDomWriter { .. }
-            | Instr::NewXsBuilder { .. }
-            | Instr::NewXmlSchema { .. }
-            | Instr::NewXmlSchemaSet { .. }
-            | Instr::NewXdtoFactory { .. }
-            | Instr::NewXdtoSerializer { .. }
-            | Instr::NewDomNsResolver { .. }
-            | Instr::NewXmlExpandedName { .. }
-            | Instr::NewXmlWriterSettings { .. }
             | Instr::NewTextWriter { .. }
-            | Instr::NewBinaryBuffer { .. }
-            | Instr::NewMemoryStream { .. }
             | Instr::NewUuid { .. }
-            | Instr::NewFileStream { .. }
-            | Instr::NewDataReader { .. }
-            | Instr::NewDataWriter { .. }
-            | Instr::NewFileStreamsManager { .. }
-            | Instr::NewArchiveReader { .. }
-            | Instr::NewArchiveWriter { .. }
             | Instr::NewBinaryData { .. }
             | Instr::Raise { .. }
             | Instr::CloseText { .. }
@@ -1702,359 +1673,6 @@ fn step_cold(
             reg_store(stack, d, BslValue::new_map())?;
             frames[frame_idx].pc += 1;
         }
-        Instr::NewJsonReader { dst } => {
-            #[cfg(not(feature = "json"))]
-            {
-                let _ = dst;
-                return Err(RtError::Component(
-                    "ЧтениеJSON требует компонент bsl-json".to_string(),
-                ));
-            }
-            #[cfg(feature = "json")]
-            {
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, bsl_json::new_json_reader())?;
-                frames[frame_idx].pc += 1;
-            }
-        }
-        Instr::NewJsonWriter { dst } => {
-            #[cfg(not(feature = "json"))]
-            {
-                let _ = dst;
-                return Err(RtError::Component(
-                    "ЗаписьJSON требует компонент bsl-json".to_string(),
-                ));
-            }
-            #[cfg(feature = "json")]
-            {
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, bsl_json::new_json_writer())?;
-                frames[frame_idx].pc += 1;
-            }
-        }
-        Instr::NewJsonWriterSettings {
-            dst,
-            line_break,
-            indent,
-        } => {
-            #[cfg(not(feature = "json"))]
-            {
-                let _ = (dst, line_break, indent);
-                return Err(RtError::Component(
-                    "ПараметрыЗаписиJSON требует компонент bsl-json".to_string(),
-                ));
-            }
-            #[cfg(feature = "json")]
-            {
-                let lb = reg_load(stack, frames[frame_idx].reg_index(line_break))?;
-                let ind = reg_load(stack, frames[frame_idx].reg_index(indent))?;
-                let settings = bsl_json::new_json_writer_settings(&[lb, ind])?;
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, settings)?;
-                frames[frame_idx].pc += 1;
-            }
-        }
-        Instr::NewJsonSerializerSettings { dst } => {
-            #[cfg(not(feature = "json"))]
-            {
-                let _ = dst;
-                return Err(RtError::Component(
-                    "НастройкиСериализацииJSON требует компонент bsl-json".to_string(),
-                ));
-            }
-            #[cfg(feature = "json")]
-            {
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, bsl_json::new_json_serializer_settings())?;
-                frames[frame_idx].pc += 1;
-            }
-        }
-        Instr::NewSpreadDocument { dst } => {
-            #[cfg(not(feature = "spreadsheet"))]
-            {
-                let _ = dst;
-                return Err(RtError::Component(
-                    "ТабличныйДокумент требует компонент bsl-spreadsheet".to_string(),
-                ));
-            }
-            #[cfg(feature = "spreadsheet")]
-            {
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, bsl_spreadsheet::new_document())?;
-                frames[frame_idx].pc += 1;
-            }
-        }
-        Instr::NewPdfDocument { dst } => {
-            #[cfg(not(feature = "pdf"))]
-            {
-                let _ = dst;
-                return Err(RtError::Component(
-                    "ДокументPDF требует компонент bsl-pdf".to_string(),
-                ));
-            }
-            #[cfg(feature = "pdf")]
-            {
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, bsl_pdf::new_pdf_document())?;
-                frames[frame_idx].pc += 1;
-            }
-        }
-        Instr::NewPdfAttachments { dst } => {
-            #[cfg(not(feature = "pdf"))]
-            {
-                let _ = dst;
-                return Err(RtError::Component(
-                    "КоллекцияВложенийPDF требует компонент bsl-pdf".to_string(),
-                ));
-            }
-            #[cfg(feature = "pdf")]
-            {
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, bsl_pdf::new_pdf_attachments())?;
-                frames[frame_idx].pc += 1;
-            }
-        }
-        Instr::NewTextDocument { dst } => {
-            #[cfg(not(feature = "textdoc"))]
-            {
-                let _ = dst;
-                return Err(RtError::Component(
-                    "ТекстовыйДокумент требует компонент bsl-textdoc".to_string(),
-                ));
-            }
-            #[cfg(feature = "textdoc")]
-            {
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, bsl_textdoc::new_text_document())?;
-                frames[frame_idx].pc += 1;
-            }
-        }
-        Instr::NewXmlReader { dst } => {
-            #[cfg(not(feature = "xml"))]
-            {
-                let _ = dst;
-                return Err(RtError::Component(
-                    "ЧтениеXML требует компонент bsl-xml".to_string(),
-                ));
-            }
-            #[cfg(feature = "xml")]
-            {
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, bsl_xml::new_xml_reader())?;
-                frames[frame_idx].pc += 1;
-            }
-        }
-        Instr::NewXmlWriter { dst } => {
-            #[cfg(not(feature = "xml"))]
-            {
-                let _ = dst;
-                return Err(RtError::Component(
-                    "ЗаписьXML требует компонент bsl-xml".to_string(),
-                ));
-            }
-            #[cfg(feature = "xml")]
-            {
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, bsl_xml::new_xml_writer())?;
-                frames[frame_idx].pc += 1;
-            }
-        }
-        Instr::NewDomBuilder { dst } => {
-            #[cfg(not(feature = "xml"))]
-            {
-                let _ = dst;
-                return Err(RtError::Component(
-                    "ПостроительDOM требует компонент bsl-xml".to_string(),
-                ));
-            }
-            #[cfg(feature = "xml")]
-            {
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, bsl_xml::new_dom_builder())?;
-                frames[frame_idx].pc += 1;
-            }
-        }
-        Instr::NewDomDocument { dst } => {
-            #[cfg(not(feature = "xml"))]
-            {
-                let _ = dst;
-                return Err(RtError::Component(
-                    "ДокументDOM требует компонент bsl-xml".to_string(),
-                ));
-            }
-            #[cfg(feature = "xml")]
-            {
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, bsl_xml::new_dom_document())?;
-                frames[frame_idx].pc += 1;
-            }
-        }
-        Instr::NewDomWriter { dst } => {
-            #[cfg(not(feature = "xml"))]
-            {
-                let _ = dst;
-                return Err(RtError::Component(
-                    "ЗаписьDOM требует компонент bsl-xml".to_string(),
-                ));
-            }
-            #[cfg(feature = "xml")]
-            {
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, bsl_xml::new_dom_writer())?;
-                frames[frame_idx].pc += 1;
-            }
-        }
-        Instr::NewXsBuilder { dst } => {
-            #[cfg(not(feature = "xml"))]
-            {
-                let _ = dst;
-                return Err(RtError::Component(
-                    "ПостроительСхемXML требует компонент bsl-xml".to_string(),
-                ));
-            }
-            #[cfg(feature = "xml")]
-            {
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, bsl_xml::new_builder())?;
-                frames[frame_idx].pc += 1;
-            }
-        }
-        Instr::NewXmlSchema { dst } => {
-            #[cfg(not(feature = "xml"))]
-            {
-                let _ = dst;
-                return Err(RtError::Component(
-                    "СхемаXML требует компонент bsl-xml".to_string(),
-                ));
-            }
-            #[cfg(feature = "xml")]
-            {
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, bsl_xml::new_schema())?;
-                frames[frame_idx].pc += 1;
-            }
-        }
-        Instr::NewXmlSchemaSet { dst } => {
-            #[cfg(not(feature = "xml"))]
-            {
-                let _ = dst;
-                return Err(RtError::Component(
-                    "НаборСхемXML требует компонент bsl-xml".to_string(),
-                ));
-            }
-            #[cfg(feature = "xml")]
-            {
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, bsl_xml::new_schema_set())?;
-                frames[frame_idx].pc += 1;
-            }
-        }
-        // Разбор набора схем в модель типов — работа не на один такт, и
-        // место этой инструкции в холодной части безоговорочно.
-        Instr::NewXdtoFactory { dst, schemas } => {
-            #[cfg(not(feature = "xml"))]
-            {
-                let _ = (dst, schemas);
-                return Err(RtError::Component(
-                    "ФабрикаXDTO требует компонент bsl-xml".to_string(),
-                ));
-            }
-            #[cfg(feature = "xml")]
-            {
-                let set = reg_load(stack, frames[frame_idx].reg_index(schemas))?;
-                let factory = bsl_xml::factory_of_schema_set(&set)?;
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, factory)?;
-                frames[frame_idx].pc += 1;
-            }
-        }
-        // Модель уже построена фабрикой — сериализатор только берёт её
-        // `Rc`, так что работа тут копеечная. Место всё равно холодное:
-        // соседство важнее, а конструктор в горячем цикле не стоит своего
-        // места в кэше микроопераций.
-        Instr::NewXdtoSerializer { dst, factory } => {
-            #[cfg(not(feature = "xml"))]
-            {
-                let _ = (dst, factory);
-                return Err(RtError::Component(
-                    "СериализаторXDTO требует компонент bsl-xml".to_string(),
-                ));
-            }
-            #[cfg(feature = "xml")]
-            {
-                let factory = reg_load(stack, frames[frame_idx].reg_index(factory))?;
-                let serializer = bsl_xml::serializer_of_factory(&factory)?;
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, serializer)?;
-                frames[frame_idx].pc += 1;
-            }
-        }
-        Instr::NewDomNsResolver { dst, node } => {
-            #[cfg(not(feature = "xml"))]
-            {
-                let _ = (dst, node);
-                return Err(RtError::Component(
-                    "РазыменовательПространствИменDOM требует компонент bsl-xml".to_string(),
-                ));
-            }
-            #[cfg(feature = "xml")]
-            {
-                let node = reg_load(stack, frames[frame_idx].reg_index(node))?;
-                let resolver = bsl_xml::new_ns_resolver(&node)?;
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, resolver)?;
-                frames[frame_idx].pc += 1;
-            }
-        }
-        Instr::NewXmlExpandedName { dst, uri, local } => {
-            #[cfg(not(feature = "xml"))]
-            {
-                let _ = (dst, uri, local);
-                return Err(RtError::Component(
-                    "РасширенноеИмяXML требует компонент bsl-xml".to_string(),
-                ));
-            }
-            #[cfg(feature = "xml")]
-            {
-                let uri = reg_load(stack, frames[frame_idx].reg_index(uri))?;
-                let local = reg_load(stack, frames[frame_idx].reg_index(local))?;
-                let text = |value: &BslValue| match value {
-                    BslValue::Str(s) => Ok(s.to_string()),
-                    _ => Err(RtError::TypeError {
-                        expected: "Строка",
-                        op: "Новый РасширенноеИмяXML",
-                    }),
-                };
-                let name = bsl_xml::new_expanded_name(&text(&uri)?, &text(&local)?);
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, name)?;
-                frames[frame_idx].pc += 1;
-            }
-        }
-        Instr::NewXmlWriterSettings {
-            dst,
-            encoding,
-            version,
-            indent,
-        } => {
-            #[cfg(not(feature = "xml"))]
-            {
-                let _ = (dst, encoding, version, indent);
-                return Err(RtError::Component(
-                    "ПараметрыЗаписиXML требует компонент bsl-xml".to_string(),
-                ));
-            }
-            #[cfg(feature = "xml")]
-            {
-                let enc = reg_load(stack, frames[frame_idx].reg_index(encoding))?;
-                let ver = reg_load(stack, frames[frame_idx].reg_index(version))?;
-                let ind = reg_load(stack, frames[frame_idx].reg_index(indent))?;
-                let settings = bsl_xml::xml_writer_settings_value(&enc, &ver, &ind)?;
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, settings)?;
-                frames[frame_idx].pc += 1;
-            }
-        }
         Instr::NewTextWriter { dst, path } => {
             let path = reg_load(stack, frames[frame_idx].reg_index(path))?;
             let writer = BslValue::new_text_writer(&path)?;
@@ -2062,176 +1680,12 @@ fn step_cold(
             reg_store(stack, d, writer)?;
             frames[frame_idx].pc += 1;
         }
-        Instr::NewBinaryBuffer { dst, size, order } => {
-            let size = reg_load(stack, frames[frame_idx].reg_index(size))?;
-            let order = reg_load(stack, frames[frame_idx].reg_index(order))?;
-            let buf = BslValue::new_binary_buffer(&size, &order)?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, buf)?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::NewMemoryStream { dst, arg } => {
-            #[cfg(not(feature = "stream"))]
-            {
-                let _ = (dst, arg);
-                return Err(RtError::Component(
-                    "ПотокВПамяти требует компонент bsl-stream".to_string(),
-                ));
-            }
-            #[cfg(feature = "stream")]
-            {
-                let arg = reg_load(stack, frames[frame_idx].reg_index(arg))?;
-                let stream = bsl_stream::new_memory_stream(&arg)?;
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, stream)?;
-                frames[frame_idx].pc += 1;
-            }
-        }
         Instr::NewUuid { dst, arg } => {
             let arg = reg_load(stack, frames[frame_idx].reg_index(arg))?;
             let uuid = BslValue::new_uuid(&arg)?;
             let d = frames[frame_idx].reg_index(dst);
             reg_store(stack, d, uuid)?;
             frames[frame_idx].pc += 1;
-        }
-        Instr::NewFileStream {
-            dst,
-            path,
-            mode,
-            access,
-        } => {
-            #[cfg(not(feature = "stream"))]
-            {
-                let _ = (dst, path, mode, access);
-                return Err(RtError::Component(
-                    "ФайловыйПоток требует компонент bsl-stream".to_string(),
-                ));
-            }
-            #[cfg(feature = "stream")]
-            {
-                let path = reg_load(stack, frames[frame_idx].reg_index(path))?;
-                let mode = reg_load(stack, frames[frame_idx].reg_index(mode))?;
-                let access = reg_load(stack, frames[frame_idx].reg_index(access))?;
-                let stream = bsl_stream::new_file_stream(&path, &mode, &access)?;
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, stream)?;
-                frames[frame_idx].pc += 1;
-            }
-        }
-        Instr::NewArchiveWriter {
-            dst,
-            zip,
-            base,
-            count,
-        } => {
-            #[cfg(not(feature = "zip"))]
-            {
-                let _ = (dst, zip, base, count);
-                return Err(RtError::Component(
-                    "ЗаписьZipФайла требует компонент bsl-zip".to_string(),
-                ));
-            }
-            #[cfg(feature = "zip")]
-            {
-                let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
-                let writer = bsl_zip::new_archive_writer(zip, args.as_slice())?;
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, writer)?;
-                frames[frame_idx].pc += 1;
-            }
-        }
-        Instr::NewArchiveReader {
-            dst,
-            zip,
-            source,
-            password,
-            archive_type,
-        } => {
-            #[cfg(not(feature = "zip"))]
-            {
-                let _ = (dst, zip, source, password, archive_type);
-                return Err(RtError::Component(
-                    "ЧтениеZipФайла требует компонент bsl-zip".to_string(),
-                ));
-            }
-            #[cfg(feature = "zip")]
-            {
-                let source = reg_load(stack, frames[frame_idx].reg_index(source))?;
-                let password = reg_load(stack, frames[frame_idx].reg_index(password))?;
-                let archive_type = reg_load(stack, frames[frame_idx].reg_index(archive_type))?;
-                let reader = bsl_zip::new_archive_reader(zip, &source, &password, &archive_type)?;
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, reader)?;
-                frames[frame_idx].pc += 1;
-            }
-        }
-        Instr::NewDataReader {
-            dst,
-            source,
-            encoding,
-            order,
-            separator,
-        } => {
-            #[cfg(not(feature = "stream"))]
-            {
-                let _ = (dst, source, encoding, order, separator);
-                return Err(RtError::Component(
-                    "ЧтениеДанных требует компонент bsl-stream".to_string(),
-                ));
-            }
-            #[cfg(feature = "stream")]
-            {
-                let source = reg_load(stack, frames[frame_idx].reg_index(source))?;
-                let encoding = reg_load(stack, frames[frame_idx].reg_index(encoding))?;
-                let order = reg_load(stack, frames[frame_idx].reg_index(order))?;
-                let separator = reg_load(stack, frames[frame_idx].reg_index(separator))?;
-                let reader = bsl_stream::new_data_reader(&source, &encoding, &order, &separator)?;
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, reader)?;
-                frames[frame_idx].pc += 1;
-            }
-        }
-        Instr::NewDataWriter {
-            dst,
-            source,
-            encoding,
-            order,
-            separator,
-        } => {
-            #[cfg(not(feature = "stream"))]
-            {
-                let _ = (dst, source, encoding, order, separator);
-                return Err(RtError::Component(
-                    "ЗаписьДанных требует компонент bsl-stream".to_string(),
-                ));
-            }
-            #[cfg(feature = "stream")]
-            {
-                let source = reg_load(stack, frames[frame_idx].reg_index(source))?;
-                let encoding = reg_load(stack, frames[frame_idx].reg_index(encoding))?;
-                let order = reg_load(stack, frames[frame_idx].reg_index(order))?;
-                let separator = reg_load(stack, frames[frame_idx].reg_index(separator))?;
-                let writer = bsl_stream::new_data_writer(&source, &encoding, &order, &separator)?;
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, writer)?;
-                frames[frame_idx].pc += 1;
-            }
-        }
-        Instr::NewFileStreamsManager { dst } => {
-            #[cfg(not(feature = "stream"))]
-            {
-                let _ = dst;
-                return Err(RtError::Component(
-                    "ФайловыеПотоки требует компонент bsl-stream".to_string(),
-                ));
-            }
-            #[cfg(feature = "stream")]
-            {
-                let manager = bsl_stream::new_file_streams_manager();
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, manager)?;
-                frames[frame_idx].pc += 1;
-            }
         }
         Instr::NewBinaryData { dst, path } => {
             let path = reg_load(stack, frames[frame_idx].reg_index(path))?;
@@ -3451,6 +2905,24 @@ mod tests {
         run_program(&program).unwrap_or_else(|e| panic!("runtime error: {e:?}"))
     }
 
+    /// Как `run_src`, но с подключённым `bsl-json`: JSON строится только
+    /// реестром, а тестам канала обратного вызова (функции восстановления
+    /// и преобразования зовут функции модуля по имени) нужен именно он.
+    #[cfg(feature = "json")]
+    fn run_src_with_json(src: &str) -> BslValue {
+        let mut builder = bsl_rt::RuntimeBuilder::new();
+        builder
+            .register(bsl_rt::core_library())
+            .register(bsl_json::library());
+        let registry = builder.build().expect("композиция bsl-rt + bsl-json");
+        let prog = parse(src).unwrap_or_else(|e| panic!("parse error: {e:?}"));
+        let resolved = bsl_sema::resolve_program_with_registry(&prog.items, &registry)
+            .unwrap_or_else(|e| panic!("sema error: {e:?}"));
+        let program = compile_program(&resolved).unwrap_or_else(|e| panic!("compile error: {e:?}"));
+        run_program_with_registry(&program, &registry)
+            .unwrap_or_else(|e| panic!("runtime error: {e:?}"))
+    }
+
     fn component_answer(
         _context: &mut bsl_rt::CallContext<'_>,
         _args: &[BslValue],
@@ -4002,7 +3474,7 @@ mod tests {
     fn write_json_of_a_cyclic_structure_is_catchable() {
         // Сквозной вариант юнит-теста из `bsl-rt`: предел глубины JSON
         // (`JSON.MAX_DEPTH`) должен доходить до `Попытка` обычным путём.
-        let v = run_src(
+        let v = run_src_with_json(
             "А = Новый Массив;\n\
              А.Добавить(А);\n\
              З = Новый ЗаписьJSON;\n\
@@ -6244,7 +5716,6 @@ mod tests {
         assert_eq!(v, num("3"));
     }
 
-    #[cfg(feature = "json")]
     #[test]
     fn vychislit_reads_a_property_whose_name_never_appears_in_static_code() {
         // Регрессия, тот же класс бага, что и у
@@ -6254,16 +5725,20 @@ mod tests {
         // запускал его поверх `program.names` ОСНОВНОЙ программы. Пока имя
         // поля уже встречалось где-то статически, `NameId` совпадал
         // случайно; для имени, впервые встреченного ТОЛЬКО внутри текста
-        // `Вычислить`, `NameId` указывал за пределы этой таблицы, и
-        // `GetProp` падал с «идентификатор имени вне таблицы имён
-        // программы». `НастройкиСериализацииJSON` резолвит свойства
-        // СТРОКОЙ (не через `Shape`), поэтому падает именно на пути,
-        // который был сломан.
+        // `Вычислить`/`Выполнить`, `NameId` указывал за пределы этой
+        // таблицы, и `GetProp` падал с «идентификатор имени вне таблицы
+        // имён программы». Колонка строки таблицы значений резолвится
+        // СТРОКОЙ по таблице имён (не через `Shape`), поэтому падает
+        // именно на пути, который был сломан; имя колонки в статическом
+        // коде — только строковый ЛИТЕРАЛ, в таблицу имён он не попадает.
         let v = run_src(
-            "нс = Новый НастройкиСериализацииJSON;\n\
-             Возврат Вычислить(\"нс.СериализовыватьМассивыКакОбъекты\");",
+            "т = Новый ТаблицаЗначений;\n\
+             т.Колонки.Добавить(\"тайное\");\n\
+             с = т.Добавить();\n\
+             Выполнить(\"с.тайное = 5\");\n\
+             Возврат Вычислить(\"с.тайное\");",
         );
-        assert_eq!(v, BslValue::Boolean(false));
+        assert_eq!(v, num("5"));
     }
 
     #[test]
@@ -6728,7 +6203,7 @@ mod tests {
     #[cfg(feature = "json")]
     #[test]
     fn json_callback_calls_a_real_module_function_on_write() {
-        let v = run_src(
+        let v = run_src_with_json(
             "Функция Преобразовать(Свойство, Значение, ДопПар, Отказ)\n\
              	Возврат \"<\" + Свойство + \"/\" + ДопПар + \">\";\n\
              КонецФункции\n\
@@ -6750,7 +6225,7 @@ mod tests {
     #[cfg(feature = "json")]
     #[test]
     fn json_callback_refusal_travels_back_through_the_parameter_slot() {
-        let v = run_src(
+        let v = run_src_with_json(
             "Функция Отказная(Свойство, Значение, ДопПар, Отказ)\n\
              	Отказ = Истина;\n\
              	Возврат \"<не должно попасть>\";\n\
@@ -6771,7 +6246,7 @@ mod tests {
     #[cfg(feature = "json")]
     #[test]
     fn json_callback_calls_a_real_module_function_on_read() {
-        let v = run_src(
+        let v = run_src_with_json(
             "Функция Восстановить(Свойство, Значение, ДопПар)\n\
              	Если Свойство = Неопределено Тогда\n\
              		Возврат Значение;\n\
@@ -6792,7 +6267,7 @@ mod tests {
     #[cfg(feature = "json")]
     #[test]
     fn json_callback_sees_module_variables() {
-        let v = run_src(
+        let v = run_src_with_json(
             "Перем Счетчик;\n\
              Функция Восстановить(Свойство, Значение, ДопПар)\n\
              	Счетчик = Счетчик + 1;\n\
@@ -6813,7 +6288,7 @@ mod tests {
     /// роняет прогон.
     #[test]
     fn json_callback_unknown_name_is_catchable() {
-        let v = run_src(
+        let v = run_src_with_json(
             "Попытка\n\
              	Запись = Новый ЗаписьJSON;\n\
              	Запись.УстановитьСтроку();\n\
@@ -6830,7 +6305,7 @@ mod tests {
     /// глотается рантаймом.
     #[test]
     fn json_callback_raise_propagates_to_the_caller() {
-        let v = run_src(
+        let v = run_src_with_json(
             "Функция Бросающая(Свойство, Значение, ДопПар, Отказ)\n\
              	ВызватьИсключение \"изнутри\";\n\
              КонецФункции\n\

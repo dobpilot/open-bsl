@@ -111,6 +111,27 @@ pub const fn library() -> LibraryDescriptor {
 mod tests {
     use super::*;
 
+    /// Мест у писателей архива разное число, и обе границы ИЗМЕРЕНЫ с
+    /// настоящим путём первым аргументом: zip-вариант принимает семь и
+    /// отвергает восьмой, архивный принимает восемь и отвергает девятый.
+    /// Разница ровно в одно место — на вставленный третьим
+    /// `ТипФайлаАрхива`.
+    #[test]
+    fn the_two_archive_writers_have_different_argument_limits() {
+        let arity_of = |name: &str| {
+            library()
+                .constructors
+                .iter()
+                .find(|constructor| constructor.names.contains(&name))
+                .unwrap_or_else(|| panic!("нет конструктора {name}"))
+                .arity
+        };
+        let zip = arity_of("ЗаписьZipФайла");
+        assert!(zip.accepts(7) && !zip.accepts(8));
+        let archive = arity_of("ЗаписьФайлаАрхива");
+        assert!(archive.accepts(8) && !archive.accepts(9));
+    }
+
     #[test]
     fn constructor_codes_are_static_and_dense() {
         let codes = library()

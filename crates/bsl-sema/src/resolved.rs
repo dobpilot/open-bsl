@@ -128,10 +128,6 @@ pub enum RExpr {
     /// что и `EnumMember` (см. doc comment там же и на
     /// `bsl_rt::BslValue::EnumType`).
     EnumTypeRef(bsl_rt::EnumKind),
-    NewJsonReader,
-    NewJsonWriter,
-    /// `Новый НастройкиСериализацииJSON` — без аргументов, как `NewJsonReader`.
-    NewJsonSerializerSettings,
     /// `?(Условие, Тогда, Иначе)`. Хранится тремя выражениями, а не
     /// вызовом с тремя аргументами: оператор ЛЕНИВ (измерено), и
     /// кодогену нужно вкомпилировать переходы между ветвями, а не
@@ -141,57 +137,6 @@ pub enum RExpr {
         then_expr: Box<RExpr>,
         else_expr: Box<RExpr>,
     },
-    NewTextDocument,
-    NewSpreadDocument,
-    /// `Новый ДокументPDF` — без аргументов: файл назначается
-    /// `Прочитать(ИмяФайла)`.
-    NewPdfDocument,
-    NewPdfAttachments,
-    NewXmlReader,
-    NewXmlWriter,
-    /// `Новый ПостроительDOM` — без аргументов: документ строится
-    /// отдельным вызовом `Прочитать(ЧтениеXML)`.
-    NewDomBuilder,
-    /// `Новый ДокументDOM` — пустой документ, приёмник фабричных методов.
-    NewDomDocument,
-    /// `Новый ЗаписьDOM` — сериализатор дерева в `ЗаписьXML`.
-    NewDomWriter,
-    /// `Новый ПостроительСхемXML` — разбирает дерево DOM в `СхемаXML`.
-    NewXsBuilder,
-    /// `Новый СхемаXML` — пустая схема.
-    NewXmlSchema,
-    /// `Новый НаборСхемXML` — схемы по одной на пространство имён.
-    NewXmlSchemaSet,
-    /// `Новый ФабрикаXDTO([НаборСхемXML])` — модель типов по набору схем.
-    /// Аргумент необязателен, и пропущенный приходит сюда как
-    /// [`RExpr::Undefined`] — так же, как необязательные позиции
-    /// `Новый ПараметрыЗаписиJSON`.
-    NewXdtoFactory {
-        schemas: Box<RExpr>,
-    },
-    /// `Новый СериализаторXDTO(ФабрикаXDTO)` — ровно один аргумент, и он
-    /// обязателен (измерено: без фабрики платформа отвечает «Конструктор
-    /// не найден»).
-    NewXdtoSerializer(Box<RExpr>),
-    /// `Новый РазыменовательПространствИменDOM(Узел)` — ровно один
-    /// аргумент (измерено: без узла платформа конструктор отвергает, в
-    /// отличие от метода документа `СоздатьРазыменовательПИ`).
-    NewDomNsResolver(Box<RExpr>),
-    /// `Новый РасширенноеИмяXML(URI, ЛокальноеИмя)` — ровно два аргумента
-    /// (измерено: одноаргументную форму платформа отвергает).
-    NewXmlExpandedName {
-        uri: Box<RExpr>,
-        local: Box<RExpr>,
-    },
-    NewXmlWriterSettings {
-        encoding: Box<RExpr>,
-        version: Box<RExpr>,
-        indent: Box<RExpr>,
-    },
-    NewJsonWriterSettings {
-        line_break: Box<RExpr>,
-        indent: Box<RExpr>,
-    },
     NewTextWriter {
         path: Box<RExpr>,
     },
@@ -200,80 +145,11 @@ pub enum RExpr {
     NewBinaryData {
         path: Box<RExpr>,
     },
-    /// `Новый БуферДвоичныхДанных(Размер[, ПорядокБайтов])` — размер
-    /// обязателен, порядок необязателен и по умолчанию `LittleEndian`.
-    /// Пропущенная позиция приходит `Undefined`, как у
-    /// [`RExpr::NewJsonWriterSettings`].
-    NewBinaryBuffer {
-        size: Box<RExpr>,
-        order: Box<RExpr>,
-    },
-    /// `Новый ПотокВПамяти([ЁмкостьЛибоБуфер])` — единственный аргумент
-    /// необязателен и приходит `Undefined`, когда его нет.
-    NewMemoryStream {
-        arg: Box<RExpr>,
-    },
     /// `Новый УникальныйИдентификатор([Строка])` — аргумент необязателен:
     /// без него порождается случайный идентификатор, со строкой — разбор.
     NewUuid {
         arg: Box<RExpr>,
     },
-    /// `Новый ФайловыйПоток(Имя, Режим[, Доступ])` — доступ необязателен и
-    /// по умолчанию `ЧтениеИЗапись` (измерено).
-    NewFileStream {
-        path: Box<RExpr>,
-        mode: Box<RExpr>,
-        access: Box<RExpr>,
-    },
-    /// `Новый ЧтениеДанных(Источник[, Кодировка][, ПорядокБайтов][, Разделитель])`
-    /// и парный `Новый ЗаписьДанных(...)`. Хвостовые три аргумента
-    /// необязательны и приходят `Undefined`; ПЯТЫЙ аргумент у платформы
-    /// есть, но его тип не измерен, поэтому здесь разбираются четыре.
-    NewDataReader {
-        source: Box<RExpr>,
-        encoding: Box<RExpr>,
-        order: Box<RExpr>,
-        separator: Box<RExpr>,
-    },
-    NewDataWriter {
-        source: Box<RExpr>,
-        encoding: Box<RExpr>,
-        order: Box<RExpr>,
-        separator: Box<RExpr>,
-    },
-    /// `Новый ЧтениеZipФайла([Источник][, Пароль])` и
-    /// `Новый ЧтениеФайлаАрхива([Источник][, Пароль][, ТипФайлаАрхива])`.
-    ///
-    /// Оба аргумента и весь конструктор необязательны: `Новый
-    /// ЧтениеZipФайла()` платформа принимает и оставляет архив закрытым до
-    /// `Открыть`. Третий аргумент есть ТОЛЬКО у `ЧтениеФайлаАрхива`
-    /// (измерено: `Новый ЧтениеZipФайла(файл, пароль, тип)` — «Конструктор
-    /// не найден»), поэтому у zip-варианта он всегда `Undefined`.
-    NewArchiveReader {
-        zip: bool,
-        source: Box<RExpr>,
-        password: Box<RExpr>,
-        archive_type: Box<RExpr>,
-    },
-    /// `Новый ЗаписьZipФайла([Файл][, Пароль][, Комментарий][, Метод]
-    /// [, Уровень][, Шифрование][, Кодировка])` и
-    /// `Новый ЗаписьФайлаАрхива([Файл][, Пароль][, ТипАрхива][, Комментарий]
-    /// [, ...])`.
-    ///
-    /// Аргументы лежат СПИСКОМ, а не отдельными полями, как у читателя: их
-    /// семь, хвост у двух типов разный, и разбирает его рантайм — иначе
-    /// инструкция VM выросла бы на семь регистров, а вместе с ней и весь
-    /// массив инструкций. Значение `zip` решает, который из двух типов
-    /// строится и как понимать хвост.
-    NewArchiveWriter {
-        zip: bool,
-        args: Vec<RExpr>,
-    },
-    /// Голое имя `ФайловыеПотоки` как выражение. В отличие от
-    /// [`RExpr::EnumTypeRef`] это НЕ константа: `ФайловыеПотоки =
-    /// ФайловыеПотоки` платформа считает ложью (измерено), значит каждое
-    /// обращение обязано строить новый объект.
-    NewFileStreamsManager,
     /// `Вычислить(<строка>)` — компилирует строку как ОДНО выражение (через
     /// внутреннюю обёртку `Возврат (<строка>);`, см. `bsl-vm`) и исполняет
     /// его в текущей области видимости верхнего уровня, возвращая значение.
@@ -479,35 +355,7 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
         RExpr::NewArray { dims } => dims.iter().any(expr_uses_dynamic),
         RExpr::NewStructure { values, .. } => values.iter().any(expr_uses_dynamic),
         RExpr::CreateObject { args, .. } => args.iter().any(expr_uses_dynamic),
-        RExpr::EnumMember(_)
-        | RExpr::EnumTypeRef(_)
-        | RExpr::NewJsonReader
-        | RExpr::NewJsonWriter
-        | RExpr::NewJsonSerializerSettings
-        | RExpr::NewTextDocument
-        | RExpr::NewSpreadDocument
-        | RExpr::NewPdfDocument
-        | RExpr::NewPdfAttachments
-        | RExpr::NewXmlReader
-        | RExpr::NewXmlWriter
-        | RExpr::NewDomBuilder
-        | RExpr::NewDomDocument
-        | RExpr::NewDomWriter
-        | RExpr::NewXsBuilder
-        | RExpr::NewXmlSchema
-        | RExpr::NewXmlSchemaSet
-        | RExpr::NewFileStreamsManager => false,
-        RExpr::NewXmlExpandedName { uri, local } => {
-            expr_uses_dynamic(uri) || expr_uses_dynamic(local)
-        }
-        RExpr::NewXdtoFactory { schemas } => expr_uses_dynamic(schemas),
-        RExpr::NewXdtoSerializer(factory) => expr_uses_dynamic(factory),
-        RExpr::NewDomNsResolver(node) => expr_uses_dynamic(node),
-        RExpr::NewXmlWriterSettings {
-            encoding,
-            version,
-            indent,
-        } => expr_uses_dynamic(encoding) || expr_uses_dynamic(version) || expr_uses_dynamic(indent),
+        RExpr::EnumMember(_) | RExpr::EnumTypeRef(_) => false,
         RExpr::Ternary {
             cond,
             then_expr,
@@ -515,45 +363,8 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
         } => {
             expr_uses_dynamic(cond) || expr_uses_dynamic(then_expr) || expr_uses_dynamic(else_expr)
         }
-        RExpr::NewJsonWriterSettings { line_break, indent } => {
-            expr_uses_dynamic(line_break) || expr_uses_dynamic(indent)
-        }
         RExpr::NewTextWriter { path } | RExpr::NewBinaryData { path } => expr_uses_dynamic(path),
-        RExpr::NewBinaryBuffer { size, order } => {
-            expr_uses_dynamic(size) || expr_uses_dynamic(order)
-        }
-        RExpr::NewMemoryStream { arg } | RExpr::NewUuid { arg } => expr_uses_dynamic(arg),
-        RExpr::NewFileStream { path, mode, access } => {
-            expr_uses_dynamic(path) || expr_uses_dynamic(mode) || expr_uses_dynamic(access)
-        }
-        RExpr::NewArchiveWriter { args, .. } => args.iter().any(expr_uses_dynamic),
-        RExpr::NewArchiveReader {
-            source,
-            password,
-            archive_type,
-            ..
-        } => {
-            expr_uses_dynamic(source)
-                || expr_uses_dynamic(password)
-                || expr_uses_dynamic(archive_type)
-        }
-        RExpr::NewDataReader {
-            source,
-            encoding,
-            order,
-            separator,
-        }
-        | RExpr::NewDataWriter {
-            source,
-            encoding,
-            order,
-            separator,
-        } => {
-            expr_uses_dynamic(source)
-                || expr_uses_dynamic(encoding)
-                || expr_uses_dynamic(order)
-                || expr_uses_dynamic(separator)
-        }
+        RExpr::NewUuid { arg } => expr_uses_dynamic(arg),
         RExpr::NewTypeDescription(names) => expr_uses_dynamic(names),
         RExpr::Number(_)
         | RExpr::Date(_)

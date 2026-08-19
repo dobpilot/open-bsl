@@ -444,11 +444,13 @@ fn resolve_snippet_stmts_mode_registry(
     Ok((r.locals, body, requirements))
 }
 
-/// Типы, которые умеет строить `Новый` — в каноническом написании, оба
-/// языка. Список нужен снаружи (автодополнение REPL предлагает их после
-/// `Новый`), а `resolve_new` разбирает каждый по-своему: у них разная
-/// арность и разный смысл аргументов, одной таблицей не обойтись. Что
-/// список не разъедется с `match`, проверяет
+/// Типы БАЗОВОГО рантайма, которые умеет строить `Новый`, — в каноническом
+/// написании, оба языка. Список нужен снаружи (автодополнение REPL
+/// добавляет к нему конструкторы реестра компонентов), а `resolve_new`
+/// разбирает каждый по-своему: у них разная арность и разный смысл
+/// аргументов, одной таблицей не обойтись. Типы вынесенных компонентов
+/// сюда не входят — их имена объявляют `ConstructorDescriptor` компонентов.
+/// Что список не разъедется с `match`, проверяет
 /// `every_new_type_is_recognised_by_resolve_new`.
 pub const NEW_TYPES: &[&str] = &[
     "Массив",
@@ -465,114 +467,12 @@ pub const NEW_TYPES: &[&str] = &[
     "ValueComparison",
     "ЗаписьТекста",
     "TextWriter",
-    "ЧтениеJSON",
-    "JSONReader",
-    "ЗаписьJSON",
-    "JSONWriter",
-    "ПараметрыЗаписиJSON",
-    "JSONWriterSettings",
-    "НастройкиСериализацииJSON",
-    "JSONSerializerSettings",
-    "ЧтениеXML",
-    "XMLReader",
-    "ЗаписьXML",
-    "XMLWriter",
-    // Английское написание ИЗМЕРЕНО: `Новый DOMBuilder` платформа
-    // принимает и отдаёт тот же тип, что и `Новый ПостроительDOM`.
-    "ПостроительDOM",
-    "DOMBuilder",
-    // `Новый ДокументDOM` и `Новый ЗаписьDOM` — ИЗМЕРЕНО, что платформа
-    // строит оба (справка называет писателя иначе, см. `dom.rs`), и
-    // английские написания `DOMDocument`/`DOMWriter` тоже принимает.
-    "ДокументDOM",
-    "DOMDocument",
-    "ЗаписьDOM",
-    "DOMWriter",
-    // `Новый РазыменовательПространствИменDOM(Узел)` — ИЗМЕРЕНО, что
-    // платформа строит разыменователь и конструктором тоже, но РОВНО с
-    // одним аргументом: без узла (в отличие от метода документа
-    // `СоздатьРазыменовательПИ`) он не создаётся. Английское написание
-    // `DOMNamespaceResolver` тоже измерено.
-    "РазыменовательПространствИменDOM",
-    "DOMNamespaceResolver",
-    // Объектная модель XML-схемы. Все написания ИЗМЕРЕНЫ через `Тип(...)`
-    // и `Новый`: английские имена у трёх первых есть, а `РасширенноеИмяXML`
-    // строится РОВНО двумя аргументами (URI и локальное имя) —
-    // одноаргументную форму платформа отвергает.
-    "ПостроительСхемXML",
-    "XMLSchemaBuilder",
-    "СхемаXML",
-    "XMLSchema",
-    "НаборСхемXML",
-    "XMLSchemaSet",
-    // `Новый ФабрикаXDTO` строит фабрику по НАБОРУ СХЕМ (или, без
-    // аргумента, только по встроенным типам XML Schema) — измерено, что
-    // ни путь к файлу, ни схема, ни текст схемы сюда не годятся: файл
-    // берёт глобальная `СоздатьФабрикуXDTO`. Английское написание
-    // `Новый XDTOFactory` тоже измерено.
-    "ФабрикаXDTO",
-    "XDTOFactory",
-    // `Новый СериализаторXDTO(Фабрика)` — фабрика ОБЯЗАТЕЛЬНА: измерено,
-    // что без аргумента платформа отвечает «Конструктор не найден», а
-    // два аргумента, строку, число и тип XDTO отвергает. Английское
-    // написание `Новый XDTOSerializer` тоже измерено.
-    "СериализаторXDTO",
-    "XDTOSerializer",
-    "РасширенноеИмяXML",
-    "XMLExpandedName",
-    "ПараметрыЗаписиXML",
-    "XMLWriterSettings",
-    "ТекстовыйДокумент",
-    "TextDocument",
-    "ТабличныйДокумент",
-    "SpreadsheetDocument",
-    // Английское написание ИЗМЕРЕНО: `Новый PDFDocument` платформа
-    // принимает и отдаёт тот же тип «Документ PDF».
-    "ДокументPDF",
-    "PDFDocument",
-    // Коллекция вложений строится и сама по себе — ИЗМЕРЕНО, как и
-    // английское написание `PDFAttachmentCollection`. У самого
-    // `ВложениеPDF` конструктора НЕТ («Конструктор не найден»), поэтому
-    // его в этой таблице нет.
-    "КоллекцияВложенийPDF",
-    "PDFAttachmentCollection",
     // Английское написание проверено пробой `BIN.NEW.EN` на платформе:
     // `Новый BinaryData(Путь)` принимается.
     "ДвоичныеДанные",
     "BinaryData",
-    // Английское написание ИЗМЕРЕНО: `Новый BinaryDataBuffer(4)` платформа
-    // принимает.
-    "БуферДвоичныхДанных",
-    "BinaryDataBuffer",
     "УникальныйИдентификатор",
     "UUID",
-    // Английские написания обоих потоков ИЗМЕРЕНЫ: `Тип("MemoryStream")` и
-    // `Тип("FileStream")` платформа разрешает и считает равными русским.
-    "ПотокВПамяти",
-    "MemoryStream",
-    "ФайловыйПоток",
-    "FileStream",
-    // Английские написания ИЗМЕРЕНЫ: `Тип("DataReader")` и `Тип("DataWriter")`
-    // платформа разрешает и считает равными русским.
-    "ЧтениеДанных",
-    "DataReader",
-    "ЗаписьДанных",
-    "DataWriter",
-    // Читателей архива на 8.3.27 ДВА, и оба английских написания измерены:
-    // `Тип("ZipFileReader")` даёт «Чтение ZIP файла», а
-    // `Тип("ArchiveFileReader")` — «Чтение файла архива», то есть это
-    // разные типы, а не два имени одного.
-    "ЧтениеZipФайла",
-    "ZipFileReader",
-    "ЧтениеФайлаАрхива",
-    "ArchiveFileReader",
-    // Писателей тоже два, и оба английских написания измерены:
-    // `Тип("ZipFileWriter")` — «Запись ZIP файла», `Тип("ArchiveFileWriter")`
-    // — «Запись файла архива».
-    "ЗаписьZipФайла",
-    "ZipFileWriter",
-    "ЗаписьФайлаАрхива",
-    "ArchiveFileWriter",
 ];
 
 struct Resolver<'a> {
@@ -847,19 +747,24 @@ impl<'a> Resolver<'a> {
                     None if bsl_rt::lookup_enum(name).is_some() => Ok(RExpr::EnumTypeRef(
                         bsl_rt::lookup_enum(name).expect("проверено guard'ом выше"),
                     )),
-                    None if self.registry.is_some()
-                        && matches!(
-                            name.to_uppercase().as_str(),
-                            "ФАЙЛОВЫЕПОТОКИ" | "FILESTREAMS"
-                        ) =>
+                    // Голое имя менеджера `ФайловыеПотоки` разрешается так
+                    // же, как голое имя перечисления, — но НЕ в константу:
+                    // измерено, что `ФайловыеПотоки = ФайловыеПотоки` —
+                    // «Нет», значит каждое обращение строит новый объект.
+                    None if matches!(
+                        name.to_uppercase().as_str(),
+                        "ФАЙЛОВЫЕПОТОКИ" | "FILESTREAMS"
+                    ) =>
                     {
-                        let registry = self.registry.expect("проверено guard'ом");
-                        let Some((library_index, constructor)) = registry.lookup_constructor(name)
+                        let Some((library_index, constructor)) = self
+                            .registry
+                            .and_then(|registry| registry.lookup_constructor(name))
                         else {
                             return Err(SemaError::Unsupported(
                                 "ФайловыеПотоки требует зарегистрированный компонент bsl-stream",
                             ));
                         };
+                        let registry = self.registry.expect("lookup выше нашёл конструктор");
                         let package = registry
                             .library(library_index)
                             .expect("индекс получен из таблицы имён этого реестра")
@@ -871,18 +776,6 @@ impl<'a> Resolver<'a> {
                             constructor,
                             args: Vec::new(),
                         })
-                    }
-                    // Голое имя менеджера `ФайловыеПотоки` разрешается так
-                    // же, как голое имя перечисления, — но НЕ в константу:
-                    // измерено, что `ФайловыеПотоки = ФайловыеПотоки` —
-                    // «Нет», значит каждое обращение строит новый объект, и
-                    // за этим стоит отдельная инструкция.
-                    None if matches!(
-                        name.to_uppercase().as_str(),
-                        "ФАЙЛОВЫЕПОТОКИ" | "FILESTREAMS"
-                    ) =>
-                    {
-                        Ok(RExpr::NewFileStreamsManager)
                     }
                     None => Err(SemaError::UndefinedVariable(name.clone())),
                 },
@@ -985,122 +878,127 @@ impl<'a> Resolver<'a> {
                 });
             }
         }
-        if self.registry.is_some() {
-            let upper = type_name.to_uppercase();
-            if matches!(upper.as_str(), "ТЕКСТОВЫЙДОКУМЕНТ" | "TEXTDOCUMENT") {
-                return Err(SemaError::Unsupported(
-                    "ТекстовыйДокумент требует зарегистрированный компонент bsl-textdoc",
-                ));
-            }
-            if matches!(
-                upper.as_str(),
-                "ПОТОКВПАМЯТИ"
-                    | "MEMORYSTREAM"
-                    | "ФАЙЛОВЫЙПОТОК"
-                    | "FILESTREAM"
-                    | "ЧТЕНИЕДАННЫХ"
-                    | "DATAREADER"
-                    | "ЗАПИСЬДАННЫХ"
-                    | "DATAWRITER"
-            ) {
-                return Err(SemaError::Unsupported(
-                    "потоковый тип требует зарегистрированный компонент bsl-stream",
-                ));
-            }
-            if matches!(upper.as_str(), "ТАБЛИЧНЫЙДОКУМЕНТ" | "SPREADSHEETDOCUMENT")
-            {
-                return Err(SemaError::Unsupported(
-                    "ТабличныйДокумент требует зарегистрированный компонент bsl-spreadsheet",
-                ));
-            }
-            if matches!(
-                upper.as_str(),
-                "ЧТЕНИЕXML"
-                    | "XMLREADER"
-                    | "ЗАПИСЬXML"
-                    | "XMLWRITER"
-                    | "ПАРАМЕТРЫЗАПИСИXML"
-                    | "XMLWRITERSETTINGS"
-            ) {
-                return Err(SemaError::Unsupported(
-                    "тип XML требует зарегистрированный компонент bsl-xml",
-                ));
-            }
-            if matches!(
-                upper.as_str(),
-                "ПОСТРОИТЕЛЬDOM"
-                    | "DOMBUILDER"
-                    | "ДОКУМЕНТDOM"
-                    | "DOMDOCUMENT"
-                    | "ЗАПИСЬDOM"
-                    | "DOMWRITER"
-                    | "РАЗЫМЕНОВАТЕЛЬПРОСТРАНСТВИМЕНDOM"
-                    | "DOMNAMESPACERESOLVER"
-            ) {
-                return Err(SemaError::Unsupported(
-                    "тип DOM требует зарегистрированный компонент bsl-xml",
-                ));
-            }
-            if matches!(
-                upper.as_str(),
-                "ПОСТРОИТЕЛЬСХЕМXML"
-                    | "XMLSCHEMABUILDER"
-                    | "СХЕМАXML"
-                    | "XMLSCHEMA"
-                    | "НАБОРСХЕМXML"
-                    | "XMLSCHEMASET"
-                    | "РАСШИРЕННОЕИМЯXML"
-            ) {
-                return Err(SemaError::Unsupported(
-                    "тип модели схемы требует зарегистрированный компонент bsl-xml",
-                ));
-            }
-            if matches!(
-                upper.as_str(),
-                "ФАБРИКАXDTO" | "XDTOFACTORY" | "СЕРИАЛИЗАТОРXDTO" | "XDTOSERIALIZER"
-            ) {
-                return Err(SemaError::Unsupported(
-                    "тип XDTO требует зарегистрированный компонент bsl-xml",
-                ));
-            }
-            if matches!(
-                upper.as_str(),
-                "ДОКУМЕНТPDF" | "PDFDOCUMENT" | "КОЛЛЕКЦИЯВЛОЖЕНИЙPDF" | "PDFATTACHMENTCOLLECTION"
-            ) {
-                return Err(SemaError::Unsupported(
-                    "тип PDF требует зарегистрированный компонент bsl-pdf",
-                ));
-            }
-            if matches!(
-                upper.as_str(),
-                "ЧТЕНИЕZIPФАЙЛА"
-                    | "ZIPFILEREADER"
-                    | "ЧТЕНИЕФАЙЛААРХИВА"
-                    | "ARCHIVEFILEREADER"
-                    | "ЗАПИСЬZIPФАЙЛА"
-                    | "ZIPFILEWRITER"
-                    | "ЗАПИСЬФАЙЛААРХИВА"
-                    | "ARCHIVEFILEWRITER"
-            ) {
-                return Err(SemaError::Unsupported(
-                    "тип архива требует зарегистрированный компонент bsl-zip",
-                ));
-            }
-            if matches!(
-                upper.as_str(),
-                "ЧТЕНИЕJSON"
-                    | "JSONREADER"
-                    | "ЗАПИСЬJSON"
-                    | "JSONWRITER"
-                    | "ПАРАМЕТРЫЗАПИСИJSON"
-                    | "JSONWRITERSETTINGS"
-                    | "НАСТРОЙКИСЕРИАЛИЗАЦИИJSON"
-                    | "JSONSERIALIZERSETTINGS"
-            ) {
-                return Err(SemaError::Unsupported(
-                    "JSON-тип требует зарегистрированный компонент bsl-json",
-                ));
-            }
+        // Имена типов вынесенных компонентов. Конструирует их только реестр
+        // (ветка выше); здесь остаётся внятный отказ — и когда компонент не
+        // зарегистрирован, и когда конвейер собран вовсе без реестра.
+        let upper = type_name.to_uppercase();
+        if matches!(upper.as_str(), "ТЕКСТОВЫЙДОКУМЕНТ" | "TEXTDOCUMENT") {
+            return Err(SemaError::Unsupported(
+                "ТекстовыйДокумент требует зарегистрированный компонент bsl-textdoc",
+            ));
+        }
+        if matches!(upper.as_str(), "БУФЕРДВОИЧНЫХДАННЫХ" | "BINARYDATABUFFER") {
+            return Err(SemaError::Unsupported(
+                "БуферДвоичныхДанных требует зарегистрированный компонент bsl-binbuf",
+            ));
+        }
+        if matches!(
+            upper.as_str(),
+            "ПОТОКВПАМЯТИ"
+                | "MEMORYSTREAM"
+                | "ФАЙЛОВЫЙПОТОК"
+                | "FILESTREAM"
+                | "ЧТЕНИЕДАННЫХ"
+                | "DATAREADER"
+                | "ЗАПИСЬДАННЫХ"
+                | "DATAWRITER"
+        ) {
+            return Err(SemaError::Unsupported(
+                "потоковый тип требует зарегистрированный компонент bsl-stream",
+            ));
+        }
+        if matches!(upper.as_str(), "ТАБЛИЧНЫЙДОКУМЕНТ" | "SPREADSHEETDOCUMENT") {
+            return Err(SemaError::Unsupported(
+                "ТабличныйДокумент требует зарегистрированный компонент bsl-spreadsheet",
+            ));
+        }
+        if matches!(
+            upper.as_str(),
+            "ЧТЕНИЕXML"
+                | "XMLREADER"
+                | "ЗАПИСЬXML"
+                | "XMLWRITER"
+                | "ПАРАМЕТРЫЗАПИСИXML"
+                | "XMLWRITERSETTINGS"
+        ) {
+            return Err(SemaError::Unsupported(
+                "тип XML требует зарегистрированный компонент bsl-xml",
+            ));
+        }
+        if matches!(
+            upper.as_str(),
+            "ПОСТРОИТЕЛЬDOM"
+                | "DOMBUILDER"
+                | "ДОКУМЕНТDOM"
+                | "DOMDOCUMENT"
+                | "ЗАПИСЬDOM"
+                | "DOMWRITER"
+                | "РАЗЫМЕНОВАТЕЛЬПРОСТРАНСТВИМЕНDOM"
+                | "DOMNAMESPACERESOLVER"
+        ) {
+            return Err(SemaError::Unsupported(
+                "тип DOM требует зарегистрированный компонент bsl-xml",
+            ));
+        }
+        if matches!(
+            upper.as_str(),
+            "ПОСТРОИТЕЛЬСХЕМXML"
+                | "XMLSCHEMABUILDER"
+                | "СХЕМАXML"
+                | "XMLSCHEMA"
+                | "НАБОРСХЕМXML"
+                | "XMLSCHEMASET"
+                | "РАСШИРЕННОЕИМЯXML"
+        ) {
+            return Err(SemaError::Unsupported(
+                "тип модели схемы требует зарегистрированный компонент bsl-xml",
+            ));
+        }
+        if matches!(
+            upper.as_str(),
+            "ФАБРИКАXDTO" | "XDTOFACTORY" | "СЕРИАЛИЗАТОРXDTO" | "XDTOSERIALIZER"
+        ) {
+            return Err(SemaError::Unsupported(
+                "тип XDTO требует зарегистрированный компонент bsl-xml",
+            ));
+        }
+        if matches!(
+            upper.as_str(),
+            "ДОКУМЕНТPDF" | "PDFDOCUMENT" | "КОЛЛЕКЦИЯВЛОЖЕНИЙPDF" | "PDFATTACHMENTCOLLECTION"
+        ) {
+            return Err(SemaError::Unsupported(
+                "тип PDF требует зарегистрированный компонент bsl-pdf",
+            ));
+        }
+        if matches!(
+            upper.as_str(),
+            "ЧТЕНИЕZIPФАЙЛА"
+                | "ZIPFILEREADER"
+                | "ЧТЕНИЕФАЙЛААРХИВА"
+                | "ARCHIVEFILEREADER"
+                | "ЗАПИСЬZIPФАЙЛА"
+                | "ZIPFILEWRITER"
+                | "ЗАПИСЬФАЙЛААРХИВА"
+                | "ARCHIVEFILEWRITER"
+        ) {
+            return Err(SemaError::Unsupported(
+                "тип архива требует зарегистрированный компонент bsl-zip",
+            ));
+        }
+        if matches!(
+            upper.as_str(),
+            "ЧТЕНИЕJSON"
+                | "JSONREADER"
+                | "ЗАПИСЬJSON"
+                | "JSONWRITER"
+                | "ПАРАМЕТРЫЗАПИСИJSON"
+                | "JSONWRITERSETTINGS"
+                | "НАСТРОЙКИСЕРИАЛИЗАЦИИJSON"
+                | "JSONSERIALIZERSETTINGS"
+        ) {
+            return Err(SemaError::Unsupported(
+                "JSON-тип требует зарегистрированный компонент bsl-json",
+            ));
         }
         match type_name.to_uppercase().as_str() {
             "МАССИВ" | "ARRAY" => {
@@ -1233,28 +1131,6 @@ impl<'a> Resolver<'a> {
                 })
             }
             // Размер обязателен, порядок байтов необязателен, третьего
-            // аргумента нет: всё измерено — платформа отвергает и пустой
-            // конструктор, и вызов с тремя аргументами.
-            "БУФЕРДВОИЧНЫХДАННЫХ" | "BINARYDATABUFFER" => {
-                if args.is_empty() || args.len() > 2 {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: "Новый БуферДвоичныхДанных".to_string(),
-                        expected: 1,
-                        found: args.len(),
-                    });
-                }
-                let size = self.resolve_expr(&args[0])?;
-                let order = match args.get(1) {
-                    Some(a) => self.resolve_expr(a)?,
-                    None => RExpr::Undefined,
-                };
-                Ok(RExpr::NewBinaryBuffer {
-                    size: Box::new(size),
-                    order: Box::new(order),
-                })
-            }
-            // Аргумент необязателен: без него — случайный идентификатор,
-            // со строкой — разбор канонической формы.
             "УНИКАЛЬНЫЙИДЕНТИФИКАТОР" | "UUID" => {
                 if args.len() > 1 {
                     return Err(SemaError::ArgumentCountMismatch {
@@ -1268,455 +1144,6 @@ impl<'a> Resolver<'a> {
                     None => RExpr::Undefined,
                 };
                 Ok(RExpr::NewUuid { arg: Box::new(arg) })
-            }
-            // Единственный аргумент необязателен: пустой конструктор
-            // платформа принимает, а второй аргумент отвергает (измерено).
-            "ПОТОКВПАМЯТИ" | "MEMORYSTREAM" => {
-                if args.len() > 1 {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: "Новый ПотокВПамяти".to_string(),
-                        expected: 1,
-                        found: args.len(),
-                    });
-                }
-                let arg = match args.first() {
-                    Some(a) => self.resolve_expr(a)?,
-                    None => RExpr::Undefined,
-                };
-                Ok(RExpr::NewMemoryStream { arg: Box::new(arg) })
-            }
-            // Имя и режим обязательны, доступ необязателен и по умолчанию
-            // `ЧтениеИЗапись` — измерено сравнением «без доступа» с явной
-            // `ЧтениеИЗапись` во всей таблице режимов.
-            "ФАЙЛОВЫЙПОТОК" | "FILESTREAM" => {
-                if args.len() < 2 || args.len() > 3 {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: "Новый ФайловыйПоток".to_string(),
-                        expected: 3,
-                        found: args.len(),
-                    });
-                }
-                let path = self.resolve_expr(&args[0])?;
-                let mode = self.resolve_expr(&args[1])?;
-                let access = match args.get(2) {
-                    Some(a) => self.resolve_expr(a)?,
-                    None => RExpr::Undefined,
-                };
-                Ok(RExpr::NewFileStream {
-                    path: Box::new(path),
-                    mode: Box::new(mode),
-                    access: Box::new(access),
-                })
-            }
-            // Источник обязателен (пустой конструктор платформа не находит
-            // вовсе), хвостовые три — нет. Пятый аргумент у платформы есть,
-            // но его тип не измерен, поэтому больше четырёх здесь ошибка.
-            "ЧТЕНИЕДАННЫХ" | "DATAREADER" | "ЗАПИСЬДАННЫХ" | "DATAWRITER" =>
-            {
-                let reader = matches!(
-                    type_name.to_uppercase().as_str(),
-                    "ЧТЕНИЕДАННЫХ" | "DATAREADER"
-                );
-                let display = if reader {
-                    "Новый ЧтениеДанных"
-                } else {
-                    "Новый ЗаписьДанных"
-                };
-                if args.is_empty() || args.len() > 4 {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: display.to_string(),
-                        expected: 1,
-                        found: args.len(),
-                    });
-                }
-                let source = Box::new(self.resolve_expr(&args[0])?);
-                let mut tail = Vec::new();
-                for i in 1..4 {
-                    tail.push(Box::new(match args.get(i) {
-                        Some(a) => self.resolve_expr(a)?,
-                        None => RExpr::Undefined,
-                    }));
-                }
-                let mut tail = tail.into_iter();
-                let encoding = tail.next().unwrap_or_else(|| Box::new(RExpr::Undefined));
-                let order = tail.next().unwrap_or_else(|| Box::new(RExpr::Undefined));
-                let separator = tail.next().unwrap_or_else(|| Box::new(RExpr::Undefined));
-                Ok(if reader {
-                    RExpr::NewDataReader {
-                        source,
-                        encoding,
-                        order,
-                        separator,
-                    }
-                } else {
-                    RExpr::NewDataWriter {
-                        source,
-                        encoding,
-                        order,
-                        separator,
-                    }
-                })
-            }
-            // Оба читателя архива: все аргументы необязательны, но у
-            // zip-варианта их не больше двух — ИЗМЕРЕНО, что
-            // `Новый ЧтениеZipФайла(файл, пароль, тип)` платформа встречает
-            // «Конструктор не найден», тогда как
-            // `Новый ЧтениеФайлаАрхива(файл, пароль, ТипФайлаАрхива.Zip)`
-            // принимает.
-            "ЧТЕНИЕZIPФАЙЛА" | "ZIPFILEREADER" | "ЧТЕНИЕФАЙЛААРХИВА" | "ARCHIVEFILEREADER" =>
-            {
-                let zip = matches!(
-                    type_name.to_uppercase().as_str(),
-                    "ЧТЕНИЕZIPФАЙЛА" | "ZIPFILEREADER"
-                );
-                let limit = if zip { 2 } else { 3 };
-                if args.len() > limit {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: if zip {
-                            "Новый ЧтениеZipФайла".to_string()
-                        } else {
-                            "Новый ЧтениеФайлаАрхива".to_string()
-                        },
-                        expected: limit,
-                        found: args.len(),
-                    });
-                }
-                let mut arg = |i: usize| -> Result<Box<RExpr>, SemaError> {
-                    Ok(Box::new(match args.get(i) {
-                        Some(a) => self.resolve_expr(a)?,
-                        None => RExpr::Undefined,
-                    }))
-                };
-                let source = arg(0)?;
-                let password = arg(1)?;
-                let archive_type = arg(2)?;
-                Ok(RExpr::NewArchiveReader {
-                    zip,
-                    source,
-                    password,
-                    archive_type,
-                })
-            }
-            // Мест у писателей РАЗНОЕ число, и это измерено с настоящим
-            // путём первым аргументом: у zip-варианта их семь (восьмой —
-            // «Конструктор не найден»), у архивного восемь (девятый —
-            // «Конструктор не найден»), ровно на вставленный третьим
-            // `ТипФайлаАрхива` больше. Прежний общий предел 7 держался на
-            // пробе с `Неопределено` первым: там платформа отвечает
-            // «Конструктор не найден» уже потому, что подходящей перегрузки
-            // с таким первым аргументом нет вовсе. Значат места разное, и
-            // разбирает их рантайм.
-            "ЗАПИСЬZIPФАЙЛА" | "ZIPFILEWRITER" | "ЗАПИСЬФАЙЛААРХИВА" | "ARCHIVEFILEWRITER" =>
-            {
-                let zip = matches!(
-                    type_name.to_uppercase().as_str(),
-                    "ЗАПИСЬZIPФАЙЛА" | "ZIPFILEWRITER"
-                );
-                let limit = if zip { 7 } else { 8 };
-                if args.len() > limit {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: if zip {
-                            "Новый ЗаписьZipФайла".to_string()
-                        } else {
-                            "Новый ЗаписьФайлаАрхива".to_string()
-                        },
-                        expected: limit,
-                        found: args.len(),
-                    });
-                }
-                let mut resolved = Vec::with_capacity(args.len());
-                for a in args {
-                    resolved.push(self.resolve_expr(a)?);
-                }
-                Ok(RExpr::NewArchiveWriter {
-                    zip,
-                    args: resolved,
-                })
-            }
-            "ЧТЕНИЕJSON" | "JSONREADER" => {
-                if !args.is_empty() {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: "Новый ЧтениеJSON".to_string(),
-                        expected: 0,
-                        found: args.len(),
-                    });
-                }
-                Ok(RExpr::NewJsonReader)
-            }
-            "ЗАПИСЬJSON" | "JSONWRITER" => {
-                if !args.is_empty() {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: "Новый ЗаписьJSON".to_string(),
-                        expected: 0,
-                        found: args.len(),
-                    });
-                }
-                Ok(RExpr::NewJsonWriter)
-            }
-            // Оба аргумента необязательны, недостающие — `Неопределено`,
-            // как и хвостовые аргументы встроенных функций.
-            "ПАРАМЕТРЫЗАПИСИJSON" | "JSONWRITERSETTINGS" => {
-                if args.len() > 2 {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: "Новый ПараметрыЗаписиJSON".to_string(),
-                        expected: 2,
-                        found: args.len(),
-                    });
-                }
-                let mut parts = Vec::with_capacity(2);
-                for a in args {
-                    parts.push(self.resolve_expr(a)?);
-                }
-                while parts.len() < 2 {
-                    parts.push(RExpr::Undefined);
-                }
-                let indent = parts.pop().expect("две позиции только что заполнены");
-                let line_break = parts.pop().expect("две позиции только что заполнены");
-                Ok(RExpr::NewJsonWriterSettings {
-                    line_break: Box::new(line_break),
-                    indent: Box::new(indent),
-                })
-            }
-            // Без аргументов — все свойства читаются и пишутся отдельно
-            // через точку (см. `bsl_rt::BslValue::new_json_serializer_settings`).
-            "НАСТРОЙКИСЕРИАЛИЗАЦИИJSON" | "JSONSERIALIZERSETTINGS" => {
-                if !args.is_empty() {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: "Новый НастройкиСериализацииJSON".to_string(),
-                        expected: 0,
-                        found: args.len(),
-                    });
-                }
-                Ok(RExpr::NewJsonSerializerSettings)
-            }
-            "ТАБЛИЧНЫЙДОКУМЕНТ" | "SPREADSHEETDOCUMENT" => {
-                if !args.is_empty() {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: "Новый ТабличныйДокумент".to_string(),
-                        expected: 0,
-                        found: args.len(),
-                    });
-                }
-                Ok(RExpr::NewSpreadDocument)
-            }
-            // Аргументов у конструктора НЕТ: измерено, что и путь, и
-            // `ДвоичныеДанные` платформа отвергает — источник назначается
-            // отдельным `Прочитать`.
-            "ДОКУМЕНТPDF" | "PDFDOCUMENT" => {
-                if !args.is_empty() {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: "Новый ДокументPDF".to_string(),
-                        expected: 0,
-                        found: args.len(),
-                    });
-                }
-                Ok(RExpr::NewPdfDocument)
-            }
-            // Коллекцию вложений платформа строит и отдельно от документа
-            // (измерено), а вот `Новый ВложениеPDF` не знает вовсе —
-            // «Конструктор не найден».
-            //
-            // Аргументы конструктор МОЛЧА ИГНОРИРУЕТ: измерен ровно один
-            // случай — `Новый КоллекцияВложенийPDF(1)` платформа принимает
-            // и отдаёт пустую коллекцию («новый коллекция с аргументом:
-            // КоллекцияВложенийPDF»). Любое другое число аргументов здесь
-            // проходит по аналогии с этим замером, а не потому, что его
-            // мерили. Проверки арности нет — как нет и вычисления
-            // аргументов: смысла у них никакого, а побочный эффект в
-            // конструкторе коллекции вложений выдумывать незачем.
-            "КОЛЛЕКЦИЯВЛОЖЕНИЙPDF" | "PDFATTACHMENTCOLLECTION" => {
-                Ok(RExpr::NewPdfAttachments)
-            }
-            "ТЕКСТОВЫЙДОКУМЕНТ" | "TEXTDOCUMENT" => {
-                if !args.is_empty() {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: "Новый ТекстовыйДокумент".to_string(),
-                        expected: 0,
-                        found: args.len(),
-                    });
-                }
-                Ok(RExpr::NewTextDocument)
-            }
-            "ЧТЕНИЕXML" | "XMLREADER" => {
-                if !args.is_empty() {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: "Новый ЧтениеXML".to_string(),
-                        expected: 0,
-                        found: args.len(),
-                    });
-                }
-                Ok(RExpr::NewXmlReader)
-            }
-            // Аргументов у построителя нет: `Новый ПостроительDOM("x")`
-            // платформа отвергает (измерено).
-            "ПОСТРОИТЕЛЬDOM" | "DOMBUILDER" => {
-                if !args.is_empty() {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: "Новый ПостроительDOM".to_string(),
-                        expected: 0,
-                        found: args.len(),
-                    });
-                }
-                Ok(RExpr::NewDomBuilder)
-            }
-            // Ни у документа, ни у писателя аргументов нет: измерено, что
-            // `Новый ДокументDOM("а")` и `Новый ЗаписьDOM("а")` платформа
-            // отвергает.
-            "ДОКУМЕНТDOM" | "DOMDOCUMENT" => {
-                if !args.is_empty() {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: "Новый ДокументDOM".to_string(),
-                        expected: 0,
-                        found: args.len(),
-                    });
-                }
-                Ok(RExpr::NewDomDocument)
-            }
-            "РАЗЫМЕНОВАТЕЛЬПРОСТРАНСТВИМЕНDOM" | "DOMNAMESPACERESOLVER" =>
-            {
-                if args.len() != 1 {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: "Новый РазыменовательПространствИменDOM".to_string(),
-                        expected: 1,
-                        found: args.len(),
-                    });
-                }
-                Ok(RExpr::NewDomNsResolver(Box::new(
-                    self.resolve_expr(&args[0])?,
-                )))
-            }
-            "ЗАПИСЬDOM" | "DOMWRITER" => {
-                if !args.is_empty() {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: "Новый ЗаписьDOM".to_string(),
-                        expected: 0,
-                        found: args.len(),
-                    });
-                }
-                Ok(RExpr::NewDomWriter)
-            }
-            // Аргументов нет ни у построителя схем, ни у пустой схемы,
-            // ни у набора: `Новый ПостроительСхемXML("x")`, `Новый
-            // СхемаXML("urn:test")` и `Новый НаборСхемXML("x")` платформа
-            // отвергает (измерено все три).
-            "ПОСТРОИТЕЛЬСХЕМXML" | "XMLSCHEMABUILDER" => {
-                if !args.is_empty() {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: "Новый ПостроительСхемXML".to_string(),
-                        expected: 0,
-                        found: args.len(),
-                    });
-                }
-                Ok(RExpr::NewXsBuilder)
-            }
-            "СХЕМАXML" | "XMLSCHEMA" => {
-                if !args.is_empty() {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: "Новый СхемаXML".to_string(),
-                        expected: 0,
-                        found: args.len(),
-                    });
-                }
-                Ok(RExpr::NewXmlSchema)
-            }
-            "НАБОРСХЕМXML" | "XMLSCHEMASET" => {
-                if !args.is_empty() {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: "Новый НаборСхемXML".to_string(),
-                        expected: 0,
-                        found: args.len(),
-                    });
-                }
-                Ok(RExpr::NewXmlSchemaSet)
-            }
-            // Набор схем необязателен: без него получается фабрика с
-            // одними встроенными типами XML Schema (измерено), и
-            // пропущенная позиция уходит вниз как `Неопределено` — так же,
-            // как хвостовые аргументы `Новый ПараметрыЗаписиJSON`. Двух
-            // аргументов платформа не берёт (измерено).
-            "ФАБРИКАXDTO" | "XDTOFACTORY" => {
-                if args.len() > 1 {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: "Новый ФабрикаXDTO".to_string(),
-                        expected: 1,
-                        found: args.len(),
-                    });
-                }
-                let schemas = match args.first() {
-                    Some(a) => self.resolve_expr(a)?,
-                    None => RExpr::Undefined,
-                };
-                Ok(RExpr::NewXdtoFactory {
-                    schemas: Box::new(schemas),
-                })
-            }
-            // Фабрика здесь, в отличие от `Новый ФабрикаXDTO`,
-            // ОБЯЗАТЕЛЬНА: измерено, что вызов без аргумента платформа
-            // отвергает на компиляции («Конструктор не найден»), а двух
-            // аргументов не берёт.
-            "СЕРИАЛИЗАТОРXDTO" | "XDTOSERIALIZER" => {
-                if args.len() != 1 {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: "Новый СериализаторXDTO".to_string(),
-                        expected: 1,
-                        found: args.len(),
-                    });
-                }
-                Ok(RExpr::NewXdtoSerializer(Box::new(
-                    self.resolve_expr(&args[0])?,
-                )))
-            }
-            // Ровно два аргумента: URI и локальное имя (измерено, что
-            // одноаргументная форма и форма без аргументов отвергаются).
-            "РАСШИРЕННОЕИМЯXML" | "XMLEXPANDEDNAME" => {
-                if args.len() != 2 {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: "Новый РасширенноеИмяXML".to_string(),
-                        expected: 2,
-                        found: args.len(),
-                    });
-                }
-                Ok(RExpr::NewXmlExpandedName {
-                    uri: Box::new(self.resolve_expr(&args[0])?),
-                    local: Box::new(self.resolve_expr(&args[1])?),
-                })
-            }
-            "ЗАПИСЬXML" | "XMLWRITER" => {
-                if !args.is_empty() {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: "Новый ЗаписьXML".to_string(),
-                        expected: 0,
-                        found: args.len(),
-                    });
-                }
-                Ok(RExpr::NewXmlWriter)
-            }
-            // Три необязательных параметра — кодировка, версия и признак
-            // отступа; недостающие уходят `Неопределено`, как и у
-            // `ПараметрыЗаписиJSON`.
-            "ПАРАМЕТРЫЗАПИСИXML" | "XMLWRITERSETTINGS" => {
-                if args.len() > 3 {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: "Новый ПараметрыЗаписиXML".to_string(),
-                        expected: 3,
-                        found: args.len(),
-                    });
-                }
-                let mut parts = Vec::with_capacity(3);
-                for a in args {
-                    parts.push(self.resolve_expr(a)?);
-                }
-                while parts.len() < 3 {
-                    parts.push(RExpr::Undefined);
-                }
-                let indent = parts.pop().expect("три позиции только что заполнены");
-                let version = parts.pop().expect("три позиции только что заполнены");
-                let encoding = parts.pop().expect("три позиции только что заполнены");
-                Ok(RExpr::NewXmlWriterSettings {
-                    encoding: Box::new(encoding),
-                    version: Box::new(version),
-                    indent: Box::new(indent),
-                })
             }
             _ => Err(SemaError::Unsupported(
                 "этот тип в выражении Новый пока не поддержан",
@@ -2378,52 +1805,46 @@ mod tests {
         );
     }
 
-    /// Мест у писателей архива разное число, и обе границы ИЗМЕРЕНЫ с
-    /// настоящим путём первым аргументом: zip-вариант принимает семь и
-    /// отвергает восьмой, архивный принимает восемь и отвергает девятый.
-    /// Разница ровно в одно место — на вставленный третьим
-    /// `ТипФайлаАрхива`.
+    /// Арность конструктора реестра проверяется в `resolve_new` по
+    /// дескриптору. Реестр здесь синтетический: измеренные границы
+    /// настоящих компонентов закреплены их собственными тестами (например,
+    /// писатели архива в `bsl-zip`).
     #[test]
-    fn the_two_archive_writers_have_different_argument_limits() {
-        let empty = |n: usize| -> String { ", Неопределено".repeat(n) };
+    fn a_registry_constructor_arity_mismatch_is_reported() {
+        fn construct(
+            _context: &mut bsl_rt::CallContext<'_>,
+            _arguments: &[bsl_rt::BslValue],
+        ) -> bsl_rt::RtResult<bsl_rt::BslValue> {
+            Ok(bsl_rt::BslValue::Undefined)
+        }
+        const CONSTRUCTORS: &[bsl_rt::ConstructorDescriptor] = &[bsl_rt::ConstructorDescriptor {
+            code: bsl_rt::ConstructorCode::new(1),
+            names: &["Тестовый"],
+            arity: bsl_rt::Arity::range(0, 2),
+            call: construct,
+        }];
+        const LIBRARY: bsl_rt::LibraryDescriptor = bsl_rt::LibraryDescriptor {
+            package: "test-lib",
+            version: "0.0.0",
+            dependencies: &[],
+            functions: &[],
+            constructors: CONSTRUCTORS,
+        };
+        let mut builder = bsl_rt::RuntimeBuilder::new();
+        builder.register(bsl_rt::core_library()).register(LIBRARY);
+        let registry = builder.build().unwrap();
+
         let resolve = |src: &str| {
             let prog = parse(src).unwrap();
-            resolve_script(&items_to_stmts(prog.items))
+            resolve_program_with_registry(&prog.items, &registry)
         };
-
-        assert!(resolve(&format!(
-            "x = Новый ЗаписьZipФайла(\"/tmp/а.zip\"{});",
-            empty(6)
-        ))
-        .is_ok());
+        assert!(resolve("x = Новый Тестовый(1, 2);").is_ok());
         assert_eq!(
-            resolve(&format!(
-                "x = Новый ЗаписьZipФайла(\"/tmp/а.zip\"{});",
-                empty(7)
-            ))
-            .unwrap_err(),
+            resolve("x = Новый Тестовый(1, 2, 3);").unwrap_err(),
             SemaError::ArgumentCountMismatch {
-                name: "Новый ЗаписьZipФайла".to_string(),
-                expected: 7,
-                found: 8,
-            }
-        );
-
-        assert!(resolve(&format!(
-            "x = Новый ЗаписьФайлаАрхива(\"/tmp/а.zip\"{});",
-            empty(7)
-        ))
-        .is_ok());
-        assert_eq!(
-            resolve(&format!(
-                "x = Новый ЗаписьФайлаАрхива(\"/tmp/а.zip\"{});",
-                empty(8)
-            ))
-            .unwrap_err(),
-            SemaError::ArgumentCountMismatch {
-                name: "Новый ЗаписьФайлаАрхива".to_string(),
-                expected: 8,
-                found: 9,
+                name: "Новый Тестовый".to_string(),
+                expected: 2,
+                found: 3,
             }
         );
     }

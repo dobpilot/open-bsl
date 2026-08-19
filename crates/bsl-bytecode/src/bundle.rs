@@ -464,82 +464,11 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
             read_range!(base, count);
             write!(dst);
         }
-        Instr::NewTable { dst }
-        | Instr::NewValueComparison { dst }
-        | Instr::NewMap { dst }
-        | Instr::NewJsonReader { dst }
-        | Instr::NewJsonWriter { dst }
-        | Instr::NewJsonSerializerSettings { dst }
-        | Instr::NewTextDocument { dst }
-        | Instr::NewSpreadDocument { dst }
-        | Instr::NewPdfDocument { dst }
-        | Instr::NewPdfAttachments { dst }
-        | Instr::NewXmlReader { dst }
-        | Instr::NewXmlWriter { dst }
-        | Instr::NewDomBuilder { dst }
-        | Instr::NewDomDocument { dst }
-        | Instr::NewDomWriter { dst }
-        | Instr::NewXsBuilder { dst }
-        | Instr::NewXmlSchema { dst }
-        | Instr::NewXmlSchemaSet { dst } => {
-            write!(dst);
-        }
-        Instr::NewXmlExpandedName { dst, uri, local } => {
-            read!(uri);
-            read!(local);
-            write!(dst);
-        }
-        // Набор схем только ЧИТАЕТСЯ: фабрика снимает с него модель на
-        // месте и сам набор не меняет (измерено — добавленная позже схема
-        // фабрике не видна). Но это чтение — именно чтение КУЧИ: содержимое
-        // схем берётся из-под `Rc`/`RefCell`, то есть ровно то изменяемое
-        // состояние, за которое `GetProp` и `GetIndex` ставят `heap_read`.
-        // (Соседний `NewMemoryStream` его не ставит потому, что берёт тот же
-        // `Rc` и байтов не читает, — к фабрике это обоснование не подходит.)
-        Instr::NewXdtoFactory { dst, schemas } => {
-            read!(schemas);
-            write!(dst);
-            e.heap_read = true;
-        }
-        // Сериализатор берёт у фабрики готовую модель тем же `Rc` и
-        // ничего в ней не читает — модель уже построена. Поэтому здесь,
-        // в отличие от соседа сверху, `heap_read` не ставится: это тот же
-        // случай, что `NewMemoryStream` и `NewDomNsResolver`.
-        Instr::NewXdtoSerializer { dst, factory } => {
-            read!(factory);
-            write!(dst);
-        }
-        // Разыменователь ЗАПОМИНАЕТ узел, а дерево не трогает: область
-        // видимости он читает не сейчас, а на каждом
-        // `НайтиURIПространстваИмен`. Поэтому здесь только чтение
-        // регистра и запись назначения — `heap_read` ставить не за что,
-        // как и у `NewMemoryStream`, который тоже лишь берёт чужой `Rc`.
-        Instr::NewDomNsResolver { dst, node } => {
-            read!(node);
+        Instr::NewTable { dst } | Instr::NewValueComparison { dst } | Instr::NewMap { dst } => {
             write!(dst);
         }
         Instr::NewTypeDescription { dst, names } => {
             read!(names);
-            write!(dst);
-        }
-        Instr::NewJsonWriterSettings {
-            dst,
-            line_break,
-            indent,
-        } => {
-            read!(line_break);
-            read!(indent);
-            write!(dst);
-        }
-        Instr::NewXmlWriterSettings {
-            dst,
-            encoding,
-            version,
-            indent,
-        } => {
-            read!(encoding);
-            read!(version);
-            read!(indent);
             write!(dst);
         }
         Instr::NewTextWriter { dst, path } | Instr::NewBinaryData { dst, path } => {
@@ -550,99 +479,12 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
             // с записью в тот же файл наблюдаемо ровно так же.
             e.io = true;
         }
-        // А буфер, в отличие от соседа выше, никуда не ходит: чистое
-        // выделение памяти, наблюдаемых побочных эффектов нет.
-        Instr::NewBinaryBuffer { dst, size, order } => {
-            read!(size);
-            read!(order);
-            write!(dst);
-        }
-        // Поток в памяти — тоже чистое выделение. Даже над буфером: там
-        // берётся тот же `Rc`, байты не копируются и не читаются.
-        Instr::NewMemoryStream { dst, arg } => {
-            read!(arg);
-            write!(dst);
-        }
         // УИД без аргумента читает системный источник случайности, но
         // порядок случайных значений программе не обещан и наблюдаемым
-        // вводом-выводом не является — эффекты как у соседа сверху.
+        // вводом-выводом не является — эффектов нет, как у `NewTable`.
         Instr::NewUuid { dst, arg } => {
             read!(arg);
             write!(dst);
-        }
-        // А файловый поток открывает файл и в половине режимов его создаёт
-        // либо обрезает — порядок относительно другого ввода-вывода
-        // наблюдаем, как у `NewTextWriter`.
-        Instr::NewFileStream {
-            dst,
-            path,
-            mode,
-            access,
-        } => {
-            read!(path);
-            read!(mode);
-            read!(access);
-            write!(dst);
-            e.io = true;
-        }
-        // Менеджер сам ничего не открывает: файл открывают его МЕТОДЫ, а
-        // они идут через `CallMethod`. Здесь только выделение объекта.
-        Instr::NewFileStreamsManager { dst } => {
-            write!(dst);
-        }
-        // Писатель архива, в отличие от читателя, ввода-вывода НЕ делает:
-        // конструктор только запоминает цель, а файл появляется на
-        // `Записать()` (измерено).
-        Instr::NewArchiveWriter {
-            dst,
-            zip: _,
-            base,
-            count,
-        } => {
-            read_range!(base, count);
-            write!(dst);
-        }
-        // Читатель архива с источником открывает и вычитывает файл целиком,
-        // а с источником-потоком двигает и возвращает его позицию — порядок
-        // наблюдаем в обоих случаях.
-        Instr::NewArchiveReader {
-            dst,
-            zip: _,
-            source,
-            password,
-            archive_type,
-        } => {
-            read!(source);
-            read!(password);
-            read!(archive_type);
-            write!(dst);
-            e.io = true;
-        }
-        // Читатель и писатель данных: источником бывает ИМЯ ФАЙЛА, и тогда
-        // конструктор открывает файл (а у писателя — создаёт, если файла нет;
-        // существующий не обрезает — измерено). Кроме того оба запоминают
-        // позицию целевого потока, так что порядок относительно операций над
-        // этим потоком наблюдаем.
-        Instr::NewDataReader {
-            dst,
-            source,
-            encoding,
-            order,
-            separator,
-        }
-        | Instr::NewDataWriter {
-            dst,
-            source,
-            encoding,
-            order,
-            separator,
-        } => {
-            read!(source);
-            read!(encoding);
-            read!(order);
-            read!(separator);
-            write!(dst);
-            e.io = true;
         }
         Instr::CollectionLen { dst, obj } => {
             read!(obj);
