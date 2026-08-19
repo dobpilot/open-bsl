@@ -248,7 +248,7 @@ impl StreamData {
                 // количество приходит из пользовательского текста (`Прочитать`
                 // у `ЧтениеДанных`) — значит, отказ обязан быть
                 // перехватываемым. Тот же приём, что в
-                // `binbuf::new_binary_buffer`; после `try_reserve_exact`
+                // `bindata::new_binary_buffer` в `bsl-rt`; после `try_reserve_exact`
                 // `resize` уже не размещает память заново и упасть не может.
                 let mut chunk = Vec::new();
                 chunk

@@ -162,7 +162,7 @@ pub enum BuiltinFn {
     ConcatBinaryData,
 
     /// `ПолучитьДвоичныеДанныеИзСтроки(Строка[, Кодировка][, ДобавлятьBOM])`
-    /// (см. `binbuf::binary_data_from_string`).
+    /// (см. `bindata::binary_data_from_string`).
     GetBinaryDataFromString,
     /// `ПолучитьБуферДвоичныхДанныхИзСтроки` — то же самое, но в буфер.
     GetBinaryDataBufferFromString,
@@ -807,7 +807,7 @@ pub enum BuiltinMethod {
     /// `Соединить(Другой)` -> НОВЫЙ буфер; получатель не меняется.
     BufConcat,
     /// `ПолучитьСрез(Позиция[, Количество])` -> ОКНО в тот же массив
-    /// байтов, а не копия (измерено, см. `crate::binbuf::get_slice`).
+    /// байтов, а не копия (измерено, см. `crate::bindata::get_slice`).
     /// Копию отдаёт `Скопировать`, которое буфер делит с `ТаблицаЗначений`
     /// — получатель разводится в рантайме.
     BufSlice,
@@ -1398,10 +1398,10 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         // `RtError::InvalidBytecode`).
         BuiltinFn::SplitBinaryData => args[0].binary_data_split(&args[1]),
         BuiltinFn::ConcatBinaryData => args[0].binary_data_combine(),
-        BuiltinFn::GetBinaryDataFromString => crate::binbuf::binary_data_from_string(args),
-        BuiltinFn::GetBinaryDataBufferFromString => crate::binbuf::binary_buffer_from_string(args),
-        BuiltinFn::GetStringFromBinaryData => crate::binbuf::string_from_binary_data(args),
-        BuiltinFn::GetStringFromBinaryDataBuffer => crate::binbuf::string_from_binary_buffer(args),
+        BuiltinFn::GetBinaryDataFromString => crate::bindata::binary_data_from_string(args),
+        BuiltinFn::GetBinaryDataBufferFromString => crate::bindata::binary_buffer_from_string(args),
+        BuiltinFn::GetStringFromBinaryData => crate::bindata::string_from_binary_data(args),
+        BuiltinFn::GetStringFromBinaryDataBuffer => crate::bindata::string_from_binary_buffer(args),
         BuiltinFn::ValueToStringInternal
         | BuiltinFn::ValueFromStringInternal
         | BuiltinFn::ValueToFile
@@ -1515,18 +1515,18 @@ fn arg(args: &[BslValue], i: usize) -> &BslValue {
 fn read_int_by_receiver(
     obj: &BslValue,
     args: &[BslValue],
-    w: crate::binbuf::IntWidth,
+    w: crate::bindata::IntWidth,
 ) -> RtResult<BslValue> {
-    crate::binbuf::read_int(obj, args, w)
+    crate::bindata::read_int(obj, args, w)
 }
 
 /// `ЗаписатьЦелоеN` по получателю — то же различие, что и у чтения.
 fn write_int_by_receiver(
     obj: &BslValue,
     args: &[BslValue],
-    w: crate::binbuf::IntWidth,
+    w: crate::bindata::IntWidth,
 ) -> RtResult<BslValue> {
-    crate::binbuf::write_int(obj, args, w)
+    crate::bindata::write_int(obj, args, w)
 }
 
 /// Лишние аргументы у метода с переменной арностью. Тихо игнорировать их
@@ -1614,8 +1614,8 @@ pub fn call_builtin_method(
                     receiver: obj.type_name(),
                 }),
             },
-            _ if crate::binbuf::is_buffer(obj) => match args {
-                [pos] => crate::binbuf::get_byte(obj, pos),
+            _ if crate::bindata::is_buffer(obj) => match args {
+                [pos] => crate::bindata::get_byte(obj, pos),
                 _ => Err(RtError::MethodNotApplicable {
                     method: "Получить",
                     receiver: obj.type_name(),
@@ -1692,8 +1692,8 @@ pub fn call_builtin_method(
         // таблицы значений — отбор и список колонок. Одно имя, разный смысл
         // по получателю, как у `Записать` и `Закрыть`.
         BuiltinMethod::Copy => {
-            if crate::binbuf::is_buffer(obj) {
-                return crate::binbuf::copy_buffer(obj, args);
+            if crate::bindata::is_buffer(obj) {
+                return crate::bindata::copy_buffer(obj, args);
             }
             too_many(obj, "Скопировать", args, 2)?;
             obj.table_copy(arg(args, 0), arg(args, 1))
@@ -1727,10 +1727,10 @@ pub fn call_builtin_method(
         // `ТекстовыйДокумент` — сохранить файл. Одно имя, разный смысл по
         // получателю, как и у `Закрыть`.
         BuiltinMethod::Write => {
-            if crate::binbuf::is_buffer(obj) {
+            if crate::bindata::is_buffer(obj) {
                 // У буфера `Записать(Позиция, Источник[, Количество])` —
                 // блочная запись; арность и границы проверяет он сам.
-                crate::binbuf::write_buffer(obj, args)
+                crate::bindata::write_buffer(obj, args)
             } else {
                 // Получатель здесь может оказаться и не `ЗаписьТекста`:
                 // тогда индексация `args[0]` обязана быть безопасной, а
@@ -1825,7 +1825,7 @@ pub fn call_builtin_method(
 
         // --- БуферДвоичныхДанных ------------------------------------------
         BuiltinMethod::BufSet => match args {
-            [pos, value] => crate::binbuf::set_byte(obj, pos, value).map(|()| BslValue::Undefined),
+            [pos, value] => crate::bindata::set_byte(obj, pos, value).map(|()| BslValue::Undefined),
             _ => Err(RtError::MethodNotApplicable {
                 method: "Установить",
                 receiver: obj.type_name(),
@@ -1835,12 +1835,18 @@ pub fn call_builtin_method(
         // `ЧтениеДанных`/`ЗаписьДанных`, но смысл аргументов разный: у буфера
         // первым идёт ПОЗИЦИЯ, у читателя и писателя её нет вовсе (позиция
         // своя). Разводится по получателю.
-        BuiltinMethod::ReadInt16 => read_int_by_receiver(obj, args, crate::binbuf::IntWidth::W16),
-        BuiltinMethod::ReadInt32 => read_int_by_receiver(obj, args, crate::binbuf::IntWidth::W32),
-        BuiltinMethod::ReadInt64 => read_int_by_receiver(obj, args, crate::binbuf::IntWidth::W64),
-        BuiltinMethod::WriteInt16 => write_int_by_receiver(obj, args, crate::binbuf::IntWidth::W16),
-        BuiltinMethod::WriteInt32 => write_int_by_receiver(obj, args, crate::binbuf::IntWidth::W32),
-        BuiltinMethod::WriteInt64 => write_int_by_receiver(obj, args, crate::binbuf::IntWidth::W64),
+        BuiltinMethod::ReadInt16 => read_int_by_receiver(obj, args, crate::bindata::IntWidth::W16),
+        BuiltinMethod::ReadInt32 => read_int_by_receiver(obj, args, crate::bindata::IntWidth::W32),
+        BuiltinMethod::ReadInt64 => read_int_by_receiver(obj, args, crate::bindata::IntWidth::W64),
+        BuiltinMethod::WriteInt16 => {
+            write_int_by_receiver(obj, args, crate::bindata::IntWidth::W16)
+        }
+        BuiltinMethod::WriteInt32 => {
+            write_int_by_receiver(obj, args, crate::bindata::IntWidth::W32)
+        }
+        BuiltinMethod::WriteInt64 => {
+            write_int_by_receiver(obj, args, crate::bindata::IntWidth::W64)
+        }
         BuiltinMethod::DataReadByte
         | BuiltinMethod::DataReadIntoBuffer
         | BuiltinMethod::DataReadChars
@@ -1859,22 +1865,22 @@ pub fn call_builtin_method(
                 receiver: obj.type_name(),
             })
         }
-        BuiltinMethod::BufSplit => crate::binbuf::split(obj, &args[0]),
-        BuiltinMethod::BufConcat => crate::binbuf::concat(obj, &args[0]),
-        BuiltinMethod::BufSlice => crate::binbuf::get_slice(obj, args),
+        BuiltinMethod::BufSplit => crate::bindata::split(obj, &args[0]),
+        BuiltinMethod::BufConcat => crate::bindata::concat(obj, &args[0]),
+        BuiltinMethod::BufSlice => crate::bindata::get_slice(obj, args),
         BuiltinMethod::WriteBitwiseAnd => {
-            crate::binbuf::bitwise(obj, args, crate::binbuf::BitOp::And)
+            crate::bindata::bitwise(obj, args, crate::bindata::BitOp::And)
         }
         BuiltinMethod::WriteBitwiseOr => {
-            crate::binbuf::bitwise(obj, args, crate::binbuf::BitOp::Or)
+            crate::bindata::bitwise(obj, args, crate::bindata::BitOp::Or)
         }
         BuiltinMethod::WriteBitwiseXor => {
-            crate::binbuf::bitwise(obj, args, crate::binbuf::BitOp::Xor)
+            crate::bindata::bitwise(obj, args, crate::bindata::BitOp::Xor)
         }
         BuiltinMethod::WriteBitwiseAndNot => {
-            crate::binbuf::bitwise(obj, args, crate::binbuf::BitOp::AndNot)
+            crate::bindata::bitwise(obj, args, crate::bindata::BitOp::AndNot)
         }
-        BuiltinMethod::Invert => crate::binbuf::invert(obj, args),
+        BuiltinMethod::Invert => crate::bindata::invert(obj, args),
         BuiltinMethod::XmlReadAttribute => Err(RtError::MethodNotApplicable {
             method: "ПрочитатьАтрибут",
             receiver: obj.type_name(),

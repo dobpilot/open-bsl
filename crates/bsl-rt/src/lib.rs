@@ -4,7 +4,7 @@
 //! модуль `date`) и типы как значения (`Type`/`TypeId`). `BslValue` растёт
 //! по мере готовности остальных слоёв, а не заранее под все типы из брифа.
 
-mod binbuf;
+mod bindata;
 mod builtin;
 mod component;
 mod date;
@@ -1288,7 +1288,7 @@ impl BslValue {
     /// Создаёт `БуферДвоичныхДанных` с готовыми байтами и малым порядком.
     pub fn binary_buffer_of(bytes: Vec<u8>) -> Self {
         BslValue::Object(Rc::new(BslObject::BinaryBuffer(Rc::new(
-            std::cell::RefCell::new(binbuf::BinBufData::new(bytes, binbuf::ByteOrder::Little)),
+            std::cell::RefCell::new(bindata::BinBufData::new(bytes, bindata::ByteOrder::Little)),
         ))))
     }
 
@@ -1585,7 +1585,7 @@ impl BslValue {
     /// такого размера не удалось разместить в памяти: отказом это лучше,
     /// чем падением процесса на числе из пользовательского текста.
     pub fn new_binary_buffer(size: &BslValue, order: &BslValue) -> RtResult<Self> {
-        binbuf::new_binary_buffer(size, order)
+        bindata::new_binary_buffer(size, order)
     }
 
     /// `Новый УникальныйИдентификатор([СтрокаЛибоУИД])`. Без аргумента —
@@ -1855,7 +1855,7 @@ impl BslValue {
                 // `Буфер[Позиция]` -> `Число` 0..255. Индекс здесь свой, не
                 // общий `index_as_usize`: у буфера дробная позиция не
                 // ошибка, а отбрасывается к нулю (измерено).
-                BslObject::BinaryBuffer(_) => binbuf::get_byte(self, idx),
+                BslObject::BinaryBuffer(_) => bindata::get_byte(self, idx),
                 _ => Err(RtError::NotIndexable),
             },
             _ => Err(RtError::NotIndexable),
@@ -1879,7 +1879,7 @@ impl BslValue {
                 }
                 // `Буфер[Позиция] = Значение` — единственный, кроме массива,
                 // изменяемый по индексу объект.
-                BslObject::BinaryBuffer(_) => binbuf::set_byte(self, idx, &val),
+                BslObject::BinaryBuffer(_) => bindata::set_byte(self, idx, &val),
                 _ => Err(RtError::NotIndexable),
             },
             _ => Err(RtError::NotIndexable),
@@ -2218,11 +2218,11 @@ impl BslValue {
                 BslObject::BinaryBuffer(_) => {
                     if name.eq_ignore_ascii_case("Размер") || name.eq_ignore_ascii_case("Size")
                     {
-                        binbuf::size(self)
+                        bindata::size(self)
                     } else if name.eq_ignore_ascii_case("ПорядокБайтов")
                         || name.eq_ignore_ascii_case("ByteOrder")
                     {
-                        binbuf::get_order(self)
+                        bindata::get_order(self)
                     } else {
                         Err(RtError::UnknownColumn(name.to_string()))
                     }
@@ -2254,7 +2254,7 @@ impl BslValue {
                     if name.eq_ignore_ascii_case("ПорядокБайтов")
                         || name.eq_ignore_ascii_case("ByteOrder")
                     {
-                        binbuf::set_order(self, val)
+                        bindata::set_order(self, val)
                     } else if name.eq_ignore_ascii_case("Размер")
                         || name.eq_ignore_ascii_case("Size")
                     {

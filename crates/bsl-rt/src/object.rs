@@ -73,7 +73,7 @@ pub enum BslObject {
     /// (измерено: два свежих нулевых буфера одного размера не равны), и
     /// потому отдельной ветки в `PartialEq`/`Hash` у него нет — работает
     /// общий путь через `Rc::ptr_eq`.
-    BinaryBuffer(Rc<RefCell<crate::binbuf::BinBufData>>),
+    BinaryBuffer(Rc<RefCell<crate::bindata::BinBufData>>),
     /// `УникальныйИдентификатор` — шестнадцать байтов UUID. Иммутабельное
     /// значение: равенство по байтам, печать канонической формой нижнего
     /// регистра (см. `crate::uuid`).
