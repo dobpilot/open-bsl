@@ -171,6 +171,7 @@ name = "bsl-spreadsheet"
 version = "0.1.0"
 dependencies = [
  "bsl-format",
+ "bsl-pdf",
  "bsl-rt",
  "flate2",
  "zip",

@@ -1,10 +1,11 @@
 //! Документы PDF BSL: «ДокументPDF», его страницы и вложения.
 //!
-//! Писательское ядро формата живёт в `bsl_rt::pdf`; этот крейт добавляет
+//! Писательское ядро формата — модуль [`writer`]; поверх него крейт добавляет
 //! читатель контейнера и измеренную на 8.3.27 поверхность встроенного
 //! языка.
 
 mod document;
+pub mod writer;
 
 use bsl_rt::{
     Arity, BslValue, CallContext, ConstructorCode, ConstructorDescriptor, LibraryDependency,

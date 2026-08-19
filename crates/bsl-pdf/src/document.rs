@@ -1,14 +1,14 @@
 //! `ДокументPDF»: читатель контейнера PDF и поверхность встроенного языка.
 //!
 //! Писательское ядро (объектная модель, шрифты, примитивы страниц) живёт в
-//! `bsl_rt::pdf` — им пользуется и раскладка табличного документа; здесь
+//! `crate::writer` — им пользуется и раскладка табличного документа; здесь
 //! разбор существующего файла, вложения и измеренная на 8.3.27 поверхность
 //! «ДокументPDF» с коллекциями страниц и вложений.
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use bsl_rt::pdf::{inflate_with_limit, write_value, zlib_compress, PdfValue};
+use crate::writer::{inflate_with_limit, write_value, zlib_compress, PdfValue};
 use bsl_rt::{
     BslNumber, BslString, BslValue, CallContext, EnumValue, ObjectProtocol, RtError, RtResult,
     TypeDescriptor, TypeId,
@@ -3057,7 +3057,7 @@ impl ObjectProtocol for AttachmentObject {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bsl_rt::pdf::{PaintMode, PdfDocument, PdfFont};
+    use crate::writer::{PaintMode, PdfDocument, PdfFont};
     use std::path::PathBuf;
 
     fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {

@@ -80,7 +80,7 @@
 //!   `841.92 x 595.32`, поля при этом не меняются (`probe-landscape`);
 //! * ПУСТОЙ документ платформа пишет как обычный файл из ОДНОЙ страницы
 //!   (877 байт), а не отказывается (`probe-empty`). Поэтому пустая
-//!   страница заводится и здесь: [`bsl_rt::pdf::PdfDocument::write`]
+//!   страница заводится и здесь: [`bsl_pdf::writer::PdfDocument::write`]
 //!   документ без страниц отвергает.
 //!
 //! # Чего мы намеренно не повторяем
@@ -125,7 +125,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::document::{CellData, HAlign, Line, LineStyle, SpreadDocData, VAlign};
-use bsl_rt::pdf::{PageId, PaintMode, PdfDocument, PdfFont};
+use bsl_pdf::writer::{PageId, PaintMode, PdfDocument, PdfFont};
 use bsl_rt::RtResult;
 
 /// A4 в пунктах — в том виде, в каком его пишет платформа (её округление

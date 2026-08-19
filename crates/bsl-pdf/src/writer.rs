@@ -131,7 +131,7 @@ use std::collections::BTreeMap;
 use std::io::Read as _;
 use std::io::Write as _;
 
-use crate::{RtError, RtResult};
+use bsl_rt::{RtError, RtResult};
 
 // ---------------------------------------------------------------------------
 // zlib поверх сырого deflate

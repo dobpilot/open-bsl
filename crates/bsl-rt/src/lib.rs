@@ -18,7 +18,6 @@ mod map;
 mod object;
 mod object_protocol;
 pub mod open_questions;
-pub mod pdf;
 mod runtime_shapes;
 mod shape;
 mod string;

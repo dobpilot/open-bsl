@@ -1,7 +1,7 @@
 //! Табличный документ BSL: MXL, XLSX, шаблоны и PDF-раскладка.
 //!
-//! Форматные ядра — писатель PDF и парсер XML — пока живут в `bsl-rt`
-//! (`bsl_rt::pdf`, `bsl_rt::xml`) и переезжают следом.
+//! Писатель PDF приходит из `bsl_pdf::writer`, парсер XML — из
+//! `bsl_xml::core`.
 
 mod document;
 mod pdf_layout;
