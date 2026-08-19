@@ -1399,54 +1399,6 @@ fn step(
                 reg_store(stack, d, v)?;
                 frames[frame_idx].pc += 1;
             }
-            Instr::CallComponent {
-                dst, base, count, ..
-            } => {
-                let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
-                let call = linked.function(func_id, pc)?;
-                let mut function_caller =
-                    |name: &str,
-                     call_args: Vec<BslValue>,
-                     stdout: &mut dyn Write,
-                     stderr: &mut dyn Write| {
-                        let mut nested_host = HostIo { stdout, stderr };
-                        call_module_function_with_host(
-                            program,
-                            stack,
-                            name,
-                            call_args,
-                            linked,
-                            &mut nested_host,
-                        )
-                    };
-                let mut context = bsl_rt::CallContext::with_function_caller(
-                    runtime_shapes,
-                    &mut *host.stdout,
-                    &mut *host.stderr,
-                    bsl_format::format_value,
-                    &mut function_caller,
-                );
-                let value = call(&mut context, args.as_slice())?;
-                let destination = frames[frame_idx].reg_index(dst);
-                reg_store(stack, destination, value)?;
-                frames[frame_idx].pc += 1;
-            }
-            Instr::CreateObject {
-                dst, base, count, ..
-            } => {
-                let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
-                let call = linked.constructor(func_id, pc)?;
-                let mut context = bsl_rt::CallContext::new(
-                    runtime_shapes,
-                    &mut *host.stdout,
-                    &mut *host.stderr,
-                    bsl_format::format_value,
-                );
-                let value = call(&mut context, args.as_slice())?;
-                let destination = frames[frame_idx].reg_index(dst);
-                reg_store(stack, destination, value)?;
-                frames[frame_idx].pc += 1;
-            }
             Instr::CallMethod {
                 dst,
                 obj,
@@ -1533,6 +1485,8 @@ fn step(
             | Instr::CallObjectMethod { .. }
             | Instr::GetObjectProp { .. }
             | Instr::SetObjectProp { .. }
+            | Instr::CallComponent { .. }
+            | Instr::CreateObject { .. }
             | Instr::RunDynamic { .. } => {
                 step_cold(
                     instr,
@@ -1758,6 +1712,62 @@ fn step_cold(
                     other => other?,
                 }
             }
+            frames[frame_idx].pc += 1;
+        }
+        // Компонентные вызовы уехали сюда из горячего цикла: их тела —
+        // самое крупное, что в нём лежало (машинерия `function_caller`
+        // для обратных вызовов из компонентов), а стоимость холодного
+        // перехода тонет в работе компонента. Горячему циклу важен
+        // размер: он живёт на грани кеша микроопераций (см. комментарий
+        // у списка холодных опкодов в `step`); вынос измерен A/B —
+        // call_overhead с +12,3% до +4,3% к main, pi_leibniz с +12,1%
+        // до +6,2%.
+        Instr::CallComponent {
+            dst, base, count, ..
+        } => {
+            let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
+            let call = linked.function(func_id, frames[frame_idx].pc)?;
+            let mut function_caller =
+                |name: &str,
+                 call_args: Vec<BslValue>,
+                 stdout: &mut dyn Write,
+                 stderr: &mut dyn Write| {
+                    let mut nested_host = HostIo { stdout, stderr };
+                    call_module_function_with_host(
+                        program,
+                        stack,
+                        name,
+                        call_args,
+                        linked,
+                        &mut nested_host,
+                    )
+                };
+            let mut context = bsl_rt::CallContext::with_function_caller(
+                runtime_shapes,
+                &mut *host.stdout,
+                &mut *host.stderr,
+                bsl_format::format_value,
+                &mut function_caller,
+            );
+            let value = call(&mut context, args.as_slice())?;
+            let destination = frames[frame_idx].reg_index(dst);
+            reg_store(stack, destination, value)?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::CreateObject {
+            dst, base, count, ..
+        } => {
+            let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
+            let call = linked.constructor(func_id, frames[frame_idx].pc)?;
+            let mut context = bsl_rt::CallContext::new(
+                runtime_shapes,
+                &mut *host.stdout,
+                &mut *host.stderr,
+                bsl_format::format_value,
+            );
+            let value = call(&mut context, args.as_slice())?;
+            let destination = frames[frame_idx].reg_index(dst);
+            reg_store(stack, destination, value)?;
             frames[frame_idx].pc += 1;
         }
         Instr::CallObjectMethod {
