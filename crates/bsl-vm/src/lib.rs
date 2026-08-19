@@ -1455,11 +1455,6 @@ fn step(
                     } else if bsl_rt::spread_is_document(ov) {
                         bsl_rt::spread_write(ov, std::slice::from_ref(sv))?;
                         BslValue::Undefined
-                    } else if bsl_rt::pdf::is_pdf_document(ov) {
-                        // `ДокументPDF.Записать(ИмяФайла)` — тот же случай:
-                        // один аргумент, а получатель не `ЗаписьТекста`.
-                        bsl_rt::pdf::write(ov, std::slice::from_ref(sv))?;
-                        BslValue::Undefined
                     } else {
                         ov.text_writer_write(sv)?
                     }
@@ -1750,14 +1745,34 @@ fn step_cold(
             frames[frame_idx].pc += 1;
         }
         Instr::NewPdfDocument { dst } => {
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, bsl_rt::pdf::new_pdf_document())?;
-            frames[frame_idx].pc += 1;
+            #[cfg(not(feature = "pdf"))]
+            {
+                let _ = dst;
+                return Err(RtError::Component(
+                    "ДокументPDF требует компонент bsl-pdf".to_string(),
+                ));
+            }
+            #[cfg(feature = "pdf")]
+            {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, bsl_pdf::new_pdf_document())?;
+                frames[frame_idx].pc += 1;
+            }
         }
         Instr::NewPdfAttachments { dst } => {
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, bsl_rt::pdf::new_pdf_attachments())?;
-            frames[frame_idx].pc += 1;
+            #[cfg(not(feature = "pdf"))]
+            {
+                let _ = dst;
+                return Err(RtError::Component(
+                    "КоллекцияВложенийPDF требует компонент bsl-pdf".to_string(),
+                ));
+            }
+            #[cfg(feature = "pdf")]
+            {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, bsl_pdf::new_pdf_attachments())?;
+                frames[frame_idx].pc += 1;
+            }
         }
         Instr::NewTextDocument { dst } => {
             #[cfg(not(feature = "textdoc"))]

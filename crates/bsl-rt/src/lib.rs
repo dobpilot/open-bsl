@@ -535,11 +535,11 @@ impl BslValue {
                 // типов, кроме документа: `Строка(Новый ДокументPDF)` —
                 // «ДокументPDF», а `Строка(ТипЗнч(...))` — «Документ PDF»
                 // (измерено обе колонки).
-                BslObject::PdfDocument(_) => "ДокументPDF",
-                BslObject::PdfPages(_) => "КоллекцияСтраницPDF",
-                BslObject::PdfPage(..) => "СтраницаPDF",
-                BslObject::PdfAttachments(_) => "КоллекцияВложенийPDF",
-                BslObject::PdfAttachment(..) => "ВложениеPDF",
+                BslObject::ReservedPdfDocument
+                | BslObject::ReservedPdfPages
+                | BslObject::ReservedPdfPage
+                | BslObject::ReservedPdfAttachments
+                | BslObject::ReservedPdfAttachment => "",
                 BslObject::ReservedArchiveReader
                 | BslObject::ReservedArchiveEntries
                 | BslObject::ReservedArchiveEntry
@@ -1319,12 +1319,6 @@ impl BslValue {
                 BslObject::DomList(kind, _) => !kind.is_empty(),
                 // Коллекции модели схемы — по тому же критерию длины.
                 BslObject::XsList(_, kind) => !kind.is_empty(),
-                // Коллекция страниц PDF — тоже по длине (измерено).
-                BslObject::PdfPages(_) => self.collection_len()? > 0,
-                // Коллекция вложений — тоже по длине: измерено, что у
-                // документа с пятью вложениями `ЗначениеЗаполнено` даёт
-                // «Да».
-                BslObject::PdfAttachments(_) => self.collection_len()? > 0,
                 // Коллекции модели типов XDTO — тоже по длине: измерено,
                 // что непустые `Свойства` и `Фасеты` дают «Да», а пустые
                 // `Свойства` типа без содержимого — «Нет».
@@ -1355,17 +1349,11 @@ impl BslValue {
                 // измерено на построителе, документе и элементе: у всех
                 // трёх `ЗначениеЗаполнено` даёт ошибку, а не «Да».
                 // ИЗМЕРЕНО каждой пробой отдельно, и ответы РАЗНЫЕ:
-                // `ЗначениеЗаполнено(Новый ДокументPDF)` — ошибка, от
-                // страницы — тоже ошибка, а вот коллекция страниц судится
-                // ПО ДЛИНЕ: три страницы дали «Да», пустое дерево — «Нет».
-                // Поэтому коллекция стоит выше, рядом с `DomList`, а
-                // документ и страница — здесь.
-                BslObject::PdfDocument(..)
-                | BslObject::PdfPage(..)
-                // Вложение платформа тоже отказывается судить: измерено —
-                // «Проверка мутабельных значений на заполненность не
-                // поддерживается».
-                | BslObject::PdfAttachment(..)
+                BslObject::ReservedPdfDocument
+                | BslObject::ReservedPdfPages
+                | BslObject::ReservedPdfPage
+                | BslObject::ReservedPdfAttachments
+                | BslObject::ReservedPdfAttachment
                 | BslObject::ReservedMemoryStream
                 | BslObject::ReservedFileStream
                 | BslObject::ReservedFileStreamsManager
@@ -1495,11 +1483,11 @@ impl BslValue {
                 BslObject::SpreadDocParams(..) => TypeId::SpreadDocParams,
                 BslObject::ReservedTextDocument => TypeId::TextDocument,
                 BslObject::ReservedTextDocParams => TypeId::TextDocParams,
-                BslObject::PdfDocument(_) => TypeId::PdfDocument,
-                BslObject::PdfPages(_) => TypeId::PdfPagesCollection,
-                BslObject::PdfPage(..) => TypeId::PdfPage,
-                BslObject::PdfAttachments(_) => TypeId::PdfAttachmentCollection,
-                BslObject::PdfAttachment(..) => TypeId::PdfAttachment,
+                BslObject::ReservedPdfDocument => TypeId::PdfDocument,
+                BslObject::ReservedPdfPages => TypeId::PdfPagesCollection,
+                BslObject::ReservedPdfPage => TypeId::PdfPage,
+                BslObject::ReservedPdfAttachments => TypeId::PdfAttachmentCollection,
+                BslObject::ReservedPdfAttachment => TypeId::PdfAttachment,
                 BslObject::ReservedArchiveReader => TypeId::ZipFileReader,
                 BslObject::ReservedArchiveEntries => TypeId::ZipFileEntries,
                 BslObject::ReservedArchiveEntry => TypeId::ZipFileEntry,
@@ -2245,14 +2233,6 @@ impl BslValue {
                         row_id,
                     ))))
                 }
-                // `Страницы[i]` — тот же путь, что и `Для Каждого`, но,
-                // в отличие от `Получить(i)`, вне диапазона это ОШИБКА
-                // (измерено: `Страницы[-1]` платформа отвергает, а
-                // `Получить(-1)` отдаёт `Неопределено`).
-                BslObject::PdfPages(_) => pdf::page_at(self, Self::index_as_usize(idx)?),
-                BslObject::PdfAttachments(_) => {
-                    pdf::attachment_at(self, Self::index_as_usize(idx)?)
-                }
                 BslObject::TableColumns(data) => {
                     let i = Self::index_as_usize(idx)?;
                     let name = {
@@ -2465,11 +2445,6 @@ impl BslValue {
                 | BslObject::XdtoFactory(..)
                 | BslObject::XdtoSerializer(..)
                 | BslObject::XdtoObject(..) => Err(RtError::NotIndexable),
-                // `Количество()` и `Для Каждого` есть только у КОЛЛЕКЦИИ
-                // страниц; у самого документа и у страницы длины нет
-                // (`КоличествоСтраниц` платформа не знает — измерено).
-                BslObject::PdfPages(_) => pdf::page_count(self),
-                BslObject::PdfAttachments(_) => pdf::attachment_count(self),
                 BslObject::TextWriter(..)
                 | BslObject::ReservedJsonReader
                 | BslObject::ReservedJsonWriter
@@ -2488,12 +2463,11 @@ impl BslValue {
                 | BslObject::ReservedArchiveEntries
                 | BslObject::ReservedArchiveEntry
                 | BslObject::ReservedArchiveWriter
-                // У документа PDF и у отдельной страницы длины нет:
-                // `КоличествоСтраниц` платформа не знает, и `Для Каждого`
-                // по документу тоже нет — считает только коллекция.
-                | BslObject::PdfDocument(..)
-                | BslObject::PdfPage(..)
-                | BslObject::PdfAttachment(..)
+                | BslObject::ReservedPdfDocument
+                | BslObject::ReservedPdfPages
+                | BslObject::ReservedPdfPage
+                | BslObject::ReservedPdfAttachments
+                | BslObject::ReservedPdfAttachment
                 // Число байтов потока отдаёт МЕТОД `Размер()`, а
                 // `Количество()` платформа отвергает и на потоке, и на
                 // менеджере — измерено на обоих. `Для Каждого` по ним
@@ -2888,14 +2862,6 @@ impl BslValue {
                 BslObject::ReservedTextDocument | BslObject::ReservedTextDocParams => {
                     Err(RtError::NotAnObject)
                 }
-                // У документа PDF свойство ровно одно — `Страницы`, у
-                // страницы их восемь; у самой коллекции свойств нет
-                // (измерено: `КоличествоСтраниц` документа платформа не
-                // знает, а всё, что есть у страницы, перечислено в
-                // `pdf::page_property`).
-                BslObject::PdfDocument(_) => pdf::document_property(self, name),
-                BslObject::PdfPage(..) => pdf::page_property(self, name),
-                BslObject::PdfAttachment(..) => pdf::attachment_property(self, name),
                 BslObject::DomNode(..) => dom::get_property(self, name),
                 BslObject::XPathResult(_) => xpath::get_property(self, name),
                 BslObject::XsComponent(..) | BslObject::XmlExpandedName(_) => {
@@ -2978,9 +2944,6 @@ impl BslValue {
                 // содержимое, а имя узла только читается — см.
                 // `dom::set_property`.
                 BslObject::DomNode(..) => dom::set_property(self, name, &val),
-                // У вложения PDF пишутся ВСЕ четыре свойства (измерено), в
-                // отличие от страницы, которая только читается.
-                BslObject::PdfAttachment(..) => pdf::set_attachment_property(self, name, &val),
                 // Свойства экземпляра XDTO пишутся точкой, с приведением к
                 // типу свойства; множественное свойство так не пишется
                 // (измерено), для него есть `СписокXDTO`.
@@ -3633,6 +3596,18 @@ impl PartialEq for BslValue {
             // них просто не доходит.
             (BslValue::Object(a), BslValue::Object(b)) if Rc::ptr_eq(a, b) => true,
             (BslValue::Object(a), BslValue::Object(b)) => match (&**a, &**b) {
+                // Внешние объекты равны по объявленному ключу «то же
+                // состояние, то же место»: обёртку строит каждое обращение
+                // к коллекции, и тождества обёрток для измеренных равенств
+                // мало. Без ключа — только тождество (быстрый путь выше).
+                (BslObject::Extension(x), BslObject::Extension(y)) => {
+                    match (x.identity_key(), y.identity_key()) {
+                        (Some(kx), Some(ky)) => {
+                            std::ptr::eq(x.type_descriptor(), y.type_descriptor()) && kx == ky
+                        }
+                        _ => false,
+                    }
+                }
                 // Непрозрачные значения внутреннего формата равны ПО
                 // ТЕКСТУ: две ссылки на один объект базы, прочитанные из
                 // разных строк, равны — так ведёт себя платформа
@@ -3685,19 +3660,6 @@ impl PartialEq for BslValue {
                 (BslObject::XdtoList(a, i), BslObject::XdtoList(b, j)) => {
                     i == j && Rc::ptr_eq(a, b)
                 }
-                // Страница PDF — ССЫЛКА на место в документе: обёртку
-                // строит каждое обращение к коллекции, а равенство идёт по
-                // паре «тот же документ, тот же номер». ИЗМЕРЕНО:
-                // `Страницы[0] = Страницы[0]` — «Да», `Страницы[0] =
-                // Страницы[1]` — «Нет».
-                (BslObject::PdfPage(a, i), BslObject::PdfPage(b, j)) => i == j && Rc::ptr_eq(a, b),
-                // Сама коллекция — окно в тот же документ, и два отдельных
-                // чтения `Док.Страницы` равны (измерено).
-                (BslObject::PdfPages(a), BslObject::PdfPages(b)) => Rc::ptr_eq(a, b),
-                (BslObject::PdfAttachment(a, i), BslObject::PdfAttachment(b, j)) => {
-                    i == j && Rc::ptr_eq(a, b)
-                }
-                (BslObject::PdfAttachments(a), BslObject::PdfAttachments(b)) => Rc::ptr_eq(a, b),
                 _ => false,
             },
             _ => false,
@@ -3863,13 +3825,11 @@ impl fmt::Display for BslValue {
                 | BslObject::ReservedArchiveEntries
                 | BslObject::ReservedArchiveEntry
                 | BslObject::ReservedArchiveWriter => write!(f, "{}", self.type_name()),
-                // Три вида PDF печатаются именем ЗНАЧЕНИЯ — «ДокументPDF»,
-                // «КоллекцияСтраницPDF», «СтраницаPDF» (измерено).
-                BslObject::PdfDocument(_)
-                | BslObject::PdfPages(_)
-                | BslObject::PdfPage(..)
-                | BslObject::PdfAttachments(_)
-                | BslObject::PdfAttachment(..) => write!(f, "{}", self.type_name()),
+                BslObject::ReservedPdfDocument
+                | BslObject::ReservedPdfPages
+                | BslObject::ReservedPdfPage
+                | BslObject::ReservedPdfAttachments
+                | BslObject::ReservedPdfAttachment => write!(f, "{}", self.type_name()),
                 // Потоки печатаются ИМЕНЕМ ЗНАЧЕНИЯ, и закрытие его не
                 // меняет: `Строка(Зкр)` после `Закрыть()` — по-прежнему
                 // «ПотокВПамяти» (измерено).

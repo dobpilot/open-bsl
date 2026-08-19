@@ -985,6 +985,14 @@ impl<'a> Resolver<'a> {
             }
             if matches!(
                 upper.as_str(),
+                "ДОКУМЕНТPDF" | "PDFDOCUMENT" | "КОЛЛЕКЦИЯВЛОЖЕНИЙPDF" | "PDFATTACHMENTCOLLECTION"
+            ) {
+                return Err(SemaError::Unsupported(
+                    "тип PDF требует зарегистрированный компонент bsl-pdf",
+                ));
+            }
+            if matches!(
+                upper.as_str(),
                 "ЧТЕНИЕZIPФАЙЛА"
                     | "ZIPFILEREADER"
                     | "ЧТЕНИЕФАЙЛААРХИВА"

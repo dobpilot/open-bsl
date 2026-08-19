@@ -134,6 +134,15 @@ pub trait ObjectProtocol: fmt::Debug + ObjectDowncast {
         None
     }
 
+    /// Ключ ссылочного равенства для типов, равных «по месту в состоянии»,
+    /// а не по тождеству обёртки: адрес состояния и номер внутри него.
+    /// Обёртку такие типы строят на каждое обращение к коллекции, поэтому
+    /// тождества значений недостаточно. `None` оставляет объекту равенство
+    /// только по тождеству.
+    fn identity_key(&self) -> Option<(usize, usize)> {
+        None
+    }
+
     fn display(&self) -> String {
         self.type_descriptor().name.to_string()
     }
@@ -198,6 +207,10 @@ impl ObjectRef {
 
     pub fn byte_stream(&self) -> Option<&dyn ByteStreamProtocol> {
         self.0.byte_stream()
+    }
+
+    pub fn identity_key(&self) -> Option<(usize, usize)> {
+        self.0.identity_key()
     }
 
     pub fn display(&self) -> String {

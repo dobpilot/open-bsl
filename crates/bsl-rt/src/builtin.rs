@@ -1806,12 +1806,6 @@ pub fn call_builtin_method(
             _ if crate::spreadsheet::is_drawings(obj) => {
                 crate::spreadsheet::drawings_add(obj, args)
             }
-            // `Вложения.Добавить(Имя, Данные[, ТипСодержимого[, ТипСвязи]])`
-            // — процедура с четырьмя арностями, разводится получателем.
-            _ if crate::pdf::is_pdf_attachments(obj) => {
-                crate::pdf::attachment_add(obj, args)?;
-                Ok(BslValue::Undefined)
-            }
             // `НаборСхемXML.Добавить(Схема)` — процедура: та же схема
             // второй раз проходит молча, а другая схема того же
             // пространства имён — ошибка (измерено).
@@ -1840,21 +1834,10 @@ pub fn call_builtin_method(
             }),
         },
         BuiltinMethod::Delete => {
-            // `Вложения.Удалить` берёт номер ЛИБО само вложение, и номер
-            // вне диапазона у неё не ошибка (измерено), поэтому общий путь
-            // удаления элемента коллекции здесь не годится.
-            if crate::pdf::is_pdf_attachments(obj) {
-                crate::pdf::attachment_delete(obj, args)?;
-                return Ok(BslValue::Undefined);
-            }
             obj.delete_element(&args[0])?;
             Ok(BslValue::Undefined)
         }
         BuiltinMethod::Clear => {
-            if crate::pdf::is_pdf_attachments(obj) {
-                crate::pdf::attachment_clear(obj)?;
-                return Ok(BslValue::Undefined);
-            }
             if crate::spreadsheet::is_spread_document(obj) {
                 crate::spreadsheet::clear(obj)?;
             } else {
@@ -1885,25 +1868,6 @@ pub fn call_builtin_method(
         // аргументов обязано стать понятной ошибкой, а не паникой на
         // `args[0]`.
         BuiltinMethod::Get => match obj {
-            // `Страницы.Получить(i)` вне диапазона отдаёт `Неопределено`,
-            // а не ошибку (измерено и на 99, и на -1), поэтому у него своя
-            // ветка, а не общий путь индексации.
-            _ if crate::pdf::is_pdf_pages(obj) => match args {
-                [index] => crate::pdf::page_get(obj, index),
-                _ => Err(RtError::MethodNotApplicable {
-                    method: "Получить",
-                    receiver: obj.type_name(),
-                }),
-            },
-            // У вложений `Получить` вне диапазона тоже отдаёт
-            // `Неопределено` (измерено на 99 и -1).
-            _ if crate::pdf::is_pdf_attachments(obj) => match args {
-                [index] => crate::pdf::attachment_get(obj, index),
-                _ => Err(RtError::MethodNotApplicable {
-                    method: "Получить",
-                    receiver: obj.type_name(),
-                }),
-            },
             BslValue::Object(o) if matches!(&**o, BslObject::XsList(..)) => {
                 crate::xsd::list_lookup(obj, args)
             }
@@ -1987,12 +1951,6 @@ pub fn call_builtin_method(
                     receiver: obj.type_name(),
                 });
             }
-            // У коллекции вложений PDF аргумент тоже РОВНО один
-            // (измерено: `Найти(имя, 1)` — «Слишком много фактических
-            // параметров»), а ищет она по `ИмяФайла`.
-            if crate::pdf::is_pdf_attachments(obj) {
-                return crate::pdf::attachment_find(obj, args);
-            }
             obj.table_find(value, args.get(1).unwrap_or(&BslValue::Undefined))
         }
         // `НайтиСтроки` перехвачен в `call_builtin_method_ctx` — ему нужен
@@ -2051,15 +2009,7 @@ pub fn call_builtin_method(
             obj.table_move(&args[0], &args[1])?;
             Ok(BslValue::Undefined)
         }
-        BuiltinMethod::IndexOf => {
-            if crate::pdf::is_pdf_pages(obj) {
-                return crate::pdf::page_index_of(obj, &args[0]);
-            }
-            if crate::pdf::is_pdf_attachments(obj) {
-                return crate::pdf::attachment_index_of(obj, &args[0]);
-            }
-            obj.table_index_of(&args[0])
-        }
+        BuiltinMethod::IndexOf => obj.table_index_of(&args[0]),
         BuiltinMethod::Collapse => {
             too_many(obj, "Свернуть", args, 2)?;
             let Some(group) = args.first() else {
@@ -2075,12 +2025,6 @@ pub fn call_builtin_method(
         // `ТекстовыйДокумент` — сохранить файл. Одно имя, разный смысл по
         // получателю, как и у `Закрыть`.
         BuiltinMethod::Write => {
-            if crate::pdf::is_pdf_document(obj) {
-                // `ДокументPDF.Записать(ИмяФайла[, Пароль])` — процедура;
-                // арность и типы проверяет он сам.
-                crate::pdf::write(obj, args)?;
-                return Ok(BslValue::Undefined);
-            }
             if crate::dom::is_dom_writer(obj) {
                 // У `ЗаписьDOM` `Записать(Узел, ЗаписьXML)` — ровно два
                 // аргумента, и узел ПЕРВЫМ (измерено: обратный порядок
@@ -2135,12 +2079,7 @@ pub fn call_builtin_method(
             Ok(BslValue::Undefined)
         }
         BuiltinMethod::ReadNext => {
-            if crate::pdf::is_pdf_document(obj) {
-                // У `ДокументPDF` `Прочитать(ИмяФайла[, Пароль])` — разбор
-                // всего файла, а не шаг по потоку событий.
-                crate::pdf::read(obj, args)?;
-                Ok(BslValue::Undefined)
-            } else if crate::dom::is_dom_builder(obj) {
+            if crate::dom::is_dom_builder(obj) {
                 // У построителя DOM `Прочитать(ЧтениеXML)` — не шаг по
                 // потоку, а разбор всего остатка документа в дерево.
                 crate::dom::read(obj, args)

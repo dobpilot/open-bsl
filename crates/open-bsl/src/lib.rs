@@ -146,6 +146,8 @@ impl EngineBuilder {
         runtime.register(bsl_stream::library());
         #[cfg(feature = "zip")]
         runtime.register(bsl_zip::library());
+        #[cfg(feature = "pdf")]
+        runtime.register(bsl_pdf::library());
         Self { runtime }
     }
 
@@ -594,6 +596,36 @@ mod tests {
         assert!(engine.compile("Возврат Новый ЧтениеZipФайла();").is_err());
         assert!(engine
             .compile("Возврат Новый ЗаписьФайлаАрхива();")
+            .is_err());
+    }
+
+    #[cfg(feature = "pdf")]
+    #[test]
+    fn pdf_feature_records_constructors_and_builds_attachments() {
+        let engine = Engine::builder().build().unwrap();
+        let module = engine
+            .compile("док = Новый ДокументPDF(); Возврат ТипЗнч(док.Вложения);")
+            .unwrap();
+        assert!(module
+            .requirements()
+            .iter()
+            .any(|requirement| requirement.package == "bsl-pdf"
+                && requirement.version == env!("CARGO_PKG_VERSION")));
+        assert!(module.bytecode().unwrap().contains("CreateObject"));
+        // Коллекция вложений есть и до чтения (измерено).
+        assert_eq!(
+            engine.new_state().run(&module).unwrap().to_string(),
+            "КоллекцияВложенийPDF"
+        );
+    }
+
+    #[cfg(not(feature = "pdf"))]
+    #[test]
+    fn missing_pdf_feature_rejects_pdf_constructors() {
+        let engine = Engine::builder().build().unwrap();
+        assert!(engine.compile("Возврат Новый ДокументPDF();").is_err());
+        assert!(engine
+            .compile("Возврат Новый КоллекцияВложенийPDF();")
             .is_err());
     }
 

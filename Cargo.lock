@@ -133,6 +133,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "bsl-pdf"
+version = "0.1.0"
+dependencies = [
+ "bsl-rt",
+ "flate2",
+]
+
+[[package]]
 name = "bsl-regexp"
 version = "0.1.0"
 dependencies = [
@@ -189,6 +197,7 @@ dependencies = [
  "bsl-format",
  "bsl-json",
  "bsl-number",
+ "bsl-pdf",
  "bsl-regexp",
  "bsl-rt",
  "bsl-sema",
@@ -644,6 +653,7 @@ dependencies = [
  "bsl-binbuf",
  "bsl-bytecode",
  "bsl-json",
+ "bsl-pdf",
  "bsl-regexp",
  "bsl-rt",
  "bsl-sema",

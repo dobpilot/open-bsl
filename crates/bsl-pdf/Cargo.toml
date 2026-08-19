@@ -1,0 +1,10 @@
+[package]
+name = "bsl-pdf"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+bsl-rt = { path = "../bsl-rt" }
+# Потоки PDF хранятся в zlib/deflate (RFC 1950/1951); распаковка
+# делегирована `flate2`, как и в писательском ядре `bsl_rt::pdf`.
+flate2 = "1"
