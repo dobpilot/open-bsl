@@ -85,6 +85,12 @@ pub struct JitCtx {
     /// таблице. Она переживает весь прогон и живёт в `drive_with`, как и
     /// остальное здесь.
     runtime_shapes: *mut bsl_rt::RuntimeShapes,
+    /// Таблица связывания «номер имени → встроенный метод» — нужна
+    /// открытому `CallObjectMethod`: разрешать имя строкой на каждом
+    /// вызове слишком дорого. Указатель на данные `LinkedComponents`,
+    /// которыми владеет `drive_with`, — живёт дольше нативного вызова.
+    builtin_methods: *const Option<bsl_rt::BuiltinMethod>,
+    builtin_methods_len: usize,
 }
 
 /// Скомпилированный чанк: машинный код и карта входов.
@@ -108,6 +114,7 @@ impl CompiledChunk {
         stack: &mut Vec<BslValue>,
         program: &Program,
         runtime_shapes: &mut bsl_rt::RuntimeShapes,
+        builtin_methods: &[Option<bsl_rt::BuiltinMethod>],
     ) -> Option<Result<usize, RtError>> {
         let offset = (*self.entries.get(pc)?)?;
         let mut error: Option<RtError> = None;
@@ -117,6 +124,8 @@ impl CompiledChunk {
             program,
             error: &mut error,
             runtime_shapes,
+            builtin_methods: builtin_methods.as_ptr(),
+            builtin_methods_len: builtin_methods.len(),
         };
         // Переход в отображённую страницу. Безопасность держится на том,
         // что код туда положил `compile` из этого же файла, а указатели в
@@ -400,11 +409,16 @@ fn compile_instr(instr: &Instr) -> Option<Compiled> {
         Instr::GetProp { .. } => s(shim_get_prop, [0, 0, 0]),
         Instr::SetProp { .. } => s(shim_set_prop, [0, 0, 0]),
         Instr::CallMethod { .. } => s(shim_call_method, [0, 0, 0]),
-        // Открытый протокол требует `CallContext` конкретного `State`.
-        // Частичный JIT безопасно отдаёт эти редкие операции интерпретатору.
-        Instr::GetObjectProp { .. }
-        | Instr::SetObjectProp { .. }
-        | Instr::CallObjectMethod { .. } => None,
+        // Открытые двойники троих закрытых выше: нативный получатель идёт
+        // тем же инлайн-кэшем и таблицей связывания, что и в интерпретаторе,
+        // компонентный — через sink-контекст, как у закрытых (методы и
+        // свойства официальных компонентов не пишут в stdout; расхождение
+        // поймала бы `the_jit_agrees_with_the_interpreter_on_every_script`).
+        // С реестром в эти опкоды компилируется каждое обращение программы,
+        // и выход в интерпретатор на каждом из них съедал целые чанки.
+        Instr::GetObjectProp { .. } => s(shim_get_object_prop, [0, 0, 0]),
+        Instr::SetObjectProp { .. } => s(shim_set_object_prop, [0, 0, 0]),
+        Instr::CallObjectMethod { .. } => s(shim_call_object_method, [0, 0, 0]),
         _ => None,
     }
 }
@@ -906,6 +920,142 @@ shim!(shim_call_method, |frames,
     reg_store(stack, d, v)?;
     Ok(OK)
 });
+
+// Открытые двойники свойств: тела зеркалят `shim_get_prop`/`shim_set_prop`,
+// отличаются только паттерном инструкции и тем, что номер имени лежит в
+// операнде как `u16`. Sink вместо настоящего stdout — то же допущение, что
+// у закрытых шимов выше: свойства и методы официальных компонентов не
+// пишут в поток вывода, а расхождение с интерпретатором поймала бы
+// `the_jit_agrees_with_the_interpreter_on_every_script`.
+shim!(shim_get_object_prop, |frames,
+                             stack,
+                             program,
+                             idx,
+                             shapes,
+                             pc,
+                             _a,
+                             _b,
+                             _c| {
+    let (chunk, instr) = own_instr(frames, program, idx, pc as usize)?;
+    let Instr::GetObjectProp { dst, obj, name } = instr else {
+        return Err(RtError::InvalidBytecode(
+            "шим открытого свойства вызван не на своей инструкции",
+        ));
+    };
+    let name_id = bsl_rt::NameId::from_index(name as u32);
+    let ov = reg_load(stack, frames[idx].reg_index(obj))?;
+    let v = if let Some(object) = ov.object_ref() {
+        let mut stdout = std::io::sink();
+        let mut stderr = std::io::sink();
+        let mut context =
+            bsl_rt::CallContext::new(shapes, &mut stdout, &mut stderr, bsl_format::format_value);
+        object.get_property(field_name(program, name_id)?, &mut context)?
+    } else {
+        match ov.get_field_cached(name_id, prop_cache(chunk, pc as usize)?) {
+            Err(RtError::NotAnObject) => ov.get_field_by_name(field_name(program, name_id)?)?,
+            other => other?,
+        }
+    };
+    let d = frames[idx].reg_index(dst);
+    reg_store(stack, d, v)?;
+    Ok(OK)
+});
+
+shim!(shim_set_object_prop, |frames,
+                             stack,
+                             program,
+                             idx,
+                             shapes,
+                             pc,
+                             _a,
+                             _b,
+                             _c| {
+    let (chunk, instr) = own_instr(frames, program, idx, pc as usize)?;
+    let Instr::SetObjectProp { obj, name, src } = instr else {
+        return Err(RtError::InvalidBytecode(
+            "шим открытого свойства вызван не на своей инструкции",
+        ));
+    };
+    let name_id = bsl_rt::NameId::from_index(name as u32);
+    let ov = reg_load(stack, frames[idx].reg_index(obj))?;
+    let sv = reg_load(stack, frames[idx].reg_index(src))?;
+    if let Some(object) = ov.object_ref() {
+        let mut stdout = std::io::sink();
+        let mut stderr = std::io::sink();
+        let mut context =
+            bsl_rt::CallContext::new(shapes, &mut stdout, &mut stderr, bsl_format::format_value);
+        object.set_property(field_name(program, name_id)?, sv, &mut context)?;
+    } else {
+        match ov.set_field_cached(name_id, sv.clone(), prop_cache(chunk, pc as usize)?) {
+            Err(RtError::NotAnObject) => ov.set_field_by_name(field_name(program, name_id)?, sv)?,
+            other => other?,
+        }
+    }
+    Ok(OK)
+});
+
+/// Открытый двойник `shim_call_method`. Написан без макроса `shim!`: ему
+/// одному нужна таблица связывания «номер имени → встроенный метод» из
+/// `JitCtx`, а расширять сигнатуру всех шимов ради одного поля незачем.
+extern "C" fn shim_call_object_method(
+    ctx: *mut JitCtx,
+    pc_arg: u32,
+    _a: u32,
+    _b: u32,
+    _c: u32,
+) -> u64 {
+    let (table_ptr, table_len) = unsafe {
+        let context = &*ctx;
+        (context.builtin_methods, context.builtin_methods_len)
+    };
+    // Пустая таблица возможна только у `Vec::new()` — указатель у него
+    // невисячий, `from_raw_parts` с нулевой длиной корректен.
+    let table = unsafe { std::slice::from_raw_parts(table_ptr, table_len) };
+    unsafe {
+        run_shim(ctx, pc_arg, |frames, stack, program, idx, shapes| {
+            let (_chunk, instr) = own_instr(frames, program, idx, pc_arg as usize)?;
+            let Instr::CallObjectMethod {
+                dst,
+                obj,
+                method,
+                base,
+                count,
+            } = instr
+            else {
+                return Err(RtError::InvalidBytecode(
+                    "шим открытого метода вызван не на своей инструкции",
+                ));
+            };
+            let name_id = bsl_rt::NameId::from_index(method as u32);
+            let ov = reg_load(stack, frames[idx].reg_index(obj))?;
+            let args = CallArgs::load(stack, &frames[idx], base, count)?;
+            let v = if let Some(object) = ov.object_ref() {
+                let mut stdout = std::io::sink();
+                let mut stderr = std::io::sink();
+                let mut context = bsl_rt::CallContext::new(
+                    shapes,
+                    &mut stdout,
+                    &mut stderr,
+                    bsl_format::format_value,
+                );
+                object.call_method(field_name(program, name_id)?, args.as_slice(), &mut context)?
+            } else {
+                let builtin = table
+                    .get(name_id.index())
+                    .copied()
+                    .flatten()
+                    .ok_or_else(|| RtError::UnknownMethod {
+                        method: field_name(program, name_id).unwrap_or("?").to_string(),
+                        receiver: ov.type_name(),
+                    })?;
+                bsl_rt::call_builtin_method_ctx(builtin, &ov, args.as_slice(), shapes)?
+            };
+            let d = frames[idx].reg_index(dst);
+            reg_store(stack, d, v)?;
+            Ok(OK)
+        })
+    }
+}
 
 shim!(
     shim_numeric_for_next,

@@ -718,9 +718,14 @@ fn drive_linked(
                 // Два слоя внутри уже найденной ячейки: пробовали ли этот
                 // чанк и вышло ли. Повторно искать его в таблице незачем.
                 if let Some(Some(code)) = slot.as_ref() {
-                    if let Some(outcome) =
-                        code.run(pc, &mut frames, &mut stack, program, &mut runtime_shapes)
-                    {
+                    if let Some(outcome) = code.run(
+                        pc,
+                        &mut frames,
+                        &mut stack,
+                        program,
+                        &mut runtime_shapes,
+                        &linked.builtin_methods,
+                    ) {
                         match outcome {
                             Ok(next_pc) => {
                                 if let Some(frame) = frames.last_mut() {
