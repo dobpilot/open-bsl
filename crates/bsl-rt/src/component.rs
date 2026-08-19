@@ -201,6 +201,73 @@ impl<'a> CallContext<'a> {
 /// Единый ABI статически зарегистрированной функции или конструктора.
 pub type ComponentCall = for<'a> fn(&mut CallContext<'a>, &[BslValue]) -> RtResult<BslValue>;
 
+/// Код метода внутри одного типа компонента.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct MethodCode(u16);
+
+impl MethodCode {
+    pub const fn new(code: u16) -> Self {
+        Self(code)
+    }
+
+    pub const fn get(self) -> u16 {
+        self.0
+    }
+}
+
+/// Вызов метода объекта компонента. Получатель передаётся значением,
+/// которым владеет вызывающий: VM отдаёт регистр напрямую, без пересборки
+/// обёртки объекта на каждый вызов.
+pub type MethodCall =
+    for<'a> fn(&BslValue, &[BslValue], &mut CallContext<'a>) -> RtResult<BslValue>;
+
+/// Статический дескриптор метода объекта компонента — как
+/// [`FunctionDescriptor`] для глобальных функций. Непустая таблица методов
+/// типа (см. `ObjectProtocol::method_table`) включает быстрый путь VM
+/// «номер имени → обработчик» без строковых операций на вызове.
+///
+/// Арность здесь сознательно не объявляется: у методов нет точки
+/// статической проверки — получатель известен только в рантайме, — а
+/// тексты ошибок о числе аргументов уже живут в самих обработчиках.
+#[derive(Debug, Clone, Copy)]
+pub struct MethodDescriptor {
+    pub code: MethodCode,
+    pub names: &'static [&'static str],
+    pub call: MethodCall,
+}
+
+/// Диспетчеризация вызова по статической таблице методов для входов с
+/// именем-строкой: реализация `call_method` конвертированного типа. Имя
+/// сравнивается без учёта регистра, как в остальных таблицах имён.
+///
+/// # Errors
+///
+/// [`crate::RtError::UnknownMethod`], если имени нет в таблице; ошибки самого
+/// метода — как есть.
+pub fn call_method_from_table(
+    table: &'static [MethodDescriptor],
+    type_name: &'static str,
+    receiver: &BslValue,
+    name: &str,
+    arguments: &[BslValue],
+    context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let upper = name.to_uppercase();
+    for descriptor in table {
+        if descriptor
+            .names
+            .iter()
+            .any(|candidate| candidate.to_uppercase() == upper)
+        {
+            return (descriptor.call)(receiver, arguments, context);
+        }
+    }
+    Err(crate::RtError::UnknownMethod {
+        method: name.to_string(),
+        receiver: type_name,
+    })
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FunctionKind {
     Function,

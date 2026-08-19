@@ -116,8 +116,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use bsl_rt::{
-    encoding::Encoding, BslNumber, BslString, BslValue, BuiltinMethod, ByteStreamProtocol,
-    CallContext, EnumValue, ObjectProtocol, RtError, RtResult, TypeDescriptor, TypeId,
+    encoding::Encoding, BslNumber, BslString, BslValue, ByteStreamProtocol, CallContext, EnumValue,
+    MethodCode, MethodDescriptor, ObjectProtocol, RtError, RtResult, TypeDescriptor, TypeId,
 };
 
 /// Порядок байтов многобайтового целого.
@@ -383,58 +383,257 @@ impl ObjectProtocol for DataRwObject {
         &self,
         name: &str,
         arguments: &[BslValue],
-        _context: &mut CallContext<'_>,
+        context: &mut CallContext<'_>,
     ) -> RtResult<BslValue> {
-        let value = self.as_value();
-        match BuiltinMethod::lookup(name) {
-            Some(BuiltinMethod::ReadNext) => read(&value, arguments),
-            Some(BuiltinMethod::Write) => {
-                write(&value, arguments)?;
-                Ok(BslValue::Undefined)
-            }
-            Some(BuiltinMethod::Close) => {
-                close(&value)?;
-                Ok(BslValue::Undefined)
-            }
-            Some(BuiltinMethod::SkipNode) => skip(&value, arguments),
-            Some(BuiltinMethod::ReadInt16) => read_int(&value, arguments, IntWidth::W16),
-            Some(BuiltinMethod::ReadInt32) => read_int(&value, arguments, IntWidth::W32),
-            Some(BuiltinMethod::ReadInt64) => read_int(&value, arguments, IntWidth::W64),
-            Some(BuiltinMethod::WriteInt16) => {
-                write_int(&value, arguments, IntWidth::W16)?;
-                Ok(BslValue::Undefined)
-            }
-            Some(BuiltinMethod::WriteInt32) => {
-                write_int(&value, arguments, IntWidth::W32)?;
-                Ok(BslValue::Undefined)
-            }
-            Some(BuiltinMethod::WriteInt64) => {
-                write_int(&value, arguments, IntWidth::W64)?;
-                Ok(BslValue::Undefined)
-            }
-            Some(BuiltinMethod::DataReadByte) => read_byte(&value),
-            Some(BuiltinMethod::DataReadIntoBuffer) => read_into_buffer(&value, arguments),
-            Some(BuiltinMethod::DataReadChars) => read_chars(&value, arguments),
-            Some(BuiltinMethod::DataReadLine) => read_line(&value, arguments),
-            Some(BuiltinMethod::DataWriteByte) => {
-                write_byte(&value, arguments)?;
-                Ok(BslValue::Undefined)
-            }
-            Some(BuiltinMethod::DataWriteChars) => {
-                write_chars(&value, arguments)?;
-                Ok(BslValue::Undefined)
-            }
-            Some(BuiltinMethod::DataWriteLine) => {
-                write_line(&value, arguments)?;
-                Ok(BslValue::Undefined)
-            }
-            _ => Err(RtError::UnknownMethod {
-                method: name.to_string(),
-                receiver: self.type_descriptor().name,
-            }),
-        }
+        bsl_rt::call_method_from_table(
+            DATA_RW_METHODS,
+            self.type_descriptor().name,
+            &self.as_value(),
+            name,
+            arguments,
+            context,
+        )
+    }
+
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        DATA_RW_METHODS
     }
 }
+
+// Обработчики статической таблицы: как и прежний общий `match`, таблица
+// одна на читателя и писателя — применимость метода к стороне проверяют
+// сами операции (измеренные тексты ошибок живут в них).
+fn rw_read(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    read(receiver, arguments)
+}
+
+fn rw_write(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    write(receiver, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+fn rw_close(
+    receiver: &BslValue,
+    _arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    close(receiver)?;
+    Ok(BslValue::Undefined)
+}
+
+fn rw_skip(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    skip(receiver, arguments)
+}
+
+fn rw_read_int16(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    read_int(receiver, arguments, IntWidth::W16)
+}
+
+fn rw_read_int32(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    read_int(receiver, arguments, IntWidth::W32)
+}
+
+fn rw_read_int64(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    read_int(receiver, arguments, IntWidth::W64)
+}
+
+fn rw_write_int16(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    write_int(receiver, arguments, IntWidth::W16)?;
+    Ok(BslValue::Undefined)
+}
+
+fn rw_write_int32(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    write_int(receiver, arguments, IntWidth::W32)?;
+    Ok(BslValue::Undefined)
+}
+
+fn rw_write_int64(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    write_int(receiver, arguments, IntWidth::W64)?;
+    Ok(BslValue::Undefined)
+}
+
+fn rw_read_byte(
+    receiver: &BslValue,
+    _arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    read_byte(receiver)
+}
+
+fn rw_read_into_buffer(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    read_into_buffer(receiver, arguments)
+}
+
+fn rw_read_chars(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    read_chars(receiver, arguments)
+}
+
+fn rw_read_line(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    read_line(receiver, arguments)
+}
+
+fn rw_write_byte(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    write_byte(receiver, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+fn rw_write_chars(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    write_chars(receiver, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+fn rw_write_line(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    write_line(receiver, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+const DATA_RW_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor {
+        code: MethodCode::new(1),
+        names: &["Прочитать", "Read"],
+        call: rw_read,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(2),
+        names: &["Записать", "Write"],
+        call: rw_write,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(3),
+        names: &["Закрыть", "Close"],
+        call: rw_close,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(4),
+        names: &["Пропустить", "Skip"],
+        call: rw_skip,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(5),
+        names: &["ПрочитатьЦелое16", "ReadInt16"],
+        call: rw_read_int16,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(6),
+        names: &["ПрочитатьЦелое32", "ReadInt32"],
+        call: rw_read_int32,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(7),
+        names: &["ПрочитатьЦелое64", "ReadInt64"],
+        call: rw_read_int64,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(8),
+        names: &["ЗаписатьЦелое16", "WriteInt16"],
+        call: rw_write_int16,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(9),
+        names: &["ЗаписатьЦелое32", "WriteInt32"],
+        call: rw_write_int32,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(10),
+        names: &["ЗаписатьЦелое64", "WriteInt64"],
+        call: rw_write_int64,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(11),
+        names: &["ПрочитатьБайт", "ReadByte"],
+        call: rw_read_byte,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(12),
+        names: &["ПрочитатьВБуферДвоичныхДанных", "ReadIntoBinaryDataBuffer"],
+        call: rw_read_into_buffer,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(13),
+        names: &["ПрочитатьСимволы", "ReadChars"],
+        call: rw_read_chars,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(14),
+        names: &["ПрочитатьСтроку", "ReadLine"],
+        call: rw_read_line,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(15),
+        names: &["ЗаписатьБайт", "WriteByte"],
+        call: rw_write_byte,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(16),
+        names: &["ЗаписатьСимволы", "WriteChars"],
+        call: rw_write_chars,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(17),
+        names: &["ЗаписатьСтроку", "WriteLine"],
+        call: rw_write_line,
+    },
+];
 
 impl DataRwObject {
     fn as_value(&self) -> BslValue {
@@ -461,19 +660,70 @@ impl ObjectProtocol for DataReadResult {
     fn call_method(
         &self,
         name: &str,
-        _arguments: &[BslValue],
-        _context: &mut CallContext<'_>,
+        arguments: &[BslValue],
+        context: &mut CallContext<'_>,
     ) -> RtResult<BslValue> {
-        match BuiltinMethod::lookup(name) {
-            Some(BuiltinMethod::GetBinaryData) => Ok(BslValue::binary_data_of(self.bytes.to_vec())),
-            Some(BuiltinMethod::GetBinaryDataBuffer) => Ok(buffer_of_bytes(self.bytes.to_vec())),
-            _ => Err(RtError::UnknownMethod {
-                method: name.to_string(),
-                receiver: DATA_READ_RESULT_TYPE.name,
-            }),
-        }
+        let value = BslValue::new_object(DataReadResult {
+            bytes: self.bytes.clone(),
+        });
+        bsl_rt::call_method_from_table(
+            DATA_READ_RESULT_METHODS,
+            DATA_READ_RESULT_TYPE.name,
+            &value,
+            name,
+            arguments,
+            context,
+        )
+    }
+
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        DATA_READ_RESULT_METHODS
     }
 }
+
+/// Байты результата чтения: обработчики таблицы получают значение и
+/// возвращаются к конкретному типу через downcast.
+fn read_result_bytes(receiver: &BslValue) -> RtResult<&Rc<[u8]>> {
+    receiver
+        .object_ref()
+        .and_then(|object| object.downcast_ref::<DataReadResult>())
+        .map(|result| &result.bytes)
+        .ok_or(RtError::MethodNotApplicable {
+            method: "ПолучитьДвоичныеДанные",
+            receiver: receiver.type_name(),
+        })
+}
+
+fn read_result_binary_data(
+    receiver: &BslValue,
+    _arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    Ok(BslValue::binary_data_of(
+        read_result_bytes(receiver)?.to_vec(),
+    ))
+}
+
+fn read_result_buffer(
+    receiver: &BslValue,
+    _arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    Ok(buffer_of_bytes(read_result_bytes(receiver)?.to_vec()))
+}
+
+const DATA_READ_RESULT_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor {
+        code: MethodCode::new(1),
+        names: &["ПолучитьДвоичныеДанные", "GetBinaryData"],
+        call: read_result_binary_data,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(2),
+        names: &["ПолучитьБуферДвоичныхДанных", "GetBinaryDataBuffer"],
+        call: read_result_buffer,
+    },
+];
 
 /// Внутренности читателя либо писателя вместе с тем, кто из них это.
 fn data<'a>(v: &'a BslValue, op: &'static str) -> RtResult<(&'a Rc<RefCell<DataRwState>>, Side)> {
@@ -1425,6 +1675,17 @@ fn result_binary_buffer(v: &BslValue) -> RtResult<BslValue> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn method_codes_are_static_and_dense() {
+        for table in [super::DATA_RW_METHODS, super::DATA_READ_RESULT_METHODS] {
+            let codes = table
+                .iter()
+                .map(|method| method.code.get())
+                .collect::<Vec<_>>();
+            assert_eq!(codes, (1..=table.len() as u16).collect::<Vec<_>>());
+        }
+    }
+
     use super::*;
     use crate::stream;
 

@@ -375,6 +375,14 @@ struct LinkedComponents<'a> {
     /// времени `csv_write` уходило в `to_uppercase` внутри
     /// `BuiltinMethod::lookup`. Таблица строится один раз при связывании.
     builtin_methods: Vec<Option<bsl_rt::BuiltinMethod>>,
+    /// Мемоизация «(статическая таблица типа, номер имени) → обработчик»
+    /// для компонентных объектов со статическими таблицами методов
+    /// (см. `ObjectProtocol::method_table`): разрешение по строке
+    /// происходит один раз на пару, дальше — целочисленный поиск по хешу.
+    /// `None` запоминает и промахи, чтобы типы без таблиц не платили за
+    /// строку на каждом вызове. Рантайм однопоточный, `RefCell` достаточно.
+    component_methods:
+        std::cell::RefCell<std::collections::HashMap<(usize, u32), Option<bsl_rt::MethodCall>>>,
 }
 
 impl LinkedComponents<'_> {
@@ -403,6 +411,35 @@ impl LinkedComponents<'_> {
     /// получателя это ошибка «метод не применим».
     fn builtin_method(&self, name: bsl_rt::NameId) -> Option<bsl_rt::BuiltinMethod> {
         self.builtin_methods.get(name.index()).copied().flatten()
+    }
+
+    /// Обработчик метода компонентного объекта по его статической таблице
+    /// и номеру имени. Строка разбирается один раз на пару «таблица, имя»;
+    /// установившийся режим — поиск по хешу от двух целых. `None` — имени
+    /// в таблице нет (или таблица пустая): вызывающий уходит в строковый
+    /// `call_method`, чтобы текст ошибки остался одним, у самого типа.
+    fn component_method(
+        &self,
+        table: &'static [bsl_rt::MethodDescriptor],
+        name: bsl_rt::NameId,
+        program: &Program,
+    ) -> Result<Option<bsl_rt::MethodCall>, RtError> {
+        let key = (table.as_ptr() as usize, name.index() as u32);
+        if let Some(resolved) = self.component_methods.borrow().get(&key) {
+            return Ok(*resolved);
+        }
+        let upper = field_name(program, name)?.to_uppercase();
+        let resolved = table
+            .iter()
+            .find(|descriptor| {
+                descriptor
+                    .names
+                    .iter()
+                    .any(|candidate| candidate.to_uppercase() == upper)
+            })
+            .map(|descriptor| descriptor.call);
+        self.component_methods.borrow_mut().insert(key, resolved);
+        Ok(resolved)
     }
 }
 
@@ -553,6 +590,7 @@ fn link_components<'a>(
         functions,
         constructors,
         builtin_methods,
+        component_methods: std::cell::RefCell::new(std::collections::HashMap::new()),
     })
 }
 
@@ -1786,14 +1824,23 @@ fn step_cold(
             let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
             let name_id = bsl_rt::NameId::from_index(method as u32);
             let value = if let Some(object) = ov.object_ref() {
-                let method_name = field_name(program, name_id)?;
                 let mut context = bsl_rt::CallContext::new(
                     runtime_shapes,
                     &mut *host.stdout,
                     &mut *host.stderr,
                     bsl_format::format_value,
                 );
-                object.call_method(method_name, args.as_slice(), &mut context)?
+                // Тип со статической таблицей методов идёт мемоизированным
+                // мостом «номер имени → обработчик»; промах и тип без
+                // таблицы — строковым `call_method`, там единственный
+                // источник текста ошибки о неизвестном методе.
+                match linked.component_method(object.method_table(), name_id, program)? {
+                    Some(call) => call(&ov, args.as_slice(), &mut context)?,
+                    None => {
+                        let method_name = field_name(program, name_id)?;
+                        object.call_method(method_name, args.as_slice(), &mut context)?
+                    }
+                }
             } else {
                 // Нативный получатель: обработчик по номеру имени из таблицы
                 // связывания, строка нужна только тексту ошибки.

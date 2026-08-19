@@ -46,10 +46,10 @@ pub use builtin::{
     set_command_line_args, BuiltinFn, BuiltinMethod, BUILTIN_FN_NAMES, BUILTIN_METHOD_NAMES,
 };
 pub use component::{
-    core_library, Arity, CallContext, ComponentCall, ConstructorCode, ConstructorDescriptor,
-    FunctionCaller, FunctionCode, FunctionDescriptor, FunctionKind, LibraryDependency,
-    LibraryDescriptor, LibraryKey, LibraryRequirement, RegistryError, RuntimeBuilder,
-    RuntimeRegistry, ValueFormatter,
+    call_method_from_table, core_library, Arity, CallContext, ComponentCall, ConstructorCode,
+    ConstructorDescriptor, FunctionCaller, FunctionCode, FunctionDescriptor, FunctionKind,
+    LibraryDependency, LibraryDescriptor, LibraryKey, LibraryRequirement, MethodCall, MethodCode,
+    MethodDescriptor, RegistryError, RuntimeBuilder, RuntimeRegistry, ValueFormatter,
 };
 pub use date::{
     format_long as format_date_long, format_pattern as format_date_pattern,

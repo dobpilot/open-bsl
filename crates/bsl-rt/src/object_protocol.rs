@@ -107,6 +107,18 @@ pub trait ObjectProtocol: fmt::Debug + ObjectDowncast {
         })
     }
 
+    /// Статическая таблица методов типа. Пустая — тип диспетчеризуется
+    /// только строковым [`ObjectProtocol::call_method`]. Непустая включает
+    /// быстрый путь VM «номер имени → обработчик» (разрешение по строке
+    /// один раз на пару «тип, имя», дальше без строковых операций);
+    /// `call_method` при этом остаётся входом для вызовов с именем-строкой
+    /// — `WriteText`/`CloseText` и legacy-`CallMethod` — и обычно
+    /// реализуется через [`crate::call_method_from_table`] по той же
+    /// таблице.
+    fn method_table(&self) -> &'static [crate::MethodDescriptor] {
+        &[]
+    }
+
     fn get_index(&self, _index: &BslValue) -> RtResult<BslValue> {
         Err(RtError::NotIndexable)
     }
@@ -217,6 +229,10 @@ impl ObjectRef {
         context: &mut CallContext<'_>,
     ) -> RtResult<BslValue> {
         self.0.call_method(name, arguments, context)
+    }
+
+    pub fn method_table(&self) -> &'static [crate::MethodDescriptor] {
+        self.0.method_table()
     }
 
     pub fn get_index(&self, index: &BslValue) -> RtResult<BslValue> {

@@ -64,8 +64,8 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::rc::Rc;
 
 use bsl_rt::{
-    BslNumber, BslValue, BuiltinMethod, ByteStreamProtocol, CallContext, EnumValue, ObjectProtocol,
-    RtError, RtResult, TypeDescriptor, TypeId,
+    BslNumber, BslValue, ByteStreamProtocol, CallContext, EnumValue, MethodCode, MethodDescriptor,
+    ObjectProtocol, RtError, RtResult, TypeDescriptor, TypeId,
 };
 
 /// Режим открытия файла — член `РежимОткрытияФайла`.
@@ -409,6 +409,92 @@ impl ByteStreamProtocol for StreamObject {
     }
 }
 
+// Обработчики статической таблицы методов потока: получатель приходит от
+// вызывающего (VM отдаёт регистр без пересборки обёртки), пары имён — те
+// же, что были у этого типа в `BUILTIN_METHOD_NAMES`.
+fn stream_write(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    write(receiver, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+fn stream_read(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    read(receiver, arguments)
+}
+
+fn stream_close(
+    receiver: &BslValue,
+    _arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    close(receiver)?;
+    Ok(BslValue::Undefined)
+}
+
+fn stream_size(
+    receiver: &BslValue,
+    _arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    size(receiver)
+}
+
+fn stream_current_position(
+    receiver: &BslValue,
+    _arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    current_position(receiver)
+}
+
+fn stream_seek(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    seek(receiver, arguments)
+}
+
+const STREAM_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor {
+        code: MethodCode::new(1),
+        names: &["Записать", "Write"],
+        call: stream_write,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(2),
+        names: &["Прочитать", "Read"],
+        call: stream_read,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(3),
+        names: &["Закрыть", "Close"],
+        call: stream_close,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(4),
+        names: &["Размер", "Size"],
+        call: stream_size,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(5),
+        names: &["ТекущаяПозиция", "CurrentPosition"],
+        call: stream_current_position,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(6),
+        names: &["Перейти", "Seek"],
+        call: stream_seek,
+    },
+];
+
 impl ObjectProtocol for StreamObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         match self.kind {
@@ -442,30 +528,24 @@ impl ObjectProtocol for StreamObject {
         &self,
         name: &str,
         arguments: &[BslValue],
-        _context: &mut CallContext<'_>,
+        context: &mut CallContext<'_>,
     ) -> RtResult<BslValue> {
         let value = BslValue::new_object(StreamObject {
             kind: self.kind,
             data: self.data.clone(),
         });
-        match BuiltinMethod::lookup(name) {
-            Some(BuiltinMethod::Write) => {
-                write(&value, arguments)?;
-                Ok(BslValue::Undefined)
-            }
-            Some(BuiltinMethod::ReadNext) => read(&value, arguments),
-            Some(BuiltinMethod::Close) => {
-                close(&value)?;
-                Ok(BslValue::Undefined)
-            }
-            Some(BuiltinMethod::Size) => size(&value),
-            Some(BuiltinMethod::CurrentPosition) => current_position(&value),
-            Some(BuiltinMethod::Seek) => seek(&value, arguments),
-            _ => Err(RtError::UnknownMethod {
-                method: name.to_string(),
-                receiver: self.type_descriptor().name,
-            }),
-        }
+        bsl_rt::call_method_from_table(
+            STREAM_METHODS,
+            self.type_descriptor().name,
+            &value,
+            name,
+            arguments,
+            context,
+        )
+    }
+
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        STREAM_METHODS
     }
 
     fn byte_stream(&self) -> Option<&dyn ByteStreamProtocol> {
@@ -868,6 +948,76 @@ pub fn manager_create(args: &[BslValue]) -> RtResult<BslValue> {
     open_file_stream(&path, FileOpenMode::Create, FileAccess::ReadWrite)
 }
 
+// Методы менеджера файловых потоков: получатель без состояния, поэтому
+// обработчики его не читают.
+fn manager_method_open(
+    _receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    manager_open(arguments)
+}
+
+fn manager_method_open_for_read(
+    _receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    manager_open_for_read(arguments)
+}
+
+fn manager_method_open_for_write(
+    _receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    manager_open_for_write(arguments)
+}
+
+fn manager_method_open_for_append(
+    _receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    manager_open_for_append(arguments)
+}
+
+fn manager_method_create(
+    _receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    manager_create(arguments)
+}
+
+const FILE_STREAMS_MANAGER_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor {
+        code: MethodCode::new(1),
+        names: &["Открыть", "Open"],
+        call: manager_method_open,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(2),
+        names: &["ОткрытьДляЧтения", "OpenForRead"],
+        call: manager_method_open_for_read,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(3),
+        names: &["ОткрытьДляЗаписи", "OpenForWrite"],
+        call: manager_method_open_for_write,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(4),
+        names: &["ОткрытьДляДописывания", "OpenForAppend"],
+        call: manager_method_open_for_append,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(5),
+        names: &["Создать", "Create"],
+        call: manager_method_create,
+    },
+];
+
 impl ObjectProtocol for FileStreamsManager {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         &FILE_STREAMS_MANAGER_TYPE
@@ -877,19 +1027,20 @@ impl ObjectProtocol for FileStreamsManager {
         &self,
         name: &str,
         arguments: &[BslValue],
-        _context: &mut CallContext<'_>,
+        context: &mut CallContext<'_>,
     ) -> RtResult<BslValue> {
-        match BuiltinMethod::lookup(name) {
-            Some(BuiltinMethod::StreamOpen) => manager_open(arguments),
-            Some(BuiltinMethod::StreamOpenForRead) => manager_open_for_read(arguments),
-            Some(BuiltinMethod::StreamOpenForWrite) => manager_open_for_write(arguments),
-            Some(BuiltinMethod::StreamOpenForAppend) => manager_open_for_append(arguments),
-            Some(BuiltinMethod::Create) => manager_create(arguments),
-            _ => Err(RtError::UnknownMethod {
-                method: name.to_string(),
-                receiver: FILE_STREAMS_MANAGER_TYPE.name,
-            }),
-        }
+        bsl_rt::call_method_from_table(
+            FILE_STREAMS_MANAGER_METHODS,
+            FILE_STREAMS_MANAGER_TYPE.name,
+            &BslValue::Undefined,
+            name,
+            arguments,
+            context,
+        )
+    }
+
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        FILE_STREAMS_MANAGER_METHODS
     }
 }
 
@@ -1102,6 +1253,17 @@ pub fn close(v: &BslValue) -> RtResult<()> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn method_codes_are_static_and_dense() {
+        for table in [super::STREAM_METHODS, super::FILE_STREAMS_MANAGER_METHODS] {
+            let codes = table
+                .iter()
+                .map(|method| method.code.get())
+                .collect::<Vec<_>>();
+            assert_eq!(codes, (1..=table.len() as u16).collect::<Vec<_>>());
+        }
+    }
+
     use super::*;
 
     fn num(v: i64) -> BslValue {
