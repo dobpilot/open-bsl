@@ -252,12 +252,20 @@ pub fn call_method_from_table(
     arguments: &[BslValue],
     context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
-    let upper = name.to_uppercase();
+    // Посимвольное сравнение без аллокаций: этим путём ходят и вызовы из
+    // JIT-шимов, где строка приходит на каждый вызов, — собирать `String`
+    // на каждую строку таблицы недопустимо.
+    let equals_ci = |candidate: &str| {
+        candidate
+            .chars()
+            .flat_map(char::to_uppercase)
+            .eq(name.chars().flat_map(char::to_uppercase))
+    };
     for descriptor in table {
         if descriptor
             .names
             .iter()
-            .any(|candidate| candidate.to_uppercase() == upper)
+            .any(|candidate| equals_ci(candidate))
         {
             return (descriptor.call)(receiver, arguments, context);
         }

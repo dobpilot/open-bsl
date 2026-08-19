@@ -47,7 +47,8 @@ mod x64;
 
 use crate::{
     add_op, at, binop, call_builtin_with_format, cmp, field_name, neg_op, numeric_for_next_regular,
-    prop_cache, reg_load, reg_store, CallArgs, Frame, HostIo,
+    prop_cache, reg_load, reg_store, resolve_component_method, CallArgs, ComponentMethodMap, Frame,
+    HostIo, LinkedComponents,
 };
 use bsl_bytecode::{Chunk, Instr, Program};
 use bsl_rt::{BslValue, RtError};
@@ -85,12 +86,14 @@ pub struct JitCtx {
     /// таблице. Она переживает весь прогон и живёт в `drive_with`, как и
     /// остальное здесь.
     runtime_shapes: *mut bsl_rt::RuntimeShapes,
-    /// Таблица связывания «номер имени → встроенный метод» — нужна
-    /// открытому `CallObjectMethod`: разрешать имя строкой на каждом
-    /// вызове слишком дорого. Указатель на данные `LinkedComponents`,
-    /// которыми владеет `drive_with`, — живёт дольше нативного вызова.
+    /// Таблицы связывания для открытого `CallObjectMethod`: «номер имени
+    /// → встроенный метод» для нативных получателей и карта мемоизации
+    /// методов компонентных объектов. Разрешать имя строкой на каждом
+    /// вызове слишком дорого. Указатели на данные `LinkedComponents`,
+    /// которыми владеет `drive_with`, — живут дольше нативного вызова.
     builtin_methods: *const Option<bsl_rt::BuiltinMethod>,
     builtin_methods_len: usize,
+    component_methods: *const ComponentMethodMap,
 }
 
 /// Скомпилированный чанк: машинный код и карта входов.
@@ -114,7 +117,7 @@ impl CompiledChunk {
         stack: &mut Vec<BslValue>,
         program: &Program,
         runtime_shapes: &mut bsl_rt::RuntimeShapes,
-        builtin_methods: &[Option<bsl_rt::BuiltinMethod>],
+        linked: &LinkedComponents<'_>,
     ) -> Option<Result<usize, RtError>> {
         let offset = (*self.entries.get(pc)?)?;
         let mut error: Option<RtError> = None;
@@ -124,8 +127,9 @@ impl CompiledChunk {
             program,
             error: &mut error,
             runtime_shapes,
-            builtin_methods: builtin_methods.as_ptr(),
-            builtin_methods_len: builtin_methods.len(),
+            builtin_methods: linked.builtin_methods.as_ptr(),
+            builtin_methods_len: linked.builtin_methods.len(),
+            component_methods: &linked.component_methods,
         };
         // Переход в отображённую страницу. Безопасность держится на том,
         // что код туда положил `compile` из этого же файла, а указатели в
@@ -1004,9 +1008,13 @@ extern "C" fn shim_call_object_method(
     _b: u32,
     _c: u32,
 ) -> u64 {
-    let (table_ptr, table_len) = unsafe {
+    let (table_ptr, table_len, component_methods) = unsafe {
         let context = &*ctx;
-        (context.builtin_methods, context.builtin_methods_len)
+        (
+            context.builtin_methods,
+            context.builtin_methods_len,
+            &*context.component_methods,
+        )
     };
     // Пустая таблица возможна только у `Vec::new()` — указатель у него
     // невисячий, `from_raw_parts` с нулевой длиной корректен.
@@ -1038,7 +1046,23 @@ extern "C" fn shim_call_object_method(
                     &mut stderr,
                     bsl_format::format_value,
                 );
-                object.call_method(field_name(program, name_id)?, args.as_slice(), &mut context)?
+                // Тот же мемоизированный мост, что у интерпретатора: без
+                // него каждый вызов конвертированного типа шёл бы строковым
+                // сканом таблицы, и `--jit` проигрывал бы интерпретатору в
+                // разы (измерено на xml_parse до этой правки).
+                match resolve_component_method(
+                    component_methods,
+                    object.method_table(),
+                    name_id,
+                    program,
+                )? {
+                    Some(call) => call(&ov, args.as_slice(), &mut context)?,
+                    None => object.call_method(
+                        field_name(program, name_id)?,
+                        args.as_slice(),
+                        &mut context,
+                    )?,
+                }
             } else {
                 let builtin = table
                     .get(name_id.index())

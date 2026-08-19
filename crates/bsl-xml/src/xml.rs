@@ -13,8 +13,8 @@ use crate::core::{
     COMMENT_NODE_NAME, TEXT_NODE_NAME,
 };
 use bsl_rt::{
-    BslNumber, BslString, BslValue, CallContext, EnumValue, ObjectProtocol, RtError, RtResult,
-    TypeDescriptor, TypeId,
+    BslNumber, BslString, BslValue, CallContext, EnumValue, MethodCode, MethodDescriptor,
+    ObjectProtocol, RtError, RtResult, TypeDescriptor, TypeId,
 };
 
 fn bad(what: impl Into<String>) -> RtError {
@@ -804,50 +804,170 @@ impl ObjectProtocol for XmlReaderObject {
         &self,
         method: &str,
         arguments: &[BslValue],
-        _context: &mut CallContext<'_>,
+        context: &mut CallContext<'_>,
     ) -> RtResult<BslValue> {
-        let receiver = self.as_value();
-        let eq =
-            |ru: &str, en: &str| method.eq_ignore_ascii_case(ru) || method.eq_ignore_ascii_case(en);
-        if eq("УстановитьСтроку", "SetString") {
-            set_string(&receiver, arguments)?;
-            Ok(BslValue::Undefined)
-        } else if eq("ОткрытьФайл", "OpenFile") {
-            open_file(&receiver, arguments)?;
-            Ok(BslValue::Undefined)
-        } else if eq("Прочитать", "Read") {
-            read(&receiver)
-        } else if eq("Пропустить", "Skip") {
-            // Верхнюю границу арности проверяет получатель: `Пропустить(5)`
-            // не должен пройти молча (см. прежний арм).
-            if !arguments.is_empty() {
-                return Err(RtError::MethodNotApplicable {
-                    method: "Пропустить",
-                    receiver: READER_TYPE.name,
-                });
-            }
-            skip(&receiver)?;
-            Ok(BslValue::Undefined)
-        } else if eq("ПрочитатьАтрибут", "ReadAttribute") {
-            read_attribute(&receiver)
-        } else if eq("КоличествоАтрибутов", "AttributeCount") {
-            attribute_count(&receiver)
-        } else if eq("ИмяАтрибута", "AttributeName") {
-            attribute_name(&receiver, arguments)
-        } else if eq("ЗначениеАтрибута", "AttributeValue") {
-            attribute_value(&receiver, arguments)
-        } else if eq("ПерейтиКСодержимому", "MoveToContent") {
-            move_to_content(&receiver)
-        } else if eq("Закрыть", "Close") {
-            close_reader(&receiver)
-        } else {
-            Err(RtError::UnknownMethod {
-                method: method.to_string(),
-                receiver: READER_TYPE.name,
-            })
-        }
+        bsl_rt::call_method_from_table(
+            READER_METHODS,
+            READER_TYPE.name,
+            &self.as_value(),
+            method,
+            arguments,
+            context,
+        )
+    }
+
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        READER_METHODS
     }
 }
+
+// Обработчики статических таблиц читателя и писателя XML: получатель
+// приходит от вызывающего, пары имён — прежние ветки `eq`-цепочек.
+// `УстановитьСтроку` и `ОткрытьФайл` общие: свободные функции сами
+// различают читателя и писателя по состоянию получателя.
+fn xml_set_string(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    set_string(receiver, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+fn xml_open_file(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    open_file(receiver, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+fn reader_read(
+    receiver: &BslValue,
+    _arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    read(receiver)
+}
+
+fn reader_skip(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    // Верхнюю границу арности проверяет получатель: `Пропустить(5)` не
+    // должен пройти молча (см. прежний арм).
+    if !arguments.is_empty() {
+        return Err(RtError::MethodNotApplicable {
+            method: "Пропустить",
+            receiver: READER_TYPE.name,
+        });
+    }
+    skip(receiver)?;
+    Ok(BslValue::Undefined)
+}
+
+fn reader_read_attribute(
+    receiver: &BslValue,
+    _arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    read_attribute(receiver)
+}
+
+fn reader_attribute_count(
+    receiver: &BslValue,
+    _arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    attribute_count(receiver)
+}
+
+fn reader_attribute_name(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    attribute_name(receiver, arguments)
+}
+
+fn reader_attribute_value(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    attribute_value(receiver, arguments)
+}
+
+fn reader_move_to_content(
+    receiver: &BslValue,
+    _arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    move_to_content(receiver)
+}
+
+fn reader_close(
+    receiver: &BslValue,
+    _arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    close_reader(receiver)
+}
+
+const READER_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor {
+        code: MethodCode::new(1),
+        names: &["УстановитьСтроку", "SetString"],
+        call: xml_set_string,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(2),
+        names: &["ОткрытьФайл", "OpenFile"],
+        call: xml_open_file,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(3),
+        names: &["Прочитать", "Read"],
+        call: reader_read,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(4),
+        names: &["Пропустить", "Skip"],
+        call: reader_skip,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(5),
+        names: &["ПрочитатьАтрибут", "ReadAttribute"],
+        call: reader_read_attribute,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(6),
+        names: &["КоличествоАтрибутов", "AttributeCount"],
+        call: reader_attribute_count,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(7),
+        names: &["ИмяАтрибута", "AttributeName"],
+        call: reader_attribute_name,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(8),
+        names: &["ЗначениеАтрибута", "AttributeValue"],
+        call: reader_attribute_value,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(9),
+        names: &["ПерейтиКСодержимому", "MoveToContent"],
+        call: reader_move_to_content,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(10),
+        names: &["Закрыть", "Close"],
+        call: reader_close,
+    },
+];
 
 impl ObjectProtocol for XmlWriterObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
@@ -858,48 +978,191 @@ impl ObjectProtocol for XmlWriterObject {
         &self,
         method: &str,
         arguments: &[BslValue],
-        _context: &mut CallContext<'_>,
+        context: &mut CallContext<'_>,
     ) -> RtResult<BslValue> {
-        let receiver = self.as_value();
-        let eq =
-            |ru: &str, en: &str| method.eq_ignore_ascii_case(ru) || method.eq_ignore_ascii_case(en);
-        let done = |result: RtResult<()>| result.map(|()| BslValue::Undefined);
-        if eq("УстановитьСтроку", "SetString") {
-            done(set_string(&receiver, arguments))
-        } else if eq("ОткрытьФайл", "OpenFile") {
-            done(open_file(&receiver, arguments))
-        } else if eq("ЗаписатьОбъявлениеXML", "WriteXMLDeclaration") {
-            done(write_declaration(&receiver))
-        } else if eq("ЗаписатьНачалоЭлемента", "WriteStartElement") {
-            done(write_start_element(&receiver, arguments))
-        } else if eq("ЗаписатьКонецЭлемента", "WriteEndElement") {
-            done(write_end_element(&receiver))
-        } else if eq("ЗаписатьАтрибут", "WriteAttribute") {
-            done(write_attribute(&receiver, arguments))
-        } else if eq("ЗаписатьТекст", "WriteText") {
-            done(write_text(&receiver, arguments))
-        } else if eq("ЗаписатьКомментарий", "WriteComment") {
-            done(write_comment(&receiver, arguments))
-        } else if eq("ЗаписатьСекциюCDATA", "WriteCDATASection") {
-            done(write_cdata(&receiver, arguments))
-        } else if eq("ЗаписатьИнструкциюОбработки", "WriteProcessingInstruction")
-        {
-            done(write_processing_instruction(&receiver, arguments))
-        } else if eq("ЗаписатьБезОбработки", "WriteRaw") {
-            done(write_raw(&receiver, arguments))
-        } else if eq("Закрыть", "Close") {
-            close_writer(&receiver)
-        } else {
-            Err(RtError::UnknownMethod {
-                method: method.to_string(),
-                receiver: WRITER_TYPE.name,
-            })
-        }
+        bsl_rt::call_method_from_table(
+            WRITER_METHODS,
+            WRITER_TYPE.name,
+            &self.as_value(),
+            method,
+            arguments,
+            context,
+        )
+    }
+
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        WRITER_METHODS
     }
 }
+
+fn writer_declaration(
+    receiver: &BslValue,
+    _arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    write_declaration(receiver)?;
+    Ok(BslValue::Undefined)
+}
+
+fn writer_start_element(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    write_start_element(receiver, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+fn writer_end_element(
+    receiver: &BslValue,
+    _arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    write_end_element(receiver)?;
+    Ok(BslValue::Undefined)
+}
+
+fn writer_attribute(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    write_attribute(receiver, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+fn writer_text(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    write_text(receiver, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+fn writer_comment(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    write_comment(receiver, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+fn writer_cdata(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    write_cdata(receiver, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+fn writer_processing_instruction(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    write_processing_instruction(receiver, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+fn writer_raw(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    write_raw(receiver, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+fn writer_close(
+    receiver: &BslValue,
+    _arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    close_writer(receiver)
+}
+
+const WRITER_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor {
+        code: MethodCode::new(1),
+        names: &["УстановитьСтроку", "SetString"],
+        call: xml_set_string,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(2),
+        names: &["ОткрытьФайл", "OpenFile"],
+        call: xml_open_file,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(3),
+        names: &["ЗаписатьОбъявлениеXML", "WriteXMLDeclaration"],
+        call: writer_declaration,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(4),
+        names: &["ЗаписатьНачалоЭлемента", "WriteStartElement"],
+        call: writer_start_element,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(5),
+        names: &["ЗаписатьКонецЭлемента", "WriteEndElement"],
+        call: writer_end_element,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(6),
+        names: &["ЗаписатьАтрибут", "WriteAttribute"],
+        call: writer_attribute,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(7),
+        names: &["ЗаписатьТекст", "WriteText"],
+        call: writer_text,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(8),
+        names: &["ЗаписатьКомментарий", "WriteComment"],
+        call: writer_comment,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(9),
+        names: &["ЗаписатьСекциюCDATA", "WriteCDATASection"],
+        call: writer_cdata,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(10),
+        names: &["ЗаписатьИнструкциюОбработки", "WriteProcessingInstruction"],
+        call: writer_processing_instruction,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(11),
+        names: &["ЗаписатьБезОбработки", "WriteRaw"],
+        call: writer_raw,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(12),
+        names: &["Закрыть", "Close"],
+        call: writer_close,
+    },
+];
 
 impl ObjectProtocol for XmlWriterSettingsObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         &SETTINGS_TYPE
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn method_codes_are_static_and_dense() {
+        for table in [super::READER_METHODS, super::WRITER_METHODS] {
+            let codes = table
+                .iter()
+                .map(|method| method.code.get())
+                .collect::<Vec<_>>();
+            assert_eq!(codes, (1..=table.len() as u16).collect::<Vec<_>>());
+        }
     }
 }
