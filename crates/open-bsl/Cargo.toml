@@ -5,14 +5,14 @@ edition.workspace = true
 license.workspace = true
 
 [features]
-default = ["binbuf", "regexp", "textdoc", "json", "stream", "zip", "pdf", "xml"]
+default = ["binbuf", "regexp", "textdoc", "json", "stream", "zip", "pdf", "xml", "spreadsheet"]
 binbuf = ["dep:bsl-binbuf", "bsl-vm/binbuf"]
 stream = ["dep:bsl-stream", "binbuf", "bsl-vm/stream"]
 json = ["dep:bsl-json", "bsl-vm/json"]
 xml = ["dep:bsl-xml", "bsl-vm/xml"]
 pdf = ["dep:bsl-pdf", "bsl-vm/pdf"]
 zip = ["dep:bsl-zip", "bsl-vm/zip"]
-spreadsheet = []
+spreadsheet = ["dep:bsl-spreadsheet", "bsl-vm/spreadsheet"]
 textdoc = ["dep:bsl-textdoc", "bsl-vm/textdoc"]
 regexp = ["dep:bsl-regexp", "bsl-vm/regexp"]
 
@@ -30,3 +30,4 @@ bsl-stream = { path = "../bsl-stream", optional = true }
 bsl-zip = { path = "../bsl-zip", optional = true }
 bsl-pdf = { path = "../bsl-pdf", optional = true }
 bsl-xml = { path = "../bsl-xml", optional = true }
+bsl-spreadsheet = { path = "../bsl-spreadsheet", optional = true }

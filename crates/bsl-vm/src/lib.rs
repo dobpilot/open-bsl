@@ -1321,7 +1321,7 @@ fn step(
                         bsl_format::format_value,
                     );
                     object.set_property(имя, sv, &mut context)?;
-                } else if !set_spread_value(&ov, имя, &sv)? {
+                } else {
                     match ov.set_field_cached(name, sv.clone(), prop_cache(chunk, pc)?) {
                         Err(RtError::NotAnObject) => ov.set_field_by_name(имя, sv)?,
                         other => other?,
@@ -1420,8 +1420,6 @@ fn step(
                         bsl_format::format_value,
                     );
                     object.call_method(method.primary_name(), args.as_slice(), &mut context)?
-                } else if method == bsl_rt::BuiltinMethod::OutputArea {
-                    output_area(&ov, args.as_slice())?
                 } else {
                     bsl_rt::call_builtin_method_ctx(method, &ov, args.as_slice(), runtime_shapes)?
                 };
@@ -1452,9 +1450,6 @@ fn step(
                             bsl_format::format_value,
                         );
                         object.call_method("Записать", std::slice::from_ref(sv), &mut context)?
-                    } else if bsl_rt::spread_is_document(ov) {
-                        bsl_rt::spread_write(ov, std::slice::from_ref(sv))?;
-                        BslValue::Undefined
                     } else {
                         ov.text_writer_write(sv)?
                     }
@@ -1740,9 +1735,19 @@ fn step_cold(
             }
         }
         Instr::NewSpreadDocument { dst } => {
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, bsl_rt::new_spread_document())?;
-            frames[frame_idx].pc += 1;
+            #[cfg(not(feature = "spreadsheet"))]
+            {
+                let _ = dst;
+                return Err(RtError::Component(
+                    "ТабличныйДокумент требует компонент bsl-spreadsheet".to_string(),
+                ));
+            }
+            #[cfg(feature = "spreadsheet")]
+            {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, bsl_spreadsheet::new_document())?;
+                frames[frame_idx].pc += 1;
+            }
         }
         Instr::NewPdfDocument { dst } => {
             #[cfg(not(feature = "pdf"))]
@@ -2245,7 +2250,7 @@ fn step_cold(
                     bsl_format::format_value,
                 );
                 object.set_property(property_name, value, &mut context)?;
-            } else if !set_spread_value(&ov, property_name, &value)? {
+            } else {
                 match ov.set_field_cached(
                     name_id,
                     value.clone(),
@@ -2282,11 +2287,7 @@ fn step_cold(
                         receiver: ov.type_name(),
                     }
                 })?;
-                if builtin == bsl_rt::BuiltinMethod::OutputArea {
-                    output_area(&ov, args.as_slice())?
-                } else {
-                    bsl_rt::call_builtin_method_ctx(builtin, &ov, args.as_slice(), runtime_shapes)?
-                }
+                bsl_rt::call_builtin_method_ctx(builtin, &ov, args.as_slice(), runtime_shapes)?
             };
             let destination = frames[frame_idx].reg_index(dst);
             reg_store(stack, destination, value)?;
@@ -3218,74 +3219,6 @@ fn call_builtin_with_format(
         // имён, и путь без контекста для неё кончается ошибкой.
         other => bsl_rt::call_builtin_fn_ctx(other, args, runtime_shapes),
     }
-}
-
-/// `Документ.Вывести(Область)` — тело инструкции, вынесенное сюда ради
-/// доступа к `bsl-format`.
-/// `ОбластьЯчеек.Значение = ...` — перехват присваивания.
-///
-/// Отдельной функцией, потому что её зовут ДВОЕ: ветка `SetProp` в
-/// интерпретаторе и одноимённый шим JIT. Разъехаться им нельзя — за этим
-/// следит `the_jit_agrees_with_the_interpreter_on_every_script`, и он же
-/// поймал это место, когда перехват стоял только в интерпретаторе.
-///
-/// В файл уходит ПРЕДСТАВЛЕНИЕ значения, а форматирование живёт в
-/// `bsl-format`, который зависит от `bsl-rt`, не наоборот, — потому это и не
-/// может быть сделано этажом ниже.
-pub(crate) fn set_spread_value(
-    obj: &BslValue,
-    name: &str,
-    value: &BslValue,
-) -> Result<bool, RtError> {
-    if !bsl_rt::spread_is_area(obj) {
-        return Ok(false);
-    }
-    // `Расшифровка` — тоже ЗНАЧЕНИЕ любого типа, и в файл она уходит своим
-    // представлением, ровно как `Значение`.
-    if name.eq_ignore_ascii_case("Значение") || name.eq_ignore_ascii_case("Value") {
-        bsl_rt::spread_set_value(obj, &bsl_format::format_value(value, None)?)?;
-        return Ok(true);
-    }
-    if name.eq_ignore_ascii_case("Расшифровка") || name.eq_ignore_ascii_case("Details") {
-        bsl_rt::spread_set_detail(obj, &bsl_format::format_value(value, None)?)?;
-        return Ok(true);
-    }
-    Ok(false)
-}
-
-pub(crate) fn output_area(target: &BslValue, args: &[BslValue]) -> Result<BslValue, RtError> {
-    let Some(source) = args.first() else {
-        return Err(RtError::MethodNotApplicable {
-            method: "Вывести",
-            receiver: target.type_name(),
-        });
-    };
-    // Компонентный `ТекстовыйДокумент` обрабатывает имя через
-    // `ObjectProtocol`; здесь остаётся только legacy-табличный документ.
-    if bsl_rt::spread_is_document(target) {
-        // Подстановка параметров макета: значения из карты параметров
-        // источника форматируются и кладутся в текст ячеек с совпадающим
-        // `CellData::parameter`. Форматирование живёт в `bsl-format`,
-        // который зависит от `bsl-rt`, — поэтому перехват здесь, а не
-        // этажом ниже.
-        if bsl_rt::spread_is_document(source) {
-            let params = bsl_rt::spread_take_params(source)?;
-            if !params.is_empty() {
-                let mut formatted: Vec<(String, String)> = Vec::with_capacity(params.len());
-                for (name, value, spec) in &params {
-                    let text = bsl_format::format_value_for_cell(value, spec.as_deref())?;
-                    formatted.push((name.clone(), text));
-                }
-                bsl_rt::spread_apply_params(source, &formatted)?;
-            }
-        }
-        bsl_rt::spread_output(target, args)?;
-        return Ok(BslValue::Undefined);
-    }
-    Err(RtError::MethodNotApplicable {
-        method: "Вывести",
-        receiver: target.type_name(),
-    })
 }
 
 /// Тело инструкции `Add`.

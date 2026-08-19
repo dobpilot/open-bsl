@@ -10,7 +10,7 @@
 //! строк, ландшафт, рисунки) — они лежат рядом как задел и в этот тест не
 //! включены.
 
-use bsl_rt::{
+use bsl_spreadsheet::{
     to_mxl_bytes, Color, Font, HAlign, Line, LineStyle, Merge, NamedArea, SpreadDocData, VAlign,
 };
 
@@ -178,8 +178,11 @@ fn dump_for_the_platform_crosscheck() {
     styles.set_cell_wrap(5, 0, true);
     styles.set_cell_text(6, 0, "снова жирная");
     styles.set_cell_font(6, 0, Font::new("Arial", 14).bold());
-    std::fs::write(dir.join("стили.xlsx"), bsl_rt::to_xlsx_bytes(&styles))
-        .expect("не записался xlsx со стилями");
+    std::fs::write(
+        dir.join("стили.xlsx"),
+        bsl_spreadsheet::to_xlsx_bytes(&styles),
+    )
+    .expect("не записался xlsx со стилями");
 
     for (name, doc) in &samples {
         let path = dir.join(format!("{name}.mxl"));
@@ -749,7 +752,7 @@ fn every_oracle_parses() {
             continue;
         }
         let bytes = std::fs::read(&path).expect("не читается эталон");
-        match bsl_rt::from_mxl_bytes(&bytes) {
+        match bsl_spreadsheet::from_mxl_bytes(&bytes) {
             Ok(_) => parsed += 1,
             Err(e) => refused.push(format!(
                 "{}: {e}",
@@ -897,9 +900,9 @@ fn roundtrip_on_the_supported_subset() {
     ];
     for name in names {
         let oracle = std::fs::read(dir.join(format!("{name}.mxl"))).expect("нет эталона");
-        let doc = bsl_rt::from_mxl_bytes(&oracle)
+        let doc = bsl_spreadsheet::from_mxl_bytes(&oracle)
             .unwrap_or_else(|e| panic!("{name}: не разобрался: {e}"));
-        let ours = bsl_rt::to_mxl_bytes(&doc);
+        let ours = bsl_spreadsheet::to_mxl_bytes(&doc);
         assert!(
             ours == oracle,
             "{name}: круговорот изменил файл\n--- после чтения и записи ---\n{}\n--- эталон ---\n{}",
@@ -918,7 +921,7 @@ fn xml_template_parsing() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/conformance/mxl/template-basic.xml");
     let text = std::fs::read_to_string(&path).expect("нет эталона макета");
-    let doc = bsl_rt::from_template_xml(&text).expect("макет не разобрался");
+    let doc = bsl_spreadsheet::from_template_xml(&text).expect("макет не разобрался");
 
     assert_eq!((doc.height(), doc.width()), (3, 3), "размеры документа");
     assert_eq!(doc.cell_text(0, 0), "Отчёт");
@@ -1195,7 +1198,7 @@ fn a_real_report_from_1c() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../tests/conformance/mxl/report-real.mxl");
     let bytes = std::fs::read(&path).expect("нет эталона отчёта");
-    let doc = bsl_rt::from_mxl_bytes(&bytes).expect("отчёт не разобрался");
+    let doc = bsl_spreadsheet::from_mxl_bytes(&bytes).expect("отчёт не разобрался");
 
     // Размеры и содержимое сверены с тем, что показывает сама платформа.
     assert_eq!((doc.height(), doc.width()), (28, 5));

@@ -124,7 +124,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::{RtError, RtResult};
+use bsl_rt::{RtError, RtResult};
 
 fn bad(what: impl Into<String>) -> RtError {
     RtError::Spread(what.into())
@@ -317,7 +317,7 @@ impl Merge {
 }
 
 /// Прямоугольник области ячеек, 0-based и включительно. Отдельный тип, а не
-/// кортеж, — он живёт в `BslObject::SpreadArea` рядом со ссылкой на документ.
+/// кортеж, — он живёт в `SpreadAreaObject` рядом со ссылкой на документ.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rect {
     pub r1: u32,
@@ -809,7 +809,7 @@ pub struct SpreadDocData {
     /// чтение возвращает их обратно. Что значат соседние пары 10 и 11, не
     /// измерено — они всегда пишутся как 1000. Те же поля доходят и до
     /// записи в PDF.
-    pub margins: crate::PageMargins,
+    pub margins: crate::pdf_layout::PageMargins,
     /// `ОбластьПечати` — прямоугольник 0-based; `None` пишется как
     /// `{0,-1,-1,-1,-1,...}`.
     pub print_area: Option<(u32, u32, u32, u32)>,
@@ -2155,7 +2155,7 @@ pub fn write_file(doc: &SpreadDocData, path: &str, kind: FileKind) -> RtResult<(
         FileKind::Mxl => to_mxl_bytes(doc),
         FileKind::Txt => to_txt_bytes(doc),
         FileKind::Xlsx => crate::xlsx::to_xlsx_bytes(doc),
-        FileKind::Pdf => crate::spreadsheet_pdf::to_pdf_bytes(doc)?,
+        FileKind::Pdf => crate::pdf_layout::to_pdf_bytes(doc)?,
     };
     std::fs::write(path, bytes).map_err(|e| bad(format!("не удалось записать {path}: {e}")))
 }
@@ -2173,9 +2173,7 @@ pub enum FileKind {
 
 // --- мост к значениям BSL -------------------------------------------------
 
-use crate::object::BslObject;
-use crate::string::BslString;
-use crate::BslValue;
+use bsl_rt::{BslNumber, BslString, BslValue, CallContext, ObjectProtocol, TypeDescriptor, TypeId};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -2189,7 +2187,7 @@ fn number(v: &BslValue, what: &str) -> RtResult<i64> {
 }
 
 fn int_value(n: i64) -> BslValue {
-    BslValue::Number(bsl_number::BslNumber::from_i64(n))
+    BslValue::Number(BslNumber::from_i64(n))
 }
 
 /// Число с дробной частью — им наружу отдаются поля страницы
@@ -2199,7 +2197,7 @@ fn int_value(n: i64) -> BslValue {
 /// попадает лишь проверенное [`number_f64`] либо сотая доля целого из MXL,
 /// поэтому запасной ноль недостижим.
 fn mm_value(mm: f64) -> BslValue {
-    BslValue::Number(bsl_number::BslNumber::from_f64(mm).unwrap_or(bsl_number::BslNumber::ZERO))
+    BslValue::Number(BslNumber::from_f64(mm).unwrap_or(BslNumber::ZERO))
 }
 
 /// Прочитать число, допуская дробное: `ПолеСлева = 12.7` — законное
@@ -2229,30 +2227,59 @@ fn number_f64(v: &BslValue, what: &str) -> RtResult<f64> {
     }
 }
 
+/// `ТабличныйДокумент`.
+#[derive(Debug)]
+pub struct SpreadDocumentObject {
+    pub(crate) data: Rc<RefCell<SpreadDocData>>,
+}
+
+/// `ОбластьЯчеекТабличногоДокумента` — ссылка на прямоугольник в документе.
+#[derive(Debug)]
+pub struct SpreadAreaObject {
+    data: Rc<RefCell<SpreadDocData>>,
+    rect: Rect,
+}
+
+/// `КоллекцияРисунковТабличногоДокумента` — окно в тот же документ.
+#[derive(Debug)]
+pub struct SpreadDrawingsObject {
+    data: Rc<RefCell<SpreadDocData>>,
+}
+
+/// `РисунокТабличногоДокумента` — документ и номер рисунка в нём.
+#[derive(Debug)]
+pub struct SpreadDrawingObject {
+    data: Rc<RefCell<SpreadDocData>>,
+    index: usize,
+}
+
+/// `ПараметрыМакетаТабличногоДокумента` — обёртка над теми же данными.
+#[derive(Debug)]
+pub struct SpreadParamsObject {
+    data: Rc<RefCell<SpreadDocData>>,
+}
+
 /// Данные документа у значения — и у самого документа, и у его области.
 fn data(v: &BslValue) -> Option<Rc<RefCell<SpreadDocData>>> {
-    match v {
-        BslValue::Object(o) => match &**o {
-            BslObject::SpreadDocument(d) | BslObject::SpreadArea(d, _) => Some(d.clone()),
-            _ => None,
-        },
-        _ => None,
+    let object = v.object_ref()?;
+    if let Some(document) = object.downcast_ref::<SpreadDocumentObject>() {
+        return Some(document.data.clone());
     }
+    object
+        .downcast_ref::<SpreadAreaObject>()
+        .map(|area| area.data.clone())
 }
 
 fn rect(v: &BslValue) -> Option<Rect> {
-    match v {
-        BslValue::Object(o) => match &**o {
-            BslObject::SpreadArea(_, r) => Some(*r),
-            _ => None,
-        },
-        _ => None,
-    }
+    v.object_ref()
+        .and_then(|object| object.downcast_ref::<SpreadAreaObject>())
+        .map(|area| area.rect)
 }
 
 /// Область ячеек — получатель `Значение`, которое ВМ перехватывает.
 pub fn is_area(v: &BslValue) -> bool {
-    matches!(v, BslValue::Object(o) if matches!(**o, BslObject::SpreadArea(..)))
+    v.object_ref()
+        .is_some_and(|object| object.downcast_ref::<SpreadAreaObject>().is_some())
 }
 
 /// Положить представление значения в левую верхнюю ячейку области.
@@ -2284,13 +2311,14 @@ pub fn set_value(obj: &BslValue, presentation: &str) -> RtResult<()> {
 }
 
 pub fn is_spread_document(v: &BslValue) -> bool {
-    matches!(v, BslValue::Object(o) if matches!(**o, BslObject::SpreadDocument(..)))
+    v.object_ref()
+        .is_some_and(|object| object.downcast_ref::<SpreadDocumentObject>().is_some())
 }
 
 pub fn new_document() -> BslValue {
-    BslValue::Object(Rc::new(BslObject::SpreadDocument(Rc::new(RefCell::new(
-        SpreadDocData::new(),
-    )))))
+    BslValue::new_object(SpreadDocumentObject {
+        data: Rc::new(RefCell::new(SpreadDocData::new())),
+    })
 }
 
 /// `Область(СтрокаНач, КолонкаНач, СтрокаКон, КолонкаКон)`. Строковая
@@ -2318,7 +2346,7 @@ pub fn region(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
         },
         _ => return Err(bad("Область: ожидалось 1 или 4 аргумента")),
     };
-    Ok(BslValue::Object(Rc::new(BslObject::SpreadArea(doc, rect))))
+    Ok(BslValue::new_object(SpreadAreaObject { data: doc, rect }))
 }
 
 /// Адрес вида `R1C1`, `R1C1:R2C3`, `R2`, `R2:R3`, `C1`, `C1:C2` — набор,
@@ -2408,9 +2436,9 @@ pub fn get_area(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
         _ => return Err(bad("ПолучитьОбласть: ожидалось 1 или 4 аргумента")),
     };
     let cut = doc.borrow().extract(rect.r1, rect.c1, rect.r2, rect.c2);
-    Ok(BslValue::Object(Rc::new(BslObject::SpreadDocument(
-        Rc::new(RefCell::new(cut)),
-    ))))
+    Ok(BslValue::new_object(SpreadDocumentObject {
+        data: Rc::new(RefCell::new(cut)),
+    }))
 }
 
 /// `Вывести(Документ)` — приёмник наращивается вниз. Область ячеек платформа
@@ -2448,7 +2476,7 @@ pub fn read(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
     } else {
         let text = String::from_utf8(bytes)
             .map_err(|_| bad(format!("{path}: не MXL и не текст в UTF-8")))?;
-        crate::spreadsheet_template::from_template_xml(&text)?
+        crate::template::from_template_xml(&text)?
     };
     Ok(())
 }
@@ -2458,24 +2486,20 @@ pub fn read(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
 /// `Рисунки.Добавить(ТипРисунка)`. Поддержан только прямоугольник:
 /// остальные типы платформа знает, но их содержимое — отдельные разделы
 /// формата, которых здесь нет.
-pub fn is_drawings(v: &BslValue) -> bool {
-    matches!(v, BslValue::Object(o) if matches!(**o, BslObject::SpreadDrawings(..)))
-}
-
 /// `Рисунки.Добавить(ТипРисунка)`.
 pub fn drawings_add(obj: &BslValue, _args: &[BslValue]) -> RtResult<BslValue> {
-    let doc = match obj {
-        BslValue::Object(o) => match &**o {
-            BslObject::SpreadDrawings(d) => d.clone(),
-            _ => return Err(bad("Добавить: не коллекция рисунков")),
-        },
-        _ => return Err(bad("Добавить: не коллекция рисунков")),
+    let doc = match obj
+        .object_ref()
+        .and_then(|object| object.downcast_ref::<SpreadDrawingsObject>())
+    {
+        Some(drawings) => drawings.data.clone(),
+        None => return Err(bad("Добавить: не коллекция рисунков")),
     };
     let number_of = doc.borrow_mut().add_drawing(0.0, 0.0, 0.0, 0.0);
-    Ok(BslValue::Object(Rc::new(BslObject::SpreadDrawing(
-        doc,
-        number_of - 1,
-    ))))
+    Ok(BslValue::new_object(SpreadDrawingObject {
+        data: doc,
+        index: number_of - 1,
+    }))
 }
 
 /// Свойства рисунка. Геометрия отдаётся в миллиметрах — но НЕ теми, что
@@ -2496,9 +2520,7 @@ pub fn drawing_property(
     let mm = |v: f64| -> RtResult<BslValue> {
         let qp = (v * MM_TO_QP).round() as i128;
         let mantissa = (f64::from(qp as i32) * 25.4 / 288.0 * 1e14).round() as i128;
-        Ok(BslValue::Number(bsl_number::BslNumber::from_parts(
-            mantissa, 14,
-        )))
+        Ok(BslValue::Number(BslNumber::from_parts(mantissa, 14)))
     };
     match () {
         _ if name.eq_ignore_ascii_case("Имя") || name.eq_ignore_ascii_case("Name") => {
@@ -2604,10 +2626,10 @@ pub fn write(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
     let kind = match args.get(1) {
         None => FileKind::Mxl,
         Some(BslValue::Enum(e)) => match e {
-            crate::EnumValue::SpreadFileMxl => FileKind::Mxl,
-            crate::EnumValue::SpreadFileTxt => FileKind::Txt,
-            crate::EnumValue::SpreadFileXlsx => FileKind::Xlsx,
-            crate::EnumValue::SpreadFilePdf => FileKind::Pdf,
+            bsl_rt::EnumValue::SpreadFileMxl => FileKind::Mxl,
+            bsl_rt::EnumValue::SpreadFileTxt => FileKind::Txt,
+            bsl_rt::EnumValue::SpreadFileXlsx => FileKind::Xlsx,
+            bsl_rt::EnumValue::SpreadFilePdf => FileKind::Pdf,
             _ => return Err(bad("Записать: неподдерживаемый тип файла")),
         },
         Some(_) => return Err(bad("Записать: ожидался ТипФайлаТабличногоДокумента")),
@@ -2741,9 +2763,9 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
             || name.eq_ignore_ascii_case("PageOrientation") =>
         {
             Ok(BslValue::Enum(if d.landscape {
-                crate::EnumValue::PageOrientationLandscape
+                bsl_rt::EnumValue::PageOrientationLandscape
             } else {
-                crate::EnumValue::PageOrientationPortrait
+                bsl_rt::EnumValue::PageOrientationPortrait
             }))
         }
         _ => Err(RtError::UnknownColumn(name.to_string())),
@@ -2867,8 +2889,8 @@ pub fn set_property(obj: &BslValue, name: &str, val: BslValue) -> RtResult<()> {
         || name.eq_ignore_ascii_case("PageOrientation")
     {
         d.landscape = match val {
-            BslValue::Enum(crate::EnumValue::PageOrientationLandscape) => true,
-            BslValue::Enum(crate::EnumValue::PageOrientationPortrait) => false,
+            BslValue::Enum(bsl_rt::EnumValue::PageOrientationLandscape) => true,
+            BslValue::Enum(bsl_rt::EnumValue::PageOrientationPortrait) => false,
             _ => return Err(bad("ОриентацияСтраницы: ожидался член ОриентацияСтраницы")),
         };
         return Ok(());
@@ -2880,12 +2902,12 @@ pub fn set_property(obj: &BslValue, name: &str, val: BslValue) -> RtResult<()> {
 
 /// Достать `Rc` данных документа из `SpreadDocParams`.
 fn param_data(obj: &BslValue) -> RtResult<Rc<RefCell<SpreadDocData>>> {
-    let BslValue::Object(o) = obj else {
-        return Err(bad("Параметры: не объект параметров макета"));
-    };
-    match &**o {
-        BslObject::SpreadDocParams(d) => Ok(d.clone()),
-        _ => Err(bad("Параметры: не объект параметров макета")),
+    match obj
+        .object_ref()
+        .and_then(|object| object.downcast_ref::<SpreadParamsObject>())
+    {
+        Some(params) => Ok(params.data.clone()),
+        None => Err(bad("Параметры: не объект параметров макета")),
     }
 }
 
@@ -3008,6 +3030,345 @@ pub fn take_params(obj: &BslValue) -> RtResult<Vec<(String, BslValue, Option<Str
     Ok(out)
 }
 
+// --- объектный протокол -----------------------------------------------------
+
+static DOCUMENT_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ТабличныйДокумент",
+    legacy_type_id: Some(TypeId::SpreadDocument),
+};
+
+static AREA_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ОбластьЯчеекТабличногоДокумента",
+    legacy_type_id: Some(TypeId::SpreadArea),
+};
+
+static DRAWINGS_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "КоллекцияРисунковТабличногоДокумента",
+    legacy_type_id: Some(TypeId::SpreadDrawings),
+};
+
+static DRAWING_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "РисунокТабличногоДокумента",
+    legacy_type_id: Some(TypeId::SpreadDrawing),
+};
+
+static PARAMS_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ПараметрыМакетаТабличногоДокумента",
+    legacy_type_id: Some(TypeId::SpreadDocParams),
+};
+
+impl SpreadDocumentObject {
+    fn as_value(&self) -> BslValue {
+        BslValue::new_object(SpreadDocumentObject {
+            data: self.data.clone(),
+        })
+    }
+}
+
+impl SpreadAreaObject {
+    fn as_value(&self) -> BslValue {
+        BslValue::new_object(SpreadAreaObject {
+            data: self.data.clone(),
+            rect: self.rect,
+        })
+    }
+}
+
+/// Общие методы документа и области: имена делятся получателями, а данные
+/// у обоих одни (см. `data`).
+fn shared_method(
+    receiver: &BslValue,
+    method: &str,
+    arguments: &[BslValue],
+) -> Option<RtResult<BslValue>> {
+    let eq =
+        |ru: &str, en: &str| method.eq_ignore_ascii_case(ru) || method.eq_ignore_ascii_case(en);
+    if eq("Область", "Area") {
+        return Some(region(receiver, arguments));
+    }
+    if eq("Объединить", "Merge") {
+        return Some(merge_cells(receiver).map(|()| BslValue::Undefined));
+    }
+    if eq("Разъединить", "Unmerge") {
+        return Some(unmerge_cells(receiver).map(|()| BslValue::Undefined));
+    }
+    None
+}
+
+impl ObjectProtocol for SpreadDocumentObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &DOCUMENT_TYPE
+    }
+
+    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
+        // `Рисунки` и `Параметры` — окна в те же данные.
+        if name.eq_ignore_ascii_case("Рисунки") || name.eq_ignore_ascii_case("Drawings") {
+            return Ok(BslValue::new_object(SpreadDrawingsObject {
+                data: self.data.clone(),
+            }));
+        }
+        if name.eq_ignore_ascii_case("Параметры") || name.eq_ignore_ascii_case("Parameters")
+        {
+            return Ok(BslValue::new_object(SpreadParamsObject {
+                data: self.data.clone(),
+            }));
+        }
+        get_property(&self.as_value(), name)
+    }
+
+    fn set_property(
+        &self,
+        name: &str,
+        value: BslValue,
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<()> {
+        set_property(&self.as_value(), name, value)
+    }
+
+    fn call_method(
+        &self,
+        method: &str,
+        arguments: &[BslValue],
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<BslValue> {
+        let receiver = self.as_value();
+        let eq =
+            |ru: &str, en: &str| method.eq_ignore_ascii_case(ru) || method.eq_ignore_ascii_case(en);
+        if let Some(result) = shared_method(&receiver, method, arguments) {
+            return result;
+        }
+        if eq("Записать", "Write") {
+            write(&receiver, arguments)?;
+            return Ok(BslValue::Undefined);
+        }
+        if eq("Прочитать", "Read") {
+            read(&receiver, arguments)?;
+            return Ok(BslValue::Undefined);
+        }
+        if eq("Вывести", "Output") {
+            return output_with_params(&receiver, arguments);
+        }
+        if eq("ПолучитьОбласть", "GetArea") {
+            return get_area(&receiver, arguments);
+        }
+        if eq("Очистить", "Clear") {
+            clear(&receiver)?;
+            return Ok(BslValue::Undefined);
+        }
+        if eq("НачатьГруппуСтрок", "StartRowGroup") {
+            begin_row_group(&receiver, arguments)?;
+            return Ok(BslValue::Undefined);
+        }
+        if eq("ЗакончитьГруппуСтрок", "EndRowGroup") {
+            end_row_group(&receiver)?;
+            return Ok(BslValue::Undefined);
+        }
+        Err(RtError::UnknownMethod {
+            method: method.to_string(),
+            receiver: DOCUMENT_TYPE.name,
+        })
+    }
+
+    fn is_filled(&self) -> RtResult<bool> {
+        Ok(true)
+    }
+}
+
+/// `Вывести` с подстановкой параметров макета: значения из карты
+/// параметров источника форматируются `bsl-format` и кладутся в текст
+/// ячеек с совпадающим `CellData::parameter` — форматирование живёт
+/// здесь, потому что `bsl-format` зависит от `bsl-rt`, а не наоборот.
+fn output_with_params(target: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let Some(source) = args.first() else {
+        return Err(RtError::MethodNotApplicable {
+            method: "Вывести",
+            receiver: DOCUMENT_TYPE.name,
+        });
+    };
+    if is_spread_document(source) {
+        let params = take_params(source)?;
+        if !params.is_empty() {
+            let mut formatted: Vec<(String, String)> = Vec::with_capacity(params.len());
+            for (name, value, spec) in &params {
+                let text = bsl_format::format_value_for_cell(value, spec.as_deref())?;
+                formatted.push((name.clone(), text));
+            }
+            apply_params(source, &formatted)?;
+        }
+    }
+    output(target, args)?;
+    Ok(BslValue::Undefined)
+}
+
+impl ObjectProtocol for SpreadAreaObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &AREA_TYPE
+    }
+
+    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
+        get_property(&self.as_value(), name)
+    }
+
+    fn set_property(
+        &self,
+        name: &str,
+        value: BslValue,
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<()> {
+        let receiver = self.as_value();
+        // `Значение` и `Расшифровка` — значения ЛЮБОГО типа; в документ
+        // уходит их представление по правилам `bsl-format` (измерено).
+        if name.eq_ignore_ascii_case("Значение") || name.eq_ignore_ascii_case("Value") {
+            return set_value(&receiver, &bsl_format::format_value(&value, None)?);
+        }
+        if name.eq_ignore_ascii_case("Расшифровка") || name.eq_ignore_ascii_case("Details")
+        {
+            return set_detail(&receiver, &bsl_format::format_value(&value, None)?);
+        }
+        set_property(&receiver, name, value)
+    }
+
+    fn call_method(
+        &self,
+        method: &str,
+        arguments: &[BslValue],
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<BslValue> {
+        let receiver = self.as_value();
+        if let Some(result) = shared_method(&receiver, method, arguments) {
+            return result;
+        }
+        Err(RtError::UnknownMethod {
+            method: method.to_string(),
+            receiver: AREA_TYPE.name,
+        })
+    }
+
+    fn is_filled(&self) -> RtResult<bool> {
+        Ok(true)
+    }
+}
+
+impl ObjectProtocol for SpreadDrawingsObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &DRAWINGS_TYPE
+    }
+
+    fn call_method(
+        &self,
+        method: &str,
+        arguments: &[BslValue],
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<BslValue> {
+        if method.eq_ignore_ascii_case("Добавить") || method.eq_ignore_ascii_case("Add") {
+            let receiver = BslValue::new_object(SpreadDrawingsObject {
+                data: self.data.clone(),
+            });
+            return drawings_add(&receiver, arguments);
+        }
+        if method.eq_ignore_ascii_case("Количество") || method.eq_ignore_ascii_case("Count")
+        {
+            return Ok(BslValue::number_from_i64(
+                self.data.borrow().drawings().len() as i64,
+            ));
+        }
+        Err(RtError::UnknownMethod {
+            method: method.to_string(),
+            receiver: DRAWINGS_TYPE.name,
+        })
+    }
+
+    fn collection_len(&self) -> RtResult<usize> {
+        Ok(self.data.borrow().drawings().len())
+    }
+}
+
+impl ObjectProtocol for SpreadDrawingObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &DRAWING_TYPE
+    }
+
+    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
+        drawing_property(&self.data, self.index, name)
+    }
+
+    fn set_property(
+        &self,
+        name: &str,
+        value: BslValue,
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<()> {
+        set_drawing_property(&self.data, self.index, name, &value)
+    }
+}
+
+impl ObjectProtocol for SpreadParamsObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &PARAMS_TYPE
+    }
+
+    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
+        get_param(&self.as_params_value(), name)
+    }
+
+    fn set_property(
+        &self,
+        name: &str,
+        value: BslValue,
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<()> {
+        set_param(&self.as_params_value(), name, value)
+    }
+
+    // Параметры макета — источник и приёмник «ЗаполнитьЗначенияСвойств»
+    // (измерено): пары отдаются в порядке текста, чужие имена приёмник
+    // пропускает.
+    fn fill_source_pairs(&self) -> Option<Vec<(String, BslValue)>> {
+        let d = self.data.borrow();
+        let names = param_names(&d);
+        Some(
+            names
+                .into_iter()
+                .map(|name| {
+                    let upper = name.to_uppercase();
+                    let value = d
+                        .params
+                        .iter()
+                        .find(|(k, _)| **k == upper)
+                        .map(|(_, v)| v.clone())
+                        .unwrap_or(BslValue::Undefined);
+                    (name, value)
+                })
+                .collect(),
+        )
+    }
+
+    fn has_property(&self, name: &str) -> bool {
+        has_param(&self.data.borrow(), name)
+    }
+
+    fn fill_property(&self, name: &str, value: BslValue) -> RtResult<bool> {
+        if !self.has_property(name) {
+            return Ok(false);
+        }
+        set_param(&self.as_params_value(), name, value)?;
+        Ok(true)
+    }
+}
+
+impl SpreadParamsObject {
+    fn as_params_value(&self) -> BslValue {
+        BslValue::new_object(SpreadParamsObject {
+            data: self.data.clone(),
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3047,11 +3408,11 @@ mod tests {
         let path = std::env::temp_dir().join(format!("open-bsl-spread-{}.bin", std::process::id()));
         let path = BslValue::Str(BslString::from_str(&path.to_string_lossy()));
         for (kind, ok) in [
-            (crate::EnumValue::SpreadFileMxl, true),
-            (crate::EnumValue::SpreadFileTxt, true),
-            (crate::EnumValue::SpreadFileXlsx, true),
-            (crate::EnumValue::SpreadFilePdf, true),
-            (crate::EnumValue::JsonBoolean, false),
+            (bsl_rt::EnumValue::SpreadFileMxl, true),
+            (bsl_rt::EnumValue::SpreadFileTxt, true),
+            (bsl_rt::EnumValue::SpreadFileXlsx, true),
+            (bsl_rt::EnumValue::SpreadFilePdf, true),
+            (bsl_rt::EnumValue::JsonBoolean, false),
         ] {
             let args = [path.clone(), BslValue::Enum(kind)];
             assert_eq!(write(&doc, &args).is_ok(), ok, "{kind:?}");
@@ -3076,7 +3437,7 @@ mod tests {
         );
         assert!(matches!(
             get_property(&doc, "ОриентацияСтраницы").unwrap(),
-            BslValue::Enum(crate::EnumValue::PageOrientationPortrait)
+            BslValue::Enum(bsl_rt::EnumValue::PageOrientationPortrait)
         ));
 
         set_property(&doc, "ПолеСлева", int_value(30)).unwrap();
@@ -3089,7 +3450,7 @@ mod tests {
         set_property(
             &doc,
             "ОриентацияСтраницы",
-            BslValue::Enum(crate::EnumValue::PageOrientationLandscape),
+            BslValue::Enum(bsl_rt::EnumValue::PageOrientationLandscape),
         )
         .unwrap();
         assert_eq!(get_property(&doc, "LeftMargin").unwrap().to_string(), "30");
@@ -3098,7 +3459,7 @@ mod tests {
         assert_eq!(get_property(&doc, "ПолеСнизу").unwrap().to_string(), "12.7");
         assert!(matches!(
             get_property(&doc, "PageOrientation").unwrap(),
-            BslValue::Enum(crate::EnumValue::PageOrientationLandscape)
+            BslValue::Enum(bsl_rt::EnumValue::PageOrientationLandscape)
         ));
 
         assert!(set_property(
@@ -3151,7 +3512,7 @@ mod tests {
         let doc = from_mxl_bytes(&bytes).expect("файл платформы читается");
         assert_eq!(
             doc.margins,
-            crate::PageMargins {
+            crate::pdf_layout::PageMargins {
                 left: 31.0,
                 right: 32.0,
                 top: 33.0,

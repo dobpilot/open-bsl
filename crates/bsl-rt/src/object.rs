@@ -153,25 +153,13 @@ pub enum BslObject {
     ReservedXdtoList,
     ReservedXdtoSequence,
 
-    /// `ТабличныйДокумент`.
-    SpreadDocument(Rc<RefCell<crate::spreadsheet::SpreadDocData>>),
-    /// `ОбластьЯчеекТабличногоДокумента` — ССЫЛКА на прямоугольник в том же
-    /// документе, а не копия: `Область(1,1,1,1).Текст = "A"` меняет сам
-    /// документ (измерено). Копию отдаёт только `ПолучитьОбласть`.
-    SpreadArea(
-        Rc<RefCell<crate::spreadsheet::SpreadDocData>>,
-        crate::spreadsheet::Rect,
-    ),
-
-    /// `КоллекцияРисунковТабличногоДокумента` — обёртка над теми же
-    /// данными, как `Таблица.Колонки`.
-    SpreadDrawings(Rc<RefCell<crate::spreadsheet::SpreadDocData>>),
-    /// `РисунокТабличногоДокумента` — документ и НОМЕР рисунка в нём.
-    SpreadDrawing(Rc<RefCell<crate::spreadsheet::SpreadDocData>>, usize),
-    /// `Область.Параметры` табличного документа — обёртка над ТЕМИ ЖЕ
-    /// данными, как `TextDocParams`: присваивание в её поле задаёт
-    /// значение параметра макета, а не поле объекта.
-    SpreadDocParams(Rc<RefCell<crate::spreadsheet::SpreadDocData>>),
+    // Теги зарезервированы, чтобы перенос типов в `bsl-spreadsheet` не
+    // менял числовое представление остальных вариантов `BslObject`.
+    ReservedSpreadDocument,
+    ReservedSpreadArea,
+    ReservedSpreadDrawings,
+    ReservedSpreadDrawing,
+    ReservedSpreadDocParams,
 
     /// Зарезервированное место прежнего `ТекстовыйДокумент`: вариант
     /// сохраняет номера следующих legacy-тегов после выноса в

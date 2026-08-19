@@ -21,7 +21,7 @@
 use std::collections::BTreeMap;
 use std::fmt::Write;
 
-use crate::spreadsheet::{CellData, Color, ColumnSet, HAlign, SpreadDocData, VAlign};
+use crate::document::{CellData, Color, ColumnSet, HAlign, SpreadDocData, VAlign};
 
 /// Сборщик пакета — тонкая обёртка над `zip::ZipWriter`. Выбирать способ
 /// хранения незачем: сжатие всегда deflate, для мелких частей XLSX (стили,
@@ -827,9 +827,9 @@ mod tests {
     fn equal_styling_reuses_the_style() {
         let mut doc = SpreadDocData::new();
         doc.set_cell_text(0, 0, "жирная");
-        doc.set_cell_font(0, 0, crate::spreadsheet::Font::new("Arial", 14).bold());
+        doc.set_cell_font(0, 0, crate::document::Font::new("Arial", 14).bold());
         doc.set_cell_text(1, 0, "снова жирная");
-        doc.set_cell_font(1, 0, crate::spreadsheet::Font::new("Arial", 14).bold());
+        doc.set_cell_font(1, 0, crate::document::Font::new("Arial", 14).bold());
         let mut book = StyleBook::default();
         let sheet = worksheet(&doc, &mut Vec::new(), &mut book, &Layout::new(&doc));
         assert_eq!(book.styles.len(), 1, "оформление должно совпасть");
@@ -846,7 +846,7 @@ mod tests {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../tests/conformance/mxl/report-real.mxl");
         let bytes = std::fs::read(&path).expect("нет эталона отчёта");
-        let doc = crate::spreadsheet::from_mxl_bytes(&bytes).expect("отчёт не разобрался");
+        let doc = crate::document::from_mxl_bytes(&bytes).expect("отчёт не разобрался");
         let sheet = worksheet(
             &doc,
             &mut Vec::new(),
@@ -900,7 +900,7 @@ mod tests {
     fn border_reaches_the_workbook() {
         let mut doc = SpreadDocData::new();
         doc.set_cell_text(0, 0, "в рамке");
-        let line = crate::spreadsheet::Line::new(crate::spreadsheet::LineStyle::Solid);
+        let line = crate::document::Line::new(crate::document::LineStyle::Solid);
         doc.set_cell_border(0, 0, Some(line), None, None, Some(line));
         let mut book = StyleBook::default();
         worksheet(&doc, &mut Vec::new(), &mut book, &Layout::new(&doc));
@@ -944,7 +944,7 @@ mod tests {
     fn merges_are_carried_into_ooxml() {
         let mut doc = SpreadDocData::new();
         doc.set_cell_text(0, 0, "шапка");
-        doc.merge(crate::spreadsheet::Merge::new(0, 0, 0, 2));
+        doc.merge(crate::document::Merge::new(0, 0, 0, 2));
         let mut strings = Vec::new();
         let sheet = worksheet(
             &doc,
@@ -997,8 +997,8 @@ mod tests {
         let mut doc = SpreadDocData::new();
         doc.set_cell_text(0, 0, "A");
         doc.set_cell_text(2, 2, "Z");
-        doc.merge(crate::spreadsheet::Merge::new(0, 0, 1, 1));
-        doc.merge(crate::spreadsheet::Merge::new(1, 1, 2, 2));
+        doc.merge(crate::document::Merge::new(0, 0, 1, 1));
+        doc.merge(crate::document::Merge::new(1, 1, 2, 2));
         assert_eq!(merge_rects(&doc, &Layout::new(&doc)), [(0, 0, 1, 1)]);
     }
 
@@ -1007,7 +1007,7 @@ mod tests {
     fn degenerate_merge_is_skipped() {
         let mut doc = SpreadDocData::new();
         doc.set_cell_text(0, 0, "A");
-        doc.merge(crate::spreadsheet::Merge::new(0, 0, 0, 0));
+        doc.merge(crate::document::Merge::new(0, 0, 0, 0));
         assert!(merge_rects(&doc, &Layout::new(&doc)).is_empty());
     }
 }

@@ -870,7 +870,7 @@ shim!(shim_set_prop, |frames,
         let mut context =
             bsl_rt::CallContext::new(shapes, &mut stdout, &mut stderr, bsl_format::format_value);
         object.set_property(field_name(program, name)?, sv, &mut context)?;
-    } else if !crate::set_spread_value(&ov, field_name(program, name)?, &sv)? {
+    } else {
         match ov.set_field_cached(name, sv.clone(), prop_cache(chunk, pc as usize)?) {
             Err(RtError::NotAnObject) => ov.set_field_by_name(field_name(program, name)?, sv)?,
             other => other?,
@@ -915,8 +915,6 @@ shim!(shim_call_method, |frames,
         let mut context =
             bsl_rt::CallContext::new(shapes, &mut stdout, &mut stderr, bsl_format::format_value);
         object.call_method(method.primary_name(), args.as_slice(), &mut context)?
-    } else if method == bsl_rt::BuiltinMethod::OutputArea {
-        crate::output_area(&ov, args.as_slice())?
     } else {
         bsl_rt::call_builtin_method_ctx(method, &ov, args.as_slice(), shapes)?
     };

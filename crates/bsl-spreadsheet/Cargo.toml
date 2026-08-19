@@ -1,0 +1,12 @@
+[package]
+name = "bsl-spreadsheet"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+bsl-rt = { path = "../bsl-rt" }
+bsl-format = { path = "../bsl-format" }
+# Контейнер XLSX собирает внешний `zip` — тот же крейт, что у архивов.
+zip = { version = "2", default-features = false, features = ["deflate"] }
+# Тесты PDF-раскладки распаковывают контент-потоки, чтобы проверить байты.
+flate2 = "1"

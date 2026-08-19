@@ -21,16 +21,12 @@ pub mod open_questions;
 pub mod pdf;
 mod runtime_shapes;
 mod shape;
-mod spreadsheet;
-mod spreadsheet_pdf;
-mod spreadsheet_template;
 mod string;
 mod table;
 mod types;
 mod tz;
 mod uuid;
 mod vstr;
-mod xlsx;
 pub mod xml;
 pub use std::cmp::Ordering;
 use std::fmt;
@@ -70,16 +66,6 @@ pub use object::{BslObject, StructureStorage};
 pub use object_protocol::{ByteStreamProtocol, ObjectProtocol, ObjectRef, TypeDescriptor};
 pub use runtime_shapes::RuntimeShapes;
 pub use shape::{Shape, ShapeTable, MAX_SHAPE_TRANSITIONS};
-pub use spreadsheet::{
-    apply_params as spread_apply_params, from_mxl_bytes, is_area as spread_is_area,
-    is_spread_document as spread_is_document, new_document as new_spread_document,
-    output as spread_output, read as spread_read, set_detail as spread_set_detail,
-    set_value as spread_set_value, take_params as spread_take_params, to_mxl_bytes, to_txt_bytes,
-    write as spread_write, write_file as spread_write_file, AreaKind, Color, FileKind, Font,
-    HAlign, Line, LineStyle, Merge, NamedArea, Rect, SpreadDocData, VAlign,
-};
-pub use spreadsheet_pdf::{to_pdf_bytes, PageMargins, DEFAULT_MARGIN_MM};
-pub use spreadsheet_template::from_template_xml;
 pub use string::{BslString, MAX_TEMPLATE_ARGS};
 pub use table::{ColumnVstr, ValueTableData};
 pub use types::TypeId;
@@ -88,7 +74,6 @@ pub use vstr::{value_from_string_internal, value_to_string_internal};
 // Модель типов XDTO наружу крейта нужна целиком: строит её фабрика,
 // которой в этой реализации ещё нет, а до тех пор единственный её
 // потребитель — собственные тесты модуля.
-pub use xlsx::to_xlsx_bytes;
 pub use xml::{XmlAttr, XmlEvent, XmlParser, XmlWriter, XmlWriterSettings};
 
 #[derive(Debug, Clone)]
@@ -488,11 +473,11 @@ impl BslValue {
                 | BslObject::ReservedXdtoObject
                 | BslObject::ReservedXdtoList
                 | BslObject::ReservedXdtoSequence => "",
-                BslObject::SpreadDocument(_) => "ТабличныйДокумент",
-                BslObject::SpreadDrawings(_) => "КоллекцияРисунковТабличногоДокумента",
-                BslObject::SpreadDrawing(..) => "РисунокТабличногоДокумента",
-                BslObject::SpreadDocParams(_) => "ПараметрыМакетаТабличногоДокумента",
-                BslObject::SpreadArea(..) => "ОбластьЯчеекТабличногоДокумента",
+                BslObject::ReservedSpreadDocument
+                | BslObject::ReservedSpreadArea
+                | BslObject::ReservedSpreadDrawings
+                | BslObject::ReservedSpreadDrawing
+                | BslObject::ReservedSpreadDocParams => "",
                 BslObject::ReservedTextDocument => "ТекстовыйДокумент",
                 BslObject::ReservedTextDocParams => "ПараметрыМакетаТекстовогоДокумента",
                 // Имена ЗНАЧЕНИЙ читателей архива — слитные, имена ТИПОВ
@@ -1268,11 +1253,11 @@ impl BslValue {
                 | BslObject::ReservedXmlReader
                 | BslObject::ReservedXmlWriter
                 | BslObject::ReservedXmlWriterSettings
-                | BslObject::SpreadDocument(..)
-                | BslObject::SpreadArea(..)
-                | BslObject::SpreadDrawing(..)
-                | BslObject::SpreadDrawings(..)
-                | BslObject::SpreadDocParams(..)
+                | BslObject::ReservedSpreadDocument
+                | BslObject::ReservedSpreadArea
+                | BslObject::ReservedSpreadDrawings
+                | BslObject::ReservedSpreadDrawing
+                | BslObject::ReservedSpreadDocParams
                 | BslObject::ReservedTextDocument
                 | BslObject::ReservedTextDocParams
                 | BslObject::ReservedArchiveReader
@@ -1420,11 +1405,11 @@ impl BslValue {
                 BslObject::ReservedXmlReader => TypeId::XmlReader,
                 BslObject::ReservedXmlWriter => TypeId::XmlWriter,
                 BslObject::ReservedXmlWriterSettings => TypeId::XmlWriterSettings,
-                BslObject::SpreadDocument(..) => TypeId::SpreadDocument,
-                BslObject::SpreadDrawings(..) => TypeId::SpreadDrawings,
-                BslObject::SpreadDrawing(..) => TypeId::SpreadDrawing,
-                BslObject::SpreadArea(..) => TypeId::SpreadArea,
-                BslObject::SpreadDocParams(..) => TypeId::SpreadDocParams,
+                BslObject::ReservedSpreadDocument => TypeId::SpreadDocument,
+                BslObject::ReservedSpreadArea => TypeId::SpreadArea,
+                BslObject::ReservedSpreadDrawings => TypeId::SpreadDrawings,
+                BslObject::ReservedSpreadDrawing => TypeId::SpreadDrawing,
+                BslObject::ReservedSpreadDocParams => TypeId::SpreadDocParams,
                 BslObject::ReservedTextDocument => TypeId::TextDocument,
                 BslObject::ReservedTextDocParams => TypeId::TextDocParams,
                 BslObject::ReservedPdfDocument => TypeId::PdfDocument,
@@ -2197,10 +2182,11 @@ impl BslValue {
                 | BslObject::ReservedXmlReader
                 | BslObject::ReservedXmlWriter
                 | BslObject::ReservedXmlWriterSettings
-                | BslObject::SpreadDocument(..)
-                | BslObject::SpreadArea(..)
-                | BslObject::SpreadDrawing(..)
-                | BslObject::SpreadDocParams(..)
+                | BslObject::ReservedSpreadDocument
+                | BslObject::ReservedSpreadArea
+                | BslObject::ReservedSpreadDrawings
+                | BslObject::ReservedSpreadDrawing
+                | BslObject::ReservedSpreadDocParams
                 | BslObject::ReservedTextDocument
                 | BslObject::ReservedTextDocParams
                 | BslObject::ReservedArchiveReader
@@ -2222,8 +2208,6 @@ impl BslValue {
                 | BslObject::ReservedDataReader
                 | BslObject::ReservedDataWriter
                 | BslObject::ReservedDataReadResult => Err(RtError::NotIndexable),
-                // У коллекции рисунков длина есть — это её `Количество`.
-                BslObject::SpreadDrawings(doc) => Ok(doc.borrow().drawings().len()),
             },
             _ => Err(RtError::NotIndexable),
         }
@@ -2554,25 +2538,6 @@ impl BslValue {
                 | BslObject::ReservedDataReadResult
                 | BslObject::ReservedMemoryStream
                 | BslObject::ReservedFileStream => Err(RtError::NotAnObject),
-                BslObject::SpreadDocument(data) => {
-                    if name.eq_ignore_ascii_case("Рисунки") || name.eq_ignore_ascii_case("Drawings")
-                    {
-                        Ok(BslValue::Object(Rc::new(BslObject::SpreadDrawings(
-                            data.clone(),
-                        ))))
-                    } else if name.eq_ignore_ascii_case("Параметры")
-                        || name.eq_ignore_ascii_case("Parameters")
-                    {
-                        Ok(BslValue::Object(Rc::new(BslObject::SpreadDocParams(
-                            data.clone(),
-                        ))))
-                    } else {
-                        spreadsheet::get_property(self, name)
-                    }
-                }
-                BslObject::SpreadArea(..) => spreadsheet::get_property(self, name),
-                BslObject::SpreadDrawing(data, i) => spreadsheet::drawing_property(data, *i, name),
-                BslObject::SpreadDocParams(_) => spreadsheet::get_param(self, name),
                 BslObject::ReservedTextDocument | BslObject::ReservedTextDocParams => {
                     Err(RtError::NotAnObject)
                 }
@@ -2596,16 +2561,6 @@ impl BslValue {
     pub fn set_field_by_name(&self, name: &str, val: BslValue) -> RtResult<()> {
         match self {
             BslValue::Object(o) => match &**o {
-                // `Параметры.Имя = Значение` — это задание параметра
-                // макета, а не заведение поля объекта. Имя, которого в
-                // тексте нет, платформа отвергает (измерено).
-                BslObject::SpreadDocument(..) | BslObject::SpreadArea(..) => {
-                    spreadsheet::set_property(self, name, val)
-                }
-                BslObject::SpreadDrawing(data, i) => {
-                    spreadsheet::set_drawing_property(data, *i, name, &val)
-                }
-                BslObject::SpreadDocParams(_) => spreadsheet::set_param(self, name, val),
                 BslObject::ReservedTextDocument | BslObject::ReservedTextDocParams => {
                     Err(RtError::NotAnObject)
                 }
@@ -3469,11 +3424,11 @@ impl fmt::Display for BslValue {
                 BslObject::ReservedXmlReader => write!(f, "ЧтениеXML"),
                 BslObject::ReservedXmlWriter => write!(f, "ЗаписьXML"),
                 BslObject::ReservedXmlWriterSettings => write!(f, "ПараметрыЗаписиXML"),
-                BslObject::SpreadDocument(_) => write!(f, "ТабличныйДокумент"),
-                BslObject::SpreadDrawings(_) => write!(f, "КоллекцияРисунковТабличногоДокумента"),
-                BslObject::SpreadDrawing(..) => write!(f, "РисунокТабличногоДокумента"),
-                BslObject::SpreadArea(..) => write!(f, "ОбластьЯчеекТабличногоДокумента"),
-                BslObject::SpreadDocParams(_) => write!(f, "ПараметрыМакетаТабличногоДокумента"),
+                BslObject::ReservedSpreadDocument
+                | BslObject::ReservedSpreadArea
+                | BslObject::ReservedSpreadDrawings
+                | BslObject::ReservedSpreadDrawing
+                | BslObject::ReservedSpreadDocParams => write!(f, "{}", self.type_name()),
                 BslObject::ReservedTextDocument => write!(f, "ТекстовыйДокумент"),
                 BslObject::ReservedTextDocParams => {
                     write!(f, "ПараметрыМакетаТекстовогоДокумента")

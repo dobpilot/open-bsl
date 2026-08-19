@@ -143,6 +143,26 @@ pub trait ObjectProtocol: fmt::Debug + ObjectDowncast {
         None
     }
 
+    /// Пары «имя — значение», которые объект отдаёт источником
+    /// «ЗаполнитьЗначенияСвойств»: `None` — объект в заполнении не
+    /// участвует. Порядок пар — порядок обхода источника.
+    fn fill_source_pairs(&self) -> Option<Vec<(String, BslValue)>> {
+        None
+    }
+
+    /// Есть ли у объекта свойство с таким именем — для приёмника
+    /// заполнения, который пропускает чужие имена без ошибки.
+    fn has_property(&self, _name: &str) -> bool {
+        false
+    }
+
+    /// Запись одного свойства приёмником заполнения: `Ok(false)` — такого
+    /// свойства нет, и перенос молча пропускает имя (набор свойств
+    /// приёмника не растёт — измерено).
+    fn fill_property(&self, _name: &str, _value: BslValue) -> RtResult<bool> {
+        Ok(false)
+    }
+
     /// Равенство по значению для внешних типов-значений: два отдельно
     /// построенных объекта равны содержимым, как строки. `None` — тип по
     /// значению не сравнивается, и в силе остаются ключ места и
@@ -225,6 +245,18 @@ impl ObjectRef {
 
     pub fn value_eq(&self, other: &ObjectRef) -> Option<bool> {
         self.0.value_eq(other)
+    }
+
+    pub fn fill_source_pairs(&self) -> Option<Vec<(String, BslValue)>> {
+        self.0.fill_source_pairs()
+    }
+
+    pub fn has_property(&self, name: &str) -> bool {
+        self.0.has_property(name)
+    }
+
+    pub fn fill_property(&self, name: &str, value: BslValue) -> RtResult<bool> {
+        self.0.fill_property(name, value)
     }
 
     pub fn display(&self) -> String {

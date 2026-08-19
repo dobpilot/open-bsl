@@ -1795,9 +1795,6 @@ pub fn call_builtin_method(
             )))
         }
         BuiltinMethod::Add => match args {
-            _ if crate::spreadsheet::is_drawings(obj) => {
-                crate::spreadsheet::drawings_add(obj, args)
-            }
             [] => obj.table_add_row(),
             [v] => match obj.push_element(v.clone()) {
                 Ok(()) => Ok(BslValue::Undefined),
@@ -1821,11 +1818,7 @@ pub fn call_builtin_method(
             Ok(BslValue::Undefined)
         }
         BuiltinMethod::Clear => {
-            if crate::spreadsheet::is_spread_document(obj) {
-                crate::spreadsheet::clear(obj)?;
-            } else {
-                obj.clear_collection()?;
-            }
+            obj.clear_collection()?;
             Ok(BslValue::Undefined)
         }
         BuiltinMethod::Insert => match obj {
@@ -1974,9 +1967,6 @@ pub fn call_builtin_method(
                 // У буфера `Записать(Позиция, Источник[, Количество])` —
                 // блочная запись; арность и границы проверяет он сам.
                 crate::binbuf::write_buffer(obj, args)
-            } else if crate::spreadsheet::is_spread_document(obj) {
-                crate::spreadsheet::write(obj, args)?;
-                Ok(BslValue::Undefined)
             } else {
                 // Получатель здесь может оказаться и не `ЗаписьТекста`:
                 // тогда индексация `args[0]` обязана быть безопасной, а
@@ -2004,17 +1994,10 @@ pub fn call_builtin_method(
             method: "ОткрытьФайл",
             receiver: obj.type_name(),
         }),
-        BuiltinMethod::ReadNext => {
-            if crate::spreadsheet::is_spread_document(obj) {
-                crate::spreadsheet::read(obj, args)?;
-                Ok(BslValue::Undefined)
-            } else {
-                Err(RtError::MethodNotApplicable {
-                    method: "Прочитать",
-                    receiver: obj.type_name(),
-                })
-            }
-        }
+        BuiltinMethod::ReadNext => Err(RtError::MethodNotApplicable {
+            method: "Прочитать",
+            receiver: obj.type_name(),
+        }),
         BuiltinMethod::SkipNode => {
             // У читателей JSON/XML `Пропустить()` — шаг через узел без
             // результата, у `ЧтениеДанных` — перевод позиции на заданное
@@ -2041,33 +2024,33 @@ pub fn call_builtin_method(
             method: "метод bsl-textdoc",
             receiver: obj.type_name(),
         }),
-        BuiltinMethod::GetArea => {
-            if crate::spreadsheet::is_spread_document(obj) {
-                crate::spreadsheet::get_area(obj, args)
-            } else {
-                Err(RtError::MethodNotApplicable {
-                    method: "ПолучитьОбласть",
-                    receiver: obj.type_name(),
-                })
-            }
-        }
-        BuiltinMethod::Region => crate::spreadsheet::region(obj, args),
-        BuiltinMethod::MergeCells => {
-            crate::spreadsheet::merge_cells(obj)?;
-            Ok(BslValue::Undefined)
-        }
-        BuiltinMethod::UnmergeCells => {
-            crate::spreadsheet::unmerge_cells(obj)?;
-            Ok(BslValue::Undefined)
-        }
-        BuiltinMethod::BeginRowGroup => {
-            crate::spreadsheet::begin_row_group(obj, args)?;
-            Ok(BslValue::Undefined)
-        }
-        BuiltinMethod::EndRowGroup => {
-            crate::spreadsheet::end_row_group(obj)?;
-            Ok(BslValue::Undefined)
-        }
+        // Методы табличного документа: получатели стали внешними
+        // объектами компонента bsl-spreadsheet и перехватываются
+        // протоколом раньше этой таблицы.
+        BuiltinMethod::GetArea => Err(RtError::MethodNotApplicable {
+            method: "ПолучитьОбласть",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::Region => Err(RtError::MethodNotApplicable {
+            method: "Область",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::MergeCells => Err(RtError::MethodNotApplicable {
+            method: "ОбъединитьЯчейки",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::UnmergeCells => Err(RtError::MethodNotApplicable {
+            method: "РазъединитьЯчейки",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::BeginRowGroup => Err(RtError::MethodNotApplicable {
+            method: "НачатьГруппуСтрок",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::EndRowGroup => Err(RtError::MethodNotApplicable {
+            method: "ЗакончитьГруппуСтрок",
+            receiver: obj.type_name(),
+        }),
         BuiltinMethod::OutputArea => Err(RtError::MethodNotApplicable {
             method: "Вывести",
             receiver: obj.type_name(),

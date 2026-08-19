@@ -41,9 +41,9 @@
 //! неосновному набору, кладутся в ту же сетку — своей модели у них пока
 //! нет, и это лучше, чем потерять их молча.
 
-use crate::spreadsheet::{AreaKind, HAlign, Merge, NamedArea, SpreadDocData, VAlign};
-use crate::xml::{XmlEvent, XmlParser};
-use crate::{RtError, RtResult};
+use crate::document::{AreaKind, HAlign, Merge, NamedArea, SpreadDocData, VAlign};
+use bsl_rt::xml::{XmlEvent, XmlParser};
+use bsl_rt::{RtError, RtResult};
 
 fn bad(what: impl Into<String>) -> RtError {
     RtError::Spread(what.into())

@@ -36,7 +36,6 @@ use std::rc::{Rc, Weak};
 
 use crate::interner::NameInterner;
 use crate::object::BslObject;
-use crate::spreadsheet;
 use crate::{BslString, BslValue, RtError, RtResult, ValueTableData};
 
 /// Разрешённые индексы прямого переноса и, если список ошибочен, имя, на
@@ -445,23 +444,9 @@ fn properties(source: &BslValue, names: &NameInterner) -> RtResult<Vec<(String, 
             }
             Ok(out)
         }
-        BslObject::SpreadDocParams(d) => {
-            let d = d.borrow();
-            let names = spreadsheet::param_names(&d);
-            Ok(names
-                .into_iter()
-                .map(|name| {
-                    let upper = name.to_uppercase();
-                    let value = d
-                        .params
-                        .iter()
-                        .find(|(k, _)| **k == upper)
-                        .map(|(_, v)| v.clone())
-                        .unwrap_or(BslValue::Undefined);
-                    (name, value)
-                })
-                .collect())
-        }
+        // Внешние объекты участвуют источником через протокол: параметры
+        // макета табличного документа отдают свои пары сами.
+        BslObject::Extension(object) => Ok(object.fill_source_pairs().unwrap_or_default()),
         _ => Ok(Vec::new()),
     }
 }
@@ -480,7 +465,7 @@ fn has_property(target: &BslValue, name: &str, names: &NameInterner) -> bool {
             None => false,
         },
         BslObject::TableRow(data, _) => data.borrow().column_index(name).is_some(),
-        BslObject::SpreadDocParams(d) => spreadsheet::has_param(&d.borrow(), name),
+        BslObject::Extension(object) => object.has_property(name),
         _ => false,
     }
 }
@@ -513,8 +498,10 @@ fn write_property(
             Err(RtError::UnknownColumn(_)) => Ok(()),
             other => other,
         },
-        BslObject::SpreadDocParams(_) => {
-            spreadsheet::set_param(target, name, value)?;
+        // Внешние приёмники пишут через протокол; отсутствие свойства —
+        // пропуск, как у остальных.
+        BslObject::Extension(object) => {
+            object.fill_property(name, value)?;
             Ok(())
         }
         _ => Ok(()),

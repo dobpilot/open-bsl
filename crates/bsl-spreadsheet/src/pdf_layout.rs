@@ -80,7 +80,7 @@
 //!   `841.92 x 595.32`, поля при этом не меняются (`probe-landscape`);
 //! * ПУСТОЙ документ платформа пишет как обычный файл из ОДНОЙ страницы
 //!   (877 байт), а не отказывается (`probe-empty`). Поэтому пустая
-//!   страница заводится и здесь: [`crate::pdf::PdfDocument::write`]
+//!   страница заводится и здесь: [`bsl_rt::pdf::PdfDocument::write`]
 //!   документ без страниц отвергает.
 //!
 //! # Чего мы намеренно не повторяем
@@ -124,9 +124,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::pdf::{PageId, PaintMode, PdfDocument, PdfFont};
-use crate::spreadsheet::{CellData, HAlign, Line, LineStyle, SpreadDocData, VAlign};
-use crate::RtResult;
+use crate::document::{CellData, HAlign, Line, LineStyle, SpreadDocData, VAlign};
+use bsl_rt::pdf::{PageId, PaintMode, PdfDocument, PdfFont};
+use bsl_rt::RtResult;
 
 /// A4 в пунктах — в том виде, в каком его пишет платформа (её округление
 /// до 1/600 дюйма от 210 x 297 мм).
@@ -722,7 +722,7 @@ fn unit(component: u8) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::spreadsheet::{from_mxl_bytes, to_mxl_bytes, Color, Font, Merge};
+    use crate::document::{from_mxl_bytes, to_mxl_bytes, Color, Font, Merge};
     use std::io::Read as _;
 
     /// Число так, как его пишет слой формата: четыре знака после запятой
@@ -758,12 +758,12 @@ mod tests {
     }
 
     /// Распаковать сырой deflate-поток (RFC 1951) с пределом размера.
-    fn inflate_raw_deflate(data: &[u8], max_out: usize) -> Result<Vec<u8>, crate::RtError> {
+    fn inflate_raw_deflate(data: &[u8], max_out: usize) -> Result<Vec<u8>, bsl_rt::RtError> {
         let mut out = Vec::new();
         flate2::read::DeflateDecoder::new(data)
             .take(max_out as u64)
             .read_to_end(&mut out)
-            .map_err(|e| crate::RtError::Zip(format!("PDF FlateDecode: {e}")))?;
+            .map_err(|e| bsl_rt::RtError::Zip(format!("PDF FlateDecode: {e}")))?;
         Ok(out)
     }
 

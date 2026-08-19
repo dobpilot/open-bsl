@@ -983,6 +983,12 @@ impl<'a> Resolver<'a> {
                     "потоковый тип требует зарегистрированный компонент bsl-stream",
                 ));
             }
+            if matches!(upper.as_str(), "ТАБЛИЧНЫЙДОКУМЕНТ" | "SPREADSHEETDOCUMENT")
+            {
+                return Err(SemaError::Unsupported(
+                    "ТабличныйДокумент требует зарегистрированный компонент bsl-spreadsheet",
+                ));
+            }
             if matches!(
                 upper.as_str(),
                 "ЧТЕНИЕXML"

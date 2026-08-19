@@ -150,6 +150,8 @@ impl EngineBuilder {
         runtime.register(bsl_pdf::library());
         #[cfg(feature = "xml")]
         runtime.register(bsl_xml::library());
+        #[cfg(feature = "spreadsheet")]
+        runtime.register(bsl_spreadsheet::library());
         Self { runtime }
     }
 
@@ -661,6 +663,35 @@ mod tests {
             )
             .unwrap();
         assert_eq!(engine.new_state().run(&module).unwrap().to_string(), "нет");
+    }
+
+    #[cfg(feature = "spreadsheet")]
+    #[test]
+    fn spreadsheet_feature_records_the_constructor_and_builds_areas() {
+        let engine = Engine::builder().build().unwrap();
+        let module = engine
+            .compile(
+                "Док = Новый ТабличныйДокумент; Обл = Док.Область(1, 1, 1, 1); \
+                 Обл.Текст = \"привет\"; Возврат Док.Область(1, 1, 1, 1).Текст;",
+            )
+            .unwrap();
+        assert!(module
+            .requirements()
+            .iter()
+            .any(|requirement| requirement.package == "bsl-spreadsheet"
+                && requirement.version == env!("CARGO_PKG_VERSION")));
+        assert!(module.bytecode().unwrap().contains("CreateObject"));
+        assert_eq!(
+            engine.new_state().run(&module).unwrap().to_string(),
+            "привет"
+        );
+    }
+
+    #[cfg(not(feature = "spreadsheet"))]
+    #[test]
+    fn missing_spreadsheet_feature_rejects_the_constructor() {
+        let engine = Engine::builder().build().unwrap();
+        assert!(engine.compile("Возврат Новый ТабличныйДокумент;").is_err());
     }
 
     #[cfg(not(feature = "xml"))]
