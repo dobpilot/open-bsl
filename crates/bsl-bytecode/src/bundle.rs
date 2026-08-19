@@ -428,21 +428,21 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
             read!(src);
             e.heap_write = true;
         }
+        // Открытые двойники `GetProp`/`SetProp`: та же операция над теми
+        // же получателями, отличается только способ разрешения имени,
+        // поэтому и эффекты заявлены те же. Прежний `Ctl::Barrier` был
+        // перестраховкой и рвал бандлы на каждом обращении к полю — с
+        // реестром компонентов так компилируется каждое обращение
+        // программы, и барьер стоил `csv_write` десятки процентов.
         Instr::GetObjectProp { dst, obj, .. } => {
             read!(obj);
             write!(dst);
             e.heap_read = true;
-            e.heap_write = true;
-            e.io = true;
-            e.ctl = Ctl::Barrier;
         }
         Instr::SetObjectProp { obj, src, .. } => {
             read!(obj);
             read!(src);
-            e.heap_read = true;
             e.heap_write = true;
-            e.io = true;
-            e.ctl = Ctl::Barrier;
         }
         Instr::CreateObject {
             dst, base, count, ..
@@ -530,6 +530,9 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
             e.heap_write = true;
             e.io = true;
         }
+        // Открытый двойник `CallMethod`: эффекты — как у закрытого, тот
+        // обслуживает тех же получателей (включая компонентные объекты) и
+        // барьера не несёт.
         Instr::CallObjectMethod {
             dst,
             obj,
@@ -543,7 +546,6 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
             e.heap_read = true;
             e.heap_write = true;
             e.io = true;
-            e.ctl = Ctl::Barrier;
         }
         Instr::WriteText { dst, obj, src } => {
             read!(obj);
