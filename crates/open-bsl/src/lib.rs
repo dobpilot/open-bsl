@@ -148,6 +148,8 @@ impl EngineBuilder {
         runtime.register(bsl_zip::library());
         #[cfg(feature = "pdf")]
         runtime.register(bsl_pdf::library());
+        #[cfg(feature = "xml")]
+        runtime.register(bsl_xml::library());
         Self { runtime }
     }
 
@@ -626,6 +628,48 @@ mod tests {
         assert!(engine.compile("Возврат Новый ДокументPDF();").is_err());
         assert!(engine
             .compile("Возврат Новый КоллекцияВложенийPDF();")
+            .is_err());
+    }
+
+    #[cfg(feature = "xml")]
+    #[test]
+    fn xml_feature_records_xdto_constructors_and_functions() {
+        let engine = Engine::builder().build().unwrap();
+        let module = engine
+            .compile(
+                "фаб = Новый ФабрикаXDTO(); сер = Новый СериализаторXDTO(фаб); \
+                 Возврат ТипЗнч(сер);",
+            )
+            .unwrap();
+        assert!(module
+            .requirements()
+            .iter()
+            .any(|requirement| requirement.package == "bsl-xml"
+                && requirement.version == env!("CARGO_PKG_VERSION")));
+        assert!(module.bytecode().unwrap().contains("CreateObject"));
+        // Представление типа — «Сериализатор XDTO», как на платформе.
+        assert_eq!(
+            engine.new_state().run(&module).unwrap().to_string(),
+            "Сериализатор XDTO"
+        );
+
+        // Глобальная `ФабрикаXDTO` конфигурации — измеренно ловимый отказ.
+        let module = engine
+            .compile(
+                "Попытка\n Ф = ФабрикаXDTO();\n Возврат \"есть\";\n\
+                 Исключение\n Возврат \"нет\";\nКонецПопытки;",
+            )
+            .unwrap();
+        assert_eq!(engine.new_state().run(&module).unwrap().to_string(), "нет");
+    }
+
+    #[cfg(not(feature = "xml"))]
+    #[test]
+    fn missing_xml_feature_rejects_xdto_constructors() {
+        let engine = Engine::builder().build().unwrap();
+        assert!(engine.compile("Возврат Новый ФабрикаXDTO();").is_err());
+        assert!(engine
+            .compile("сер = Новый СериализаторXDTO(Неопределено);")
             .is_err());
     }
 

@@ -985,6 +985,14 @@ impl<'a> Resolver<'a> {
             }
             if matches!(
                 upper.as_str(),
+                "ФАБРИКАXDTO" | "XDTOFACTORY" | "СЕРИАЛИЗАТОРXDTO" | "XDTOSERIALIZER"
+            ) {
+                return Err(SemaError::Unsupported(
+                    "тип XDTO требует зарегистрированный компонент bsl-xml",
+                ));
+            }
+            if matches!(
+                upper.as_str(),
                 "ДОКУМЕНТPDF" | "PDFDOCUMENT" | "КОЛЛЕКЦИЯВЛОЖЕНИЙPDF" | "PDFATTACHMENTCOLLECTION"
             ) {
                 return Err(SemaError::Unsupported(

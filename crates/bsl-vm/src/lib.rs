@@ -1832,22 +1832,42 @@ fn step_cold(
         // Разбор набора схем в модель типов — работа не на один такт, и
         // место этой инструкции в холодной части безоговорочно.
         Instr::NewXdtoFactory { dst, schemas } => {
-            let set = reg_load(stack, frames[frame_idx].reg_index(schemas))?;
-            let factory = BslValue::new_xdto_factory(&set)?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, factory)?;
-            frames[frame_idx].pc += 1;
+            #[cfg(not(feature = "xml"))]
+            {
+                let _ = (dst, schemas);
+                return Err(RtError::Component(
+                    "ФабрикаXDTO требует компонент bsl-xml".to_string(),
+                ));
+            }
+            #[cfg(feature = "xml")]
+            {
+                let set = reg_load(stack, frames[frame_idx].reg_index(schemas))?;
+                let factory = bsl_xml::factory_of_schema_set(&set)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, factory)?;
+                frames[frame_idx].pc += 1;
+            }
         }
         // Модель уже построена фабрикой — сериализатор только берёт её
         // `Rc`, так что работа тут копеечная. Место всё равно холодное:
         // соседство важнее, а конструктор в горячем цикле не стоит своего
         // места в кэше микроопераций.
         Instr::NewXdtoSerializer { dst, factory } => {
-            let factory = reg_load(stack, frames[frame_idx].reg_index(factory))?;
-            let serializer = BslValue::new_xdto_serializer(&factory)?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, serializer)?;
-            frames[frame_idx].pc += 1;
+            #[cfg(not(feature = "xml"))]
+            {
+                let _ = (dst, factory);
+                return Err(RtError::Component(
+                    "СериализаторXDTO требует компонент bsl-xml".to_string(),
+                ));
+            }
+            #[cfg(feature = "xml")]
+            {
+                let factory = reg_load(stack, frames[frame_idx].reg_index(factory))?;
+                let serializer = bsl_xml::serializer_of_factory(&factory)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, serializer)?;
+                frames[frame_idx].pc += 1;
+            }
         }
         Instr::NewDomNsResolver { dst, node } => {
             let node = reg_load(stack, frames[frame_idx].reg_index(node))?;
@@ -3073,6 +3093,10 @@ fn call_builtin_with_format(
         BuiltinFn::StrReplaceByRegex => bsl_regexp::replace(args),
         #[cfg(feature = "regexp")]
         BuiltinFn::StrLikeByRegex => bsl_regexp::like(args),
+        #[cfg(feature = "xml")]
+        BuiltinFn::CreateXdtoFactory => bsl_xml::factory_of_file(args),
+        #[cfg(feature = "xml")]
+        BuiltinFn::XdtoConfigurationFactory => bsl_xml::configuration_factory(),
         // Не `call_builtin_fn`: `ЗаполнитьЗначенияСвойств` читает таблицу
         // имён, и путь без контекста для неё кончается ошибкой.
         other => bsl_rt::call_builtin_fn_ctx(other, args, runtime_shapes),

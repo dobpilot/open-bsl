@@ -12,7 +12,7 @@ mod dom;
 pub mod encoding;
 mod enums;
 mod fill;
-mod fold;
+pub mod fold;
 mod interner;
 mod locale;
 mod map;
@@ -31,11 +31,10 @@ mod types;
 mod tz;
 mod uuid;
 mod vstr;
-mod xdto;
 mod xlsx;
-mod xml;
+pub mod xml;
 pub mod xpath;
-mod xsd;
+pub mod xsd;
 
 use std::cmp::Ordering;
 use std::fmt;
@@ -71,7 +70,7 @@ pub use enums::{lookup_enum, lookup_member, members_of, EnumKind, EnumValue, ENU
 pub use interner::{NameId, NameInterner};
 pub use locale::{Locale, NBSP};
 pub use map::MapData;
-pub use object::{BslObject, StructureStorage};
+pub use object::{BslObject, StructureStorage, XmlReaderState};
 pub use object_protocol::{ByteStreamProtocol, ObjectProtocol, ObjectRef, TypeDescriptor};
 pub use runtime_shapes::RuntimeShapes;
 pub use shape::{Shape, ShapeTable, MAX_SHAPE_TRANSITIONS};
@@ -93,9 +92,6 @@ pub use vstr::{value_from_string_internal, value_to_string_internal};
 // Модель типов XDTO наружу крейта нужна целиком: строит её фабрика,
 // которой в этой реализации ещё нет, а до тех пор единственный её
 // потребитель — собственные тесты модуля.
-pub use xdto::{
-    model_of_schema, type_value, value_from_lexical, BuiltinBsl, XdtoModel, XdtoObjectData,
-};
 pub use xlsx::to_xlsx_bytes;
 pub use xml::{XmlAttr, XmlEvent, XmlParser, XmlWriter, XmlWriterSettings};
 
@@ -505,22 +501,17 @@ impl BslValue {
                     Some(name) => name,
                     None => unreachable!("вид проверен объемлющим match"),
                 },
-                // Имена значений модели типов XDTO — одной таблицей в
-                // `xdto.rs`, рядом с их `ТипЗнч()`.
-                obj @ (BslObject::XdtoType(..)
-                | BslObject::XdtoProperty(..)
-                | BslObject::XdtoProperties(..)
-                | BslObject::XdtoFacets(..)
-                | BslObject::XdtoFacet(..)
-                | BslObject::XdtoValue(..)
-                | BslObject::XdtoFactory(_)
-                | BslObject::XdtoSerializer(_)
-                | BslObject::XdtoObject(..)
-                | BslObject::XdtoList(..)
-                | BslObject::XdtoSequence(..)) => match crate::xdto::type_name_of(obj) {
-                    Some(name) => name,
-                    None => "ТипЗначенияXDTO",
-                },
+                BslObject::ReservedXdtoType
+                | BslObject::ReservedXdtoProperty
+                | BslObject::ReservedXdtoProperties
+                | BslObject::ReservedXdtoFacets
+                | BslObject::ReservedXdtoFacet
+                | BslObject::ReservedXdtoValue
+                | BslObject::ReservedXdtoFactory
+                | BslObject::ReservedXdtoSerializer
+                | BslObject::ReservedXdtoObject
+                | BslObject::ReservedXdtoList
+                | BslObject::ReservedXdtoSequence => "",
                 BslObject::SpreadDocument(_) => "ТабличныйДокумент",
                 BslObject::SpreadDrawings(_) => "КоллекцияРисунковТабличногоДокумента",
                 BslObject::SpreadDrawing(..) => "РисунокТабличногоДокумента",
@@ -1319,15 +1310,6 @@ impl BslValue {
                 BslObject::DomList(kind, _) => !kind.is_empty(),
                 // Коллекции модели схемы — по тому же критерию длины.
                 BslObject::XsList(_, kind) => !kind.is_empty(),
-                // Коллекции модели типов XDTO — тоже по длине: измерено,
-                // что непустые `Свойства` и `Фасеты` дают «Да», а пустые
-                // `Свойства` типа без содержимого — «Нет».
-                obj @ (BslObject::XdtoProperties(..) | BslObject::XdtoFacets(..)) => {
-                    match crate::xdto::collection_len(obj) {
-                        Some(len) => len? != 0,
-                        None => false,
-                    }
-                }
                 BslObject::XmlExpandedNameList(names) => !names.is_empty(),
                 // ИЗМЕРЕНО, и для потока, и для менеджера:
                 // `ЗначениеЗаполнено` от них платформа отвергает — это
@@ -1396,19 +1378,17 @@ impl BslValue {
                 // `ЗначениеЗаполнено` от них — нет и не будет, пока проба
                 // вешает платформу.
                 //
-                // Сериализатор к неизмеренным НЕ относится: у него проба
-                // прошла и дала ошибку «Проверка мутабельных значений на
-                // заполненность не поддерживается».
-                // НЕ ИЗМЕРЕНО(XDTO.VALUE.FILLED)
-                | BslObject::XdtoType(..)
-                | BslObject::XdtoProperty(..)
-                | BslObject::XdtoFacet(..)
-                | BslObject::XdtoValue(..)
-                | BslObject::XdtoFactory(..)
-                | BslObject::XdtoSerializer(..)
-                | BslObject::XdtoObject(..)
-                | BslObject::XdtoList(..)
-                | BslObject::XdtoSequence(..) => {
+                | BslObject::ReservedXdtoType
+                | BslObject::ReservedXdtoProperty
+                | BslObject::ReservedXdtoProperties
+                | BslObject::ReservedXdtoFacets
+                | BslObject::ReservedXdtoFacet
+                | BslObject::ReservedXdtoValue
+                | BslObject::ReservedXdtoFactory
+                | BslObject::ReservedXdtoSerializer
+                | BslObject::ReservedXdtoObject
+                | BslObject::ReservedXdtoList
+                | BslObject::ReservedXdtoSequence => {
                     return Err(RtError::TypeError {
                         expected: "Значение, у которого есть признак заполненности",
                         op: "ЗначениеЗаполнено",
@@ -1528,20 +1508,17 @@ impl BslValue {
                     Some(id) => id,
                     None => unreachable!("вид проверен объемлющим match"),
                 },
-                obj @ (BslObject::XdtoType(..)
-                | BslObject::XdtoProperty(..)
-                | BslObject::XdtoProperties(..)
-                | BslObject::XdtoFacets(..)
-                | BslObject::XdtoFacet(..)
-                | BslObject::XdtoValue(..)
-                | BslObject::XdtoFactory(_)
-                | BslObject::XdtoSerializer(_)
-                | BslObject::XdtoObject(..)
-                | BslObject::XdtoList(..)
-                | BslObject::XdtoSequence(..)) => match crate::xdto::type_id_of(obj) {
-                    Some(id) => id,
-                    None => TypeId::XdtoValueType,
-                },
+                BslObject::ReservedXdtoType => TypeId::XdtoObjectType,
+                BslObject::ReservedXdtoProperty => TypeId::XdtoProperty,
+                BslObject::ReservedXdtoProperties => TypeId::XdtoPropertyCollection,
+                BslObject::ReservedXdtoFacets => TypeId::XdtoFacetCollection,
+                BslObject::ReservedXdtoFacet => TypeId::XdtoFacet,
+                BslObject::ReservedXdtoValue => TypeId::XdtoDataValue,
+                BslObject::ReservedXdtoFactory => TypeId::XdtoFactory,
+                BslObject::ReservedXdtoSerializer => TypeId::XdtoSerializer,
+                BslObject::ReservedXdtoObject => TypeId::XdtoDataObject,
+                BslObject::ReservedXdtoList => TypeId::XdtoList,
+                BslObject::ReservedXdtoSequence => TypeId::XdtoSequence,
             },
             BslValue::Skipped => {
                 return Err(RtError::TypeError {
@@ -1806,25 +1783,6 @@ impl BslValue {
 
     /// `Новый ФабрикаXDTO([НаборСхемXML])` — модель типов по набору схем.
     /// Без аргумента (тогда сюда приходит `Неопределено`) получается
-    /// фабрика с одними встроенными типами XML Schema.
-    ///
-    /// # Errors
-    ///
-    /// [`RtError::Xdto`], если аргумент не набор схем либо модель по схемам
-    /// не строится.
-    pub fn new_xdto_factory(schemas: &BslValue) -> RtResult<Self> {
-        xdto::factory_of_schema_set(schemas)
-    }
-
-    /// `Новый СериализаторXDTO(ФабрикаXDTO)` — фабрика обязательна.
-    ///
-    /// # Errors
-    ///
-    /// [`RtError::Xdto`], если аргумент не фабрика XDTO.
-    pub fn new_xdto_serializer(factory: &BslValue) -> RtResult<Self> {
-        xdto::serializer_of_factory(factory)
-    }
-
     /// `Новый РасширенноеИмяXML(URI, ЛокальноеИмя)` — ровно два аргумента,
     /// оба строки (измерено: одноаргументная форма отвергается).
     ///
@@ -2335,9 +2293,6 @@ impl BslValue {
                     xsd::name_list_get(names, Self::index_as_usize(idx)?)
                 }
                 BslObject::XsSchemaSet(_) => xsd::schema_set_get(self, Self::index_as_usize(idx)?),
-                obj @ (BslObject::XdtoProperties(..)
-                | BslObject::XdtoFacets(..)
-                | BslObject::XdtoList(..)) => xdto::collection_get(obj, Self::index_as_usize(idx)?),
                 _ => Err(RtError::NotIndexable),
             },
             _ => Err(RtError::NotIndexable),
@@ -2426,25 +2381,17 @@ impl BslValue {
                 // `Количество()` и `Для Каждого` по свойствам и по
                 // фасетам измерены. Сами тип, свойство, фасет и значение
                 // — нет.
-                // Экземплярные коллекции — там же: `Количество()` измерено и
-                // у `СписокXDTO`, и у `ПоследовательностьXDTO`. Обход
-                // `Для Каждого` при этом получается только у списка —
-                // последовательность не индексируется (измерено), и цикл
-                // спотыкается о `get_index`, как на платформе.
-                obj @ (BslObject::XdtoProperties(..)
-                | BslObject::XdtoFacets(..)
-                | BslObject::XdtoList(..)
-                | BslObject::XdtoSequence(..)) => match xdto::collection_len(obj) {
-                    Some(len) => len,
-                    None => Err(RtError::NotIndexable),
-                },
-                BslObject::XdtoType(..)
-                | BslObject::XdtoProperty(..)
-                | BslObject::XdtoFacet(..)
-                | BslObject::XdtoValue(..)
-                | BslObject::XdtoFactory(..)
-                | BslObject::XdtoSerializer(..)
-                | BslObject::XdtoObject(..) => Err(RtError::NotIndexable),
+                BslObject::ReservedXdtoType
+                | BslObject::ReservedXdtoProperty
+                | BslObject::ReservedXdtoProperties
+                | BslObject::ReservedXdtoFacets
+                | BslObject::ReservedXdtoFacet
+                | BslObject::ReservedXdtoValue
+                | BslObject::ReservedXdtoFactory
+                | BslObject::ReservedXdtoSerializer
+                | BslObject::ReservedXdtoObject
+                | BslObject::ReservedXdtoList
+                | BslObject::ReservedXdtoSequence => Err(RtError::NotIndexable),
                 BslObject::TextWriter(..)
                 | BslObject::ReservedJsonReader
                 | BslObject::ReservedJsonWriter
@@ -2867,16 +2814,6 @@ impl BslValue {
                 BslObject::XsComponent(..) | BslObject::XmlExpandedName(_) => {
                     xsd::get_property(self, name)
                 }
-                // У экземпляра точкой читаются СВОЙСТВА ЕГО ТИПА, у списка и
-                // последовательности — только `Владелец` (измерено), у
-                // самой фабрики членов нет вовсе.
-                BslObject::XdtoType(..)
-                | BslObject::XdtoProperty(..)
-                | BslObject::XdtoFacet(..)
-                | BslObject::XdtoValue(..)
-                | BslObject::XdtoObject(..)
-                | BslObject::XdtoList(..)
-                | BslObject::XdtoSequence(..) => xdto::get_property(self, name),
                 BslObject::KeyValuePair(k, v) => {
                     if name.eq_ignore_ascii_case("Ключ") || name.eq_ignore_ascii_case("Key") {
                         Ok(k.clone())
@@ -2944,10 +2881,6 @@ impl BslValue {
                 // содержимое, а имя узла только читается — см.
                 // `dom::set_property`.
                 BslObject::DomNode(..) => dom::set_property(self, name, &val),
-                // Свойства экземпляра XDTO пишутся точкой, с приведением к
-                // типу свойства; множественное свойство так не пишется
-                // (измерено), для него есть `СписокXDTO`.
-                BslObject::XdtoObject(..) => xdto::set_property(self, name, val),
                 BslObject::TableRow(data, row_id) => {
                     let mut data = data.borrow_mut();
                     let col = data
@@ -3071,8 +3004,6 @@ impl BslValue {
                     v.remove(i);
                     Ok(())
                 }
-                // `СписокXDTO.Удалить(i)` — по позиции, как у массива.
-                BslObject::XdtoList(..) => xdto::list_delete(self, idx),
                 BslObject::ValueTable(data) => {
                     let mut d = data.borrow_mut();
                     let i = Self::index_as_usize(idx)?;
@@ -3534,11 +3465,6 @@ impl BslValue {
                     data.borrow_mut().clear();
                     Ok(())
                 }
-                // У списка `Очистить` забывает заполнения его свойства, у
-                // последовательности — заполнения всех свойств-элементов
-                // (атрибуты уцелевают, измерено).
-                BslObject::XdtoList(..) => xdto::list_clear(self),
-                BslObject::XdtoSequence(..) => xdto::sequence_clear(self),
                 _ => Err(RtError::MethodNotApplicable {
                     method: "Очистить",
                     receiver: self.type_name(),
@@ -3638,28 +3564,6 @@ impl PartialEq for BslValue {
                 // имени с одинаковыми URI и локальным именем равны
                 // (измерено).
                 (BslObject::XmlExpandedName(x), BslObject::XmlExpandedName(y)) => x == y,
-                // Типы и свойства XDTO — тоже ССЫЛКИ на место в модели, и
-                // тождество у них такое же: та же модель, тот же номер.
-                // ИЗМЕРЕНО: два `Тип("urn:test", "RootType")` одной
-                // фабрики равны.
-                (BslObject::XdtoType(a, i), BslObject::XdtoType(b, j))
-                | (BslObject::XdtoProperty(a, i), BslObject::XdtoProperty(b, j)) => {
-                    i == j && Rc::ptr_eq(a, b)
-                }
-                // Экземпляр — по ХРАНИЛИЩУ, а не по обёртке: обёртку
-                // строит каждое чтение свойства и каждый `Владелец()`, и
-                // измерено, что `О.anon = А` после `О.anon = А` — «Да», а
-                // `А.Владелец() = О` — тоже «Да». Два отдельно созданных
-                // объекта одного типа при этом не равны (измерено) — и не
-                // равны здесь, потому что хранилища разные.
-                (BslObject::XdtoObject(a), BslObject::XdtoObject(b))
-                | (BslObject::XdtoSequence(a), BslObject::XdtoSequence(b)) => Rc::ptr_eq(a, b),
-                // Список — окно «то же хранилище, то же свойство»:
-                // измерено, что `О.code = О.code` — «Да», хотя каждое
-                // чтение строит своё значение.
-                (BslObject::XdtoList(a, i), BslObject::XdtoList(b, j)) => {
-                    i == j && Rc::ptr_eq(a, b)
-                }
                 _ => false,
             },
             _ => false,
@@ -3853,22 +3757,17 @@ impl fmt::Display for BslValue {
                     Some(name) => write!(f, "{name}"),
                     None => unreachable!("вид проверен объемлющим match"),
                 },
-                // Тип XDTO печатается расширенным именем, свойство —
-                // своим именем, остальные — именем типа (измерено).
-                obj @ (BslObject::XdtoType(..)
-                | BslObject::XdtoProperty(..)
-                | BslObject::XdtoProperties(..)
-                | BslObject::XdtoFacets(..)
-                | BslObject::XdtoFacet(..)
-                | BslObject::XdtoValue(..)
-                | BslObject::XdtoFactory(_)
-                | BslObject::XdtoSerializer(_)
-                | BslObject::XdtoObject(..)
-                | BslObject::XdtoList(..)
-                | BslObject::XdtoSequence(..)) => match crate::xdto::display_text(obj) {
-                    Some(text) => write!(f, "{text}"),
-                    None => unreachable!("вид проверен объемлющим match"),
-                },
+                BslObject::ReservedXdtoType
+                | BslObject::ReservedXdtoProperty
+                | BslObject::ReservedXdtoProperties
+                | BslObject::ReservedXdtoFacets
+                | BslObject::ReservedXdtoFacet
+                | BslObject::ReservedXdtoValue
+                | BslObject::ReservedXdtoFactory
+                | BslObject::ReservedXdtoSerializer
+                | BslObject::ReservedXdtoObject
+                | BslObject::ReservedXdtoList
+                | BslObject::ReservedXdtoSequence => write!(f, "{}", self.type_name()),
             },
             // Никогда не должно реально дойти до печати (см. doc comment
             // на варианте) — но `Display` обязан быть тотальным.

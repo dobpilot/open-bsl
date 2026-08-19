@@ -1123,7 +1123,7 @@ pub enum BuiltinMethod {
     /// `СериализаторXDTO.XMLТип(Тип)` — отображение типа BSL в тип XML.
     /// ИЗМЕРЕН существующим (отдаёт `ТипДанныхXML`), но здесь не
     /// поддержан: вызов даёт перехватываемый отказ «не поддерживается»
-    /// (`xdto::serializer_unsupported`).
+    /// (прежний `serializer_unsupported`, теперь в компоненте bsl-xml).
     XdtoXmlTypeOfType,
     /// `СериализаторXDTO.XMLТипЗнч(Значение)` — то же от значения.
     XdtoXmlTypeOfValue,
@@ -1585,19 +1585,11 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
                 .map(|a| BslValue::Str(BslString::from_str(a)))
                 .collect(),
         )),
-        BuiltinFn::CreateXdtoFactory => crate::xdto::factory_of_file(args),
-        // Глобальная `ФабрикаXDTO` — фабрика КОНФИГУРАЦИИ, а конфигурации
-        // здесь нет: скрипт исполняется сам по себе, метаданных с пакетами
-        // XDTO у него нет и взяться им неоткуда. Платформа в этом месте
-        // отдаёт живую фабрику (измерено, `Тип({...}string)` у неё есть), и
-        // расхождение сознательное: отдать ПУСТУЮ фабрику было бы хуже —
-        // код молча получал бы `Неопределено` вместо своих типов вместо
-        // внятного «фабрики конфигурации нет».
-        BuiltinFn::XdtoConfigurationFactory => Err(RtError::Xdto(
-            "глобальная ФабрикаXDTO — фабрика конфигурации, а метаданных конфигурации \
-             у этой реализации нет; фабрику по схеме строят СоздатьФабрикуXDTO(ПутьКXSD) \
-             и Новый ФабрикаXDTO(НаборСхемXML)"
-                .to_string(),
+        BuiltinFn::CreateXdtoFactory => Err(RtError::Component(
+            "функции XDTO выполняются компонентом bsl-xml".to_string(),
+        )),
+        BuiltinFn::XdtoConfigurationFactory => Err(RtError::Component(
+            "функции XDTO выполняются компонентом bsl-xml".to_string(),
         )),
         BuiltinFn::DatePartOf(part) => args[0].date_component(part),
         BuiltinFn::DateBoundaryOf(which) => args[0].date_boundary(which),
@@ -1810,11 +1802,6 @@ pub fn call_builtin_method(
             // второй раз проходит молча, а другая схема того же
             // пространства имён — ошибка (измерено).
             _ if crate::xsd::is_schema_set(obj) => crate::xsd::schema_set_add(obj, args),
-            // `СписокXDTO.Добавить(Значение)` и
-            // `ПоследовательностьXDTO.Добавить(Свойство, Значение)` — одно
-            // имя, разная арность, разводится получателем.
-            _ if crate::xdto::is_list(obj) => crate::xdto::list_add(obj, args),
-            _ if crate::xdto::is_sequence(obj) => crate::xdto::sequence_add(obj, args),
             [] => obj.table_add_row(),
             [v] => match obj.push_element(v.clone()) {
                 Ok(()) => Ok(BslValue::Undefined),
@@ -1850,7 +1837,6 @@ pub fn call_builtin_method(
                 obj.map_insert(args[0].clone(), args[1].clone())?;
                 Ok(BslValue::Undefined)
             }
-            _ if crate::xdto::is_list(obj) => crate::xdto::list_insert(obj, args),
             // `Структура.Вставить` доходит сюда, только если `obj` НЕ
             // структура — сам структурный случай перехвачен раньше, в
             // `call_builtin_method_ctx` (нужен рантайм-контекст форм).
@@ -1871,27 +1857,6 @@ pub fn call_builtin_method(
             BslValue::Object(o) if matches!(&**o, BslObject::XsList(..)) => {
                 crate::xsd::list_lookup(obj, args)
             }
-            // Модель типов XDTO: у коллекции свойств `Получить` берёт имя
-            // или номер, у коллекции фасетов — только номер (измерено:
-            // `Фасеты.Получить("minLength")` платформа отвергает).
-            BslValue::Object(o)
-                if matches!(
-                    &**o,
-                    BslObject::XdtoProperties(..) | BslObject::XdtoFacets(..)
-                ) =>
-            {
-                crate::xdto::collection_lookup(obj, args)
-            }
-            // У экземпляра `Получить` берёт имя свойства или само
-            // `СвойствоXDTO`, у списка — номер (измерено оба).
-            _ if crate::xdto::is_object(obj) => crate::xdto::object_get(obj, args),
-            _ if crate::xdto::is_list(obj) => match args {
-                [index] => crate::xdto::list_get(obj, BslValue::index_as_usize(index)?),
-                _ => Err(RtError::MethodNotApplicable {
-                    method: "Получить",
-                    receiver: obj.type_name(),
-                }),
-            },
             BslValue::Object(o) if matches!(&**o, BslObject::XsSchemaSet(_)) => match args {
                 [BslValue::Number(n)] => {
                     let i = n
@@ -2163,11 +2128,6 @@ pub fn call_builtin_method(
 
         // --- БуферДвоичныхДанных ------------------------------------------
         BuiltinMethod::BufSet => match args {
-            // `Установить` делят буфер, экземпляр XDTO (имя свойства и
-            // значение) и его список (номер и значение) — решает
-            // получатель.
-            _ if crate::xdto::is_object(obj) => crate::xdto::object_set(obj, args),
-            _ if crate::xdto::is_list(obj) => crate::xdto::list_set(obj, args),
             [pos, value] => crate::binbuf::set_byte(obj, pos, value).map(|()| BslValue::Undefined),
             _ => Err(RtError::MethodNotApplicable {
                 method: "Установить",
@@ -2339,32 +2299,53 @@ pub fn call_builtin_method(
             method: "метод bsl-stream",
             receiver: obj.type_name(),
         }),
-        // `Создать` делят менеджер файловых потоков и фабрика XDTO —
-        // получатель решает, что это значит.
-        BuiltinMethod::Create if crate::xdto::is_factory(obj) => {
-            crate::xdto::factory_create(obj, args)
-        }
         BuiltinMethod::Create => Err(RtError::MethodNotApplicable {
             method: "Создать",
             receiver: obj.type_name(),
         }),
-        // `Тип` — то же самое: у фабрики это поиск типа, а у экземпляра и
-        // у `ЗначениеXDTO` — собственный тип (измерено на обоих).
-        BuiltinMethod::XdtoType if crate::xdto::is_object(obj) || crate::xdto::is_value(obj) => {
-            crate::xdto::object_type(obj, args)
-        }
-        BuiltinMethod::XdtoType => crate::xdto::factory_type(obj, args),
-
-        // --- экземпляр XDTO -------------------------------------------------
-        BuiltinMethod::XdtoGetList => crate::xdto::object_get_list(obj, args),
-        BuiltinMethod::XdtoIsSet => crate::xdto::object_is_set(obj, args),
-        BuiltinMethod::XdtoUnset => crate::xdto::object_unset(obj, args),
-        BuiltinMethod::XdtoValidate => crate::xdto::object_validate(obj, args),
-        BuiltinMethod::XdtoObjectProperties => crate::xdto::object_properties(obj, args),
-        BuiltinMethod::XdtoOwner => crate::xdto::object_owner(obj, args),
-        BuiltinMethod::XdtoSequenceOf => crate::xdto::object_sequence(obj, args),
-        BuiltinMethod::XdtoSequenceValue => crate::xdto::sequence_value(obj, args),
-        BuiltinMethod::XdtoSequenceProperty => crate::xdto::sequence_property(obj, args),
+        // Все получатели методов XDTO стали внешними объектами компонента
+        // bsl-xml и перехватываются протоколом раньше этой таблицы; сюда
+        // доходит только чужой получатель.
+        BuiltinMethod::XdtoType => Err(RtError::MethodNotApplicable {
+            method: "Тип",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::XdtoGetList => Err(RtError::MethodNotApplicable {
+            method: "ПолучитьСписок",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::XdtoIsSet => Err(RtError::MethodNotApplicable {
+            method: "Установлено",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::XdtoUnset => Err(RtError::MethodNotApplicable {
+            method: "Сбросить",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::XdtoValidate => Err(RtError::MethodNotApplicable {
+            method: "Проверить",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::XdtoObjectProperties => Err(RtError::MethodNotApplicable {
+            method: "Свойства",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::XdtoOwner => Err(RtError::MethodNotApplicable {
+            method: "Владелец",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::XdtoSequenceOf => Err(RtError::MethodNotApplicable {
+            method: "Последовательность",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::XdtoSequenceValue => Err(RtError::MethodNotApplicable {
+            method: "ПолучитьЗначение",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::XdtoSequenceProperty => Err(RtError::MethodNotApplicable {
+            method: "ПолучитьСвойство",
+            receiver: obj.type_name(),
+        }),
         // --- ввод-вывод: фабрика и сериализатор -----------------------------
         //
         // Оба имени принадлежат этим двум получателям и никому больше;
@@ -2372,18 +2353,6 @@ pub fn call_builtin_method(
         // всегда. Семантика у них РАЗНАЯ: фабрика ходит по типам схемы и
         // строит `ОбъектXDTO`/`ЗначениеXDTO`, сериализатор переводит
         // значения BSL, — поэтому разбор идёт по получателю, а не по имени.
-        BuiltinMethod::XdtoReadXml if crate::xdto::is_factory(obj) => {
-            crate::xdto::factory_read_xml(obj, args)
-        }
-        BuiltinMethod::XdtoWriteXml if crate::xdto::is_factory(obj) => {
-            crate::xdto::factory_write_xml(obj, args).map(|()| BslValue::Undefined)
-        }
-        BuiltinMethod::XdtoReadXml if crate::xdto::is_serializer(obj) => {
-            crate::xdto::serializer_read_xml(obj, args)
-        }
-        BuiltinMethod::XdtoWriteXml if crate::xdto::is_serializer(obj) => {
-            crate::xdto::serializer_write_xml(obj, args).map(|()| BslValue::Undefined)
-        }
         BuiltinMethod::XdtoReadXml => Err(RtError::MethodNotApplicable {
             method: "ПрочитатьXML",
             receiver: obj.type_name(),
@@ -2395,14 +2364,18 @@ pub fn call_builtin_method(
         // Три измеренных члена сериализатора, до которых очередь не дошла:
         // у своего получателя — честный отказ «не поддерживается», у
         // чужого — обычное «метод неприменим».
-        BuiltinMethod::XdtoXmlTypeOfType => Err(crate::xdto::serializer_unsupported(obj, "XMLТип")),
-        BuiltinMethod::XdtoXmlTypeOfValue => {
-            Err(crate::xdto::serializer_unsupported(obj, "XMLТипЗнч"))
-        }
-        BuiltinMethod::XdtoCanReadXml => Err(crate::xdto::serializer_unsupported(
-            obj,
-            "ВозможностьЧтенияXML",
-        )),
+        BuiltinMethod::XdtoXmlTypeOfType => Err(RtError::MethodNotApplicable {
+            method: "XMLТип",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::XdtoXmlTypeOfValue => Err(RtError::MethodNotApplicable {
+            method: "XMLТипЗнч",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::XdtoCanReadXml => Err(RtError::MethodNotApplicable {
+            method: "ВозможностьЧтенияXML",
+            receiver: obj.type_name(),
+        }),
     }
 }
 

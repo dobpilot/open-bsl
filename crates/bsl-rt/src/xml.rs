@@ -2133,7 +2133,7 @@ fn index_arg(arg: Option<&BslValue>) -> RtResult<usize> {
 
 /// Доступ к писателю получателя. `pub(crate)`, потому что тем же писателем
 /// пишет дерево DOM (`dom::write`): второго сериализатора XML в рантайме нет.
-pub(crate) fn with_writer<R>(
+pub fn with_writer<R>(
     obj: &BslValue,
     f: impl FnOnce(&mut XmlWriter) -> RtResult<R>,
 ) -> RtResult<R> {
@@ -2155,7 +2155,7 @@ pub(crate) fn with_writer<R>(
 ///
 /// [`RtError::MethodNotApplicable`], если получатель не `ЧтениеXML`, плюс
 /// всё, чем ответит `f`.
-pub(crate) fn with_reader<R>(
+pub fn with_reader<R>(
     obj: &BslValue,
     f: impl FnOnce(&mut XmlReaderState) -> RtResult<R>,
 ) -> RtResult<R> {

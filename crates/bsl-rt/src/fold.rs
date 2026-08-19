@@ -96,7 +96,7 @@ fn folded_string(s: &str) -> String {
 /// экзотика — через свёрнутые строки. Порядок проверок замерен на
 /// генерации `table_compare`.
 #[inline]
-pub(crate) fn folded_eq(a: &str, b: &str) -> bool {
+pub fn folded_eq(a: &str, b: &str) -> bool {
     if a == b {
         return true;
     }

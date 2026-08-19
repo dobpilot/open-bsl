@@ -3,7 +3,7 @@
 //! встроенных типов XML Schema типам BSL.
 //!
 //! Второго разборщика схем здесь нет: на вход идёт готовая `XsSchemaData`
-//! из [`crate::xsd`], а этот модуль превращает ЛЕКСИЧЕСКУЮ модель схемы в
+//! из [`bsl_rt::xsd`], а этот модуль превращает ЛЕКСИЧЕСКУЮ модель схемы в
 //! РАЗРЕШЁННУЮ модель типов — ту, где ссылки уже связаны, наследование
 //! сплющено, а границы вхождения посчитаны. Ровно этим две модели и
 //! различаются: `ОбъявлениеЭлементаXS` показывает написанное, а
@@ -78,7 +78,7 @@
 //!   ЧИСЛА, и `unbounded` показывается числом `-1`. Лексическая модель
 //!   схемы отвечает на то же самое иначе: `МаксимальноВходит` частицы с
 //!   `maxOccurs="unbounded"` — это СТРОКА `unbounded` (измерено, см.
-//!   [`crate::xsd`]). Границы ПЕРЕМНОЖАЮТСЯ по вложенным группам модели:
+//!   [`bsl_rt::xsd`]). Границы ПЕРЕМНОЖАЮТСЯ по вложенным группам модели:
 //!   `<xs:choice minOccurs="0">` превращает `1..1` вложенного элемента в
 //!   `0..1`, а `<xs:sequence maxOccurs="unbounded">` — `0..1` в `0..-1`;
 //! * `Форма` — член `ФормаXML` (`Элемент`, `Атрибут`, `Текст`), у
@@ -586,11 +586,50 @@ use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::rc::{Rc, Weak};
 
-use crate::object::BslObject;
-use crate::string::BslString;
-use crate::types::TypeId;
-use crate::xsd::{FacetKind, XName, XsKind, XsSchemaData, XSD_NS};
-use crate::{BslValue, EnumValue, RtError, RtResult};
+use bsl_rt::xsd::{FacetKind, XName, XsKind, XsSchemaData, XSD_NS};
+use bsl_rt::{
+    BslNumber, BslObject, BslString, BslValue, CallContext, EnumValue, ObjectProtocol, RtError,
+    RtResult, TypeDescriptor, TypeId,
+};
+
+/// Представление объекта XDTO за оболочкой [`XdtoShell`] — прежние
+/// варианты `BslObject`, один в один: модель и номер внутри неё либо
+/// хранилище экземпляра. Оболочка одна на одиннадцать видов, потому что
+/// поверхность у них общая и разводится получателем, как в прежних общих
+/// таблицах методов.
+#[derive(Debug)]
+pub enum XdtoRepr {
+    Type(Rc<XdtoModel>, usize),
+    Property(Rc<XdtoModel>, usize),
+    Properties(Rc<XdtoModel>, usize),
+    Facets(Rc<XdtoModel>, usize),
+    Facet(Rc<XdtoModel>, usize, usize),
+    Value(Rc<XdtoModel>, Rc<XdtoValueData>),
+    Factory(Rc<XdtoModel>),
+    Serializer(Rc<XdtoModel>),
+    Object(Rc<XdtoObjectData>),
+    List(Rc<XdtoObjectData>, usize),
+    Sequence(Rc<XdtoObjectData>),
+}
+
+/// Объект XDTO как расширяемый объект рантайма.
+#[derive(Debug)]
+pub struct XdtoShell {
+    repr: XdtoRepr,
+}
+
+/// Значение BSL из представления.
+fn shell_value(repr: XdtoRepr) -> BslValue {
+    BslValue::new_object(XdtoShell { repr })
+}
+
+/// Представление за значением, если это объект XDTO.
+fn repr_of(value: &BslValue) -> Option<&XdtoRepr> {
+    value
+        .object_ref()
+        .and_then(|object| object.downcast_ref::<XdtoShell>())
+        .map(|shell| &shell.repr)
+}
 
 // --- встроенные типы XML Schema ------------------------------------------
 
@@ -626,6 +665,9 @@ pub enum BuiltinBsl {
 
 impl BuiltinBsl {
     /// `ТипЗнч()` значения, которое получится из лексической формы.
+    /// Вне тестов встроенные типы проверяются через модель, поэтому
+    /// lib-цель метода не видит.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn type_id(self) -> TypeId {
         match self {
             BuiltinBsl::Str => TypeId::String,
@@ -1041,6 +1083,7 @@ fn broken(what: &str) -> RtError {
 /// [`RtError::Xdto`], если схема ссылается на неизвестный тип, содержит
 /// цикл наследования либо значение по умолчанию, которое не разбирается в
 /// объявленном типе.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn model_of_schema(schema: &Rc<XsSchemaData>) -> RtResult<Rc<XdtoModel>> {
     model_of_schemas(std::slice::from_ref(schema))
 }
@@ -1053,7 +1096,7 @@ pub fn model_of_schema(schema: &Rc<XsSchemaData>) -> RtResult<Rc<XdtoModel>> {
 /// схемам набора сразу: схема из одного пространства имён вправе ссылаться
 /// на тип из другой схемы того же набора. Двусмысленности это не создаёт —
 /// `НаборСхемXML` держит не больше одной схемы на пространство имён
-/// (измерено, см. [`crate::xsd`]).
+/// (измерено, см. [`bsl_rt::xsd`]).
 ///
 /// Пустой набор даёт фабрику с одними встроенными типами — ровно то же, что
 /// `Новый ФабрикаXDTO` без аргументов (измерено: у такой фабрики
@@ -2078,9 +2121,9 @@ fn builtin_from_lexical(bsl: BuiltinBsl, lexical: &str) -> RtResult<BslValue> {
         // (измерено — `чв Создать пустой dbl` и `чв пустое dbl`), как у
         // даты, времени и булева, поэтому double уходит в общий разбор.
         BuiltinBsl::Number if lexical.trim().is_empty() => {
-            Ok(BslValue::Number(bsl_number::BslNumber::from_i64(0)))
+            Ok(BslValue::Number(BslNumber::from_i64(0)))
         }
-        BuiltinBsl::Number => match bsl_number::BslNumber::parse_canonical(lexical.trim()) {
+        BuiltinBsl::Number => match BslNumber::parse_canonical(lexical.trim()) {
             Ok(n) => Ok(BslValue::Number(n)),
             Err(_) => Err(bad_lexical(lexical, "числа")),
         },
@@ -2114,7 +2157,7 @@ fn builtin_from_lexical(bsl: BuiltinBsl, lexical: &str) -> RtResult<BslValue> {
             if text.contains(':') || text.is_empty() {
                 return Err(bad_lexical(lexical, "«QName» без префикса"));
             }
-            Ok(crate::xsd::new_expanded_name("", text))
+            Ok(bsl_rt::xsd::new_expanded_name("", text))
         }
     }
 }
@@ -2140,8 +2183,7 @@ fn parse_exponential(text: &str) -> RtResult<BslValue> {
         }
         None => (text, 0),
     };
-    let mantissa =
-        bsl_number::BslNumber::parse_canonical(mantissa).map_err(|_| bad_lexical(text, "числа"))?;
+    let mantissa = BslNumber::parse_canonical(mantissa).map_err(|_| bad_lexical(text, "числа"))?;
     if exponent == 0 {
         return Ok(BslValue::Number(mantissa));
     }
@@ -2150,8 +2192,8 @@ fn parse_exponential(text: &str) -> RtResult<BslValue> {
     // обычное `/`, то есть с округлением до 27 знаков.
     let magnitude = u32::try_from(exponent.unsigned_abs())
         .map_err(|_| bad_lexical(text, "числа с показателем степени"))?;
-    let ten = bsl_number::BslNumber::from_i64(10);
-    let mut power = bsl_number::BslNumber::from_i64(1);
+    let ten = BslNumber::from_i64(10);
+    let mut power = BslNumber::from_i64(1);
     for _ in 0..magnitude {
         power = power
             .mul(&ten)
@@ -2179,7 +2221,7 @@ fn parse_xsd_date(text: &str) -> RtResult<BslValue> {
     if parts.next().is_some() {
         return Err(bad_lexical(text, "даты"));
     }
-    let wall = crate::BslDate::from_civil(year, month, day, 0, 0, 0)
+    let wall = bsl_rt::BslDate::from_civil(year, month, day, 0, 0, 0)
         .ok_or_else(|| bad_lexical(text, "даты"))?;
     Ok(BslValue::Date(apply_zone(wall, tail)?))
 }
@@ -2196,7 +2238,7 @@ fn parse_xsd_date_time(text: &str) -> RtResult<BslValue> {
     let month: u32 = parse_part(dp.next(), text, "«dateTime»")?;
     let day: u32 = parse_part(dp.next(), text, "«dateTime»")?;
     let (hour, minute, second) = parse_clock(&time_part[1..], text)?;
-    let wall = crate::BslDate::from_civil(year, month, day, hour, minute, second)
+    let wall = bsl_rt::BslDate::from_civil(year, month, day, hour, minute, second)
         .ok_or_else(|| bad_lexical(text, "«dateTime»"))?;
     Ok(BslValue::Date(apply_zone(wall, tail)?))
 }
@@ -2205,7 +2247,7 @@ fn parse_xsd_date_time(text: &str) -> RtResult<BslValue> {
 fn parse_xsd_time(text: &str) -> RtResult<BslValue> {
     let (body, tail) = split_zone(text, 0);
     let (hour, minute, second) = parse_clock(body, text)?;
-    let wall = crate::BslDate::from_civil(1, 1, 1, hour, minute, second)
+    let wall = bsl_rt::BslDate::from_civil(1, 1, 1, hour, minute, second)
         .ok_or_else(|| bad_lexical(text, "времени"))?;
     Ok(BslValue::Date(apply_zone(wall, tail)?))
 }
@@ -2259,11 +2301,11 @@ fn split_zone(text: &str, from: usize) -> (&str, Option<i32>) {
 /// Пояс пересчитывается в МЕСТНОЕ время машины, как это делает платформа
 /// (измерено: `2026-08-12T18:41:17Z` дало 21:41:17 на машине с +03:00, а
 /// `…+02:00` — 19:41:17). Без пояса запись остаётся как есть.
-fn apply_zone(wall: crate::BslDate, zone: Option<i32>) -> RtResult<crate::BslDate> {
+fn apply_zone(wall: bsl_rt::BslDate, zone: Option<i32>) -> RtResult<bsl_rt::BslDate> {
     match zone {
         None => Ok(wall),
-        Some(offset) => crate::local_date_from_utc_seconds(
-            crate::pseudo_unix_seconds(wall) - i64::from(offset),
+        Some(offset) => bsl_rt::local_date_from_utc_seconds(
+            bsl_rt::pseudo_unix_seconds(wall) - i64::from(offset),
             "лексическая форма XDTO",
         ),
     }
@@ -2342,21 +2384,21 @@ fn str_value(s: &str) -> BslValue {
 }
 
 fn number_value(n: i64) -> BslValue {
-    BslValue::Number(bsl_number::BslNumber::from_i64(n))
+    BslValue::Number(BslNumber::from_i64(n))
 }
 
 /// `ТипЗначенияXDTO`/`ТипОбъектаXDTO` по номеру в модели.
 pub fn type_value(model: &Rc<XdtoModel>, index: usize) -> BslValue {
-    BslValue::Object(Rc::new(BslObject::XdtoType(model.clone(), index)))
+    shell_value(XdtoRepr::Type(model.clone(), index))
 }
 
 fn property_value(model: &Rc<XdtoModel>, index: usize) -> BslValue {
-    BslValue::Object(Rc::new(BslObject::XdtoProperty(model.clone(), index)))
+    shell_value(XdtoRepr::Property(model.clone(), index))
 }
 
 /// `ЗначениеXDTO` из готовой пары «значение, лексическая форма».
 fn data_value(model: &Rc<XdtoModel>, data: &Rc<XdtoValueData>) -> BslValue {
-    BslValue::Object(Rc::new(BslObject::XdtoValue(model.clone(), data.clone())))
+    shell_value(XdtoRepr::Value(model.clone(), data.clone()))
 }
 
 /// Границы наружу: `unbounded` — это `-1` (измерено).
@@ -2381,14 +2423,14 @@ fn type_display(data: &XdtoTypeData) -> String {
 }
 
 /// Строковое представление значения модели типов.
-pub fn display_text(obj: &BslObject) -> Option<String> {
+pub fn display_text(obj: &XdtoRepr) -> Option<String> {
     Some(match obj {
-        BslObject::XdtoType(model, i) => match model.types.get(*i) {
+        XdtoRepr::Type(model, i) => match model.types.get(*i) {
             Some(data) => type_display(data),
             None => String::new(),
         },
         // Свойство печатается ИМЕНЕМ (измерено: `Строка(Свв)` -> `name`).
-        BslObject::XdtoProperty(model, i) => match model.properties.get(*i) {
+        XdtoRepr::Property(model, i) => match model.properties.get(*i) {
             Some(data) => data.name.clone(),
             None => String::new(),
         },
@@ -2397,61 +2439,37 @@ pub fn display_text(obj: &BslObject) -> Option<String> {
         // `ФабрикаXDTO`, `Строка(Объект)` -> `ОбъектXDTO`,
         // `Строка(О.code)` -> `СписокXDTO` (и пустого, и непустого),
         // `Строка(О.Последовательность())` -> `ПоследовательностьXDTO`.
-        BslObject::XdtoProperties(..)
-        | BslObject::XdtoFacets(..)
-        | BslObject::XdtoFacet(..)
-        | BslObject::XdtoValue(..)
-        | BslObject::XdtoFactory(_)
-        | BslObject::XdtoSerializer(_)
-        | BslObject::XdtoObject(..)
-        | BslObject::XdtoList(..)
-        | BslObject::XdtoSequence(..) => type_name_of(obj)?.to_string(),
-        _ => return None,
+        XdtoRepr::Properties(..)
+        | XdtoRepr::Facets(..)
+        | XdtoRepr::Facet(..)
+        | XdtoRepr::Value(..)
+        | XdtoRepr::Factory(_)
+        | XdtoRepr::Serializer(_)
+        | XdtoRepr::Object(..)
+        | XdtoRepr::List(..)
+        | XdtoRepr::Sequence(..) => type_name_of(obj)?.to_string(),
     })
 }
 
 /// Имя типа значения — то, чем зовут тип в коде.
-pub fn type_name_of(obj: &BslObject) -> Option<&'static str> {
+pub fn type_name_of(obj: &XdtoRepr) -> Option<&'static str> {
     Some(match obj {
-        BslObject::XdtoType(model, i) => match model.types.get(*i) {
+        XdtoRepr::Type(model, i) => match model.types.get(*i) {
             Some(data) if data.is_value() => "ТипЗначенияXDTO",
             Some(_) => "ТипОбъектаXDTO",
             None => return None,
         },
-        BslObject::XdtoProperty(..) => "СвойствоXDTO",
-        BslObject::XdtoProperties(..) => "КоллекцияСвойствXDTO",
-        BslObject::XdtoFacets(..) => "КоллекцияФасетовXDTO",
-        BslObject::XdtoFacet(..) => "ФасетXDTO",
-        BslObject::XdtoValue(..) => "ЗначениеXDTO",
-        BslObject::XdtoFactory(_) => "ФабрикаXDTO",
+        XdtoRepr::Property(..) => "СвойствоXDTO",
+        XdtoRepr::Properties(..) => "КоллекцияСвойствXDTO",
+        XdtoRepr::Facets(..) => "КоллекцияФасетовXDTO",
+        XdtoRepr::Facet(..) => "ФасетXDTO",
+        XdtoRepr::Value(..) => "ЗначениеXDTO",
+        XdtoRepr::Factory(_) => "ФабрикаXDTO",
         // Измерено: `Строка(Сер)` -> `СериализаторXDTO`, как у фабрики.
-        BslObject::XdtoSerializer(_) => "СериализаторXDTO",
-        BslObject::XdtoObject(..) => "ОбъектXDTO",
-        BslObject::XdtoList(..) => "СписокXDTO",
-        BslObject::XdtoSequence(..) => "ПоследовательностьXDTO",
-        _ => return None,
-    })
-}
-
-/// `ТипЗнч()` значения модели типов.
-pub fn type_id_of(obj: &BslObject) -> Option<TypeId> {
-    Some(match obj {
-        BslObject::XdtoType(model, i) => match model.types.get(*i) {
-            Some(data) if data.is_value() => TypeId::XdtoValueType,
-            Some(_) => TypeId::XdtoObjectType,
-            None => return None,
-        },
-        BslObject::XdtoProperty(..) => TypeId::XdtoProperty,
-        BslObject::XdtoProperties(..) => TypeId::XdtoPropertyCollection,
-        BslObject::XdtoFacets(..) => TypeId::XdtoFacetCollection,
-        BslObject::XdtoFacet(..) => TypeId::XdtoFacet,
-        BslObject::XdtoValue(..) => TypeId::XdtoDataValue,
-        BslObject::XdtoFactory(_) => TypeId::XdtoFactory,
-        BslObject::XdtoSerializer(_) => TypeId::XdtoSerializer,
-        BslObject::XdtoObject(..) => TypeId::XdtoDataObject,
-        BslObject::XdtoList(..) => TypeId::XdtoList,
-        BslObject::XdtoSequence(..) => TypeId::XdtoSequence,
-        _ => return None,
+        XdtoRepr::Serializer(_) => "СериализаторXDTO",
+        XdtoRepr::Object(..) => "ОбъектXDTO",
+        XdtoRepr::List(..) => "СписокXDTO",
+        XdtoRepr::Sequence(..) => "ПоследовательностьXDTO",
     })
 }
 
@@ -2465,7 +2483,7 @@ pub fn type_id_of(obj: &BslObject) -> Option<TypeId> {
 /// `Неопределено` — промах поиска, а не ошибка). Отсюда и `Rc<XdtoModel>`
 /// вместо ссылки на набор.
 pub fn factory_value(model: Rc<XdtoModel>) -> BslValue {
-    BslValue::Object(Rc::new(BslObject::XdtoFactory(model)))
+    shell_value(XdtoRepr::Factory(model))
 }
 
 /// `ОбъектXDTO` — свежий экземпляр типа объекта: хранилище пусто, владельца
@@ -2481,7 +2499,7 @@ fn object_value(model: &Rc<XdtoModel>, index: usize) -> BslValue {
 
 /// Значение вокруг готового хранилища — им же отдаётся `Владелец()`.
 fn instance_value(data: &Rc<XdtoObjectData>) -> BslValue {
-    BslValue::Object(Rc::new(BslObject::XdtoObject(data.clone())))
+    shell_value(XdtoRepr::Object(data.clone()))
 }
 
 /// `СоздатьФабрикуXDTO(Путь)` — фабрика по файлу XSD.
@@ -2508,7 +2526,7 @@ pub fn factory_of_file(args: &[BslValue]) -> RtResult<BslValue> {
     // Сигнатуру UTF-8 разборщик видит как символ перед `<` — снимаем её
     // так же, как `ЧтениеXML.ОткрытьФайл`.
     let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
-    let schema = crate::xsd::schema_of_text(text)?;
+    let schema = bsl_rt::xsd::schema_of_text(text)?;
     Ok(factory_value(model_of_schemas(&[schema])?))
 }
 
@@ -2522,7 +2540,7 @@ pub fn factory_of_file(args: &[BslValue]) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// [`RtError::Xdto`], если аргумент не `НаборСхемXML`; ошибки построения
-/// модели — из [`model_of_schemas`].
+/// модели — из `model_of_schemas`.
 pub fn factory_of_schema_set(arg: &BslValue) -> RtResult<BslValue> {
     let schemas: Vec<Rc<XsSchemaData>> = match arg {
         BslValue::Undefined => Vec::new(),
@@ -2543,31 +2561,11 @@ fn bad_factory_source() -> RtError {
     )
 }
 
-/// Фабрика ли это — нужно диспетчеру методов: имя `Создать` делят фабрика
-/// и менеджер файловых потоков.
+/// Фабрика ли это — вне тестов диспетчер ветвится по представлению
+/// напрямую, поэтому lib-цель проверку не видит.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn is_factory(v: &BslValue) -> bool {
-    matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::XdtoFactory(_)))
-}
-
-/// Экземпляр `ОбъектXDTO` ли это.
-pub fn is_object(v: &BslValue) -> bool {
-    matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::XdtoObject(..)))
-}
-
-/// `ЗначениеXDTO` ли это — у него свой `Тип()`, как у экземпляра.
-pub fn is_value(v: &BslValue) -> bool {
-    matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::XdtoValue(..)))
-}
-
-/// `СписокXDTO` ли это — нужно диспетчеру методов: имена `Добавить`,
-/// `Получить`, `Установить` делят между собой все коллекции рантайма.
-pub fn is_list(v: &BslValue) -> bool {
-    matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::XdtoList(..)))
-}
-
-/// `ПоследовательностьXDTO` ли это.
-pub fn is_sequence(v: &BslValue) -> bool {
-    matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::XdtoSequence(..)))
+    matches!(repr_of(v), Some(XdtoRepr::Factory(_)))
 }
 
 fn not_applicable(obj: &BslValue, method: &'static str) -> RtError {
@@ -2579,11 +2577,8 @@ fn not_applicable(obj: &BslValue, method: &'static str) -> RtError {
 
 /// Модель фабрики-получателя.
 fn factory_model<'a>(obj: &'a BslValue, method: &'static str) -> RtResult<&'a Rc<XdtoModel>> {
-    match obj {
-        BslValue::Object(o) => match &**o {
-            BslObject::XdtoFactory(model) => Ok(model),
-            _ => Err(not_applicable(obj, method)),
-        },
+    match repr_of(obj) {
+        Some(XdtoRepr::Factory(model)) => Ok(model),
         _ => Err(not_applicable(obj, method)),
     }
 }
@@ -2650,10 +2645,7 @@ pub fn factory_create(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
     if rest.len() > 2 {
         return Err(not_applicable(obj, "Создать"));
     }
-    let BslValue::Object(o) = first else {
-        return Err(not_applicable(obj, "Создать"));
-    };
-    let BslObject::XdtoType(model, index) = &**o else {
+    let Some(XdtoRepr::Type(model, index)) = repr_of(first) else {
         return Err(not_applicable(obj, "Создать"));
     };
     // Модель берётся у САМОГО типа, а не у фабрики-получателя: тип и так
@@ -2708,11 +2700,9 @@ pub fn object_type(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
     // `ЗначениеXDTO` отвечает на `Тип()` так же — типом, по которому
     // разобрана его лексическая форма (измерено: `Создать(xs:int, "42")
     // .Тип()` -> `{...}int`).
-    if let BslValue::Object(o) = obj {
-        if let BslObject::XdtoValue(model, data) = &**o {
-            model.type_at(data.type_index)?;
-            return Ok(type_value(model, data.type_index));
-        }
+    if let Some(XdtoRepr::Value(model, data)) = repr_of(obj) {
+        model.type_at(data.type_index)?;
+        return Ok(type_value(model, data.type_index));
     }
     let data = instance_of(obj, "Тип")?;
     // Номер проверяется до построения значения: испорченная модель обязана
@@ -2752,12 +2742,12 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
     // том написании, в каком его первым увидел интерн полей, и `Значение`
     // в скрипте, где раньше встретилось `значение`, доходит сюда строчным.
     let is =
-        |ru: &str, en: &str| crate::fold::folded_eq(name, ru) || crate::fold::folded_eq(name, en);
-    let BslValue::Object(o) = obj else {
+        |ru: &str, en: &str| bsl_rt::fold::folded_eq(name, ru) || bsl_rt::fold::folded_eq(name, en);
+    let Some(o) = repr_of(obj) else {
         return Err(unknown());
     };
-    match &**o {
-        BslObject::XdtoType(model, i) => {
+    match o {
+        XdtoRepr::Type(model, i) => {
             let data = model.type_at(*i)?;
             if is("Имя", "Name") {
                 return Ok(str_value(&data.name));
@@ -2778,16 +2768,13 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
                     return Ok(if data.facets.is_empty() {
                         BslValue::Undefined
                     } else {
-                        BslValue::Object(Rc::new(BslObject::XdtoFacets(model.clone(), *i)))
+                        shell_value(XdtoRepr::Facets(model.clone(), *i))
                     });
                 }
                 return Err(unknown());
             }
             if is("Свойства", "Properties") {
-                return Ok(BslValue::Object(Rc::new(BslObject::XdtoProperties(
-                    model.clone(),
-                    *i,
-                ))));
+                return Ok(shell_value(XdtoRepr::Properties(model.clone(), *i)));
             }
             if is("Открытый", "Open") {
                 return Ok(BslValue::Boolean(data.open));
@@ -2806,7 +2793,7 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
             }
             Err(unknown())
         }
-        BslObject::XdtoProperty(model, i) => {
+        XdtoRepr::Property(model, i) => {
             let data = model.property_at(*i)?;
             if is("Имя", "Name") {
                 return Ok(str_value(&data.name));
@@ -2834,7 +2821,7 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
             }
             Err(unknown())
         }
-        BslObject::XdtoFacet(model, type_index, facet_index) => {
+        XdtoRepr::Facet(model, type_index, facet_index) => {
             let data = model.type_at(*type_index)?;
             let (kind, lexical) = data
                 .facets
@@ -2852,7 +2839,7 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
             }
             Err(unknown())
         }
-        BslObject::XdtoValue(_, data) => {
+        XdtoRepr::Value(_, data) => {
             if is("Значение", "Value") {
                 return Ok(data.value.clone());
             }
@@ -2864,15 +2851,15 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
         // Своих читаемых членов у фабрики нет: `Тип` и `Создать` — методы,
         // а на постороннее имя платформа отвечает ошибкой (измерено
         // `Фаб.НетТакогоЧлена`). `Пакеты` этой реализацией не поддержаны.
-        BslObject::XdtoFactory(_) => Err(unknown()),
+        XdtoRepr::Factory(_) => Err(unknown()),
         // У экземпляра члены — это СВОЙСТВА ЕГО ТИПА: `Тип`, `Владелец`,
         // `Свойства` читаются методами, а не точкой (измерено — все три
         // как члены отвергнуты).
-        BslObject::XdtoObject(data) => object_get_property(data, name),
+        XdtoRepr::Object(data) => object_get_property(data, name),
         // А вот у списка и последовательности владелец, наоборот, ЧЛЕН:
         // `Список.Владелец` даёт объект, `Список.Владелец()` — ошибка
         // (измерено обе пробы, и то же самое у последовательности).
-        BslObject::XdtoList(data, _) | BslObject::XdtoSequence(data) => {
+        XdtoRepr::List(data, _) | XdtoRepr::Sequence(data) => {
             if is("Владелец", "Owner") {
                 return Ok(instance_value(data));
             }
@@ -2887,18 +2874,16 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// [`RtError::Xdto`], если модель ссылается на несуществующий тип.
-pub fn collection_len(obj: &BslObject) -> Option<RtResult<usize>> {
+pub fn collection_len(obj: &XdtoRepr) -> Option<RtResult<usize>> {
     match obj {
-        BslObject::XdtoProperties(model, i) => {
-            Some(model.type_at(*i).map(|data| data.properties.len()))
-        }
-        BslObject::XdtoFacets(model, i) => Some(model.type_at(*i).map(|data| data.facets.len())),
+        XdtoRepr::Properties(model, i) => Some(model.type_at(*i).map(|data| data.properties.len())),
+        XdtoRepr::Facets(model, i) => Some(model.type_at(*i).map(|data| data.facets.len())),
         // Длина есть и у экземплярных коллекций: `Количество()` измерено и
         // у списка, и у последовательности. Разница между ними в другом —
         // список ещё и ИНДЕКСИРУЕТСЯ, а последовательность нет, поэтому
         // `Для Каждого` по ней платформа отвергает (измерено).
-        BslObject::XdtoList(data, prop) => Some(Ok(list_len(data, *prop))),
-        BslObject::XdtoSequence(data) => Some(sequence_len(data)),
+        XdtoRepr::List(data, prop) => Some(Ok(list_len(data, *prop))),
+        XdtoRepr::Sequence(data) => Some(sequence_len(data)),
         _ => None,
     }
 }
@@ -2908,9 +2893,9 @@ pub fn collection_len(obj: &BslObject) -> Option<RtResult<usize>> {
 /// # Errors
 ///
 /// [`RtError::IndexOutOfBounds`], если номер за границей.
-pub fn collection_get(obj: &BslObject, i: usize) -> RtResult<BslValue> {
+pub fn collection_get(obj: &XdtoRepr, i: usize) -> RtResult<BslValue> {
     match obj {
-        BslObject::XdtoProperties(model, t) => {
+        XdtoRepr::Properties(model, t) => {
             let data = model.type_at(*t)?;
             match data.properties.get(i) {
                 Some(p) => Ok(property_value(model, *p)),
@@ -2920,14 +2905,10 @@ pub fn collection_get(obj: &BslObject, i: usize) -> RtResult<BslValue> {
                 }),
             }
         }
-        BslObject::XdtoFacets(model, t) => {
+        XdtoRepr::Facets(model, t) => {
             let data = model.type_at(*t)?;
             if i < data.facets.len() {
-                Ok(BslValue::Object(Rc::new(BslObject::XdtoFacet(
-                    model.clone(),
-                    *t,
-                    i,
-                ))))
+                Ok(shell_value(XdtoRepr::Facet(model.clone(), *t, i)))
             } else {
                 Err(RtError::IndexOutOfBounds {
                     index: i as i64,
@@ -2936,7 +2917,7 @@ pub fn collection_get(obj: &BslObject, i: usize) -> RtResult<BslValue> {
             }
         }
         // `Список[i]` и `Для Каждого` по списку — измерены оба.
-        BslObject::XdtoList(data, prop) => list_item(data, *prop, i),
+        XdtoRepr::List(data, prop) => list_item(data, *prop, i),
         _ => Err(RtError::NotIndexable),
     }
 }
@@ -2954,14 +2935,14 @@ pub fn collection_lookup(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue
         method: "Получить",
         receiver: obj.type_name(),
     };
-    let BslValue::Object(o) = obj else {
+    let Some(o) = repr_of(obj) else {
         return Err(not_applicable());
     };
     let [arg] = args else {
         return Err(not_applicable());
     };
-    match (&**o, arg) {
-        (BslObject::XdtoProperties(model, t), BslValue::Str(s)) => {
+    match (o, arg) {
+        (XdtoRepr::Properties(model, t), BslValue::Str(s)) => {
             let data = model.type_at(*t)?;
             let name = s.to_string();
             // Неизвестное имя — `Неопределено`, а не ошибка (измерено).
@@ -2976,7 +2957,7 @@ pub fn collection_lookup(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue
                 })
                 .map_or(BslValue::Undefined, |p| property_value(model, *p)))
         }
-        (BslObject::XdtoProperties(..) | BslObject::XdtoFacets(..), BslValue::Number(n)) => {
+        (XdtoRepr::Properties(..) | XdtoRepr::Facets(..), BslValue::Number(n)) => {
             let index = n.to_i64_exact().ok_or_else(not_applicable)?;
             let len = match collection_len(o) {
                 Some(len) => len?,
@@ -3034,7 +3015,7 @@ impl XdtoObjectData {
     /// регистра не различает (измерено: `О.NAME` читает `name`).
     fn property_by_name(&self, name: &str) -> RtResult<Option<usize>> {
         for p in &self.type_data()?.properties {
-            if crate::fold::folded_eq(&self.model.property_at(*p)?.name, name) {
+            if bsl_rt::fold::folded_eq(&self.model.property_at(*p)?.name, name) {
                 return Ok(Some(*p));
             }
         }
@@ -3077,11 +3058,8 @@ fn is_multiple(prop: &XdtoPropertyData) -> bool {
 
 /// Хранилище получателя-экземпляра.
 fn instance_of<'a>(obj: &'a BslValue, method: &'static str) -> RtResult<&'a Rc<XdtoObjectData>> {
-    match obj {
-        BslValue::Object(o) => match &**o {
-            BslObject::XdtoObject(data) => Ok(data),
-            _ => Err(not_applicable(obj, method)),
-        },
+    match repr_of(obj) {
+        Some(XdtoRepr::Object(data)) => Ok(data),
         _ => Err(not_applicable(obj, method)),
     }
 }
@@ -3091,11 +3069,8 @@ fn list_of<'a>(
     obj: &'a BslValue,
     method: &'static str,
 ) -> RtResult<(&'a Rc<XdtoObjectData>, usize)> {
-    match obj {
-        BslValue::Object(o) => match &**o {
-            BslObject::XdtoList(data, prop) => Ok((data, *prop)),
-            _ => Err(not_applicable(obj, method)),
-        },
+    match repr_of(obj) {
+        Some(XdtoRepr::List(data, prop)) => Ok((data, *prop)),
         _ => Err(not_applicable(obj, method)),
     }
 }
@@ -3117,8 +3092,8 @@ fn property_arg(data: &XdtoObjectData, arg: &BslValue, method: &'static str) -> 
             let name = s.to_string();
             data.property_by_name(&name)?.ok_or_else(|| unknown(name))
         }
-        BslValue::Object(o) => match &**o {
-            BslObject::XdtoProperty(model, index) => {
+        BslValue::Object(_) => match repr_of(arg) {
+            Some(XdtoRepr::Property(model, index)) => {
                 // Чужое свойство — из другой модели или из другого типа —
                 // не годится: хранилище адресуется номерами СВОЕЙ модели.
                 if !Rc::ptr_eq(model, &data.model) || !data.type_data()?.properties.contains(index)
@@ -3195,10 +3170,7 @@ fn coerce_to_property(
         if is_any_type(data) {
             return Ok(value);
         }
-        let BslValue::Object(o) = &value else {
-            return Err(bad_property_value(model, target, &value));
-        };
-        let BslObject::XdtoObject(inst) = &**o else {
+        let Some(XdtoRepr::Object(inst)) = repr_of(&value) else {
             return Err(bad_property_value(model, target, &value));
         };
         if !Rc::ptr_eq(&inst.model, model) || !derives_from(model, inst.type_index, target) {
@@ -3211,11 +3183,8 @@ fn coerce_to_property(
     // из него ЗНАЧЕНИЕ, а не лексическую форму: `О.id = Создать(xs:string,
     // "5")` дало число 5, хотя типы источника и приёмника разные
     // (измерено).
-    let value = match &value {
-        BslValue::Object(o) => match &**o {
-            BslObject::XdtoValue(_, v) => v.value.clone(),
-            _ => value,
-        },
+    let value = match repr_of(&value) {
+        Some(XdtoRepr::Value(_, v)) => v.value.clone(),
         _ => value,
     };
     coerce_to_value_type(model, target, value)
@@ -3320,10 +3289,7 @@ fn object_get_property(data: &Rc<XdtoObjectData>, name: &str) -> RtResult<BslVal
         return Err(RtError::UnknownColumn(name.to_string()));
     };
     if is_multiple(data.model.property_at(prop)?) {
-        return Ok(BslValue::Object(Rc::new(BslObject::XdtoList(
-            data.clone(),
-            prop,
-        ))));
+        return Ok(shell_value(XdtoRepr::List(data.clone(), prop)));
     }
     data.single_value(prop)
 }
@@ -3415,10 +3381,7 @@ pub fn object_get_list(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> 
             data.model.property_at(prop)?.name
         )));
     }
-    Ok(BslValue::Object(Rc::new(BslObject::XdtoList(
-        data.clone(),
-        prop,
-    ))))
+    Ok(shell_value(XdtoRepr::List(data.clone(), prop)))
 }
 
 /// `ОбъектXDTO.Установлено(Имя|Свойство)`.
@@ -3469,10 +3432,10 @@ pub fn object_properties(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue
         return Err(not_applicable(obj, "Свойства"));
     }
     data.type_data()?;
-    Ok(BslValue::Object(Rc::new(BslObject::XdtoProperties(
+    Ok(shell_value(XdtoRepr::Properties(
         data.model.clone(),
         data.type_index,
-    ))))
+    )))
 }
 
 /// `ОбъектXDTO.Владелец()` — объект, в свойство которого этот записан;
@@ -3552,8 +3515,8 @@ fn validate_instance(data: &Rc<XdtoObjectData>, depth: usize) -> RtResult<()> {
         }
         for place in places {
             let nested = match data.entries.borrow().get(place).map(|e| e.value.clone()) {
-                Some(BslValue::Object(o)) => match &*o {
-                    BslObject::XdtoObject(inst) => Some(inst.clone()),
+                Some(value) => match repr_of(&value) {
+                    Some(XdtoRepr::Object(inst)) => Some(inst.clone()),
                     _ => None,
                 },
                 _ => None,
@@ -3585,9 +3548,7 @@ pub fn object_sequence(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> 
     if !data.type_data()?.sequenced() {
         return Ok(BslValue::Undefined);
     }
-    Ok(BslValue::Object(Rc::new(BslObject::XdtoSequence(
-        data.clone(),
-    ))))
+    Ok(shell_value(XdtoRepr::Sequence(data.clone())))
 }
 
 // --- `СписокXDTO` --------------------------------------------------------
@@ -3748,11 +3709,8 @@ fn index_arg(index: &BslValue, len: usize) -> RtResult<usize> {
 
 /// Хранилище получателя-последовательности.
 fn sequence_of<'a>(obj: &'a BslValue, method: &'static str) -> RtResult<&'a Rc<XdtoObjectData>> {
-    match obj {
-        BslValue::Object(o) => match &**o {
-            BslObject::XdtoSequence(data) => Ok(data),
-            _ => Err(not_applicable(obj, method)),
-        },
+    match repr_of(obj) {
+        Some(XdtoRepr::Sequence(data)) => Ok(data),
         _ => Err(not_applicable(obj, method)),
     }
 }
@@ -3901,7 +3859,7 @@ const MAX_XDTO_DEPTH: usize = 500;
 struct ElementHead {
     name: String,
     uri: String,
-    attrs: Rc<Vec<crate::xml::XmlAttr>>,
+    attrs: Rc<Vec<bsl_rt::xml::XmlAttr>>,
 }
 
 /// Что вышло из одного элемента.
@@ -3943,7 +3901,7 @@ pub fn factory_read_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue>
         [reader, ty] => (reader, Some(ty)),
         _ => return Err(not_applicable(obj, "ПрочитатьXML")),
     };
-    if !crate::xml::is_xml_reader(reader) {
+    if !bsl_rt::xml::is_xml_reader(reader) {
         return Err(RtError::Xdto(
             "ПрочитатьXML читает из «ЧтениеXML»".to_string(),
         ));
@@ -3956,14 +3914,11 @@ pub fn factory_read_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue>
                 .to_string(),
         ));
     };
-    let (model, type_index) = match type_arg {
-        BslValue::Object(o) => match &**o {
-            BslObject::XdtoType(model, i) => (model.clone(), *i),
-            _ => return Err(bad_read_type(type_arg)),
-        },
+    let (model, type_index) = match repr_of(type_arg) {
+        Some(XdtoRepr::Type(model, i)) => (model.clone(), *i),
         _ => return Err(bad_read_type(type_arg)),
     };
-    crate::xml::with_reader(reader, |state| read_document(state, &model, type_index))
+    bsl_rt::xml::with_reader(reader, |state| read_document(state, &model, type_index))
 }
 
 fn bad_read_type(arg: &BslValue) -> RtError {
@@ -3981,7 +3936,7 @@ fn bad_read_type(arg: &BslValue) -> RtError {
 /// — «Нет»). Поэтому два элемента подряд читаются двумя вызовами без
 /// `Прочитать()` между ними.
 fn read_document(
-    state: &mut crate::object::XmlReaderState,
+    state: &mut bsl_rt::XmlReaderState,
     model: &Rc<XdtoModel>,
     type_index: usize,
 ) -> RtResult<BslValue> {
@@ -4022,8 +3977,8 @@ fn read_document(
 /// [`RtError::Xdto`], если источник не задан или в нём не осталось
 /// элементов; ошибка самого разбора приходит из `read`.
 fn read_one<T>(
-    state: &mut crate::object::XmlReaderState,
-    read: impl FnOnce(&mut crate::xml::XmlParser, &ElementHead) -> RtResult<T>,
+    state: &mut bsl_rt::XmlReaderState,
+    read: impl FnOnce(&mut bsl_rt::xml::XmlParser, &ElementHead) -> RtResult<T>,
 ) -> RtResult<T> {
     let mut current = state.current.take();
     let parser = state
@@ -4032,7 +3987,7 @@ fn read_one<T>(
         .ok_or_else(|| RtError::Xdto("источник для ЧтениеXML не задан".to_string()))?;
     let head = loop {
         match current {
-            Some(crate::xml::XmlEvent::ElementStart { name, uri, attrs }) => {
+            Some(bsl_rt::xml::XmlEvent::ElementStart { name, uri, attrs }) => {
                 break ElementHead { name, uri, attrs }
             }
             _ => match parser.read()? {
@@ -4050,7 +4005,7 @@ fn read_one<T>(
     state.depth = state
         .parser
         .as_ref()
-        .map_or(0, crate::xml::XmlParser::depth);
+        .map_or(0, bsl_rt::xml::XmlParser::depth);
     state.current = next;
     state.attr_cursor = None;
     Ok(out)
@@ -4059,7 +4014,7 @@ fn read_one<T>(
 /// Разбор элемента, начальный тег которого уже прочитан: разбор идёт до
 /// парного закрывающего тега включительно.
 fn read_element(
-    parser: &mut crate::xml::XmlParser,
+    parser: &mut bsl_rt::xml::XmlParser,
     model: &Rc<XdtoModel>,
     type_index: usize,
     head: &ElementHead,
@@ -4086,18 +4041,18 @@ fn read_element(
 
 /// `xsi:nil="true"` у элемента. Цифровая запись `1` — та же, что у
 /// `xs:boolean`, где обе формы измерены.
-fn reads_as_nil(parser: &crate::xml::XmlParser, head: &ElementHead) -> bool {
+fn reads_as_nil(parser: &bsl_rt::xml::XmlParser, head: &ElementHead) -> bool {
     head.attrs.iter().any(|a| {
         attribute_uri(parser, &a.name) == XSI_NS
-            && crate::xml::local_of(&a.name) == "nil"
+            && bsl_rt::xml::local_of(&a.name) == "nil"
             && (a.value == "true" || a.value == "1")
     })
 }
 
 /// URI атрибута: у атрибута без префикса пространства имён нет НИКОГДА —
 /// умолчательное объявление на атрибуты не распространяется.
-fn attribute_uri(parser: &crate::xml::XmlParser, name: &str) -> String {
-    let prefix = crate::xml::prefix_of(name);
+fn attribute_uri(parser: &bsl_rt::xml::XmlParser, name: &str) -> String {
+    let prefix = bsl_rt::xml::prefix_of(name);
     if prefix.is_empty() {
         String::new()
     } else {
@@ -4107,14 +4062,14 @@ fn attribute_uri(parser: &crate::xml::XmlParser, name: &str) -> String {
 
 /// Объявление пространства имён, а не атрибут данных.
 fn is_ns_declaration(name: &str) -> bool {
-    name == "xmlns" || crate::xml::prefix_of(name) == "xmlns"
+    name == "xmlns" || bsl_rt::xml::prefix_of(name) == "xmlns"
 }
 
 /// Проглотить остаток текущего элемента вместе с его закрывающим тегом.
-fn skip_element(parser: &mut crate::xml::XmlParser) -> RtResult<()> {
+fn skip_element(parser: &mut bsl_rt::xml::XmlParser) -> RtResult<()> {
     let target = parser.depth().saturating_sub(1);
     while let Some(event) = parser.read()? {
-        if matches!(event, crate::xml::XmlEvent::ElementEnd { .. }) && parser.depth() == target {
+        if matches!(event, bsl_rt::xml::XmlEvent::ElementEnd { .. }) && parser.depth() == target {
             return Ok(());
         }
     }
@@ -4125,7 +4080,7 @@ fn skip_element(parser: &mut crate::xml::XmlParser) -> RtResult<()> {
 
 /// Собрать текст элемента. Вложенный элемент — ошибка: у простого типа
 /// содержимого быть не может.
-fn read_text_only(parser: &mut crate::xml::XmlParser, head: &ElementHead) -> RtResult<String> {
+fn read_text_only(parser: &mut bsl_rt::xml::XmlParser, head: &ElementHead) -> RtResult<String> {
     let target = parser.depth().saturating_sub(1);
     let mut text = String::new();
     loop {
@@ -4136,9 +4091,11 @@ fn read_text_only(parser: &mut crate::xml::XmlParser, head: &ElementHead) -> RtR
             )));
         };
         match event {
-            crate::xml::XmlEvent::ElementEnd { .. } if parser.depth() == target => return Ok(text),
-            crate::xml::XmlEvent::Text(t) => text.push_str(&t),
-            crate::xml::XmlEvent::ElementStart { name, .. } => {
+            bsl_rt::xml::XmlEvent::ElementEnd { .. } if parser.depth() == target => {
+                return Ok(text)
+            }
+            bsl_rt::xml::XmlEvent::Text(t) => text.push_str(&t),
+            bsl_rt::xml::XmlEvent::ElementStart { name, .. } => {
                 return Err(RtError::Xdto(format!(
                     "элемент «{}» простого типа не может содержать элемент «{name}»",
                     head.name
@@ -4146,13 +4103,13 @@ fn read_text_only(parser: &mut crate::xml::XmlParser, head: &ElementHead) -> RtR
             }
             // Инструкции обработки и комментарии значения не несут;
             // чужого закрывающего тега разборщик не отдаёт.
-            crate::xml::XmlEvent::ElementEnd { .. }
-            | crate::xml::XmlEvent::ProcessingInstruction { .. }
-            | crate::xml::XmlEvent::Comment(_) => {}
+            bsl_rt::xml::XmlEvent::ElementEnd { .. }
+            | bsl_rt::xml::XmlEvent::ProcessingInstruction { .. }
+            | bsl_rt::xml::XmlEvent::Comment(_) => {}
             // Ссылку на сущность разборщик отдаёт узлом, а не текстом:
             // подставить её значение здесь нечем, а молча потерять —
             // испортить прочитанное.
-            crate::xml::XmlEvent::EntityReference { name } => {
+            bsl_rt::xml::XmlEvent::EntityReference { name } => {
                 return Err(RtError::Xdto(format!(
                     "ссылка на сущность «&{name};» при чтении XDTO не поддерживается"
                 )))
@@ -4166,7 +4123,7 @@ fn read_text_only(parser: &mut crate::xml::XmlParser, head: &ElementHead) -> RtR
 /// ошибка), поэтому пропускаются только объявления пространств имён и
 /// служебные `xsi:*`.
 fn read_simple(
-    parser: &mut crate::xml::XmlParser,
+    parser: &mut bsl_rt::xml::XmlParser,
     model: &Rc<XdtoModel>,
     type_index: usize,
     head: &ElementHead,
@@ -4192,7 +4149,7 @@ fn read_simple(
 /// Элемент типа `anyType`. Поддержан ровно измеренный случай — текст,
 /// который платформа отдаёт строкой; всё остальное (атрибуты и вложенные
 /// элементы) — это уже открытое содержимое.
-fn read_open(parser: &mut crate::xml::XmlParser, head: &ElementHead) -> RtResult<ReadOut> {
+fn read_open(parser: &mut bsl_rt::xml::XmlParser, head: &ElementHead) -> RtResult<ReadOut> {
     for attr in head.attrs.iter() {
         if is_ns_declaration(&attr.name) || attribute_uri(parser, &attr.name) == XSI_NS {
             continue;
@@ -4209,18 +4166,18 @@ fn read_open(parser: &mut crate::xml::XmlParser, head: &ElementHead) -> RtResult
             )));
         };
         match event {
-            crate::xml::XmlEvent::ElementEnd { .. } if parser.depth() == target => {
+            bsl_rt::xml::XmlEvent::ElementEnd { .. } if parser.depth() == target => {
                 return Ok(ReadOut::Open(text))
             }
-            crate::xml::XmlEvent::Text(t) => text.push_str(&t),
-            crate::xml::XmlEvent::ElementStart { .. } => return Err(open_content(&head.name)),
-            crate::xml::XmlEvent::ElementEnd { .. }
-            | crate::xml::XmlEvent::ProcessingInstruction { .. }
-            | crate::xml::XmlEvent::Comment(_) => {}
+            bsl_rt::xml::XmlEvent::Text(t) => text.push_str(&t),
+            bsl_rt::xml::XmlEvent::ElementStart { .. } => return Err(open_content(&head.name)),
+            bsl_rt::xml::XmlEvent::ElementEnd { .. }
+            | bsl_rt::xml::XmlEvent::ProcessingInstruction { .. }
+            | bsl_rt::xml::XmlEvent::Comment(_) => {}
             // Ссылку на сущность разборщик отдаёт узлом, а не текстом:
             // подставить её значение здесь нечем, а молча потерять —
             // испортить прочитанное.
-            crate::xml::XmlEvent::EntityReference { name } => {
+            bsl_rt::xml::XmlEvent::EntityReference { name } => {
                 return Err(RtError::Xdto(format!(
                     "ссылка на сущность «&{name};» при чтении XDTO не поддерживается"
                 )))
@@ -4239,7 +4196,7 @@ fn open_content(name: &str) -> RtError {
 /// Элемент типа ОБЪЕКТА: атрибуты, содержимое, проверка порядка и
 /// обязательных свойств — всё так, как это делает платформа.
 fn read_object(
-    parser: &mut crate::xml::XmlParser,
+    parser: &mut bsl_rt::xml::XmlParser,
     model: &Rc<XdtoModel>,
     type_index: usize,
     head: &ElementHead,
@@ -4262,7 +4219,7 @@ fn read_object(
         if uri == XSI_NS {
             continue;
         }
-        let local = crate::xml::local_of(&attr.name);
+        let local = bsl_rt::xml::local_of(&attr.name);
         let Some(k) = find_property(model, &props, local, &uri, EnumValue::XmlFormAttribute)?
         else {
             return Err(RtError::Xdto(format!(
@@ -4296,8 +4253,8 @@ fn read_object(
             )));
         };
         match event {
-            crate::xml::XmlEvent::ElementEnd { .. } if parser.depth() == end_depth => break,
-            crate::xml::XmlEvent::Text(text) => {
+            bsl_rt::xml::XmlEvent::ElementEnd { .. } if parser.depth() == end_depth => break,
+            bsl_rt::xml::XmlEvent::Text(text) => {
                 if content_prop.is_some() {
                     content.push_str(&text);
                 } else if !text.trim().is_empty() {
@@ -4310,9 +4267,9 @@ fn read_object(
                     )));
                 }
             }
-            crate::xml::XmlEvent::ElementStart { name, uri, attrs } => {
+            bsl_rt::xml::XmlEvent::ElementStart { name, uri, attrs } => {
                 let child = ElementHead { name, uri, attrs };
-                let local = crate::xml::local_of(&child.name);
+                let local = bsl_rt::xml::local_of(&child.name);
                 let Some(k) =
                     find_property(model, &props, local, &child.uri, EnumValue::XmlFormElement)?
                 else {
@@ -4341,23 +4298,21 @@ fn read_object(
                     ReadOut::Simple(value, _) => value,
                     ReadOut::Open(text) => str_value(&text),
                     ReadOut::Object(value) => {
-                        if let BslValue::Object(o) = &value {
-                            if let BslObject::XdtoObject(inner) = &**o {
-                                *inner.owner.borrow_mut() = Rc::downgrade(&instance);
-                            }
+                        if let Some(XdtoRepr::Object(inner)) = repr_of(&value) {
+                            *inner.owner.borrow_mut() = Rc::downgrade(&instance);
                         }
                         value
                     }
                 };
                 push_entry(&instance, prop, value);
             }
-            crate::xml::XmlEvent::ElementEnd { .. }
-            | crate::xml::XmlEvent::ProcessingInstruction { .. }
-            | crate::xml::XmlEvent::Comment(_) => {}
+            bsl_rt::xml::XmlEvent::ElementEnd { .. }
+            | bsl_rt::xml::XmlEvent::ProcessingInstruction { .. }
+            | bsl_rt::xml::XmlEvent::Comment(_) => {}
             // Ссылку на сущность разборщик отдаёт узлом, а не текстом:
             // подставить её значение здесь нечем, а молча потерять —
             // испортить прочитанное.
-            crate::xml::XmlEvent::EntityReference { name } => {
+            bsl_rt::xml::XmlEvent::EntityReference { name } => {
                 return Err(RtError::Xdto(format!(
                     "ссылка на сущность «&{name};» при чтении XDTO не поддерживается"
                 )))
@@ -4442,14 +4397,14 @@ fn check_order(
 /// если он и правда наследник объявленного. Неизвестное имя платформа
 /// ИГНОРИРУЕТ и читает объявленным типом (измерено).
 fn child_type_of(
-    parser: &crate::xml::XmlParser,
+    parser: &bsl_rt::xml::XmlParser,
     model: &Rc<XdtoModel>,
     prop: usize,
     head: &ElementHead,
 ) -> RtResult<usize> {
     let declared = model.property_at(prop)?.type_index;
     let Some(qname) = head.attrs.iter().find(|a| {
-        attribute_uri(parser, &a.name) == XSI_NS && crate::xml::local_of(&a.name) == "type"
+        attribute_uri(parser, &a.name) == XSI_NS && bsl_rt::xml::local_of(&a.name) == "type"
     }) else {
         return Ok(declared);
     };
@@ -4457,9 +4412,9 @@ fn child_type_of(
     // разрешается умолчательным объявлением (измерено обе записи:
     // `t:InnerExt` при префиксном объявлении и `InnerExt` при
     // умолчательном дают один и тот же тип).
-    let prefix = crate::xml::prefix_of(&qname.value);
+    let prefix = bsl_rt::xml::prefix_of(&qname.value);
     let uri = parser.namespace_of(prefix);
-    let local = crate::xml::local_of(&qname.value);
+    let local = bsl_rt::xml::local_of(&qname.value);
     match model.find(&uri, local) {
         Some(actual) if derives_from(model, actual, declared) => Ok(actual),
         _ => Ok(declared),
@@ -4643,7 +4598,7 @@ pub fn factory_write_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
         [writer, value, name, uri] => (writer, value, Some(name), Some(uri)),
         _ => return Err(not_applicable(obj, "ЗаписатьXML")),
     };
-    if !crate::xml::is_xml_writer(writer) {
+    if !bsl_rt::xml::is_xml_writer(writer) {
         return Err(RtError::Xdto("ЗаписатьXML пишет в «ЗаписьXML»".to_string()));
     }
     let name = optional_text(name, "ЗаписатьXML")?;
@@ -4661,20 +4616,17 @@ pub fn factory_write_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
         }
     }
     let uri = optional_text(uri, "ЗаписатьXML")?;
-    let (model, type_index, slot) = match value {
-        BslValue::Object(o) => match &**o {
-            BslObject::XdtoObject(data) => (&data.model, data.type_index, Slot::Object(data)),
-            BslObject::XdtoValue(model, data) => (
+    let (model, type_index, slot) = match repr_of(value) {
+        Some(XdtoRepr::Object(data)) => (&data.model, data.type_index, Slot::Object(data)),
+        Some(XdtoRepr::Value(model, data)) => (
+            model,
+            data.type_index,
+            Slot::Simple {
                 model,
-                data.type_index,
-                Slot::Simple {
-                    model,
-                    type_index: data.type_index,
-                    value: &data.value,
-                },
-            ),
-            _ => return Err(bad_write_value(value)),
-        },
+                type_index: data.type_index,
+                value: &data.value,
+            },
+        ),
         _ => return Err(bad_write_value(value)),
     };
     let type_data = model.type_at(type_index)?;
@@ -4690,7 +4642,7 @@ pub fn factory_write_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
         ));
     }
     let uri = uri.unwrap_or_else(|| type_data.ns.clone());
-    crate::xml::with_writer(writer, |w| {
+    bsl_rt::xml::with_writer(writer, |w| {
         let mut scope = NsScope::default();
         write_node(w, &mut scope, &name, &uri, None, &slot, 0)
     })
@@ -4727,7 +4679,7 @@ fn optional_text(arg: Option<&BslValue>, method: &'static str) -> RtResult<Optio
 /// от начала записи, тогда как `w.depth()` знает и про элементы, открытые
 /// вызывающим кодом до `ЗаписатьXML`.
 fn write_node(
-    w: &mut crate::xml::XmlWriter,
+    w: &mut bsl_rt::xml::XmlWriter,
     scope: &mut NsScope,
     name: &str,
     uri: &str,
@@ -4855,7 +4807,7 @@ fn occurrences_of(data: &Rc<XdtoObjectData>, prop: usize) -> Vec<BslValue> {
 
 /// Содержимое элемента: текст простого значения либо свойства объекта.
 fn write_content(
-    w: &mut crate::xml::XmlWriter,
+    w: &mut bsl_rt::xml::XmlWriter,
     scope: &mut NsScope,
     slot: &Slot,
     depth: usize,
@@ -4905,7 +4857,7 @@ fn write_content(
 /// перемежаются с одиночными по месту `Добавить`
 /// (`XDTO.WRITE_ORDER.MULTI` — `[c][c][a]`).
 fn write_properties(
-    w: &mut crate::xml::XmlWriter,
+    w: &mut bsl_rt::xml::XmlWriter,
     scope: &mut NsScope,
     data: &Rc<XdtoObjectData>,
     depth: usize,
@@ -4985,9 +4937,9 @@ fn slot_for<'a>(
             Some((model, index))
         }
     };
-    if let BslValue::Object(o) = value {
-        match &**o {
-            BslObject::XdtoObject(inner) => {
+    if let Some(o) = repr_of(value) {
+        match o {
+            XdtoRepr::Object(inner) => {
                 let same_model = Rc::ptr_eq(&inner.model, model);
                 let mark = if same_model && inner.type_index == declared {
                     None
@@ -4996,7 +4948,7 @@ fn slot_for<'a>(
                 };
                 return Ok((Slot::Object(inner), mark));
             }
-            BslObject::XdtoValue(value_model, data) => {
+            XdtoRepr::Value(value_model, data) => {
                 return Ok((
                     Slot::Simple {
                         model: value_model,
@@ -5183,7 +5135,7 @@ const V8_CORE_NS: &str = "http://v8.1c.ru/8.1/data/core";
 
 /// `СериализаторXDTO` над готовой моделью типов.
 pub fn serializer_value(model: Rc<XdtoModel>) -> BslValue {
-    BslValue::Object(Rc::new(BslObject::XdtoSerializer(model)))
+    shell_value(XdtoRepr::Serializer(model))
 }
 
 /// `Новый СериализаторXDTO(ФабрикаXDTO)`.
@@ -5198,11 +5150,8 @@ pub fn serializer_value(model: Rc<XdtoModel>) -> BslValue {
 ///
 /// [`RtError::Xdto`], если аргумент — не `ФабрикаXDTO`.
 pub fn serializer_of_factory(factory: &BslValue) -> RtResult<BslValue> {
-    match factory {
-        BslValue::Object(o) => match &**o {
-            BslObject::XdtoFactory(model) => Ok(serializer_value(model.clone())),
-            _ => Err(bad_serializer_factory(factory)),
-        },
+    match repr_of(factory) {
+        Some(XdtoRepr::Factory(model)) => Ok(serializer_value(model.clone())),
         _ => Err(bad_serializer_factory(factory)),
     }
 }
@@ -5217,16 +5166,13 @@ fn bad_serializer_factory(arg: &BslValue) -> RtError {
 /// `СериализаторXDTO` ли это — нужно диспетчеру методов: имена
 /// `ПрочитатьXML` и `ЗаписатьXML` делят с фабрикой.
 pub fn is_serializer(v: &BslValue) -> bool {
-    matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::XdtoSerializer(_)))
+    matches!(repr_of(v), Some(XdtoRepr::Serializer(_)))
 }
 
 /// Модель сериализатора-получателя.
 fn serializer_model<'a>(obj: &'a BslValue, method: &'static str) -> RtResult<&'a Rc<XdtoModel>> {
-    match obj {
-        BslValue::Object(o) => match &**o {
-            BslObject::XdtoSerializer(model) => Ok(model),
-            _ => Err(not_applicable(obj, method)),
-        },
+    match repr_of(obj) {
+        Some(XdtoRepr::Serializer(model)) => Ok(model),
         _ => Err(not_applicable(obj, method)),
     }
 }
@@ -5371,7 +5317,7 @@ fn unsupported_value(value: &BslValue) -> RtError {
 ///
 /// [`RtError::Xml`], если писатель уже закрыт.
 fn write_serialized(
-    w: &mut crate::xml::XmlWriter,
+    w: &mut bsl_rt::xml::XmlWriter,
     name: &str,
     uri: &str,
     nil: bool,
@@ -5440,7 +5386,7 @@ pub fn serializer_write_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
         [writer, value, name, uri] => (writer, value, Some(name), Some(uri)),
         _ => return Err(not_applicable(obj, "ЗаписатьXML")),
     };
-    if !crate::xml::is_xml_writer(writer) {
+    if !bsl_rt::xml::is_xml_writer(writer) {
         return Err(RtError::Xdto("ЗаписатьXML пишет в «ЗаписьXML»".to_string()));
     }
     if matches!(name, Some(BslValue::Undefined)) && matches!(uri, Some(BslValue::Str(_))) {
@@ -5457,7 +5403,7 @@ pub fn serializer_write_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
         Some(name) => (name, given_uri.unwrap_or_default()),
         None => (default_name, default_uri),
     };
-    crate::xml::with_writer(writer, |w| write_serialized(w, &name, &uri, nil, &text))
+    bsl_rt::xml::with_writer(writer, |w| write_serialized(w, &name, &uri, nil, &text))
 }
 
 /// Встроенный тип XML Schema, лексической формой которого сериализатор
@@ -5501,7 +5447,7 @@ pub fn serializer_read_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<BslVal
         [reader, ty] => (reader, Some(ty)),
         _ => return Err(not_applicable(obj, "ПрочитатьXML")),
     };
-    if !crate::xml::is_xml_reader(reader) {
+    if !bsl_rt::xml::is_xml_reader(reader) {
         return Err(RtError::Xdto(
             "ПрочитатьXML читает из «ЧтениеXML»".to_string(),
         ));
@@ -5517,7 +5463,7 @@ pub fn serializer_read_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<BslVal
             )))
         }
     };
-    crate::xml::with_reader(reader, |state| {
+    bsl_rt::xml::with_reader(reader, |state| {
         read_one(state, |parser, head| {
             serializer_read_element(parser, &model, head, want)
         })
@@ -5549,7 +5495,7 @@ pub fn serializer_read_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<BslVal
 /// `Len` отдаёт «а» без ошибки, тогда как то же чтение ФАБРИКОЙ — ошибка.
 /// Поэтому разбор идёт через непроверяющий `value_from_lexical`.
 fn serializer_read_element(
-    parser: &mut crate::xml::XmlParser,
+    parser: &mut bsl_rt::xml::XmlParser,
     model: &Rc<XdtoModel>,
     head: &ElementHead,
     want: Option<TypeId>,
@@ -5585,23 +5531,351 @@ fn serializer_read_element(
 
 /// Тип элемента: сначала `xsi:type`, потом собственное имя.
 fn serializer_type_of(
-    parser: &crate::xml::XmlParser,
+    parser: &bsl_rt::xml::XmlParser,
     model: &Rc<XdtoModel>,
     head: &ElementHead,
 ) -> Option<usize> {
     let marked = head.attrs.iter().find(|a| {
-        attribute_uri(parser, &a.name) == XSI_NS && crate::xml::local_of(&a.name) == "type"
+        attribute_uri(parser, &a.name) == XSI_NS && bsl_rt::xml::local_of(&a.name) == "type"
     });
     if let Some(qname) = marked {
-        let uri = parser.namespace_of(crate::xml::prefix_of(&qname.value));
-        if let Some(index) = model.find(&uri, crate::xml::local_of(&qname.value)) {
+        let uri = parser.namespace_of(bsl_rt::xml::prefix_of(&qname.value));
+        if let Some(index) = model.find(&uri, bsl_rt::xml::local_of(&qname.value)) {
             return Some(index);
         }
         // Неизвестное имя типа платформа ИГНОРИРУЕТ и читает дальше как
         // ни в чём не бывало (измерено: `xsi:type="xs:чепуха"` на
         // элементе `<мой>` дало строку «42», а не ошибку).
     }
-    model.find(&head.uri, crate::xml::local_of(&head.name))
+    model.find(&head.uri, bsl_rt::xml::local_of(&head.name))
+}
+
+// --- объектный протокол -----------------------------------------------------
+
+static VALUE_TYPE_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ТипЗначенияXDTO",
+    legacy_type_id: Some(TypeId::XdtoValueType),
+};
+
+static OBJECT_TYPE_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ТипОбъектаXDTO",
+    legacy_type_id: Some(TypeId::XdtoObjectType),
+};
+
+static PROPERTY_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "СвойствоXDTO",
+    legacy_type_id: Some(TypeId::XdtoProperty),
+};
+
+static PROPERTIES_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "КоллекцияСвойствXDTO",
+    legacy_type_id: Some(TypeId::XdtoPropertyCollection),
+};
+
+static FACETS_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "КоллекцияФасетовXDTO",
+    legacy_type_id: Some(TypeId::XdtoFacetCollection),
+};
+
+static FACET_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ФасетXDTO",
+    legacy_type_id: Some(TypeId::XdtoFacet),
+};
+
+static VALUE_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ЗначениеXDTO",
+    legacy_type_id: Some(TypeId::XdtoDataValue),
+};
+
+static FACTORY_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ФабрикаXDTO",
+    legacy_type_id: Some(TypeId::XdtoFactory),
+};
+
+static SERIALIZER_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "СериализаторXDTO",
+    legacy_type_id: Some(TypeId::XdtoSerializer),
+};
+
+static OBJECT_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ОбъектXDTO",
+    legacy_type_id: Some(TypeId::XdtoDataObject),
+};
+
+static LIST_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "СписокXDTO",
+    legacy_type_id: Some(TypeId::XdtoList),
+};
+
+static SEQUENCE_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ПоследовательностьXDTO",
+    legacy_type_id: Some(TypeId::XdtoSequence),
+};
+
+/// Значение оболочки как получатель методов: протокольные хуки передают
+/// `&self`, а поверхность принимает `&BslValue`, поэтому оболочка на время
+/// вызова заворачивается обратно в значение. Клонирование дешёвое — внутри
+/// `Rc`.
+fn as_value(shell: &XdtoShell) -> BslValue {
+    shell_value(match &shell.repr {
+        XdtoRepr::Type(model, i) => XdtoRepr::Type(model.clone(), *i),
+        XdtoRepr::Property(model, i) => XdtoRepr::Property(model.clone(), *i),
+        XdtoRepr::Properties(model, i) => XdtoRepr::Properties(model.clone(), *i),
+        XdtoRepr::Facets(model, i) => XdtoRepr::Facets(model.clone(), *i),
+        XdtoRepr::Facet(model, t, f) => XdtoRepr::Facet(model.clone(), *t, *f),
+        XdtoRepr::Value(model, data) => XdtoRepr::Value(model.clone(), data.clone()),
+        XdtoRepr::Factory(model) => XdtoRepr::Factory(model.clone()),
+        XdtoRepr::Serializer(model) => XdtoRepr::Serializer(model.clone()),
+        XdtoRepr::Object(data) => XdtoRepr::Object(data.clone()),
+        XdtoRepr::List(data, prop) => XdtoRepr::List(data.clone(), *prop),
+        XdtoRepr::Sequence(data) => XdtoRepr::Sequence(data.clone()),
+    })
+}
+
+impl ObjectProtocol for XdtoShell {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        match &self.repr {
+            XdtoRepr::Type(model, i) => match model.types.get(*i) {
+                Some(data) if data.is_value() => &VALUE_TYPE_TYPE,
+                _ => &OBJECT_TYPE_TYPE,
+            },
+            XdtoRepr::Property(..) => &PROPERTY_TYPE,
+            XdtoRepr::Properties(..) => &PROPERTIES_TYPE,
+            XdtoRepr::Facets(..) => &FACETS_TYPE,
+            XdtoRepr::Facet(..) => &FACET_TYPE,
+            XdtoRepr::Value(..) => &VALUE_TYPE,
+            XdtoRepr::Factory(_) => &FACTORY_TYPE,
+            XdtoRepr::Serializer(_) => &SERIALIZER_TYPE,
+            XdtoRepr::Object(..) => &OBJECT_TYPE,
+            XdtoRepr::List(..) => &LIST_TYPE,
+            XdtoRepr::Sequence(..) => &SEQUENCE_TYPE,
+        }
+    }
+
+    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
+        get_property(&as_value(self), name)
+    }
+
+    fn set_property(
+        &self,
+        name: &str,
+        value: BslValue,
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<()> {
+        match &self.repr {
+            XdtoRepr::Object(..) => set_property(&as_value(self), name, value),
+            _ => Err(RtError::NotAnObject),
+        }
+    }
+
+    fn call_method(
+        &self,
+        name: &str,
+        arguments: &[BslValue],
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<BslValue> {
+        let receiver = as_value(self);
+        let eq =
+            |ru: &str, en: &str| name.eq_ignore_ascii_case(ru) || name.eq_ignore_ascii_case(en);
+        // Диспетчеризация повторяет прежние общие таблицы методов: имя
+        // делится получателями, получатель выбирает семантику.
+        if eq("Тип", "Type") {
+            return match &self.repr {
+                XdtoRepr::Object(..) | XdtoRepr::Value(..) => object_type(&receiver, arguments),
+                _ => factory_type(&receiver, arguments),
+            };
+        }
+        if eq("Создать", "Create") {
+            return factory_create(&receiver, arguments);
+        }
+        if eq("ПрочитатьXML", "ReadXML") {
+            return match &self.repr {
+                XdtoRepr::Serializer(_) => serializer_read_xml(&receiver, arguments),
+                _ => factory_read_xml(&receiver, arguments),
+            };
+        }
+        if eq("ЗаписатьXML", "WriteXML") {
+            return match &self.repr {
+                XdtoRepr::Serializer(_) => {
+                    serializer_write_xml(&receiver, arguments).map(|()| BslValue::Undefined)
+                }
+                _ => factory_write_xml(&receiver, arguments).map(|()| BslValue::Undefined),
+            };
+        }
+        if eq("Получить", "Get") {
+            return match &self.repr {
+                XdtoRepr::Properties(..) | XdtoRepr::Facets(..) => {
+                    collection_lookup(&receiver, arguments)
+                }
+                XdtoRepr::Object(..) => object_get(&receiver, arguments),
+                XdtoRepr::List(..) => match arguments {
+                    [index] => list_get(&receiver, shell_index(index)?),
+                    _ => Err(RtError::MethodNotApplicable {
+                        method: "Получить",
+                        receiver: receiver.type_name(),
+                    }),
+                },
+                _ => Err(RtError::MethodNotApplicable {
+                    method: "Получить",
+                    receiver: receiver.type_name(),
+                }),
+            };
+        }
+        if eq("Установить", "Set") {
+            return match &self.repr {
+                XdtoRepr::Object(..) => object_set(&receiver, arguments),
+                _ => list_set(&receiver, arguments),
+            };
+        }
+        if eq("Добавить", "Add") {
+            return match &self.repr {
+                XdtoRepr::Sequence(..) => sequence_add(&receiver, arguments),
+                _ => list_add(&receiver, arguments),
+            };
+        }
+        if eq("Вставить", "Insert") {
+            return list_insert(&receiver, arguments);
+        }
+        if eq("Удалить", "Delete") {
+            return match arguments {
+                [index] => list_delete(&receiver, index).map(|()| BslValue::Undefined),
+                _ => Err(RtError::MethodNotApplicable {
+                    method: "Удалить",
+                    receiver: receiver.type_name(),
+                }),
+            };
+        }
+        if eq("Очистить", "Clear") {
+            return match &self.repr {
+                XdtoRepr::Sequence(..) => sequence_clear(&receiver).map(|()| BslValue::Undefined),
+                _ => list_clear(&receiver).map(|()| BslValue::Undefined),
+            };
+        }
+        if eq("Количество", "Count") {
+            return match collection_len(&self.repr) {
+                Some(len) => len.map(|len| BslValue::number_from_i64(len as i64)),
+                None => Err(RtError::MethodNotApplicable {
+                    method: "Количество",
+                    receiver: receiver.type_name(),
+                }),
+            };
+        }
+        if eq("ПолучитьСписок", "GetList") {
+            return object_get_list(&receiver, arguments);
+        }
+        if eq("Установлено", "IsSet") {
+            return object_is_set(&receiver, arguments);
+        }
+        if eq("Сбросить", "Unset") {
+            return object_unset(&receiver, arguments);
+        }
+        if eq("Проверить", "Validate") {
+            return object_validate(&receiver, arguments);
+        }
+        if eq("Свойства", "Properties") {
+            return object_properties(&receiver, arguments);
+        }
+        if eq("Владелец", "Owner") {
+            return object_owner(&receiver, arguments);
+        }
+        if eq("Последовательность", "Sequence") {
+            return object_sequence(&receiver, arguments);
+        }
+        if eq("ПолучитьЗначение", "GetValue") {
+            return sequence_value(&receiver, arguments);
+        }
+        if eq("ПолучитьСвойство", "GetProperty") {
+            return sequence_property(&receiver, arguments);
+        }
+        // Три измеренных члена сериализатора, до которых очередь не дошла:
+        // у своего получателя — честный отказ «не поддерживается».
+        if eq("XMLТип", "XMLType") {
+            return Err(serializer_unsupported(&receiver, "XMLТип"));
+        }
+        if eq("XMLТипЗнч", "XMLTypeOf") {
+            return Err(serializer_unsupported(&receiver, "XMLТипЗнч"));
+        }
+        if eq("ВозможностьЧтенияXML", "CanReadXML") {
+            return Err(serializer_unsupported(&receiver, "ВозможностьЧтенияXML"));
+        }
+        Err(RtError::UnknownMethod {
+            method: name.to_string(),
+            receiver: self.type_descriptor().name,
+        })
+    }
+
+    fn get_index(&self, index: &BslValue) -> RtResult<BslValue> {
+        collection_get(&self.repr, shell_index(index)?)
+    }
+
+    fn collection_len(&self) -> RtResult<usize> {
+        match collection_len(&self.repr) {
+            Some(len) => len,
+            None => Err(RtError::NotIndexable),
+        }
+    }
+
+    // Коллекции модели судятся по длине (измерено: непустые `Свойства` и
+    // `Фасеты` дают «Да», пустые — «Нет»). Тип, свойство, фасет, фабрика и
+    // сериализатор отвечают измеренной ошибкой «Проверка мутабельных
+    // значений на заполненность не поддерживается»; про ЭКЗЕМПЛЯРЫ —
+    // `ЗначениеXDTO` и `ОбъектXDTO` — замера нет: проба на значении вешает
+    // платформу модальным окном, и они отнесены к соседям по аналогии.
+    // НЕ ИЗМЕРЕНО(XDTO.VALUE.FILLED)
+    fn is_filled(&self) -> RtResult<bool> {
+        match &self.repr {
+            XdtoRepr::Properties(..) | XdtoRepr::Facets(..) => match collection_len(&self.repr) {
+                Some(len) => Ok(len? > 0),
+                None => Ok(false),
+            },
+            _ => Err(RtError::TypeError {
+                expected: "Значение, у которого есть признак заполненности",
+                op: "ЗначениеЗаполнено",
+            }),
+        }
+    }
+
+    // Тип, свойство и список — ссылки на место в модели или в хранилище;
+    // экземпляр и последовательность — на само хранилище (равенства
+    // измерены, см. прежние армы `PartialEq`). Остальные виды равны только
+    // по тождеству.
+    fn identity_key(&self) -> Option<(usize, usize)> {
+        match &self.repr {
+            XdtoRepr::Type(model, i) | XdtoRepr::Property(model, i) => {
+                Some((Rc::as_ptr(model) as usize, *i))
+            }
+            XdtoRepr::Object(data) => Some((Rc::as_ptr(data) as usize, 0)),
+            XdtoRepr::Sequence(data) => Some((Rc::as_ptr(data) as usize, 0)),
+            XdtoRepr::List(data, prop) => Some((Rc::as_ptr(data) as usize, *prop)),
+            _ => None,
+        }
+    }
+
+    fn display(&self) -> String {
+        display_text(&self.repr).unwrap_or_else(|| self.type_descriptor().name.to_string())
+    }
+}
+
+/// Номер элемента из значения-индекса — та же семантика, что у `[]`
+/// встроенных коллекций.
+fn shell_index(index: &BslValue) -> RtResult<usize> {
+    let BslValue::Number(number) = index else {
+        return Err(RtError::BadIndex);
+    };
+    let index = number.to_i64_exact().ok_or(RtError::BadIndex)?;
+    usize::try_from(index).map_err(|_| RtError::BadIndex)
 }
 
 #[cfg(test)]
@@ -5611,7 +5885,7 @@ mod tests {
     /// Модель типов из текста XSD — тем же путём, что и в бою: дерево
     /// строит `dom`, схему — `xsd`, а типы — этот модуль.
     fn model(text: &str) -> Rc<XdtoModel> {
-        let schema = crate::xsd::schema_of_text(text).expect("схема обязана разбираться");
+        let schema = bsl_rt::xsd::schema_of_text(text).expect("схема обязана разбираться");
         model_of_schema(&schema).expect("модель обязана строиться")
     }
 
@@ -5718,17 +5992,14 @@ mod tests {
     fn property_names(model: &Rc<XdtoModel>, uri: &str, name: &str) -> Vec<String> {
         let t = type_of(model, uri, name);
         let props = prop(&t, "Свойства");
-        let len = match &props {
-            BslValue::Object(o) => collection_len(o).expect("коллекция").expect("длина"),
-            other => panic!("ожидалась коллекция, получено {other:?}"),
-        };
+        let repr = repr_of(&props).expect("ожидалась коллекция");
+        let len = collection_len(repr).expect("коллекция").expect("длина");
         (0..len)
-            .map(|i| match &props {
-                BslValue::Object(o) => text_of(&prop(
-                    &collection_get(o, i).expect("элемент коллекции"),
+            .map(|i| {
+                text_of(&prop(
+                    &collection_get(repr, i).expect("элемент коллекции"),
                     "Имя",
-                )),
-                other => panic!("ожидалась коллекция, получено {other:?}"),
+                ))
             })
             .collect()
     }
@@ -5842,10 +6113,9 @@ mod tests {
         assert_eq!(text_of(&prop(&anon, "URIПространстваИмен")), "urn:test");
         let anon_props = prop(&anon, "Свойства");
         assert_eq!(
-            match &anon_props {
-                BslValue::Object(o) => collection_len(o).expect("коллекция").expect("длина"),
-                other => panic!("ожидалась коллекция, получено {other:?}"),
-            },
+            collection_len(repr_of(&anon_props).expect("ожидалась коллекция"))
+                .expect("коллекция")
+                .expect("длина"),
             1
         );
     }
@@ -5947,16 +6217,16 @@ mod tests {
             let facets = prop(&t, "Фасеты");
             match &facets {
                 BslValue::Undefined => Vec::new(),
-                BslValue::Object(o) => {
-                    let len = collection_len(o).expect("коллекция").expect("длина");
+                value => {
+                    let repr = repr_of(value).expect("ожидалась коллекция");
+                    let len = collection_len(repr).expect("коллекция").expect("длина");
                     (0..len)
                         .map(|i| {
-                            let f = collection_get(o, i).expect("фасет");
+                            let f = collection_get(repr, i).expect("фасет");
                             (prop(&f, "Вид"), text_of(&prop(&f, "Значение")))
                         })
                         .collect::<Vec<_>>()
                 }
-                other => panic!("ожидалась коллекция или Неопределено, получено {other:?}"),
             }
         };
         assert_eq!(
@@ -6246,11 +6516,11 @@ mod tests {
             r#"<xs:element name="bad" type="t:Len" default="а" minOccurs="0"/>"#,
             r#"</xs:sequence></xs:complexType></xs:schema>"#,
         );
-        let schema = crate::xsd::schema_of_text(bad).expect("схема разбирается");
+        let schema = bsl_rt::xsd::schema_of_text(bad).expect("схема разбирается");
         assert!(model_of_schema(&schema).is_err());
         // Годное умолчание того же вида модель строит.
         let good = bad.replace(r#"default="а""#, r#"default="аб""#);
-        let schema = crate::xsd::schema_of_text(&good).expect("схема разбирается");
+        let schema = bsl_rt::xsd::schema_of_text(&good).expect("схема разбирается");
         assert!(model_of_schema(&schema).is_ok());
     }
 
@@ -6428,7 +6698,7 @@ mod tests {
         // Расширенное имя — значение модели СХЕМЫ, и члены у него читает
         // она же.
         let expanded = |member: &str| {
-            text_of(&crate::xsd::get_property(&name, member).expect("член расширенного имени"))
+            text_of(&bsl_rt::xsd::get_property(&name, member).expect("член расширенного имени"))
         };
         assert_eq!(expanded("ЛокальноеИмя"), "просто");
         assert_eq!(expanded("URIПространстваИмен"), "");
@@ -6521,13 +6791,11 @@ mod tests {
             BslValue::Type(TypeId::XdtoFacetCollection)
         );
         assert_eq!(facets.to_string(), "КоллекцияФасетовXDTO");
-        match &facets {
-            BslValue::Object(o) => {
-                let f = collection_get(o, 0).expect("фасет");
-                assert_eq!(f.type_of().unwrap(), BslValue::Type(TypeId::XdtoFacet));
-                assert_eq!(f.to_string(), "ФасетXDTO");
-            }
-            other => panic!("ожидалась коллекция, получено {other:?}"),
+        {
+            let repr = repr_of(&facets).expect("ожидалась коллекция");
+            let f = collection_get(repr, 0).expect("фасет");
+            assert_eq!(f.type_of().unwrap(), BslValue::Type(TypeId::XdtoFacet));
+            assert_eq!(f.to_string(), "ФасетXDTO");
         }
         let def = prop(
             &collection_lookup(&props, &[str_value("def")]).expect("поиск"),
@@ -6673,7 +6941,7 @@ mod tests {
     #[test]
     fn broken_schemas_report_errors_instead_of_panicking() {
         // Ссылка на несуществующий тип.
-        let schema = crate::xsd::schema_of_text(concat!(
+        let schema = bsl_rt::xsd::schema_of_text(concat!(
             r#"<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t">"#,
             r#"<xs:complexType name="T"><xs:sequence>"#,
             r#"<xs:element name="a" type="xs:нетТакого"/>"#,
@@ -6689,7 +6957,7 @@ mod tests {
         // Кольцо в цепочке базовых типов простого типа: разбор
         // лексической формы обязан отвечать ошибкой, а не переполнением
         // стека.
-        let schema = crate::xsd::schema_of_text(concat!(
+        let schema = bsl_rt::xsd::schema_of_text(concat!(
             r#"<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="urn:t" "#,
             r#"targetNamespace="urn:t">"#,
             r#"<xs:simpleType name="A"><xs:restriction base="t:A"/></xs:simpleType>"#,
@@ -6703,7 +6971,7 @@ mod tests {
         assert!(cyclic.builtin_of(a).is_none(), "кольцо не даёт отображения");
 
         // Цикл наследования типов ОБЪЕКТА ловится при построении модели.
-        let schema = crate::xsd::schema_of_text(concat!(
+        let schema = bsl_rt::xsd::schema_of_text(concat!(
             r#"<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="urn:t" "#,
             r#"targetNamespace="urn:t">"#,
             r#"<xs:complexType name="A"><xs:complexContent>"#,
@@ -6720,7 +6988,7 @@ mod tests {
         );
 
         // Значение по умолчанию, не разбирающееся в своём типе.
-        let schema = crate::xsd::schema_of_text(concat!(
+        let schema = bsl_rt::xsd::schema_of_text(concat!(
             r#"<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t">"#,
             r#"<xs:complexType name="T"><xs:sequence>"#,
             r#"<xs:element name="a" type="xs:int" default="ерунда"/>"#,
@@ -6734,7 +7002,7 @@ mod tests {
         // десяти байт, и десятый байт лежит внутри «я». Схема доходит сюда
         // сама (`collect_elements` -> `has_constraint` -> `value_of`), так
         // что ответом обязана быть ошибка, а не паника процесса.
-        let schema = crate::xsd::schema_of_text(concat!(
+        let schema = bsl_rt::xsd::schema_of_text(concat!(
             r#"<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t">"#,
             r#"<xs:complexType name="T"><xs:sequence>"#,
             r#"<xs:element name="a" type="xs:date" default="2026-08-1я"/>"#,
@@ -6766,7 +7034,7 @@ mod tests {
     fn factory_of_texts(texts: &[&str]) -> BslValue {
         let schemas: Vec<Rc<XsSchemaData>> = texts
             .iter()
-            .map(|t| crate::xsd::schema_of_text(t).expect("схема обязана разбираться"))
+            .map(|t| bsl_rt::xsd::schema_of_text(t).expect("схема обязана разбираться"))
             .collect();
         factory_value(model_of_schemas(&schemas).expect("модель обязана строиться"))
     }
@@ -6827,7 +7095,7 @@ mod tests {
         let f = factory(SAMPLE);
         let pair = factory_type(&f, &[str_value("urn:test"), str_value("RootType")]).expect("тип");
         assert_eq!(pair.to_string(), "{urn:test}RootType");
-        let expanded = crate::xsd::new_expanded_name("urn:test", "RootType");
+        let expanded = bsl_rt::xsd::new_expanded_name("urn:test", "RootType");
         assert_eq!(factory_type(&f, &[expanded]).expect("тип"), pair);
         // Два обращения за одним именем равны — тип это ссылка в модель.
         assert_eq!(
@@ -6956,12 +7224,12 @@ mod tests {
         );
         assert_eq!(TypeId::XdtoFactory.name(), "Фабрика XDTO");
         assert!(is_factory(&empty));
-        let set = crate::xsd::new_schema_set();
+        let set = bsl_rt::xsd::new_schema_set();
         assert!(factory_of_schema_set(&set).is_ok());
         // Путь к файлу, схема и число сюда не годятся.
         for wrong in [
             str_value("/tmp/схема.xsd"),
-            crate::xsd::new_schema(),
+            bsl_rt::xsd::new_schema(),
             number_value(1),
         ] {
             assert!(factory_of_schema_set(&wrong).is_err(), "{wrong:?}");
@@ -7071,7 +7339,7 @@ mod tests {
         assert_eq!(text_of(&prop(&o, "name")), "5");
         set_property(&o, "name", BslValue::Boolean(true)).expect("булево в строку");
         assert_eq!(text_of(&prop(&o, "name")), "true");
-        let day = BslValue::Date(crate::BslDate::from_civil(2026, 8, 13, 0, 0, 0).expect("дата"));
+        let day = BslValue::Date(bsl_rt::BslDate::from_civil(2026, 8, 13, 0, 0, 0).expect("дата"));
         set_property(&o, "name", day.clone()).expect("дата в строку");
         assert_eq!(text_of(&prop(&o, "name")), "2026-08-13T00:00:00");
         // В `xs:int` строка цифрами проходит, а «true» — нет: это не его
@@ -7357,14 +7625,14 @@ mod tests {
     /// Читатель над текстом.
     fn reader(text: &str) -> BslValue {
         let value = BslValue::new_xml_reader();
-        crate::xml::set_string(&value, &[str_value(text)]).expect("источник");
+        bsl_rt::xml::set_string(&value, &[str_value(text)]).expect("источник");
         value
     }
 
     /// Писатель в строку.
     fn writer() -> BslValue {
         let value = BslValue::new_xml_writer();
-        crate::xml::set_string(&value, &[]).expect("приёмник");
+        bsl_rt::xml::set_string(&value, &[]).expect("приёмник");
         value
     }
 
@@ -7386,7 +7654,7 @@ mod tests {
             call.push(str_value(a));
         }
         factory_write_xml(f, &call)?;
-        match crate::xml::close_writer(&w)? {
+        match bsl_rt::xml::close_writer(&w)? {
             BslValue::Str(s) => Ok(s.to_string()),
             other => panic!("писатель отдал не строку: {other:?}"),
         }
@@ -7587,21 +7855,21 @@ mod tests {
         // Обёртку читатель проходит сам, а дальше два элемента подряд
         // читаются двумя вызовами БЕЗ `Прочитать()` между ними —
         // измерено, что после разбора читатель стоит на следующем узле.
-        crate::xml::read(&r).expect("обёртка");
-        crate::xml::read(&r).expect("первый корень");
+        bsl_rt::xml::read(&r).expect("обёртка");
+        bsl_rt::xml::read(&r).expect("первый корень");
         let t = type_of_factory(&f, "RootType");
         let first = factory_read_xml(&f, &[r.clone(), t.clone()]).expect("первый");
-        assert_eq!(text_of(&crate::xml::name(&r).expect("имя")), "t:root");
+        assert_eq!(text_of(&bsl_rt::xml::name(&r).expect("имя")), "t:root");
         let second = factory_read_xml(&f, &[r.clone(), t]).expect("второй");
         assert_eq!(number_of(&prop(&first, "id")), 1);
         assert_eq!(number_of(&prop(&second, "id")), 2);
-        assert_eq!(text_of(&crate::xml::name(&r).expect("имя")), "хвост");
+        assert_eq!(text_of(&bsl_rt::xml::name(&r).expect("имя")), "хвост");
         // На документе из одного корня читатель после разбора исчерпан.
         let single = reader(IO_DOC);
         let t = type_of_factory(&f, "RootType");
         factory_read_xml(&f, &[single.clone(), t]).expect("корень");
         assert_eq!(
-            crate::xml::read(&single).expect("шаг"),
+            bsl_rt::xml::read(&single).expect("шаг"),
             BslValue::Boolean(false)
         );
     }
@@ -8000,7 +8268,7 @@ mod tests {
         let mut call = vec![w.clone(), value.clone()];
         call.extend(args.iter().cloned());
         serializer_write_xml(&serializer(), &call)?;
-        match crate::xml::close_writer(&w)? {
+        match bsl_rt::xml::close_writer(&w)? {
             BslValue::Str(s) => Ok(s.to_string()),
             other => panic!("писатель отдал не строку: {other:?}"),
         }
@@ -8015,7 +8283,7 @@ mod tests {
 
     /// Дата как значение — тем же путём, что и разбор лексики.
     fn date_value(y: i64, m: u32, d: u32, hh: u32, mm: u32, ss: u32) -> BslValue {
-        BslValue::Date(crate::BslDate::from_civil(y, m, d, hh, mm, ss).expect("дата"))
+        BslValue::Date(bsl_rt::BslDate::from_civil(y, m, d, hh, mm, ss).expect("дата"))
     }
 
     /// `ДвоичныеДанные` из байтов.
@@ -8101,7 +8369,7 @@ mod tests {
         // `круг булево`, `круг неопределено`, `круг двоичные`).
         for value in [
             number_value(42),
-            BslValue::Number(bsl_number::BslNumber::parse_canonical("12.5").expect("12.5")),
+            BslValue::Number(BslNumber::parse_canonical("12.5").expect("12.5")),
             str_value("аб"),
             str_value(""),
             date_value(2026, 8, 13, 10, 20, 30),
@@ -8339,7 +8607,7 @@ mod tests {
         // Отказ обязан НАЗЫВАТЬ причину — метаданные конфигурации.
         let collections = [
             BslValue::new_array(vec![number_value(1)]),
-            BslValue::new_structure(crate::shape::ShapeTable::default().empty(), Vec::new()),
+            BslValue::new_structure(bsl_rt::ShapeTable::default().empty(), Vec::new()),
             BslValue::new_map(),
             BslValue::new_table(),
         ];
@@ -8378,7 +8646,7 @@ mod tests {
             "</об>"
         );
         let r = reader(doc);
-        crate::xml::with_reader(&r, |state| {
+        bsl_rt::xml::with_reader(&r, |state| {
             state.parser.as_mut().expect("разборщик").read()?;
             Ok(())
         })
@@ -8481,7 +8749,7 @@ mod tests {
         // вызова: строка 181 снимка даёт на втором уровне `d2p1`.
         let s = serializer();
         let w = writer();
-        crate::xml::write_start_element(&w, &[str_value("об")]).expect("обёртка");
+        bsl_rt::xml::write_start_element(&w, &[str_value("об")]).expect("обёртка");
         serializer_write_xml(
             &s,
             &[
@@ -8492,8 +8760,8 @@ mod tests {
             ],
         )
         .expect("запись внутрь");
-        crate::xml::write_end_element(&w).expect("конец обёртки");
-        let text = match crate::xml::close_writer(&w).expect("закрытие") {
+        bsl_rt::xml::write_end_element(&w).expect("конец обёртки");
+        let text = match bsl_rt::xml::close_writer(&w).expect("закрытие") {
             BslValue::Str(s) => s.to_string(),
             other => panic!("писатель отдал не строку: {other:?}"),
         };

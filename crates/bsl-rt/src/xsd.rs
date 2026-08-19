@@ -3,7 +3,7 @@
 //! имён.
 //!
 //! Второго разборщика XML здесь нет: на вход идёт дерево, построенное
-//! [`crate::dom`], а этот модуль только опознаёт в нём элементы схемы — ПО
+//! `crate::dom`, а этот модуль только опознаёт в нём элементы схемы — ПО
 //! ПРОСТРАНСТВУ ИМЁН `http://www.w3.org/2001/XMLSchema`, а не по префиксу
 //! `xs:`. Измерено, что префикс не важен: схема с `<я:schema
 //! xmlns:я="...XMLSchema">` разбирается так же, как с `xs:`, а схема, чей
@@ -168,7 +168,7 @@
 //!   компонентой; САМ ФАКТ маски при этом запоминается
 //!   ([`XsSchemaData::complex_has_wildcard`]) и наблюдаем прикладным
 //!   кодом: он делает тип XDTO открытым, а от этого зависит порядок
-//!   записи свойств — см. [`crate::xdto`].
+//!   записи свойств — см. модуль `xdto` компонента `bsl-xml`.
 //! * **`БазовыйТип` и `ОпределениеПримитивногоТипа` не реализованы.**
 //!   Платформа их отдаёт, РАЗРЕШАЯ ссылку: у `Code` с `base="xs:string"`
 //!   `БазовыйТип.Имя` — `string` из пространства имён XML Schema, у
@@ -493,7 +493,7 @@ struct ComplexTypeData {
     /// любой глубине модели содержимого. Сами маски по-прежнему
     /// пропускаются (`НЕ ИЗМЕРЕНО(XSD.WILDCARD.COMPONENT)`), но их наличие
     /// наблюдаемо: это `Открытый` типа XDTO, а от него зависит ПОРЯДОК
-    /// записи свойств — см. [`crate::xdto`].
+    /// записи свойств — см. модуль `xdto` компонента `bsl-xml`.
     has_wildcard: bool,
 }
 
@@ -2089,7 +2089,7 @@ fn facet_value(kind: XsKind, lexical: &str) -> BslValue {
 
 /// Объявление элемента или атрибута — ровно те поля, которые нужны
 /// строителю модели типов XDTO.
-pub(crate) struct DeclView<'a> {
+pub struct DeclView<'a> {
     pub name: &'a str,
     pub ns: &'a str,
     pub type_name: Option<&'a XName>,
@@ -2101,7 +2101,7 @@ pub(crate) struct DeclView<'a> {
 
 /// Использование атрибута: обязательность и значение по умолчанию живут
 /// здесь, а имя и тип — в объявлении внутри.
-pub(crate) struct AttributeUseView<'a> {
+pub struct AttributeUseView<'a> {
     pub declaration: usize,
     pub required: bool,
     pub lexical: &'a str,
@@ -2117,21 +2117,21 @@ pub(crate) struct AttributeUseView<'a> {
 /// инварианты разбора (см. заголовок модуля) остаются в силе.
 impl XsSchemaData {
     /// Целевое пространство имён схемы.
-    pub(crate) fn target_namespace(&self) -> &str {
+    pub fn target_namespace(&self) -> &str {
         self.target_ns()
     }
 
-    pub(crate) fn kind_of(&self, i: usize) -> XsKind {
+    pub fn kind_of(&self, i: usize) -> XsKind {
         self.node(i).kind
     }
 
-    pub(crate) fn name_of(&self, i: usize) -> &str {
+    pub fn name_of(&self, i: usize) -> &str {
         &self.node(i).name
     }
 
     /// Номера ИМЕНОВАННЫХ глобальных определений типов, как их отдаёт
     /// `ОпределенияТипов`: отсортированные по имени, без дублей.
-    pub(crate) fn global_types(&self) -> &[usize] {
+    pub fn global_types(&self) -> &[usize] {
         match &self.nodes[0].data {
             XsData::Schema(d) => &d.types,
             _ => &[],
@@ -2140,7 +2140,7 @@ impl XsSchemaData {
 
     /// Имя базового типа простого типа — лексически, как написано в
     /// `xs:restriction base`.
-    pub(crate) fn simple_base_of(&self, i: usize) -> Option<&XName> {
+    pub fn simple_base_of(&self, i: usize) -> Option<&XName> {
         match &self.node(i).data {
             XsData::SimpleType(d) => d.base_name.as_ref(),
             _ => None,
@@ -2149,10 +2149,7 @@ impl XsSchemaData {
 
     /// Вариант простого типа (`Атомарная`/`Список`/`Объединение`) вместе с
     /// именем типа элемента списка и именами членов объединения.
-    pub(crate) fn simple_variety_of(
-        &self,
-        i: usize,
-    ) -> Option<(EnumValue, Option<&XName>, &[XName])> {
+    pub fn simple_variety_of(&self, i: usize) -> Option<(EnumValue, Option<&XName>, &[XName])> {
         match &self.node(i).data {
             XsData::SimpleType(d) => Some((
                 d.variety?,
@@ -2165,7 +2162,7 @@ impl XsSchemaData {
 
     /// Фасеты простого типа — вид и лексическая запись значения, в порядке
     /// документа.
-    pub(crate) fn facets_of(&self, i: usize) -> Vec<(FacetKind, &str)> {
+    pub fn facets_of(&self, i: usize) -> Vec<(FacetKind, &str)> {
         let XsData::SimpleType(d) = &self.node(i).data else {
             return Vec::new();
         };
@@ -2179,7 +2176,7 @@ impl XsSchemaData {
     }
 
     /// Имя базового типа составного типа (`extension`/`restriction`).
-    pub(crate) fn complex_base_of(&self, i: usize) -> Option<&XName> {
+    pub fn complex_base_of(&self, i: usize) -> Option<&XName> {
         match &self.node(i).data {
             XsData::ComplexType(d) => d.base_name.as_ref(),
             _ => None,
@@ -2187,7 +2184,7 @@ impl XsSchemaData {
     }
 
     /// `mixed`/`abstract` составного типа; неуказанный атрибут — «нет».
-    pub(crate) fn complex_flags_of(&self, i: usize) -> (bool, bool) {
+    pub fn complex_flags_of(&self, i: usize) -> (bool, bool) {
         match &self.node(i).data {
             XsData::ComplexType(d) => (d.mixed.unwrap_or(false), d.is_abstract.unwrap_or(false)),
             _ => (false, false),
@@ -2197,7 +2194,7 @@ impl XsSchemaData {
     /// Есть ли в объявлении составного типа маска `xs:any` или
     /// `xs:anyAttribute`. Наследование сюда не входит: это СОБСТВЕННОЕ
     /// объявление типа, включая тело `xs:extension`/`xs:restriction`.
-    pub(crate) fn complex_has_wildcard(&self, i: usize) -> bool {
+    pub fn complex_has_wildcard(&self, i: usize) -> bool {
         match &self.node(i).data {
             XsData::ComplexType(d) => d.has_wildcard,
             _ => false,
@@ -2205,7 +2202,7 @@ impl XsSchemaData {
     }
 
     /// Фрагмент содержимого составного типа, если он есть.
-    pub(crate) fn complex_content_of(&self, i: usize) -> Option<usize> {
+    pub fn complex_content_of(&self, i: usize) -> Option<usize> {
         match &self.node(i).data {
             XsData::ComplexType(d) => d.content,
             _ => None,
@@ -2213,7 +2210,7 @@ impl XsSchemaData {
     }
 
     /// Использования атрибутов составного типа — в порядке документа.
-    pub(crate) fn complex_attribute_uses_of(&self, i: usize) -> &[usize] {
+    pub fn complex_attribute_uses_of(&self, i: usize) -> &[usize] {
         match &self.node(i).data {
             XsData::ComplexType(d) => &d.attributes,
             _ => &[],
@@ -2221,7 +2218,7 @@ impl XsSchemaData {
     }
 
     /// Фрагмент: терм и границы вхождения так, как они написаны.
-    pub(crate) fn particle_of(&self, i: usize) -> Option<(usize, Option<u32>, Option<u32>)> {
+    pub fn particle_of(&self, i: usize) -> Option<(usize, Option<u32>, Option<u32>)> {
         match &self.node(i).data {
             XsData::Particle {
                 term,
@@ -2233,7 +2230,7 @@ impl XsSchemaData {
     }
 
     /// Группа модели: вид композитора и её фрагменты.
-    pub(crate) fn model_group_of(&self, i: usize) -> Option<(EnumValue, &[usize])> {
+    pub fn model_group_of(&self, i: usize) -> Option<(EnumValue, &[usize])> {
         match &self.node(i).data {
             XsData::ModelGroup {
                 compositor,
@@ -2244,7 +2241,7 @@ impl XsSchemaData {
     }
 
     /// Объявление элемента или атрибута.
-    pub(crate) fn decl_of(&self, i: usize) -> Option<DeclView<'_>> {
+    pub fn decl_of(&self, i: usize) -> Option<DeclView<'_>> {
         let node = self.node(i);
         let (XsData::Element(d) | XsData::Attribute(d)) = &node.data else {
             return None;
@@ -2260,7 +2257,7 @@ impl XsSchemaData {
     }
 
     /// Использование атрибута.
-    pub(crate) fn attribute_use_of(&self, i: usize) -> Option<AttributeUseView<'_>> {
+    pub fn attribute_use_of(&self, i: usize) -> Option<AttributeUseView<'_>> {
         match &self.node(i).data {
             XsData::AttributeUse(d) => Some(AttributeUseView {
                 declaration: d.declaration,
@@ -2274,14 +2271,14 @@ impl XsSchemaData {
 }
 
 /// Схема из текста XSD — тем же путём, каким её строит BSL-код: дерево
-/// строит [`crate::dom`], а разбирает уже готовое дерево этот модуль.
+/// строит `crate::dom`, а разбирает уже готовое дерево этот модуль.
 /// Второго разборщика схем в проекте нет, поэтому этой же дорогой ходит
-/// `СоздатьФабрикуXDTO`, прочитав файл (см. [`crate::xdto`]).
+/// `СоздатьФабрикуXDTO`, прочитав файл (см. модуль `xdto` компонента `bsl-xml`).
 ///
 /// # Errors
 ///
 /// Всё, чем отвечает [`create_schema`], плюс ошибка разбора XML.
-pub(crate) fn schema_of_text(text: &str) -> RtResult<Rc<XsSchemaData>> {
+pub fn schema_of_text(text: &str) -> RtResult<Rc<XsSchemaData>> {
     let mut state = crate::object::XmlReaderState::over(crate::xml::XmlParser::new(text));
     let doc = crate::dom::build_tree(&mut state)?;
     let value = crate::dom::node_value(&doc, &doc);
