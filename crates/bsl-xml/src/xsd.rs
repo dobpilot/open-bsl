@@ -2262,7 +2262,7 @@ impl XsSchemaData {
 ///
 /// Всё, чем отвечает [`create_schema`], плюс ошибка разбора XML.
 pub fn schema_of_text(text: &str) -> RtResult<Rc<XsSchemaData>> {
-    let mut state = crate::xml::XmlReaderState::over(bsl_rt::xml::XmlParser::new(text));
+    let mut state = crate::xml::XmlReaderState::over(crate::core::XmlParser::new(text));
     let doc = crate::dom::build_tree(&mut state)?;
     let value = crate::dom::node_value(&doc, &doc);
     match as_component(&create_schema(&new_builder(), &[value])?) {
@@ -2871,7 +2871,7 @@ mod tests {
     /// [`schema_of_text`], отдаёт результат `СоздатьСхемуXML` как есть,
     /// включая `Неопределено` на корне, который схемой не является.
     fn schema_of(text: &str) -> RtResult<BslValue> {
-        let mut state = crate::xml::XmlReaderState::over(bsl_rt::xml::XmlParser::new(text));
+        let mut state = crate::xml::XmlReaderState::over(crate::core::XmlParser::new(text));
         let doc = crate::dom::build_tree(&mut state).expect("дерево обязано строиться");
         let value = crate::dom::node_value(&doc, &doc);
         create_schema(&new_builder(), &[value])

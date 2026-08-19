@@ -173,6 +173,7 @@ dependencies = [
  "bsl-format",
  "bsl-pdf",
  "bsl-rt",
+ "bsl-xml",
  "flate2",
  "zip",
 ]

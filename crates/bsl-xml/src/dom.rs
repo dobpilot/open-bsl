@@ -3,9 +3,9 @@
 //! через `ЗаписьXML`.
 //!
 //! Второго разборщика здесь нет — дерево собирается из событий того же
-//! [`bsl_rt::xml::XmlParser`], что питает `ЧтениеXML`. Второго
+//! [`crate::core::XmlParser`], что питает `ЧтениеXML`. Второго
 //! сериализатора тоже нет: обход дерева пишет через тот же
-//! [`bsl_rt::xml::XmlWriter`], что питает `ЗаписьXML`, поэтому всё
+//! [`crate::core::XmlWriter`], что питает `ЗаписьXML`, поэтому всё
 //! измеренное форматирование (отступ в один таб, закрывающий тег вплотную
 //! после текста, экранирование) достаётся записи дерева бесплатно. Отсюда
 //! бесплатно наследуются его измеренные правила: секция CDATA вливается в
@@ -229,9 +229,9 @@
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
+use crate::core::{local_of, prefix_of, XmlEvent, XmlParser, XmlWriter};
+use crate::core::{CDATA_NODE_NAME, COMMENT_NODE_NAME, DOCUMENT_NODE_NAME, TEXT_NODE_NAME};
 use crate::xml::XmlReaderState;
-use bsl_rt::xml::{local_of, prefix_of, XmlEvent, XmlParser, XmlWriter};
-use bsl_rt::xml::{CDATA_NODE_NAME, COMMENT_NODE_NAME, DOCUMENT_NODE_NAME, TEXT_NODE_NAME};
 use bsl_rt::{
     BslString, BslValue, CallContext, EnumValue, ObjectProtocol, RtError, RtResult, TypeDescriptor,
     TypeId,
@@ -2088,7 +2088,7 @@ fn is_xmlns_attr(name: &str) -> bool {
 ///
 /// Второго сериализатора нет: всё форматирование — отступ, поведение
 /// закрывающего тега после текста, экранирование — приходит из уже
-/// измеренного [`bsl_rt::xml::XmlWriter`].
+/// измеренного [`crate::core::XmlWriter`].
 struct DomSerializer<'a> {
     w: &'a mut XmlWriter,
     /// На каждый открытый элемент — объявленные им пары «префикс, URI».

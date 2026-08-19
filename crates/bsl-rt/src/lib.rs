@@ -26,7 +26,6 @@ mod types;
 mod tz;
 mod uuid;
 mod vstr;
-pub mod xml;
 pub use std::cmp::Ordering;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -73,7 +72,6 @@ pub use vstr::{value_from_string_internal, value_to_string_internal};
 // Модель типов XDTO наружу крейта нужна целиком: строит её фабрика,
 // которой в этой реализации ещё нет, а до тех пор единственный её
 // потребитель — собственные тесты модуля.
-pub use xml::{XmlAttr, XmlEvent, XmlParser, XmlWriter, XmlWriterSettings};
 
 #[derive(Debug, Clone)]
 pub enum BslValue {

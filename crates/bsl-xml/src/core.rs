@@ -100,7 +100,7 @@
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use crate::{RtError, RtResult};
+use bsl_rt::{RtError, RtResult};
 
 /// Ошибка разбора или записи. Текст платформы не воспроизводим — он
 /// привязан к номерам строк её модуля, — поэтому своё сообщение.

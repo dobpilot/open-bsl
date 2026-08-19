@@ -3872,7 +3872,7 @@ const MAX_XDTO_DEPTH: usize = 500;
 struct ElementHead {
     name: String,
     uri: String,
-    attrs: Rc<Vec<bsl_rt::xml::XmlAttr>>,
+    attrs: Rc<Vec<crate::core::XmlAttr>>,
 }
 
 /// Что вышло из одного элемента.
@@ -3991,7 +3991,7 @@ fn read_document(
 /// элементов; ошибка самого разбора приходит из `read`.
 fn read_one<T>(
     state: &mut crate::xml::XmlReaderState,
-    read: impl FnOnce(&mut bsl_rt::xml::XmlParser, &ElementHead) -> RtResult<T>,
+    read: impl FnOnce(&mut crate::core::XmlParser, &ElementHead) -> RtResult<T>,
 ) -> RtResult<T> {
     let mut current = state.current.take();
     let parser = state
@@ -4000,7 +4000,7 @@ fn read_one<T>(
         .ok_or_else(|| RtError::Xdto("источник для ЧтениеXML не задан".to_string()))?;
     let head = loop {
         match current {
-            Some(bsl_rt::xml::XmlEvent::ElementStart { name, uri, attrs }) => {
+            Some(crate::core::XmlEvent::ElementStart { name, uri, attrs }) => {
                 break ElementHead { name, uri, attrs }
             }
             _ => match parser.read()? {
@@ -4018,7 +4018,7 @@ fn read_one<T>(
     state.depth = state
         .parser
         .as_ref()
-        .map_or(0, bsl_rt::xml::XmlParser::depth);
+        .map_or(0, crate::core::XmlParser::depth);
     state.current = next;
     state.attr_cursor = None;
     Ok(out)
@@ -4027,7 +4027,7 @@ fn read_one<T>(
 /// Разбор элемента, начальный тег которого уже прочитан: разбор идёт до
 /// парного закрывающего тега включительно.
 fn read_element(
-    parser: &mut bsl_rt::xml::XmlParser,
+    parser: &mut crate::core::XmlParser,
     model: &Rc<XdtoModel>,
     type_index: usize,
     head: &ElementHead,
@@ -4054,18 +4054,18 @@ fn read_element(
 
 /// `xsi:nil="true"` у элемента. Цифровая запись `1` — та же, что у
 /// `xs:boolean`, где обе формы измерены.
-fn reads_as_nil(parser: &bsl_rt::xml::XmlParser, head: &ElementHead) -> bool {
+fn reads_as_nil(parser: &crate::core::XmlParser, head: &ElementHead) -> bool {
     head.attrs.iter().any(|a| {
         attribute_uri(parser, &a.name) == XSI_NS
-            && bsl_rt::xml::local_of(&a.name) == "nil"
+            && crate::core::local_of(&a.name) == "nil"
             && (a.value == "true" || a.value == "1")
     })
 }
 
 /// URI атрибута: у атрибута без префикса пространства имён нет НИКОГДА —
 /// умолчательное объявление на атрибуты не распространяется.
-fn attribute_uri(parser: &bsl_rt::xml::XmlParser, name: &str) -> String {
-    let prefix = bsl_rt::xml::prefix_of(name);
+fn attribute_uri(parser: &crate::core::XmlParser, name: &str) -> String {
+    let prefix = crate::core::prefix_of(name);
     if prefix.is_empty() {
         String::new()
     } else {
@@ -4075,14 +4075,14 @@ fn attribute_uri(parser: &bsl_rt::xml::XmlParser, name: &str) -> String {
 
 /// Объявление пространства имён, а не атрибут данных.
 fn is_ns_declaration(name: &str) -> bool {
-    name == "xmlns" || bsl_rt::xml::prefix_of(name) == "xmlns"
+    name == "xmlns" || crate::core::prefix_of(name) == "xmlns"
 }
 
 /// Проглотить остаток текущего элемента вместе с его закрывающим тегом.
-fn skip_element(parser: &mut bsl_rt::xml::XmlParser) -> RtResult<()> {
+fn skip_element(parser: &mut crate::core::XmlParser) -> RtResult<()> {
     let target = parser.depth().saturating_sub(1);
     while let Some(event) = parser.read()? {
-        if matches!(event, bsl_rt::xml::XmlEvent::ElementEnd { .. }) && parser.depth() == target {
+        if matches!(event, crate::core::XmlEvent::ElementEnd { .. }) && parser.depth() == target {
             return Ok(());
         }
     }
@@ -4093,7 +4093,7 @@ fn skip_element(parser: &mut bsl_rt::xml::XmlParser) -> RtResult<()> {
 
 /// Собрать текст элемента. Вложенный элемент — ошибка: у простого типа
 /// содержимого быть не может.
-fn read_text_only(parser: &mut bsl_rt::xml::XmlParser, head: &ElementHead) -> RtResult<String> {
+fn read_text_only(parser: &mut crate::core::XmlParser, head: &ElementHead) -> RtResult<String> {
     let target = parser.depth().saturating_sub(1);
     let mut text = String::new();
     loop {
@@ -4104,11 +4104,11 @@ fn read_text_only(parser: &mut bsl_rt::xml::XmlParser, head: &ElementHead) -> Rt
             )));
         };
         match event {
-            bsl_rt::xml::XmlEvent::ElementEnd { .. } if parser.depth() == target => {
+            crate::core::XmlEvent::ElementEnd { .. } if parser.depth() == target => {
                 return Ok(text)
             }
-            bsl_rt::xml::XmlEvent::Text(t) => text.push_str(&t),
-            bsl_rt::xml::XmlEvent::ElementStart { name, .. } => {
+            crate::core::XmlEvent::Text(t) => text.push_str(&t),
+            crate::core::XmlEvent::ElementStart { name, .. } => {
                 return Err(RtError::Xdto(format!(
                     "элемент «{}» простого типа не может содержать элемент «{name}»",
                     head.name
@@ -4116,13 +4116,13 @@ fn read_text_only(parser: &mut bsl_rt::xml::XmlParser, head: &ElementHead) -> Rt
             }
             // Инструкции обработки и комментарии значения не несут;
             // чужого закрывающего тега разборщик не отдаёт.
-            bsl_rt::xml::XmlEvent::ElementEnd { .. }
-            | bsl_rt::xml::XmlEvent::ProcessingInstruction { .. }
-            | bsl_rt::xml::XmlEvent::Comment(_) => {}
+            crate::core::XmlEvent::ElementEnd { .. }
+            | crate::core::XmlEvent::ProcessingInstruction { .. }
+            | crate::core::XmlEvent::Comment(_) => {}
             // Ссылку на сущность разборщик отдаёт узлом, а не текстом:
             // подставить её значение здесь нечем, а молча потерять —
             // испортить прочитанное.
-            bsl_rt::xml::XmlEvent::EntityReference { name } => {
+            crate::core::XmlEvent::EntityReference { name } => {
                 return Err(RtError::Xdto(format!(
                     "ссылка на сущность «&{name};» при чтении XDTO не поддерживается"
                 )))
@@ -4136,7 +4136,7 @@ fn read_text_only(parser: &mut bsl_rt::xml::XmlParser, head: &ElementHead) -> Rt
 /// ошибка), поэтому пропускаются только объявления пространств имён и
 /// служебные `xsi:*`.
 fn read_simple(
-    parser: &mut bsl_rt::xml::XmlParser,
+    parser: &mut crate::core::XmlParser,
     model: &Rc<XdtoModel>,
     type_index: usize,
     head: &ElementHead,
@@ -4162,7 +4162,7 @@ fn read_simple(
 /// Элемент типа `anyType`. Поддержан ровно измеренный случай — текст,
 /// который платформа отдаёт строкой; всё остальное (атрибуты и вложенные
 /// элементы) — это уже открытое содержимое.
-fn read_open(parser: &mut bsl_rt::xml::XmlParser, head: &ElementHead) -> RtResult<ReadOut> {
+fn read_open(parser: &mut crate::core::XmlParser, head: &ElementHead) -> RtResult<ReadOut> {
     for attr in head.attrs.iter() {
         if is_ns_declaration(&attr.name) || attribute_uri(parser, &attr.name) == XSI_NS {
             continue;
@@ -4179,18 +4179,18 @@ fn read_open(parser: &mut bsl_rt::xml::XmlParser, head: &ElementHead) -> RtResul
             )));
         };
         match event {
-            bsl_rt::xml::XmlEvent::ElementEnd { .. } if parser.depth() == target => {
+            crate::core::XmlEvent::ElementEnd { .. } if parser.depth() == target => {
                 return Ok(ReadOut::Open(text))
             }
-            bsl_rt::xml::XmlEvent::Text(t) => text.push_str(&t),
-            bsl_rt::xml::XmlEvent::ElementStart { .. } => return Err(open_content(&head.name)),
-            bsl_rt::xml::XmlEvent::ElementEnd { .. }
-            | bsl_rt::xml::XmlEvent::ProcessingInstruction { .. }
-            | bsl_rt::xml::XmlEvent::Comment(_) => {}
+            crate::core::XmlEvent::Text(t) => text.push_str(&t),
+            crate::core::XmlEvent::ElementStart { .. } => return Err(open_content(&head.name)),
+            crate::core::XmlEvent::ElementEnd { .. }
+            | crate::core::XmlEvent::ProcessingInstruction { .. }
+            | crate::core::XmlEvent::Comment(_) => {}
             // Ссылку на сущность разборщик отдаёт узлом, а не текстом:
             // подставить её значение здесь нечем, а молча потерять —
             // испортить прочитанное.
-            bsl_rt::xml::XmlEvent::EntityReference { name } => {
+            crate::core::XmlEvent::EntityReference { name } => {
                 return Err(RtError::Xdto(format!(
                     "ссылка на сущность «&{name};» при чтении XDTO не поддерживается"
                 )))
@@ -4209,7 +4209,7 @@ fn open_content(name: &str) -> RtError {
 /// Элемент типа ОБЪЕКТА: атрибуты, содержимое, проверка порядка и
 /// обязательных свойств — всё так, как это делает платформа.
 fn read_object(
-    parser: &mut bsl_rt::xml::XmlParser,
+    parser: &mut crate::core::XmlParser,
     model: &Rc<XdtoModel>,
     type_index: usize,
     head: &ElementHead,
@@ -4232,7 +4232,7 @@ fn read_object(
         if uri == XSI_NS {
             continue;
         }
-        let local = bsl_rt::xml::local_of(&attr.name);
+        let local = crate::core::local_of(&attr.name);
         let Some(k) = find_property(model, &props, local, &uri, EnumValue::XmlFormAttribute)?
         else {
             return Err(RtError::Xdto(format!(
@@ -4266,8 +4266,8 @@ fn read_object(
             )));
         };
         match event {
-            bsl_rt::xml::XmlEvent::ElementEnd { .. } if parser.depth() == end_depth => break,
-            bsl_rt::xml::XmlEvent::Text(text) => {
+            crate::core::XmlEvent::ElementEnd { .. } if parser.depth() == end_depth => break,
+            crate::core::XmlEvent::Text(text) => {
                 if content_prop.is_some() {
                     content.push_str(&text);
                 } else if !text.trim().is_empty() {
@@ -4280,9 +4280,9 @@ fn read_object(
                     )));
                 }
             }
-            bsl_rt::xml::XmlEvent::ElementStart { name, uri, attrs } => {
+            crate::core::XmlEvent::ElementStart { name, uri, attrs } => {
                 let child = ElementHead { name, uri, attrs };
-                let local = bsl_rt::xml::local_of(&child.name);
+                let local = crate::core::local_of(&child.name);
                 let Some(k) =
                     find_property(model, &props, local, &child.uri, EnumValue::XmlFormElement)?
                 else {
@@ -4319,13 +4319,13 @@ fn read_object(
                 };
                 push_entry(&instance, prop, value);
             }
-            bsl_rt::xml::XmlEvent::ElementEnd { .. }
-            | bsl_rt::xml::XmlEvent::ProcessingInstruction { .. }
-            | bsl_rt::xml::XmlEvent::Comment(_) => {}
+            crate::core::XmlEvent::ElementEnd { .. }
+            | crate::core::XmlEvent::ProcessingInstruction { .. }
+            | crate::core::XmlEvent::Comment(_) => {}
             // Ссылку на сущность разборщик отдаёт узлом, а не текстом:
             // подставить её значение здесь нечем, а молча потерять —
             // испортить прочитанное.
-            bsl_rt::xml::XmlEvent::EntityReference { name } => {
+            crate::core::XmlEvent::EntityReference { name } => {
                 return Err(RtError::Xdto(format!(
                     "ссылка на сущность «&{name};» при чтении XDTO не поддерживается"
                 )))
@@ -4410,14 +4410,14 @@ fn check_order(
 /// если он и правда наследник объявленного. Неизвестное имя платформа
 /// ИГНОРИРУЕТ и читает объявленным типом (измерено).
 fn child_type_of(
-    parser: &bsl_rt::xml::XmlParser,
+    parser: &crate::core::XmlParser,
     model: &Rc<XdtoModel>,
     prop: usize,
     head: &ElementHead,
 ) -> RtResult<usize> {
     let declared = model.property_at(prop)?.type_index;
     let Some(qname) = head.attrs.iter().find(|a| {
-        attribute_uri(parser, &a.name) == XSI_NS && bsl_rt::xml::local_of(&a.name) == "type"
+        attribute_uri(parser, &a.name) == XSI_NS && crate::core::local_of(&a.name) == "type"
     }) else {
         return Ok(declared);
     };
@@ -4425,9 +4425,9 @@ fn child_type_of(
     // разрешается умолчательным объявлением (измерено обе записи:
     // `t:InnerExt` при префиксном объявлении и `InnerExt` при
     // умолчательном дают один и тот же тип).
-    let prefix = bsl_rt::xml::prefix_of(&qname.value);
+    let prefix = crate::core::prefix_of(&qname.value);
     let uri = parser.namespace_of(prefix);
-    let local = bsl_rt::xml::local_of(&qname.value);
+    let local = crate::core::local_of(&qname.value);
     match model.find(&uri, local) {
         Some(actual) if derives_from(model, actual, declared) => Ok(actual),
         _ => Ok(declared),
@@ -4692,7 +4692,7 @@ fn optional_text(arg: Option<&BslValue>, method: &'static str) -> RtResult<Optio
 /// от начала записи, тогда как `w.depth()` знает и про элементы, открытые
 /// вызывающим кодом до `ЗаписатьXML`.
 fn write_node(
-    w: &mut bsl_rt::xml::XmlWriter,
+    w: &mut crate::core::XmlWriter,
     scope: &mut NsScope,
     name: &str,
     uri: &str,
@@ -4820,7 +4820,7 @@ fn occurrences_of(data: &Rc<XdtoObjectData>, prop: usize) -> Vec<BslValue> {
 
 /// Содержимое элемента: текст простого значения либо свойства объекта.
 fn write_content(
-    w: &mut bsl_rt::xml::XmlWriter,
+    w: &mut crate::core::XmlWriter,
     scope: &mut NsScope,
     slot: &Slot,
     depth: usize,
@@ -4870,7 +4870,7 @@ fn write_content(
 /// перемежаются с одиночными по месту `Добавить`
 /// (`XDTO.WRITE_ORDER.MULTI` — `[c][c][a]`).
 fn write_properties(
-    w: &mut bsl_rt::xml::XmlWriter,
+    w: &mut crate::core::XmlWriter,
     scope: &mut NsScope,
     data: &Rc<XdtoObjectData>,
     depth: usize,
@@ -5335,7 +5335,7 @@ fn unsupported_value(value: &BslValue) -> RtError {
 ///
 /// [`RtError::Xml`], если писатель уже закрыт.
 fn write_serialized(
-    w: &mut bsl_rt::xml::XmlWriter,
+    w: &mut crate::core::XmlWriter,
     name: &str,
     uri: &str,
     nil: bool,
@@ -5513,7 +5513,7 @@ pub fn serializer_read_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<BslVal
 /// `Len` отдаёт «а» без ошибки, тогда как то же чтение ФАБРИКОЙ — ошибка.
 /// Поэтому разбор идёт через непроверяющий `value_from_lexical`.
 fn serializer_read_element(
-    parser: &mut bsl_rt::xml::XmlParser,
+    parser: &mut crate::core::XmlParser,
     model: &Rc<XdtoModel>,
     head: &ElementHead,
     want: Option<TypeId>,
@@ -5549,23 +5549,23 @@ fn serializer_read_element(
 
 /// Тип элемента: сначала `xsi:type`, потом собственное имя.
 fn serializer_type_of(
-    parser: &bsl_rt::xml::XmlParser,
+    parser: &crate::core::XmlParser,
     model: &Rc<XdtoModel>,
     head: &ElementHead,
 ) -> Option<usize> {
     let marked = head.attrs.iter().find(|a| {
-        attribute_uri(parser, &a.name) == XSI_NS && bsl_rt::xml::local_of(&a.name) == "type"
+        attribute_uri(parser, &a.name) == XSI_NS && crate::core::local_of(&a.name) == "type"
     });
     if let Some(qname) = marked {
-        let uri = parser.namespace_of(bsl_rt::xml::prefix_of(&qname.value));
-        if let Some(index) = model.find(&uri, bsl_rt::xml::local_of(&qname.value)) {
+        let uri = parser.namespace_of(crate::core::prefix_of(&qname.value));
+        if let Some(index) = model.find(&uri, crate::core::local_of(&qname.value)) {
             return Some(index);
         }
         // Неизвестное имя типа платформа ИГНОРИРУЕТ и читает дальше как
         // ни в чём не бывало (измерено: `xsi:type="xs:чепуха"` на
         // элементе `<мой>` дало строку «42», а не ошибку).
     }
-    model.find(&head.uri, bsl_rt::xml::local_of(&head.name))
+    model.find(&head.uri, crate::core::local_of(&head.name))
 }
 
 // --- объектный протокол -----------------------------------------------------

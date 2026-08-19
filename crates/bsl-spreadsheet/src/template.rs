@@ -42,8 +42,8 @@
 //! нет, и это лучше, чем потерять их молча.
 
 use crate::document::{AreaKind, HAlign, Merge, NamedArea, SpreadDocData, VAlign};
-use bsl_rt::xml::{XmlEvent, XmlParser};
 use bsl_rt::{RtError, RtResult};
+use bsl_xml::core::{XmlEvent, XmlParser};
 
 fn bad(what: impl Into<String>) -> RtError {
     RtError::Spread(what.into())

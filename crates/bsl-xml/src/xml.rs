@@ -1,6 +1,6 @@
 //! Поверхность `ЧтениеXML`/`ЗаписьXML`/`ПараметрыЗаписиXML`.
 //!
-//! Парсерное и писательское ядро живёт в `bsl_rt::xml` — им пользуется и
+//! Парсерное и писательское ядро живёт в `crate::core` — им пользуется и
 //! шаблонный разбор MXL; здесь объекты встроенного языка поверх него.
 
 use std::cell::RefCell;
@@ -8,7 +8,7 @@ use std::rc::Rc;
 
 use std::path::PathBuf;
 
-use bsl_rt::xml::{
+use crate::core::{
     local_of, prefix_of, XmlAttr, XmlEvent, XmlParser, XmlWriter, XmlWriterSettings,
     COMMENT_NODE_NAME, TEXT_NODE_NAME,
 };
