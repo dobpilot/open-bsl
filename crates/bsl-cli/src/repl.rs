@@ -56,12 +56,25 @@ impl Session {
     }
 
     /// Имена, которые дополнение предлагает сверх встроенных: переменные
-    /// этой сессии и всё, что осело в интернере (колонки таблиц, поля
-    /// структур — они приходят туда при первом же обращении).
+    /// этой сессии, всё, что осело в интернере (колонки таблиц, поля
+    /// структур — они приходят туда при первом же обращении), и имена
+    /// реестра компонентов движка — конструкторы и глобальные функции.
     fn names_for_completion(&self) -> SessionNames {
+        let mut constructors = Vec::new();
+        let mut functions = Vec::new();
+        for library in self.engine.registry().libraries() {
+            for constructor in library.constructors {
+                constructors.extend(constructor.names.iter().map(|n| n.to_string()));
+            }
+            for function in library.functions {
+                functions.extend(function.names.iter().map(|n| n.to_string()));
+            }
+        }
         SessionNames {
             locals: self.locals.clone(),
             fields: self.names.clone(),
+            constructors,
+            functions,
         }
     }
 }
@@ -81,6 +94,10 @@ fn colors_enabled() -> bool {
 /// хранение имён текущей сессии.
 struct BslHelper {
     session: SessionNames,
+    /// Имена глобальных функций реестра в верхнем регистре — подсветке,
+    /// в отличие от дополнения, нужен регистронезависимый поиск на каждый
+    /// набранный символ.
+    component_fns: std::collections::HashSet<String>,
     colors: bool,
 }
 
@@ -88,6 +105,7 @@ impl BslHelper {
     fn new(colors: bool) -> Self {
         BslHelper {
             session: SessionNames::default(),
+            component_fns: std::collections::HashSet::new(),
             colors,
         }
     }
@@ -119,7 +137,7 @@ impl Highlighter for BslHelper {
         if !self.colors || line.is_empty() {
             return Cow::Borrowed(line);
         }
-        Cow::Owned(highlight::colorize(line))
+        Cow::Owned(highlight::colorize(line, &self.component_fns))
     }
 
     fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
@@ -177,6 +195,17 @@ pub fn run() {
 
     println!("BSL REPL. Tab — дополнение, стрелка вверх — история, Ctrl+D — выход.");
     let mut session = Session::new();
+    // Имена реестра известны до первой строки — дополнение и подсветка
+    // компонентов не должны ждать первого исполнения.
+    if let Some(helper) = editor.helper_mut() {
+        helper.session = session.names_for_completion();
+        helper.component_fns = helper
+            .session
+            .functions
+            .iter()
+            .map(|n| n.to_uppercase())
+            .collect();
+    }
 
     loop {
         match editor.readline("bsl> ") {
@@ -191,6 +220,12 @@ pub fn run() {
                 eval_and_print(line.trim(), &mut session);
                 if let Some(helper) = editor.helper_mut() {
                     helper.session = session.names_for_completion();
+                    helper.component_fns = helper
+                        .session
+                        .functions
+                        .iter()
+                        .map(|n| n.to_uppercase())
+                        .collect();
                 }
             }
             // Ctrl+C — бросить набранную строку, но не сессию.

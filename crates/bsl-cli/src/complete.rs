@@ -6,9 +6,10 @@
 //!
 //! Источники имён — те же таблицы, по которым идёт настоящий разбор
 //! (`bsl_rt::BUILTIN_FN_NAMES`, `bsl_rt::BUILTIN_METHOD_NAMES`,
-//! `bsl_syntax::KEYWORD_SPELLINGS`, `bsl_sema::NEW_TYPES`), поэтому
-//! предложить то, чего интерпретатор не знает, автодополнение не может: за
-//! этим следят тесты в тех же крейтах.
+//! `bsl_syntax::KEYWORD_SPELLINGS`, `bsl_sema::NEW_TYPES` плюс реестр
+//! компонентов движка — его конструкторы и глобальные функции приходят в
+//! [`SessionNames`]), поэтому предложить то, чего интерпретатор не знает,
+//! автодополнение не может: за этим следят тесты в тех же крейтах.
 
 /// Что уместно в текущей позиции. Место определяется одним символом слева
 /// (`.`) или одним словом слева (`Новый`) — большего разбора здесь не
@@ -23,12 +24,15 @@ pub enum Place {
     Expression,
 }
 
-/// Имена, которые знает только текущая сессия REPL: её переменные и поля,
-/// осевшие в интернере (колонки таблиц, поля структур).
+/// Имена, которые знает только текущая сессия REPL: её переменные, поля,
+/// осевшие в интернере (колонки таблиц, поля структур), и имена из реестра
+/// компонентов её движка — конструкторы для `Новый` и глобальные функции.
 #[derive(Debug, Default, Clone)]
 pub struct SessionNames {
     pub locals: Vec<String>,
     pub fields: Vec<String>,
+    pub constructors: Vec<String>,
+    pub functions: Vec<String>,
 }
 
 fn is_ident_continue(c: char) -> bool {
@@ -81,9 +85,13 @@ fn names_for(place: Place, session: &SessionNames) -> Vec<String> {
             );
             out.extend(session.fields.iter().cloned());
         }
-        Place::NewType => out.extend(bsl_sema::NEW_TYPES.iter().map(|n| n.to_string())),
+        Place::NewType => {
+            out.extend(bsl_sema::NEW_TYPES.iter().map(|n| n.to_string()));
+            out.extend(session.constructors.iter().cloned());
+        }
         Place::Expression => {
             out.extend(bsl_rt::BUILTIN_FN_NAMES.iter().map(|(n, _)| n.to_string()));
+            out.extend(session.functions.iter().cloned());
             for (ru, en, _) in bsl_syntax::KEYWORD_SPELLINGS {
                 out.push(ru.to_string());
                 if ru != en {
@@ -128,6 +136,8 @@ mod tests {
         SessionNames {
             locals: vec!["таблица".to_string(), "сумма".to_string()],
             fields: vec!["цена".to_string()],
+            constructors: vec!["ЧтениеXML".to_string(), "XMLReader".to_string()],
+            functions: vec!["ПрочитатьJSON".to_string()],
         }
     }
 
@@ -173,10 +183,13 @@ mod tests {
         let found = names("х = Новый ");
         assert_eq!(found, {
             let mut all: Vec<String> = bsl_sema::NEW_TYPES.iter().map(|s| s.to_string()).collect();
+            all.extend(session().constructors);
             all.sort_by_key(|n| (n.to_uppercase(), n.clone()));
             all
         });
         assert!(names("х = Новый Табл").contains(&"ТаблицаЗначений".to_string()));
+        // Конструкторы реестра предлагаются наравне с базовыми типами.
+        assert!(names("х = Новый Чтен").contains(&"ЧтениеXML".to_string()));
         // `New` — то же самое ключевое слово.
         assert!(names("x = New Val").contains(&"ValueTable".to_string()));
     }
@@ -186,6 +199,8 @@ mod tests {
         assert!(names("Сооб").contains(&"Сообщить".to_string()));
         assert!(names("Ес").contains(&"Если".to_string()));
         assert!(names("таб").contains(&"таблица".to_string()));
+        // Глобальные функции компонентов приходят из реестра сессии.
+        assert!(names("Прочитать").contains(&"ПрочитатьJSON".to_string()));
         // Методы объектов в выражении не предлагаются — они бессмысленны
         // без получателя.
         assert!(!names("Сверн").contains(&"Свернуть".to_string()));

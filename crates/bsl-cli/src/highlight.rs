@@ -56,7 +56,10 @@ fn is_ident_continue(c: char) -> bool {
 /// Разбор строки на куски `(начало, конец, что это)` в БАЙТОВЫХ смещениях.
 /// Куски идут подряд и покрывают строку целиком, без дыр и наложений — на
 /// этом держится склейка обратно в `colorize`.
-pub fn pieces(line: &str) -> Vec<(usize, usize, Piece)> {
+pub fn pieces(
+    line: &str,
+    component_fns: &std::collections::HashSet<String>,
+) -> Vec<(usize, usize, Piece)> {
     let bytes = line.as_bytes();
     let mut out: Vec<(usize, usize, Piece)> = Vec::new();
     let mut i = 0;
@@ -119,7 +122,7 @@ pub fn pieces(line: &str) -> Vec<(usize, usize, Piece)> {
                     break;
                 }
             }
-            classify_ident(&line[start..i])
+            classify_ident(&line[start..i], component_fns)
         } else {
             i += c.len_utf8();
             Piece::Punct
@@ -137,12 +140,15 @@ pub fn pieces(line: &str) -> Vec<(usize, usize, Piece)> {
 
 /// Имя — ключевое слово, встроенная функция/метод или обычный идентификатор.
 /// Метод и функция дают один цвет: с точки зрения читающего строку это
-/// одинаково «имя из языка, а не моё».
-fn classify_ident(ident: &str) -> Piece {
+/// одинаково «имя из языка, а не моё». Глобальные функции компонентов
+/// (`component_fns`, имена в верхнем регистре из реестра движка) — тоже:
+/// пользователю всё равно, в каком крейте живёт `ПрочитатьJSON`.
+fn classify_ident(ident: &str, component_fns: &std::collections::HashSet<String>) -> Piece {
     if bsl_syntax::lookup_keyword(ident).is_some() {
         Piece::Keyword
     } else if bsl_rt::BuiltinFn::lookup(ident).is_some()
         || bsl_rt::BuiltinMethod::lookup(ident).is_some()
+        || component_fns.contains(&ident.to_uppercase())
     {
         Piece::Builtin
     } else {
@@ -151,9 +157,9 @@ fn classify_ident(ident: &str) -> Piece {
 }
 
 /// Строка с ANSI-кодами. Текст не меняется — только вставляются коды.
-pub fn colorize(line: &str) -> String {
+pub fn colorize(line: &str, component_fns: &std::collections::HashSet<String>) -> String {
     let mut out = String::with_capacity(line.len() + 32);
-    for (start, end, piece) in pieces(line) {
+    for (start, end, piece) in pieces(line, component_fns) {
         match piece.color() {
             Some(code) => {
                 out.push_str("\x1b[");
@@ -193,7 +199,7 @@ mod tests {
     }
 
     fn kinds(line: &str) -> Vec<(&str, Piece)> {
-        pieces(line)
+        pieces(line, &Default::default())
             .into_iter()
             .map(|(s, e, p)| (&line[s..e], p))
             .collect()
@@ -214,7 +220,11 @@ mod tests {
             "1.5 + .5 + 1..2",
             "\"\"\"экранированная\"\"\"",
         ] {
-            assert_eq!(strip_ansi(&colorize(line)), line, "вход: {line:?}");
+            assert_eq!(
+                strip_ansi(&colorize(line, &Default::default())),
+                line,
+                "вход: {line:?}"
+            );
         }
     }
 
@@ -222,7 +232,7 @@ mod tests {
     fn pieces_cover_the_line_without_gaps() {
         let line = "Для i = 1 По 10 Цикл Сообщить(i); КонецЦикла // всё";
         let mut expected_start = 0;
-        for (start, end, _) in pieces(line) {
+        for (start, end, _) in pieces(line, &Default::default()) {
             assert_eq!(start, expected_start, "дыра или наложение в {line:?}");
             assert!(end > start);
             expected_start = end;
