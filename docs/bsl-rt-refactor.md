@@ -68,7 +68,10 @@ VM. Новая глобальная функция аналогично испо
 | `bsl-spreadsheet` | `spreadsheet.rs`, `spreadsheet_pdf.rs`, `spreadsheet_template.rs`, `xlsx.rs` |
 | `bsl-textdoc` | `textdoc.rs`, `ТекстовыйДокумент`, области и параметры макета |
 | `bsl-regexp` | `regex.rs`, `regex_api.rs`, движок и BSL-поверхность регулярных выражений |
-| `bsl-compression` | `deflate.rs`, `inflate.rs`; внутренний форматный слой без BSL-объектов |
+
+Отдельный крейт сжатия из плана исключён: in-tree `deflate.rs` и
+`inflate.rs` отставлены в пользу внешних `flate2` и `zip` (см. историю
+`bsl-rt`), поэтому форматные крейты зависят от них напрямую.
 
 Вспомогательную календарную арифметику, которой одновременно пользуются
 JSON и XDTO, следует перенести из `json.rs` в модуль даты `bsl-rt`. Наличие
@@ -83,8 +86,8 @@ bsl-binbuf       -> bsl-rt
 bsl-stream       -> bsl-rt + bsl-binbuf
 bsl-json         -> bsl-rt
 bsl-xml          -> bsl-rt
-bsl-pdf          -> bsl-rt + bsl-compression
-bsl-zip          -> bsl-rt + bsl-stream + bsl-compression
+bsl-pdf          -> bsl-rt + flate2
+bsl-zip          -> bsl-rt + bsl-stream + zip + flate2
 bsl-spreadsheet  -> bsl-rt + bsl-xml + bsl-pdf + bsl-zip
 bsl-textdoc      -> bsl-rt
 bsl-regexp       -> bsl-rt
@@ -495,9 +498,9 @@ CallComponent dst=1 lib=1 fn=1 base=2 count=1
 ```
 
 Проверка происходит до открытия файлов, вывода и других наблюдаемых
-эффектов. `bsl-compression` не записывается в заголовок: это внутреннее
-статически связанное устройство `bsl-pdf` и `bsl-zip`, которое невозможно
-предоставить BSL-программе отдельно. Заголовок перечисляет адресуемые
+эффектов. Внешние `flate2` и `zip` не записываются в заголовок: это
+внутреннее статически связанное устройство `bsl-pdf` и `bsl-zip`, которое
+невозможно предоставить BSL-программе отдельно. Заголовок перечисляет адресуемые
 runtime-компоненты, а не служит полным Cargo SBOM.
 
 Каждый зарегистрированный конструктор, встроенная функция, перечисление и
@@ -771,7 +774,7 @@ VM. `bsl-cli` не должен быть контроллером библиот
    перенаправление `stdout`/`stderr` до перемещения реализаций.
 4. Вынести независимые листья: `bsl-regexp`, `bsl-binbuf`, `bsl-textdoc`,
    `bsl-json`.
-5. Вынести `bsl-compression`, затем `bsl-stream`, `bsl-zip` и `bsl-pdf`.
+5. Вынести `bsl-stream`, затем `bsl-zip` и `bsl-pdf`.
 6. Вынести XML-стек в `bsl-xml`, предварительно перенеся общую календарную
    арифметику в `bsl-rt`.
 7. Последним вынести `bsl-spreadsheet` вместе с форматами MXL/XLSX,
