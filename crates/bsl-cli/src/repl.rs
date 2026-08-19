@@ -35,6 +35,7 @@ use crate::print_value;
 /// объектов это не портит (у каждого объекта своя `Rc<Shape>` независимо
 /// от того, какая `ShapeTable` её породила).
 pub struct Session {
+    engine: open_bsl::Engine,
     locals: Vec<String>,
     names: Vec<String>,
     values: Vec<BslValue>,
@@ -42,7 +43,12 @@ pub struct Session {
 
 impl Session {
     fn new() -> Self {
+        let engine = crate::engine().unwrap_or_else(|e| {
+            eprintln!("ошибка сборки движка: {e}");
+            std::process::exit(1);
+        });
         Session {
+            engine,
             locals: Vec::new(),
             names: Vec::new(),
             values: Vec::new(),
@@ -250,16 +256,27 @@ fn eval_repl_line(line: &str, session: &mut Session) -> Result<BslValue, String>
         }
     }
 
-    let (new_locals, body) = bsl_sema::resolve_repl_stmts(&session.locals, &[], &stmts, &[])
-        .map_err(|e| format!("{e:?}"))?;
+    let (new_locals, body, requirements) = bsl_sema::resolve_repl_stmts_with_registry(
+        &session.locals,
+        &[],
+        &stmts,
+        &[],
+        session.engine.registry(),
+    )
+    .map_err(|e| format!("{e:?}"))?;
     // Формы — ВСЕГДА свежие для этой строки (см. doc comment на
     // `compile_snippet`): shape-индексы внутри `chunk` ссылаются на них, а
     // не на что-то накопленное в сессии. Раньше здесь передавался
     // `session.shapes` (всегда пустой) — падало на первой же строке,
     // создающей `Новый Структура(...)`, с индексом за границами.
-    let (chunk, new_names, shapes) =
-        bsl_bytecode::compile_snippet(&new_locals, &body, &session.names, &[])
-            .map_err(|e| format!("{e:?}"))?;
+    let (chunk, new_names, shapes) = bsl_bytecode::compile_snippet_with_requirements(
+        &new_locals,
+        &body,
+        &session.names,
+        &[],
+        &requirements,
+    )
+    .map_err(|e| format!("{e:?}"))?;
 
     let mut stack = session.values.clone();
     stack.resize(chunk.n_regs as usize, BslValue::Undefined);
@@ -269,9 +286,16 @@ fn eval_repl_line(line: &str, session: &mut Session) -> Result<BslValue, String>
     // упомянутого этой же строкой (`т.Колонки`), в старую таблицу не
     // попадает. Раньше сюда передавалась старая — и первая же строка с
     // новым именем поля падала с `InvalidBytecode`.
-    let (value, mut final_stack) =
-        bsl_vm::run_repl_chunk(&chunk, new_names.clone(), shapes, new_locals.clone(), stack)
-            .map_err(|e| e.to_string())?;
+    let (value, mut final_stack) = bsl_vm::run_repl_chunk_with_registry(
+        &chunk,
+        new_names.clone(),
+        shapes,
+        new_locals.clone(),
+        stack,
+        requirements.clone(),
+        session.engine.registry(),
+    )
+    .map_err(|e| e.to_string())?;
     // `final_stack` включает временные регистры этой строки (`chunk.n_regs`
     // может быть больше числа локалей) — обрезаем до настоящих локалей,
     // иначе следующая строка увидит мусор от чужих temp-регистров на месте

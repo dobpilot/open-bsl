@@ -9,7 +9,7 @@ mod resolver;
 
 pub use resolved::{RExpr, RStmt, Resolved, ResolvedFunction, ResolvedParam, ResolvedProgram};
 pub use resolver::{
-    resolve_program, resolve_program_with_registry, resolve_repl_stmts, resolve_script,
-    resolve_snippet_stmts, resolve_snippet_stmts_with_registry, ResolvedSnippetWithRequirements,
-    SemaError, NEW_TYPES,
+    resolve_program, resolve_program_with_registry, resolve_repl_stmts,
+    resolve_repl_stmts_with_registry, resolve_script, resolve_snippet_stmts,
+    resolve_snippet_stmts_with_registry, ResolvedSnippetWithRequirements, SemaError, NEW_TYPES,
 };

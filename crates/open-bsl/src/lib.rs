@@ -116,6 +116,12 @@ impl Engine {
         })
     }
 
+    /// Каталог компонентов движка — для клиентов, собирающих фрагменты
+    /// самостоятельно (REPL с накоплением локалей).
+    pub fn registry(&self) -> &bsl_rt::RuntimeRegistry {
+        &self.inner.registry
+    }
+
     pub fn new_state(&self) -> State {
         self.state_builder().build()
     }
@@ -198,6 +204,15 @@ impl Module {
     ///
     /// Возвращает ошибку, если внутренние таблицы модуля не помещаются в
     /// ограничения формата.
+    /// Печатает байт-код вместе с текстом исходника в листинге.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку печати текстового формата.
+    pub fn bytecode_with_source(&self, source: &str) -> Result<String, Error> {
+        bsl_bytecode::write_program(&self.program, Some(source)).map_err(Error::Bytecode)
+    }
+
     pub fn bytecode(&self) -> Result<String, Error> {
         Ok(bsl_bytecode::write_program(&self.program, None)?)
     }

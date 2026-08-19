@@ -344,6 +344,30 @@ pub fn resolve_snippet_stmts_with_registry(
     )
 }
 
+/// То же, что [`resolve_snippet_stmts_with_registry`], но по правилам
+/// REPL: голый вызов функции встроенного языка не отвергается.
+///
+/// # Errors
+///
+/// Возвращает [`SemaError`] по тем же причинам, что и
+/// [`resolve_repl_stmts`].
+pub fn resolve_repl_stmts_with_registry(
+    existing_locals: &[String],
+    module_vars: &[String],
+    stmts: &[AStmt],
+    signatures: &[(String, usize)],
+    registry: &bsl_rt::RuntimeRegistry,
+) -> Result<ResolvedSnippetWithRequirements, SemaError> {
+    resolve_snippet_stmts_mode_registry(
+        existing_locals,
+        module_vars,
+        stmts,
+        signatures,
+        false,
+        Some(registry),
+    )
+}
+
 fn resolve_snippet_stmts_mode(
     existing_locals: &[String],
     module_vars: &[String],

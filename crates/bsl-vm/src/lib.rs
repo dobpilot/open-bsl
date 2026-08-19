@@ -311,6 +311,41 @@ pub fn run_repl_chunk(
     drive(&program, 0, stack)
 }
 
+/// То же, что [`run_repl_chunk`], но с каталогом компонентов: чанк,
+/// скомпилированный с реестром, несёт `CreateObject`/`CallComponent`, и
+/// его требования связываются перед исполнением.
+///
+/// # Errors
+///
+/// Возвращает те же ошибки, что [`run_repl_chunk`], плюс ошибку
+/// связывания компонентов.
+pub fn run_repl_chunk_with_registry(
+    chunk: &bsl_bytecode::Chunk,
+    names: Vec<String>,
+    shapes: Vec<std::rc::Rc<bsl_rt::Shape>>,
+    locals: Vec<String>,
+    stack: Vec<BslValue>,
+    requirements: Vec<bsl_bytecode::LibraryRequirement>,
+    registry: &bsl_rt::RuntimeRegistry,
+) -> Result<(BslValue, Vec<BslValue>), RtError> {
+    let program = Program {
+        requirements,
+        chunks: vec![chunk.clone()],
+        names,
+        shapes,
+        top_level_locals: locals,
+        function_names: Vec::new(),
+        module_vars: Vec::new(),
+        module_base: 0,
+    };
+    let linked = link_components(&program, Some(registry))?;
+    let mut host = HostIo {
+        stdout: &mut std::io::stdout(),
+        stderr: &mut std::io::stderr(),
+    };
+    drive_linked(&program, 0, stack, JitMode::Off, &linked, &mut host)
+}
+
 /// Выполняет `program.chunks[func_id]` с нуля, используя `stack` как
 /// начальное содержимое регистров (уже дополненное/подготовленное
 /// вызывающим), и возвращает и значение, и финальный стек — нужен

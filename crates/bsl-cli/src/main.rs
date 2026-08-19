@@ -240,39 +240,50 @@ fn run_file(path: &str, engine: Engine) {
         }
     };
 
-    let program = match bsl_syntax::parse(&src) {
-        Ok(p) => p,
+    let host = match crate::engine() {
+        Ok(engine) => engine,
         Err(e) => {
+            eprintln!("ошибка сборки движка: {e}");
+            std::process::exit(1);
+        }
+    };
+    let module = match host.compile(&src) {
+        Ok(m) => m,
+        Err(open_bsl::Error::Parse(e)) => {
             eprintln!("ошибка разбора: {e:?}");
             std::process::exit(1);
         }
-    };
-    let resolved = match bsl_sema::resolve_program(&program.items) {
-        Ok(r) => r,
-        Err(e) => {
+        Err(open_bsl::Error::Semantic(e)) => {
             eprintln!("ошибка резолвинга: {e:?}");
             std::process::exit(1);
         }
-    };
-    let compiled = match bsl_bytecode::compile_program(&resolved) {
-        Ok(c) => c,
         Err(e) => {
-            eprintln!("ошибка компиляции: {e:?}");
+            eprintln!("ошибка компиляции: {e}");
             std::process::exit(1);
         }
     };
-    let outcome = match engine {
-        Engine::Interpreter => bsl_vm::run_program(&compiled),
-        Engine::Jit => bsl_vm::run_program_jit(&compiled),
-    };
-    match outcome {
+    let mut state = host
+        .state_builder()
+        .jit(matches!(engine, Engine::Jit))
+        .build();
+    match state.run(&module) {
         Ok(BslValue::Undefined) => {}
         Ok(v) => print_value(&v),
+        Err(open_bsl::Error::Runtime(e)) => {
+            eprintln!("ошибка выполнения: {e}");
+            std::process::exit(1);
+        }
         Err(e) => {
             eprintln!("ошибка выполнения: {e}");
             std::process::exit(1);
         }
     }
+}
+
+/// Движок со всеми компонентами по умолчанию — общий для запуска файла,
+/// байт-кода и REPL.
+pub fn engine() -> Result<open_bsl::Engine, open_bsl::Error> {
+    open_bsl::Engine::builder().build()
 }
 
 /// Печать значения, которым завершился скрипт или строка REPL.

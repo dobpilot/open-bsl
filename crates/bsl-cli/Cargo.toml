@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 bsl-vm = { path = "../bsl-vm" }
+open-bsl = { path = "../open-bsl" }
 bsl-bytecode = { path = "../bsl-bytecode" }
 bsl-syntax = { path = "../bsl-syntax" }
 bsl-sema = { path = "../bsl-sema" }

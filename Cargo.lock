@@ -106,6 +106,7 @@ dependencies = [
  "bsl-sema",
  "bsl-syntax",
  "bsl-vm",
+ "open-bsl",
  "rustyline",
 ]
 

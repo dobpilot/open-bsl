@@ -14,11 +14,11 @@ use std::path::Path;
 /// Компилирует и печатает байт-код: в файл, если путь задан, иначе в
 /// stdout. Возвращает код возврата процесса.
 pub fn emit(source: &str, out: Option<&str>) -> i32 {
-    let program = match compile(source) {
-        Ok(p) => p,
+    let module = match compile(source) {
+        Ok(m) => m,
         Err(code) => return code,
     };
-    let text = match bsl_bytecode::write_program(&program, Some(source)) {
+    let text = match module.bytecode_with_source(source) {
         Ok(t) => t,
         Err(e) => {
             eprintln!("не удалось напечатать байт-код: {e}");
@@ -54,14 +54,21 @@ pub fn run(path: &str) -> i32 {
             return 1;
         }
     };
-    let program = match bsl_bytecode::parse_program(&text) {
-        Ok(p) => p,
+    let engine = match crate::engine() {
+        Ok(engine) => engine,
+        Err(e) => {
+            eprintln!("ошибка сборки движка: {e}");
+            return 1;
+        }
+    };
+    let module = match engine.load_bytecode(&text) {
+        Ok(m) => m,
         Err(e) => {
             eprintln!("{}: {e}", Path::new(path).display());
             return 1;
         }
     };
-    match bsl_vm::run_program(&program) {
+    match engine.new_state().run(&module) {
         Ok(bsl_rt::BslValue::Undefined) => 0,
         Ok(v) => {
             crate::print_value(&v);
@@ -75,21 +82,21 @@ pub fn run(path: &str) -> i32 {
 }
 
 /// Тот же путь компиляции, что и у обычного запуска файла, — до VM.
-fn compile(path: &str) -> Result<bsl_bytecode::Program, i32> {
+fn compile(path: &str) -> Result<open_bsl::Module, i32> {
     let src = std::fs::read_to_string(path).map_err(|e| {
         eprintln!("не удалось прочитать «{path}»: {e}");
         1
     })?;
-    let program = bsl_syntax::parse(&src).map_err(|e| {
-        eprintln!("ошибка разбора: {e:?}");
+    let engine = crate::engine().map_err(|e| {
+        eprintln!("ошибка сборки движка: {e}");
         1
     })?;
-    let resolved = bsl_sema::resolve_program(&program.items).map_err(|e| {
-        eprintln!("ошибка резолвинга: {e:?}");
-        1
-    })?;
-    bsl_bytecode::compile_program(&resolved).map_err(|e| {
-        eprintln!("ошибка компиляции: {e:?}");
+    engine.compile(&src).map_err(|e| {
+        match e {
+            open_bsl::Error::Parse(e) => eprintln!("ошибка разбора: {e:?}"),
+            open_bsl::Error::Semantic(e) => eprintln!("ошибка резолвинга: {e:?}"),
+            other => eprintln!("ошибка компиляции: {other}"),
+        }
         1
     })
 }
