@@ -1932,11 +1932,21 @@ fn step_cold(
             base,
             count,
         } => {
-            let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
-            let writer = bsl_rt::new_archive_writer(zip, args.as_slice())?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, writer)?;
-            frames[frame_idx].pc += 1;
+            #[cfg(not(feature = "zip"))]
+            {
+                let _ = (dst, zip, base, count);
+                return Err(RtError::Component(
+                    "ЗаписьZipФайла требует компонент bsl-zip".to_string(),
+                ));
+            }
+            #[cfg(feature = "zip")]
+            {
+                let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
+                let writer = bsl_zip::new_archive_writer(zip, args.as_slice())?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, writer)?;
+                frames[frame_idx].pc += 1;
+            }
         }
         Instr::NewArchiveReader {
             dst,
@@ -1945,13 +1955,23 @@ fn step_cold(
             password,
             archive_type,
         } => {
-            let source = reg_load(stack, frames[frame_idx].reg_index(source))?;
-            let password = reg_load(stack, frames[frame_idx].reg_index(password))?;
-            let archive_type = reg_load(stack, frames[frame_idx].reg_index(archive_type))?;
-            let reader = bsl_rt::new_archive_reader(zip, &source, &password, &archive_type)?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, reader)?;
-            frames[frame_idx].pc += 1;
+            #[cfg(not(feature = "zip"))]
+            {
+                let _ = (dst, zip, source, password, archive_type);
+                return Err(RtError::Component(
+                    "ЧтениеZipФайла требует компонент bsl-zip".to_string(),
+                ));
+            }
+            #[cfg(feature = "zip")]
+            {
+                let source = reg_load(stack, frames[frame_idx].reg_index(source))?;
+                let password = reg_load(stack, frames[frame_idx].reg_index(password))?;
+                let archive_type = reg_load(stack, frames[frame_idx].reg_index(archive_type))?;
+                let reader = bsl_zip::new_archive_reader(zip, &source, &password, &archive_type)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, reader)?;
+                frames[frame_idx].pc += 1;
+            }
         }
         Instr::NewDataReader {
             dst,

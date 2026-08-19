@@ -36,7 +36,6 @@ mod xlsx;
 mod xml;
 pub mod xpath;
 mod xsd;
-mod zip;
 
 use std::cmp::Ordering;
 use std::fmt;
@@ -91,7 +90,6 @@ pub use table::{ColumnVstr, ValueTableData};
 pub use types::TypeId;
 pub use tz::local_offset_seconds;
 pub use vstr::{value_from_string_internal, value_to_string_internal};
-pub use zip::{new_archive_reader, new_archive_writer, ArchiveKind, ArchiveState, WriterState};
 // Модель типов XDTO наружу крейта нужна целиком: строит её фабрика,
 // которой в этой реализации ещё нет, а до тех пор единственный её
 // потребитель — собственные тесты модуля.
@@ -542,14 +540,10 @@ impl BslValue {
                 BslObject::PdfPage(..) => "СтраницаPDF",
                 BslObject::PdfAttachments(_) => "КоллекцияВложенийPDF",
                 BslObject::PdfAttachment(..) => "ВложениеPDF",
-                BslObject::ArchiveReader(zip::ArchiveKind::Zip, _) => "ЧтениеZipФайла",
-                BslObject::ArchiveEntries(zip::ArchiveKind::Zip, _) => "ЭлементыZipФайла",
-                BslObject::ArchiveEntry(zip::ArchiveKind::Zip, ..) => "ЭлементZipФайла",
-                BslObject::ArchiveReader(zip::ArchiveKind::Archive, _) => "ЧтениеФайлаАрхива",
-                BslObject::ArchiveEntries(zip::ArchiveKind::Archive, _) => "ЭлементыФайлаАрхива",
-                BslObject::ArchiveEntry(zip::ArchiveKind::Archive, ..) => "ЭлементФайлаАрхива",
-                BslObject::ArchiveWriter(zip::ArchiveKind::Zip, _) => "ЗаписьZipФайла",
-                BslObject::ArchiveWriter(zip::ArchiveKind::Archive, _) => "ЗаписьФайлаАрхива",
+                BslObject::ReservedArchiveReader
+                | BslObject::ReservedArchiveEntries
+                | BslObject::ReservedArchiveEntry
+                | BslObject::ReservedArchiveWriter => "",
                 // Имена ЗНАЧЕНИЙ у потоков — слитные и РАЗНЫЕ, в отличие от
                 // имени их типа, которое у обоих одно («Файловый поток»,
                 // см. `types.rs`). Измерено обеими сторонами.
@@ -1314,13 +1308,9 @@ impl BslValue {
                 | BslObject::SpreadDocParams(..)
                 | BslObject::ReservedTextDocument
                 | BslObject::ReservedTextDocParams
-                // ИЗМЕРЕНО: `ЗначениеЗаполнено(Новый ЧтениеZipФайла(файл))`
-                // — «Да». Ни у читателя, ни у элемента длины нет, а
-                // коллекция элементов отдельно не мерилась и идёт сюда же:
-                // ошибка на закрытом архиве важнее, чем ноль элементов.
-                | BslObject::ArchiveReader(..)
-                | BslObject::ArchiveEntries(..)
-                | BslObject::ArchiveEntry(..) => true,
+                | BslObject::ReservedArchiveReader
+                | BslObject::ReservedArchiveEntries
+                | BslObject::ReservedArchiveEntry => true,
                 // Коллекции DOM заполненность имеют, и критерий у них
                 // ДЛИНА, как у массива: измерено, что непустые
                 // `ДочерниеУзлы` дают «Да», а пустые `Атрибуты` — «Нет».
@@ -1379,7 +1369,7 @@ impl BslValue {
                 | BslObject::ReservedMemoryStream
                 | BslObject::ReservedFileStream
                 | BslObject::ReservedFileStreamsManager
-                | BslObject::ArchiveWriter(..)
+                | BslObject::ReservedArchiveWriter
                 | BslObject::ReservedDataReader
                 | BslObject::ReservedDataWriter
                 | BslObject::ReservedDataReadResult
@@ -1510,16 +1500,10 @@ impl BslValue {
                 BslObject::PdfPage(..) => TypeId::PdfPage,
                 BslObject::PdfAttachments(_) => TypeId::PdfAttachmentCollection,
                 BslObject::PdfAttachment(..) => TypeId::PdfAttachment,
-                BslObject::ArchiveReader(zip::ArchiveKind::Zip, _) => TypeId::ZipFileReader,
-                BslObject::ArchiveEntries(zip::ArchiveKind::Zip, _) => TypeId::ZipFileEntries,
-                BslObject::ArchiveEntry(zip::ArchiveKind::Zip, ..) => TypeId::ZipFileEntry,
-                BslObject::ArchiveReader(zip::ArchiveKind::Archive, _) => TypeId::ArchiveFileReader,
-                BslObject::ArchiveEntries(zip::ArchiveKind::Archive, _) => {
-                    TypeId::ArchiveFileEntries
-                }
-                BslObject::ArchiveEntry(zip::ArchiveKind::Archive, ..) => TypeId::ArchiveFileEntry,
-                BslObject::ArchiveWriter(zip::ArchiveKind::Zip, _) => TypeId::ZipFileWriter,
-                BslObject::ArchiveWriter(zip::ArchiveKind::Archive, _) => TypeId::ArchiveFileWriter,
+                BslObject::ReservedArchiveReader => TypeId::ZipFileReader,
+                BslObject::ReservedArchiveEntries => TypeId::ZipFileEntries,
+                BslObject::ReservedArchiveEntry => TypeId::ZipFileEntry,
+                BslObject::ReservedArchiveWriter => TypeId::ZipFileWriter,
                 BslObject::ReservedMemoryStream => TypeId::MemoryStream,
                 BslObject::ReservedFileStream => TypeId::FileStream,
                 BslObject::ReservedFileStreamsManager => TypeId::FileStreamsManager,
@@ -1776,12 +1760,7 @@ impl BslValue {
     ///
     /// Ошибку ввода-вывода либо неприменимость метода к получателю.
     pub fn close_object(&self) -> RtResult<BslValue> {
-        if zip::is_reader(self) {
-            // У читателя архива `Закрыть` отпускает архив целиком, и
-            // повторный вызов — уже ошибка (измерено: «Архив не открыт!»).
-            zip::close(self)?;
-            Ok(BslValue::Undefined)
-        } else if xml::is_xml_writer(self) {
+        if xml::is_xml_writer(self) {
             xml::close_writer(self)
         } else if xml::is_xml_reader(self) {
             // У ЧтениеXML `Закрыть` ничего не отдаёт: это отпускание
@@ -2266,9 +2245,6 @@ impl BslValue {
                         row_id,
                     ))))
                 }
-                // `Элементы[i]` — тот же путь, что и `Получить(i)`
-                // (измерено, что есть оба).
-                BslObject::ArchiveEntries(..) => zip::get(self, Self::index_as_usize(idx)?),
                 // `Страницы[i]` — тот же путь, что и `Для Каждого`, но,
                 // в отличие от `Получить(i)`, вне диапазона это ОШИБКА
                 // (измерено: `Страницы[-1]` платформа отвергает, а
@@ -2489,10 +2465,6 @@ impl BslValue {
                 | BslObject::XdtoFactory(..)
                 | BslObject::XdtoSerializer(..)
                 | BslObject::XdtoObject(..) => Err(RtError::NotIndexable),
-                // Коллекция элементов архива — коллекция и по индексу, и
-                // по `Для Каждого`, и по `Количество()` (измерено все
-                // три); сам читатель и отдельный элемент — нет.
-                BslObject::ArchiveEntries(..) => zip::count(self),
                 // `Количество()` и `Для Каждого` есть только у КОЛЛЕКЦИИ
                 // страниц; у самого документа и у страницы длины нет
                 // (`КоличествоСтраниц` платформа не знает — измерено).
@@ -2512,9 +2484,10 @@ impl BslValue {
                 | BslObject::SpreadDocParams(..)
                 | BslObject::ReservedTextDocument
                 | BslObject::ReservedTextDocParams
-                | BslObject::ArchiveReader(..)
-                | BslObject::ArchiveEntry(..)
-                | BslObject::ArchiveWriter(..)
+                | BslObject::ReservedArchiveReader
+                | BslObject::ReservedArchiveEntries
+                | BslObject::ReservedArchiveEntry
+                | BslObject::ReservedArchiveWriter
                 // У документа PDF и у отдельной страницы длины нет:
                 // `КоличествоСтраниц` платформа не знает, и `Для Каждого`
                 // по документу тоже нет — считает только коллекция.
@@ -2915,22 +2888,6 @@ impl BslValue {
                 BslObject::ReservedTextDocument | BslObject::ReservedTextDocParams => {
                     Err(RtError::NotAnObject)
                 }
-                // У читателя архива свойств ровно два, и оба измерены;
-                // `Кодировка`, `Формат`, `ИмяФайла` и `РазмерАрхива`
-                // платформа не знает.
-                BslObject::ArchiveReader(..) => {
-                    if name.eq_ignore_ascii_case("Элементы") || name.eq_ignore_ascii_case("Items")
-                    {
-                        zip::entries(self)
-                    } else if name.eq_ignore_ascii_case("Комментарий")
-                        || name.eq_ignore_ascii_case("Comment")
-                    {
-                        zip::comment(self)
-                    } else {
-                        Err(RtError::UnknownColumn(name.to_string()))
-                    }
-                }
-                BslObject::ArchiveEntry(..) => zip::entry_prop(self, name),
                 // У документа PDF свойство ровно одно — `Страницы`, у
                 // страницы их восемь; у самой коллекции свойств нет
                 // (измерено: `КоличествоСтраниц` документа платформа не
@@ -3902,10 +3859,10 @@ impl fmt::Display for BslValue {
                 BslObject::ReservedTextDocParams => {
                     write!(f, "ПараметрыМакетаТекстовогоДокумента")
                 }
-                BslObject::ArchiveReader(..)
-                | BslObject::ArchiveEntries(..)
-                | BslObject::ArchiveEntry(..)
-                | BslObject::ArchiveWriter(..) => write!(f, "{}", self.type_name()),
+                BslObject::ReservedArchiveReader
+                | BslObject::ReservedArchiveEntries
+                | BslObject::ReservedArchiveEntry
+                | BslObject::ReservedArchiveWriter => write!(f, "{}", self.type_name()),
                 // Три вида PDF печатаются именем ЗНАЧЕНИЯ — «ДокументPDF»,
                 // «КоллекцияСтраницPDF», «СтраницаPDF» (измерено).
                 BslObject::PdfDocument(_)

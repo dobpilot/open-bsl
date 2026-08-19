@@ -22,7 +22,44 @@ use std::collections::BTreeMap;
 use std::fmt::Write;
 
 use crate::spreadsheet::{CellData, Color, ColumnSet, HAlign, SpreadDocData, VAlign};
-use crate::zip::ZipWriter;
+
+/// Сборщик пакета — тонкая обёртка над `zip::ZipWriter`. Выбирать способ
+/// хранения незачем: сжатие всегда deflate, для мелких частей XLSX (стили,
+/// строки) раздувание пренебрежимо. Прежде обёртка жила в модуле архивов;
+/// после его выноса в `bsl-zip` единственный потребитель — этот экспорт.
+struct ZipWriter {
+    inner: zip::ZipWriter<std::io::Cursor<Vec<u8>>>,
+}
+
+impl ZipWriter {
+    fn new() -> Self {
+        ZipWriter {
+            inner: zip::ZipWriter::new(std::io::Cursor::new(Vec::new())),
+        }
+    }
+
+    /// Добавить файл. Имя — с прямыми слэшами и без ведущего слэша, как
+    /// требует формат.
+    fn add(&mut self, name: &str, data: &[u8]) {
+        use std::io::Write as _;
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated)
+            .compression_level(Some(1))
+            .last_modified_time(zip::DateTime::default());
+        self.inner
+            .start_file(name, options)
+            .expect("zip start_file не отказывает на корректном имени");
+        self.inner
+            .write_all(data)
+            .expect("zip write_all в память не отказывает");
+    }
+
+    /// Закрыть архив и отдать его байты.
+    fn finish(self) -> Vec<u8> {
+        let cursor = self.inner.finish().expect("zip finish не отказывает");
+        cursor.into_inner()
+    }
+}
 
 /// Экранирование для XML. Апостроф и кавычка не трогаются: они попадают
 /// только в текст узлов, а не в атрибуты, которые мы формируем сами.

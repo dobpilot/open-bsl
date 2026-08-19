@@ -1,9 +1,8 @@
-//! Контейнер ZIP: писатель для XLSX и читатель произвольных архивов.
+//! Архивы: чтение и запись ZIP и вся BSL-поверхность файлов архивов.
 //!
-//! Разбор формата делегирован крейту `zip`; здесь лежит тонкая обёртка для
-//! писателя ([`ZipWriter`], используемого модулем `xlsx`) и вся поверхность
-//! встроенного языка — `ЧтениеZipФайла`/`ЧтениеФайлаАрхива` со своими
-//! коллекциями и элементами ([`ArchiveState`]).
+//! Разбор формата делегирован крейтам `zip` и `flate2`; здесь лежит
+//! поверхность встроенного языка — `ЧтениеZipФайла`/`ЧтениеФайлаАрхива` со
+//! своими коллекциями и элементами ([`ArchiveState`]) и оба писателя.
 //!
 //! Поверх читателя проходит важная граница: формат хранит имя записи БАЙТАМИ,
 //! а всё, что платформа делает с именем дальше — декодирование как UTF-8 с
@@ -17,52 +16,10 @@ use std::io::Read as _;
 use std::io::Write as _;
 use std::rc::Rc;
 
-use crate::{BslObject, BslValue, RtError, RtResult};
-
-// --- контейнер: писатель ---------------------------------------------------
-
-/// Сборщик архива — тонкая обёртка над `zip::ZipWriter` для нужд модуля
-/// `xlsx`. Выбирает способ хранения (0 или 8) по результату сжатия: раздувать
-/// мелочь незачем.
-pub struct ZipWriter {
-    inner: zip::ZipWriter<std::io::Cursor<Vec<u8>>>,
-}
-
-impl Default for ZipWriter {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl ZipWriter {
-    pub fn new() -> Self {
-        ZipWriter {
-            inner: zip::ZipWriter::new(std::io::Cursor::new(Vec::new())),
-        }
-    }
-
-    /// Добавить файл. Имя — с прямыми слэшами и без ведущего слэша, как
-    /// требует формат. Сжатие всегда deflate — крейт `zip` делает его сам;
-    /// для мелких частей XLSX (стили, строки) раздувание пренебрежимо.
-    pub fn add(&mut self, name: &str, data: &[u8]) {
-        let options = zip::write::SimpleFileOptions::default()
-            .compression_method(zip::CompressionMethod::Deflated)
-            .compression_level(Some(1))
-            .last_modified_time(zip::DateTime::default());
-        self.inner
-            .start_file(name, options)
-            .expect("zip start_file не отказывает на корректном имени");
-        self.inner
-            .write_all(data)
-            .expect("zip write_all в память не отказывает");
-    }
-
-    /// Закрыть архив и отдать его байты.
-    pub fn finish(self) -> Vec<u8> {
-        let cursor = self.inner.finish().expect("zip finish не отказывает");
-        cursor.into_inner()
-    }
-}
+use bsl_rt::{
+    BslDate, BslNumber, BslString, BslValue, CallContext, EnumKind, EnumValue, ObjectProtocol,
+    RtError, RtResult, TypeDescriptor, TypeId, UNIX_EPOCH_SECONDS,
+};
 
 // --- контейнер: читатель ---------------------------------------------------
 
@@ -156,7 +113,7 @@ impl RawEntry {
     }
 
     /// Время изменения записи так, как его показывает встроенный язык.
-    pub(crate) fn modified(&self) -> crate::BslDate {
+    pub(crate) fn modified(&self) -> BslDate {
         dos_datetime(self.mod_time, self.mod_date)
     }
 }
@@ -408,7 +365,7 @@ fn find_local_offset(data: &[u8], index: usize) -> RtResult<usize> {
 /// `1999-12-01`, день 0 января -> `1999-12-31`, `2001-02-30` ->
 /// `2001-03-02`, час 25 -> `2000-01-02 01:00`, минута 61 -> `01:01`,
 /// поле секунд 31 -> `00:01:02`). Нулевые поля целиком дают `1979-11-30`.
-fn dos_datetime(time: u16, date: u16) -> crate::BslDate {
+fn dos_datetime(time: u16, date: u16) -> BslDate {
     let year = 1980 + i64::from(date >> 9);
     let month = i64::from((date >> 5) & 0xF);
     let day = i64::from(date & 0x1F);
@@ -420,11 +377,11 @@ fn dos_datetime(time: u16, date: u16) -> crate::BslDate {
     // секунд поверх первого числа этого месяца.
     let months = year * 12 + month - 1;
     let (y, m) = (months.div_euclid(12), months.rem_euclid(12) + 1);
-    let Some(first) = crate::BslDate::from_civil(y, m as u32, 1, 0, 0, 0) else {
-        return crate::BslDate::empty();
+    let Some(first) = BslDate::from_civil(y, m as u32, 1, 0, 0, 0) else {
+        return BslDate::empty();
     };
     let shift = (day - 1) * 86_400 + hour * 3600 + minute * 60 + second;
-    crate::BslDate::from_seconds(first.seconds() + shift).unwrap_or_else(crate::BslDate::empty)
+    BslDate::from_seconds(first.seconds() + shift).unwrap_or_else(BslDate::empty)
 }
 
 // --------------------------------------------------------------------------
@@ -702,35 +659,123 @@ fn resolve_dir(nodes: &mut Vec<DirNode>, parent: usize, part: &str) -> usize {
     at
 }
 
-// --- доступ к объектам --------------------------------------------------------
+// --- объекты компонента -----------------------------------------------------
 
-/// Состояние читателя за значением любого из трёх видов.
-fn state<'a>(v: &'a BslValue, op: &'static str) -> RtResult<&'a Rc<RefCell<ArchiveState>>> {
-    match v {
-        BslValue::Object(o) => match &**o {
-            BslObject::ArchiveReader(_, s)
-            | BslObject::ArchiveEntries(_, s)
-            | BslObject::ArchiveEntry(_, s, ..) => Ok(s),
-            _ => Err(RtError::MethodNotApplicable {
-                method: op,
-                receiver: v.type_name(),
-            }),
-        },
-        _ => Err(RtError::MethodNotApplicable {
-            method: op,
-            receiver: v.type_name(),
-        }),
+/// `ЧтениеZipФайла` либо `ЧтениеФайлаАрхива` — тег решает только имена
+/// типов, поверхность у обоих одна (измерено).
+#[derive(Debug)]
+pub struct ReaderObject {
+    kind: ArchiveKind,
+    state: Rc<RefCell<ArchiveState>>,
+}
+
+/// `ЭлементыZipФайла` / `ЭлементыФайлаАрхива` — не снимок, а окно в то же
+/// состояние читателя, как `Таблица.Колонки`.
+#[derive(Debug)]
+pub struct EntriesObject {
+    kind: ArchiveKind,
+    state: Rc<RefCell<ArchiveState>>,
+}
+
+/// `ЭлементZipФайла` / `ЭлементФайлаАрхива` — то же состояние плюс номер
+/// записи в каталоге и номер открытия, при котором элемент получен.
+#[derive(Debug)]
+pub struct EntryObject {
+    kind: ArchiveKind,
+    state: Rc<RefCell<ArchiveState>>,
+    index: usize,
+    generation: u64,
+}
+
+/// `ЗаписьZipФайла` / `ЗаписьФайлаАрхива`.
+#[derive(Debug)]
+pub struct WriterObject {
+    kind: ArchiveKind,
+    state: Rc<RefCell<WriterState>>,
+}
+
+static ZIP_READER_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ЧтениеZipФайла",
+    legacy_type_id: Some(TypeId::ZipFileReader),
+};
+
+static ARCHIVE_READER_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ЧтениеФайлаАрхива",
+    legacy_type_id: Some(TypeId::ArchiveFileReader),
+};
+
+static ZIP_ENTRIES_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ЭлементыZipФайла",
+    legacy_type_id: Some(TypeId::ZipFileEntries),
+};
+
+static ARCHIVE_ENTRIES_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ЭлементыФайлаАрхива",
+    legacy_type_id: Some(TypeId::ArchiveFileEntries),
+};
+
+static ZIP_ENTRY_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ЭлементZipФайла",
+    legacy_type_id: Some(TypeId::ZipFileEntry),
+};
+
+static ARCHIVE_ENTRY_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ЭлементФайлаАрхива",
+    legacy_type_id: Some(TypeId::ArchiveFileEntry),
+};
+
+static ZIP_WRITER_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ЗаписьZipФайла",
+    legacy_type_id: Some(TypeId::ZipFileWriter),
+};
+
+static ARCHIVE_WRITER_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ЗаписьФайлаАрхива",
+    legacy_type_id: Some(TypeId::ArchiveFileWriter),
+};
+
+impl ReaderObject {
+    fn descriptor(&self) -> &'static TypeDescriptor {
+        match self.kind {
+            ArchiveKind::Zip => &ZIP_READER_TYPE,
+            ArchiveKind::Archive => &ARCHIVE_READER_TYPE,
+        }
     }
 }
 
-/// Объект чтения ли это (`ЧтениеZipФайла` либо `ЧтениеФайлаАрхива`).
-pub fn is_reader(v: &BslValue) -> bool {
-    matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::ArchiveReader(..)))
+impl EntriesObject {
+    fn descriptor(&self) -> &'static TypeDescriptor {
+        match self.kind {
+            ArchiveKind::Zip => &ZIP_ENTRIES_TYPE,
+            ArchiveKind::Archive => &ARCHIVE_ENTRIES_TYPE,
+        }
+    }
 }
 
-/// Коллекция элементов ли это.
-pub fn is_entries(v: &BslValue) -> bool {
-    matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::ArchiveEntries(..)))
+impl EntryObject {
+    fn descriptor(&self) -> &'static TypeDescriptor {
+        match self.kind {
+            ArchiveKind::Zip => &ZIP_ENTRY_TYPE,
+            ArchiveKind::Archive => &ARCHIVE_ENTRY_TYPE,
+        }
+    }
+}
+
+impl WriterObject {
+    fn descriptor(&self) -> &'static TypeDescriptor {
+        match self.kind {
+            ArchiveKind::Zip => &ZIP_WRITER_TYPE,
+            ArchiveKind::Archive => &ARCHIVE_WRITER_TYPE,
+        }
+    }
 }
 
 // --- конструкторы и методы -----------------------------------------------------
@@ -772,9 +817,7 @@ pub fn new_archive_reader(
     }
     // Пароль хранить негде и незачем — см. doc comment.
     let _ = password;
-    Ok(BslValue::Object(Rc::new(BslObject::ArchiveReader(
-        kind, state,
-    ))))
+    Ok(BslValue::new_object(ReaderObject { kind, state }))
 }
 
 /// Третий аргумент конструктора `ЧтениеФайлаАрхива`.
@@ -787,10 +830,11 @@ pub fn new_archive_reader(
 fn check_archive_type(value: &BslValue) -> RtResult<()> {
     match value {
         BslValue::Undefined => Ok(()),
-        BslValue::Enum(crate::EnumValue::ArchiveTypeZip) => Ok(()),
-        BslValue::Enum(e) if e.kind() == crate::EnumKind::ArchiveFileType => Err(zip_err(
-            &format!("формат архива «{}» не поддерживается", e.display_text()),
-        )),
+        BslValue::Enum(EnumValue::ArchiveTypeZip) => Ok(()),
+        BslValue::Enum(e) if e.kind() == EnumKind::ArchiveFileType => Err(zip_err(&format!(
+            "формат архива «{}» не поддерживается",
+            e.display_text()
+        ))),
         _ => Err(RtError::TypeError {
             expected: "ТипФайлаАрхива",
             op: "ЧтениеФайлаАрхива",
@@ -848,14 +892,14 @@ fn open_bytes(state: &Rc<RefCell<ArchiveState>>, data: Vec<u8>, source: String) 
 ///
 /// [`RtError::Zip`], если архив уже открыт или источник не является
 /// читаемым архивом ZIP.
-pub fn open(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
-    let state = state(obj, "Открыть")?.clone();
+pub fn open(reader: &ReaderObject, args: &[BslValue]) -> RtResult<()> {
+    let state = reader.state.clone();
     if let Some(open) = &state.borrow().open {
         return Err(zip_err(&format!("архив уже открыт: {}", open.source)));
     }
     let source = args.first().ok_or_else(|| RtError::MethodNotApplicable {
         method: "Открыть",
-        receiver: obj.type_name(),
+        receiver: reader.descriptor().name,
     })?;
     let (bytes, from) = read_source(source, "Открыть")?;
     open_bytes(&state, bytes, from)
@@ -867,9 +911,8 @@ pub fn open(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
 ///
 /// [`RtError::Zip`], если архив уже закрыт: измерено, что второй `Закрыть`
 /// подряд платформа считает ошибкой, а не тихим повтором.
-pub fn close(obj: &BslValue) -> RtResult<()> {
-    let state = state(obj, "Закрыть")?;
-    let mut state = state.borrow_mut();
+pub fn close(reader: &ReaderObject) -> RtResult<()> {
+    let mut state = reader.state.borrow_mut();
     state.opened("Закрыть")?;
     state.open = None;
     Ok(())
@@ -881,14 +924,12 @@ pub fn close(obj: &BslValue) -> RtResult<()> {
 ///
 /// [`RtError::Zip`], если архив не открыт — измерено, что чтение свойства
 /// на закрытом объекте это ошибка, а не пустая коллекция.
-pub fn entries(obj: &BslValue) -> RtResult<BslValue> {
-    let state = state(obj, "Элементы")?;
-    state.borrow().opened("Элементы")?;
-    let kind = reader_kind(obj)?;
-    Ok(BslValue::Object(Rc::new(BslObject::ArchiveEntries(
-        kind,
-        state.clone(),
-    ))))
+pub fn entries(reader: &ReaderObject) -> RtResult<BslValue> {
+    reader.state.borrow().opened("Элементы")?;
+    Ok(BslValue::new_object(EntriesObject {
+        kind: reader.kind,
+        state: reader.state.clone(),
+    }))
 }
 
 /// Свойство `Комментарий` — комментарий всего архива.
@@ -896,25 +937,11 @@ pub fn entries(obj: &BslValue) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// [`RtError::Zip`], если архив не открыт.
-pub fn comment(obj: &BslValue) -> RtResult<BslValue> {
-    let state = state(obj, "Комментарий")?;
-    let state = state.borrow();
-    Ok(BslValue::Str(crate::BslString::from_str(
+pub fn comment(reader: &ReaderObject) -> RtResult<BslValue> {
+    let state = reader.state.borrow();
+    Ok(BslValue::Str(BslString::from_str(
         &state.opened("Комментарий")?.comment,
     )))
-}
-
-/// Тег объекта — он же решает имена типов коллекции и элемента.
-fn reader_kind(obj: &BslValue) -> RtResult<ArchiveKind> {
-    match obj {
-        BslValue::Object(o) => match &**o {
-            BslObject::ArchiveReader(kind, _)
-            | BslObject::ArchiveEntries(kind, _)
-            | BslObject::ArchiveEntry(kind, ..) => Ok(*kind),
-            _ => Err(RtError::NotAnObject),
-        },
-        _ => Err(RtError::NotAnObject),
-    }
 }
 
 /// Число элементов открытого архива.
@@ -922,9 +949,8 @@ fn reader_kind(obj: &BslValue) -> RtResult<ArchiveKind> {
 /// # Errors
 ///
 /// [`RtError::Zip`], если архив не открыт.
-pub fn count(obj: &BslValue) -> RtResult<usize> {
-    let state = state(obj, "Количество")?;
-    let state = state.borrow();
+pub fn count(entries: &EntriesObject) -> RtResult<usize> {
+    let state = entries.state.borrow();
     Ok(state.opened("Количество")?.items.len())
 }
 
@@ -934,10 +960,9 @@ pub fn count(obj: &BslValue) -> RtResult<usize> {
 ///
 /// [`RtError::Zip`], если архив не открыт; [`RtError::IndexOutOfBounds`],
 /// если номера в архиве нет.
-pub fn get(obj: &BslValue, index: usize) -> RtResult<BslValue> {
-    let state = state(obj, "Получить")?;
+pub fn get(entries: &EntriesObject, index: usize) -> RtResult<BslValue> {
     let (len, generation) = {
-        let state = state.borrow();
+        let state = entries.state.borrow();
         (state.opened("Получить")?.items.len(), state.generation)
     };
     if index >= len {
@@ -946,12 +971,12 @@ pub fn get(obj: &BslValue, index: usize) -> RtResult<BslValue> {
             len,
         });
     }
-    Ok(BslValue::Object(Rc::new(BslObject::ArchiveEntry(
-        reader_kind(obj)?,
-        state.clone(),
+    Ok(BslValue::new_object(EntryObject {
+        kind: entries.kind,
+        state: entries.state.clone(),
         index,
         generation,
-    ))))
+    }))
 }
 
 /// `Найти(Имя)` — первый элемент с таким ИСХОДНЫМ коротким именем,
@@ -976,11 +1001,10 @@ pub fn get(obj: &BslValue, index: usize) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// [`RtError::Zip`], если архив не открыт.
-pub fn find(obj: &BslValue, name: &BslValue) -> RtResult<BslValue> {
-    let wanted = name.as_str("Найти")?.to_string().to_uppercase();
-    let state = state(obj, "Найти")?;
+pub fn find(entries: &EntriesObject, name: &BslValue) -> RtResult<BslValue> {
+    let wanted = text_of(name, "Найти")?.to_string().to_uppercase();
     let (found, generation) = {
-        let state = state.borrow();
+        let state = entries.state.borrow();
         let open = state.opened("Найти")?;
         (
             open.items
@@ -990,12 +1014,12 @@ pub fn find(obj: &BslValue, name: &BslValue) -> RtResult<BslValue> {
         )
     };
     match found {
-        Some(index) => Ok(BslValue::Object(Rc::new(BslObject::ArchiveEntry(
-            reader_kind(obj)?,
-            state.clone(),
+        Some(index) => Ok(BslValue::new_object(EntryObject {
+            kind: entries.kind,
+            state: entries.state.clone(),
             index,
             generation,
-        )))),
+        })),
         None => Ok(BslValue::Undefined),
     }
 }
@@ -1015,29 +1039,17 @@ pub fn find(obj: &BslValue, name: &BslValue) -> RtResult<BslValue> {
 /// [`RtError::UnknownColumn`], если такого свойства у элемента нет;
 /// [`RtError::Zip`], если архив уже закрыт либо элемент получен при
 /// предыдущем его открытии.
-pub fn entry_prop(obj: &BslValue, prop: &str) -> RtResult<BslValue> {
-    let (state, index, generation) = match obj {
-        BslValue::Object(o) => match &**o {
-            BslObject::ArchiveEntry(_, s, i, g) => (s, *i, *g),
-            _ => return Err(RtError::NotAnObject),
-        },
-        _ => return Err(RtError::NotAnObject),
-    };
-    let state = state.borrow();
-    let item = state.item(index, generation, "ЭлементZipФайла")?;
+pub fn entry_prop(entry: &EntryObject, prop: &str) -> RtResult<BslValue> {
+    let state = entry.state.borrow();
+    let item = state.item(entry.index, entry.generation, "ЭлементZipФайла")?;
 
-    let text = |s: String| Ok(BslValue::Str(crate::BslString::from_str(&s)));
+    let text = |s: String| Ok(BslValue::Str(BslString::from_str(&s)));
     // Размеры записи приходят из чужого каталога: у Zip64 это произвольные
     // восемь байт, ничем не ограниченные. Через `i64` их пускать нельзя —
     // старший бит завернулся бы в знак, и `РазмерНесжатого` отдал бы
     // отрицательное число, которого платформа дать не может; `i128`
     // вмещает любой `u64` без потерь.
-    let number = |n: u64| {
-        Ok(BslValue::Number(bsl_number::BslNumber::from_parts(
-            i128::from(n),
-            0,
-        )))
-    };
+    let number = |n: u64| Ok(BslValue::Number(BslNumber::from_parts(i128::from(n), 0)));
     match prop {
         _ if eq(prop, "Имя", "Name") => text(item.name.clone()),
         _ if eq(prop, "ПолноеИмя", "FullName") => text(item.full_name()),
@@ -1076,6 +1088,17 @@ pub fn entry_prop(obj: &BslValue, prop: &str) -> RtResult<BslValue> {
     }
 }
 
+/// Строка за значением — семантика приватного `BslValue::as_str`.
+fn text_of<'a>(value: &'a BslValue, op: &'static str) -> RtResult<&'a BslString> {
+    match value {
+        BslValue::Str(s) => Ok(s),
+        _ => Err(RtError::TypeError {
+            expected: "Строка",
+            op,
+        }),
+    }
+}
+
 /// Оба написания одного свойства.
 fn eq(name: &str, ru: &str, en: &str) -> bool {
     name.eq_ignore_ascii_case(ru) || name.eq_ignore_ascii_case(en)
@@ -1095,8 +1118,11 @@ fn eq(name: &str, ru: &str, en: &str) -> bool {
 /// записи, на неподдержанном способе хранения и на любой ошибке записи
 /// файла; [`RtError::TypeError`], если первым аргументом передан не элемент
 /// архива, а вторым — не строка.
-pub fn extract(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
-    let state = state(obj, "Извлечь")?;
+pub fn extract(
+    state: &Rc<RefCell<ArchiveState>>,
+    receiver: &'static str,
+    args: &[BslValue],
+) -> RtResult<()> {
     let (item, dir, mode) = match args {
         [item, dir] => (item, dir, None),
         [item, dir, mode] => (item, dir, Some(mode)),
@@ -1105,29 +1131,22 @@ pub fn extract(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
         _ => {
             return Err(RtError::MethodNotApplicable {
                 method: "Извлечь",
-                receiver: obj.type_name(),
+                receiver,
             })
         }
     };
-    let (index, generation) = match item {
-        BslValue::Object(o) => match &**o {
-            // Элемент обязан быть из ЭТОГО архива: сам он свой читатель
-            // помнит, но `Извлечь` — метод читателя, и распаковывать чужую
-            // запись, ничего не сказав, хуже, чем отказать. Тождества
-            // состояния для этого мало — оно переживает переоткрытие, — и
-            // номер открытия сверяет `ArchiveState::item` ниже.
-            BslObject::ArchiveEntry(_, s, i, g) if Rc::ptr_eq(s, state) => (*i, *g),
-            BslObject::ArchiveEntry(..) => {
-                return Err(zip_err("элемент принадлежит другому архиву"))
-            }
-            _ => {
-                return Err(RtError::TypeError {
-                    expected: "ЭлементZipФайла",
-                    op: "Извлечь",
-                })
-            }
-        },
-        _ => {
+    // Элемент обязан быть из ЭТОГО архива: сам он свой читатель помнит, но
+    // `Извлечь` — метод читателя, и распаковывать чужую запись, ничего не
+    // сказав, хуже, чем отказать. Тождества состояния для этого мало — оно
+    // переживает переоткрытие, — и номер открытия сверяет
+    // `ArchiveState::item` ниже.
+    let (index, generation) = match item
+        .object_ref()
+        .and_then(|object| object.downcast_ref::<EntryObject>())
+    {
+        Some(entry) if Rc::ptr_eq(&entry.state, state) => (entry.index, entry.generation),
+        Some(_) => return Err(zip_err("элемент принадлежит другому архиву")),
+        None => {
             return Err(RtError::TypeError {
                 expected: "ЭлементZipФайла",
                 op: "Извлечь",
@@ -1154,15 +1173,18 @@ pub fn extract(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
 /// Те же, что у [`extract`], плюс [`RtError::Zip`] на записи с пустым
 /// именем: распаковать её некуда (платформа на таком архиве тоже
 /// отказывает).
-pub fn extract_all(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
-    let state = state(obj, "ИзвлечьВсе")?;
+pub fn extract_all(
+    state: &Rc<RefCell<ArchiveState>>,
+    receiver: &'static str,
+    args: &[BslValue],
+) -> RtResult<()> {
     let (dir, mode) = match args {
         [dir] => (dir, None),
         [dir, mode] => (dir, Some(mode)),
         _ => {
             return Err(RtError::MethodNotApplicable {
                 method: "ИзвлечьВсе",
-                receiver: obj.type_name(),
+                receiver,
             })
         }
     };
@@ -1190,8 +1212,8 @@ pub fn extract_all(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
 fn restore_paths(mode: Option<&BslValue>, op: &'static str) -> RtResult<bool> {
     match mode {
         None => Ok(true),
-        Some(BslValue::Enum(crate::EnumValue::RestorePaths)) => Ok(true),
-        Some(BslValue::Enum(crate::EnumValue::DontRestorePaths)) => Ok(false),
+        Some(BslValue::Enum(EnumValue::RestorePaths)) => Ok(true),
+        Some(BslValue::Enum(EnumValue::DontRestorePaths)) => Ok(false),
         Some(_) => Err(RtError::TypeError {
             expected: "РежимВосстановленияПутейФайловZIP",
             op,
@@ -1202,7 +1224,7 @@ fn restore_paths(mode: Option<&BslValue>, op: &'static str) -> RtResult<bool> {
 /// Каталог назначения. Пустая строка — ошибка (измерено: «Некорректный путь
 /// для распаковки»), а несуществующий каталог создаётся (тоже измерено).
 fn destination(dir: &BslValue, op: &'static str) -> RtResult<std::path::PathBuf> {
-    let dir = dir.as_str(op)?.to_string();
+    let dir = text_of(dir, op)?.to_string();
     if dir.is_empty() {
         return Err(zip_err("некорректный путь для распаковки"));
     }
@@ -1376,40 +1398,6 @@ impl std::fmt::Debug for WriterState {
     }
 }
 
-/// Состояние писателя за значением.
-fn writer_state<'a>(v: &'a BslValue, op: &'static str) -> RtResult<&'a Rc<RefCell<WriterState>>> {
-    match v {
-        BslValue::Object(o) => match &**o {
-            BslObject::ArchiveWriter(_, s) => Ok(s),
-            _ => Err(RtError::MethodNotApplicable {
-                method: op,
-                receiver: v.type_name(),
-            }),
-        },
-        _ => Err(RtError::MethodNotApplicable {
-            method: op,
-            receiver: v.type_name(),
-        }),
-    }
-}
-
-/// Тег писателя: он решает, какой у конструктора и у `Открыть` хвост
-/// аргументов.
-fn writer_kind(v: &BslValue) -> RtResult<ArchiveKind> {
-    match v {
-        BslValue::Object(o) => match &**o {
-            BslObject::ArchiveWriter(kind, _) => Ok(*kind),
-            _ => Err(RtError::NotAnObject),
-        },
-        _ => Err(RtError::NotAnObject),
-    }
-}
-
-/// Объект записи ли это (`ЗаписьZipФайла` либо `ЗаписьФайлаАрхива`).
-pub fn is_writer(v: &BslValue) -> bool {
-    matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::ArchiveWriter(..)))
-}
-
 /// `Новый ЗаписьZipФайла([Файл][, Пароль][, Комментарий][, МетодСжатия]
 /// [, УровеньСжатия][, МетодШифрования][, КодировкаИмён])` и
 /// `Новый ЗаписьФайлаАрхива([Файл][, Пароль][, ТипФайлаАрхива]
@@ -1438,9 +1426,7 @@ pub fn new_archive_writer(zip: bool, args: &[BslValue]) -> RtResult<BslValue> {
     };
     let state = Rc::new(RefCell::new(WriterState::default()));
     configure(kind, &state, args, "ЗаписьZipФайла")?;
-    Ok(BslValue::Object(Rc::new(BslObject::ArchiveWriter(
-        kind, state,
-    ))))
+    Ok(BslValue::new_object(WriterObject { kind, state }))
 }
 
 /// `Открыть(Файл[, ...])` у писателя — те же аргументы, что у его
@@ -1451,13 +1437,13 @@ pub fn new_archive_writer(zip: bool, args: &[BslValue]) -> RtResult<BslValue> {
 /// [`RtError::Zip`], если архив уже открыт (измерено: «Архив уже открыт!:
 /// <путь>») либо если запрошено неподдержанное; [`RtError::TypeError`] на
 /// аргументе не того типа.
-pub fn writer_open(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
-    let kind = writer_kind(obj)?;
-    let state = writer_state(obj, "Открыть")?.clone();
+pub fn writer_open(writer: &WriterObject, args: &[BslValue]) -> RtResult<()> {
+    let kind = writer.kind;
+    let state = writer.state.clone();
     if args.is_empty() {
         return Err(RtError::MethodNotApplicable {
             method: "Открыть",
-            receiver: obj.type_name(),
+            receiver: writer.descriptor().name,
         });
     }
     if state.borrow().target.is_some() {
@@ -1586,9 +1572,9 @@ fn optional_text(value: &BslValue, op: &'static str) -> RtResult<String> {
 fn write_method(value: &BslValue, op: &'static str) -> RtResult<WriteMethod> {
     match value {
         BslValue::Undefined => Ok(WriteMethod::Deflate),
-        BslValue::Enum(crate::EnumValue::ZipMethodDeflate) => Ok(WriteMethod::Deflate),
-        BslValue::Enum(crate::EnumValue::ZipMethodCopy) => Ok(WriteMethod::Stored),
-        BslValue::Enum(crate::EnumValue::ZipMethodBzip2) => Err(zip_err(
+        BslValue::Enum(EnumValue::ZipMethodDeflate) => Ok(WriteMethod::Deflate),
+        BslValue::Enum(EnumValue::ZipMethodCopy) => Ok(WriteMethod::Stored),
+        BslValue::Enum(EnumValue::ZipMethodBzip2) => Err(zip_err(
             "метод сжатия BZIP2 не поддерживается, доступны «Сжатие» и «Копирование»",
         )),
         _ => Err(RtError::TypeError {
@@ -1610,7 +1596,7 @@ fn write_method(value: &BslValue, op: &'static str) -> RtResult<WriteMethod> {
 fn check_level(value: &BslValue, op: &'static str) -> RtResult<()> {
     match value {
         BslValue::Undefined => Ok(()),
-        BslValue::Enum(e) if e.kind() == crate::EnumKind::ZipCompressionLevel => Ok(()),
+        BslValue::Enum(e) if e.kind() == EnumKind::ZipCompressionLevel => Ok(()),
         _ => Err(RtError::TypeError {
             expected: "УровеньСжатияZIP",
             op,
@@ -1622,9 +1608,10 @@ fn check_level(value: &BslValue, op: &'static str) -> RtResult<()> {
 fn check_encryption(value: &BslValue, op: &'static str) -> RtResult<()> {
     match value {
         BslValue::Undefined => Ok(()),
-        BslValue::Enum(e) if e.kind() == crate::EnumKind::ZipEncryptionMethod => Err(zip_err(
-            &format!("шифрование «{}» не поддерживается", e.display_text()),
-        )),
+        BslValue::Enum(e) if e.kind() == EnumKind::ZipEncryptionMethod => Err(zip_err(&format!(
+            "шифрование «{}» не поддерживается",
+            e.display_text()
+        ))),
         _ => Err(RtError::TypeError {
             expected: "МетодШифрованияZIP",
             op,
@@ -1639,7 +1626,7 @@ fn check_encryption(value: &BslValue, op: &'static str) -> RtResult<()> {
 fn check_names_encoding(value: &BslValue, op: &'static str) -> RtResult<()> {
     match value {
         BslValue::Undefined => Ok(()),
-        BslValue::Enum(e) if e.kind() == crate::EnumKind::ZipFileNamesEncoding => Ok(()),
+        BslValue::Enum(e) if e.kind() == EnumKind::ZipFileNamesEncoding => Ok(()),
         _ => Err(RtError::TypeError {
             expected: "КодировкаИменФайловВZipФайле",
             op,
@@ -1660,8 +1647,8 @@ fn check_names_encoding(value: &BslValue, op: &'static str) -> RtResult<()> {
 /// [`RtError::Zip`], если файла или каталога маски нет, если имя в архиве
 /// уже занято (измерено: «Файл с таким именем в архиве уже существует») или
 /// если файл не читается; [`RtError::TypeError`] на режиме не того типа.
-pub fn writer_add(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
-    let state = writer_state(obj, "Добавить")?;
+pub fn writer_add(writer: &WriterObject, args: &[BslValue]) -> RtResult<()> {
+    let state = &writer.state;
     let (path, mode, subdirs) = match args {
         [path] => (path, None, None),
         [path, mode] => (path, Some(mode), None),
@@ -1669,7 +1656,7 @@ pub fn writer_add(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
         _ => {
             return Err(RtError::MethodNotApplicable {
                 method: "Добавить",
-                receiver: obj.type_name(),
+                receiver: writer.descriptor().name,
             })
         }
     };
@@ -1702,9 +1689,9 @@ fn add_path(value: &BslValue) -> RtResult<String> {
 fn path_mode(mode: Option<&BslValue>) -> RtResult<PathMode> {
     match mode {
         None => Ok(PathMode::Flat),
-        Some(BslValue::Enum(crate::EnumValue::ZipStoreRelativePath)) => Ok(PathMode::Relative),
-        Some(BslValue::Enum(crate::EnumValue::ZipStoreFullPath)) => Ok(PathMode::Full),
-        Some(BslValue::Enum(crate::EnumValue::ZipDontStorePath)) => Ok(PathMode::Flat),
+        Some(BslValue::Enum(EnumValue::ZipStoreRelativePath)) => Ok(PathMode::Relative),
+        Some(BslValue::Enum(EnumValue::ZipStoreFullPath)) => Ok(PathMode::Full),
+        Some(BslValue::Enum(EnumValue::ZipDontStorePath)) => Ok(PathMode::Flat),
         Some(_) => Err(RtError::TypeError {
             expected: "РежимСохраненияПутейZIP",
             op: "Добавить",
@@ -1716,10 +1703,8 @@ fn path_mode(mode: Option<&BslValue>) -> RtResult<PathMode> {
 fn subdir_mode(mode: Option<&BslValue>) -> RtResult<SubdirMode> {
     match mode {
         None => Ok(SubdirMode::Skip),
-        Some(BslValue::Enum(crate::EnumValue::ZipDontProcessSubdirs)) => Ok(SubdirMode::Skip),
-        Some(BslValue::Enum(crate::EnumValue::ZipProcessSubdirsRecursively)) => {
-            Ok(SubdirMode::Recurse)
-        }
+        Some(BslValue::Enum(EnumValue::ZipDontProcessSubdirs)) => Ok(SubdirMode::Skip),
+        Some(BslValue::Enum(EnumValue::ZipProcessSubdirsRecursively)) => Ok(SubdirMode::Recurse),
         Some(_) => Err(RtError::TypeError {
             expected: "РежимОбработкиПодкаталоговZIP",
             op: "Добавить",
@@ -2036,8 +2021,8 @@ fn dos_fields(meta: &std::fs::Metadata) -> (u16, u16) {
     let Ok(since) = modified.duration_since(std::time::UNIX_EPOCH) else {
         return (0, 0);
     };
-    let secs = since.as_secs() as i64 + crate::date::UNIX_EPOCH_SECONDS;
-    let Some(date) = crate::BslDate::from_seconds(secs) else {
+    let secs = since.as_secs() as i64 + UNIX_EPOCH_SECONDS;
+    let Some(date) = BslDate::from_seconds(secs) else {
         return (0, 0);
     };
     let civil = date.to_civil();
@@ -2059,9 +2044,8 @@ fn dos_fields(meta: &std::fs::Metadata) -> (u16, u16) {
 ///
 /// [`RtError::Zip`], если архив не открыт (измерено: «Архив не открыт!» —
 /// в том числе на втором `Записать` подряд) либо если цель не пишется.
-pub fn writer_write(obj: &BslValue) -> RtResult<()> {
-    let state = writer_state(obj, "Записать")?;
-    let mut state = state.borrow_mut();
+pub fn writer_write(writer: &WriterObject) -> RtResult<()> {
+    let mut state = writer.state.borrow_mut();
     let Some(target) = state.target.take() else {
         return Err(zip_err("архив не открыт"));
     };
@@ -2090,16 +2074,13 @@ pub fn writer_write(obj: &BslValue) -> RtResult<()> {
 /// [`RtError::Zip`], если архив открыт: измерено, что на писателе с целью
 /// платформа отвечает «Архив уже открыт!», и только после `Записать()` (или
 /// у писателя, созданного без цели) отдаёт данные.
-pub fn writer_binary_data(obj: &BslValue) -> RtResult<BslValue> {
-    let state = writer_state(obj, "ПолучитьДвоичныеДанные")?;
-    let state = state.borrow();
+pub fn writer_binary_data(writer: &WriterObject) -> RtResult<BslValue> {
+    let state = writer.state.borrow();
     if state.target.is_some() {
         return Err(zip_err("архив уже открыт"));
     }
     let bytes = build_archive(&state.entries, &state.comment)?;
-    Ok(BslValue::Object(Rc::new(BslObject::BinaryData(
-        bytes.into(),
-    ))))
+    Ok(BslValue::binary_data_of(bytes))
 }
 
 /// Собрать архив из накопленных записей через крейт `zip`.
@@ -2134,9 +2115,349 @@ fn build_archive(entries: &[PendingEntry], comment: &str) -> RtResult<Vec<u8>> {
     let cursor = zip.finish().map_err(zip_error_to_rt)?;
     Ok(cursor.into_inner())
 }
+// --- объектный протокол -----------------------------------------------------
+
+impl ObjectProtocol for ReaderObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        self.descriptor()
+    }
+
+    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
+        // У читателя свойств ровно два, и оба измерены; `Кодировка`,
+        // `Формат`, `ИмяФайла` и `РазмерАрхива` платформа не знает.
+        if name.eq_ignore_ascii_case("Элементы") || name.eq_ignore_ascii_case("Items") {
+            entries(self)
+        } else if name.eq_ignore_ascii_case("Комментарий") || name.eq_ignore_ascii_case("Comment")
+        {
+            comment(self)
+        } else {
+            Err(RtError::UnknownColumn(name.to_string()))
+        }
+    }
+
+    fn call_method(
+        &self,
+        name: &str,
+        arguments: &[BslValue],
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<BslValue> {
+        if eq(name, "Открыть", "Open") {
+            open(self, arguments)?;
+            Ok(BslValue::Undefined)
+        } else if eq(name, "Закрыть", "Close") {
+            close(self)?;
+            Ok(BslValue::Undefined)
+        } else if eq(name, "Извлечь", "Extract") {
+            extract(&self.state, self.descriptor().name, arguments)?;
+            Ok(BslValue::Undefined)
+        } else if eq(name, "ИзвлечьВсе", "ExtractAll") {
+            extract_all(&self.state, self.descriptor().name, arguments)?;
+            Ok(BslValue::Undefined)
+        } else {
+            Err(RtError::UnknownMethod {
+                method: name.to_string(),
+                receiver: self.descriptor().name,
+            })
+        }
+    }
+
+    // Измерено: `ЗначениеЗаполнено` от читателя — «Да»; ошибка на закрытом
+    // архиве важнее, чем ноль элементов.
+    fn is_filled(&self) -> RtResult<bool> {
+        Ok(true)
+    }
+}
+
+impl ObjectProtocol for EntriesObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        self.descriptor()
+    }
+
+    fn call_method(
+        &self,
+        name: &str,
+        arguments: &[BslValue],
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<BslValue> {
+        if eq(name, "Количество", "Count") {
+            count(self).map(|len| BslValue::number_from_i64(len as i64))
+        } else if eq(name, "Получить", "Get") {
+            match arguments {
+                [index] => get(self, entry_index(index)?),
+                _ => Err(RtError::MethodNotApplicable {
+                    method: "Получить",
+                    receiver: self.descriptor().name,
+                }),
+            }
+        } else if eq(name, "Найти", "Find") {
+            // Аргумент РОВНО один: измерено, что `Элементы.Найти("шум.bin",
+            // 1)` платформа отвергает — «Слишком много фактических
+            // параметров».
+            match arguments {
+                [name] => find(self, name),
+                _ => Err(RtError::MethodNotApplicable {
+                    method: "Найти",
+                    receiver: self.descriptor().name,
+                }),
+            }
+        } else if eq(name, "Извлечь", "Extract") {
+            extract(&self.state, self.descriptor().name, arguments)?;
+            Ok(BslValue::Undefined)
+        } else if eq(name, "ИзвлечьВсе", "ExtractAll") {
+            extract_all(&self.state, self.descriptor().name, arguments)?;
+            Ok(BslValue::Undefined)
+        } else {
+            Err(RtError::UnknownMethod {
+                method: name.to_string(),
+                receiver: self.descriptor().name,
+            })
+        }
+    }
+
+    fn get_index(&self, index: &BslValue) -> RtResult<BslValue> {
+        get(self, entry_index(index)?)
+    }
+
+    fn collection_len(&self) -> RtResult<usize> {
+        count(self)
+    }
+
+    fn is_filled(&self) -> RtResult<bool> {
+        Ok(true)
+    }
+}
+
+/// Номер элемента из значения-индекса — та же семантика, что у `[]`
+/// встроенных коллекций.
+fn entry_index(index: &BslValue) -> RtResult<usize> {
+    let BslValue::Number(number) = index else {
+        return Err(RtError::BadIndex);
+    };
+    let index = number.to_i64_exact().ok_or(RtError::BadIndex)?;
+    usize::try_from(index).map_err(|_| RtError::BadIndex)
+}
+
+impl ObjectProtocol for EntryObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        self.descriptor()
+    }
+
+    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
+        entry_prop(self, name)
+    }
+
+    fn call_method(
+        &self,
+        name: &str,
+        arguments: &[BslValue],
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<BslValue> {
+        // Статус-кво прежней диспетчеризации: `Извлечь`/`ИзвлечьВсе`
+        // принимали любой из трёх объектов чтения, включая элемент.
+        if eq(name, "Извлечь", "Extract") {
+            extract(&self.state, self.descriptor().name, arguments)?;
+            Ok(BslValue::Undefined)
+        } else if eq(name, "ИзвлечьВсе", "ExtractAll") {
+            extract_all(&self.state, self.descriptor().name, arguments)?;
+            Ok(BslValue::Undefined)
+        } else {
+            Err(RtError::UnknownMethod {
+                method: name.to_string(),
+                receiver: self.descriptor().name,
+            })
+        }
+    }
+
+    fn is_filled(&self) -> RtResult<bool> {
+        Ok(true)
+    }
+}
+
+impl ObjectProtocol for WriterObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        self.descriptor()
+    }
+
+    fn call_method(
+        &self,
+        name: &str,
+        arguments: &[BslValue],
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<BslValue> {
+        if eq(name, "Открыть", "Open") {
+            writer_open(self, arguments)?;
+            Ok(BslValue::Undefined)
+        } else if eq(name, "Добавить", "Add") {
+            writer_add(self, arguments)?;
+            Ok(BslValue::Undefined)
+        } else if eq(name, "Записать", "Write") {
+            // Аргументов нет: измерено, что `Записать(имя)` платформа
+            // встречает «Слишком много фактических параметров».
+            if !arguments.is_empty() {
+                return Err(RtError::MethodNotApplicable {
+                    method: "Записать",
+                    receiver: self.descriptor().name,
+                });
+            }
+            writer_write(self)?;
+            Ok(BslValue::Undefined)
+        } else if eq(name, "ПолучитьДвоичныеДанные", "GetBinaryData") {
+            writer_binary_data(self)
+        } else {
+            Err(RtError::UnknownMethod {
+                method: name.to_string(),
+                receiver: self.descriptor().name,
+            })
+        }
+    }
+
+    // `ЗначениеЗаполнено` от писателя — измеренная ошибка «Проверка
+    // мутабельных значений на заполненность не поддерживается»; её отдаёт
+    // реализация протокола по умолчанию.
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Тесты написаны до перевода объектов на протокол и обращаются к ним
+    // значениями BSL. Локальные тёзки функций поверхности принимают
+    // значение, снимают протокольный объект и делегируют настоящим — так
+    // сами сценарии остаются дословно теми, какими были измерены.
+
+    fn reader_of(value: &BslValue) -> &ReaderObject {
+        value
+            .object_ref()
+            .and_then(|object| object.downcast_ref())
+            .expect("значение должно быть читателем архива")
+    }
+
+    fn entries_of(value: &BslValue) -> &EntriesObject {
+        value
+            .object_ref()
+            .and_then(|object| object.downcast_ref())
+            .expect("значение должно быть коллекцией элементов")
+    }
+
+    fn entry_of(value: &BslValue) -> &EntryObject {
+        value
+            .object_ref()
+            .and_then(|object| object.downcast_ref())
+            .expect("значение должно быть элементом архива")
+    }
+
+    fn writer_of(value: &BslValue) -> &WriterObject {
+        value
+            .object_ref()
+            .and_then(|object| object.downcast_ref())
+            .expect("значение должно быть писателем архива")
+    }
+
+    /// Состояние чтения за значением любого из трёх видов — как прежний
+    /// внутренний хелпер `state`.
+    fn state_of(value: &BslValue) -> (&Rc<RefCell<ArchiveState>>, &'static str) {
+        let object = value.object_ref().expect("значение должно быть объектом");
+        if let Some(reader) = object.downcast_ref::<ReaderObject>() {
+            (&reader.state, reader.descriptor().name)
+        } else if let Some(entries) = object.downcast_ref::<EntriesObject>() {
+            (&entries.state, entries.descriptor().name)
+        } else if let Some(entry) = object.downcast_ref::<EntryObject>() {
+            (&entry.state, entry.descriptor().name)
+        } else {
+            panic!("значение должно быть объектом чтения архива")
+        }
+    }
+
+    fn open(value: &BslValue, args: &[BslValue]) -> RtResult<()> {
+        super::open(reader_of(value), args)
+    }
+
+    fn close(value: &BslValue) -> RtResult<()> {
+        super::close(reader_of(value))
+    }
+
+    fn entries(value: &BslValue) -> RtResult<BslValue> {
+        super::entries(reader_of(value))
+    }
+
+    fn comment(value: &BslValue) -> RtResult<BslValue> {
+        super::comment(reader_of(value))
+    }
+
+    fn count(value: &BslValue) -> RtResult<usize> {
+        super::count(entries_of(value))
+    }
+
+    fn get(value: &BslValue, index: usize) -> RtResult<BslValue> {
+        super::get(entries_of(value), index)
+    }
+
+    fn find(value: &BslValue, name: &BslValue) -> RtResult<BslValue> {
+        super::find(entries_of(value), name)
+    }
+
+    fn entry_prop(value: &BslValue, prop: &str) -> RtResult<BslValue> {
+        super::entry_prop(entry_of(value), prop)
+    }
+
+    fn extract(value: &BslValue, args: &[BslValue]) -> RtResult<()> {
+        let (state, receiver) = state_of(value);
+        super::extract(state, receiver, args)
+    }
+
+    fn extract_all(value: &BslValue, args: &[BslValue]) -> RtResult<()> {
+        let (state, receiver) = state_of(value);
+        super::extract_all(state, receiver, args)
+    }
+
+    fn writer_open(value: &BslValue, args: &[BslValue]) -> RtResult<()> {
+        super::writer_open(writer_of(value), args)
+    }
+
+    fn writer_add(value: &BslValue, args: &[BslValue]) -> RtResult<()> {
+        super::writer_add(writer_of(value), args)
+    }
+
+    fn writer_write(value: &BslValue) -> RtResult<()> {
+        super::writer_write(writer_of(value))
+    }
+
+    fn writer_binary_data(value: &BslValue) -> RtResult<BslValue> {
+        super::writer_binary_data(writer_of(value))
+    }
+
+    /// Сборщик эталонных архивов для тестов — тот же тонкий `ZipWriter`,
+    /// что живёт в `bsl-rt` для XLSX: способ хранения deflate, дата записи
+    /// фиксированная, чтобы байты не зависели от времени прогона.
+    struct ZipWriter {
+        inner: zip::ZipWriter<std::io::Cursor<Vec<u8>>>,
+    }
+
+    impl ZipWriter {
+        fn new() -> Self {
+            ZipWriter {
+                inner: zip::ZipWriter::new(std::io::Cursor::new(Vec::new())),
+            }
+        }
+
+        fn add(&mut self, name: &str, data: &[u8]) {
+            let options = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Deflated)
+                .compression_level(Some(1))
+                .last_modified_time(zip::DateTime::default());
+            self.inner
+                .start_file(name, options)
+                .expect("zip start_file не отказывает на корректном имени");
+            self.inner
+                .write_all(data)
+                .expect("zip write_all в память не отказывает");
+        }
+
+        fn finish(self) -> Vec<u8> {
+            let cursor = self.inner.finish().expect("zip finish не отказывает");
+            cursor.into_inner()
+        }
+    }
 
     /// Сжатие включено: повторяющаяся разметка обязана ужаться, а метод в
     /// заголовке — стать восьмым.
@@ -3043,7 +3364,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join(name);
         std::fs::write(&path, bytes).unwrap();
-        BslValue::Str(crate::BslString::from_str(path.to_str().unwrap()))
+        BslValue::Str(BslString::from_str(path.to_str().unwrap()))
     }
 
     /// Объект чтения над готовым архивом — то, что видит встроенный язык.
@@ -3091,17 +3412,9 @@ mod tests {
         );
 
         // Регистр в имени не значим, а искать надо по короткому имени.
-        let found = find(
-            &items,
-            &BslValue::Str(crate::BslString::from_str("ШУМ.BIN")),
-        )
-        .unwrap();
+        let found = find(&items, &BslValue::Str(BslString::from_str("ШУМ.BIN"))).unwrap();
         assert_eq!(prop(&found, "Имя"), "шум.bin");
-        let missing = find(
-            &items,
-            &BslValue::Str(crate::BslString::from_str("нет.txt")),
-        )
-        .unwrap();
+        let missing = find(&items, &BslValue::Str(BslString::from_str("нет.txt"))).unwrap();
         assert!(matches!(missing, BslValue::Undefined));
     }
 
@@ -3117,13 +3430,13 @@ mod tests {
 
         let by_original = find(
             &items,
-            &BslValue::Str(crate::BslString::from_str("отчёт:2026.txt")),
+            &BslValue::Str(BslString::from_str("отчёт:2026.txt")),
         )
         .unwrap();
         assert_eq!(prop(&by_original, "Имя"), "отчёт_2026.txt");
         let by_shown = find(
             &items,
-            &BslValue::Str(crate::BslString::from_str("отчёт_2026.txt")),
+            &BslValue::Str(BslString::from_str("отчёт_2026.txt")),
         )
         .unwrap();
         assert!(matches!(by_shown, BslValue::Undefined));
@@ -3140,7 +3453,7 @@ mod tests {
 
         let dir = std::env::temp_dir().join(format!("open-bsl-zip-{}", std::process::id()));
         let path = dir.join("closed.zip");
-        let source = BslValue::Str(crate::BslString::from_str(path.to_str().unwrap()));
+        let source = BslValue::Str(BslString::from_str(path.to_str().unwrap()));
         open(&reader, std::slice::from_ref(&source)).expect("после Закрыть открывается снова");
         assert!(
             open(&reader, &[source]).is_err(),
@@ -3163,8 +3476,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
         let deep = root.join("сПутями");
         let flat = root.join("плоско");
-        let arg =
-            |p: &std::path::Path| BslValue::Str(crate::BslString::from_str(p.to_str().unwrap()));
+        let arg = |p: &std::path::Path| BslValue::Str(BslString::from_str(p.to_str().unwrap()));
 
         // Каталога назначения ещё нет — измерено, что он создаётся.
         extract_all(&reader, &[arg(&deep)]).expect("распаковка с путями");
@@ -3177,10 +3489,7 @@ mod tests {
 
         extract_all(
             &reader,
-            &[
-                arg(&flat),
-                BslValue::Enum(crate::EnumValue::DontRestorePaths),
-            ],
+            &[arg(&flat), BslValue::Enum(EnumValue::DontRestorePaths)],
         )
         .expect("плоская распаковка");
         assert!(flat.join("вложенный.txt").is_file());
@@ -3188,7 +3497,7 @@ mod tests {
 
         // Пустая строка каталога — ошибка, а `Неопределено` режимом не
         // считается (оба измерены).
-        assert!(extract_all(&reader, &[BslValue::Str(crate::BslString::from_str(""))]).is_err());
+        assert!(extract_all(&reader, &[BslValue::Str(BslString::from_str(""))]).is_err());
         assert!(extract_all(&reader, &[arg(&flat), BslValue::Undefined]).is_err());
     }
 
@@ -3200,7 +3509,7 @@ mod tests {
         let other = reader_over(&REF_MIXED, "one-more.zip");
         let items = entries(&reader).unwrap();
         let dir = std::env::temp_dir().join(format!("open-bsl-zip-one-{}", std::process::id()));
-        let arg = BslValue::Str(crate::BslString::from_str(dir.to_str().unwrap()));
+        let arg = BslValue::Str(BslString::from_str(dir.to_str().unwrap()));
 
         let alien = get(&entries(&other).unwrap(), 0).unwrap();
         let e = extract(&reader, &[alien, arg.clone()]).expect_err("элемент чужого архива");
@@ -3243,7 +3552,7 @@ mod tests {
         assert_eq!(count(&entries(&reader).unwrap()).unwrap(), 1);
 
         let dir = output_dir("stale");
-        let arg = BslValue::Str(crate::BslString::from_str(dir.to_str().unwrap()));
+        let arg = BslValue::Str(BslString::from_str(dir.to_str().unwrap()));
         let e = extract(&reader, &[stale, arg]).expect_err("элемент от прошлого открытия");
         assert!(e.to_string().contains("другом открытии"), "текст: {e}");
         assert!(!dir.exists(), "распаковывать было нечего");
@@ -3266,7 +3575,7 @@ mod tests {
         assert_eq!(count(&entries(&reader).unwrap()).unwrap(), 2);
 
         let dir = output_dir("stale-same");
-        let arg = BslValue::Str(crate::BslString::from_str(dir.to_str().unwrap()));
+        let arg = BslValue::Str(BslString::from_str(dir.to_str().unwrap()));
         let e = extract(&reader, &[stale, arg.clone()]).expect_err("элемент от прошлого открытия");
         assert!(e.to_string().contains("другом открытии"), "текст: {e}");
         assert!(
@@ -3302,7 +3611,7 @@ mod tests {
         assert!(e.to_string().contains("другом открытии"), "текст: {e}");
         let fresh = find(
             &entries(&reader).unwrap(),
-            &BslValue::Str(crate::BslString::from_str("один.txt")),
+            &BslValue::Str(BslString::from_str("один.txt")),
         )
         .unwrap();
         assert_eq!(prop(&fresh, "Имя"), "один.txt");
@@ -3338,13 +3647,13 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("kind.zip");
         std::fs::write(&path, REF_MIXED).unwrap();
-        let source = BslValue::Str(crate::BslString::from_str(path.to_str().unwrap()));
+        let source = BslValue::Str(BslString::from_str(path.to_str().unwrap()));
 
         let ok = new_archive_reader(
             false,
             &source,
             &BslValue::Undefined,
-            &BslValue::Enum(crate::EnumValue::ArchiveTypeZip),
+            &BslValue::Enum(EnumValue::ArchiveTypeZip),
         )
         .expect("ZIP поддержан");
         assert_eq!(ok.type_name(), "ЧтениеФайлаАрхива");
@@ -3353,7 +3662,7 @@ mod tests {
             false,
             &source,
             &BslValue::Undefined,
-            &BslValue::Enum(crate::EnumValue::ArchiveTypeTar),
+            &BslValue::Enum(EnumValue::ArchiveTypeTar),
         )
         .expect_err("TAR здесь не читается");
         assert!(e.to_string().contains("не поддерживается"), "текст: {e}");
@@ -3374,12 +3683,12 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("broken.zip");
         std::fs::write(&path, b"not a zip at all, not even close").unwrap();
-        let source = BslValue::Str(crate::BslString::from_str(path.to_str().unwrap()));
+        let source = BslValue::Str(BslString::from_str(path.to_str().unwrap()));
         assert!(
             new_archive_reader(true, &source, &BslValue::Undefined, &BslValue::Undefined).is_err()
         );
 
-        let missing = BslValue::Str(crate::BslString::from_str("/несуществующий/архив.zip"));
+        let missing = BslValue::Str(BslString::from_str("/несуществующий/архив.zip"));
         assert!(
             new_archive_reader(true, &missing, &BslValue::Undefined, &BslValue::Undefined).is_err()
         );
@@ -3405,15 +3714,13 @@ mod tests {
     fn writer(target: &std::path::Path) -> BslValue {
         new_archive_writer(
             true,
-            &[BslValue::Str(crate::BslString::from_str(
-                target.to_str().unwrap(),
-            ))],
+            &[BslValue::Str(BslString::from_str(target.to_str().unwrap()))],
         )
         .expect("писатель строится")
     }
 
     fn str_value(text: &str) -> BslValue {
-        BslValue::Str(crate::BslString::from_str(text))
+        BslValue::Str(BslString::from_str(text))
     }
 
     /// Имена записей собранного архива — по каталогу, а не по локальным
@@ -3429,13 +3736,11 @@ mod tests {
     /// Собрать архив писателем и вернуть его байты, не трогая файловую
     /// систему целью.
     fn built(state_owner: &BslValue) -> Vec<u8> {
-        match writer_binary_data(state_owner).expect("данные отдаются") {
-            BslValue::Object(o) => match &*o {
-                BslObject::BinaryData(bytes) => bytes.to_vec(),
-                _ => panic!("не двоичные данные"),
-            },
-            _ => panic!("не объект"),
-        }
+        writer_binary_data(state_owner)
+            .expect("данные отдаются")
+            .binary_data_bytes()
+            .expect("не двоичные данные")
+            .to_vec()
     }
 
     /// Три режима путей на ОДНОМ файле дают три разных имени, и все три
@@ -3455,18 +3760,14 @@ mod tests {
             &relative,
             &[
                 file.clone(),
-                BslValue::Enum(crate::EnumValue::ZipStoreRelativePath),
+                BslValue::Enum(EnumValue::ZipStoreRelativePath),
             ],
         )
         .unwrap();
         assert_eq!(entry_names(&built(&relative)), vec!["f0.txt"]);
 
         let full = new_archive_writer(true, &[]).unwrap();
-        writer_add(
-            &full,
-            &[file, BslValue::Enum(crate::EnumValue::ZipStoreFullPath)],
-        )
-        .unwrap();
+        writer_add(&full, &[file, BslValue::Enum(EnumValue::ZipStoreFullPath)]).unwrap();
         // Полный путь ложится БЕЗ ведущего слэша — измерено.
         let names = entry_names(&built(&full));
         assert_eq!(names.len(), 1);
@@ -3506,8 +3807,8 @@ mod tests {
             &relative,
             &[
                 mask.clone(),
-                BslValue::Enum(crate::EnumValue::ZipStoreRelativePath),
-                BslValue::Enum(crate::EnumValue::ZipProcessSubdirsRecursively),
+                BslValue::Enum(EnumValue::ZipStoreRelativePath),
+                BslValue::Enum(EnumValue::ZipProcessSubdirsRecursively),
             ],
         )
         .unwrap();
@@ -3520,8 +3821,8 @@ mod tests {
             &flat,
             &[
                 mask,
-                BslValue::Enum(crate::EnumValue::ZipDontStorePath),
-                BslValue::Enum(crate::EnumValue::ZipProcessSubdirsRecursively),
+                BslValue::Enum(EnumValue::ZipDontStorePath),
+                BslValue::Enum(EnumValue::ZipProcessSubdirsRecursively),
             ],
         )
         .unwrap();
@@ -3552,8 +3853,8 @@ mod tests {
             &selected,
             &[
                 str_value(&format!("{}/*", root.display())),
-                BslValue::Enum(crate::EnumValue::ZipStoreRelativePath),
-                BslValue::Enum(crate::EnumValue::ZipProcessSubdirsRecursively),
+                BslValue::Enum(EnumValue::ZipStoreRelativePath),
+                BslValue::Enum(EnumValue::ZipProcessSubdirsRecursively),
             ],
         )
         .unwrap();
@@ -3568,8 +3869,8 @@ mod tests {
             &unselected,
             &[
                 str_value(&format!("{}/*.txt", root.display())),
-                BslValue::Enum(crate::EnumValue::ZipStoreRelativePath),
-                BslValue::Enum(crate::EnumValue::ZipProcessSubdirsRecursively),
+                BslValue::Enum(EnumValue::ZipStoreRelativePath),
+                BslValue::Enum(EnumValue::ZipProcessSubdirsRecursively),
             ],
         )
         .unwrap();
@@ -3587,8 +3888,8 @@ mod tests {
             &empty_base,
             &[
                 str_value(&format!("{}/пуст/*", root.display())),
-                BslValue::Enum(crate::EnumValue::ZipStoreRelativePath),
-                BslValue::Enum(crate::EnumValue::ZipProcessSubdirsRecursively),
+                BslValue::Enum(EnumValue::ZipStoreRelativePath),
+                BslValue::Enum(EnumValue::ZipProcessSubdirsRecursively),
             ],
         )
         .unwrap();
@@ -3616,8 +3917,8 @@ mod tests {
             &flat,
             &[
                 str_value(&format!("{}/*.нет", root.display())),
-                BslValue::Enum(crate::EnumValue::ZipDontStorePath),
-                BslValue::Enum(crate::EnumValue::ZipProcessSubdirsRecursively),
+                BslValue::Enum(EnumValue::ZipDontStorePath),
+                BslValue::Enum(EnumValue::ZipProcessSubdirsRecursively),
             ],
         )
         .expect_err("два пустых имени подряд");
@@ -3637,7 +3938,7 @@ mod tests {
                 BslValue::Undefined,
                 BslValue::Undefined,
                 BslValue::Undefined,
-                BslValue::Enum(crate::EnumValue::ZipMethodCopy),
+                BslValue::Enum(EnumValue::ZipMethodCopy),
             ],
         )
         .unwrap();
@@ -3675,7 +3976,7 @@ mod tests {
                 BslValue::Undefined,
                 BslValue::Undefined,
                 BslValue::Undefined,
-                BslValue::Enum(crate::EnumValue::ZipMethodBzip2),
+                BslValue::Enum(EnumValue::ZipMethodBzip2),
             ],
         )
         .expect_err("BZIP2 здесь не пишется");
@@ -3689,7 +3990,7 @@ mod tests {
                 BslValue::Undefined,
                 BslValue::Undefined,
                 BslValue::Undefined,
-                BslValue::Enum(crate::EnumValue::ZipEncryptionAes256),
+                BslValue::Enum(EnumValue::ZipEncryptionAes256),
             ],
         )
         .expect_err("шифрования нет");
@@ -3706,7 +4007,7 @@ mod tests {
                 BslValue::Undefined,
                 BslValue::Undefined,
                 BslValue::Undefined,
-                BslValue::Enum(crate::EnumValue::ZipLevelMaximal),
+                BslValue::Enum(EnumValue::ZipLevelMaximal),
             ]
         )
         .is_ok());
@@ -3723,7 +4024,7 @@ mod tests {
             &[
                 BslValue::Undefined,
                 BslValue::Undefined,
-                BslValue::Enum(crate::EnumValue::ArchiveTypeZip),
+                BslValue::Enum(EnumValue::ArchiveTypeZip),
                 str_value("комментарий"),
             ],
         )
@@ -3738,7 +4039,7 @@ mod tests {
             &[
                 BslValue::Undefined,
                 BslValue::Undefined,
-                BslValue::Enum(crate::EnumValue::ArchiveTypeTar)
+                BslValue::Enum(EnumValue::ArchiveTypeTar)
             ]
         )
         .is_err());
@@ -3761,7 +4062,7 @@ mod tests {
         let empty_tail = vec![BslValue::Undefined; 8];
         assert!(new_archive_writer(false, &empty_tail).is_ok());
         let mut eighth = empty_tail;
-        eighth[7] = BslValue::Enum(crate::EnumValue::ArchiveTypeZip);
+        eighth[7] = BslValue::Enum(EnumValue::ArchiveTypeZip);
         assert!(new_archive_writer(false, &eighth).is_err());
     }
 
@@ -3836,8 +4137,8 @@ mod tests {
             &slashed,
             &[
                 str_value(&format!("{}/", dir.display())),
-                BslValue::Enum(crate::EnumValue::ZipStoreRelativePath),
-                BslValue::Enum(crate::EnumValue::ZipProcessSubdirsRecursively),
+                BslValue::Enum(EnumValue::ZipStoreRelativePath),
+                BslValue::Enum(EnumValue::ZipProcessSubdirsRecursively),
             ],
         )
         .unwrap();
@@ -3852,8 +4153,8 @@ mod tests {
             &plain,
             &[
                 str_value(dir.to_str().unwrap()),
-                BslValue::Enum(crate::EnumValue::ZipStoreRelativePath),
-                BslValue::Enum(crate::EnumValue::ZipProcessSubdirsRecursively),
+                BslValue::Enum(EnumValue::ZipStoreRelativePath),
+                BslValue::Enum(EnumValue::ZipProcessSubdirsRecursively),
             ],
         )
         .unwrap();
@@ -3893,8 +4194,8 @@ mod tests {
             &w,
             &[
                 str_value(&format!("{}/*.txt", root.display())),
-                BslValue::Enum(crate::EnumValue::ZipStoreRelativePath),
-                BslValue::Enum(crate::EnumValue::ZipProcessSubdirsRecursively),
+                BslValue::Enum(EnumValue::ZipStoreRelativePath),
+                BslValue::Enum(EnumValue::ZipProcessSubdirsRecursively),
             ],
         )
         .unwrap();

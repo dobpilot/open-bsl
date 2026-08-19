@@ -87,7 +87,7 @@ bsl-stream       -> bsl-rt + bsl-binbuf
 bsl-json         -> bsl-rt
 bsl-xml          -> bsl-rt
 bsl-pdf          -> bsl-rt + flate2
-bsl-zip          -> bsl-rt + bsl-stream + zip + flate2
+bsl-zip          -> bsl-rt + zip + flate2
 bsl-spreadsheet  -> bsl-rt + bsl-xml + bsl-pdf + bsl-zip
 bsl-textdoc      -> bsl-rt
 bsl-regexp       -> bsl-rt

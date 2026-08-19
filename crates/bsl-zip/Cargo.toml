@@ -1,0 +1,11 @@
+[package]
+name = "bsl-zip"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+bsl-rt = { path = "../bsl-rt" }
+# Разбор и сборка контейнера ZIP делегированы тем же внешним крейтам, что
+# и в `bsl-rt` (см. решение об отставке in-tree реализации в его истории).
+zip = { version = "2", default-features = false, features = ["deflate"] }
+flate2 = "1"

@@ -144,6 +144,8 @@ impl EngineBuilder {
         runtime.register(bsl_json::library());
         #[cfg(feature = "stream")]
         runtime.register(bsl_stream::library());
+        #[cfg(feature = "zip")]
+        runtime.register(bsl_zip::library());
         Self { runtime }
     }
 
@@ -558,6 +560,41 @@ mod tests {
         let engine = Engine::builder().build().unwrap();
         assert!(engine.compile("Возврат Новый ПотокВПамяти;").is_err());
         assert!(engine.compile("Возврат ФайловыеПотоки;").is_err());
+    }
+
+    #[cfg(feature = "zip")]
+    #[test]
+    fn zip_feature_records_constructors_and_reads_written_archives() {
+        let engine = Engine::builder().build().unwrap();
+        let module = engine
+            .compile("писатель = Новый ЗаписьZipФайла(); Возврат ТипЗнч(писатель);")
+            .unwrap();
+        assert!(module
+            .requirements()
+            .iter()
+            .any(|requirement| requirement.package == "bsl-zip"
+                && requirement.version == env!("CARGO_PKG_VERSION")));
+        assert!(module.bytecode().unwrap().contains("CreateObject"));
+
+        // Читатель без источника создаётся закрытым — законная форма.
+        let module = engine
+            .compile("чтение = Новый ЧтениеZipФайла(); Возврат ТипЗнч(чтение);")
+            .unwrap();
+        // Представление типа — «Чтение ZIP файла», как на платформе.
+        assert_eq!(
+            engine.new_state().run(&module).unwrap().to_string(),
+            "Чтение ZIP файла"
+        );
+    }
+
+    #[cfg(not(feature = "zip"))]
+    #[test]
+    fn missing_zip_feature_rejects_archive_constructors() {
+        let engine = Engine::builder().build().unwrap();
+        assert!(engine.compile("Возврат Новый ЧтениеZipФайла();").is_err());
+        assert!(engine
+            .compile("Возврат Новый ЗаписьФайлаАрхива();")
+            .is_err());
     }
 
     #[cfg(feature = "regexp")]

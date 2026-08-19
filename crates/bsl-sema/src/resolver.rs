@@ -985,6 +985,21 @@ impl<'a> Resolver<'a> {
             }
             if matches!(
                 upper.as_str(),
+                "ЧТЕНИЕZIPФАЙЛА"
+                    | "ZIPFILEREADER"
+                    | "ЧТЕНИЕФАЙЛААРХИВА"
+                    | "ARCHIVEFILEREADER"
+                    | "ЗАПИСЬZIPФАЙЛА"
+                    | "ZIPFILEWRITER"
+                    | "ЗАПИСЬФАЙЛААРХИВА"
+                    | "ARCHIVEFILEWRITER"
+            ) {
+                return Err(SemaError::Unsupported(
+                    "тип архива требует зарегистрированный компонент bsl-zip",
+                ));
+            }
+            if matches!(
+                upper.as_str(),
                 "ЧТЕНИЕJSON"
                     | "JSONREADER"
                     | "ЗАПИСЬJSON"

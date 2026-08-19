@@ -1821,13 +1821,6 @@ pub fn call_builtin_method(
             // имя, разная арность, разводится получателем.
             _ if crate::xdto::is_list(obj) => crate::xdto::list_add(obj, args),
             _ if crate::xdto::is_sequence(obj) => crate::xdto::sequence_add(obj, args),
-            // `ЗаписьZipФайла.Добавить(Путь[, РежимПутей][, РежимПодкаталогов])`
-            // — то же имя, свои три арности; разводится получателем, как
-            // всё остальное в этой ветке.
-            _ if crate::zip::is_writer(obj) => {
-                crate::zip::writer_add(obj, args)?;
-                Ok(BslValue::Undefined)
-            }
             [] => obj.table_add_row(),
             [v] => match obj.push_element(v.clone()) {
                 Ok(()) => Ok(BslValue::Undefined),
@@ -1962,13 +1955,6 @@ pub fn call_builtin_method(
                     receiver: obj.type_name(),
                 }),
             },
-            _ if crate::zip::is_entries(obj) => match args {
-                [index] => crate::zip::get(obj, BslValue::index_as_usize(index)?),
-                _ => Err(RtError::MethodNotApplicable {
-                    method: "Получить",
-                    receiver: obj.type_name(),
-                }),
-            },
             _ => Err(RtError::MethodNotApplicable {
                 method: "Получить",
                 receiver: obj.type_name(),
@@ -2000,18 +1986,6 @@ pub fn call_builtin_method(
                     method: "Найти",
                     receiver: obj.type_name(),
                 });
-            }
-            // У коллекции элементов архива аргумент РОВНО один: измерено,
-            // что `Элементы.Найти("шум.bin", 1)` платформа отвергает —
-            // «Слишком много фактических параметров».
-            if crate::zip::is_entries(obj) {
-                if args.len() != 1 {
-                    return Err(RtError::MethodNotApplicable {
-                        method: "Найти",
-                        receiver: obj.type_name(),
-                    });
-                }
-                return crate::zip::find(obj, value);
             }
             // У коллекции вложений PDF аргумент тоже РОВНО один
             // (измерено: `Найти(имя, 1)` — «Слишком много фактических
@@ -2118,18 +2092,6 @@ pub fn call_builtin_method(
                 crate::binbuf::write_buffer(obj, args)
             } else if crate::spreadsheet::is_spread_document(obj) {
                 crate::spreadsheet::write(obj, args)?;
-                Ok(BslValue::Undefined)
-            } else if crate::zip::is_writer(obj) {
-                // У писателя архива `Записать()` без аргументов: измерено,
-                // что `Записать(имя)` платформа встречает «Слишком много
-                // фактических параметров».
-                if !args.is_empty() {
-                    return Err(RtError::MethodNotApplicable {
-                        method: "Записать",
-                        receiver: obj.type_name(),
-                    });
-                }
-                crate::zip::writer_write(obj)?;
                 Ok(BslValue::Undefined)
             } else {
                 // Получатель здесь может оказаться и не `ЗаписьТекста`:
@@ -2295,9 +2257,6 @@ pub fn call_builtin_method(
         }),
         // Имя делят результат чтения данных и писатель архива — ветвление
         // по получателю.
-        BuiltinMethod::GetBinaryData if crate::zip::is_writer(obj) => {
-            crate::zip::writer_binary_data(obj)
-        }
         BuiltinMethod::GetBinaryData | BuiltinMethod::GetBinaryDataBuffer => {
             Err(RtError::MethodNotApplicable {
                 method: "метод bsl-stream",
@@ -2420,25 +2379,20 @@ pub fn call_builtin_method(
         // `Поток.ОткрытьДляЧтения` на `ПотокВПамяти` дают ошибку).
         // Имя `Открыть` делят менеджер файловых потоков и читатель архива —
         // ветвление по получателю, как у `Прочитать`.
-        BuiltinMethod::StreamOpen if crate::zip::is_writer(obj) => {
-            crate::zip::writer_open(obj, args)?;
-            Ok(BslValue::Undefined)
-        }
-        BuiltinMethod::StreamOpen if crate::zip::is_reader(obj) => {
-            crate::zip::open(obj, args)?;
-            Ok(BslValue::Undefined)
-        }
         BuiltinMethod::StreamOpen => Err(RtError::MethodNotApplicable {
             method: "Открыть",
             receiver: obj.type_name(),
         }),
-        BuiltinMethod::ArchiveExtract => {
-            crate::zip::extract(obj, args)?;
-            Ok(BslValue::Undefined)
-        }
-        BuiltinMethod::ArchiveExtractAll => {
-            crate::zip::extract_all(obj, args)?;
-            Ok(BslValue::Undefined)
+        // `Извлечь`/`ИзвлечьВсе` остались только у объектов архива, а они
+        // стали Extension и диспетчеризуются протоколом раньше этой таблицы.
+        BuiltinMethod::ArchiveExtract | BuiltinMethod::ArchiveExtractAll => {
+            Err(RtError::MethodNotApplicable {
+                method: match m {
+                    BuiltinMethod::ArchiveExtract => "Извлечь",
+                    _ => "ИзвлечьВсе",
+                },
+                receiver: obj.type_name(),
+            })
         }
         BuiltinMethod::StreamOpenForRead
         | BuiltinMethod::StreamOpenForWrite

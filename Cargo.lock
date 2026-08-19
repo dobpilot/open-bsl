@@ -195,7 +195,17 @@ dependencies = [
  "bsl-stream",
  "bsl-syntax",
  "bsl-textdoc",
+ "bsl-zip",
  "pprof",
+]
+
+[[package]]
+name = "bsl-zip"
+version = "0.1.0"
+dependencies = [
+ "bsl-rt",
+ "flate2",
+ "zip",
 ]
 
 [[package]]
@@ -641,6 +651,7 @@ dependencies = [
  "bsl-syntax",
  "bsl-textdoc",
  "bsl-vm",
+ "bsl-zip",
 ]
 
 [[package]]
