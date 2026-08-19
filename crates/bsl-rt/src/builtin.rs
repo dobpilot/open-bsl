@@ -1996,34 +1996,18 @@ pub fn call_builtin_method(
 
         // Имя метода общее для JSON и XML — ветвление по получателю, а не
         // по имени: у платформы это ровно один метод.
-        BuiltinMethod::SetString => {
-            if crate::xml::is_xml_reader(obj) || crate::xml::is_xml_writer(obj) {
-                crate::xml::set_string(obj, args)?;
-            } else {
-                return Err(RtError::MethodNotApplicable {
-                    method: "УстановитьСтроку",
-                    receiver: obj.type_name(),
-                });
-            }
-            Ok(BslValue::Undefined)
-        }
-        BuiltinMethod::OpenFile => {
-            if crate::xml::is_xml_reader(obj) || crate::xml::is_xml_writer(obj) {
-                crate::xml::open_file(obj, args)?;
-            } else {
-                return Err(RtError::MethodNotApplicable {
-                    method: "ОткрытьФайл",
-                    receiver: obj.type_name(),
-                });
-            }
-            Ok(BslValue::Undefined)
-        }
+        BuiltinMethod::SetString => Err(RtError::MethodNotApplicable {
+            method: "УстановитьСтроку",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::OpenFile => Err(RtError::MethodNotApplicable {
+            method: "ОткрытьФайл",
+            receiver: obj.type_name(),
+        }),
         BuiltinMethod::ReadNext => {
             if crate::spreadsheet::is_spread_document(obj) {
                 crate::spreadsheet::read(obj, args)?;
                 Ok(BslValue::Undefined)
-            } else if crate::xml::is_xml_reader(obj) {
-                crate::xml::read(obj)
             } else {
                 Err(RtError::MethodNotApplicable {
                     method: "Прочитать",
@@ -2041,15 +2025,10 @@ pub fn call_builtin_method(
             // `ЧтениеXML.Пропустить(5)` прошёл бы молча: `xml::skip`
             // аргументы попросту не смотрит.
             too_many(obj, "Пропустить", args, 0)?;
-            if crate::xml::is_xml_reader(obj) {
-                crate::xml::skip(obj)?;
-            } else {
-                return Err(RtError::MethodNotApplicable {
-                    method: "Пропустить",
-                    receiver: obj.type_name(),
-                });
-            }
-            Ok(BslValue::Undefined)
+            Err(RtError::MethodNotApplicable {
+                method: "Пропустить",
+                receiver: obj.type_name(),
+            })
         }
         BuiltinMethod::SetText
         | BuiltinMethod::GetText
@@ -2149,11 +2128,26 @@ pub fn call_builtin_method(
             crate::binbuf::bitwise(obj, args, crate::binbuf::BitOp::AndNot)
         }
         BuiltinMethod::Invert => crate::binbuf::invert(obj, args),
-        BuiltinMethod::XmlReadAttribute => crate::xml::read_attribute(obj),
-        BuiltinMethod::XmlAttributeCount => crate::xml::attribute_count(obj),
-        BuiltinMethod::XmlAttributeName => crate::xml::attribute_name(obj, args),
-        BuiltinMethod::XmlAttributeValue => crate::xml::attribute_value(obj, args),
-        BuiltinMethod::XmlMoveToContent => crate::xml::move_to_content(obj),
+        BuiltinMethod::XmlReadAttribute => Err(RtError::MethodNotApplicable {
+            method: "ПрочитатьАтрибут",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::XmlAttributeCount => Err(RtError::MethodNotApplicable {
+            method: "КоличествоАтрибутов",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::XmlAttributeName => Err(RtError::MethodNotApplicable {
+            method: "ИмяАтрибута",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::XmlAttributeValue => Err(RtError::MethodNotApplicable {
+            method: "ЗначениеАтрибута",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::XmlMoveToContent => Err(RtError::MethodNotApplicable {
+            method: "ПерейтиКСодержимому",
+            receiver: obj.type_name(),
+        }),
         BuiltinMethod::DomHasChildNodes => Err(RtError::MethodNotApplicable {
             method: "ЕстьДочерниеУзлы",
             receiver: obj.type_name(),
@@ -2276,42 +2270,42 @@ pub fn call_builtin_method(
             method: "СоздатьСхемуXML",
             receiver: obj.type_name(),
         }),
-        BuiltinMethod::WriteXmlDeclaration => {
-            crate::xml::write_declaration(obj)?;
-            Ok(BslValue::Undefined)
-        }
-        BuiltinMethod::WriteStartElement => {
-            crate::xml::write_start_element(obj, args)?;
-            Ok(BslValue::Undefined)
-        }
-        BuiltinMethod::WriteEndElement => {
-            crate::xml::write_end_element(obj)?;
-            Ok(BslValue::Undefined)
-        }
-        BuiltinMethod::WriteXmlAttribute => {
-            crate::xml::write_attribute(obj, args)?;
-            Ok(BslValue::Undefined)
-        }
-        BuiltinMethod::WriteXmlText => {
-            crate::xml::write_text(obj, args)?;
-            Ok(BslValue::Undefined)
-        }
-        BuiltinMethod::WriteXmlComment => {
-            crate::xml::write_comment(obj, args)?;
-            Ok(BslValue::Undefined)
-        }
-        BuiltinMethod::WriteCdataSection => {
-            crate::xml::write_cdata(obj, args)?;
-            Ok(BslValue::Undefined)
-        }
-        BuiltinMethod::WriteXmlProcessingInstruction => {
-            crate::xml::write_processing_instruction(obj, args)?;
-            Ok(BslValue::Undefined)
-        }
-        BuiltinMethod::WriteXmlRaw => {
-            crate::xml::write_raw(obj, args)?;
-            Ok(BslValue::Undefined)
-        }
+        BuiltinMethod::WriteXmlDeclaration => Err(RtError::MethodNotApplicable {
+            method: "ЗаписатьОбъявлениеXML",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::WriteStartElement => Err(RtError::MethodNotApplicable {
+            method: "ЗаписатьНачалоЭлемента",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::WriteEndElement => Err(RtError::MethodNotApplicable {
+            method: "ЗаписатьКонецЭлемента",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::WriteXmlAttribute => Err(RtError::MethodNotApplicable {
+            method: "ЗаписатьАтрибут",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::WriteXmlText => Err(RtError::MethodNotApplicable {
+            method: "ЗаписатьТекст",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::WriteXmlComment => Err(RtError::MethodNotApplicable {
+            method: "ЗаписатьКомментарий",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::WriteCdataSection => Err(RtError::MethodNotApplicable {
+            method: "ЗаписатьСекциюCDATA",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::WriteXmlProcessingInstruction => Err(RtError::MethodNotApplicable {
+            method: "ЗаписатьИнструкциюОбработки",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::WriteXmlRaw => Err(RtError::MethodNotApplicable {
+            method: "ЗаписатьБезОбработки",
+            receiver: obj.type_name(),
+        }),
         BuiltinMethod::WriteStartObject
         | BuiltinMethod::WriteEndObject
         | BuiltinMethod::WriteStartArray

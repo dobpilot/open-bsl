@@ -66,7 +66,7 @@ pub use enums::{lookup_enum, lookup_member, members_of, EnumKind, EnumValue, ENU
 pub use interner::{NameId, NameInterner};
 pub use locale::{Locale, NBSP};
 pub use map::MapData;
-pub use object::{BslObject, StructureStorage, XmlReaderState};
+pub use object::{BslObject, StructureStorage};
 pub use object_protocol::{ByteStreamProtocol, ObjectProtocol, ObjectRef, TypeDescriptor};
 pub use runtime_shapes::RuntimeShapes;
 pub use shape::{Shape, ShapeTable, MAX_SHAPE_TRANSITIONS};
@@ -457,9 +457,9 @@ impl BslValue {
                 BslObject::ReservedJsonWriter => "ЗаписьJSON",
                 BslObject::ReservedJsonWriterSettings => "ПараметрыЗаписиJSON",
                 BslObject::ReservedJsonSerializerSettings => "НастройкиСериализацииJSON",
-                BslObject::XmlReader(_) => "ЧтениеXML",
-                BslObject::XmlWriter(_) => "ЗаписьXML",
-                BslObject::XmlWriterSettings(_) => "ПараметрыЗаписиXML",
+                BslObject::ReservedXmlReader
+                | BslObject::ReservedXmlWriter
+                | BslObject::ReservedXmlWriterSettings => "",
                 // Имена ЗНАЧЕНИЙ узлов DOM — слитные, имена ТИПОВ («Элемент
                 // DOM», «Документ  DOM» с ДВУМЯ пробелами) живут в
                 // `types.rs`. Обе колонки измерены.
@@ -1265,9 +1265,9 @@ impl BslValue {
                 | BslObject::ReservedJsonWriter
                 | BslObject::ReservedJsonWriterSettings
                 | BslObject::ReservedJsonSerializerSettings
-                | BslObject::XmlReader(..)
-                | BslObject::XmlWriter(..)
-                | BslObject::XmlWriterSettings(..)
+                | BslObject::ReservedXmlReader
+                | BslObject::ReservedXmlWriter
+                | BslObject::ReservedXmlWriterSettings
                 | BslObject::SpreadDocument(..)
                 | BslObject::SpreadArea(..)
                 | BslObject::SpreadDrawing(..)
@@ -1417,9 +1417,9 @@ impl BslValue {
                 BslObject::ReservedJsonWriter => TypeId::JsonWriter,
                 BslObject::ReservedJsonWriterSettings => TypeId::JsonWriterSettings,
                 BslObject::ReservedJsonSerializerSettings => TypeId::JsonSerializerSettings,
-                BslObject::XmlReader(..) => TypeId::XmlReader,
-                BslObject::XmlWriter(..) => TypeId::XmlWriter,
-                BslObject::XmlWriterSettings(..) => TypeId::XmlWriterSettings,
+                BslObject::ReservedXmlReader => TypeId::XmlReader,
+                BslObject::ReservedXmlWriter => TypeId::XmlWriter,
+                BslObject::ReservedXmlWriterSettings => TypeId::XmlWriterSettings,
                 BslObject::SpreadDocument(..) => TypeId::SpreadDocument,
                 BslObject::SpreadDrawings(..) => TypeId::SpreadDrawings,
                 BslObject::SpreadDrawing(..) => TypeId::SpreadDrawing,
@@ -1673,73 +1673,7 @@ impl BslValue {
     ///
     /// Ошибку ввода-вывода либо неприменимость метода к получателю.
     pub fn close_object(&self) -> RtResult<BslValue> {
-        if xml::is_xml_writer(self) {
-            xml::close_writer(self)
-        } else if xml::is_xml_reader(self) {
-            // У ЧтениеXML `Закрыть` ничего не отдаёт: это отпускание
-            // источника, а не выемка результата.
-            xml::close_reader(self)
-        } else {
-            self.text_writer_close()
-        }
-    }
-
-    pub fn new_xml_reader() -> Self {
-        BslValue::Object(Rc::new(BslObject::XmlReader(std::cell::RefCell::new(
-            crate::object::XmlReaderState::default(),
-        ))))
-    }
-
-    pub fn new_xml_writer() -> Self {
-        BslValue::Object(Rc::new(BslObject::XmlWriter(std::cell::RefCell::new(None))))
-    }
-
-    /// `Новый ПараметрыЗаписиXML([Кодировка][, Версия][, ИспользоватьОтступ])`.
-    ///
-    /// Третий параметр гасит и перевод строки, и отступ разом — измерено.
-    ///
-    /// # Errors
-    ///
-    /// [`RtError::TypeError`], если аргумент не того типа.
-    pub fn new_xml_writer_settings(
-        encoding: &BslValue,
-        version: &BslValue,
-        indent: &BslValue,
-    ) -> RtResult<Self> {
-        let mut settings = xml::XmlWriterSettings::default();
-        match encoding {
-            BslValue::Undefined => {}
-            BslValue::Str(s) => settings.encoding = Some(s.to_string()),
-            _ => {
-                return Err(RtError::TypeError {
-                    expected: "Строка",
-                    op: "Новый ПараметрыЗаписиXML",
-                })
-            }
-        }
-        match version {
-            BslValue::Undefined => {}
-            BslValue::Str(s) => settings.version = s.to_string(),
-            _ => {
-                return Err(RtError::TypeError {
-                    expected: "Строка",
-                    op: "Новый ПараметрыЗаписиXML",
-                })
-            }
-        }
-        match indent {
-            BslValue::Undefined => {}
-            BslValue::Boolean(b) => settings.indent = *b,
-            _ => {
-                return Err(RtError::TypeError {
-                    expected: "Булево",
-                    op: "Новый ПараметрыЗаписиXML",
-                })
-            }
-        }
-        Ok(BslValue::Object(Rc::new(BslObject::XmlWriterSettings(
-            settings,
-        ))))
+        self.text_writer_close()
     }
 
     /// Создаёт объект `ЗаписьТекста` и открывает файл для буферизованной
@@ -2260,9 +2194,9 @@ impl BslValue {
                 | BslObject::ReservedJsonWriter
                 | BslObject::ReservedJsonWriterSettings
                 | BslObject::ReservedJsonSerializerSettings
-                | BslObject::XmlReader(..)
-                | BslObject::XmlWriter(..)
-                | BslObject::XmlWriterSettings(..)
+                | BslObject::ReservedXmlReader
+                | BslObject::ReservedXmlWriter
+                | BslObject::ReservedXmlWriterSettings
                 | BslObject::SpreadDocument(..)
                 | BslObject::SpreadArea(..)
                 | BslObject::SpreadDrawing(..)
@@ -2620,36 +2554,6 @@ impl BslValue {
                 | BslObject::ReservedDataReadResult
                 | BslObject::ReservedMemoryStream
                 | BslObject::ReservedFileStream => Err(RtError::NotAnObject),
-                // У `ЧтениеXML` свойств больше, но природа та же: читатель
-                // помнит текущий узел, а `ТипУзла`/`Имя`/`Значение` только
-                // показывают его с разных сторон.
-                BslObject::XmlReader(_) => {
-                    if name.eq_ignore_ascii_case("ТипУзла") || name.eq_ignore_ascii_case("NodeType")
-                    {
-                        xml::node_type(self)
-                    } else if name.eq_ignore_ascii_case("Имя") || name.eq_ignore_ascii_case("Name")
-                    {
-                        xml::name(self)
-                    } else if name.eq_ignore_ascii_case("Значение")
-                        || name.eq_ignore_ascii_case("Value")
-                    {
-                        xml::value(self)
-                    } else if name.eq_ignore_ascii_case("ЛокальноеИмя")
-                        || name.eq_ignore_ascii_case("LocalName")
-                    {
-                        xml::local_name(self)
-                    } else if name.eq_ignore_ascii_case("Префикс")
-                        || name.eq_ignore_ascii_case("Prefix")
-                    {
-                        xml::prefix(self)
-                    } else if name.eq_ignore_ascii_case("URIПространстваИмен")
-                        || name.eq_ignore_ascii_case("NamespaceURI")
-                    {
-                        xml::namespace_uri(self)
-                    } else {
-                        Err(RtError::UnknownColumn(name.to_string()))
-                    }
-                }
                 BslObject::SpreadDocument(data) => {
                     if name.eq_ignore_ascii_case("Рисунки") || name.eq_ignore_ascii_case("Drawings")
                     {
@@ -3562,9 +3466,9 @@ impl fmt::Display for BslValue {
                 BslObject::ReservedJsonWriter => write!(f, "ЗаписьJSON"),
                 BslObject::ReservedJsonWriterSettings => write!(f, "ПараметрыЗаписиJSON"),
                 BslObject::ReservedJsonSerializerSettings => write!(f, "НастройкиСериализацииJSON"),
-                BslObject::XmlReader(_) => write!(f, "ЧтениеXML"),
-                BslObject::XmlWriter(_) => write!(f, "ЗаписьXML"),
-                BslObject::XmlWriterSettings(_) => write!(f, "ПараметрыЗаписиXML"),
+                BslObject::ReservedXmlReader => write!(f, "ЧтениеXML"),
+                BslObject::ReservedXmlWriter => write!(f, "ЗаписьXML"),
+                BslObject::ReservedXmlWriterSettings => write!(f, "ПараметрыЗаписиXML"),
                 BslObject::SpreadDocument(_) => write!(f, "ТабличныйДокумент"),
                 BslObject::SpreadDrawings(_) => write!(f, "КоллекцияРисунковТабличногоДокумента"),
                 BslObject::SpreadDrawing(..) => write!(f, "РисунокТабличногоДокумента"),

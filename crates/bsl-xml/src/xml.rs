@@ -1,0 +1,905 @@
+//! Поверхность `ЧтениеXML`/`ЗаписьXML`/`ПараметрыЗаписиXML`.
+//!
+//! Парсерное и писательское ядро живёт в `bsl_rt::xml` — им пользуется и
+//! шаблонный разбор MXL; здесь объекты встроенного языка поверх него.
+
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use std::path::PathBuf;
+
+use bsl_rt::xml::{
+    local_of, prefix_of, XmlAttr, XmlEvent, XmlParser, XmlWriter, XmlWriterSettings,
+    COMMENT_NODE_NAME, TEXT_NODE_NAME,
+};
+use bsl_rt::{
+    BslNumber, BslString, BslValue, CallContext, EnumValue, ObjectProtocol, RtError, RtResult,
+    TypeDescriptor, TypeId,
+};
+
+fn bad(what: impl Into<String>) -> RtError {
+    RtError::Xml(what.into())
+}
+
+/// Состояние `ЧтениеXML`.
+///
+/// Кроме текущего события хранится ещё две вещи, и обе — из-за того, что у
+/// платформы курсор один на две сущности. `attr_cursor` — позиция обхода
+/// `ПрочитатьАтрибут`: пока он стоит на атрибуте, `ТипУзла`, `Имя` и
+/// `Значение` показывают АТРИБУТ, а не сам элемент (измерено). `depth` —
+/// глубина открытых элементов на момент текущего события: по ней
+/// `Пропустить` понимает, до какого закрывающего тега глотать, и она обязана
+/// быть снята ДО того, как разборщик уйдёт вперёд.
+#[derive(Debug, Default)]
+pub struct XmlReaderState {
+    pub parser: Option<XmlParser>,
+    pub current: Option<XmlEvent>,
+    pub attr_cursor: Option<usize>,
+    pub depth: usize,
+}
+
+impl XmlReaderState {
+    /// Свежее состояние над готовым разборщиком.
+    pub fn over(parser: XmlParser) -> Self {
+        XmlReaderState {
+            parser: Some(parser),
+            current: None,
+            attr_cursor: None,
+            depth: 0,
+        }
+    }
+
+    /// Атрибуты текущего узла; у неэлементного узла их нет.
+    pub fn attrs(&self) -> &[XmlAttr] {
+        match &self.current {
+            Some(XmlEvent::ElementStart { attrs, .. }) => attrs.as_slice(),
+            _ => &[],
+        }
+    }
+
+    /// Атрибут, на котором стоит курсор `ПрочитатьАтрибут`.
+    pub fn current_attr(&self) -> Option<&XmlAttr> {
+        self.attr_cursor.and_then(|i| self.attrs().get(i))
+    }
+}
+
+// --- Склейка с объектами BSL --------------------------------------------
+
+/// `ЧтениеXML`.
+#[derive(Debug)]
+pub struct XmlReaderObject {
+    pub(crate) state: Rc<RefCell<XmlReaderState>>,
+}
+
+/// `ЗаписьXML` — до `УстановитьСтроку`/`ОткрытьФайл` писателя нет.
+#[derive(Debug)]
+pub struct XmlWriterObject {
+    writer: Rc<RefCell<Option<XmlWriter>>>,
+}
+
+/// `ПараметрыЗаписиXML` — неизменяемый набор настроек.
+#[derive(Debug)]
+pub struct XmlWriterSettingsObject {
+    settings: XmlWriterSettings,
+}
+
+fn as_reader(v: &BslValue) -> RtResult<&RefCell<XmlReaderState>> {
+    match v
+        .object_ref()
+        .and_then(|object| object.downcast_ref::<XmlReaderObject>())
+    {
+        Some(reader) => Ok(&reader.state),
+        _ => Err(not_applicable(v)),
+    }
+}
+
+fn as_writer(v: &BslValue) -> RtResult<&RefCell<Option<XmlWriter>>> {
+    match v
+        .object_ref()
+        .and_then(|object| object.downcast_ref::<XmlWriterObject>())
+    {
+        Some(writer) => Ok(&writer.writer),
+        _ => Err(not_applicable(v)),
+    }
+}
+
+fn not_applicable(v: &BslValue) -> RtError {
+    RtError::MethodNotApplicable {
+        method: "метод XML",
+        receiver: v.type_name(),
+    }
+}
+
+pub fn is_xml_reader(v: &BslValue) -> bool {
+    v.object_ref()
+        .is_some_and(|object| object.downcast_ref::<XmlReaderObject>().is_some())
+}
+
+pub fn is_xml_writer(v: &BslValue) -> bool {
+    v.object_ref()
+        .is_some_and(|object| object.downcast_ref::<XmlWriterObject>().is_some())
+}
+
+/// `Новый ЧтениеXML` — читатель без источника.
+pub fn new_xml_reader() -> BslValue {
+    BslValue::new_object(XmlReaderObject {
+        state: Rc::new(RefCell::new(XmlReaderState::default())),
+    })
+}
+
+/// `Новый ЗаписьXML` — писатель без приёмника.
+pub fn new_xml_writer() -> BslValue {
+    BslValue::new_object(XmlWriterObject {
+        writer: Rc::new(RefCell::new(None)),
+    })
+}
+
+/// `Новый ПараметрыЗаписиXML([Кодировка][, Версия][, ИспользоватьОтступ])`.
+pub fn new_xml_writer_settings(settings: XmlWriterSettings) -> BslValue {
+    BslValue::new_object(XmlWriterSettingsObject { settings })
+}
+
+/// Настройки из аргументов конструктора — прежние проверки типов.
+///
+/// # Errors
+///
+/// [`RtError::TypeError`], если аргумент не того типа.
+pub fn writer_settings_from_args(
+    encoding: &BslValue,
+    version: &BslValue,
+    indent: &BslValue,
+) -> RtResult<BslValue> {
+    let mut settings = XmlWriterSettings::default();
+    match encoding {
+        BslValue::Undefined => {}
+        BslValue::Str(s) => settings.encoding = Some(s.to_string()),
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "Строка",
+                op: "Новый ПараметрыЗаписиXML",
+            })
+        }
+    }
+    match version {
+        BslValue::Undefined => {}
+        BslValue::Str(s) => settings.version = s.to_string(),
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "Строка",
+                op: "Новый ПараметрыЗаписиXML",
+            })
+        }
+    }
+    match indent {
+        BslValue::Undefined => {}
+        BslValue::Boolean(b) => settings.indent = *b,
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "Булево",
+                op: "Новый ПараметрыЗаписиXML",
+            })
+        }
+    }
+    Ok(new_xml_writer_settings(settings))
+}
+
+fn need_str(arg: Option<&BslValue>, op: &'static str) -> RtResult<String> {
+    match arg {
+        Some(BslValue::Str(s)) => Ok(s.to_string()),
+        _ => Err(RtError::TypeError {
+            expected: "Строка",
+            op,
+        }),
+    }
+}
+
+/// Настройки из аргумента `УстановитьСтроку([Параметры])`.
+fn settings_from(arg: Option<&BslValue>) -> RtResult<XmlWriterSettings> {
+    match arg {
+        None | Some(BslValue::Undefined) => Ok(XmlWriterSettings::default()),
+        Some(value @ BslValue::Object(_)) => match value
+            .object_ref()
+            .and_then(|object| object.downcast_ref::<XmlWriterSettingsObject>())
+        {
+            Some(settings) => Ok(settings.settings.clone()),
+            None => Err(RtError::TypeError {
+                expected: "ПараметрыЗаписиXML",
+                op: "УстановитьСтроку",
+            }),
+        },
+        Some(_) => Err(RtError::TypeError {
+            expected: "ПараметрыЗаписиXML",
+            op: "УстановитьСтроку",
+        }),
+    }
+}
+
+/// `ЧтениеXML.УстановитьСтроку(Текст)` / `ЗаписьXML.УстановитьСтроку([Параметры])`.
+///
+/// # Errors
+///
+/// [`RtError::TypeError`], если получатель не объект XML либо аргумент не
+/// того типа.
+pub fn set_string(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+    if let Ok(reader) = as_reader(obj) {
+        let text = need_str(args.first(), "УстановитьСтроку")?;
+        *reader.borrow_mut() = XmlReaderState::over(XmlParser::new(&text));
+        return Ok(());
+    }
+    let writer = as_writer(obj)?;
+    *writer.borrow_mut() = Some(XmlWriter::to_string_target(settings_from(args.first())?));
+    Ok(())
+}
+
+/// `ОткрытьФайл(Имя)` у обоих объектов XML.
+///
+/// # Errors
+///
+/// [`RtError::IoError`], если файл не читается; [`RtError::TypeError`] при
+/// неверном аргументе.
+pub fn open_file(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+    let path = need_str(args.first(), "ОткрытьФайл")?;
+    if let Ok(reader) = as_reader(obj) {
+        let text = std::fs::read_to_string(&path).map_err(|e| RtError::IoError(e.to_string()))?;
+        // Платформа терпит сигнатуру UTF-8 в начале файла, а разборщику
+        // она видна как символ перед `<` — снимаем.
+        let text = text.strip_prefix('\u{feff}').unwrap_or(&text).to_string();
+        *reader.borrow_mut() = XmlReaderState::over(XmlParser::new(&text));
+        return Ok(());
+    }
+    let writer = as_writer(obj)?;
+    // У файлового приёмника объявление получает `encoding` — измерено на
+    // содержимом записанного файла.
+    let settings = XmlWriterSettings {
+        encoding: Some("UTF-8".to_string()),
+        ..XmlWriterSettings::default()
+    };
+    *writer.borrow_mut() = Some(XmlWriter::to_file(PathBuf::from(path), settings));
+    Ok(())
+}
+
+/// Разобрать следующий узел. Курсор атрибутов при этом сбрасывается.
+///
+/// # Errors
+///
+/// [`RtError::Xml`] на битой разметке.
+pub fn read(obj: &BslValue) -> RtResult<BslValue> {
+    let reader = as_reader(obj)?;
+    let mut state = reader.borrow_mut();
+    let Some(parser) = state.parser.as_mut() else {
+        return Err(bad("источник для ЧтениеXML не задан"));
+    };
+    let event = parser.read()?;
+    state.attr_cursor = None;
+    match event {
+        Some(e) => {
+            state.depth = state.parser.as_ref().map_or(0, XmlParser::depth);
+            state.current = Some(e);
+            Ok(BslValue::Boolean(true))
+        }
+        None => {
+            state.current = None;
+            Ok(BslValue::Boolean(false))
+        }
+    }
+}
+
+/// `Пропустить()` — проглотить остаток текущего элемента и встать НА его
+/// закрывающий тег (измерено; на нетекстовом узле пропускается остаток
+/// родителя).
+///
+/// # Errors
+///
+/// [`RtError::Xml`] на битой разметке или если пропускать нечего.
+pub fn skip(obj: &BslValue) -> RtResult<()> {
+    let reader = as_reader(obj)?;
+    let mut state = reader.borrow_mut();
+    // Глубина снимается ДО заимствования разборщика: после первого же
+    // `read` она уже другая, а нужна та, что была на текущем узле.
+    let depth = state.depth;
+    if depth == 0 {
+        return Err(bad("Пропустить вне элемента"));
+    }
+    let target = depth - 1;
+    let Some(parser) = state.parser.as_mut() else {
+        return Err(bad("источник для ЧтениеXML не задан"));
+    };
+    loop {
+        let Some(event) = parser.read()? else {
+            state.current = None;
+            state.depth = 0;
+            return Ok(());
+        };
+        let now = parser.depth();
+        if matches!(event, XmlEvent::ElementEnd { .. }) && now == target {
+            state.current = Some(event);
+            state.depth = now;
+            state.attr_cursor = None;
+            return Ok(());
+        }
+    }
+}
+
+/// `ПрочитатьАтрибут()` — курсор по атрибутам текущего элемента.
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель не `ЧтениеXML`.
+pub fn read_attribute(obj: &BslValue) -> RtResult<BslValue> {
+    let reader = as_reader(obj)?;
+    let mut state = reader.borrow_mut();
+    let count = state.attrs().len();
+    let next = match state.attr_cursor {
+        None => 0,
+        Some(i) => i + 1,
+    };
+    if next >= count {
+        state.attr_cursor = Some(count);
+        return Ok(BslValue::Boolean(false));
+    }
+    state.attr_cursor = Some(next);
+    Ok(BslValue::Boolean(true))
+}
+
+/// `ПерейтиКСодержимому()` -> член `ТипУзлаXML`.
+///
+/// # Errors
+///
+/// [`RtError::Xml`] на битой разметке.
+pub fn move_to_content(obj: &BslValue) -> RtResult<BslValue> {
+    loop {
+        {
+            let reader = as_reader(obj)?;
+            let state = reader.borrow();
+            if matches!(
+                state.current,
+                Some(XmlEvent::ElementStart { .. })
+                    | Some(XmlEvent::ElementEnd { .. })
+                    | Some(XmlEvent::Text(_))
+            ) {
+                drop(state);
+                return node_type(obj);
+            }
+        }
+        if read(obj)? == BslValue::Boolean(false) {
+            return Ok(BslValue::Enum(EnumValue::XmlNothing));
+        }
+    }
+}
+
+/// `ТипУзла` — член `ТипУзлаXML`.
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель не `ЧтениеXML`.
+pub fn node_type(obj: &BslValue) -> RtResult<BslValue> {
+    let reader = as_reader(obj)?;
+    let state = reader.borrow();
+    if state.attr_cursor.is_some_and(|i| i < state.attrs().len()) {
+        return Ok(BslValue::Enum(EnumValue::XmlAttribute));
+    }
+    let v = match &state.current {
+        None => EnumValue::XmlNothing,
+        Some(XmlEvent::ElementStart { .. }) => EnumValue::XmlElementStart,
+        Some(XmlEvent::ElementEnd { .. }) => EnumValue::XmlElementEnd,
+        Some(XmlEvent::Text(_)) => EnumValue::XmlText,
+        Some(XmlEvent::ProcessingInstruction { .. }) => EnumValue::XmlProcessingInstruction,
+        // Недостижимо: комментарии разборщик отдаёт только построителю
+        // DOM, а тот не оставляет их в состоянии читателя. Ветка написана
+        // явно, чтобы `match` оставался исчерпывающим.
+        Some(XmlEvent::Comment(_)) => EnumValue::XmlComment,
+        Some(XmlEvent::EntityReference { .. }) => EnumValue::XmlEntityReference,
+    };
+    Ok(BslValue::Enum(v))
+}
+
+/// `Имя` текущего узла; у текста это `#text` (измерено).
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель не `ЧтениеXML`.
+pub fn name(obj: &BslValue) -> RtResult<BslValue> {
+    let reader = as_reader(obj)?;
+    let state = reader.borrow();
+    if let Some(a) = state.current_attr() {
+        return Ok(BslValue::Str(BslString::from_str(&a.name)));
+    }
+    let s = match &state.current {
+        None => String::new(),
+        Some(XmlEvent::ElementStart { name, .. }) | Some(XmlEvent::ElementEnd { name, .. }) => {
+            name.clone()
+        }
+        Some(XmlEvent::Text(_)) => TEXT_NODE_NAME.to_string(),
+        Some(XmlEvent::ProcessingInstruction { target, .. }) => target.clone(),
+        // Недостижимо — см. `node_type`.
+        Some(XmlEvent::Comment(_)) => COMMENT_NODE_NAME.to_string(),
+        // У ссылки на сущность `Имя` — имя сущности, а `Значение` пусто
+        // (измерено).
+        Some(XmlEvent::EntityReference { name }) => name.clone(),
+    };
+    Ok(BslValue::Str(BslString::from_str(&s)))
+}
+
+/// `Значение` текущего узла; у элемента оно пустое (измерено).
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель не `ЧтениеXML`.
+pub fn value(obj: &BslValue) -> RtResult<BslValue> {
+    let reader = as_reader(obj)?;
+    let state = reader.borrow();
+    if let Some(a) = state.current_attr() {
+        return Ok(BslValue::Str(BslString::from_str(&a.value)));
+    }
+    let s = match &state.current {
+        Some(XmlEvent::Text(t)) => t.clone(),
+        Some(XmlEvent::ProcessingInstruction { data, .. }) => data.clone(),
+        // Недостижимо — см. `node_type`; ответ дан по образцу дерева DOM,
+        // где значение комментария и есть его текст.
+        Some(XmlEvent::Comment(t)) => t.clone(),
+        // У элемента значения нет (измерено), у ссылки на сущность — тоже:
+        // `Значение` на ней пусто, хотя текст замены известен.
+        Some(XmlEvent::ElementStart { .. })
+        | Some(XmlEvent::ElementEnd { .. })
+        | Some(XmlEvent::EntityReference { .. })
+        | None => String::new(),
+    };
+    Ok(BslValue::Str(BslString::from_str(&s)))
+}
+
+/// `ЛокальноеИмя` — имя без префикса.
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель не `ЧтениеXML`.
+pub fn local_name(obj: &BslValue) -> RtResult<BslValue> {
+    let full = name(obj)?;
+    let BslValue::Str(s) = &full else {
+        return Ok(full);
+    };
+    Ok(BslValue::Str(BslString::from_str(local_of(&s.to_string()))))
+}
+
+/// `Префикс` — часть имени до двоеточия.
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель не `ЧтениеXML`.
+pub fn prefix(obj: &BslValue) -> RtResult<BslValue> {
+    let full = name(obj)?;
+    let BslValue::Str(s) = &full else {
+        return Ok(full);
+    };
+    Ok(BslValue::Str(BslString::from_str(prefix_of(
+        &s.to_string(),
+    ))))
+}
+
+/// `URIПространстваИмен` текущего элемента.
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель не `ЧтениеXML`.
+pub fn namespace_uri(obj: &BslValue) -> RtResult<BslValue> {
+    let reader = as_reader(obj)?;
+    let state = reader.borrow();
+    let s = match &state.current {
+        Some(XmlEvent::ElementStart { uri, .. }) | Some(XmlEvent::ElementEnd { uri, .. }) => {
+            uri.clone()
+        }
+        _ => String::new(),
+    };
+    Ok(BslValue::Str(BslString::from_str(&s)))
+}
+
+/// `КоличествоАтрибутов()`.
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель не `ЧтениеXML`.
+pub fn attribute_count(obj: &BslValue) -> RtResult<BslValue> {
+    let reader = as_reader(obj)?;
+    let state = reader.borrow();
+    Ok(BslValue::Number(BslNumber::from_i64(
+        state.attrs().len() as i64
+    )))
+}
+
+/// `ИмяАтрибута(Индекс)`. Индекс за границей — `Неопределено`, как и у
+/// `ЗначениеАтрибута` (у которого это измерено).
+///
+/// # Errors
+///
+/// [`RtError::BadIndex`], если индекс не целое неотрицательное.
+pub fn attribute_name(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let reader = as_reader(obj)?;
+    let state = reader.borrow();
+    let idx = index_arg(args.first())?;
+    // Индекс за границей списка даёт `Неопределено` — измерено отдельно
+    // от `ЗначениеАтрибута`, у обоих одинаково.
+    Ok(state.attrs().get(idx).map_or(BslValue::Undefined, |a| {
+        BslValue::Str(BslString::from_str(&a.name))
+    }))
+}
+
+/// `ЗначениеАтрибута(ИмяЛибоИндекс)` -> значение либо `Неопределено`
+/// (измерено: у отсутствующего атрибута тип результата — «Не определено»).
+///
+/// # Errors
+///
+/// [`RtError::TypeError`], если аргумент не строка и не число.
+pub fn attribute_value(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+    let reader = as_reader(obj)?;
+    let state = reader.borrow();
+    match args.first() {
+        Some(BslValue::Str(s)) => {
+            let wanted = s.to_string();
+            Ok(state
+                .attrs()
+                .iter()
+                .find(|a| a.name == wanted)
+                .map_or(BslValue::Undefined, |a| {
+                    BslValue::Str(BslString::from_str(&a.value))
+                }))
+        }
+        Some(BslValue::Number(_)) => {
+            let idx = index_arg(args.first())?;
+            Ok(state.attrs().get(idx).map_or(BslValue::Undefined, |a| {
+                BslValue::Str(BslString::from_str(&a.value))
+            }))
+        }
+        _ => Err(RtError::TypeError {
+            expected: "Строка либо Число",
+            op: "ЗначениеАтрибута",
+        }),
+    }
+}
+
+fn index_arg(arg: Option<&BslValue>) -> RtResult<usize> {
+    match arg {
+        Some(BslValue::Number(n)) => {
+            let i = n.to_i64_exact().ok_or(RtError::BadIndex)?;
+            usize::try_from(i).map_err(|_| RtError::BadIndex)
+        }
+        _ => Err(RtError::TypeError {
+            expected: "Число",
+            op: "индекс атрибута",
+        }),
+    }
+}
+
+// --- Методы записи ------------------------------------------------------
+
+/// Доступ к писателю получателя. `pub(crate)`, потому что тем же писателем
+/// пишет дерево DOM (`dom::write`): второго сериализатора XML в рантайме нет.
+pub fn with_writer<R>(
+    obj: &BslValue,
+    f: impl FnOnce(&mut XmlWriter) -> RtResult<R>,
+) -> RtResult<R> {
+    let writer = as_writer(obj)?;
+    let mut slot = writer.borrow_mut();
+    let w = slot
+        .as_mut()
+        .ok_or_else(|| bad("приёмник для ЗаписьXML не задан"))?;
+    f(w)
+}
+
+/// Доступ к состоянию читателя. `pub(crate)` по той же причине, что и
+/// [`with_writer`]: разбор XML в экземпляры XDTO (`xdto::factory_read_xml`)
+/// идёт по СОБЫТИЯМ того же `ЧтениеXML`, и второго разборщика для этого
+/// заводить не за чем. Читатель после вызова остаётся там, куда его
+/// подвинул `f`, — позиция наблюдаема из BSL.
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель не `ЧтениеXML`, плюс
+/// всё, чем ответит `f`.
+pub fn with_reader<R>(
+    obj: &BslValue,
+    f: impl FnOnce(&mut XmlReaderState) -> RtResult<R>,
+) -> RtResult<R> {
+    let reader = as_reader(obj)?;
+    let mut state = reader.borrow_mut();
+    f(&mut state)
+}
+
+/// `ЗаписатьОбъявлениеXML()`.
+///
+/// # Errors
+///
+/// [`RtError::Xml`], если объявление пишется не первым.
+pub fn write_declaration(obj: &BslValue) -> RtResult<()> {
+    with_writer(obj, XmlWriter::write_declaration)
+}
+
+/// `ЗаписатьНачалоЭлемента(Имя)`.
+///
+/// # Errors
+///
+/// [`RtError::TypeError`], если имя не строка; [`RtError::Xml`], если
+/// корневой элемент уже записан.
+pub fn write_start_element(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+    let name = need_str(args.first(), "ЗаписатьНачалоЭлемента")?;
+    with_writer(obj, |w| w.write_start_element(&name))
+}
+
+/// `ЗаписатьКонецЭлемента()`.
+///
+/// # Errors
+///
+/// [`RtError::Xml`], если открытого элемента нет.
+pub fn write_end_element(obj: &BslValue) -> RtResult<()> {
+    with_writer(obj, XmlWriter::write_end_element)
+}
+
+/// `ЗаписатьАтрибут(Имя, Значение)` — оба только строки (измерено: число
+/// даёт ошибку).
+///
+/// # Errors
+///
+/// [`RtError::TypeError`] на нестроковом аргументе; [`RtError::Xml`], если
+/// начальный тег уже закрыт.
+pub fn write_attribute(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+    let name = need_str(args.first(), "ЗаписатьАтрибут")?;
+    let value = need_str(args.get(1), "ЗаписатьАтрибут")?;
+    with_writer(obj, |w| w.write_attribute(&name, &value))
+}
+
+/// `ЗаписатьТекст(Текст)`.
+///
+/// # Errors
+///
+/// [`RtError::TypeError`], если аргумент не строка.
+pub fn write_text(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+    let text = need_str(args.first(), "ЗаписатьТекст")?;
+    with_writer(obj, |w| w.write_text(&text))
+}
+
+/// `ЗаписатьКомментарий(Текст)`.
+///
+/// # Errors
+///
+/// [`RtError::TypeError`], если аргумент не строка.
+pub fn write_comment(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+    let text = need_str(args.first(), "ЗаписатьКомментарий")?;
+    with_writer(obj, |w| w.write_comment(&text))
+}
+
+/// `ЗаписатьСекциюCDATA(Текст)`.
+///
+/// # Errors
+///
+/// [`RtError::TypeError`], если аргумент не строка.
+pub fn write_cdata(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+    let text = need_str(args.first(), "ЗаписатьСекциюCDATA")?;
+    with_writer(obj, |w| w.write_cdata(&text))
+}
+
+/// `ЗаписатьИнструкциюОбработки(Имя, Текст)`.
+///
+/// # Errors
+///
+/// [`RtError::TypeError`], если аргумент не строка.
+pub fn write_processing_instruction(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+    let target = need_str(args.first(), "ЗаписатьИнструкциюОбработки")?;
+    let data = need_str(args.get(1), "ЗаписатьИнструкциюОбработки")?;
+    with_writer(obj, |w| w.write_processing_instruction(&target, &data))
+}
+
+/// `ЗаписатьБезОбработки(Текст)`.
+///
+/// # Errors
+///
+/// [`RtError::TypeError`], если аргумент не строка.
+pub fn write_raw(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+    let text = need_str(args.first(), "ЗаписатьБезОбработки")?;
+    with_writer(obj, |w| w.write_raw(&text))
+}
+
+/// `ЗаписьXML.Закрыть()` -> текст для строкового приёмника либо пустая
+/// строка для файлового. Второй вызов подряд отдаёт пустую строку —
+/// измерено.
+///
+/// # Errors
+///
+/// [`RtError::IoError`], если файл не записался.
+pub fn close_writer(obj: &BslValue) -> RtResult<BslValue> {
+    let writer = as_writer(obj)?;
+    let mut slot = writer.borrow_mut();
+    let Some(w) = slot.as_mut() else {
+        return Ok(BslValue::Str(BslString::from_str("")));
+    };
+    let text = w.finish();
+    if let Some(path) = w.take_path() {
+        // Файл платформа начинает сигнатурой UTF-8 — измерено побайтным
+        // сличением выгрузки `edata_writer` (первые три байта EF BB BF).
+        let mut bytes = Vec::with_capacity(3 + text.len());
+        bytes.extend_from_slice(b"\xef\xbb\xbf");
+        bytes.extend_from_slice(text.as_bytes());
+        std::fs::write(&path, bytes).map_err(|e| RtError::IoError(e.to_string()))?;
+        *slot = None;
+        return Ok(BslValue::Str(BslString::from_str("")));
+    }
+    *slot = None;
+    Ok(BslValue::Str(BslString::from_str(&text)))
+}
+
+/// `ЧтениеXML.Закрыть()` — источник отпускается, объект остаётся годным для
+/// нового `УстановитьСтроку`.
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель не `ЧтениеXML`.
+pub fn close_reader(obj: &BslValue) -> RtResult<BslValue> {
+    let reader = as_reader(obj)?;
+    *reader.borrow_mut() = XmlReaderState::default();
+    Ok(BslValue::Undefined)
+}
+
+// --- объектный протокол -----------------------------------------------------
+
+static READER_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ЧтениеXML",
+    legacy_type_id: Some(TypeId::XmlReader),
+};
+
+static WRITER_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ЗаписьXML",
+    legacy_type_id: Some(TypeId::XmlWriter),
+};
+
+static SETTINGS_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ПараметрыЗаписиXML",
+    legacy_type_id: Some(TypeId::XmlWriterSettings),
+};
+
+impl XmlReaderObject {
+    fn as_value(&self) -> BslValue {
+        BslValue::new_object(XmlReaderObject {
+            state: self.state.clone(),
+        })
+    }
+}
+
+impl XmlWriterObject {
+    fn as_value(&self) -> BslValue {
+        BslValue::new_object(XmlWriterObject {
+            writer: self.writer.clone(),
+        })
+    }
+}
+
+impl ObjectProtocol for XmlReaderObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &READER_TYPE
+    }
+
+    fn get_property(&self, prop: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
+        let receiver = self.as_value();
+        let is =
+            |ru: &str, en: &str| prop.eq_ignore_ascii_case(ru) || prop.eq_ignore_ascii_case(en);
+        // Читатель помнит текущий узел, а свойства показывают его с разных
+        // сторон (прежний арм общей таблицы свойств).
+        if is("ТипУзла", "NodeType") {
+            node_type(&receiver)
+        } else if is("Имя", "Name") {
+            name(&receiver)
+        } else if is("Значение", "Value") {
+            value(&receiver)
+        } else if is("ЛокальноеИмя", "LocalName") {
+            local_name(&receiver)
+        } else if is("Префикс", "Prefix") {
+            prefix(&receiver)
+        } else if is("URIПространстваИмен", "NamespaceURI") {
+            namespace_uri(&receiver)
+        } else {
+            Err(RtError::UnknownColumn(prop.to_string()))
+        }
+    }
+
+    fn call_method(
+        &self,
+        method: &str,
+        arguments: &[BslValue],
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<BslValue> {
+        let receiver = self.as_value();
+        let eq =
+            |ru: &str, en: &str| method.eq_ignore_ascii_case(ru) || method.eq_ignore_ascii_case(en);
+        if eq("УстановитьСтроку", "SetString") {
+            set_string(&receiver, arguments)?;
+            Ok(BslValue::Undefined)
+        } else if eq("ОткрытьФайл", "OpenFile") {
+            open_file(&receiver, arguments)?;
+            Ok(BslValue::Undefined)
+        } else if eq("Прочитать", "Read") {
+            read(&receiver)
+        } else if eq("Пропустить", "Skip") {
+            // Верхнюю границу арности проверяет получатель: `Пропустить(5)`
+            // не должен пройти молча (см. прежний арм).
+            if !arguments.is_empty() {
+                return Err(RtError::MethodNotApplicable {
+                    method: "Пропустить",
+                    receiver: READER_TYPE.name,
+                });
+            }
+            skip(&receiver)?;
+            Ok(BslValue::Undefined)
+        } else if eq("ПрочитатьАтрибут", "ReadAttribute") {
+            read_attribute(&receiver)
+        } else if eq("КоличествоАтрибутов", "AttributeCount") {
+            attribute_count(&receiver)
+        } else if eq("ИмяАтрибута", "AttributeName") {
+            attribute_name(&receiver, arguments)
+        } else if eq("ЗначениеАтрибута", "AttributeValue") {
+            attribute_value(&receiver, arguments)
+        } else if eq("ПерейтиКСодержимому", "MoveToContent") {
+            move_to_content(&receiver)
+        } else if eq("Закрыть", "Close") {
+            close_reader(&receiver)
+        } else {
+            Err(RtError::UnknownMethod {
+                method: method.to_string(),
+                receiver: READER_TYPE.name,
+            })
+        }
+    }
+}
+
+impl ObjectProtocol for XmlWriterObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &WRITER_TYPE
+    }
+
+    fn call_method(
+        &self,
+        method: &str,
+        arguments: &[BslValue],
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<BslValue> {
+        let receiver = self.as_value();
+        let eq =
+            |ru: &str, en: &str| method.eq_ignore_ascii_case(ru) || method.eq_ignore_ascii_case(en);
+        let done = |result: RtResult<()>| result.map(|()| BslValue::Undefined);
+        if eq("УстановитьСтроку", "SetString") {
+            done(set_string(&receiver, arguments))
+        } else if eq("ОткрытьФайл", "OpenFile") {
+            done(open_file(&receiver, arguments))
+        } else if eq("ЗаписатьОбъявлениеXML", "WriteXMLDeclaration") {
+            done(write_declaration(&receiver))
+        } else if eq("ЗаписатьНачалоЭлемента", "WriteStartElement") {
+            done(write_start_element(&receiver, arguments))
+        } else if eq("ЗаписатьКонецЭлемента", "WriteEndElement") {
+            done(write_end_element(&receiver))
+        } else if eq("ЗаписатьАтрибут", "WriteAttribute") {
+            done(write_attribute(&receiver, arguments))
+        } else if eq("ЗаписатьТекст", "WriteText") {
+            done(write_text(&receiver, arguments))
+        } else if eq("ЗаписатьКомментарий", "WriteComment") {
+            done(write_comment(&receiver, arguments))
+        } else if eq("ЗаписатьСекциюCDATA", "WriteCDATASection") {
+            done(write_cdata(&receiver, arguments))
+        } else if eq("ЗаписатьИнструкциюОбработки", "WriteProcessingInstruction")
+        {
+            done(write_processing_instruction(&receiver, arguments))
+        } else if eq("ЗаписатьБезОбработки", "WriteRaw") {
+            done(write_raw(&receiver, arguments))
+        } else if eq("Закрыть", "Close") {
+            close_writer(&receiver)
+        } else {
+            Err(RtError::UnknownMethod {
+                method: method.to_string(),
+                receiver: WRITER_TYPE.name,
+            })
+        }
+    }
+}
+
+impl ObjectProtocol for XmlWriterSettingsObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &SETTINGS_TYPE
+    }
+}

@@ -5,6 +5,7 @@
 
 mod dom;
 mod xdto;
+mod xml;
 mod xpath;
 mod xsd;
 
@@ -17,6 +18,10 @@ pub use dom::{
     new_builder as new_dom_builder, new_document as new_dom_document, new_writer as new_dom_writer,
 };
 pub use xdto::{factory_of_file, factory_of_schema_set, serializer_of_factory};
+pub use xml::{
+    new_xml_reader, new_xml_writer, new_xml_writer_settings,
+    writer_settings_from_args as xml_writer_settings_value,
+};
 pub use xpath::new_ns_resolver;
 pub use xsd::{new_builder, new_expanded_name, new_schema, new_schema_set};
 
@@ -94,6 +99,31 @@ fn construct_ns_resolver(
     arguments: &[BslValue],
 ) -> RtResult<BslValue> {
     new_ns_resolver(&arguments[0])
+}
+
+fn construct_xml_reader(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    Ok(new_xml_reader())
+}
+
+fn construct_xml_writer(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    Ok(new_xml_writer())
+}
+
+fn construct_xml_writer_settings(
+    _context: &mut CallContext<'_>,
+    arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    xml::writer_settings_from_args(
+        argument(arguments, 0),
+        argument(arguments, 1),
+        argument(arguments, 2),
+    )
 }
 
 fn construct_serializer(
@@ -200,6 +230,24 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[
         arity: Arity::exact(1),
         call: construct_ns_resolver,
     },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(11),
+        names: &["ЧтениеXML", "XMLReader"],
+        arity: Arity::exact(0),
+        call: construct_xml_reader,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(12),
+        names: &["ЗаписьXML", "XMLWriter"],
+        arity: Arity::exact(0),
+        call: construct_xml_writer,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(13),
+        names: &["ПараметрыЗаписиXML", "XMLWriterSettings"],
+        arity: Arity::range(0, 3),
+        call: construct_xml_writer_settings,
+    },
 ];
 
 const FUNCTIONS: &[FunctionDescriptor] = &[
@@ -244,7 +292,7 @@ mod tests {
             .iter()
             .map(|constructor| constructor.code.get())
             .collect::<Vec<_>>();
-        assert_eq!(constructors, (1..=10).collect::<Vec<_>>());
+        assert_eq!(constructors, (1..=13).collect::<Vec<_>>());
         let functions = library()
             .functions
             .iter()

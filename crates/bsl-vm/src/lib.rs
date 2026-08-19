@@ -1790,14 +1790,34 @@ fn step_cold(
             }
         }
         Instr::NewXmlReader { dst } => {
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, BslValue::new_xml_reader())?;
-            frames[frame_idx].pc += 1;
+            #[cfg(not(feature = "xml"))]
+            {
+                let _ = dst;
+                return Err(RtError::Component(
+                    "ЧтениеXML требует компонент bsl-xml".to_string(),
+                ));
+            }
+            #[cfg(feature = "xml")]
+            {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, bsl_xml::new_xml_reader())?;
+                frames[frame_idx].pc += 1;
+            }
         }
         Instr::NewXmlWriter { dst } => {
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, BslValue::new_xml_writer())?;
-            frames[frame_idx].pc += 1;
+            #[cfg(not(feature = "xml"))]
+            {
+                let _ = dst;
+                return Err(RtError::Component(
+                    "ЗаписьXML требует компонент bsl-xml".to_string(),
+                ));
+            }
+            #[cfg(feature = "xml")]
+            {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, bsl_xml::new_xml_writer())?;
+                frames[frame_idx].pc += 1;
+            }
         }
         Instr::NewDomBuilder { dst } => {
             #[cfg(not(feature = "xml"))]
@@ -1977,13 +1997,23 @@ fn step_cold(
             version,
             indent,
         } => {
-            let enc = reg_load(stack, frames[frame_idx].reg_index(encoding))?;
-            let ver = reg_load(stack, frames[frame_idx].reg_index(version))?;
-            let ind = reg_load(stack, frames[frame_idx].reg_index(indent))?;
-            let settings = BslValue::new_xml_writer_settings(&enc, &ver, &ind)?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, settings)?;
-            frames[frame_idx].pc += 1;
+            #[cfg(not(feature = "xml"))]
+            {
+                let _ = (dst, encoding, version, indent);
+                return Err(RtError::Component(
+                    "ПараметрыЗаписиXML требует компонент bsl-xml".to_string(),
+                ));
+            }
+            #[cfg(feature = "xml")]
+            {
+                let enc = reg_load(stack, frames[frame_idx].reg_index(encoding))?;
+                let ver = reg_load(stack, frames[frame_idx].reg_index(version))?;
+                let ind = reg_load(stack, frames[frame_idx].reg_index(indent))?;
+                let settings = bsl_xml::xml_writer_settings_value(&enc, &ver, &ind)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, settings)?;
+                frames[frame_idx].pc += 1;
+            }
         }
         Instr::NewTextWriter { dst, path } => {
             let path = reg_load(stack, frames[frame_idx].reg_index(path))?;

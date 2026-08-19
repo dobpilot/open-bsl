@@ -3914,7 +3914,7 @@ pub fn factory_read_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue>
         [reader, ty] => (reader, Some(ty)),
         _ => return Err(not_applicable(obj, "ПрочитатьXML")),
     };
-    if !bsl_rt::xml::is_xml_reader(reader) {
+    if !crate::xml::is_xml_reader(reader) {
         return Err(RtError::Xdto(
             "ПрочитатьXML читает из «ЧтениеXML»".to_string(),
         ));
@@ -3931,7 +3931,7 @@ pub fn factory_read_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue>
         Some(XdtoRepr::Type(model, i)) => (model.clone(), *i),
         _ => return Err(bad_read_type(type_arg)),
     };
-    bsl_rt::xml::with_reader(reader, |state| read_document(state, &model, type_index))
+    crate::xml::with_reader(reader, |state| read_document(state, &model, type_index))
 }
 
 fn bad_read_type(arg: &BslValue) -> RtError {
@@ -3949,7 +3949,7 @@ fn bad_read_type(arg: &BslValue) -> RtError {
 /// — «Нет»). Поэтому два элемента подряд читаются двумя вызовами без
 /// `Прочитать()` между ними.
 fn read_document(
-    state: &mut bsl_rt::XmlReaderState,
+    state: &mut crate::xml::XmlReaderState,
     model: &Rc<XdtoModel>,
     type_index: usize,
 ) -> RtResult<BslValue> {
@@ -3990,7 +3990,7 @@ fn read_document(
 /// [`RtError::Xdto`], если источник не задан или в нём не осталось
 /// элементов; ошибка самого разбора приходит из `read`.
 fn read_one<T>(
-    state: &mut bsl_rt::XmlReaderState,
+    state: &mut crate::xml::XmlReaderState,
     read: impl FnOnce(&mut bsl_rt::xml::XmlParser, &ElementHead) -> RtResult<T>,
 ) -> RtResult<T> {
     let mut current = state.current.take();
@@ -4611,7 +4611,7 @@ pub fn factory_write_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
         [writer, value, name, uri] => (writer, value, Some(name), Some(uri)),
         _ => return Err(not_applicable(obj, "ЗаписатьXML")),
     };
-    if !bsl_rt::xml::is_xml_writer(writer) {
+    if !crate::xml::is_xml_writer(writer) {
         return Err(RtError::Xdto("ЗаписатьXML пишет в «ЗаписьXML»".to_string()));
     }
     let name = optional_text(name, "ЗаписатьXML")?;
@@ -4655,7 +4655,7 @@ pub fn factory_write_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
         ));
     }
     let uri = uri.unwrap_or_else(|| type_data.ns.clone());
-    bsl_rt::xml::with_writer(writer, |w| {
+    crate::xml::with_writer(writer, |w| {
         let mut scope = NsScope::default();
         write_node(w, &mut scope, &name, &uri, None, &slot, 0)
     })
@@ -5404,7 +5404,7 @@ pub fn serializer_write_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
         [writer, value, name, uri] => (writer, value, Some(name), Some(uri)),
         _ => return Err(not_applicable(obj, "ЗаписатьXML")),
     };
-    if !bsl_rt::xml::is_xml_writer(writer) {
+    if !crate::xml::is_xml_writer(writer) {
         return Err(RtError::Xdto("ЗаписатьXML пишет в «ЗаписьXML»".to_string()));
     }
     if matches!(name, Some(BslValue::Undefined)) && matches!(uri, Some(BslValue::Str(_))) {
@@ -5421,7 +5421,7 @@ pub fn serializer_write_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
         Some(name) => (name, given_uri.unwrap_or_default()),
         None => (default_name, default_uri),
     };
-    bsl_rt::xml::with_writer(writer, |w| write_serialized(w, &name, &uri, nil, &text))
+    crate::xml::with_writer(writer, |w| write_serialized(w, &name, &uri, nil, &text))
 }
 
 /// Встроенный тип XML Schema, лексической формой которого сериализатор
@@ -5465,7 +5465,7 @@ pub fn serializer_read_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<BslVal
         [reader, ty] => (reader, Some(ty)),
         _ => return Err(not_applicable(obj, "ПрочитатьXML")),
     };
-    if !bsl_rt::xml::is_xml_reader(reader) {
+    if !crate::xml::is_xml_reader(reader) {
         return Err(RtError::Xdto(
             "ПрочитатьXML читает из «ЧтениеXML»".to_string(),
         ));
@@ -5481,7 +5481,7 @@ pub fn serializer_read_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<BslVal
             )))
         }
     };
-    bsl_rt::xml::with_reader(reader, |state| {
+    crate::xml::with_reader(reader, |state| {
         read_one(state, |parser, head| {
             serializer_read_element(parser, &model, head, want)
         })
@@ -7642,15 +7642,15 @@ mod tests {
 
     /// Читатель над текстом.
     fn reader(text: &str) -> BslValue {
-        let value = BslValue::new_xml_reader();
-        bsl_rt::xml::set_string(&value, &[str_value(text)]).expect("источник");
+        let value = crate::xml::new_xml_reader();
+        crate::xml::set_string(&value, &[str_value(text)]).expect("источник");
         value
     }
 
     /// Писатель в строку.
     fn writer() -> BslValue {
-        let value = BslValue::new_xml_writer();
-        bsl_rt::xml::set_string(&value, &[]).expect("приёмник");
+        let value = crate::xml::new_xml_writer();
+        crate::xml::set_string(&value, &[]).expect("приёмник");
         value
     }
 
@@ -7672,7 +7672,7 @@ mod tests {
             call.push(str_value(a));
         }
         factory_write_xml(f, &call)?;
-        match bsl_rt::xml::close_writer(&w)? {
+        match crate::xml::close_writer(&w)? {
             BslValue::Str(s) => Ok(s.to_string()),
             other => panic!("писатель отдал не строку: {other:?}"),
         }
@@ -7873,21 +7873,21 @@ mod tests {
         // Обёртку читатель проходит сам, а дальше два элемента подряд
         // читаются двумя вызовами БЕЗ `Прочитать()` между ними —
         // измерено, что после разбора читатель стоит на следующем узле.
-        bsl_rt::xml::read(&r).expect("обёртка");
-        bsl_rt::xml::read(&r).expect("первый корень");
+        crate::xml::read(&r).expect("обёртка");
+        crate::xml::read(&r).expect("первый корень");
         let t = type_of_factory(&f, "RootType");
         let first = factory_read_xml(&f, &[r.clone(), t.clone()]).expect("первый");
-        assert_eq!(text_of(&bsl_rt::xml::name(&r).expect("имя")), "t:root");
+        assert_eq!(text_of(&crate::xml::name(&r).expect("имя")), "t:root");
         let second = factory_read_xml(&f, &[r.clone(), t]).expect("второй");
         assert_eq!(number_of(&prop(&first, "id")), 1);
         assert_eq!(number_of(&prop(&second, "id")), 2);
-        assert_eq!(text_of(&bsl_rt::xml::name(&r).expect("имя")), "хвост");
+        assert_eq!(text_of(&crate::xml::name(&r).expect("имя")), "хвост");
         // На документе из одного корня читатель после разбора исчерпан.
         let single = reader(IO_DOC);
         let t = type_of_factory(&f, "RootType");
         factory_read_xml(&f, &[single.clone(), t]).expect("корень");
         assert_eq!(
-            bsl_rt::xml::read(&single).expect("шаг"),
+            crate::xml::read(&single).expect("шаг"),
             BslValue::Boolean(false)
         );
     }
@@ -8286,7 +8286,7 @@ mod tests {
         let mut call = vec![w.clone(), value.clone()];
         call.extend(args.iter().cloned());
         serializer_write_xml(&serializer(), &call)?;
-        match bsl_rt::xml::close_writer(&w)? {
+        match crate::xml::close_writer(&w)? {
             BslValue::Str(s) => Ok(s.to_string()),
             other => panic!("писатель отдал не строку: {other:?}"),
         }
@@ -8664,7 +8664,7 @@ mod tests {
             "</об>"
         );
         let r = reader(doc);
-        bsl_rt::xml::with_reader(&r, |state| {
+        crate::xml::with_reader(&r, |state| {
             state.parser.as_mut().expect("разборщик").read()?;
             Ok(())
         })
@@ -8767,7 +8767,7 @@ mod tests {
         // вызова: строка 181 снимка даёт на втором уровне `d2p1`.
         let s = serializer();
         let w = writer();
-        bsl_rt::xml::write_start_element(&w, &[str_value("об")]).expect("обёртка");
+        crate::xml::write_start_element(&w, &[str_value("об")]).expect("обёртка");
         serializer_write_xml(
             &s,
             &[
@@ -8778,8 +8778,8 @@ mod tests {
             ],
         )
         .expect("запись внутрь");
-        bsl_rt::xml::write_end_element(&w).expect("конец обёртки");
-        let text = match bsl_rt::xml::close_writer(&w).expect("закрытие") {
+        crate::xml::write_end_element(&w).expect("конец обёртки");
+        let text = match crate::xml::close_writer(&w).expect("закрытие") {
             BslValue::Str(s) => s.to_string(),
             other => panic!("писатель отдал не строку: {other:?}"),
         };

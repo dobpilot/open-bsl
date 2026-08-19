@@ -229,11 +229,12 @@
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
+use crate::xml::XmlReaderState;
 use bsl_rt::xml::{local_of, prefix_of, XmlEvent, XmlParser, XmlWriter};
 use bsl_rt::xml::{CDATA_NODE_NAME, COMMENT_NODE_NAME, DOCUMENT_NODE_NAME, TEXT_NODE_NAME};
 use bsl_rt::{
     BslString, BslValue, CallContext, EnumValue, ObjectProtocol, RtError, RtResult, TypeDescriptor,
-    TypeId, XmlReaderState,
+    TypeId,
 };
 
 /// URI, который платформа приписывает объявлениям пространств имён
@@ -621,16 +622,11 @@ pub fn read(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
             op: "ПостроительDOM.Прочитать",
         });
     }
-    let state = match &args[0] {
-        BslValue::Object(o) => match &**o {
-            bsl_rt::BslObject::XmlReader(state) => state,
-            _ => {
-                return Err(RtError::TypeError {
-                    expected: "ЧтениеXML",
-                    op: "ПостроительDOM.Прочитать",
-                })
-            }
-        },
+    let state = match args[0]
+        .object_ref()
+        .and_then(|object| object.downcast_ref::<crate::xml::XmlReaderObject>())
+    {
+        Some(reader) => &reader.state,
         _ => {
             return Err(RtError::TypeError {
                 expected: "ЧтениеXML",
@@ -2264,7 +2260,7 @@ pub fn write(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
     }
     let node = need_node(args.first(), op)?;
     let target = &args[1];
-    bsl_rt::xml::with_writer(target, |w| {
+    crate::xml::with_writer(target, |w| {
         let mut ser = DomSerializer {
             w,
             scopes: Vec::new(),
@@ -3035,10 +3031,10 @@ mod tests {
 
     /// Записать узел через `ЗаписьDOM` и отдать накопленный текст.
     fn serialize(node: &BslValue) -> RtResult<String> {
-        let target = BslValue::new_xml_writer();
-        bsl_rt::xml::set_string(&target, &[])?;
+        let target = crate::xml::new_xml_writer();
+        crate::xml::set_string(&target, &[])?;
         write(&new_writer(), &[node.clone(), target.clone()])?;
-        match bsl_rt::xml::close_writer(&target)? {
+        match crate::xml::close_writer(&target)? {
             BslValue::Str(s) => Ok(s.to_string()),
             other => panic!("ожидалась строка, получено {other:?}"),
         }

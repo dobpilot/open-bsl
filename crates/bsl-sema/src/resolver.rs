@@ -985,6 +985,19 @@ impl<'a> Resolver<'a> {
             }
             if matches!(
                 upper.as_str(),
+                "ЧТЕНИЕXML"
+                    | "XMLREADER"
+                    | "ЗАПИСЬXML"
+                    | "XMLWRITER"
+                    | "ПАРАМЕТРЫЗАПИСИXML"
+                    | "XMLWRITERSETTINGS"
+            ) {
+                return Err(SemaError::Unsupported(
+                    "тип XML требует зарегистрированный компонент bsl-xml",
+                ));
+            }
+            if matches!(
+                upper.as_str(),
                 "ПОСТРОИТЕЛЬDOM"
                     | "DOMBUILDER"
                     | "ДОКУМЕНТDOM"
