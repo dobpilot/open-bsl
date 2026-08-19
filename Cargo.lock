@@ -205,21 +205,13 @@ dependencies = [
 name = "bsl-vm"
 version = "0.1.0"
 dependencies = [
- "bsl-binbuf",
  "bsl-bytecode",
  "bsl-format",
  "bsl-json",
  "bsl-number",
- "bsl-pdf",
- "bsl-regexp",
  "bsl-rt",
  "bsl-sema",
- "bsl-spreadsheet",
- "bsl-stream",
  "bsl-syntax",
- "bsl-textdoc",
- "bsl-xml",
- "bsl-zip",
  "pprof",
 ]
 

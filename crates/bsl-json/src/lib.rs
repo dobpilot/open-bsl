@@ -922,7 +922,7 @@ fn escape_control_into(out: &mut String, byte: u8) {
 use std::cell::RefCell;
 
 use bsl_rt::{
-    local_date_from_utc_seconds, pseudo_unix_seconds, Arity, BslObject, BuiltinMethod, CallContext,
+    local_date_from_utc_seconds, pseudo_unix_seconds, Arity, BslObject, CallContext,
     ConstructorCode, ConstructorDescriptor, EnumValue, FunctionCode, FunctionDescriptor,
     FunctionKind, LibraryDependency, LibraryDescriptor, ObjectProtocol, StructureStorage,
     TypeDescriptor, TypeId,
@@ -1734,35 +1734,6 @@ impl ObjectProtocol for JsonWriterObject {
     fn is_filled(&self) -> RtResult<bool> {
         Ok(true)
     }
-}
-
-/// Быстрый адаптер старой инструкции `CallMethod`.
-///
-/// Новый байткод вызывает [`ObjectProtocol::call_method`] по имени.
-/// Адаптер нужен только до перевода CLI на реестр и не является
-/// частью компонентного ABI.
-///
-/// Возвращает `None`, если получатель или метод не принадлежит
-/// `ЗаписьJSON`.
-pub fn call_legacy_method(
-    method: BuiltinMethod,
-    receiver: &BslValue,
-    arguments: &[BslValue],
-) -> Option<RtResult<BslValue>> {
-    let writer = receiver.object_ref()?.downcast_ref::<JsonWriterObject>()?;
-    let method = match method {
-        BuiltinMethod::SetString => WriterMethod::SetString,
-        BuiltinMethod::OpenFile => WriterMethod::OpenFile,
-        BuiltinMethod::Close => WriterMethod::Close,
-        BuiltinMethod::WriteStartObject => WriterMethod::StartObject,
-        BuiltinMethod::WriteEndObject => WriterMethod::EndObject,
-        BuiltinMethod::WriteStartArray => WriterMethod::StartArray,
-        BuiltinMethod::WriteEndArray => WriterMethod::EndArray,
-        BuiltinMethod::WritePropertyName => WriterMethod::PropertyName,
-        BuiltinMethod::WriteJsonValue => WriterMethod::Value,
-        _ => return None,
-    };
-    Some(writer.invoke(method, arguments))
 }
 
 impl ObjectProtocol for JsonWriterSettingsObject {

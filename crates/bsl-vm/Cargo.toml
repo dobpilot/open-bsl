@@ -3,32 +3,11 @@ name = "bsl-vm"
 version.workspace = true
 edition.workspace = true
 
-[features]
-default = ["binbuf", "regexp", "textdoc", "json", "stream", "zip", "pdf", "xml", "spreadsheet"]
-binbuf = ["dep:bsl-binbuf"]
-regexp = ["dep:bsl-regexp"]
-textdoc = ["dep:bsl-textdoc"]
-json = ["dep:bsl-json"]
-stream = ["dep:bsl-stream", "binbuf"]
-zip = ["dep:bsl-zip"]
-pdf = ["dep:bsl-pdf"]
-xml = ["dep:bsl-xml"]
-spreadsheet = ["dep:bsl-spreadsheet"]
-
 [dependencies]
 bsl-rt = { path = "../bsl-rt" }
 bsl-bytecode = { path = "../bsl-bytecode" }
 bsl-format = { path = "../bsl-format" }
 bsl-number = { path = "../bsl-number" }
-bsl-binbuf = { path = "../bsl-binbuf", optional = true }
-bsl-regexp = { path = "../bsl-regexp", optional = true }
-bsl-textdoc = { path = "../bsl-textdoc", optional = true }
-bsl-json = { path = "../bsl-json", optional = true }
-bsl-stream = { path = "../bsl-stream", optional = true }
-bsl-zip = { path = "../bsl-zip", optional = true }
-bsl-pdf = { path = "../bsl-pdf", optional = true }
-bsl-xml = { path = "../bsl-xml", optional = true }
-bsl-spreadsheet = { path = "../bsl-spreadsheet", optional = true }
 # Выполнить/Вычислить компилируют строку в байт-код тем же движком, что и
 # статический код ("один движок, одна семантика" из брифа) — поэтому VM
 # теперь зависит от всего фронтенда, не только от bsl-bytecode.
@@ -36,4 +15,8 @@ bsl-sema = { path = "../bsl-sema" }
 bsl-syntax = { path = "../bsl-syntax" }
 
 [dev-dependencies]
+# Тестам канала обратного вызова (ПрочитатьJSON/ЗаписатьJSON зовут функции
+# модуля по имени) нужен настоящий компонент; в обычные зависимости
+# компонентные крейты больше не входят — VM говорит с ними через реестр.
+bsl-json = { path = "../bsl-json" }
 pprof = { version = "0.13", default-features = false, features = ["flamegraph"] }

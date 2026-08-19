@@ -90,21 +90,6 @@ pub enum BuiltinFn {
     StrSplit,
     /// `СтрСоединить`/`StrConcat(массив, разделитель)` -> `Строка`.
     StrConcat,
-    /// `СтрНайтиПоРегулярномуВыражению`/`StrFindByRegularExpression` —
-    /// строка, шаблон и до пяти необязательных: направление, начальная
-    /// позиция, номер вхождения, игнорировать регистр, многострочный
-    /// поиск. Возвращает `РезультатПоискаПоРегулярномуВыражению` ВСЕГДА,
-    /// даже когда ничего не найдено (см. `crate::regex_api`).
-    StrFindByRegex,
-    /// `СтрНайтиВсеПоРегулярномуВыражению`/`StrFindAllByRegularExpression`
-    /// -> `Массив` результатов.
-    StrFindAllByRegex,
-    /// `СтрЗаменитьПоРегулярномуВыражению`/`StrReplaceByRegularExpression`
-    /// — со ссылками на группы `$0`..`$n` в строке замены.
-    StrReplaceByRegex,
-    /// `СтрПодобнаПоРегулярномуВыражению`/`StrLikeByRegularExpression` —
-    /// совпадение строки ЦЕЛИКОМ, а не вхождение.
-    StrLikeByRegex,
     /// `СтрЧислоСтрок`/`StrLineCount`.
     StrLineCount,
     /// `СтрПолучитьСтроку`/`StrGetLine(строка, номер)`.
@@ -151,31 +136,6 @@ pub enum BuiltinFn {
     /// [`call_builtin_fn_ctx`], а не через [`call_builtin_fn`].
     FillPropertyValues,
 
-    /// `ПрочитатьJSON(Чтение[, ВозвращатьСоответствие[,
-    /// ИменаСвойствСоЗначениямиДата]])`. Как и
-    /// `ЗаполнитьЗначенияСвойств`, требует контекста форм: объект JSON
-    /// превращается в `Структура`, а её поля надо интернировать.
-    ReadJson,
-    /// `ЗаписатьJSON(Запись, Значение[, Настройки[, ИмяФункции[,
-    /// ДополнительныеПараметры[, ВызовКонтекстногоМетода]]]])` — тот же
-    /// контекст нужен, чтобы прочитать ИМЕНА полей сериализуемой структуры.
-    /// Функции преобразования (три последних параметра) появятся на
-    /// этапе 1 плана (`docs/std-library-plan.md`) — непустой аргумент на
-    /// этих позициях сейчас даёт понятную ошибку, а не молчаливый пропуск.
-    WriteJson,
-
-    /// `ЗаписатьДатуJSON(Дата, Формат[, Вариант])` -> `Строка`. Контекста
-    /// имён не требует — сама по себе функция дат, без структур.
-    WriteJsonDate,
-    /// `ПрочитатьДатуJSON(Строка, Формат)` -> `Дата`.
-    ReadJsonDate,
-    /// `ЗаписатьЗначениеJSON(Значение)` -> `Строка`. Контекст нужен затем
-    /// же, зачем `ЗаписатьJSON`, — сериализовать структуру.
-    WriteJsonValue,
-    /// `ПрочитатьЗначениеJSON(Строка)` -> значение. Контекст нужен затем
-    /// же, зачем `ПрочитатьJSON`.
-    ReadJsonValue,
-
     /// `ЗначениеВСтрокуВнутр(Значение)` — внутренний строковый формат
     /// платформы (см. модуль `vstr`). Контекст имён нужен затем же, зачем
     /// `ЗаписатьJSON`: прочитать имена полей структуры.
@@ -201,32 +161,6 @@ pub enum BuiltinFn {
     /// угадано по русскому имени.
     ConcatBinaryData,
 
-    /// `ПобитовоеИ(Число1, Число2)` и соседи по семейству (см. модуль
-    /// `bitops`). Английские написания у всей дюжины ИЗМЕРЕНЫ
-    /// перебором кандидатов через `Вычислить`, а не выведены из русских:
-    /// платформа знает `BitwiseXor`, но не `BitwiseExclusiveOr`, и
-    /// `BitwiseShiftLeft`, но не `BitShiftLeft`.
-    BitwiseAnd,
-    BitwiseOr,
-    BitwiseNot,
-    BitwiseAndNot,
-    BitwiseXor,
-    BitwiseShiftLeft,
-    BitwiseShiftRight,
-    /// `ПроверитьБит(Число, НомерБита)` -> `Булево`.
-    CheckBit,
-    /// `ПроверитьПоБитовойМаске(Число, Маска)` -> `Булево`: ВСЕ биты маски
-    /// стоят в числе (измерено).
-    CheckByBitMask,
-    /// `УстановитьБит(Число, НомерБита, Значение)`; третий аргумент
-    /// обязателен и строго `Булево` (измерено).
-    SetBit,
-    /// `ЧислоИзШестнадцатеричнойСтроки("0xFF")` -> 255. Приставка
-    /// обязательна, `0XFF` платформа отвергает (измерено).
-    NumberFromHexString,
-    /// `ЧислоИзДвоичнойСтроки("0b1010")` -> 10.
-    NumberFromBinaryString,
-
     /// `ПолучитьДвоичныеДанныеИзСтроки(Строка[, Кодировка][, ДобавлятьBOM])`
     /// (см. `binbuf::binary_data_from_string`).
     GetBinaryDataFromString,
@@ -246,16 +180,6 @@ pub enum BuiltinFn {
     /// обычный `Массив`, построенный заново на каждое чтение, — правки не
     /// переживают следующее обращение.
     CommandLineArguments,
-
-    /// `СоздатьФабрикуXDTO(ПутьКФайлуXSD)` — фабрика по файлу схемы.
-    /// Единственный измеренный источник у этой функции: набор схем берёт
-    /// конструктор `Новый ФабрикаXDTO`, а не она (см. модуль `xdto`).
-    CreateXdtoFactory,
-    /// Голое имя `ФабрикаXDTO` — фабрика КОНФИГУРАЦИИ. Функция всегда
-    /// отвечает ошибкой: конфигурации у этой реализации нет, а значит нет
-    /// и её пакетов XDTO. Ошибка ловимая (`Попытка`), как и всё
-    /// остальное, — это честный отказ, а не паника.
-    XdtoConfigurationFactory,
 }
 
 /// Написания встроенных ФУНКЦИЙ: `(имя, вариант)` в каноническом
@@ -318,29 +242,6 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("StrSplit", BuiltinFn::StrSplit),
     ("СтрСоединить", BuiltinFn::StrConcat),
     ("StrConcat", BuiltinFn::StrConcat),
-    ("СтрНайтиПоРегулярномуВыражению", BuiltinFn::StrFindByRegex),
-    ("StrFindByRegularExpression", BuiltinFn::StrFindByRegex),
-    (
-        "СтрНайтиВсеПоРегулярномуВыражению",
-        BuiltinFn::StrFindAllByRegex,
-    ),
-    (
-        "StrFindAllByRegularExpression",
-        BuiltinFn::StrFindAllByRegex,
-    ),
-    (
-        "СтрЗаменитьПоРегулярномуВыражению",
-        BuiltinFn::StrReplaceByRegex,
-    ),
-    (
-        "StrReplaceByRegularExpression",
-        BuiltinFn::StrReplaceByRegex,
-    ),
-    (
-        "СтрПодобнаПоРегулярномуВыражению",
-        BuiltinFn::StrLikeByRegex,
-    ),
-    ("StrLikeByRegularExpression", BuiltinFn::StrLikeByRegex),
     ("СтрЧислоСтрок", BuiltinFn::StrLineCount),
     ("StrLineCount", BuiltinFn::StrLineCount),
     ("СтрПолучитьСтроку", BuiltinFn::StrGetLine),
@@ -443,18 +344,6 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("AddMonth", BuiltinFn::AddMonth),
     ("ЗаполнитьЗначенияСвойств", BuiltinFn::FillPropertyValues),
     ("FillPropertyValues", BuiltinFn::FillPropertyValues),
-    ("ПрочитатьJSON", BuiltinFn::ReadJson),
-    ("ReadJSON", BuiltinFn::ReadJson),
-    ("ЗаписатьJSON", BuiltinFn::WriteJson),
-    ("WriteJSON", BuiltinFn::WriteJson),
-    ("ЗаписатьДатуJSON", BuiltinFn::WriteJsonDate),
-    ("WriteJSONDate", BuiltinFn::WriteJsonDate),
-    ("ПрочитатьДатуJSON", BuiltinFn::ReadJsonDate),
-    ("ReadJSONDate", BuiltinFn::ReadJsonDate),
-    ("ЗаписатьЗначениеJSON", BuiltinFn::WriteJsonValue),
-    ("WriteJSONValue", BuiltinFn::WriteJsonValue),
-    ("ПрочитатьЗначениеJSON", BuiltinFn::ReadJsonValue),
-    ("ReadJSONValue", BuiltinFn::ReadJsonValue),
     ("ЗначениеВСтрокуВнутр", BuiltinFn::ValueToStringInternal),
     ("ValueToStringInternal", BuiltinFn::ValueToStringInternal),
     ("ЗначениеИзСтрокиВнутр", BuiltinFn::ValueFromStringInternal),
@@ -470,46 +359,15 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("CommandLineArguments", BuiltinFn::CommandLineArguments),
     // Оба написания ИЗМЕРЕНЫ на файле схемы: и `СоздатьФабрикуXDTO`, и
     // `CreateXDTOFactory` отдают фабрику.
-    ("СоздатьФабрикуXDTO", BuiltinFn::CreateXdtoFactory),
-    ("CreateXDTOFactory", BuiltinFn::CreateXdtoFactory),
     // `ФабрикаXDTO` у платформы — СВОЙСТВО глобального контекста, а не
     // функция, и резолвер разрешает именно голое имя (как
     // `АргументыКоманднойСтроки`). Строка в таблице всё равно нужна:
     // текстовый формат байт-кода печатает и разбирает встроенную функцию
     // по имени, а безымянный вариант не пережил бы round-trip.
-    ("ФабрикаXDTO", BuiltinFn::XdtoConfigurationFactory),
-    ("XDTOFactory", BuiltinFn::XdtoConfigurationFactory),
     ("РазделитьДвоичныеДанные", BuiltinFn::SplitBinaryData),
     ("SplitBinaryData", BuiltinFn::SplitBinaryData),
     ("СоединитьДвоичныеДанные", BuiltinFn::ConcatBinaryData),
     ("ConcatBinaryData", BuiltinFn::ConcatBinaryData),
-    ("ПобитовоеИ", BuiltinFn::BitwiseAnd),
-    ("BitwiseAnd", BuiltinFn::BitwiseAnd),
-    ("ПобитовоеИли", BuiltinFn::BitwiseOr),
-    ("BitwiseOr", BuiltinFn::BitwiseOr),
-    ("ПобитовоеНе", BuiltinFn::BitwiseNot),
-    ("BitwiseNot", BuiltinFn::BitwiseNot),
-    ("ПобитовоеИНе", BuiltinFn::BitwiseAndNot),
-    ("BitwiseAndNot", BuiltinFn::BitwiseAndNot),
-    ("ПобитовоеИсключительноеИли", BuiltinFn::BitwiseXor),
-    ("BitwiseXor", BuiltinFn::BitwiseXor),
-    ("ПобитовыйСдвигВлево", BuiltinFn::BitwiseShiftLeft),
-    ("BitwiseShiftLeft", BuiltinFn::BitwiseShiftLeft),
-    ("ПобитовыйСдвигВправо", BuiltinFn::BitwiseShiftRight),
-    ("BitwiseShiftRight", BuiltinFn::BitwiseShiftRight),
-    ("ПроверитьБит", BuiltinFn::CheckBit),
-    ("CheckBit", BuiltinFn::CheckBit),
-    ("ПроверитьПоБитовойМаске", BuiltinFn::CheckByBitMask),
-    ("CheckByBitMask", BuiltinFn::CheckByBitMask),
-    ("УстановитьБит", BuiltinFn::SetBit),
-    ("SetBit", BuiltinFn::SetBit),
-    (
-        "ЧислоИзШестнадцатеричнойСтроки",
-        BuiltinFn::NumberFromHexString,
-    ),
-    ("NumberFromHexString", BuiltinFn::NumberFromHexString),
-    ("ЧислоИзДвоичнойСтроки", BuiltinFn::NumberFromBinaryString),
-    ("NumberFromBinaryString", BuiltinFn::NumberFromBinaryString),
     (
         "ПолучитьДвоичныеДанныеИзСтроки",
         BuiltinFn::GetBinaryDataFromString,
@@ -570,10 +428,10 @@ impl BuiltinFn {
     /// `CALL.*` в `open_questions.rs` и скрипт
     /// `tests/conformance/measure/measure-builtin-call.bsl`.
     /// `Вычислить`/`Eval` — тоже функция языка, но в этой таблице её нет:
-    /// у резолвера это отдельная форма `DynEval`. Расширения, которых у
-    /// платформы нет (`CommandLineArguments`, `XdtoConfigurationFactory` —
-    /// «Процедура или функция с указанным именем не определена»), правилом
-    /// не связаны и остаются обычными функциями.
+    /// у резолвера это отдельная форма `DynEval`. Расширение, которого у
+    /// платформы нет (`CommandLineArguments` — «Процедура или функция с
+    /// указанным именем не определена»), правилом не связано и остаётся
+    /// обычной функцией.
     pub fn is_intrinsic(self) -> bool {
         matches!(
             self,
@@ -621,10 +479,7 @@ impl BuiltinFn {
     /// платформа отвечает «Обращение к процедуре как к функции». Замер тот
     /// же, что у [`BuiltinFn::is_intrinsic`].
     pub fn is_procedure(self) -> bool {
-        matches!(
-            self,
-            BuiltinFn::Message | BuiltinFn::FillPropertyValues | BuiltinFn::WriteJson
-        )
+        matches!(self, BuiltinFn::Message | BuiltinFn::FillPropertyValues)
     }
 
     /// `(минимум, максимум)` аргументов. У большинства встроенных они
@@ -652,9 +507,6 @@ impl BuiltinFn {
             // меньшем платформа отвечает «Недостаточно фактических
             // параметров», при большем — «Слишком много фактических
             // параметров».
-            BuiltinFn::StrFindByRegex => (2, 7),
-            BuiltinFn::StrFindAllByRegex | BuiltinFn::StrLikeByRegex => (2, 4),
-            BuiltinFn::StrReplaceByRegex => (3, 5),
             BuiltinFn::Round => (3, 3),
             // Длину можно не указывать — до конца строки.
             BuiltinFn::Mid => (2, 3),
@@ -671,39 +523,10 @@ impl BuiltinFn {
             BuiltinFn::MakeDate => (1, 6),
             BuiltinFn::CurrentDate
             | BuiltinFn::CurrentUniversalDateInMilliseconds
-            | BuiltinFn::CommandLineArguments
-            // Голое имя глобальной фабрики аргументов не берёт: у
-            // платформы это свойство, а не функция.
-            | BuiltinFn::XdtoConfigurationFactory => (0, 0),
-            // Ровно один аргумент — путь к файлу XSD: и `СоздатьФабрикуXDTO()`,
-            // и вызов с двумя аргументами платформа отвергает (измерено).
-            BuiltinFn::CreateXdtoFactory => (1, 1),
+            | BuiltinFn::CommandLineArguments => (0, 0),
             // Оба списка свойств необязательны; недостающие позиции
             // резолвер добьёт `Неопределено`, что и значит «не задан».
             BuiltinFn::FillPropertyValues => (2, 4),
-            // Полные арности платформы поддержаны целиком: `ПрочитатьJSON` —
-            // 8 позиций, `ЗаписатьJSON` — 6. Хвостовые позиции обеих — это
-            // функция восстановления и функция преобразования со своими
-            // параметрами: имя, модуль, дополнительные параметры, а у чтения
-            // ещё и `ИменаСвойствДляФункцииВосстановления`. Разбирают их
-            // `bsl-json::read_json_builtin`/`write_json_builtin`, а зовут по
-            // имени через контекст исполнения, который даёт VM.
-            //
-            // Про сами хвостовые позиции ИЗМЕРЕНО две вещи. Функция
-            // преобразования зовётся ЛЕНИВО: одно её имя ничего не меняет,
-            // пока не встретилось значение, которое сериализовать нечем (см.
-            // `bsl-json::write_json`). И `ПрочитатьJSON` отвергает ЯВНОЕ
-            // `Неопределено` в четвёртой позиции (`ОжидаемыйФорматДаты`) —
-            // «Несоответствие типов (параметр номер '4')», — тогда как
-            // ПРОПУСК той же позиции принимает; здесь резолвер добивает
-            // пропущенные позиции тем же `Неопределено`, поэтому различие не
-            // воспроизводится (см.
-            // `bsl-json::optional_date_format_from_arg`).
-            BuiltinFn::ReadJson => (1, 8),
-            BuiltinFn::WriteJson => (2, 6),
-            BuiltinFn::WriteJsonDate => (2, 3),
-            BuiltinFn::ReadJsonDate => (2, 2),
-            BuiltinFn::WriteJsonValue | BuiltinFn::ReadJsonValue => (1, 1),
             BuiltinFn::ValueToStringInternal | BuiltinFn::ValueFromStringInternal => (1, 1),
             BuiltinFn::ValueToFile => (2, 2),
             BuiltinFn::ValueFromFile => (1, 1),
@@ -713,20 +536,6 @@ impl BuiltinFn {
             // `BIN.SPLIT.ONEARG`, `BIN.COMBINE.NOARG`).
             BuiltinFn::SplitBinaryData => (2, 2),
             BuiltinFn::ConcatBinaryData => (1, 1),
-            BuiltinFn::BitwiseAnd
-            | BuiltinFn::BitwiseOr
-            | BuiltinFn::BitwiseAndNot
-            | BuiltinFn::BitwiseXor
-            | BuiltinFn::BitwiseShiftLeft
-            | BuiltinFn::BitwiseShiftRight
-            | BuiltinFn::CheckBit
-            | BuiltinFn::CheckByBitMask => (2, 2),
-            BuiltinFn::BitwiseNot
-            | BuiltinFn::NumberFromHexString
-            | BuiltinFn::NumberFromBinaryString => (1, 1),
-            // Третий аргумент ОБЯЗАТЕЛЕН: вызов с двумя платформа не
-            // компилирует («Недостаточно фактических параметров»).
-            BuiltinFn::SetBit => (3, 3),
             BuiltinFn::GetBinaryDataFromString | BuiltinFn::GetBinaryDataBufferFromString => (1, 3),
             BuiltinFn::GetStringFromBinaryData | BuiltinFn::GetStringFromBinaryDataBuffer => (1, 2),
             _ => (1, 1),
@@ -1558,12 +1367,6 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         BuiltinFn::TrimRight => args[0].str_trim_right(),
         BuiltinFn::StrFind => args[0].str_find(&args[1]),
         BuiltinFn::StrReplace => args[0].str_replace(&args[1], &args[2]),
-        BuiltinFn::StrFindByRegex
-        | BuiltinFn::StrFindAllByRegex
-        | BuiltinFn::StrReplaceByRegex
-        | BuiltinFn::StrLikeByRegex => Err(RtError::Component(
-            "регулярные выражения выполняются компонентом bsl-regexp".to_string(),
-        )),
         BuiltinFn::StrSplit => args[0].str_split(&args[1]),
         BuiltinFn::StrConcat => args[0].str_join(&args[1]),
         BuiltinFn::StrLineCount => args[0].str_line_count(),
@@ -1585,12 +1388,6 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
                 .map(|a| BslValue::Str(BslString::from_str(a)))
                 .collect(),
         )),
-        BuiltinFn::CreateXdtoFactory => Err(RtError::Component(
-            "функции XDTO выполняются компонентом bsl-xml".to_string(),
-        )),
-        BuiltinFn::XdtoConfigurationFactory => Err(RtError::Component(
-            "функции XDTO выполняются компонентом bsl-xml".to_string(),
-        )),
         BuiltinFn::DatePartOf(part) => args[0].date_component(part),
         BuiltinFn::DateBoundaryOf(which) => args[0].date_boundary(which),
         BuiltinFn::AddMonth => args[0].add_month(&args[1]),
@@ -1599,30 +1396,8 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         // функция публична, и ронять процесс на прямом вызове из
         // встраивающего приложения незачем (то же соображение, что и у
         // `RtError::InvalidBytecode`).
-        BuiltinFn::ReadJson
-        | BuiltinFn::WriteJson
-        | BuiltinFn::WriteJsonValue
-        | BuiltinFn::ReadJsonValue
-        | BuiltinFn::WriteJsonDate
-        | BuiltinFn::ReadJsonDate => Err(RtError::Component(
-            "функции JSON выполняются компонентом bsl-json".to_string(),
-        )),
         BuiltinFn::SplitBinaryData => args[0].binary_data_split(&args[1]),
         BuiltinFn::ConcatBinaryData => args[0].binary_data_combine(),
-        BuiltinFn::BitwiseAnd
-        | BuiltinFn::BitwiseOr
-        | BuiltinFn::BitwiseNot
-        | BuiltinFn::BitwiseAndNot
-        | BuiltinFn::BitwiseXor
-        | BuiltinFn::BitwiseShiftLeft
-        | BuiltinFn::BitwiseShiftRight
-        | BuiltinFn::CheckBit
-        | BuiltinFn::CheckByBitMask
-        | BuiltinFn::SetBit
-        | BuiltinFn::NumberFromHexString
-        | BuiltinFn::NumberFromBinaryString => Err(RtError::Component(
-            "побитовые операции выполняются компонентом bsl-binbuf".to_string(),
-        )),
         BuiltinFn::GetBinaryDataFromString => crate::binbuf::binary_data_from_string(args),
         BuiltinFn::GetBinaryDataBufferFromString => crate::binbuf::binary_buffer_from_string(args),
         BuiltinFn::GetStringFromBinaryData => crate::binbuf::string_from_binary_data(args),
@@ -1691,17 +1466,6 @@ pub fn call_builtin_fn_ctx(
         // заводить не нужно.
         crate::fill::fill_property_values(target, source, list, exclude, &rt.names)?;
         return Ok(BslValue::Undefined);
-    }
-    if matches!(
-        f,
-        BuiltinFn::ReadJson
-            | BuiltinFn::WriteJson
-            | BuiltinFn::WriteJsonValue
-            | BuiltinFn::ReadJsonValue
-    ) {
-        return Err(RtError::Component(
-            "функции JSON выполняются компонентом bsl-json".to_string(),
-        ));
     }
     if f == BuiltinFn::ValueToStringInternal {
         let text = crate::vstr::value_to_string_internal(&args[0], rt)?;

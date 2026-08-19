@@ -722,15 +722,37 @@ impl<'a> Resolver<'a> {
                     // контекста (фабрика КОНФИГУРАЦИИ), поэтому пишется без
                     // скобок и разрешается тем же приёмом, что и
                     // `АргументыКоманднойСтроки`: голое имя становится
-                    // вызовом встроенной функции с нулём аргументов.
-                    // Функция всегда отвечает ловимой ошибкой — метаданных
-                    // конфигурации здесь нет (см. `bsl_rt::BuiltinFn`).
+                    // вызовом функции компонента с нулём аргументов
+                    // (`bsl_xml::configuration_factory`, всегда ловимая
+                    // ошибка — метаданных конфигурации здесь нет).
                     // Переменная с тем же именем побеждает: проверки выше.
-                    None if bsl_rt::BuiltinFn::lookup(name)
-                        == Some(bsl_rt::BuiltinFn::XdtoConfigurationFactory) =>
+                    None if matches!(
+                        name.to_uppercase().as_str(),
+                        "ФАБРИКАXDTO" | "XDTOFACTORY"
+                    ) =>
                     {
-                        Ok(RExpr::CallBuiltinFn {
-                            builtin: bsl_rt::BuiltinFn::XdtoConfigurationFactory,
+                        let Some((library_index, function)) = self
+                            .registry
+                            .and_then(|registry| registry.lookup_function(name))
+                        else {
+                            return Err(SemaError::Unsupported(
+                                "ФабрикаXDTO требует зарегистрированный компонент bsl-xml",
+                            ));
+                        };
+                        let registry = self.registry.expect("lookup выше нашёл функцию");
+                        let descriptor = registry
+                            .function(library_index, function)
+                            .expect("индекс получен из таблицы имён этого реестра");
+                        let package = registry
+                            .library(library_index)
+                            .expect("индекс получен из таблицы имён этого реестра")
+                            .package;
+                        let library = bsl_rt::LibraryKey::new(package);
+                        self.used_libraries.insert(library.clone());
+                        Ok(RExpr::CallComponent {
+                            library,
+                            function,
+                            kind: descriptor.kind,
                             args: Vec::new(),
                         })
                     }
@@ -1266,39 +1288,6 @@ impl<'a> Resolver<'a> {
                     });
                 }
                 if let Some(builtin) = bsl_rt::BuiltinFn::lookup(name) {
-                    // При компиляции с реестром вынесенные функции не
-                    // должны проваливаться в legacy-`CallBuiltin`: иначе модуль
-                    // не попадёт в `.requires`. Путь без реестра нужен только
-                    // переходному `bsl-cli`.
-                    if self.registry.is_some()
-                        && matches!(
-                            builtin,
-                            bsl_rt::BuiltinFn::StrFindByRegex
-                                | bsl_rt::BuiltinFn::StrFindAllByRegex
-                                | bsl_rt::BuiltinFn::StrReplaceByRegex
-                                | bsl_rt::BuiltinFn::StrLikeByRegex
-                                | bsl_rt::BuiltinFn::BitwiseAnd
-                                | bsl_rt::BuiltinFn::BitwiseOr
-                                | bsl_rt::BuiltinFn::BitwiseNot
-                                | bsl_rt::BuiltinFn::BitwiseAndNot
-                                | bsl_rt::BuiltinFn::BitwiseXor
-                                | bsl_rt::BuiltinFn::BitwiseShiftLeft
-                                | bsl_rt::BuiltinFn::BitwiseShiftRight
-                                | bsl_rt::BuiltinFn::CheckBit
-                                | bsl_rt::BuiltinFn::CheckByBitMask
-                                | bsl_rt::BuiltinFn::SetBit
-                                | bsl_rt::BuiltinFn::NumberFromHexString
-                                | bsl_rt::BuiltinFn::NumberFromBinaryString
-                                | bsl_rt::BuiltinFn::ReadJson
-                                | bsl_rt::BuiltinFn::WriteJson
-                                | bsl_rt::BuiltinFn::WriteJsonDate
-                                | bsl_rt::BuiltinFn::ReadJsonDate
-                                | bsl_rt::BuiltinFn::WriteJsonValue
-                                | bsl_rt::BuiltinFn::ReadJsonValue
-                        )
-                    {
-                        return Err(SemaError::UndefinedFunction(name.clone()));
-                    }
                     // Глобальная процедура легальна только оператором:
                     // `Х = Сообщить(1)` платформа отвергает («Обращение к
                     // процедуре как к функции») — ИЗМЕРЕНО, якорь
@@ -1805,13 +1794,17 @@ mod tests {
         );
     }
 
-    /// Арность конструктора реестра проверяется в `resolve_new` по
-    /// дескриптору. Реестр здесь синтетический: измеренные границы
-    /// настоящих компонентов закреплены их собственными тестами (например,
-    /// писатели архива в `bsl-zip`).
-    #[test]
-    fn a_registry_constructor_arity_mismatch_is_reported() {
+    /// Синтетический реестр для проверки generic-механизмов: измеренные
+    /// границы настоящих компонентов закреплены их собственными тестами
+    /// (например, писатели архива в `bsl-zip`).
+    fn synthetic_registry() -> bsl_rt::RuntimeRegistry {
         fn construct(
+            _context: &mut bsl_rt::CallContext<'_>,
+            _arguments: &[bsl_rt::BslValue],
+        ) -> bsl_rt::RtResult<bsl_rt::BslValue> {
+            Ok(bsl_rt::BslValue::Undefined)
+        }
+        fn call(
             _context: &mut bsl_rt::CallContext<'_>,
             _arguments: &[bsl_rt::BslValue],
         ) -> bsl_rt::RtResult<bsl_rt::BslValue> {
@@ -1823,16 +1816,30 @@ mod tests {
             arity: bsl_rt::Arity::range(0, 2),
             call: construct,
         }];
+        const FUNCTIONS: &[bsl_rt::FunctionDescriptor] = &[bsl_rt::FunctionDescriptor {
+            code: bsl_rt::FunctionCode::new(1),
+            names: &["ТестоваяПроцедура"],
+            arity: bsl_rt::Arity::exact(1),
+            kind: bsl_rt::FunctionKind::Procedure,
+            call,
+        }];
         const LIBRARY: bsl_rt::LibraryDescriptor = bsl_rt::LibraryDescriptor {
             package: "test-lib",
             version: "0.0.0",
             dependencies: &[],
-            functions: &[],
+            functions: FUNCTIONS,
             constructors: CONSTRUCTORS,
         };
         let mut builder = bsl_rt::RuntimeBuilder::new();
         builder.register(bsl_rt::core_library()).register(LIBRARY);
-        let registry = builder.build().unwrap();
+        builder.build().unwrap()
+    }
+
+    /// Арность конструктора реестра проверяется в `resolve_new` по
+    /// дескриптору.
+    #[test]
+    fn a_registry_constructor_arity_mismatch_is_reported() {
+        let registry = synthetic_registry();
 
         let resolve = |src: &str| {
             let prog = parse(src).unwrap();
@@ -1846,6 +1853,23 @@ mod tests {
                 expected: 2,
                 found: 3,
             }
+        );
+    }
+
+    /// Процедура компонента подчиняется тому же измеренному правилу, что и
+    /// встроенная (`CALL.EXPR.PROCEDURE`): оператором — можно, в позиции
+    /// выражения — «Обращение к процедуре как к функции».
+    #[test]
+    fn a_registry_procedure_is_a_statement_but_not_an_expression() {
+        let registry = synthetic_registry();
+        let resolve = |src: &str| {
+            let prog = parse(src).unwrap();
+            resolve_program_with_registry(&prog.items, &registry)
+        };
+        assert!(resolve("ТестоваяПроцедура(1);").is_ok());
+        assert_eq!(
+            resolve("x = ТестоваяПроцедура(1);").unwrap_err(),
+            SemaError::ProcedureAsFunction("ТестоваяПроцедура".to_string())
         );
     }
 
@@ -2014,7 +2038,6 @@ mod tests {
         resolve_src("СтрНайти(\"а\", \"б\");");
         resolve_src("ТекущаяУниверсальнаяДатаВМиллисекундах();");
         resolve_src("Сообщить(1);");
-        resolve_src("ЗаписатьJSON(1, 2);");
     }
 
     /// Глобальная процедура в позиции выражения — «Обращение к процедуре

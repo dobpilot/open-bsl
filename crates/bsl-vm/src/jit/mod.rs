@@ -47,7 +47,7 @@ mod x64;
 
 use crate::{
     add_op, at, binop, call_builtin_with_format, cmp, field_name, neg_op, numeric_for_next_regular,
-    prop_cache, reg_load, reg_store, CallArgs, Frame, HostIo, LinkedComponents,
+    prop_cache, reg_load, reg_store, CallArgs, Frame, HostIo,
 };
 use bsl_bytecode::{Chunk, Instr, Program};
 use bsl_rt::{BslValue, RtError};
@@ -390,8 +390,7 @@ fn compile_instr(instr: &Instr) -> Option<Compiled> {
         // JIT-шима нет. Оставляем только этот IO-вызов интерпретатору;
         // остальные builtin'ы не используют переданный ниже sink.
         Instr::CallBuiltin {
-            builtin:
-                bsl_rt::BuiltinFn::Message | bsl_rt::BuiltinFn::ReadJson | bsl_rt::BuiltinFn::WriteJson,
+            builtin: bsl_rt::BuiltinFn::Message,
             ..
         } => None,
         Instr::CallBuiltin { .. } => s(shim_call_builtin, [0, 0, 0]),
@@ -773,16 +772,7 @@ shim!(shim_call_builtin, |frames,
         stdout: &mut stdout,
         stderr: &mut stderr,
     };
-    let linked = LinkedComponents::default();
-    let v = call_builtin_with_format(
-        builtin,
-        args.as_slice(),
-        shapes,
-        program,
-        stack,
-        &linked,
-        &mut host,
-    )?;
+    let v = call_builtin_with_format(builtin, args.as_slice(), shapes, &mut host)?;
     let d = frames[idx].reg_index(dst);
     reg_store(stack, d, v)?;
     Ok(OK)
@@ -903,13 +893,7 @@ shim!(shim_call_method, |frames,
     };
     let ov = reg_load(stack, frames[idx].reg_index(obj))?;
     let args = CallArgs::load(stack, &frames[idx], base, count)?;
-    #[cfg(feature = "json")]
-    let legacy_json = bsl_json::call_legacy_method(method, &ov, args.as_slice());
-    #[cfg(not(feature = "json"))]
-    let legacy_json: Option<Result<BslValue, RtError>> = None;
-    let v = if let Some(result) = legacy_json {
-        result?
-    } else if let Some(object) = ov.object_ref() {
+    let v = if let Some(object) = ov.object_ref() {
         let mut stdout = std::io::sink();
         let mut stderr = std::io::sink();
         let mut context =
