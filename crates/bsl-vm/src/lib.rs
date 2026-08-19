@@ -1815,19 +1815,49 @@ fn step_cold(
             frames[frame_idx].pc += 1;
         }
         Instr::NewXsBuilder { dst } => {
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, BslValue::new_xs_builder())?;
-            frames[frame_idx].pc += 1;
+            #[cfg(not(feature = "xml"))]
+            {
+                let _ = dst;
+                return Err(RtError::Component(
+                    "ПостроительСхемXML требует компонент bsl-xml".to_string(),
+                ));
+            }
+            #[cfg(feature = "xml")]
+            {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, bsl_xml::new_builder())?;
+                frames[frame_idx].pc += 1;
+            }
         }
         Instr::NewXmlSchema { dst } => {
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, BslValue::new_xml_schema())?;
-            frames[frame_idx].pc += 1;
+            #[cfg(not(feature = "xml"))]
+            {
+                let _ = dst;
+                return Err(RtError::Component(
+                    "СхемаXML требует компонент bsl-xml".to_string(),
+                ));
+            }
+            #[cfg(feature = "xml")]
+            {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, bsl_xml::new_schema())?;
+                frames[frame_idx].pc += 1;
+            }
         }
         Instr::NewXmlSchemaSet { dst } => {
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, BslValue::new_xml_schema_set())?;
-            frames[frame_idx].pc += 1;
+            #[cfg(not(feature = "xml"))]
+            {
+                let _ = dst;
+                return Err(RtError::Component(
+                    "НаборСхемXML требует компонент bsl-xml".to_string(),
+                ));
+            }
+            #[cfg(feature = "xml")]
+            {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, bsl_xml::new_schema_set())?;
+                frames[frame_idx].pc += 1;
+            }
         }
         // Разбор набора схем в модель типов — работа не на один такт, и
         // место этой инструкции в холодной части безоговорочно.
@@ -1877,12 +1907,29 @@ fn step_cold(
             frames[frame_idx].pc += 1;
         }
         Instr::NewXmlExpandedName { dst, uri, local } => {
-            let uri = reg_load(stack, frames[frame_idx].reg_index(uri))?;
-            let local = reg_load(stack, frames[frame_idx].reg_index(local))?;
-            let name = BslValue::new_expanded_name(&uri, &local)?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, name)?;
-            frames[frame_idx].pc += 1;
+            #[cfg(not(feature = "xml"))]
+            {
+                let _ = (dst, uri, local);
+                return Err(RtError::Component(
+                    "РасширенноеИмяXML требует компонент bsl-xml".to_string(),
+                ));
+            }
+            #[cfg(feature = "xml")]
+            {
+                let uri = reg_load(stack, frames[frame_idx].reg_index(uri))?;
+                let local = reg_load(stack, frames[frame_idx].reg_index(local))?;
+                let text = |value: &BslValue| match value {
+                    BslValue::Str(s) => Ok(s.to_string()),
+                    _ => Err(RtError::TypeError {
+                        expected: "Строка",
+                        op: "Новый РасширенноеИмяXML",
+                    }),
+                };
+                let name = bsl_xml::new_expanded_name(&text(&uri)?, &text(&local)?);
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, name)?;
+                frames[frame_idx].pc += 1;
+            }
         }
         Instr::NewXmlWriterSettings {
             dst,

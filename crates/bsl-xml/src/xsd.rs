@@ -3,7 +3,7 @@
 //! имён.
 //!
 //! Второго разборщика XML здесь нет: на вход идёт дерево, построенное
-//! `crate::dom`, а этот модуль только опознаёт в нём элементы схемы — ПО
+//! `bsl_rt::dom`, а этот модуль только опознаёт в нём элементы схемы — ПО
 //! ПРОСТРАНСТВУ ИМЁН `http://www.w3.org/2001/XMLSchema`, а не по префиксу
 //! `xs:`. Измерено, что префикс не важен: схема с `<я:schema
 //! xmlns:я="...XMLSchema">` разбирается так же, как с `xs:`, а схема, чей
@@ -196,10 +196,11 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::dom::{DomKind, DomNode};
-use crate::object::BslObject;
-use crate::string::BslString;
-use crate::{BslValue, EnumValue, RtError, RtResult};
+use bsl_rt::dom::{DomKind, DomNode};
+use bsl_rt::{
+    BslNumber, BslString, BslValue, CallContext, EnumValue, ObjectProtocol, RtError, RtResult,
+    TypeDescriptor, TypeId,
+};
 
 /// Пространство имён XML Schema. Опознание элементов схемы идёт по нему, а
 /// не по префиксу: измерено, что префикс может быть любым.
@@ -280,24 +281,6 @@ impl FacetKind {
         }
     }
 
-    fn type_id(self) -> crate::types::TypeId {
-        use crate::types::TypeId;
-        match self {
-            FacetKind::Length => TypeId::XsLengthFacet,
-            FacetKind::MinLength => TypeId::XsMinLengthFacet,
-            FacetKind::MaxLength => TypeId::XsMaxLengthFacet,
-            FacetKind::Pattern => TypeId::XsPatternFacet,
-            FacetKind::Enumeration => TypeId::XsEnumerationFacet,
-            FacetKind::WhiteSpace => TypeId::XsWhitespaceFacet,
-            FacetKind::TotalDigits => TypeId::XsTotalDigitsFacet,
-            FacetKind::FractionDigits => TypeId::XsFractionDigitsFacet,
-            FacetKind::MinInclusive => TypeId::XsMinInclusiveFacet,
-            FacetKind::MaxInclusive => TypeId::XsMaxInclusiveFacet,
-            FacetKind::MinExclusive => TypeId::XsMinExclusiveFacet,
-            FacetKind::MaxExclusive => TypeId::XsMaxExclusiveFacet,
-        }
-    }
-
     /// Числовой ли это фасет — от этого зависит и вид `Значение`, и то,
     /// есть ли у фасета `Фиксированный`.
     ///
@@ -346,25 +329,6 @@ impl XsKind {
             XsKind::Annotation => "АннотацияXS",
             XsKind::Documentation => "ДокументацияXS",
             XsKind::AppInfo => "ИнформацияДляПриложенияXS",
-        }
-    }
-
-    /// `ТипЗнч()` компоненты.
-    pub fn type_id(self) -> crate::types::TypeId {
-        use crate::types::TypeId;
-        match self {
-            XsKind::Schema => TypeId::XmlSchema,
-            XsKind::Element => TypeId::XsElementDeclaration,
-            XsKind::Attribute => TypeId::XsAttributeDeclaration,
-            XsKind::SimpleType => TypeId::XsSimpleTypeDefinition,
-            XsKind::ComplexType => TypeId::XsComplexTypeDefinition,
-            XsKind::Particle => TypeId::XsParticle,
-            XsKind::ModelGroup => TypeId::XsModelGroup,
-            XsKind::AttributeUse => TypeId::XsAttributeUse,
-            XsKind::Facet(f) => f.type_id(),
-            XsKind::Annotation => TypeId::XsAnnotation,
-            XsKind::Documentation => TypeId::XsDocumentation,
-            XsKind::AppInfo => TypeId::XsAppInfo,
         }
     }
 
@@ -573,27 +537,6 @@ impl XsListKind {
     pub fn len(&self) -> usize {
         self.items().len()
     }
-
-    pub fn is_empty(&self) -> bool {
-        self.items().is_empty()
-    }
-
-    pub fn type_name(&self) -> &'static str {
-        match self {
-            XsListKind::Fixed(_) => "ФиксированныйСписокКомпонентXS",
-            XsListKind::Plain(_) => "СписокКомпонентXS",
-            XsListKind::Named(_) => "КоллекцияИменованныхКомпонентXS",
-        }
-    }
-
-    pub fn type_id(&self) -> crate::types::TypeId {
-        use crate::types::TypeId;
-        match self {
-            XsListKind::Fixed(_) => TypeId::XsComponentFixedList,
-            XsListKind::Plain(_) => TypeId::XsComponentList,
-            XsListKind::Named(_) => TypeId::XsNamedComponentMap,
-        }
-    }
 }
 
 // --- значения ------------------------------------------------------------
@@ -602,16 +545,61 @@ fn str_value(s: &str) -> BslValue {
     BslValue::Str(BslString::from_str(s))
 }
 
+/// `ПостроительСхемXML` — состояния нет, схему целиком строит
+/// `СоздатьСхемуXML`.
+#[derive(Debug)]
+pub struct BuilderObject;
+
+/// `НаборСхемXML` — упорядоченный список схем.
+#[derive(Debug)]
+pub struct SchemaSetObject {
+    pub(crate) schemas: Rc<RefCell<Vec<Rc<XsSchemaData>>>>,
+}
+
+/// Компонента модели схемы: схема целиком и номер узла в ней.
+#[derive(Debug)]
+pub struct ComponentObject {
+    schema: Rc<XsSchemaData>,
+    index: usize,
+}
+
+/// Списки компонент — фиксированный, плоский и именованная коллекция.
+#[derive(Debug)]
+pub struct SchemaListObject {
+    schema: Rc<XsSchemaData>,
+    kind: XsListKind,
+}
+
+/// `РасширенноеИмяXML` — значение, а не объект: равенство по содержимому.
+#[derive(Debug)]
+pub struct ExpandedNameObject {
+    pub(crate) name: Rc<XName>,
+}
+
+/// `СписокРасширенныхИменXML` — снимок имён.
+#[derive(Debug)]
+pub struct NameListObject {
+    names: Rc<Vec<XName>>,
+}
+
 fn component_value(schema: &Rc<XsSchemaData>, index: usize) -> BslValue {
-    BslValue::Object(Rc::new(BslObject::XsComponent(schema.clone(), index)))
+    BslValue::new_object(ComponentObject {
+        schema: schema.clone(),
+        index,
+    })
 }
 
 fn list_value(schema: &Rc<XsSchemaData>, kind: XsListKind) -> BslValue {
-    BslValue::Object(Rc::new(BslObject::XsList(schema.clone(), kind)))
+    BslValue::new_object(SchemaListObject {
+        schema: schema.clone(),
+        kind,
+    })
 }
 
 fn name_value(name: &XName) -> BslValue {
-    BslValue::Object(Rc::new(BslObject::XmlExpandedName(Rc::new(name.clone()))))
+    BslValue::new_object(ExpandedNameObject {
+        name: Rc::new(name.clone()),
+    })
 }
 
 fn opt_name(name: Option<&XName>) -> BslValue {
@@ -638,20 +626,20 @@ fn occurs_value(occurs: Option<u32>, maximum: bool) -> BslValue {
     match occurs {
         None => BslValue::Undefined,
         Some(u32::MAX) if maximum => str_value("unbounded"),
-        Some(n) => BslValue::Number(bsl_number::BslNumber::from_i64(i64::from(n))),
+        Some(n) => BslValue::Number(BslNumber::from_i64(i64::from(n))),
     }
 }
 
 /// `Новый ПостроительСхемXML`.
 pub fn new_builder() -> BslValue {
-    BslValue::Object(Rc::new(BslObject::XsBuilder))
+    BslValue::new_object(BuilderObject)
 }
 
 /// `Новый НаборСхемXML`.
 pub fn new_schema_set() -> BslValue {
-    BslValue::Object(Rc::new(BslObject::XsSchemaSet(Rc::new(RefCell::new(
-        Vec::new(),
-    )))))
+    BslValue::new_object(SchemaSetObject {
+        schemas: Rc::new(RefCell::new(Vec::new())),
+    })
 }
 
 /// `Новый СхемаXML` — пустая схема без дерева за спиной.
@@ -680,22 +668,15 @@ pub fn new_expanded_name(uri: &str, local: &str) -> BslValue {
 }
 
 pub fn is_builder(v: &BslValue) -> bool {
-    matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::XsBuilder))
-}
-
-pub fn is_schema_set(v: &BslValue) -> bool {
-    matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::XsSchemaSet(_)))
+    v.object_ref()
+        .is_some_and(|object| object.downcast_ref::<BuilderObject>().is_some())
 }
 
 /// Компонента ли это и, если да, какая именно.
 fn as_component(v: &BslValue) -> Option<(Rc<XsSchemaData>, usize)> {
-    match v {
-        BslValue::Object(o) => match &**o {
-            BslObject::XsComponent(s, i) => Some((s.clone(), *i)),
-            _ => None,
-        },
-        _ => None,
-    }
+    v.object_ref()
+        .and_then(|object| object.downcast_ref::<ComponentObject>())
+        .map(|component| (component.schema.clone(), component.index))
 }
 
 // --- разбор --------------------------------------------------------------
@@ -1471,13 +1452,13 @@ pub fn create_schema(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
     };
     let (node, doc) = match arg {
         BslValue::Object(o) => match &**o {
-            BslObject::DomNode(n, d) => (n.clone(), d.clone()),
+            bsl_rt::BslObject::DomNode(n, d) => (n.clone(), d.clone()),
             _ => return Err(RtError::Xsd(source_error())),
         },
         _ => return Err(RtError::Xsd(source_error())),
     };
     let root = match node.kind() {
-        DomKind::Document => crate::dom::xs_document_element(&node)
+        DomKind::Document => bsl_rt::dom::xs_document_element(&node)
             .ok_or_else(|| RtError::Xsd("документ без корневого элемента".to_string()))?,
         DomKind::Element => node,
         _ => return Err(RtError::Xsd(source_error())),
@@ -1609,22 +1590,23 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
     let unknown = || RtError::UnknownColumn(name.to_string());
     let is = |ru: &str, en: &str| name.eq_ignore_ascii_case(ru) || name.eq_ignore_ascii_case(en);
 
-    match obj {
-        BslValue::Object(o) => match &**o {
-            BslObject::XmlExpandedName(n) => {
-                if is("ЛокальноеИмя", "LocalName") {
-                    return Ok(str_value(&n.local));
-                }
-                if is("URIПространстваИмен", "NamespaceURI") {
-                    return Ok(str_value(&n.uri));
-                }
-                Err(unknown())
-            }
-            BslObject::XsComponent(schema, index) => component_property(schema, *index, name),
-            _ => Err(unknown()),
-        },
-        _ => Err(unknown()),
+    let Some(object) = obj.object_ref() else {
+        return Err(unknown());
+    };
+    if let Some(expanded) = object.downcast_ref::<ExpandedNameObject>() {
+        let n = &expanded.name;
+        if is("ЛокальноеИмя", "LocalName") {
+            return Ok(str_value(&n.local));
+        }
+        if is("URIПространстваИмен", "NamespaceURI") {
+            return Ok(str_value(&n.uri));
+        }
+        return Err(unknown());
     }
+    if let Some(component) = object.downcast_ref::<ComponentObject>() {
+        return component_property(&component.schema, component.index, name);
+    }
+    Err(unknown())
 }
 
 fn component_property(schema: &Rc<XsSchemaData>, index: usize, name: &str) -> RtResult<BslValue> {
@@ -1650,7 +1632,7 @@ fn component_property(schema: &Rc<XsSchemaData>, index: usize, name: &str) -> Rt
     }
     if is("ЭлементDOM", "DOMElement") {
         return Ok(match (&node.dom, &schema.dom_doc) {
-            (Some(n), Some(doc)) => crate::dom::node_value(n, doc),
+            (Some(n), Some(doc)) => bsl_rt::dom::node_value(n, doc),
             _ => BslValue::Undefined,
         });
     }
@@ -1924,9 +1906,9 @@ fn simple_type_property(
         });
     }
     if is("ИменаТиповОбъединения", "MemberTypeNames") {
-        return Ok(BslValue::Object(Rc::new(BslObject::XmlExpandedNameList(
-            Rc::new(d.member_type_names.clone()),
-        ))));
+        return Ok(BslValue::new_object(NameListObject {
+            names: Rc::new(d.member_type_names.clone()),
+        }));
     }
     if is("ОпределенияТиповОбъединения", "MemberTypeDefinitions") {
         return Ok(list_value(schema, XsListKind::Plain(Vec::new())));
@@ -2023,7 +2005,7 @@ fn typed_value(lexical: &str, constraint: Option<EnumValue>) -> BslValue {
         return BslValue::Boolean(false);
     }
     match numeric_prefix(text) {
-        Some(prefix) => match bsl_number::BslNumber::parse_canonical(prefix) {
+        Some(prefix) => match BslNumber::parse_canonical(prefix) {
             Ok(n) => BslValue::Number(n),
             // Префикс состоит из знака, цифр и не более чем одной точки,
             // поэтому разбор отказывает только на переполнении разрядности;
@@ -2077,7 +2059,7 @@ fn facet_value(kind: XsKind, lexical: &str) -> BslValue {
             "collapse" => BslValue::Enum(EnumValue::XsWhitespaceCollapse),
             _ => str_value(lexical),
         },
-        f if f.is_numeric() => match bsl_number::BslNumber::parse_canonical(lexical) {
+        f if f.is_numeric() => match BslNumber::parse_canonical(lexical) {
             Ok(n) => BslValue::Number(n),
             Err(_) => str_value(lexical),
         },
@@ -2271,7 +2253,7 @@ impl XsSchemaData {
 }
 
 /// Схема из текста XSD — тем же путём, каким её строит BSL-код: дерево
-/// строит `crate::dom`, а разбирает уже готовое дерево этот модуль.
+/// строит `bsl_rt::dom`, а разбирает уже готовое дерево этот модуль.
 /// Второго разборщика схем в проекте нет, поэтому этой же дорогой ходит
 /// `СоздатьФабрикуXDTO`, прочитав файл (см. модуль `xdto` компонента `bsl-xml`).
 ///
@@ -2279,9 +2261,9 @@ impl XsSchemaData {
 ///
 /// Всё, чем отвечает [`create_schema`], плюс ошибка разбора XML.
 pub fn schema_of_text(text: &str) -> RtResult<Rc<XsSchemaData>> {
-    let mut state = crate::object::XmlReaderState::over(crate::xml::XmlParser::new(text));
-    let doc = crate::dom::build_tree(&mut state)?;
-    let value = crate::dom::node_value(&doc, &doc);
+    let mut state = bsl_rt::XmlReaderState::over(bsl_rt::xml::XmlParser::new(text));
+    let doc = bsl_rt::dom::build_tree(&mut state)?;
+    let value = bsl_rt::dom::node_value(&doc, &doc);
     match as_component(&create_schema(&new_builder(), &[value])?) {
         Some((schema, 0)) => Ok(schema),
         _ => Err(RtError::Xsd("корень дерева — не схема".to_string())),
@@ -2320,12 +2302,13 @@ pub fn list_get(schema: &Rc<XsSchemaData>, kind: &XsListKind, i: usize) -> RtRes
 /// [`RtError::MethodNotApplicable`] при неподходящем числе аргументов и
 /// [`RtError::IndexOutOfBounds`] при номере за границей.
 pub fn list_lookup(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
-    let BslValue::Object(o) = obj else {
+    let Some(list) = obj
+        .object_ref()
+        .and_then(|object| object.downcast_ref::<SchemaListObject>())
+    else {
         return Err(method_error("Получить", obj));
     };
-    let BslObject::XsList(schema, kind) = &**o else {
-        return Err(method_error("Получить", obj));
-    };
+    let (schema, kind) = (&list.schema, &list.kind);
     let named = matches!(kind, XsListKind::Named(_));
     match args {
         [BslValue::Number(n)] => {
@@ -2336,8 +2319,14 @@ pub fn list_lookup(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
             list_get(schema, kind, i)
         }
         [BslValue::Str(s)] if named => Ok(named_lookup(schema, kind, None, &s.to_string())),
-        [BslValue::Object(name)] if named => match &**name {
-            BslObject::XmlExpandedName(n) => Ok(named_lookup(schema, kind, Some(&n.uri), &n.local)),
+        [name_arg @ BslValue::Object(_)] if named => match name_arg
+            .object_ref()
+            .and_then(|object| object.downcast_ref::<ExpandedNameObject>())
+        {
+            Some(expanded) => {
+                let n = &expanded.name;
+                Ok(named_lookup(schema, kind, Some(&n.uri), &n.local))
+            }
             _ => Err(method_error("Получить", obj)),
         },
         [BslValue::Str(uri), BslValue::Str(local)] if named => Ok(named_lookup(
@@ -2401,12 +2390,13 @@ pub fn name_list_get(names: &[XName], i: usize) -> RtResult<BslValue> {
 /// схема с тем же целевым пространством имён (измерено: платформа на этом
 /// отказывает, а повторное добавление ТОЙ ЖЕ схемы молча пропускает).
 pub fn schema_set_add(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
-    let BslValue::Object(o) = obj else {
+    let Some(set) = obj
+        .object_ref()
+        .and_then(|object| object.downcast_ref::<SchemaSetObject>())
+    else {
         return Err(method_error("Добавить", obj));
     };
-    let BslObject::XsSchemaSet(list) = &**o else {
-        return Err(method_error("Добавить", obj));
-    };
+    let list = &set.schemas;
     let [arg] = args else {
         return Err(method_error("Добавить", obj));
     };
@@ -2435,13 +2425,13 @@ pub fn schema_set_add(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
 /// [`RtError::IndexOutOfBounds`] при номере за границей — измерено, что
 /// платформа отвечает именно ошибкой.
 pub fn schema_set_get(obj: &BslValue, i: usize) -> RtResult<BslValue> {
-    let BslValue::Object(o) = obj else {
+    let Some(set) = obj
+        .object_ref()
+        .and_then(|object| object.downcast_ref::<SchemaSetObject>())
+    else {
         return Err(method_error("Получить", obj));
     };
-    let BslObject::XsSchemaSet(list) = &**o else {
-        return Err(method_error("Получить", obj));
-    };
-    let list = list.borrow();
+    let list = set.schemas.borrow();
     match list.get(i) {
         Some(s) => Ok(component_value(s, 0)),
         None => Err(RtError::IndexOutOfBounds {
@@ -2451,31 +2441,424 @@ pub fn schema_set_get(obj: &BslValue, i: usize) -> RtResult<BslValue> {
     }
 }
 
-/// Имя типа значения и `ТипЗнч()` для объектов этого модуля — обе таблицы
-/// живут рядом, чтобы не разъезжались.
-pub fn type_name_of(obj: &BslObject) -> Option<&'static str> {
-    Some(match obj {
-        BslObject::XsBuilder => "ПостроительСхемXML",
-        BslObject::XsSchemaSet(_) => "НаборСхемXML",
-        BslObject::XsComponent(schema, i) => schema.node(*i).kind.type_name(),
-        BslObject::XsList(_, kind) => kind.type_name(),
-        BslObject::XmlExpandedName(_) => "РасширенноеИмяXML",
-        BslObject::XmlExpandedNameList(_) => "СписокРасширенныхИменXML",
-        _ => return None,
-    })
+// --- объектный протокол -----------------------------------------------------
+
+static BUILDER_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ПостроительСхемXML",
+    legacy_type_id: Some(TypeId::XmlSchemaBuilder),
+};
+
+static SCHEMA_SET_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "НаборСхемXML",
+    legacy_type_id: Some(TypeId::XmlSchemaSet),
+};
+
+static EXPANDED_NAME_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "РасширенноеИмяXML",
+    legacy_type_id: Some(TypeId::XmlExpandedName),
+};
+
+static NAME_LIST_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "СписокРасширенныхИменXML",
+    legacy_type_id: Some(TypeId::XmlExpandedNameList),
+};
+
+static SCHEMA_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "СхемаXML",
+    legacy_type_id: Some(TypeId::XmlSchema),
+};
+
+static ELEMENT_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ОбъявлениеЭлементаXS",
+    legacy_type_id: Some(TypeId::XsElementDeclaration),
+};
+
+static ATTRIBUTE_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ОбъявлениеАтрибутаXS",
+    legacy_type_id: Some(TypeId::XsAttributeDeclaration),
+};
+
+static SIMPLE_TYPE_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ОпределениеПростогоТипаXS",
+    legacy_type_id: Some(TypeId::XsSimpleTypeDefinition),
+};
+
+static COMPLEX_TYPE_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ОпределениеСоставногоТипаXS",
+    legacy_type_id: Some(TypeId::XsComplexTypeDefinition),
+};
+
+static PARTICLE_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ФрагментXS",
+    legacy_type_id: Some(TypeId::XsParticle),
+};
+
+static MODEL_GROUP_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ГруппаМоделиXS",
+    legacy_type_id: Some(TypeId::XsModelGroup),
+};
+
+static ATTRIBUTE_USE_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ИспользованиеАтрибутаXS",
+    legacy_type_id: Some(TypeId::XsAttributeUse),
+};
+
+static ANNOTATION_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "АннотацияXS",
+    legacy_type_id: Some(TypeId::XsAnnotation),
+};
+
+static DOCUMENTATION_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ДокументацияXS",
+    legacy_type_id: Some(TypeId::XsDocumentation),
+};
+
+static APP_INFO_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ИнформацияДляПриложенияXS",
+    legacy_type_id: Some(TypeId::XsAppInfo),
+};
+
+static FACET_LENGTH_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ФасетДлиныXS",
+    legacy_type_id: Some(TypeId::XsLengthFacet),
+};
+
+static FACET_MIN_LENGTH_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ФасетМинимальнойДлиныXS",
+    legacy_type_id: Some(TypeId::XsMinLengthFacet),
+};
+
+static FACET_MAX_LENGTH_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ФасетМаксимальнойДлиныXS",
+    legacy_type_id: Some(TypeId::XsMaxLengthFacet),
+};
+
+static FACET_PATTERN_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ФасетОбразцаXS",
+    legacy_type_id: Some(TypeId::XsPatternFacet),
+};
+
+static FACET_ENUMERATION_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ФасетПеречисленияXS",
+    legacy_type_id: Some(TypeId::XsEnumerationFacet),
+};
+
+static FACET_WHITE_SPACE_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ФасетПробельныхСимволовXS",
+    legacy_type_id: Some(TypeId::XsWhitespaceFacet),
+};
+
+static FACET_TOTAL_DIGITS_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ФасетОбщегоКоличестваРазрядовXS",
+    legacy_type_id: Some(TypeId::XsTotalDigitsFacet),
+};
+
+static FACET_FRACTION_DIGITS_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ФасетКоличестваРазрядовДробнойЧастиXS",
+    legacy_type_id: Some(TypeId::XsFractionDigitsFacet),
+};
+
+static FACET_MIN_INCLUSIVE_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ФасетМинимальногоВключающегоЗначенияXS",
+    legacy_type_id: Some(TypeId::XsMinInclusiveFacet),
+};
+
+static FACET_MAX_INCLUSIVE_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ФасетМаксимальногоВключающегоЗначенияXS",
+    legacy_type_id: Some(TypeId::XsMaxInclusiveFacet),
+};
+
+static FACET_MIN_EXCLUSIVE_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ФасетМинимальногоИсключающегоЗначенияXS",
+    legacy_type_id: Some(TypeId::XsMinExclusiveFacet),
+};
+
+static FACET_MAX_EXCLUSIVE_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ФасетМаксимальногоИсключающегоЗначенияXS",
+    legacy_type_id: Some(TypeId::XsMaxExclusiveFacet),
+};
+
+static LIST_FIXED_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ФиксированныйСписокКомпонентXS",
+    legacy_type_id: Some(TypeId::XsComponentFixedList),
+};
+
+static LIST_PLAIN_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "СписокКомпонентXS",
+    legacy_type_id: Some(TypeId::XsComponentList),
+};
+
+static LIST_NAMED_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "КоллекцияИменованныхКомпонентXS",
+    legacy_type_id: Some(TypeId::XsNamedComponentMap),
+};
+
+/// Дескриптор компоненты по виду узла — та же таблица, что
+/// `XsKind::type_name`/`type_id`, но статиками протокола.
+fn component_descriptor(kind: XsKind) -> &'static TypeDescriptor {
+    match kind {
+        XsKind::Schema => &SCHEMA_TYPE,
+        XsKind::Element => &ELEMENT_TYPE,
+        XsKind::Attribute => &ATTRIBUTE_TYPE,
+        XsKind::SimpleType => &SIMPLE_TYPE_TYPE,
+        XsKind::ComplexType => &COMPLEX_TYPE_TYPE,
+        XsKind::Particle => &PARTICLE_TYPE,
+        XsKind::ModelGroup => &MODEL_GROUP_TYPE,
+        XsKind::AttributeUse => &ATTRIBUTE_USE_TYPE,
+        XsKind::Annotation => &ANNOTATION_TYPE,
+        XsKind::Documentation => &DOCUMENTATION_TYPE,
+        XsKind::AppInfo => &APP_INFO_TYPE,
+        XsKind::Facet(facet) => match facet {
+            FacetKind::Length => &FACET_LENGTH_TYPE,
+            FacetKind::MinLength => &FACET_MIN_LENGTH_TYPE,
+            FacetKind::MaxLength => &FACET_MAX_LENGTH_TYPE,
+            FacetKind::Pattern => &FACET_PATTERN_TYPE,
+            FacetKind::Enumeration => &FACET_ENUMERATION_TYPE,
+            FacetKind::WhiteSpace => &FACET_WHITE_SPACE_TYPE,
+            FacetKind::TotalDigits => &FACET_TOTAL_DIGITS_TYPE,
+            FacetKind::FractionDigits => &FACET_FRACTION_DIGITS_TYPE,
+            FacetKind::MinInclusive => &FACET_MIN_INCLUSIVE_TYPE,
+            FacetKind::MaxInclusive => &FACET_MAX_INCLUSIVE_TYPE,
+            FacetKind::MinExclusive => &FACET_MIN_EXCLUSIVE_TYPE,
+            FacetKind::MaxExclusive => &FACET_MAX_EXCLUSIVE_TYPE,
+        },
+    }
 }
 
-pub fn type_id_of(obj: &BslObject) -> Option<crate::types::TypeId> {
-    use crate::types::TypeId;
-    Some(match obj {
-        BslObject::XsBuilder => TypeId::XmlSchemaBuilder,
-        BslObject::XsSchemaSet(_) => TypeId::XmlSchemaSet,
-        BslObject::XsComponent(schema, i) => schema.node(*i).kind.type_id(),
-        BslObject::XsList(_, kind) => kind.type_id(),
-        BslObject::XmlExpandedName(_) => TypeId::XmlExpandedName,
-        BslObject::XmlExpandedNameList(_) => TypeId::XmlExpandedNameList,
-        _ => return None,
-    })
+fn list_descriptor(kind: &XsListKind) -> &'static TypeDescriptor {
+    match kind {
+        XsListKind::Fixed(_) => &LIST_FIXED_TYPE,
+        XsListKind::Plain(_) => &LIST_PLAIN_TYPE,
+        XsListKind::Named(_) => &LIST_NAMED_TYPE,
+    }
+}
+
+impl ObjectProtocol for BuilderObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &BUILDER_TYPE
+    }
+
+    fn call_method(
+        &self,
+        name: &str,
+        arguments: &[BslValue],
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<BslValue> {
+        if name.eq_ignore_ascii_case("СоздатьСхемуXML")
+            || name.eq_ignore_ascii_case("CreateXMLSchema")
+        {
+            create_schema(&new_builder(), arguments)
+        } else {
+            Err(RtError::UnknownMethod {
+                method: name.to_string(),
+                receiver: BUILDER_TYPE.name,
+            })
+        }
+    }
+}
+
+impl ObjectProtocol for SchemaSetObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &SCHEMA_SET_TYPE
+    }
+
+    fn call_method(
+        &self,
+        name: &str,
+        arguments: &[BslValue],
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<BslValue> {
+        let receiver = BslValue::new_object(SchemaSetObject {
+            schemas: self.schemas.clone(),
+        });
+        if name.eq_ignore_ascii_case("Добавить") || name.eq_ignore_ascii_case("Add") {
+            schema_set_add(&receiver, arguments)
+        } else if name.eq_ignore_ascii_case("Получить") || name.eq_ignore_ascii_case("Get")
+        {
+            match arguments {
+                [index] => schema_set_get(&receiver, set_index(index)?),
+                _ => Err(RtError::MethodNotApplicable {
+                    method: "Получить",
+                    receiver: SCHEMA_SET_TYPE.name,
+                }),
+            }
+        } else if name.eq_ignore_ascii_case("Количество") || name.eq_ignore_ascii_case("Count")
+        {
+            Ok(BslValue::number_from_i64(self.schemas.borrow().len() as i64))
+        } else {
+            Err(RtError::UnknownMethod {
+                method: name.to_string(),
+                receiver: SCHEMA_SET_TYPE.name,
+            })
+        }
+    }
+
+    fn get_index(&self, index: &BslValue) -> RtResult<BslValue> {
+        let receiver = BslValue::new_object(SchemaSetObject {
+            schemas: self.schemas.clone(),
+        });
+        schema_set_get(&receiver, set_index(index)?)
+    }
+
+    fn collection_len(&self) -> RtResult<usize> {
+        Ok(self.schemas.borrow().len())
+    }
+
+    // Набор — окно в общий список схем: два значения с одним списком равны.
+    fn identity_key(&self) -> Option<(usize, usize)> {
+        Some((Rc::as_ptr(&self.schemas) as usize, 0))
+    }
+}
+
+/// Номер элемента из значения-индекса — та же семантика, что у `[]`
+/// встроенных коллекций.
+fn set_index(index: &BslValue) -> RtResult<usize> {
+    let BslValue::Number(number) = index else {
+        return Err(RtError::BadIndex);
+    };
+    let index = number.to_i64_exact().ok_or(RtError::BadIndex)?;
+    usize::try_from(index).map_err(|_| RtError::BadIndex)
+}
+
+impl ObjectProtocol for ComponentObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        component_descriptor(self.schema.node(self.index).kind)
+    }
+
+    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
+        component_property(&self.schema, self.index, name)
+    }
+
+    // Компонента — ссылка на место в схеме: та же схема, тот же номер
+    // (измерено на компонентах одной схемы).
+    fn identity_key(&self) -> Option<(usize, usize)> {
+        Some((Rc::as_ptr(&self.schema) as usize, self.index))
+    }
+}
+
+impl ObjectProtocol for SchemaListObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        list_descriptor(&self.kind)
+    }
+
+    fn call_method(
+        &self,
+        name: &str,
+        arguments: &[BslValue],
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<BslValue> {
+        let receiver = BslValue::new_object(SchemaListObject {
+            schema: self.schema.clone(),
+            kind: self.kind.clone(),
+        });
+        if name.eq_ignore_ascii_case("Получить") || name.eq_ignore_ascii_case("Get") {
+            list_lookup(&receiver, arguments)
+        } else if name.eq_ignore_ascii_case("Количество") || name.eq_ignore_ascii_case("Count")
+        {
+            Ok(BslValue::number_from_i64(self.kind.len() as i64))
+        } else {
+            Err(RtError::UnknownMethod {
+                method: name.to_string(),
+                receiver: self.type_descriptor().name,
+            })
+        }
+    }
+
+    fn get_index(&self, index: &BslValue) -> RtResult<BslValue> {
+        list_get(&self.schema, &self.kind, set_index(index)?)
+    }
+
+    fn collection_len(&self) -> RtResult<usize> {
+        Ok(self.kind.len())
+    }
+}
+
+impl ObjectProtocol for ExpandedNameObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &EXPANDED_NAME_TYPE
+    }
+
+    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
+        get_property(&name_value(&self.name), name)
+    }
+
+    // Расширенное имя — ЗНАЧЕНИЕ: два отдельно построенных имени с
+    // одинаковыми URI и локальным именем равны (измерено).
+    fn value_eq(&self, other: &bsl_rt::ObjectRef) -> Option<bool> {
+        other
+            .downcast_ref::<ExpandedNameObject>()
+            .map(|other| self.name == other.name)
+    }
+
+    // Печатается СОДЕРЖИМЫМ, а не именем типа: `{urn:t}а`, а при пустом
+    // URI — одно локальное имя (измерено).
+    fn display(&self) -> String {
+        self.name.display_text()
+    }
+}
+
+impl ObjectProtocol for NameListObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &NAME_LIST_TYPE
+    }
+
+    fn call_method(
+        &self,
+        name: &str,
+        _arguments: &[BslValue],
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<BslValue> {
+        if name.eq_ignore_ascii_case("Количество") || name.eq_ignore_ascii_case("Count") {
+            Ok(BslValue::number_from_i64(self.names.len() as i64))
+        } else {
+            Err(RtError::UnknownMethod {
+                method: name.to_string(),
+                receiver: NAME_LIST_TYPE.name,
+            })
+        }
+    }
+
+    fn get_index(&self, index: &BslValue) -> RtResult<BslValue> {
+        name_list_get(&self.names, set_index(index)?)
+    }
+
+    fn collection_len(&self) -> RtResult<usize> {
+        Ok(self.names.len())
+    }
+
+    fn is_filled(&self) -> RtResult<bool> {
+        Ok(!self.names.is_empty())
+    }
 }
 
 #[cfg(test)]
@@ -2487,9 +2870,9 @@ mod tests {
     /// [`schema_of_text`], отдаёт результат `СоздатьСхемуXML` как есть,
     /// включая `Неопределено` на корне, который схемой не является.
     fn schema_of(text: &str) -> RtResult<BslValue> {
-        let mut state = crate::object::XmlReaderState::over(crate::xml::XmlParser::new(text));
-        let doc = crate::dom::build_tree(&mut state).expect("дерево обязано строиться");
-        let value = crate::dom::node_value(&doc, &doc);
+        let mut state = bsl_rt::XmlReaderState::over(bsl_rt::xml::XmlParser::new(text));
+        let doc = bsl_rt::dom::build_tree(&mut state).expect("дерево обязано строиться");
+        let value = bsl_rt::dom::node_value(&doc, &doc);
         create_schema(&new_builder(), &[value])
     }
 
@@ -2513,13 +2896,11 @@ mod tests {
     }
 
     fn item(v: &BslValue, i: usize) -> BslValue {
-        match v {
-            BslValue::Object(o) => match &**o {
-                BslObject::XsList(s, kind) => list_get(s, kind, i).expect("элемент обязан быть"),
-                _ => panic!("ожидалась коллекция компонент"),
-            },
-            other => panic!("ожидалась коллекция, получено {other:?}"),
-        }
+        let list = v
+            .object_ref()
+            .and_then(|object| object.downcast_ref::<SchemaListObject>())
+            .expect("ожидалась коллекция компонент");
+        list_get(&list.schema, &list.kind, i).expect("элемент обязан быть")
     }
 
     /// Схема с двумя глобальными объявлениями, простым и составным типом —
@@ -2680,7 +3061,7 @@ mod tests {
         assert_eq!(prop(&content, "МаксимальноВходит"), BslValue::Undefined);
 
         let particles = prop(&prop(&content, "Часть"), "Фрагменты");
-        let num = |n: i64| BslValue::Number(bsl_number::BslNumber::from_i64(n));
+        let num = |n: i64| BslValue::Number(BslNumber::from_i64(n));
         let bounds = |i: usize| {
             let p = item(&particles, i);
             (prop(&p, "МинимальноВходит"), prop(&p, "МаксимальноВходит"))
@@ -2735,7 +3116,7 @@ mod tests {
             let d = list_lookup(&elements, &[BslValue::Str(BslString::from_str(name))]).unwrap();
             prop(&d, "Значение")
         };
-        let num = |s: &str| BslValue::Number(bsl_number::BslNumber::parse_canonical(s).unwrap());
+        let num = |s: &str| BslValue::Number(BslNumber::parse_canonical(s).unwrap());
         assert_eq!(get("ч"), num("5"));
         assert_eq!(get("л"), BslValue::Boolean(true));
         // Дата, время и показатель степени числами не остаются целиком:
@@ -3245,13 +3626,11 @@ mod tests {
     fn indexing_past_the_end_is_an_error() {
         let s = schema(SAMPLE);
         let elements = prop(&s, "ОбъявленияЭлементов");
-        let (schema_rc, kind) = match &elements {
-            BslValue::Object(o) => match &**o {
-                BslObject::XsList(s, k) => (s.clone(), k.clone()),
-                _ => panic!("ожидалась коллекция"),
-            },
-            _ => panic!("ожидалась коллекция"),
-        };
+        let list = elements
+            .object_ref()
+            .and_then(|object| object.downcast_ref::<SchemaListObject>())
+            .expect("ожидалась коллекция");
+        let (schema_rc, kind) = (list.schema.clone(), list.kind.clone());
         assert!(matches!(
             list_get(&schema_rc, &kind, 9),
             Err(RtError::IndexOutOfBounds { .. })

@@ -985,6 +985,20 @@ impl<'a> Resolver<'a> {
             }
             if matches!(
                 upper.as_str(),
+                "ПОСТРОИТЕЛЬСХЕМXML"
+                    | "XMLSCHEMABUILDER"
+                    | "СХЕМАXML"
+                    | "XMLSCHEMA"
+                    | "НАБОРСХЕМXML"
+                    | "XMLSCHEMASET"
+                    | "РАСШИРЕННОЕИМЯXML"
+            ) {
+                return Err(SemaError::Unsupported(
+                    "тип модели схемы требует зарегистрированный компонент bsl-xml",
+                ));
+            }
+            if matches!(
+                upper.as_str(),
                 "ФАБРИКАXDTO" | "XDTOFACTORY" | "СЕРИАЛИЗАТОРXDTO" | "XDTOSERIALIZER"
             ) {
                 return Err(SemaError::Unsupported(

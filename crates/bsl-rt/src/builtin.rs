@@ -1798,10 +1798,6 @@ pub fn call_builtin_method(
             _ if crate::spreadsheet::is_drawings(obj) => {
                 crate::spreadsheet::drawings_add(obj, args)
             }
-            // `НаборСхемXML.Добавить(Схема)` — процедура: та же схема
-            // второй раз проходит молча, а другая схема того же
-            // пространства имён — ошибка (измерено).
-            _ if crate::xsd::is_schema_set(obj) => crate::xsd::schema_set_add(obj, args),
             [] => obj.table_add_row(),
             [v] => match obj.push_element(v.clone()) {
                 Ok(()) => Ok(BslValue::Undefined),
@@ -1854,22 +1850,6 @@ pub fn call_builtin_method(
         // аргументов обязано стать понятной ошибкой, а не паникой на
         // `args[0]`.
         BuiltinMethod::Get => match obj {
-            BslValue::Object(o) if matches!(&**o, BslObject::XsList(..)) => {
-                crate::xsd::list_lookup(obj, args)
-            }
-            BslValue::Object(o) if matches!(&**o, BslObject::XsSchemaSet(_)) => match args {
-                [BslValue::Number(n)] => {
-                    let i = n
-                        .to_i64_exact()
-                        .and_then(|v| usize::try_from(v).ok())
-                        .ok_or(RtError::BadIndex)?;
-                    crate::xsd::schema_set_get(obj, i)
-                }
-                _ => Err(RtError::MethodNotApplicable {
-                    method: "Получить",
-                    receiver: obj.type_name(),
-                }),
-            },
             BslValue::Object(o) if matches!(&**o, BslObject::Map(_)) => match args {
                 [key] => obj.map_get(key),
                 _ => Err(RtError::MethodNotApplicable {
@@ -2217,7 +2197,12 @@ pub fn call_builtin_method(
         }),
         BuiltinMethod::XPathSnapshotItem => crate::xpath::snapshot_item(obj, args),
         BuiltinMethod::XPathEvaluateExpression => crate::xpath::evaluate_expression(obj, args),
-        BuiltinMethod::CreateXmlSchema => crate::xsd::create_schema(obj, args),
+        // `СоздатьСхемуXML` — метод построителя, ставшего внешним объектом
+        // компонента bsl-xml; сюда доходит только чужой получатель.
+        BuiltinMethod::CreateXmlSchema => Err(RtError::MethodNotApplicable {
+            method: "СоздатьСхемуXML",
+            receiver: obj.type_name(),
+        }),
         BuiltinMethod::WriteXmlDeclaration => {
             crate::xml::write_declaration(obj)?;
             Ok(BslValue::Undefined)

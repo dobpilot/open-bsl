@@ -143,6 +143,16 @@ pub trait ObjectProtocol: fmt::Debug + ObjectDowncast {
         None
     }
 
+    /// Равенство по значению для внешних типов-значений: два отдельно
+    /// построенных объекта равны содержимым, как строки. `None` — тип по
+    /// значению не сравнивается, и в силе остаются ключ места и
+    /// тождество. Сравнение вызывается только для объектов ОДНОГО
+    /// дескриптора, поэтому реализация может смело сужать `other` к
+    /// собственному типу.
+    fn value_eq(&self, _other: &ObjectRef) -> Option<bool> {
+        None
+    }
+
     fn display(&self) -> String {
         self.type_descriptor().name.to_string()
     }
@@ -211,6 +221,10 @@ impl ObjectRef {
 
     pub fn identity_key(&self) -> Option<(usize, usize)> {
         self.0.identity_key()
+    }
+
+    pub fn value_eq(&self, other: &ObjectRef) -> Option<bool> {
+        self.0.value_eq(other)
     }
 
     pub fn display(&self) -> String {

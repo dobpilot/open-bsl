@@ -586,7 +586,7 @@ use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::rc::{Rc, Weak};
 
-use bsl_rt::xsd::{FacetKind, XName, XsKind, XsSchemaData, XSD_NS};
+use crate::xsd::{FacetKind, XName, XsKind, XsSchemaData, XSD_NS};
 use bsl_rt::{
     BslNumber, BslObject, BslString, BslValue, CallContext, EnumValue, ObjectProtocol, RtError,
     RtResult, TypeDescriptor, TypeId,
@@ -2157,7 +2157,7 @@ fn builtin_from_lexical(bsl: BuiltinBsl, lexical: &str) -> RtResult<BslValue> {
             if text.contains(':') || text.is_empty() {
                 return Err(bad_lexical(lexical, "«QName» без префикса"));
             }
-            Ok(bsl_rt::xsd::new_expanded_name("", text))
+            Ok(crate::xsd::new_expanded_name("", text))
         }
     }
 }
@@ -2526,7 +2526,7 @@ pub fn factory_of_file(args: &[BslValue]) -> RtResult<BslValue> {
     // Сигнатуру UTF-8 разборщик видит как символ перед `<` — снимаем её
     // так же, как `ЧтениеXML.ОткрытьФайл`.
     let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
-    let schema = bsl_rt::xsd::schema_of_text(text)?;
+    let schema = crate::xsd::schema_of_text(text)?;
     Ok(factory_value(model_of_schemas(&[schema])?))
 }
 
@@ -2544,11 +2544,13 @@ pub fn factory_of_file(args: &[BslValue]) -> RtResult<BslValue> {
 pub fn factory_of_schema_set(arg: &BslValue) -> RtResult<BslValue> {
     let schemas: Vec<Rc<XsSchemaData>> = match arg {
         BslValue::Undefined => Vec::new(),
-        BslValue::Object(o) => match &**o {
-            BslObject::XsSchemaSet(set) => set.borrow().clone(),
-            _ => return Err(bad_factory_source()),
+        _ => match arg
+            .object_ref()
+            .and_then(|object| object.downcast_ref::<crate::xsd::SchemaSetObject>())
+        {
+            Some(set) => set.schemas.borrow().clone(),
+            None => return Err(bad_factory_source()),
         },
-        _ => return Err(bad_factory_source()),
     };
     Ok(factory_value(model_of_schemas(&schemas)?))
 }
@@ -2600,9 +2602,12 @@ pub fn factory_type(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
         [BslValue::Str(uri), BslValue::Str(name)] => {
             model.find(&uri.to_string(), &name.to_string())
         }
-        [BslValue::Object(o)] => match &**o {
-            BslObject::XmlExpandedName(name) => model.find(&name.uri, &name.local),
-            _ => return Err(not_applicable(obj, "Тип")),
+        [name_arg @ BslValue::Object(_)] => match name_arg
+            .object_ref()
+            .and_then(|object| object.downcast_ref::<crate::xsd::ExpandedNameObject>())
+        {
+            Some(expanded) => model.find(&expanded.name.uri, &expanded.name.local),
+            None => return Err(not_applicable(obj, "Тип")),
         },
         _ => return Err(not_applicable(obj, "Тип")),
     };
@@ -3205,9 +3210,17 @@ fn coerce_to_value_type(
     // значению: длина двоичных данных считается в байтах и без лексической
     // формы.
     if let BslValue::Object(o) = &value {
+        let is_expanded_name = value.object_ref().is_some_and(|object| {
+            object
+                .downcast_ref::<crate::xsd::ExpandedNameObject>()
+                .is_some()
+        });
         match (builtin, &**o) {
-            (Some(BuiltinBsl::Base64 | BuiltinBsl::Hex), BslObject::BinaryData(_))
-            | (Some(BuiltinBsl::QName), BslObject::XmlExpandedName(_)) => {
+            (Some(BuiltinBsl::Base64 | BuiltinBsl::Hex), BslObject::BinaryData(_)) => {
+                check_facet_chain(model, Some(target), "", &value)?;
+                return Ok(value);
+            }
+            (Some(BuiltinBsl::QName), _) if is_expanded_name => {
                 check_facet_chain(model, Some(target), "", &value)?;
                 return Ok(value);
             }
@@ -5013,6 +5026,12 @@ fn lexical_for_write(
     value: &BslValue,
 ) -> RtResult<String> {
     let builtin = model.builtin_of(type_index);
+    if let Some(expanded) = value
+        .object_ref()
+        .and_then(|object| object.downcast_ref::<crate::xsd::ExpandedNameObject>())
+    {
+        return Ok(expanded.name.local.clone());
+    }
     if let BslValue::Object(o) = value {
         match &**o {
             BslObject::BinaryData(bytes) => {
@@ -5025,7 +5044,6 @@ fn lexical_for_write(
                     _ => encode_base64(bytes),
                 });
             }
-            BslObject::XmlExpandedName(name) => return Ok(name.local.clone()),
             // Значение СПИСОЧНОГО простого типа — это массив (у платформы
             // фиксированный, см. «Двоичные лексические формы» в шапке
             // модуля).
@@ -5885,7 +5903,7 @@ mod tests {
     /// Модель типов из текста XSD — тем же путём, что и в бою: дерево
     /// строит `dom`, схему — `xsd`, а типы — этот модуль.
     fn model(text: &str) -> Rc<XdtoModel> {
-        let schema = bsl_rt::xsd::schema_of_text(text).expect("схема обязана разбираться");
+        let schema = crate::xsd::schema_of_text(text).expect("схема обязана разбираться");
         model_of_schema(&schema).expect("модель обязана строиться")
     }
 
@@ -6516,11 +6534,11 @@ mod tests {
             r#"<xs:element name="bad" type="t:Len" default="а" minOccurs="0"/>"#,
             r#"</xs:sequence></xs:complexType></xs:schema>"#,
         );
-        let schema = bsl_rt::xsd::schema_of_text(bad).expect("схема разбирается");
+        let schema = crate::xsd::schema_of_text(bad).expect("схема разбирается");
         assert!(model_of_schema(&schema).is_err());
         // Годное умолчание того же вида модель строит.
         let good = bad.replace(r#"default="а""#, r#"default="аб""#);
-        let schema = bsl_rt::xsd::schema_of_text(&good).expect("схема разбирается");
+        let schema = crate::xsd::schema_of_text(&good).expect("схема разбирается");
         assert!(model_of_schema(&schema).is_ok());
     }
 
@@ -6698,7 +6716,7 @@ mod tests {
         // Расширенное имя — значение модели СХЕМЫ, и члены у него читает
         // она же.
         let expanded = |member: &str| {
-            text_of(&bsl_rt::xsd::get_property(&name, member).expect("член расширенного имени"))
+            text_of(&crate::xsd::get_property(&name, member).expect("член расширенного имени"))
         };
         assert_eq!(expanded("ЛокальноеИмя"), "просто");
         assert_eq!(expanded("URIПространстваИмен"), "");
@@ -6941,7 +6959,7 @@ mod tests {
     #[test]
     fn broken_schemas_report_errors_instead_of_panicking() {
         // Ссылка на несуществующий тип.
-        let schema = bsl_rt::xsd::schema_of_text(concat!(
+        let schema = crate::xsd::schema_of_text(concat!(
             r#"<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t">"#,
             r#"<xs:complexType name="T"><xs:sequence>"#,
             r#"<xs:element name="a" type="xs:нетТакого"/>"#,
@@ -6957,7 +6975,7 @@ mod tests {
         // Кольцо в цепочке базовых типов простого типа: разбор
         // лексической формы обязан отвечать ошибкой, а не переполнением
         // стека.
-        let schema = bsl_rt::xsd::schema_of_text(concat!(
+        let schema = crate::xsd::schema_of_text(concat!(
             r#"<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="urn:t" "#,
             r#"targetNamespace="urn:t">"#,
             r#"<xs:simpleType name="A"><xs:restriction base="t:A"/></xs:simpleType>"#,
@@ -6971,7 +6989,7 @@ mod tests {
         assert!(cyclic.builtin_of(a).is_none(), "кольцо не даёт отображения");
 
         // Цикл наследования типов ОБЪЕКТА ловится при построении модели.
-        let schema = bsl_rt::xsd::schema_of_text(concat!(
+        let schema = crate::xsd::schema_of_text(concat!(
             r#"<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:t="urn:t" "#,
             r#"targetNamespace="urn:t">"#,
             r#"<xs:complexType name="A"><xs:complexContent>"#,
@@ -6988,7 +7006,7 @@ mod tests {
         );
 
         // Значение по умолчанию, не разбирающееся в своём типе.
-        let schema = bsl_rt::xsd::schema_of_text(concat!(
+        let schema = crate::xsd::schema_of_text(concat!(
             r#"<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t">"#,
             r#"<xs:complexType name="T"><xs:sequence>"#,
             r#"<xs:element name="a" type="xs:int" default="ерунда"/>"#,
@@ -7002,7 +7020,7 @@ mod tests {
         // десяти байт, и десятый байт лежит внутри «я». Схема доходит сюда
         // сама (`collect_elements` -> `has_constraint` -> `value_of`), так
         // что ответом обязана быть ошибка, а не паника процесса.
-        let schema = bsl_rt::xsd::schema_of_text(concat!(
+        let schema = crate::xsd::schema_of_text(concat!(
             r#"<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t">"#,
             r#"<xs:complexType name="T"><xs:sequence>"#,
             r#"<xs:element name="a" type="xs:date" default="2026-08-1я"/>"#,
@@ -7034,7 +7052,7 @@ mod tests {
     fn factory_of_texts(texts: &[&str]) -> BslValue {
         let schemas: Vec<Rc<XsSchemaData>> = texts
             .iter()
-            .map(|t| bsl_rt::xsd::schema_of_text(t).expect("схема обязана разбираться"))
+            .map(|t| crate::xsd::schema_of_text(t).expect("схема обязана разбираться"))
             .collect();
         factory_value(model_of_schemas(&schemas).expect("модель обязана строиться"))
     }
@@ -7095,7 +7113,7 @@ mod tests {
         let f = factory(SAMPLE);
         let pair = factory_type(&f, &[str_value("urn:test"), str_value("RootType")]).expect("тип");
         assert_eq!(pair.to_string(), "{urn:test}RootType");
-        let expanded = bsl_rt::xsd::new_expanded_name("urn:test", "RootType");
+        let expanded = crate::xsd::new_expanded_name("urn:test", "RootType");
         assert_eq!(factory_type(&f, &[expanded]).expect("тип"), pair);
         // Два обращения за одним именем равны — тип это ссылка в модель.
         assert_eq!(
@@ -7224,12 +7242,12 @@ mod tests {
         );
         assert_eq!(TypeId::XdtoFactory.name(), "Фабрика XDTO");
         assert!(is_factory(&empty));
-        let set = bsl_rt::xsd::new_schema_set();
+        let set = crate::xsd::new_schema_set();
         assert!(factory_of_schema_set(&set).is_ok());
         // Путь к файлу, схема и число сюда не годятся.
         for wrong in [
             str_value("/tmp/схема.xsd"),
-            bsl_rt::xsd::new_schema(),
+            crate::xsd::new_schema(),
             number_value(1),
         ] {
             assert!(factory_of_schema_set(&wrong).is_err(), "{wrong:?}");

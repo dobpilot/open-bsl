@@ -4,6 +4,7 @@
 //! ядро остаётся в `bsl_rt::xml`.
 
 mod xdto;
+mod xsd;
 
 use bsl_rt::{
     Arity, BslValue, CallContext, ConstructorCode, ConstructorDescriptor, FunctionCode,
@@ -11,6 +12,7 @@ use bsl_rt::{
 };
 
 pub use xdto::{factory_of_file, factory_of_schema_set, serializer_of_factory};
+pub use xsd::{new_builder, new_expanded_name, new_schema, new_schema_set};
 
 /// Идентификатор компонента в заголовке байткода.
 pub const PACKAGE_NAME: &str = env!("CARGO_PKG_NAME");
@@ -23,6 +25,41 @@ fn argument(arguments: &[BslValue], index: usize) -> &BslValue {
 
 fn construct_factory(_context: &mut CallContext<'_>, arguments: &[BslValue]) -> RtResult<BslValue> {
     factory_of_schema_set(argument(arguments, 0))
+}
+
+fn construct_builder(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    Ok(new_builder())
+}
+
+fn construct_schema(_context: &mut CallContext<'_>, _arguments: &[BslValue]) -> RtResult<BslValue> {
+    Ok(new_schema())
+}
+
+fn construct_schema_set(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    Ok(new_schema_set())
+}
+
+fn construct_expanded_name(
+    _context: &mut CallContext<'_>,
+    arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    let text = |value: &BslValue| match value {
+        BslValue::Str(s) => Ok(s.to_string()),
+        _ => Err(RtError::TypeError {
+            expected: "Строка",
+            op: "Новый РасширенноеИмяXML",
+        }),
+    };
+    Ok(new_expanded_name(
+        &text(&arguments[0])?,
+        &text(&arguments[1])?,
+    ))
 }
 
 fn construct_serializer(
@@ -79,6 +116,32 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[
         arity: Arity::exact(1),
         call: construct_serializer,
     },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(3),
+        names: &["ПостроительСхемXML", "XMLSchemaBuilder"],
+        arity: Arity::exact(0),
+        call: construct_builder,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(4),
+        names: &["СхемаXML", "XMLSchema"],
+        arity: Arity::exact(0),
+        call: construct_schema,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(5),
+        names: &["НаборСхемXML", "XMLSchemaSet"],
+        arity: Arity::exact(0),
+        call: construct_schema_set,
+    },
+    ConstructorDescriptor {
+        // Английское написание не измерено — есть только русское имя, как
+        // в прежней таблице `NEW_TYPES`.
+        code: ConstructorCode::new(6),
+        names: &["РасширенноеИмяXML"],
+        arity: Arity::exact(2),
+        call: construct_expanded_name,
+    },
 ];
 
 const FUNCTIONS: &[FunctionDescriptor] = &[
@@ -123,7 +186,7 @@ mod tests {
             .iter()
             .map(|constructor| constructor.code.get())
             .collect::<Vec<_>>();
-        assert_eq!(constructors, (1..=2).collect::<Vec<_>>());
+        assert_eq!(constructors, (1..=6).collect::<Vec<_>>());
         let functions = library()
             .functions
             .iter()

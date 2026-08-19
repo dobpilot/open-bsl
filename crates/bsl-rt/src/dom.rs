@@ -3,9 +3,9 @@
 //! через `ЗаписьXML`.
 //!
 //! Второго разборщика здесь нет — дерево собирается из событий того же
-//! [`XmlParser`](crate::xml::XmlParser), что питает `ЧтениеXML`. Второго
+//! [`crate::xml::XmlParser`], что питает `ЧтениеXML`. Второго
 //! сериализатора тоже нет: обход дерева пишет через тот же
-//! [`XmlWriter`](crate::xml::XmlWriter), что питает `ЗаписьXML`, поэтому всё
+//! [`crate::xml::XmlWriter`], что питает `ЗаписьXML`, поэтому всё
 //! измеренное форматирование (отступ в один таб, закрывающий тег вплотную
 //! после текста, экранирование) достаётся записи дерева бесплатно. Отсюда
 //! бесплатно наследуются его измеренные правила: секция CDATA вливается в
@@ -362,23 +362,23 @@ impl DomNode {
     /// значение атрибута и подъём к родителю (для поиска объявлений
     /// `xmlns` в области видимости). Только чтение: модель схемы дерево не
     /// меняет.
-    pub(crate) fn xs_local_name(&self) -> &str {
+    pub fn xs_local_name(&self) -> &str {
         &self.local
     }
 
     /// `URIПространстваИмен` узла: по нему `xsd.rs` и узнаёт элементы
     /// схемы — по пространству имён, а НЕ по префиксу `xs:`.
-    pub(crate) fn xs_uri(&self) -> &str {
+    pub fn xs_uri(&self) -> &str {
         &self.uri
     }
 
-    pub(crate) fn xs_children(&self) -> Vec<Rc<DomNode>> {
+    pub fn xs_children(&self) -> Vec<Rc<DomNode>> {
         self.children.borrow().clone()
     }
 
     /// Значение атрибута с пустым пространством имён по локальному имени —
     /// именно так записаны все атрибуты XSD (`name`, `type`, `use`).
-    pub(crate) fn xs_attribute(&self, local: &str) -> Option<String> {
+    pub fn xs_attribute(&self, local: &str) -> Option<String> {
         self.attrs
             .borrow()
             .iter()
@@ -388,7 +388,7 @@ impl DomNode {
 
     /// URI объявления пространства имён, действующего на этом узле:
     /// `xmlns:префикс` при непустом префиксе и `xmlns` при пустом.
-    pub(crate) fn xs_namespace_declaration(&self, prefix: &str) -> Option<String> {
+    pub fn xs_namespace_declaration(&self, prefix: &str) -> Option<String> {
         self.attrs
             .borrow()
             .iter()
@@ -403,7 +403,7 @@ impl DomNode {
             .map(|a| a.attr_value())
     }
 
-    pub(crate) fn xs_parent(&self) -> Option<Rc<DomNode>> {
+    pub fn xs_parent(&self) -> Option<Rc<DomNode>> {
         self.parent.borrow().upgrade()
     }
 
@@ -649,7 +649,7 @@ pub fn read(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// Всё, чем отвечает разбор XML.
-pub(crate) fn build_tree(state: &mut XmlReaderState) -> RtResult<Rc<DomNode>> {
+pub fn build_tree(state: &mut XmlReaderState) -> RtResult<Rc<DomNode>> {
     build(state)
 }
 
@@ -825,7 +825,7 @@ fn attach_attribute(
 
 /// Корневой элемент документа — для разбора схемы (`xsd.rs`), которому
 /// `СоздатьСхемуXML` даёт документ, а работать надо с его корнем.
-pub(crate) fn xs_document_element(doc: &Rc<DomNode>) -> Option<Rc<DomNode>> {
+pub fn xs_document_element(doc: &Rc<DomNode>) -> Option<Rc<DomNode>> {
     document_element(doc)
 }
 
@@ -2083,7 +2083,7 @@ fn is_xmlns_attr(name: &str) -> bool {
 ///
 /// Второго сериализатора нет: всё форматирование — отступ, поведение
 /// закрывающего тега после текста, экранирование — приходит из уже
-/// измеренного [`XmlWriter`](crate::xml::XmlWriter).
+/// измеренного [`crate::xml::XmlWriter`].
 struct DomSerializer<'a> {
     w: &'a mut XmlWriter,
     /// На каждый открытый элемент — объявленные им пары «префикс, URI».
