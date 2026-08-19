@@ -3,9 +3,9 @@
 //! через `ЗаписьXML`.
 //!
 //! Второго разборщика здесь нет — дерево собирается из событий того же
-//! [`crate::xml::XmlParser`], что питает `ЧтениеXML`. Второго
+//! [`bsl_rt::xml::XmlParser`], что питает `ЧтениеXML`. Второго
 //! сериализатора тоже нет: обход дерева пишет через тот же
-//! [`crate::xml::XmlWriter`], что питает `ЗаписьXML`, поэтому всё
+//! [`bsl_rt::xml::XmlWriter`], что питает `ЗаписьXML`, поэтому всё
 //! измеренное форматирование (отступ в один таб, закрывающий тег вплотную
 //! после текста, экранирование) достаётся записи дерева бесплатно. Отсюда
 //! бесплатно наследуются его измеренные правила: секция CDATA вливается в
@@ -229,11 +229,12 @@
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
-use crate::object::{BslObject, XmlReaderState};
-use crate::string::BslString;
-use crate::xml::{local_of, prefix_of, XmlEvent, XmlParser, XmlWriter};
-use crate::xml::{CDATA_NODE_NAME, COMMENT_NODE_NAME, DOCUMENT_NODE_NAME, TEXT_NODE_NAME};
-use crate::{BslValue, EnumValue, RtError, RtResult};
+use bsl_rt::xml::{local_of, prefix_of, XmlEvent, XmlParser, XmlWriter};
+use bsl_rt::xml::{CDATA_NODE_NAME, COMMENT_NODE_NAME, DOCUMENT_NODE_NAME, TEXT_NODE_NAME};
+use bsl_rt::{
+    BslString, BslValue, CallContext, EnumValue, ObjectProtocol, RtError, RtResult, TypeDescriptor,
+    TypeId, XmlReaderState,
+};
 
 /// URI, который платформа приписывает объявлениям пространств имён
 /// (измерено: `xmlns:к` отдаёт именно это). Значение из спецификации XML
@@ -622,7 +623,7 @@ pub fn read(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
     }
     let state = match &args[0] {
         BslValue::Object(o) => match &**o {
-            BslObject::XmlReader(state) => state,
+            bsl_rt::BslObject::XmlReader(state) => state,
             _ => {
                 return Err(RtError::TypeError {
                     expected: "ЧтениеXML",
@@ -863,6 +864,7 @@ pub enum DomListKind {
 impl DomListKind {
     /// Содержимое коллекции на СЕЙЧАС. Живые окна перечитывают узел, снимок
     /// отдаёт своё.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn items(&self) -> Vec<Rc<DomNode>> {
         match self {
             DomListKind::Nodes(node) => node.children.borrow().clone(),
@@ -904,11 +906,17 @@ impl DomListKind {
 /// см. [`BslObject::DomNode`]. Для самого документа обе ссылки — одна и
 /// та же.
 pub fn node_value(node: &Rc<DomNode>, doc: &Rc<DomNode>) -> BslValue {
-    BslValue::Object(Rc::new(BslObject::DomNode(node.clone(), doc.clone())))
+    BslValue::new_object(DomNodeObject {
+        node: node.clone(),
+        doc: doc.clone(),
+    })
 }
 
 fn list_value(kind: DomListKind, doc: &Rc<DomNode>) -> BslValue {
-    BslValue::Object(Rc::new(BslObject::DomList(kind, doc.clone())))
+    BslValue::new_object(DomListObject {
+        kind,
+        doc: doc.clone(),
+    })
 }
 
 fn opt_node(node: Option<Rc<DomNode>>, doc: &Rc<DomNode>) -> BslValue {
@@ -930,21 +938,19 @@ fn str_value(s: &str) -> BslValue {
 }
 
 pub fn is_dom_builder(v: &BslValue) -> bool {
-    matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::DomBuilder))
+    v.object_ref()
+        .is_some_and(|object| object.downcast_ref::<DomBuilderObject>().is_some())
 }
 
 /// Узел значения вместе с его документом: второй `Rc` нужен всем, кто
 /// строит из этого узла новое значение, — иначе документ не дожил бы до
 /// следующей навигации.
 fn as_node(v: &BslValue, method: &'static str) -> RtResult<(Rc<DomNode>, Rc<DomNode>)> {
-    match v {
-        BslValue::Object(o) => match &**o {
-            BslObject::DomNode(n, doc) => Ok((n.clone(), doc.clone())),
-            _ => Err(RtError::MethodNotApplicable {
-                method,
-                receiver: v.type_name(),
-            }),
-        },
+    match v
+        .object_ref()
+        .and_then(|object| object.downcast_ref::<DomNodeObject>())
+    {
+        Some(node) => Ok((node.node.clone(), node.doc.clone())),
         _ => Err(RtError::MethodNotApplicable {
             method,
             receiver: v.type_name(),
@@ -1298,12 +1304,18 @@ pub fn new_document() -> BslValue {
 }
 
 /// `Новый ЗаписьDOM`.
+/// `Новый ПостроительDOM` — состояния нет.
+pub fn new_builder() -> BslValue {
+    BslValue::new_object(DomBuilderObject)
+}
+
 pub fn new_writer() -> BslValue {
-    BslValue::Object(Rc::new(BslObject::DomWriter))
+    BslValue::new_object(DomWriterObject)
 }
 
 pub fn is_dom_writer(v: &BslValue) -> bool {
-    matches!(v, BslValue::Object(o) if matches!(&**o, BslObject::DomWriter))
+    v.object_ref()
+        .is_some_and(|object| object.downcast_ref::<DomWriterObject>().is_some())
 }
 
 /// Годится ли строка как имя XML.
@@ -1596,14 +1608,11 @@ fn need_node(arg: Option<&BslValue>, op: &'static str) -> RtResult<Rc<DomNode>> 
             op,
         });
     };
-    match v {
-        BslValue::Object(o) => match &**o {
-            BslObject::DomNode(n, _) => Ok(n.clone()),
-            _ => Err(RtError::TypeError {
-                expected: "узел DOM",
-                op,
-            }),
-        },
+    match v
+        .object_ref()
+        .and_then(|object| object.downcast_ref::<DomNodeObject>())
+    {
+        Some(node) => Ok(node.node.clone()),
         _ => Err(RtError::TypeError {
             expected: "узел DOM",
             op,
@@ -2083,7 +2092,7 @@ fn is_xmlns_attr(name: &str) -> bool {
 ///
 /// Второго сериализатора нет: всё форматирование — отступ, поведение
 /// закрывающего тега после текста, экранирование — приходит из уже
-/// измеренного [`crate::xml::XmlWriter`].
+/// измеренного [`bsl_rt::xml::XmlWriter`].
 struct DomSerializer<'a> {
     w: &'a mut XmlWriter,
     /// На каждый открытый элемент — объявленные им пары «префикс, URI».
@@ -2255,7 +2264,7 @@ pub fn write(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
     }
     let node = need_node(args.first(), op)?;
     let target = &args[1];
-    crate::xml::with_writer(target, |w| {
+    bsl_rt::xml::with_writer(target, |w| {
         let mut ser = DomSerializer {
             w,
             scopes: Vec::new(),
@@ -2266,6 +2275,356 @@ pub fn write(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
         ser.write_node(&node)
     })?;
     Ok(BslValue::Undefined)
+}
+
+// --- объектный протокол -----------------------------------------------------
+
+static DOM_BUILDER_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ПостроительDOM",
+    legacy_type_id: Some(TypeId::DomBuilder),
+};
+
+static DOM_WRITER_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ЗаписьDOM",
+    legacy_type_id: Some(TypeId::DomWriter),
+};
+
+static DOM_DOCUMENT_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ДокументDOM",
+    legacy_type_id: Some(TypeId::DomDocument),
+};
+
+static DOM_ELEMENT_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ЭлементDOM",
+    legacy_type_id: Some(TypeId::DomElement),
+};
+
+static DOM_ATTRIBUTE_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "АтрибутDOM",
+    legacy_type_id: Some(TypeId::DomAttribute),
+};
+
+static DOM_TEXT_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ТекстDOM",
+    legacy_type_id: Some(TypeId::DomText),
+};
+
+static DOM_CDATA_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "СекцияCDATADOM",
+    legacy_type_id: Some(TypeId::DomCdataSection),
+};
+
+static DOM_COMMENT_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "КомментарийDOM",
+    legacy_type_id: Some(TypeId::DomComment),
+};
+
+static DOM_PI_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ИнструкцияОбработкиDOM",
+    legacy_type_id: Some(TypeId::DomProcessingInstruction),
+};
+
+static DOM_ENTITY_REF_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "СсылкаНаСущностьDOM",
+    legacy_type_id: Some(TypeId::DomEntityReference),
+};
+
+static DOM_NODE_LIST_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "СписокУзловDOM",
+    legacy_type_id: Some(TypeId::DomNodeList),
+};
+
+static DOM_ATTR_MAP_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "КоллекцияАтрибутовDOM",
+    legacy_type_id: Some(TypeId::DomAttributeMap),
+};
+
+static DOM_ELEMENT_LIST_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "СписокЭлементовDOM",
+    legacy_type_id: Some(TypeId::DomElementList),
+};
+
+/// `ПостроительDOM` — состояния нет: дерево целиком строит `Прочитать`.
+#[derive(Debug)]
+pub struct DomBuilderObject;
+
+/// `ЗаписьDOM` — состояния нет: `Записать(Узел, ЗаписьXML)` обходит дерево.
+#[derive(Debug)]
+pub struct DomWriterObject;
+
+/// Узел DOM вместе с документом-владельцем: второй `Rc` держит дерево
+/// живым, у узлов внутри дерева ссылки вверх слабые.
+#[derive(Debug)]
+pub struct DomNodeObject {
+    pub(crate) node: Rc<DomNode>,
+    pub(crate) doc: Rc<DomNode>,
+}
+
+/// Коллекция узлов — снимок либо живая карта, по виду.
+#[derive(Debug)]
+pub struct DomListObject {
+    pub(crate) kind: DomListKind,
+    pub(crate) doc: Rc<DomNode>,
+}
+
+fn node_descriptor(kind: DomKind) -> &'static TypeDescriptor {
+    match kind {
+        DomKind::Document => &DOM_DOCUMENT_TYPE,
+        DomKind::Element => &DOM_ELEMENT_TYPE,
+        DomKind::Attribute => &DOM_ATTRIBUTE_TYPE,
+        DomKind::Text => &DOM_TEXT_TYPE,
+        DomKind::CdataSection => &DOM_CDATA_TYPE,
+        DomKind::Comment => &DOM_COMMENT_TYPE,
+        DomKind::ProcessingInstruction => &DOM_PI_TYPE,
+        DomKind::EntityReference => &DOM_ENTITY_REF_TYPE,
+    }
+}
+
+fn dom_list_descriptor(kind: &DomListKind) -> &'static TypeDescriptor {
+    match kind {
+        DomListKind::Nodes(_) => &DOM_NODE_LIST_TYPE,
+        DomListKind::Attributes(_) => &DOM_ATTR_MAP_TYPE,
+        DomListKind::Elements(_) => &DOM_ELEMENT_LIST_TYPE,
+    }
+}
+
+impl DomNodeObject {
+    fn as_value(&self) -> BslValue {
+        node_value(&self.node, &self.doc)
+    }
+}
+
+impl ObjectProtocol for DomBuilderObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &DOM_BUILDER_TYPE
+    }
+
+    fn call_method(
+        &self,
+        name: &str,
+        arguments: &[BslValue],
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<BslValue> {
+        if name.eq_ignore_ascii_case("Прочитать") || name.eq_ignore_ascii_case("Read") {
+            read(&new_builder(), arguments)
+        } else {
+            Err(RtError::UnknownMethod {
+                method: name.to_string(),
+                receiver: DOM_BUILDER_TYPE.name,
+            })
+        }
+    }
+}
+
+impl ObjectProtocol for DomWriterObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &DOM_WRITER_TYPE
+    }
+
+    fn call_method(
+        &self,
+        name: &str,
+        arguments: &[BslValue],
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<BslValue> {
+        if name.eq_ignore_ascii_case("Записать") || name.eq_ignore_ascii_case("Write") {
+            write(&new_writer(), arguments)
+        } else {
+            Err(RtError::UnknownMethod {
+                method: name.to_string(),
+                receiver: DOM_WRITER_TYPE.name,
+            })
+        }
+    }
+}
+
+impl ObjectProtocol for DomNodeObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        node_descriptor(self.node.kind())
+    }
+
+    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
+        get_property(&self.as_value(), name)
+    }
+
+    fn set_property(
+        &self,
+        name: &str,
+        value: BslValue,
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<()> {
+        set_property(&self.as_value(), name, &value)
+    }
+
+    fn call_method(
+        &self,
+        name: &str,
+        arguments: &[BslValue],
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<BslValue> {
+        let receiver = self.as_value();
+        let eq =
+            |ru: &str, en: &str| name.eq_ignore_ascii_case(ru) || name.eq_ignore_ascii_case(en);
+        if eq("ЕстьДочерниеУзлы", "HasChildNodes") {
+            return has_child_nodes(&receiver);
+        }
+        if eq("ЕстьАтрибуты", "HasAttributes") {
+            return has_attributes(&receiver);
+        }
+        if eq("ПолучитьАтрибут", "GetAttribute") {
+            return get_attribute(&receiver, arguments);
+        }
+        if eq("ЕстьАтрибут", "HasAttribute") {
+            return has_attribute(&receiver, arguments);
+        }
+        if eq("ПолучитьУзелАтрибута", "GetAttributeNode") {
+            return get_attribute_node(&receiver, arguments);
+        }
+        if eq("ПолучитьЭлементыПоИмени", "GetElementByTagName") {
+            return get_elements_by_name(&receiver, arguments);
+        }
+        if eq("ПолучитьЭлементПоИдентификатору", "GetElementById") {
+            return get_element_by_id(&receiver, arguments);
+        }
+        if eq("СоздатьЭлемент", "CreateElement") {
+            return create_element(&receiver, arguments);
+        }
+        if eq("СоздатьАтрибут", "CreateAttribute") {
+            return create_attribute(&receiver, arguments);
+        }
+        if eq("СоздатьТекстовыйУзел", "CreateTextNode") {
+            return create_text_node(&receiver, arguments);
+        }
+        if eq("СоздатьСекциюCDATA", "CreateCDATASection") {
+            return create_cdata_section(&receiver, arguments);
+        }
+        if eq("СоздатьКомментарий", "CreateComment") {
+            return create_comment(&receiver, arguments);
+        }
+        if eq("СоздатьИнструкциюОбработки", "CreateProcessingInstruction")
+        {
+            return create_processing_instruction(&receiver, arguments);
+        }
+        if eq("ДобавитьДочерний", "AppendChild") {
+            return append_child(&receiver, arguments);
+        }
+        if eq("ВставитьПеред", "InsertBefore") {
+            return insert_before(&receiver, arguments);
+        }
+        if eq("УдалитьДочерний", "RemoveChild") {
+            return remove_child(&receiver, arguments);
+        }
+        if eq("ЗаменитьДочерний", "ReplaceChild") {
+            return replace_child(&receiver, arguments);
+        }
+        if eq("УстановитьАтрибут", "SetAttribute") {
+            return set_attribute(&receiver, arguments);
+        }
+        if eq("УдалитьАтрибут", "RemoveAttribute") {
+            return remove_attribute(&receiver, arguments);
+        }
+        if eq("УстановитьУзелАтрибута", "SetAttributeNode") {
+            return set_attribute_node(&receiver, arguments);
+        }
+        if eq("УдалитьУзелАтрибута", "RemoveAttributeNode") {
+            return remove_attribute_node(&receiver, arguments);
+        }
+        if eq("ВычислитьВыражениеXPath", "EvaluateXPathExpression") {
+            return crate::xpath::evaluate(&receiver, arguments);
+        }
+        if eq("СоздатьВыражениеXPath", "CreateXPathExpression") {
+            return crate::xpath::create_expression(&receiver, arguments);
+        }
+        if eq("СоздатьРазыменовательПИ", "CreateNSResolver") {
+            return crate::xpath::create_ns_resolver(&receiver, arguments);
+        }
+        Err(RtError::UnknownMethod {
+            method: name.to_string(),
+            receiver: self.type_descriptor().name,
+        })
+    }
+
+    // Узел равен узлу по ТОЖДЕСТВУ узла в дереве: два значения одного
+    // узла, добытые разной навигацией, равны (измерено).
+    fn identity_key(&self) -> Option<(usize, usize)> {
+        Some((Rc::as_ptr(&self.node) as usize, 0))
+    }
+}
+
+impl ObjectProtocol for DomListObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        dom_list_descriptor(&self.kind)
+    }
+
+    fn call_method(
+        &self,
+        name: &str,
+        arguments: &[BslValue],
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<BslValue> {
+        if name.eq_ignore_ascii_case("Количество") || name.eq_ignore_ascii_case("Count") {
+            return Ok(BslValue::number_from_i64(self.kind.len() as i64));
+        }
+        // `Получить(i)` — тот же путь, что `[i]` (измерено у списков DOM).
+        if name.eq_ignore_ascii_case("Получить") || name.eq_ignore_ascii_case("Get") {
+            return match arguments {
+                [index] => self.get_index(index),
+                _ => Err(RtError::MethodNotApplicable {
+                    method: "Получить",
+                    receiver: self.type_descriptor().name,
+                }),
+            };
+        }
+        Err(RtError::UnknownMethod {
+            method: name.to_string(),
+            receiver: self.type_descriptor().name,
+        })
+    }
+
+    fn get_index(&self, index: &BslValue) -> RtResult<BslValue> {
+        let i = dom_index(index)?;
+        let node = self.kind.get(i).ok_or(RtError::IndexOutOfBounds {
+            index: i as i64,
+            len: self.kind.len(),
+        })?;
+        Ok(node_value(&node, &self.doc))
+    }
+
+    fn collection_len(&self) -> RtResult<usize> {
+        Ok(self.kind.len())
+    }
+
+    // Критерий заполненности у коллекций DOM — ДЛИНА, как у массива
+    // (измерено: непустые `ДочерниеУзлы` — «Да», пустые `Атрибуты` — «Нет»).
+    fn is_filled(&self) -> RtResult<bool> {
+        Ok(!self.kind.is_empty())
+    }
+
+    // Коллекции DOM равными не бывают: два обращения к `ДочерниеУзлы`
+    // дают «Нет» (измерено), поэтому ключа тождества у списка нет.
+}
+
+/// Номер элемента из значения-индекса — та же семантика, что у `[]`
+/// встроенных коллекций.
+fn dom_index(index: &BslValue) -> RtResult<usize> {
+    let BslValue::Number(number) = index else {
+        return Err(RtError::BadIndex);
+    };
+    let index = number.to_i64_exact().ok_or(RtError::BadIndex)?;
+    usize::try_from(index).map_err(|_| RtError::BadIndex)
 }
 
 #[cfg(test)]
@@ -2428,12 +2787,14 @@ mod tests {
     fn dom_search_matches_full_and_local_names() {
         let tree = document_of(r#"<к:а xmlns:к="urn:к"><а><к:а/></а></к:а>"#);
         let doc = node_value(&tree, &tree);
-        let count = |args: &[BslValue]| match get_elements_by_name(&doc, args).unwrap() {
-            BslValue::Object(o) => match &*o {
-                BslObject::DomList(kind, _) => kind.len(),
-                _ => panic!("ожидался список"),
-            },
-            other => panic!("ожидался список, получено {other:?}"),
+        let count = |args: &[BslValue]| {
+            let value = get_elements_by_name(&doc, args).unwrap();
+            value
+                .object_ref()
+                .and_then(|object| object.downcast_ref::<DomListObject>())
+                .expect("ожидался список")
+                .kind
+                .len()
         };
         assert_eq!(count(&[str_value("а")]), 3, "локальное имя у всех трёх");
         assert_eq!(count(&[str_value("к:а")]), 2);
@@ -2543,14 +2904,13 @@ mod tests {
         assert_eq!(hash_of(&one), hash_of(&two));
         // И то же самое для узла, добытого навигацией, а не напрямую.
         let via_property = prop(&root, "ПервыйДочерний");
-        let via_list = match prop(&root, "ДочерниеУзлы") {
-            BslValue::Object(o) => match &*o {
-                BslObject::DomList(kind, list_doc) => {
-                    node_value(&kind.get(0).expect("список не пуст"), list_doc)
-                }
-                _ => panic!("ожидался список"),
-            },
-            other => panic!("ожидался список, получено {other:?}"),
+        let via_list = {
+            let value = prop(&root, "ДочерниеУзлы");
+            let list = value
+                .object_ref()
+                .and_then(|object| object.downcast_ref::<DomListObject>())
+                .expect("ожидался список");
+            node_value(&list.kind.get(0).expect("список не пуст"), &list.doc)
         };
         assert_eq!(via_property, via_list);
         assert_eq!(hash_of(&via_property), hash_of(&via_list));
@@ -2660,13 +3020,12 @@ mod tests {
 
     fn kids_names(node: &BslValue) -> String {
         let list = get_property(node, "ДочерниеУзлы").expect("дети обязаны читаться");
-        let (kind, _) = match &list {
-            BslValue::Object(o) => match &**o {
-                BslObject::DomList(kind, doc) => (kind.clone(), doc.clone()),
-                _ => panic!("ожидался список"),
-            },
-            other => panic!("ожидался список, получено {other:?}"),
-        };
+        let kind = list
+            .object_ref()
+            .and_then(|object| object.downcast_ref::<DomListObject>())
+            .expect("ожидался список")
+            .kind
+            .clone();
         kind.items()
             .iter()
             .map(|n| n.name.clone())
@@ -2677,9 +3036,9 @@ mod tests {
     /// Записать узел через `ЗаписьDOM` и отдать накопленный текст.
     fn serialize(node: &BslValue) -> RtResult<String> {
         let target = BslValue::new_xml_writer();
-        crate::xml::set_string(&target, &[])?;
+        bsl_rt::xml::set_string(&target, &[])?;
         write(&new_writer(), &[node.clone(), target.clone()])?;
-        match crate::xml::close_writer(&target)? {
+        match bsl_rt::xml::close_writer(&target)? {
             BslValue::Str(s) => Ok(s.to_string()),
             other => panic!("ожидалась строка, получено {other:?}"),
         }
@@ -2710,14 +3069,12 @@ mod tests {
         assert_eq!(text_of(&get_property(&ns, "Префикс").unwrap()), "п");
         let attrs = get_property(&ns, "Атрибуты").unwrap();
         assert_eq!(attrs.collection_len().unwrap(), 1, "объявление xmlns:п");
-        let decl = match &attrs {
-            BslValue::Object(o) => match &**o {
-                BslObject::DomList(kind, list_doc) => {
-                    node_value(&kind.get(0).expect("объявление на месте"), list_doc)
-                }
-                _ => panic!("ожидалась коллекция атрибутов"),
-            },
-            other => panic!("ожидалась коллекция, получено {other:?}"),
+        let decl = {
+            let list = attrs
+                .object_ref()
+                .and_then(|object| object.downcast_ref::<DomListObject>())
+                .expect("ожидалась коллекция атрибутов");
+            node_value(&list.kind.get(0).expect("объявление на месте"), &list.doc)
         };
         assert_eq!(text_of(&get_property(&decl, "ИмяУзла").unwrap()), "xmlns:п");
         assert_eq!(text_of(&get_property(&decl, "Значение").unwrap()), "urn:х");

@@ -3,7 +3,7 @@
 //! имён.
 //!
 //! Второго разборщика XML здесь нет: на вход идёт дерево, построенное
-//! `bsl_rt::dom`, а этот модуль только опознаёт в нём элементы схемы — ПО
+//! `crate::dom`, а этот модуль только опознаёт в нём элементы схемы — ПО
 //! ПРОСТРАНСТВУ ИМЁН `http://www.w3.org/2001/XMLSchema`, а не по префиксу
 //! `xs:`. Измерено, что префикс не важен: схема с `<я:schema
 //! xmlns:я="...XMLSchema">` разбирается так же, как с `xs:`, а схема, чей
@@ -196,7 +196,8 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use bsl_rt::dom::{DomKind, DomNode};
+use crate::dom::{DomKind, DomNode};
+
 use bsl_rt::{
     BslNumber, BslString, BslValue, CallContext, EnumValue, ObjectProtocol, RtError, RtResult,
     TypeDescriptor, TypeId,
@@ -1450,15 +1451,15 @@ pub fn create_schema(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
             receiver: obj.type_name(),
         });
     };
-    let (node, doc) = match arg {
-        BslValue::Object(o) => match &**o {
-            bsl_rt::BslObject::DomNode(n, d) => (n.clone(), d.clone()),
-            _ => return Err(RtError::Xsd(source_error())),
-        },
+    let (node, doc) = match arg
+        .object_ref()
+        .and_then(|object| object.downcast_ref::<crate::dom::DomNodeObject>())
+    {
+        Some(dom_node) => (dom_node.node.clone(), dom_node.doc.clone()),
         _ => return Err(RtError::Xsd(source_error())),
     };
     let root = match node.kind() {
-        DomKind::Document => bsl_rt::dom::xs_document_element(&node)
+        DomKind::Document => crate::dom::xs_document_element(&node)
             .ok_or_else(|| RtError::Xsd("документ без корневого элемента".to_string()))?,
         DomKind::Element => node,
         _ => return Err(RtError::Xsd(source_error())),
@@ -1632,7 +1633,7 @@ fn component_property(schema: &Rc<XsSchemaData>, index: usize, name: &str) -> Rt
     }
     if is("ЭлементDOM", "DOMElement") {
         return Ok(match (&node.dom, &schema.dom_doc) {
-            (Some(n), Some(doc)) => bsl_rt::dom::node_value(n, doc),
+            (Some(n), Some(doc)) => crate::dom::node_value(n, doc),
             _ => BslValue::Undefined,
         });
     }
@@ -2253,7 +2254,7 @@ impl XsSchemaData {
 }
 
 /// Схема из текста XSD — тем же путём, каким её строит BSL-код: дерево
-/// строит `bsl_rt::dom`, а разбирает уже готовое дерево этот модуль.
+/// строит `crate::dom`, а разбирает уже готовое дерево этот модуль.
 /// Второго разборщика схем в проекте нет, поэтому этой же дорогой ходит
 /// `СоздатьФабрикуXDTO`, прочитав файл (см. модуль `xdto` компонента `bsl-xml`).
 ///
@@ -2262,8 +2263,8 @@ impl XsSchemaData {
 /// Всё, чем отвечает [`create_schema`], плюс ошибка разбора XML.
 pub fn schema_of_text(text: &str) -> RtResult<Rc<XsSchemaData>> {
     let mut state = bsl_rt::XmlReaderState::over(bsl_rt::xml::XmlParser::new(text));
-    let doc = bsl_rt::dom::build_tree(&mut state)?;
-    let value = bsl_rt::dom::node_value(&doc, &doc);
+    let doc = crate::dom::build_tree(&mut state)?;
+    let value = crate::dom::node_value(&doc, &doc);
     match as_component(&create_schema(&new_builder(), &[value])?) {
         Some((schema, 0)) => Ok(schema),
         _ => Err(RtError::Xsd("корень дерева — не схема".to_string())),
@@ -2871,8 +2872,8 @@ mod tests {
     /// включая `Неопределено` на корне, который схемой не является.
     fn schema_of(text: &str) -> RtResult<BslValue> {
         let mut state = bsl_rt::XmlReaderState::over(bsl_rt::xml::XmlParser::new(text));
-        let doc = bsl_rt::dom::build_tree(&mut state).expect("дерево обязано строиться");
-        let value = bsl_rt::dom::node_value(&doc, &doc);
+        let doc = crate::dom::build_tree(&mut state).expect("дерево обязано строиться");
+        let value = crate::dom::node_value(&doc, &doc);
         create_schema(&new_builder(), &[value])
     }
 
@@ -3433,7 +3434,7 @@ mod tests {
         // Корень не схема — `Неопределено`, а не ошибка.
         assert_eq!(schema("<а><б/></а>"), BslValue::Undefined);
         // Документ без корня — ошибка.
-        let empty = create_schema(&new_builder(), &[BslValue::new_dom_document()]);
+        let empty = create_schema(&new_builder(), &[crate::dom::new_document()]);
         assert!(matches!(empty, Err(RtError::Xsd(_))));
         // Не узел дерева и не один аргумент — тоже.
         assert!(matches!(

@@ -985,6 +985,21 @@ impl<'a> Resolver<'a> {
             }
             if matches!(
                 upper.as_str(),
+                "ПОСТРОИТЕЛЬDOM"
+                    | "DOMBUILDER"
+                    | "ДОКУМЕНТDOM"
+                    | "DOMDOCUMENT"
+                    | "ЗАПИСЬDOM"
+                    | "DOMWRITER"
+                    | "РАЗЫМЕНОВАТЕЛЬПРОСТРАНСТВИМЕНDOM"
+                    | "DOMNAMESPACERESOLVER"
+            ) {
+                return Err(SemaError::Unsupported(
+                    "тип DOM требует зарегистрированный компонент bsl-xml",
+                ));
+            }
+            if matches!(
+                upper.as_str(),
                 "ПОСТРОИТЕЛЬСХЕМXML"
                     | "XMLSCHEMABUILDER"
                     | "СХЕМАXML"

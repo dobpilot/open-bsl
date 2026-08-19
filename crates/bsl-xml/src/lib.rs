@@ -3,7 +3,9 @@
 //! `ЧтениеXML`/`ЗаписьXML`) переезжают сюда следующими шагами, парсерное
 //! ядро остаётся в `bsl_rt::xml`.
 
+mod dom;
 mod xdto;
+mod xpath;
 mod xsd;
 
 use bsl_rt::{
@@ -11,7 +13,11 @@ use bsl_rt::{
     FunctionDescriptor, FunctionKind, LibraryDependency, LibraryDescriptor, RtError, RtResult,
 };
 
+pub use dom::{
+    new_builder as new_dom_builder, new_document as new_dom_document, new_writer as new_dom_writer,
+};
 pub use xdto::{factory_of_file, factory_of_schema_set, serializer_of_factory};
+pub use xpath::new_ns_resolver;
 pub use xsd::{new_builder, new_expanded_name, new_schema, new_schema_set};
 
 /// Идентификатор компонента в заголовке байткода.
@@ -60,6 +66,34 @@ fn construct_expanded_name(
         &text(&arguments[0])?,
         &text(&arguments[1])?,
     ))
+}
+
+fn construct_dom_builder(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    Ok(new_dom_builder())
+}
+
+fn construct_dom_document(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    Ok(new_dom_document())
+}
+
+fn construct_dom_writer(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    Ok(new_dom_writer())
+}
+
+fn construct_ns_resolver(
+    _context: &mut CallContext<'_>,
+    arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    new_ns_resolver(&arguments[0])
 }
 
 fn construct_serializer(
@@ -142,6 +176,30 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[
         arity: Arity::exact(2),
         call: construct_expanded_name,
     },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(7),
+        names: &["ПостроительDOM", "DOMBuilder"],
+        arity: Arity::exact(0),
+        call: construct_dom_builder,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(8),
+        names: &["ДокументDOM", "DOMDocument"],
+        arity: Arity::exact(0),
+        call: construct_dom_document,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(9),
+        names: &["ЗаписьDOM", "DOMWriter"],
+        arity: Arity::exact(0),
+        call: construct_dom_writer,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(10),
+        names: &["РазыменовательПространствИменDOM", "DOMNamespaceResolver"],
+        arity: Arity::exact(1),
+        call: construct_ns_resolver,
+    },
 ];
 
 const FUNCTIONS: &[FunctionDescriptor] = &[
@@ -186,7 +244,7 @@ mod tests {
             .iter()
             .map(|constructor| constructor.code.get())
             .collect::<Vec<_>>();
-        assert_eq!(constructors, (1..=6).collect::<Vec<_>>());
+        assert_eq!(constructors, (1..=10).collect::<Vec<_>>());
         let functions = library()
             .functions
             .iter()

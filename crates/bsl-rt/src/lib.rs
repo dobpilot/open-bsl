@@ -8,7 +8,6 @@ mod binbuf;
 mod builtin;
 mod component;
 mod date;
-pub mod dom;
 pub mod encoding;
 mod enums;
 mod fill;
@@ -33,9 +32,7 @@ mod uuid;
 mod vstr;
 mod xlsx;
 pub mod xml;
-pub mod xpath;
-
-use std::cmp::Ordering;
+pub use std::cmp::Ordering;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::io::Write;
@@ -466,29 +463,14 @@ impl BslValue {
                 // Имена ЗНАЧЕНИЙ узлов DOM — слитные, имена ТИПОВ («Элемент
                 // DOM», «Документ  DOM» с ДВУМЯ пробелами) живут в
                 // `types.rs`. Обе колонки измерены.
-                BslObject::DomBuilder => "ПостроительDOM",
-                BslObject::DomWriter => "ЗаписьDOM",
-                BslObject::DomNode(n, _) => match n.kind() {
-                    crate::dom::DomKind::Document => "ДокументDOM",
-                    crate::dom::DomKind::Element => "ЭлементDOM",
-                    crate::dom::DomKind::Attribute => "АтрибутDOM",
-                    crate::dom::DomKind::Text => "ТекстDOM",
-                    crate::dom::DomKind::CdataSection => "СекцияCDATADOM",
-                    crate::dom::DomKind::Comment => "КомментарийDOM",
-                    crate::dom::DomKind::ProcessingInstruction => "ИнструкцияОбработкиDOM",
-                    crate::dom::DomKind::EntityReference => "СсылкаНаСущностьDOM",
-                },
-                // Имена значений XPath — тоже слитные, а типы у них
-                // печатаются иначе («Результат DOM XPath»), см. `types.rs`.
-                BslObject::XPathResolver(_) => "РазыменовательПространствИменDOM",
-                BslObject::XPathExpression(_) => "ВыражениеXPath",
-                BslObject::XPathResult(_) => "РезультатXPath",
+                BslObject::ReservedDomBuilder
+                | BslObject::ReservedDomNode
+                | BslObject::ReservedDomWriter
+                | BslObject::ReservedDomList
+                | BslObject::ReservedXPathResolver
+                | BslObject::ReservedXPathExpression
+                | BslObject::ReservedXPathResult => "",
                 BslObject::ReservedRegexGroup(_) => "ГруппаРезультатаПоискаПоРегулярномуВыражению",
-                BslObject::DomList(kind, _) => match kind {
-                    crate::dom::DomListKind::Nodes(_) => "СписокУзловDOM",
-                    crate::dom::DomListKind::Attributes(_) => "КоллекцияАтрибутовDOM",
-                    crate::dom::DomListKind::Elements(_) => "СписокЭлементовDOM",
-                },
                 BslObject::ReservedXsBuilder
                 | BslObject::ReservedXsSchemaSet
                 | BslObject::ReservedXsComponent
@@ -1296,12 +1278,6 @@ impl BslValue {
                 | BslObject::ReservedArchiveReader
                 | BslObject::ReservedArchiveEntries
                 | BslObject::ReservedArchiveEntry => true,
-                // Коллекции DOM заполненность имеют, и критерий у них
-                // ДЛИНА, как у массива: измерено, что непустые
-                // `ДочерниеУзлы` дают «Да», а пустые `Атрибуты` — «Нет».
-                // Сам узел и построитель заполненности не имеют вовсе (см.
-                // ниже).
-                BslObject::DomList(kind, _) => !kind.is_empty(),
                 // ИЗМЕРЕНО, и для потока, и для менеджера:
                 // `ЗначениеЗаполнено` от них платформа отвергает — это
                 // ошибка, а не «Да»/«Нет». Поток снят фикстурой
@@ -1334,15 +1310,13 @@ impl BslValue {
                 | BslObject::ReservedDataReader
                 | BslObject::ReservedDataWriter
                 | BslObject::ReservedDataReadResult
-                | BslObject::DomBuilder
-                | BslObject::DomWriter
-                | BslObject::DomNode(..)
-                // Значения XPath отнесены к соседям по DOM: измерено, что
-                // `ЗначениеЗаполнено` от разыменователя, выражения и
-                // результата — ошибка, ровно как от построителя и узла.
-                | BslObject::XPathResolver(_)
-                | BslObject::XPathExpression(_)
-                | BslObject::XPathResult(_)
+                | BslObject::ReservedDomBuilder
+                | BslObject::ReservedDomNode
+                | BslObject::ReservedDomWriter
+                | BslObject::ReservedDomList
+                | BslObject::ReservedXPathResolver
+                | BslObject::ReservedXPathExpression
+                | BslObject::ReservedXPathResult
                 | BslObject::ReservedRegexGroup(_)
                 // Результат поиска по регулярному выражению и его группа —
                 // туда же, и это ИЗМЕРЕНО отдельно, а не выведено по
@@ -1468,27 +1442,14 @@ impl BslValue {
                 BslObject::ReservedDataReader => TypeId::DataReader,
                 BslObject::ReservedDataWriter => TypeId::DataWriter,
                 BslObject::ReservedDataReadResult => TypeId::DataReadResult,
-                BslObject::DomBuilder => TypeId::DomBuilder,
-                BslObject::DomWriter => TypeId::DomWriter,
-                BslObject::DomNode(n, _) => match n.kind() {
-                    crate::dom::DomKind::Document => TypeId::DomDocument,
-                    crate::dom::DomKind::Element => TypeId::DomElement,
-                    crate::dom::DomKind::Attribute => TypeId::DomAttribute,
-                    crate::dom::DomKind::Text => TypeId::DomText,
-                    crate::dom::DomKind::CdataSection => TypeId::DomCdataSection,
-                    crate::dom::DomKind::Comment => TypeId::DomComment,
-                    crate::dom::DomKind::ProcessingInstruction => TypeId::DomProcessingInstruction,
-                    crate::dom::DomKind::EntityReference => TypeId::DomEntityReference,
-                },
-                BslObject::XPathResolver(_) => TypeId::DomNamespaceResolver,
-                BslObject::XPathExpression(_) => TypeId::XPathExpression,
-                BslObject::XPathResult(_) => TypeId::XPathResult,
+                BslObject::ReservedDomBuilder
+                | BslObject::ReservedDomNode
+                | BslObject::ReservedDomWriter
+                | BslObject::ReservedDomList
+                | BslObject::ReservedXPathResolver
+                | BslObject::ReservedXPathExpression
+                | BslObject::ReservedXPathResult => TypeId::DomBuilder,
                 BslObject::ReservedRegexGroup(_) => TypeId::RegexMatchGroup,
-                BslObject::DomList(kind, _) => match kind {
-                    crate::dom::DomListKind::Nodes(_) => TypeId::DomNodeList,
-                    crate::dom::DomListKind::Attributes(_) => TypeId::DomAttributeMap,
-                    crate::dom::DomListKind::Elements(_) => TypeId::DomElementList,
-                },
                 BslObject::ReservedXsBuilder
                 | BslObject::ReservedXsSchemaSet
                 | BslObject::ReservedXsComponent
@@ -1731,24 +1692,6 @@ impl BslValue {
 
     pub fn new_xml_writer() -> Self {
         BslValue::Object(Rc::new(BslObject::XmlWriter(std::cell::RefCell::new(None))))
-    }
-
-    /// `Новый ПостроительDOM`. Состояния у построителя нет — вся работа
-    /// происходит в `Прочитать(ЧтениеXML)`.
-    pub fn new_dom_builder() -> Self {
-        BslValue::Object(Rc::new(BslObject::DomBuilder))
-    }
-
-    /// `Новый ДокументDOM` — пустой документ: приёмник фабричных методов и
-    /// мутации. ИЗМЕРЕНО, что платформа его строит и что детей у него ноль.
-    pub fn new_dom_document() -> Self {
-        dom::new_document()
-    }
-
-    /// `Новый ЗаписьDOM`. Состояния у писателя нет — узел и приёмник
-    /// приходят аргументами `Записать`.
-    pub fn new_dom_writer() -> Self {
-        dom::new_writer()
     }
 
     /// `Новый ПараметрыЗаписиXML([Кодировка][, Версия][, ИспользоватьОтступ])`.
@@ -2223,17 +2166,6 @@ impl BslValue {
                 // общий `index_as_usize`: у буфера дробная позиция не
                 // ошибка, а отбрасывается к нулю (измерено).
                 BslObject::BinaryBuffer(_) => binbuf::get_byte(self, idx),
-                // Индекс за границей списка DOM — ошибка, а не
-                // `Неопределено` (измерено на `ДочерниеУзлы[99]`,
-                // `Атрибуты[9]` и на отрицательном индексе).
-                BslObject::DomList(kind, doc) => {
-                    let i = Self::index_as_usize(idx)?;
-                    let node = kind.get(i).ok_or(RtError::IndexOutOfBounds {
-                        index: i as i64,
-                        len: kind.len(),
-                    })?;
-                    Ok(dom::node_value(&node, doc))
-                }
                 _ => Err(RtError::NotIndexable),
             },
             _ => Err(RtError::NotIndexable),
@@ -2293,20 +2225,13 @@ impl BslValue {
                 // входит, и своего эталона у него ещё нет.)
                 BslObject::BinaryBuffer(..) => Err(RtError::NotIndexable),
                 // Три коллекции DOM — настоящие коллекции: `Количество()`
-                // и `Для Каждого` по ним платформа принимает (измерено на
-                // `ДочерниеУзлы`, `Атрибуты` и результате поиска). Сам
-                // узел и построитель — нет.
-                BslObject::DomList(kind, _) => Ok(kind.len()),
-                BslObject::DomBuilder | BslObject::DomWriter | BslObject::DomNode(..) => {
-                    Err(RtError::NotIndexable)
-                }
-                // Результат XPath коллекцией не считается: `Количество()`
-                // у него платформа отвергает (измерено), а число узлов в
-                // снимке отдаёт `РазмерСнимка`. Разыменователь и выражение
-                // — тем более.
-                BslObject::XPathResolver(_)
-                | BslObject::XPathExpression(_)
-                | BslObject::XPathResult(_)
+                BslObject::ReservedDomBuilder
+                | BslObject::ReservedDomNode
+                | BslObject::ReservedDomWriter
+                | BslObject::ReservedDomList
+                | BslObject::ReservedXPathResolver
+                | BslObject::ReservedXPathExpression
+                | BslObject::ReservedXPathResult
                 | BslObject::ReservedRegexGroup(_) => Err(RtError::NotIndexable),
                 BslObject::ReservedXsBuilder
                 | BslObject::ReservedXsSchemaSet
@@ -2747,8 +2672,6 @@ impl BslValue {
                 BslObject::ReservedTextDocument | BslObject::ReservedTextDocParams => {
                     Err(RtError::NotAnObject)
                 }
-                BslObject::DomNode(..) => dom::get_property(self, name),
-                BslObject::XPathResult(_) => xpath::get_property(self, name),
                 BslObject::KeyValuePair(k, v) => {
                     if name.eq_ignore_ascii_case("Ключ") || name.eq_ignore_ascii_case("Key") {
                         Ok(k.clone())
@@ -2813,9 +2736,6 @@ impl BslValue {
                     }
                 }
                 // Узлы DOM: пишутся значение, данные и текстовое
-                // содержимое, а имя узла только читается — см.
-                // `dom::set_property`.
-                BslObject::DomNode(..) => dom::set_property(self, name, &val),
                 BslObject::TableRow(data, row_id) => {
                     let mut data = data.borrow_mut();
                     let col = data
@@ -3486,11 +3406,6 @@ impl PartialEq for BslValue {
                 // равны, откуда бы они ни пришли.
                 (BslObject::Uuid(x), BslObject::Uuid(y)) => x == y,
                 // Узлы DOM — ССЫЛКИ на место в дереве: обёртка каждый раз
-                // новая, а равенство идёт по самому узлу. ИЗМЕРЕНО:
-                // `Э.ПервыйДочерний = Э.ДочерниеУзлы[0]` — «Да», а два
-                // обращения к `ДочерниеУзлы` дают «Нет», поэтому у
-                // `DomList` такой ветки НЕТ намеренно.
-                (BslObject::DomNode(x, _), BslObject::DomNode(y, _)) => Rc::ptr_eq(x, y),
                 _ => false,
             },
             _ => false,
@@ -3528,10 +3443,22 @@ impl Hash for BslValue {
             BslValue::Object(o) => match &**o {
                 BslObject::VstrOpaque(text) => text.hash(state),
                 BslObject::BinaryData(bytes) => bytes.hash(state),
-                // Узел хэширует АДРЕС УЗЛА, а не обёртки: иначе два равных
-                // по `PartialEq` выше значения давали бы разные хэши и
-                // ключ `Соответствие` терялся бы.
-                BslObject::DomNode(n, _) => Rc::as_ptr(n).hash(state),
+                // Внешний объект хэширует то же, чем равняется: ключ места
+                // (`identity_key`), содержимое (типы-значения с `value_eq`
+                // хэшируют своё представление) — и только при чистом
+                // тождестве адрес обёртки. Иначе два равных по `PartialEq`
+                // выше значения давали бы разные хэши и ключ `Соответствие`
+                // терялся бы.
+                BslObject::Extension(object) => {
+                    std::ptr::from_ref(object.type_descriptor()).hash(state);
+                    if let Some(key) = object.identity_key() {
+                        key.hash(state);
+                    } else if object.value_eq(object).is_some() {
+                        object.display().hash(state);
+                    } else {
+                        Rc::as_ptr(o).hash(state);
+                    }
+                }
                 _ => Rc::as_ptr(o).hash(state),
             },
             BslValue::Skipped => {}
@@ -3617,18 +3544,13 @@ impl fmt::Display for BslValue {
                 // типа: `Строка(УИД)` — это и есть его строка (фикстура
                 // `uuid`, эталон с платформы).
                 BslObject::Uuid(b) => write!(f, "{}", uuid::format(b)),
-                // Узлы и коллекции DOM печатаются слитным именем — то же,
-                // что отдаёт `type_name`, поэтому одна ветка на всех.
-                BslObject::DomBuilder
-                | BslObject::DomWriter
-                | BslObject::DomNode(..)
-                | BslObject::DomList(..)
-                // Значения XPath тоже печатаются слитным именем: измерено
-                // на всех трёх («РезультатXPath», «ВыражениеXPath»,
-                // «РазыменовательПространствИменDOM»).
-                | BslObject::XPathResolver(_)
-                | BslObject::XPathExpression(_)
-                | BslObject::XPathResult(_)
+                BslObject::ReservedDomBuilder
+                | BslObject::ReservedDomNode
+                | BslObject::ReservedDomWriter
+                | BslObject::ReservedDomList
+                | BslObject::ReservedXPathResolver
+                | BslObject::ReservedXPathExpression
+                | BslObject::ReservedXPathResult
                 | BslObject::ReservedRegexGroup(_) => write!(f, "{}", self.type_name()),
                 // Единственный объект, который печатается СОДЕРЖИМЫМ, а не
                 // именем: см. `binary_data_display`.

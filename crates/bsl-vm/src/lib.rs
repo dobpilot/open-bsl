@@ -1800,19 +1800,49 @@ fn step_cold(
             frames[frame_idx].pc += 1;
         }
         Instr::NewDomBuilder { dst } => {
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, BslValue::new_dom_builder())?;
-            frames[frame_idx].pc += 1;
+            #[cfg(not(feature = "xml"))]
+            {
+                let _ = dst;
+                return Err(RtError::Component(
+                    "ПостроительDOM требует компонент bsl-xml".to_string(),
+                ));
+            }
+            #[cfg(feature = "xml")]
+            {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, bsl_xml::new_dom_builder())?;
+                frames[frame_idx].pc += 1;
+            }
         }
         Instr::NewDomDocument { dst } => {
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, BslValue::new_dom_document())?;
-            frames[frame_idx].pc += 1;
+            #[cfg(not(feature = "xml"))]
+            {
+                let _ = dst;
+                return Err(RtError::Component(
+                    "ДокументDOM требует компонент bsl-xml".to_string(),
+                ));
+            }
+            #[cfg(feature = "xml")]
+            {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, bsl_xml::new_dom_document())?;
+                frames[frame_idx].pc += 1;
+            }
         }
         Instr::NewDomWriter { dst } => {
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, BslValue::new_dom_writer())?;
-            frames[frame_idx].pc += 1;
+            #[cfg(not(feature = "xml"))]
+            {
+                let _ = dst;
+                return Err(RtError::Component(
+                    "ЗаписьDOM требует компонент bsl-xml".to_string(),
+                ));
+            }
+            #[cfg(feature = "xml")]
+            {
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, bsl_xml::new_dom_writer())?;
+                frames[frame_idx].pc += 1;
+            }
         }
         Instr::NewXsBuilder { dst } => {
             #[cfg(not(feature = "xml"))]
@@ -1900,11 +1930,21 @@ fn step_cold(
             }
         }
         Instr::NewDomNsResolver { dst, node } => {
-            let node = reg_load(stack, frames[frame_idx].reg_index(node))?;
-            let resolver = bsl_rt::xpath::new_ns_resolver(&node)?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, resolver)?;
-            frames[frame_idx].pc += 1;
+            #[cfg(not(feature = "xml"))]
+            {
+                let _ = (dst, node);
+                return Err(RtError::Component(
+                    "РазыменовательПространствИменDOM требует компонент bsl-xml".to_string(),
+                ));
+            }
+            #[cfg(feature = "xml")]
+            {
+                let node = reg_load(stack, frames[frame_idx].reg_index(node))?;
+                let resolver = bsl_xml::new_ns_resolver(&node)?;
+                let d = frames[frame_idx].reg_index(dst);
+                reg_store(stack, d, resolver)?;
+                frames[frame_idx].pc += 1;
+            }
         }
         Instr::NewXmlExpandedName { dst, uri, local } => {
             #[cfg(not(feature = "xml"))]

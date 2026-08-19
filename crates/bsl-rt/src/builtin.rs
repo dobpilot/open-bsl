@@ -1970,12 +1970,7 @@ pub fn call_builtin_method(
         // `ТекстовыйДокумент` — сохранить файл. Одно имя, разный смысл по
         // получателю, как и у `Закрыть`.
         BuiltinMethod::Write => {
-            if crate::dom::is_dom_writer(obj) {
-                // У `ЗаписьDOM` `Записать(Узел, ЗаписьXML)` — ровно два
-                // аргумента, и узел ПЕРВЫМ (измерено: обратный порядок
-                // платформа отвергает).
-                crate::dom::write(obj, args)
-            } else if crate::binbuf::is_buffer(obj) {
+            if crate::binbuf::is_buffer(obj) {
                 // У буфера `Записать(Позиция, Источник[, Количество])` —
                 // блочная запись; арность и границы проверяет он сам.
                 crate::binbuf::write_buffer(obj, args)
@@ -2024,11 +2019,7 @@ pub fn call_builtin_method(
             Ok(BslValue::Undefined)
         }
         BuiltinMethod::ReadNext => {
-            if crate::dom::is_dom_builder(obj) {
-                // У построителя DOM `Прочитать(ЧтениеXML)` — не шаг по
-                // потоку, а разбор всего остатка документа в дерево.
-                crate::dom::read(obj, args)
-            } else if crate::spreadsheet::is_spread_document(obj) {
+            if crate::spreadsheet::is_spread_document(obj) {
                 crate::spreadsheet::read(obj, args)?;
                 Ok(BslValue::Undefined)
             } else if crate::xml::is_xml_reader(obj) {
@@ -2163,40 +2154,122 @@ pub fn call_builtin_method(
         BuiltinMethod::XmlAttributeName => crate::xml::attribute_name(obj, args),
         BuiltinMethod::XmlAttributeValue => crate::xml::attribute_value(obj, args),
         BuiltinMethod::XmlMoveToContent => crate::xml::move_to_content(obj),
-        BuiltinMethod::DomHasChildNodes => crate::dom::has_child_nodes(obj),
-        BuiltinMethod::DomHasAttributes => crate::dom::has_attributes(obj),
-        BuiltinMethod::DomGetAttribute => crate::dom::get_attribute(obj, args),
-        BuiltinMethod::DomHasAttribute => crate::dom::has_attribute(obj, args),
-        BuiltinMethod::DomGetAttributeNode => crate::dom::get_attribute_node(obj, args),
-        BuiltinMethod::DomGetElementsByName => crate::dom::get_elements_by_name(obj, args),
-        BuiltinMethod::DomGetElementById => crate::dom::get_element_by_id(obj, args),
-        BuiltinMethod::DomCreateElement => crate::dom::create_element(obj, args),
-        BuiltinMethod::DomCreateAttribute => crate::dom::create_attribute(obj, args),
-        BuiltinMethod::DomCreateTextNode => crate::dom::create_text_node(obj, args),
-        BuiltinMethod::DomCreateCdataSection => crate::dom::create_cdata_section(obj, args),
-        BuiltinMethod::DomCreateComment => crate::dom::create_comment(obj, args),
-        BuiltinMethod::DomCreateProcessingInstruction => {
-            crate::dom::create_processing_instruction(obj, args)
-        }
-        BuiltinMethod::DomAppendChild => crate::dom::append_child(obj, args),
-        BuiltinMethod::DomInsertBefore => crate::dom::insert_before(obj, args),
-        BuiltinMethod::DomRemoveChild => crate::dom::remove_child(obj, args),
-        BuiltinMethod::DomReplaceChild => crate::dom::replace_child(obj, args),
-        BuiltinMethod::DomSetAttribute => crate::dom::set_attribute(obj, args),
-        BuiltinMethod::DomRemoveAttribute => crate::dom::remove_attribute(obj, args),
-        BuiltinMethod::DomSetAttributeNode => crate::dom::set_attribute_node(obj, args),
-        BuiltinMethod::DomRemoveAttributeNode => crate::dom::remove_attribute_node(obj, args),
-        BuiltinMethod::XPathEvaluate => crate::xpath::evaluate(obj, args),
-        BuiltinMethod::XPathCreateExpression => crate::xpath::create_expression(obj, args),
-        BuiltinMethod::XPathCreateNsResolver => crate::xpath::create_ns_resolver(obj, args),
-        BuiltinMethod::XPathLookupNamespaceUri => crate::xpath::lookup_namespace_uri(obj, args),
-        BuiltinMethod::XPathNext => crate::xpath::next_node(obj, args),
+        BuiltinMethod::DomHasChildNodes => Err(RtError::MethodNotApplicable {
+            method: "ЕстьДочерниеУзлы",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::DomHasAttributes => Err(RtError::MethodNotApplicable {
+            method: "ЕстьАтрибуты",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::DomGetAttribute => Err(RtError::MethodNotApplicable {
+            method: "ПолучитьАтрибут",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::DomHasAttribute => Err(RtError::MethodNotApplicable {
+            method: "ЕстьАтрибут",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::DomGetAttributeNode => Err(RtError::MethodNotApplicable {
+            method: "ПолучитьУзелАтрибута",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::DomGetElementsByName => Err(RtError::MethodNotApplicable {
+            method: "ПолучитьЭлементыПоИмени",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::DomGetElementById => Err(RtError::MethodNotApplicable {
+            method: "ПолучитьЭлементПоИдентификатору",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::DomCreateElement => Err(RtError::MethodNotApplicable {
+            method: "СоздатьЭлемент",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::DomCreateAttribute => Err(RtError::MethodNotApplicable {
+            method: "СоздатьАтрибут",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::DomCreateTextNode => Err(RtError::MethodNotApplicable {
+            method: "СоздатьТекстовыйУзел",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::DomCreateCdataSection => Err(RtError::MethodNotApplicable {
+            method: "СоздатьСекциюCDATA",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::DomCreateComment => Err(RtError::MethodNotApplicable {
+            method: "СоздатьКомментарий",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::DomCreateProcessingInstruction => Err(RtError::MethodNotApplicable {
+            method: "СоздатьИнструкциюОбработки",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::DomAppendChild => Err(RtError::MethodNotApplicable {
+            method: "ДобавитьДочерний",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::DomInsertBefore => Err(RtError::MethodNotApplicable {
+            method: "ВставитьПеред",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::DomRemoveChild => Err(RtError::MethodNotApplicable {
+            method: "УдалитьДочерний",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::DomReplaceChild => Err(RtError::MethodNotApplicable {
+            method: "ЗаменитьДочерний",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::DomSetAttribute => Err(RtError::MethodNotApplicable {
+            method: "УстановитьАтрибут",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::DomRemoveAttribute => Err(RtError::MethodNotApplicable {
+            method: "УдалитьАтрибут",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::DomSetAttributeNode => Err(RtError::MethodNotApplicable {
+            method: "УстановитьУзелАтрибута",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::DomRemoveAttributeNode => Err(RtError::MethodNotApplicable {
+            method: "УдалитьУзелАтрибута",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::XPathEvaluate => Err(RtError::MethodNotApplicable {
+            method: "ВычислитьВыражениеXPath",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::XPathCreateExpression => Err(RtError::MethodNotApplicable {
+            method: "СоздатьВыражениеXPath",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::XPathCreateNsResolver => Err(RtError::MethodNotApplicable {
+            method: "СоздатьРазыменовательПИ",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::XPathLookupNamespaceUri => Err(RtError::MethodNotApplicable {
+            method: "НайтиURIПространстваИмен",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::XPathNext => Err(RtError::MethodNotApplicable {
+            method: "ПолучитьСледующий",
+            receiver: obj.type_name(),
+        }),
         BuiltinMethod::RegexGetGroups => Err(RtError::MethodNotApplicable {
             method: "ПолучитьГруппы",
             receiver: obj.type_name(),
         }),
-        BuiltinMethod::XPathSnapshotItem => crate::xpath::snapshot_item(obj, args),
-        BuiltinMethod::XPathEvaluateExpression => crate::xpath::evaluate_expression(obj, args),
+        BuiltinMethod::XPathSnapshotItem => Err(RtError::MethodNotApplicable {
+            method: "ЭлементСнимка",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::XPathEvaluateExpression => Err(RtError::MethodNotApplicable {
+            method: "Вычислить",
+            receiver: obj.type_name(),
+        }),
         // `СоздатьСхемуXML` — метод построителя, ставшего внешним объектом
         // компонента bsl-xml; сюда доходит только чужой получатель.
         BuiltinMethod::CreateXmlSchema => Err(RtError::MethodNotApplicable {

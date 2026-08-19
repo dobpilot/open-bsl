@@ -216,9 +216,11 @@ use std::cell::Cell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::dom::{DomKind, DomNode};
-use crate::object::BslObject;
-use crate::{BslString, BslValue, EnumValue, RtError, RtResult};
+use crate::dom::{DomKind, DomNode, DomNodeObject};
+use bsl_rt::{
+    BslNumber, BslString, BslValue, CallContext, EnumValue, ObjectProtocol, RtError, RtResult,
+    TypeDescriptor, TypeId,
+};
 
 fn bad(what: impl Into<String>) -> RtError {
     RtError::XPath(what.into())
@@ -2168,14 +2170,11 @@ fn make_result(value: XValue, requested: Option<ResultKind>, doc: Rc<DomNode>) -
 // --- Приём аргументов -----------------------------------------------------
 
 fn as_document(v: &BslValue, method: &'static str) -> RtResult<Rc<DomNode>> {
-    match v {
-        BslValue::Object(o) => match &**o {
-            BslObject::DomNode(node, _) if node.kind() == DomKind::Document => Ok(node.clone()),
-            _ => Err(RtError::MethodNotApplicable {
-                method,
-                receiver: v.type_name(),
-            }),
-        },
+    match v
+        .object_ref()
+        .and_then(|object| object.downcast_ref::<DomNodeObject>())
+    {
+        Some(node) if node.node.kind() == DomKind::Document => Ok(node.node.clone()),
         _ => Err(RtError::MethodNotApplicable {
             method,
             receiver: v.type_name(),
@@ -2184,34 +2183,23 @@ fn as_document(v: &BslValue, method: &'static str) -> RtResult<Rc<DomNode>> {
 }
 
 fn as_node(v: &BslValue) -> Option<(Rc<DomNode>, Rc<DomNode>)> {
-    match v {
-        BslValue::Object(o) => match &**o {
-            BslObject::DomNode(node, doc) => Some((node.clone(), doc.clone())),
-            _ => None,
-        },
-        _ => None,
-    }
+    v.object_ref()
+        .and_then(|object| object.downcast_ref::<DomNodeObject>())
+        .map(|node| (node.node.clone(), node.doc.clone()))
 }
 
 fn as_resolver(v: &BslValue) -> Option<Rc<XPathResolver>> {
-    match v {
-        BslValue::Object(o) => match &**o {
-            BslObject::XPathResolver(r) => Some(r.clone()),
-            _ => None,
-        },
-        _ => None,
-    }
+    v.object_ref()
+        .and_then(|object| object.downcast_ref::<ResolverObject>())
+        .map(|resolver| resolver.resolver.clone())
 }
 
 fn as_result(v: &BslValue, method: &'static str) -> RtResult<Rc<XPathResult>> {
-    match v {
-        BslValue::Object(o) => match &**o {
-            BslObject::XPathResult(r) => Ok(r.clone()),
-            _ => Err(RtError::MethodNotApplicable {
-                method,
-                receiver: v.type_name(),
-            }),
-        },
+    match v
+        .object_ref()
+        .and_then(|object| object.downcast_ref::<XPathResultObject>())
+    {
+        Some(result) => Ok(result.result.clone()),
         _ => Err(RtError::MethodNotApplicable {
             method,
             receiver: v.type_name(),
@@ -2297,9 +2285,9 @@ pub fn create_ns_resolver(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValu
             None => (None, doc),
         },
     };
-    Ok(BslValue::Object(Rc::new(BslObject::XPathResolver(
-        Rc::new(XPathResolver { scope, doc }),
-    ))))
+    Ok(BslValue::new_object(ResolverObject {
+        resolver: Rc::new(XPathResolver { scope, doc }),
+    }))
 }
 
 /// `Новый РазыменовательПространствИменDOM(Узел)`.
@@ -2315,12 +2303,12 @@ pub fn new_ns_resolver(arg: &BslValue) -> RtResult<BslValue> {
             op: "Новый РазыменовательПространствИменDOM",
         });
     };
-    Ok(BslValue::Object(Rc::new(BslObject::XPathResolver(
-        Rc::new(XPathResolver {
+    Ok(BslValue::new_object(ResolverObject {
+        resolver: Rc::new(XPathResolver {
             scope: Some(node),
             doc,
         }),
-    ))))
+    }))
 }
 
 fn document_element(doc: &Rc<DomNode>) -> Option<Rc<DomNode>> {
@@ -2382,9 +2370,9 @@ pub fn create_expression(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue
         });
     };
     let ast = parse(&text)?;
-    Ok(BslValue::Object(Rc::new(BslObject::XPathExpression(
-        Rc::new(XPathExpression { ast, resolver, doc }),
-    ))))
+    Ok(BslValue::new_object(ExpressionObject {
+        expression: Rc::new(XPathExpression { ast, resolver, doc }),
+    }))
 }
 
 /// `ДокументDOM.ВычислитьВыражениеXPath(Выражение, Узел, Разыменователь[, Вид])`.
@@ -2421,16 +2409,11 @@ pub fn evaluate(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
 ///
 /// Те же, что у [`evaluate`], кроме разбора: выражение уже разобрано.
 pub fn evaluate_expression(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
-    let expr = match obj {
-        BslValue::Object(o) => match &**o {
-            BslObject::XPathExpression(e) => e.clone(),
-            _ => {
-                return Err(RtError::MethodNotApplicable {
-                    method: "Вычислить",
-                    receiver: obj.type_name(),
-                })
-            }
-        },
+    let expr = match obj
+        .object_ref()
+        .and_then(|object| object.downcast_ref::<ExpressionObject>())
+    {
+        Some(expression) => expression.expression.clone(),
         _ => {
             return Err(RtError::MethodNotApplicable {
                 method: "Вычислить",
@@ -2468,9 +2451,9 @@ fn run(
         XValue::Nodes(nodes) => XValue::Nodes(evaluator.sort_unique(nodes)),
         other => other,
     };
-    Ok(BslValue::Object(Rc::new(BslObject::XPathResult(Rc::new(
-        make_result(value, kind, doc),
-    )))))
+    Ok(BslValue::new_object(XPathResultObject {
+        result: Rc::new(make_result(value, kind, doc)),
+    }))
 }
 
 /// `РезультатXPath.ПолучитьСледующий()` / `IterateNext`.
@@ -2554,7 +2537,7 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
         if result.kind != ResultKind::Number {
             return Err(bad("`ЧисловоеЗначение` есть только у числового результата"));
         }
-        return match bsl_number::BslNumber::from_f64(result.number) {
+        return match BslNumber::from_f64(result.number) {
             Ok(n) => Ok(BslValue::Number(n)),
             // Бесконечность и `NaN` десятичным числом не представимы —
             // см. расхождения в заголовке модуля.
@@ -2594,8 +2577,8 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
         if !result.kind.is_snapshot() {
             return Err(bad("`РазмерСнимка` есть только у результата-снимка"));
         }
-        return Ok(BslValue::Number(bsl_number::BslNumber::from_i64(
-            result.nodes.len() as i64,
+        return Ok(BslValue::Number(BslNumber::from_i64(
+            result.nodes.len() as i64
         )));
     }
     if is("НеверноеСостояниеИтератора", "InvalidIteratorState") {
@@ -2606,15 +2589,144 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
     Err(RtError::UnknownColumn(name.to_string()))
 }
 
+// --- объектный протокол -----------------------------------------------------
+
+static RESOLVER_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "РазыменовательПространствИменDOM",
+    legacy_type_id: Some(TypeId::DomNamespaceResolver),
+};
+
+static EXPRESSION_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "ВыражениеXPath",
+    legacy_type_id: Some(TypeId::XPathExpression),
+};
+
+static RESULT_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "РезультатXPath",
+    legacy_type_id: Some(TypeId::XPathResult),
+};
+
+/// `РазыменовательПространствИменDOM`.
+#[derive(Debug)]
+pub struct ResolverObject {
+    resolver: Rc<XPathResolver>,
+}
+
+/// `ВыражениеXPath` — разобранный текст выражения со своим разыменователем.
+#[derive(Debug)]
+pub struct ExpressionObject {
+    expression: Rc<XPathExpression>,
+}
+
+/// `РезультатXPath` — снимок вычисления.
+#[derive(Debug)]
+pub struct XPathResultObject {
+    result: Rc<XPathResult>,
+}
+
+impl ObjectProtocol for ResolverObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &RESOLVER_TYPE
+    }
+
+    fn call_method(
+        &self,
+        name: &str,
+        arguments: &[BslValue],
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<BslValue> {
+        if name.eq_ignore_ascii_case("НайтиURIПространстваИмен")
+            || name.eq_ignore_ascii_case("LookupNamespaceURI")
+        {
+            let receiver = BslValue::new_object(ResolverObject {
+                resolver: self.resolver.clone(),
+            });
+            lookup_namespace_uri(&receiver, arguments)
+        } else {
+            Err(RtError::UnknownMethod {
+                method: name.to_string(),
+                receiver: RESOLVER_TYPE.name,
+            })
+        }
+    }
+}
+
+impl ObjectProtocol for ExpressionObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &EXPRESSION_TYPE
+    }
+
+    fn call_method(
+        &self,
+        name: &str,
+        arguments: &[BslValue],
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<BslValue> {
+        if name.eq_ignore_ascii_case("Вычислить") || name.eq_ignore_ascii_case("Evaluate")
+        {
+            let receiver = BslValue::new_object(ExpressionObject {
+                expression: self.expression.clone(),
+            });
+            evaluate_expression(&receiver, arguments)
+        } else {
+            Err(RtError::UnknownMethod {
+                method: name.to_string(),
+                receiver: EXPRESSION_TYPE.name,
+            })
+        }
+    }
+}
+
+impl ObjectProtocol for XPathResultObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &RESULT_TYPE
+    }
+
+    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
+        let receiver = BslValue::new_object(XPathResultObject {
+            result: self.result.clone(),
+        });
+        get_property(&receiver, name)
+    }
+
+    fn call_method(
+        &self,
+        name: &str,
+        arguments: &[BslValue],
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<BslValue> {
+        let receiver = BslValue::new_object(XPathResultObject {
+            result: self.result.clone(),
+        });
+        if name.eq_ignore_ascii_case("ПолучитьСледующий")
+            || name.eq_ignore_ascii_case("IterateNext")
+        {
+            next_node(&receiver, arguments)
+        } else if name.eq_ignore_ascii_case("ЭлементСнимка")
+            || name.eq_ignore_ascii_case("SnapshotItem")
+        {
+            snapshot_item(&receiver, arguments)
+        } else {
+            Err(RtError::UnknownMethod {
+                method: name.to_string(),
+                receiver: RESULT_TYPE.name,
+            })
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::dom;
 
     fn document_of(text: &str) -> BslValue {
-        let builder = BslValue::new_dom_builder();
+        let builder = dom::new_builder();
         let reader = BslValue::new_xml_reader();
-        crate::xml::set_string(&reader, &[str_value(text)]).unwrap();
+        bsl_rt::xml::set_string(&reader, &[str_value(text)]).unwrap();
         dom::read(&builder, &[reader]).unwrap()
     }
 
@@ -3125,7 +3237,7 @@ mod tests {
         let snapshot = ask("count(//*)", EnumValue::XPathOrderedNodeSnapshot);
         assert_eq!(
             get_property(&snapshot, "РазмерСнимка").unwrap(),
-            BslValue::Number(bsl_number::BslNumber::from_i64(0))
+            BslValue::Number(BslNumber::from_i64(0))
         );
         assert_eq!(
             snapshot_item(&snapshot, &[num(0)]).unwrap(),
@@ -3136,7 +3248,7 @@ mod tests {
         let nodes = ask("//к:товар", EnumValue::XPathOrderedNodeSnapshot);
         assert_eq!(
             get_property(&nodes, "РазмерСнимка").unwrap(),
-            BslValue::Number(bsl_number::BslNumber::from_i64(2))
+            BslValue::Number(BslNumber::from_i64(2))
         );
         assert_eq!(
             describe(&snapshot_item(&nodes, &[num(1)]).unwrap()),
@@ -3159,7 +3271,7 @@ mod tests {
     }
 
     fn num(v: i64) -> BslValue {
-        BslValue::Number(bsl_number::BslNumber::from_i64(v))
+        BslValue::Number(BslNumber::from_i64(v))
     }
 
     /// Члены разграничены по виду результата — измерено на платформе.
