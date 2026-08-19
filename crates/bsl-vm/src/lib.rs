@@ -369,6 +369,12 @@ struct LinkedComponents<'a> {
     registry: Option<&'a bsl_rt::RuntimeRegistry>,
     functions: Vec<Vec<Option<bsl_rt::ComponentCall>>>,
     constructors: Vec<Vec<Option<bsl_rt::ComponentCall>>>,
+    /// Обработчики встроенных методов по номеру имени программы. Открытый
+    /// `CallObjectMethod` исполняется миллионами, и поиск по строке на
+    /// каждом вызове недопустим: измерено флеймграфом, до трёх четвертей
+    /// времени `csv_write` уходило в `to_uppercase` внутри
+    /// `BuiltinMethod::lookup`. Таблица строится один раз при связывании.
+    builtin_methods: Vec<Option<bsl_rt::BuiltinMethod>>,
 }
 
 impl LinkedComponents<'_> {
@@ -390,6 +396,13 @@ impl LinkedComponents<'_> {
             .ok_or(RtError::InvalidBytecode(
                 "CreateObject не связан с конструктором реестра",
             ))
+    }
+
+    /// Обработчик встроенного метода по номеру имени — без строковых
+    /// операций на вызове. `None` — имя не из таблицы ядра: для нативного
+    /// получателя это ошибка «метод не применим».
+    fn builtin_method(&self, name: bsl_rt::NameId) -> Option<bsl_rt::BuiltinMethod> {
+        self.builtin_methods.get(name.index()).copied().flatten()
     }
 }
 
@@ -526,10 +539,20 @@ fn link_components<'a>(
         functions.push(function_slots);
         constructors.push(constructor_slots);
     }
+    // Диспетчеризация открытых методов: карта «номер имени → обработчик»
+    // строится здесь один раз, чтобы `CallObjectMethod` не искал метод по
+    // строке на каждом вызове. Сама `lookup` дешёвая (хеш-карта на
+    // процесс), поэтому связывание фрагмента `Выполнить` она не утяжеляет.
+    let builtin_methods = program
+        .names
+        .iter()
+        .map(|name| bsl_rt::BuiltinMethod::lookup(name))
+        .collect();
     Ok(LinkedComponents {
         registry,
         functions,
         constructors,
+        builtin_methods,
     })
 }
 
@@ -1746,8 +1769,9 @@ fn step_cold(
         } => {
             let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
             let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
-            let method_name = field_name(program, bsl_rt::NameId::from_index(method as u32))?;
+            let name_id = bsl_rt::NameId::from_index(method as u32);
             let value = if let Some(object) = ov.object_ref() {
+                let method_name = field_name(program, name_id)?;
                 let mut context = bsl_rt::CallContext::new(
                     runtime_shapes,
                     &mut *host.stdout,
@@ -1756,12 +1780,15 @@ fn step_cold(
                 );
                 object.call_method(method_name, args.as_slice(), &mut context)?
             } else {
-                let builtin = bsl_rt::BuiltinMethod::lookup(method_name).ok_or_else(|| {
-                    RtError::UnknownMethod {
-                        method: method_name.to_string(),
-                        receiver: ov.type_name(),
-                    }
-                })?;
+                // Нативный получатель: обработчик по номеру имени из таблицы
+                // связывания, строка нужна только тексту ошибки.
+                let builtin =
+                    linked
+                        .builtin_method(name_id)
+                        .ok_or_else(|| RtError::UnknownMethod {
+                            method: field_name(program, name_id).unwrap_or("?").to_string(),
+                            receiver: ov.type_name(),
+                        })?;
                 bsl_rt::call_builtin_method_ctx(builtin, &ov, args.as_slice(), runtime_shapes)?
             };
             let destination = frames[frame_idx].reg_index(dst);

@@ -1309,12 +1309,24 @@ pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
 
 impl BuiltinMethod {
     /// Регистронезависимый поиск по [`BUILTIN_METHOD_NAMES`].
+    ///
+    /// Ищет по хеш-карте, построенной один раз на процесс: линейный проход
+    /// с `to_uppercase` каждой строки таблицы стоил сотни аллокаций на
+    /// обращение, а `lookup` зовут не только при резолвинге, но и при
+    /// связывании каждого фрагмента `Выполнить`/`Вычислить`. При совпадении
+    /// имён карта сохраняет семантику прежнего `find` — победитель тот, кто
+    /// в таблице раньше.
     pub fn lookup(name: &str) -> Option<Self> {
-        let upper = name.to_uppercase();
-        BUILTIN_METHOD_NAMES
-            .iter()
-            .find(|(n, _)| n.to_uppercase() == upper)
-            .map(|(_, m)| *m)
+        static BY_UPPER: std::sync::OnceLock<std::collections::HashMap<String, BuiltinMethod>> =
+            std::sync::OnceLock::new();
+        let map = BY_UPPER.get_or_init(|| {
+            let mut map = std::collections::HashMap::with_capacity(BUILTIN_METHOD_NAMES.len());
+            for (table_name, method) in BUILTIN_METHOD_NAMES {
+                map.entry(table_name.to_uppercase()).or_insert(*method);
+            }
+            map
+        });
+        map.get(&name.to_uppercase()).copied()
     }
 
     /// Основное русское имя для перехода legacy-`CallMethod` к открытому
