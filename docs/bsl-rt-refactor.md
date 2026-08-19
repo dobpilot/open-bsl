@@ -85,10 +85,10 @@ XDTO в `bsl-xml` не должно создавать зависимость `b
 bsl-binbuf       -> bsl-rt
 bsl-stream       -> bsl-rt + bsl-binbuf
 bsl-json         -> bsl-rt
-bsl-xml          -> bsl-rt
+bsl-xml          -> bsl-rt (несёт и парсерное ядро `core`)
 bsl-pdf          -> bsl-rt + flate2
 bsl-zip          -> bsl-rt + zip + flate2
-bsl-spreadsheet  -> bsl-rt + bsl-xml + bsl-pdf + bsl-zip
+bsl-spreadsheet  -> bsl-rt + bsl-format + bsl-xml + bsl-pdf + zip
 bsl-textdoc      -> bsl-rt
 bsl-regexp       -> bsl-rt
 ```
