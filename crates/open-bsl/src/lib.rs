@@ -11,7 +11,8 @@ use std::sync::Arc;
 pub use bsl_rt::BslValue as Value;
 pub use bsl_rt::{
     Arity, CallContext, ConstructorCode, ConstructorDescriptor, FunctionCode, FunctionDescriptor,
-    FunctionKind, LibraryDependency, LibraryDescriptor,
+    FunctionKind, LibraryDependency, LibraryDescriptor, MethodCall, MethodCode, MethodDescriptor,
+    ObjectProtocol, RtError, RtResult, TypeDescriptor, call_method_from_table,
 };
 
 /// Ошибка одной из фаз публичного конвейера.
@@ -376,6 +377,118 @@ mod tests {
         kind: FunctionKind::Function,
         call: host_answer,
     }];
+
+    // Пример из README («Свой компонент и свой объект»): хост-объект
+    // «Счётчик» с конструктором, методом и свойством. Тест держит текст
+    // README компилирующимся — правки здесь и там идут вместе.
+    #[derive(Debug)]
+    struct Counter {
+        value: std::rc::Rc<std::cell::Cell<i64>>,
+    }
+
+    static COUNTER_TYPE: TypeDescriptor = TypeDescriptor {
+        package: "example-host",
+        name: "Счётчик",
+        legacy_type_id: None,
+    };
+
+    fn counter_of<'v>(receiver: &'v Value, method: &'static str) -> RtResult<&'v Counter> {
+        receiver
+            .object_ref()
+            .and_then(|object| object.downcast_ref::<Counter>())
+            .ok_or(RtError::MethodNotApplicable {
+                method,
+                receiver: receiver.type_name(),
+            })
+    }
+
+    fn counter_increase(
+        receiver: &Value,
+        _arguments: &[Value],
+        _context: &mut CallContext<'_>,
+    ) -> RtResult<Value> {
+        let counter = counter_of(receiver, "Увеличить")?;
+        counter.value.set(counter.value.get() + 1);
+        Ok(Value::Undefined)
+    }
+
+    const COUNTER_METHODS: &[MethodDescriptor] = &[MethodDescriptor {
+        code: MethodCode::new(1),
+        names: &["Увеличить", "Increase"],
+        call: counter_increase,
+    }];
+
+    impl ObjectProtocol for Counter {
+        fn type_descriptor(&self) -> &'static TypeDescriptor {
+            &COUNTER_TYPE
+        }
+
+        fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<Value> {
+            if matches!(name.to_uppercase().as_str(), "ЗНАЧЕНИЕ" | "VALUE") {
+                Ok(Value::number_from_i64(self.value.get()))
+            } else {
+                Err(RtError::UnknownColumn(name.to_string()))
+            }
+        }
+
+        fn call_method(
+            &self,
+            name: &str,
+            arguments: &[Value],
+            context: &mut CallContext<'_>,
+        ) -> RtResult<Value> {
+            let receiver = Value::new_object(Counter {
+                value: self.value.clone(),
+            });
+            call_method_from_table(
+                COUNTER_METHODS,
+                COUNTER_TYPE.name,
+                &receiver,
+                name,
+                arguments,
+                context,
+            )
+        }
+
+        fn method_table(&self) -> &'static [MethodDescriptor] {
+            COUNTER_METHODS
+        }
+    }
+
+    fn construct_counter(_context: &mut CallContext<'_>, _arguments: &[Value]) -> RtResult<Value> {
+        Ok(Value::new_object(Counter {
+            value: std::rc::Rc::new(std::cell::Cell::new(0)),
+        }))
+    }
+
+    const COUNTER_CONSTRUCTORS: &[ConstructorDescriptor] = &[ConstructorDescriptor {
+        code: ConstructorCode::new(1),
+        names: &["Счётчик", "Counter"],
+        arity: Arity::exact(0),
+        call: construct_counter,
+    }];
+
+    fn counter_library() -> LibraryDescriptor {
+        LibraryDescriptor {
+            package: "example-host",
+            version: "1.0.0",
+            dependencies: &[],
+            functions: &[],
+            constructors: COUNTER_CONSTRUCTORS,
+        }
+    }
+
+    #[test]
+    fn the_readme_custom_object_example_works() {
+        let engine = Engine::builder()
+            .register_library(counter_library())
+            .build()
+            .unwrap();
+        let module = engine
+            .compile("с = Новый Счётчик();\nс.Увеличить();\nс.Увеличить();\nВозврат с.Значение;")
+            .unwrap();
+        assert_eq!(engine.new_state().run(&module).unwrap().to_string(), "2");
+    }
 
     fn host_library() -> LibraryDescriptor {
         LibraryDescriptor {

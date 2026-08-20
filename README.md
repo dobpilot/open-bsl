@@ -11,7 +11,7 @@
 
 ## Быстрый старт
 
-Для сборки нужен Rust с поддержкой редакции 2021.
+Для сборки нужен Rust с поддержкой редакции 2024.
 
 ```bash
 cargo build --workspace
@@ -48,7 +48,7 @@ cargo test --workspace
 
 ## Устройство проекта
 
-Код разделён на несколько крейтов по этапам обработки программы:
+Код разделён на крейты. Конвейер интерпретатора и базовый рантайм:
 
 | крейт | назначение |
 |---|---|
@@ -56,14 +56,33 @@ cargo test --workspace
 | `bsl-sema` | разрешение имён и семантическое представление программы |
 | `bsl-bytecode` | компилятор и формат байт-кода |
 | `bsl-vm` | виртуальная машина и экспериментальный JIT |
-| `bsl-rt` | значения BSL, коллекции и встроенные функции |
+| `bsl-rt` | значения BSL, коллекции, встроенные функции и реестр компонентов |
 | `bsl-number` | десятичная арифметика |
 | `bsl-format` | правила преобразования значений в строки |
-| `bsl-cli` | запуск файлов, REPL и conformance-тесты |
 
-Ядро интерпретатора почти не использует внешних библиотек. `bsl-number`
-зависит от `num-bigint` и `num-traits`, а `rustyline` нужен только командной
-строке.
+Платформенные подсистемы вынесены в runtime-компоненты — статически
+подключаемые библиотеки над `bsl-rt`; байт-код записывает, какие из них
+нужны программе, и не исполняется без них:
+
+| крейт | подсистема |
+|---|---|
+| `bsl-binbuf` | `БуферДвоичныхДанных` и битовые функции |
+| `bsl-regexp` | регулярные выражения |
+| `bsl-textdoc` | `ТекстовыйДокумент` |
+| `bsl-json` | `ЧтениеJSON`/`ЗаписьJSON` и `ПрочитатьJSON`/`ЗаписатьJSON` |
+| `bsl-stream` | потоки и `ЧтениеДанных`/`ЗаписьДанных` |
+| `bsl-zip` | архивы ZIP |
+| `bsl-pdf` | запись и чтение PDF |
+| `bsl-xml` | `ЧтениеXML`/`ЗаписьXML`, DOM, XPath, XSD и XDTO |
+| `bsl-spreadsheet` | `ТабличныйДокумент`, MXL и XLSX |
+
+Верхний слой — фасад встраивания `open-bsl` (движок, модуль, состояние,
+выбор компонентов фичами) и `bsl-cli` (запуск файлов, REPL и
+conformance-тесты).
+
+Внешних зависимостей немного: `bsl-number` использует `num-bigint` и
+`num-traits`, `bsl-rt` — `zip` и `flate2` для контейнера ZIP и сжатия, а
+`rustyline` нужен только командной строке.
 
 ## REPL
 
@@ -114,8 +133,10 @@ cargo run -p bsl-cli -- --run-bytecode out.bslc
 cargo run -p bsl-cli --release -- --jit script.bsl
 ```
 
-JIT переводит в машинный код арифметику, сравнения, присваивания и переходы.
-Остальные инструкции по-прежнему исполняет виртуальная машина. Поэтому режим
+JIT переводит в машинный код арифметику, сравнения, присваивания, переходы,
+обращения к свойствам и вызовы встроенных и компонентных методов. Вызовы
+функций модуля, создание объектов и динамическое исполнение по-прежнему
+исполняет виртуальная машина. Поэтому режим
 помогает главным образом программам с вычислительно насыщенными циклами и почти
 не влияет на код, который большую часть времени работает со строками,
 коллекциями или файлами.
@@ -127,62 +148,242 @@ JIT переводит в машинный код арифметику, срав
 ## Встраивание
 
 `bsl-cli` — один из клиентов интерпретатора, а не обязательная его часть.
-Крейты пока не опубликованы на crates.io, поэтому их следует подключать по пути
-или через git:
+Точка входа для приложений — фасад `open-bsl`. Крейты пока не опубликованы
+на crates.io, поэтому подключать их следует по пути или через git:
 
 ```toml
 [dependencies]
-bsl-syntax   = { path = "../open-bsl/crates/bsl-syntax" }
-bsl-sema     = { path = "../open-bsl/crates/bsl-sema" }
-bsl-bytecode = { path = "../open-bsl/crates/bsl-bytecode" }
-bsl-vm       = { path = "../open-bsl/crates/bsl-vm" }
-bsl-rt       = { path = "../open-bsl/crates/bsl-rt" }
-bsl-format   = { path = "../open-bsl/crates/bsl-format" }
-# Нужен, если приложение само создаёт числовые значения BSL:
-bsl-number   = { path = "../open-bsl/crates/bsl-number" }
+open-bsl = { path = "../open-bsl/crates/open-bsl" }
 ```
 
-Минимальный запуск состоит из четырёх этапов. У каждого свой тип ошибки, так
-что приложение может сообщить пользователю, где именно возникла проблема.
+По умолчанию фасад включает все runtime-компоненты. Набор можно сузить
+фичами; скомпилированный модуль объявляет нужные ему компоненты в заголовке
+и без них честно откажется исполняться:
+
+```toml
+open-bsl = { path = "../open-bsl/crates/open-bsl",
+             default-features = false, features = ["json", "xml"] }
+```
+
+Минимальный запуск: движок компилирует модуль, состояние его исполняет.
 
 ```rust
-use bsl_rt::BslValue;
-
-fn run_script(src: &str) -> Result<BslValue, String> {
-    let parsed = bsl_syntax::parse(src)
-        .map_err(|e| format!("синтаксическая ошибка: {e:?}"))?;
-    let resolved = bsl_sema::resolve_program(&parsed.items)
-        .map_err(|e| format!("семантическая ошибка: {e:?}"))?;
-    let program = bsl_bytecode::compile_program(&resolved)
-        .map_err(|e| format!("ошибка компиляции: {e:?}"))?;
-    bsl_vm::run_program(&program)
-        .map_err(|e| format!("ошибка выполнения: {e}"))
+fn run_script(src: &str) -> Result<open_bsl::Value, open_bsl::Error> {
+    let engine = open_bsl::Engine::builder().build()?;
+    let module = engine.compile(src)?;
+    engine.new_state().run(&module)
 }
 ```
 
-`run_program` возвращает значение верхнеуровневого оператора `Возврат`, а при
-его отсутствии — `Неопределено`. Для представления значений используется
-`bsl_rt::BslValue`. Пользовательский вывод следует формировать через
-`bsl_format::format_value`: реализация `Display` предназначена для отладки и
-не воспроизводит форматирование 1С.
+`run` возвращает значение верхнеуровневого оператора `Возврат`, а при его
+отсутствии — `Неопределено`. У каждой фазы свой вариант `open_bsl::Error`,
+так что приложение может сообщить пользователю, где именно возникла
+проблема. Пользовательский вывод следует формировать через
+`bsl_format::format_value`: реализация `Display` предназначена для отладки
+и не воспроизводит форматирование 1С.
 
-Для REPL-подобных сценариев существуют `resolve_snippet_stmts`,
-`compile_snippet` и `run_repl_chunk`. Они позволяют передать начальные значения
-локальных переменных и получить их новое состояние после исполнения. Пример
-такой сессии находится в [`crates/bsl-cli/src/repl.rs`](crates/bsl-cli/src/repl.rs).
+Состояние настраивается построителем: `Сообщить` и сообщения об ошибках
+уходят в переданные писатели (любой `Write + 'static`; чтобы прочитать
+перехваченное, передайте обёртку над разделяемым буфером), а `--jit`
+включается флагом:
+
+```rust
+let mut state = engine
+    .state_builder()
+    .stdout(std::io::stdout())
+    .jit(true)
+    .build();
+```
+
+Для одноразовых фрагментов у состояния есть `exec` и `eval`; каждый вызов
+компилируется отдельным модулем, локальные переменные между вызовами не
+сохраняются:
+
+```rust
+let mut state = engine.new_state();
+assert_eq!(state.eval("2 + 2")?.to_string(), "4");
+```
+
+Скомпилированный модуль сериализуется в переносимый текстовый байт-код и
+загружается обратно; совместимость записанных в нём компонентов проверяется
+при запуске, до первой инструкции:
+
+```rust
+let text = module.bytecode()?;
+let restored = engine.load_bytecode(&text)?;
+```
+
+REPL-подобные сценарии с накоплением локальных переменных между фрагментами
+собираются из низкоуровневых частей конвейера (`resolve_repl_stmts_with_registry`,
+`compile_snippet_with_requirements`, `run_repl_chunk_with_registry`); рабочий
+пример — [`crates/bsl-cli/src/repl.rs`](crates/bsl-cli/src/repl.rs).
 
 У встраивания сейчас есть несколько существенных ограничений:
 
 - `BslValue` и скомпилированная программа используют `Rc` и `RefCell`, поэтому
   не реализуют `Send` и `Sync`;
 - лимитов времени, памяти и числа инструкций нет;
-- `Сообщить` пишет в stdout, готового интерфейса для перенаправления вывода нет;
-- `ЗаписьТекста` может создавать файлы по указанному программой пути;
-- реестра пользовательских встроенных функций пока нет;
+- `ЗаписьТекста` и файловые потоки могут создавать файлы по указанному
+  программой пути;
 - публичные интерфейсы не считаются стабильными.
 
 Недоверенные программы лучше запускать в отдельном процессе с ограничениями по
 времени, памяти и доступу к файловой системе.
+
+## Свой компонент и свой объект
+
+Приложение может добавить движку собственные глобальные функции, конструкторы
+и типы объектов — тем же механизмом, каким подключены штатные компоненты.
+Компонент описывается статическими таблицами дескрипторов и регистрируется
+при сборке движка; после этого исходный код видит его имена наравне со
+встроенными, а модуль записывает зависимость от компонента в заголовок
+байт-кода.
+
+Полный пример — тип «Счётчик» с конструктором, методом и свойством. Этот же
+код живёт тестом `the_readme_custom_object_example_works` в
+[`crates/open-bsl/src/lib.rs`](crates/open-bsl/src/lib.rs), поэтому пример
+всегда компилируется.
+
+```rust
+use open_bsl::{
+    call_method_from_table, Arity, CallContext, ConstructorCode, ConstructorDescriptor, Engine,
+    LibraryDescriptor, MethodCode, MethodDescriptor, ObjectProtocol, RtError, RtResult,
+    TypeDescriptor, Value,
+};
+
+// Состояние объекта живёт за `Rc`: рантайм однопоточный, а обёртка
+// значения может пересобираться, пока состояние остаётся общим.
+#[derive(Debug)]
+struct Counter {
+    value: std::rc::Rc<std::cell::Cell<i64>>,
+}
+
+static COUNTER_TYPE: TypeDescriptor = TypeDescriptor {
+    package: "example-host",
+    name: "Счётчик",
+    legacy_type_id: None,
+};
+
+// Обработчик метода получает значение-получателя от вызывающего и
+// возвращается к конкретному типу через downcast.
+fn counter_of<'v>(receiver: &'v Value, method: &'static str) -> RtResult<&'v Counter> {
+    receiver
+        .object_ref()
+        .and_then(|object| object.downcast_ref::<Counter>())
+        .ok_or(RtError::MethodNotApplicable {
+            method,
+            receiver: receiver.type_name(),
+        })
+}
+
+fn counter_increase(
+    receiver: &Value,
+    _arguments: &[Value],
+    _context: &mut CallContext<'_>,
+) -> RtResult<Value> {
+    let counter = counter_of(receiver, "Увеличить")?;
+    counter.value.set(counter.value.get() + 1);
+    Ok(Value::Undefined)
+}
+
+// Таблица методов типа: плотные коды от единицы, русское и английское
+// написания. Имена регистронезависимы.
+const COUNTER_METHODS: &[MethodDescriptor] = &[MethodDescriptor {
+    code: MethodCode::new(1),
+    names: &["Увеличить", "Increase"],
+    call: counter_increase,
+}];
+
+impl ObjectProtocol for Counter {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &COUNTER_TYPE
+    }
+
+    // Свойства обслуживаются парой get_property/set_property.
+    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<Value> {
+        if matches!(name.to_uppercase().as_str(), "ЗНАЧЕНИЕ" | "VALUE") {
+            Ok(Value::number_from_i64(self.value.get()))
+        } else {
+            Err(RtError::UnknownColumn(name.to_string()))
+        }
+    }
+
+    // Вход для вызовов с именем-строкой — реализуется той же таблицей.
+    fn call_method(
+        &self,
+        name: &str,
+        arguments: &[Value],
+        context: &mut CallContext<'_>,
+    ) -> RtResult<Value> {
+        let receiver = Value::new_object(Counter {
+            value: self.value.clone(),
+        });
+        call_method_from_table(
+            COUNTER_METHODS,
+            COUNTER_TYPE.name,
+            &receiver,
+            name,
+            arguments,
+            context,
+        )
+    }
+
+    // Непустая таблица включает быстрый путь VM: обработчик находится по
+    // номеру имени без строковых сравнений на каждом вызове.
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        COUNTER_METHODS
+    }
+}
+
+fn construct_counter(_context: &mut CallContext<'_>, _arguments: &[Value]) -> RtResult<Value> {
+    Ok(Value::new_object(Counter {
+        value: std::rc::Rc::new(std::cell::Cell::new(0)),
+    }))
+}
+
+const COUNTER_CONSTRUCTORS: &[ConstructorDescriptor] = &[ConstructorDescriptor {
+    code: ConstructorCode::new(1),
+    names: &["Счётчик", "Counter"],
+    arity: Arity::exact(0),
+    call: construct_counter,
+}];
+
+fn counter_library() -> LibraryDescriptor {
+    LibraryDescriptor {
+        package: "example-host",
+        version: "1.0.0",
+        dependencies: &[],
+        functions: &[],
+        constructors: COUNTER_CONSTRUCTORS,
+    }
+}
+
+fn main() -> Result<(), open_bsl::Error> {
+    let engine = Engine::builder()
+        .register_library(counter_library())
+        .build()?;
+    let module = engine.compile(
+        "с = Новый Счётчик();\nс.Увеличить();\nс.Увеличить();\nВозврат с.Значение;",
+    )?;
+    assert_eq!(engine.new_state().run(&module)?.to_string(), "2");
+    Ok(())
+}
+```
+
+Правила, которых держатся и штатные компоненты:
+
+- коды конструкторов, функций и методов — стабильные и плотные, с единицы
+  в каждой таблице; по кодам связывается байт-код;
+- арность конструкторов и глобальных функций объявляется в дескрипторе и
+  проверяется на этапе семантики; `FunctionKind::Procedure` запрещает вызов
+  в выражении, как у платформенных процедур;
+- имена всюду регистронезависимы, русское написание принято перечислять
+  первым;
+- глобальные функции получают `CallContext` — через него доступны вывод,
+  форматирование значений и таблицы форм текущей сессии;
+- компонент, чей байт-код будут загружать другие процессы, объявляет
+  зависимости `LibraryDependency` с точными версиями: загрузчик сверяет их
+  до первой инструкции.
 
 ## Совместимость с 1С
 
