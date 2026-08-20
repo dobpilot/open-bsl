@@ -373,7 +373,10 @@ pub fn move_to_content(obj: &BslValue) -> RtResult<BslValue> {
 ///
 /// [`RtError::MethodNotApplicable`], если получатель не `ЧтениеXML`.
 pub fn node_type(obj: &BslValue) -> RtResult<BslValue> {
-    let reader = as_reader(obj)?;
+    node_type_from(as_reader(obj)?)
+}
+
+fn node_type_from(reader: &RefCell<XmlReaderState>) -> RtResult<BslValue> {
     let state = reader.borrow();
     if state.attr_cursor.is_some_and(|i| i < state.attrs().len()) {
         return Ok(BslValue::Enum(EnumValue::XmlAttribute));
@@ -398,8 +401,15 @@ pub fn node_type(obj: &BslValue) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// [`RtError::MethodNotApplicable`], если получатель не `ЧтениеXML`.
+/// Обёртка над [`name_from`] для получателя-значения. Продуктовые пути
+/// ходят через `get_property`/таблицу методов; снаружи модуля имя узла
+/// читает только тест round-trip XDTO.
+#[cfg(test)]
 pub fn name(obj: &BslValue) -> RtResult<BslValue> {
-    let reader = as_reader(obj)?;
+    name_from(as_reader(obj)?)
+}
+
+fn name_from(reader: &RefCell<XmlReaderState>) -> RtResult<BslValue> {
     let state = reader.borrow();
     if let Some(a) = state.current_attr() {
         return Ok(BslValue::Str(BslString::from_str(&a.name)));
@@ -425,8 +435,7 @@ pub fn name(obj: &BslValue) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// [`RtError::MethodNotApplicable`], если получатель не `ЧтениеXML`.
-pub fn value(obj: &BslValue) -> RtResult<BslValue> {
-    let reader = as_reader(obj)?;
+fn value_from(reader: &RefCell<XmlReaderState>) -> RtResult<BslValue> {
     let state = reader.borrow();
     if let Some(a) = state.current_attr() {
         return Ok(BslValue::Str(BslString::from_str(&a.value)));
@@ -452,8 +461,8 @@ pub fn value(obj: &BslValue) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// [`RtError::MethodNotApplicable`], если получатель не `ЧтениеXML`.
-pub fn local_name(obj: &BslValue) -> RtResult<BslValue> {
-    let full = name(obj)?;
+fn local_name_from(reader: &RefCell<XmlReaderState>) -> RtResult<BslValue> {
+    let full = name_from(reader)?;
     let BslValue::Str(s) = &full else {
         return Ok(full);
     };
@@ -465,8 +474,8 @@ pub fn local_name(obj: &BslValue) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// [`RtError::MethodNotApplicable`], если получатель не `ЧтениеXML`.
-pub fn prefix(obj: &BslValue) -> RtResult<BslValue> {
-    let full = name(obj)?;
+fn prefix_from(reader: &RefCell<XmlReaderState>) -> RtResult<BslValue> {
+    let full = name_from(reader)?;
     let BslValue::Str(s) = &full else {
         return Ok(full);
     };
@@ -480,8 +489,7 @@ pub fn prefix(obj: &BslValue) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// [`RtError::MethodNotApplicable`], если получатель не `ЧтениеXML`.
-pub fn namespace_uri(obj: &BslValue) -> RtResult<BslValue> {
-    let reader = as_reader(obj)?;
+fn namespace_uri_from(reader: &RefCell<XmlReaderState>) -> RtResult<BslValue> {
     let state = reader.borrow();
     let s = match &state.current {
         Some(XmlEvent::ElementStart { uri, .. }) | Some(XmlEvent::ElementEnd { uri, .. }) => {
@@ -778,23 +786,25 @@ impl ObjectProtocol for XmlReaderObject {
     }
 
     fn get_property(&self, prop: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
-        let receiver = self.as_value();
         let is =
             |ru: &str, en: &str| prop.eq_ignore_ascii_case(ru) || prop.eq_ignore_ascii_case(en);
         // Читатель помнит текущий узел, а свойства показывают его с разных
-        // сторон (прежний арм общей таблицы свойств).
+        // сторон (прежний арм общей таблицы свойств). Внутренние
+        // `*_from`-функции работают прямо над состоянием: свойство
+        // читается на каждом узле обхода, и пересборка Rc-обёртки ради
+        // обратного даункаста стоила бы аллокации на каждое чтение.
         if is("ТипУзла", "NodeType") {
-            node_type(&receiver)
+            node_type_from(&self.state)
         } else if is("Имя", "Name") {
-            name(&receiver)
+            name_from(&self.state)
         } else if is("Значение", "Value") {
-            value(&receiver)
+            value_from(&self.state)
         } else if is("ЛокальноеИмя", "LocalName") {
-            local_name(&receiver)
+            local_name_from(&self.state)
         } else if is("Префикс", "Prefix") {
-            prefix(&receiver)
+            prefix_from(&self.state)
         } else if is("URIПространстваИмен", "NamespaceURI") {
-            namespace_uri(&receiver)
+            namespace_uri_from(&self.state)
         } else {
             Err(RtError::UnknownColumn(prop.to_string()))
         }
