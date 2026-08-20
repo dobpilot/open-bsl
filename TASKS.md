@@ -64,7 +64,7 @@ CallContext)`, `const *_METHODS` с плотными кодами и тесто�
 - [ ] (mt-dom) объекты dom.rs и xpath.rs в bsl-xml на таблицы методов
 - [ ] (mt-xsd) объекты xsd.rs в bsl-xml на таблицы методов (30 статических
       дескрипторов уже есть — свести диспетчеризацию к общему мосту)
-- [ ] (mt-json) объекты bsl-json на таблицы методов
+- [x] (mt-json) объекты bsl-json на таблицы методов
 - [ ] (mt-textdoc) объекты bsl-textdoc на таблицы методов
 - [ ] (mt-zip) объекты bsl-zip на таблицы методов
 - [ ] (mt-spreadsheet) объекты bsl-spreadsheet и bsl-pdf на таблицы методов

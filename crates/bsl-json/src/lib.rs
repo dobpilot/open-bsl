@@ -923,8 +923,9 @@ use std::cell::RefCell;
 
 use bsl_rt::{
     Arity, BslObject, CallContext, ConstructorCode, ConstructorDescriptor, EnumValue, FunctionCode,
-    FunctionDescriptor, FunctionKind, LibraryDependency, LibraryDescriptor, ObjectProtocol,
-    StructureStorage, TypeDescriptor, TypeId, local_date_from_utc_seconds, pseudo_unix_seconds,
+    FunctionDescriptor, FunctionKind, LibraryDependency, LibraryDescriptor, MethodCode,
+    MethodDescriptor, ObjectProtocol, StructureStorage, TypeDescriptor, TypeId,
+    local_date_from_utc_seconds, pseudo_unix_seconds,
 };
 
 #[derive(Debug, Default)]
@@ -940,7 +941,10 @@ struct JsonReaderObject {
 
 #[derive(Debug, Default)]
 struct JsonWriterObject {
-    writer: RefCell<Option<JsonWriter>>,
+    /// За `Rc` — чтобы `as_value` мог собрать получателя-значение для
+    /// строкового пути `call_method`, разделяющего то же состояние (у
+    /// читателя ту же роль играет `Rc` вокруг `JsonReaderState`).
+    writer: Rc<RefCell<Option<JsonWriter>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -980,7 +984,7 @@ fn as_reader(v: &BslValue) -> RtResult<&std::cell::RefCell<JsonReaderState>> {
 fn as_writer(v: &BslValue) -> RtResult<&std::cell::RefCell<Option<JsonWriter>>> {
     v.object_ref()
         .and_then(|object| object.downcast_ref::<JsonWriterObject>())
-        .map(|writer| &writer.writer)
+        .map(|writer| writer.writer.as_ref())
         .ok_or_else(|| not_applicable(v, "ЗаписьJSON"))
 }
 
@@ -1428,53 +1432,6 @@ fn method_is(name: &str, russian: &str, english: &str) -> bool {
     name.eq_ignore_ascii_case(russian) || name.eq_ignore_ascii_case(english)
 }
 
-#[derive(Clone, Copy)]
-enum WriterMethod {
-    SetString,
-    OpenFile,
-    Close,
-    StartObject,
-    EndObject,
-    StartArray,
-    EndArray,
-    PropertyName,
-    Value,
-}
-
-fn writer_method(name: &str) -> Option<WriterMethod> {
-    match name {
-        "УстановитьСтроку" | "SetString" => Some(WriterMethod::SetString),
-        "ОткрытьФайл" | "OpenFile" => Some(WriterMethod::OpenFile),
-        "Закрыть" | "Close" => Some(WriterMethod::Close),
-        "ЗаписатьНачалоОбъекта" | "WriteStartObject" => {
-            Some(WriterMethod::StartObject)
-        }
-        "ЗаписатьКонецОбъекта" | "WriteEndObject" => {
-            Some(WriterMethod::EndObject)
-        }
-        "ЗаписатьНачалоМассива" | "WriteStartArray" => {
-            Some(WriterMethod::StartArray)
-        }
-        "ЗаписатьКонецМассива" | "WriteEndArray" => {
-            Some(WriterMethod::EndArray)
-        }
-        "ЗаписатьИмяСвойства" | "WritePropertyName" => {
-            Some(WriterMethod::PropertyName)
-        }
-        "ЗаписатьЗначение" | "WriteValue" => Some(WriterMethod::Value),
-        _ if name.eq_ignore_ascii_case("SetString") => Some(WriterMethod::SetString),
-        _ if name.eq_ignore_ascii_case("OpenFile") => Some(WriterMethod::OpenFile),
-        _ if name.eq_ignore_ascii_case("Close") => Some(WriterMethod::Close),
-        _ if name.eq_ignore_ascii_case("WriteStartObject") => Some(WriterMethod::StartObject),
-        _ if name.eq_ignore_ascii_case("WriteEndObject") => Some(WriterMethod::EndObject),
-        _ if name.eq_ignore_ascii_case("WriteStartArray") => Some(WriterMethod::StartArray),
-        _ if name.eq_ignore_ascii_case("WriteEndArray") => Some(WriterMethod::EndArray),
-        _ if name.eq_ignore_ascii_case("WritePropertyName") => Some(WriterMethod::PropertyName),
-        _ if name.eq_ignore_ascii_case("WriteValue") => Some(WriterMethod::Value),
-        _ => None,
-    }
-}
-
 fn exact_method_arity(_name: &str, arguments: &[BslValue], count: usize) -> RtResult<()> {
     if arguments.len() == count {
         Ok(())
@@ -1496,7 +1453,7 @@ pub fn new_json_reader() -> BslValue {
 /// Создаёт ненастроенный `ЗаписьJSON`.
 pub fn new_json_writer() -> BslValue {
     BslValue::new_object(JsonWriterObject {
-        writer: RefCell::new(None),
+        writer: Rc::new(RefCell::new(None)),
     })
 }
 
@@ -1550,15 +1507,24 @@ pub fn new_json_serializer_settings() -> BslValue {
     ))))
 }
 
+impl JsonReaderObject {
+    /// Получатель-значение, разделяющий то же состояние: нужен строковым
+    /// путям (`call_method`, `get_property`), у которых в руках только
+    /// `&self`.
+    fn as_value(&self) -> BslValue {
+        BslValue::new_object(JsonReaderObject {
+            state: self.state.clone(),
+        })
+    }
+}
+
 impl ObjectProtocol for JsonReaderObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         &READER_TYPE
     }
 
     fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
-        let value = BslValue::new_object(JsonReaderObject {
-            state: self.state.clone(),
-        });
+        let value = self.as_value();
         if method_is(name, "ТипТекущегоЗначения", "CurrentValueType") {
             current_value_type(&value)
         } else if method_is(name, "ТекущееЗначение", "CurrentValue") {
@@ -1572,29 +1538,20 @@ impl ObjectProtocol for JsonReaderObject {
         &self,
         name: &str,
         arguments: &[BslValue],
-        _context: &mut CallContext<'_>,
+        context: &mut CallContext<'_>,
     ) -> RtResult<BslValue> {
-        let value = BslValue::new_object(JsonReaderObject {
-            state: self.state.clone(),
-        });
-        if method_is(name, "УстановитьСтроку", "SetString") {
-            exact_method_arity(name, arguments, 1)?;
-            set_string(&value, arguments).map(|()| BslValue::Undefined)
-        } else if method_is(name, "ОткрытьФайл", "OpenFile") {
-            exact_method_arity(name, arguments, 1)?;
-            open_file(&value, arguments).map(|()| BslValue::Undefined)
-        } else if method_is(name, "Прочитать", "Read") {
-            exact_method_arity(name, arguments, 0)?;
-            read(&value).map(BslValue::Boolean)
-        } else if method_is(name, "Пропустить", "Skip") {
-            exact_method_arity(name, arguments, 0)?;
-            skip(&value).map(|()| BslValue::Undefined)
-        } else {
-            Err(RtError::UnknownMethod {
-                method: name.to_string(),
-                receiver: READER_TYPE.name,
-            })
-        }
+        bsl_rt::call_method_from_table(
+            READER_METHODS,
+            READER_TYPE.name,
+            &self.as_value(),
+            name,
+            arguments,
+            context,
+        )
+    }
+
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        READER_METHODS
     }
 
     fn is_filled(&self) -> RtResult<bool> {
@@ -1602,81 +1559,241 @@ impl ObjectProtocol for JsonReaderObject {
     }
 }
 
+// Обработчики статической таблицы читателя: получатель приходит от
+// вызывающего (VM отдаёт исходное значение — без пересборки обёртки на
+// каждый вызов), проверки арности — прежние, из веток `method_is`.
+fn reader_set_string(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    exact_method_arity("УстановитьСтроку", arguments, 1)?;
+    set_string(receiver, arguments).map(|()| BslValue::Undefined)
+}
+
+fn reader_open_file(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    exact_method_arity("ОткрытьФайл", arguments, 1)?;
+    open_file(receiver, arguments).map(|()| BslValue::Undefined)
+}
+
+fn reader_read(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    exact_method_arity("Прочитать", arguments, 0)?;
+    read(receiver).map(BslValue::Boolean)
+}
+
+fn reader_skip(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    exact_method_arity("Пропустить", arguments, 0)?;
+    skip(receiver).map(|()| BslValue::Undefined)
+}
+
+const READER_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor {
+        code: MethodCode::new(1),
+        names: &["УстановитьСтроку", "SetString"],
+        call: reader_set_string,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(2),
+        names: &["ОткрытьФайл", "OpenFile"],
+        call: reader_open_file,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(3),
+        names: &["Прочитать", "Read"],
+        call: reader_read,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(4),
+        names: &["Пропустить", "Skip"],
+        call: reader_skip,
+    },
+];
+
 impl JsonWriterObject {
-    fn invoke(&self, method: WriterMethod, arguments: &[BslValue]) -> RtResult<BslValue> {
-        match method {
-            WriterMethod::SetString => {
-                if arguments.len() > 1 {
-                    return Err(RtError::MethodNotApplicable {
-                        method: "метод JSON",
-                        receiver: WRITER_TYPE.name,
-                    });
-                }
-                *self.writer.borrow_mut() = Some(JsonWriter::to_string_target(settings_from(
-                    arguments.first(),
-                )?));
-                Ok(BslValue::Undefined)
-            }
-            WriterMethod::OpenFile => {
-                if !(1..=2).contains(&arguments.len()) {
-                    return Err(RtError::MethodNotApplicable {
-                        method: "метод JSON",
-                        receiver: WRITER_TYPE.name,
-                    });
-                }
-                let BslValue::Str(path) = &arguments[0] else {
-                    return Err(RtError::TypeError {
-                        expected: "Строка",
-                        op: "ОткрытьФайл",
-                    });
-                };
-                *self.writer.borrow_mut() = Some(JsonWriter::to_file(
-                    std::path::PathBuf::from(path.to_string()),
-                    settings_from(arguments.get(1))?,
-                ));
-                Ok(BslValue::Undefined)
-            }
-            WriterMethod::Close => {
-                exact_method_arity("Закрыть", arguments, 0)?;
-                close_writer_cell(&self.writer)
-            }
-            WriterMethod::StartObject => {
-                exact_method_arity("ЗаписатьНачалоОбъекта", arguments, 0)?;
-                with_writer_cell(&self.writer, JsonWriter::begin_object)
-                    .map(|()| BslValue::Undefined)
-            }
-            WriterMethod::EndObject => {
-                exact_method_arity("ЗаписатьКонецОбъекта", arguments, 0)?;
-                with_writer_cell(&self.writer, JsonWriter::end_object).map(|()| BslValue::Undefined)
-            }
-            WriterMethod::StartArray => {
-                exact_method_arity("ЗаписатьНачалоМассива", arguments, 0)?;
-                with_writer_cell(&self.writer, JsonWriter::begin_array)
-                    .map(|()| BslValue::Undefined)
-            }
-            WriterMethod::EndArray => {
-                exact_method_arity("ЗаписатьКонецМассива", arguments, 0)?;
-                with_writer_cell(&self.writer, JsonWriter::end_array).map(|()| BslValue::Undefined)
-            }
-            WriterMethod::PropertyName => {
-                exact_method_arity("ЗаписатьИмяСвойства", arguments, 1)?;
-                let BslValue::Str(property) = &arguments[0] else {
-                    return Err(RtError::TypeError {
-                        expected: "Строка",
-                        op: "ЗаписатьИмяСвойства",
-                    });
-                };
-                with_writer_cell(&self.writer, |writer| writer.property_name_bsl(property))
-                    .map(|()| BslValue::Undefined)
-            }
-            WriterMethod::Value => {
-                exact_method_arity("ЗаписатьЗначение", arguments, 1)?;
-                with_writer_cell(&self.writer, |writer| writer.value(&arguments[0]))
-                    .map(|()| BslValue::Undefined)
-            }
-        }
+    /// Получатель-значение с тем же состоянием — для строкового
+    /// `call_method`, у которого в руках только `&self`.
+    fn as_value(&self) -> BslValue {
+        BslValue::new_object(JsonWriterObject {
+            writer: self.writer.clone(),
+        })
     }
 }
+
+// Обработчики статической таблицы писателя: тела — прежние ветки
+// `invoke`, состояние достаётся из получателя через `as_writer`.
+fn writer_set_string(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    if arguments.len() > 1 {
+        return Err(RtError::MethodNotApplicable {
+            method: "метод JSON",
+            receiver: WRITER_TYPE.name,
+        });
+    }
+    *as_writer(receiver)?.borrow_mut() = Some(JsonWriter::to_string_target(settings_from(
+        arguments.first(),
+    )?));
+    Ok(BslValue::Undefined)
+}
+
+fn writer_open_file(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    if !(1..=2).contains(&arguments.len()) {
+        return Err(RtError::MethodNotApplicable {
+            method: "метод JSON",
+            receiver: WRITER_TYPE.name,
+        });
+    }
+    let BslValue::Str(path) = &arguments[0] else {
+        return Err(RtError::TypeError {
+            expected: "Строка",
+            op: "ОткрытьФайл",
+        });
+    };
+    *as_writer(receiver)?.borrow_mut() = Some(JsonWriter::to_file(
+        std::path::PathBuf::from(path.to_string()),
+        settings_from(arguments.get(1))?,
+    ));
+    Ok(BslValue::Undefined)
+}
+
+fn writer_close(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    exact_method_arity("Закрыть", arguments, 0)?;
+    close_writer_cell(as_writer(receiver)?)
+}
+
+fn writer_start_object(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    exact_method_arity("ЗаписатьНачалоОбъекта", arguments, 0)?;
+    with_writer_cell(as_writer(receiver)?, JsonWriter::begin_object).map(|()| BslValue::Undefined)
+}
+
+fn writer_end_object(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    exact_method_arity("ЗаписатьКонецОбъекта", arguments, 0)?;
+    with_writer_cell(as_writer(receiver)?, JsonWriter::end_object).map(|()| BslValue::Undefined)
+}
+
+fn writer_start_array(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    exact_method_arity("ЗаписатьНачалоМассива", arguments, 0)?;
+    with_writer_cell(as_writer(receiver)?, JsonWriter::begin_array).map(|()| BslValue::Undefined)
+}
+
+fn writer_end_array(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    exact_method_arity("ЗаписатьКонецМассива", arguments, 0)?;
+    with_writer_cell(as_writer(receiver)?, JsonWriter::end_array).map(|()| BslValue::Undefined)
+}
+
+fn writer_property_name(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    exact_method_arity("ЗаписатьИмяСвойства", arguments, 1)?;
+    let BslValue::Str(property) = &arguments[0] else {
+        return Err(RtError::TypeError {
+            expected: "Строка",
+            op: "ЗаписатьИмяСвойства",
+        });
+    };
+    with_writer_cell(as_writer(receiver)?, |writer| {
+        writer.property_name_bsl(property)
+    })
+    .map(|()| BslValue::Undefined)
+}
+
+fn writer_value(
+    receiver: &BslValue,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    exact_method_arity("ЗаписатьЗначение", arguments, 1)?;
+    with_writer_cell(as_writer(receiver)?, |writer| writer.value(&arguments[0]))
+        .map(|()| BslValue::Undefined)
+}
+
+const WRITER_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor {
+        code: MethodCode::new(1),
+        names: &["УстановитьСтроку", "SetString"],
+        call: writer_set_string,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(2),
+        names: &["ОткрытьФайл", "OpenFile"],
+        call: writer_open_file,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(3),
+        names: &["Закрыть", "Close"],
+        call: writer_close,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(4),
+        names: &["ЗаписатьНачалоОбъекта", "WriteStartObject"],
+        call: writer_start_object,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(5),
+        names: &["ЗаписатьКонецОбъекта", "WriteEndObject"],
+        call: writer_end_object,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(6),
+        names: &["ЗаписатьНачалоМассива", "WriteStartArray"],
+        call: writer_start_array,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(7),
+        names: &["ЗаписатьКонецМассива", "WriteEndArray"],
+        call: writer_end_array,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(8),
+        names: &["ЗаписатьИмяСвойства", "WritePropertyName"],
+        call: writer_property_name,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(9),
+        names: &["ЗаписатьЗначение", "WriteValue"],
+        call: writer_value,
+    },
+];
 
 impl ObjectProtocol for JsonWriterObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
@@ -1719,15 +1836,20 @@ impl ObjectProtocol for JsonWriterObject {
         &self,
         name: &str,
         arguments: &[BslValue],
-        _context: &mut CallContext<'_>,
+        context: &mut CallContext<'_>,
     ) -> RtResult<BslValue> {
-        match writer_method(name) {
-            Some(method) => self.invoke(method, arguments),
-            None => Err(RtError::UnknownMethod {
-                method: name.to_string(),
-                receiver: WRITER_TYPE.name,
-            }),
-        }
+        bsl_rt::call_method_from_table(
+            WRITER_METHODS,
+            WRITER_TYPE.name,
+            &self.as_value(),
+            name,
+            arguments,
+            context,
+        )
+    }
+
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        WRITER_METHODS
     }
 
     fn is_filled(&self) -> RtResult<bool> {
