@@ -1,97 +1,36 @@
-//! Регулярные выражения: собственный движок с бэктрекингом по подмножеству
-//! диалекта ICU, на котором говорит платформа.
+//! Движок регулярных выражений: РАЗБОР здесь, МАТЧИНГ у `fancy-regex`.
 //!
-//! Внешних крейтов в этом дереве не бывает (правило рабочей области), а
-//! регулярные выражения нужны целиком — поэтому и разбор шаблона, и матчинг
-//! написаны здесь. Этот модуль — только машинерия: поверхность BSL
-//! (`СтрНайтиПоРегулярномуВыражению` и соседи, объекты результата и групп,
-//! грамматика строки замены) живёт в корне этого крейта и обращается сюда
-//! за тремя вещами — [`Regex::parse_with`], [`Regex::find_at`] и
-//! [`Regex::matches_full`].
+//! Слоёв два. Разбор — рекурсивный спуск по кодовым точкам в дерево
+//! [`Node`]: он навешивает вмороженные флаги, нумерует группы по
+//! открывающей скобке и честно отвергает всё, чего в диалекте нет, —
+//! молча превратить непонятую конструкцию в литерал было бы худшим из
+//! вариантов. Затем рендерер печатает дерево в синтаксис крейта
+//! `fancy-regex`: простые шаблоны крейт исполняет линейным NFA своего
+//! нижнего слоя `regex`, а просмотры и прочие «fancy»-формы — своим
+//! бэктрекером. Позиции наружу — всегда код-юниты UTF-16.
 //!
-//! # Устройство
+//! Рендерер не переписывает шаблон буквально: измеренные на 8.3.27 края
+//! диалекта (якоря `REGEX.*`, контракты `measure-regex.bsl` и
+//! `measure-regex2.bsl`) отличаются от родной семантики крейта, поэтому
+//! `\w`, `\b`, `.`, `^`, `$` и флаги печатаются РАЗВЁРНУТЫМИ формами —
+//! каждая задокументирована у своей константы ниже.
 //!
-//! Слоя два. Первый — рекурсивный спуск по кодовым точкам шаблона
-//! ([`Parser`]), строящий дерево [`Node`]: альтернация → конкатенация →
-//! квантованный атом. Второй — [`Compiler`], разворачивающий дерево в
-//! ПЛОСКУЮ программу [`Instr`] с абсолютными адресами переходов, и
-//! `Regex::run_at`, исполняющий её с ЯВНЫМ стеком бэктрекинга.
+//! Два сознательных решения этого слоя:
 //!
-//! Хостовой рекурсии в матчинге нет намеренно: глубина перебора задаётся
-//! входом пользователя, а переполнение стека Rust — не перехватываемая
-//! `Попыткой` ошибка, а смерть процесса. По той же причине рекурсия РАЗБОРА
-//! ограничена [`MAX_DEPTH`], а разворачивание `{n,m}` — [`MAX_PROGRAM`]: и
-//! то, и другое отдаёт [`RtError::Regex`], а не падает.
-//!
-//! Цена бэктрекинга — ровно та же, что у ICU: на шаблонах вида `(а+)+б`
-//! время экспоненциально от длины входа. Отсечки по числу шагов здесь нет
-//! сознательно: платформа ведёт себя так же, а тихая отсечка превратила бы
-//! «искали слишком долго» в «не нашли», то есть в неверный ответ вместо
-//! медленного.
-//!
-//! # Кодовые точки поверх UTF-16
-//!
-//! Вход — код-юниты рантаймовой строки (`BslString`), декодирование идёт НА
-//! МЕСТЕ: суррогатная пара собирается в одну кодовую точку, и `.`, классы и
-//! кванторы считают её ОДНИМ символом. Непарный суррогат — законная точка
-//! со своим значением, а не ошибка: строка BSL не обязана быть корректным
-//! UTF-16, и матчинг не имеет права на этом падать. Позиции и границы групп
-//! движок отдаёт в КОД-ЮНИТАХ — это родные индексы строкового рантайма,
-//! которыми будут пользоваться builtins.
-//!
-//! # Что поддержано
-//!
-//! Литералы и экранирование (`\\`, `\.`, `\n`, `\t`, `\r`, `\f`, `\a`,
-//! `\e`, `\uXXXX`, экранированная пунктуация), `.`, классы `[...]`/`[^...]`
-//! с диапазонами и вложенными сокращениями, `\d`/`\D`/`\w`/`\W`/`\s`/`\S`,
-//! `\b`/`\B`, якоря `^`/`$`, кванторы `*`/`+`/`?`/`{n}`/`{n,}`/`{n,m}` —
-//! жадные и ленивые с суффиксом `?`, группы захвата `(...)` и
-//! незахватывающие `(?:...)`, альтернация `|`, инлайн-флаги `(?i)`/`(?m)`,
-//! свойства Unicode `\p{L}`/`\p{Nd}` и их отрицания `\P{...}`.
-//!
-//! Всё остальное — ЧЕСТНАЯ ошибка разбора, а не молчаливый литерал:
-//! просмотр вперёд `(?=...)`, именованные группы, обратные ссылки `\1`,
-//! операции над множествами `[a-z&&[^k]]`, притяжательные кванторы `a*+`,
-//! флаг `(?s)`. Молчаливое превращение непонятой конструкции в литерал —
-//! худший из вариантов: шаблон «работает», но ищет не то.
-//!
-//! # Семантика совпадения
-//!
-//! Поиск leftmost: первая позиция слева, на которой матч удался. На
-//! позиции порядок обхода задан приоритетом ветвей бэктрекинга — жадный
-//! квантор сперва пробует больше, ленивый меньше, альтернация идёт слева
-//! направо. Группы нумеруются по ОТКРЫВАЮЩЕЙ скобке слева направо, поэтому
-//! `((а)(б))(в)` даёт порядок «первая, её вложенные, затем вторая»; группа
-//! 0 — всё совпадение; неучаствовавшая группа — `None`, а не пустая строка
-//! (это разные вещи: `(а)?` на `б` не участвовала, `(а*)` на `б`
-//! участвовала и пуста). НЕОБЯЗАТЕЛЬНАЯ итерация, не сдвинувшая позицию,
-//! прекращает повторение НЕОГРАНИЧЕННОГО квантора — иначе `(а*)*`
-//! зациклился бы навсегда. У ограниченного `{n,m}` число проходов конечно
-//! само по себе, стража там нет, и захват достаётся последней копии,
-//! которой хватило текста: так измерена платформа.
-//!
-//! # Края диалекта, снятые с платформы
-//!
-//! Семь мест, где классические движки расходятся между собой, измерены на
-//! 8.3.27 контрактом `tests/conformance/measure/measure-regex.bsl` и стоят
-//! в реестре якорями: `REGEX.CLASS.WORD` (состав `\w` — `Alphabetic`,
-//! `\p{M}`, `\p{Nd}` и `\p{Pc}`, но БЕЗ U+200C/U+200D),
-//! `REGEX.CLASS.SPACE` (состав `\s` — свойство `White_Space` целиком),
-//! `REGEX.FOLD.SIMPLE` (свёртка регистра при `(?i)` — только одинарные
-//! отображения, `ß` с `SS` не совпадает), `REGEX.FLAG.SCOPE` (инлайн-флаг
-//! действует от своего места до конца охватывающей группы),
-//! `REGEX.LINE.TERMINATORS` (концы строки для `.` и `(?m)` — набор UTS#18),
-//! `REGEX.ANCHOR.EOL` (`$` без `(?m)` видит хвостовой перевод строки, а `^`
-//! под `(?m)` за ним новой строки не открывает), `REGEX.REPEAT.EMPTY`
-//! (какой итерации ограниченного квантора достаётся захват, когда тело
-//! совпало с пустотой).
+//!   * лимит бэктрекинга крейта отключён (`backtrack_limit(usize::MAX)`):
+//!     цена бэктрекинга — та же, что у ICU, на шаблонах вида `(а+)+б`
+//!     время экспоненциально, и платформа ведёт себя так же. Отсечка
+//!     превратила бы «искали слишком долго» в ошибку, которой у платформы
+//!     нет;
+//!   * непарный суррогат входа заменяется на U+FFFD: крейт работает по
+//!     UTF-8-строке, где непарной половине пары представления нет. Сам
+//!     интерпретатор такую строку не строит, платформа с ней не
+//!     промерена — это огрубление неизмеримого угла, а не совместимость.
 
 #[path = "regex/tables.rs"]
 mod tables;
 
 use bsl_rt::{RtError, RtResult};
-use std::collections::HashMap;
-use tables::{CONNECTOR_RANGES, DIGIT_RANGES, LETTER_RANGES, MARK_RANGES, in_ranges};
 
 pub(crate) use tables::decimal_digit_value;
 
@@ -107,15 +46,13 @@ type Cp = u32;
 /// не держит стек debug-сборки.
 const MAX_DEPTH: usize = 100;
 
-/// Предел длины скомпилированной программы.
+/// Предел развёрнутой оценки шаблона.
 ///
-/// `{n,m}` разворачивается копиями тела, поэтому `(?:а{1000}){1000}` — это
-/// миллион инструкций из двенадцати символов шаблона. Предел реализации, а
-/// не платформы: он даёт внятную ошибку вместо гигабайтов памяти.
-///
-/// Считаются именно инструкции, и этого достаточно: таблица классов растёт
-/// не с разворачиванием, а с числом классов В ШАБЛОНЕ — все копии одного
-/// узла делят одну запись (`Compiler::class_index`).
+/// Крейт разворачивает `{n,m}` копиями тела, поэтому `(?:а{1000}){1000}` —
+/// это миллион инструкций из двенадцати символов шаблона. Предел
+/// реализации, а не платформы: он даёт внятную ошибку вместо гигабайтов
+/// памяти, и срабатывает в рендерере — ДО крейта и его собственных
+/// пределов размера.
 const MAX_PROGRAM: usize = 200_000;
 
 /// Предел счётчика в `{n,m}`. Тоже предел реализации; настоящую отсечку
@@ -137,12 +74,8 @@ fn show(cp: Cp) -> String {
 
 const CP_TAB: Cp = 0x09;
 const CP_LF: Cp = 0x0A;
-const CP_VT: Cp = 0x0B;
 const CP_FF: Cp = 0x0C;
 const CP_CR: Cp = 0x0D;
-const CP_NEL: Cp = 0x85;
-const CP_LS: Cp = 0x2028;
-const CP_PS: Cp = 0x2029;
 
 /// Кодовая точка, начинающаяся в позиции `i`, и её ширина в код-юнитах.
 /// `None` — за концом строки.
@@ -185,62 +118,6 @@ fn decode(units: &[u16]) -> Vec<Cp> {
     out
 }
 
-/// Конец строки для `.` и для `(?m)`.
-///
-/// Набор UTS#18, ИЗМЕРЕННЫЙ на 8.3.27 (якорь `REGEX.LINE.TERMINATORS`):
-/// перевод строки, вертикальная табуляция, перевод формата, возврат
-/// каретки, NEL и разделители строк и абзацев. Под `.` проверены шесть из
-/// семи (все, кроме перевода строки, — он и так вне спора), под `(?m)` —
-/// вертикальная табуляция, NEL и разделитель абзацев. Java, для сравнения,
-/// вертикальную табуляцию и перевод формата концом строки не считает, и
-/// именно этой парой проба два набора и разделила.
-fn is_line_terminator(cp: Cp) -> bool {
-    matches!(cp, CP_LF | CP_VT | CP_FF | CP_CR | CP_NEL | CP_LS | CP_PS)
-}
-
-/// Свёртка регистра для `(?i)` — ТОЛЬКО одинарные отображения.
-///
-/// `char::to_lowercase` для некоторых точек даёт несколько символов
-/// (`İ` U+0130 → `i` + U+0307); брать первый символ такого отображения
-/// нельзя — это уже другая точка, и `(?i)İ` начал бы совпадать с `i`.
-/// Многосимвольные отображения оставляются как есть, то есть такие пары
-/// под `(?i)` не сворачиваются вовсе. `ё`/`Ё`, вся кириллица и латиница
-/// сворачиваются одинарно и работают.
-///
-/// Это ИЗМЕРЕНО на 8.3.27 (якорь `REGEX.FOLD.SIMPLE`) и оказалось более
-/// узким, чем ждёшь от ICU: `ß` под `(?i)` не совпадает ни с `SS`, ни `SS` с
-/// `ß`, `İ` U+0130 не совпадает с `i` ни в ту, ни в другую сторону, а
-/// бесточечная `ı` U+0131 не совпадает с `I`. Свернулось ровно то, у чего
-/// отображение одинарное: `ё`/`Ё`, класс `[а-я]` против `Я` и знак Кельвина
-/// U+212A против `k`.
-fn simple_lower(cp: Cp) -> Cp {
-    let Some(c) = char::from_u32(cp) else {
-        return cp;
-    };
-    let mut mapping = c.to_lowercase();
-    match (mapping.next(), mapping.next()) {
-        (Some(single), None) => single as Cp,
-        (Some(_), Some(_)) => cp,
-        // `to_lowercase` всегда отдаёт хотя бы один символ; ветка — ради
-        // исчерпывающего разбора, а не ради случая.
-        (None, _) => cp,
-    }
-}
-
-/// Обратная сторона [`simple_lower`] — нужна классам: `[А-Я]` под `(?i)`
-/// обязан ловить `а`, а свёртка вниз этого не даёт.
-fn simple_upper(cp: Cp) -> Cp {
-    let Some(c) = char::from_u32(cp) else {
-        return cp;
-    };
-    let mut mapping = c.to_uppercase();
-    match (mapping.next(), mapping.next()) {
-        (Some(single), None) => single as Cp,
-        (Some(_), Some(_)) => cp,
-        (None, _) => cp,
-    }
-}
-
 // --- свойства символов --------------------------------------------------
 
 /// Именованный набор точек: сокращения `\d`/`\w`/`\s` и свойства
@@ -258,42 +135,6 @@ enum PropKind {
     Letter,
 }
 
-impl PropKind {
-    fn matches(self, cp: Cp) -> bool {
-        match self {
-            PropKind::Digit => in_ranges(DIGIT_RANGES, cp),
-            PropKind::Letter => in_ranges(LETTER_RANGES, cp),
-            // Состав `\w` ИЗМЕРЕН на 8.3.27 (якорь `REGEX.CLASS.WORD`,
-            // блок «слово …» в measure-regex.bsl): свойство `Alphabetic`
-            // (римская единица U+2160 категории Nl и буква в круге U+24B6
-            // категории So — символы слова), все знаки `\p{M}` (ударение
-            // U+0301, висарга U+0903, охватывающий круг U+20DD), десятичные
-            // цифры `\p{Nd}` и соединители `\p{Pc}` (не только `_`, но и
-            // связка снизу U+203F). Это набор ICU БЕЗ невидимых
-            // U+200C/U+200D: их документация ICU в `\w` перечисляет, а
-            // платформа символами слова НЕ считает. Надстрочная двойка
-            // U+00B2 (No) тоже не входит.
-            PropKind::Word => {
-                char::from_u32(cp).is_some_and(char::is_alphabetic)
-                    || in_ranges(MARK_RANGES, cp)
-                    || in_ranges(DIGIT_RANGES, cp)
-                    || in_ranges(CONNECTOR_RANGES, cp)
-            }
-            // Состав `\s` ИЗМЕРЕН там же (якорь `REGEX.CLASS.SPACE`):
-            // свойство Unicode `White_Space` целиком, то есть вертикальная
-            // табуляция U+000B и NEL U+0085 — пробельные. Набор
-            // `[\t\n\f\r\p{Z}]`, который документирует ICU, обоих не
-            // содержит, и обоими проба его и отвергла.
-            PropKind::Space => char::from_u32(cp).is_some_and(char::is_whitespace),
-        }
-    }
-}
-
-/// Символ слова для `\b`/`\B` — тот же набор, что у `\w`.
-fn is_word_cp(cp: Cp) -> bool {
-    PropKind::Word.matches(cp)
-}
-
 // --- разобранный шаблон -------------------------------------------------
 
 /// Элемент класса символов.
@@ -308,39 +149,11 @@ enum ClassItem {
     },
 }
 
-impl ClassItem {
-    fn matches(&self, cp: Cp) -> bool {
-        match self {
-            ClassItem::Single(one) => *one == cp,
-            ClassItem::Range(from, to) => *from <= cp && cp <= *to,
-            ClassItem::Prop { kind, negated } => kind.matches(cp) != *negated,
-        }
-    }
-}
-
 /// Класс символов целиком.
 #[derive(Clone, Debug)]
 struct ClassSpec {
     negated: bool,
     items: Vec<ClassItem>,
-}
-
-impl ClassSpec {
-    /// Совпадение с учётом регистра.
-    ///
-    /// Свёртка применяется ДО отрицания, а не после: иначе `(?i)[^а-я]`
-    /// поймал бы `А` (её нет среди элементов, значит отрицание пропускает),
-    /// то есть отрицание перестало бы быть отрицанием того же множества.
-    fn matches(&self, cp: Cp, icase: bool) -> bool {
-        let mut hit = self.items.iter().any(|item| item.matches(cp));
-        if !hit && icase {
-            let lower = simple_lower(cp);
-            let upper = simple_upper(cp);
-            hit = (lower != cp && self.items.iter().any(|item| item.matches(lower)))
-                || (upper != cp && self.items.iter().any(|item| item.matches(upper)));
-        }
-        hit != self.negated
-    }
 }
 
 /// Узел дерева шаблона. Флаги, действовавшие в точке разбора, вморожены в
@@ -950,284 +763,414 @@ impl<'a> Parser<'a> {
     }
 }
 
-// --- программа ----------------------------------------------------------
+// --- рендеринг в синтаксис крейта ---------------------------------------
 
-/// Инструкция плоской программы. Адреса переходов — АБСОЛЮТНЫЕ индексы,
-/// как в байт-коде этого проекта.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Instr {
-    /// Литерал; под `(?i)` в `cp` лежит уже свёрнутая точка.
-    Char {
-        cp: Cp,
-        icase: bool,
-    },
-    /// Класс по индексу в таблице классов программы.
-    Class(usize),
-    /// `.`
-    Any,
-    /// Развилка: продолжить с `prefer`, а `alt` положить в стек
-    /// бэктрекинга. Жадность и леность — это порядок этих двух полей.
-    Split {
-        prefer: usize,
-        alt: usize,
-    },
-    Jump(usize),
-    /// Записать текущую позицию в регистр (границы групп).
-    Save(usize),
-    /// Обнулить регистр-метку перед входом в цикл.
-    ClearMark(usize),
-    /// Страж пустой итерации: если метка уже равна текущей позиции —
-    /// предыдущий проход ничего не съел, повторять нельзя.
-    Guard(usize),
-    /// `^`
-    LineStart {
-        multiline: bool,
-    },
-    /// `$`
-    LineEnd {
-        multiline: bool,
-    },
-    /// `\b` и `\B`
-    WordBoundary {
-        negated: bool,
-    },
-    /// Совпадение найдено.
-    Match,
+/// Набор `\w` в записи крейта. Состав ИЗМЕРЕН на 8.3.27 (якорь
+/// `REGEX.CLASS.WORD`): свойство `Alphabetic` (римская единица U+2160
+/// категории Nl и буква в круге U+24B6 категории So — символы слова), все
+/// знаки `\p{M}`, десятичные цифры `\p{Nd}` и соединители `\p{Pc}`. У
+/// самого крейта `\w` шире — он включает `\p{Join_Control}`, то есть
+/// невидимые U+200C/U+200D, которые документация ICU в `\w` перечисляет,
+/// а платформа символами слова НЕ считает. Вычитание возвращает
+/// измеренный состав; крейтовые `\w` и `\b` поэтому не эмитятся никогда.
+const WORD_CLASS: &str = r"[\w--[\x{200C}\x{200D}]]";
+
+/// Дополнение [`WORD_CLASS`]: не-слово крейта плюс оба джойнера.
+const NON_WORD_CLASS: &str = r"[[^\w]\x{200C}\x{200D}]";
+
+/// `.` — любой символ, кроме семи терминаторов UTS#18: перевод строки,
+/// вертикальная табуляция, перевод формата, возврат каретки, NEL и
+/// разделители строк и абзацев. ИЗМЕРЕНО на 8.3.27 (якорь
+/// `REGEX.LINE.TERMINATORS`): Java, для сравнения, вертикальную табуляцию
+/// и перевод формата концом строки не считает, и именно этой парой проба
+/// два набора и разделила. У крейта точка исключает только `\n`, поэтому
+/// всегда печатается класс.
+const DOT_CLASS: &str = r"[^\n\x0B\x0C\r\x{85}\x{2028}\x{2029}]";
+
+/// `$` без `(?m)`: конец входа либо позиция перед РОВНО ОДНИМ хвостовым
+/// терминатором, где `\r\n` считается одним, а между `\r` и `\n` конца
+/// нет. ИЗМЕРЕНО на 8.3.27 (якорь `REGEX.ANCHOR.EOL`, блок «конец …» в
+/// `measure-regex.bsl`): «аб$» находится в «аб», «аб\n», «аб\r», «аб\r\n»
+/// и «аб» + NEL, но не в «аб\n\n», а «аб\r$» в «аб\r\n» — нет. У крейта
+/// `$` — строгий конец входа, поэтому форма собрана из просмотров.
+const DOLLAR_FORM: &str =
+    r"(?:\z|(?=\r\n?\z)|(?<!\r)(?=\n\z)|(?=[\x0B\x0C\x{85}\x{2028}\x{2029}]\z))";
+
+/// `^` под `(?m)`: начало входа либо позиция сразу за терминатором — но
+/// не между `\r` и `\n` и не в самом конце входа: за хвостовым переводом
+/// строки новая строка НЕ открывается (якорь `REGEX.ANCHOR.EOL`: в «а\n»
+/// позиций у `^` одна, в «а\nб» — две). Страж `(?=[\s\S])` и отвечает за
+/// «не в самом конце»; крейтовый `(?m)` знает только `\n`, поэтому форма
+/// перечисляет терминаторы просмотрами назад.
+const MULTILINE_START_FORM: &str =
+    r"(?:\A|(?:(?<=[\n\x0B\x0C\x{85}\x{2028}\x{2029}])|(?<=\r)(?!\n))(?=[\s\S]))";
+
+/// `$` под `(?m)`: конец входа либо позиция перед терминатором — но не
+/// между `\r` и `\n` (в «а\n» позиций две: перед `\n` и в конце; в
+/// «а\r\nб» — перед `\r` и в конце, якорь `REGEX.ANCHOR.EOL` и блок
+/// «многострочный …» контракта).
+const MULTILINE_END_FORM: &str = r"(?:\z|(?=[\x0B\x0C\r\x{85}\x{2028}\x{2029}])|(?<!\r)(?=\n))";
+
+/// Печать дерева в синтаксис крейта.
+///
+/// Рендерер не оптимизирует: каждое квантуемое тело оборачивается
+/// незахватывающей группой, каждый регистронезависимый лист — группой
+/// `(?i:…)`. Лишние группы крейту безразличны, а нумерацию захватов они
+/// не сдвигают — физические номера групп совпадают с логическими, потому
+/// что своих ЗАХВАТЫВАЮЩИХ групп рендерер не вставляет никогда.
+struct Renderer {
+    out: String,
+    /// Обнуляемость тела каждой логической группы; индекс — номер группы,
+    /// нулевой не используется. Нужна чистке фантомных пустых участий,
+    /// см. [`Regex::find_at`].
+    nullable: Vec<bool>,
+    /// Оценка числа «инструкций» развёрнутого шаблона — прежний предел
+    /// [`MAX_PROGRAM`] переехал сюда из компилятора: сам рендерер копий
+    /// не печатает, но крейт разворачивает `{n,m}` копиями тела, и предел
+    /// обязан сработать ДО него, с прежним сообщением.
+    cost: usize,
 }
 
-#[derive(Clone, Debug)]
-struct CompiledClass {
-    spec: ClassSpec,
-    icase: bool,
-}
+impl Renderer {
+    fn new(group_count: usize) -> Renderer {
+        Renderer {
+            out: String::new(),
+            nullable: vec![false; group_count],
+            cost: 0,
+        }
+    }
 
-struct Compiler {
-    prog: Vec<Instr>,
-    classes: Vec<CompiledClass>,
-    /// Мемоизация «один узел класса — одна запись таблицы»: адрес
-    /// [`ClassSpec`] в дереве разбора → индекс в `classes`.
-    ///
-    /// Ключ — именно адрес, а не содержимое: дерево живёт всю компиляцию и
-    /// не мутирует, поэтому адреса стабильны и различны у разных узлов, а
-    /// сравнение по содержимому стоило бы обхода всего класса. Смысл — в
-    /// том, что [`Compiler::repeat`] обходит ОДИН И ТОТ ЖЕ `&Node` столько
-    /// раз, сколько копий тела разворачивает: без мемоизации `[абв]{20000}`
-    /// клал бы в таблицу двадцать тысяч клонов, и память таблицы росла бы
-    /// произведением «размер класса × число копий» мимо [`MAX_PROGRAM`],
-    /// который считает только инструкции. Флаг `icase` лежит в самом узле,
-    /// поэтому один узел всегда компилируется в одну и ту же запись.
-    class_index: HashMap<usize, usize>,
-    /// Следующий свободный регистр: сперва по два на группу, дальше метки
-    /// стражей пустого цикла.
-    next_reg: usize,
-}
-
-impl Compiler {
-    fn emit(&mut self, instr: Instr) -> RtResult<usize> {
-        if self.prog.len() >= MAX_PROGRAM {
+    fn charge(&mut self, amount: usize) -> RtResult<()> {
+        self.cost = self.cost.saturating_add(amount);
+        if self.cost > MAX_PROGRAM {
             return Err(bad(format!(
                 "шаблон разворачивается больше чем в {MAX_PROGRAM} инструкций — \
                  это предел этой реализации"
             )));
         }
-        self.prog.push(instr);
-        Ok(self.prog.len() - 1)
+        Ok(())
     }
 
-    fn here(&self) -> usize {
-        self.prog.len()
-    }
-
-    fn new_mark(&mut self) -> usize {
-        let reg = self.next_reg;
-        self.next_reg += 1;
-        reg
-    }
-
-    /// Дописать развилку на место заглушки: `taken` — ветвь «повторить или
-    /// войти», `skipped` — «пропустить». Жадный квантор предпочитает
-    /// первую, ленивый вторую.
-    fn set_split(&mut self, at: usize, greedy: bool, taken: usize, skipped: usize) {
-        let instr = if greedy {
-            Instr::Split {
-                prefer: taken,
-                alt: skipped,
-            }
+    /// Кодовая точка в литеральной позиции. ASCII-буквоцифры и всё вне
+    /// ASCII печатаются как есть, прочий ASCII — записью `\x{..}`: так не
+    /// нужен список метасимволов, а в классе заодно закрыты `-`, `]` и
+    /// `^`. Непарный суррогат представления в UTF-8 не имеет и печатается
+    /// как U+FFFD (см. шапку модуля).
+    fn literal_cp(&mut self, cp: Cp) {
+        let cp = if (0xD800..0xE000).contains(&cp) {
+            0xFFFD
         } else {
-            Instr::Split {
-                prefer: skipped,
-                alt: taken,
-            }
+            cp
         };
-        if let Some(slot) = self.prog.get_mut(at) {
-            *slot = instr;
+        match char::from_u32(cp) {
+            Some(c) if c.is_ascii_alphanumeric() || !c.is_ascii() => self.out.push(c),
+            _ => {
+                self.out.push_str(&format!("\\x{{{cp:X}}}"));
+            }
         }
     }
 
-    fn node(&mut self, node: &Node) -> RtResult<()> {
+    /// Сокращение или свойство в позиции элемента класса (или атома).
+    fn prop(&mut self, kind: PropKind, negated: bool) {
+        let text = match (kind, negated) {
+            (PropKind::Digit, false) => r"\p{Nd}",
+            (PropKind::Digit, true) => r"\P{Nd}",
+            (PropKind::Letter, false) => r"\p{L}",
+            (PropKind::Letter, true) => r"\P{L}",
+            // Состав `\s` ИЗМЕРЕН на 8.3.27 (якорь `REGEX.CLASS.SPACE`):
+            // свойство Unicode `White_Space` целиком — вертикальная
+            // табуляция U+000B и NEL U+0085 пробельные, хотя набор
+            // `[\t\n\f\r\p{Z}]` из документации ICU обоих не содержит.
+            // У крейта `\s` — то же свойство, печатается как есть.
+            (PropKind::Space, false) => r"\s",
+            (PropKind::Space, true) => r"\S",
+            (PropKind::Word, false) => WORD_CLASS,
+            (PropKind::Word, true) => NON_WORD_CLASS,
+        };
+        self.out.push_str(text);
+    }
+
+    /// Класс символов; суррогатные края диапазонов клипуются до валидных
+    /// половин, целиком суррогатный элемент вырождается в U+FFFD.
+    fn class(&mut self, spec: &ClassSpec) {
+        self.out.push('[');
+        if spec.negated {
+            self.out.push('^');
+        }
+        for item in &spec.items {
+            match item {
+                ClassItem::Single(cp) => self.literal_cp(*cp),
+                ClassItem::Range(low, high) => {
+                    let mut emit = |a: Cp, b: Cp| {
+                        self.literal_cp(a);
+                        self.out.push('-');
+                        self.literal_cp(b);
+                    };
+                    let (low, high) = (*low, *high);
+                    if low >= 0xD800 && high < 0xE000 {
+                        // Диапазон целиком в суррогатах.
+                        self.literal_cp(0xFFFD);
+                    } else if low < 0xD800 && high >= 0xE000 {
+                        emit(low, 0xD7FF);
+                        emit(0xE000, high);
+                    } else if (0xD800..0xE000).contains(&low) {
+                        emit(0xE000, high);
+                    } else if (0xD800..0xE000).contains(&high) {
+                        emit(low, 0xD7FF);
+                    } else {
+                        emit(low, high);
+                    }
+                }
+                ClassItem::Prop { kind, negated } => self.prop(*kind, *negated),
+            }
+        }
+        self.out.push(']');
+    }
+
+    /// Обе границы слова — просмотры над [`WORD_CLASS`]: `\b` — смена
+    /// принадлежности, `\B` — её сохранение. Края входа корректны сами
+    /// собой: несуществующий сосед проваливает и `(?<=W)`, и `(?=W)`.
+    fn word_boundary(&mut self, negated: bool) {
+        let w = WORD_CLASS;
+        let form = if negated {
+            format!("(?:(?<={w})(?={w})|(?<!{w})(?!{w}))")
+        } else {
+            format!("(?:(?<={w})(?!{w})|(?<!{w})(?={w}))")
+        };
+        self.out.push_str(&form);
+    }
+
+    /// Узел целиком; возвращает, обнуляемо ли его тело (совпадает ли оно
+    /// хоть когда-нибудь с пустотой) — это и заполняет [`Renderer::nullable`].
+    fn node(&mut self, node: &Node) -> RtResult<bool> {
         match node {
-            Node::Empty => Ok(()),
+            Node::Empty => Ok(true),
             Node::Literal { cp, icase } => {
-                let cp = if *icase { simple_lower(*cp) } else { *cp };
-                self.emit(Instr::Char { cp, icase: *icase })?;
-                Ok(())
+                self.charge(1)?;
+                if *icase {
+                    self.out.push_str("(?i:");
+                    self.literal_cp(*cp);
+                    self.out.push(')');
+                } else {
+                    self.literal_cp(*cp);
+                }
+                Ok(false)
             }
             Node::Class { spec, icase } => {
-                let key = std::ptr::from_ref(spec) as usize;
-                let index = match self.class_index.get(&key) {
-                    Some(index) => *index,
-                    None => {
-                        self.classes.push(CompiledClass {
-                            spec: spec.clone(),
-                            icase: *icase,
-                        });
-                        let index = self.classes.len() - 1;
-                        self.class_index.insert(key, index);
-                        index
-                    }
-                };
-                self.emit(Instr::Class(index))?;
-                Ok(())
+                self.charge(1)?;
+                if *icase {
+                    self.out.push_str("(?i:");
+                    self.class(spec);
+                    self.out.push(')');
+                } else {
+                    self.class(spec);
+                }
+                Ok(false)
             }
             Node::Any => {
-                self.emit(Instr::Any)?;
-                Ok(())
+                self.charge(1)?;
+                self.out.push_str(DOT_CLASS);
+                Ok(false)
             }
             Node::LineStart { multiline } => {
-                self.emit(Instr::LineStart {
-                    multiline: *multiline,
-                })?;
-                Ok(())
+                self.charge(1)?;
+                self.out.push_str(if *multiline {
+                    MULTILINE_START_FORM
+                } else {
+                    r"\A"
+                });
+                Ok(true)
             }
             Node::LineEnd { multiline } => {
-                self.emit(Instr::LineEnd {
-                    multiline: *multiline,
-                })?;
-                Ok(())
+                self.charge(1)?;
+                self.out.push_str(if *multiline {
+                    MULTILINE_END_FORM
+                } else {
+                    DOLLAR_FORM
+                });
+                Ok(true)
             }
             Node::WordBoundary { negated } => {
-                self.emit(Instr::WordBoundary { negated: *negated })?;
-                Ok(())
+                self.charge(1)?;
+                self.word_boundary(*negated);
+                Ok(true)
             }
             Node::Group { slot, body } => {
+                self.charge(1)?;
+                self.out.push_str(if slot.is_some() { "(" } else { "(?:" });
+                let nullable = self.node(body)?;
+                self.out.push(')');
                 if let Some(slot) = slot {
-                    self.emit(Instr::Save(slot * 2))?;
-                    self.node(body)?;
-                    self.emit(Instr::Save(slot * 2 + 1))?;
-                } else {
-                    self.node(body)?;
+                    self.nullable[*slot] = nullable;
                 }
-                Ok(())
+                Ok(nullable)
             }
             Node::Concat(parts) => {
+                let mut nullable = true;
                 for part in parts {
-                    self.node(part)?;
+                    nullable &= self.node(part)?;
                 }
-                Ok(())
+                Ok(nullable)
             }
-            Node::Alt(branches) => self.alt(branches),
+            Node::Alt(branches) => {
+                self.charge(branches.len())?;
+                self.out.push_str("(?:");
+                let mut nullable = false;
+                for (i, branch) in branches.iter().enumerate() {
+                    if i > 0 {
+                        self.out.push('|');
+                    }
+                    nullable |= self.node(branch)?;
+                }
+                self.out.push(')');
+                Ok(nullable)
+            }
             Node::Repeat {
                 body,
                 min,
                 max,
                 greedy,
-            } => self.repeat(body, *min, *max, *greedy),
-        }
-    }
-
-    fn alt(&mut self, branches: &[Node]) -> RtResult<()> {
-        let mut ends = Vec::new();
-        for (i, branch) in branches.iter().enumerate() {
-            if i + 1 == branches.len() {
-                // Последняя ветвь идёт без развилки: если не подошла она,
-                // не подошла вся альтернация.
-                self.node(branch)?;
-                break;
-            }
-            let split = self.emit(Instr::Jump(0))?;
-            self.node(branch)?;
-            ends.push(self.emit(Instr::Jump(0))?);
-            let next = self.here();
-            self.set_split(split, true, split + 1, next);
-        }
-        let end = self.here();
-        for at in ends {
-            if let Some(slot) = self.prog.get_mut(at) {
-                *slot = Instr::Jump(end);
-            }
-        }
-        Ok(())
-    }
-
-    /// Повторение.
-    ///
-    /// Неограниченное сверху разворачивается в ОДНУ копию тела в цикле
-    /// (плюс `min - 1` копий перед ним у `{n,}`), ограниченное — в `min`
-    /// обязательных копий и `max - min` копий под развилками. Копирование
-    /// тела — плата за плоскую программу без счётчиков в рантайме; предел
-    /// [`MAX_PROGRAM`] держит её конечной.
-    ///
-    /// Страж пустой итерации ([`Instr::ClearMark`] перед цепочкой копий и
-    /// [`Instr::Guard`] в голове каждой копии в цикле) стоит ТОЛЬКО в
-    /// неограниченной ветви и отвечает там за завершимость: без него
-    /// `(а*)*` крутился бы вечно. В ограниченной ветви число проходов
-    /// конечно само по себе, и страж влиял бы не на завершимость, а на
-    /// ПОРЯДОК ЗАХВАТОВ — поэтому его там нет: платформа ИЗМЕРЕНА (якорь
-    /// `REGEX.REPEAT.EMPTY`) и текст достаётся ПОСЛЕДНЕЙ копии, которой его
-    /// хватило, а не ранней. `(б{0,1}?){0,2}в` на «бв» даёт группу 1 =
-    /// `0,1`, `(б{0,2}?){1,3}в` на «ббв» — `0,2`, `(а*?){3,5}$` на «аа» —
-    /// `0,2`. Со стражем каждый из трёх сдвинулся бы вправо (`1,1`, `1,2`,
-    /// `2,2`) — это ответ `python3 re`, а платформа отвечает иначе.
-    /// Классические движки расходятся здесь вчетвером, поэтому проверены
-    /// все шесть строк теста
-    /// `an_empty_pass_of_a_bounded_quantifier_keeps_the_text_like_the_platform`.
-    fn repeat(&mut self, body: &Node, min: u32, max: Option<u32>, greedy: bool) -> RtResult<()> {
-        match max {
-            None => {
-                for _ in 0..min.saturating_sub(1) {
-                    self.node(body)?;
+            } => {
+                // Квантор над заведомо пустым телом крейт не принимает
+                // («target of repeat operator is invalid» на `(?:)*`), да
+                // и печатать его незачем: пустое тело совпадает с
+                // пустотой, а больше одной пустой итерации не различимо.
+                // Группы внутри такого тела при `min > 0` участвуют —
+                // тело печатается один раз без квантора.
+                if is_purely_empty(body) {
+                    if *min > 0 || has_group(body) && *greedy {
+                        return self.node(body);
+                    }
+                    return Ok(true);
                 }
-                let mark = self.new_mark();
-                self.emit(Instr::ClearMark(mark))?;
-                let start = self.here();
-                if min == 0 {
-                    let split = self.emit(Instr::Jump(0))?;
-                    self.emit(Instr::Guard(mark))?;
-                    self.node(body)?;
-                    self.emit(Instr::Jump(start))?;
-                    let end = self.here();
-                    self.set_split(split, greedy, split + 1, end);
-                } else {
-                    self.emit(Instr::Guard(mark))?;
-                    self.node(body)?;
-                    let split = self.emit(Instr::Jump(0))?;
-                    let end = self.here();
-                    self.set_split(split, greedy, start, end);
+                let copies = usize::try_from(max.unwrap_or_else(|| (*min).max(1))).unwrap_or(1);
+                let before = self.cost;
+                self.out.push_str("(?:");
+                let nullable = self.node(body)?;
+                self.out.push(')');
+                let body_cost = self.cost - before;
+                self.charge(body_cost.saturating_mul(copies.saturating_sub(1)))?;
+                match (*min, *max) {
+                    (0, None) => self.out.push('*'),
+                    (1, None) => self.out.push('+'),
+                    (0, Some(1)) => self.out.push('?'),
+                    (n, None) => {
+                        self.out.push_str(&format!("{{{n},}}"));
+                    }
+                    (n, Some(m)) if n == m => {
+                        self.out.push_str(&format!("{{{n}}}"));
+                    }
+                    (n, Some(m)) => {
+                        self.out.push_str(&format!("{{{n},{m}}}"));
+                    }
                 }
-            }
-            Some(max) => {
-                for _ in 0..min {
-                    self.node(body)?;
+                if !greedy {
+                    self.out.push('?');
                 }
-                // Точный `{n}` проходит эту цепочку пустой: копий под
-                // развилками у него нет, и тело ниже не разворачивается ни
-                // разу.
-                let mut splits = Vec::new();
-                for _ in min..max {
-                    splits.push(self.emit(Instr::Jump(0))?);
-                    self.node(body)?;
-                }
-                let end = self.here();
-                for at in splits {
-                    self.set_split(at, greedy, at + 1, end);
-                }
+                Ok(*min == 0 || nullable)
             }
         }
-        Ok(())
     }
 }
 
-// --- готовое выражение --------------------------------------------------
+/// Тело, не порождающее текста ни при каком совпадении.
+fn is_purely_empty(node: &Node) -> bool {
+    match node {
+        Node::Empty => true,
+        Node::Group { body, .. } => is_purely_empty(body),
+        Node::Concat(parts) => parts.iter().all(is_purely_empty),
+        Node::Repeat { body, .. } => is_purely_empty(body),
+        _ => false,
+    }
+}
+
+/// Есть ли в поддереве захватывающая группа.
+fn has_group(node: &Node) -> bool {
+    match node {
+        Node::Group { slot, body } => slot.is_some() || has_group(body),
+        Node::Concat(parts) | Node::Alt(parts) => parts.iter().any(has_group),
+        Node::Repeat { body, .. } => has_group(body),
+        _ => false,
+    }
+}
+
+// --- вход в UTF-8 и обратно ----------------------------------------------
+
+/// Вход поиска: UTF-8-копия строки и таблица соответствия границ.
+///
+/// Строится ОДИН раз на вызов BSL-функции — `scan`/`scan_back` зовут
+/// `find_at` в цикле, и конверсия внутри него превращала бы один проход в
+/// квадратичный. Для чисто ASCII-строк таблица не строится: смещения
+/// совпадают сами собой.
+pub(crate) struct Haystack {
+    text: String,
+    /// `u8_of[i]` — байтовое смещение UTF-16-границы `i`; всего
+    /// `len + 1` значений. Пуст у ASCII-строк. Середина суррогатной пары
+    /// смотрит на КОНЕЦ символа: законная позиция `НачальнаяПозиция`
+    /// не должна попасть внутрь UTF-8-последовательности.
+    u8_of: Vec<u32>,
+    /// Длина входа в код-юнитах.
+    len: usize,
+}
+
+impl Haystack {
+    pub(crate) fn new(units: &[u16]) -> Haystack {
+        if units.iter().all(|&u| u < 0x80) {
+            let text = units.iter().map(|&u| char::from(u as u8)).collect();
+            return Haystack {
+                text,
+                u8_of: Vec::new(),
+                len: units.len(),
+            };
+        }
+        let mut text = String::with_capacity(units.len() * 3 / 2);
+        let mut u8_of = Vec::with_capacity(units.len() + 1);
+        let mut i = 0;
+        while i < units.len() {
+            u8_of.push(text.len() as u32);
+            match cp_at(units, i) {
+                Some((cp, width)) => {
+                    let c = char::from_u32(cp).unwrap_or('\u{FFFD}');
+                    text.push(c);
+                    if width == 2 {
+                        // Середина пары указывает на конец символа.
+                        u8_of.push(text.len() as u32);
+                    }
+                    i += width;
+                }
+                None => break,
+            }
+        }
+        u8_of.push(text.len() as u32);
+        Haystack {
+            text,
+            u8_of,
+            len: units.len(),
+        }
+    }
+
+    fn to_u8(&self, cu: usize) -> usize {
+        if self.u8_of.is_empty() {
+            cu
+        } else {
+            self.u8_of[cu] as usize
+        }
+    }
+
+    fn to_cu(&self, byte: usize) -> usize {
+        if self.u8_of.is_empty() {
+            byte
+        } else {
+            // Последняя граница с этим смещением, а не первая: у середины
+            // суррогатной пары смещение совпадает с КОНЦОМ символа, и
+            // ответ обязан быть концом — иначе шаг по кодовым точкам
+            // топтался бы на месте.
+            self.u8_of.partition_point(|&off| (off as usize) <= byte) - 1
+        }
+    }
+}
+
+// --- скомпилированное выражение ------------------------------------------
 
 /// Найденное совпадение: границы групп в КОД-ЮНИТАХ UTF-16.
 ///
@@ -1240,56 +1183,67 @@ pub(crate) struct Match {
 
 /// Скомпилированное регулярное выражение.
 pub(crate) struct Regex {
-    prog: Vec<Instr>,
-    classes: Vec<CompiledClass>,
+    re: fancy_regex::Regex,
+    /// Обнуляемость тел логических групп — для чистки фантомов.
+    nullable: Vec<bool>,
     /// Число групп ВМЕСТЕ с нулевой.
     group_count: usize,
-    /// Сколько регистров нужно исполнителю: границы групп плюс метки.
-    reg_count: usize,
 }
 
-/// Точка возврата бэктрекинга.
-struct Backtrack {
-    pc: usize,
-    pos: usize,
-    /// Длина журнала отмены на момент развилки: всё, что записано позже,
-    /// откатывается.
-    undo: usize,
-}
-
-/// Что делать после инструкции.
-enum Step {
-    /// Съедено столько код-юнитов, дальше следующая инструкция.
-    Advance(usize),
-    Next,
-    Goto(usize),
-    Done,
-    Fail,
+/// Ошибка крейта — в ловимую ошибку времени выполнения. Разбор шаблона
+/// целиком наш, поэтому сюда попадают только пределы размера и прочие
+/// внутренние отказы крейта на уже разобранном шаблоне.
+fn engine_error(e: &fancy_regex::Error) -> RtError {
+    bad(format!(
+        "внутренняя ошибка движка регулярных выражений: {e}"
+    ))
 }
 
 impl Regex {
-    /// Разобрать и скомпилировать шаблон с флагами, ЗАДАННЫМИ СНАРУЖИ.
+    /// Разобрать шаблон и скомпилировать его рендер крейтом; флаги,
+    /// ЗАДАННЫЕ СНАРУЖИ, — начальное состояние парсера.
     ///
     /// Платформа принимает регистронезависимость и многострочность двумя
     /// путями сразу: инлайн-флагами `(?i)`/`(?m)` внутри шаблона и
     /// отдельными аргументами `ИгнорироватьРегистр`/`МногострочныйПоиск` у
-    /// всех четырёх функций поиска. Второй путь заведён здесь начальным
+    /// всех четырёх функций поиска. Второй путь заведён начальным
     /// состоянием [`Flags`], а не дописыванием `(?i)` к тексту шаблона:
     /// приписка сдвинула бы позиции в сообщениях об ошибках разбора и
     /// зависела бы от области действия инлайн-флага, которая у платформы
     /// кончается на границе охватывающей группы (якорь `REGEX.FLAG.SCOPE`).
-    /// Начальные флаги от такой области не зависят по построению: они
-    /// действуют ровно на всё.
     ///
     /// # Errors
     ///
     /// [`RtError::Regex`] на любой ошибке разбора: незакрытая группа или
     /// класс, перевёрнутый диапазон, квантор без атома или с верхней
-    /// границей меньше нижней, неподдержанная конструкция (просмотр
-    /// вперёд, обратная ссылка, операции над множествами), а также на
+    /// границей меньше нижней, неподдержанная конструкция, а также на
     /// превышении пределов реализации — вложенности [`MAX_DEPTH`],
-    /// счётчика [`MAX_REPEAT`] и длины программы [`MAX_PROGRAM`].
+    /// счётчика [`MAX_REPEAT`] и развёрнутой оценки [`MAX_PROGRAM`].
     pub(crate) fn parse_with(pattern: &[u16], icase: bool, multiline: bool) -> RtResult<Regex> {
+        Regex::build(pattern, icase, multiline, false)
+    }
+
+    /// То же, но скомпилированное для совпадения СО ВСЕЙ строкой: рендер
+    /// оборачивается в `\A(?:…)\z`. Нужно одной `СтрПодобна…`, и только
+    /// ей: обёртка «на всякий случай» удваивала бы компиляцию у всех.
+    ///
+    /// `\z` — СТРОГИЙ конец входа, и это не то же, что `$`: «аб» +
+    /// перевод строки под `аб` НЕ подходит (измерено), хотя `б$` в нём
+    /// находится. Перебор ветвей при этом остаётся за крейтом: `а|аб` на
+    /// «аб» обязан дойти до второй ветви и ответить «подходит».
+    ///
+    /// # Errors
+    ///
+    /// Как у [`Regex::parse_with`].
+    pub(crate) fn parse_full_with(
+        pattern: &[u16],
+        icase: bool,
+        multiline: bool,
+    ) -> RtResult<Regex> {
+        Regex::build(pattern, icase, multiline, true)
+    }
+
+    fn build(pattern: &[u16], icase: bool, multiline: bool, full: bool) -> RtResult<Regex> {
         let src = decode(pattern);
         let mut parser = Parser::new(&src);
         parser.flags = Flags { icase, multiline };
@@ -1300,21 +1254,27 @@ impl Regex {
             return Err(bad("лишняя « ) » в шаблоне"));
         }
         let group_count = parser.groups + 1;
-        let mut compiler = Compiler {
-            prog: Vec::new(),
-            classes: Vec::new(),
-            class_index: HashMap::new(),
-            next_reg: group_count * 2,
-        };
-        compiler.emit(Instr::Save(0))?;
-        compiler.node(&tree)?;
-        compiler.emit(Instr::Save(1))?;
-        compiler.emit(Instr::Match)?;
+        let mut renderer = Renderer::new(group_count);
+        if full {
+            renderer.out.push_str(r"\A(?:");
+        }
+        renderer.node(&tree)?;
+        if full {
+            renderer.out.push_str(r")\z");
+        }
+        let mut builder = fancy_regex::RegexBuilder::new(&renderer.out);
+        // Пределы: свой бюджет уже отработал на рендере, поэтому предел
+        // крейта поднят до запаса, в который влезает всё, что бюджет
+        // пропустил (например, `\w{5000}` — большой класс, повторённый
+        // крейтом покопийно). Лимит бэктрекинга отключён сознательно —
+        // довод в шапке модуля.
+        builder.backtrack_limit(usize::MAX);
+        builder.delegate_size_limit(256 << 20);
+        let re = builder.build().map_err(|e| engine_error(&e))?;
         Ok(Regex {
-            prog: compiler.prog,
-            classes: compiler.classes,
+            re,
+            nullable: renderer.nullable,
             group_count,
-            reg_count: compiler.next_reg,
         })
     }
 
@@ -1328,296 +1288,82 @@ impl Regex {
         self.group_count
     }
 
+    /// Захваты крейта — в [`Match`] с код-юнитными границами и чисткой
+    /// фантомов: бэктрекер крейта нормализует `(X+)?` в `(X*)`, и группа,
+    /// чьё тело не совпадает с пустотой, приходит «участвовавшей пусто»
+    /// там, где обязана быть неучаствовавшей. Обнуляемость тел знает
+    /// рендерер, и пустой спан НЕобнуляемой группы — всегда фантом.
+    fn convert(&self, hay: &Haystack, caps: &fancy_regex::Captures<'_, str>) -> Match {
+        let spans = (0..self.group_count)
+            .map(|i| {
+                let m = caps.get(i)?;
+                let (from, to) = (hay.to_cu(m.start()), hay.to_cu(m.end()));
+                if i > 0 && from == to && !self.nullable[i] {
+                    return None;
+                }
+                Some((from, to))
+            })
+            .collect();
+        Match { spans }
+    }
+
     /// Первое совпадение, начинающееся не левее `start`.
     ///
     /// Позиции — код-юниты UTF-16. `start` ожидается на границе кодовой
-    /// точки; если он попал в середину суррогатной пары, низкий суррогат
-    /// читается как непарный — так же, как читался бы в любой другой
-    /// позиции.
-    pub(crate) fn find_at(&self, haystack: &[u16], start: usize) -> Option<Match> {
-        if start > haystack.len() {
-            return None;
+    /// точки; попавший в середину суррогатной пары — округляется к её
+    /// концу.
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::Regex`] на внутренней ошибке крейта: «не смогли» не
+    /// прячется под «не нашли».
+    pub(crate) fn find_at(&self, hay: &Haystack, start: usize) -> RtResult<Option<Match>> {
+        if start > hay.len {
+            return Ok(None);
         }
-        let mut regs: Vec<Option<usize>> = vec![None; self.reg_count];
-        let mut undo: Vec<(usize, Option<usize>)> = Vec::new();
-        let mut stack: Vec<Backtrack> = Vec::new();
-        let mut pos = start;
-        loop {
-            if let Some(found) = self.run_at(haystack, pos, false, &mut regs, &mut undo, &mut stack)
-            {
-                return Some(found);
-            }
-            match cp_at(haystack, pos) {
-                // Шаг поиска — по кодовой точке, а не по код-юниту: начало
-                // совпадения не должно попадать в середину пары.
-                Some((_, width)) => pos += width,
-                None => return None,
-            }
-        }
+        let caps = self
+            .re
+            .captures_from_pos(hay.text.as_str(), hay.to_u8(start))
+            .map_err(|e| engine_error(&e))?;
+        Ok(caps.map(|caps| self.convert(hay, &caps)))
     }
 
     /// Совпадение, НАЧИНАЮЩЕЕСЯ ровно в `at`, — без поиска правее.
     ///
     /// Нужно проходу справа налево (`НаправлениеПоиска.СКонца`): он
-    /// перебирает позиции начала сам, и [`Regex::find_at`] тут не годится
-    /// не только по смыслу, но и по цене — на каждой позиции он
-    /// досматривал бы строку до конца, превращая один проход в
-    /// квадратичный.
-    pub(crate) fn match_at(&self, haystack: &[u16], at: usize) -> Option<Match> {
-        if at > haystack.len() {
-            return None;
-        }
-        let mut regs: Vec<Option<usize>> = vec![None; self.reg_count];
-        let mut undo: Vec<(usize, Option<usize>)> = Vec::new();
-        let mut stack: Vec<Backtrack> = Vec::new();
-        self.run_at(haystack, at, false, &mut regs, &mut undo, &mut stack)
-    }
-
-    /// Совпадает ли выражение со ВСЕЙ строкой целиком.
+    /// перебирает позиции начала сам. Якорного поиска у крейта нет,
+    /// поэтому берётся первое совпадение не левее `at` с проверкой, что
+    /// оно началось именно там: приоритет ветвей в позиции `at` у обоих
+    /// способов один и тот же. Промах при этом стоит просмотра хвоста —
+    /// на длинных строках проход справа налево квадратичен; если станет
+    /// горячо, выход — якорный поиск нижнего слоя `regex-automata`.
     ///
-    /// Это не то же, что `find_at(hay, 0)` с проверкой границ постфактум, и
-    /// не то же, что обёртка `^(?:…)$`. Постфактум-проверка проиграла бы на
-    /// `а|аб` ~ «аб»: перебор отдаёт ПЕРВУЮ по приоритету ветвь («а»), и
-    /// сравнение её конца с длиной строки ответило бы «не подходит», тогда
-    /// как платформа отвечает «подходит» — она продолжает бэктрекинг, пока
-    /// не найдёт ветвь, съедающую строку целиком. Обёртка с якорями тоже не
-    /// годится: `$` совпадает и ПЕРЕД хвостовым переводом строки (измерено:
-    /// «аб» + `Символ(10)` ~ `б$` даёт позицию 2), а
-    /// `СтрПодобнаПоРегулярномуВыражению("аб" + Символ(10), "аб")` — «Нет».
-    /// Поэтому требование «конец совпадения равен концу входа» встроено в
-    /// сам перебор: несовпавшая длина — это `Fail`, за которым идёт откат к
-    /// следующей точке возврата.
-    pub(crate) fn matches_full(&self, haystack: &[u16]) -> bool {
-        let mut regs: Vec<Option<usize>> = vec![None; self.reg_count];
-        let mut undo: Vec<(usize, Option<usize>)> = Vec::new();
-        let mut stack: Vec<Backtrack> = Vec::new();
-        self.run_at(haystack, 0, true, &mut regs, &mut undo, &mut stack)
-            .is_some()
-    }
-
-    /// Попытка совпадения, НАЧИНАЮЩЕГОСЯ ровно в `start`.
+    /// # Errors
     ///
-    /// `require_end` — принимать только совпадение, кончающееся на конце
-    /// входа; иначе перебор продолжается, а не останавливается на первом
-    /// удачном разборе.
-    fn run_at(
-        &self,
-        hay: &[u16],
-        start: usize,
-        require_end: bool,
-        regs: &mut [Option<usize>],
-        undo: &mut Vec<(usize, Option<usize>)>,
-        stack: &mut Vec<Backtrack>,
-    ) -> Option<Match> {
-        regs.iter_mut().for_each(|slot| *slot = None);
-        undo.clear();
-        stack.clear();
-        let mut pc = 0usize;
-        let mut pos = start;
-        loop {
-            let Some(instr) = self.prog.get(pc) else {
-                debug_assert!(false, "счётчик инструкций вышел за программу");
-                return None;
-            };
-            let step = match *instr {
-                Instr::Char { cp, icase } => match cp_at(hay, pos) {
-                    Some((got, width)) => {
-                        let got = if icase { simple_lower(got) } else { got };
-                        if got == cp {
-                            Step::Advance(width)
-                        } else {
-                            Step::Fail
-                        }
-                    }
-                    None => Step::Fail,
-                },
-                Instr::Class(index) => match (cp_at(hay, pos), self.classes.get(index)) {
-                    (Some((got, width)), Some(class)) if class.spec.matches(got, class.icase) => {
-                        Step::Advance(width)
-                    }
-                    _ => Step::Fail,
-                },
-                Instr::Any => match cp_at(hay, pos) {
-                    Some((got, width)) if !is_line_terminator(got) => Step::Advance(width),
-                    _ => Step::Fail,
-                },
-                Instr::Split { prefer, alt } => {
-                    stack.push(Backtrack {
-                        pc: alt,
-                        pos,
-                        undo: undo.len(),
-                    });
-                    Step::Goto(prefer)
-                }
-                Instr::Jump(target) => Step::Goto(target),
-                Instr::Save(reg) => {
-                    if write_reg(regs, undo, reg, Some(pos)) {
-                        Step::Next
-                    } else {
-                        debug_assert!(false, "инструкция сослалась на чужой регистр");
-                        return None;
-                    }
-                }
-                Instr::ClearMark(reg) => {
-                    if write_reg(regs, undo, reg, None) {
-                        Step::Next
-                    } else {
-                        debug_assert!(false, "инструкция сослалась на чужой регистр");
-                        return None;
-                    }
-                }
-                Instr::Guard(reg) => match regs.get(reg).copied() {
-                    // Итерация, начавшаяся там же, где предыдущая, ничего
-                    // не съела — повторять её нельзя.
-                    Some(mark) if mark == Some(pos) => Step::Fail,
-                    Some(_) => {
-                        write_reg(regs, undo, reg, Some(pos));
-                        Step::Next
-                    }
-                    None => {
-                        debug_assert!(false, "инструкция сослалась на чужой регистр");
-                        return None;
-                    }
-                },
-                Instr::LineStart { multiline } => {
-                    if at_line_start(hay, pos, multiline) {
-                        Step::Next
-                    } else {
-                        Step::Fail
-                    }
-                }
-                Instr::LineEnd { multiline } => {
-                    if at_line_end(hay, pos, multiline) {
-                        Step::Next
-                    } else {
-                        Step::Fail
-                    }
-                }
-                Instr::WordBoundary { negated } => {
-                    let before = cp_before(hay, pos).is_some_and(|(cp, _)| is_word_cp(cp));
-                    let after = cp_at(hay, pos).is_some_and(|(cp, _)| is_word_cp(cp));
-                    if (before != after) != negated {
-                        Step::Next
-                    } else {
-                        Step::Fail
-                    }
-                }
-                Instr::Match => {
-                    if require_end && pos != hay.len() {
-                        Step::Fail
-                    } else {
-                        Step::Done
-                    }
-                }
-            };
-            match step {
-                Step::Advance(width) => {
-                    pos += width;
-                    pc += 1;
-                }
-                Step::Next => pc += 1,
-                Step::Goto(target) => pc = target,
-                Step::Done => {
-                    let spans = (0..self.group_count)
-                        .map(|group| {
-                            let from = regs.get(group * 2).copied().flatten();
-                            let to = regs.get(group * 2 + 1).copied().flatten();
-                            from.zip(to)
-                        })
-                        .collect();
-                    return Some(Match { spans });
-                }
-                Step::Fail => {
-                    let point = stack.pop()?;
-                    while undo.len() > point.undo {
-                        let Some((reg, previous)) = undo.pop() else {
-                            break;
-                        };
-                        if let Some(slot) = regs.get_mut(reg) {
-                            *slot = previous;
-                        }
-                    }
-                    pc = point.pc;
-                    pos = point.pos;
-                }
-            }
+    /// Как у [`Regex::find_at`].
+    pub(crate) fn match_at(&self, hay: &Haystack, at: usize) -> RtResult<Option<Match>> {
+        let Some(found) = self.find_at(hay, at)? else {
+            return Ok(None);
+        };
+        // Нулевая группа совпадения есть всегда.
+        if found.spans[0].is_some_and(|(from, _)| from == at) {
+            Ok(Some(found))
+        } else {
+            Ok(None)
         }
     }
-}
 
-/// Записать регистр, занеся прежнее значение в журнал отмены.
-///
-/// `false` — регистра с таким номером нет; корректная программа такого не
-/// порождает, поэтому исполнитель на этом останавливается, а не молчит.
-fn write_reg(
-    regs: &mut [Option<usize>],
-    undo: &mut Vec<(usize, Option<usize>)>,
-    reg: usize,
-    value: Option<usize>,
-) -> bool {
-    match regs.get_mut(reg) {
-        Some(slot) => {
-            undo.push((reg, *slot));
-            *slot = value;
-            true
-        }
-        None => false,
+    /// Совпадает ли выражение со ВСЕЙ строкой целиком; выражение обязано
+    /// быть собрано [`Regex::parse_full_with`].
+    ///
+    /// # Errors
+    ///
+    /// Как у [`Regex::find_at`].
+    pub(crate) fn matches_full(&self, hay: &Haystack) -> RtResult<bool> {
+        self.re
+            .is_match(hay.text.as_str())
+            .map_err(|e| engine_error(&e))
     }
-}
-
-/// Стоит ли позиция в начале строки текста.
-///
-/// Без `(?m)` — только самое начало входа. С `(?m)` — ещё и сразу после
-/// конца строки, но НЕ между `\r` и `\n` (пара — один конец строки) и не в
-/// самом конце входа: хвостовой перевод строки новой строки не открывает.
-/// ИЗМЕРЕНО на 8.3.27 счётом позиций (якорь `REGEX.ANCHOR.EOL`): `(?m)^`
-/// находится в «а\nб» дважды, а в «а\n» — один раз, то есть за хвостовым
-/// переводом строки третьей позиции нет.
-fn at_line_start(hay: &[u16], pos: usize, multiline: bool) -> bool {
-    if pos == 0 {
-        return true;
-    }
-    if !multiline || pos >= hay.len() {
-        return false;
-    }
-    let Some((previous, _)) = cp_before(hay, pos) else {
-        return false;
-    };
-    if !is_line_terminator(previous) {
-        return false;
-    }
-    !(previous == CP_CR && cp_at(hay, pos).map(|(cp, _)| cp) == Some(CP_LF))
-}
-
-/// Стоит ли позиция в конце строки текста.
-///
-/// С `(?m)` — перед любым концом строки и в конце входа. Без `(?m)` — в
-/// конце входа и перед ХВОСТОВЫМ концом строки (`\r\n` считается одним),
-/// то есть `«аб\n»` шаблоном `б$` находится. ИЗМЕРЕНО на 8.3.27 (якорь
-/// `REGEX.ANCHOR.EOL`): `аб$` находится в «аб», «аб\n», «аб\r», «аб\r\n» и
-/// «аб» + NEL, но НЕ в «аб\n\n» — хвостовым считается ровно один конец
-/// строки, — и не в виде `аб\r$` на «аб\r\n», потому что внутри пары конца
-/// строки нет.
-fn at_line_end(hay: &[u16], pos: usize, multiline: bool) -> bool {
-    let Some((cp, width)) = cp_at(hay, pos) else {
-        return true;
-    };
-    if !is_line_terminator(cp) {
-        return false;
-    }
-    // Внутри пары `\r\n` конца строки нет.
-    if cp == CP_LF && cp_before(hay, pos).map(|(prev, _)| prev) == Some(CP_CR) {
-        return false;
-    }
-    if multiline {
-        return true;
-    }
-    let tail = if cp == CP_CR && cp_at(hay, pos + 1).map(|(next, _)| next) == Some(CP_LF) {
-        pos + 2
-    } else {
-        pos + width
-    };
-    tail == hay.len()
 }
 
 #[cfg(test)]
@@ -1643,7 +1389,10 @@ mod tests {
     /// Текст группы `n` первого совпадения.
     fn group(pattern: &str, text: &str, n: usize) -> Option<String> {
         let hay = utf16(text);
-        let found = compile(pattern).find_at(&hay, 0)?;
+        let haystack = Haystack::new(&hay);
+        let found = compile(pattern)
+            .find_at(&haystack, 0)
+            .expect("движок не должен отказывать")?;
         let (from, to) = *found.spans.get(n)?.as_ref()?;
         Some(String::from_utf16_lossy(hay.get(from..to)?))
     }
@@ -1651,7 +1400,11 @@ mod tests {
     /// Границы всех групп совпадения.
     fn spans(pattern: &str, text: &str) -> Vec<Option<(usize, usize)>> {
         let hay = utf16(text);
-        match compile(pattern).find_at(&hay, 0) {
+        let haystack = Haystack::new(&hay);
+        match compile(pattern)
+            .find_at(&haystack, 0)
+            .expect("движок не должен отказывать")
+        {
             Some(found) => found.spans,
             None => panic!("шаблон «{pattern}» не нашёлся в «{text}»"),
         }
@@ -1889,14 +1642,18 @@ mod tests {
         // Пустое совпадение находится в самой левой позиции.
         assert_eq!(spans("б*", "аб")[0], Some((0, 0)));
         let hay = utf16("аббаббб");
+        let haystack = Haystack::new(&hay);
         let regex = compile("б+");
         // Со сдвигом — первое совпадение правее старта.
         assert_eq!(
-            regex.find_at(&hay, 3).and_then(|m| m.spans[0]),
+            regex
+                .find_at(&haystack, 3)
+                .unwrap()
+                .and_then(|m| m.spans[0]),
             Some((4, 7))
         );
-        assert_eq!(regex.find_at(&hay, hay.len()), None);
-        assert_eq!(regex.find_at(&hay, hay.len() + 5), None);
+        assert_eq!(regex.find_at(&haystack, hay.len()).unwrap(), None);
+        assert_eq!(regex.find_at(&haystack, hay.len() + 5).unwrap(), None);
     }
 
     #[test]
@@ -1943,7 +1700,10 @@ mod tests {
         let lonely = vec![0x0430u16, 0xD83Du16, 0x0431u16];
         let regex = compile("а.б");
         assert_eq!(
-            regex.find_at(&lonely, 0).and_then(|m| m.spans[0]),
+            regex
+                .find_at(&Haystack::new(&lonely), 0)
+                .unwrap()
+                .and_then(|m| m.spans[0]),
             Some((0, 3))
         );
     }
@@ -1996,18 +1756,17 @@ mod tests {
         }
     }
 
-    /// Таблица классов растёт с ШАБЛОНОМ, а не с разворачиванием `{n,m}`.
+    /// Большой повтор в бюджете обязан и компилироваться крейтом.
     ///
-    /// Тест белого ящика: снаружи разница видна только пиковой памятью, а
-    /// инвариант «одна запись на синтаксический класс» и есть та граница,
-    /// ради которой заведён [`MAX_PROGRAM`] — сорок тысяч копий класса
-    /// обязаны делить одну запись, иначе предел считает инструкции, а
-    /// память съедают клоны `ClassSpec`.
+    /// Прежний тест белого ящика проверял разделяемую таблицу классов
+    /// собственного компилятора; у крейта такой таблицы нет — сорок тысяч
+    /// копий класса он разворачивает честно, и предел его размера поднят
+    /// в [`Regex::build`] так, чтобы всё, что пропустил бюджет
+    /// [`MAX_PROGRAM`], компилировалось. Этот тест держит именно ту
+    /// границу: бюджет пропускает — крейт не отказывает.
     #[test]
-    fn the_class_table_grows_with_the_pattern_not_the_expansion() {
-        let many = compile("(?:[абв]){40000}");
-        assert_eq!(many.classes.len(), 1);
-        assert_eq!(compile("[а][б]").classes.len(), 2);
+    fn the_rendered_pattern_grows_with_the_source_not_the_expansion() {
+        compile("(?:[абв]){40000}");
     }
 
     #[test]

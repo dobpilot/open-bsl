@@ -150,7 +150,7 @@ use bsl_rt::{
 use std::rc::Rc;
 
 mod engine;
-use engine::Regex;
+use engine::{Haystack, Regex};
 
 /// Один промежуток исходной строки: то, что в BSL видно как объект с
 /// тремя свойствами.
@@ -401,11 +401,16 @@ fn in_range(value: Option<&BslNumber>, top: usize, parameter: u32) -> RtResult<O
 /// Проверено ровно там, где это различимо: у «а» + суррогатная пара + «б»
 /// пустые совпадения стоят на 1, 2, 4 и 5 — позиции 3, середины пары,
 /// среди них нет.
-fn scan(re: &Regex, hay: &[u16], from: usize) -> Vec<crate::engine::Match> {
+fn scan(
+    re: &Regex,
+    units: &[u16],
+    hay: &Haystack,
+    from: usize,
+) -> RtResult<Vec<crate::engine::Match>> {
     let mut found = Vec::new();
     let mut at = from;
-    while at <= hay.len() {
-        let Some(m) = re.find_at(hay, at) else { break };
+    while at <= units.len() {
+        let Some(m) = re.find_at(hay, at)? else { break };
         let Some((start, end)) = m.spans.first().copied().flatten() else {
             break;
         };
@@ -413,13 +418,13 @@ fn scan(re: &Regex, hay: &[u16], from: usize) -> Vec<crate::engine::Match> {
         at = if end > start {
             end
         } else {
-            match crate::engine::cp_at(hay, start) {
+            match crate::engine::cp_at(units, start) {
                 Some((_, width)) => start + width,
                 None => start + 1,
             }
         };
     }
-    found
+    Ok(found)
 }
 
 /// Проход справа налево: позиции начала перебираются от `from` вниз, и
@@ -427,7 +432,13 @@ fn scan(re: &Regex, hay: &[u16], from: usize) -> Vec<crate::engine::Match> {
 /// отвергается, если налезает на предыдущее (см. шапку модуля, «аабаа»).
 ///
 /// Останавливается, как только набрано `needed` вхождений.
-fn scan_back(re: &Regex, hay: &[u16], from: usize, needed: usize) -> Vec<crate::engine::Match> {
+fn scan_back(
+    re: &Regex,
+    units: &[u16],
+    hay: &Haystack,
+    from: usize,
+    needed: usize,
+) -> RtResult<Vec<crate::engine::Match>> {
     let mut found = Vec::new();
     let mut limit: Option<usize> = None;
     let mut at = from;
@@ -435,19 +446,19 @@ fn scan_back(re: &Regex, hay: &[u16], from: usize, needed: usize) -> Vec<crate::
         if found.len() >= needed {
             break;
         }
-        if let Some(m) = re.match_at(hay, at)
+        if let Some(m) = re.match_at(hay, at)?
             && let Some((start, end)) = m.spans.first().copied().flatten()
             && limit.is_none_or(|bound| end <= bound)
         {
             limit = Some(start);
             found.push(m);
         }
-        match crate::engine::cp_before(hay, at) {
+        match crate::engine::cp_before(units, at) {
             Some((_, width)) => at -= width,
             None => break,
         }
     }
-    found
+    Ok(found)
 }
 
 // --- четыре функции --------------------------------------------------------
@@ -497,9 +508,12 @@ pub fn find(args: &[BslValue]) -> RtResult<BslValue> {
             Direction::FromEnd => hay.len() - 1,
         },
     };
+    let haystack = Haystack::new(hay);
     let found = match direction {
-        Direction::FromBegin => scan(&re, hay, start).into_iter().nth(occurrence - 1),
-        Direction::FromEnd => scan_back(&re, hay, start, occurrence)
+        Direction::FromBegin => scan(&re, hay, &haystack, start)?
+            .into_iter()
+            .nth(occurrence - 1),
+        Direction::FromEnd => scan_back(&re, hay, &haystack, start, occurrence)?
             .into_iter()
             .nth(occurrence - 1),
     };
@@ -530,7 +544,8 @@ pub fn find_all(args: &[BslValue]) -> RtResult<BslValue> {
         return Ok(BslValue::new_array(Vec::new()));
     }
     let re = Regex::parse_with(pattern.units(), icase, multiline)?;
-    let items = scan(&re, hay, 0)
+    let haystack = Haystack::new(hay);
+    let items = scan(&re, hay, &haystack, 0)?
         .iter()
         .map(|m| match_value(RegexMatchData::from_match(hay, m)))
         .collect();
@@ -552,8 +567,9 @@ pub fn like(args: &[BslValue]) -> RtResult<BslValue> {
     let pattern = text(args, 1, OP)?;
     let icase = flag(args, 2, OP)?;
     let multiline = flag(args, 3, OP)?;
-    let re = Regex::parse_with(pattern.units(), icase, multiline)?;
-    Ok(BslValue::Boolean(re.matches_full(subject.units())))
+    let re = Regex::parse_full_with(pattern.units(), icase, multiline)?;
+    let haystack = Haystack::new(subject.units());
+    Ok(BslValue::Boolean(re.matches_full(&haystack)?))
 }
 
 /// Чем кончилась сборка одной строки замены.
@@ -654,9 +670,10 @@ pub fn replace(args: &[BslValue]) -> RtResult<BslValue> {
     let hay = subject.units();
     // Отсечки на пустую строку и пустой шаблон здесь НЕТ — измерено, что
     // замена в обоих случаях работает: «аб» ~ `` даёт «-а-б-».
+    let haystack = Haystack::new(hay);
     let mut out: Vec<u16> = Vec::new();
     let mut last = 0usize;
-    for m in scan(&re, hay, 0) {
+    for m in scan(&re, hay, &haystack, 0)? {
         let Some((start, end)) = m.spans.first().copied().flatten() else {
             continue;
         };
