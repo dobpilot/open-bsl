@@ -51,6 +51,24 @@ Line format (order top-to-bottom by priority):
       gzip/tarfile, происхождение в комментарии); фикстура с эталоном с
       платформы, входные архивы в дереве.
 
+Конверсии методов компонентных объектов на статические таблицы
+`MethodDescriptor` (механика ветки bsl-rt-ver2; образцы — коммиты
+4046e51 и 938b945: обработчики `fn(&BslValue, &[BslValue], &mut
+CallContext)`, `const *_METHODS` с плотными кодами и тестом плотности,
+`call_method` через `bsl_rt::call_method_from_table`, хук
+`method_table()`). Поведение и тексты ошибок сохранять дословно; ворота
+плюс `the_jit_agrees_with_the_interpreter_on_every_script`; замер A/B не
+обязателен — сценарии этих крейтов в паритете, цель — единообразие и
+уход строковых цепочек:
+
+- [ ] (mt-dom) объекты dom.rs и xpath.rs в bsl-xml на таблицы методов
+- [ ] (mt-xsd) объекты xsd.rs в bsl-xml на таблицы методов (30 статических
+      дескрипторов уже есть — свести диспетчеризацию к общему мосту)
+- [ ] (mt-json) объекты bsl-json на таблицы методов
+- [ ] (mt-textdoc) объекты bsl-textdoc на таблицы методов
+- [ ] (mt-zip) объекты bsl-zip на таблицы методов
+- [ ] (mt-spreadsheet) объекты bsl-spreadsheet и bsl-pdf на таблицы методов
+
 ## Closed
 
 Этапы 1–6 (этап 0 — JSON — выполнен и измерен раньше, до этого
