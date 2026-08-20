@@ -83,7 +83,7 @@ VM. Новая глобальная функция аналогично испо
 | `bsl-zip` | `zip.rs`, чтение и запись ZIP и файлов архивов |
 | `bsl-spreadsheet` | `spreadsheet.rs`, `spreadsheet_pdf.rs`, `spreadsheet_template.rs`, `xlsx.rs` |
 | `bsl-textdoc` | `textdoc.rs`, `ТекстовыйДокумент`, области и параметры макета |
-| `bsl-regexp` | `regex.rs`, `regex_api.rs`, движок и BSL-поверхность регулярных выражений |
+| `bsl-regexp` | `engine.rs` — разбор диалекта и рендер в `fancy-regex`, `lib.rs` — BSL-поверхность регулярных выражений |
 
 Отдельный крейт сжатия из плана исключён: in-tree `deflate.rs` и
 `inflate.rs` отставлены в пользу внешних `flate2` и `zip` (см. историю
@@ -106,7 +106,7 @@ bsl-pdf          -> bsl-rt + flate2
 bsl-zip          -> bsl-rt + zip + flate2
 bsl-spreadsheet  -> bsl-rt + bsl-format + bsl-xml + bsl-pdf + zip + flate2
 bsl-textdoc      -> bsl-rt
-bsl-regexp       -> bsl-rt + bsl-number
+bsl-regexp       -> bsl-rt + bsl-number + fancy-regex
 ```
 
 `bsl-rt` не делает обратных ссылок на эти крейты. Стандартный бинарник и

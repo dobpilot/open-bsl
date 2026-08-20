@@ -81,8 +81,10 @@ cargo test --workspace
 conformance-тесты).
 
 Внешних зависимостей немного: `bsl-number` использует `num-bigint` и
-`num-traits`, `bsl-rt` — `zip` и `flate2` для контейнера ZIP и сжатия, а
-`rustyline` нужен только командной строке.
+`num-traits`, `bsl-rt` — `zip` и `flate2` для контейнера ZIP и сжатия,
+`bsl-regexp` — `fancy-regex` для исполнения шаблонов (разбор диалекта и
+измеренные края остаются своими), а `rustyline` нужен только командной
+строке.
 
 ## REPL
 
