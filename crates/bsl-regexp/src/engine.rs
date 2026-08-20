@@ -147,13 +147,20 @@ enum ClassItem {
         kind: PropKind,
         negated: bool,
     },
+    /// Вложенный класс: `[[аб]в]`, `[[^аб]]`.
+    Nested(Box<ClassSpec>),
 }
 
-/// Класс символов целиком.
+/// Класс символов целиком: пересечение объединений.
+///
+/// Обычный класс — одно объединение; каждое `&&` открывает следующий
+/// операнд пересечения (ИЗМЕРЕНО, якорь `REGEX.CLASSOPS`). Запись
+/// `[а-я-[б]]` пересечением или разностью НЕ является: минус после
+/// диапазона — литерал, скобки — вложенный класс, итог — объединение.
 #[derive(Clone, Debug)]
 struct ClassSpec {
     negated: bool,
-    items: Vec<ClassItem>,
+    inter: Vec<Vec<ClassItem>>,
 }
 
 /// Узел дерева шаблона. Флаги, действовавшие в точке разбора, вморожены в
@@ -171,8 +178,10 @@ enum Node {
         spec: ClassSpec,
         icase: bool,
     },
-    /// `.`
-    Any,
+    /// `.`; под `(?s)` берёт и терминаторы (якорь `REGEX.DOTALL`).
+    Any {
+        dotall: bool,
+    },
     /// `^`
     LineStart {
         multiline: bool,
@@ -185,6 +194,20 @@ enum Node {
     WordBoundary {
         negated: bool,
     },
+    /// Просмотры `(?=…)`, `(?!…)`, `(?<=…)`, `(?<!…)`.
+    Look {
+        behind: bool,
+        negated: bool,
+        body: Box<Node>,
+    },
+    /// Обратная ссылка `\1`–`\9`; свёртка вморожена, как у литерала:
+    /// ссылка сравнивает по флагу, действующему в ЕЁ месте.
+    Backref {
+        slot: usize,
+        icase: bool,
+    },
+    /// Атомарная группа `(?>…)`; притяжательный квантор — её сахар.
+    Atomic(Box<Node>),
     /// Группа; `slot` — её номер, `None` у незахватывающей `(?:...)`.
     Group {
         slot: Option<usize>,
@@ -197,6 +220,8 @@ enum Node {
         min: u32,
         max: Option<u32>,
         greedy: bool,
+        /// `а*+` и родня: назад не отдаёт (якорь `REGEX.POSSESSIVE`).
+        possessive: bool,
     },
 }
 
@@ -205,6 +230,7 @@ enum Node {
 struct Flags {
     icase: bool,
     multiline: bool,
+    dotall: bool,
 }
 
 /// Что дало экранирование.
@@ -212,6 +238,7 @@ enum Escape {
     Cp(Cp),
     Prop { kind: PropKind, negated: bool },
     WordBoundary { negated: bool },
+    Backref(usize),
 }
 
 // --- разбор -------------------------------------------------------------
@@ -297,43 +324,58 @@ impl<'a> Parser<'a> {
         })
     }
 
-    /// `(?i)`, `(?m)`, `(?im)` — меняет флаги ДО конца охватывающей группы.
+    /// Разбор списка флагов `i`/`m`/`s` с необязательной снимающей частью
+    /// после `-`; курсор — сразу за `(?`. Возвращает пару (установить,
+    /// снять) и число разобранных символов, `None` — если это не список
+    /// флагов вовсе.
+    fn flag_list(&self, mut ahead: usize) -> Option<(Flags, Flags, usize)> {
+        let mut set = Flags::default();
+        let mut unset = Flags::default();
+        let mut clearing = false;
+        let mut named = 0usize;
+        loop {
+            match self.peek_at(ahead).and_then(char::from_u32) {
+                Some(c @ ('i' | 'm' | 's')) => {
+                    let target = if clearing { &mut unset } else { &mut set };
+                    match c {
+                        'i' => target.icase = true,
+                        'm' => target.multiline = true,
+                        _ => target.dotall = true,
+                    }
+                    named += 1;
+                }
+                Some('-') if !clearing => clearing = true,
+                _ if named == 0 => return None,
+                _ => return Some((set, unset, ahead)),
+            }
+            ahead += 1;
+        }
+    }
+
+    /// `(?i)`, `(?m)`, `(?s)` и их сочетания со снятием `(?-i)` — меняют
+    /// флаги ДО конца охватывающей группы. ИЗМЕРЕНО (якоря
+    /// `REGEX.FLAG.SCOPE`, `REGEX.DOTALL`): снятая групповая точка
+    /// `(?s)а(?-s:.)б` терминатор не берёт, снятие без группы действует
+    /// так же до конца охватывающей группы.
     ///
-    /// Возвращает `false`, если в позиции не инлайн-флаг: тогда `(` разберёт
-    /// [`Parser::atom`] как группу.
+    /// Возвращает `false`, если в позиции не инлайн-флаг: групповую форму
+    /// `(?i:…)` и всё остальное разберёт [`Parser::atom`] как группу.
     fn inline_flags(&mut self) -> RtResult<bool> {
         if self.peek() != Some('(' as Cp) || self.peek_at(1) != Some('?' as Cp) {
             return Ok(false);
         }
-        let mut ahead = 2;
-        let mut icase = false;
-        let mut multiline = false;
-        loop {
-            match self.peek_at(ahead) {
-                Some(cp) if cp == 'i' as Cp => icase = true,
-                Some(cp) if cp == 'm' as Cp => multiline = true,
-                Some(cp) if cp == ')' as Cp && ahead > 2 => {
-                    self.pos += ahead + 1;
-                    // Флаги только включаются: `(?-i)` не поддержан (см.
-                    // ниже), поэтому сброса тут быть не может.
-                    self.flags.icase |= icase;
-                    self.flags.multiline |= multiline;
-                    return Ok(true);
-                }
-                // `(?i:...)` — групповая форма флага; `(?-i)` — сброс.
-                // Обе меняют смысл шаблона, и молчаливо принять их за
-                // что-то другое нельзя.
-                Some(cp) if ahead > 2 => {
-                    return Err(bad(format!(
-                        "инлайн-флаг записан как «(?…{}…)»; поддержаны только \
-                         «(?i)», «(?m)» и «(?im)»",
-                        show(cp)
-                    )));
-                }
-                _ => return Ok(false),
-            }
-            ahead += 1;
+        let Some((set, unset, end)) = self.flag_list(2) else {
+            return Ok(false);
+        };
+        if self.peek_at(end) != Some(')' as Cp) {
+            // `(?i:…)` — форма группы, не инлайн-флага.
+            return Ok(false);
         }
+        self.pos += end + 1;
+        self.flags.icase = (self.flags.icase || set.icase) && !unset.icase;
+        self.flags.multiline = (self.flags.multiline || set.multiline) && !unset.multiline;
+        self.flags.dotall = (self.flags.dotall || set.dotall) && !unset.dotall;
+        Ok(true)
     }
 
     /// Атом с необязательным квантором.
@@ -342,13 +384,21 @@ impl<'a> Parser<'a> {
         let Some((min, max)) = self.quantifier()? else {
             return Ok(atom);
         };
+        if matches!(atom, Node::Look { .. }) {
+            // ИЗМЕРЕНО: `а(?=б)?` — ошибка шаблона, а не необязательный
+            // просмотр.
+            return Err(bad("квантор на просмотр не поддержан"));
+        }
         let greedy = !self.eat('?' as Cp);
+        // `а*+` — притяжательная форма: жадный квантор, не отдающий назад
+        // (ИЗМЕРЕНО, якорь `REGEX.POSSESSIVE`). Ленивый суффикс `?` с `+`
+        // не сочетается — это ловит проверка двойного квантора ниже.
+        let possessive = greedy && self.eat('+' as Cp);
         if let Some(next) = self.peek()
             && (next == '*' as Cp || next == '+' as Cp || next == '?' as Cp)
         {
             return Err(bad(format!(
-                "два квантора подряд («{}» после квантора); притяжательные \
-                     кванторы вида «а*+» не поддержаны",
+                "два квантора подряд («{}» после квантора)",
                 show(next)
             )));
         }
@@ -357,6 +407,7 @@ impl<'a> Parser<'a> {
             min,
             max,
             greedy,
+            possessive,
         })
     }
 
@@ -460,7 +511,9 @@ impl<'a> Parser<'a> {
         }
         if cp == '.' as Cp {
             self.pos += 1;
-            return Ok(Node::Any);
+            return Ok(Node::Any {
+                dotall: self.flags.dotall,
+            });
         }
         if cp == '^' as Cp {
             self.pos += 1;
@@ -496,11 +549,15 @@ impl<'a> Parser<'a> {
                 Escape::Prop { kind, negated } => Ok(Node::Class {
                     spec: ClassSpec {
                         negated: false,
-                        items: vec![ClassItem::Prop { kind, negated }],
+                        inter: vec![vec![ClassItem::Prop { kind, negated }]],
                     },
                     icase: self.flags.icase,
                 }),
                 Escape::WordBoundary { negated } => Ok(Node::WordBoundary { negated }),
+                Escape::Backref(slot) => Ok(Node::Backref {
+                    slot,
+                    icase: self.flags.icase,
+                }),
             };
         }
         self.pos += 1;
@@ -514,24 +571,81 @@ impl<'a> Parser<'a> {
     /// перехватывает [`Parser::inline_flags`].
     fn group(&mut self) -> RtResult<Node> {
         self.pos += 1;
-        let slot = if self.peek() == Some('?' as Cp) {
+        enum Kind {
+            Plain(Option<usize>),
+            Look { behind: bool, negated: bool },
+            Atomic,
+        }
+        let mut flag_group: Option<(Flags, Flags)> = None;
+        let kind = if self.peek() == Some('?' as Cp) {
             match self.peek_at(1) {
                 Some(cp) if cp == ':' as Cp => {
                     self.pos += 2;
-                    None
+                    Kind::Plain(None)
                 }
-                Some(cp) => {
-                    return Err(bad(format!(
-                        "конструкция «(?{}» не поддержана: есть только группа \
-                         «(…)», незахватывающая «(?:…)» и флаги «(?i)»/«(?m)»",
-                        show(cp)
-                    )));
+                // Просмотры вперёд и назад, обе полярности. ИЗМЕРЕНО
+                // (якорь `REGEX.LOOK.BEHIND` и контракт
+                // `measure-regex2.bsl`): захваты внутри видны снаружи,
+                // сам просмотр текста не ест.
+                Some(cp) if cp == '=' as Cp => {
+                    self.pos += 2;
+                    Kind::Look {
+                        behind: false,
+                        negated: false,
+                    }
+                }
+                Some(cp) if cp == '!' as Cp => {
+                    self.pos += 2;
+                    Kind::Look {
+                        behind: false,
+                        negated: true,
+                    }
+                }
+                Some(cp) if cp == '<' as Cp && self.peek_at(2) == Some('=' as Cp) => {
+                    self.pos += 3;
+                    Kind::Look {
+                        behind: true,
+                        negated: false,
+                    }
+                }
+                Some(cp) if cp == '<' as Cp && self.peek_at(2) == Some('!' as Cp) => {
+                    self.pos += 3;
+                    Kind::Look {
+                        behind: true,
+                        negated: true,
+                    }
+                }
+                Some(cp) if cp == '>' as Cp => {
+                    self.pos += 2;
+                    Kind::Atomic
+                }
+                Some(_) => {
+                    // Групповая форма флагов `(?i:…)`/`(?-i:…)` — тело
+                    // разбирается с изменёнными флагами, а по выходе они
+                    // восстанавливаются вместе с флагами охватывающей
+                    // группы.
+                    if let Some((set, unset, end)) = self.flag_list(1)
+                        && self.peek_at(end) == Some(':' as Cp)
+                    {
+                        self.pos += end + 1;
+                        flag_group = Some((set, unset));
+                        Kind::Plain(None)
+                    } else {
+                        let cp = self.peek_at(1).unwrap_or('?' as Cp);
+                        return Err(bad(format!(
+                            "конструкция «(?{}» не поддержана: есть группы «(…)» и \
+                             «(?:…)», просмотры «(?=…)»/«(?!…)»/«(?<=…)»/«(?<!…)», \
+                             атомарная «(?>…)» и флаги «(?i)»/«(?m)»/«(?s)» с \
+                             групповой и снимающей формами",
+                            show(cp)
+                        )));
+                    }
                 }
                 None => return Err(bad("шаблон обрывается на «(?»")),
             }
         } else {
             self.groups += 1;
-            Some(self.groups)
+            Kind::Plain(Some(self.groups))
         };
         self.depth += 1;
         if self.depth > MAX_DEPTH {
@@ -546,15 +660,35 @@ impl<'a> Parser<'a> {
         // `(?:(?i)а)б` и из `((?i)а)б` он наружу не выходит, зато в соседнюю
         // ветвь альтернации (`б(?i)в|а` на «А») выходит: ветвь — не группа.
         let outer = self.flags;
+        if let Some((set, unset)) = flag_group {
+            self.flags.icase = (self.flags.icase || set.icase) && !unset.icase;
+            self.flags.multiline = (self.flags.multiline || set.multiline) && !unset.multiline;
+            self.flags.dotall = (self.flags.dotall || set.dotall) && !unset.dotall;
+        }
         let body = self.alternation()?;
         self.flags = outer;
         self.depth -= 1;
         if !self.eat(')' as Cp) {
             return Err(bad("незакрытая группа: не хватает « ) »"));
         }
-        Ok(Node::Group {
-            slot,
-            body: Box::new(body),
+        let body = Box::new(body);
+        Ok(match kind {
+            Kind::Plain(slot) => Node::Group { slot, body },
+            Kind::Atomic => Node::Atomic(body),
+            Kind::Look { behind, negated } => {
+                if behind && !bounded(&body) {
+                    // ИЗМЕРЕНО (якорь `REGEX.LOOK.BEHIND`): `(?<=а+)` и
+                    // `(?<=а*)` платформа отвергает, ограниченные формы
+                    // работают.
+                    return Err(bad("просмотр назад требует ограниченной длины: кванторы \
+                         без верхней границы в нём не поддержаны"));
+                }
+                Node::Look {
+                    behind,
+                    negated,
+                    body,
+                }
+            }
         })
     }
 
@@ -566,33 +700,53 @@ impl<'a> Parser<'a> {
     /// наоборот, ошибка: там уже заявлен диапазон, и второй его край
     /// обязан быть символом.
     fn class(&mut self) -> RtResult<ClassSpec> {
+        self.depth += 1;
+        if self.depth > MAX_DEPTH {
+            return Err(bad(format!(
+                "классы вложены глубже {MAX_DEPTH} уровней — это предел этой реализации"
+            )));
+        }
+        let parsed = self.class_body();
+        self.depth -= 1;
+        parsed
+    }
+
+    fn class_body(&mut self) -> RtResult<ClassSpec> {
         let negated = self.eat('^' as Cp);
-        let mut items: Vec<ClassItem> = Vec::new();
+        let mut inter: Vec<Vec<ClassItem>> = vec![Vec::new()];
         loop {
+            let items = inter.last_mut().expect("хотя бы один операнд есть всегда");
             let Some(cp) = self.peek() else {
                 return Err(bad("незакрытый класс символов: не хватает « ] »"));
             };
             if cp == ']' as Cp {
                 if items.is_empty() {
-                    return Err(bad(
-                        "пустой класс символов; литеральная « ] » внутри класса \
-                         пишется как «\\]»",
-                    ));
+                    if inter.len() == 1 {
+                        return Err(bad(
+                            "пустой класс символов; литеральная « ] » внутри класса \
+                             пишется как «\\]»",
+                        ));
+                    }
+                    return Err(bad("пустой операнд пересечения «&&» в классе символов"));
                 }
                 self.pos += 1;
-                return Ok(ClassSpec { negated, items });
+                return Ok(ClassSpec { negated, inter });
             }
             if cp == '[' as Cp {
-                return Err(bad(
-                    "вложенные классы и операции над множествами не поддержаны; \
-                     литеральная « [ » внутри класса пишется как «\\[»",
-                ));
+                // Вложенный класс — операнд объединения (ИЗМЕРЕНО, якорь
+                // `REGEX.CLASSOPS`: `[[аб]в]` и `[[^аб]]` работают).
+                self.pos += 1;
+                let nested = self.class()?;
+                items.push(ClassItem::Nested(Box::new(nested)));
+                continue;
             }
             if cp == '&' as Cp && self.peek_at(1) == Some('&' as Cp) {
-                return Err(bad(
-                    "пересечение классов «&&» не поддержано; литеральный «&» \
-                     пишется одиночным",
-                ));
+                if items.is_empty() {
+                    return Err(bad("пустой операнд пересечения «&&» в классе символов"));
+                }
+                self.pos += 2;
+                inter.push(Vec::new());
+                continue;
             }
             let low = if cp == '\\' as Cp {
                 self.pos += 1;
@@ -602,8 +756,9 @@ impl<'a> Parser<'a> {
                         items.push(ClassItem::Prop { kind, negated });
                         None
                     }
-                    // Внутрь класса `\b`/`\B` не пропускает `escape`.
-                    Escape::WordBoundary { .. } => None,
+                    // Внутрь класса `\b`/`\B` и ссылки не пропускает
+                    // `escape`.
+                    Escape::WordBoundary { .. } | Escape::Backref(_) => None,
                 }
             } else {
                 self.pos += 1;
@@ -612,10 +767,15 @@ impl<'a> Parser<'a> {
             let Some(low) = low else {
                 continue;
             };
-            // Диапазон, только если после дефиса есть что-то кроме « ] »:
-            // в `[а-]` дефис — обычный символ.
-            let is_range =
-                self.peek() == Some('-' as Cp) && self.peek_at(1).is_some_and(|cp| cp != ']' as Cp);
+            // Диапазон, только если после дефиса есть что-то кроме « ] » и
+            // « [ »: в `[а-]` дефис — обычный символ, а в `[а-я-[б]]` он
+            // литерал перед вложенным классом, и итог — объединение
+            // (ИЗМЕРЕНО, якорь `REGEX.CLASSOPS`: «б» в `[а-я-[б]]`
+            // находится).
+            let is_range = self.peek() == Some('-' as Cp)
+                && self
+                    .peek_at(1)
+                    .is_some_and(|cp| cp != ']' as Cp && cp != '[' as Cp);
             if !is_range {
                 items.push(ClassItem::Single(low));
                 continue;
@@ -626,7 +786,7 @@ impl<'a> Parser<'a> {
                     self.pos += 1;
                     match self.escape(true)? {
                         Escape::Cp(cp) => cp,
-                        Escape::Prop { .. } | Escape::WordBoundary { .. } => {
+                        Escape::Prop { .. } | Escape::WordBoundary { .. } | Escape::Backref(_) => {
                             return Err(bad("границей диапазона в классе может быть только \
                                  символ, а не сокращение вида «\\d»"));
                         }
@@ -682,10 +842,18 @@ impl<'a> Parser<'a> {
             'a' => Ok(Escape::Cp(0x07)),
             'e' => Ok(Escape::Cp(0x1B)),
             'u' => self.hex_escape().map(Escape::Cp),
-            '0'..='9' => Err(bad(format!(
-                "экранирование «\\{c}» не поддержано: обратных ссылок на группы \
-                 и восьмеричных кодов здесь нет"
-            ))),
+            '0' => Err(bad(
+                "экранирование «\\0» не поддержано: восьмеричных кодов здесь нет",
+            )),
+            '1'..='9' if in_class => Err(bad(
+                "обратная ссылка внутри класса символов не имеет смысла",
+            )),
+            // Ссылка на группу, которой в шаблоне нет вовсе, остаётся
+            // ошибкой — её отдаст крейт на компиляции рендера; ссылка,
+            // стоящая РАНЬШЕ своей группы, законна и проваливает
+            // совпадение (ИЗМЕРЕНО, контракт `measure-regex2.bsl`:
+            // «ссылка вперёд» — Нет, не ошибка).
+            '1'..='9' => Ok(Escape::Backref(c as usize - '0' as usize)),
             // Экранированная пунктуация — она сама: `\.`, `\\`, `\[`, `\{`.
             _ if !c.is_ascii_alphanumeric() => Ok(Escape::Cp(cp)),
             _ => Err(bad(format!("экранирование «\\{c}» не поддержано"))),
@@ -890,38 +1058,46 @@ impl Renderer {
         self.out.push_str(text);
     }
 
-    /// Класс символов; суррогатные края диапазонов клипуются до валидных
-    /// половин, целиком суррогатный элемент вырождается в U+FFFD.
+    /// Класс символов; операнды пересечения печатаются через `&&` крейта,
+    /// вложенные классы — рекурсивно. Суррогатные края диапазонов
+    /// клипуются до валидных половин, целиком суррогатный элемент
+    /// вырождается в U+FFFD.
     fn class(&mut self, spec: &ClassSpec) {
         self.out.push('[');
         if spec.negated {
             self.out.push('^');
         }
-        for item in &spec.items {
-            match item {
-                ClassItem::Single(cp) => self.literal_cp(*cp),
-                ClassItem::Range(low, high) => {
-                    let mut emit = |a: Cp, b: Cp| {
-                        self.literal_cp(a);
-                        self.out.push('-');
-                        self.literal_cp(b);
-                    };
-                    let (low, high) = (*low, *high);
-                    if low >= 0xD800 && high < 0xE000 {
-                        // Диапазон целиком в суррогатах.
-                        self.literal_cp(0xFFFD);
-                    } else if low < 0xD800 && high >= 0xE000 {
-                        emit(low, 0xD7FF);
-                        emit(0xE000, high);
-                    } else if (0xD800..0xE000).contains(&low) {
-                        emit(0xE000, high);
-                    } else if (0xD800..0xE000).contains(&high) {
-                        emit(low, 0xD7FF);
-                    } else {
-                        emit(low, high);
+        for (term_index, items) in spec.inter.iter().enumerate() {
+            if term_index > 0 {
+                self.out.push_str("&&");
+            }
+            for item in items {
+                match item {
+                    ClassItem::Single(cp) => self.literal_cp(*cp),
+                    ClassItem::Range(low, high) => {
+                        let mut emit = |a: Cp, b: Cp| {
+                            self.literal_cp(a);
+                            self.out.push('-');
+                            self.literal_cp(b);
+                        };
+                        let (low, high) = (*low, *high);
+                        if low >= 0xD800 && high < 0xE000 {
+                            // Диапазон целиком в суррогатах.
+                            self.literal_cp(0xFFFD);
+                        } else if low < 0xD800 && high >= 0xE000 {
+                            emit(low, 0xD7FF);
+                            emit(0xE000, high);
+                        } else if (0xD800..0xE000).contains(&low) {
+                            emit(0xE000, high);
+                        } else if (0xD800..0xE000).contains(&high) {
+                            emit(low, 0xD7FF);
+                        } else {
+                            emit(low, high);
+                        }
                     }
+                    ClassItem::Prop { kind, negated } => self.prop(*kind, *negated),
+                    ClassItem::Nested(nested) => self.class(nested),
                 }
-                ClassItem::Prop { kind, negated } => self.prop(*kind, *negated),
             }
         }
         self.out.push(']');
@@ -967,9 +1143,13 @@ impl Renderer {
                 }
                 Ok(false)
             }
-            Node::Any => {
+            Node::Any { dotall } => {
                 self.charge(1)?;
-                self.out.push_str(DOT_CLASS);
+                // Под `(?s)` точка берёт все семь терминаторов (ИЗМЕРЕНО,
+                // якорь `REGEX.DOTALL`) — печатается класс-всё: флаговой
+                // семантике крейта рендер не доверяет ничего.
+                self.out
+                    .push_str(if *dotall { r"[\s\S]" } else { DOT_CLASS });
                 Ok(false)
             }
             Node::LineStart { multiline } => {
@@ -994,6 +1174,40 @@ impl Renderer {
                 self.charge(1)?;
                 self.word_boundary(*negated);
                 Ok(true)
+            }
+            Node::Look {
+                behind,
+                negated,
+                body,
+            } => {
+                self.charge(1)?;
+                self.out.push_str(match (behind, negated) {
+                    (false, false) => "(?=",
+                    (false, true) => "(?!",
+                    (true, false) => "(?<=",
+                    (true, true) => "(?<!",
+                });
+                self.node(body)?;
+                self.out.push(')');
+                // Просмотр текста не ест — он обнуляем всегда.
+                Ok(true)
+            }
+            Node::Backref { slot, icase } => {
+                self.charge(1)?;
+                if *icase {
+                    self.out.push_str(&format!("(?i:\\{slot})"));
+                } else {
+                    self.out.push_str(&format!("\\{slot}"));
+                }
+                // Ссылка на пустую группу совпадает с пустотой.
+                Ok(true)
+            }
+            Node::Atomic(body) => {
+                self.charge(1)?;
+                self.out.push_str("(?>");
+                let nullable = self.node(body)?;
+                self.out.push(')');
+                Ok(nullable)
             }
             Node::Group { slot, body } => {
                 self.charge(1)?;
@@ -1030,6 +1244,7 @@ impl Renderer {
                 min,
                 max,
                 greedy,
+                possessive,
             } => {
                 // Квантор над заведомо пустым телом крейт не принимает
                 // («target of repeat operator is invalid» на `(?:)*`), да
@@ -1045,6 +1260,12 @@ impl Renderer {
                 }
                 let copies = usize::try_from(max.unwrap_or_else(|| (*min).max(1))).unwrap_or(1);
                 let before = self.cost;
+                if *possessive {
+                    // `а*+` печатается атомарной группой над обычным
+                    // квантором: `(?>(?:а)*)` — та же семантика без
+                    // отдачи назад.
+                    self.out.push_str("(?>");
+                }
                 self.out.push_str("(?:");
                 let nullable = self.node(body)?;
                 self.out.push(')');
@@ -1067,9 +1288,26 @@ impl Renderer {
                 if !greedy {
                     self.out.push('?');
                 }
+                if *possessive {
+                    self.out.push(')');
+                }
                 Ok(*min == 0 || nullable)
             }
         }
+    }
+}
+
+/// Ограничена ли длина возможных совпадений поддерева — требование
+/// платформы к телу просмотра назад (якорь `REGEX.LOOK.BEHIND`).
+/// Обратная ссылка консервативно считается неограниченной: её длина не
+/// видна из структуры шаблона.
+fn bounded(node: &Node) -> bool {
+    match node {
+        Node::Repeat { max: None, .. } | Node::Backref { .. } => false,
+        Node::Repeat { body, .. } | Node::Atomic(body) | Node::Group { body, .. } => bounded(body),
+        Node::Concat(parts) | Node::Alt(parts) => parts.iter().all(bounded),
+        // Просмотр сам текста не ест, его тело на длину не влияет.
+        _ => true,
     }
 }
 
@@ -1246,7 +1484,11 @@ impl Regex {
     fn build(pattern: &[u16], icase: bool, multiline: bool, full: bool) -> RtResult<Regex> {
         let src = decode(pattern);
         let mut parser = Parser::new(&src);
-        parser.flags = Flags { icase, multiline };
+        parser.flags = Flags {
+            icase,
+            multiline,
+            dotall: false,
+        };
         let tree = parser.alternation()?;
         if parser.pos < src.len() {
             // Сюда приводит только лишняя закрывающая скобка: остальное
@@ -1784,11 +2026,117 @@ mod tests {
         assert!(parse_error("а{2").contains("не хватает « } »"));
         assert!(parse_error(r"а\").contains("обрывается"));
         assert!(parse_error(r"\u12").contains("четыре шестнадцатеричные"));
-        assert!(parse_error(r"\1").contains("обратных ссылок"));
-        assert!(parse_error("(?=аб)").contains("не поддержана"));
-        assert!(parse_error("(?i:аб)").contains("инлайн-флаг"));
-        assert!(parse_error("[а-я&&[^аеиоу]]").contains("«&&»"));
-        assert!(parse_error("[[аб]]").contains("вложенные классы"));
+        assert!(parse_error(r"\0").contains("восьмеричных"));
+        assert!(parse_error(r"[\1]").contains("внутри класса"));
+        assert!(parse_error("(?<имя>а)").contains("не поддержана"));
+        assert!(parse_error("а(?#х)б").contains("не поддержана"));
+        assert!(parse_error("(?x)а б").contains("не поддержана"));
+        assert!(parse_error(r"а\Q.\Eб").contains("не поддержано"));
+        assert!(parse_error("(?<=а+)б").contains("ограниченной длины"));
+        assert!(parse_error("(?<=а*)б").contains("ограниченной длины"));
+        assert!(parse_error("а(?=б)?").contains("квантор на просмотр"));
+        assert!(parse_error("[а-в&&]").contains("пустой операнд"));
+    }
+
+    /// Просмотры — по строкам платформенного контракта
+    /// `measure-regex2.platform.txt`: сам просмотр текста не ест, захваты
+    /// из него видны, просмотр назад ограниченной длины работает во всех
+    /// измеренных формах.
+    #[test]
+    fn lookaround_matches_the_platform_contract() {
+        assert_eq!(find("а(?=б)", "аб").as_deref(), Some("а"));
+        assert_eq!(find("а(?=б)", "ав"), None);
+        assert_eq!(spans("(а(?=б))", "аб"), vec![Some((0, 1)), Some((0, 1))]);
+        assert_eq!(find("а(?!б)", "ав").as_deref(), Some("а"));
+        assert_eq!(find("а(?!б)", "аб"), None);
+        assert_eq!(spans("а(?=(б))", "аб"), vec![Some((0, 1)), Some((1, 2))]);
+        assert_eq!(spans("(?!(б))а", "а"), vec![Some((0, 1)), None]);
+        assert_eq!(find("(?<=а)б", "аб").as_deref(), Some("б"));
+        assert_eq!(find("(?<=а)б", "хб"), None);
+        assert_eq!(find("(?<!а)б", "хб").as_deref(), Some("б"));
+        assert_eq!(find("(?<=а{1,3})б", "аааб").as_deref(), Some("б"));
+        assert_eq!(find("(?<=а|аа)б", "ааб").as_deref(), Some("б"));
+        assert_eq!(spans("(?<=(а))б", "аб"), vec![Some((1, 2)), Some((0, 1))]);
+        assert_eq!(find(r"(?<=\bа)б", "аб").as_deref(), Some("б"));
+    }
+
+    /// Обратные ссылки — как PCRE, и это ИЗМЕРЕНО: ссылка на
+    /// неучаствовавшую группу проваливает совпадение, а не подставляет
+    /// пустоту; свёртка `(?i)` действует и на ссылку; ссылка раньше своей
+    /// группы законна и проваливается.
+    #[test]
+    fn backrefs_match_the_platform_contract() {
+        assert_eq!(find(r"(а)\1", "аа").as_deref(), Some("аа"));
+        assert_eq!(find(r"(а)\1", "аб"), None);
+        assert_eq!(find(r"(?i)(а)\1", "аА").as_deref(), Some("аА"));
+        assert_eq!(find(r"(а)\1", "аА"), None);
+        assert_eq!(find(r"(б)?а\1", "а"), None);
+        assert_eq!(find(r"(б?)а\1", "а").as_deref(), Some("а"));
+        assert_eq!(
+            spans(r"((а)|б)+\2", "баа"),
+            vec![Some((0, 3)), Some((1, 2)), Some((1, 2))]
+        );
+        assert_eq!(find(r"\1(а)", "аа"), None);
+    }
+
+    /// `(?s)` берёт все семь терминаторов, действует групповой формой и
+    /// снимается — по якорю `REGEX.DOTALL`.
+    #[test]
+    fn dotall_takes_every_terminator() {
+        for terminator in ["\n", "\r", "\x0B", "\x0C", "\u{85}", "\u{2028}", "\u{2029}"] {
+            let text = format!("а{terminator}б");
+            assert_eq!(
+                find("(?s)а.б", &text).as_deref(),
+                Some(text.as_str()),
+                "терминатор U+{:04X}",
+                terminator.chars().next().unwrap() as u32
+            );
+        }
+        assert_eq!(find("а(?s:.)б", "а\nб").as_deref(), Some("а\nб"));
+        assert_eq!(find("а(?s:.)б.в", "а\nб\nв"), None);
+        assert_eq!(find("(?s)а(?-s:.)б", "а\nб"), None);
+        assert_eq!(find("а.б", "а\nб"), None);
+    }
+
+    /// Групповые и снимающие формы флагов — область до конца группы.
+    #[test]
+    fn flag_groups_scope_like_the_platform() {
+        assert_eq!(find("(?i:а)б", "Аб").as_deref(), Some("Аб"));
+        assert_eq!(find("(?i:а)б", "АБ"), None);
+        assert_eq!(find("(?i)а(?-i:б)", "Аб").as_deref(), Some("Аб"));
+        assert_eq!(find("(?i)а(?-i:б)", "АБ"), None);
+        assert_eq!(find("(?i)а(?-i)б", "АБ"), None);
+        assert_eq!(find("(?m:а)^б", "а\nб"), None);
+        assert_eq!(find("(?m:^б)", "а\nб").as_deref(), Some("б"));
+    }
+
+    /// Притяжательные кванторы и атомарные группы назад не отдают — по
+    /// якорю `REGEX.POSSESSIVE`.
+    #[test]
+    fn possessive_and_atomic_do_not_give_back() {
+        assert_eq!(find("а*+а", "аа"), None);
+        assert_eq!(find("а++а", "аа"), None);
+        assert_eq!(find("а?+а", "а"), None);
+        assert_eq!(find("а{1,2}+а", "ааа").as_deref(), Some("ааа"));
+        assert_eq!(find("(?>а|аб)в", "абв"), None);
+        assert_eq!(find("(?>а)б", "аб").as_deref(), Some("аб"));
+        assert_eq!(find("(?>а)+б", "аб").as_deref(), Some("аб"));
+    }
+
+    /// Операции над множествами в классе — по якорю `REGEX.CLASSOPS`:
+    /// пересечение и вложение работают, а `[а-я-[б]]` — объединение с
+    /// литеральным минусом, не разность.
+    #[test]
+    fn class_operations_follow_the_measured_semantics() {
+        assert_eq!(find("[а-в&&[^б]]", "в").as_deref(), Some("в"));
+        assert_eq!(find("[а-в&&[^б]]", "б"), None);
+        assert_eq!(find("[а-в&&б-г]", "б").as_deref(), Some("б"));
+        assert_eq!(find("[[аб]в]", "в").as_deref(), Some("в"));
+        assert_eq!(find("[[^аб]]", "х").as_deref(), Some("х"));
+        assert_eq!(find("[а-я-[б]]", "а").as_deref(), Some("а"));
+        assert_eq!(find("[а-я-[б]]", "б").as_deref(), Some("б"));
+        assert_eq!(find("(?i)[а-в&&[^б]]", "Б"), None);
+        assert_eq!(find("[а&]", "&").as_deref(), Some("&"));
     }
 
     #[test]
