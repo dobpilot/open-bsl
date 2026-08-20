@@ -273,16 +273,6 @@ struct Compiler<'a> {
     shapes: &'a mut ShapeTable,
 }
 
-/// До перевода `bsl-cli` на реестр regex-объекты уже живут в
-/// отдельном крейте. Их три свойства сразу кодируются открытым
-/// опкодом. Общий путь определяется `RExpr::Field::open`.
-fn is_legacy_regexp_property(name: &str) -> bool {
-    matches!(
-        name.to_uppercase().as_str(),
-        "ЗНАЧЕНИЕ" | "VALUE" | "НАЧАЛЬНАЯПОЗИЦИЯ" | "STARTINDEX" | "ДЛИНА" | "LENGTH"
-    )
-}
-
 impl<'a> Compiler<'a> {
     fn alloc_temp(&mut self) -> Result<u8, CompileError> {
         let r = self.next_reg;
@@ -658,7 +648,7 @@ impl<'a> Compiler<'a> {
                 let o = self.alloc_temp()?;
                 self.compile_expr(obj, o)?;
                 let name_id = self.names.intern(name);
-                if *open || is_legacy_regexp_property(name) {
+                if *open {
                     let name = name_id
                         .index()
                         .try_into()

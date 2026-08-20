@@ -3194,6 +3194,53 @@ mod tests {
         );
     }
 
+    /// Приёмник, статически доказанный ядровым (см. `core_receivers` в
+    /// `bsl-sema`), и с реестром компилируется в закрытые опкоды: путь
+    /// `csv_write` — `WriteText` с инкрементом `pc` вместо холодного
+    /// `CallObjectMethod` на каждую запись.
+    #[test]
+    fn a_proven_core_receiver_compiles_closed_even_with_a_registry() {
+        let registry = test_component_registry();
+        let program = compile_with_registry(
+            "ф = Новый ЗаписьТекста(\"пусто.тмп\");\n\
+             д = Новый Структура(\"а\", 1);\n\
+             ф.Записать(д.а);\n\
+             ф.Закрыть();\n\
+             м = Новый Массив;\n\
+             м.Добавить(1);",
+            &registry,
+        );
+        let instructions = &program.chunks[0].instrs;
+        assert!(
+            instructions
+                .iter()
+                .any(|instruction| matches!(instruction, Instr::WriteText { .. }))
+        );
+        assert!(
+            instructions
+                .iter()
+                .any(|instruction| matches!(instruction, Instr::CloseText { .. }))
+        );
+        assert!(
+            instructions
+                .iter()
+                .any(|instruction| matches!(instruction, Instr::GetProp { .. }))
+        );
+        assert!(instructions.iter().any(|instruction| matches!(
+            instruction,
+            Instr::CallMethod {
+                method: bsl_rt::BuiltinMethod::Add,
+                ..
+            }
+        )));
+        assert!(!instructions.iter().any(|instruction| matches!(
+            instruction,
+            Instr::CallObjectMethod { .. }
+                | Instr::GetObjectProp { .. }
+                | Instr::SetObjectProp { .. }
+        )));
+    }
+
     #[test]
     fn component_object_owns_properties_methods_and_indexes() {
         let registry = test_component_registry();
@@ -3206,16 +3253,21 @@ mod tests {
             &registry,
         );
 
+        // Свойства компилируются в закрытые `GetProp`/`SetProp` даже для
+        // компонентного получателя (резолвер больше не выпускает открытые
+        // двойники — их тела совпадают, см. комментарий у `RExpr::Field`),
+        // а вот метод вне ядровой таблицы обязан идти открытым
+        // `CallObjectMethod`.
         let instructions = &program.chunks[0].instrs;
         assert!(
             instructions
                 .iter()
-                .any(|instruction| matches!(instruction, Instr::GetObjectProp { .. }))
+                .any(|instruction| matches!(instruction, Instr::GetProp { .. }))
         );
         assert!(
             instructions
                 .iter()
-                .any(|instruction| matches!(instruction, Instr::SetObjectProp { .. }))
+                .any(|instruction| matches!(instruction, Instr::SetProp { .. }))
         );
         assert!(
             instructions

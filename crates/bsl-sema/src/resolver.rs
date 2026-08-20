@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use bsl_number::BslNumber;
 use bsl_syntax::{Expr as AExpr, Item, Stmt as AStmt};
 
+use crate::core_receivers::{self, CoreReceiver};
 use crate::resolved::{RExpr, RStmt, Resolved, ResolvedFunction, ResolvedParam, ResolvedProgram};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -145,9 +146,42 @@ fn resolve_program_impl(
         .collect();
     let empty_module_index: HashMap<String, u32> = HashMap::new();
 
+    // Статически доказанные ядровые приёмники — пре-проход по AST до
+    // резолвинга тел: его вердикты решают, остаётся ли вызов метода
+    // открытым (см. `core_receivers` и сайт `RExpr::CallMethod` ниже).
+    let by_val_modes: HashMap<String, Vec<bool>> = func_items
+        .iter()
+        .map(|item| match item {
+            Item::Function(f) => (&f.name, &f.params),
+            Item::Procedure(p) => (&p.name, &p.params),
+            _ => unreachable!(),
+        })
+        .map(|(name, params)| {
+            (
+                name.to_uppercase(),
+                params.iter().map(|p| p.by_val).collect(),
+            )
+        })
+        .collect();
+    let function_bodies: Vec<(&[bsl_syntax::Param], &[AStmt])> = func_items
+        .iter()
+        .map(|item| match item {
+            Item::Function(f) => (f.params.as_slice(), f.body.as_slice()),
+            Item::Procedure(p) => (p.params.as_slice(), p.body.as_slice()),
+            _ => unreachable!(),
+        })
+        .collect();
+    let core_maps = core_receivers::analyze(
+        &top_stmts,
+        &function_bodies,
+        &module_vars,
+        &by_val_modes,
+        registry,
+    );
+
     let mut functions = Vec::with_capacity(func_items.len());
     let mut used_libraries = HashSet::new();
-    for item in &func_items {
+    for (func_index, item) in func_items.iter().enumerate() {
         let (name, params, body) = match item {
             Item::Function(f) => (&f.name, &f.params, &f.body),
             Item::Procedure(p) => (&p.name, &p.params, &p.body),
@@ -162,6 +196,8 @@ fn resolve_program_impl(
             used_libraries: HashSet::new(),
             strict_stmt_calls: true,
             stmt_call: false,
+            core_locals: Some(&core_maps.functions[func_index]),
+            core_module: Some(&core_maps.module_slots),
         };
         for p in params {
             r.declare(&p.name);
@@ -205,6 +241,8 @@ fn resolve_program_impl(
         used_libraries: HashSet::new(),
         strict_stmt_calls: true,
         stmt_call: false,
+        core_locals: Some(&core_maps.top),
+        core_module: None,
     };
     for name in &module_vars {
         r.declare(name);
@@ -261,6 +299,8 @@ pub fn resolve_script(stmts: &[AStmt]) -> Result<Resolved, SemaError> {
         used_libraries: HashSet::new(),
         strict_stmt_calls: true,
         stmt_call: false,
+        core_locals: None,
+        core_module: None,
     };
     let body = r.resolve_block(stmts)?;
     Ok(Resolved {
@@ -435,6 +475,8 @@ fn resolve_snippet_stmts_mode_registry(
         used_libraries: HashSet::new(),
         strict_stmt_calls,
         stmt_call: false,
+        core_locals: None,
+        core_module: None,
     };
     let body = r.resolve_block(stmts)?;
     let requirements = match registry {
@@ -499,6 +541,14 @@ struct Resolver<'a> {
     /// оператора-вызова и потребляется входом в `resolve_expr`: только в
     /// этой позиции легальна глобальная процедура.
     stmt_call: bool,
+    /// Статически доказанные ядровые приёмники этой области (см.
+    /// `core_receivers`): локальные — по имени в верхнем регистре. `None`
+    /// у REPL и фрагментов `Выполнить` — их слоты живут дольше одного
+    /// разрешения, и доказательств там нет.
+    core_locals: Option<&'a HashMap<String, CoreReceiver>>,
+    /// Модульные переменные — по номеру слота (для `RExpr::ModuleVar` из
+    /// тел функций).
+    core_module: Option<&'a HashMap<u32, CoreReceiver>>,
 }
 
 impl<'a> Resolver<'a> {
@@ -515,6 +565,29 @@ impl<'a> Resolver<'a> {
 
     fn lookup(&self, name: &str) -> Option<u32> {
         self.index.get(&name.to_uppercase()).copied()
+    }
+
+    /// Статически доказанный ядровый тип приёмника: переменная с
+    /// вердиктом пре-прохода (см. `core_receivers`) или сам ядровый
+    /// конструктор на месте вызова.
+    fn core_receiver_of(&self, obj: &RExpr) -> Option<CoreReceiver> {
+        match obj {
+            RExpr::Local(slot) => {
+                let name = self.locals.get(*slot as usize)?;
+                self.core_locals?.get(&name.to_uppercase()).copied()
+            }
+            RExpr::ModuleVar(slot) => self.core_module?.get(slot).copied(),
+            RExpr::NewTextWriter { .. } => Some(CoreReceiver::TextWriter),
+            RExpr::NewArray { .. }
+            | RExpr::NewStructure { .. }
+            | RExpr::NewTable
+            | RExpr::NewMap
+            | RExpr::NewTypeDescription(_)
+            | RExpr::NewValueComparison
+            | RExpr::NewBinaryData { .. }
+            | RExpr::NewUuid { .. } => Some(CoreReceiver::Other),
+            _ => None,
+        }
     }
 
     fn resolve_block(&mut self, stmts: &[AStmt]) -> Result<Vec<RStmt>, SemaError> {
@@ -557,10 +630,13 @@ impl<'a> Resolver<'a> {
                 AExpr::Field { obj, name } => {
                     let obj = self.resolve_expr(obj)?;
                     let value = self.resolve_expr(value)?;
+                    // Запись свойства всегда компилируется в закрытый
+                    // `SetProp` — обоснование у чтения поля в
+                    // `resolve_expr`.
                     Ok(Some(RStmt::AssignField {
                         obj,
                         name: name.clone(),
-                        open: self.registry.is_some(),
+                        open: false,
                         value,
                     }))
                 }
@@ -840,10 +916,23 @@ impl<'a> Resolver<'a> {
                         .ok_or_else(|| SemaError::UndefinedVariable(format!("{base}.{name}")))?;
                     return Ok(RExpr::EnumMember(member));
                 }
+                // Доступ к свойству всегда компилируется в закрытый
+                // `GetProp`: открытый двойник не несёт информации сверх
+                // закрытого (то же имя в той же таблице `.names`, только
+                // усечённое до u16), а тела совпадают на всех трёх
+                // исполнителях — в интерпретаторе, в JIT-шимах и в
+                // эффектах бандлов. Для компонентного получателя оба
+                // варианта идут одним строковым `get_property`, а
+                // нативный в закрытом варианте остаётся в горячем цикле
+                // диспетчера — с реестром это измеренные десятки
+                // процентов на сценариях с плотным доступом к полям
+                // (`csv_write`). Открытые `GetObjectProp`/`SetObjectProp`
+                // остаются в формате байт-кода ради уже сериализованных
+                // программ и legacy-пути regexp в компиляторе.
                 Ok(RExpr::Field {
                     obj: Box::new(self.resolve_expr(obj)?),
                     name: name.clone(),
-                    open: self.registry.is_some(),
+                    open: false,
                 })
             }
             AExpr::New { type_name, args } => self.resolve_new(type_name, args),
@@ -1601,10 +1690,29 @@ impl<'a> Resolver<'a> {
                 }
                 let rargs = self.resolve_required_args(args)?;
                 let obj = self.resolve_expr(obj)?;
+                // Открытый вызов обязателен, когда получатель может
+                // оказаться компонентным объектом. Если же приёмник
+                // статически доказан ядровым (все его перепривязки — один
+                // `Новый T` из `NEW_TYPES`, см. `core_receivers`),
+                // закрытый путь семантически совпадает с открытым и
+                // остаётся измеренным горячим. Спец-опкоды
+                // `WriteText`/`CloseText` компилятор выбирает по паре
+                // «метод, арность» без знания типа, поэтому эти пары
+                // закрываются только для доказанного `ЗаписьТекста`;
+                // имена вне ядровой таблицы компилятор и при open=false
+                // выпускает открытым `CallObjectMethod`.
+                let core = self.core_receiver_of(&obj);
+                let closed_is_safe = match (method, args.len()) {
+                    (Some(bsl_rt::BuiltinMethod::Write), 1)
+                    | (Some(bsl_rt::BuiltinMethod::Close), 0) => {
+                        core == Some(CoreReceiver::TextWriter)
+                    }
+                    _ => core.is_some(),
+                };
                 Ok(RExpr::CallMethod {
                     obj: Box::new(obj),
                     method: name.clone(),
-                    open: self.registry.is_some(),
+                    open: self.registry.is_some() && !closed_is_safe,
                     args: rargs,
                 })
             }
@@ -2272,5 +2380,283 @@ mod tests {
                 value: RExpr::Local(0),
             }
         );
+    }
+
+    /// Все пары «имя метода, open» из разрешённой программы — в порядке
+    /// обхода. Только для проверок ниже: ходит ровно по тем узлам, где
+    /// вызов метода может встретиться в этих тестах.
+    fn call_opens(program: &ResolvedProgram) -> Vec<(String, bool)> {
+        fn from_expr(expr: &RExpr, into: &mut Vec<(String, bool)>) {
+            match expr {
+                RExpr::CallMethod {
+                    obj,
+                    method,
+                    open,
+                    args,
+                } => {
+                    from_expr(obj, into);
+                    into.push((method.clone(), *open));
+                    for arg in args {
+                        from_expr(arg, into);
+                    }
+                }
+                RExpr::Unary { expr, .. } => from_expr(expr, into),
+                RExpr::Binary { lhs, rhs, .. } => {
+                    from_expr(lhs, into);
+                    from_expr(rhs, into);
+                }
+                RExpr::Call { args, .. }
+                | RExpr::CallBuiltinFn { args, .. }
+                | RExpr::CallComponent { args, .. }
+                | RExpr::CreateObject { args, .. } => {
+                    for arg in args {
+                        from_expr(arg, into);
+                    }
+                }
+                RExpr::Index { obj, index } => {
+                    from_expr(obj, into);
+                    from_expr(index, into);
+                }
+                RExpr::Field { obj, .. } => from_expr(obj, into),
+                _ => {}
+            }
+        }
+        fn from_block(body: &[RStmt], into: &mut Vec<(String, bool)>) {
+            for stmt in body {
+                match stmt {
+                    RStmt::AssignLocal { value, .. }
+                    | RStmt::AssignModuleVar { value, .. }
+                    | RStmt::ExprStmt(value)
+                    | RStmt::Execute(value) => from_expr(value, into),
+                    RStmt::ForNumeric { from, to, body, .. } => {
+                        from_expr(from, into);
+                        from_expr(to, into);
+                        from_block(body, into);
+                    }
+                    RStmt::ForEach { iter, body, .. } => {
+                        from_expr(iter, into);
+                        from_block(body, into);
+                    }
+                    RStmt::While { cond, body } => {
+                        from_expr(cond, into);
+                        from_block(body, into);
+                    }
+                    RStmt::If {
+                        cond,
+                        then_branch,
+                        elsif_branches,
+                        else_branch,
+                    } => {
+                        from_expr(cond, into);
+                        from_block(then_branch, into);
+                        for (c, b) in elsif_branches {
+                            from_expr(c, into);
+                            from_block(b, into);
+                        }
+                        if let Some(b) = else_branch {
+                            from_block(b, into);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        let mut collected = Vec::new();
+        from_block(&program.top_level.body, &mut collected);
+        for function in &program.functions {
+            from_block(&function.body, &mut collected);
+        }
+        collected
+    }
+
+    fn opens_with_registry(src: &str) -> Vec<(String, bool)> {
+        let registry = synthetic_registry();
+        let prog = parse(src).unwrap_or_else(|e| panic!("parse error: {e:?}"));
+        let resolved = resolve_program_with_registry(&prog.items, &registry)
+            .unwrap_or_else(|e| panic!("sema error: {e:?}"));
+        call_opens(&resolved)
+    }
+
+    /// Приёмник, доказанно ядровый, компилируется закрытым даже с
+    /// реестром: это и есть возврат измеренного горячего пути.
+    #[test]
+    fn a_proven_core_receiver_closes_its_method_calls() {
+        let opens = opens_with_registry(
+            "ф = Новый ЗаписьТекста(\"о.тмп\");\n\
+             ф.Записать(\"х\");\n\
+             ф.Закрыть();\n\
+             с = Новый Структура(\"а\", 1);\n\
+             с.Вставить(\"б\", 2);",
+        );
+        assert_eq!(
+            opens,
+            vec![
+                ("Записать".to_string(), false),
+                ("Закрыть".to_string(), false),
+                ("Вставить".to_string(), false),
+            ]
+        );
+    }
+
+    /// Спец-опкоды `WriteText`/`CloseText` выбираются по паре «метод,
+    /// арность» — для прочих ядровых типов эти пары остаются открытыми.
+    #[test]
+    fn write_and_close_specializations_require_a_text_writer() {
+        let opens = opens_with_registry(
+            "с = Новый Структура(\"а\", 1);\n\
+             с.Записать(1);\n\
+             с.Закрыть();",
+        );
+        assert_eq!(
+            opens,
+            vec![
+                ("Записать".to_string(), true),
+                ("Закрыть".to_string(), true),
+            ]
+        );
+    }
+
+    /// Конструктор реестра (компонент) — не ядровый приёмник.
+    #[test]
+    fn a_registry_constructed_receiver_stays_open() {
+        let opens = opens_with_registry(
+            "т = Новый Тестовый();\n\
+             т.Добавить(1);",
+        );
+        assert_eq!(opens, vec![("Добавить".to_string(), true)]);
+    }
+
+    /// Любая перепривязка не-`Новый` правым выражением снимает вердикт.
+    #[test]
+    fn a_reassignment_from_an_unknown_value_reopens_the_calls() {
+        let opens = opens_with_registry(
+            "м = Новый Массив;\n\
+             м = 1;\n\
+             м.Добавить(1);",
+        );
+        assert_eq!(opens, vec![("Добавить".to_string(), true)]);
+    }
+
+    /// Роль переменной цикла — перепривязка на каждой итерации.
+    #[test]
+    fn loop_variables_are_not_tracked() {
+        let opens = opens_with_registry(
+            "м = Новый Массив;\n\
+             Для м = 1 По 2 Цикл КонецЦикла;\n\
+             м.Добавить(1);\n\
+             к = Новый Массив;\n\
+             Для Каждого к Из м Цикл КонецЦикла;\n\
+             к.Добавить(1);",
+        );
+        assert_eq!(
+            opens,
+            vec![
+                ("Добавить".to_string(), true),
+                ("Добавить".to_string(), true),
+            ]
+        );
+    }
+
+    /// Передача голым именем в by-ref параметр пользовательской функции
+    /// может переприсвоить слот; `Знач` — не может.
+    #[test]
+    fn by_ref_argument_passing_kills_the_verdict_but_by_val_does_not() {
+        let opens = opens_with_registry(
+            "Процедура ПоСсылке(х)\nКонецПроцедуры\n\
+             Процедура ПоЗначению(Знач х)\nКонецПроцедуры\n\
+             м = Новый Массив;\n\
+             ПоСсылке(м);\n\
+             м.Добавить(1);\n\
+             к = Новый Массив;\n\
+             ПоЗначению(к);\n\
+             к.Добавить(1);",
+        );
+        assert_eq!(
+            opens,
+            vec![
+                ("Добавить".to_string(), true),
+                ("Добавить".to_string(), false),
+            ]
+        );
+    }
+
+    /// `Выполнить`/`Вычислить` видят слоты кадра — динамика в области
+    /// снимает отслеживание её переменных.
+    #[test]
+    fn dynamic_execution_in_scope_reopens_the_calls() {
+        let opens = opens_with_registry(
+            "м = Новый Массив;\n\
+             Выполнить(\"м = 1\");\n\
+             м.Добавить(1);",
+        );
+        assert_eq!(opens, vec![("Добавить".to_string(), true)]);
+
+        let opens = opens_with_registry(
+            "м = Новый Массив;\n\
+             х = Вычислить(\"1\");\n\
+             м.Добавить(1);",
+        );
+        assert_eq!(opens, vec![("Добавить".to_string(), true)]);
+    }
+
+    /// Модульная переменная отслеживается по всему модулю: присваивание
+    /// в любой функции засчитывается, затенение своей `Перем` — нет.
+    #[test]
+    fn module_variables_aggregate_sites_across_functions() {
+        // Функция переприсваивает модульную — вердикта нет ни у неё, ни
+        // на верхнем уровне.
+        let opens = opens_with_registry(
+            "Перем м;\n\
+             Процедура П()\n\
+                 м = 1;\n\
+             КонецПроцедуры\n\
+             м = Новый Массив;\n\
+             м.Добавить(1);",
+        );
+        assert_eq!(opens, vec![("Добавить".to_string(), true)]);
+
+        // Функция работает со СВОЕЙ `Перем` — модульная чиста, и оба
+        // вызова закрыты: локальный тоже доказан (`Новый Соответствие`).
+        let opens = opens_with_registry(
+            "Перем м;\n\
+             Процедура П()\n\
+                 Перем м;\n\
+                 м = Новый Соответствие;\n\
+                 м.Вставить(1, 2);\n\
+             КонецПроцедуры\n\
+             м = Новый Массив;\n\
+             м.Добавить(1);\n\
+             П();",
+        );
+        assert_eq!(
+            opens,
+            vec![
+                ("Добавить".to_string(), false),
+                ("Вставить".to_string(), false),
+            ]
+        );
+
+        // Чтение модульной из функции пользуется модульным вердиктом.
+        let opens = opens_with_registry(
+            "Перем м;\n\
+             Процедура П()\n\
+                 м.Добавить(2);\n\
+             КонецПроцедуры\n\
+             м = Новый Массив;\n\
+             П();",
+        );
+        assert_eq!(opens, vec![("Добавить".to_string(), false)]);
+    }
+
+    /// Параметры приходят с неизвестным типом и не отслеживаются.
+    #[test]
+    fn function_parameters_are_never_tracked() {
+        let opens = opens_with_registry(
+            "Процедура П(м)\n\
+                 м.Добавить(1);\n\
+             КонецПроцедуры\n\
+             П(Новый Массив);",
+        );
+        assert_eq!(opens, vec![("Добавить".to_string(), true)]);
     }
 }
