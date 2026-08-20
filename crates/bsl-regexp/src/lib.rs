@@ -435,13 +435,12 @@ fn scan_back(re: &Regex, hay: &[u16], from: usize, needed: usize) -> Vec<crate::
         if found.len() >= needed {
             break;
         }
-        if let Some(m) = re.match_at(hay, at) {
-            if let Some((start, end)) = m.spans.first().copied().flatten() {
-                if limit.is_none_or(|bound| end <= bound) {
-                    limit = Some(start);
-                    found.push(m);
-                }
-            }
+        if let Some(m) = re.match_at(hay, at)
+            && let Some((start, end)) = m.spans.first().copied().flatten()
+            && limit.is_none_or(|bound| end <= bound)
+        {
+            limit = Some(start);
+            found.push(m);
         }
         match crate::engine::cp_before(hay, at) {
             Some((_, width)) => at -= width,

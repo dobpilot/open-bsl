@@ -491,7 +491,7 @@ impl XmlParser {
                     Some(EntityDecl::External) => {
                         return Err(bad(format!(
                             "внешняя сущность «&{name};» в значении атрибута"
-                        )))
+                        )));
                     }
                     Some(EntityDecl::Internal(text)) => {
                         if in_expansion(&stack, &frame, &name) {
@@ -1028,10 +1028,10 @@ impl XmlParser {
         // Побеждает ПЕРВОЕ объявление (измерено), поэтому повторное просто
         // отбрасывается.
         if parametric {
-            if let EntityDecl::Internal(text) = decl {
-                if !self.param_entities.iter().any(|(n, _)| *n == name) {
-                    self.param_entities.push((name, text));
-                }
+            if let EntityDecl::Internal(text) = decl
+                && !self.param_entities.iter().any(|(n, _)| *n == name)
+            {
+                self.param_entities.push((name, text));
             }
         } else if !self.entities.iter().any(|(n, _)| *n == name) {
             self.entities.push((name, decl));

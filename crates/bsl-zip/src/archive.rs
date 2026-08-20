@@ -318,7 +318,7 @@ pub(crate) fn read_entry(data: &[u8], index: usize, entry: &RawEntry) -> RtResul
             return Err(zip_err(&format!(
                 "у записи «{}» способ хранения {other} не поддерживается",
                 String::from_utf8_lossy(&entry.name)
-            )))
+            )));
         }
     };
     Ok(out)
@@ -1132,7 +1132,7 @@ pub fn extract(
             return Err(RtError::MethodNotApplicable {
                 method: "Извлечь",
                 receiver,
-            })
+            });
         }
     };
     // Элемент обязан быть из ЭТОГО архива: сам он свой читатель помнит, но
@@ -1150,7 +1150,7 @@ pub fn extract(
             return Err(RtError::TypeError {
                 expected: "ЭлементZipФайла",
                 op: "Извлечь",
-            })
+            });
         }
     };
 
@@ -1185,7 +1185,7 @@ pub fn extract_all(
             return Err(RtError::MethodNotApplicable {
                 method: "ИзвлечьВсе",
                 receiver,
-            })
+            });
         }
     };
     let restore = restore_paths(mode, "ИзвлечьВсе")?;
@@ -1657,7 +1657,7 @@ pub fn writer_add(writer: &WriterObject, args: &[BslValue]) -> RtResult<()> {
             return Err(RtError::MethodNotApplicable {
                 method: "Добавить",
                 receiver: writer.descriptor().name,
-            })
+            });
         }
     };
     let path = add_path(path)?;
@@ -3666,13 +3666,15 @@ mod tests {
         )
         .expect_err("TAR здесь не читается");
         assert!(e.to_string().contains("не поддерживается"), "текст: {e}");
-        assert!(new_archive_reader(
-            false,
-            &source,
-            &BslValue::Undefined,
-            &BslValue::Boolean(true)
-        )
-        .is_err());
+        assert!(
+            new_archive_reader(
+                false,
+                &source,
+                &BslValue::Undefined,
+                &BslValue::Boolean(true)
+            )
+            .is_err()
+        );
     }
 
     /// Испорченный вход не открывается вовсе — ошибка приходит из
@@ -4000,17 +4002,19 @@ mod tests {
         );
 
         // Уровень сжатия, наоборот, принимается — он на байты не влияет.
-        assert!(new_archive_writer(
-            true,
-            &[
-                BslValue::Undefined,
-                BslValue::Undefined,
-                BslValue::Undefined,
-                BslValue::Undefined,
-                BslValue::Enum(EnumValue::ZipLevelMaximal),
-            ]
-        )
-        .is_ok());
+        assert!(
+            new_archive_writer(
+                true,
+                &[
+                    BslValue::Undefined,
+                    BslValue::Undefined,
+                    BslValue::Undefined,
+                    BslValue::Undefined,
+                    BslValue::Enum(EnumValue::ZipLevelMaximal),
+                ]
+            )
+            .is_ok()
+        );
     }
 
     /// У архивного писателя третий аргумент — тип архива, четвёртый —
@@ -4034,26 +4038,30 @@ mod tests {
         let (_, comment) = parse_archive(&bytes).unwrap();
         assert_eq!(String::from_utf8_lossy(&comment), "комментарий");
 
-        assert!(new_archive_writer(
-            false,
-            &[
-                BslValue::Undefined,
-                BslValue::Undefined,
-                BslValue::Enum(EnumValue::ArchiveTypeTar)
-            ]
-        )
-        .is_err());
-        assert!(new_archive_writer(
-            false,
-            &[
-                BslValue::Undefined,
-                BslValue::Undefined,
-                BslValue::Undefined,
-                BslValue::Undefined,
-                str_value("пятый")
-            ]
-        )
-        .is_err());
+        assert!(
+            new_archive_writer(
+                false,
+                &[
+                    BslValue::Undefined,
+                    BslValue::Undefined,
+                    BslValue::Enum(EnumValue::ArchiveTypeTar)
+                ]
+            )
+            .is_err()
+        );
+        assert!(
+            new_archive_writer(
+                false,
+                &[
+                    BslValue::Undefined,
+                    BslValue::Undefined,
+                    BslValue::Undefined,
+                    BslValue::Undefined,
+                    str_value("пятый")
+                ]
+            )
+            .is_err()
+        );
 
         // Восьмое место у архивного писателя ЕСТЬ (у zip-варианта его нет)
         // и типизировано так же пусто. Резолвер не пускает сюда девятый

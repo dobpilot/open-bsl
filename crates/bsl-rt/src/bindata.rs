@@ -209,7 +209,7 @@ pub fn new_binary_buffer(size: &BslValue, order: &BslValue) -> RtResult<BslValue
             return Err(RtError::TypeError {
                 expected: "ПорядокБайтов",
                 op: OP,
-            })
+            });
         }
     };
     // `vec![0; size]` на неразмещаемом размере ПАНИКУЕТ, а размер пришёл из
@@ -588,14 +588,14 @@ pub fn split(v: &BslValue, sep: &BslValue) -> RtResult<BslValue> {
                 return Err(RtError::TypeError {
                     expected: "БуферДвоичныхДанных",
                     op: OP,
-                })
+                });
             }
         },
         _ => {
             return Err(RtError::TypeError {
                 expected: "БуферДвоичныхДанных",
                 op: OP,
-            })
+            });
         }
     };
     // Разделитель и получатель могут быть ОДНИМ объектом (`Б.Разделить(Б)`),
@@ -654,14 +654,14 @@ pub fn concat(v: &BslValue, other: &BslValue) -> RtResult<BslValue> {
                 return Err(RtError::TypeError {
                     expected: "БуферДвоичныхДанных",
                     op: OP,
-                })
+                });
             }
         },
         _ => {
             return Err(RtError::TypeError {
                 expected: "БуферДвоичныхДанных",
                 op: OP,
-            })
+            });
         }
     };
     // `Б.Соединить(Б)` измерено — даёт удвоенный размер, поэтому второе
@@ -762,7 +762,7 @@ pub fn get_slice(v: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
             return Err(RtError::MethodNotApplicable {
                 method: OP,
                 receiver: v.type_name(),
-            })
+            });
         }
     };
     Ok(wrap(d.window(pos, count)))
@@ -800,7 +800,7 @@ pub fn write_buffer(v: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
             return Err(RtError::MethodNotApplicable {
                 method: OP,
                 receiver: v.type_name(),
-            })
+            });
         }
     };
     let d = data(v, OP)?;
@@ -913,14 +913,14 @@ pub fn bitwise(v: &BslValue, args: &[BslValue], op: BitOp) -> RtResult<BslValue>
                 return Err(RtError::TypeError {
                     expected: "БуферДвоичныхДанных",
                     op: name,
-                })
+                });
             }
         },
         _ => {
             return Err(RtError::TypeError {
                 expected: "БуферДвоичныхДанных",
                 op: name,
-            })
+            });
         }
     };
     // Маской может быть сам получатель — берём её копией до `borrow_mut`.
@@ -991,7 +991,7 @@ pub fn invert(v: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
             return Err(RtError::MethodNotApplicable {
                 method: OP,
                 receiver: v.type_name(),
-            })
+            });
         }
     };
     d.with_bytes_mut(|b| {
@@ -1133,14 +1133,14 @@ pub fn string_from_binary_data(args: &[BslValue]) -> RtResult<BslValue> {
                 return Err(RtError::TypeError {
                     expected: "ДвоичныеДанные",
                     op: OP,
-                })
+                });
             }
         },
         _ => {
             return Err(RtError::TypeError {
                 expected: "ДвоичныеДанные",
                 op: OP,
-            })
+            });
         }
     };
     let encoding = encoding_arg(args.get(1).unwrap_or(&BslValue::Undefined), OP)?;
@@ -1255,11 +1255,13 @@ mod tests {
         // А отрицательный, дробный и строковый — нет.
         assert!(new_binary_buffer(&num(-1), &BslValue::Undefined).is_err());
         assert!(new_binary_buffer(&dec("2.5"), &BslValue::Undefined).is_err());
-        assert!(new_binary_buffer(
-            &BslValue::Str(crate::BslString::from_str("4")),
-            &BslValue::Undefined
-        )
-        .is_err());
+        assert!(
+            new_binary_buffer(
+                &BslValue::Str(crate::BslString::from_str("4")),
+                &BslValue::Undefined
+            )
+            .is_err()
+        );
         // Порядок байтов — только член перечисления.
         assert_eq!(
             get_order(&new_binary_buffer(&num(2), &be).unwrap()).unwrap(),
@@ -1969,12 +1971,10 @@ mod tests {
         // 59. из Неопределено: нет
         assert!(binary_data_from_string(&[BslValue::Undefined]).is_err());
         // 64. BOM числом: нет — единица НЕ читается как Истина.
-        assert!(binary_data_from_string(&[
-            str_arg("Аб"),
-            enc(EnumValue::TextEncodingUtf8),
-            num(1)
-        ])
-        .is_err());
+        assert!(
+            binary_data_from_string(&[str_arg("Аб"), enc(EnumValue::TextEncodingUtf8), num(1)])
+                .is_err()
+        );
         // 65. кодировка числом: нет
         assert!(binary_data_from_string(&[str_arg("Аб"), num(5)]).is_err());
         // 60. обратно из строки: нет

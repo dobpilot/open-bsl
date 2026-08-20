@@ -1,8 +1,8 @@
 use num_bigint::BigInt;
 use num_traits::Signed;
 
-use crate::number::BslNumber;
 use crate::NumError;
+use crate::number::BslNumber;
 
 impl BslNumber {
     /// Каноническая форма: точка как разделитель, без группировки, без

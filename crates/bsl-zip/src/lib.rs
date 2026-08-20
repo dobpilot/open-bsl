@@ -12,8 +12,8 @@ use bsl_rt::{
 };
 
 pub use archive::{
-    new_archive_reader, new_archive_writer, ArchiveKind, EntriesObject, EntryObject, ReaderObject,
-    WriterObject,
+    ArchiveKind, EntriesObject, EntryObject, ReaderObject, WriterObject, new_archive_reader,
+    new_archive_writer,
 };
 
 /// Идентификатор компонента в заголовке байткода.

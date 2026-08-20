@@ -463,7 +463,10 @@ mod tests {
 
         assert_eq!(module.requirements().len(), 2);
         assert_eq!(module.requirements()[1].package, "bsl-binbuf");
-        assert_eq!(module.requirements()[1].version, env!("CARGO_PKG_VERSION"));
+        assert_eq!(
+            module.requirements()[1].version,
+            bsl_binbuf::PACKAGE_VERSION
+        );
         assert_eq!(engine.new_state().run(&module).unwrap().to_string(), "8");
         assert!(module.bytecode().unwrap().contains("CallComponent"));
     }
@@ -495,7 +498,10 @@ mod tests {
 
         assert_eq!(module.requirements().len(), 2);
         assert_eq!(module.requirements()[1].package, "bsl-textdoc");
-        assert_eq!(module.requirements()[1].version, env!("CARGO_PKG_VERSION"));
+        assert_eq!(
+            module.requirements()[1].version,
+            bsl_textdoc::library().version
+        );
         assert_eq!(
             engine.new_state().run(&module).unwrap().to_string(),
             "мир  \n"
@@ -542,9 +548,11 @@ mod tests {
     fn missing_json_feature_rejects_functions_and_constructors() {
         let engine = Engine::builder().build().unwrap();
         assert!(engine.compile("Возврат Новый ЧтениеJSON;").is_err());
-        assert!(engine
-            .compile("Возврат ПрочитатьЗначениеJSON(\"1\");")
-            .is_err());
+        assert!(
+            engine
+                .compile("Возврат ПрочитатьЗначениеJSON(\"1\");")
+                .is_err()
+        );
     }
 
     #[cfg(feature = "stream")]
@@ -566,11 +574,13 @@ mod tests {
             )
             .unwrap();
 
-        assert!(module
-            .requirements()
-            .iter()
-            .any(|requirement| requirement.package == "bsl-stream"
-                && requirement.version == env!("CARGO_PKG_VERSION")));
+        assert!(
+            module
+                .requirements()
+                .iter()
+                .any(|requirement| requirement.package == "bsl-stream"
+                    && requirement.version == bsl_stream::PACKAGE_VERSION)
+        );
         assert_eq!(engine.new_state().run(&module).unwrap().to_string(), "65");
         assert!(module.bytecode().unwrap().contains("CreateObject"));
     }
@@ -590,11 +600,13 @@ mod tests {
         let module = engine
             .compile("писатель = Новый ЗаписьZipФайла(); Возврат ТипЗнч(писатель);")
             .unwrap();
-        assert!(module
-            .requirements()
-            .iter()
-            .any(|requirement| requirement.package == "bsl-zip"
-                && requirement.version == env!("CARGO_PKG_VERSION")));
+        assert!(
+            module
+                .requirements()
+                .iter()
+                .any(|requirement| requirement.package == "bsl-zip"
+                    && requirement.version == bsl_zip::PACKAGE_VERSION)
+        );
         assert!(module.bytecode().unwrap().contains("CreateObject"));
 
         // Читатель без источника создаётся закрытым — законная форма.
@@ -613,9 +625,11 @@ mod tests {
     fn missing_zip_feature_rejects_archive_constructors() {
         let engine = Engine::builder().build().unwrap();
         assert!(engine.compile("Возврат Новый ЧтениеZipФайла();").is_err());
-        assert!(engine
-            .compile("Возврат Новый ЗаписьФайлаАрхива();")
-            .is_err());
+        assert!(
+            engine
+                .compile("Возврат Новый ЗаписьФайлаАрхива();")
+                .is_err()
+        );
     }
 
     #[cfg(feature = "pdf")]
@@ -625,11 +639,13 @@ mod tests {
         let module = engine
             .compile("док = Новый ДокументPDF(); Возврат ТипЗнч(док.Вложения);")
             .unwrap();
-        assert!(module
-            .requirements()
-            .iter()
-            .any(|requirement| requirement.package == "bsl-pdf"
-                && requirement.version == env!("CARGO_PKG_VERSION")));
+        assert!(
+            module
+                .requirements()
+                .iter()
+                .any(|requirement| requirement.package == "bsl-pdf"
+                    && requirement.version == bsl_pdf::PACKAGE_VERSION)
+        );
         assert!(module.bytecode().unwrap().contains("CreateObject"));
         // Коллекция вложений есть и до чтения (измерено).
         assert_eq!(
@@ -643,9 +659,11 @@ mod tests {
     fn missing_pdf_feature_rejects_pdf_constructors() {
         let engine = Engine::builder().build().unwrap();
         assert!(engine.compile("Возврат Новый ДокументPDF();").is_err());
-        assert!(engine
-            .compile("Возврат Новый КоллекцияВложенийPDF();")
-            .is_err());
+        assert!(
+            engine
+                .compile("Возврат Новый КоллекцияВложенийPDF();")
+                .is_err()
+        );
     }
 
     #[cfg(feature = "xml")]
@@ -658,11 +676,13 @@ mod tests {
                  Возврат ТипЗнч(сер);",
             )
             .unwrap();
-        assert!(module
-            .requirements()
-            .iter()
-            .any(|requirement| requirement.package == "bsl-xml"
-                && requirement.version == env!("CARGO_PKG_VERSION")));
+        assert!(
+            module
+                .requirements()
+                .iter()
+                .any(|requirement| requirement.package == "bsl-xml"
+                    && requirement.version == bsl_xml::PACKAGE_VERSION)
+        );
         assert!(module.bytecode().unwrap().contains("CreateObject"));
         // Представление типа — «Сериализатор XDTO», как на платформе.
         assert_eq!(
@@ -690,11 +710,13 @@ mod tests {
                  Обл.Текст = \"привет\"; Возврат Док.Область(1, 1, 1, 1).Текст;",
             )
             .unwrap();
-        assert!(module
-            .requirements()
-            .iter()
-            .any(|requirement| requirement.package == "bsl-spreadsheet"
-                && requirement.version == env!("CARGO_PKG_VERSION")));
+        assert!(
+            module
+                .requirements()
+                .iter()
+                .any(|requirement| requirement.package == "bsl-spreadsheet"
+                    && requirement.version == bsl_spreadsheet::PACKAGE_VERSION)
+        );
         assert!(module.bytecode().unwrap().contains("CreateObject"));
         assert_eq!(
             engine.new_state().run(&module).unwrap().to_string(),
@@ -714,9 +736,11 @@ mod tests {
     fn missing_xml_feature_rejects_xdto_constructors() {
         let engine = Engine::builder().build().unwrap();
         assert!(engine.compile("Возврат Новый ФабрикаXDTO();").is_err());
-        assert!(engine
-            .compile("сер = Новый СериализаторXDTO(Неопределено);")
-            .is_err());
+        assert!(
+            engine
+                .compile("сер = Новый СериализаторXDTO(Неопределено);")
+                .is_err()
+        );
     }
 
     #[cfg(feature = "regexp")]
@@ -740,8 +764,10 @@ mod tests {
     #[test]
     fn missing_regexp_feature_is_a_compile_error() {
         let engine = Engine::builder().build().unwrap();
-        assert!(engine
-            .compile("Возврат СтрПодобнаПоРегулярномуВыражению(\"а\", \"а\");")
-            .is_err());
+        assert!(
+            engine
+                .compile("Возврат СтрПодобнаПоРегулярномуВыражению(\"а\", \"а\");")
+                .is_err()
+        );
     }
 }

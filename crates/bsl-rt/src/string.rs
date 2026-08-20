@@ -515,12 +515,11 @@ impl BslString {
         let unit = *self.0.get(i)? as u32;
         const HIGH: std::ops::Range<u32> = 0xD800..0xDC00;
         const LOW: std::ops::Range<u32> = 0xDC00..0xE000;
-        if HIGH.contains(&unit) {
-            if let Some(&next) = self.0.get(i + 1) {
-                if LOW.contains(&(next as u32)) {
-                    return Some(0x10000 + ((unit - 0xD800) << 10) + (next as u32 - 0xDC00));
-                }
-            }
+        if HIGH.contains(&unit)
+            && let Some(&next) = self.0.get(i + 1)
+            && LOW.contains(&(next as u32))
+        {
+            return Some(0x10000 + ((unit - 0xD800) << 10) + (next as u32 - 0xDC00));
         }
         Some(unit)
     }
@@ -551,21 +550,21 @@ impl BslString {
                 Some(&d) if digit(d).is_some() => {
                     let mut n = digit(d).unwrap() as usize;
                     let mut used = 2;
-                    if let Some(&d2) = src.get(i + 2) {
-                        if let Some(v) = digit(d2) {
-                            // Только до `%10`: у 1С шаблон принимает ровно
-                            // десять значений, `%11` — это `%1` и текст `1`.
-                            let wide = n * 10 + v as usize;
-                            if wide <= MAX_TEMPLATE_ARGS {
-                                n = wide;
-                                used = 3;
-                            }
+                    if let Some(&d2) = src.get(i + 2)
+                        && let Some(v) = digit(d2)
+                    {
+                        // Только до `%10`: у 1С шаблон принимает ровно
+                        // десять значений, `%11` — это `%1` и текст `1`.
+                        let wide = n * 10 + v as usize;
+                        if wide <= MAX_TEMPLATE_ARGS {
+                            n = wide;
+                            used = 3;
                         }
                     }
-                    if n >= 1 {
-                        if let Some(v) = values.get(n - 1) {
-                            out.extend_from_slice(&v.0);
-                        }
+                    if n >= 1
+                        && let Some(v) = values.get(n - 1)
+                    {
+                        out.extend_from_slice(&v.0);
                     }
                     i += used;
                 }

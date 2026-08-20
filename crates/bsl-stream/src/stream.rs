@@ -687,7 +687,7 @@ pub fn new_memory_stream(arg: &BslValue) -> RtResult<BslValue> {
             return Err(RtError::TypeError {
                 expected: "Число либо БуферДвоичныхДанных",
                 op: OP,
-            })
+            });
         }
     };
     Ok(stream_value(
@@ -741,7 +741,7 @@ pub fn new_file_stream(path: &BslValue, mode: &BslValue, access: &BslValue) -> R
             return Err(RtError::TypeError {
                 expected: "ДоступКФайлу",
                 op: OP,
-            })
+            });
         }
     };
     open_file_stream(&path, mode, access)
@@ -1126,7 +1126,7 @@ pub fn seek(v: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
             return Err(RtError::TypeError {
                 expected: "Целое число",
                 op: OP,
-            })
+            });
         }
     };
     let origin = match origin {
@@ -1629,12 +1629,14 @@ mod tests {
 
         // `Создать` обрезает, `Чтение` с ним несовместимо.
         refill();
-        assert!(open(
-            &path,
-            EnumValue::FileOpenModeCreate,
-            Some(EnumValue::FileAccessRead)
-        )
-        .is_err());
+        assert!(
+            open(
+                &path,
+                EnumValue::FileOpenModeCreate,
+                Some(EnumValue::FileAccessRead)
+            )
+            .is_err()
+        );
         let s = open(&path, EnumValue::FileOpenModeCreate, None).unwrap();
         assert_eq!(as_u64(&size(&s).unwrap()), 0);
 
@@ -1644,23 +1646,27 @@ mod tests {
 
         // `Обрезать` обрезает и тоже требует записи.
         refill();
-        assert!(open(
-            &path,
-            EnumValue::FileOpenModeTruncate,
-            Some(EnumValue::FileAccessRead)
-        )
-        .is_err());
+        assert!(
+            open(
+                &path,
+                EnumValue::FileOpenModeTruncate,
+                Some(EnumValue::FileAccessRead)
+            )
+            .is_err()
+        );
         let s = open(&path, EnumValue::FileOpenModeTruncate, None).unwrap();
         assert_eq!(as_u64(&size(&s).unwrap()), 0);
 
         // `Дописать` ставит позицию в конец и с `Чтение` несовместим.
         refill();
-        assert!(open(
-            &path,
-            EnumValue::FileOpenModeAppend,
-            Some(EnumValue::FileAccessRead)
-        )
-        .is_err());
+        assert!(
+            open(
+                &path,
+                EnumValue::FileOpenModeAppend,
+                Some(EnumValue::FileAccessRead)
+            )
+            .is_err()
+        );
         let s = open(&path, EnumValue::FileOpenModeAppend, None).unwrap();
         assert_eq!(as_u64(&size(&s).unwrap()), 13);
         assert_eq!(as_u64(&current_position(&s).unwrap()), 13);
@@ -1680,12 +1686,14 @@ mod tests {
         clear();
         assert!(open(&path, EnumValue::FileOpenModeOpen, None).is_err());
         assert!(open(&path, EnumValue::FileOpenModeTruncate, None).is_err());
-        assert!(open(
-            &path,
-            EnumValue::FileOpenModeOpenOrCreate,
-            Some(EnumValue::FileAccessRead)
-        )
-        .is_err());
+        assert!(
+            open(
+                &path,
+                EnumValue::FileOpenModeOpenOrCreate,
+                Some(EnumValue::FileAccessRead)
+            )
+            .is_err()
+        );
 
         for mode in [
             EnumValue::FileOpenModeOpenOrCreate,
@@ -1713,18 +1721,22 @@ mod tests {
         let name = BslValue::Str(bsl_rt::BslString::from_str(&path));
         assert!(new_file_stream(&name, &num(1), &BslValue::Undefined).is_err());
         assert!(new_file_stream(&name, &enum_val(EnumValue::FileOpenModeOpen), &num(1)).is_err());
-        assert!(new_file_stream(
-            &num(5),
-            &enum_val(EnumValue::FileOpenModeOpen),
-            &BslValue::Undefined
-        )
-        .is_err());
-        assert!(new_file_stream(
-            &BslValue::Str(bsl_rt::BslString::from_str("")),
-            &enum_val(EnumValue::FileOpenModeOpen),
-            &BslValue::Undefined
-        )
-        .is_err());
+        assert!(
+            new_file_stream(
+                &num(5),
+                &enum_val(EnumValue::FileOpenModeOpen),
+                &BslValue::Undefined
+            )
+            .is_err()
+        );
+        assert!(
+            new_file_stream(
+                &BslValue::Str(bsl_rt::BslString::from_str("")),
+                &enum_val(EnumValue::FileOpenModeOpen),
+                &BslValue::Undefined
+            )
+            .is_err()
+        );
         let _ = std::fs::remove_file(&path);
     }
 
@@ -1815,12 +1827,14 @@ mod tests {
         let name = BslValue::Str(bsl_rt::BslString::from_str(&path));
         assert!(manager_open(std::slice::from_ref(&name)).is_err());
         assert!(manager_open(&[name.clone(), enum_val(EnumValue::FileOpenModeOpen)]).is_ok());
-        assert!(manager_open(&[
-            name.clone(),
-            enum_val(EnumValue::FileOpenModeOpen),
-            enum_val(EnumValue::FileAccessRead)
-        ])
-        .is_ok());
+        assert!(
+            manager_open(&[
+                name.clone(),
+                enum_val(EnumValue::FileOpenModeOpen),
+                enum_val(EnumValue::FileAccessRead)
+            ])
+            .is_ok()
+        );
         assert!(manager_open_for_read(&[num(5)]).is_err());
         assert!(manager_open_for_read(&[name.clone(), num(5)]).is_err());
         assert!(manager_open_for_read(&[]).is_err());

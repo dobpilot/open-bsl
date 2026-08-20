@@ -91,7 +91,7 @@ mod tables;
 
 use bsl_rt::{RtError, RtResult};
 use std::collections::HashMap;
-use tables::{in_ranges, CONNECTOR_RANGES, DIGIT_RANGES, LETTER_RANGES, MARK_RANGES};
+use tables::{CONNECTOR_RANGES, DIGIT_RANGES, LETTER_RANGES, MARK_RANGES, in_ranges};
 
 pub(crate) use tables::decimal_digit_value;
 
@@ -148,12 +148,11 @@ const CP_PS: Cp = 0x2029;
 /// `None` — за концом строки.
 pub(crate) fn cp_at(units: &[u16], i: usize) -> Option<(Cp, usize)> {
     let first = Cp::from(*units.get(i)?);
-    if (0xD800..0xDC00).contains(&first) {
-        if let Some(low) = units.get(i + 1).copied().map(Cp::from) {
-            if (0xDC00..0xE000).contains(&low) {
-                return Some((0x1_0000 + ((first - 0xD800) << 10) + (low - 0xDC00), 2));
-            }
-        }
+    if (0xD800..0xDC00).contains(&first)
+        && let Some(low) = units.get(i + 1).copied().map(Cp::from)
+        && (0xDC00..0xE000).contains(&low)
+    {
+        return Some((0x1_0000 + ((first - 0xD800) << 10) + (low - 0xDC00), 2));
     }
     Some((first, 1))
 }
@@ -516,7 +515,7 @@ impl<'a> Parser<'a> {
                         "инлайн-флаг записан как «(?…{}…)»; поддержаны только \
                          «(?i)», «(?m)» и «(?im)»",
                         show(cp)
-                    )))
+                    )));
                 }
                 _ => return Ok(false),
             }
@@ -531,14 +530,14 @@ impl<'a> Parser<'a> {
             return Ok(atom);
         };
         let greedy = !self.eat('?' as Cp);
-        if let Some(next) = self.peek() {
-            if next == '*' as Cp || next == '+' as Cp || next == '?' as Cp {
-                return Err(bad(format!(
-                    "два квантора подряд («{}» после квантора); притяжательные \
+        if let Some(next) = self.peek()
+            && (next == '*' as Cp || next == '+' as Cp || next == '?' as Cp)
+        {
+            return Err(bad(format!(
+                "два квантора подряд («{}» после квантора); притяжательные \
                      кванторы вида «а*+» не поддержаны",
-                    show(next)
-                )));
-            }
+                show(next)
+            )));
         }
         Ok(Node::Repeat {
             body: Box::new(atom),
@@ -713,7 +712,7 @@ impl<'a> Parser<'a> {
                         "конструкция «(?{}» не поддержана: есть только группа \
                          «(…)», незахватывающая «(?:…)» и флаги «(?i)»/«(?m)»",
                         show(cp)
-                    )))
+                    )));
                 }
                 None => return Err(bad("шаблон обрывается на «(?»")),
             }
@@ -816,7 +815,7 @@ impl<'a> Parser<'a> {
                         Escape::Cp(cp) => cp,
                         Escape::Prop { .. } | Escape::WordBoundary { .. } => {
                             return Err(bad("границей диапазона в классе может быть только \
-                                 символ, а не сокращение вида «\\d»"))
+                                 символ, а не сокращение вида «\\d»"));
                         }
                     }
                 }

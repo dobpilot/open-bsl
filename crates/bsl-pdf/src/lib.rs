@@ -13,8 +13,8 @@ use bsl_rt::{
 };
 
 pub use document::{
-    new_pdf_attachments, new_pdf_document, AttachmentObject, AttachmentsObject, DocumentObject,
-    PageObject, PagesObject,
+    AttachmentObject, AttachmentsObject, DocumentObject, PageObject, PagesObject,
+    new_pdf_attachments, new_pdf_document,
 };
 
 /// Идентификатор компонента в заголовке байткода.

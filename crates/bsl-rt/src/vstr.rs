@@ -297,7 +297,7 @@ fn value_to_writer(
             return Err(err(format!(
                 "значение типа «{}» не представимо во внутреннем формате",
                 other.type_name()
-            )))
+            )));
         }
     }
     Ok(())
@@ -403,7 +403,7 @@ fn object_to_writer(
         _ => {
             return Err(err(format!(
                 "значение типа «{type_name}» не представимо во внутреннем формате"
-            )))
+            )));
         }
     }
     Ok(())
@@ -1892,7 +1892,13 @@ fn table_from_payload(
     rt: &mut RuntimeShapes,
     depth: usize,
 ) -> RtResult<BslValue> {
-    let [Node::Bare(version), Node::List(cols), Node::List(rows_block), _indexes] = payload else {
+    let [
+        Node::Bare(version),
+        Node::List(cols),
+        Node::List(rows_block),
+        _indexes,
+    ] = payload
+    else {
         return Err(err(
             "разметка ТаблицыЗначений — версия, колонки, строки, индексы",
         ));
@@ -1911,8 +1917,13 @@ fn table_from_payload(
             let Node::List(col) = col else {
                 return Err(err("колонка ТаблицыЗначений — список"));
             };
-            let [Node::Bare(col_id), Node::Str(name), Node::List(pattern), Node::Str(title), Node::Bare(width)] =
-                col.as_slice()
+            let [
+                Node::Bare(col_id),
+                Node::Str(name),
+                Node::List(pattern),
+                Node::Str(title),
+                Node::Bare(width),
+            ] = col.as_slice()
             else {
                 return Err(err(
                     "колонка ТаблицыЗначений — идентификатор, имя, типы, заголовок, ширина",

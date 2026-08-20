@@ -772,34 +772,34 @@ fn drive_linked(
                 }
                 // Два слоя внутри уже найденной ячейки: пробовали ли этот
                 // чанк и вышло ли. Повторно искать его в таблице незачем.
-                if let Some(Some(code)) = slot.as_ref() {
-                    if let Some(outcome) = code.run(
+                if let Some(Some(code)) = slot.as_ref()
+                    && let Some(outcome) = code.run(
                         pc,
                         &mut frames,
                         &mut stack,
                         program,
                         &mut runtime_shapes,
                         linked,
-                    ) {
-                        match outcome {
-                            Ok(next_pc) => {
-                                if let Some(frame) = frames.last_mut() {
-                                    frame.pc = next_pc;
-                                }
-                                continue;
+                    )
+                {
+                    match outcome {
+                        Ok(next_pc) => {
+                            if let Some(frame) = frames.last_mut() {
+                                frame.pc = next_pc;
                             }
-                            Err(e) => {
-                                if !unwind_to_handler(
-                                    &mut frames,
-                                    &mut stack,
-                                    program,
-                                    &e,
-                                    &mut current_exception,
-                                ) {
-                                    return Err(e);
-                                }
-                                continue;
+                            continue;
+                        }
+                        Err(e) => {
+                            if !unwind_to_handler(
+                                &mut frames,
+                                &mut stack,
+                                program,
+                                &e,
+                                &mut current_exception,
+                            ) {
+                                return Err(e);
                             }
+                            continue;
                         }
                     }
                 }
@@ -1273,7 +1273,7 @@ fn step(
                     Some(_) => {
                         return Err(RtError::InvalidBytecode(
                             "перекрывающиеся скрытые состояния числовых циклов",
-                        ))
+                        ));
                     }
                     None => {
                         match numeric_for_i64_start(
@@ -1904,7 +1904,7 @@ fn step_cold(
                         } else {
                             "Выполнить"
                         },
-                    })
+                    });
                 }
             };
             // Область видимости фрагмента — материализованная таблица
@@ -1933,7 +1933,7 @@ fn step_cold(
         _ => {
             return Err(RtError::InvalidBytecode(
                 "горячий опкод попал в холодную половину диспетчера",
-            ))
+            ));
         }
     }
     Ok(())
@@ -2360,7 +2360,7 @@ fn compile_dynamic_snippet(
             _ => {
                 return Err(RtError::DynamicError(
                     "Выполнить/Вычислить не поддерживают объявление процедур/функций".to_string(),
-                ))
+                ));
             }
         }
     }
@@ -2439,7 +2439,7 @@ fn merge_requirements(
                 return Err(RtError::Component(format!(
                     "для {} одновременно требуются версии {} и {}",
                     requirement.package, existing.version, requirement.version
-                )))
+                )));
             }
             Some(_) => {}
             None => merged.push(requirement.clone()),
@@ -2691,7 +2691,7 @@ fn call_builtin_with_format(
                     return Err(RtError::TypeError {
                         expected: "Строка",
                         op: "Формат(..., СтрокаФормата)",
-                    })
+                    });
                 }
             };
             let s = bsl_format::format_value(&args[0], Some(&spec))?;
@@ -2704,7 +2704,7 @@ fn call_builtin_with_format(
                     return Err(RtError::TypeError {
                         expected: "Строка",
                         op: "Число(...)",
-                    })
+                    });
                 }
             };
             let n = bsl_format::parse_number(&s.to_string(), &bsl_format::NumberFormat::default())?;
@@ -3207,15 +3207,21 @@ mod tests {
         );
 
         let instructions = &program.chunks[0].instrs;
-        assert!(instructions
-            .iter()
-            .any(|instruction| matches!(instruction, Instr::GetObjectProp { .. })));
-        assert!(instructions
-            .iter()
-            .any(|instruction| matches!(instruction, Instr::SetObjectProp { .. })));
-        assert!(instructions
-            .iter()
-            .any(|instruction| matches!(instruction, Instr::CallObjectMethod { .. })));
+        assert!(
+            instructions
+                .iter()
+                .any(|instruction| matches!(instruction, Instr::GetObjectProp { .. }))
+        );
+        assert!(
+            instructions
+                .iter()
+                .any(|instruction| matches!(instruction, Instr::SetObjectProp { .. }))
+        );
+        assert!(
+            instructions
+                .iter()
+                .any(|instruction| matches!(instruction, Instr::CallObjectMethod { .. }))
+        );
 
         assert_eq!(
             run_program_with_registry(&program, &registry).unwrap(),

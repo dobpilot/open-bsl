@@ -478,7 +478,7 @@ impl RuntimeBuilder {
                         return Err(RegistryError::MissingDependency {
                             package: library.package.to_string(),
                             dependency: dependency.package.to_string(),
-                        })
+                        });
                     }
                     Some(actual) if *actual != dependency.version => {
                         return Err(RegistryError::DependencyVersion {
@@ -486,7 +486,7 @@ impl RuntimeBuilder {
                             dependency: dependency.package.to_string(),
                             expected: dependency.version.to_string(),
                             actual: (*actual).to_string(),
-                        })
+                        });
                     }
                     Some(_) => {}
                 }

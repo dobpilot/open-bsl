@@ -11,7 +11,7 @@
 //! включены.
 
 use bsl_spreadsheet::{
-    to_mxl_bytes, Color, Font, HAlign, Line, LineStyle, Merge, NamedArea, SpreadDocData, VAlign,
+    Color, Font, HAlign, Line, LineStyle, Merge, NamedArea, SpreadDocData, VAlign, to_mxl_bytes,
 };
 
 fn oracle(name: &str) -> Vec<u8> {

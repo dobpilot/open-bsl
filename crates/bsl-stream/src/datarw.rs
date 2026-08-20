@@ -116,8 +116,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use bsl_rt::{
-    encoding::Encoding, BslNumber, BslString, BslValue, ByteStreamProtocol, CallContext, EnumValue,
-    MethodCode, MethodDescriptor, ObjectProtocol, RtError, RtResult, TypeDescriptor, TypeId,
+    BslNumber, BslString, BslValue, ByteStreamProtocol, CallContext, EnumValue, MethodCode,
+    MethodDescriptor, ObjectProtocol, RtError, RtResult, TypeDescriptor, TypeId,
+    encoding::Encoding,
 };
 
 /// Порядок байтов многобайтового целого.
@@ -967,7 +968,7 @@ fn new_state(
             return Err(RtError::TypeError {
                 expected: "Строка с именем кодировки",
                 op,
-            })
+            });
         }
     };
     // Имя кодировки проверяется ЛЕНИВО: конструктор с «нет-такой-кодировки»
@@ -985,7 +986,7 @@ fn new_state(
             return Err(RtError::TypeError {
                 expected: "ПорядокБайтов",
                 op,
-            })
+            });
         }
     };
     // Разделитель по умолчанию РАЗНЫЙ у сторон: у читателя пустой (и
@@ -1001,7 +1002,7 @@ fn new_state(
             return Err(RtError::TypeError {
                 expected: "Строка",
                 op,
-            })
+            });
         }
     };
     Ok(DataRwState {
@@ -1159,7 +1160,7 @@ pub fn set_prop(v: &BslValue, which: DataRwProp, value: &BslValue) -> RtResult<(
                     return Err(RtError::TypeError {
                         expected: "Строка с именем кодировки",
                         op: OP,
-                    })
+                    });
                 }
             };
             // Как и в конструкторе, негодное имя откладывается до места
@@ -1176,7 +1177,7 @@ pub fn set_prop(v: &BslValue, which: DataRwProp, value: &BslValue) -> RtResult<(
                     return Err(RtError::TypeError {
                         expected: "Строка",
                         op: OP,
-                    })
+                    });
                 }
             };
         }
@@ -1582,7 +1583,7 @@ pub fn write_chars(v: &BslValue, args: &[BslValue]) -> RtResult<()> {
             return Err(RtError::TypeError {
                 expected: "Строка",
                 op: OP,
-            })
+            });
         }
     };
     let enc = encoding_of(&d, args.get(1), OP)?;
@@ -1608,7 +1609,7 @@ pub fn write_line(v: &BslValue, args: &[BslValue]) -> RtResult<()> {
             return Err(RtError::TypeError {
                 expected: "Строка",
                 op: OP,
-            })
+            });
         }
     };
     let enc = encoding_of(&d, args.get(1), OP)?;
@@ -2199,36 +2200,44 @@ mod tests {
 
     #[test]
     fn the_constructor_rejects_what_the_platform_rejects() {
-        assert!(new_data_reader(
-            &num(5),
-            &BslValue::Undefined,
-            &BslValue::Undefined,
-            &BslValue::Undefined
-        )
-        .is_err());
-        assert!(new_data_reader(
-            &BslValue::Undefined,
-            &BslValue::Undefined,
-            &BslValue::Undefined,
-            &BslValue::Undefined
-        )
-        .is_err());
+        assert!(
+            new_data_reader(
+                &num(5),
+                &BslValue::Undefined,
+                &BslValue::Undefined,
+                &BslValue::Undefined
+            )
+            .is_err()
+        );
+        assert!(
+            new_data_reader(
+                &BslValue::Undefined,
+                &BslValue::Undefined,
+                &BslValue::Undefined,
+                &BslValue::Undefined
+            )
+            .is_err()
+        );
         // Буфер двоичных данных источником платформа НЕ принимает.
-        assert!(new_data_reader(
-            &buffer(&[1, 2]),
-            &BslValue::Undefined,
-            &BslValue::Undefined,
-            &BslValue::Undefined
-        )
-        .is_err());
+        assert!(
+            new_data_reader(
+                &buffer(&[1, 2]),
+                &BslValue::Undefined,
+                &BslValue::Undefined,
+                &BslValue::Undefined
+            )
+            .is_err()
+        );
         // Отсутствующий файл — ошибка.
-        assert!(new_data_reader(
-            &text("/tmp/open-bsl-нет-такого-файла-datarw.bin"),
-            &BslValue::Undefined,
-            &BslValue::Undefined,
-            &BslValue::Undefined
-        )
-        .is_err());
+        assert!(
+            new_data_reader(
+                &text("/tmp/open-bsl-нет-такого-файла-datarw.bin"),
+                &BslValue::Undefined,
+                &BslValue::Undefined,
+                &BslValue::Undefined
+            )
+            .is_err()
+        );
     }
 
     /// Конструктор НЕ перематывает поток: читатель продолжает с той позиции,
@@ -2485,20 +2494,24 @@ mod tests {
     #[test]
     fn the_two_sides_accept_different_sources() {
         let bin = BslValue::binary_data_of(vec![1, 2, 3]);
-        assert!(new_data_reader(
-            &bin,
-            &BslValue::Undefined,
-            &BslValue::Undefined,
-            &BslValue::Undefined
-        )
-        .is_ok());
-        assert!(new_data_writer(
-            &bin,
-            &BslValue::Undefined,
-            &BslValue::Undefined,
-            &BslValue::Undefined
-        )
-        .is_err());
+        assert!(
+            new_data_reader(
+                &bin,
+                &BslValue::Undefined,
+                &BslValue::Undefined,
+                &BslValue::Undefined
+            )
+            .is_ok()
+        );
+        assert!(
+            new_data_writer(
+                &bin,
+                &BslValue::Undefined,
+                &BslValue::Undefined,
+                &BslValue::Undefined
+            )
+            .is_err()
+        );
 
         // Писатель по имени файла заводит файл и кладёт в него ровно
         // записанное — без сигнатуры (измерено).

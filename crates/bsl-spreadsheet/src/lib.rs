@@ -14,10 +14,10 @@ use bsl_rt::{
 };
 
 pub use document::{
-    apply_params, from_mxl_bytes, is_area, is_spread_document, new_document, output,
+    Color, Font, HAlign, Line, LineStyle, Merge, NamedArea, SpreadDocData, SpreadDocumentObject,
+    VAlign, apply_params, from_mxl_bytes, is_area, is_spread_document, new_document, output,
     read as spread_read, set_detail, set_value, take_params, to_mxl_bytes, write as spread_write,
-    write_file as spread_write_file, Color, Font, HAlign, Line, LineStyle, Merge, NamedArea,
-    SpreadDocData, SpreadDocumentObject, VAlign,
+    write_file as spread_write_file,
 };
 pub use template::from_template_xml;
 pub use xlsx::to_xlsx_bytes;

@@ -406,10 +406,10 @@ impl<'a> Layout<'a> {
 /// — по самому крупному шрифту строки.
 fn row_height_pt(doc: &SpreadDocData, r: u32) -> f64 {
     let row = doc.rows().get(&r);
-    if let Some(height) = row.and_then(|row| row.height) {
-        if height > 0 {
-            return height as f64;
-        }
+    if let Some(height) = row.and_then(|row| row.height)
+        && height > 0
+    {
+        return height as f64;
     }
     let biggest = row
         .map(|row| {
@@ -722,7 +722,7 @@ fn unit(component: u8) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::document::{from_mxl_bytes, to_mxl_bytes, Color, Font, Merge};
+    use crate::document::{Color, Font, Merge, from_mxl_bytes, to_mxl_bytes};
     use std::io::Read as _;
 
     /// Число так, как его пишет слой формата: четыре знака после запятой
@@ -780,10 +780,10 @@ mod tests {
             };
             let end = start + found;
             // Оболочка zlib: два байта заголовка и четыре Adler-32.
-            if end > start + 6 {
-                if let Ok(data) = inflate_raw_deflate(&pdf[start + 2..end - 4], 1 << 22) {
-                    streams.push(String::from_utf8_lossy(&data).to_string());
-                }
+            if end > start + 6
+                && let Ok(data) = inflate_raw_deflate(&pdf[start + 2..end - 4], 1 << 22)
+            {
+                streams.push(String::from_utf8_lossy(&data).to_string());
             }
             at = end + b"\nendstream".len();
         }
@@ -1254,7 +1254,9 @@ mod tests {
             out
         };
         let (mine, theirs) = (words(mine), words(theirs));
-        println!("pdftotext ИСПОЛНЕН на platform-simple.pdf\nнаш:        {mine:?}\nплатформа:  {theirs:?}");
+        println!(
+            "pdftotext ИСПОЛНЕН на platform-simple.pdf\nнаш:        {mine:?}\nплатформа:  {theirs:?}"
+        );
         assert_eq!(mine, theirs);
         std::fs::remove_file(&ours).ok();
     }

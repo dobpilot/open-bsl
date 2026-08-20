@@ -8,7 +8,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::writer::{inflate_with_limit, write_value, zlib_compress, PdfValue};
+use crate::writer::{PdfValue, inflate_with_limit, write_value, zlib_compress};
 use bsl_rt::{
     BslNumber, BslString, BslValue, CallContext, EnumValue, ObjectProtocol, RtError, RtResult,
     TypeDescriptor, TypeId,
@@ -731,7 +731,7 @@ impl<'a> Lexer<'a> {
                 Some(other) => {
                     return Err(pdf_err(format!(
                         "ключ словаря должен начинаться с «/», получен байт 0x{other:02X}"
-                    )))
+                    )));
                 }
             }
         }
@@ -758,7 +758,7 @@ impl<'a> Lexer<'a> {
                     _ => {
                         return Err(pdf_err(
                             "в имени после «#» ожидались две шестнадцатеричные цифры",
-                        ))
+                        ));
                     }
                 }
             } else {
@@ -1022,12 +1022,11 @@ impl<'a> Reader<'a> {
             }
             let section = self.load_xref_section(offset)?;
             for key in ["XRefStm", "Prev"] {
-                if let Some(PdfValue::Integer(prev)) = dict_get(&section, key) {
-                    if let Ok(prev) = usize::try_from(*prev) {
-                        if prev < self.data.len() {
-                            pending.push_back(prev);
-                        }
-                    }
+                if let Some(PdfValue::Integer(prev)) = dict_get(&section, key)
+                    && let Ok(prev) = usize::try_from(*prev)
+                    && prev < self.data.len()
+                {
+                    pending.push_back(prev);
                 }
             }
             for (key, value) in section {
@@ -1103,7 +1102,7 @@ impl<'a> Reader<'a> {
                         return Err(pdf_err(format!(
                             "запись xref помечена «{}», а не «n» или «f»",
                             String::from_utf8_lossy(other)
-                        )))
+                        )));
                     }
                 }
             }
@@ -1453,7 +1452,7 @@ impl<'a> Reader<'a> {
                 other => {
                     return Err(pdf_err(format!(
                         "фильтр потока «{other}» не поддерживается"
-                    )))
+                    )));
                 }
             }
             if let Some(Some(parm)) = parms.get(i) {
@@ -1546,7 +1545,7 @@ impl<'a> Reader<'a> {
                     other => {
                         return Err(pdf_err(format!(
                             "неизвестный тип строки предиктора PNG: {other}"
-                        )))
+                        )));
                     }
                 };
             }
@@ -1997,12 +1996,11 @@ fn inflate_pdf_stream(data: &[u8]) -> RtResult<Vec<u8>> {
     if data.len() >= 2 {
         let (cmf, flg) = (data[0], data[1]);
         let looks_zlib = cmf & 0x0F == 8 && (u16::from(cmf) * 256 + u16::from(flg)) % 31 == 0;
-        if looks_zlib {
-            if let Ok(out) =
+        if looks_zlib
+            && let Ok(out) =
                 inflate_with_limit(flate2::read::ZlibDecoder::new(data), MAX_STREAM_OUT)
-            {
-                return Ok(out);
-            }
+        {
+            return Ok(out);
         }
     }
     inflate_with_limit(flate2::read::DeflateDecoder::new(data), MAX_STREAM_OUT)
@@ -2379,7 +2377,7 @@ pub fn attachment_index_of(attachments: &AttachmentsObject, item: &BslValue) -> 
             return Err(RtError::TypeError {
                 expected: "ВложениеPDF",
                 op: "КоллекцияВложенийPDF.Индекс",
-            })
+            });
         }
     };
     Ok(BslValue::Number(BslNumber::from_i64(found)))
@@ -2405,14 +2403,14 @@ fn attachment_name_arg(value: &BslValue, op: &'static str) -> RtResult<String> {
                 return Err(RtError::TypeError {
                     expected: "Строка",
                     op,
-                })
+                });
             }
         },
         _ => {
             return Err(RtError::TypeError {
                 expected: "Строка",
                 op,
-            })
+            });
         }
     };
     if name.is_empty() {
@@ -2492,7 +2490,7 @@ pub fn attachment_add(attachments: &AttachmentsObject, args: &[BslValue]) -> RtR
             return Err(RtError::TypeError {
                 expected: "Строка",
                 op: "КоллекцияВложенийPDF.Добавить",
-            })
+            });
         }
     };
     let relation = match args.get(3) {
@@ -2589,13 +2587,13 @@ pub fn attachment_delete(attachments: &AttachmentsObject, args: &[BslValue]) -> 
                 return Err(RtError::TypeError {
                     expected: "ВложениеPDF этой же коллекции",
                     op: "КоллекцияВложенийPDF.Удалить",
-                })
+                });
             }
             None => {
                 return Err(RtError::TypeError {
                     expected: "Число или ВложениеPDF",
                     op: "КоллекцияВложенийPDF.Удалить",
-                })
+                });
             }
         },
     };
@@ -3088,8 +3086,10 @@ mod tests {
             out.extend_from_slice(format!("{offset:010} 00000 n \n").as_bytes());
         }
         out.extend_from_slice(
-            format!("trailer\n<< /Size {size} /Root 1 0 R{trailer_extra} >>\nstartxref\n{xref}\n%%EOF\n")
-                .as_bytes(),
+            format!(
+                "trailer\n<< /Size {size} /Root 1 0 R{trailer_extra} >>\nstartxref\n{xref}\n%%EOF\n"
+            )
+            .as_bytes(),
         );
         out
     }
@@ -3901,7 +3901,9 @@ mod tests {
             (
                 "/BitsPerComponent предиктора у i64::MAX",
                 Boundary {
-                    parms: Some("<< /Predictor 12 /BitsPerComponent 9223372036854775807 /Columns 7 >>"),
+                    parms: Some(
+                        "<< /Predictor 12 /BitsPerComponent 9223372036854775807 /Columns 7 >>",
+                    ),
                     ..Boundary::default()
                 },
                 true,

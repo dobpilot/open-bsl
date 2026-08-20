@@ -164,7 +164,7 @@ fn parse_tree(text: &str) -> RtResult<El> {
             // Внутренний формат макета сущностей не объявляет, поэтому
             // ссылка на них здесь — испорченный файл, а не потеря данных.
             XmlEvent::EntityReference { name } => {
-                return Err(bad(format!("ссылка на сущность «&{name};» в макете")))
+                return Err(bad(format!("ссылка на сущность «&{name};» в макете")));
             }
         }
     }

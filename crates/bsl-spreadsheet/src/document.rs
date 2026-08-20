@@ -1769,7 +1769,7 @@ fn mxl_body(doc: &SpreadDocData) -> String {
     };
     let content: Vec<(u32, Vec<(u32, &CellData)>)> = filled
         .iter()
-        .map(|(&r, row)| {
+        .map(|&(&r, row)| {
             let cells = row
                 .cells
                 .iter()
@@ -3462,12 +3462,14 @@ mod tests {
             BslValue::Enum(bsl_rt::EnumValue::PageOrientationLandscape)
         ));
 
-        assert!(set_property(
-            &doc,
-            "ПолеСлева",
-            BslValue::Str(BslString::from_str("не число"))
-        )
-        .is_err());
+        assert!(
+            set_property(
+                &doc,
+                "ПолеСлева",
+                BslValue::Str(BslString::from_str("не число"))
+            )
+            .is_err()
+        );
         assert!(set_property(&doc, "ОриентацияСтраницы", int_value(1)).is_err());
     }
 
@@ -3699,8 +3701,8 @@ pub fn from_mxl_bytes(bytes: &[u8]) -> RtResult<SpreadDocData> {
     cur.skip(3)?; // 8, 1, 12
     cur.skip(1)?; // языки
     cur.skip(1)?; // {128,72}
-                  // Палитра линий: `{<кол-во>,1,<запись>,0,1,<запись>,0,...}` — записи
-                  // идут тройками, потому что каждая обёрнута парой служебных чисел.
+    // Палитра линий: `{<кол-во>,1,<запись>,0,1,<запись>,0,...}` — записи
+    // идут тройками, потому что каждая обёрнута парой служебных чисел.
     let line_palette = {
         let g = cur.next()?.group()?;
         let count = g.first().map_or(Ok(0), Node::number)? as usize;
@@ -3771,15 +3773,15 @@ pub fn from_mxl_bytes(bytes: &[u8]) -> RtResult<SpreadDocData> {
             let cell_format = cell_group.get(1).map_or(Ok(0), Node::number)?;
             if mask & 16 != 0 {
                 // Текстовый блок: `{1,1,{<язык>,<текст>}}`.
-                if let Some(Node::Group(block)) = cell_group.get(field) {
-                    if let Some(Node::Group(pair)) = block.get(2) {
-                        let lang = pair_text(pair_get(pair, 0));
-                        let value = pair_text(pair_get(pair, 1));
-                        if lang.is_empty() {
-                            cell.parameter = value;
-                        } else {
-                            cell.text = value;
-                        }
+                if let Some(Node::Group(block)) = cell_group.get(field)
+                    && let Some(Node::Group(pair)) = block.get(2)
+                {
+                    let lang = pair_text(pair_get(pair, 0));
+                    let value = pair_text(pair_get(pair, 1));
+                    if lang.is_empty() {
+                        cell.parameter = value;
+                    } else {
+                        cell.text = value;
                     }
                 }
             }
@@ -3950,32 +3952,31 @@ pub fn from_mxl_bytes(bytes: &[u8]) -> RtResult<SpreadDocData> {
         if let Node::Group(body) = &names[i + 1] {
             // `{1,{<область>},0}` — ячейки, `{2,<рисунок>,0}` — рисунок;
             // рисунки мы не моделируем и пропускаем.
-            if body.first().map_or(Ok(0), Node::number)? == 1 {
-                if let Some(Node::Group(area)) = body.get(1) {
-                    if area.len() >= 5 {
-                        let kind = match area[0].number()? {
-                            1 => AreaKind::Rows,
-                            2 => AreaKind::Columns,
-                            _ => AreaKind::Rect,
-                        };
-                        let (c1, r1, c2, r2) = (
-                            area[1].number()?,
-                            area[2].number()?,
-                            area[3].number()?,
-                            area[4].number()?,
-                        );
-                        doc.names.insert(
-                            name,
-                            NamedArea {
-                                kind,
-                                r1: r1.max(0) as u32,
-                                c1: c1.max(0) as u32,
-                                r2: r2.max(0) as u32,
-                                c2: c2.max(0) as u32,
-                            },
-                        );
-                    }
-                }
+            if body.first().map_or(Ok(0), Node::number)? == 1
+                && let Some(Node::Group(area)) = body.get(1)
+                && area.len() >= 5
+            {
+                let kind = match area[0].number()? {
+                    1 => AreaKind::Rows,
+                    2 => AreaKind::Columns,
+                    _ => AreaKind::Rect,
+                };
+                let (c1, r1, c2, r2) = (
+                    area[1].number()?,
+                    area[2].number()?,
+                    area[3].number()?,
+                    area[4].number()?,
+                );
+                doc.names.insert(
+                    name,
+                    NamedArea {
+                        kind,
+                        r1: r1.max(0) as u32,
+                        c1: c1.max(0) as u32,
+                        r2: r2.max(0) as u32,
+                        c2: c2.max(0) as u32,
+                    },
+                );
             }
         }
         i += 2;
@@ -4110,15 +4111,15 @@ pub fn from_mxl_bytes(bytes: &[u8]) -> RtResult<SpreadDocData> {
         }
     }
     for (r, c, fmt) in cell_formats {
-        if let Some(v) = value(fmt, bits::H_ALIGN) {
-            if let Some(a) = HAlign::from_code(v) {
-                doc.set_cell_h_align(r, c, a);
-            }
+        if let Some(v) = value(fmt, bits::H_ALIGN)
+            && let Some(a) = HAlign::from_code(v)
+        {
+            doc.set_cell_h_align(r, c, a);
         }
-        if let Some(v) = value(fmt, bits::V_ALIGN) {
-            if let Some(a) = VAlign::from_code(v) {
-                doc.set_cell_v_align(r, c, a);
-            }
+        if let Some(v) = value(fmt, bits::V_ALIGN)
+            && let Some(a) = VAlign::from_code(v)
+        {
+            doc.set_cell_v_align(r, c, a);
         }
         if value(fmt, bits::TEXT_PLACEMENT) == Some(3) {
             doc.set_cell_wrap(r, c, true);
@@ -4129,15 +4130,15 @@ pub fn from_mxl_bytes(bytes: &[u8]) -> RtResult<SpreadDocData> {
                 doc.set_cell_format_spec(r, c, spec);
             }
         }
-        if let Some(v) = value(fmt, bits::FONT) {
-            if let Some(f) = fonts_test.get(v.max(0) as usize) {
-                doc.set_cell_font(r, c, f.clone());
-            }
+        if let Some(v) = value(fmt, bits::FONT)
+            && let Some(f) = fonts_test.get(v.max(0) as usize)
+        {
+            doc.set_cell_font(r, c, f.clone());
         }
-        if let Some(v) = value(fmt, bits::TEXT_COLOR) {
-            if let Some(Some(color)) = colors.get(v.max(0) as usize) {
-                doc.set_cell_text_color(r, c, *color);
-            }
+        if let Some(v) = value(fmt, bits::TEXT_COLOR)
+            && let Some(Some(color)) = colors.get(v.max(0) as usize)
+        {
+            doc.set_cell_text_color(r, c, *color);
         }
         for (bit, side) in [
             (bits::BORDER_LEFT, 0),
@@ -4145,23 +4146,23 @@ pub fn from_mxl_bytes(bytes: &[u8]) -> RtResult<SpreadDocData> {
             (bits::BORDER_RIGHT, 2),
             (bits::BORDER_BOTTOM, 3),
         ] {
-            if let Some(v) = value(fmt, bit) {
-                if let Some(&line) = line_palette.get(v.max(0) as usize) {
-                    doc.set_cell_border(
-                        r,
-                        c,
-                        (side == 0).then_some(line),
-                        (side == 1).then_some(line),
-                        (side == 2).then_some(line),
-                        (side == 3).then_some(line),
-                    );
-                }
+            if let Some(v) = value(fmt, bit)
+                && let Some(&line) = line_palette.get(v.max(0) as usize)
+            {
+                doc.set_cell_border(
+                    r,
+                    c,
+                    (side == 0).then_some(line),
+                    (side == 1).then_some(line),
+                    (side == 2).then_some(line),
+                    (side == 3).then_some(line),
+                );
             }
         }
-        if let Some(v) = value(fmt, bits::BACK_COLOR) {
-            if let Some(Some(color)) = colors.get(v.max(0) as usize) {
-                doc.set_cell_back_color(r, c, *color);
-            }
+        if let Some(v) = value(fmt, bits::BACK_COLOR)
+            && let Some(Some(color)) = colors.get(v.max(0) as usize)
+        {
+            doc.set_cell_back_color(r, c, *color);
         }
     }
 

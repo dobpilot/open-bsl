@@ -42,28 +42,28 @@ pub const PACKAGE_NAME: &str = env!("CARGO_PKG_NAME");
 pub const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub use builtin::{
-    call_builtin_fn, call_builtin_fn_ctx, call_builtin_method, call_builtin_method_ctx,
-    set_command_line_args, BuiltinFn, BuiltinMethod, BUILTIN_FN_NAMES, BUILTIN_METHOD_NAMES,
+    BUILTIN_FN_NAMES, BUILTIN_METHOD_NAMES, BuiltinFn, BuiltinMethod, call_builtin_fn,
+    call_builtin_fn_ctx, call_builtin_method, call_builtin_method_ctx, set_command_line_args,
 };
 pub use component::{
-    call_method_from_table, core_library, Arity, CallContext, ComponentCall, ConstructorCode,
-    ConstructorDescriptor, FunctionCaller, FunctionCode, FunctionDescriptor, FunctionKind,
-    LibraryDependency, LibraryDescriptor, LibraryKey, LibraryRequirement, MethodCall, MethodCode,
-    MethodDescriptor, RegistryError, RuntimeBuilder, RuntimeRegistry, ValueFormatter,
+    Arity, CallContext, ComponentCall, ConstructorCode, ConstructorDescriptor, FunctionCaller,
+    FunctionCode, FunctionDescriptor, FunctionKind, LibraryDependency, LibraryDescriptor,
+    LibraryKey, LibraryRequirement, MethodCall, MethodCode, MethodDescriptor, RegistryError,
+    RuntimeBuilder, RuntimeRegistry, ValueFormatter, call_method_from_table, core_library,
 };
 pub use date::{
+    BslDate, DEFAULT_PATTERN as DEFAULT_DATE_PATTERN, DateBoundary, DatePart, UNIX_EPOCH_SECONDS,
     format_long as format_date_long, format_pattern as format_date_pattern,
-    local_date_from_utc_seconds, pseudo_unix_seconds, BslDate, DateBoundary, DatePart,
-    DEFAULT_PATTERN as DEFAULT_DATE_PATTERN, UNIX_EPOCH_SECONDS,
+    local_date_from_utc_seconds, pseudo_unix_seconds,
 };
-pub use enums::{lookup_enum, lookup_member, members_of, EnumKind, EnumValue, ENUM_NAMES};
+pub use enums::{ENUM_NAMES, EnumKind, EnumValue, lookup_enum, lookup_member, members_of};
 pub use interner::{NameId, NameInterner};
 pub use locale::{Locale, NBSP};
 pub use map::MapData;
 pub use object::{BslObject, StructureStorage};
 pub use object_protocol::{ByteStreamProtocol, ObjectProtocol, ObjectRef, TypeDescriptor};
 pub use runtime_shapes::RuntimeShapes;
-pub use shape::{Shape, ShapeTable, MAX_SHAPE_TRANSITIONS};
+pub use shape::{MAX_SHAPE_TRANSITIONS, Shape, ShapeTable};
 pub use string::{BslString, MAX_TEMPLATE_ARGS};
 pub use table::{ColumnVstr, ValueTableData};
 pub use types::TypeId;
@@ -1173,7 +1173,7 @@ impl BslValue {
                 return Err(RtError::TypeError {
                     expected: "Значение",
                     op: "ЗначениеЗаполнено",
-                })
+                });
             }
         })
     }
@@ -1200,7 +1200,7 @@ impl BslValue {
                     None => {
                         return Err(RtError::UnknownType(
                             object.type_descriptor().name.to_string(),
-                        ))
+                        ));
                     }
                 },
                 BslObject::VstrOpaque(_) => TypeId::VstrOpaque,
@@ -1218,7 +1218,7 @@ impl BslValue {
                     return Err(RtError::TypeError {
                         expected: "Зарегистрированный тип",
                         op: "ТипЗнч",
-                    })
+                    });
                 }
                 BslObject::BinaryData(..) => TypeId::BinaryData,
                 BslObject::BinaryBuffer(..) => TypeId::BinaryDataBuffer,
@@ -1228,7 +1228,7 @@ impl BslValue {
                 return Err(RtError::TypeError {
                     expected: "Значение",
                     op: "ТипЗнч",
-                })
+                });
             }
         };
         Ok(BslValue::Type(id))
@@ -1347,14 +1347,14 @@ impl BslValue {
                     return Err(RtError::TypeError {
                         expected: "БуферДвоичныхДанных",
                         op: "Записать",
-                    })
+                    });
                 }
             },
             _ => {
                 return Err(RtError::TypeError {
                     expected: "БуферДвоичныхДанных",
                     op: "Записать",
-                })
+                });
             }
         };
         let end = offset.checked_add(bytes.len()).ok_or(RtError::BadIndex)?;
@@ -1610,14 +1610,14 @@ impl BslValue {
                     return Err(RtError::TypeError {
                         expected: "Строка",
                         op: "Новый УникальныйИдентификатор",
-                    })
+                    });
                 }
             },
             _ => {
                 return Err(RtError::TypeError {
                     expected: "Строка",
                     op: "Новый УникальныйИдентификатор",
-                })
+                });
             }
         };
         Ok(BslValue::Object(Rc::new(BslObject::Uuid(bytes))))
@@ -1718,14 +1718,14 @@ impl BslValue {
                     return Err(RtError::TypeError {
                         expected: "Массив",
                         op: OP,
-                    })
+                    });
                 }
             },
             _ => {
                 return Err(RtError::TypeError {
                     expected: "Массив",
                     op: OP,
-                })
+                });
             }
         };
         let items = items.borrow();
@@ -2095,10 +2095,10 @@ impl BslValue {
             BslValue::Object(o) => match &**o {
                 BslObject::Structure(s) => match &*s.borrow() {
                     StructureStorage::Shaped { shape, slots } => {
-                        if let Some((cached_shape, slot)) = cache.borrow().as_ref() {
-                            if Rc::ptr_eq(cached_shape, shape) {
-                                return Ok(slots[*slot as usize].clone());
-                            }
+                        if let Some((cached_shape, slot)) = cache.borrow().as_ref()
+                            && Rc::ptr_eq(cached_shape, shape)
+                        {
+                            return Ok(slots[*slot as usize].clone());
                         }
                         match shape.index.get(&name) {
                             Some(&slot) => {
@@ -2130,11 +2130,11 @@ impl BslValue {
             BslValue::Object(o) => match &**o {
                 BslObject::Structure(s) => match &mut *s.borrow_mut() {
                     StructureStorage::Shaped { shape, slots } => {
-                        if let Some((cached_shape, slot)) = cache.borrow().as_ref() {
-                            if Rc::ptr_eq(cached_shape, shape) {
-                                slots[*slot as usize] = val;
-                                return Ok(());
-                            }
+                        if let Some((cached_shape, slot)) = cache.borrow().as_ref()
+                            && Rc::ptr_eq(cached_shape, shape)
+                        {
+                            slots[*slot as usize] = val;
+                            return Ok(());
                         }
                         match shape.index.get(&name).copied() {
                             Some(slot) => {
@@ -2348,14 +2348,14 @@ impl BslValue {
                                 return Err(RtError::TypeError {
                                     expected: "ОписаниеТипов",
                                     op: "Колонки.Добавить",
-                                })
+                                });
                             }
                         },
                         _ => {
                             return Err(RtError::TypeError {
                                 expected: "ОписаниеТипов",
                                 op: "Колонки.Добавить",
-                            })
+                            });
                         }
                     };
                     data.borrow_mut().add_typed_column(&name, value_types);
@@ -2646,14 +2646,14 @@ impl BslValue {
                     return Err(RtError::TypeError {
                         expected: "Массив",
                         op: "Скопировать",
-                    })
+                    });
                 }
             },
             _ => {
                 return Err(RtError::TypeError {
                     expected: "Массив",
                     op: "Скопировать",
-                })
+                });
             }
         };
         let copy = data.borrow().copy_of(&positions, &cols);
@@ -3503,9 +3503,11 @@ mod tests {
             .unwrap();
         assert_eq!(part_sizes(&parts), vec![3]);
         // На единицу больше — уже ошибка, ровно как у платформы.
-        assert!(bin(b"012")
-            .binary_data_split(&num("18446744073709551616"))
-            .is_err());
+        assert!(
+            bin(b"012")
+                .binary_data_split(&num("18446744073709551616"))
+                .is_err()
+        );
     }
 
     /// Пустые данные дают массив из ОДНОЙ пустой части, а не пустой массив
@@ -3525,13 +3527,17 @@ mod tests {
             );
         }
         // Числовая строка тоже отвергается — платформа её не приводит.
-        assert!(bin(b"0123")
-            .binary_data_split(&BslValue::Str(BslString::from_str("5")))
-            .is_err());
+        assert!(
+            bin(b"0123")
+                .binary_data_split(&BslValue::Str(BslString::from_str("5")))
+                .is_err()
+        );
         // Разбивать не двоичные данные нечего.
-        assert!(BslValue::Str(BslString::from_str("абв"))
-            .binary_data_split(&num("2"))
-            .is_err());
+        assert!(
+            BslValue::Str(BslString::from_str("абв"))
+                .binary_data_split(&num("2"))
+                .is_err()
+        );
     }
 
     #[test]

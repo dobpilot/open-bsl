@@ -1291,10 +1291,10 @@ impl Parser {
                     }
                 }
                 "attribute" => {
-                    if let Some(use_idx) = self.parse_attribute_use(&child, idx)? {
-                        if let XsData::ComplexType(d) = &mut self.nodes[idx].data {
-                            d.attributes.push(use_idx);
-                        }
+                    if let Some(use_idx) = self.parse_attribute_use(&child, idx)?
+                        && let XsData::ComplexType(d) = &mut self.nodes[idx].data
+                    {
+                        d.attributes.push(use_idx);
                     }
                 }
                 // НЕ ИЗМЕРЕНО(XSD.WILDCARD.COMPONENT): как платформа

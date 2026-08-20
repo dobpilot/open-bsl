@@ -833,13 +833,12 @@ impl<'a> Resolver<'a> {
                 // рантайме (проверено `Вычислить`). Проверка идёт до
                 // резолвинга левой части — иначе имя перечисления сначала
                 // не нашлось бы среди переменных.
-                if let AExpr::Ident(base) = obj.as_ref() {
-                    if let Some(kind) = bsl_rt::lookup_enum(base) {
-                        let member = bsl_rt::lookup_member(kind, name).ok_or_else(|| {
-                            SemaError::UndefinedVariable(format!("{base}.{name}"))
-                        })?;
-                        return Ok(RExpr::EnumMember(member));
-                    }
+                if let AExpr::Ident(base) = obj.as_ref()
+                    && let Some(kind) = bsl_rt::lookup_enum(base)
+                {
+                    let member = bsl_rt::lookup_member(kind, name)
+                        .ok_or_else(|| SemaError::UndefinedVariable(format!("{base}.{name}")))?;
+                    return Ok(RExpr::EnumMember(member));
                 }
                 Ok(RExpr::Field {
                     obj: Box::new(self.resolve_expr(obj)?),
@@ -863,42 +862,42 @@ impl<'a> Resolver<'a> {
     /// Разбирает известные платформенные типы из [`NEW_TYPES`]. Общие
     /// пользовательские типы пока не поддержаны.
     fn resolve_new(&mut self, type_name: &str, args: &[AExpr]) -> Result<RExpr, SemaError> {
-        if let Some(registry) = self.registry {
-            if let Some((library_index, constructor)) = registry.lookup_constructor(type_name) {
-                let descriptor = registry
-                    .constructor(library_index, constructor)
-                    .expect("индекс получен из таблицы имён этого реестра");
-                let found: u8 =
-                    args.len()
-                        .try_into()
-                        .map_err(|_| SemaError::ArgumentCountMismatch {
-                            name: format!("Новый {type_name}"),
-                            expected: descriptor.arity.max() as usize,
-                            found: args.len(),
-                        })?;
-                if !descriptor.arity.accepts(found) {
-                    return Err(SemaError::ArgumentCountMismatch {
+        if let Some(registry) = self.registry
+            && let Some((library_index, constructor)) = registry.lookup_constructor(type_name)
+        {
+            let descriptor = registry
+                .constructor(library_index, constructor)
+                .expect("индекс получен из таблицы имён этого реестра");
+            let found: u8 =
+                args.len()
+                    .try_into()
+                    .map_err(|_| SemaError::ArgumentCountMismatch {
                         name: format!("Новый {type_name}"),
                         expected: descriptor.arity.max() as usize,
                         found: args.len(),
-                    });
-                }
-                let mut resolved_args = Vec::with_capacity(args.len());
-                for argument in args {
-                    resolved_args.push(self.resolve_expr(argument)?);
-                }
-                let package = registry
-                    .library(library_index)
-                    .expect("индекс получен из таблицы имён этого реестра")
-                    .package;
-                let library = bsl_rt::LibraryKey::new(package);
-                self.used_libraries.insert(library.clone());
-                return Ok(RExpr::CreateObject {
-                    library,
-                    constructor,
-                    args: resolved_args,
+                    })?;
+            if !descriptor.arity.accepts(found) {
+                return Err(SemaError::ArgumentCountMismatch {
+                    name: format!("Новый {type_name}"),
+                    expected: descriptor.arity.max() as usize,
+                    found: args.len(),
                 });
             }
+            let mut resolved_args = Vec::with_capacity(args.len());
+            for argument in args {
+                resolved_args.push(self.resolve_expr(argument)?);
+            }
+            let package = registry
+                .library(library_index)
+                .expect("индекс получен из таблицы имён этого реестра")
+                .package;
+            let library = bsl_rt::LibraryKey::new(package);
+            self.used_libraries.insert(library.clone());
+            return Ok(RExpr::CreateObject {
+                library,
+                constructor,
+                args: resolved_args,
+            });
         }
         // Имена типов вынесенных компонентов. Конструирует их только реестр
         // (ветка выше); здесь остаётся внятный отказ — и когда компонент не
@@ -1055,7 +1054,7 @@ impl<'a> Resolver<'a> {
                     _ => {
                         return Err(SemaError::Unsupported(
                             "Новый Структура(...) со списком полей не строковым литералом появится позже",
-                        ))
+                        ));
                     }
                 };
                 let keys: Vec<String> = key_text
@@ -1208,7 +1207,7 @@ impl<'a> Resolver<'a> {
                                 return Err(SemaError::MissingRequiredArgument {
                                     name: name.clone(),
                                     position: i,
-                                })
+                                });
                             }
                         }
                     }
@@ -1217,45 +1216,46 @@ impl<'a> Resolver<'a> {
                         args: rargs,
                     });
                 }
-                if let Some(registry) = self.registry {
-                    if let Some((library_index, function)) = registry.lookup_function(name) {
-                        let descriptor = registry
-                            .function(library_index, function)
-                            .expect("индекс получен из таблицы имён этого реестра");
-                        if descriptor.kind == bsl_rt::FunctionKind::Procedure && !stmt_call {
-                            return Err(SemaError::ProcedureAsFunction(name.clone()));
-                        }
-                        let found: u8 = args.len().try_into().map_err(|_| {
-                            SemaError::ArgumentCountMismatch {
+                if let Some(registry) = self.registry
+                    && let Some((library_index, function)) = registry.lookup_function(name)
+                {
+                    let descriptor = registry
+                        .function(library_index, function)
+                        .expect("индекс получен из таблицы имён этого реестра");
+                    if descriptor.kind == bsl_rt::FunctionKind::Procedure && !stmt_call {
+                        return Err(SemaError::ProcedureAsFunction(name.clone()));
+                    }
+                    let found: u8 =
+                        args.len()
+                            .try_into()
+                            .map_err(|_| SemaError::ArgumentCountMismatch {
                                 name: name.clone(),
                                 expected: descriptor.arity.max() as usize,
                                 found: args.len(),
-                            }
-                        })?;
-                        if !descriptor.arity.accepts(found) {
-                            return Err(SemaError::ArgumentCountMismatch {
-                                name: name.clone(),
-                                expected: descriptor.arity.max() as usize,
-                                found: args.len(),
-                            });
-                        }
-                        // Глобальные функции компонентов имеют ту же
-                        // BSL-семантику пропущенных позиций, что и builtin:
-                        // `ПрочитатьJSON(Ч, , Имена)` передаёт `Неопределено`.
-                        let rargs = self.resolve_builtin_args(args)?;
-                        let package = registry
-                            .library(library_index)
-                            .expect("индекс получен из таблицы имён этого реестра")
-                            .package;
-                        let library = bsl_rt::LibraryKey::new(package);
-                        self.used_libraries.insert(library.clone());
-                        return Ok(RExpr::CallComponent {
-                            library,
-                            function,
-                            kind: descriptor.kind,
-                            args: rargs,
+                            })?;
+                    if !descriptor.arity.accepts(found) {
+                        return Err(SemaError::ArgumentCountMismatch {
+                            name: name.clone(),
+                            expected: descriptor.arity.max() as usize,
+                            found: args.len(),
                         });
                     }
+                    // Глобальные функции компонентов имеют ту же
+                    // BSL-семантику пропущенных позиций, что и builtin:
+                    // `ПрочитатьJSON(Ч, , Имена)` передаёт `Неопределено`.
+                    let rargs = self.resolve_builtin_args(args)?;
+                    let package = registry
+                        .library(library_index)
+                        .expect("индекс получен из таблицы имён этого реестра")
+                        .package;
+                    let library = bsl_rt::LibraryKey::new(package);
+                    self.used_libraries.insert(library.clone());
+                    return Ok(RExpr::CallComponent {
+                        library,
+                        function,
+                        kind: descriptor.kind,
+                        args: rargs,
+                    });
                 }
                 // `Окр(x[, ЧислоРазрядов[, Режим]])` — единственный
                 // builtin с необязательными аргументами, до генерального
@@ -1590,14 +1590,14 @@ impl<'a> Resolver<'a> {
                     bsl_rt::BuiltinMethod::ArchiveExtract
                     | bsl_rt::BuiltinMethod::ArchiveExtractAll => None,
                 });
-                if let Some(expected) = expected {
-                    if args.len() != expected {
-                        return Err(SemaError::ArgumentCountMismatch {
-                            name: name.clone(),
-                            expected,
-                            found: args.len(),
-                        });
-                    }
+                if let Some(expected) = expected
+                    && args.len() != expected
+                {
+                    return Err(SemaError::ArgumentCountMismatch {
+                        name: name.clone(),
+                        expected,
+                        found: args.len(),
+                    });
                 }
                 let rargs = self.resolve_required_args(args)?;
                 let obj = self.resolve_expr(obj)?;

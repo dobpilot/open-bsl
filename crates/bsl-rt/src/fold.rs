@@ -61,23 +61,23 @@ fn next_unit(bytes: &[u8], i: &mut usize) -> Option<Result<u16, ()>> {
         *i += 1;
         return Some(Ok(u16::from(first.to_ascii_uppercase())));
     }
-    if first == 0xD0 || first == 0xD1 {
-        if let Some(&second) = bytes.get(*i + 1) {
-            let folded = match (first, second) {
-                // а..п -> А..П
-                (0xD0, 0xB0..=0xBF) => Some((0xD0, second - 0x20)),
-                // р..я -> Р..Я
-                (0xD1, 0x80..=0x8F) => Some((0xD0, second + 0x20)),
-                // ё -> Ё
-                (0xD1, 0x91) => Some((0xD0, 0x81)),
-                // уже верхний регистр: А..Я и Ё
-                (0xD0, 0x81 | 0x90..=0xAF) => Some((first, second)),
-                _ => None,
-            };
-            if let Some((f, s)) = folded {
-                *i += 2;
-                return Some(Ok(u16::from_be_bytes([f, s])));
-            }
+    if (first == 0xD0 || first == 0xD1)
+        && let Some(&second) = bytes.get(*i + 1)
+    {
+        let folded = match (first, second) {
+            // а..п -> А..П
+            (0xD0, 0xB0..=0xBF) => Some((0xD0, second - 0x20)),
+            // р..я -> Р..Я
+            (0xD1, 0x80..=0x8F) => Some((0xD0, second + 0x20)),
+            // ё -> Ё
+            (0xD1, 0x91) => Some((0xD0, 0x81)),
+            // уже верхний регистр: А..Я и Ё
+            (0xD0, 0x81 | 0x90..=0xAF) => Some((first, second)),
+            _ => None,
+        };
+        if let Some((f, s)) = folded {
+            *i += 2;
+            return Some(Ok(u16::from_be_bytes([f, s])));
         }
     }
     Some(Err(()))

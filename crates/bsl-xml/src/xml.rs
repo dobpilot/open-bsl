@@ -9,8 +9,8 @@ use std::rc::Rc;
 use std::path::PathBuf;
 
 use crate::core::{
-    local_of, prefix_of, XmlAttr, XmlEvent, XmlParser, XmlWriter, XmlWriterSettings,
-    COMMENT_NODE_NAME, TEXT_NODE_NAME,
+    COMMENT_NODE_NAME, TEXT_NODE_NAME, XmlAttr, XmlEvent, XmlParser, XmlWriter, XmlWriterSettings,
+    local_of, prefix_of,
 };
 use bsl_rt::{
     BslNumber, BslString, BslValue, CallContext, EnumValue, MethodCode, MethodDescriptor,
@@ -157,7 +157,7 @@ pub fn writer_settings_from_args(
             return Err(RtError::TypeError {
                 expected: "Строка",
                 op: "Новый ПараметрыЗаписиXML",
-            })
+            });
         }
     }
     match version {
@@ -167,7 +167,7 @@ pub fn writer_settings_from_args(
             return Err(RtError::TypeError {
                 expected: "Строка",
                 op: "Новый ПараметрыЗаписиXML",
-            })
+            });
         }
     }
     match indent {
@@ -177,7 +177,7 @@ pub fn writer_settings_from_args(
             return Err(RtError::TypeError {
                 expected: "Булево",
                 op: "Новый ПараметрыЗаписиXML",
-            })
+            });
         }
     }
     Ok(new_xml_writer_settings(settings))

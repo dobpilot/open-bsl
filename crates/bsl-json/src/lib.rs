@@ -323,7 +323,7 @@ impl JsonParser {
                             units.push(v);
                         }
                         other => {
-                            return Err(bad(&format!("неизвестное экранирование «\\{other}»")))
+                            return Err(bad(&format!("неизвестное экранирование «\\{other}»")));
                         }
                     }
                 }
@@ -922,10 +922,9 @@ fn escape_control_into(out: &mut String, byte: u8) {
 use std::cell::RefCell;
 
 use bsl_rt::{
-    local_date_from_utc_seconds, pseudo_unix_seconds, Arity, BslObject, CallContext,
-    ConstructorCode, ConstructorDescriptor, EnumValue, FunctionCode, FunctionDescriptor,
-    FunctionKind, LibraryDependency, LibraryDescriptor, ObjectProtocol, StructureStorage,
-    TypeDescriptor, TypeId,
+    Arity, BslObject, CallContext, ConstructorCode, ConstructorDescriptor, EnumValue, FunctionCode,
+    FunctionDescriptor, FunctionKind, LibraryDependency, LibraryDescriptor, ObjectProtocol,
+    StructureStorage, TypeDescriptor, TypeId, local_date_from_utc_seconds, pseudo_unix_seconds,
 };
 
 #[derive(Debug, Default)]
@@ -1526,7 +1525,7 @@ pub fn new_json_writer_settings(arguments: &[BslValue]) -> RtResult<BslValue> {
             return Err(RtError::TypeError {
                 expected: "ПереносСтрокJSON",
                 op: "Новый ПараметрыЗаписиJSON",
-            })
+            });
         }
     };
     let indent = match indent {
@@ -1536,7 +1535,7 @@ pub fn new_json_writer_settings(arguments: &[BslValue]) -> RtResult<BslValue> {
             return Err(RtError::TypeError {
                 expected: "Строка",
                 op: "Новый ПараметрыЗаписиJSON",
-            })
+            });
         }
     };
     Ok(BslValue::new_object(JsonWriterSettingsObject(
@@ -1783,7 +1782,7 @@ fn callback_name(
             return Err(RtError::TypeError {
                 expected: "Строка",
                 op,
-            })
+            });
         }
     };
     if name.is_empty() || matches!(module_arg, None | Some(BslValue::Undefined)) {
@@ -1835,7 +1834,7 @@ pub fn read_json_builtin(
             return Err(RtError::TypeError {
                 expected: "Булево",
                 op: "ПрочитатьJSON(ВозвращатьСоответствие)",
-            })
+            });
         }
     };
     let date_names = name_list_arg(
@@ -1865,7 +1864,7 @@ pub fn read_json_builtin(
         (Some(_), None) => {
             return Err(RtError::Json(
                 "ПрочитатьJSON: функция восстановления требует исполняющей VM".to_string(),
-            ))
+            ));
         }
     };
     read_json(
@@ -1904,7 +1903,7 @@ pub fn write_json_builtin(
         (Some(_), None) => {
             return Err(RtError::Json(
                 "ЗаписатьJSON: функция преобразования требует исполняющей VM".to_string(),
-            ))
+            ));
         }
     };
     write_json(&arguments[0], &arguments[1], &settings, convert, runtime)?;
@@ -2134,7 +2133,7 @@ pub fn write_json_date(
             return Err(RtError::TypeError {
                 expected: "ВариантЗаписиДатыJSON",
                 op: "ЗаписатьДатуJSON",
-            })
+            });
         }
     };
     let text = format_json_date(*d, format, variant)?;
@@ -3218,8 +3217,7 @@ fn serialize(
                 // `ЗаписатьЗначениеJSON`, а не в объектной технике сериализации.
                 if ctx.single_value_mode {
                     return Err(RtError::TypeError {
-                        expected:
-                            "значение без Соответствия (ЗаписатьЗначениеJSON его не сериализует)",
+                        expected: "значение без Соответствия (ЗаписатьЗначениеJSON его не сериализует)",
                         op: "ЗаписатьЗначениеJSON",
                     });
                 }
@@ -3240,7 +3238,7 @@ fn serialize(
                             return Err(RtError::TypeError {
                                 expected: "Строка или Число в ключе Соответствия",
                                 op: "ЗаписатьJSON",
-                            })
+                            });
                         }
                     };
                     // Функция преобразования зовётся только на ЗНАЧЕНИИ —
@@ -4004,18 +4002,22 @@ mod tests {
         assert!(
             format_json_date(d, JsonDateFormat::JavaScript, JsonDateWritingVariant::Local).is_err()
         );
-        assert!(format_json_date(
-            d,
-            JsonDateFormat::Microsoft,
-            JsonDateWritingVariant::LocalOffset
-        )
-        .is_err());
-        assert!(format_json_date(
-            d,
-            JsonDateFormat::JavaScript,
-            JsonDateWritingVariant::Universal
-        )
-        .is_ok());
+        assert!(
+            format_json_date(
+                d,
+                JsonDateFormat::Microsoft,
+                JsonDateWritingVariant::LocalOffset
+            )
+            .is_err()
+        );
+        assert!(
+            format_json_date(
+                d,
+                JsonDateFormat::JavaScript,
+                JsonDateWritingVariant::Universal
+            )
+            .is_ok()
+        );
     }
 
     #[test]

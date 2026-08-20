@@ -260,10 +260,10 @@ fn write_chunk(out: &mut String, index: usize, chunk: &Chunk, program: &Program)
         // Начало многочленного бандла помечается отдельной строкой-
         // комментарием: для парсера её не существует, а при разборе
         // разметка пересчитывается в ту же (см. `parse_program`).
-        if let Some(&w) = chunk.bundle_len.get(pc) {
-            if w >= 2 {
-                writeln!(out, "    ; бандл {w}").unwrap();
-            }
+        if let Some(&w) = chunk.bundle_len.get(pc)
+            && w >= 2
+        {
+            writeln!(out, "    ; бандл {w}").unwrap();
         }
         let text = write_instr(instr);
         match instr_comment(instr, chunk, program) {
@@ -687,12 +687,12 @@ pub fn parse_program(src: &str) -> Result<Program> {
         (Some("bslc"), Some(v)) => {
             return Err(TextError::BadHeader(format!(
                 "версия формата {v}, этот бинарник понимает только {FORMAT_VERSION}"
-            )))
+            )));
         }
         _ => {
             return Err(TextError::BadHeader(format!(
                 "строка {no}: ожидалось «bslc {FORMAT_VERSION}»"
-            )))
+            )));
         }
     }
 

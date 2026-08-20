@@ -424,18 +424,18 @@ pub fn format_number(n: &BslNumber, fmt: &NumberFormat) -> RtResult<String> {
         None => (body, None),
     };
 
-    if let Some(total) = fmt.total_digits {
-        if let Some(nines) = overflow_nines(int_part.len(), total, frac_digits.unwrap_or(0)) {
-            let frac = frac_digits.unwrap_or(0) as usize;
-            let mut out = String::new();
-            out.push_str(sign);
-            out.push_str(&nines);
-            if frac > 0 {
-                out.push(fmt.decimal_sep);
-                out.push_str(&"9".repeat(frac));
-            }
-            return Ok(out);
+    if let Some(total) = fmt.total_digits
+        && let Some(nines) = overflow_nines(int_part.len(), total, frac_digits.unwrap_or(0))
+    {
+        let frac = frac_digits.unwrap_or(0) as usize;
+        let mut out = String::new();
+        out.push_str(sign);
+        out.push_str(&nines);
+        if frac > 0 {
+            out.push(fmt.decimal_sep);
+            out.push_str(&"9".repeat(frac));
         }
+        return Ok(out);
     }
 
     let frac_part = match (frac_part, frac_digits) {
@@ -454,13 +454,13 @@ pub fn format_number(n: &BslNumber, fmt: &NumberFormat) -> RtResult<String> {
     // Ведущие нули добиваются ДО группировки: иначе разделитель встал бы
     // по границам исходного, а не дополненного числа.
     let mut int_part = int_part.to_string();
-    if fmt.leading_zeros {
-        if let Some(total) = fmt.total_digits {
-            let used_by_frac = frac_part.as_ref().map_or(0, |f| f.len() as u32);
-            let width = total.saturating_sub(used_by_frac) as usize;
-            while int_part.len() < width {
-                int_part.insert(0, '0');
-            }
+    if fmt.leading_zeros
+        && let Some(total) = fmt.total_digits
+    {
+        let used_by_frac = frac_part.as_ref().map_or(0, |f| f.len() as u32);
+        let width = total.saturating_sub(used_by_frac) as usize;
+        while int_part.len() < width {
+            int_part.insert(0, '0');
         }
     }
     let int_part = if fmt.group {

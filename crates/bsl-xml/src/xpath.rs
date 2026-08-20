@@ -508,7 +508,7 @@ fn lex(text: &str) -> RtResult<Vec<Tok>> {
             '$' => {
                 return Err(bad(
                     "переменные (`$имя`) в выражениях XPath не поддерживаются",
-                ))
+                ));
             }
             c if c.is_ascii_digit() => {
                 let start = i;
@@ -545,7 +545,7 @@ fn lex(text: &str) -> RtResult<Vec<Tok>> {
             other => {
                 return Err(bad(format!(
                     "в выражении XPath недопустимый символ «{other}»"
-                )))
+                )));
             }
         };
         // Правило разрешения неоднозначности из §3.7.
@@ -1158,7 +1158,7 @@ impl Parser {
                     other => {
                         return Err(bad(format!(
                             "в шаге пути XPath ожидалась проверка узла, а не «{other}(…)»"
-                        )))
+                        )));
                     }
                 };
                 self.expect(&Tok::RParen, "закрывающая скобка проверки узла")?;
@@ -1887,11 +1887,7 @@ fn compare_scalar(op: CmpOp, left: &XValue, right: &XValue) -> bool {
                 }
                 _ => left.to_str() == right.to_str(),
             };
-            if op == CmpOp::Eq {
-                equal
-            } else {
-                !equal
-            }
+            if op == CmpOp::Eq { equal } else { !equal }
         }
         CmpOp::Lt => left.to_number() < right.to_number(),
         CmpOp::Le => left.to_number() <= right.to_number(),
@@ -1910,12 +1906,11 @@ fn check_prefixes(expr: &Expr, resolver: &XPathResolver) -> RtResult<()> {
         if let NodeTest::Name {
             prefix: Some(p), ..
         } = &step.test
+            && resolver.lookup(p).is_none()
         {
-            if resolver.lookup(p).is_none() {
-                return Err(bad(format!(
-                    "префикс «{p}» в выражении XPath не разыменовывается"
-                )));
-            }
+            return Err(bad(format!(
+                "префикс «{p}» в выражении XPath не разыменовывается"
+            )));
         }
     }
     Ok(())
@@ -2108,7 +2103,7 @@ fn requested_kind(arg: Option<&BslValue>) -> RtResult<Option<ResultKind>> {
                 return Err(RtError::TypeError {
                     expected: "член ТипРезультатаDOMXPath",
                     op: "ВычислитьВыражениеXPath",
-                })
+                });
             }
         }),
         Some(_) => Err(RtError::TypeError {
@@ -2330,7 +2325,7 @@ pub fn lookup_namespace_uri(obj: &BslValue, args: &[BslValue]) -> RtResult<BslVa
             return Err(RtError::MethodNotApplicable {
                 method: "НайтиURIПространстваИмен",
                 receiver: obj.type_name(),
-            })
+            });
         }
     };
     let prefix = match args {
@@ -2339,7 +2334,7 @@ pub fn lookup_namespace_uri(obj: &BslValue, args: &[BslValue]) -> RtResult<BslVa
             return Err(RtError::TypeError {
                 expected: "ровно один аргумент — префикс строкой",
                 op: "НайтиURIПространстваИмен",
-            })
+            });
         }
     };
     Ok(match resolver.lookup(&prefix) {
@@ -2418,7 +2413,7 @@ pub fn evaluate_expression(obj: &BslValue, args: &[BslValue]) -> RtResult<BslVal
             return Err(RtError::MethodNotApplicable {
                 method: "Вычислить",
                 receiver: obj.type_name(),
-            })
+            });
         }
     };
     if args.is_empty() || args.len() > 2 {
@@ -2499,7 +2494,7 @@ pub fn snapshot_item(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
             return Err(RtError::TypeError {
                 expected: "ровно один аргумент — номер узла",
                 op: "ЭлементСнимка",
-            })
+            });
         }
     };
     // Номер вне снимка — `Неопределено`, а не ошибка; отрицательный тоже
@@ -3095,11 +3090,13 @@ mod tests {
     fn position_outside_a_predicate_is_an_error() {
         let doc = sample();
         let resolver = resolver_of(&doc);
-        assert!(evaluate(
-            &doc,
-            &[str_value("position()"), doc.clone(), resolver.clone()]
-        )
-        .is_err());
+        assert!(
+            evaluate(
+                &doc,
+                &[str_value("position()"), doc.clone(), resolver.clone()]
+            )
+            .is_err()
+        );
         assert!(evaluate(&doc, &[str_value("last()"), doc.clone(), resolver]).is_err());
         // А внутри предиката — работают.
         assert_eq!(

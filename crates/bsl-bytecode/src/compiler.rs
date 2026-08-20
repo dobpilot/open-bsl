@@ -854,12 +854,10 @@ impl<'a> Compiler<'a> {
         let mut modes = Vec::with_capacity(args.len());
         for (i, arg) in args.iter().enumerate() {
             let by_val = *by_val.get(i).unwrap_or(&true);
-            if !by_val {
-                if let RExpr::Local(slot) = arg {
-                    self.alloc_temp()?; // держим диапазон [base,base+argc) непрерывным
-                    modes.push(ArgMode::ByRefLocal(*slot as u8));
-                    continue;
-                }
+            if !by_val && let RExpr::Local(slot) = arg {
+                self.alloc_temp()?; // держим диапазон [base,base+argc) непрерывным
+                modes.push(ArgMode::ByRefLocal(*slot as u8));
+                continue;
             }
             let r = self.alloc_temp()?;
             self.compile_expr(arg, r)?;

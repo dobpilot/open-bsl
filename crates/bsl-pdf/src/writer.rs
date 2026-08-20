@@ -1803,9 +1803,10 @@ mod tests {
         assert!(doc.line(page, f64::INFINITY, 0.0, 1.0, 1.0).is_err());
         assert!(doc.set_fill_color(page, 1.5, 0.0, 0.0).is_err());
         assert!(doc.set_line_width(page, -1.0).is_err());
-        assert!(doc
-            .text(page, 0.0, 0.0, PdfFont::Courier, 0.0, "а")
-            .is_err());
+        assert!(
+            doc.text(page, 0.0, 0.0, PdfFont::Courier, 0.0, "а")
+                .is_err()
+        );
         assert!(
             doc.text(page, 0.0, 0.0, PdfFont::Courier, 10.0, "две\nстроки")
                 .is_err(),
@@ -1816,12 +1817,14 @@ mod tests {
         // нет.
         assert!(doc.fonts.planes.is_empty(), "отказ не должен ничего копить");
         // Номер страницы из чужого документа — тоже ошибка, а не паника.
-        assert!(doc
-            .rect(PageId(7), 0.0, 0.0, 1.0, 1.0, PaintMode::Fill)
-            .is_err());
-        assert!(doc
-            .text(PageId(7), 0.0, 0.0, PdfFont::Courier, 10.0, "а")
-            .is_err());
+        assert!(
+            doc.rect(PageId(7), 0.0, 0.0, 1.0, 1.0, PaintMode::Fill)
+                .is_err()
+        );
+        assert!(
+            doc.text(PageId(7), 0.0, 0.0, PdfFont::Courier, 10.0, "а")
+                .is_err()
+        );
     }
 
     /// Вывод детерминирован: тот же вход — те же байты.
@@ -1980,7 +1983,9 @@ mod tests {
         let run = match run {
             Ok(run) => run,
             Err(err) => {
-                println!("ПРОПУЩЕНО: pdftotext не найден в PATH ({err}) — извлечение текста не проверено");
+                println!(
+                    "ПРОПУЩЕНО: pdftotext не найден в PATH ({err}) — извлечение текста не проверено"
+                );
                 return;
             }
         };

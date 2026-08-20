@@ -527,14 +527,14 @@ runtime-компоненты, а не служит полным Cargo SBOM.
 
 ```toml
 [dependencies]
-open-bsl = "0.1"
+open-bsl = "0.2"
 ```
 
 Для компактной сборки:
 
 ```toml
 [dependencies]
-open-bsl = { version = "0.1", default-features = false,
+open-bsl = { version = "0.2", default-features = false,
              features = ["json", "regexp"] }
 ```
 

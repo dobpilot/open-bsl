@@ -586,7 +586,7 @@ use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::rc::{Rc, Weak};
 
-use crate::xsd::{FacetKind, XName, XsKind, XsSchemaData, XSD_NS};
+use crate::xsd::{FacetKind, XName, XSD_NS, XsKind, XsSchemaData};
 use bsl_rt::{
     BslNumber, BslObject, BslString, BslValue, CallContext, EnumValue, MethodCode,
     MethodDescriptor, ObjectProtocol, RtError, RtResult, TypeDescriptor, TypeId,
@@ -1284,7 +1284,7 @@ impl<'a> Builder<'a> {
                 return Err(RtError::Xdto(format!(
                     "типом XDTO может стать только определение типа, а не «{}»",
                     other.type_name()
-                )))
+                )));
             }
         };
         Ok(self.push_type(data, Some((si, node))))
@@ -1400,27 +1400,27 @@ impl<'a> Builder<'a> {
         }
         self.busy[index] = true;
         let mut props = Vec::new();
-        if let Some(base) = self.model.types[index].base {
-            if !self.model.types[base].is_value() {
-                self.ensure_properties(base)?;
-                props.extend_from_slice(&self.model.types[base].properties);
-                // Открытость идёт следом за свойствами, но `anyType`
-                // её НЕ передаёт: он открыт сам (измерено), однако
-                // ни подставленный заглушкой, ни выписанный в схеме
-                // явно наследника не открывает — `Closed` и `ExtAny`
-                // оба «Нет» (`XDTO.WRITE_ORDER.EXT_ANY`). Иначе
-                // открытым стал бы каждый составной тип: базовый у
-                // них заполнен всегда.
-                if !is_any_type(&self.model.types[base]) && self.model.types[base].open {
-                    self.model.types[index].open = true;
-                }
+        if let Some(base) = self.model.types[index].base
+            && !self.model.types[base].is_value()
+        {
+            self.ensure_properties(base)?;
+            props.extend_from_slice(&self.model.types[base].properties);
+            // Открытость идёт следом за свойствами, но `anyType`
+            // её НЕ передаёт: он открыт сам (измерено), однако
+            // ни подставленный заглушкой, ни выписанный в схеме
+            // явно наследника не открывает — `Closed` и `ExtAny`
+            // оба «Нет» (`XDTO.WRITE_ORDER.EXT_ANY`). Иначе
+            // открытым стал бы каждый составной тип: базовый у
+            // них заполнен всегда.
+            if !is_any_type(&self.model.types[base]) && self.model.types[base].open {
+                self.model.types[index].open = true;
             }
         }
-        if let Some((si, node)) = self.to_xs[index] {
-            if !self.model.types[index].is_value() {
-                self.collect_attributes(si, node, &mut props)?;
-                self.collect_content(si, node, &mut props)?;
-            }
+        if let Some((si, node)) = self.to_xs[index]
+            && !self.model.types[index].is_value()
+        {
+            self.collect_attributes(si, node, &mut props)?;
+            self.collect_content(si, node, &mut props)?;
         }
         self.model.types[index].properties = props;
         self.busy[index] = false;
@@ -2076,10 +2076,10 @@ fn check_enumeration(
         if lexical == *spec {
             return Ok(());
         }
-        if let Ok(allowed) = value_from_lexical(model, index, spec) {
-            if *value == allowed {
-                return Ok(());
-            }
+        if let Ok(allowed) = value_from_lexical(model, index, spec)
+            && *value == allowed
+        {
+            return Ok(());
         }
     }
     Err(RtError::Xdto(format!(
@@ -2284,15 +2284,15 @@ fn split_zone(text: &str, from: usize) -> (&str, Option<i32>) {
     if let Some(body) = text.strip_suffix('Z') {
         return (body, Some(0));
     }
-    if let Some(tail) = text.get(from..) {
-        if let Some(rel) = tail.find(['+', '-']) {
-            let at = from + rel;
-            let sign = if text.as_bytes()[at] == b'-' { -1 } else { 1 };
-            if let Some((h, m)) = text[at + 1..].split_once(':') {
-                if let (Ok(h), Ok(m)) = (h.parse::<i32>(), m.parse::<i32>()) {
-                    return (&text[..at], Some(sign * (h * 3600 + m * 60)));
-                }
-            }
+    if let Some(tail) = text.get(from..)
+        && let Some(rel) = tail.find(['+', '-'])
+    {
+        let at = from + rel;
+        let sign = if text.as_bytes()[at] == b'-' { -1 } else { 1 };
+        if let Some((h, m)) = text[at + 1..].split_once(':')
+            && let (Ok(h), Ok(m)) = (h.parse::<i32>(), m.parse::<i32>())
+        {
+            return (&text[..at], Some(sign * (h * 3600 + m * 60)));
         }
     }
     (text, None)
@@ -3518,13 +3518,13 @@ fn validate_instance(data: &Rc<XdtoObjectData>, depth: usize) -> RtResult<()> {
                 prop.lower.unwrap_or(0)
             )));
         }
-        if let Some(upper) = prop.upper {
-            if count > upper {
-                return Err(RtError::Xdto(format!(
-                    "свойство «{}» входит не более {upper} раз, а заполнено {count}",
-                    prop.name
-                )));
-            }
+        if let Some(upper) = prop.upper
+            && count > upper
+        {
+            return Err(RtError::Xdto(format!(
+                "свойство «{}» входит не более {upper} раз, а заполнено {count}",
+                prop.name
+            )));
         }
         for place in places {
             let nested = match data.entries.borrow().get(place).map(|e| e.value.clone()) {
@@ -4001,14 +4001,14 @@ fn read_one<T>(
     let head = loop {
         match current {
             Some(crate::core::XmlEvent::ElementStart { name, uri, attrs }) => {
-                break ElementHead { name, uri, attrs }
+                break ElementHead { name, uri, attrs };
             }
             _ => match parser.read()? {
                 Some(event) => current = Some(event),
                 None => {
                     return Err(RtError::Xdto(
                         "ПрочитатьXML: в источнике не осталось элементов".to_string(),
-                    ))
+                    ));
                 }
             },
         }
@@ -4105,14 +4105,14 @@ fn read_text_only(parser: &mut crate::core::XmlParser, head: &ElementHead) -> Rt
         };
         match event {
             crate::core::XmlEvent::ElementEnd { .. } if parser.depth() == target => {
-                return Ok(text)
+                return Ok(text);
             }
             crate::core::XmlEvent::Text(t) => text.push_str(&t),
             crate::core::XmlEvent::ElementStart { name, .. } => {
                 return Err(RtError::Xdto(format!(
                     "элемент «{}» простого типа не может содержать элемент «{name}»",
                     head.name
-                )))
+                )));
             }
             // Инструкции обработки и комментарии значения не несут;
             // чужого закрывающего тега разборщик не отдаёт.
@@ -4125,7 +4125,7 @@ fn read_text_only(parser: &mut crate::core::XmlParser, head: &ElementHead) -> Rt
             crate::core::XmlEvent::EntityReference { name } => {
                 return Err(RtError::Xdto(format!(
                     "ссылка на сущность «&{name};» при чтении XDTO не поддерживается"
-                )))
+                )));
             }
         }
     }
@@ -4180,7 +4180,7 @@ fn read_open(parser: &mut crate::core::XmlParser, head: &ElementHead) -> RtResul
         };
         match event {
             crate::core::XmlEvent::ElementEnd { .. } if parser.depth() == target => {
-                return Ok(ReadOut::Open(text))
+                return Ok(ReadOut::Open(text));
             }
             crate::core::XmlEvent::Text(t) => text.push_str(&t),
             crate::core::XmlEvent::ElementStart { .. } => return Err(open_content(&head.name)),
@@ -4193,7 +4193,7 @@ fn read_open(parser: &mut crate::core::XmlParser, head: &ElementHead) -> RtResul
             crate::core::XmlEvent::EntityReference { name } => {
                 return Err(RtError::Xdto(format!(
                     "ссылка на сущность «&{name};» при чтении XDTO не поддерживается"
-                )))
+                )));
             }
         }
     }
@@ -4328,7 +4328,7 @@ fn read_object(
             crate::core::XmlEvent::EntityReference { name } => {
                 return Err(RtError::Xdto(format!(
                     "ссылка на сущность «&{name};» при чтении XDTO не поддерживается"
-                )))
+                )));
             }
         }
     }
@@ -4620,13 +4620,13 @@ pub fn factory_write_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
     // Записать его как есть значило бы выпустить документ с необъявленным
     // префиксом. Проверяется РОВНО двоеточие: остальные требования к имени
     // XML не измерены, и расширять запрет без замера нечем.
-    if let Some(given) = &name {
-        if given.contains(':') {
-            return Err(RtError::Xdto(format!(
-                "имя элемента «{given}» содержит двоеточие, а префикс в имени \
+    if let Some(given) = &name
+        && given.contains(':')
+    {
+        return Err(RtError::Xdto(format!(
+            "имя элемента «{given}» содержит двоеточие, а префикс в имени \
                  ЗаписатьXML не объявляет"
-            )));
-        }
+        )));
     }
     let uri = optional_text(uri, "ЗаписатьXML")?;
     let (model, type_index, slot) = match repr_of(value) {
@@ -4973,7 +4973,7 @@ fn slot_for<'a>(
                     } else {
                         Some((value_model, data.type_index))
                     },
-                ))
+                ));
             }
             _ => {}
         }
@@ -5478,7 +5478,7 @@ pub fn serializer_read_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<BslVal
                 "второй аргумент «СериализаторXDTO.ПрочитатьXML» — значение «Тип», \
                  а не «{}»",
                 other.type_name()
-            )))
+            )));
         }
     };
     crate::xml::with_reader(reader, |state| {
@@ -6285,7 +6285,9 @@ mod tests {
         let m = model(SAMPLE);
         assert_eq!(
             property_names(&m, "urn:test", "RootType"),
-            vec!["id", "opt", "q", "fx", "name", "code", "def", "many5", "notype", "uq", "anon"]
+            vec![
+                "id", "opt", "q", "fx", "name", "code", "def", "many5", "notype", "uq", "anon"
+            ]
         );
         // Наследник: сначала весь базовый тип, потом СВОЙ атрибут, потом
         // свой элемент.
@@ -7388,15 +7390,17 @@ mod tests {
         // Одна строка, три аргумента, числа вместо имён и вызов без
         // аргументов — ошибка (измерено все четыре).
         assert!(factory_type(&f, &[str_value("RootType")]).is_err());
-        assert!(factory_type(
-            &f,
-            &[
-                str_value("urn:test"),
-                str_value("RootType"),
-                number_value(1)
-            ]
-        )
-        .is_err());
+        assert!(
+            factory_type(
+                &f,
+                &[
+                    str_value("urn:test"),
+                    str_value("RootType"),
+                    number_value(1)
+                ]
+            )
+            .is_err()
+        );
         assert!(factory_type(&f, &[number_value(5), number_value(5)]).is_err());
         assert!(factory_type(&f, &[]).is_err());
         // Получатель обязан быть фабрикой.
@@ -7428,16 +7432,18 @@ mod tests {
         );
         // Третий аргумент платформа принимает, четвёртый — уже нет.
         assert!(factory_create(&f, &[int.clone(), str_value("1"), number_value(1)]).is_ok());
-        assert!(factory_create(
-            &f,
-            &[
-                int.clone(),
-                str_value("1"),
-                number_value(1),
-                number_value(1)
-            ]
-        )
-        .is_err());
+        assert!(
+            factory_create(
+                &f,
+                &[
+                    int.clone(),
+                    str_value("1"),
+                    number_value(1),
+                    number_value(1)
+                ]
+            )
+            .is_err()
+        );
         // Не разбирающаяся форма — ошибка, а не подстановка.
         assert!(factory_create(&f, &[int, str_value("ерунда")]).is_err());
         // Первый аргумент — обязательно тип XDTO, а лексическая форма —
@@ -7558,11 +7564,13 @@ mod tests {
         // Ни без аргумента, ни с двумя, ни с нестроковым (измерено).
         assert!(factory_of_file(&[]).is_err());
         assert!(factory_of_file(&[number_value(1)]).is_err());
-        assert!(factory_of_file(&[
-            str_value(&path.to_string_lossy()),
-            str_value(&path.to_string_lossy())
-        ])
-        .is_err());
+        assert!(
+            factory_of_file(&[
+                str_value(&path.to_string_lossy()),
+                str_value(&path.to_string_lossy())
+            ])
+            .is_err()
+        );
         let _ = std::fs::remove_file(&path);
         let _ = std::fs::remove_file(&broken);
     }
@@ -8099,12 +8107,14 @@ mod tests {
             );
         }
         // А необязательное свойство пропускать можно.
-        assert!(read_with(
-            &f,
-            "RootType",
-            r#"<t:root xmlns:t="urn:test"><t:name>а</t:name><t:flag>true</t:flag></t:root>"#,
-        )
-        .is_ok());
+        assert!(
+            read_with(
+                &f,
+                "RootType",
+                r#"<t:root xmlns:t="urn:test"><t:name>а</t:name><t:flag>true</t:flag></t:root>"#,
+            )
+            .is_ok()
+        );
     }
 
     #[test]
@@ -8167,9 +8177,11 @@ mod tests {
             object_is_set(&o, &[str_value("nilt")]).expect("признак"),
             BslValue::Boolean(true)
         );
-        assert!(write_out(&f, &o, &["к"])
-            .expect("запись")
-            .contains(r#"<nilt xsi:nil="true"/>"#));
+        assert!(
+            write_out(&f, &o, &["к"])
+                .expect("запись")
+                .contains(r#"<nilt xsi:nil="true"/>"#)
+        );
         // `xsi:type` у СВОЙСТВА выбирает наследника, а неизвестное имя
         // платформа игнорирует (измерено обе стороны).
         let derived = read_with(
@@ -8187,9 +8199,11 @@ mod tests {
             object_type(&nested, &[]).expect("тип").to_string(),
             "{urn:test}InnerExt"
         );
-        assert!(write_out(&f, &derived, &["к"])
-            .expect("запись")
-            .contains(r#"<nested xsi:type="InnerExt">"#));
+        assert!(
+            write_out(&f, &derived, &["к"])
+                .expect("запись")
+                .contains(r#"<nested xsi:type="InnerExt">"#)
+        );
         let unknown = read_with(
             &f,
             "Inner",
@@ -8231,14 +8245,18 @@ mod tests {
             "{text}"
         );
         // Имя по умолчанию — имя ТИПА, а не объявленного элемента.
-        assert!(write_out(&f, &o, &[])
-            .expect("запись")
-            .starts_with("<RootType "));
+        assert!(
+            write_out(&f, &o, &[])
+                .expect("запись")
+                .starts_with("<RootType ")
+        );
         // Пустая строка даёт схлопнутый элемент, а не пару тегов.
         set_property(&o, "name", str_value("")).expect("пустая строка");
-        assert!(write_out(&f, &o, &["к"])
-            .expect("запись")
-            .contains("<name/>"));
+        assert!(
+            write_out(&f, &o, &["к"])
+                .expect("запись")
+                .contains("<name/>")
+        );
         // Записывать можно только экземпляры.
         assert!(factory_write_xml(&f, &[writer(), number_value(5)]).is_err());
         // Пустое имя платформа отвергает — и здесь тоже.
@@ -8258,9 +8276,11 @@ mod tests {
             "имя с двоеточием обязано быть отвергнуто"
         );
         // Имя без двоеточия по-прежнему пишется.
-        assert!(write_out(&f, &o, &["мой"])
-            .expect("запись")
-            .starts_with("<мой "));
+        assert!(
+            write_out(&f, &o, &["мой"])
+                .expect("запись")
+                .starts_with("<мой ")
+        );
     }
 
     /// Тесты на предел глубины гоняются в потоке со стеком главного
@@ -8354,9 +8374,11 @@ mod tests {
         set_property(&o, "name", str_value("аб")).expect("строка");
         set_property(&o, "uq", str_value("де")).expect("неквалифицированное");
         // Неквалифицированное свойство отменяет умолчательное объявление.
-        assert!(write_out(&f, &o, &["к"])
-            .expect("запись")
-            .contains(r#"<uq xmlns="">де</uq>"#));
+        assert!(
+            write_out(&f, &o, &["к"])
+                .expect("запись")
+                .contains(r#"<uq xmlns="">де</uq>"#)
+        );
         // Квалифицированному АТРИБУТУ умолчательное объявление не годится
         // — ему заводится префикс `d<глубина>p<номер>`, а сам элемент
         // остаётся на умолчании (измерено).
@@ -8720,17 +8742,19 @@ mod tests {
         // Арность: одного аргумента мало, пятого не бывает.
         let s = serializer();
         assert!(serializer_write_xml(&s, &[writer()]).is_err());
-        assert!(serializer_write_xml(
-            &s,
-            &[
-                writer(),
-                number_value(42),
-                str_value("м"),
-                str_value("u"),
-                str_value("лишний"),
-            ]
-        )
-        .is_err());
+        assert!(
+            serializer_write_xml(
+                &s,
+                &[
+                    writer(),
+                    number_value(42),
+                    str_value("м"),
+                    str_value("u"),
+                    str_value("лишний"),
+                ]
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -8865,11 +8889,13 @@ mod tests {
         let f = factory(IO_SAMPLE);
         assert!(deserialize("<м/>", &[type_of_factory(&f, "RootType")]).is_err());
         // Третьего аргумента у чтения нет.
-        assert!(deserialize(
-            "<м/>",
-            &[BslValue::Type(TypeId::Number), str_value("лишний")]
-        )
-        .is_err());
+        assert!(
+            deserialize(
+                "<м/>",
+                &[BslValue::Type(TypeId::Number), str_value("лишний")]
+            )
+            .is_err()
+        );
     }
 
     #[test]

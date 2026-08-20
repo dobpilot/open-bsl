@@ -46,9 +46,9 @@ mod mem;
 mod x64;
 
 use crate::{
-    add_op, at, binop, call_builtin_with_format, cmp, field_name, neg_op, numeric_for_next_regular,
-    prop_cache, reg_load, reg_store, resolve_component_method, CallArgs, ComponentMethodMap, Frame,
-    HostIo, LinkedComponents,
+    CallArgs, ComponentMethodMap, Frame, HostIo, LinkedComponents, add_op, at, binop,
+    call_builtin_with_format, cmp, field_name, neg_op, numeric_for_next_regular, prop_cache,
+    reg_load, reg_store, resolve_component_method,
 };
 use bsl_bytecode::{Chunk, Instr, Program};
 use bsl_rt::{BslValue, RtError};

@@ -229,8 +229,8 @@
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
-use crate::core::{local_of, prefix_of, XmlEvent, XmlParser, XmlWriter};
 use crate::core::{CDATA_NODE_NAME, COMMENT_NODE_NAME, DOCUMENT_NODE_NAME, TEXT_NODE_NAME};
+use crate::core::{XmlEvent, XmlParser, XmlWriter, local_of, prefix_of};
 use crate::xml::XmlReaderState;
 use bsl_rt::{
     BslString, BslValue, CallContext, EnumValue, ObjectProtocol, RtError, RtResult, TypeDescriptor,
@@ -477,10 +477,10 @@ impl DomNode {
     }
 
     fn collect_text(&self, out: &mut String) {
-        if self.kind.is_text_like() {
-            if let Some(v) = self.value.borrow().as_ref() {
-                out.push_str(v);
-            }
+        if self.kind.is_text_like()
+            && let Some(v) = self.value.borrow().as_ref()
+        {
+            out.push_str(v);
         }
         for c in self.children.borrow().iter() {
             c.collect_text(out);
@@ -631,7 +631,7 @@ pub fn read(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
             return Err(RtError::TypeError {
                 expected: "ЧтениеXML",
                 op: "ПостроительDOM.Прочитать",
-            })
+            });
         }
     };
     let doc = build(&mut state.borrow_mut())?;
@@ -1160,7 +1160,7 @@ fn find_attribute(
             return Err(RtError::TypeError {
                 expected: "один или два аргумента",
                 op,
-            })
+            });
         }
     };
     Ok(el
@@ -1243,7 +1243,7 @@ pub fn get_elements_by_name(obj: &BslValue, args: &[BslValue]) -> RtResult<BslVa
             return Err(RtError::TypeError {
                 expected: "один или два аргумента",
                 op: "ПолучитьЭлементыПоИмени",
-            })
+            });
         }
     };
     let mut all = Vec::new();
@@ -1850,7 +1850,7 @@ pub fn set_attribute(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
             return Err(RtError::TypeError {
                 expected: "два или три аргумента",
                 op,
-            })
+            });
         }
     };
     let (name, local, prefix, uri) = named_parts(DomKind::Attribute, head, op)?;
@@ -3191,11 +3191,13 @@ mod tests {
         assert!(append_child(&attr, &[call(&doc, create_element, &[str_value("х")])]).is_err());
         // Узел чужого документа — ошибка.
         let other = fresh_document();
-        assert!(append_child(
-            &root,
-            &[call(&other, create_element, &[str_value("чужой")])]
-        )
-        .is_err());
+        assert!(
+            append_child(
+                &root,
+                &[call(&other, create_element, &[str_value("чужой")])]
+            )
+            .is_err()
+        );
         // Опорный узел вставки обязан быть ребёнком.
         let orphan = call(&doc, create_element, &[str_value("сирота")]);
         let some = call(&doc, create_element, &[str_value("нов")]);

@@ -6,7 +6,7 @@ use std::rc::Rc;
 use num_bigint::BigInt;
 use num_traits::{One, Signed, ToPrimitive, Zero};
 
-use crate::{NumError, DIV_SCALE, MAX_SCALE};
+use crate::{DIV_SCALE, MAX_SCALE, NumError};
 
 // --- Упакованная мантисса -------------------------------------------------
 //
@@ -204,11 +204,10 @@ impl BslNumber {
     pub fn add_assign(&mut self, other: &Self) -> Result<(), NumError> {
         if let (BslNumber::Small { m: left, scale: 0 }, BslNumber::Small { m: right, scale: 0 }) =
             (&mut *self, other)
+            && let Some(sum) = left.get().checked_add(right.get())
         {
-            if let Some(sum) = left.get().checked_add(right.get()) {
-                *left = M128::new(sum);
-                return Ok(());
-            }
+            *left = M128::new(sum);
+            return Ok(());
         }
 
         *self = self.add(other)?;
@@ -223,16 +222,16 @@ impl BslNumber {
         let s = self.scale().max(other.scale());
         check_scale(s)?;
 
-        if let (Some((a, asc)), Some((b, bsc))) = (self.fast64_parts(), other.fast64_parts()) {
-            if let (Some(a), Some(b)) = (scale_up_i64(a, s - asc), scale_up_i64(b, s - bsc)) {
-                let result = if negate {
-                    a.checked_sub(b)
-                } else {
-                    a.checked_add(b)
-                };
-                if let Some(result) = result {
-                    return Ok(BslNumber::small(result as i128, s));
-                }
+        if let (Some((a, asc)), Some((b, bsc))) = (self.fast64_parts(), other.fast64_parts())
+            && let (Some(a), Some(b)) = (scale_up_i64(a, s - asc), scale_up_i64(b, s - bsc))
+        {
+            let result = if negate {
+                a.checked_sub(b)
+            } else {
+                a.checked_add(b)
+            };
+            if let Some(result) = result {
+                return Ok(BslNumber::small(result as i128, s));
             }
         }
 
@@ -283,18 +282,17 @@ impl BslNumber {
         let s = self.scale() + other.scale();
         check_scale(s)?;
 
-        if let (Some((a, _)), Some((b, _))) = (self.fast64_parts(), other.fast64_parts()) {
-            if let Some(result) = a.checked_mul(b) {
-                return Ok(BslNumber::small(result as i128, s));
-            }
+        if let (Some((a, _)), Some((b, _))) = (self.fast64_parts(), other.fast64_parts())
+            && let Some(result) = a.checked_mul(b)
+        {
+            return Ok(BslNumber::small(result as i128, s));
         }
 
         if let (BslNumber::Small { m: am, scale: _ }, BslNumber::Small { m: bm, scale: _ }) =
             (self, other)
+            && let Some(r) = am.get().checked_mul(bm.get())
         {
-            if let Some(r) = am.get().checked_mul(bm.get()) {
-                return Ok(BslNumber::small(r, s));
-            }
+            return Ok(BslNumber::small(r, s));
         }
 
         // ЗДЕСЬ БЫЛ БЫСТРЫЙ ПУТЬ «одна мантисса взаимно проста с 10, значит
@@ -322,11 +320,10 @@ impl BslNumber {
             },
             BslNumber::Small { m: limit, scale: 0 },
         ) = (&mut *self, bound)
+            && let Some(next) = counter.get().checked_add(1)
         {
-            if let Some(next) = counter.get().checked_add(1) {
-                *counter = M128::new(next);
-                return Ok(next <= limit.get());
-            }
+            *counter = M128::new(next);
+            return Ok(next <= limit.get());
         }
 
         let next = self.add(&BslNumber::from_i64(1))?;
@@ -389,13 +386,12 @@ impl BslNumber {
 
         if let (BslNumber::Small { m: am, scale: asc }, BslNumber::Small { m: bm, scale: bsc }) =
             (self, other)
-        {
-            if let (Some(a), Some(b)) = (
+            && let (Some(a), Some(b)) = (
                 scale_up_i128(am.get(), s - asc),
                 scale_up_i128(bm.get(), s - bsc),
-            ) {
-                return Ok(BslNumber::small(a % b, s));
-            }
+            )
+        {
+            return Ok(BslNumber::small(a % b, s));
         }
 
         let (a, a_scale) = self.big_parts();
@@ -415,10 +411,10 @@ impl BslNumber {
             } else {
                 (Some(am.get()), scale_up_i128(bm.get(), -k))
             };
-            if let (Some(n), Some(d)) = (n, d) {
-                if let Some(q) = div_half_up_i128(n, d) {
-                    return Ok(BslNumber::small(q, target));
-                }
+            if let (Some(n), Some(d)) = (n, d)
+                && let Some(q) = div_half_up_i128(n, d)
+            {
+                return Ok(BslNumber::small(q, target));
             }
         }
 
@@ -436,10 +432,10 @@ impl BslNumber {
     /// даёт единицу и тридцать нулей, а не мусор из double).
     /// Дробный показатель уходит в f64.
     pub fn pow(&self, exp: &Self) -> Result<Self, NumError> {
-        if exp.is_integer() {
-            if let Some(e) = exp.to_i64_exact() {
-                return self.pow_int(e);
-            }
+        if exp.is_integer()
+            && let Some(e) = exp.to_i64_exact()
+        {
+            return self.pow_int(e);
         }
         crate::float::via_f64_2(self, exp, f64::powf)
     }
@@ -496,12 +492,11 @@ impl BslNumber {
         }
         let delta = cur_scale - target_scale;
 
-        if let BslNumber::Small { m, .. } = self {
-            if delta <= 38 {
-                if let Some(q) = div_half_up_i128(m.get(), POW10[delta as usize]) {
-                    return BslNumber::small(q, target_scale);
-                }
-            }
+        if let BslNumber::Small { m, .. } = self
+            && delta <= 38
+            && let Some(q) = div_half_up_i128(m.get(), POW10[delta as usize])
+        {
+            return BslNumber::small(q, target_scale);
         }
 
         let (m, _) = self.big_parts();
@@ -523,12 +518,11 @@ impl BslNumber {
         }
         let delta = cur_scale - target_scale;
 
-        if let BslNumber::Small { m, .. } = self {
-            if delta <= 38 {
-                if let Some(q) = div_half_down_i128(m.get(), POW10[delta as usize]) {
-                    return BslNumber::small(q, target_scale);
-                }
-            }
+        if let BslNumber::Small { m, .. } = self
+            && delta <= 38
+            && let Some(q) = div_half_down_i128(m.get(), POW10[delta as usize])
+        {
+            return BslNumber::small(q, target_scale);
         }
 
         let (m, _) = self.big_parts();
@@ -550,11 +544,11 @@ impl BslNumber {
         }
         let delta = cur_scale - target_scale;
 
-        if let BslNumber::Small { m, .. } = self {
-            if delta <= 38 {
-                let q = m.get() / POW10[delta as usize];
-                return BslNumber::small(q, target_scale);
-            }
+        if let BslNumber::Small { m, .. } = self
+            && delta <= 38
+        {
+            let q = m.get() / POW10[delta as usize];
+            return BslNumber::small(q, target_scale);
         }
 
         let (m, _) = self.big_parts();
@@ -936,7 +930,7 @@ mod tests {
     use num_bigint::BigInt;
     use num_traits::Zero;
 
-    use super::{bigint_is_divisible_by_10, i128_is_divisible_by_10, BslNumber};
+    use super::{BslNumber, bigint_is_divisible_by_10, i128_is_divisible_by_10};
 
     /// Знак остатка — по ДЕЛИМОМУ, дробные операнды допустимы. Всё
     /// перечисленное измерено на 8.3.27, замеры `MOD.*`.

@@ -1,13 +1,13 @@
 use std::cell::RefCell;
 use std::cmp::Ordering;
-use std::collections::{hash_map::RandomState, HashMap};
+use std::collections::{HashMap, hash_map::RandomState};
 use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 use std::rc::Rc;
 
 use bsl_number::{BslNumber, NumError};
 
-use crate::string::BslString;
 use crate::BslValue;
+use crate::string::BslString;
 
 /// `ТаблицаЗначений` — колоночное хранение: каждая колонка своя
 /// `Vec<BslValue>`, а не `Vec` строк-объектов. Ускоряет то, что реально
@@ -172,10 +172,10 @@ impl RowPositions {
                 positions.remove(&row_id);
             }
             Self::Dense(positions) => {
-                if let Ok(index) = usize::try_from(row_id) {
-                    if let Some(position) = positions.get_mut(index) {
-                        *position = MISSING_POSITION;
-                    }
+                if let Ok(index) = usize::try_from(row_id)
+                    && let Some(position) = positions.get_mut(index)
+                {
+                    *position = MISSING_POSITION;
                 }
             }
         }
@@ -190,14 +190,14 @@ impl RowPositions {
             return Self::identity();
         }
 
-        if let Ok(dense_len) = usize::try_from(next_id) {
-            if dense_len <= row_ids.len().saturating_mul(2) {
-                let mut positions = vec![MISSING_POSITION; dense_len];
-                for (position, &row_id) in row_ids.iter().enumerate() {
-                    positions[row_id as usize] = position;
-                }
-                return Self::Dense(positions);
+        if let Ok(dense_len) = usize::try_from(next_id)
+            && dense_len <= row_ids.len().saturating_mul(2)
+        {
+            let mut positions = vec![MISSING_POSITION; dense_len];
+            for (position, &row_id) in row_ids.iter().enumerate() {
+                positions[row_id as usize] = position;
             }
+            return Self::Dense(positions);
         }
 
         Self::Sparse(
@@ -783,10 +783,10 @@ impl ValueTableData {
     /// Текущая позиция строки; `None` — строка удалена (`Удалить`,
     /// `Очистить`, `Свернуть`) либо принадлежит другой таблице.
     pub fn pos_of(&self, row_id: u64) -> Option<usize> {
-        if let Ok(pos) = usize::try_from(row_id) {
-            if self.row_ids.get(pos) == Some(&row_id) {
-                return Some(pos);
-            }
+        if let Ok(pos) = usize::try_from(row_id)
+            && self.row_ids.get(pos) == Some(&row_id)
+        {
+            return Some(pos);
         }
         self.row_positions.get(row_id)
     }
@@ -1170,11 +1170,7 @@ impl SortPrefix {
 /// Свёрнутый в первичную коллацию символ: нижний регистр уже дала
 /// [`BslString::lowercase_chars`], здесь остаётся `ё` → `е`.
 fn fold_collation(c: char) -> char {
-    if c == 'ё' {
-        'е'
-    } else {
-        c
-    }
+    if c == 'ё' { 'е' } else { c }
 }
 
 /// Общий первичный префикс всех СТРОК колонки в символах; `None` — в

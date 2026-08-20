@@ -4,11 +4,11 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::rc::Rc;
 
+use crate::BslValue;
 use crate::interner::NameId;
 use crate::map::MapData;
 use crate::shape::{Shape, ShapeTable};
 use crate::table::ValueTableData;
-use crate::BslValue;
 
 /// Объекты BSL — `enum`, а не vtable: тонкий указатель (`Rc<BslObject>`) и
 /// исчерпывающий `match` вместо динамической диспетчеризации. Управление

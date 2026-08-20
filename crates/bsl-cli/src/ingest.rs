@@ -153,10 +153,10 @@ pub fn run(input: &str, script_override: Option<&str>) -> i32 {
     // 2. Якоря — канарейка сеанса.
     let mut broken_anchors = Vec::new();
     for a in MEASURED_ANCHORS {
-        if let Some(got) = platform.get(a.id) {
-            if got != a.expect {
-                broken_anchors.push((a.id, a.expect, got.clone(), a.note));
-            }
+        if let Some(got) = platform.get(a.id)
+            && got != a.expect
+        {
+            broken_anchors.push((a.id, a.expect, got.clone(), a.note));
         }
     }
     if !broken_anchors.is_empty() {

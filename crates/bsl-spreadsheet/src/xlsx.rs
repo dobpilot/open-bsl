@@ -216,10 +216,9 @@ impl StyleBook {
             && cell.border_top.is_none()
             && cell.border_right.is_none()
             && cell.border_bottom.is_none()
+            && let Some(ready) = self.plain
         {
-            if let Some(ready) = self.plain {
-                return ready;
-            }
+            return ready;
         }
         let mut font = XlsxFont::default();
         if let Some(f) = &cell.font {

@@ -161,10 +161,10 @@ pub fn fill_property_values(
         // из него. Всё, чего нет у другой стороны, пропускается молча.
         for (name, value) in available {
             let upper = name.to_uppercase();
-            if let Some(except) = &except {
-                if except.iter().any(|n| n.upper() == upper) {
-                    continue;
-                }
+            if let Some(except) = &except
+                && except.iter().any(|n| n.upper() == upper)
+            {
+                continue;
             }
             write_property(target, &name, value, names)?;
         }

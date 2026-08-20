@@ -127,7 +127,7 @@ impl Encoding {
             _ => {
                 return Err(RtError::TextDoc(format!(
                     "кодировка «{name}» не поддержана"
-                )))
+                )));
             }
         })
     }

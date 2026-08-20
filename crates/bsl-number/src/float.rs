@@ -1,5 +1,5 @@
 use crate::number::BslNumber;
-use crate::{NumError, F64_SIG};
+use crate::{F64_SIG, NumError};
 
 /// Функции, которые 1С считает в двойной точности.
 ///

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 
-use crate::fold::{folded_eq, folded_hash, PassHasher};
+use crate::fold::{PassHasher, folded_eq, folded_hash};
 
 /// Корзина одного свёрнутого хеша. Коллизии настолько редки, что
 /// обычный случай не должен платить ни аллокацией, ни прыжком по

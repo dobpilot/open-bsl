@@ -368,8 +368,10 @@ mod tests {
                 );
             }
         }
-        assert!(COMMANDS
-            .iter()
-            .all(|c| c.flag != "--нет-такой" && c.alias != Some("--нет-такой")));
+        assert!(
+            COMMANDS
+                .iter()
+                .all(|c| c.flag != "--нет-такой" && c.alias != Some("--нет-такой"))
+        );
     }
 }
