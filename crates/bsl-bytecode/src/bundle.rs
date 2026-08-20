@@ -713,6 +713,7 @@ mod tests {
 
     fn chunk(instrs: Vec<Instr>) -> Chunk {
         let prop_cache = instrs.iter().map(|_| RefCell::new(None)).collect();
+        let method_cache = instrs.iter().map(|_| RefCell::new(None)).collect();
         let bundle_len = vec![0; instrs.len()];
         Chunk {
             instrs,
@@ -724,6 +725,7 @@ mod tests {
             n_locals: 8,
             n_regs: 16,
             prop_cache,
+            method_cache,
             local_names: Vec::new(),
             bundle_len,
         }

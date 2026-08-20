@@ -217,6 +217,11 @@ fn compile_chunk(
         .iter()
         .map(|_| std::cell::RefCell::new(None))
         .collect();
+    let method_cache = c
+        .instrs
+        .iter()
+        .map(|_| std::cell::RefCell::new(None))
+        .collect();
     Ok(Chunk {
         param_by_val: params.iter().map(|p| p.by_val).collect(),
         instrs: c.instrs,
@@ -232,6 +237,7 @@ fn compile_chunk(
             Vec::new()
         },
         prop_cache,
+        method_cache,
         // Заполняется вызывающим: ширина бандлов зависит от места чанка в
         // программе (перекрытие модульных слотов с регистрами кадра 0),
         // которого здесь не видно. Пустой вектор — легальное состояние

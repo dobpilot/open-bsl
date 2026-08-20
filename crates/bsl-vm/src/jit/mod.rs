@@ -47,8 +47,8 @@ mod x64;
 
 use crate::{
     CallArgs, ComponentMethodMap, Frame, HostIo, LinkedComponents, add_op, at, binop,
-    call_builtin_with_format, cmp, field_name, neg_op, numeric_for_next_regular, prop_cache,
-    reg_load, reg_store, resolve_component_method,
+    cached_component_method, call_builtin_with_format, cmp, field_name, neg_op,
+    numeric_for_next_regular, prop_cache, reg_load, reg_store,
 };
 use bsl_bytecode::{Chunk, Instr, Program};
 use bsl_rt::{BslValue, RtError};
@@ -1021,7 +1021,7 @@ extern "C" fn shim_call_object_method(
     let table = unsafe { std::slice::from_raw_parts(table_ptr, table_len) };
     unsafe {
         run_shim(ctx, pc_arg, |frames, stack, program, idx, shapes| {
-            let (_chunk, instr) = own_instr(frames, program, idx, pc_arg as usize)?;
+            let (chunk, instr) = own_instr(frames, program, idx, pc_arg as usize)?;
             let Instr::CallObjectMethod {
                 dst,
                 obj,
@@ -1035,8 +1035,30 @@ extern "C" fn shim_call_object_method(
                 ));
             };
             let name_id = bsl_rt::NameId::from_index(method as u32);
-            let ov = reg_load(stack, frames[idx].reg_index(obj))?;
-            let args = CallArgs::load(stack, &frames[idx], base, count)?;
+            let ov = at(
+                stack,
+                frames[idx].reg_index(obj),
+                "чтение объекта за границей стека значений",
+            )?;
+            // Приёмник заимствуется, аргументы идут срезом стека — как в
+            // ветке интерпретатора (см. `Instr::CallObjectMethod` в
+            // `step_cold`): temp-регистры аргументов смежны, обработчики
+            // до стека VM не достают.
+            let contiguous_args = base as usize >= frames[idx].param_aliases.len();
+            let fallback_args;
+            let args: &[BslValue] = if count == 0 {
+                &[]
+            } else if contiguous_args {
+                let start = frames[idx].reg_index(base);
+                stack
+                    .get(start..start + count as usize)
+                    .ok_or(RtError::InvalidBytecode(
+                        "чтение аргументов за границей стека значений",
+                    ))?
+            } else {
+                fallback_args = CallArgs::load(stack, &frames[idx], base, count)?;
+                fallback_args.as_slice()
+            };
             let v = if let Some(object) = ov.object_ref() {
                 let mut stdout = std::io::sink();
                 let mut stderr = std::io::sink();
@@ -1046,22 +1068,23 @@ extern "C" fn shim_call_object_method(
                     &mut stderr,
                     bsl_format::format_value,
                 );
-                // Тот же мемоизированный мост, что у интерпретатора: без
-                // него каждый вызов конвертированного типа шёл бы строковым
-                // сканом таблицы, и `--jit` проигрывал бы интерпретатору в
-                // разы (измерено на xml_parse до этой правки).
-                match resolve_component_method(
+                // Тот же кэш ячейки инструкции поверх мемоизированного
+                // моста, что у интерпретатора: без моста каждый вызов
+                // конвертированного типа шёл бы строковым сканом таблицы,
+                // и `--jit` проигрывал бы интерпретатору в разы (измерено
+                // на xml_parse до этой правки).
+                match cached_component_method(
+                    chunk,
+                    pc_arg as usize,
                     component_methods,
                     object.method_table(),
                     name_id,
                     program,
                 )? {
-                    Some(call) => call(&ov, args.as_slice(), &mut context)?,
-                    None => object.call_method(
-                        field_name(program, name_id)?,
-                        args.as_slice(),
-                        &mut context,
-                    )?,
+                    Some(call) => call(ov, args, &mut context)?,
+                    None => {
+                        object.call_method(field_name(program, name_id)?, args, &mut context)?
+                    }
                 }
             } else {
                 let builtin = table
@@ -1072,7 +1095,7 @@ extern "C" fn shim_call_object_method(
                         method: field_name(program, name_id).unwrap_or("?").to_string(),
                         receiver: ov.type_name(),
                     })?;
-                bsl_rt::call_builtin_method_ctx(builtin, &ov, args.as_slice(), shapes)?
+                bsl_rt::call_builtin_method_ctx(builtin, ov, args, shapes)?
             };
             let d = frames[idx].reg_index(dst);
             reg_store(stack, d, v)?;

@@ -11,7 +11,7 @@ mod instr;
 mod text;
 
 pub use bsl_rt::LibraryRequirement;
-pub use chunk::{Chunk, ExceptionRange, Program, PropCacheSlot};
+pub use chunk::{Chunk, ExceptionRange, MethodCacheSlot, Program, PropCacheSlot};
 pub use compiler::{
     CompileError, compile_program, compile_snippet, compile_snippet_with_requirements,
 };

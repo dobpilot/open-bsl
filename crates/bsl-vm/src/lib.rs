@@ -411,17 +411,6 @@ impl LinkedComponents<'_> {
     fn builtin_method(&self, name: bsl_rt::NameId) -> Option<bsl_rt::BuiltinMethod> {
         self.builtin_methods.get(name.index()).copied().flatten()
     }
-
-    /// Обработчик метода компонентного объекта по его статической таблице
-    /// и номеру имени — см. [`resolve_component_method`].
-    fn component_method(
-        &self,
-        table: &'static [bsl_rt::MethodDescriptor],
-        name: bsl_rt::NameId,
-        program: &Program,
-    ) -> Result<Option<bsl_rt::MethodCall>, RtError> {
-        resolve_component_method(&self.component_methods, table, name, program)
-    }
 }
 
 /// Карта мемоизации «(статическая таблица типа, номер имени) → обработчик».
@@ -1017,6 +1006,46 @@ fn prop_cache(
         pc,
         "нет ячейки инлайн-кэша для инструкции",
     )
+}
+
+/// Ячейка инлайн-кэша `CallObjectMethod` на позиции `pc` — см.
+/// [`cached_component_method`].
+#[inline]
+fn method_cache(
+    chunk: &bsl_bytecode::Chunk,
+    pc: usize,
+) -> Result<&bsl_bytecode::MethodCacheSlot, RtError> {
+    at(
+        &chunk.method_cache,
+        pc,
+        "нет ячейки кэша метода для инструкции",
+    )
+}
+
+/// Разрешение метода компонентного объекта с кэшем на позиции инструкции:
+/// мономорфный сайт после первого вызова читает обработчик из своей ячейки
+/// по одному сравнению адреса таблицы, не трогая карту мемоизации. Смена
+/// типа получателя на том же сайте (полиморфизм) перечитывает карту и
+/// перезаписывает ячейку; `None` кэшируется наравне с попаданием — тип без
+/// имени в таблице не платит за строку и хэш на каждый вызов.
+fn cached_component_method(
+    chunk: &bsl_bytecode::Chunk,
+    pc: usize,
+    map: &ComponentMethodMap,
+    table: &'static [bsl_rt::MethodDescriptor],
+    name: bsl_rt::NameId,
+    program: &Program,
+) -> Result<Option<bsl_rt::MethodCall>, RtError> {
+    let slot = method_cache(chunk, pc)?;
+    let key = table.as_ptr() as usize;
+    if let Some((cached_table, resolved)) = *slot.borrow()
+        && cached_table == key
+    {
+        return Ok(resolved);
+    }
+    let resolved = resolve_component_method(map, table, name, program)?;
+    *slot.borrow_mut() = Some((key, resolved));
+    Ok(resolved)
 }
 
 /// Оригинальное написание имени поля — нужно строковому пути доступа
@@ -1837,8 +1866,36 @@ fn step_cold(
             base,
             count,
         } => {
-            let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
-            let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
+            let ov = at(
+                stack,
+                frames[frame_idx].reg_index(obj),
+                "чтение объекта за границей стека значений",
+            )?;
+            // Аргументы открытого вызова кодоген кладёт в свежие временные
+            // регистры — в стеке значений они лежат подряд, и обработчик
+            // получает их срезом стека без поштучного клонирования (это
+            // измеримая часть цены вызова: Rc-инкременты и сбросы на
+            // каждый аргумент). Регистры-алиасы параметров смежности не
+            // гарантируют — такая база уходит запасным путём с копиями.
+            // Приёмник тоже заимствуется, как у горячего `WriteText`:
+            // обработчики не достают до стека VM (их `CallContext` — без
+            // канала обратного вызова), поэтому заём безопасен, а
+            // `reg_store` идёт уже после того, как значение вычислено.
+            let contiguous_args = base as usize >= frames[frame_idx].param_aliases.len();
+            let fallback_args;
+            let args: &[BslValue] = if count == 0 {
+                &[]
+            } else if contiguous_args {
+                let start = frames[frame_idx].reg_index(base);
+                stack
+                    .get(start..start + count as usize)
+                    .ok_or(RtError::InvalidBytecode(
+                        "чтение аргументов за границей стека значений",
+                    ))?
+            } else {
+                fallback_args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
+                fallback_args.as_slice()
+            };
             let name_id = bsl_rt::NameId::from_index(method as u32);
             let value = if let Some(object) = ov.object_ref() {
                 let mut context = bsl_rt::CallContext::new(
@@ -1847,15 +1904,23 @@ fn step_cold(
                     &mut *host.stderr,
                     bsl_format::format_value,
                 );
-                // Тип со статической таблицей методов идёт мемоизированным
-                // мостом «номер имени → обработчик»; промах и тип без
-                // таблицы — строковым `call_method`, там единственный
-                // источник текста ошибки о неизвестном методе.
-                match linked.component_method(object.method_table(), name_id, program)? {
-                    Some(call) => call(&ov, args.as_slice(), &mut context)?,
+                // Тип со статической таблицей методов идёт кэшем ячейки
+                // этой инструкции поверх мемоизированного моста «номер
+                // имени → обработчик»; промах и тип без таблицы —
+                // строковым `call_method`, там единственный источник
+                // текста ошибки о неизвестном методе.
+                match cached_component_method(
+                    chunk,
+                    frames[frame_idx].pc,
+                    &linked.component_methods,
+                    object.method_table(),
+                    name_id,
+                    program,
+                )? {
+                    Some(call) => call(ov, args, &mut context)?,
                     None => {
                         let method_name = field_name(program, name_id)?;
-                        object.call_method(method_name, args.as_slice(), &mut context)?
+                        object.call_method(method_name, args, &mut context)?
                     }
                 }
             } else {
@@ -1868,7 +1933,7 @@ fn step_cold(
                             method: field_name(program, name_id).unwrap_or("?").to_string(),
                             receiver: ov.type_name(),
                         })?;
-                bsl_rt::call_builtin_method_ctx(builtin, &ov, args.as_slice(), runtime_shapes)?
+                bsl_rt::call_builtin_method_ctx(builtin, ov, args, runtime_shapes)?
             };
             let destination = frames[frame_idx].reg_index(dst);
             reg_store(stack, destination, value)?;
@@ -3194,6 +3259,60 @@ mod tests {
         );
     }
 
+    /// Полиморфный сайт открытого вызова: одна и та же инструкция видит
+    /// то конвертированный тип со статической таблицей (`ЗаписьJSON`), то
+    /// хостовый без неё. Ячейка кэша метода (см. `cached_component_method`)
+    /// обязана перечитываться при смене таблицы получателя, а тип без
+    /// имени в таблице — уходить строковым путём с прежней ошибкой; JIT
+    /// идёт тем же кэшем через шим.
+    #[test]
+    fn a_polymorphic_open_call_site_revalidates_its_method_cache() {
+        let mut builder = bsl_rt::RuntimeBuilder::new();
+        builder
+            .register(bsl_rt::core_library())
+            .register(bsl_json::library())
+            .register(bsl_rt::LibraryDescriptor {
+                package: "bsl-test-host",
+                version: "1.2.3",
+                dependencies: &[bsl_rt::LibraryDependency {
+                    package: bsl_rt::PACKAGE_NAME,
+                    version: bsl_rt::PACKAGE_VERSION,
+                }],
+                functions: TEST_COMPONENT_FUNCTIONS,
+                constructors: TEST_COMPONENT_CONSTRUCTORS,
+            });
+        let registry = builder.build().unwrap();
+        let program = compile_with_registry(
+            "з = Новый ЗаписьJSON;\n\
+             с = Новый СчётчикХоста();\n\
+             рез = \"\";\n\
+             Для н = 1 По 4 Цикл\n\
+                 Если н % 2 = 1 Тогда\n\
+                     об = з;\n\
+                 Иначе\n\
+                     об = с;\n\
+                 КонецЕсли;\n\
+                 Попытка\n\
+                     об.УстановитьСтроку();\n\
+                     рез = рез + \"+\";\n\
+                 Исключение\n\
+                     рез = рез + \"-\";\n\
+                 КонецПопытки;\n\
+             КонецЦикла;\n\
+             Возврат рез;",
+            &registry,
+        );
+        let expected = BslValue::Str(bsl_rt::BslString::from_str("+-+-"));
+        assert_eq!(
+            run_program_with_registry(&program, &registry).unwrap(),
+            expected
+        );
+        assert_eq!(
+            run_program_jit_with_registry(&program, &registry).unwrap(),
+            expected
+        );
+    }
+
     /// Приёмник, статически доказанный ядровым (см. `core_receivers` в
     /// `bsl-sema`), и с реестром компилируется в закрытые опкоды: путь
     /// `csv_write` — `WriteText` с инкрементом `pc` вместо холодного
@@ -4154,6 +4273,7 @@ mod tests {
                 n_regs: 1,
                 local_names: Vec::new(),
                 prop_cache: vec![std::cell::RefCell::new(None)],
+                method_cache: vec![std::cell::RefCell::new(None)],
                 // Пустая разметка = поинструкционное исполнение — ровно
                 // тот путь, на котором и проверяется `InvalidBytecode`.
                 bundle_len: Vec::new(),

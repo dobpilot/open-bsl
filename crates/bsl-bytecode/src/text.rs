@@ -1003,6 +1003,7 @@ fn parse_chunk(r: &mut Reader, expected_index: usize) -> Result<Chunk> {
     Ok(Chunk {
         param_by_val,
         prop_cache: (0..instrs.len()).map(|_| RefCell::new(None)).collect(),
+        method_cache: (0..instrs.len()).map(|_| RefCell::new(None)).collect(),
         instrs,
         consts,
         call_arg_modes,
