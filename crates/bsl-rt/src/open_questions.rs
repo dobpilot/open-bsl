@@ -3425,17 +3425,6 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
     },
 ];
 
-/// Поиск вопроса по ID — нужен `bsl-cli --ingest-measurements`, чтобы
-/// показать рядом с расхождением, что именно было выбрано.
-pub fn question(id: &str) -> Option<&'static OpenQuestion> {
-    OPEN_QUESTIONS.iter().find(|q| q.id == id)
-}
-
-/// Поиск якоря по ID.
-pub fn anchor(id: &str) -> Option<&'static Anchor> {
-    MEASURED_ANCHORS.iter().find(|a| a.id == id)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

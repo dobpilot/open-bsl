@@ -58,7 +58,7 @@ pub use date::{
     format_long as format_date_long, format_pattern as format_date_pattern,
     local_date_from_utc_seconds, pseudo_unix_seconds,
 };
-pub use enums::{ENUM_NAMES, EnumKind, EnumValue, lookup_enum, lookup_member, members_of};
+pub use enums::{ENUM_NAMES, EnumKind, EnumValue, lookup_enum, lookup_member};
 pub use fold::folded_eq;
 pub use interner::{NameId, NameInterner};
 pub use locale::{Locale, NBSP};
@@ -281,10 +281,6 @@ pub enum RtError {
     StackOverflow {
         what: &'static str,
     },
-    /// `Формат(x, "Л=de_DE")` — локаль, которой здесь нет. Поддержаны
-    /// русская и английская, см. `Locale` (там же метка о том, что набор
-    /// кодов НЕ ИЗМЕРЕН).
-    UnsupportedLocale(String),
 }
 
 impl From<NumError> for RtError {
@@ -341,9 +337,6 @@ impl fmt::Display for RtError {
             RtError::InvalidBytecode(what) => write!(f, "некорректный байт-код: {what}"),
             RtError::IoError(msg) => write!(f, "ошибка файлового ввода-вывода: {msg}"),
             RtError::Component(msg) => write!(f, "ошибка runtime-компонента: {msg}"),
-            RtError::UnsupportedLocale(code) => {
-                write!(f, "локаль «{code}» не поддержана: есть только ru и en")
-            }
             RtError::StackOverflow { what } => {
                 write!(f, "превышена глубина стека: {what}")
             }

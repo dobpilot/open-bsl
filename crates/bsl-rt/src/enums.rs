@@ -1996,14 +1996,6 @@ pub fn lookup_member(kind: EnumKind, member: &str) -> Option<EnumValue> {
         .map(|(_, v, ..)| *v)
 }
 
-/// Все члены перечисления — для автодополнения после точки.
-pub fn members_of(kind: EnumKind) -> impl Iterator<Item = &'static str> {
-    MEMBERS
-        .iter()
-        .filter(move |(k, ..)| *k == kind)
-        .map(|(_, _, ru, ..)| *ru)
-}
-
 impl EnumValue {
     /// Что печатает `Строка()`. Измерено на платформе.
     pub fn display_text(self) -> &'static str {

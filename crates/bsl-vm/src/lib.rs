@@ -199,22 +199,6 @@ pub fn run_program_with_registry_and_io(
     run_program_with_host(program, Some(registry), JitMode::Off, stdout, stderr)
 }
 
-/// То же, что [`run_program`], но с включённым JIT.
-///
-/// Отдельная функция, а не аргумент: обычный режим — это обычный режим, и
-/// ни одна его строка не должна начинаться с проверки «а не JIT ли у нас».
-/// Ключ `--jit` у `bsl-cli` зовёт именно её.
-///
-/// # Errors
-///
-/// Те же ошибки, что и у [`run_program`]. JIT своих не добавляет: он либо
-/// исполняет инструкцию так же, как интерпретатор, либо отдаёт её ему.
-pub fn run_program_jit(program: &Program) -> Result<BslValue, RtError> {
-    let mut stdout = std::io::stdout().lock();
-    let mut stderr = std::io::stderr().lock();
-    run_program_with_host(program, None, JitMode::On, &mut stdout, &mut stderr)
-}
-
 /// Вариант [`run_program_with_registry`] с включённым JIT.
 ///
 /// # Errors
@@ -268,56 +252,15 @@ fn run_program_with_host(
     Ok(value)
 }
 
-/// Для REPL (`bsl-cli`): исполняет один чанк с готовым стеком (уже
-/// дополненным под `chunk.n_regs`) и возвращает и значение (`Возврат` в
-/// строке, если был), и финальный стек — REPL сохраняет его целиком как
-/// новое состояние сессии для следующей строки (в отличие от
-/// `Выполнить`/`Вычислить` внутри уже работающего скрипта, REPL не
-/// ограничен статически размеченным окружающим кадром — расти можно
-/// сколько угодно, каждая строка — это просто новый чанк поверх той же
-/// растущей таблицы имён).
-/// `locals` — имена слотов ЭТОЙ строки (все накопленные за сессию, включая
-/// новые в этой строке) в порядке, СОВПАДАЮЩЕМ с раскладкой регистров
-/// `chunk` (он был скомпилирован именно с этим списком как `all_locals`,
-/// см. `bsl_bytecode::compile_snippet`). Передаётся дальше как
-/// `Program::top_level_locals`, чтобы `Выполнить`/`Вычислить`, вызванные
-/// ИЗНУТРИ этой строки, могли резолвить переменные REPL-сессии на те же
-/// слоты — без этого они не видели бы вообще ничего (список был бы пуст)
-/// и завели бы каждое имя как новую, независимую переменную.
+/// Исполняет чанк REPL с каталогом компонентов: фрагмент, скомпилированный
+/// с реестром, несёт `CreateObject`/`CallComponent`, и его требования
+/// связываются перед исполнением. Стек предыдущего чанка передаётся внутрь
+/// и возвращается наружу — так в сессии живут накопленные переменные.
 ///
 /// # Errors
 ///
-/// Возвращает [`RtError`] при неперехваченном исключении или некорректных таблицах
-/// имён, форм и регистров чанка.
-pub fn run_repl_chunk(
-    chunk: &bsl_bytecode::Chunk,
-    names: Vec<String>,
-    shapes: Vec<std::rc::Rc<bsl_rt::Shape>>,
-    locals: Vec<String>,
-    stack: Vec<BslValue>,
-) -> Result<(BslValue, Vec<BslValue>), RtError> {
-    let program = Program {
-        requirements: vec![bsl_bytecode::LibraryRequirement::bsl_rt()],
-        chunks: vec![chunk.clone()],
-        names,
-        shapes,
-        top_level_locals: locals,
-        // В REPL объявления процедур пока не поддержаны, звать из
-        // фрагмента нечего; модульных переменных там тоже нет.
-        function_names: Vec::new(),
-        module_vars: Vec::new(),
-        module_base: 0,
-    };
-    drive(&program, 0, stack)
-}
-
-/// То же, что [`run_repl_chunk`], но с каталогом компонентов: чанк,
-/// скомпилированный с реестром, несёт `CreateObject`/`CallComponent`, и
-/// его требования связываются перед исполнением.
-///
-/// # Errors
-///
-/// Возвращает те же ошибки, что [`run_repl_chunk`], плюс ошибку
+/// Возвращает [`RtError`] при неперехваченном исключении или некорректных
+/// таблицах имён, форм и регистров чанка, плюс ошибку
 /// связывания компонентов.
 pub fn run_repl_chunk_with_registry(
     chunk: &bsl_bytecode::Chunk,
@@ -346,6 +289,9 @@ pub fn run_repl_chunk_with_registry(
     drive_linked(&program, 0, stack, JitMode::Off, &linked, &mut host)
 }
 
+/// Прогон без реестра — остался входом для собственных тестов VM:
+/// production-путь (CLI и фасад) всюду ходит через `*_with_registry*`.
+#[cfg(test)]
 /// Выполняет `program.chunks[func_id]` с нуля, используя `stack` как
 /// начальное содержимое регистров (уже дополненное/подготовленное
 /// вызывающим), и возвращает и значение, и финальный стек — нужен
@@ -758,6 +704,7 @@ pub enum JitMode {
     On,
 }
 
+#[cfg(test)]
 fn drive_with(
     program: &Program,
     func_id: usize,
