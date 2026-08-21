@@ -583,18 +583,11 @@ fn leaders(chunk: &Chunk) -> Vec<bool> {
         }
     };
     for instr in &chunk.instrs {
-        match *instr {
-            Instr::Jump { target }
-            | Instr::JumpIfFalse { target, .. }
-            | Instr::JumpIfTrue { target, .. }
-            | Instr::JumpIfNotSkipped { target, .. }
-            | Instr::NumericForNext { target, .. }
-            | Instr::NumericForNextI64 { target, .. } => {
-                if let Ok(t) = usize::try_from(target) {
-                    mark(t);
-                }
-            }
-            _ => {}
+        // Список опкодов с целью — один, у определения `Instr`.
+        if let Some(target) = instr.jump_target()
+            && let Ok(t) = usize::try_from(target)
+        {
+            mark(t);
         }
     }
     for r in &chunk.exception_ranges {

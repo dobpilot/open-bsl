@@ -383,6 +383,29 @@ pub enum ArgMode {
     ByRefLocal(u8),
 }
 
+impl Instr {
+    /// Цель перехода, если инструкция её несёт.
+    ///
+    /// ЕДИНСТВЕННОЕ место, где перечислены опкоды с полем `target`. Копия
+    /// этого списка однажды уже разошлась: разбор текстового байт-кода
+    /// проверял четыре опкода из шести и пропускал оба цикловых, а VM
+    /// преобразует их цель тем же `as usize`, поэтому испорченный листинг
+    /// завершал программу молча. Добавляя опкод с целью, дописывать надо
+    /// здесь — и `bundle::leaders`, и проверка при разборе увидят его сами.
+    #[must_use]
+    pub fn jump_target(&self) -> Option<i16> {
+        match self {
+            Instr::Jump { target }
+            | Instr::JumpIfFalse { target, .. }
+            | Instr::JumpIfTrue { target, .. }
+            | Instr::JumpIfNotSkipped { target, .. }
+            | Instr::NumericForNext { target, .. }
+            | Instr::NumericForNextI64 { target, .. } => Some(*target),
+            _ => None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::Instr;

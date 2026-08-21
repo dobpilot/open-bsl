@@ -85,3 +85,97 @@ fn a_hand_edited_bytecode_target_is_rejected_before_execution() {
         );
     }
 }
+
+/// Наибольшая цель перехода в программе — по всем опкодам, которые её несут.
+fn max_target(program: &bsl_bytecode::Program) -> i64 {
+    let mut best = i64::MIN;
+    for chunk in &program.chunks {
+        for instr in &chunk.instrs {
+            let text = format!("{instr:?}");
+            if let Some(rest) = text.split("target: ").nth(1) {
+                let t: i64 = rest
+                    .trim_end_matches([' ', '}'])
+                    .split([',', ' '])
+                    .next()
+                    .unwrap()
+                    .parse()
+                    .unwrap();
+                best = best.max(t);
+            }
+        }
+    }
+    best
+}
+
+#[test]
+fn the_limit_is_exactly_i16_max_and_not_a_round_number_near_it() {
+    // Смещение цели от числа операторов определяется прогоном, а не
+    // константой в тесте: раскладка кодогенератора — не предмет проверки,
+    // предмет — точная граница.
+    let probe = compile(&module_with_dead_branch(1_000)).expect("проба");
+    let offset = max_target(&probe) - 1_000;
+
+    let last_ok = i64::from(i16::MAX) - offset;
+    let program = compile(&module_with_dead_branch(last_ok as usize)).expect("граница берётся");
+    assert_eq!(
+        max_target(&program),
+        i64::from(i16::MAX),
+        "проба должна упираться ровно в i16::MAX"
+    );
+
+    assert!(
+        matches!(
+            compile(&module_with_dead_branch(last_ok as usize + 1)),
+            Err(CompileError::JumpTargetOutOfRange)
+        ),
+        "следующий адрес обязан быть ошибкой"
+    );
+}
+
+#[test]
+fn tampered_numeric_for_targets_are_rejected_for_both_opcodes() {
+    // Оба цикловых опкода несут цель и оба преобразуют её в VM через
+    // `as usize`, поэтому листинг с `target=-1` завершал бы программу так
+    // же молча, как испорченный `JumpIfFalse`.
+    let sources = [
+        // тело непустое — `NumericForNext`
+        (
+            "NumericForNext",
+            "Сумма = 0;
+Для н = 1 По 5 Цикл
+Сумма = Сумма + н;
+КонецЦикла;
+",
+        ),
+        // тело доказанно пустое — `NumericForNextI64`
+        (
+            "NumericForNextI64",
+            "Для н = 1 По 5 Цикл
+КонецЦикла;
+",
+        ),
+    ];
+    for (opcode, src) in sources {
+        let program = compile(src).expect("сборка");
+        let text = write_program(&program, None).expect("печать");
+        assert!(
+            text.contains(opcode),
+            "листинг должен содержать {opcode}: {text}"
+        );
+
+        let at = text.find(opcode).expect("опкод в листинге");
+        let field = at + text[at..].find("target=").expect("у опкода есть цель");
+        let end = field
+            + text[field..]
+                .find(['\n', ' '])
+                .unwrap_or(text.len() - field);
+        for bad in ["target=-1", "target=9999"] {
+            let mut broken = text.clone();
+            broken.replace_range(field..end, bad);
+            assert!(
+                matches!(parse_program(&broken), Err(TextError::BadJumpTarget { .. })),
+                "{opcode} с {bad} обязан отвергаться"
+            );
+        }
+    }
+}

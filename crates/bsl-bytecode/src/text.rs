@@ -678,17 +678,6 @@ fn unquote(no: usize, text: &str) -> Result<(String, String)> {
     Err(TextError::At(no, "незакрытая строка".to_string()))
 }
 
-/// Цель перехода, если инструкция — переход.
-fn jump_target_of(instr: &Instr) -> Option<i16> {
-    match instr {
-        Instr::Jump { target }
-        | Instr::JumpIfFalse { target, .. }
-        | Instr::JumpIfTrue { target, .. }
-        | Instr::JumpIfNotSkipped { target, .. } => Some(*target),
-        _ => None,
-    }
-}
-
 /// Разбирает текстовое представление программы байт-кода.
 ///
 /// # Errors
@@ -841,7 +830,7 @@ pub fn parse_program(src: &str) -> Result<Program> {
     for (i, chunk) in chunks.iter().enumerate() {
         let limit = chunk.instrs.len();
         for (pc, instr) in chunk.instrs.iter().enumerate() {
-            let Some(target) = jump_target_of(instr) else {
+            let Some(target) = instr.jump_target() else {
                 continue;
             };
             // `target == limit` законно: так выглядит выход за последнюю
