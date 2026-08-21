@@ -15,57 +15,96 @@ fn compile(src: &str) -> Program {
     let resolved = bsl_sema::resolve_program(&parsed.items).expect("резолвинг");
     compile_program(&resolved).expect("кодоген")
 }
-/// Ставит цель `target` переходу номер `nth` в нулевом чанке.
-/// `None` — переходов столько не нашлось.
-fn break_jump(program: &mut Program, nth: usize, target: i16) -> Option<()> {
-    let mut seen = 0;
-    for instr in &mut program.chunks[0].instrs {
-        match instr {
-            Instr::Jump { target: t }
-            | Instr::JumpIfFalse { target: t, .. }
-            | Instr::JumpIfTrue { target: t, .. }
-            | Instr::JumpIfNotSkipped { target: t, .. }
-            | Instr::NumericForNext { target: t, .. }
-            | Instr::NumericForNextI64 { target: t, .. } => {
-                if seen == nth {
-                    *t = target;
-                    return Some(());
-                }
-                seen += 1;
+/// Все переходы программы: `(номер чанка, позиция инструкции)`.
+fn jumps(program: &Program) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
+    for (c, chunk) in program.chunks.iter().enumerate() {
+        for (pc, instr) in chunk.instrs.iter().enumerate() {
+            if instr.jump_target().is_some() {
+                out.push((c, pc));
             }
-            _ => {}
         }
     }
-    None
+    out
+}
+
+/// Имя опкода — первое слово его отладочной записи.
+fn opcode_name(instr: &Instr) -> String {
+    let text = format!("{instr:?}");
+    text.split([' ', '{', '(']).next().unwrap_or("").to_string()
+}
+
+/// Исходник, дающий ВСЕ шесть опкодов с целью: условие с коротким
+/// замыканием (`Jump`, `JumpIfFalse`, `JumpIfTrue`), цикл с телом и
+/// пустой цикл (`NumericForNext`, `NumericForNextI64`) и вызов с
+/// пропущенным параметром по умолчанию (`JumpIfNotSkipped`).
+const ALL_SIX: &str = concat!(
+    "Функция Ф(а = 3, б = 7)\n",
+    "Возврат а + б;\n",
+    "КонецФункции\n",
+    "Сумма = 0;\n",
+    "Если Истина ИЛИ Ложь Тогда\n",
+    "Для н = 1 По 5 Цикл\n",
+    "Сумма = Сумма + н;\n",
+    "КонецЦикла;\n",
+    "Для п = 1 По 3 Цикл\n",
+    "КонецЦикла;\n",
+    "Сумма = Сумма + Ф(1,);\n",
+    "Иначе\n",
+    "Сообщить(1);\n",
+    "КонецЕсли;\n",
+);
+
+#[test]
+fn the_sample_really_contains_every_target_carrying_opcode() {
+    // Иначе следующий тест мог бы «покрывать шесть опкодов», не встретив
+    // половины из них: именно так и вышло в первой редакции.
+    let program = compile(ALL_SIX);
+    let mut kinds: Vec<String> = jumps(&program)
+        .into_iter()
+        .map(|(c, pc)| opcode_name(&program.chunks[c].instrs[pc]))
+        .collect();
+    kinds.sort();
+    kinds.dedup();
+    assert_eq!(
+        kinds,
+        vec![
+            "Jump",
+            "JumpIfFalse",
+            "JumpIfNotSkipped",
+            "JumpIfTrue",
+            "NumericForNext",
+            "NumericForNextI64",
+        ],
+        "образец обязан содержать все шесть опкодов с целью"
+    );
 }
 
 #[test]
-fn every_jump_in_the_chunk_is_checked_not_only_the_first() {
-    // Портится КАЖДЫЙ переход по очереди: проверка, глядящая лишь на
-    // первый, прошла бы мимо остальных пяти опкодов с целью.
-    let src = concat!(
-        "Сумма = 0;\n",
-        "Если Истина ИЛИ Ложь Тогда\n",
-        "Для н = 1 По 5 Цикл\n",
-        "Сумма = Сумма + н;\n",
-        "КонецЦикла;\n",
-        "Иначе\n",
-        "Сообщить(1);\n",
-        "КонецЕсли;\n",
-    );
-    for nth in 0..16 {
+fn every_jump_of_every_opcode_is_checked_wherever_it_sits() {
+    // Портится КАЖДЫЙ переход во ВСЕХ чанках: проверка, глядящая лишь на
+    // первый или лишь на нулевой чанк, прошла бы мимо остальных.
+    let sites = jumps(&compile(ALL_SIX));
+    assert!(sites.len() >= 6, "переходов должно быть не меньше шести");
+    for (chunk, pc) in sites {
         for target in [-1, 9999] {
-            let mut program = compile(src);
-            if break_jump(&mut program, nth, target).is_none() {
-                assert!(nth > 0, "в чанке не нашлось ни одного перехода");
-                return;
+            let mut program = compile(ALL_SIX);
+            let name = opcode_name(&program.chunks[chunk].instrs[pc]);
+            match &mut program.chunks[chunk].instrs[pc] {
+                Instr::Jump { target: t }
+                | Instr::JumpIfFalse { target: t, .. }
+                | Instr::JumpIfTrue { target: t, .. }
+                | Instr::JumpIfNotSkipped { target: t, .. }
+                | Instr::NumericForNext { target: t, .. }
+                | Instr::NumericForNextI64 { target: t, .. } => *t = target,
+                other => panic!("не переход: {other:?}"),
             }
             assert!(
                 matches!(
                     bsl_vm::run_program(&program),
                     Err(RtError::InvalidBytecode(_))
                 ),
-                "переход {nth} с целью {target} обязан быть ошибкой"
+                "{name} в чанке {chunk} на {pc} с целью {target} обязан быть ошибкой"
             );
         }
     }
@@ -87,4 +126,28 @@ fn a_handler_out_of_the_chunk_is_invalid_bytecode_too() {
 fn a_correct_program_still_runs() {
     let program = compile("Если Ложь Тогда\nСообщить(1);\nКонецЕсли;\n");
     assert!(bsl_vm::run_program(&program).is_ok());
+}
+
+#[test]
+fn an_empty_handler_at_the_end_unwinds_into_ordinary_termination() {
+    // `handler_pc == instrs.len()` — законная цель, и проверять её надо не
+    // только разбором листинга, но и ИСПОЛНЕНИЕМ: возврат строгого `>=` в
+    // VM тест на разбор не сломал бы. Исключение здесь настоящее, поэтому
+    // разматывание действительно приходит на `pc == len`.
+    let program = compile(concat!(
+        "Попытка\n",
+        "ВызватьИсключение \"бум\";\n",
+        "Исключение\n",
+        "КонецПопытки;\n",
+    ));
+    let handler = program.chunks[0].exception_ranges[0].handler_pc;
+    assert_eq!(
+        handler,
+        program.chunks[0].instrs.len(),
+        "обработчик обязан указывать ровно за конец чанка"
+    );
+    assert!(
+        bsl_vm::run_program(&program).is_ok(),
+        "пустой обработчик в конце обязан ловить исключение и завершать программу"
+    );
 }

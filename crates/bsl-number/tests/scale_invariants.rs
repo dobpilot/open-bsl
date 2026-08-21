@@ -201,3 +201,20 @@ fn rounding_to_a_negative_scale_keeps_the_hash_contract() {
         assert_eq!(hash_of(&produced), hash_of(&direct));
     }
 }
+
+#[test]
+fn multiplication_is_refused_only_when_the_normalised_result_is_out_of_range() {
+    // Сырая сумма масштабов ещё не приговор: нормализация снимает хвостовые
+    // нули и опускает масштаб обратно в предел. Здесь 4e-50001 × 25e-50001
+    // даёт сырые 100 002, но произведение мантисс — 100, и после снятия двух
+    // нулей выходит ровно 1e-100000, то есть допустимое число.
+    let a = BslNumber::from_parts(4, 50_001).expect("операнд допустим");
+    let b = BslNumber::from_parts(25, 50_001).expect("операнд допустим");
+    let expected = BslNumber::from_parts(1, MAX_SCALE).expect("результат допустим");
+    assert_eq!(a.mul(&b).expect("произведение представимо"), expected);
+    assert_eq!(a.mul(&b).unwrap().scale(), MAX_SCALE);
+
+    // А когда нормализации снимать нечего, отказ обязан остаться.
+    let c = BslNumber::from_parts(3, 50_001).expect("операнд допустим");
+    assert!(matches!(c.mul(&c), Err(NumError::ScaleOverflow)));
+}

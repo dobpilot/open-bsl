@@ -353,19 +353,26 @@ impl BslNumber {
             .scale()
             .checked_add(other.scale())
             .ok_or(NumError::ScaleOverflow)?;
-        check_scale(s)?;
-
+        // Предел проверяется по РЕЗУЛЬТАТУ, а не по сырой сумме: нормализация
+        // снимает хвостовые нули и опускает масштаб обратно. `4e-50001` на
+        // `25e-50001` даёт сырые 100 002, но мантиссы дают 100, и после
+        // снятия двух нулей выходит допустимое `1e-100000`. Проверка до
+        // умножения отвергала такое произведение зря.
+        //
+        // Хранимый масштаб неотрицателен всегда (отрицательный канонизируется
+        // в конструкторе), поэтому сумма не уходит вниз и переполнить `i32`
+        // может только вверх — этим и занят `checked_add`.
         if let (Some((a, _)), Some((b, _))) = (self.fast64_parts(), other.fast64_parts())
             && let Some(result) = a.checked_mul(b)
         {
-            return Ok(BslNumber::small(result as i128, s));
+            return checked_result(BslNumber::small(result as i128, s));
         }
 
         if let (Repr::Small { m: am, scale: _ }, Repr::Small { m: bm, scale: _ }) =
             (&self.0, &other.0)
             && let Some(r) = am.get().checked_mul(bm.get())
         {
-            return Ok(BslNumber::small(r, s));
+            return checked_result(BslNumber::small(r, s));
         }
 
         // ЗДЕСЬ БЫЛ БЫСТРЫЙ ПУТЬ «одна мантисса взаимно проста с 10, значит
@@ -379,7 +386,7 @@ impl BslNumber {
         // Регрессионный тест: `mul_normalizes_when_one_operand_goes_big`.
         let (a, _) = self.big_parts();
         let (b, _) = other.big_parts();
-        Ok(BslNumber::big(&*a * &*b, s))
+        checked_result(BslNumber::big(&*a * &*b, s))
     }
 
     /// Горячий шаг числового `Для`: увеличить счётчик на единицу и сразу
@@ -827,6 +834,15 @@ fn demote(b: BigDec) -> BslNumber {
 /// `|scale| <= MAX_SCALE` любая разность не превосходит `2 * MAX_SCALE`.
 /// Без нижней границы `from_parts(1, i32::MIN)` строил число, на котором
 /// `to_canonical` паниковал при вычислении `-scale`.
+/// Пропускает уже нормализованное число, если его масштаб в пределах.
+///
+/// Нужна там, где сырой масштаб операции может выйти за предел, а
+/// нормализация результата — вернуть его обратно.
+fn checked_result(value: BslNumber) -> Result<BslNumber, NumError> {
+    check_scale(value.scale())?;
+    Ok(value)
+}
+
 fn check_scale(s: i32) -> Result<(), NumError> {
     if !(-MAX_SCALE..=MAX_SCALE).contains(&s) {
         Err(NumError::ScaleOverflow)
