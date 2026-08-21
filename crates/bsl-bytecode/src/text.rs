@@ -629,15 +629,31 @@ impl Reader {
     }
 
     /// `.директива N` — возвращает N.
+    ///
+    /// Счётчик проверяется по числу ОСТАВШИХСЯ строк: каждая запись секции
+    /// занимает хотя бы одну, поэтому больше их быть не может. Без этой
+    /// границы число из листинга уходило прямо в `Vec::with_capacity`, и
+    /// `.handlers 18446744073709551615` валил процесс «capacity overflow»
+    /// с кодом 101 вместо `TextError` — одинаково в debug и в release.
+    /// Листинг правят руками, доверия ему столько же, сколько целям
+    /// переходов.
     fn directive(&mut self, name: &str) -> Result<usize> {
         let (no, text) = self.expect(name)?;
         let mut parts = text.split_whitespace();
-        match (parts.next(), parts.next()) {
+        let n = match (parts.next(), parts.next()) {
             (Some(d), Some(n)) if d == name => n
                 .parse::<usize>()
-                .map_err(|_| TextError::At(no, format!("{name}: «{n}» не число"))),
-            _ => Err(TextError::At(no, format!("ожидалась директива {name} N"))),
+                .map_err(|_| TextError::At(no, format!("{name}: «{n}» не число")))?,
+            _ => return Err(TextError::At(no, format!("ожидалась директива {name} N"))),
+        };
+        let left = self.lines.len() - self.pos;
+        if n > left {
+            return Err(TextError::At(
+                no,
+                format!("{name}: записей {n}, а строк осталось {left}"),
+            ));
         }
+        Ok(n)
     }
 }
 
