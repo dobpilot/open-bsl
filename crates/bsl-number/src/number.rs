@@ -122,6 +122,28 @@ impl BslNumber {
         BslNumber::small(v as i128, 0)
     }
 
+    /// Приводит отрицательный масштаб к нулю, материализуя нули мантиссы.
+    ///
+    /// Отрицательный масштаб законен на ВХОДЕ, но храниться не должен.
+    /// `normalize_small` снимает лишние нули только при `scale > 0`,
+    /// поэтому `1000` легло бы как `{m: 1000, scale: 0}`, а `1×10³` — как
+    /// `{m: 1, scale: -3}`: по `Eq` это одно значение, а хеш у них разный,
+    /// то есть контракт `Hash` нарушен и `Соответствие` с числовым ключом
+    /// теряло бы записи. Нормализация на входе закрывает это, не трогая ни
+    /// `Hash`, ни порядок, ни арифметику.
+    ///
+    /// Арифметика отрицательных масштабов не порождает: `normalize_small`
+    /// доводит масштаб только до нуля, — поэтому одного этого места
+    /// достаточно.
+    fn with_scale_raised(m: BigInt, scale: i32) -> Self {
+        debug_assert!(scale < 0, "путь только для отрицательного масштаба");
+        // Масштаб проверен пределом, значит `-scale <= MAX_SCALE` и в `u32`
+        // влезает. `demote` зовётся напрямую, а не через `big`, чтобы не
+        // возвращаться сюда же.
+        let factor = BigInt::from(10u8).pow((-scale) as u32);
+        demote(normalize_big(m * factor, 0))
+    }
+
     /// Целое из `i128`: масштаб ноль, проверять нечего.
     #[inline]
     pub fn from_i128(m: i128) -> Self {
@@ -157,10 +179,16 @@ impl BslNumber {
 
     #[inline]
     fn small(m: i128, scale: i32) -> Self {
+        if scale < 0 {
+            return Self::with_scale_raised(BigInt::from(m), scale);
+        }
         normalize_small(m, scale)
     }
 
     fn big(m: BigInt, scale: i32) -> Self {
+        if scale < 0 {
+            return Self::with_scale_raised(m, scale);
+        }
         demote(normalize_big(m, scale))
     }
 
@@ -521,13 +549,32 @@ impl BslNumber {
     /// половина-вверх-от-нуля — та же схема, что и у деления. Используется
     /// форматированием (`ЧДЦ=N`) и будущими `Окр`/`Round`. Если `scale`
     /// не меньше текущего, значение не меняется: досыпать лишние дробные
+    /// Оценка сверху числа десятичных разрядов мантиссы.
+    ///
+    /// Нужна, чтобы решить, не бессмысленно ли округление: если сдвиг
+    /// больше, чем разрядов, ответ — ноль, и строить `10^сдвиг` не надо.
+    /// Оценка грубая намеренно (`log10(2) < 1/3`), зато без перевода
+    /// числа в строку.
+    fn mantissa_digits_at_most(&self) -> u64 {
+        match self {
+            BslNumber::Small { .. } => 39,
+            BslNumber::Big(b) => b.m.bits() / 3 + 1,
+        }
+    }
+
     /// разряды — забота форматирования (нулями), не самого числа.
     pub fn round_to_scale(&self, target_scale: i32) -> Self {
         let cur_scale = self.scale();
         if target_scale >= cur_scale {
             return self.clone();
         }
-        let delta = cur_scale - target_scale;
+        // Разность считается насыщающе, а огромный сдвиг отсекается: без
+        // этого общий путь строит `10^delta`, и `Окр(1.5, -2000000000)` не
+        // отвечает вовсе — измерено, процесс снимался по таймауту.
+        let delta = cur_scale.saturating_sub(target_scale);
+        if u64::from(delta.unsigned_abs()) > self.mantissa_digits_at_most() + 1 {
+            return BslNumber::from_i128(0);
+        }
 
         if let BslNumber::Small { m, .. } = self
             && delta <= 38
@@ -553,7 +600,13 @@ impl BslNumber {
         if target_scale >= cur_scale {
             return self.clone();
         }
-        let delta = cur_scale - target_scale;
+        // Разность считается насыщающе, а огромный сдвиг отсекается: без
+        // этого общий путь строит `10^delta`, и `Окр(1.5, -2000000000)` не
+        // отвечает вовсе — измерено, процесс снимался по таймауту.
+        let delta = cur_scale.saturating_sub(target_scale);
+        if u64::from(delta.unsigned_abs()) > self.mantissa_digits_at_most() + 1 {
+            return BslNumber::from_i128(0);
+        }
 
         if let BslNumber::Small { m, .. } = self
             && delta <= 38
@@ -579,7 +632,13 @@ impl BslNumber {
         if target_scale >= cur_scale {
             return self.clone();
         }
-        let delta = cur_scale - target_scale;
+        // Разность считается насыщающе, а огромный сдвиг отсекается: без
+        // этого общий путь строит `10^delta`, и `Окр(1.5, -2000000000)` не
+        // отвечает вовсе — измерено, процесс снимался по таймауту.
+        let delta = cur_scale.saturating_sub(target_scale);
+        if u64::from(delta.unsigned_abs()) > self.mantissa_digits_at_most() + 1 {
+            return BslNumber::from_i128(0);
+        }
 
         if let BslNumber::Small { m, .. } = self
             && delta <= 38
@@ -704,8 +763,15 @@ fn demote(b: BigDec) -> BslNumber {
     }
 }
 
+/// Предел масштаба симметричен.
+///
+/// Ограничение снизу не запрещает отрицательный масштаб — он законен и
+/// нужен, — а держит РАЗНОСТИ масштабов в пределах `i32`: при
+/// `|scale| <= MAX_SCALE` любая разность не превосходит `2 * MAX_SCALE`.
+/// Без нижней границы `from_parts(1, i32::MIN)` строил число, на котором
+/// `to_canonical` паниковал при вычислении `-scale`.
 fn check_scale(s: i32) -> Result<(), NumError> {
-    if s > MAX_SCALE {
+    if !(-MAX_SCALE..=MAX_SCALE).contains(&s) {
         Err(NumError::ScaleOverflow)
     } else {
         Ok(())
