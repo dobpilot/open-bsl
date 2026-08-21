@@ -108,6 +108,12 @@ fn main() -> Result<(), open_bsl::Error> {
         .compile("с = Новый Счётчик();\nс.Увеличить();\nс.Увеличить();\nВозврат с.Значение;")?;
     let result = engine.new_state().run(&module)?;
     assert_eq!(result.to_string(), "2");
+
+    // `ТипЗнч` над host-объектом называет его дескриптором: своего
+    // идентификатора в закрытом реестре типов ядра у host-типа нет.
+    let type_of = engine.compile("с = Новый Счётчик();\nВозврат Строка(ТипЗнч(с));")?;
+    assert_eq!(engine.new_state().run(&type_of)?.to_string(), "Счётчик");
+
     println!("{result}");
     Ok(())
 }

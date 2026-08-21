@@ -912,7 +912,10 @@ mod tests {
         let miss = found("абвг", "яя");
         assert_eq!(triple(&miss), (String::new(), 0, 0));
         assert!(groups(&miss).is_empty());
-        assert_eq!(miss.type_of().unwrap(), BslValue::Type(TypeId::RegexMatch));
+        assert_eq!(
+            miss.type_of().unwrap(),
+            BslValue::Type(bsl_rt::TypeRef::Native(TypeId::RegexMatch))
+        );
     }
 
     #[test]
@@ -944,7 +947,7 @@ mod tests {
         let item = items(&array).remove(0);
         assert_eq!(
             item.type_of().unwrap(),
-            BslValue::Type(TypeId::RegexMatchGroup)
+            BslValue::Type(bsl_rt::TypeRef::Native(TypeId::RegexMatchGroup))
         );
         // Метода `ПолучитьГруппы` у самой группы нет.
         assert!(get_groups(&item).is_err());

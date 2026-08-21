@@ -37,7 +37,7 @@ use bsl_number::BslNumber;
 use crate::date::BslDate;
 use crate::object::BslObject;
 use crate::runtime_shapes::RuntimeShapes;
-use crate::types::TypeId;
+use crate::types::{TypeId, TypeRef};
 use crate::{BslString, BslValue, RtError, RtResult};
 
 /// Идентификаторы видов сериализуемых объектов — измерены на 8.3.27.
@@ -258,9 +258,13 @@ fn value_to_writer(
             w.close();
         }
         BslValue::Type(t) => {
+            // Во внутреннем формате тип записывается измеренным UUID, а он
+            // известен только нативным: тип объекта компонента сюда не
+            // доходит и получает ту же ошибку «UUID не измерен».
+            let native = t.native();
             let uuid = TYPE_UUIDS
                 .iter()
-                .find(|(known, _)| known == t)
+                .find(|(known, _)| Some(*known) == native)
                 .map(|(_, uuid)| *uuid)
                 .ok_or_else(|| {
                     err(format!(
@@ -1132,7 +1136,7 @@ impl<'a> Reader<'a, '_> {
                     .iter()
                     .find(|(_, known)| known.eq_ignore_ascii_case(uuid))
                 {
-                    Some((t, _)) => Ok(BslValue::Type(*t)),
+                    Some((t, _)) => Ok(BslValue::Type(TypeRef::Native(*t))),
                     None => self.read_cold_interned(start, depth),
                 }
             }
@@ -1680,7 +1684,7 @@ fn convert(node: &Node, rt: &mut RuntimeShapes, depth: usize) -> RtResult<BslVal
                 .iter()
                 .find(|(_, known)| known.eq_ignore_ascii_case(uuid))
             {
-                Some((t, _)) => Ok(BslValue::Type(*t)),
+                Some((t, _)) => Ok(BslValue::Type(TypeRef::Native(*t))),
                 // Неизвестный UUID — тип из конфигурации базы (например,
                 // `СправочникСсылка.Имя`): материализовать нечем, но
                 // транзит обязан его сохранить.
@@ -2143,12 +2147,14 @@ mod tests {
 
     #[test]
     fn types_round_trip_and_match_measured_uuids() {
-        let t = BslValue::Type(TypeId::String);
+        let t = BslValue::Type(TypeRef::Native(TypeId::String));
         let text = write(&t);
         assert_eq!(text, r#"{"T",9b6abf8b-0173-48e5-b0a0-83b21fcf63c5}"#);
         assert_eq!(read(&text), t);
         // Тип, UUID которого не измерен, — ошибка, а не выдуманный UUID.
-        let e = value_to_string_internal(&BslValue::Type(TypeId::JsonReader), &rt()).unwrap_err();
+        let e =
+            value_to_string_internal(&BslValue::Type(TypeRef::Native(TypeId::JsonReader)), &rt())
+                .unwrap_err();
         assert!(matches!(e, RtError::Vstr(_)), "{e:?}");
     }
 
@@ -2221,7 +2227,7 @@ mod tests {
             s("а\"б\nв"),
             BslValue::Date(BslDate::from_civil(2024, 5, 6, 7, 8, 9).unwrap()),
             BslValue::Null,
-            BslValue::Type(TypeId::Date),
+            BslValue::Type(TypeRef::Native(TypeId::Date)),
             map,
         ]);
         let text = value_to_string_internal(&arr, &context).unwrap();

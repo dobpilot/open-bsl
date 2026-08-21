@@ -7,6 +7,7 @@ use std::rc::Rc;
 use bsl_number::{BslNumber, NumError};
 
 use crate::BslValue;
+use crate::TypeRef;
 use crate::string::BslString;
 
 /// `ТаблицаЗначений` — колоночное хранение: каждая колонка своя
@@ -592,8 +593,11 @@ impl ValueTableData {
         if types.is_empty() {
             return value;
         }
+        // Колонка описана нативными типами: тип-дескриптор компонента в
+        // её список попасть не может, и значение с таким типом проходит
+        // без приведения.
         let value_type = match value.type_of() {
-            Ok(BslValue::Type(id)) => id,
+            Ok(BslValue::Type(TypeRef::Native(id))) => id,
             _ => return value,
         };
         if let Some(t) = types.iter().find(|t| t.id == value_type) {

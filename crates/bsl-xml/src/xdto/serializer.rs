@@ -330,7 +330,9 @@ pub fn serializer_read_xml(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtRes
     }
     let want = match type_arg {
         None | Some(BslValue::Undefined) => None,
-        Some(BslValue::Type(id)) => Some(*id),
+        // Сериализатор понимает только НАТИВНЫЕ типы: разбор ведётся по
+        // таблице соответствий `TypeId` → тип XSD.
+        Some(BslValue::Type(id)) => id.native(),
         Some(other) => {
             return Err(RtError::Xdto(format!(
                 "второй аргумент «СериализаторXDTO.ПрочитатьXML» — значение «Тип», \

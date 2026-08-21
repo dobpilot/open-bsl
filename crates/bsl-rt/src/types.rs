@@ -944,6 +944,82 @@ const IDENTIFIERS: &[(TypeId, &str)] = &[
     (TypeId::XsComponentList, "СписокКомпонентXS"),
 ];
 
+/// Тип как ЗНАЧЕНИЕ: либо нативный тип ядра, либо тип объекта
+/// компонента, названный своим дескриптором.
+///
+/// Второй вариант — шаг к тому, чтобы компонент не заводил себе строку в
+/// закрытом `TypeId` ядра: у host-типа идентификатора там нет и быть не
+/// может, а `ТипЗнч` над ним обязан работать. Официальные компоненты пока
+/// сохраняют свои `TypeId` (поле `TypeDescriptor::legacy_type_id`), и до
+/// их перевода `Тип("ЧтениеXML")` и `ТипЗнч(читатель)` дают ОДИН И ТОТ ЖЕ
+/// нативный вариант — измеренное равенство этих двух не меняется.
+///
+/// `Copy` в размер указателя: `BslValue::Type` не должен раздувать
+/// значение (см. инвариант про размер).
+#[derive(Debug, Clone, Copy)]
+pub enum TypeRef {
+    Native(TypeId),
+    /// Тип объекта компонента. Дескрипторы — статики, но равенство здесь
+    /// ПО СОДЕРЖИМОМУ (пакет и имя): так тождество не зависит от того,
+    /// собрал ли линкер две копии одного дескриптора.
+    Object(&'static crate::TypeDescriptor),
+}
+
+impl TypeRef {
+    /// Нативный идентификатор, если тип — из закрытого реестра ядра.
+    pub fn native(self) -> Option<TypeId> {
+        match self {
+            TypeRef::Native(id) => Some(id),
+            TypeRef::Object(_) => None,
+        }
+    }
+
+    /// Русское имя типа — то, что печатает `Строка(ТипЗнч(...))`.
+    pub fn name(self) -> String {
+        match self {
+            TypeRef::Native(id) => id.name().to_string(),
+            TypeRef::Object(descriptor) => descriptor.name.to_string(),
+        }
+    }
+}
+
+impl PartialEq for TypeRef {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (TypeRef::Native(a), TypeRef::Native(b)) => a == b,
+            (TypeRef::Object(a), TypeRef::Object(b)) => a.package == b.package && a.name == b.name,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for TypeRef {}
+
+impl std::hash::Hash for TypeRef {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            TypeRef::Native(id) => {
+                0u8.hash(state);
+                id.hash(state);
+            }
+            TypeRef::Object(descriptor) => {
+                1u8.hash(state);
+                descriptor.package.hash(state);
+                descriptor.name.hash(state);
+            }
+        }
+    }
+}
+
+impl std::fmt::Display for TypeRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TypeRef::Native(id) => write!(f, "{id}"),
+            TypeRef::Object(descriptor) => write!(f, "{}", descriptor.name),
+        }
+    }
+}
+
 impl TypeId {
     /// Каноническое (русское) имя типа — то, что печатает `Строка()`.
     pub fn name(self) -> &'static str {

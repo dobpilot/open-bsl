@@ -3,6 +3,8 @@
 //! а не по одному при каждом файле — иначе харнесс пришлось бы копировать
 //! в каждый из них.
 
+use bsl_rt::TypeRef;
+
 use super::*;
 
 #[test]
@@ -738,7 +740,7 @@ fn builtin_types_map_to_the_measured_bsl_types() {
     ] {
         assert_eq!(
             type_of_value(name, "аб"),
-            BslValue::Type(TypeId::String),
+            BslValue::Type(TypeRef::Native(TypeId::String)),
             "{name}"
         );
     }
@@ -762,37 +764,37 @@ fn builtin_types_map_to_the_measured_bsl_types() {
     ] {
         assert_eq!(
             type_of_value(name, "-42"),
-            BslValue::Type(TypeId::Number),
+            BslValue::Type(TypeRef::Native(TypeId::Number)),
             "{name}"
         );
     }
     assert_eq!(
         type_of_value("boolean", "true"),
-        BslValue::Type(TypeId::Boolean)
+        BslValue::Type(TypeRef::Native(TypeId::Boolean))
     );
     assert_eq!(
         type_of_value("date", "2026-08-12"),
-        BslValue::Type(TypeId::Date)
+        BslValue::Type(TypeRef::Native(TypeId::Date))
     );
     assert_eq!(
         type_of_value("dateTime", "2026-08-12T18:41:17"),
-        BslValue::Type(TypeId::Date)
+        BslValue::Type(TypeRef::Native(TypeId::Date))
     );
     assert_eq!(
         type_of_value("time", "18:41:17"),
-        BslValue::Type(TypeId::Date)
+        BslValue::Type(TypeRef::Native(TypeId::Date))
     );
     assert_eq!(
         type_of_value("base64Binary", "0LDQsQ=="),
-        BslValue::Type(TypeId::BinaryData)
+        BslValue::Type(TypeRef::Native(TypeId::BinaryData))
     );
     assert_eq!(
         type_of_value("hexBinary", "D0B0D0B1"),
-        BslValue::Type(TypeId::BinaryData)
+        BslValue::Type(TypeRef::Native(TypeId::BinaryData))
     );
     assert_eq!(
         type_of_value("QName", "просто"),
-        BslValue::Type(TypeId::XmlExpandedName)
+        BslValue::Type(TypeRef::Native(TypeId::XmlExpandedName))
     );
     // `anyType` — тип ОБЪЕКТА: значения из лексической формы он не
     // строит (измерено: `Создать` от него отвергает лексику).
@@ -899,26 +901,26 @@ fn type_and_property_values_print_as_measured() {
     assert_eq!(root.to_string(), "{urn:test}RootType");
     assert_eq!(
         root.type_of().unwrap(),
-        BslValue::Type(TypeId::XdtoObjectType)
+        BslValue::Type(TypeRef::Native(TypeId::XdtoObjectType))
     );
     assert_eq!(TypeId::XdtoObjectType.name(), "Тип объекта XDTO");
     let code = type_of(&m, "urn:test", "Code");
     assert_eq!(code.to_string(), "{urn:test}Code");
     assert_eq!(
         code.type_of().unwrap(),
-        BslValue::Type(TypeId::XdtoValueType)
+        BslValue::Type(TypeRef::Native(TypeId::XdtoValueType))
     );
     let props = prop(&root, "Свойства");
     assert_eq!(
         props.type_of().unwrap(),
-        BslValue::Type(TypeId::XdtoPropertyCollection)
+        BslValue::Type(TypeRef::Native(TypeId::XdtoPropertyCollection))
     );
     assert_eq!(props.to_string(), "КоллекцияСвойствXDTO");
     let name = collection_lookup(ob(&props), &[str_value("name")]).expect("поиск");
     assert_eq!(name.to_string(), "name", "свойство печатается именем");
     assert_eq!(
         name.type_of().unwrap(),
-        BslValue::Type(TypeId::XdtoProperty)
+        BslValue::Type(TypeRef::Native(TypeId::XdtoProperty))
     );
     // Анонимный тип печатается ПУСТОЙ строкой, хотя URI у него есть.
     let anon = prop(
@@ -930,13 +932,16 @@ fn type_and_property_values_print_as_measured() {
     let facets = prop(&code, "Фасеты");
     assert_eq!(
         facets.type_of().unwrap(),
-        BslValue::Type(TypeId::XdtoFacetCollection)
+        BslValue::Type(TypeRef::Native(TypeId::XdtoFacetCollection))
     );
     assert_eq!(facets.to_string(), "КоллекцияФасетовXDTO");
     {
         let repr = repr_of(&facets).expect("ожидалась коллекция");
         let f = collection_get(repr, 0).expect("фасет");
-        assert_eq!(f.type_of().unwrap(), BslValue::Type(TypeId::XdtoFacet));
+        assert_eq!(
+            f.type_of().unwrap(),
+            BslValue::Type(TypeRef::Native(TypeId::XdtoFacet))
+        );
         assert_eq!(f.to_string(), "ФасетXDTO");
     }
     let def = prop(
@@ -945,7 +950,7 @@ fn type_and_property_values_print_as_measured() {
     );
     assert_eq!(
         def.type_of().unwrap(),
-        BslValue::Type(TypeId::XdtoDataValue)
+        BslValue::Type(TypeRef::Native(TypeId::XdtoDataValue))
     );
     assert_eq!(def.to_string(), "ЗначениеXDTO");
 }
@@ -1284,7 +1289,7 @@ fn factory_create_builds_a_value_from_its_lexical_form() {
     let value = factory_create(ob(&f), &[code.clone(), str_value("AB")]).expect("значение");
     assert_eq!(
         value.type_of().unwrap(),
-        BslValue::Type(TypeId::XdtoDataValue)
+        BslValue::Type(TypeRef::Native(TypeId::XdtoDataValue))
     );
     assert_eq!(text_of(&prop(&value, "Значение")), "AB");
     assert_eq!(text_of(&prop(&value, "ЛексическоеЗначение")), "AB");
@@ -1331,7 +1336,7 @@ fn factory_create_builds_an_object_that_knows_its_type() {
     assert_eq!(object.to_string(), "ОбъектXDTO");
     assert_eq!(
         object.type_of().unwrap(),
-        BslValue::Type(TypeId::XdtoDataObject)
+        BslValue::Type(TypeRef::Native(TypeId::XdtoDataObject))
     );
     assert_eq!(TypeId::XdtoDataObject.name(), "Объект XDTO");
     assert_eq!(object_type(ob(&object), &[]).expect("тип"), root);
@@ -1368,7 +1373,7 @@ fn a_factory_is_built_from_a_schema_set_or_from_nothing() {
     assert_eq!(empty.to_string(), "ФабрикаXDTO");
     assert_eq!(
         empty.type_of().unwrap(),
-        BslValue::Type(TypeId::XdtoFactory)
+        BslValue::Type(TypeRef::Native(TypeId::XdtoFactory))
     );
     assert_eq!(TypeId::XdtoFactory.name(), "Фабрика XDTO");
     assert!(is_factory(&empty));
@@ -1467,7 +1472,10 @@ fn a_fresh_instance_answers_with_defaults_and_empty_lists() {
     // Множественное свойство — всегда список, даже пустой.
     let list = prop(&o, "code");
     assert_eq!(list.to_string(), "СписокXDTO");
-    assert_eq!(list.type_of().unwrap(), BslValue::Type(TypeId::XdtoList));
+    assert_eq!(
+        list.type_of().unwrap(),
+        BslValue::Type(TypeRef::Native(TypeId::XdtoList))
+    );
     assert_eq!(TypeId::XdtoList.name(), "Список XDTO");
     assert_eq!(list.collection_len().expect("длина"), 0);
     // Постороннее имя — ошибка, а не `Неопределено` (измерено).
@@ -1674,7 +1682,10 @@ fn the_sequence_follows_the_order_of_filling() {
     let o = instance(&f, "ChoiceType");
     let seq = object_sequence(ob(&o), &[]).expect("последовательность");
     assert_eq!(seq.to_string(), "ПоследовательностьXDTO");
-    assert_eq!(seq.type_of().unwrap(), BslValue::Type(TypeId::XdtoSequence));
+    assert_eq!(
+        seq.type_of().unwrap(),
+        BslValue::Type(TypeRef::Native(TypeId::XdtoSequence))
+    );
     assert_eq!(TypeId::XdtoSequence.name(), "Последовательность XDTO");
     assert_eq!(seq.collection_len().expect("длина"), 0);
     // Порядок: заполнение элементов, атрибут в него не попадает
@@ -1914,11 +1925,11 @@ fn reading_a_composite_document_maps_every_lexical_form() {
     assert_eq!(prop(&o, "flag"), BslValue::Boolean(true));
     assert_eq!(
         prop(&o, "when").type_of().unwrap(),
-        BslValue::Type(TypeId::Date)
+        BslValue::Type(TypeRef::Native(TypeId::Date))
     );
     assert_eq!(
         prop(&o, "bin").type_of().unwrap(),
-        BslValue::Type(TypeId::BinaryData)
+        BslValue::Type(TypeRef::Native(TypeId::BinaryData))
     );
     // Множественное свойство накапливается в списке, вложенное —
     // рекурсивно, и владельцем ему становится родитель.
@@ -2480,7 +2491,7 @@ fn xdto_serializer_needs_a_factory() {
     assert_eq!(a.to_string(), "СериализаторXDTO");
     assert_eq!(
         a.type_of().expect("ТипЗнч"),
-        BslValue::Type(TypeId::XdtoSerializer)
+        BslValue::Type(TypeRef::Native(TypeId::XdtoSerializer))
     );
 }
 
@@ -2726,38 +2737,60 @@ fn xdto_serializer_reads_by_an_explicit_bsl_type() {
     // Заданный тип отменяет имя элемента: `<int>` с `Тип("Число")`
     // разбирается как `xs:decimal` и даёт 42 (измерено).
     assert_eq!(
-        deserialize("<что>42</что>", &[BslValue::Type(TypeId::Number)]).expect("число"),
+        deserialize(
+            "<что>42</что>",
+            &[BslValue::Type(TypeRef::Native(TypeId::Number))]
+        )
+        .expect("число"),
         number_value(42)
     );
     assert_eq!(
         deserialize(
             "<когда>2026-08-13T10:20:30</когда>",
-            &[BslValue::Type(TypeId::Date)]
+            &[BslValue::Type(TypeRef::Native(TypeId::Date))]
         )
         .expect("дата"),
         date_value(2026, 8, 13, 10, 20, 30)
     );
     assert_eq!(
-        deserialize("<флаг>true</флаг>", &[BslValue::Type(TypeId::Boolean)]).expect("булево"),
+        deserialize(
+            "<флаг>true</флаг>",
+            &[BslValue::Type(TypeRef::Native(TypeId::Boolean))]
+        )
+        .expect("булево"),
         BslValue::Boolean(true)
     );
     assert_eq!(
-        deserialize("<что>аб</что>", &[BslValue::Type(TypeId::String)]).expect("строка"),
+        deserialize(
+            "<что>аб</что>",
+            &[BslValue::Type(TypeRef::Native(TypeId::String))]
+        )
+        .expect("строка"),
         str_value("аб")
     );
     assert_eq!(
-        deserialize("<что>0LDQsQ==</что>", &[BslValue::Type(TypeId::BinaryData)])
-            .expect("двоичные"),
+        deserialize(
+            "<что>0LDQsQ==</что>",
+            &[BslValue::Type(TypeRef::Native(TypeId::BinaryData))]
+        )
+        .expect("двоичные"),
         binary_value(&[0xD0, 0xB0, 0xD0, 0xB1])
     );
     // Отображения нет — платформа отвечает «Отсутствует отображение
     // для типа», и здесь то же (измерено на трёх типах).
     for id in [TypeId::Array, TypeId::Null, TypeId::Undefined] {
-        let err = deserialize("<м/>", &[BslValue::Type(id)]).expect_err("нет отображения");
+        let err = deserialize("<м/>", &[BslValue::Type(TypeRef::Native(id))])
+            .expect_err("нет отображения");
         assert!(err.to_string().contains("отсутствует отображение"), "{err}");
     }
     // Лексическая форма проверяется и при заданном типе.
-    assert!(deserialize("<что>аб</что>", &[BslValue::Type(TypeId::Number)]).is_err());
+    assert!(
+        deserialize(
+            "<что>аб</что>",
+            &[BslValue::Type(TypeRef::Native(TypeId::Number))]
+        )
+        .is_err()
+    );
     // Второй аргумент — именно значение `Тип`, а не тип XDTO.
     let f = factory(IO_SAMPLE);
     assert!(deserialize("<м/>", &[type_of_factory(&f, "RootType")]).is_err());
@@ -2765,7 +2798,10 @@ fn xdto_serializer_reads_by_an_explicit_bsl_type() {
     assert!(
         deserialize(
             "<м/>",
-            &[BslValue::Type(TypeId::Number), str_value("лишний")]
+            &[
+                BslValue::Type(TypeRef::Native(TypeId::Number)),
+                str_value("лишний")
+            ]
         )
         .is_err()
     );

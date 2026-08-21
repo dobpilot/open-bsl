@@ -71,7 +71,7 @@ pub use runtime_shapes::RuntimeShapes;
 pub use shape::{MAX_SHAPE_TRANSITIONS, Shape, ShapeTable};
 pub use string::{BslString, MAX_TEMPLATE_ARGS};
 pub use table::{ColumnVstr, ValueTableData};
-pub use types::TypeId;
+pub use types::{TypeId, TypeRef};
 pub use tz::local_offset_seconds;
 pub use vstr::{value_from_string_internal, value_to_string_internal};
 // Модель типов XDTO наружу крейта нужна целиком: строит её фабрика,
@@ -94,9 +94,9 @@ pub enum BslValue {
     /// Тип как ЗНАЧЕНИЕ (`ТипЗнч(х)`, `Тип("Массив")`) — не тег этого
     /// перечисления, а полноценное значение, которое можно сравнить,
     /// положить в переменную и напечатать (`Строка(ТипЗнч(1))` -> `Число`).
-    /// `TypeId` — `Copy` в один байт, поэтому вариант ничего не добавляет
-    /// к размеру `BslValue`.
-    Type(TypeId),
+    /// `TypeRef` — `Copy` в размер указателя, поэтому вариант ничего не
+    /// добавляет к размеру `BslValue`.
+    Type(TypeRef),
     /// Член платформенного перечисления (`ТипЗначенияJSON.Строка`). Как и
     /// `Type`, это ЗНАЧЕНИЕ, а не тег: его можно сравнить, положить в
     /// переменную и напечатать. `Copy` в один байт — размер `BslValue` не
@@ -1209,14 +1209,18 @@ impl BslValue {
             // `Перечисление<Имя>`, а не тип членов.
             BslValue::EnumType(k) => TypeId::EnumMeta(*k),
             BslValue::Object(o) => match &**o {
-                BslObject::Extension(object) => match object.type_descriptor().legacy_type_id {
-                    Some(type_id) => type_id,
-                    None => {
-                        return Err(RtError::UnknownType(
-                            object.type_descriptor().name.to_string(),
-                        ));
-                    }
-                },
+                // Официальный компонент пока сохраняет свой `TypeId`, и
+                // тогда `Тип("ЧтениеXML") = ТипЗнч(читатель)` остаётся
+                // измеренным «Да». У host-типа идентификатора в закрытом
+                // реестре нет — он называется своим дескриптором, и
+                // `ТипЗнч` над ним работает, а не отвечает ошибкой.
+                BslObject::Extension(object) => {
+                    let descriptor = object.type_descriptor();
+                    return Ok(BslValue::Type(match descriptor.legacy_type_id {
+                        Some(type_id) => TypeRef::Native(type_id),
+                        None => TypeRef::Object(descriptor),
+                    }));
+                }
                 BslObject::VstrOpaque(_) => TypeId::VstrOpaque,
                 BslObject::Array(_) => TypeId::Array,
                 BslObject::Structure(_) => TypeId::Structure,
@@ -1245,7 +1249,7 @@ impl BslValue {
                 });
             }
         };
-        Ok(BslValue::Type(id))
+        Ok(BslValue::Type(TypeRef::Native(id)))
     }
 
     /// `Тип("ИмяТипа")` -> `Тип`. Неизвестное имя — ошибка (в 1С тоже
@@ -1253,8 +1257,10 @@ impl BslValue {
     /// падать сразу, а не молча делать сравнение вечно ложным).
     pub fn type_by_name(&self) -> RtResult<Self> {
         let name = self.as_str("Тип")?.to_string();
+        // Имя ищется в таблице ядра: типы компонентов пока опознаются
+        // через свои `TypeId` там же (см. `TypeRef`).
         TypeId::lookup(&name)
-            .map(BslValue::Type)
+            .map(|id| BslValue::Type(TypeRef::Native(id)))
             .ok_or(RtError::UnknownType(name))
     }
 
