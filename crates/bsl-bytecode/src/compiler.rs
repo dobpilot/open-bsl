@@ -23,6 +23,15 @@ pub enum CompileError {
     /// Разрешённое дерево сослалось на компонент, которого нет в полном
     /// списке требований программы.
     UnknownLibrary(String),
+    /// Цель перехода не помещается в `i16`, то есть чанк длиннее
+    /// `i16::MAX` инструкций.
+    ///
+    /// До этой проверки `as i16` усекал цель молча: в чанке на сорок тысяч
+    /// инструкций цель 40004 превращалась в -25532, VM получала `pc` далеко
+    /// за концом чанка, принимала это за нормальное завершение и заканчивала
+    /// программу БЕЗ вывода и БЕЗ ошибки. Неверный ответ хуже отказа,
+    /// поэтому здесь отказ.
+    JumpTargetOutOfRange,
 }
 
 /// Компилирует весь модуль: чанк верхнего уровня плюс чанк на каждую
@@ -315,8 +324,17 @@ impl<'a> Compiler<'a> {
         self.instrs.len() - 1
     }
 
-    fn patch_jump(&mut self, idx: usize, target: usize) {
-        let target = target as i16;
+    /// Абсолютный индекс инструкции как цель перехода.
+    ///
+    /// Ширину `Instr` в восемь байт заодно не пересматриваем: она измерена,
+    /// а расширение цели до `i32` её меняет. Отсюда предел — чанк не длиннее
+    /// `i16::MAX` инструкций, и он честный, а не молчаливый.
+    fn jump_target(target: usize) -> Result<i16, CompileError> {
+        i16::try_from(target).map_err(|_| CompileError::JumpTargetOutOfRange)
+    }
+
+    fn patch_jump(&mut self, idx: usize, target: usize) -> Result<(), CompileError> {
+        let target = Self::jump_target(target)?;
         match &mut self.instrs[idx] {
             Instr::Jump { target: t } => *t = target,
             Instr::JumpIfFalse { target: t, .. } => *t = target,
@@ -324,6 +342,7 @@ impl<'a> Compiler<'a> {
             Instr::JumpIfNotSkipped { target: t, .. } => *t = target,
             other => unreachable!("patch_jump on non-jump instruction: {other:?}"),
         }
+        Ok(())
     }
 
     fn here(&self) -> usize {
@@ -345,7 +364,7 @@ impl<'a> Compiler<'a> {
                 });
                 self.compile_expr(default, slot)?;
                 let end = self.here();
-                self.patch_jump(j, end);
+                self.patch_jump(j, end)?;
             }
         }
         Ok(())
@@ -435,9 +454,9 @@ impl<'a> Compiler<'a> {
                 let on_false = self.here();
                 self.emit(Instr::LoadBool { dst, val: false });
                 let end = self.here();
-                self.patch_jump(short, on_false);
-                self.patch_jump(checked, on_false);
-                self.patch_jump(to_end, end);
+                self.patch_jump(short, on_false)?;
+                self.patch_jump(checked, on_false)?;
+                self.patch_jump(to_end, end)?;
             }
             RExpr::Binary {
                 op: BinaryOp::Or,
@@ -459,9 +478,9 @@ impl<'a> Compiler<'a> {
                 let on_true = self.here();
                 self.emit(Instr::LoadBool { dst, val: true });
                 let end = self.here();
-                self.patch_jump(short, on_true);
-                self.patch_jump(checked, on_true);
-                self.patch_jump(to_end, end);
+                self.patch_jump(short, on_true)?;
+                self.patch_jump(checked, on_true)?;
+                self.patch_jump(to_end, end)?;
             }
             RExpr::Binary { op, lhs, rhs } => {
                 // Оба операнда — просто переменные: копировать их во
@@ -761,8 +780,8 @@ impl<'a> Compiler<'a> {
                 let else_at = self.here();
                 self.compile_expr(else_expr, dst)?;
                 let end = self.here();
-                self.patch_jump(to_else, else_at);
-                self.patch_jump(to_end, end);
+                self.patch_jump(to_else, else_at)?;
+                self.patch_jump(to_end, end)?;
             }
             RExpr::NewTextWriter { path } => {
                 let path_reg = self.alloc_temp()?;
@@ -938,7 +957,7 @@ impl<'a> Compiler<'a> {
                 end_patches.push(self.emit(Instr::Jump { target: 0 }));
 
                 for (c, body) in elsif_branches {
-                    self.patch_jump(jf, self.here());
+                    self.patch_jump(jf, self.here())?;
                     let r = self.alloc_temp()?;
                     self.compile_expr(c, r)?;
                     self.free_temp(1);
@@ -947,14 +966,14 @@ impl<'a> Compiler<'a> {
                     end_patches.push(self.emit(Instr::Jump { target: 0 }));
                 }
 
-                self.patch_jump(jf, self.here());
+                self.patch_jump(jf, self.here())?;
                 if let Some(else_body) = else_branch {
                     self.compile_block(else_body)?;
                 }
 
                 let end = self.here();
                 for p in end_patches {
-                    self.patch_jump(p, end);
+                    self.patch_jump(p, end)?;
                 }
             }
             RStmt::While { cond, body } => {
@@ -970,18 +989,18 @@ impl<'a> Compiler<'a> {
                 });
                 self.compile_block(body)?;
                 self.emit(Instr::Jump {
-                    target: cond_pc as i16,
+                    target: Self::jump_target(cond_pc)?,
                 });
 
                 let end = self.here();
-                self.patch_jump(jf, end);
+                self.patch_jump(jf, end)?;
                 let ctx = self.loop_stack.pop().unwrap();
                 for p in ctx.break_patches {
-                    self.patch_jump(p, end);
+                    self.patch_jump(p, end)?;
                 }
                 // `Продолжить` в `Пока` — это "перепроверить условие".
                 for p in ctx.continue_patches {
-                    self.patch_jump(p, cond_pc);
+                    self.patch_jump(p, cond_pc)?;
                 }
             }
             RStmt::ForNumeric {
@@ -1022,24 +1041,24 @@ impl<'a> Compiler<'a> {
                     self.emit(Instr::NumericForNextI64 {
                         counter: slot,
                         bound,
-                        target: body_pc as i16,
+                        target: Self::jump_target(body_pc)?,
                     });
                 } else {
                     self.emit(Instr::NumericForNext {
                         counter: slot,
                         bound,
-                        target: body_pc as i16,
+                        target: Self::jump_target(body_pc)?,
                     });
                 }
 
                 let end = self.here();
-                self.patch_jump(jf, end);
+                self.patch_jump(jf, end)?;
                 let ctx = self.loop_stack.pop().unwrap();
                 for p in ctx.break_patches {
-                    self.patch_jump(p, end);
+                    self.patch_jump(p, end)?;
                 }
                 for p in ctx.continue_patches {
-                    self.patch_jump(p, incr_pc);
+                    self.patch_jump(p, incr_pc)?;
                 }
 
                 self.free_temp(1); // bound
@@ -1098,17 +1117,17 @@ impl<'a> Compiler<'a> {
                 });
                 self.free_temp(1);
                 self.emit(Instr::Jump {
-                    target: cond_pc as i16,
+                    target: Self::jump_target(cond_pc)?,
                 });
 
                 let end = self.here();
-                self.patch_jump(jf, end);
+                self.patch_jump(jf, end)?;
                 let ctx = self.loop_stack.pop().unwrap();
                 for p in ctx.break_patches {
-                    self.patch_jump(p, end);
+                    self.patch_jump(p, end)?;
                 }
                 for p in ctx.continue_patches {
-                    self.patch_jump(p, incr_pc);
+                    self.patch_jump(p, incr_pc)?;
                 }
 
                 self.free_temp(3); // iter_reg, len_reg, idx_reg
@@ -1124,7 +1143,7 @@ impl<'a> Compiler<'a> {
                 self.compile_block(except_body)?;
 
                 let after = self.here();
-                self.patch_jump(skip_handler, after);
+                self.patch_jump(skip_handler, after)?;
                 self.exception_ranges.push(ExceptionRange {
                     start_pc: start,
                     end_pc: end,

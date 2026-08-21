@@ -110,6 +110,12 @@ pub enum TextError {
     InvalidRequirements(String),
     /// Значение, которое не переживает печать (объект в константах).
     Unrepresentable(&'static str),
+    /// Цель перехода вне чанка: номер чанка, `pc` инструкции и сама цель.
+    BadJumpTarget {
+        chunk: usize,
+        pc: usize,
+        target: i16,
+    },
 }
 
 impl std::fmt::Display for TextError {
@@ -120,6 +126,10 @@ impl std::fmt::Display for TextError {
             TextError::InvalidRequirements(what) => {
                 write!(f, "требования компонентов: {what}")
             }
+            TextError::BadJumpTarget { chunk, pc, target } => write!(
+                f,
+                "чанк {chunk}, инструкция {pc}: цель перехода {target} вне чанка"
+            ),
             TextError::Unrepresentable(what) => {
                 write!(f, "значение не представимо в текстовом байт-коде: {what}")
             }
@@ -668,6 +678,17 @@ fn unquote(no: usize, text: &str) -> Result<(String, String)> {
     Err(TextError::At(no, "незакрытая строка".to_string()))
 }
 
+/// Цель перехода, если инструкция — переход.
+fn jump_target_of(instr: &Instr) -> Option<i16> {
+    match instr {
+        Instr::Jump { target }
+        | Instr::JumpIfFalse { target, .. }
+        | Instr::JumpIfTrue { target, .. }
+        | Instr::JumpIfNotSkipped { target, .. } => Some(*target),
+        _ => None,
+    }
+}
+
 /// Разбирает текстовое представление программы байт-кода.
 ///
 /// # Errors
@@ -809,6 +830,30 @@ pub fn parse_program(src: &str) -> Result<Program> {
     for (i, chunk) in chunks.iter_mut().enumerate() {
         chunk.bundle_len =
             crate::bundle::compute(chunk, crate::bundle::module_overlap(i, module_vars.len()));
+    }
+
+    // Цели переходов из файла доверия не заслуживают ровно так же, как
+    // разметка бандлов. `pc` за концом чанка VM принимает за нормальное
+    // завершение, поэтому битая цель дала бы не диагностику, а МОЛЧА
+    // неверный ответ: программа закончилась бы без вывода и с нулевым кодом
+    // возврата. Проверка стоит один проход здесь, а не по ветвлению на
+    // каждом переходе, — горячий цикл её не замечает.
+    for (i, chunk) in chunks.iter().enumerate() {
+        let limit = chunk.instrs.len();
+        for (pc, instr) in chunk.instrs.iter().enumerate() {
+            let Some(target) = jump_target_of(instr) else {
+                continue;
+            };
+            // `target == limit` законно: так выглядит выход за последнюю
+            // инструкцию чанка, то есть нормальное завершение.
+            if target < 0 || target as usize > limit {
+                return Err(TextError::BadJumpTarget {
+                    chunk: i,
+                    pc,
+                    target,
+                });
+            }
+        }
     }
 
     Ok(Program {
