@@ -465,21 +465,26 @@ fn letter_of(id: TypeId) -> Option<&'static str> {
 
 /// Буквы описания типов в каноническом порядке платформы; дубликаты
 /// схлопываются самим обходом канона.
-fn canonical_letters(type_ids: &[TypeId]) -> RtResult<Vec<&'static str>> {
-    for type_id in type_ids {
-        if !COLUMN_TYPE_LETTERS
-            .iter()
-            .any(|(known, _)| known == type_id)
-        {
+fn canonical_letters(types: &[TypeRef]) -> RtResult<Vec<&'static str>> {
+    let mut ids = Vec::with_capacity(types.len());
+    for reference in types {
+        // Буквы измерены только у нативных типов; тип компонента во
+        // внутреннем формате не представим — как и `Тип` от него.
+        let Some(id) = reference.native() else {
             return Err(err(format!(
-                "тип «{:?}» в описании типов не представим во внутреннем формате",
-                type_id
+                "тип «{reference}» в описании типов не представим во внутреннем формате"
+            )));
+        };
+        if !COLUMN_TYPE_LETTERS.iter().any(|(known, _)| *known == id) {
+            return Err(err(format!(
+                "тип «{id:?}» в описании типов не представим во внутреннем формате"
             )));
         }
+        ids.push(id);
     }
     Ok(COLUMN_TYPE_LETTERS
         .iter()
-        .filter(|(known, _)| type_ids.contains(known))
+        .filter(|(known, _)| ids.contains(known))
         .map(|(_, letter)| *letter)
         .collect())
 }
@@ -532,7 +537,7 @@ fn table_to_writer(
             w.open();
             w.quoted("Pattern");
             if let Some(Some(column_types)) = types.get(idx) {
-                let ids: Vec<crate::TypeId> = column_types.iter().map(|t| t.id).collect();
+                let ids: Vec<TypeRef> = column_types.iter().map(|t| t.id).collect();
                 for letter in canonical_letters(&ids).map_err(|_| {
                     err(format!(
                         "тип колонки «{name}» не представим во внутреннем формате"
@@ -540,7 +545,7 @@ fn table_to_writer(
                 })? {
                     let quals = column_types
                         .iter()
-                        .find(|t| letter_of(t.id) == Some(letter))
+                        .find(|t| t.id.native().and_then(letter_of) == Some(letter))
                         .map(|t| t.quals.as_slice())
                         .unwrap_or(&[]);
                     w.open();
@@ -1874,7 +1879,7 @@ fn convert_object(
                 else {
                     return Ok(opaque(node));
                 };
-                ids.push(*id);
+                ids.push(TypeRef::Native(*id));
             }
             Ok(BslValue::Object(Rc::new(BslObject::TypeDescription(ids))))
         }
@@ -2064,7 +2069,10 @@ fn column_pattern(pattern: &[Node]) -> RtResult<(Option<Vec<crate::table::Column
                             .collect()
                     })
                     .unwrap_or_default();
-                ids.push(crate::table::ColumnType { id, quals });
+                ids.push(crate::table::ColumnType {
+                    id: TypeRef::Native(id),
+                    quals,
+                });
             }
             None => {
                 representable = false;
@@ -2313,7 +2321,9 @@ mod tests {
         {
             let mut t = t.borrow_mut();
             t.add_column("С");
-            t.column_types[0] = Some(vec![crate::table::ColumnType::plain(TypeId::String)]);
+            t.column_types[0] = Some(vec![crate::table::ColumnType::plain(TypeRef::Native(
+                TypeId::String,
+            ))]);
         }
         assert_eq!(
             write(&table_value(t)),
@@ -2327,8 +2337,14 @@ mod tests {
         // платформа всегда пишет буквы в порядке B, S, D, N.
         let expected = "{\"#\",acf6192e-81ca-46ef-93a6-5a6968b78663,\n{9,\n{1,\n{0,\"К\",\n{\"Pattern\",\n{\"S\"},\n{\"N\"}\n},\"\",0}\n},\n{2,1,0,0,\n{1,0},0,-1},\n{0,0}\n}\n}";
         for order in [
-            vec![TypeId::Number, TypeId::String],
-            vec![TypeId::String, TypeId::Number],
+            vec![
+                TypeRef::Native(TypeId::Number),
+                TypeRef::Native(TypeId::String),
+            ],
+            vec![
+                TypeRef::Native(TypeId::String),
+                TypeRef::Native(TypeId::Number),
+            ],
         ]
         .map(|ids| {
             ids.into_iter()
@@ -2350,8 +2366,8 @@ mod tests {
         // Эталоны `CMP.VALUE`/`CMP.VALUE.EMPTY`: значение `ОписаниеТипов`
         // — тот же {"Pattern",…} под своим видом объекта.
         let td = BslValue::Object(Rc::new(BslObject::TypeDescription(vec![
-            TypeId::Number,
-            TypeId::String,
+            TypeRef::Native(TypeId::Number),
+            TypeRef::Native(TypeId::String),
         ])));
         let text = write(&td);
         assert_eq!(

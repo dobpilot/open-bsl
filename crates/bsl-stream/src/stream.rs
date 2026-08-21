@@ -1270,6 +1270,24 @@ mod tests {
         // тоже только один из двух — так же несимметрично, как у платформы.
         assert!(FILE_STREAM_TYPE.answers_to("Файловый поток"));
     }
+
+    /// НАПРАВЛЕНИЕ асимметрии: на общее представление «Файловый поток»
+    /// откликаются ОБА типа, а `Тип("Файловый поток")` обязан отдать
+    /// именно `ФайловыйПоток` — измерено. Разрешение берёт ПЕРВОЕ
+    /// совпадение в списке типов библиотеки, поэтому порядок в нём —
+    /// часть контракта, а не оформление: без этого теста перестановка
+    /// строки молча развернула бы измеренный факт.
+    #[test]
+    fn the_shared_display_name_resolves_to_the_file_stream() {
+        let mut rt = bsl_rt::RuntimeShapes::seeded(Vec::new(), Vec::new());
+        rt.component_types = crate::library().types.to_vec();
+        let found = rt.component_type("Файловый поток").expect("тип найден");
+        assert_eq!(found.name, FILE_STREAM_TYPE.name);
+        assert_eq!(
+            rt.component_type("ПотокВПамяти").expect("тип найден").name,
+            MEMORY_STREAM_TYPE.name
+        );
+    }
     #[test]
     fn method_codes_are_static_and_dense() {
         for table in [super::STREAM_METHODS, super::FILE_STREAMS_MANAGER_METHODS] {

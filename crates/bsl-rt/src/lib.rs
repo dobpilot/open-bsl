@@ -1404,15 +1404,22 @@ impl BslValue {
     ///
     /// Возвращает ошибку, если аргумент не строка либо содержит имя
     /// незарегистрированного типа.
-    pub fn new_type_description(names: &BslValue) -> RtResult<Self> {
+    /// Имена ищутся там же, где их ищет `Тип("Имя")`: сперва в таблице
+    /// ядра, потом среди типов компонентов этого прогона. Без второго
+    /// шага `Новый ОписаниеТипов("ЧтениеJSON")` перестал бы работать,
+    /// когда компонентные типы ушли из закрытого реестра `TypeId`.
+    pub fn new_type_description(names: &BslValue, rt: &RuntimeShapes) -> RtResult<Self> {
         let names = names.as_str("Новый ОписаниеТипов")?.to_string();
-        let mut types = Vec::new();
+        let mut types: Vec<TypeRef> = Vec::new();
         for name in names
             .split(',')
             .map(str::trim)
             .filter(|name| !name.is_empty())
         {
-            let ty = TypeId::lookup(name).ok_or_else(|| RtError::UnknownType(name.to_string()))?;
+            let ty = TypeId::lookup(name)
+                .map(TypeRef::Native)
+                .or_else(|| rt.component_type(name).map(TypeRef::Object))
+                .ok_or_else(|| RtError::UnknownType(name.to_string()))?;
             if !types.contains(&ty) {
                 types.push(ty);
             }
@@ -2215,7 +2222,7 @@ impl BslValue {
                         Ok(BslValue::Str(BslString::from_str(column_name)))
                     } else if folded_eq(name, "ТипЗначения") || folded_eq(name, "ValueType")
                     {
-                        let types: Vec<TypeId> = data
+                        let types: Vec<TypeRef> = data
                             .borrow()
                             .column_types
                             .get(column)

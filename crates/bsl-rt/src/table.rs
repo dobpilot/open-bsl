@@ -78,12 +78,12 @@ const MISSING_POSITION: usize = usize::MAX;
 /// ([`ValueTableData::adjust_to_column_type`]); написание — транзитом.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ColumnType {
-    pub id: crate::TypeId,
+    pub id: crate::TypeRef,
     pub quals: Vec<String>,
 }
 
 impl ColumnType {
-    pub fn plain(id: crate::TypeId) -> Self {
+    pub fn plain(id: crate::TypeRef) -> Self {
         ColumnType {
             id,
             quals: Vec::new(),
@@ -260,7 +260,12 @@ fn default_of(id: crate::TypeId) -> BslValue {
 /// Квалификаторы типа: число — округление дробной части и насыщение целой,
 /// строка — обрезка по длине, дата — обнуление «чужих» частей.
 fn apply_qualifiers(value: BslValue, t: &ColumnType) -> BslValue {
-    match (&value, t.id) {
+    // Квалификаторы описаны только у нативных типов: у колонки с типом
+    // компонента их нет и быть не может, значение проходит как есть.
+    let Some(id) = t.id.native() else {
+        return value;
+    };
+    match (&value, id) {
         (BslValue::Number(n), crate::TypeId::Number) => {
             let digits: u32 = t.quals.first().and_then(|q| q.parse().ok()).unwrap_or(0);
             if digits == 0 {
@@ -467,7 +472,7 @@ impl ValueTableData {
         self.add_typed_column(name, None);
     }
 
-    pub fn add_typed_column(&mut self, name: &str, value_types: Option<Vec<crate::TypeId>>) {
+    pub fn add_typed_column(&mut self, name: &str, value_types: Option<Vec<crate::TypeRef>>) {
         self.add_constrained_column(
             name,
             value_types.map(|ids| ids.into_iter().map(ColumnType::plain).collect()),
@@ -593,11 +598,8 @@ impl ValueTableData {
         if types.is_empty() {
             return value;
         }
-        // Колонка описана нативными типами: тип-дескриптор компонента в
-        // её список попасть не может, и значение с таким типом проходит
-        // без приведения.
         let value_type = match value.type_of() {
-            Ok(BslValue::Type(TypeRef::Native(id))) => id,
+            Ok(BslValue::Type(reference)) => reference,
             _ => return value,
         };
         if let Some(t) = types.iter().find(|t| t.id == value_type) {
@@ -617,15 +619,20 @@ impl ValueTableData {
             crate::TypeId::Number,
             crate::TypeId::Boolean,
         ] {
-            let Some(t) = types.iter().find(|t| t.id == probe) else {
+            let Some(t) = types.iter().find(|t| t.id == TypeRef::Native(probe)) else {
                 continue;
             };
             if let Some(converted) = convert_to(&value, probe) {
                 return apply_qualifiers(converted, t);
             }
         }
+        // Колонка с единственным типом приводит значение к умолчанию
+        // этого типа; у типа компонента умолчания нет — там `Неопределено`.
         if types.len() == 1 {
-            return apply_qualifiers(default_of(types[0].id), &types[0]);
+            let Some(id) = types[0].id.native() else {
+                return BslValue::Undefined;
+            };
+            return apply_qualifiers(default_of(id), &types[0]);
         }
         BslValue::Undefined
     }
@@ -1437,7 +1444,7 @@ mod tests {
                 types
                     .iter()
                     .map(|(id, quals)| ColumnType {
-                        id: *id,
+                        id: crate::TypeRef::Native(*id),
                         quals: quals.iter().map(|q| q.to_string()).collect(),
                     })
                     .collect(),

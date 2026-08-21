@@ -81,11 +81,18 @@ impl TypeDescriptor {
         }
     }
 
-    /// Ищется ли тип по этому имени. Регистр не значим, как везде в языке.
+    /// Ищется ли тип по этому имени. Сравнение — тем же правилом, что у
+    /// нативной таблицы (`types::squash`): регистр и пробелы внутри имени
+    /// не значимы, иначе у компонентных типов было бы своё правило поиска,
+    /// отличное от типов ядра.
     pub fn answers_to(&self, name: &str) -> bool {
-        crate::folded_eq(self.name, name)
-            || crate::folded_eq(self.type_display, name)
-            || self.type_names.iter().any(|n| crate::folded_eq(n, name))
+        let key = crate::types::squash(name);
+        crate::types::squash(self.name) == key
+            || crate::types::squash(self.type_display) == key
+            || self
+                .type_names
+                .iter()
+                .any(|candidate| crate::types::squash(candidate) == key)
     }
 }
 

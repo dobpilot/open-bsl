@@ -1824,7 +1824,7 @@ fn step_cold(
         }
         Instr::NewTypeDescription { dst, names } => {
             let names = reg_load(stack, frames[frame_idx].reg_index(names))?;
-            let value = BslValue::new_type_description(&names)?;
+            let value = BslValue::new_type_description(&names, runtime_shapes)?;
             let d = frames[frame_idx].reg_index(dst);
             reg_store(stack, d, value)?;
             frames[frame_idx].pc += 1;
@@ -3092,6 +3092,7 @@ fn cmp(
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
     use bsl_bytecode::compile_program;
     use bsl_number::BslNumber;
@@ -3120,6 +3121,20 @@ mod tests {
         let program = compile_program(&resolved).unwrap_or_else(|e| panic!("compile error: {e:?}"));
         run_program_with_registry(&program, &registry)
             .unwrap_or_else(|e| panic!("runtime error: {e:?}"))
+    }
+
+    /// `ОписаниеТипов` берёт имена оттуда же, откуда `Тип("Имя")`: имя
+    /// типа компонента обязано работать наравне с нативным. Когда
+    /// компонентные типы ушли из закрытого реестра `TypeId`, этот путь
+    /// остался единственным, который их не видел, — а фикстуры такого
+    /// сочетания не пробуют.
+    #[test]
+    fn a_type_description_accepts_a_component_type_by_name() {
+        let описание = run_src_with_json("Возврат Строка(Новый ОписаниеТипов(\"ЧтениеJSON\"));");
+        assert_eq!(описание.to_string(), "ОписаниеТипов");
+        // И пробелы в имени по-прежнему не значимы — как у нативных.
+        let пробел = run_src_with_json("Возврат Строка(Новый ОписаниеТипов(\"Чтение JSON\"));");
+        assert_eq!(пробел.to_string(), "ОписаниеТипов");
     }
 
     fn component_answer(
