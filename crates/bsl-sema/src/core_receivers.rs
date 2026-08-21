@@ -33,7 +33,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use bsl_syntax::{Expr, Param, Stmt};
+use bsl_syntax::{Expr, LValue, Param, Stmt};
 
 use crate::resolver::NEW_TYPES;
 
@@ -184,13 +184,18 @@ impl Collector<'_> {
     fn walk_stmt(&mut self, stmt: &Stmt) {
         match stmt {
             Stmt::Assign { target, value } => {
-                if let Expr::Ident(name) = target {
-                    let ctor = self.classify_ctor(value);
-                    self.assign(name, ctor);
-                } else {
+                match target {
+                    LValue::Name(name) => {
+                        let ctor = self.classify_ctor(value);
+                        self.assign(name, ctor);
+                    }
                     // `а.поле = х` и `а[и] = х` мутируют содержимое, но не
                     // перепривязывают слот — тип приёмника не меняется.
-                    self.walk_expr(target);
+                    LValue::Index { obj, index } => {
+                        self.walk_expr(obj);
+                        self.walk_expr(index);
+                    }
+                    LValue::Field { obj, .. } => self.walk_expr(obj),
                 }
                 self.walk_expr(value);
             }

@@ -1,12 +1,23 @@
 use std::collections::{HashMap, HashSet};
 
 use bsl_number::BslNumber;
-use bsl_syntax::{Expr as AExpr, Item, Stmt as AStmt};
+use bsl_syntax::{Expr as AExpr, Item, LValue, Stmt as AStmt};
 
 use crate::core_receivers::{self, CoreReceiver};
 use crate::resolved::{
     RExpr, RStmt, Resolved, ResolvedArg, ResolvedFunction, ResolvedParam, ResolvedProgram,
 };
+
+/// Позиция, в которой разрешается вызов.
+///
+/// Различие несёт СЕМАНТИКУ, а не удобство: глобальная процедура законна
+/// только как оператор (`Сообщить(1);`), а в выражении — ошибка, потому
+/// что значения у неё нет.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CallPosition {
+    Expression,
+    Statement,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SemaError {
@@ -197,7 +208,6 @@ fn resolve_program_impl(
             registry,
             used_libraries: HashSet::new(),
             strict_stmt_calls: true,
-            stmt_call: false,
             core_locals: Some(&core_maps.functions[func_index]),
             core_module: Some(&core_maps.module_slots),
         };
@@ -242,7 +252,6 @@ fn resolve_program_impl(
         registry,
         used_libraries: HashSet::new(),
         strict_stmt_calls: true,
-        stmt_call: false,
         core_locals: Some(&core_maps.top),
         core_module: None,
     };
@@ -300,7 +309,6 @@ pub fn resolve_script(stmts: &[AStmt]) -> Result<Resolved, SemaError> {
         registry: None,
         used_libraries: HashSet::new(),
         strict_stmt_calls: true,
-        stmt_call: false,
         core_locals: None,
         core_module: None,
     };
@@ -476,7 +484,6 @@ fn resolve_snippet_stmts_mode_registry(
         registry,
         used_libraries: HashSet::new(),
         strict_stmt_calls,
-        stmt_call: false,
         core_locals: None,
         core_module: None,
     };
@@ -538,11 +545,12 @@ struct Resolver<'a> {
     /// модулях и фрагментах `Выполнить` — да, как на платформе; в REPL —
     /// нет: голый вызов `СтрДлина("аб")` там печатает значение, и лишать
     /// REPL этого ради правила о компиляции модулей незачем.
+    ///
+    /// Остаётся булевым сознательно: у него ровно два очевидных состояния,
+    /// одно место чтения и объяснение прямо здесь. Имя-перечисление на
+    /// месте этого поля не убрало бы ни ветвления, ни комментария —
+    /// значит, добавило бы только тип.
     strict_stmt_calls: bool,
-    /// Взводится веткой `ExprStmt` на время разрешения верхнего выражения
-    /// оператора-вызова и потребляется входом в `resolve_expr`: только в
-    /// этой позиции легальна глобальная процедура.
-    stmt_call: bool,
     /// Статически доказанные ядровые приёмники этой области (см.
     /// `core_receivers`): локальные — по имени в верхнем регистре. `None`
     /// у REPL и фрагментов `Выполнить` — их слоты живут дольше одного
@@ -605,7 +613,7 @@ impl<'a> Resolver<'a> {
     fn resolve_stmt(&mut self, s: &AStmt) -> Result<Option<RStmt>, SemaError> {
         match s {
             AStmt::Assign { target, value } => match target {
-                AExpr::Ident(name) => {
+                LValue::Name(name) => {
                     // Уже известное локальное имя — обычная запись. Иначе
                     // ищем модульное: присваивание модульной переменной
                     // ОБЯЗАНО писать в неё, а не заводить локальную копию,
@@ -623,13 +631,13 @@ impl<'a> Resolver<'a> {
                     let value = self.resolve_expr(value)?;
                     Ok(Some(RStmt::AssignLocal { slot, value }))
                 }
-                AExpr::Index { obj, index } => {
+                LValue::Index { obj, index } => {
                     let obj = self.resolve_expr(obj)?;
                     let index = self.resolve_expr(index)?;
                     let value = self.resolve_expr(value)?;
                     Ok(Some(RStmt::AssignIndex { obj, index, value }))
                 }
-                AExpr::Field { obj, name } => {
+                LValue::Field { obj, name } => {
                     let obj = self.resolve_expr(obj)?;
                     let value = self.resolve_expr(value)?;
                     // Запись свойства всегда компилируется в закрытый
@@ -641,9 +649,6 @@ impl<'a> Resolver<'a> {
                         value,
                     }))
                 }
-                _ => Err(SemaError::Unsupported(
-                    "присваивание поддержано только в переменную, индекс или поле",
-                )),
             },
             AStmt::ExprStmt(e) => {
                 // Позиция оператора: единственное место, где легальна
@@ -652,8 +657,7 @@ impl<'a> Resolver<'a> {
                 // разрешения, а не по имени: пользовательская функция,
                 // затеняющая встроенное имя, разрешится в `RExpr::Call` и
                 // под правило не попадёт.
-                self.stmt_call = true;
-                let r = self.resolve_expr(e)?;
+                let r = self.resolve_expr_at(e, CallPosition::Statement)?;
                 let forbidden = match &r {
                     RExpr::CallBuiltinFn { builtin, .. } => builtin.is_intrinsic(),
                     RExpr::CallComponent { kind, .. } => *kind == bsl_rt::FunctionKind::Intrinsic,
@@ -763,12 +767,23 @@ impl<'a> Resolver<'a> {
         }
     }
 
+    /// Разрешает выражение в позиции ВЫРАЖЕНИЯ.
+    ///
+    /// Вложенные части — аргументы, индексы, объекты цепочек — разрешаются
+    /// только этим входом, поэтому процедура в аргументе
+    /// (`Сообщить(Сообщить(1))`) не проскочит: позиция оператора туда
+    /// физически не передаётся. Раньше её нёс изменяемый флаг, который
+    /// ветка `ExprStmt` взводила, а вход сюда гасил `mem::take`; правило
+    /// держалось на том, что гашение не забудут.
     fn resolve_expr(&mut self, e: &AExpr) -> Result<RExpr, SemaError> {
-        // Потребляем флаг позиции оператора: он относится ровно к ЭТОМУ
-        // выражению. Вложенные выражения — аргументы, индексы, объекты
-        // цепочек — заходят сюда уже с погашенным флагом, поэтому
-        // процедура в аргументе (`Сообщить(Сообщить(1))`) не проскочит.
-        let stmt_call = std::mem::take(&mut self.stmt_call);
+        self.resolve_expr_at(e, CallPosition::Expression)
+    }
+
+    /// То же с явной позицией. Отдельный вход, а не параметр у
+    /// `resolve_expr`: позиция значима ровно для ОДНОГО узла — верхнего
+    /// вызова оператора, — и её незачем протаскивать через полсотни
+    /// вызовов, которым она всегда `Expression`.
+    fn resolve_expr_at(&mut self, e: &AExpr, position: CallPosition) -> Result<RExpr, SemaError> {
         match e {
             AExpr::Number(text) => {
                 let n = BslNumber::parse_canonical(text).unwrap_or_else(|err| {
@@ -888,7 +903,7 @@ impl<'a> Resolver<'a> {
                 lhs: Box::new(self.resolve_expr(lhs)?),
                 rhs: Box::new(self.resolve_expr(rhs)?),
             }),
-            AExpr::Call { callee, args } => self.resolve_call(callee, args, stmt_call),
+            AExpr::Call { callee, args } => self.resolve_call(callee, args, position),
             AExpr::Str(s) => Ok(RExpr::Str(s.clone())),
             // Литерал `'ГГГГММДД'`/`'ГГГГММДДЧЧММСС'`. Лексер уже проверил,
             // что внутри только цифры и их 8 или 14, — но НЕ проверил, что
@@ -1265,7 +1280,7 @@ impl<'a> Resolver<'a> {
         &mut self,
         callee: &AExpr,
         args: &[Option<AExpr>],
-        stmt_call: bool,
+        position: CallPosition,
     ) -> Result<RExpr, SemaError> {
         match callee {
             AExpr::Ident(name) => {
@@ -1311,7 +1326,9 @@ impl<'a> Resolver<'a> {
                     let descriptor = registry
                         .function(library_index, function)
                         .expect("индекс получен из таблицы имён этого реестра");
-                    if descriptor.kind == bsl_rt::FunctionKind::Procedure && !stmt_call {
+                    if descriptor.kind == bsl_rt::FunctionKind::Procedure
+                        && position != CallPosition::Statement
+                    {
                         return Err(SemaError::ProcedureAsFunction(name.clone()));
                     }
                     let found: u8 =
@@ -1381,7 +1398,7 @@ impl<'a> Resolver<'a> {
                     // `Х = Сообщить(1)` платформа отвергает («Обращение к
                     // процедуре как к функции») — ИЗМЕРЕНО, якорь
                     // `CALL.EXPR.PROCEDURE`.
-                    if builtin.is_procedure() && !stmt_call {
+                    if builtin.is_procedure() && position != CallPosition::Statement {
                         return Err(SemaError::ProcedureAsFunction(name.clone()));
                     }
                     let (min, max) = builtin.arity_range();
@@ -2153,10 +2170,19 @@ mod tests {
     /// как к функции», в том числе аргументом другого вызова.
     #[test]
     fn a_procedure_in_an_expression_is_rejected() {
+        // Позиция оператора относится ровно к ВЕРХНЕМУ узлу; глубина
+        // вложения роли не играет. Пока её нёс изменяемый флаг, это
+        // держалось на том, что вход в разрешение выражения его погасит, —
+        // теперь позиция просто не передаётся вглубь (см. `CallPosition`).
         for src in [
             "Х = Сообщить(1);",
             "Сообщить(Сообщить(1));",
             "Х = ЗаполнитьЗначенияСвойств(1, 2);",
+            "Х = 1 + Сообщить(1);",
+            "Х = ?(Истина, Сообщить(1), 2);",
+            "м = Новый Массив(3);\nм[0] = Сообщить(1);",
+            "м = Новый Массив(3);\nСообщить(м[Сообщить(0)]);",
+            "с = Новый Структура(\"а\", 1);\nс.а = Сообщить(1);",
         ] {
             let prog = parse(src).unwrap();
             let err = resolve_script(&items_to_stmts(prog.items)).unwrap_err();

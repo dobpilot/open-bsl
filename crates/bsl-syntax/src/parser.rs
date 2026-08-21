@@ -459,11 +459,15 @@ impl<'src> Parser<'src> {
     fn parse_simple_stmt(&mut self) -> Result<Stmt, ParseError> {
         let expr = self.parse_postfix()?;
         if self.eat(&TokenKind::Eq) {
+            // Цель проверяется ЗДЕСЬ, где известна позиция: слева от `=`
+            // законны только имя, индекс и поле (см. `LValue`).
+            let target = LValue::from_expr(expr).ok_or_else(|| {
+                self.error_here(
+                    "слева от «=» ожидались переменная, элемент по индексу или поле".to_string(),
+                )
+            })?;
             let value = self.parse_expr()?;
-            Ok(Stmt::Assign {
-                target: expr,
-                value,
-            })
+            Ok(Stmt::Assign { target, value })
         } else {
             Ok(Stmt::ExprStmt(expr))
         }
@@ -838,7 +842,7 @@ mod tests {
         assert_eq!(
             prog.items,
             vec![Item::Stmt(Stmt::Assign {
-                target: Expr::Ident("PI".into()),
+                target: LValue::Name("PI".into()),
                 value: Expr::Number("3.14".into()),
             })]
         );
@@ -864,7 +868,7 @@ mod tests {
         assert_eq!(
             prog.items[0],
             Item::Stmt(Stmt::Assign {
-                target: Expr::Ident("x".into()),
+                target: LValue::Name("x".into()),
                 value: Expr::Number("5".into()),
             })
         );
@@ -892,14 +896,38 @@ mod tests {
         };
         assert_eq!(
             target,
-            Expr::Field {
-                obj: Box::new(Expr::Index {
+            LValue::Field {
+                obj: Expr::Index {
                     obj: Box::new(Expr::Ident("bodies".into())),
                     index: Box::new(Expr::Number("0".into())),
-                }),
+                },
                 name: "vx".into(),
             }
         );
+    }
+
+    /// Недопустимая цель — ошибка РАЗБОРА, а не резолвинга: слева от `=`
+    /// стоит выражение, которое целью быть не может, и позиция известна
+    /// именно здесь.
+    #[test]
+    fn a_target_that_cannot_be_assigned_to_is_a_parse_error() {
+        // Ровно те формы, что доходят до проверки: постфиксная цепочка
+        // разобралась, а следом стоит `=`. Всё остальное (`-х = 5`,
+        // `х + 1 = 6`) обрывается раньше — там ошибка не про цель.
+        for src in ["Ф() = 1;", "1 = 2;", "\"а\" = 3;", "х.Ф() = 4;"] {
+            let error = parse(src).expect_err(&format!("должно быть ошибкой: {src}"));
+            let text = format!("{error:?}");
+            assert!(
+                text.contains("слева от «=»"),
+                "ожидалась диагностика цели присваивания для {src}, получено {text}"
+            );
+        }
+
+        // А скобки прозрачны: `(х)` разбирается в то же `Expr::Ident`, что
+        // и `х`, поэтому целью остаётся. Так было и до введения `LValue`;
+        // на платформе это НЕ ИЗМЕРЯЛОСЬ, и тест закрепляет наше поведение,
+        // чтобы его не «починили» мимоходом.
+        assert!(parse("(х) = 4;").is_ok());
     }
 
     #[test]

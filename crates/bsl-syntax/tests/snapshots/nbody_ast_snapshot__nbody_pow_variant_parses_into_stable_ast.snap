@@ -1,5 +1,6 @@
 ---
 source: crates/bsl-syntax/tests/nbody_ast_snapshot.rs
+assertion_line: 24
 expression: program
 ---
 Program {
@@ -11,7 +12,7 @@ Program {
                 export: false,
                 body: [
                     Assign {
-                        target: Ident(
+                        target: Name(
                             "PI",
                         ),
                         value: Number(
@@ -19,7 +20,7 @@ Program {
                         ),
                     },
                     Assign {
-                        target: Ident(
+                        target: Name(
                             "SOLAR_MASS",
                         ),
                         value: Binary {
@@ -39,7 +40,7 @@ Program {
                         },
                     },
                     Assign {
-                        target: Ident(
+                        target: Name(
                             "DAYS_PER_YEAR",
                         ),
                         value: Number(
@@ -83,7 +84,7 @@ Program {
                 export: false,
                 body: [
                     Assign {
-                        target: Ident(
+                        target: Name(
                             "PI",
                         ),
                         value: Field {
@@ -94,7 +95,7 @@ Program {
                         },
                     },
                     Assign {
-                        target: Ident(
+                        target: Name(
                             "SOLAR_MASS",
                         ),
                         value: Field {
@@ -105,7 +106,7 @@ Program {
                         },
                     },
                     Assign {
-                        target: Ident(
+                        target: Name(
                             "DAYS_PER_YEAR",
                         ),
                         value: Field {
@@ -116,7 +117,7 @@ Program {
                         },
                     },
                     Assign {
-                        target: Ident(
+                        target: Name(
                             "bodies",
                         ),
                         value: New {
@@ -621,7 +622,7 @@ Program {
                 export: false,
                 body: [
                     Assign {
-                        target: Ident(
+                        target: Name(
                             "px",
                         ),
                         value: Number(
@@ -629,7 +630,7 @@ Program {
                         ),
                     },
                     Assign {
-                        target: Ident(
+                        target: Name(
                             "py",
                         ),
                         value: Number(
@@ -637,7 +638,7 @@ Program {
                         ),
                     },
                     Assign {
-                        target: Ident(
+                        target: Name(
                             "pz",
                         ),
                         value: Number(
@@ -651,7 +652,7 @@ Program {
                         ),
                         body: [
                             Assign {
-                                target: Ident(
+                                target: Name(
                                     "px",
                                 ),
                                 value: Binary {
@@ -677,7 +678,7 @@ Program {
                                 },
                             },
                             Assign {
-                                target: Ident(
+                                target: Name(
                                     "py",
                                 ),
                                 value: Binary {
@@ -703,7 +704,7 @@ Program {
                                 },
                             },
                             Assign {
-                                target: Ident(
+                                target: Name(
                                     "pz",
                                 ),
                                 value: Binary {
@@ -830,7 +831,7 @@ Program {
                 export: false,
                 body: [
                     Assign {
-                        target: Ident(
+                        target: Name(
                             "e",
                         ),
                         value: Number(
@@ -859,7 +860,7 @@ Program {
                         },
                         body: [
                             Assign {
-                                target: Ident(
+                                target: Name(
                                     "b",
                                 ),
                                 value: Index {
@@ -872,7 +873,7 @@ Program {
                                 },
                             },
                             Assign {
-                                target: Ident(
+                                target: Name(
                                     "e",
                                 ),
                                 value: Binary {
@@ -976,7 +977,7 @@ Program {
                                 },
                                 body: [
                                     Assign {
-                                        target: Ident(
+                                        target: Name(
                                             "b2",
                                         ),
                                         value: Index {
@@ -989,7 +990,7 @@ Program {
                                         },
                                     },
                                     Assign {
-                                        target: Ident(
+                                        target: Name(
                                             "dx",
                                         ),
                                         value: Binary {
@@ -1009,7 +1010,7 @@ Program {
                                         },
                                     },
                                     Assign {
-                                        target: Ident(
+                                        target: Name(
                                             "dy",
                                         ),
                                         value: Binary {
@@ -1029,7 +1030,7 @@ Program {
                                         },
                                     },
                                     Assign {
-                                        target: Ident(
+                                        target: Name(
                                             "dz",
                                         ),
                                         value: Binary {
@@ -1049,7 +1050,7 @@ Program {
                                         },
                                     },
                                     Assign {
-                                        target: Ident(
+                                        target: Name(
                                             "distance",
                                         ),
                                         value: Call {
@@ -1096,7 +1097,7 @@ Program {
                                         },
                                     },
                                     Assign {
-                                        target: Ident(
+                                        target: Name(
                                             "e",
                                         ),
                                         value: Binary {
@@ -1180,7 +1181,7 @@ Program {
                         },
                         body: [
                             Assign {
-                                target: Ident(
+                                target: Name(
                                     "b",
                                 ),
                                 value: Index {
@@ -1220,7 +1221,7 @@ Program {
                                 },
                                 body: [
                                     Assign {
-                                        target: Ident(
+                                        target: Name(
                                             "b2",
                                         ),
                                         value: Index {
@@ -1233,7 +1234,7 @@ Program {
                                         },
                                     },
                                     Assign {
-                                        target: Ident(
+                                        target: Name(
                                             "dx",
                                         ),
                                         value: Binary {
@@ -1253,7 +1254,7 @@ Program {
                                         },
                                     },
                                     Assign {
-                                        target: Ident(
+                                        target: Name(
                                             "dy",
                                         ),
                                         value: Binary {
@@ -1273,7 +1274,7 @@ Program {
                                         },
                                     },
                                     Assign {
-                                        target: Ident(
+                                        target: Name(
                                             "dz",
                                         ),
                                         value: Binary {
@@ -1293,7 +1294,7 @@ Program {
                                         },
                                     },
                                     Assign {
-                                        target: Ident(
+                                        target: Name(
                                             "distanced",
                                         ),
                                         value: Binary {
@@ -1355,7 +1356,7 @@ Program {
                                         },
                                     },
                                     Assign {
-                                        target: Ident(
+                                        target: Name(
                                             "distance",
                                         ),
                                         value: Call {
@@ -1372,7 +1373,7 @@ Program {
                                         },
                                     },
                                     Assign {
-                                        target: Ident(
+                                        target: Name(
                                             "mag",
                                         ),
                                         value: Binary {
@@ -1627,7 +1628,7 @@ Program {
                         },
                         body: [
                             Assign {
-                                target: Ident(
+                                target: Name(
                                     "b",
                                 ),
                                 value: Index {
@@ -1738,7 +1739,7 @@ Program {
                 export: false,
                 body: [
                     Assign {
-                        target: Ident(
+                        target: Name(
                             "const",
                         ),
                         value: Call {
@@ -1749,7 +1750,7 @@ Program {
                         },
                     },
                     Assign {
-                        target: Ident(
+                        target: Name(
                             "bodies",
                         ),
                         value: Call {
