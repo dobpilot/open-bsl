@@ -207,6 +207,12 @@ pub trait ObjectProtocol: fmt::Debug + ObjectDowncast {
         &[]
     }
 
+    /// Чтение и запись по индексу. Умолчание отвечает за все типы этого
+    /// дерева: индексируемые коллекции ядра до трейта не доходят, их
+    /// обслуживает `BslValue::get_index`/`set_index` напрямую. Пара
+    /// остаётся ради host-типа с индексным доступом — путь до неё живой
+    /// (ветвь `BslObject::Extension` в тех же функциях), а рабочее
+    /// переопределение есть в тестах VM.
     fn get_index(&self, _index: &BslValue) -> RtResult<BslValue> {
         Err(RtError::NotIndexable)
     }

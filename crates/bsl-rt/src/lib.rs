@@ -26,7 +26,7 @@ mod types;
 mod tz;
 mod uuid;
 mod vstr;
-pub use std::cmp::Ordering;
+use std::cmp::Ordering;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::io::Write;
@@ -46,34 +46,33 @@ pub use builtin::{
     call_builtin_fn_ctx, call_builtin_method, call_builtin_method_ctx, set_command_line_args,
 };
 pub use component::{
-    Arity, CallContext, ComponentCall, ConstructorCode, ConstructorDescriptor, FunctionCaller,
-    FunctionCode, FunctionDescriptor, FunctionKind, LibraryDependency, LibraryDescriptor,
-    LibraryKey, LibraryRequirement, MethodCall, MethodCode, MethodDescriptor, PropertyCode,
-    PropertyDescriptor, PropertyGet, PropertySet, RegistryError, RuntimeBuilder, RuntimeRegistry,
-    ValueFormatter, call_method_from_table, core_library, get_property_from_table,
-    set_property_from_table,
+    Arity, CallContext, ComponentCall, ConstructorCode, ConstructorDescriptor, FunctionCode,
+    FunctionDescriptor, FunctionKind, LibraryDependency, LibraryDescriptor, LibraryKey,
+    LibraryRequirement, MethodCall, MethodCode, MethodDescriptor, PropertyCode, PropertyDescriptor,
+    PropertyGet, PropertySet, RegistryError, RuntimeBuilder, RuntimeRegistry,
+    call_method_from_table, core_library, get_property_from_table, set_property_from_table,
 };
 pub use date::{
-    BslDate, DEFAULT_PATTERN as DEFAULT_DATE_PATTERN, DateBoundary, DatePart, UNIX_EPOCH_SECONDS,
+    BslDate, DEFAULT_PATTERN as DEFAULT_DATE_PATTERN, UNIX_EPOCH_SECONDS,
     format_long as format_date_long, format_pattern as format_date_pattern,
     local_date_from_utc_seconds, pseudo_unix_seconds,
 };
-pub use enums::{ENUM_NAMES, EnumKind, EnumValue, lookup_enum, lookup_member};
+use date::{DateBoundary, DatePart};
+pub use enums::{EnumKind, EnumValue, lookup_enum, lookup_member};
 pub use fold::folded_eq;
 pub use interner::{NameId, NameInterner};
 pub use locale::{Locale, NBSP};
-pub use map::MapData;
+use map::MapData;
 pub use object::{BslObject, StructureStorage};
 pub use object_protocol::{
     ByteStreamProtocol, ObjectDowncast, ObjectProtocol, ObjectRef, TypeDescriptor,
 };
 pub use runtime_shapes::RuntimeShapes;
 pub use shape::{MAX_SHAPE_TRANSITIONS, Shape, ShapeTable};
-pub use string::{BslString, MAX_TEMPLATE_ARGS};
-pub use table::{ColumnVstr, ValueTableData};
+pub use string::BslString;
+pub use table::ValueTableData;
 pub use types::{TypeId, TypeRef};
 pub use tz::local_offset_seconds;
-pub use vstr::{value_from_string_internal, value_to_string_internal};
 // Модель типов XDTO наружу крейта нужна целиком: строит её фабрика,
 // которой в этой реализации ещё нет, а до тех пор единственный её
 // потребитель — собственные тесты модуля.
