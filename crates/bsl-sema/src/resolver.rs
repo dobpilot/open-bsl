@@ -636,7 +636,6 @@ impl<'a> Resolver<'a> {
                     Ok(Some(RStmt::AssignField {
                         obj,
                         name: name.clone(),
-                        open: false,
                         value,
                     }))
                 }
@@ -932,7 +931,6 @@ impl<'a> Resolver<'a> {
                 Ok(RExpr::Field {
                     obj: Box::new(self.resolve_expr(obj)?),
                     name: name.clone(),
-                    open: false,
                 })
             }
             AExpr::New { type_name, args } => self.resolve_new(type_name, args),

@@ -650,23 +650,16 @@ impl<'a> Compiler<'a> {
                 });
                 self.free_temp(2);
             }
-            RExpr::Field { obj, name, open } => {
+            RExpr::Field { obj, name } => {
+                // Свойство всегда закрытое — обоснование у резолвера, в
+                // `AExpr::Field`. Открытые `GetObjectProp`/`SetObjectProp`
+                // компилятор не выпускает вовсе; они живут в формате ради
+                // уже сериализованного байт-кода, поэтому их читает
+                // `text.rs` и исполняют интерпретатор и JIT.
                 let o = self.alloc_temp()?;
                 self.compile_expr(obj, o)?;
-                let name_id = self.names.intern(name);
-                if *open {
-                    let name = name_id
-                        .index()
-                        .try_into()
-                        .map_err(|_| CompileError::TooManyNames)?;
-                    self.emit(Instr::GetObjectProp { dst, obj: o, name });
-                } else {
-                    self.emit(Instr::GetProp {
-                        dst,
-                        obj: o,
-                        name: name_id,
-                    });
-                }
+                let name = self.names.intern(name);
+                self.emit(Instr::GetProp { dst, obj: o, name });
                 self.free_temp(1);
             }
             RExpr::NewArray { dims } => {
@@ -916,34 +909,17 @@ impl<'a> Compiler<'a> {
                 });
                 self.free_temp(3);
             }
-            RStmt::AssignField {
-                obj,
-                name,
-                open,
-                value,
-            } => {
+            RStmt::AssignField { obj, name, value } => {
                 let o = self.alloc_temp()?;
                 self.compile_expr(obj, o)?;
                 let v = self.alloc_temp()?;
                 self.compile_expr(value, v)?;
-                let name_id = self.names.intern(name);
-                if *open {
-                    let name = name_id
-                        .index()
-                        .try_into()
-                        .map_err(|_| CompileError::TooManyNames)?;
-                    self.emit(Instr::SetObjectProp {
-                        obj: o,
-                        name,
-                        src: v,
-                    });
-                } else {
-                    self.emit(Instr::SetProp {
-                        obj: o,
-                        name: name_id,
-                        src: v,
-                    });
-                }
+                let name = self.names.intern(name);
+                self.emit(Instr::SetProp {
+                    obj: o,
+                    name,
+                    src: v,
+                });
                 self.free_temp(2);
             }
             RStmt::ExprStmt(e) => {

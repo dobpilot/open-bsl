@@ -86,7 +86,6 @@ pub enum RExpr {
     Field {
         obj: Box<RExpr>,
         name: String,
-        open: bool,
     },
     /// `Новый Массив(d1, d2, ...)` — каждое измерение вкладывает следующий
     /// уровень массивов (`Новый Массив(3, 4)` — массив из 3 массивов по 4).
@@ -175,7 +174,6 @@ pub enum RStmt {
     AssignField {
         obj: RExpr,
         name: String,
-        open: bool,
         value: RExpr,
     },
     /// Вызов процедуры/функции как оператор — результат отбрасывается.
