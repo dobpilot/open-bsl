@@ -177,12 +177,14 @@ impl CallArgs {
 pub fn run_program(program: &Program) -> Result<BslValue, RtError> {
     let mut stdout = std::io::stdout().lock();
     let mut stderr = std::io::stderr().lock();
+    let mut env = bsl_rt::HostEnv::process();
     run_program_with_host(
         program,
         CompileEnv::bare(),
         JitMode::Off,
         &mut stdout,
         &mut stderr,
+        &mut env,
     )
 }
 
@@ -200,12 +202,14 @@ pub fn run_program_with_registry(
 ) -> Result<BslValue, RtError> {
     let mut stdout = std::io::stdout().lock();
     let mut stderr = std::io::stderr().lock();
+    let mut env = bsl_rt::HostEnv::process();
     run_program_with_host(
         program,
         CompileEnv::with_registry(registry),
         JitMode::Off,
         &mut stdout,
         &mut stderr,
+        &mut env,
     )
 }
 
@@ -223,12 +227,13 @@ pub fn run_program_with_registry_and_io(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
     symbols: bsl_syntax::PreprocSymbols,
+    host_env: &mut bsl_rt::HostEnv,
 ) -> Result<BslValue, RtError> {
     let env = CompileEnv {
         registry: Some(registry),
         symbols,
     };
-    run_program_with_host(program, env, JitMode::Off, stdout, stderr)
+    run_program_with_host(program, env, JitMode::Off, stdout, stderr, host_env)
 }
 
 /// Вариант [`run_program_with_registry`] с включённым JIT.
@@ -242,12 +247,14 @@ pub fn run_program_jit_with_registry(
 ) -> Result<BslValue, RtError> {
     let mut stdout = std::io::stdout().lock();
     let mut stderr = std::io::stderr().lock();
+    let mut env = bsl_rt::HostEnv::process();
     run_program_with_host(
         program,
         CompileEnv::with_registry(registry),
         JitMode::On,
         &mut stdout,
         &mut stderr,
+        &mut env,
     )
 }
 
@@ -263,12 +270,13 @@ pub fn run_program_jit_with_registry_and_io(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
     symbols: bsl_syntax::PreprocSymbols,
+    host_env: &mut bsl_rt::HostEnv,
 ) -> Result<BslValue, RtError> {
     let env = CompileEnv {
         registry: Some(registry),
         symbols,
     };
-    run_program_with_host(program, env, JitMode::On, stdout, stderr)
+    run_program_with_host(program, env, JitMode::On, stdout, stderr, host_env)
 }
 
 fn run_program_with_host(
@@ -277,6 +285,7 @@ fn run_program_with_host(
     jit_mode: JitMode,
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
+    host_env: &mut bsl_rt::HostEnv,
 ) -> Result<BslValue, RtError> {
     let mut stack = Vec::new();
     push_own_registers(
@@ -284,7 +293,11 @@ fn run_program_with_host(
         at(&program.chunks, 0, "в программе нет чанка верхнего уровня")?,
     );
     let linked = link_components(program, env)?;
-    let mut host = HostIo { stdout, stderr };
+    let mut host = HostIo {
+        stdout,
+        stderr,
+        env: Some(host_env),
+    };
     let (value, _) = drive_linked(program, 0, stack, jit_mode, &linked, &mut host)?;
     Ok(value)
 }
@@ -299,6 +312,11 @@ fn run_program_with_host(
 /// Возвращает [`RtError`] при неперехваченном исключении или некорректных
 /// таблицах имён, форм и регистров чанка, плюс ошибку
 /// связывания компонентов.
+// Восемь параметров — это состояние REPL-сессии, разложенное по местам:
+// таблицы имён и форм, локали, стек и требования собираются вызывающим по
+// одному, и связывать их в тип ради счётчика аргументов значило бы
+// придумать сущность, которой в REPL нет.
+#[allow(clippy::too_many_arguments)]
 pub fn run_repl_chunk_with_registry(
     chunk: &bsl_bytecode::Chunk,
     names: Vec<String>,
@@ -307,6 +325,7 @@ pub fn run_repl_chunk_with_registry(
     stack: Vec<BslValue>,
     requirements: Vec<bsl_bytecode::LibraryRequirement>,
     env: CompileEnv<'_>,
+    host_env: &mut bsl_rt::HostEnv,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
     let program = Program {
         requirements,
@@ -322,6 +341,7 @@ pub fn run_repl_chunk_with_registry(
     let mut host = HostIo {
         stdout: &mut std::io::stdout(),
         stderr: &mut std::io::stderr(),
+        env: Some(host_env),
     };
     drive_linked(&program, 0, stack, JitMode::Off, &linked, &mut host)
 }
@@ -342,9 +362,33 @@ fn drive(
     drive_with(program, func_id, stack, JitMode::Off)
 }
 
+/// Host-сервисы одного прогона: куда писать и откуда брать то, чего нет в
+/// аргументах BSL-функции (аргументы запуска, часы, случайность).
+///
+/// Вывод и окружение ходят вместе, потому что оба принадлежат ПРОГОНУ, а
+/// не программе: `Program` сериализуется, а это — нет.
 struct HostIo<'a> {
     stdout: &'a mut dyn Write,
     stderr: &'a mut dyn Write,
+    /// `None` — у вызывающего окружения нет: так работает шим JIT, у
+    /// которого нет и потоков. Функции, которым окружение нужно, туда не
+    /// компилируются, поэтому `None` — запись контракта, а не заглушка.
+    env: Option<&'a mut bsl_rt::HostEnv>,
+}
+
+impl HostIo<'_> {
+    /// Окружение прогона или ошибка, если его нет.
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::InvalidBytecode`], если сюда дошла функция окружения из
+    /// контекста без окружения — то есть если список исключений JIT
+    /// разошёлся с `bsl_rt::call_builtin_env`.
+    fn env(&mut self) -> Result<&mut bsl_rt::HostEnv, RtError> {
+        self.env.as_deref_mut().ok_or(RtError::InvalidBytecode(
+            "функция окружения вызвана там, где окружения прогона нет",
+        ))
+    }
 }
 
 #[derive(Default)]
@@ -885,9 +929,11 @@ fn drive_with(
     let linked = link_components(program, CompileEnv::bare())?;
     let mut stdout = std::io::stdout().lock();
     let mut stderr = std::io::stderr().lock();
+    let mut env = bsl_rt::HostEnv::process();
     let mut host = HostIo {
         stdout: &mut stdout,
         stderr: &mut stderr,
+        env: Some(&mut env),
     };
     drive_linked(program, func_id, stack, jit_mode, &linked, &mut host)
 }
@@ -2003,7 +2049,7 @@ fn step_cold(
         }
         Instr::NewUuid { dst, arg } => {
             let arg = reg_load(stack, frames[frame_idx].reg_index(arg))?;
-            let uuid = BslValue::new_uuid(&arg)?;
+            let uuid = BslValue::new_uuid(&arg, host.env()?)?;
             let d = frames[frame_idx].reg_index(dst);
             reg_store(stack, d, uuid)?;
             frames[frame_idx].pc += 1;
@@ -2100,12 +2146,24 @@ fn step_cold(
         } => {
             let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
             let call = linked.function(func_id, frames[frame_idx].pc)?;
+            // Окружение прогона едет и в обратный вызов: функция модуля,
+            // позванная компонентом, обязана видеть те же часы и те же
+            // аргументы, что и остальной код этого `State`.
+            let HostIo {
+                stdout: host_stdout,
+                stderr: host_stderr,
+                env: host_env,
+            } = host;
             let mut function_caller =
                 |name: &str,
                  call_args: Vec<BslValue>,
                  stdout: &mut dyn Write,
                  stderr: &mut dyn Write| {
-                    let mut nested_host = HostIo { stdout, stderr };
+                    let mut nested_host = HostIo {
+                        stdout,
+                        stderr,
+                        env: host_env.as_deref_mut(),
+                    };
                     call_module_function_with_host(
                         program,
                         stack,
@@ -2117,8 +2175,8 @@ fn step_cold(
                 };
             let mut context = bsl_rt::CallContext::with_function_caller(
                 runtime_shapes,
-                &mut *host.stdout,
-                &mut *host.stderr,
+                &mut **host_stdout,
+                &mut **host_stderr,
                 bsl_format::format_value,
                 &mut function_caller,
             );
@@ -2483,9 +2541,11 @@ pub fn call_module_function(
     let linked = link_components(program, CompileEnv::bare())?;
     let mut stdout = std::io::stdout().lock();
     let mut stderr = std::io::stderr().lock();
+    let mut env = bsl_rt::HostEnv::process();
     let mut host = HostIo {
         stdout: &mut stdout,
         stderr: &mut stderr,
+        env: Some(&mut env),
     };
     call_module_function_with_host(program, stack, name, args, &linked, &mut host)
 }
@@ -2497,6 +2557,7 @@ pub fn call_module_function(
 ///
 /// Помимо ошибок [`call_module_function`] возвращает ошибку связывания,
 /// если модулю недоступен требуемый компонент или его точная версия.
+#[allow(clippy::too_many_arguments)]
 pub fn call_module_function_with_registry_and_io(
     program: &Program,
     stack: &mut [BslValue],
@@ -2505,9 +2566,14 @@ pub fn call_module_function_with_registry_and_io(
     registry: &bsl_rt::RuntimeRegistry,
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
+    host_env: &mut bsl_rt::HostEnv,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
     let linked = link_components(program, CompileEnv::with_registry(registry))?;
-    let mut host = HostIo { stdout, stderr };
+    let mut host = HostIo {
+        stdout,
+        stderr,
+        env: Some(host_env),
+    };
     call_module_function_with_host(program, stack, name, args, &linked, &mut host)
 }
 
@@ -3055,6 +3121,11 @@ fn call_builtin_with_format(
         }
         // Не `call_builtin_fn`: `ЗаполнитьЗначенияСвойств` читает таблицу
         // имён, и путь без контекста для неё кончается ошибкой.
+        // Часы, часы в миллисекундах и аргументы запуска отвечают из
+        // окружения прогона, а не из состояния процесса.
+        BuiltinFn::CurrentDate
+        | BuiltinFn::CurrentUniversalDateInMilliseconds
+        | BuiltinFn::CommandLineArguments => bsl_rt::call_builtin_env(builtin, host.env()?),
         other => bsl_rt::call_builtin_fn_ctx(other, args, runtime_shapes),
     }
 }

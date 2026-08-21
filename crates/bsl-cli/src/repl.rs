@@ -39,6 +39,10 @@ pub struct Session {
     locals: Vec<String>,
     names: Vec<String>,
     values: Vec<BslValue>,
+    /// Окружение сессии: часы, случайность и (пустые) аргументы запуска.
+    /// Одно на всю сессию, как и таблица имён, — иначе `ТекущаяДата` в
+    /// соседних строках отвечала бы из разных окружений.
+    env: bsl_rt::HostEnv,
 }
 
 impl Session {
@@ -52,6 +56,7 @@ impl Session {
             locals: Vec::new(),
             names: Vec::new(),
             values: Vec::new(),
+            env: bsl_rt::HostEnv::process(),
         }
     }
 
@@ -332,6 +337,7 @@ fn eval_repl_line(line: &str, session: &mut Session) -> Result<BslValue, String>
             registry: Some(session.engine.registry()),
             symbols: session.engine.preproc_symbols(),
         },
+        &mut session.env,
     )
     .map_err(|e| e.to_string())?;
     // `final_stack` включает временные регистры этой строки (`chunk.n_regs`

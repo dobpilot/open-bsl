@@ -2,6 +2,8 @@
 
 use std::io::Write;
 
+use bsl_rt::{Clock, HostEnv, RandomSource};
+
 use crate::Value;
 use crate::engine::{Engine, Module};
 use crate::error::Error;
@@ -37,6 +39,36 @@ impl StateBuilder {
         self
     }
 
+    /// Аргументы запуска, которые скрипт увидит в
+    /// `АргументыКоманднойСтроки`.
+    ///
+    /// Принадлежат ЭТОЙ сессии, а не процессу: два `State` одного `Engine`
+    /// видят каждый свой набор, в каком угодно порядке запусков.
+    #[must_use]
+    pub fn arguments(mut self, arguments: Vec<String>) -> Self {
+        self.host.env = self.host.env.with_arguments(arguments);
+        self
+    }
+
+    /// Часы сессии: `ТекущаяДата` и
+    /// `ТекущаяУниверсальнаяДатаВМиллисекундах` отвечают из них.
+    /// Неподвижные часы делают вывод скрипта побайтово воспроизводимым.
+    #[must_use]
+    pub fn clock(mut self, clock: impl Clock + 'static) -> Self {
+        self.host.env = self.host.env.with_clock(clock);
+        self
+    }
+
+    /// Источник байтов для `Новый УникальныйИдентификатор()`. Расстановку
+    /// битов версии и варианта он не контролирует — она остаётся за
+    /// рантаймом, поэтому заданная последовательность даёт настоящий UUID
+    /// версии 4, а не произвольные шестнадцать байтов.
+    #[must_use]
+    pub fn random(mut self, random: impl RandomSource + 'static) -> Self {
+        self.host.env = self.host.env.with_random(random);
+        self
+    }
+
     pub fn build(self) -> State {
         State {
             engine: self.engine,
@@ -48,9 +80,13 @@ impl StateBuilder {
 
 /// Изменяемые возможности host-приложения, принадлежащие одной сессии.
 /// Они не входят в реестр компонентов и не сериализуются в байт-код.
+///
+/// Вывод и окружение запуска лежат вместе, потому что это одно и то же по
+/// сути: то, что BSL-код берёт не из своих аргументов, а из мира вокруг.
 pub struct HostServices {
     stdout: Box<dyn Write>,
     stderr: Box<dyn Write>,
+    env: HostEnv,
 }
 
 impl HostServices {
@@ -58,6 +94,7 @@ impl HostServices {
         Self {
             stdout: Box::new(std::io::stdout()),
             stderr: Box::new(std::io::stderr()),
+            env: HostEnv::process(),
         }
     }
 }
@@ -116,6 +153,7 @@ impl State {
                 &mut self.host.stdout,
                 &mut self.host.stderr,
                 symbols,
+                &mut self.host.env,
             )
         } else {
             bsl_vm::run_program_with_registry_and_io(
@@ -124,6 +162,7 @@ impl State {
                 &mut self.host.stdout,
                 &mut self.host.stderr,
                 symbols,
+                &mut self.host.env,
             )
         }?;
         Ok(result)

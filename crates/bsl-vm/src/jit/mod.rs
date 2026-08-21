@@ -405,11 +405,18 @@ fn compile_instr(instr: &Instr) -> Option<Compiled> {
         // инструкцию сам: по `pc` он и так её находит, а `match` по одному
         // известному варианту стоит несравнимо дешевле, чем разбор всей
         // таблицы кодов операций в `step`.
-        // `Сообщить` обязан писать в поток конкретного `State`, которого у
-        // JIT-шима нет. Оставляем только этот IO-вызов интерпретатору;
-        // остальные builtin'ы не используют переданный ниже sink.
+        // `Сообщить` обязан писать в поток конкретного `State`, а три
+        // функции окружения — отвечать из его часов, случайности и
+        // аргументов запуска. Ни того, ни другого у JIT-шима нет: он
+        // работает с sink-потоками и без окружения. Все четыре остаются
+        // интерпретатору; остальные builtin'ы ни того, ни другого не
+        // трогают. Список обязан совпадать с `bsl_rt::call_builtin_env`.
         Instr::CallBuiltin {
-            builtin: bsl_rt::BuiltinFn::Message,
+            builtin:
+                bsl_rt::BuiltinFn::Message
+                | bsl_rt::BuiltinFn::CurrentDate
+                | bsl_rt::BuiltinFn::CurrentUniversalDateInMilliseconds
+                | bsl_rt::BuiltinFn::CommandLineArguments,
             ..
         } => None,
         Instr::CallBuiltin { .. } => s(shim_call_builtin, [0, 0, 0]),
@@ -831,9 +838,15 @@ shim!(shim_call_builtin, |frames,
     let args = CallArgs::load(stack, &frames[idx], base, count)?;
     let mut stdout = std::io::sink();
     let mut stderr = std::io::sink();
+    // Ни потоков, ни окружения: то и другое принадлежит `State`, которого
+    // здесь нет. Функции, которым они нужны, сюда не компилируются (см.
+    // список исключений выше), и `None` — не заглушка, а запись этого
+    // контракта: если исключение когда-нибудь протухнет, будет ошибка, а
+    // не молча другое время.
     let mut host = HostIo {
         stdout: &mut stdout,
         stderr: &mut stderr,
+        env: None,
     };
     let v = call_builtin_with_format(builtin, args.as_slice(), shapes, &mut host)?;
     let d = frames[idx].reg_index(dst);

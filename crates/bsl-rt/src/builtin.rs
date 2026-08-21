@@ -1,24 +1,37 @@
 use crate::date::{DateBoundary, DatePart};
+use crate::env::HostEnv;
 use crate::runtime_shapes::RuntimeShapes;
 use crate::{BslObject, BslString, BslValue, NameId, RtError, RtResult};
 
-/// Аргументы командной строки, переданные скрипту после его имени.
-/// Процессно-глобальное неизменяемое состояние: командная строка у
-/// процесса одна, поэтому `bsl-cli` выставляет её один раз при старте, а
-/// REPL и `Выполнить`/`Вычислить` видят те же аргументы без протаскивания
-/// через `Program` — компилированная программа про своё окружение знать
-/// не должна.
-static COMMAND_LINE_ARGS: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
-
-/// Выставляет аргументы для [`BuiltinFn::CommandLineArguments`]. Зовётся
-/// встраивающим приложением один раз до исполнения; повторный вызов
-/// игнорируется — командная строка за время жизни процесса не меняется.
-pub fn set_command_line_args(args: Vec<String>) {
-    let _ = COMMAND_LINE_ARGS.set(args);
-}
-
-fn command_line_args() -> &'static [String] {
-    COMMAND_LINE_ARGS.get().map_or(&[], Vec::as_slice)
+/// Три встроенные функции, ответ которых берётся не из аргументов, а из
+/// ОКРУЖЕНИЯ прогона: часы, часы в миллисекундах и аргументы запуска.
+///
+/// Отдельный узкий вход, а не четвёртый параметр у `call_builtin_fn_ctx`:
+/// окружение есть не у всякого вызывающего. У шима JIT его нет и быть не
+/// должно — он работает с sink-потоками и не видит `State`, — поэтому эти
+/// три функции JIT не компилирует вовсе и отдаёт интерпретатору, ровно как
+/// `Сообщить`. Список здесь и список исключений в `bsl-vm::jit` обязаны
+/// совпадать; расхождение поймает первый же вызов.
+///
+/// # Errors
+///
+/// [`RtError::InvalidBytecode`], если сюда пришла не функция окружения.
+pub fn call_builtin_env(f: BuiltinFn, env: &mut HostEnv) -> RtResult<BslValue> {
+    match f {
+        BuiltinFn::CurrentDate => BslValue::current_date(env),
+        BuiltinFn::CurrentUniversalDateInMilliseconds => {
+            BslValue::current_universal_date_in_milliseconds(env)
+        }
+        BuiltinFn::CommandLineArguments => Ok(BslValue::new_array(
+            env.arguments()
+                .iter()
+                .map(|a| BslValue::Str(BslString::from_str(a)))
+                .collect(),
+        )),
+        _ => Err(RtError::InvalidBytecode(
+            "эта встроенная функция не относится к окружению прогона",
+        )),
+    }
 }
 
 /// Встроенные функции, вызываемые по голому имени (`Sqrt(x)`, `Pow(x,y)`,
@@ -1392,15 +1405,15 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         // видны только нативные имена.
         BuiltinFn::TypeByName => args[0].type_by_name(),
         BuiltinFn::MakeDate => BslValue::make_date(args),
-        BuiltinFn::CurrentDate => BslValue::current_date(),
-        BuiltinFn::CurrentUniversalDateInMilliseconds => {
-            BslValue::current_universal_date_in_milliseconds()
-        }
-        BuiltinFn::CommandLineArguments => Ok(BslValue::new_array(
-            command_line_args()
-                .iter()
-                .map(|a| BslValue::Str(BslString::from_str(a)))
-                .collect(),
+        // Три функции окружения перехвачены в `call_builtin_fn_ctx`: часы,
+        // случайность и аргументы запуска принадлежат ПРОГОНУ, и без него
+        // отвечать нечем. Ошибка, а не `unreachable!`, по той же причине,
+        // что у соседей ниже: функция публична, и прямой вызов из
+        // Rust-кода не должен ронять процесс.
+        BuiltinFn::CurrentDate
+        | BuiltinFn::CurrentUniversalDateInMilliseconds
+        | BuiltinFn::CommandLineArguments => Err(RtError::InvalidBytecode(
+            "функция окружения вызвана без окружения прогона",
         )),
         BuiltinFn::DatePartOf(part) => args[0].date_component(part),
         BuiltinFn::DateBoundaryOf(which) => args[0].date_boundary(which),

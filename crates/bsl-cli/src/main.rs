@@ -173,8 +173,7 @@ fn main() {
         Some(path) => {
             // Всё после имени скрипта — его собственные аргументы: скрипт
             // читает их массивом АргументыКоманднойСтроки.
-            bsl_rt::set_command_line_args(args[2..].to_vec());
-            run_file(path, Engine::Interpreter);
+            run_file(path, Engine::Interpreter, args[2..].to_vec());
             0
         }
     };
@@ -192,10 +191,7 @@ fn run_command(cmd: &Command, args: &[String]) -> i32 {
             None => missing_argument(cmd),
         },
         Kind::RunBytecode => match args.get(2) {
-            Some(path) => {
-                bsl_rt::set_command_line_args(args[3..].to_vec());
-                bytecode::run(path)
-            }
+            Some(path) => bytecode::run(path, args[3..].to_vec()),
             None => missing_argument(cmd),
         },
         Kind::IngestMeasurements => match args.get(2) {
@@ -204,8 +200,7 @@ fn run_command(cmd: &Command, args: &[String]) -> i32 {
         },
         Kind::Jit => match args.get(2) {
             Some(path) => {
-                bsl_rt::set_command_line_args(args[3..].to_vec());
-                run_file(path, Engine::Jit);
+                run_file(path, Engine::Jit, args[3..].to_vec());
                 0
             }
             None => missing_argument(cmd),
@@ -231,7 +226,7 @@ enum Engine {
     Jit,
 }
 
-fn run_file(path: &str, engine: Engine) {
+fn run_file(path: &str, engine: Engine, arguments: Vec<String>) {
     let src = match std::fs::read_to_string(path) {
         Ok(s) => s,
         Err(e) => {
@@ -265,6 +260,7 @@ fn run_file(path: &str, engine: Engine) {
     let mut state = host
         .state_builder()
         .jit(matches!(engine, Engine::Jit))
+        .arguments(arguments)
         .build();
     match state.run(&module) {
         Ok(BslValue::Undefined) => {}

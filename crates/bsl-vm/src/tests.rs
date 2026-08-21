@@ -483,6 +483,7 @@ fn host_streams_are_used_by_builtins_components_dynamic_code_and_jit() {
                 &mut stdout,
                 &mut stderr,
                 bsl_syntax::PreprocSymbols::new(),
+                &mut bsl_rt::HostEnv::process(),
             )
         } else {
             run_program_with_registry_and_io(
@@ -491,6 +492,7 @@ fn host_streams_are_used_by_builtins_components_dynamic_code_and_jit() {
                 &mut stdout,
                 &mut stderr,
                 bsl_syntax::PreprocSymbols::new(),
+                &mut bsl_rt::HostEnv::process(),
             )
         };
 
@@ -529,6 +531,7 @@ fn host_writer_error_is_returned_without_a_panic() {
             &mut stdout,
             &mut stderr,
             bsl_syntax::PreprocSymbols::new(),
+            &mut bsl_rt::HostEnv::process(),
         ),
         Err(RtError::IoError(message)) if message.contains("test writer failed")
     ));

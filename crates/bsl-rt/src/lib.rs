@@ -10,6 +10,7 @@ mod component;
 mod date;
 pub mod encoding;
 mod enums;
+mod env;
 mod fill;
 pub mod fold;
 mod interner;
@@ -42,8 +43,8 @@ pub const PACKAGE_NAME: &str = env!("CARGO_PKG_NAME");
 pub const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub use builtin::{
-    BUILTIN_FN_NAMES, BUILTIN_METHOD_NAMES, BuiltinFn, BuiltinMethod, call_builtin_fn,
-    call_builtin_fn_ctx, call_builtin_method, call_builtin_method_ctx, set_command_line_args,
+    BUILTIN_FN_NAMES, BUILTIN_METHOD_NAMES, BuiltinFn, BuiltinMethod, call_builtin_env,
+    call_builtin_fn, call_builtin_fn_ctx, call_builtin_method, call_builtin_method_ctx,
 };
 pub use component::{
     Arity, CallContext, ComponentCall, ConstructorCode, ConstructorDescriptor, FunctionCode,
@@ -59,6 +60,7 @@ pub use date::{
 };
 use date::{DateBoundary, DatePart};
 pub use enums::{EnumKind, EnumValue, lookup_enum, lookup_member};
+pub use env::{Clock, HostEnv, RandomSource, SystemClock, SystemRandom};
 pub use fold::folded_eq;
 pub use interner::{NameId, NameInterner};
 pub use locale::{Locale, NBSP};
@@ -1012,11 +1014,8 @@ impl BslValue {
     /// Наблюдаемо это только как сдвиг на смещение зоны, и только у
     /// `ТекущаяДата` — все остальные функции работают с датами, которые им
     /// дали.
-    pub fn current_date() -> RtResult<Self> {
-        let secs = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0);
+    pub fn current_date(env: &mut HostEnv) -> RtResult<Self> {
+        let secs = env.unix_millis().div_euclid(1000);
         BslDate::from_seconds(secs + date::UNIX_EPOCH_SECONDS)
             .map(BslValue::Date)
             .ok_or(RtError::DateOutOfRange {
@@ -1026,19 +1025,16 @@ impl BslValue {
 
     /// `ТекущаяУниверсальнаяДатаВМиллисекундах()` — целое число
     /// миллисекунд от Unix-эпохи в UTC.
-    pub fn current_universal_date_in_milliseconds() -> RtResult<Self> {
-        let millis = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_millis())
-            .unwrap_or(0);
-        let millis = i64::try_from(millis).map_err(|_| RtError::DateOutOfRange {
-            op: "ТекущаяУниверсальнаяДатаВМиллисекундах",
-        })?;
+    pub fn current_universal_date_in_milliseconds(env: &mut HostEnv) -> RtResult<Self> {
+        let millis = env.unix_millis();
         // Отсчёт — от эпохи дат BSL (0001-01-01 UTC), не от 1970-го:
         // ИЗМЕРЕНО на 8.3.27, платформа печатает ~63.9e12.
-        Ok(BslValue::Number(BslNumber::from_i64(
-            millis + crate::date::UNIX_EPOCH_SECONDS * 1000,
-        )))
+        let millis = millis
+            .checked_add(crate::date::UNIX_EPOCH_SECONDS * 1000)
+            .ok_or(RtError::DateOutOfRange {
+                op: "ТекущаяУниверсальнаяДатаВМиллисекундах",
+            })?;
+        Ok(BslValue::Number(BslNumber::from_i64(millis)))
     }
 
     /// `Год`/`Месяц`/`День`/`Час`/`Минута`/`Секунда`/`ДеньНедели` — все
@@ -1587,9 +1583,13 @@ impl BslValue {
     ///
     /// [`RtError::TypeError`], если аргумент не строка, не идентификатор и
     /// не `Неопределено`, либо строка не в канонической форме.
-    pub fn new_uuid(arg: &BslValue) -> RtResult<Self> {
+    pub fn new_uuid(arg: &BslValue, env: &mut HostEnv) -> RtResult<Self> {
         let bytes = match arg {
-            BslValue::Undefined => uuid::random_v4(),
+            BslValue::Undefined => {
+                let mut bytes = [0u8; 16];
+                env.fill_random(&mut bytes);
+                uuid::v4_from_bytes(bytes)
+            }
             BslValue::Str(s) => uuid::parse(&s.to_string())?,
             // Конструктор от другого идентификатора платформа принимает и
             // отдаёт равное значение (измерено фикстурой `uuid`).

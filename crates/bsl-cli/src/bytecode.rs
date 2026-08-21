@@ -46,7 +46,7 @@ pub fn emit(source: &str, out: Option<&str>) -> i32 {
 /// Читает напечатанный байт-код и исполняет его — тем же путём через
 /// фасад (`Engine`/`State`), что и обычный запуск: разобранная программа
 /// ничем не отличается от только что скомпилированной.
-pub fn run(path: &str) -> i32 {
+pub fn run(path: &str, arguments: Vec<String>) -> i32 {
     let text = match std::fs::read_to_string(path) {
         Ok(t) => t,
         Err(e) => {
@@ -68,7 +68,8 @@ pub fn run(path: &str) -> i32 {
             return 1;
         }
     };
-    match engine.new_state().run(&module) {
+    let mut state = engine.state_builder().arguments(arguments).build();
+    match state.run(&module) {
         Ok(bsl_rt::BslValue::Undefined) => 0,
         Ok(v) => {
             crate::print_value(&v);
