@@ -331,7 +331,7 @@ struct LinkedComponents<'a> {
     /// То же для статических таблиц СВОЙСТВ (`ObjectProtocol::property_table`).
     /// Ячейки инструкции у свойств пока нет: она — производная таблица
     /// `Chunk`, её добавление стоит правок формата байт-кода, а выигрыш не
-    /// измерен (см. `docs/bsl-rt-abi.md`, часть C).
+    /// измерен.
     component_properties: ComponentPropertyMap,
 }
 
