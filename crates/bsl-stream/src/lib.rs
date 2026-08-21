@@ -5,7 +5,7 @@ mod stream;
 
 use bsl_rt::{
     Arity, BslValue, CallContext, ConstructorCode, ConstructorDescriptor, LibraryDependency,
-    LibraryDescriptor, RtResult,
+    LibraryDescriptor, RtResult, TypeDescriptor,
 };
 
 pub use datarw::{new_data_reader, new_data_writer};
@@ -98,6 +98,16 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[
     },
 ];
 
+/// Типы, которые компонент вводит в язык: по ним работает `Тип("Имя")`.
+const TYPES: &[&TypeDescriptor] = &[
+    &crate::datarw::DATA_READER_TYPE,
+    &crate::datarw::DATA_READ_RESULT_TYPE,
+    &crate::datarw::DATA_WRITER_TYPE,
+    &crate::stream::FILE_STREAMS_MANAGER_TYPE,
+    &crate::stream::FILE_STREAM_TYPE,
+    &crate::stream::MEMORY_STREAM_TYPE,
+];
+
 /// Дескриптор статически подключаемого компонента потоков.
 pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor {
@@ -109,7 +119,7 @@ pub const fn library() -> LibraryDescriptor {
         }],
         functions: &[],
         constructors: CONSTRUCTORS,
-        types: &[],
+        types: TYPES,
     }
 }
 

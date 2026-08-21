@@ -320,49 +320,57 @@ pub struct WriterObject {
 pub(crate) static ZIP_READER_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ЧтениеZipФайла",
-    legacy_type_id: Some(TypeId::ZipFileReader),
+    type_display: "Чтение ZIP файла",
+    type_names: &["ZipFileReader"],
 };
 
 pub(crate) static ARCHIVE_READER_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ЧтениеФайлаАрхива",
-    legacy_type_id: Some(TypeId::ArchiveFileReader),
+    type_display: "Чтение файла архива",
+    type_names: &["ArchiveFileReader"],
 };
 
 pub(crate) static ZIP_ENTRIES_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ЭлементыZipФайла",
-    legacy_type_id: Some(TypeId::ZipFileEntries),
+    type_display: "Элементы ZIP файла",
+    type_names: &["ZipFileEntries"],
 };
 
 pub(crate) static ARCHIVE_ENTRIES_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ЭлементыФайлаАрхива",
-    legacy_type_id: Some(TypeId::ArchiveFileEntries),
+    type_display: "Элементы файла архива",
+    type_names: &["ArchiveFileEntries"],
 };
 
 pub(crate) static ZIP_ENTRY_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ЭлементZipФайла",
-    legacy_type_id: Some(TypeId::ZipFileEntry),
+    type_display: "Элемент ZIP файла",
+    type_names: &["ZipFileEntry"],
 };
 
 pub(crate) static ARCHIVE_ENTRY_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ЭлементФайлаАрхива",
-    legacy_type_id: Some(TypeId::ArchiveFileEntry),
+    type_display: "Элемент файла архива",
+    type_names: &["ArchiveFileEntry"],
 };
 
 pub(crate) static ZIP_WRITER_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ЗаписьZipФайла",
-    legacy_type_id: Some(TypeId::ZipFileWriter),
+    type_display: "Запись ZIP файла",
+    type_names: &["ZipFileWriter"],
 };
 
 pub(crate) static ARCHIVE_WRITER_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ЗаписьФайлаАрхива",
-    legacy_type_id: Some(TypeId::ArchiveFileWriter),
+    type_display: "Запись файла архива",
+    type_names: &["ArchiveFileWriter"],
 };
 
 impl ReaderObject {

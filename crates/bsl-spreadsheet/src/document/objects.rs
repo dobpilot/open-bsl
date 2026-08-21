@@ -7,31 +7,36 @@ use super::*;
 pub(crate) static DOCUMENT_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ТабличныйДокумент",
-    legacy_type_id: Some(TypeId::SpreadDocument),
+    type_display: "Табличный документ",
+    type_names: &["SpreadsheetDocument"],
 };
 
 pub(crate) static AREA_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ОбластьЯчеекТабличногоДокумента",
-    legacy_type_id: Some(TypeId::SpreadArea),
+    type_display: "Область ячеек табличного документа",
+    type_names: &["SpreadsheetDocumentRange"],
 };
 
 pub(crate) static DRAWINGS_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "КоллекцияРисунковТабличногоДокумента",
-    legacy_type_id: Some(TypeId::SpreadDrawings),
+    type_display: "Коллекция рисунков табличного документа",
+    type_names: &["SpreadsheetDocumentDrawingCollection"],
 };
 
 pub(crate) static DRAWING_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "РисунокТабличногоДокумента",
-    legacy_type_id: Some(TypeId::SpreadDrawing),
+    type_display: "Рисунок табличного документа",
+    type_names: &["SpreadsheetDocumentDrawing"],
 };
 
 pub(crate) static PARAMS_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ПараметрыМакетаТабличногоДокумента",
-    legacy_type_id: Some(TypeId::SpreadDocParams),
+    type_display: "Параметры макета табличного документа",
+    type_names: &["SpreadsheetDocumentTemplateParameters"],
 };
 
 impl SpreadDocumentObject {

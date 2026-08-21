@@ -9,7 +9,7 @@ pub mod writer;
 
 use bsl_rt::{
     Arity, BslValue, CallContext, ConstructorCode, ConstructorDescriptor, LibraryDescriptor,
-    RtResult,
+    RtResult, TypeDescriptor,
 };
 
 pub use document::{
@@ -54,6 +54,15 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[
     },
 ];
 
+/// Типы, которые компонент вводит в язык: по ним работает `Тип("Имя")`.
+const TYPES: &[&TypeDescriptor] = &[
+    &crate::document::surface::ATTACHMENTS_TYPE,
+    &crate::document::surface::ATTACHMENT_TYPE,
+    &crate::document::surface::DOCUMENT_TYPE,
+    &crate::document::surface::PAGES_TYPE,
+    &crate::document::surface::PAGE_TYPE,
+];
+
 /// Дескриптор статически подключаемого компонента документов PDF.
 pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor {
@@ -64,7 +73,7 @@ pub const fn library() -> LibraryDescriptor {
         dependencies: &[],
         functions: &[],
         constructors: CONSTRUCTORS,
-        types: &[],
+        types: TYPES,
     }
 }
 

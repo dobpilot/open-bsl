@@ -126,19 +126,19 @@ use std::collections::BTreeMap;
 
 use bsl_rt::{
     BslNumber, BslString, BslValue, CallContext, MethodCode, MethodDescriptor, ObjectProtocol,
-    RtError, RtResult, TypeDescriptor, TypeId, folded_eq,
+    RtError, RtResult, TypeDescriptor, folded_eq,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
 
 // Модуль разложен по подсистемам, но остаётся одним пространством имён:
 // подмодули видят друг друга через `use super::*`.
-mod bridge;
-mod model;
-mod mxl_read;
-mod mxl_write;
-mod objects;
-mod params;
+pub(crate) mod bridge;
+pub(crate) mod model;
+pub(crate) mod mxl_read;
+pub(crate) mod mxl_write;
+pub(crate) mod objects;
+pub(crate) mod params;
 
 #[cfg(test)]
 mod tests;

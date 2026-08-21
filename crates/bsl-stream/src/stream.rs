@@ -65,7 +65,7 @@ use std::rc::Rc;
 
 use bsl_rt::{
     BslNumber, BslValue, ByteStreamProtocol, CallContext, EnumValue, MethodCode, MethodDescriptor,
-    ObjectProtocol, PropertyCode, PropertyDescriptor, RtError, RtResult, TypeDescriptor, TypeId,
+    ObjectProtocol, PropertyCode, PropertyDescriptor, RtError, RtResult, TypeDescriptor,
 };
 
 /// Режим открытия файла — член `РежимОткрытияФайла`.
@@ -353,16 +353,18 @@ enum StreamKind {
     File,
 }
 
-static MEMORY_STREAM_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static MEMORY_STREAM_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ПотокВПамяти",
-    legacy_type_id: Some(TypeId::MemoryStream),
+    type_display: "Файловый поток",
+    type_names: &["ПотокВПамяти", "MemoryStream"],
 };
 
-static FILE_STREAM_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static FILE_STREAM_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ФайловыйПоток",
-    legacy_type_id: Some(TypeId::FileStream),
+    type_display: "Файловый поток",
+    type_names: &["ФайловыйПоток", "FileStream"],
 };
 
 #[derive(Debug)]
@@ -820,10 +822,11 @@ pub fn new_file_streams_manager() -> BslValue {
     BslValue::new_object(FileStreamsManager)
 }
 
-static FILE_STREAMS_MANAGER_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static FILE_STREAMS_MANAGER_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "МенеджерФайловыхПотоков",
-    legacy_type_id: Some(TypeId::FileStreamsManager),
+    type_display: "Менеджер файловых потоков",
+    type_names: &["FileStreamsManager"],
 };
 
 #[derive(Debug)]
@@ -1250,6 +1253,23 @@ pub fn close(v: &dyn ObjectProtocol) -> RtResult<()> {
 
 #[cfg(test)]
 mod tests {
+
+    /// Два потока — РАЗНЫЕ типы с ОДНИМ представлением. Измерено:
+    /// `Строка(Тип("ПотокВПамяти"))` и `Строка(Тип("ФайловыйПоток"))` оба
+    /// дают «Файловый поток», а `Тип("ПотокВПамяти") = Тип("ФайловыйПоток")`
+    /// — «Нет». Ровно это закрепляет и фикстура `binary-streams`.
+    #[test]
+    fn both_streams_print_the_same_name_but_stay_different_types() {
+        assert_ne!(MEMORY_STREAM_TYPE.name, FILE_STREAM_TYPE.name);
+        assert_eq!(MEMORY_STREAM_TYPE.type_display, "Файловый поток");
+        assert_eq!(FILE_STREAM_TYPE.type_display, "Файловый поток");
+        assert!(MEMORY_STREAM_TYPE.answers_to("ПотокВПамяти"));
+        assert!(MEMORY_STREAM_TYPE.answers_to("MemoryStream"));
+        assert!(FILE_STREAM_TYPE.answers_to("ФайловыйПоток"));
+        // Обратная сторона совпадения представлений: по нему находится
+        // тоже только один из двух — так же несимметрично, как у платформы.
+        assert!(FILE_STREAM_TYPE.answers_to("Файловый поток"));
+    }
     #[test]
     fn method_codes_are_static_and_dense() {
         for table in [super::STREAM_METHODS, super::FILE_STREAMS_MANAGER_METHODS] {

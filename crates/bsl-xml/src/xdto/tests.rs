@@ -794,7 +794,7 @@ fn builtin_types_map_to_the_measured_bsl_types() {
     );
     assert_eq!(
         type_of_value("QName", "просто"),
-        BslValue::Type(TypeRef::Native(TypeId::XmlExpandedName))
+        BslValue::Type(TypeRef::Object(&crate::xsd::EXPANDED_NAME_TYPE))
     );
     // `anyType` — тип ОБЪЕКТА: значения из лексической формы он не
     // строит (измерено: `Создать` от него отвергает лексику).
@@ -901,26 +901,29 @@ fn type_and_property_values_print_as_measured() {
     assert_eq!(root.to_string(), "{urn:test}RootType");
     assert_eq!(
         root.type_of().unwrap(),
-        BslValue::Type(TypeRef::Native(TypeId::XdtoObjectType))
+        BslValue::Type(TypeRef::Object(&crate::xdto::objects::OBJECT_TYPE_TYPE))
     );
-    assert_eq!(TypeId::XdtoObjectType.name(), "Тип объекта XDTO");
+    assert_eq!(
+        crate::xdto::objects::OBJECT_TYPE_TYPE.type_display,
+        "Тип объекта XDTO"
+    );
     let code = type_of(&m, "urn:test", "Code");
     assert_eq!(code.to_string(), "{urn:test}Code");
     assert_eq!(
         code.type_of().unwrap(),
-        BslValue::Type(TypeRef::Native(TypeId::XdtoValueType))
+        BslValue::Type(TypeRef::Object(&crate::xdto::objects::VALUE_TYPE_TYPE))
     );
     let props = prop(&root, "Свойства");
     assert_eq!(
         props.type_of().unwrap(),
-        BslValue::Type(TypeRef::Native(TypeId::XdtoPropertyCollection))
+        BslValue::Type(TypeRef::Object(&crate::xdto::objects::PROPERTIES_TYPE))
     );
     assert_eq!(props.to_string(), "КоллекцияСвойствXDTO");
     let name = collection_lookup(ob(&props), &[str_value("name")]).expect("поиск");
     assert_eq!(name.to_string(), "name", "свойство печатается именем");
     assert_eq!(
         name.type_of().unwrap(),
-        BslValue::Type(TypeRef::Native(TypeId::XdtoProperty))
+        BslValue::Type(TypeRef::Object(&crate::xdto::objects::PROPERTY_TYPE))
     );
     // Анонимный тип печатается ПУСТОЙ строкой, хотя URI у него есть.
     let anon = prop(
@@ -932,7 +935,7 @@ fn type_and_property_values_print_as_measured() {
     let facets = prop(&code, "Фасеты");
     assert_eq!(
         facets.type_of().unwrap(),
-        BslValue::Type(TypeRef::Native(TypeId::XdtoFacetCollection))
+        BslValue::Type(TypeRef::Object(&crate::xdto::objects::FACETS_TYPE))
     );
     assert_eq!(facets.to_string(), "КоллекцияФасетовXDTO");
     {
@@ -940,7 +943,7 @@ fn type_and_property_values_print_as_measured() {
         let f = collection_get(repr, 0).expect("фасет");
         assert_eq!(
             f.type_of().unwrap(),
-            BslValue::Type(TypeRef::Native(TypeId::XdtoFacet))
+            BslValue::Type(TypeRef::Object(&crate::xdto::objects::FACET_TYPE))
         );
         assert_eq!(f.to_string(), "ФасетXDTO");
     }
@@ -950,7 +953,7 @@ fn type_and_property_values_print_as_measured() {
     );
     assert_eq!(
         def.type_of().unwrap(),
-        BslValue::Type(TypeRef::Native(TypeId::XdtoDataValue))
+        BslValue::Type(TypeRef::Object(&crate::xdto::objects::VALUE_TYPE))
     );
     assert_eq!(def.to_string(), "ЗначениеXDTO");
 }
@@ -1051,7 +1054,7 @@ fn every_builtin_row_is_backed_by_a_measured_line() {
                 let ours = m
                     .builtin_of(index)
                     .unwrap_or_else(|| panic!("{name} обязан отображаться в тип BSL"));
-                assert_eq!(ours.type_id().name(), measured, "тип BSL для {name}");
+                assert_eq!(ours.type_name(), measured, "тип BSL для {name}");
             }
             None => continue,
         }
@@ -1289,7 +1292,7 @@ fn factory_create_builds_a_value_from_its_lexical_form() {
     let value = factory_create(ob(&f), &[code.clone(), str_value("AB")]).expect("значение");
     assert_eq!(
         value.type_of().unwrap(),
-        BslValue::Type(TypeRef::Native(TypeId::XdtoDataValue))
+        BslValue::Type(TypeRef::Object(&crate::xdto::objects::VALUE_TYPE))
     );
     assert_eq!(text_of(&prop(&value, "Значение")), "AB");
     assert_eq!(text_of(&prop(&value, "ЛексическоеЗначение")), "AB");
@@ -1336,9 +1339,12 @@ fn factory_create_builds_an_object_that_knows_its_type() {
     assert_eq!(object.to_string(), "ОбъектXDTO");
     assert_eq!(
         object.type_of().unwrap(),
-        BslValue::Type(TypeRef::Native(TypeId::XdtoDataObject))
+        BslValue::Type(TypeRef::Object(&crate::xdto::objects::OBJECT_TYPE))
     );
-    assert_eq!(TypeId::XdtoDataObject.name(), "Объект XDTO");
+    assert_eq!(
+        crate::xdto::objects::OBJECT_TYPE.type_display,
+        "Объект XDTO"
+    );
     assert_eq!(object_type(ob(&object), &[]).expect("тип"), root);
     // Аргументов у `Тип()` нет, а два экземпляра одного типа не равны
     // (измерено обе стороны).
@@ -1373,9 +1379,12 @@ fn a_factory_is_built_from_a_schema_set_or_from_nothing() {
     assert_eq!(empty.to_string(), "ФабрикаXDTO");
     assert_eq!(
         empty.type_of().unwrap(),
-        BslValue::Type(TypeRef::Native(TypeId::XdtoFactory))
+        BslValue::Type(TypeRef::Object(&crate::xdto::objects::FACTORY_TYPE))
     );
-    assert_eq!(TypeId::XdtoFactory.name(), "Фабрика XDTO");
+    assert_eq!(
+        crate::xdto::objects::FACTORY_TYPE.type_display,
+        "Фабрика XDTO"
+    );
     assert!(is_factory(&empty));
     let set = crate::xsd::new_schema_set();
     assert!(factory_of_schema_set(&set).is_ok());
@@ -1474,9 +1483,9 @@ fn a_fresh_instance_answers_with_defaults_and_empty_lists() {
     assert_eq!(list.to_string(), "СписокXDTO");
     assert_eq!(
         list.type_of().unwrap(),
-        BslValue::Type(TypeRef::Native(TypeId::XdtoList))
+        BslValue::Type(TypeRef::Object(&crate::xdto::objects::LIST_TYPE))
     );
-    assert_eq!(TypeId::XdtoList.name(), "Список XDTO");
+    assert_eq!(crate::xdto::objects::LIST_TYPE.type_display, "Список XDTO");
     assert_eq!(list.collection_len().expect("длина"), 0);
     // Постороннее имя — ошибка, а не `Неопределено` (измерено).
     assert!(get_property(ob(&o), "нетТакого").is_err());
@@ -1684,9 +1693,12 @@ fn the_sequence_follows_the_order_of_filling() {
     assert_eq!(seq.to_string(), "ПоследовательностьXDTO");
     assert_eq!(
         seq.type_of().unwrap(),
-        BslValue::Type(TypeRef::Native(TypeId::XdtoSequence))
+        BslValue::Type(TypeRef::Object(&crate::xdto::objects::SEQUENCE_TYPE))
     );
-    assert_eq!(TypeId::XdtoSequence.name(), "Последовательность XDTO");
+    assert_eq!(
+        crate::xdto::objects::SEQUENCE_TYPE.type_display,
+        "Последовательность XDTO"
+    );
     assert_eq!(seq.collection_len().expect("длина"), 0);
     // Порядок: заполнение элементов, атрибут в него не попадает
     // (измерено).
@@ -2491,7 +2503,7 @@ fn xdto_serializer_needs_a_factory() {
     assert_eq!(a.to_string(), "СериализаторXDTO");
     assert_eq!(
         a.type_of().expect("ТипЗнч"),
-        BslValue::Type(TypeRef::Native(TypeId::XdtoSerializer))
+        BslValue::Type(TypeRef::Object(&crate::xdto::objects::SERIALIZER_TYPE))
     );
 }
 

@@ -200,8 +200,7 @@ use crate::dom::{DomKind, DomNode};
 
 use bsl_rt::{
     BslNumber, BslString, BslValue, CallContext, EnumValue, MethodCode, MethodDescriptor,
-    ObjectProtocol, PropertyCode, PropertyDescriptor, RtError, RtResult, TypeDescriptor, TypeId,
-    folded_eq,
+    ObjectProtocol, PropertyCode, PropertyDescriptor, RtError, RtResult, TypeDescriptor, folded_eq,
 };
 
 /// Пространство имён XML Schema. Опознание элементов схемы идёт по нему, а
@@ -2445,184 +2444,229 @@ pub fn schema_set_get(obj: &BslValue, i: usize) -> RtResult<BslValue> {
 
 // --- объектный протокол -----------------------------------------------------
 
-static BUILDER_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static BUILDER_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ПостроительСхемXML",
-    legacy_type_id: Some(TypeId::XmlSchemaBuilder),
+    type_display: "Построитель схем XML",
+    type_names: &["XMLSchemaBuilder"],
 };
 
-static SCHEMA_SET_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static SCHEMA_SET_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "НаборСхемXML",
-    legacy_type_id: Some(TypeId::XmlSchemaSet),
+    type_display: "Набор схем XML",
+    type_names: &["XMLSchemaSet"],
 };
 
-static EXPANDED_NAME_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static EXPANDED_NAME_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "РасширенноеИмяXML",
-    legacy_type_id: Some(TypeId::XmlExpandedName),
+    type_display: "Расширенное имя XML",
+    type_names: &["XMLExpandedName"],
 };
 
-static NAME_LIST_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static NAME_LIST_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "СписокРасширенныхИменXML",
-    legacy_type_id: Some(TypeId::XmlExpandedNameList),
+    type_display: "Список расширенных имен XML",
+    type_names: &["XMLExpandedNameList"],
 };
 
-static SCHEMA_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static SCHEMA_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "СхемаXML",
-    legacy_type_id: Some(TypeId::XmlSchema),
+    type_display: "Схема XML",
+    type_names: &["XMLSchema"],
 };
 
-static ELEMENT_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static ELEMENT_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ОбъявлениеЭлементаXS",
-    legacy_type_id: Some(TypeId::XsElementDeclaration),
+    type_display: "Объявление элемента XML Schema",
+    type_names: &["XSElementDeclaration", "ОбъявлениеЭлементаXS"],
 };
 
-static ATTRIBUTE_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static ATTRIBUTE_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ОбъявлениеАтрибутаXS",
-    legacy_type_id: Some(TypeId::XsAttributeDeclaration),
+    type_display: "Объявление атрибута XML Schema",
+    type_names: &["XSAttributeDeclaration", "ОбъявлениеАтрибутаXS"],
 };
 
-static SIMPLE_TYPE_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static SIMPLE_TYPE_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ОпределениеПростогоТипаXS",
-    legacy_type_id: Some(TypeId::XsSimpleTypeDefinition),
+    type_display: "Определение простого типа XML Schema",
+    type_names: &["XSSimpleTypeDefinition", "ОпределениеПростогоТипаXS"],
 };
 
-static COMPLEX_TYPE_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static COMPLEX_TYPE_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ОпределениеСоставногоТипаXS",
-    legacy_type_id: Some(TypeId::XsComplexTypeDefinition),
+    type_display: "Определение составного типа XML Schema",
+    type_names: &["XSComplexTypeDefinition", "ОпределениеСоставногоТипаXS"],
 };
 
-static PARTICLE_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static PARTICLE_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ФрагментXS",
-    legacy_type_id: Some(TypeId::XsParticle),
+    type_display: "Фрагмент XML Schema",
+    type_names: &["XSParticle", "ФрагментXS"],
 };
 
-static MODEL_GROUP_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static MODEL_GROUP_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ГруппаМоделиXS",
-    legacy_type_id: Some(TypeId::XsModelGroup),
+    type_display: "Группа модели XML Schema",
+    type_names: &["XSModelGroup", "ГруппаМоделиXS"],
 };
 
-static ATTRIBUTE_USE_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static ATTRIBUTE_USE_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ИспользованиеАтрибутаXS",
-    legacy_type_id: Some(TypeId::XsAttributeUse),
+    type_display: "Использование атрибута XML Schema",
+    type_names: &["XSAttributeUse", "ИспользованиеАтрибутаXS"],
 };
 
-static ANNOTATION_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static ANNOTATION_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "АннотацияXS",
-    legacy_type_id: Some(TypeId::XsAnnotation),
+    type_display: "Аннотация XML Schema",
+    type_names: &["XSAnnotation", "АннотацияXS"],
 };
 
-static DOCUMENTATION_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static DOCUMENTATION_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ДокументацияXS",
-    legacy_type_id: Some(TypeId::XsDocumentation),
+    type_display: "Документация XML Schema",
+    type_names: &["XSDocumentation", "ДокументацияXS"],
 };
 
-static APP_INFO_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static APP_INFO_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ИнформацияДляПриложенияXS",
-    legacy_type_id: Some(TypeId::XsAppInfo),
+    type_display: "Информация для приложения XML Schema",
+    type_names: &["XSAppInfo", "ИнформацияДляПриложенияXS"],
 };
 
-static FACET_LENGTH_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static FACET_LENGTH_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ФасетДлиныXS",
-    legacy_type_id: Some(TypeId::XsLengthFacet),
+    type_display: "Фасет длины значения XML Schema",
+    type_names: &["XSLengthFacet", "ФасетДлиныXS"],
 };
 
-static FACET_MIN_LENGTH_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static FACET_MIN_LENGTH_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ФасетМинимальнойДлиныXS",
-    legacy_type_id: Some(TypeId::XsMinLengthFacet),
+    type_display: "Фасет минимальной длины значения XML Schema",
+    type_names: &["XSMinLengthFacet", "ФасетМинимальнойДлиныXS"],
 };
 
-static FACET_MAX_LENGTH_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static FACET_MAX_LENGTH_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ФасетМаксимальнойДлиныXS",
-    legacy_type_id: Some(TypeId::XsMaxLengthFacet),
+    type_display: "Фасет максимальной длины значения XML Schema",
+    type_names: &["XSMaxLengthFacet", "ФасетМаксимальнойДлиныXS"],
 };
 
-static FACET_PATTERN_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static FACET_PATTERN_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ФасетОбразцаXS",
-    legacy_type_id: Some(TypeId::XsPatternFacet),
+    type_display: "Фасет образца значения XML Schema",
+    type_names: &["XSPatternFacet", "ФасетОбразцаXS"],
 };
 
-static FACET_ENUMERATION_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static FACET_ENUMERATION_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ФасетПеречисленияXS",
-    legacy_type_id: Some(TypeId::XsEnumerationFacet),
+    type_display: "Фасет перечисления значения XML Schema",
+    type_names: &["XSEnumerationFacet", "ФасетПеречисленияXS"],
 };
 
-static FACET_WHITE_SPACE_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static FACET_WHITE_SPACE_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ФасетПробельныхСимволовXS",
-    legacy_type_id: Some(TypeId::XsWhitespaceFacet),
+    type_display: "Фасет пробельных символов XML Schema",
+    type_names: &["XSWhitespaceFacet", "ФасетПробельныхСимволовXS"],
 };
 
-static FACET_TOTAL_DIGITS_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static FACET_TOTAL_DIGITS_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ФасетОбщегоКоличестваРазрядовXS",
-    legacy_type_id: Some(TypeId::XsTotalDigitsFacet),
+    type_display: "Фасет общего количества разрядов значения XML Schema",
+    type_names: &["XSTotalDigitsFacet", "ФасетОбщегоКоличестваРазрядовXS"],
 };
 
-static FACET_FRACTION_DIGITS_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static FACET_FRACTION_DIGITS_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ФасетКоличестваРазрядовДробнойЧастиXS",
-    legacy_type_id: Some(TypeId::XsFractionDigitsFacet),
+    type_display: "Фасет количества разрядов дробной части значения XML Schema",
+    type_names: &[
+        "XSFractionDigitsFacet",
+        "ФасетКоличестваРазрядовДробнойЧастиXS",
+    ],
 };
 
-static FACET_MIN_INCLUSIVE_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static FACET_MIN_INCLUSIVE_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ФасетМинимальногоВключающегоЗначенияXS",
-    legacy_type_id: Some(TypeId::XsMinInclusiveFacet),
+    type_display: "Фасет минимального включающего значения XML Schema",
+    type_names: &[
+        "XSMinInclusiveFacet",
+        "ФасетМинимальногоВключающегоЗначенияXS",
+    ],
 };
 
-static FACET_MAX_INCLUSIVE_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static FACET_MAX_INCLUSIVE_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ФасетМаксимальногоВключающегоЗначенияXS",
-    legacy_type_id: Some(TypeId::XsMaxInclusiveFacet),
+    type_display: "Фасет максимального включающего значения XML Schema",
+    type_names: &[
+        "XSMaxInclusiveFacet",
+        "ФасетМаксимальногоВключающегоЗначенияXS",
+    ],
 };
 
-static FACET_MIN_EXCLUSIVE_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static FACET_MIN_EXCLUSIVE_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ФасетМинимальногоИсключающегоЗначенияXS",
-    legacy_type_id: Some(TypeId::XsMinExclusiveFacet),
+    type_display: "Фасет минимального исключающего значения XML Schema",
+    type_names: &[
+        "XSMinExclusiveFacet",
+        "ФасетМинимальногоИсключающегоЗначенияXS",
+    ],
 };
 
-static FACET_MAX_EXCLUSIVE_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static FACET_MAX_EXCLUSIVE_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ФасетМаксимальногоИсключающегоЗначенияXS",
-    legacy_type_id: Some(TypeId::XsMaxExclusiveFacet),
+    type_display: "Фасет максимального исключающего значения XML Schema",
+    type_names: &[
+        "XSMaxExclusiveFacet",
+        "ФасетМаксимальногоИсключающегоЗначенияXS",
+    ],
 };
 
-static LIST_FIXED_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static LIST_FIXED_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ФиксированныйСписокКомпонентXS",
-    legacy_type_id: Some(TypeId::XsComponentFixedList),
+    type_display: "Фиксированный список компонент XML Schema",
+    type_names: &["XSComponentFixedList", "ФиксированныйСписокКомпонентXS"],
 };
 
-static LIST_PLAIN_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static LIST_PLAIN_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "СписокКомпонентXS",
-    legacy_type_id: Some(TypeId::XsComponentList),
+    type_display: "Список компонент XML Schema",
+    type_names: &["XSComponentList", "СписокКомпонентXS"],
 };
 
-static LIST_NAMED_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static LIST_NAMED_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "КоллекцияИменованныхКомпонентXS",
-    legacy_type_id: Some(TypeId::XsNamedComponentMap),
+    type_display: "Коллекция именованных компонент XML Schema",
+    type_names: &["XSNamedComponentMap", "КоллекцияИменованныхКомпонентXS"],
 };
 
 /// Дескриптор компоненты по виду узла — та же таблица, что

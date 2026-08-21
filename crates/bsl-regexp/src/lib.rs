@@ -145,7 +145,7 @@ use bsl_number::BslNumber;
 use bsl_rt::{
     Arity, BslString, BslValue, CallContext, EnumValue, FunctionCode, FunctionDescriptor,
     FunctionKind, LibraryDescriptor, ObjectProtocol, PropertyCode, PropertyDescriptor, RtError,
-    RtResult, TypeDescriptor, TypeId,
+    RtResult, TypeDescriptor,
 };
 use std::rc::Rc;
 
@@ -221,16 +221,18 @@ impl RegexMatchData {
     }
 }
 
-static MATCH_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static MATCH_TYPE: TypeDescriptor = TypeDescriptor {
     package: env!("CARGO_PKG_NAME"),
     name: "РезультатПоискаПоРегулярномуВыражению",
-    legacy_type_id: Some(TypeId::RegexMatch),
+    type_display: "Результат поиска по регулярному выражению",
+    type_names: &["ResultOfSearchByRegularExpression"],
 };
 
-static GROUP_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static GROUP_TYPE: TypeDescriptor = TypeDescriptor {
     package: env!("CARGO_PKG_NAME"),
     name: "ГруппаРезультатаПоискаПоРегулярномуВыражению",
-    legacy_type_id: Some(TypeId::RegexMatchGroup),
+    type_display: "Группа результата поиска по регулярному выражению",
+    type_names: &["ResultOfSearchByRegularExpressionGroup"],
 };
 
 /// Результат и группа используют одну реализацию: `group = None` означает
@@ -793,6 +795,9 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
     },
 ];
 
+/// Типы, которые компонент вводит в язык: по ним работает `Тип("Имя")`.
+const TYPES: &[&TypeDescriptor] = &[&crate::GROUP_TYPE, &crate::MATCH_TYPE];
+
 /// Дескриптор статически подключаемого regex-компонента.
 pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor {
@@ -803,7 +808,7 @@ pub const fn library() -> LibraryDescriptor {
         dependencies: &[],
         functions: FUNCTIONS,
         constructors: &[],
-        types: &[],
+        types: TYPES,
     }
 }
 
@@ -915,7 +920,7 @@ mod tests {
         assert!(groups(&miss).is_empty());
         assert_eq!(
             miss.type_of().unwrap(),
-            BslValue::Type(bsl_rt::TypeRef::Native(TypeId::RegexMatch))
+            BslValue::Type(bsl_rt::TypeRef::Object(&MATCH_TYPE))
         );
     }
 
@@ -948,7 +953,7 @@ mod tests {
         let item = items(&array).remove(0);
         assert_eq!(
             item.type_of().unwrap(),
-            BslValue::Type(bsl_rt::TypeRef::Native(TypeId::RegexMatchGroup))
+            BslValue::Type(bsl_rt::TypeRef::Object(&GROUP_TYPE))
         );
         // Метода `ПолучитьГруппы` у самой группы нет.
         assert!(get_groups(&item).is_err());

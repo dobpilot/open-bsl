@@ -2,7 +2,7 @@ use std::any::Any;
 use std::fmt;
 use std::rc::Rc;
 
-use crate::{BslValue, CallContext, RtError, RtResult, TypeId};
+use crate::{BslValue, CallContext, RtError, RtResult};
 
 /// Байтовый поток, который можно передать другому runtime-компоненту.
 ///
@@ -54,23 +54,38 @@ pub trait ByteStreamProtocol: fmt::Debug {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TypeDescriptor {
     pub package: &'static str,
+    /// Имя ЗНАЧЕНИЯ и конструктора: «ЧтениеXML».
     pub name: &'static str,
-    /// Временная совместимость с закрытым реестром `TypeId`. Официальные
-    /// типы сохраняют свой прежний идентификатор; новый host-тип может
-    /// оставить `None`, пока типы-значения не переведены на дескрипторы.
-    pub legacy_type_id: Option<TypeId>,
+    /// Как тип ПЕЧАТАЕТСЯ — `Строка(ТипЗнч(...))`. У платформы это часто
+    /// не имя значения: «Чтение XML» с пробелом, «Документ  DOM» с двумя.
+    /// Все написания здесь ИЗМЕРЕНЫ на 8.3.27.
+    pub type_display: &'static str,
+    /// Дополнительные имена, по которым тип ищет `Тип("Имя")`, сверх
+    /// `name` и `type_display`: английское написание и — там, где
+    /// представление расходится с именем в коде, — идентификатор
+    /// (`ОбъявлениеЭлементаXS` печатается «Объявление элемента XML
+    /// Schema»).
+    pub type_names: &'static [&'static str],
 }
 
 impl TypeDescriptor {
-    /// Дескриптор host-типа: пакет и имя, без идентификатора закрытого
-    /// реестра. Официальные компоненты заполняют `legacy_type_id`
-    /// структурным литералом — им нужен `Some(TypeId::…)`.
+    /// Дескриптор типа, у которого имя значения, представление и имя
+    /// поиска — одно и то же слово. Тип с измеренными расхождениями
+    /// («ЧтениеXML» против «Чтение XML») заполняет поля литералом.
     pub const fn new(package: &'static str, name: &'static str) -> Self {
         Self {
             package,
             name,
-            legacy_type_id: None,
+            type_display: name,
+            type_names: &[],
         }
+    }
+
+    /// Ищется ли тип по этому имени. Регистр не значим, как везде в языке.
+    pub fn answers_to(&self, name: &str) -> bool {
+        crate::folded_eq(self.name, name)
+            || crate::folded_eq(self.type_display, name)
+            || self.type_names.iter().any(|n| crate::folded_eq(n, name))
     }
 }
 

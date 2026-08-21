@@ -17,7 +17,7 @@ use crate::{parse::*, write::*};
 
 use bsl_rt::{
     BslValue, CallContext, EnumValue, MethodCode, MethodDescriptor, ObjectProtocol, PropertyCode,
-    PropertyDescriptor, RtError, RtResult, TypeDescriptor, TypeId,
+    PropertyDescriptor, RtError, RtResult, TypeDescriptor,
 };
 
 #[derive(Debug, Default)]
@@ -44,25 +44,29 @@ pub(crate) struct JsonWriterSettingsObject(JsonWriterSettings);
 #[derive(Debug, Default)]
 pub(crate) struct JsonSerializerSettingsObject(Rc<RefCell<JsonSerializerSettings>>);
 
-static READER_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static READER_TYPE: TypeDescriptor = TypeDescriptor {
     package: env!("CARGO_PKG_NAME"),
     name: "ЧтениеJSON",
-    legacy_type_id: Some(TypeId::JsonReader),
+    type_display: "Чтение JSON",
+    type_names: &["JSONReader"],
 };
-static WRITER_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static WRITER_TYPE: TypeDescriptor = TypeDescriptor {
     package: env!("CARGO_PKG_NAME"),
     name: "ЗаписьJSON",
-    legacy_type_id: Some(TypeId::JsonWriter),
+    type_display: "Запись JSON",
+    type_names: &["JSONWriter"],
 };
-static WRITER_SETTINGS_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static WRITER_SETTINGS_TYPE: TypeDescriptor = TypeDescriptor {
     package: env!("CARGO_PKG_NAME"),
     name: "ПараметрыЗаписиJSON",
-    legacy_type_id: Some(TypeId::JsonWriterSettings),
+    type_display: "Параметры записи JSON",
+    type_names: &["JSONWriterSettings"],
 };
-static SERIALIZER_SETTINGS_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static SERIALIZER_SETTINGS_TYPE: TypeDescriptor = TypeDescriptor {
     package: env!("CARGO_PKG_NAME"),
     name: "НастройкиСериализацииJSON",
-    legacy_type_id: Some(TypeId::JsonSerializerSettings),
+    type_display: "Настройки сериализации JSON",
+    type_names: &["JSONSerializerSettings"],
 };
 
 pub(crate) fn as_reader(v: &dyn ObjectProtocol) -> RtResult<&std::cell::RefCell<JsonReaderState>> {

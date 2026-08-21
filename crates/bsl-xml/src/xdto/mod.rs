@@ -599,7 +599,7 @@ mod factory;
 mod instance;
 mod lexical;
 mod model;
-mod objects;
+pub(crate) mod objects;
 mod read;
 mod serializer;
 mod values;

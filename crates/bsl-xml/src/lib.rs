@@ -12,7 +12,7 @@ mod xsd;
 
 use bsl_rt::{
     Arity, BslValue, CallContext, ConstructorCode, ConstructorDescriptor, FunctionCode,
-    FunctionDescriptor, FunctionKind, LibraryDescriptor, RtError, RtResult,
+    FunctionDescriptor, FunctionKind, LibraryDescriptor, RtError, RtResult, TypeDescriptor,
 };
 
 pub use dom::{
@@ -268,6 +268,71 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
     },
 ];
 
+/// Типы, которые компонент вводит в язык: по ним работает `Тип("Имя")`.
+const TYPES: &[&TypeDescriptor] = &[
+    &crate::xsd::ANNOTATION_TYPE,
+    &crate::xsd::APP_INFO_TYPE,
+    &crate::xsd::ATTRIBUTE_TYPE,
+    &crate::xsd::ATTRIBUTE_USE_TYPE,
+    &crate::xsd::BUILDER_TYPE,
+    &crate::xsd::COMPLEX_TYPE_TYPE,
+    &crate::xsd::DOCUMENTATION_TYPE,
+    &crate::dom::DOM_ATTRIBUTE_TYPE,
+    &crate::dom::DOM_ATTR_MAP_TYPE,
+    &crate::dom::DOM_BUILDER_TYPE,
+    &crate::dom::DOM_CDATA_TYPE,
+    &crate::dom::DOM_COMMENT_TYPE,
+    &crate::dom::DOM_DOCUMENT_TYPE,
+    &crate::dom::DOM_ELEMENT_LIST_TYPE,
+    &crate::dom::DOM_ELEMENT_TYPE,
+    &crate::dom::DOM_ENTITY_REF_TYPE,
+    &crate::dom::DOM_NODE_LIST_TYPE,
+    &crate::dom::DOM_PI_TYPE,
+    &crate::dom::DOM_TEXT_TYPE,
+    &crate::dom::DOM_WRITER_TYPE,
+    &crate::xsd::ELEMENT_TYPE,
+    &crate::xsd::EXPANDED_NAME_TYPE,
+    &crate::xpath::EXPRESSION_TYPE,
+    &crate::xdto::objects::FACETS_TYPE,
+    &crate::xsd::FACET_ENUMERATION_TYPE,
+    &crate::xsd::FACET_FRACTION_DIGITS_TYPE,
+    &crate::xsd::FACET_LENGTH_TYPE,
+    &crate::xsd::FACET_MAX_EXCLUSIVE_TYPE,
+    &crate::xsd::FACET_MAX_INCLUSIVE_TYPE,
+    &crate::xsd::FACET_MAX_LENGTH_TYPE,
+    &crate::xsd::FACET_MIN_EXCLUSIVE_TYPE,
+    &crate::xsd::FACET_MIN_INCLUSIVE_TYPE,
+    &crate::xsd::FACET_MIN_LENGTH_TYPE,
+    &crate::xsd::FACET_PATTERN_TYPE,
+    &crate::xsd::FACET_TOTAL_DIGITS_TYPE,
+    &crate::xdto::objects::FACET_TYPE,
+    &crate::xsd::FACET_WHITE_SPACE_TYPE,
+    &crate::xdto::objects::FACTORY_TYPE,
+    &crate::xsd::LIST_FIXED_TYPE,
+    &crate::xsd::LIST_NAMED_TYPE,
+    &crate::xsd::LIST_PLAIN_TYPE,
+    &crate::xdto::objects::LIST_TYPE,
+    &crate::xsd::MODEL_GROUP_TYPE,
+    &crate::xsd::NAME_LIST_TYPE,
+    &crate::xdto::objects::OBJECT_TYPE,
+    &crate::xdto::objects::OBJECT_TYPE_TYPE,
+    &crate::xsd::PARTICLE_TYPE,
+    &crate::xdto::objects::PROPERTIES_TYPE,
+    &crate::xdto::objects::PROPERTY_TYPE,
+    &crate::xml::READER_TYPE,
+    &crate::xpath::RESOLVER_TYPE,
+    &crate::xpath::RESULT_TYPE,
+    &crate::xsd::SCHEMA_SET_TYPE,
+    &crate::xsd::SCHEMA_TYPE,
+    &crate::xdto::objects::SEQUENCE_TYPE,
+    &crate::xdto::objects::SERIALIZER_TYPE,
+    &crate::xml::SETTINGS_TYPE,
+    &crate::xsd::SIMPLE_TYPE_TYPE,
+    &crate::xdto::objects::VALUE_TYPE,
+    &crate::xdto::objects::VALUE_TYPE_TYPE,
+    &crate::xml::WRITER_TYPE,
+];
+
 /// Дескриптор статически подключаемого компонента стека XML.
 pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor {
@@ -278,7 +343,7 @@ pub const fn library() -> LibraryDescriptor {
         dependencies: &[],
         functions: FUNCTIONS,
         constructors: CONSTRUCTORS,
-        types: &[],
+        types: TYPES,
     }
 }
 

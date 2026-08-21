@@ -234,7 +234,7 @@ use crate::core::{XmlEvent, XmlParser, XmlWriter, local_of, prefix_of};
 use crate::xml::XmlReaderState;
 use bsl_rt::{
     BslString, BslValue, CallContext, EnumValue, MethodCode, MethodDescriptor, ObjectProtocol,
-    PropertyCode, PropertyDescriptor, RtError, RtResult, TypeDescriptor, TypeId, folded_eq,
+    PropertyCode, PropertyDescriptor, RtError, RtResult, TypeDescriptor, folded_eq,
 };
 
 /// URI, который платформа приписывает объявлениям пространств имён
@@ -2275,82 +2275,95 @@ pub fn write(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
 
 // --- объектный протокол -----------------------------------------------------
 
-static DOM_BUILDER_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static DOM_BUILDER_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ПостроительDOM",
-    legacy_type_id: Some(TypeId::DomBuilder),
+    type_display: "Построитель DOM",
+    type_names: &["DOMBuilder"],
 };
 
-static DOM_WRITER_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static DOM_WRITER_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ЗаписьDOM",
-    legacy_type_id: Some(TypeId::DomWriter),
+    type_display: "Запись DOM",
+    type_names: &["DOMWriter"],
 };
 
-static DOM_DOCUMENT_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static DOM_DOCUMENT_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ДокументDOM",
-    legacy_type_id: Some(TypeId::DomDocument),
+    type_display: "Документ  DOM",
+    type_names: &["DOMDocument"],
 };
 
-static DOM_ELEMENT_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static DOM_ELEMENT_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ЭлементDOM",
-    legacy_type_id: Some(TypeId::DomElement),
+    type_display: "Элемент DOM",
+    type_names: &["DOMElement"],
 };
 
-static DOM_ATTRIBUTE_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static DOM_ATTRIBUTE_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "АтрибутDOM",
-    legacy_type_id: Some(TypeId::DomAttribute),
+    type_display: "Атрибут DOM",
+    type_names: &["DOMAttribute"],
 };
 
-static DOM_TEXT_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static DOM_TEXT_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ТекстDOM",
-    legacy_type_id: Some(TypeId::DomText),
+    type_display: "Текст DOM",
+    type_names: &["DOMText"],
 };
 
-static DOM_CDATA_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static DOM_CDATA_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "СекцияCDATADOM",
-    legacy_type_id: Some(TypeId::DomCdataSection),
+    type_display: "Секция CDATA DOM",
+    type_names: &["DOMCDATASection"],
 };
 
-static DOM_COMMENT_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static DOM_COMMENT_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "КомментарийDOM",
-    legacy_type_id: Some(TypeId::DomComment),
+    type_display: "Комментарий  DOM",
+    type_names: &["DOMComment"],
 };
 
-static DOM_PI_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static DOM_PI_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ИнструкцияОбработкиDOM",
-    legacy_type_id: Some(TypeId::DomProcessingInstruction),
+    type_display: "Инструкция обработки DOM",
+    type_names: &["DOMProcessingInstruction"],
 };
 
-static DOM_ENTITY_REF_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static DOM_ENTITY_REF_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "СсылкаНаСущностьDOM",
-    legacy_type_id: Some(TypeId::DomEntityReference),
+    type_display: "Ссылка на сущность DOM",
+    type_names: &["DOMEntityReference"],
 };
 
-static DOM_NODE_LIST_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static DOM_NODE_LIST_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "СписокУзловDOM",
-    legacy_type_id: Some(TypeId::DomNodeList),
+    type_display: "Список узлов DOM",
+    type_names: &["DOMNodeList"],
 };
 
-static DOM_ATTR_MAP_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static DOM_ATTR_MAP_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "КоллекцияАтрибутовDOM",
-    legacy_type_id: Some(TypeId::DomAttributeMap),
+    type_display: "Коллекция атрибутов DOM",
+    type_names: &["DOMAttributeMap"],
 };
 
-static DOM_ELEMENT_LIST_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static DOM_ELEMENT_LIST_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "СписокЭлементовDOM",
-    legacy_type_id: Some(TypeId::DomElementList),
+    type_display: "Список элементов DOM",
+    type_names: &["DOMElementList"],
 };
 
 /// `ПостроительDOM` — состояния нет: дерево целиком строит `Прочитать`.

@@ -8,7 +8,7 @@ mod archive;
 
 use bsl_rt::{
     Arity, BslValue, CallContext, ConstructorCode, ConstructorDescriptor, LibraryDescriptor,
-    RtResult,
+    RtResult, TypeDescriptor,
 };
 
 pub use archive::{
@@ -93,6 +93,18 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[
     },
 ];
 
+/// Типы, которые компонент вводит в язык: по ним работает `Тип("Имя")`.
+const TYPES: &[&TypeDescriptor] = &[
+    &crate::archive::reader::ARCHIVE_ENTRIES_TYPE,
+    &crate::archive::reader::ARCHIVE_ENTRY_TYPE,
+    &crate::archive::reader::ARCHIVE_READER_TYPE,
+    &crate::archive::reader::ARCHIVE_WRITER_TYPE,
+    &crate::archive::reader::ZIP_ENTRIES_TYPE,
+    &crate::archive::reader::ZIP_ENTRY_TYPE,
+    &crate::archive::reader::ZIP_READER_TYPE,
+    &crate::archive::reader::ZIP_WRITER_TYPE,
+];
+
 /// Дескриптор статически подключаемого компонента архивов.
 pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor {
@@ -103,7 +115,7 @@ pub const fn library() -> LibraryDescriptor {
         dependencies: &[],
         functions: &[],
         constructors: CONSTRUCTORS,
-        types: &[],
+        types: TYPES,
     }
 }
 

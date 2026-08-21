@@ -7,73 +7,85 @@ use super::*;
 pub(crate) static VALUE_TYPE_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ТипЗначенияXDTO",
-    legacy_type_id: Some(TypeId::XdtoValueType),
+    type_display: "Тип значения XDTO",
+    type_names: &["XDTOValueType"],
 };
 
 pub(crate) static OBJECT_TYPE_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ТипОбъектаXDTO",
-    legacy_type_id: Some(TypeId::XdtoObjectType),
+    type_display: "Тип объекта XDTO",
+    type_names: &["XDTOObjectType"],
 };
 
 pub(crate) static PROPERTY_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "СвойствоXDTO",
-    legacy_type_id: Some(TypeId::XdtoProperty),
+    type_display: "Свойство XDTO",
+    type_names: &["XDTOProperty"],
 };
 
 pub(crate) static PROPERTIES_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "КоллекцияСвойствXDTO",
-    legacy_type_id: Some(TypeId::XdtoPropertyCollection),
+    type_display: "Коллекция свойств XDTO",
+    type_names: &["XDTOPropertyCollection"],
 };
 
 pub(crate) static FACETS_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "КоллекцияФасетовXDTO",
-    legacy_type_id: Some(TypeId::XdtoFacetCollection),
+    type_display: "Коллекция фасетов XDTO",
+    type_names: &["XDTOFacetCollection"],
 };
 
 pub(crate) static FACET_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ФасетXDTO",
-    legacy_type_id: Some(TypeId::XdtoFacet),
+    type_display: "Фасет XDTO",
+    type_names: &["XDTOFacet"],
 };
 
 pub(crate) static VALUE_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ЗначениеXDTO",
-    legacy_type_id: Some(TypeId::XdtoDataValue),
+    type_display: "Значение XDTO",
+    type_names: &["XDTODataValue"],
 };
 
 pub(crate) static FACTORY_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ФабрикаXDTO",
-    legacy_type_id: Some(TypeId::XdtoFactory),
+    type_display: "Фабрика XDTO",
+    type_names: &["XDTOFactory"],
 };
 
 pub(crate) static SERIALIZER_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "СериализаторXDTO",
-    legacy_type_id: Some(TypeId::XdtoSerializer),
+    type_display: "Сериализатор XDTO",
+    type_names: &["XDTOSerializer"],
 };
 
 pub(crate) static OBJECT_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ОбъектXDTO",
-    legacy_type_id: Some(TypeId::XdtoDataObject),
+    type_display: "Объект XDTO",
+    type_names: &["XDTODataObject"],
 };
 
 pub(crate) static LIST_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "СписокXDTO",
-    legacy_type_id: Some(TypeId::XdtoList),
+    type_display: "Список XDTO",
+    type_names: &["XDTOList"],
 };
 
 pub(crate) static SEQUENCE_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ПоследовательностьXDTO",
-    legacy_type_id: Some(TypeId::XdtoSequence),
+    type_display: "Последовательность XDTO",
+    type_names: &["XDTOSequence"],
 };
 
 // Обработчики статической таблицы методов оболочки XDTO. Таблица одна на

@@ -35,18 +35,20 @@ pub enum BuiltinBsl {
 }
 
 impl BuiltinBsl {
-    /// `ТипЗнч()` значения, которое получится из лексической формы.
-    /// Вне тестов встроенные типы проверяются через модель, поэтому
-    /// lib-цель метода не видит.
+    /// Имя типа BSL, который получится из лексической формы, — как его
+    /// печатает `Строка(ТипЗнч(...))`. Вне тестов встроенные типы
+    /// проверяются через модель, поэтому lib-цель метода не видит.
     #[cfg_attr(not(test), allow(dead_code))]
-    pub fn type_id(self) -> TypeId {
+    pub fn type_name(self) -> &'static str {
         match self {
-            BuiltinBsl::Str => TypeId::String,
-            BuiltinBsl::Number | BuiltinBsl::Double => TypeId::Number,
-            BuiltinBsl::Boolean => TypeId::Boolean,
-            BuiltinBsl::Date | BuiltinBsl::DateTime | BuiltinBsl::Time => TypeId::Date,
-            BuiltinBsl::Base64 | BuiltinBsl::Hex => TypeId::BinaryData,
-            BuiltinBsl::QName => TypeId::XmlExpandedName,
+            BuiltinBsl::Str => TypeId::String.name(),
+            BuiltinBsl::Number | BuiltinBsl::Double => TypeId::Number.name(),
+            BuiltinBsl::Boolean => TypeId::Boolean.name(),
+            BuiltinBsl::Date | BuiltinBsl::DateTime | BuiltinBsl::Time => TypeId::Date.name(),
+            BuiltinBsl::Base64 | BuiltinBsl::Hex => TypeId::BinaryData.name(),
+            // Расширенное имя — тип компонента: у него своё представление
+            // в дескрипторе, а не строка в закрытом реестре ядра.
+            BuiltinBsl::QName => crate::xsd::EXPANDED_NAME_TYPE.type_display,
         }
     }
 }

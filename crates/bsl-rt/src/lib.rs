@@ -1209,17 +1209,11 @@ impl BslValue {
             // `Перечисление<Имя>`, а не тип членов.
             BslValue::EnumType(k) => TypeId::EnumMeta(*k),
             BslValue::Object(o) => match &**o {
-                // Официальный компонент пока сохраняет свой `TypeId`, и
-                // тогда `Тип("ЧтениеXML") = ТипЗнч(читатель)` остаётся
-                // измеренным «Да». У host-типа идентификатора в закрытом
-                // реестре нет — он называется своим дескриптором, и
-                // `ТипЗнч` над ним работает, а не отвечает ошибкой.
+                // Тип объекта компонента — его дескриптор, и только он:
+                // ни у официального типа, ни у host-типа больше нет
+                // строки в закрытом реестре `TypeId` ядра.
                 BslObject::Extension(object) => {
-                    let descriptor = object.type_descriptor();
-                    return Ok(BslValue::Type(match descriptor.legacy_type_id {
-                        Some(type_id) => TypeRef::Native(type_id),
-                        None => TypeRef::Object(descriptor),
-                    }));
+                    return Ok(BslValue::Type(TypeRef::Object(object.type_descriptor())));
                 }
                 BslObject::VstrOpaque(_) => TypeId::VstrOpaque,
                 BslObject::Array(_) => TypeId::Array,

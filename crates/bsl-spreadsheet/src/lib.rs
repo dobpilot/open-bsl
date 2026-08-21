@@ -10,7 +10,7 @@ mod xlsx;
 
 use bsl_rt::{
     Arity, BslValue, CallContext, ConstructorCode, ConstructorDescriptor, LibraryDescriptor,
-    RtResult,
+    RtResult, TypeDescriptor,
 };
 
 pub use document::{
@@ -41,6 +41,15 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[ConstructorDescriptor {
     call: construct_document,
 }];
 
+/// Типы, которые компонент вводит в язык: по ним работает `Тип("Имя")`.
+const TYPES: &[&TypeDescriptor] = &[
+    &crate::document::objects::AREA_TYPE,
+    &crate::document::objects::DOCUMENT_TYPE,
+    &crate::document::objects::DRAWINGS_TYPE,
+    &crate::document::objects::DRAWING_TYPE,
+    &crate::document::objects::PARAMS_TYPE,
+];
+
 /// Дескриптор статически подключаемого компонента табличного документа.
 pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor {
@@ -51,7 +60,7 @@ pub const fn library() -> LibraryDescriptor {
         dependencies: &[],
         functions: &[],
         constructors: CONSTRUCTORS,
-        types: &[],
+        types: TYPES,
     }
 }
 

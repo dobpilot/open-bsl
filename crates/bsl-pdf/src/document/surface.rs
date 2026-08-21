@@ -124,31 +124,36 @@ pub struct AttachmentObject {
 pub(crate) static DOCUMENT_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ДокументPDF",
-    legacy_type_id: Some(TypeId::PdfDocument),
+    type_display: "Документ PDF",
+    type_names: &["PDFDocument"],
 };
 
 pub(crate) static PAGES_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "КоллекцияСтраницPDF",
-    legacy_type_id: Some(TypeId::PdfPagesCollection),
+    type_display: "КоллекцияСтраницPDF",
+    type_names: &["PDFPagesCollection"],
 };
 
 pub(crate) static PAGE_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "СтраницаPDF",
-    legacy_type_id: Some(TypeId::PdfPage),
+    type_display: "СтраницаPDF",
+    type_names: &["PDFPage"],
 };
 
 pub(crate) static ATTACHMENTS_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "КоллекцияВложенийPDF",
-    legacy_type_id: Some(TypeId::PdfAttachmentCollection),
+    type_display: "КоллекцияВложенийPDF",
+    type_names: &["PDFAttachmentCollection"],
 };
 
 pub(crate) static ATTACHMENT_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ВложениеPDF",
-    legacy_type_id: Some(TypeId::PdfAttachment),
+    type_display: "ВложениеPDF",
+    type_names: &["PDFAttachment"],
 };
 
 /// `ДокументPDF.Прочитать(ИмяФайла[, Пароль])`.

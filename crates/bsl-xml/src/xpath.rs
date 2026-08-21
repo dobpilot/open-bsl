@@ -219,8 +219,7 @@ use std::rc::Rc;
 use crate::dom::{DomKind, DomNode, DomNodeObject};
 use bsl_rt::{
     BslNumber, BslString, BslValue, CallContext, EnumValue, MethodCode, MethodDescriptor,
-    ObjectProtocol, PropertyCode, PropertyDescriptor, RtError, RtResult, TypeDescriptor, TypeId,
-    folded_eq,
+    ObjectProtocol, PropertyCode, PropertyDescriptor, RtError, RtResult, TypeDescriptor, folded_eq,
 };
 
 fn bad(what: impl Into<String>) -> RtError {
@@ -2587,22 +2586,25 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
 
 // --- объектный протокол -----------------------------------------------------
 
-static RESOLVER_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static RESOLVER_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "РазыменовательПространствИменDOM",
-    legacy_type_id: Some(TypeId::DomNamespaceResolver),
+    type_display: "Разыменователь пространств имен DOM XPath",
+    type_names: &["DOMNamespaceResolver", "РазыменовательПространствИменDOM"],
 };
 
-static EXPRESSION_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static EXPRESSION_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ВыражениеXPath",
-    legacy_type_id: Some(TypeId::XPathExpression),
+    type_display: "Выражение DOM XPath",
+    type_names: &["XPathExpression", "ВыражениеXPath"],
 };
 
-static RESULT_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static RESULT_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "РезультатXPath",
-    legacy_type_id: Some(TypeId::XPathResult),
+    type_display: "Результат DOM XPath",
+    type_names: &["XPathResult", "РезультатXPath"],
 };
 
 /// `РазыменовательПространствИменDOM`.

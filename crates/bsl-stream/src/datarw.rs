@@ -118,7 +118,7 @@ use std::rc::Rc;
 use bsl_rt::{
     BslNumber, BslString, BslValue, ByteStreamProtocol, CallContext, EnumValue, MethodCode,
     MethodDescriptor, ObjectProtocol, PropertyCode, PropertyDescriptor, RtError, RtResult,
-    TypeDescriptor, TypeId, encoding::Encoding,
+    TypeDescriptor, encoding::Encoding,
 };
 
 /// Порядок байтов многобайтового целого.
@@ -311,22 +311,25 @@ enum Side {
     Writer,
 }
 
-static DATA_READER_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static DATA_READER_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ЧтениеДанных",
-    legacy_type_id: Some(TypeId::DataReader),
+    type_display: "Чтение данных",
+    type_names: &["DataReader"],
 };
 
-static DATA_WRITER_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static DATA_WRITER_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ЗаписьДанных",
-    legacy_type_id: Some(TypeId::DataWriter),
+    type_display: "Запись данных",
+    type_names: &["DataWriter"],
 };
 
-static DATA_READ_RESULT_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static DATA_READ_RESULT_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "РезультатЧтенияДанных",
-    legacy_type_id: Some(TypeId::DataReadResult),
+    type_display: "Результат чтения данных",
+    type_names: &["ReadDataResult"],
 };
 
 #[derive(Debug)]

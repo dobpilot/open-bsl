@@ -11,14 +11,14 @@ use std::rc::Rc;
 use crate::writer::{PdfValue, inflate_with_limit, write_value, zlib_compress};
 use bsl_rt::{
     BslNumber, BslString, BslValue, CallContext, EnumValue, MethodCode, MethodDescriptor,
-    ObjectProtocol, PropertyCode, PropertyDescriptor, RtError, RtResult, TypeDescriptor, TypeId,
+    ObjectProtocol, PropertyCode, PropertyDescriptor, RtError, RtResult, TypeDescriptor,
 };
 
 // Модуль разложен по подсистемам, но остаётся одним пространством
 // имён: подмодули видят друг друга через `use super::*`.
-mod container;
-mod objects;
-mod surface;
+pub(crate) mod container;
+pub(crate) mod objects;
+pub(crate) mod surface;
 
 #[cfg(test)]
 mod tests;

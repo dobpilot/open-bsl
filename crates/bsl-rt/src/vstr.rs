@@ -2153,7 +2153,7 @@ mod tests {
         assert_eq!(read(&text), t);
         // Тип, UUID которого не измерен, — ошибка, а не выдуманный UUID.
         let e =
-            value_to_string_internal(&BslValue::Type(TypeRef::Native(TypeId::JsonReader)), &rt())
+            value_to_string_internal(&BslValue::Type(TypeRef::Native(TypeId::KeyAndValue)), &rt())
                 .unwrap_err();
         assert!(matches!(e, RtError::Vstr(_)), "{e:?}");
     }

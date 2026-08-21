@@ -39,7 +39,7 @@ use std::rc::Rc;
 use bsl_rt::{
     Arity, BslString, BslValue, CallContext, ConstructorCode, ConstructorDescriptor, EnumValue,
     LibraryDescriptor, MethodCode, MethodDescriptor, ObjectProtocol, PropertyCode,
-    PropertyDescriptor, RtError, RtResult, TypeDescriptor, TypeId, folded_eq,
+    PropertyDescriptor, RtError, RtResult, TypeDescriptor, folded_eq,
 };
 
 fn bad(what: impl Into<String>) -> RtError {
@@ -384,16 +384,18 @@ impl TextDocData {
 
 // --- Объекты компонента --------------------------------------------------
 
-static DOCUMENT_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static DOCUMENT_TYPE: TypeDescriptor = TypeDescriptor {
     package: env!("CARGO_PKG_NAME"),
     name: "ТекстовыйДокумент",
-    legacy_type_id: Some(TypeId::TextDocument),
+    type_display: "Текстовый документ",
+    type_names: &["TextDocument"],
 };
 
-static PARAMS_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static PARAMS_TYPE: TypeDescriptor = TypeDescriptor {
     package: env!("CARGO_PKG_NAME"),
     name: "ПараметрыМакетаТекстовогоДокумента",
-    legacy_type_id: Some(TypeId::TextDocParams),
+    type_display: "Параметры макета текстового документа",
+    type_names: &["TextTemplateParameters"],
 };
 
 #[derive(Debug, Clone, Default)]
@@ -856,6 +858,9 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[ConstructorDescriptor {
     call: construct,
 }];
 
+/// Типы, которые компонент вводит в язык: по ним работает `Тип("Имя")`.
+const TYPES: &[&TypeDescriptor] = &[&crate::DOCUMENT_TYPE, &crate::PARAMS_TYPE];
+
 /// Дескриптор статически подключаемого компонента текстовых документов.
 pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor {
@@ -866,7 +871,7 @@ pub const fn library() -> LibraryDescriptor {
         dependencies: &[],
         functions: &[],
         constructors: CONSTRUCTORS,
-        types: &[],
+        types: TYPES,
     }
 }
 

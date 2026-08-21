@@ -3139,11 +3139,8 @@ mod tests {
     #[derive(Debug)]
     struct HostCounter(std::cell::RefCell<i64>);
 
-    static HOST_COUNTER_TYPE: bsl_rt::TypeDescriptor = bsl_rt::TypeDescriptor {
-        package: "bsl-test-host",
-        name: "СчётчикХоста",
-        legacy_type_id: None,
-    };
+    static HOST_COUNTER_TYPE: bsl_rt::TypeDescriptor =
+        bsl_rt::TypeDescriptor::new("bsl-test-host", "СчётчикХоста");
 
     impl bsl_rt::ObjectProtocol for HostCounter {
         fn type_descriptor(&self) -> &'static bsl_rt::TypeDescriptor {

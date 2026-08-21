@@ -24,7 +24,7 @@
 
 mod bridge;
 mod dates;
-mod objects;
+pub(crate) mod objects;
 mod parse;
 mod write;
 
@@ -36,7 +36,7 @@ pub use write::*;
 
 use bsl_rt::{
     Arity, ConstructorCode, ConstructorDescriptor, FunctionCode, FunctionDescriptor, FunctionKind,
-    LibraryDescriptor, RtError,
+    LibraryDescriptor, RtError, TypeDescriptor,
 };
 
 /// Ошибка разбора. Текст платформы мы не воспроизводим (он привязан к её
@@ -117,6 +117,14 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[
     },
 ];
 
+/// Типы, которые компонент вводит в язык: по ним работает `Тип("Имя")`.
+const TYPES: &[&TypeDescriptor] = &[
+    &crate::objects::READER_TYPE,
+    &crate::objects::SERIALIZER_SETTINGS_TYPE,
+    &crate::objects::WRITER_SETTINGS_TYPE,
+    &crate::objects::WRITER_TYPE,
+];
+
 /// Дескриптор статически подключаемого JSON-компонента.
 pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor {
@@ -127,7 +135,7 @@ pub const fn library() -> LibraryDescriptor {
         dependencies: &[],
         functions: FUNCTIONS,
         constructors: CONSTRUCTORS,
-        types: &[],
+        types: TYPES,
     }
 }
 

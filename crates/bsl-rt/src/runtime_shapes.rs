@@ -38,6 +38,6 @@ impl RuntimeShapes {
         self.component_types
             .iter()
             .copied()
-            .find(|descriptor| crate::folded_eq(descriptor.name, name))
+            .find(|descriptor| descriptor.answers_to(name))
     }
 }

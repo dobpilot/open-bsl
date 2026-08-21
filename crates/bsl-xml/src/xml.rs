@@ -14,7 +14,7 @@ use crate::core::{
 };
 use bsl_rt::{
     BslNumber, BslString, BslValue, CallContext, EnumValue, MethodCode, MethodDescriptor,
-    ObjectProtocol, PropertyCode, PropertyDescriptor, RtError, RtResult, TypeDescriptor, TypeId,
+    ObjectProtocol, PropertyCode, PropertyDescriptor, RtError, RtResult, TypeDescriptor,
 };
 
 fn bad(what: impl Into<String>) -> RtError {
@@ -753,22 +753,25 @@ pub fn close_reader(obj: &dyn ObjectProtocol) -> RtResult<BslValue> {
 
 // --- объектный протокол -----------------------------------------------------
 
-static READER_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static READER_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ЧтениеXML",
-    legacy_type_id: Some(TypeId::XmlReader),
+    type_display: "Чтение XML",
+    type_names: &["XMLReader"],
 };
 
-static WRITER_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static WRITER_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ЗаписьXML",
-    legacy_type_id: Some(TypeId::XmlWriter),
+    type_display: "Запись XML",
+    type_names: &["XMLWriter"],
 };
 
-static SETTINGS_TYPE: TypeDescriptor = TypeDescriptor {
+pub(crate) static SETTINGS_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "ПараметрыЗаписиXML",
-    legacy_type_id: Some(TypeId::XmlWriterSettings),
+    type_display: "Параметры записи XML",
+    type_names: &["XMLWriterSettings"],
 };
 
 impl ObjectProtocol for XmlReaderObject {
