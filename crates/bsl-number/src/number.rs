@@ -106,16 +106,26 @@ pub struct BigDec {
 /// вернуться в `Small`, иначе однажды ушедшее наверх значение навсегда
 /// осталось бы на медленном пути.
 #[derive(Clone)]
-pub enum BslNumber {
+pub struct BslNumber(pub(crate) Repr);
+
+/// Представление числа. ПРИВАТНО СОЗНАТЕЛЬНО: пока варианты были
+/// публичными, внешний клиент мог взять обычное число, сопоставить
+/// `Small { scale, .. }` и записать туда `i32::MIN` мимо проверяющих
+/// конструкторов. После этого печать паниковала в debug на `-scale`, а в
+/// release выдавала заведомо неверную строку. Инвариант «масштаб в
+/// пределах `MAX_SCALE`» держится конструкторами, и обойти их теперь
+/// нечем.
+#[derive(Clone)]
+pub(crate) enum Repr {
     Small { m: M128, scale: i32 },
     Big(Rc<BigDec>),
 }
 
 impl BslNumber {
-    pub const ZERO: BslNumber = BslNumber::Small {
+    pub const ZERO: BslNumber = BslNumber(Repr::Small {
         m: M128([0, 0]),
         scale: 0,
-    };
+    });
 
     #[inline]
     pub fn from_i64(v: i64) -> Self {
@@ -199,8 +209,8 @@ impl BslNumber {
 
     #[inline]
     fn fast64_parts(&self) -> Option<(i64, i32)> {
-        match self {
-            BslNumber::Small { m, scale } if *scale <= 15 => {
+        match &self.0 {
+            Repr::Small { m, scale } if *scale <= 15 => {
                 i64::try_from(m.get()).ok().map(|m| (m, *scale))
             }
             _ => None,
@@ -208,16 +218,16 @@ impl BslNumber {
     }
 
     pub fn is_zero(&self) -> bool {
-        match self {
-            BslNumber::Small { m, .. } => m.get() == 0,
-            BslNumber::Big(b) => b.m.is_zero(),
+        match &self.0 {
+            Repr::Small { m, .. } => m.get() == 0,
+            Repr::Big(b) => b.m.is_zero(),
         }
     }
 
     pub fn is_negative(&self) -> bool {
-        match self {
-            BslNumber::Small { m, .. } => m.get() < 0,
-            BslNumber::Big(b) => b.m.is_negative(),
+        match &self.0 {
+            Repr::Small { m, .. } => m.get() < 0,
+            Repr::Big(b) => b.m.is_negative(),
         }
     }
 
@@ -227,16 +237,16 @@ impl BslNumber {
     }
 
     pub fn scale(&self) -> i32 {
-        match self {
-            BslNumber::Small { scale, .. } => *scale,
-            BslNumber::Big(b) => b.scale,
+        match &self.0 {
+            Repr::Small { scale, .. } => *scale,
+            Repr::Big(b) => b.scale,
         }
     }
 
     fn big_parts(&self) -> (Cow<'_, BigInt>, i32) {
-        match self {
-            BslNumber::Small { m, scale } => (Cow::Owned(BigInt::from(m.get())), *scale),
-            BslNumber::Big(b) => (Cow::Borrowed(&b.m), b.scale),
+        match &self.0 {
+            Repr::Small { m, scale } => (Cow::Owned(BigInt::from(m.get())), *scale),
+            Repr::Big(b) => (Cow::Borrowed(&b.m), b.scale),
         }
     }
 
@@ -258,8 +268,8 @@ impl BslNumber {
     /// превышает защитный предел.
     #[inline]
     pub fn add_assign(&mut self, other: &Self) -> Result<(), NumError> {
-        if let (BslNumber::Small { m: left, scale: 0 }, BslNumber::Small { m: right, scale: 0 }) =
-            (&mut *self, other)
+        if let (Repr::Small { m: left, scale: 0 }, Repr::Small { m: right, scale: 0 }) =
+            (&mut self.0, &other.0)
             && let Some(sum) = left.get().checked_add(right.get())
         {
             *left = M128::new(sum);
@@ -291,8 +301,8 @@ impl BslNumber {
             }
         }
 
-        if let (BslNumber::Small { m: am, scale: asc }, BslNumber::Small { m: bm, scale: bsc }) =
-            (self, other)
+        if let (Repr::Small { m: am, scale: asc }, Repr::Small { m: bm, scale: bsc }) =
+            (&self.0, &other.0)
         {
             // Самый частый путь (целые счётчики, значения одного масштаба):
             // не умножаем обе мантиссы на 10^0. У i128 даже такое
@@ -351,8 +361,8 @@ impl BslNumber {
             return Ok(BslNumber::small(result as i128, s));
         }
 
-        if let (BslNumber::Small { m: am, scale: _ }, BslNumber::Small { m: bm, scale: _ }) =
-            (self, other)
+        if let (Repr::Small { m: am, scale: _ }, Repr::Small { m: bm, scale: _ }) =
+            (&self.0, &other.0)
             && let Some(r) = am.get().checked_mul(bm.get())
         {
             return Ok(BslNumber::small(r, s));
@@ -377,12 +387,12 @@ impl BslNumber {
     #[inline]
     pub fn increment_and_le(&mut self, bound: &Self) -> Result<bool, NumError> {
         if let (
-            BslNumber::Small {
+            Repr::Small {
                 m: counter,
                 scale: 0,
             },
-            BslNumber::Small { m: limit, scale: 0 },
-        ) = (&mut *self, bound)
+            Repr::Small { m: limit, scale: 0 },
+        ) = (&mut self.0, &bound.0)
             && let Some(next) = counter.get().checked_add(1)
         {
             *counter = M128::new(next);
@@ -396,16 +406,16 @@ impl BslNumber {
     }
 
     pub fn neg(&self) -> Self {
-        match self {
+        match &self.0 {
             // У `i128::MIN` положительного двойника в `i128` НЕТ, поэтому
             // обычный минус там паникует в debug и возвращает то же
             // отрицательное число в release. Такой случай переезжает в
             // большой ярус, где предела нет.
-            BslNumber::Small { m, scale } => match m.get().checked_neg() {
+            Repr::Small { m, scale } => match m.get().checked_neg() {
                 Some(v) => BslNumber::small(v, *scale),
                 None => BslNumber::big(-BigInt::from(m.get()), *scale),
             },
-            BslNumber::Big(b) => BslNumber::big(-b.m.clone(), b.scale),
+            Repr::Big(b) => BslNumber::big(-b.m.clone(), b.scale),
         }
     }
 
@@ -454,8 +464,8 @@ impl BslNumber {
         let s = self.scale().max(other.scale());
         check_scale(s)?;
 
-        if let (BslNumber::Small { m: am, scale: asc }, BslNumber::Small { m: bm, scale: bsc }) =
-            (self, other)
+        if let (Repr::Small { m: am, scale: asc }, Repr::Small { m: bm, scale: bsc }) =
+            (&self.0, &other.0)
             && let (Some(a), Some(b)) = (
                 scale_up_i128(am.get(), s - asc),
                 scale_up_i128(bm.get(), s - bsc),
@@ -486,7 +496,7 @@ impl BslNumber {
             .and_then(|k| k.checked_sub(self.scale()))
             .ok_or(NumError::ScaleOverflow)?;
 
-        if let (BslNumber::Small { m: am, .. }, BslNumber::Small { m: bm, .. }) = (self, other) {
+        if let (Repr::Small { m: am, .. }, Repr::Small { m: bm, .. }) = (&self.0, &other.0) {
             let (n, d) = if k >= 0 {
                 (scale_up_i128(am.get(), k), Some(bm.get()))
             } else {
@@ -583,12 +593,12 @@ impl BslNumber {
         if self.scale() > 0 {
             return None;
         }
-        match self {
-            BslNumber::Small { m, scale } => {
+        match &self.0 {
+            Repr::Small { m, scale } => {
                 let v = scale_up_i128(m.get(), -*scale)?;
                 i64::try_from(v).ok()
             }
-            BslNumber::Big(b) => scale_up_big(&b.m, -b.scale).to_i64(),
+            Repr::Big(b) => scale_up_big(&b.m, -b.scale).to_i64(),
         }
     }
 
@@ -599,9 +609,9 @@ impl BslNumber {
     /// Оценка грубая намеренно (`log10(2) < 1/3`), зато без перевода
     /// числа в строку.
     fn mantissa_digits_at_most(&self) -> u64 {
-        match self {
-            BslNumber::Small { .. } => 39,
-            BslNumber::Big(b) => b.m.bits() / 3 + 1,
+        match &self.0 {
+            Repr::Small { .. } => 39,
+            Repr::Big(b) => b.m.bits() / 3 + 1,
         }
     }
 
@@ -623,7 +633,7 @@ impl BslNumber {
             return BslNumber::from_i128(0);
         }
 
-        if let BslNumber::Small { m, .. } = self
+        if let Repr::Small { m, .. } = &self.0
             && delta <= 38
             && let Some(q) = div_half_up_i128(m.get(), POW10[delta as usize])
         {
@@ -655,7 +665,7 @@ impl BslNumber {
             return BslNumber::from_i128(0);
         }
 
-        if let BslNumber::Small { m, .. } = self
+        if let Repr::Small { m, .. } = &self.0
             && delta <= 38
             && let Some(q) = div_half_down_i128(m.get(), POW10[delta as usize])
         {
@@ -687,7 +697,7 @@ impl BslNumber {
             return BslNumber::from_i128(0);
         }
 
-        if let BslNumber::Small { m, .. } = self
+        if let Repr::Small { m, .. } = &self.0
             && delta <= 38
         {
             let q = m.get() / POW10[delta as usize];
@@ -709,19 +719,19 @@ impl BslNumber {
 
 fn normalize_small(mut m: i128, mut scale: i32) -> BslNumber {
     if m == 0 {
-        return BslNumber::Small {
+        return BslNumber(Repr::Small {
             m: M128::new(0),
             scale: 0,
-        };
+        });
     }
     while scale > 0 && i128_is_divisible_by_10(m) {
         m = exact_div_by_10(m);
         scale -= 1;
     }
-    BslNumber::Small {
+    BslNumber(Repr::Small {
         m: M128::new(m),
         scale,
-    }
+    })
 }
 
 /// Обратное к пяти по модулю 2^128. Считается один раз и на бумаге:
@@ -802,11 +812,11 @@ fn bigint_is_divisible_by_10(value: &BigInt) -> bool {
 /// Попытка вернуться в быстрый ярус после операции на `BigInt`.
 fn demote(b: BigDec) -> BslNumber {
     match b.m.to_i128() {
-        Some(v) => BslNumber::Small {
+        Some(v) => BslNumber(Repr::Small {
             m: M128::new(v),
             scale: b.scale,
-        },
-        None => BslNumber::Big(Rc::new(b)),
+        }),
+        None => BslNumber(Repr::Big(Rc::new(b))),
     }
 }
 
@@ -1031,8 +1041,8 @@ impl Ord for BslNumber {
                 return a.cmp(&b);
             }
         }
-        if let (BslNumber::Small { m: a, scale: asc }, BslNumber::Small { m: b, scale: bsc }) =
-            (self, other)
+        if let (Repr::Small { m: a, scale: asc }, Repr::Small { m: b, scale: bsc }) =
+            (&self.0, &other.0)
         {
             if asc == bsc {
                 return a.get().cmp(&b.get());
@@ -1054,14 +1064,14 @@ impl Ord for BslNumber {
 
 impl Hash for BslNumber {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        match self {
-            BslNumber::Small { m, scale } => {
+        match &self.0 {
+            Repr::Small { m, scale } => {
                 // Малое и большое представление одного значения не пересекаются:
                 // demote гарантирует, что всё влезающее в i128 лежит в Small.
                 m.get().hash(state);
                 scale.hash(state);
             }
-            BslNumber::Big(b) => {
+            Repr::Big(b) => {
                 b.m.hash(state);
                 b.scale.hash(state);
             }
@@ -1077,6 +1087,7 @@ impl std::fmt::Debug for BslNumber {
 
 #[cfg(test)]
 mod tests {
+    use super::Repr;
     use num_bigint::BigInt;
     use num_traits::Zero;
 
@@ -1163,7 +1174,7 @@ mod tests {
     fn fast_i64_paths_promote_without_losing_decimal_exactness() {
         let max = BslNumber::from_i64(i64::MAX);
         let promoted = max.add(&BslNumber::from_i64(1)).unwrap();
-        assert!(matches!(promoted, BslNumber::Small { .. }));
+        assert!(matches!(promoted.0, Repr::Small { .. }));
         assert_eq!(promoted.to_canonical(), "9223372036854775808");
 
         let sum = BslNumber::from_parts(1, 1)

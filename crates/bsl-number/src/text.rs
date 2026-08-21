@@ -1,3 +1,4 @@
+use crate::number::Repr;
 use num_bigint::BigInt;
 use num_traits::Signed;
 
@@ -9,12 +10,12 @@ impl BslNumber {
     /// экспоненты. Соответствует `Формат(x, "ЧГ=0; ЧРД=.")` в 1С и
     /// разбирается обратно без потерь — на этом строится дифф-харнесс.
     pub fn to_canonical(&self) -> String {
-        let (digits, neg, scale) = match self {
-            BslNumber::Small { m, scale } => {
+        let (digits, neg, scale) = match &self.0 {
+            Repr::Small { m, scale } => {
                 let v = m.get();
                 (v.unsigned_abs().to_string(), v < 0, *scale)
             }
-            BslNumber::Big(b) => (b.m.abs().to_string(), b.m.is_negative(), b.scale),
+            Repr::Big(b) => (b.m.abs().to_string(), b.m.is_negative(), b.scale),
         };
 
         let mut out = String::new();
