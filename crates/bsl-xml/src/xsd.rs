@@ -199,8 +199,9 @@ use std::rc::Rc;
 use crate::dom::{DomKind, DomNode};
 
 use bsl_rt::{
-    BslNumber, BslString, BslValue, CallContext, EnumValue, ObjectProtocol, RtError, RtResult,
-    TypeDescriptor, TypeId,
+    BslNumber, BslString, BslValue, CallContext, EnumValue, MethodCode, MethodDescriptor,
+    ObjectProtocol, PropertyCode, PropertyDescriptor, RtError, RtResult, TypeDescriptor, TypeId,
+    folded_eq,
 };
 
 /// Пространство имён XML Schema. Опознание элементов схемы идёт по нему, а
@@ -1589,7 +1590,7 @@ fn build_schema(root: &Rc<DomNode>, doc: &Rc<DomNode>) -> RtResult<BslValue> {
 /// компоненты нет.
 pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
     let unknown = || RtError::UnknownColumn(name.to_string());
-    let is = |ru: &str, en: &str| name.eq_ignore_ascii_case(ru) || name.eq_ignore_ascii_case(en);
+    let is = |ru: &str, en: &str| folded_eq(name, ru) || folded_eq(name, en);
 
     let Some(object) = obj.object_ref() else {
         return Err(unknown());
@@ -1612,7 +1613,7 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
 
 fn component_property(schema: &Rc<XsSchemaData>, index: usize, name: &str) -> RtResult<BslValue> {
     let unknown = || RtError::UnknownColumn(name.to_string());
-    let is = |ru: &str, en: &str| name.eq_ignore_ascii_case(ru) || name.eq_ignore_ascii_case(en);
+    let is = |ru: &str, en: &str| folded_eq(name, ru) || folded_eq(name, en);
     let node = schema.node(index);
 
     // Общее у всех компонент.
@@ -1767,7 +1768,7 @@ fn schema_property(
     name: &str,
 ) -> RtResult<BslValue> {
     let unknown = || RtError::UnknownColumn(name.to_string());
-    let is = |ru: &str, en: &str| name.eq_ignore_ascii_case(ru) || name.eq_ignore_ascii_case(en);
+    let is = |ru: &str, en: &str| folded_eq(name, ru) || folded_eq(name, en);
 
     if is("ПространствоИмен", "TargetNamespace") {
         return Ok(str_value(&node.ns));
@@ -1826,7 +1827,7 @@ fn declaration_property(
     element: bool,
 ) -> RtResult<BslValue> {
     let unknown = || RtError::UnknownColumn(name.to_string());
-    let is = |ru: &str, en: &str| name.eq_ignore_ascii_case(ru) || name.eq_ignore_ascii_case(en);
+    let is = |ru: &str, en: &str| folded_eq(name, ru) || folded_eq(name, en);
 
     if is("Имя", "Name") {
         return Ok(str_value(&node.name));
@@ -1877,7 +1878,7 @@ fn simple_type_property(
     name: &str,
 ) -> RtResult<BslValue> {
     let unknown = || RtError::UnknownColumn(name.to_string());
-    let is = |ru: &str, en: &str| name.eq_ignore_ascii_case(ru) || name.eq_ignore_ascii_case(en);
+    let is = |ru: &str, en: &str| folded_eq(name, ru) || folded_eq(name, en);
 
     if is("Имя", "Name") {
         return Ok(str_value(&node.name));
@@ -1927,7 +1928,7 @@ fn complex_type_property(
     name: &str,
 ) -> RtResult<BslValue> {
     let unknown = || RtError::UnknownColumn(name.to_string());
-    let is = |ru: &str, en: &str| name.eq_ignore_ascii_case(ru) || name.eq_ignore_ascii_case(en);
+    let is = |ru: &str, en: &str| folded_eq(name, ru) || folded_eq(name, en);
 
     if is("Имя", "Name") {
         return Ok(str_value(&node.name));
@@ -1999,10 +2000,10 @@ fn typed_value(lexical: &str, constraint: Option<EnumValue>) -> BslValue {
     // Пробелы по краям платформа игнорирует: `xs:string` со значением
     // « 7 » (пробелы сохраняет сама схема) отдан числом `7`.
     let text = lexical.trim();
-    if text.eq_ignore_ascii_case("true") || text == "1" {
+    if folded_eq(text, "true") || text == "1" {
         return BslValue::Boolean(true);
     }
-    if text.eq_ignore_ascii_case("false") || text == "0" {
+    if folded_eq(text, "false") || text == "0" {
         return BslValue::Boolean(false);
     }
     match numeric_prefix(text) {
@@ -2664,71 +2665,123 @@ fn list_descriptor(kind: &XsListKind) -> &'static TypeDescriptor {
     }
 }
 
+macro_rules! receiver_of {
+    ($fn_name:ident, $ty:ty, $type_name:expr) => {
+        fn $fn_name<'r>(
+            receiver: &'r dyn ObjectProtocol,
+            method: &'static str,
+        ) -> RtResult<&'r $ty> {
+            receiver
+                .downcast_ref::<$ty>()
+                .ok_or(RtError::MethodNotApplicable {
+                    method,
+                    receiver: $type_name,
+                })
+        }
+    };
+}
+
+receiver_of!(builder_of, BuilderObject, BUILDER_TYPE.name);
+receiver_of!(schema_set_of, SchemaSetObject, SCHEMA_SET_TYPE.name);
+receiver_of!(schema_list_of, SchemaListObject, "Список компонент XS");
+receiver_of!(expanded_of, ExpandedNameObject, EXPANDED_NAME_TYPE.name);
+receiver_of!(name_list_of, NameListObject, NAME_LIST_TYPE.name);
+
+fn builder_create_schema(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    builder_of(receiver, "СоздатьСхемуXML")?;
+    create_schema(&new_builder(), arguments)
+}
+
+static BUILDER_METHODS: &[MethodDescriptor] = &[MethodDescriptor {
+    code: MethodCode::new(1),
+    names: &["СоздатьСхемуXML", "CreateXMLSchema"],
+    call: builder_create_schema,
+}];
+
 impl ObjectProtocol for BuilderObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         &BUILDER_TYPE
     }
 
-    fn call_method(
-        &self,
-        name: &str,
-        arguments: &[BslValue],
-        _context: &mut CallContext<'_>,
-    ) -> RtResult<BslValue> {
-        if name.eq_ignore_ascii_case("СоздатьСхемуXML")
-            || name.eq_ignore_ascii_case("CreateXMLSchema")
-        {
-            create_schema(&new_builder(), arguments)
-        } else {
-            Err(RtError::UnknownMethod {
-                method: name.to_string(),
-                receiver: BUILDER_TYPE.name,
-            })
-        }
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        BUILDER_METHODS
     }
 }
+
+/// Значение-получатель набора: свободные функции поверхности приняли его
+/// значением ещё до перевода объектов на протокол.
+fn schema_set_value(set: &SchemaSetObject) -> BslValue {
+    BslValue::new_object(SchemaSetObject {
+        schemas: set.schemas.clone(),
+    })
+}
+
+fn schema_set_method_add(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let set = schema_set_of(receiver, "Добавить")?;
+    schema_set_add(&schema_set_value(set), arguments)
+}
+
+fn schema_set_method_get(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let set = schema_set_of(receiver, "Получить")?;
+    match arguments {
+        [index] => schema_set_get(&schema_set_value(set), set_index(index)?),
+        _ => Err(RtError::MethodNotApplicable {
+            method: "Получить",
+            receiver: SCHEMA_SET_TYPE.name,
+        }),
+    }
+}
+
+fn schema_set_method_count(
+    receiver: &dyn ObjectProtocol,
+    _arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let set = schema_set_of(receiver, "Количество")?;
+    Ok(BslValue::number_from_i64(set.schemas.borrow().len() as i64))
+}
+
+static SCHEMA_SET_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor {
+        code: MethodCode::new(1),
+        names: &["Добавить", "Add"],
+        call: schema_set_method_add,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(2),
+        names: &["Получить", "Get"],
+        call: schema_set_method_get,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(3),
+        names: &["Количество", "Count"],
+        call: schema_set_method_count,
+    },
+];
 
 impl ObjectProtocol for SchemaSetObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         &SCHEMA_SET_TYPE
     }
 
-    fn call_method(
-        &self,
-        name: &str,
-        arguments: &[BslValue],
-        _context: &mut CallContext<'_>,
-    ) -> RtResult<BslValue> {
-        let receiver = BslValue::new_object(SchemaSetObject {
-            schemas: self.schemas.clone(),
-        });
-        if name.eq_ignore_ascii_case("Добавить") || name.eq_ignore_ascii_case("Add") {
-            schema_set_add(&receiver, arguments)
-        } else if name.eq_ignore_ascii_case("Получить") || name.eq_ignore_ascii_case("Get")
-        {
-            match arguments {
-                [index] => schema_set_get(&receiver, set_index(index)?),
-                _ => Err(RtError::MethodNotApplicable {
-                    method: "Получить",
-                    receiver: SCHEMA_SET_TYPE.name,
-                }),
-            }
-        } else if name.eq_ignore_ascii_case("Количество") || name.eq_ignore_ascii_case("Count")
-        {
-            Ok(BslValue::number_from_i64(self.schemas.borrow().len() as i64))
-        } else {
-            Err(RtError::UnknownMethod {
-                method: name.to_string(),
-                receiver: SCHEMA_SET_TYPE.name,
-            })
-        }
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        SCHEMA_SET_METHODS
     }
 
     fn get_index(&self, index: &BslValue) -> RtResult<BslValue> {
-        let receiver = BslValue::new_object(SchemaSetObject {
-            schemas: self.schemas.clone(),
-        });
-        schema_set_get(&receiver, set_index(index)?)
+        schema_set_get(&schema_set_value(self), set_index(index)?)
     }
 
     fn collection_len(&self) -> RtResult<usize> {
@@ -2756,6 +2809,10 @@ impl ObjectProtocol for ComponentObject {
         component_descriptor(self.schema.node(self.index).kind)
     }
 
+    /// Свойства компоненты остаются строковым путём: их набор РАЗНЫЙ у
+    /// каждого вида компоненты (у объявления элемента одни, у фасета
+    /// другие), и таблица, общая на все виды, обещала бы больше, чем
+    /// отдаёт. Свёртка имени внутри — общая `folded_eq`.
     fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
         component_property(&self.schema, self.index, name)
     }
@@ -2767,32 +2824,51 @@ impl ObjectProtocol for ComponentObject {
     }
 }
 
+fn schema_list_value(list: &SchemaListObject) -> BslValue {
+    BslValue::new_object(SchemaListObject {
+        schema: list.schema.clone(),
+        kind: list.kind.clone(),
+    })
+}
+
+fn schema_list_method_get(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let list = schema_list_of(receiver, "Получить")?;
+    list_lookup(&schema_list_value(list), arguments)
+}
+
+fn schema_list_method_count(
+    receiver: &dyn ObjectProtocol,
+    _arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let list = schema_list_of(receiver, "Количество")?;
+    Ok(BslValue::number_from_i64(list.kind.len() as i64))
+}
+
+static SCHEMA_LIST_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor {
+        code: MethodCode::new(1),
+        names: &["Получить", "Get"],
+        call: schema_list_method_get,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(2),
+        names: &["Количество", "Count"],
+        call: schema_list_method_count,
+    },
+];
+
 impl ObjectProtocol for SchemaListObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         list_descriptor(&self.kind)
     }
 
-    fn call_method(
-        &self,
-        name: &str,
-        arguments: &[BslValue],
-        _context: &mut CallContext<'_>,
-    ) -> RtResult<BslValue> {
-        let receiver = BslValue::new_object(SchemaListObject {
-            schema: self.schema.clone(),
-            kind: self.kind.clone(),
-        });
-        if name.eq_ignore_ascii_case("Получить") || name.eq_ignore_ascii_case("Get") {
-            list_lookup(&receiver, arguments)
-        } else if name.eq_ignore_ascii_case("Количество") || name.eq_ignore_ascii_case("Count")
-        {
-            Ok(BslValue::number_from_i64(self.kind.len() as i64))
-        } else {
-            Err(RtError::UnknownMethod {
-                method: name.to_string(),
-                receiver: self.type_descriptor().name,
-            })
-        }
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        SCHEMA_LIST_METHODS
     }
 
     fn get_index(&self, index: &BslValue) -> RtResult<BslValue> {
@@ -2804,13 +2880,44 @@ impl ObjectProtocol for SchemaListObject {
     }
 }
 
+fn expanded_local_name(
+    receiver: &dyn ObjectProtocol,
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let expanded = expanded_of(receiver, "ЛокальноеИмя")?;
+    get_property(&name_value(&expanded.name), "ЛокальноеИмя")
+}
+
+fn expanded_namespace_uri(
+    receiver: &dyn ObjectProtocol,
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let expanded = expanded_of(receiver, "URIПространстваИмен")?;
+    get_property(&name_value(&expanded.name), "URIПространстваИмен")
+}
+
+static EXPANDED_NAME_PROPERTIES: &[PropertyDescriptor] = &[
+    PropertyDescriptor {
+        code: PropertyCode::new(1),
+        names: &["ЛокальноеИмя", "LocalName"],
+        get: expanded_local_name,
+        set: None,
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(2),
+        names: &["URIПространстваИмен", "NamespaceURI"],
+        get: expanded_namespace_uri,
+        set: None,
+    },
+];
+
 impl ObjectProtocol for ExpandedNameObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         &EXPANDED_NAME_TYPE
     }
 
-    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
-        get_property(&name_value(&self.name), name)
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        EXPANDED_NAME_PROPERTIES
     }
 
     // Расширенное имя — ЗНАЧЕНИЕ: два отдельно построенных имени с
@@ -2828,25 +2935,28 @@ impl ObjectProtocol for ExpandedNameObject {
     }
 }
 
+fn name_list_method_count(
+    receiver: &dyn ObjectProtocol,
+    _arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let list = name_list_of(receiver, "Количество")?;
+    Ok(BslValue::number_from_i64(list.names.len() as i64))
+}
+
+static NAME_LIST_METHODS: &[MethodDescriptor] = &[MethodDescriptor {
+    code: MethodCode::new(1),
+    names: &["Количество", "Count"],
+    call: name_list_method_count,
+}];
+
 impl ObjectProtocol for NameListObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         &NAME_LIST_TYPE
     }
 
-    fn call_method(
-        &self,
-        name: &str,
-        _arguments: &[BslValue],
-        _context: &mut CallContext<'_>,
-    ) -> RtResult<BslValue> {
-        if name.eq_ignore_ascii_case("Количество") || name.eq_ignore_ascii_case("Count") {
-            Ok(BslValue::number_from_i64(self.names.len() as i64))
-        } else {
-            Err(RtError::UnknownMethod {
-                method: name.to_string(),
-                receiver: NAME_LIST_TYPE.name,
-            })
-        }
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        NAME_LIST_METHODS
     }
 
     fn get_index(&self, index: &BslValue) -> RtResult<BslValue> {

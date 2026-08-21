@@ -218,8 +218,9 @@ use std::rc::Rc;
 
 use crate::dom::{DomKind, DomNode, DomNodeObject};
 use bsl_rt::{
-    BslNumber, BslString, BslValue, CallContext, EnumValue, ObjectProtocol, RtError, RtResult,
-    TypeDescriptor, TypeId,
+    BslNumber, BslString, BslValue, CallContext, EnumValue, MethodCode, MethodDescriptor,
+    ObjectProtocol, PropertyCode, PropertyDescriptor, RtError, RtResult, TypeDescriptor, TypeId,
+    folded_eq,
 };
 
 fn bad(what: impl Into<String>) -> RtError {
@@ -2523,7 +2524,7 @@ pub fn snapshot_item(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
 /// разграничивает их именно так) либо число не представимо.
 pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
     let result = as_result(obj, "свойство результата XPath")?;
-    let is = |ru: &str, en: &str| name.eq_ignore_ascii_case(ru) || name.eq_ignore_ascii_case(en);
+    let is = |ru: &str, en: &str| folded_eq(name, ru) || folded_eq(name, en);
 
     if is("ТипРезультата", "ResultType") {
         return Ok(BslValue::Enum(result.kind.enum_value()));
@@ -2557,7 +2558,7 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
         return Ok(BslValue::Boolean(result.flag));
     }
     // Русского написания у этого члена НЕТ — измерено перебором.
-    if name.eq_ignore_ascii_case("SingleNodeValue") {
+    if folded_eq(name, "SingleNodeValue") {
         if !result.kind.is_single_node() {
             return Err(bad(
                 "`SingleNodeValue` есть только у результата вида «первый узел»",
@@ -2622,94 +2623,200 @@ pub struct XPathResultObject {
     result: Rc<XPathResult>,
 }
 
+/// Получатель нужного типа: чужой получает ту же ошибку «метод не
+/// применим», что и прежний строковый путь.
+macro_rules! receiver_of {
+    ($fn_name:ident, $ty:ty, $type_name:expr) => {
+        fn $fn_name<'r>(
+            receiver: &'r dyn ObjectProtocol,
+            method: &'static str,
+        ) -> RtResult<&'r $ty> {
+            receiver
+                .downcast_ref::<$ty>()
+                .ok_or(RtError::MethodNotApplicable {
+                    method,
+                    receiver: $type_name,
+                })
+        }
+    };
+}
+
+receiver_of!(resolver_of, ResolverObject, RESOLVER_TYPE.name);
+receiver_of!(expression_of, ExpressionObject, EXPRESSION_TYPE.name);
+receiver_of!(result_of, XPathResultObject, RESULT_TYPE.name);
+
+fn resolver_lookup(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let resolver = resolver_of(receiver, "НайтиURIПространстваИмен")?;
+    let receiver = BslValue::new_object(ResolverObject {
+        resolver: resolver.resolver.clone(),
+    });
+    lookup_namespace_uri(&receiver, arguments)
+}
+
+static RESOLVER_METHODS: &[MethodDescriptor] = &[MethodDescriptor {
+    code: MethodCode::new(1),
+    names: &["НайтиURIПространстваИмен", "LookupNamespaceURI"],
+    call: resolver_lookup,
+}];
+
 impl ObjectProtocol for ResolverObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         &RESOLVER_TYPE
     }
 
-    fn call_method(
-        &self,
-        name: &str,
-        arguments: &[BslValue],
-        _context: &mut CallContext<'_>,
-    ) -> RtResult<BslValue> {
-        if name.eq_ignore_ascii_case("НайтиURIПространстваИмен")
-            || name.eq_ignore_ascii_case("LookupNamespaceURI")
-        {
-            let receiver = BslValue::new_object(ResolverObject {
-                resolver: self.resolver.clone(),
-            });
-            lookup_namespace_uri(&receiver, arguments)
-        } else {
-            Err(RtError::UnknownMethod {
-                method: name.to_string(),
-                receiver: RESOLVER_TYPE.name,
-            })
-        }
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        RESOLVER_METHODS
     }
 }
+
+fn expression_evaluate(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let expression = expression_of(receiver, "Вычислить")?;
+    let receiver = BslValue::new_object(ExpressionObject {
+        expression: expression.expression.clone(),
+    });
+    evaluate_expression(&receiver, arguments)
+}
+
+static EXPRESSION_METHODS: &[MethodDescriptor] = &[MethodDescriptor {
+    code: MethodCode::new(1),
+    names: &["Вычислить", "Evaluate"],
+    call: expression_evaluate,
+}];
 
 impl ObjectProtocol for ExpressionObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         &EXPRESSION_TYPE
     }
 
-    fn call_method(
-        &self,
-        name: &str,
-        arguments: &[BslValue],
-        _context: &mut CallContext<'_>,
-    ) -> RtResult<BslValue> {
-        if name.eq_ignore_ascii_case("Вычислить") || name.eq_ignore_ascii_case("Evaluate")
-        {
-            let receiver = BslValue::new_object(ExpressionObject {
-                expression: self.expression.clone(),
-            });
-            evaluate_expression(&receiver, arguments)
-        } else {
-            Err(RtError::UnknownMethod {
-                method: name.to_string(),
-                receiver: EXPRESSION_TYPE.name,
-            })
-        }
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        EXPRESSION_METHODS
     }
 }
+
+/// Значение-получатель результата: свободные функции поверхности приняли
+/// его значением ещё до перевода объектов на протокол.
+fn result_value(result: &XPathResultObject) -> BslValue {
+    BslValue::new_object(XPathResultObject {
+        result: result.result.clone(),
+    })
+}
+
+macro_rules! result_property {
+    ($fn_name:ident, $canonical:expr) => {
+        fn $fn_name(receiver: &dyn ObjectProtocol, _c: &mut CallContext<'_>) -> RtResult<BslValue> {
+            get_property(&result_value(result_of(receiver, $canonical)?), $canonical)
+        }
+    };
+}
+
+result_property!(result_kind, "ТипРезультата");
+result_property!(result_number, "ЧисловоеЗначение");
+result_property!(result_string, "СтроковоеЗначение");
+result_property!(result_boolean, "БулевоЗначение");
+result_property!(result_snapshot_length, "РазмерСнимка");
+result_property!(result_invalid_iterator, "НеверноеСостояниеИтератора");
+result_property!(result_single_node, "SingleNodeValue");
+
+static RESULT_PROPERTIES: &[PropertyDescriptor] = &[
+    PropertyDescriptor {
+        code: PropertyCode::new(1),
+        names: &["ТипРезультата", "ResultType"],
+        get: result_kind,
+        set: None,
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(2),
+        names: &["ЧисловоеЗначение", "NumberValue"],
+        get: result_number,
+        set: None,
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(3),
+        names: &["СтроковоеЗначение", "StringValue"],
+        get: result_string,
+        set: None,
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(4),
+        names: &["БулевоЗначение", "BooleanValue"],
+        get: result_boolean,
+        set: None,
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(5),
+        names: &["РазмерСнимка", "SnapshotLength"],
+        get: result_snapshot_length,
+        set: None,
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(6),
+        names: &["НеверноеСостояниеИтератора", "InvalidIteratorState"],
+        get: result_invalid_iterator,
+        set: None,
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(7),
+        // Русского написания у этого члена НЕТ — измерено перебором.
+        names: &["SingleNodeValue"],
+        get: result_single_node,
+        set: None,
+    },
+];
+
+fn result_next_node(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    next_node(
+        &result_value(result_of(receiver, "ПолучитьСледующий")?),
+        arguments,
+    )
+}
+
+fn result_snapshot_item(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    snapshot_item(
+        &result_value(result_of(receiver, "ЭлементСнимка")?),
+        arguments,
+    )
+}
+
+static RESULT_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor {
+        code: MethodCode::new(1),
+        names: &["ПолучитьСледующий", "IterateNext"],
+        call: result_next_node,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(2),
+        names: &["ЭлементСнимка", "SnapshotItem"],
+        call: result_snapshot_item,
+    },
+];
 
 impl ObjectProtocol for XPathResultObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         &RESULT_TYPE
     }
 
-    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
-        let receiver = BslValue::new_object(XPathResultObject {
-            result: self.result.clone(),
-        });
-        get_property(&receiver, name)
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        RESULT_PROPERTIES
     }
 
-    fn call_method(
-        &self,
-        name: &str,
-        arguments: &[BslValue],
-        _context: &mut CallContext<'_>,
-    ) -> RtResult<BslValue> {
-        let receiver = BslValue::new_object(XPathResultObject {
-            result: self.result.clone(),
-        });
-        if name.eq_ignore_ascii_case("ПолучитьСледующий")
-            || name.eq_ignore_ascii_case("IterateNext")
-        {
-            next_node(&receiver, arguments)
-        } else if name.eq_ignore_ascii_case("ЭлементСнимка")
-            || name.eq_ignore_ascii_case("SnapshotItem")
-        {
-            snapshot_item(&receiver, arguments)
-        } else {
-            Err(RtError::UnknownMethod {
-                method: name.to_string(),
-                receiver: RESULT_TYPE.name,
-            })
-        }
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        RESULT_METHODS
     }
 }
 
