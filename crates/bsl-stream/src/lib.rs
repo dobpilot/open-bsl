@@ -109,6 +109,7 @@ pub const fn library() -> LibraryDescriptor {
         }],
         functions: &[],
         constructors: CONSTRUCTORS,
+        types: &[],
     }
 }
 

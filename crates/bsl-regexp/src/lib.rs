@@ -803,6 +803,7 @@ pub const fn library() -> LibraryDescriptor {
         dependencies: &[],
         functions: FUNCTIONS,
         constructors: &[],
+        types: &[],
     }
 }
 

@@ -17,6 +17,11 @@ use crate::shape::{Shape, ShapeTable};
 pub struct RuntimeShapes {
     pub names: NameInterner,
     pub shapes: ShapeTable,
+    /// Типы объектов, объявленные компонентами ЭТОГО прогона
+    /// (`LibraryDescriptor::types`). По ним `Тип("Имя")` находит то, чего
+    /// нет в закрытом реестре `TypeId`: у host-типа идентификатора там
+    /// нет и быть не может. Пусто, пока связывание не заполнило список.
+    pub component_types: Vec<&'static crate::TypeDescriptor>,
 }
 
 impl RuntimeShapes {
@@ -24,6 +29,15 @@ impl RuntimeShapes {
         RuntimeShapes {
             names: NameInterner::from_existing(names),
             shapes: ShapeTable::from_existing(shapes),
+            component_types: Vec::new(),
         }
+    }
+
+    /// Тип компонента по имени — регистронезависимо, как всё в языке.
+    pub fn component_type(&self, name: &str) -> Option<&'static crate::TypeDescriptor> {
+        self.component_types
+            .iter()
+            .copied()
+            .find(|descriptor| crate::folded_eq(descriptor.name, name))
     }
 }

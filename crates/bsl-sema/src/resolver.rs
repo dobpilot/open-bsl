@@ -1937,6 +1937,7 @@ mod tests {
             dependencies: &[],
             functions: FUNCTIONS,
             constructors: CONSTRUCTORS,
+            types: &[],
         };
         let mut builder = bsl_rt::RuntimeBuilder::new();
         builder.register(bsl_rt::core_library()).register(LIBRARY);

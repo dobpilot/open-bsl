@@ -103,6 +103,7 @@ pub const fn library() -> LibraryDescriptor {
         dependencies: &[],
         functions: &[],
         constructors: CONSTRUCTORS,
+        types: &[],
     }
 }
 

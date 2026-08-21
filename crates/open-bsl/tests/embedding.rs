@@ -53,6 +53,7 @@ fn host_library() -> LibraryDescriptor {
         }],
         functions: HOST_FUNCTIONS,
         constructors: &[],
+        types: &[],
     }
 }
 

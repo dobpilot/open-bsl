@@ -416,6 +416,11 @@ pub struct LibraryDescriptor {
     pub dependencies: &'static [LibraryDependency],
     pub functions: &'static [FunctionDescriptor],
     pub constructors: &'static [ConstructorDescriptor],
+    /// Типы объектов, которые компонент вводит в язык. По ним `Тип("Имя")`
+    /// находит то, чего нет в закрытом реестре `TypeId` ядра: у host-типа
+    /// идентификатора там нет и быть не может. Официальные компоненты
+    /// пока опознаются и старым путём — через `legacy_type_id`.
+    pub types: &'static [&'static crate::TypeDescriptor],
 }
 
 /// Дескриптор базового компонента. На переходном этапе встроенные функции
@@ -429,6 +434,7 @@ pub const fn core_library() -> LibraryDescriptor {
         dependencies: &[],
         functions: &[],
         constructors: &[],
+        types: &[],
     }
 }
 
@@ -688,6 +694,13 @@ impl RuntimeRegistry {
         self.constructor_names.get(&name.to_uppercase()).copied()
     }
 
+    /// Все типы, объявленные библиотеками реестра.
+    pub fn types(&self) -> impl Iterator<Item = &'static crate::TypeDescriptor> + '_ {
+        self.libraries
+            .iter()
+            .flat_map(|library| library.types.iter().copied())
+    }
+
     pub fn requirements_for(
         &self,
         used: impl IntoIterator<Item = LibraryKey>,
@@ -776,6 +789,7 @@ mod tests {
             dependencies: &[],
             functions: CORE_FUNCTIONS,
             constructors: &[],
+            types: &[],
         }
     }
 
@@ -789,6 +803,7 @@ mod tests {
             }],
             functions: &[],
             constructors: JSON_CONSTRUCTORS,
+            types: &[],
         }
     }
 
@@ -826,6 +841,7 @@ mod tests {
             dependencies: &[],
             functions: DUPLICATE,
             constructors: &[],
+            types: &[],
         });
 
         assert!(matches!(

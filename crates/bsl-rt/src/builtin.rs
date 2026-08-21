@@ -1388,6 +1388,8 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         BuiltinFn::CharCode => args[0].char_code(&args[1]),
         BuiltinFn::ValueIsFilled => Ok(BslValue::Boolean(args[0].is_filled()?)),
         BuiltinFn::TypeOf => args[0].type_of(),
+        // Перехвачена в `call_builtin_fn_ctx`: без списка типов прогона
+        // видны только нативные имена.
         BuiltinFn::TypeByName => args[0].type_by_name(),
         BuiltinFn::MakeDate => BslValue::make_date(args),
         BuiltinFn::CurrentDate => BslValue::current_date(),
@@ -1478,6 +1480,13 @@ pub fn call_builtin_fn_ctx(
         // заводить не нужно.
         crate::fill::fill_property_values(target, source, list, exclude, &rt.names)?;
         return Ok(BslValue::Undefined);
+    }
+    if f == BuiltinFn::TypeByName {
+        let name = args[0].as_str("Тип")?.to_string();
+        if let Some(descriptor) = rt.component_type(&name) {
+            return Ok(BslValue::Type(crate::TypeRef::Object(descriptor)));
+        }
+        return args[0].type_by_name();
     }
     if f == BuiltinFn::ValueToStringInternal {
         let text = crate::vstr::value_to_string_internal(&args[0], rt)?;

@@ -83,6 +83,9 @@ fn construct_counter(_context: &mut CallContext<'_>, _arguments: &[Value]) -> Rt
     }))
 }
 
+/// Типы, которые компонент вводит в язык: по ним работает `Тип("Счётчик")`.
+const COUNTER_TYPES: &[&TypeDescriptor] = &[&COUNTER_TYPE];
+
 const COUNTER_CONSTRUCTORS: &[ConstructorDescriptor] = &[ConstructorDescriptor {
     code: ConstructorCode::new(1),
     names: &["Счётчик", "Counter"],
@@ -97,6 +100,7 @@ fn counter_library() -> LibraryDescriptor {
         dependencies: &[],
         functions: &[],
         constructors: COUNTER_CONSTRUCTORS,
+        types: COUNTER_TYPES,
     }
 }
 
@@ -113,6 +117,10 @@ fn main() -> Result<(), open_bsl::Error> {
     // идентификатора в закрытом реестре типов ядра у host-типа нет.
     let type_of = engine.compile("с = Новый Счётчик();\nВозврат Строка(ТипЗнч(с));")?;
     assert_eq!(engine.new_state().run(&type_of)?.to_string(), "Счётчик");
+
+    // И `Тип("Счётчик")` находит тот же тип — как у штатных типов языка.
+    let same = engine.compile("с = Новый Счётчик();\nВозврат Тип(\"Счётчик\") = ТипЗнч(с);")?;
+    assert_eq!(engine.new_state().run(&same)?.to_string(), "Да");
 
     println!("{result}");
     Ok(())

@@ -390,6 +390,14 @@ struct LinkedComponents<'a> {
 }
 
 impl LinkedComponents<'_> {
+    /// Типы всех библиотек реестра: список короткий (десятки записей на
+    /// всю сборку) и строится один раз на прогон.
+    fn component_types(&self) -> Vec<&'static bsl_rt::TypeDescriptor> {
+        self.registry
+            .map(|registry| registry.types().collect())
+            .unwrap_or_default()
+    }
+
     fn function(&self, func_id: usize, pc: usize) -> Result<bsl_rt::ComponentCall, RtError> {
         self.functions
             .get(func_id)
@@ -794,6 +802,9 @@ fn drive_linked(
     // её форму) актуальны только для объектов внутри ОДНОГО такого вызова.
     let mut runtime_shapes =
         bsl_rt::RuntimeShapes::seeded(program.names.clone(), program.shapes.clone());
+    // Типы, объявленные компонентами этого прогона: по ним `Тип("Имя")`
+    // находит то, чего нет в закрытом реестре ядра (см. `TypeRef`).
+    runtime_shapes.component_types = linked.component_types();
     // Скомпилированные чанки. Внешний `None` — «ещё не пробовали»,
     // внутренний — «пробовали, JIT отказался»: компилировать чанк заново
     // на каждом входе в него стоило бы дороже любого выигрыша.
@@ -3292,6 +3303,7 @@ mod tests {
                 dependencies: &[],
                 functions: &[],
                 constructors: &[],
+                types: &[],
             })
             .register(bsl_rt::LibraryDescriptor {
                 package: "bsl-test-host",
@@ -3302,6 +3314,7 @@ mod tests {
                 }],
                 functions: TEST_COMPONENT_FUNCTIONS,
                 constructors: TEST_COMPONENT_CONSTRUCTORS,
+                types: &[],
             });
         builder.build().unwrap()
     }
@@ -3398,6 +3411,7 @@ mod tests {
                 }],
                 functions: TEST_COMPONENT_FUNCTIONS,
                 constructors: TEST_COMPONENT_CONSTRUCTORS,
+                types: &[],
             });
         let registry = builder.build().unwrap();
         let program = compile_with_registry(
