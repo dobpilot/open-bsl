@@ -25,7 +25,24 @@ const BLOCK_ENDERS: &[Keyword] = &[
 /// Возвращает [`Diagnostic`], если лексер встретил недопустимый токен или текст не
 /// соответствует грамматике BSL.
 pub fn parse(src: &str) -> Result<Program, Diagnostic> {
-    let tokens = tokenize_all(src).map_err(Diagnostic::Lex)?;
+    parse_with_symbols(src, &crate::PreprocSymbols::new())
+}
+
+/// Разбирает исходный текст BSL с заданным набором символов условной
+/// компиляции.
+///
+/// Значения символов — свойство контекста развёртывания, а не языка,
+/// поэтому встраивающая программа вправе задать свой набор: движок,
+/// поднятый клиентским приложением, честно скажет об этом коду.
+///
+/// # Errors
+///
+/// Те же, что у [`parse`], плюс ошибки инструкций препроцессора.
+pub fn parse_with_symbols(
+    src: &str,
+    symbols: &crate::PreprocSymbols,
+) -> Result<Program, Diagnostic> {
+    let tokens = tokenize_all(src, symbols).map_err(Diagnostic::Lex)?;
     let mut parser = Parser {
         tokens,
         pos: 0,
@@ -48,8 +65,8 @@ pub fn parse(src: &str) -> Result<Program, Diagnostic> {
 // отвечать диагностикой, а не падением процесса.
 const MAX_NESTING: u32 = 500;
 
-fn tokenize_all(src: &str) -> Result<Vec<Token>, LexError> {
-    let mut lexer = Lexer::new(src);
+fn tokenize_all(src: &str, symbols: &crate::PreprocSymbols) -> Result<Vec<Token>, LexError> {
+    let mut lexer = Lexer::with_symbols(src, symbols.clone());
     let mut tokens = Vec::new();
     loop {
         let tok = lexer.next_token()?;

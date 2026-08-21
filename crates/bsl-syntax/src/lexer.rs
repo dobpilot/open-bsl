@@ -1,4 +1,5 @@
 use crate::keywords;
+use crate::preproc::{self, Directive, PreprocSymbols};
 use crate::token::{Span, Token, TokenKind};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -10,13 +11,25 @@ pub enum LexError {
     ExpectedContinuationBar(u32),
     /// Внутри `'...'` встретился не-цифровой символ, либо длина не 8/14.
     BadDateLiteral(u32),
+    /// Ошибка в инструкции препроцессора: постоянный текст причины и
+    /// смещение `#`.
+    Preproc(&'static str, u32),
 }
 
 pub type LexResult<T> = Result<T, LexError>;
 
+/// Открытый `#Если`: помним, взята ли уже какая-то его ветка, и где он
+/// начался — для сообщения о незакрытой директиве.
+struct OpenIf {
+    taken: bool,
+    at: usize,
+}
+
 pub struct Lexer<'src> {
     src: &'src str,
     pos: usize,
+    symbols: PreprocSymbols,
+    open_ifs: Vec<OpenIf>,
 }
 
 fn is_ident_start(c: char) -> bool {
@@ -29,7 +42,17 @@ fn is_ident_continue(c: char) -> bool {
 
 impl<'src> Lexer<'src> {
     pub fn new(src: &'src str) -> Self {
-        Lexer { src, pos: 0 }
+        Self::with_symbols(src, PreprocSymbols::new())
+    }
+
+    /// Лексер с заданным набором символов условной компиляции.
+    pub fn with_symbols(src: &'src str, symbols: PreprocSymbols) -> Self {
+        Lexer {
+            src,
+            pos: 0,
+            symbols,
+            open_ifs: Vec::new(),
+        }
     }
 
     fn peek(&self) -> Option<char> {
@@ -65,10 +88,19 @@ impl<'src> Lexer<'src> {
     /// Возвращает [`LexError`], если вход содержит недопустимый символ, незакрытый строковый
     /// литерал или некорректный литерал даты.
     pub fn next_token(&mut self) -> LexResult<Token> {
-        self.skip_trivia();
+        self.skip_trivia()?;
         let start = self.pos;
         let c = match self.peek() {
-            None => return Ok(self.tok(TokenKind::Eof, start)),
+            None => {
+                // Незакрытый `#Если` — ошибка компиляции и на платформе.
+                if let Some(open) = self.open_ifs.first() {
+                    return Err(LexError::Preproc(
+                        "не закрыта инструкция «#Если»",
+                        open.at as u32,
+                    ));
+                }
+                return Ok(self.tok(TokenKind::Eof, start));
+            }
             Some(c) => c,
         };
 
@@ -171,7 +203,9 @@ impl<'src> Lexer<'src> {
         }
     }
 
-    fn skip_trivia(&mut self) {
+    /// Пробелы, комментарии и инструкции препроцессора: для потока
+    /// токенов всё это одинаково незначащий текст.
+    fn skip_trivia(&mut self) -> LexResult<()> {
         loop {
             match self.peek() {
                 Some(c) if c.is_whitespace() => {
@@ -185,7 +219,145 @@ impl<'src> Lexer<'src> {
                         self.bump();
                     }
                 }
+                Some('#') => self.directive()?,
                 _ => break,
+            }
+        }
+        Ok(())
+    }
+
+    /// Обрабатывает строку директивы в АКТИВНОМ тексте. Здесь строгость
+    /// полная: неизвестная инструкция, пропущенное «Тогда», посторонний
+    /// хвост и безымянная область — измеренные ошибки компиляции.
+    fn directive(&mut self) -> LexResult<()> {
+        let at = self.pos;
+        let (word, rest, next) = preproc::split_line(self.src, at);
+        let fail = |what: &'static str| LexError::Preproc(what, at as u32);
+        if word.is_empty() {
+            return Err(fail("после «#» ожидается имя инструкции препроцессора"));
+        }
+        if preproc::is_extension(word) {
+            return Err(fail("инструкции расширений конфигурации не поддержаны"));
+        }
+        let directive =
+            preproc::classify(word).ok_or_else(|| fail("неизвестная инструкция препроцессора"))?;
+        self.pos = next;
+        match directive {
+            Directive::Region => preproc::expect_region_name(rest).map_err(fail)?,
+            Directive::EndRegion => preproc::expect_empty_tail(rest).map_err(fail)?,
+            Directive::If => {
+                let taken = preproc::eval_condition(rest, &self.symbols).map_err(fail)?;
+                self.open_ifs.push(OpenIf { taken, at });
+                if !taken {
+                    self.skip_to_branch(at)?;
+                }
+            }
+            Directive::ElsIf | Directive::Else => {
+                // Досюда доходит только АКТИВНАЯ ветка: выключенные
+                // пропускает скан. Значит своё этот `#Если` уже отработал,
+                // и остаток блока выключен целиком.
+                if self.open_ifs.is_empty() {
+                    return Err(fail("инструкция без парного «#Если»"));
+                }
+                if directive == Directive::Else {
+                    preproc::expect_empty_tail(rest).map_err(fail)?;
+                }
+                self.skip_to_endif(at)?;
+            }
+            Directive::EndIf => {
+                preproc::expect_empty_tail(rest).map_err(fail)?;
+                if self.open_ifs.pop().is_none() {
+                    return Err(fail("«#КонецЕсли» без парного «#Если»"));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Начало ближайшей следующей строки, у которой первый непробельный
+    /// знак — `#`.
+    fn next_directive_line(&self) -> Option<usize> {
+        let mut i = self.pos;
+        loop {
+            let nl = self.src[i..].find('\n')?;
+            i += nl + 1;
+            let tail = self.src[i..].trim_start_matches([' ', '\t', '\r']);
+            if tail.starts_with('#') {
+                return Some(self.src.len() - tail.len());
+            }
+        }
+    }
+
+    /// Пропускает выключенный текст до ветки этого же `#Если`, которую
+    /// надо включить, либо до его `#КонецЕсли`.
+    ///
+    /// Мёртвый текст НЕ ЛЕКСИРУЕТСЯ и не разбирается: измерено, что
+    /// платформа терпит там не-токены. Поэтому строки, начинающиеся с `#`,
+    /// но не опознанные как директива, здесь тоже просто пропускаются.
+    fn skip_to_branch(&mut self, from: usize) -> LexResult<()> {
+        let mut depth = 0usize;
+        loop {
+            let Some(at) = self.next_directive_line() else {
+                return Err(LexError::Preproc(
+                    "не закрыта инструкция «#Если»",
+                    from as u32,
+                ));
+            };
+            let (word, rest, next) = preproc::split_line(self.src, at);
+            self.pos = next;
+            match preproc::classify(word) {
+                Some(Directive::If) => depth += 1,
+                Some(Directive::EndIf) if depth > 0 => depth -= 1,
+                Some(Directive::EndIf) => {
+                    self.open_ifs.pop();
+                    return Ok(());
+                }
+                Some(Directive::ElsIf) if depth == 0 => {
+                    let already = self.open_ifs.last().is_some_and(|o| o.taken);
+                    if !already
+                        && preproc::eval_condition(rest, &self.symbols)
+                            .map_err(|w| LexError::Preproc(w, at as u32))?
+                    {
+                        if let Some(top) = self.open_ifs.last_mut() {
+                            top.taken = true;
+                        }
+                        return Ok(());
+                    }
+                }
+                Some(Directive::Else) if depth == 0 => {
+                    if let Some(top) = self.open_ifs.last_mut()
+                        && !top.taken
+                    {
+                        top.taken = true;
+                        return Ok(());
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Пропускает остаток условного блока до его `#КонецЕсли`, не
+    /// рассматривая промежуточные ветки.
+    fn skip_to_endif(&mut self, from: usize) -> LexResult<()> {
+        let mut depth = 0usize;
+        loop {
+            let Some(at) = self.next_directive_line() else {
+                return Err(LexError::Preproc(
+                    "не закрыта инструкция «#Если»",
+                    from as u32,
+                ));
+            };
+            let (word, _, next) = preproc::split_line(self.src, at);
+            self.pos = next;
+            match preproc::classify(word) {
+                Some(Directive::If) => depth += 1,
+                Some(Directive::EndIf) if depth > 0 => depth -= 1,
+                Some(Directive::EndIf) => {
+                    self.open_ifs.pop();
+                    return Ok(());
+                }
+                _ => {}
             }
         }
     }
@@ -440,5 +612,188 @@ mod tests {
             lex_all("@").unwrap_err(),
             LexError::UnexpectedChar('@', 0)
         ));
+    }
+
+    // --- Инструкции препроцессора -------------------------------------
+    //
+    // Каждый тест ниже пришпилен к строке из `docs/bsl-preproc.md`, снятой
+    // на 8.3.27.2130. Где поведение выбрано нами, а не платформой, это
+    // сказано прямо.
+
+    fn idents(src: &str) -> Vec<String> {
+        let mut lexer = Lexer::new(src);
+        let mut out = Vec::new();
+        loop {
+            let tok = lexer.next_token().expect("лексер не должен падать");
+            match tok.kind {
+                TokenKind::Eof => return out,
+                TokenKind::String(v) => out.push(v),
+                _ => {}
+            }
+        }
+    }
+
+    #[test]
+    fn a_true_condition_keeps_the_branch_and_a_false_one_drops_it() {
+        let src = "#Если Сервер Тогда\n\"да\"\n#КонецЕсли\n#Если Клиент Тогда\n\"нет\"\n#КонецЕсли";
+        assert_eq!(idents(src), vec!["да".to_string()]);
+    }
+
+    #[test]
+    fn elsif_and_else_pick_exactly_one_branch() {
+        let src =
+            "#Если Клиент Тогда\n\"к\"\n#ИначеЕсли Сервер Тогда\n\"с\"\n#Иначе\n\"и\"\n#КонецЕсли";
+        assert_eq!(idents(src), vec!["с".to_string()]);
+        let src = "#Если Клиент Тогда\n\"к\"\n#ИначеЕсли ВебКлиент Тогда\n\"в\"\n#Иначе\n\"и\"\n#КонецЕсли";
+        assert_eq!(idents(src), vec!["и".to_string()]);
+    }
+
+    #[test]
+    fn conditionals_nest() {
+        let src = "#Если Сервер Тогда\n#Если Клиент Тогда\n\"нет\"\n#Иначе\n\"да\"\n#КонецЕсли\n#КонецЕсли";
+        assert_eq!(idents(src), vec!["да".to_string()]);
+    }
+
+    #[test]
+    fn a_directive_can_split_an_expression() {
+        // Измерено: платформа даёт «аб», то есть директива режет выражение,
+        // а не только оператор.
+        let src = "\"а\"\n#Если Сервер Тогда\n+ \"б\"\n#КонецЕсли\n;";
+        let toks = lex_all(src).unwrap();
+        assert_eq!(
+            toks,
+            vec![
+                TokenKind::String("а".to_string()),
+                TokenKind::Plus,
+                TokenKind::String("б".to_string()),
+                TokenKind::Semicolon,
+                TokenKind::Eof,
+            ]
+        );
+    }
+
+    #[test]
+    fn a_disabled_branch_need_not_be_lexable() {
+        // Измерено: платформа терпит в выключенной ветке не-токены.
+        let src = "#Если Клиент Тогда\n@ ` ~ вообще не токены\n#КонецЕсли\n\"после\"";
+        assert_eq!(idents(src), vec!["после".to_string()]);
+    }
+
+    #[test]
+    fn an_unknown_symbol_is_false_and_not_an_error() {
+        let src = "#Если ЛютоНеизвестныйСимвол Тогда\n\"нет\"\n#Иначе\n\"да\"\n#КонецЕсли";
+        assert_eq!(idents(src), vec!["да".to_string()]);
+    }
+
+    #[test]
+    fn directive_and_symbol_names_ignore_case_including_cyrillic() {
+        let src = "#если сЕрВеР тогда\n\"да\"\n#конецесли";
+        assert_eq!(idents(src), vec!["да".to_string()]);
+    }
+
+    #[test]
+    fn english_directives_and_symbols_work() {
+        let src = "#If Server Then\n\"да\"\n#Else\n\"нет\"\n#EndIf";
+        assert_eq!(idents(src), vec!["да".to_string()]);
+        let src = "#Region Проба\n\"да\"\n#EndRegion";
+        assert_eq!(idents(src), vec!["да".to_string()]);
+    }
+
+    #[test]
+    fn regions_are_skipped_but_need_a_name() {
+        let src = "#Область Служебные\n\"да\"\n#КонецОбласти";
+        assert_eq!(idents(src), vec!["да".to_string()]);
+        assert!(matches!(
+            lex_all("#Область\n\"да\"\n#КонецОбласти"),
+            Err(LexError::Preproc(..))
+        ));
+    }
+
+    #[test]
+    fn a_comment_may_follow_a_directive_but_other_text_may_not() {
+        let src = "#Если Сервер Тогда // хвост\n\"да\"\n#КонецЕсли";
+        assert_eq!(idents(src), vec!["да".to_string()]);
+        assert!(matches!(
+            lex_all("#Если Сервер Тогда\n\"да\"\n#КонецЕсли лишнее"),
+            Err(LexError::Preproc(..))
+        ));
+    }
+
+    #[test]
+    fn the_measured_directive_errors_are_errors_here_too() {
+        for src in [
+            "#Если Сервер\n\"да\"\n#КонецЕсли",         // пропущено «Тогда»
+            "#Если Сервер Тогда\n\"да\"",               // не закрыт
+            "#КонецЕсли",                               // без парного «#Если»
+            "#Вставка\n\"да\"\n#КонецВставки",          // директива расширения
+            "#ЧтоТоНеизвестное\n\"да\"",                // не инструкция вовсе
+            "#Если ( Сервер Тогда\n\"да\"\n#КонецЕсли", // не закрыта скобка
+            "#Если И Сервер Тогда\n\"да\"\n#КонецЕсли", // нет операнда
+        ] {
+            assert!(
+                matches!(lex_all(src), Err(LexError::Preproc(..))),
+                "должно быть ошибкой: {src}"
+            );
+        }
+    }
+
+    #[test]
+    fn logical_operators_and_parentheses_work() {
+        let cases = [
+            ("Сервер И НЕ Клиент", true),
+            ("Сервер И Клиент", false),
+            ("Клиент ИЛИ Сервер", true),
+            ("(Клиент ИЛИ ВебКлиент)", false),
+            ("НЕ (Клиент И Сервер)", true),
+            ("ВнешнееСоединение", true),
+        ];
+        for (cond, want) in cases {
+            let src = format!("#Если {cond} Тогда\n\"да\"\n#КонецЕсли");
+            assert_eq!(
+                idents(&src) == vec!["да".to_string()],
+                want,
+                "условие: {cond}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_hash_inside_a_string_literal_is_not_a_directive() {
+        // Продолжение литерала обязано начинаться с `|`, поэтому строки,
+        // начинающейся с `#`, внутри литерала не бывает — но сам знак `#`
+        // в тексте литерала законен.
+        let toks = lex_all("\"первая\n|#КонецЕсли внутри строки\"").unwrap();
+        assert_eq!(
+            toks,
+            vec![
+                TokenKind::String("первая\n#КонецЕсли внутри строки".to_string()),
+                TokenKind::Eof,
+            ]
+        );
+    }
+
+    #[test]
+    fn the_host_may_redefine_the_symbol_set() {
+        let mut symbols = PreprocSymbols::new();
+        symbols.set("Клиент", true);
+        symbols.set("Сервер", false);
+        let mut lexer = Lexer::with_symbols(
+            "#Если Клиент И НЕ Сервер Тогда\n\"да\"\n#КонецЕсли",
+            symbols,
+        );
+        let mut got = None;
+        loop {
+            let tok = lexer.next_token().unwrap();
+            match tok.kind {
+                TokenKind::Eof => break,
+                TokenKind::String(v) => got = Some(v),
+                _ => {}
+            }
+        }
+        assert_eq!(got.as_deref(), Some("да"));
+        // Английское написание — тот же символ, а не второй.
+        let mut symbols = PreprocSymbols::new();
+        symbols.set("Client", true);
+        assert!(symbols.is_on("Клиент"));
     }
 }
