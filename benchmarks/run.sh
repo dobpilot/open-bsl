@@ -23,9 +23,15 @@
 # benchmarks/1c/combined.platform.txt — вывода реальной 8.3.27, снятого
 # так:
 #
-#   python3 benchmarks/1c/build-combined.py 3
-#   ONEC_TIMEOUT=900 ./tests/conformance/measure/1c/run-on-1c.sh \
+#   python3 benchmarks/1c/build-combined.py 1
+#   ONEC_TIMEOUT=1800 ./tests/conformance/measure/1c/run-on-1c.sh \
 #       benchmarks/1c/combined.bsl
+#
+# Повтор ОДИН, а не три. Платформа тратит на invoice_doc_generator около
+# 760 с (из них ~700 — сохранение в PDF) и 250 с на textdoc_invoice; при
+# трёх повторах 26 сценариев не укладываются и в час, и прогон снимается
+# таймаутом, не записав результата. Дрожание платформы на фоне таких
+# величин пренебрежимо, усреднять там нечего.
 #
 # Нет файла — в колонке прочерк. Пересняли сценарии — пересними и файл,
 # иначе колонка будет мерить старую редакцию бенчмарка.
