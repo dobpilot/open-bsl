@@ -322,8 +322,7 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
         Instr::LoadConst { dst, .. }
         | Instr::LoadBool { dst, .. }
         | Instr::LoadUndefined { dst }
-        | Instr::LoadNull { dst }
-        | Instr::LoadSkipped { dst } => {
+        | Instr::LoadNull { dst } => {
             write!(dst);
         }
         Instr::Add { dst, a, b }
@@ -352,8 +351,9 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
             read!(cond);
             e.ctl = Ctl::Trailing;
         }
-        Instr::JumpIfNotSkipped { src, .. } => {
-            read!(src);
+        // Регистров не читает вовсе: признак пропущенного аргумента лежит
+        // в метаданных кадра, а не в слоте параметра (см. `Instr`).
+        Instr::JumpIfNotSkipped { .. } => {
             e.ctl = Ctl::Trailing;
         }
         Instr::NumericForNext { counter, bound, .. }
@@ -382,6 +382,14 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
                             ArgMode::ByRefLocal(slot) => {
                                 read!(*slot);
                                 write!(*slot);
+                            }
+                            // Пропущенная позиция: вызывающий в этот
+                            // регистр ничего не клал и вызванный оттуда
+                            // ничего не читает — но пролог умолчаний
+                            // пишет туда вычисленное значение.
+                            ArgMode::Default => {
+                                let r = (base as usize + i).min(255) as u8;
+                                write!(r);
                             }
                         }
                     }

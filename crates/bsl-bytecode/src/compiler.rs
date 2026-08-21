@@ -1,5 +1,5 @@
 use bsl_rt::{BslValue, NameInterner, ShapeTable};
-use bsl_sema::{RExpr, RStmt, ResolvedFunction, ResolvedParam, ResolvedProgram};
+use bsl_sema::{RExpr, RStmt, ResolvedArg, ResolvedFunction, ResolvedParam, ResolvedProgram};
 use bsl_syntax::{BinaryOp, UnaryOp};
 
 use crate::chunk::{Chunk, ExceptionRange, Program};
@@ -390,9 +390,6 @@ impl<'a> Compiler<'a> {
             }
             RExpr::Null => {
                 self.emit(Instr::LoadNull { dst });
-            }
-            RExpr::Skipped => {
-                self.emit(Instr::LoadSkipped { dst });
             }
             RExpr::Local(slot) => {
                 let src = *slot as u8;
@@ -826,7 +823,12 @@ impl<'a> Compiler<'a> {
     /// материализации значения); всё остальное — обычным значением в
     /// регистре `base + i`. Само решение "по ссылке или нет" статично и
     /// целиком принимается здесь, в компиляторе.
-    fn compile_call(&mut self, func: u32, args: &[RExpr], dst: u8) -> Result<(), CompileError> {
+    fn compile_call(
+        &mut self,
+        func: u32,
+        args: &[ResolvedArg],
+        dst: u8,
+    ) -> Result<(), CompileError> {
         // Индекс приходит из резолвинга, но во ФРАГМЕНТЕ (`Выполнить`) он
         // указывает на функцию окружающей программы, которой у компилятора
         // фрагмента в `functions` нет. Поэтому режимы параметров берутся из
@@ -843,6 +845,19 @@ impl<'a> Compiler<'a> {
         let base = self.next_reg;
         let mut modes = Vec::with_capacity(args.len());
         for (i, arg) in args.iter().enumerate() {
+            let arg = match arg {
+                ResolvedArg::Value(e) => e,
+                // Пропущенная позиция: считать нечего, но временный
+                // регистр всё равно занимаем — диапазон [base,base+argc)
+                // обязан остаться непрерывным, а слот параметра, на
+                // который он превратится, заполнит пролог умолчаний
+                // вызванной функции.
+                ResolvedArg::Default => {
+                    self.alloc_temp()?;
+                    modes.push(ArgMode::Default);
+                    continue;
+                }
+            };
             let by_val = *by_val.get(i).unwrap_or(&true);
             if !by_val && let RExpr::Local(slot) = arg {
                 self.alloc_temp()?; // держим диапазон [base,base+argc) непрерывным

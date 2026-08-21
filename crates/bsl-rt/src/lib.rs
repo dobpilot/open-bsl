@@ -110,18 +110,6 @@ pub enum BslValue {
     /// другое: не тип и не конкретный член), `Copy` в один байт, как и они.
     EnumType(EnumKind),
     Object(Rc<BslObject>),
-    /// Пропущенный позиционный аргумент (`Ф(1, , 3)`) — ТОЛЬКО как
-    /// временное значение параметра сразу при входе в функцию/процедуру, до
-    /// того как пролог параметров по умолчанию (см.
-    /// `bsl-bytecode::compiler`, генерация `JumpUnlessSkipped`) заменит его
-    /// резолвнутым значением по умолчанию из объявления. Отличается от
-    /// `Неопределено`: `Ф(Знач а = 1)` вызванная как `Ф()` должна дать `а`
-    /// значение `1`, а не `Неопределено`, а `Ф(,)` внутри тела, если бы
-    /// прологу не удалось подставить дефолт, должна была бы упасть, а не
-    /// молча дать `Неопределено` — снаружи этого значения не видно ни при
-    /// каких обстоятельствах, весь остальной рантайм трактует его как
-    /// ошибку типа (см. `as_number`/`as_str`/... через generic `_ => Err`).
-    Skipped,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -440,7 +428,6 @@ impl BslValue {
                 // Строка ниже живёт в диагностике `RtError`.
                 BslObject::Uuid(_) => "УникальныйИдентификатор",
             },
-            BslValue::Skipped => "Skipped",
         }
     }
 
@@ -1176,12 +1163,6 @@ impl BslValue {
                 | BslObject::KeyValuePair(..)
                 | BslObject::TextWriter(..) => true,
             },
-            BslValue::Skipped => {
-                return Err(RtError::TypeError {
-                    expected: "Значение",
-                    op: "ЗначениеЗаполнено",
-                });
-            }
         })
     }
 
@@ -1229,12 +1210,6 @@ impl BslValue {
                 BslObject::BinaryBuffer(..) => TypeId::BinaryDataBuffer,
                 BslObject::Uuid(..) => TypeId::Uuid,
             },
-            BslValue::Skipped => {
-                return Err(RtError::TypeError {
-                    expected: "Значение",
-                    op: "ТипЗнч",
-                });
-            }
         };
         Ok(BslValue::Type(TypeRef::Native(id)))
     }
@@ -3003,7 +2978,6 @@ impl Hash for BslValue {
                 }
                 _ => Rc::as_ptr(o).hash(state),
             },
-            BslValue::Skipped => {}
         }
     }
 }
@@ -3093,9 +3067,6 @@ impl fmt::Display for BslValue {
                 // не содержимым (измерено): дампа байтов у него нет.
                 BslObject::BinaryBuffer(_) => write!(f, "БуферДвоичныхДанных"),
             },
-            // Никогда не должно реально дойти до печати (см. doc comment
-            // на варианте) — но `Display` обязан быть тотальным.
-            BslValue::Skipped => write!(f, "<Skipped>"),
         }
     }
 }

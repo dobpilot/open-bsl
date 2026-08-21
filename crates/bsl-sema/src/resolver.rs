@@ -4,7 +4,9 @@ use bsl_number::BslNumber;
 use bsl_syntax::{Expr as AExpr, Item, Stmt as AStmt};
 
 use crate::core_receivers::{self, CoreReceiver};
-use crate::resolved::{RExpr, RStmt, Resolved, ResolvedFunction, ResolvedParam, ResolvedProgram};
+use crate::resolved::{
+    RExpr, RStmt, Resolved, ResolvedArg, ResolvedFunction, ResolvedParam, ResolvedProgram,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SemaError {
@@ -1284,12 +1286,12 @@ impl<'a> Resolver<'a> {
                     // ниже для builtin'ов, у которых нет объявленных
                     // умолчаний) — пропуск позиции здесь допустим, если у
                     // ЭТОГО параметра есть значение по умолчанию: тогда
-                    // компилируется маркер `RExpr::Skipped`, а не ошибка.
+                    // получается `ResolvedArg::Default`, а не ошибка.
                     let mut rargs = Vec::with_capacity(args.len());
                     for (i, a) in args.iter().enumerate() {
                         match a {
-                            Some(e) => rargs.push(self.resolve_expr(e)?),
-                            None if has_default[i] => rargs.push(RExpr::Skipped),
+                            Some(e) => rargs.push(ResolvedArg::Value(self.resolve_expr(e)?)),
+                            None if has_default[i] => rargs.push(ResolvedArg::Default),
                             None => {
                                 return Err(SemaError::MissingRequiredArgument {
                                     name: name.clone(),
@@ -1727,7 +1729,7 @@ impl<'a> Resolver<'a> {
     /// форма записи, когда нужен только последний параметр, — не
     /// компилировалась бы вовсе.
     ///
-    /// У ПОЛЬЗОВАТЕЛЬСКИХ функций правило другое (`RExpr::Skipped` и
+    /// У ПОЛЬЗОВАТЕЛЬСКИХ функций правило другое (`ResolvedArg::Default` и
     /// пролог умолчаний, см. `resolve_call`): там пропуск значит «взять
     /// объявленное значение по умолчанию», а объявить его встроенной
     /// функции негде. Пропуск ОБЯЗАТЕЛЬНОЙ позиции здесь не ловится: как и
@@ -2087,14 +2089,14 @@ mod tests {
                 value: RExpr::Call { args, .. },
                 ..
             } => {
-                assert_eq!(args[1], RExpr::Skipped);
+                assert_eq!(args[1], ResolvedArg::Default);
             }
             other => panic!("expected AssignLocal(Call), got {other:?}"),
         }
     }
 
     /// У ВСТРОЕННОЙ функции объявленных умолчаний нет, поэтому пропуск —
-    /// не `RExpr::Skipped`, а `Неопределено`: ровно то же, чем добиваются
+    /// не `ResolvedArg::Default`, а `Неопределено`: ровно то же, чем добиваются
     /// недостающие хвостовые позиции. Ради этой формы записи
     /// (`ЗаполнитьЗначенияСвойств(П, И, , "Б")`) правило и заведено.
     #[test]
@@ -2195,7 +2197,7 @@ mod tests {
             rp.top_level.body,
             vec![RStmt::ExprStmt(RExpr::Call {
                 func: 0,
-                args: vec![RExpr::Number(BslNumber::from_i64(1))],
+                args: vec![ResolvedArg::Value(RExpr::Number(BslNumber::from_i64(1)))],
             })]
         );
     }
@@ -2404,8 +2406,14 @@ mod tests {
                     from_expr(lhs, into);
                     from_expr(rhs, into);
                 }
-                RExpr::Call { args, .. }
-                | RExpr::CallBuiltinFn { args, .. }
+                RExpr::Call { args, .. } => {
+                    for arg in args {
+                        if let ResolvedArg::Value(arg) = arg {
+                            from_expr(arg, into);
+                        }
+                    }
+                }
+                RExpr::CallBuiltinFn { args, .. }
                 | RExpr::CallComponent { args, .. }
                 | RExpr::CreateObject { args, .. } => {
                     for arg in args {

@@ -1149,7 +1149,6 @@ fn type_rank(v: &BslValue) -> u8 {
         // перечисления: тоже не участвовало в замере.
         BslValue::EnumType(_) => 8,
         BslValue::Object(_) => 9,
-        BslValue::Skipped => 10,
     }
 }
 

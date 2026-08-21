@@ -8,7 +8,9 @@ mod core_receivers;
 mod resolved;
 mod resolver;
 
-pub use resolved::{RExpr, RStmt, Resolved, ResolvedFunction, ResolvedParam, ResolvedProgram};
+pub use resolved::{
+    RExpr, RStmt, Resolved, ResolvedArg, ResolvedFunction, ResolvedParam, ResolvedProgram,
+};
 pub use resolver::{
     NEW_TYPES, ResolvedSnippetWithRequirements, SemaError, resolve_program,
     resolve_program_with_registry, resolve_repl_stmts, resolve_repl_stmts_with_registry,

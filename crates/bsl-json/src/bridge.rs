@@ -866,7 +866,7 @@ fn needs_convert(value: &BslValue) -> bool {
             &**o,
             BslObject::Array(_) | BslObject::Structure(_) | BslObject::Map(_)
         ),
-        BslValue::Type(_) | BslValue::Enum(_) | BslValue::EnumType(_) | BslValue::Skipped => true,
+        BslValue::Type(_) | BslValue::Enum(_) | BslValue::EnumType(_) => true,
     }
 }
 

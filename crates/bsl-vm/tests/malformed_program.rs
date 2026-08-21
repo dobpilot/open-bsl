@@ -7,7 +7,7 @@
 //! переводила цель через `as usize`, а `pc` за концом чанка принимала за
 //! нормальное завершение — и остаток программы молча пропадал.
 
-use bsl_bytecode::{Instr, Program, compile_program};
+use bsl_bytecode::{ArgMode, Instr, Program, compile_program};
 use bsl_rt::RtError;
 
 fn compile(src: &str) -> Program {
@@ -149,5 +149,39 @@ fn an_empty_handler_at_the_end_unwinds_into_ordinary_termination() {
     assert!(
         bsl_vm::run_program(&program).is_ok(),
         "пустой обработчик в конце обязан ловить исключение и завершать программу"
+    );
+}
+
+/// Режим `ArgMode::Default` обязывает вызванную функцию вычислить в этот
+/// слот значение по умолчанию. У функции без умолчаний прологa нет, и слот
+/// остался бы с тем, что вызывающий успел положить в свой временный
+/// регистр раньше, — то есть результат зависел бы от чужого выражения.
+/// Поэтому VM обнуляет слот при построении кадра: испорченный извне режим
+/// даёт `Неопределено`, одно и то же при любом соседнем коде.
+#[test]
+fn a_default_mode_without_a_default_prologue_yields_undefined_not_leftovers() {
+    let src = "Функция Ф(а)\nВозврат а;\nКонецФункции\nВозврат Ф(22);\n";
+    // Контроль: без правки вызов возвращает переданное значение — значит
+    // временный регистр действительно занят числом 22, и «Неопределено»
+    // ниже берётся из обнуления, а не из пустоты.
+    assert_eq!(
+        bsl_vm::run_program(&compile(src)).unwrap(),
+        bsl_rt::BslValue::Number(bsl_number::BslNumber::from_i64(22))
+    );
+
+    let mut program = compile(src);
+    let modes = program.chunks[0]
+        .instrs
+        .iter()
+        .find_map(|i| match i {
+            Instr::Call { arg_modes, .. } => Some(*arg_modes as usize),
+            _ => None,
+        })
+        .expect("в чанке верхнего уровня обязан быть вызов");
+    program.chunks[0].call_arg_modes[modes][0] = ArgMode::Default;
+
+    assert_eq!(
+        bsl_vm::run_program(&program).unwrap(),
+        bsl_rt::BslValue::Undefined
     );
 }

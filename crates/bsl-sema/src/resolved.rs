@@ -15,15 +15,6 @@ pub enum RExpr {
     Bool(bool),
     Undefined,
     Null,
-    /// Пропущенный аргумент вызова (`Ф(1, , 3)`) на месте, где параметр
-    /// объявлен со значением по умолчанию — компилируется в
-    /// `bsl_rt::BslValue::Skipped`, который пролог параметров по умолчанию
-    /// в вызванной функции (см. `bsl-bytecode::compiler::compile_chunk`)
-    /// заменит разрешённым `ResolvedParam::default`. Само по себе не
-    /// значение, с которым можно что-то делать — `Неопределено` для этого
-    /// уже есть и означает другое (явно переданное "нет значения", а не
-    /// "используй умолчание").
-    Skipped,
     /// Слот в кадре текущей функции/скрипта.
     Local(u32),
     /// Переменная уровня модуля (`Перем` в начале файла). Отдельный вариант,
@@ -46,7 +37,7 @@ pub enum RExpr {
     /// заполнение значениями по умолчанию (см. `SemaError::Unsupported`).
     Call {
         func: u32,
-        args: Vec<RExpr>,
+        args: Vec<ResolvedArg>,
     },
     /// Вызов встроенной функции по голому имени (`Sqrt(x)`, `Pow(x,y)`,
     /// `Message(x)`, ...). Всегда по значению — ни у одной встроенной
@@ -153,6 +144,26 @@ pub enum RExpr {
     /// внутреннюю обёртку `Возврат (<строка>);`, см. `bsl-vm`) и исполняет
     /// его в текущей области видимости верхнего уровня, возвращая значение.
     DynEval(Box<RExpr>),
+}
+
+/// Аргумент вызова ПОЛЬЗОВАТЕЛЬСКОЙ функции: либо выражение, либо
+/// пропущенная позиция (`Ф(1, , 3)`), допустимая только там, где у
+/// параметра объявлено значение по умолчанию — это проверяет резолвер.
+///
+/// Пропуск — свойство МЕСТА ВЫЗОВА, а не значение: значения «пропущено» в
+/// BSL нет и в `bsl_rt::BslValue` ему больше ничего не соответствует.
+/// Дальше по конвейеру пропуск живёт режимом `ArgMode::Default` в таблице
+/// режимов инструкции `Call`, а вызванная функция узнаёт о нём из
+/// метаданных кадра (см. пролог умолчаний в `bsl-bytecode::compiler` и
+/// `Frame::param_aliases` в `bsl-vm`).
+///
+/// У ВСТРОЕННЫХ функций правило другое: объявленных умолчаний у них нет,
+/// поэтому пропуск позиции резолвится в `Неопределено` (см.
+/// `resolve_builtin_args`), и отдельный вариант им не нужен.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ResolvedArg {
+    Value(RExpr),
+    Default,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -342,9 +353,13 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
         RExpr::ModuleVar(_) => false,
         RExpr::Unary { expr, .. } => expr_uses_dynamic(expr),
         RExpr::Binary { lhs, rhs, .. } => expr_uses_dynamic(lhs) || expr_uses_dynamic(rhs),
-        RExpr::Call { args, .. }
-        | RExpr::CallBuiltinFn { args, .. }
-        | RExpr::CallComponent { args, .. } => args.iter().any(expr_uses_dynamic),
+        RExpr::Call { args, .. } => args.iter().any(|a| match a {
+            ResolvedArg::Value(e) => expr_uses_dynamic(e),
+            ResolvedArg::Default => false,
+        }),
+        RExpr::CallBuiltinFn { args, .. } | RExpr::CallComponent { args, .. } => {
+            args.iter().any(expr_uses_dynamic)
+        }
         RExpr::CallMethod { obj, args, .. } => {
             expr_uses_dynamic(obj) || args.iter().any(expr_uses_dynamic)
         }
@@ -369,7 +384,6 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
         | RExpr::Bool(_)
         | RExpr::Undefined
         | RExpr::Null
-        | RExpr::Skipped
         | RExpr::Local(_)
         | RExpr::Str(_)
         | RExpr::NewTable

@@ -36,7 +36,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 18;
+pub const FORMAT_VERSION: u32 = 19;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -50,7 +50,6 @@ pub const OPCODES: &[&str] = &[
     "LoadBool",
     "LoadUndefined",
     "LoadNull",
-    "LoadSkipped",
     "Add",
     "Sub",
     "Mul",
@@ -250,6 +249,7 @@ fn write_chunk(out: &mut String, index: usize, chunk: &Chunk, program: &Program)
             .map(|m| match m {
                 ArgMode::Value => "value".to_string(),
                 ArgMode::ByRefLocal(slot) => format!("byref:{slot}"),
+                ArgMode::Default => "default".to_string(),
             })
             .collect();
         writeln!(out, "    {i} [{}]", modes.join(" ")).unwrap();
@@ -378,7 +378,6 @@ fn write_const(v: &BslValue) -> Result<String> {
         // разбирался бы неоднозначно.
         BslValue::EnumType(k) => format!("ТипПеречисления {}", k.ru_name()),
         BslValue::Object(_) => return Err(TextError::Unrepresentable("объект")),
-        BslValue::Skipped => "Пропущено".to_string(),
     })
 }
 
@@ -391,7 +390,6 @@ fn write_instr(instr: &Instr) -> String {
         Instr::LoadBool { dst, val } => format!("LoadBool dst={dst} val={val}"),
         Instr::LoadUndefined { dst } => format!("LoadUndefined dst={dst}"),
         Instr::LoadNull { dst } => format!("LoadNull dst={dst}"),
-        Instr::LoadSkipped { dst } => format!("LoadSkipped dst={dst}"),
         Instr::Add { dst, a, b } => format!("Add dst={dst} a={a} b={b}"),
         Instr::Sub { dst, a, b } => format!("Sub dst={dst} a={a} b={b}"),
         Instr::Mul { dst, a, b } => format!("Mul dst={dst} a={a} b={b}"),
@@ -1011,6 +1009,7 @@ fn parse_chunk(r: &mut Reader, expected_index: usize) -> Result<Chunk> {
         for token in inner.split_whitespace() {
             modes.push(match token {
                 "value" => ArgMode::Value,
+                "default" => ArgMode::Default,
                 t => match t.strip_prefix("byref:") {
                     Some(slot) => ArgMode::ByRefLocal(
                         slot.parse()
@@ -1100,7 +1099,6 @@ fn parse_const(no: usize, text: &str) -> Result<BslValue> {
     Ok(match tag {
         "Неопределено" => BslValue::Undefined,
         "Null" => BslValue::Null,
-        "Пропущено" => BslValue::Skipped,
         "Булево" => match rest {
             "Истина" => BslValue::Boolean(true),
             "Ложь" => BslValue::Boolean(false),
@@ -1239,7 +1237,6 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
         },
         "LoadUndefined" => Instr::LoadUndefined { dst: dst(&f)? },
         "LoadNull" => Instr::LoadNull { dst: dst(&f)? },
-        "LoadSkipped" => Instr::LoadSkipped { dst: dst(&f)? },
         "Add" => Instr::Add {
             dst: dst(&f)?,
             a: a(&f)?,
