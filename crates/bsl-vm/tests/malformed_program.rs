@@ -7,7 +7,7 @@
 //! переводила цель через `as usize`, а `pc` за концом чанка принимала за
 //! нормальное завершение — и остаток программы молча пропадал.
 
-use bsl_bytecode::{ArgMode, Instr, Program, compile_program};
+use bsl_bytecode::{ArgMode, Instr, Program, compile_program, parse_program, write_program};
 use bsl_rt::RtError;
 
 fn compile(src: &str) -> Program {
@@ -183,5 +183,116 @@ fn a_default_mode_without_a_default_prologue_yields_undefined_not_leftovers() {
     assert_eq!(
         bsl_vm::run_program(&program).unwrap(),
         bsl_rt::BslValue::Undefined
+    );
+}
+
+// --- Геометрия вызова в тексте --------------------------------------------
+//
+// Здесь листинг проходит ИМЕННО через текстовый разбор — тот путь, которым
+// байт-код приходит от `--run-bytecode`. Разбор эти правки принимает: они
+// синтаксически безупречны, и заводить в нём вторую копию проверки значило
+// бы повторить ошибку, которую этот файл уже фиксирует выше. Отвергает их
+// связывание, до первой инструкции, и потому одинаково для листинга и для
+// `Program`, собранной Rust-клиентом.
+
+/// Двухпараметровая функция с умолчанием, вызванная с пропуском позиции, и
+/// переменная вызывающего рядом — та, которую испорченный вызов затирал.
+const CALL_SAMPLE: &str = concat!(
+    "Функция Ф(а, б = 100)\n",
+    "Возврат б;\n",
+    "КонецФункции\n",
+    "х = 7;\n",
+    "у = Ф(1, );\n",
+    "Возврат Строка(х) + \"/\" + Строка(у);\n",
+);
+
+/// Переписывает в строке листинга операнд `ключ=значение`, не трогая
+/// остального: номера регистров у соседей и хвостовой комментарий.
+fn retoken(line: &str, key: &str, value: &str) -> String {
+    let prefix = format!("{key}=");
+    line.split(' ')
+        .map(|token| {
+            if token.starts_with(&prefix) {
+                format!("{prefix}{value}")
+            } else {
+                token.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Печатает листинг, портит единственную строку с `anchor` и разбирает его
+/// обратно. Разбор обязан пройти: проверка живёт не в нём.
+fn tampered(anchor: &str, edit: impl Fn(&str) -> String) -> Program {
+    let listing = write_program(&compile(CALL_SAMPLE), None).expect("печать листинга");
+    let hits: Vec<&str> = listing.lines().filter(|l| l.contains(anchor)).collect();
+    assert_eq!(
+        hits.len(),
+        1,
+        "«{anchor}» обязан встречаться в листинге ровно раз:\n{listing}"
+    );
+    let broken = listing.replace(hits[0], &edit(hits[0]));
+    parse_program(&broken).unwrap_or_else(|e| panic!("разбор обязан принять правку: {e}\n{broken}"))
+}
+
+fn invalid(program: &Program) -> &'static str {
+    match bsl_vm::run_program(program) {
+        Err(RtError::InvalidBytecode(text)) => text,
+        other => panic!("ожидалась ошибка некорректного байт-кода, получено {other:?}"),
+    }
+}
+
+/// Контроль: неиспорченный листинг проходит тот же путь и даёт исходные
+/// значения. Без него три теста ниже прошли бы и на программе, которая
+/// вообще не собирается.
+#[test]
+fn the_intact_listing_still_round_trips_and_runs() {
+    let listing = write_program(&compile(CALL_SAMPLE), None).expect("печать листинга");
+    let program = parse_program(&listing).expect("разбор");
+    // «7/100» — то, что обязана дать программа: переменная вызывающего
+    // цела, а пропущенный аргумент взял объявленное умолчание. Каждая из
+    // трёх правок ниже ломает ровно одно из двух, и до проверок ломала
+    // молча (измерено снятием проверок: «100/100», «100/100» и «7/»).
+    assert_eq!(bsl_vm::run_program(&program).unwrap().to_string(), "7/100");
+}
+
+/// Номера регистров — `u8`. `base + i` заворачивалось: в отладочной сборке
+/// это была паника «attempt to add with overflow», а в релизной — молчаливая
+/// подмена. Пропущенный параметр становился алиасом регистра 0 вызывающего,
+/// и пролог умолчаний записывал туда 100 поверх `х = 7`: «100/100».
+#[test]
+fn a_call_whose_argument_registers_leave_the_frame_is_invalid_bytecode() {
+    let program = tampered(" Call func=", |line| retoken(line, "base", "255"));
+    assert_eq!(
+        invalid(&program),
+        "регистры аргументов вызова выходят за кадр"
+    );
+}
+
+/// Длина набора режимов — это и есть арность вызова, а вся остальная
+/// геометрия кадра считается по `n_params` вызываемой функции. Лишний режим
+/// превращал собственный регистр вызванной функции в алиас слота
+/// вызывающего, и она затирала `х`: «100/100» с кодом успеха.
+#[test]
+fn argument_modes_that_outnumber_the_parameters_are_invalid_bytecode() {
+    let program = tampered("[value default]", |line| {
+        line.replace("[value default]", "[value default byref:0]")
+    });
+    assert_eq!(
+        invalid(&program),
+        "режимов аргументов не столько, сколько параметров у вызываемой функции"
+    );
+}
+
+/// `src` пролога умолчаний — номер параметра. Слот с номером за их числом
+/// VM не находила и считала аргумент переданным: умолчание не вычислялось, и
+/// функция возвращала `Неопределено` вместо 100 — «7/».
+#[test]
+fn a_default_prologue_pointing_past_the_parameters_is_invalid_bytecode() {
+    let program = tampered("JumpIfNotSkipped", |line| retoken(line, "src", "2"));
+    assert_eq!(
+        invalid(&program),
+        "пролог умолчаний ссылается на несуществующий параметр"
     );
 }

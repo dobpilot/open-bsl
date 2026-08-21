@@ -1784,6 +1784,10 @@ fn skipped_call_argument_uses_declared_default() {
     assert_eq!(v, num("101"));
 }
 
+/// Закрепляет НАШЕ поведение, а не платформенное: 8.3.27 такое объявление
+/// вообще не компилирует, умолчанием у неё может быть только литерал (см.
+/// `compile_param_defaults` в `bsl-bytecode`). Платформенные случаи лежат
+/// в фикстуре `default-args`.
 #[test]
 fn skipped_call_argument_default_may_reference_earlier_parameter() {
     let v = run_src(
