@@ -1,0 +1,1038 @@
+# Чистка ABI регистрации объектов и разбивка фасада open-bsl
+
+Редакция 2. Первая редакция (`docs/bsl-rt-abi.rt`, коммит `02a2aaa`)
+сверена с деревом и живыми репродукциями 2026-08-20; исправлены четыре
+дефекта: быстрый путь свойств нацелен на открытые опкоды, а не только на
+legacy-пару; механика default-методов трейта переписана через `as_dyn`
+(как было — не компилируется); радиус кириллической свёртки расширен на
+нативный строковый путь ядра и сужен на `bsl-binbuf` (это не
+`ObjectProtocol`-тип); таблица миграции приведена к фактическому
+состоянию таблиц методов. Результаты проверок — в разделе «Что проверено».
+Этой же редакцией добавлены части E — снятие временного `legacy_type_id`
+(тип компонента — его дескриптор) — и F — распайка компонентных
+монолитов; их собственные проверки и репро — в их преамбулах.
+
+## Контекст и цель
+
+Ветка `bsl-rt-ver2` вынесла компоненты в отдельные крейты и ввела
+`ObjectProtocol`/`MethodDescriptor`/`call_method_from_table` (см.
+`docs/bsl-rt-refactor.md`). При этом остались две шероховатости:
+
+1. Фасад `open-bsl` — 886 строк в одном `lib.rs`: сам фасад, полный пример
+   «Счётчик» из README (дубликат текста README) и 15 feature-тестов.
+2. Регистрация объекта host-приложением перегружена бойлерплейтом; ABI
+   метода заставляет делегирующие `call_method` пересобирать обёртку
+   значения на каждый строковый вызов; а свойства не имеют таблиц вовсе —
+   каждый `get_property`/`set_property` пишет самодельный `if/else` со
+   свёрткой регистра через `eq_ignore_ascii_case`, которая не берёт
+   кириллицу: `р.значение` не совпадает с `Значение` (репро ниже; на
+   платформе имена членов регистронезависимы, как и весь язык).
+
+План сознательно вводит `PropertyDescriptor`-таблицы симметрично с
+`MethodDescriptor`: мы уже меняем ABI `MethodCall` и весь код свойств,
+поэтому закреплять асимметрию «методы с таблицами, свойства с ad-hoc
+if/else» нельзя. Бенефициары измеримы: `xml_parse` читает
+`ЧтениеXML.ТипУзла`/`.Имя` в цикле (через открытый `GetObjectProp` —
+строковый `get_property` на каждый узел), а `WriteText`/`CloseText` ходят
+строковым `call_method` через делегирующие обёртки с пересборкой
+`Rc`-значения на каждую запись (каждая строка `csv_write`/`json_write`;
+см. комментарий у `method_table` в `object_protocol.rs:110-117`).
+
+## Что проверено по дереву и живым репро (2026-08-20)
+
+Репродукции на текущем интерпретаторе (`cargo run -p bsl-cli`):
+
+| Скрипт | Результат |
+|---|---|
+| `Р = СтрНайтиПоРегулярномуВыражению("абв","б"); Сообщить(Р.значение);` | ошибка «колонка «значение» не найдена» |
+| то же с `Р.ЗНАЧЕНИЕ` | та же ошибка — ASCII-свёртка не берёт и верхний регистр кириллицы |
+| `Р.Значение;` затем `Р.значение;` | оба печатают «б» — интернер канонизирует по первому написанию |
+| `КЗ.значение` в обходе `Соответствия` | ошибка — баг есть и в нативном пути ядра |
+| `ТД.добавитьстроку("привет")` | «метод «добавитьстроку» не найден» — у типов без таблиц сломаны и методы |
+| `ЗаписьJSON`: `установитьстроку`/`записатьзначение`/`закрыть` строчными | работает — таблица методов сворачивает юникод-корректно |
+
+Выводы и проверенные предпосылки:
+
+- Баг порядкозависим: `NameInterner` регистронезависим, но хранит первое
+  встреченное написание (`bsl-rt/src/interner.rs:55-57`), и строковый путь
+  получает именно его. Поэтому conformance-корпус, пишущий имена
+  канонично, бага не видит.
+- Свёртка табличных путей юникод-корректна уже сейчас:
+  `call_method_from_table` сравнивает через
+  `chars().flat_map(char::to_uppercase)` (`component.rs:247-277`), мост
+  `resolve_component_method` — через `to_uppercase` с мемоизацией
+  (`bsl-vm/src/lib.rs:429-451`). Сломан только строковый путь на
+  `eq_ignore_ascii_case`.
+- `requirements_for` безусловно включает ядро
+  (`component.rs:592-593`), а `dependencies` потребляются только
+  валидацией при регистрации (`component.rs:475-494`) и транзитивным
+  замыканием — автоинжект ядра безопасен.
+- `ObjectDowncast` (`object_protocol.rs:67-75`) не имеет потребителей вне
+  своего файла — его blanket-impl можно расширять и сужать свободно.
+- Обработчики `MethodCall` в конвертированных крейтах используют
+  получатель только для даункаста (выборочно проверены json, xml,
+  stream) — `&dyn ObjectProtocol` в ABI достаточен, значение-обёртка
+  обработчикам не нужно.
+- Таблицы методов фактически есть у: `bsl-json` (`32f69b5`), `bsl-stream`
+  (`stream.rs`, `datarw.rs`), `bsl-xml` (`xml.rs`, `xdto.rs`) и Counter в
+  фасаде. Таблиц нет у: `bsl-textdoc`, `bsl-pdf`, `bsl-zip`,
+  `bsl-spreadsheet` и объектов `bsl-xml/{dom,xsd,xpath}` — их конверсии
+  не выполнены, а файл бэклога удалён из репозитория (`ac3e668`) и живёт
+  вне дерева.
+- `БуферДвоичныхДанных` — нативное значение (`bsl-rt/src/bindata.rs`), не
+  `ObjectProtocol`-тип: методы диспетчеризуются builtin-таблицами, свойства
+  — нативным строковым путём ядра (часть D). В миграциях частей B и C он
+  не участвует.
+
+## Часть A — разбивка фасада
+
+### Текущее состояние
+
+`crates/open-bsl/src/lib.rs` (886 строк):
+
+| Диапазон | Содержимое |
+|---|---|
+| 1-16 | crate-doc, реэкспорты |
+| 18-78 | `Error` + `Display`/`Error` + `From` |
+| 80-220 | `Engine`/`EngineInner`/`EngineBuilder`/`Module` |
+| 222-338 | `StateBuilder`/`HostServices`/`State` |
+| 341-491 | `#[cfg(test)] mod tests`: пример «Счётчик» (~110 строк) + `the_readme_custom_object_example_works` |
+| 493-886 | `host_library` и 15 feature-тестов |
+
+Пример «Счётчик» дублирован между `README.md:244-373` и тестом;
+синхронизация ручная.
+
+### Целевая структура
+
+```
+crates/open-bsl/
+  src/
+    lib.rs          объявления модулей, crate-doc, реэкспорты
+    error.rs        Error + Display + From
+    engine.rs       Engine, EngineInner, EngineBuilder, Module
+    state.rs        StateBuilder, HostServices, State
+  examples/
+    counter.rs      пример «Счётчик» — источник правды, с assert в main
+  tests/
+    embedding.rs    15 feature-тестов + host_library/HOST_FUNCTIONS
+    counter_example.rs  собирает и запускает пример, проверяет exit 0
+```
+
+### Перенос по файлам
+
+- `src/error.rs` — `Error` (тек. 18-78) как есть.
+- `src/engine.rs` — `Engine`, `EngineInner`, `EngineBuilder`, `Module`
+  (тек. 80-220).
+- `src/state.rs` — `StateBuilder`, `HostServices`, `State` (тек. 222-338).
+- `src/lib.rs` — объявления `mod error; mod engine; mod state;` (все
+  `pub use`), crate-doc, `pub use bsl_rt::BslValue as Value` и прочие
+  реэкспорты.
+- `examples/counter.rs` — пример «Счётчик», оформленный как
+  `fn main() -> Result<(), open_bsl::Error>` с
+  `assert_eq!(engine.new_state().run(&module)?.to_string(), "2")`.
+- `tests/embedding.rs` — `host_library`/`HOST_FUNCTIONS`/`host_answer` и
+  15 feature-тестов, кроме `the_readme_custom_object_example_works`.
+- `tests/counter_example.rs` — замена
+  `the_readme_custom_object_example_works`. У examples не бывает
+  `CARGO_BIN_EXE_<имя>`, поэтому тест собирает пример вложенным
+  `Command::new(env!("CARGO"))` + `build --example counter`, затем
+  запускает бинарник и проверяет `exit 0` (вложенный cargo в фазе
+  исполнения тестов блокировок не держит; это медленнее обычного теста,
+  но единственный способ гонять именно артефакт примера).
+
+### README
+
+Большой блок примера (`README.md:244-373`) заменяется ссылкой на
+`examples/counter.rs` с кратким описанием (2-3 строки); свод правил
+штатных компонентов после него (`:375-389`) остаётся. Четыре мелких
+сниппета раздела «Встраивание» остаются иллюстративным текстом — они не
+самодостаточны для doctest без скрытых строк.
+
+### Проверка части A
+
+- `cargo build -p open-bsl --example counter` компилируется.
+- `cargo run -p open-bsl --example counter` печатает `2` и выходит с 0.
+- `cargo test -p open-bsl` зелёный (включая `counter_example`).
+- `cargo fmt --all -- --check`; `cargo clippy -p open-bsl -- -D warnings`.
+- README ссылается на `examples/counter.rs`, текст не дублирует код.
+
+## Часть B — ABI `MethodCall` и эргономика регистрации
+
+### Корневая причина
+
+`MethodCall` (`bsl-rt/src/component.rs:218-222`) берёт получателя как
+`&BslValue`:
+
+```rust
+pub type MethodCall =
+    for<'a> fn(&BslValue, &[BslValue], &mut CallContext<'a>) -> RtResult<BslValue>;
+```
+
+Горячий путь VM уже отдаёт регистр напрямую, без пересборки (это
+зафиксировано в док-комментарии типа). Пересборка живёт в строковом
+входе: `ObjectProtocol::call_method` для делегирования в
+`call_method_from_table` заворачивает `self` обратно в
+`Value::new_object(...)`/`self.as_value()` — а строковым входом ходят
+`WriteText`/`CloseText` и legacy-`CallMethod`, то есть каждая запись
+`csv_write`/`json_write`. Делегирующие реализации:
+
+- Counter (`open-bsl/src/lib.rs:434-449`, пересборка `:440-442`).
+- bsl-json reader/writer (`bsl-json/src/lib.rs:1537`, `:1835`).
+- bsl-stream (`stream.rs:527`, `:1026`; `datarw.rs:383`, `:661`).
+- bsl-xml (`xml.rs:813` и `:987`, пересборка `:822`/`:996`;
+  `xdto.rs:6061`).
+
+Лишняя `Rc`-аллокация на строковый вызов; делегирование одинаково для
+всех типов, но из-за сигнатуры не выносится в default; каждый обработчик
+вручную даункастит через типоспецифичный хелпер.
+
+### Изменение ABI
+
+`bsl-rt/src/component.rs`:
+
+```rust
+pub type MethodCall =
+    for<'a> fn(&dyn ObjectProtocol, &[BslValue], &mut CallContext<'a>) -> RtResult<BslValue>;
+```
+
+`call_method_from_table`: параметр `receiver: &BslValue` →
+`receiver: &dyn ObjectProtocol`. Тело без изменений.
+
+### `as_dyn`: почему нельзя «просто привести self»
+
+Правка первой редакции: default-метод трейта, передающий `self` туда, где
+ждут `&dyn ObjectProtocol`, не компилируется — тело default-метода
+типизируется при `Self: ?Sized`, а приведение `&Self → &dyn` требует
+`Self: Sized` (E0277). Добавить `where Self: Sized` тоже нельзя: метод
+выпадет из vtable, и строковый вход VM через `ObjectRef` перестанет
+диспетчеризоваться вовсе. Решение — расширить уже существующую служебную
+основу `ObjectDowncast` (потребителей вне файла нет, сужение blanket
+безопасно):
+
+```rust
+#[doc(hidden)]
+pub trait ObjectDowncast {
+    fn as_any(&self) -> &dyn Any;
+    fn as_dyn(&self) -> &dyn ObjectProtocol;
+}
+
+impl<T: Any + ObjectProtocol> ObjectDowncast for T {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+    fn as_dyn(&self) -> &dyn ObjectProtocol {
+        self
+    }
+}
+```
+
+Связка «`ObjectProtocol: ObjectDowncast`, blanket по
+`T: ObjectProtocol`» циклична лишь на вид — это стандартный приём
+авто-супертрейта. В default-телах `self.as_dyn()` — обычный вызов
+супертрейт-метода, без приведения. Для VM добавляется зеркало:
+
+```rust
+impl ObjectRef {
+    pub fn as_dyn(&self) -> &dyn ObjectProtocol { &*self.0 }
+}
+```
+
+### Default `call_method`
+
+`bsl-rt/src/object_protocol.rs:98-108` — вместо возврата
+`RtError::UnknownMethod` реализация по умолчанию делегирует в таблицу:
+
+```rust
+fn call_method(
+    &self,
+    name: &str,
+    arguments: &[BslValue],
+    context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    call_method_from_table(
+        self.method_table(),
+        self.type_descriptor().name,
+        self.as_dyn(),
+        name,
+        arguments,
+        context,
+    )
+}
+```
+
+Пустая таблица даёт прежний `UnknownMethod` из `call_method_from_table` —
+поведение типов без таблиц не меняется. Кастомный `call_method` в
+bsl-regexp (`bsl-regexp/src/lib.rs:277-302`) остаётся: он обрабатывает
+`ПолучитьГруппы` напрямую, таблицы у типа нет намеренно (у
+группы-двойника методов нет вовсе).
+
+### VM
+
+`bsl-vm/src/lib.rs:1920` — быстрый путь `CallObjectMethod`; `object` уже
+вычислен выше (`:1900`):
+
+```rust
+Some(call) => call(object.as_dyn(), args, &mut context)?,
+```
+
+Симметрично в JIT: `bsl-vm/src/jit/mod.rs:1084`
+(`shim_call_object_method`). Строковый fallback без изменений —
+`object.call_method` теперь default, но вызов тот же.
+
+### Миграция обработчиков
+
+Сигнатура 1-го параметра `&BslValue` → `&dyn ObjectProtocol`, даункаст —
+с `receiver.object_ref().and_then(|o| o.downcast_ref::<T>())` на
+`receiver.as_any().downcast_ref::<T>()` (супертрейт-метод доступен на
+`&dyn ObjectProtocol`). Мигрируют только крейты, у которых таблицы
+фактически есть:
+
+| Крейт | Файлы | Таблицы |
+|---|---|---|
+| `bsl-json` | `src/lib.rs` | reader, writer, настройки записи |
+| `bsl-stream` | `src/stream.rs`, `src/datarw.rs` | потоки, менеджер файловых потоков, чтение/запись данных, результаты |
+| `bsl-xml` | `src/xml.rs`, `src/xdto.rs` | reader, writer, настройки, XDTO-обвязка |
+| `open-bsl` | пример Counter | `COUNTER_METHODS` |
+
+Чисто-делегирующие `call_method` (список в «Корневой причине»)
+**удаляются** — их заменяет default; bsl-regexp остаётся кастомным.
+
+У `bsl-textdoc`, `bsl-pdf`, `bsl-zip`, `bsl-spreadsheet` и объектов
+`dom`/`xsd`/`xpath` таблиц нет — в этой части их не трогаем. Их конверсия
+на таблицы — отдельные задачи **после** этого плана, уже под новый ABI:
+им не понадобится делегирующий `call_method` вовсе (закрыт default-ом), а
+паттерн конверсионных коммитов `4046e51`/`938b945`/`32f69b5` в части
+делегирования устаревает. Вместе с конверсией у этих типов уйдёт и
+регистровый баг имён методов (репро `ТД.добавитьстроку`).
+
+### Эргономика: `TypeDescriptor::new`
+
+`bsl-rt/src/object_protocol.rs:54-62` — конструктор, чтобы host не писал
+`legacy_type_id: None` руками:
+
+```rust
+impl TypeDescriptor {
+    pub const fn new(package: &'static str, name: &'static str) -> Self {
+        Self { package, name, legacy_type_id: None }
+    }
+}
+```
+
+Поле `legacy_type_id` остаётся `pub` — официальным компонентам нужно
+`Some(TypeId::…)`. Пример Counter и README используют `new`.
+
+### Эргономика: автоинжект ядра
+
+`LibraryDescriptor.dependencies` для ядра писать руками не нужно:
+`requirements_for` включает `PACKAGE_NAME` безусловно, а `dependencies`
+потребляются только валидацией регистрации и транзитивным замыканием
+(проверено, см. «Что проверено»). Убрать
+`LibraryDependency { package: bsl_rt::PACKAGE_NAME, ... }` во всех
+компонентах: `dependencies: &[...]` → `&[]` (межкомпонентные зависимости,
+если есть, остаются). Правок `RuntimeBuilder` не требуется.
+
+### Эргономика: `folded_eq` реэкспорт
+
+`bsl-rt/src/fold.rs:99` уже `pub fn folded_eq`, но не реэкспортирован из
+корня — добавить в `lib.rs` к остальным `pub use`. Компоненты в
+`get_property`/`set_property`/`has_property`/`fill_property` заменяют
+`eq_ignore_ascii_case`/`to_uppercase` на `folded_eq`. Это перекроется с
+частью C (таблицы свойств), но `folded_eq` нужен и типам с динамическими
+свойствами, и `has_property`/`fill_property`, которые таблицами не
+покрываются. Уточнение первой редакции: табличные пути методов сворачивают
+через `char::to_uppercase`, не через `folded_eq` — семантика та же;
+таблицы свойств части C пишем сразу на `folded_eq` (без аллокаций), а
+унификация свёртки методного моста — по желанию и отдельно.
+
+### Проверка части B
+
+- `cargo build --workspace`; `cargo test --workspace` — conformance
+  зелёный.
+- `the_jit_agrees_with_the_interpreter_on_every_script` зелёный.
+- `cargo run -p open-bsl --example counter` → `2` (Counter без
+  бойлерплейта `call_method` и даункаст-хелпера).
+- `cargo clippy --workspace --all-targets -- -D warnings`.
+
+## Часть C — `PropertyDescriptor` и быстрый путь свойств
+
+### Текущее состояние
+
+Правка первой редакции: строковый `get_property`/`set_property` на каждый
+доступ живёт в **четырёх** ветках интерпретатора, а не в двух. Открытая
+пара `GetObjectProp`/`SetObjectProp` (`bsl-vm/src/lib.rs:1759`, `:1781`,
+в `step_cold`) — именно она исполняется при компиляции с реестром, то
+есть во всех реальных прогонах, включая `xml_parse`. Legacy-пара
+`GetProp`/`SetProp` (`:1429`, `:1460`, в горячем `step`) обслуживает
+байт-код без реестра; её нативные ветви (`get_field_cached`/`prop_cache`)
+— горячий путь структур `csv_write`. В JIT свои четыре шима:
+`shim_get_prop`/`shim_set_prop` (`jit/mod.rs:817`, `:856`) и открытые
+двойники `shim_get_object_prop`/`shim_set_object_prop` (`:934`, `:968`) с
+sink-`CallContext` — контракт «свойства компонентов не пишут в IO».
+
+`field_name` (`:1052-1060`) возвращает написание из `Program::names` —
+первое встреченное в программе, — и каждый тип сравнивает его самодельным
+`if/else` на `eq_ignore_ascii_case` (кириллица ломается, см. репро).
+Методы уже имеют быстрый путь из трёх уровней (ячейка инструкции →
+мемо-мост → строковый fallback); свойства не имеют ничего.
+
+### Целевой дизайн: таблицы + мемо, без ячейки инструкции
+
+`PropertyDescriptor` симметрично с `MethodDescriptor`, но уровни только
+(1) и (3) — мемо в `LinkedComponents` и строковый fallback. Уровень (2) —
+`property_cache` на `Chunk` — откладываем: derived-таблица потянула бы
+правки `chunk.rs`/`compiler.rs`/`text.rs`/`bundle.rs` и подъём
+`FORMAT_VERSION`, а мемо не сериализуется вовсе. У методов HashMap-мост
+стоил ~7 % `json_write` (`docs/bsl-rt-refactor.md:955, 963`); бенефициар
+свойств — `xml_parse`; если мост всплывёт в профиле, уровень (2)
+добавляется по замеру.
+
+### Типы
+
+`bsl-rt/src/component.rs`:
+
+```rust
+pub struct PropertyCode(u16);  // newtype, плотные с 1, как MethodCode
+
+pub type PropertyGet =
+    for<'a> fn(&dyn ObjectProtocol, &mut CallContext<'a>) -> RtResult<BslValue>;
+
+pub type PropertySet =
+    for<'a> fn(&dyn ObjectProtocol, BslValue, &mut CallContext<'a>) -> RtResult<()>;
+
+pub struct PropertyDescriptor {
+    pub code: PropertyCode,
+    pub names: &'static [&'static str],
+    pub get: PropertyGet,
+    /// `None` — свойство только для чтения; запись вернёт ошибку.
+    pub set: Option<PropertySet>,
+}
+
+pub fn get_property_from_table(
+    table: &'static [PropertyDescriptor],
+    type_name: &'static str,
+    receiver: &dyn ObjectProtocol,
+    name: &str,
+    context: &mut CallContext<'_>,
+) -> RtResult<BslValue>;
+
+pub fn set_property_from_table(...) -> RtResult<()>;
+```
+
+Свёртка имени — `folded_eq` (безаллокационно, корректно для кириллицы).
+Промах — `RtError::UnknownProperty(name)`: правка первой редакции — не
+`UnknownColumn`. `UnknownProperty` уже существует
+(`bsl-rt/src/lib.rs:220`, текст «свойство «X» не найдено», им пользуется
+`fill.rs`), а `UnknownColumn` — про колонки таблиц значений; RegexObject
+сегодня отвечает «колонка «значение» не найдена», что и видно в репро.
+
+### `ObjectProtocol`
+
+`bsl-rt/src/object_protocol.rs`:
+
+- `fn property_table(&self) -> &'static [PropertyDescriptor] { &[] }`
+  (default) + зеркало в `ObjectRef` (рядом с `method_table`, `:234-236`).
+- Default `get_property` делегирует
+  `get_property_from_table(self.property_table(), self.type_descriptor().name, self.as_dyn(), name, ctx)`;
+  пустая таблица и промах дают `UnknownProperty` (прежний default отвечал
+  `NotAnObject` — см. «Наблюдаемые изменения»).
+- Default `set_property` — симметрично; `set: None` →
+  `RtError::PropertyReadOnly { name, receiver }` (новый вариант).
+- `has_property`/`fill_property` — default как есть; для типов с таблицей
+  `has_property` имеет смысл переопределить через обход таблицы с
+  `folded_eq`, но это опционально и план не блокирует.
+
+### VM: `LinkedComponents`
+
+`bsl-vm/src/lib.rs`, зеркало методного моста (`:417-451`):
+
+```rust
+type ComponentPropertyMap = std::cell::RefCell<
+    std::collections::HashMap<(usize, u32), Option<(PropertyGet, Option<PropertySet>)>>
+>;
+```
+
+`resolve_component_property(map, table, name, program)` — ключ
+`(table.as_ptr() as usize, name.index())`, мемоизация промахов, первое
+разрешение — `folded_eq` по таблице.
+
+### VM: четыре ветки интерпретатора и четыре шима JIT
+
+Чтобы не плодить восемь копий и не раздувать горячие арм-ы, объектная
+ветвь выносится в общие хелперы:
+
+```rust
+#[inline(never)]
+fn component_prop_get(
+    object: &ObjectRef,
+    linked: &LinkedComponents<'_>,
+    name: bsl_rt::NameId,
+    program: &Program,
+    context: &mut bsl_rt::CallContext<'_>,
+) -> RtResult<BslValue> {
+    let table = object.property_table();
+    if !table.is_empty() {
+        if let Some((get, _)) = resolve_component_property(
+            &linked.component_properties, table, name, program,
+        )? {
+            return get(object.as_dyn(), context);
+        }
+    }
+    // Промах и тип без таблицы — строковым путём: единственный источник
+    // текста ошибки о неизвестном свойстве остаётся у самого типа.
+    object.get_property(field_name(program, name)?, context)
+}
+```
+
+и симметричный `component_prop_set`. Вызывающие:
+
+- интерпретатор: `GetObjectProp`/`SetObjectProp` (`:1759`/`:1781`,
+  `step_cold`) и объектная ветвь `GetProp`/`SetProp` (`:1429`/`:1460`,
+  `step`);
+- JIT: `shim_get_prop`/`shim_set_prop` (`:817`/`:856`) и
+  `shim_get_object_prop`/`shim_set_object_prop` (`:934`/`:968`) — те же
+  хелперы, sink-контекст двойников сохраняется.
+
+`#[inline(never)]` держит объектную ветвь вне инлайн-бюджета горячего
+цикла (правило `step_cold`: граница — стоимость тела). Нативные ветви
+(`get_field_cached`/`set_field_cached` с `prop_cache`) **не меняются** —
+это горячий путь структур `csv_write`.
+
+### Миграция свойств в таблицы
+
+В таблицу идут только типы с фиксированным набором свойств. Тип с
+динамическими именами оставляет пустую таблицу и кастомный строковый
+`get_property`/`set_property` на `folded_eq` — ветка VM это уже
+переживает (пустая таблица → строковый путь), это штатный режим дизайна.
+
+| Крейт | Типы |
+|---|---|
+| `bsl-regexp` | `RegexObject` (результат и группа): `Значение`/`Value`, `НачальнаяПозиция`/`StartIndex`, `Длина`/`Length`; фикс регистра кириллицы + `UnknownProperty` вместо `UnknownColumn` |
+| `bsl-json` | reader, writer, настройки записи (`ФорматСериализацииДаты`, …) |
+| `bsl-xml` | `XmlReader` (`ТипУзла`/`Имя` — бенефициар `xml_parse`), `XmlWriter`, настройки. **Объекты XDTO не мигрируют**: набор свойств динамический (по схеме), доступ уже свёрнут корректно (`xdto.rs:2743-2745`) |
+| `bsl-stream` | `StreamObject` (`ДоступнаЗапись`, …), чтение/запись данных (`ПорядокБайтов`, `КодировкаТекста`, …), результаты |
+| `bsl-textdoc` | фиксированные свойства документа и областей; «Параметры» макета — динамические имена, остаются кастомными |
+| `bsl-pdf` | `ДокументPDF` (`Вложения`, `Страницы`), вложение, страница |
+| `bsl-zip` | чтение/запись ZIP (`Элементы`, `Комментарий`), элемент архива |
+| `bsl-spreadsheet` | `ТабличныйДокумент` (`ВысотаТаблицы`, поля печати, …), область, ячейка, рисунок |
+| `open-bsl` | Counter: 1 свойство «Значение» (`get` only) |
+
+`bsl-binbuf` в списке нет — см. «Что проверено» и часть D.
+
+### Проверка части C
+
+- `cargo test --workspace`; особое внимание `xml_parse` (свойства
+  `ЧтениеXML`) и `textdoc_invoice` (`Параметры.X` — динамический путь).
+- Прицельные тесты из репро: `Р.значение` → «б», `Р.ЗНАЧЕНИЕ` → «б»
+  (регистр кириллицы), плюс свойство строчными на каком-то из
+  мигрированных типов части C.
+- `the_jit_agrees_with_the_interpreter_on_every_script` зелёный.
+- A/B — в финальной проверке (набор там).
+
+## Часть D — свёртка имён в нативном строковом пути ядра
+
+Новая часть по итогам репро `КЗ.значение`. Нативные значения без формы —
+`КлючИЗначение`, `КолонкаТаблицыЗначений`, коллекция `Колонки`,
+`БуферДвоичныхДанных` — сравнивают имена свойств в
+`get_field_by_name`/`set_field_by_name` через `eq_ignore_ascii_case`
+(`bsl-rt/src/lib.rs:2174-2259`), то есть несут тот же кириллический баг,
+и таблицы части C их не лечат: это не `ObjectProtocol`-типы. Замена на
+`folded_eq` точечно по этим сайтам. `folded_eq` начинает с побайтового
+равенства (`fold.rs`), так что канонические написания не замедляются;
+некорректно работавшие написания начинают работать.
+
+Приёмка: `КЗ.значение`/`КЗ.ключ` в обходе `Соответствия`,
+`Колонка.имя`/`Колонка.типзначения`, `Буфер.размер` — строчными; плюс
+юнит-тесты рядом с сайтами.
+
+## Часть E — снятие `legacy_type_id`: тип компонента — его дескриптор
+
+Поле задумано временным с самого рождения — его док-комментарий
+(`object_protocol.rs:58-61`) прямо говорит «пока типы-значения не
+переведены на дескрипторы». Эта часть завершает перевод. Выполняется
+отдельным этапом **после частей B–C** (часть D независима): те делают
+дескриптор единственной идентичностью в диспетчеризации, эта — в системе
+типов. В общей последовательности часть E идёт последней — после волны
+распайки F и конверсий таблиц методов: её шаг `e3` правит каждую
+декларацию дескриптора, и пусть правит уже новые файлы.
+
+### Что проверено (2026-08-20)
+
+- Читатель у поля ровно один: `type_of`/`ТипЗнч`
+  (`bsl-rt/src/lib.rs:1198`) превращает объект-расширение в `TypeId`;
+  ветка `legacy_type_id: None` отвечает «тип «X» не определён» — то есть
+  `ТипЗнч` на host-типе (Counter из README) сегодня падает.
+- Значение `Тип` — `BslValue::Type(TypeId)` (`lib.rs:94`); равенство
+  `:2898`, хеш `:2968` (ключи `Соответствия`), печать `:3054`.
+- `Тип("Имя")` — `BuiltinFn::TypeByName` (`builtin.rs:259`) через
+  статический `TypeId::lookup` (`types.rs:966`); тем же путём ходит
+  список имён конструктора `ОписаниеТипов` (`lib.rs:1406`). Реестр
+  компонентов в разрешении не участвует вовсе.
+- Сериализационные UUID внутреннего формата (`vstr.rs:64`,
+  `TYPE_UUIDS`) — только нативные типы; компонентные `Тип`-значения в
+  `ЗначениеВФайл` не поддержаны и сейчас.
+- Живой якорь: `ТипЗнч(Р)` печатает «Результат поиска по регулярному
+  выражению» (имя типа с пробелами ≠ имени значения), и
+  `Тип("РезультатПоискаПоРегулярномуВыражению") = ТипЗнч(Р)` → «Да».
+- Деклараций `legacy_type_id: Some(TypeId::…)` — 93 по девяти крейтам;
+  компонентные записи `NAMES`/`IDENTIFIERS` (`types.rs:336`, `:886`) —
+  большинство таблицы.
+
+### Что даёт снятие
+
+1. `TypeId` сжимается с ~200 вариантов до ~30 нативных; `types.rs`
+   теряет компонентную часть `NAMES`/`IDENTIFIERS`.
+2. Новый компонентный тип перестаёт трогать `bsl-rt` — сегодня каждый
+   обязан иметь вариант в закрытом enum ядра плюс строку имён, что
+   противоречит самой идее выноса компонентов.
+3. Host-типы становятся полноценными: `ТипЗнч` работает на любом
+   объекте из его дескриптора, ветка ошибки исчезает.
+
+### Дизайн: `TypeRef`
+
+```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TypeRef {
+    Native(TypeId),
+    Object(&'static TypeDescriptor),
+}
+```
+
+`BslValue::Type(TypeId)` → `BslValue::Type(TypeRef)`. Указатель — 8
+байт, не больше `Rc`-вариантов, размер `BslValue` не растёт. Derive
+`PartialEq` на `&'static TypeDescriptor` сравнивает содержимое (после
+снятия поля — пакет и имена): статики уникальны, но равенство по
+содержимому устойчивее тождества указателя. `TypeDescriptor` получает
+`derive(Hash)` — хеш ключей `Соответствия` (`lib.rs:2968`). Порядка
+«больше/меньше» у `Тип`-значений в языке нет; внутренние ранжировки
+разнотипных значений работают по `TypeId` самих значений и не
+затрагиваются. Если полный порядок `TypeRef` где-то понадобится —
+`Native` в порядке `TypeId` (он измерен), затем `Object` по
+`(package, name)`; наблюдаемым он не является.
+
+### Дизайн: имена типа в дескрипторе
+
+Имя ТИПА ≠ имени ЗНАЧЕНИЯ («Чтение XML» с пробелом против «ЧтениеXML»;
+у DOM — измеренные двойные пробелы; у XPath представление и имя поиска —
+разные строки). Эти измеренные пары переезжают из `NAMES`/`IDENTIFIERS`
+в дескрипторы — вместе со своими комментариями, это память проекта:
+
+```rust
+pub struct TypeDescriptor {
+    pub package: &'static str,
+    /// Имя значения и конструктора: «ЧтениеXML».
+    pub name: &'static str,
+    /// Русское имя типа — печать `Строка(Тип)` и поиск: «Чтение XML».
+    pub type_ru: &'static str,
+    /// Английское имя типа — только поиск: «XMLReader».
+    pub type_en: &'static str,
+    /// Дополнительные имена поиска, где написание в коде отличается от
+    /// представления (случаи XPath) — как `IDENTIFIERS` сейчас.
+    pub type_identifiers: &'static [&'static str],
+}
+```
+
+Семантика полей — ровно как у `NAMES`/`IDENTIFIERS`: печатается всегда
+`type_ru`, ищутся регистронезависимо все. `TypeDescriptor::new(package,
+name)` заполняет `type_ru = name`, `type_en = name`, пустые
+идентификаторы — для host-типа «Счётчик» печать «Счётчик» без лишних
+слов в примере.
+
+### Дизайн: реестр типов и `Тип("Имя")`
+
+`LibraryDescriptor` получает `types: &'static [&'static TypeDescriptor]`
+— список типов компонента (одна новая таблица на крейт).
+`RuntimeRegistry::build()` строит свёрнутый индекс «имя → дескриптор»
+рядом с индексом конструкторов (`component.rs:585-586`).
+
+`TypeByName` и список имён `ОписаниеТипов` переходят на ctx-вариант
+(`call_builtin_fn_ctx` — штатный путь билтинов, которым нужно
+окружение); `CallContext` несёт ссылку на индекс типов, который
+`link_components` кладёт туда один раз на программу. Порядок разрешения:
+нативная таблица (`TypeId::lookup`) → индекс реестра.
+
+### Дизайн: остальные потребители
+
+- `type_of` (`lib.rs:1198`): ветка `Extension` возвращает
+  `TypeRef::Object(object.type_descriptor())`; ветки `Some`/`None` и
+  ошибка `UnknownType` из этого места исчезают.
+- Печать: `TypeRef` отдаёт имя сам — `Native` через `NAMES`, `Object` —
+  `type_ru`; оба существующих пути печати сводятся к `Display` у
+  `TypeId` (`lib.rs:3054`), он становится `Display` у `TypeRef`.
+- `ОписаниеТипов`: `TypeDescription(Vec<TypeId>)` (`object.rs:43`) →
+  `Vec<TypeRef>`; квалификаторы и конверсии `table.rs` работают только с
+  нативными — компонентные ссылки проходят сквозь без конверсий.
+- Сериализация: `TYPE_UUIDS` не меняется; `Тип` компонентного типа в
+  `ЗначениеВФайл` остаётся ошибкой (промах по таблице), как сейчас.
+- XDTO: мэппинги (`xdto.rs:673-678`, `:5440-…`) почти все нативные;
+  собственные типы `bsl-xml` ссылается напрямую на свои дескрипторы.
+
+### Что остаётся на `TypeId`
+
+Нативные значения и коллекции, `VstrOpaque`, `Type`, `EnumMeta` и типы
+членов перечислений (`JsonValueType`, `XmlNodeType`, `DomNodeType`, …):
+перечисления живут в `ENUM_NAMES` ядра (`bsl-rt/src/enums.rs`), их
+перевод в компоненты — отдельная задача вне этой части. Их записи в
+`NAMES` остаются.
+
+### Порядок части E
+
+- **e1.** `TypeRef` + `BslValue::Type(TypeRef)` и рябь по ядру:
+  `type_of`, равенство/хеш/печать, `ОписаниеТипов`, `table.rs`,
+  проверка промаха в `vstr`. Проверка: `cargo build -p bsl-rt`,
+  `cargo test -p bsl-rt`.
+- **e2.** Поля имён в `TypeDescriptor`; `LibraryDescriptor.types`;
+  индекс типов в реестре; ctx-доступ для `TypeByName`/`ОписаниеТипов`
+  (`link_components` → `CallContext`). Проверка: `cargo build
+  --workspace`.
+- **e3.** Миграция девяти крейтов: имена типов в дескрипторы (вместе с
+  измеренными комментариями), списки `types`, прямые ссылки на свои
+  дескрипторы вместо `TypeId::…` в XDTO. Проверка: `cargo test
+  --workspace`.
+- **e4.** Удаления: поле `legacy_type_id` и его 93 декларации,
+  компонентные варианты `TypeId`, их записи `NAMES`/`IDENTIFIERS`;
+  README и Counter на упрощённый `TypeDescriptor::new`. Проверка:
+  `cargo test --workspace`.
+- **e5.** Ворота части: conformance целиком,
+  `the_jit_agrees_with_the_interpreter_on_every_script`, fmt, clippy,
+  doc.
+
+### Проверка части E
+
+- Имена пришпилены к прежней таблице: адаптированный раунд-трип
+  (`types.rs:1014`) — каждый дескриптор официальных компонентов
+  находится по всем своим именам и печатается `type_ru`; прицельные
+  проверки представителей причуд («Чтение JSON» с пробелом,
+  «Документ  DOM» с двумя, XPath-имена) байт-в-байт.
+- Живой якорь этой редакции:
+  `Тип("РезультатПоискаПоРегулярномуВыражению") = ТипЗнч(Р)` → «Да»,
+  печать «Результат поиска по регулярному выражению».
+- Новое: `ТипЗнч` на «Счётчике» печатает «Счётчик» (тест в
+  `embedding.rs`/`counter_example.rs`).
+- Платформенный заход не нужен: имена не меняются, а переезжают —
+  оракулом служит прежняя таблица `NAMES` в истории.
+
+### Наблюдаемые изменения части E
+
+1. `Тип("ЧтениеXML")` в сборке без компонента — ошибка «тип не
+   определён» вместо статического успеха: разрешение стало
+   реестрозависимым. Это консистентно с `Новый` (намеренный блокер без
+   компонента); фиксируется embedding-тестом.
+2. `ТипЗнч` host-объекта — раньше ошибка, теперь тип. Исправление в
+   пользу host-API, наблюдаемо только для встраивания.
+
+### Радиус части E
+
+`bsl-rt` (`types.rs`, `lib.rs`, `object.rs`, `object_protocol.rs`,
+`component.rs`, краевая проверка в `vstr.rs`), все девять компонентных
+крейтов (декларации типов), `bsl-vm` (индекс типов в `link_components` и
+`CallContext`), `open-bsl` и README (Counter). `bsl-sema` и
+`bsl-bytecode` не затрагиваются: `Тип` — рантайм-функция, формат
+байт-кода типов не кодирует.
+
+## Часть F — распайка компонентных монолитов
+
+Канон компоновки компонентного крейта в воркспейсе уже сложился: тонкий
+`lib.rs`-фасад — `library()`, объявления модулей, реэкспорты, тест
+плотности кодов — плюс файлы-подсистемы. Так устроены `bsl-xml`
+(`lib.rs` — 304 строки), `bsl-zip` (144), `bsl-stream` (134), `bsl-pdf`
+(84), `bsl-spreadsheet` (71). Каша — двух сортов: `bsl-json`,
+единственный крейт вообще без модульной структуры (самый старый
+компонент, этап 1 плана стандартной библиотеки — канон сложился позже
+него), и файлы-подсистемы-монолиты, где под одной крышей живут логика
+формата, `ObjectProtocol`-объекты с диспетчеризацией и тестовый хвост.
+
+### Что проверено (2026-08-20)
+
+Инвентарь (`wc -l`, секционные комментарии — швы уже размечены,
+распайка почти механическая):
+
+| Файл | Строк | Внутри |
+|---|---:|---|
+| `bsl-json/src/lib.rs` | 4437 | разбор (:52), запись (:432), склейка с BSL (:915), `ПрочитатьJSON`/`ЗаписатьJSON` (:2035), даты (:2113), объекты с таблицами и фасад, тесты (:3552) |
+| `bsl-xml/src/xdto.rs` | 9074 | 14 секций: встроенные типы схемы (:634), модель (:943), построение (:1077), лексические формы (:1666), фасеты (:1797), значения BSL (:2380), фабрика (:2476), экземпляр (:2979), список (:3567), последовательность (:3721), чтение XML (:3854), запись XML (:4452), сериализатор (:5146), объектный протокол (:5571); тестовый хвост ~2,9 тыс. строк (:6143) |
+| `bsl-pdf/src/document.rs` | 4689 | чтение контейнера (:17), поверхность «ДокументPDF» (:2009), объектный протокол (:2822), тесты (:3055); `writer.rs` (2022) уже отдельный |
+| `bsl-spreadsheet/src/document.rs` | 4260 | модель и сериализация MXL (:1503), мост к значениям (:2174), параметры макета (:2901), объектный протокол (:3033), тесты (:3372) |
+| `bsl-zip/src/archive.rs` | 4222 | читатель контейнера (:24), поверхность читателя (:387), конструкторы и методы (:781), писатель (:1295), объектный протокол (:2118), тесты (:2319) |
+| `bsl-xml/{xsd,dom,xpath}.rs` | 3640/3477/3413 | цельные подсистемы одного предмета — большие, но однородные |
+| `bsl-stream/{datarw,stream}.rs` | 2547/1855 | умеренные, структурированы |
+
+### Правила волны
+
+- **Чистое перемещение.** Ни одной смены сигнатуры, имени или
+  поведения; видимость поднимается точечно до `pub(crate)`/`pub(super)`.
+  Ревью перемещений — `git diff --color-moved=dimmed-zebra`.
+- **Тесты остаются `#[cfg(test)]` при своих модулях** — конвенция
+  AGENTS.md («юнит-тесты рядом с логикой»), и многие тестируют приватное,
+  в `tests/` им нельзя. Проблема «тысячи строк тестов в хвосте» решается
+  сама: тесты уезжают со своей логикой.
+- **Маркеры `НЕ ИЗМЕРЕНО` переезжают вместе с кодом** — сканер реестра
+  (`open_questions_registry_matches_source_markers`) читает исходники и
+  сам поймает потерю.
+- **Один крейт — один коммит** (`bsl-json` допустимо двумя:
+  формат/объекты). Ворота на каждый: `cargo test -p` крейта; в конце
+  волны — workspace, conformance,
+  `the_jit_agrees_with_the_interpreter_on_every_script`, fmt, clippy,
+  doc.
+- Публичный интерфейс крейта не меняется: `pub use` фасада отдаёт те же
+  имена.
+
+### Целевые нарезки
+
+- **f1 `bsl-json`**: `lib.rs` (фасад по канону) + `parse.rs` (разбор) +
+  `write.rs` (запись) + `bridge.rs` (склейка значений с BSL, настройки
+  сериализации, даты, `ПрочитатьJSON`/`ЗаписатьJSON`) + `objects.rs`
+  (`ObjectProtocol` и таблицы; делегирующих `call_method` к этому
+  моменту уже нет — часть B).
+- **f2 `bsl-xml/xdto.rs`** → каталог `xdto/`: `mod.rs` (шов подсистемы,
+  реэкспорты), `builtins.rs`, `model.rs` (модель и построение),
+  `lexical.rs` (лексические формы и фасеты), `values.rs`, `factory.rs`,
+  `instance.rs` (экземпляр, список, последовательность), `read.rs`,
+  `write.rs`, `serializer.rs`, `objects.rs` (объектный протокол).
+- **f3 `bsl-pdf/document.rs`** → `container.rs` (чтение контейнера) +
+  `document.rs` (поверхность «ДокументPDF») + `objects.rs` (протокол и
+  таблицы).
+- **f4 `bsl-spreadsheet/document.rs`** → `mxl.rs` (формат MXL) +
+  `bridge.rs` (мост к значениям, параметры макета) + `objects.rs`.
+- **f5 `bsl-zip/archive.rs`** → `container.rs` (низкоуровневый
+  читатель) + `reader.rs` (поверхность чтения) + `writer.rs`
+  (поверхность записи); объектный протокол — при своих объектах.
+
+Не трогаем: `bsl-stream` (умеренный и структурированный), `bsl-regexp`
+(свеженарезан: `lib`/`engine`/`tables`), `bsl-textdoc` и `bsl-binbuf`
+(меньше 900 строк). `dom.rs`/`xsd.rs`/`xpath.rs` отдельно не пилим:
+донарезка их хвостов «объектный протокол» совмещается с их конверсией на
+таблицы методов — каждая добавит ~300 строк (json-конверсия `32f69b5`
+добавила +280), это естественный момент перекомпоновки.
+
+### Проверка части F
+
+- Поведенческий ноль: `cargo test --workspace` зелёный после каждого
+  шага без правок тестов (кроме путей `use` внутри крейта).
+- Реестровый тест маркеров зелёный — маркеры не потерялись при
+  переносе.
+- Conformance и JIT-сверка в конце волны; fmt, clippy, doc.
+
+### Место в последовательности
+
+После частей B–C: план цитирует точные строки этих файлов, распайка
+раньше инвалидирует цитаты. До конверсий таблиц методов: их таблицы
+лягут сразу в новые файлы. До части E: `e3` правит декларации
+дескрипторов — уже в новых файлах. Полная последовательность — в
+«Порядке реализации».
+
+### Радиус части F
+
+Только пять названных крейтов, только перемещение внутри `src/`;
+`bsl-rt`, VM, sema, байт-код, фикстуры и оракулы не затрагиваются.
+
+## Порядок реализации
+
+Этапы идут от проверки к проверке; каждый завершается зелёным
+`cargo test` затронутых крейтов.
+
+1. **Часть A — разбивка фасада.** `error.rs`/`engine.rs`/`state.rs`,
+   `examples/counter.rs`, `tests/embedding.rs`, `tests/counter_example.rs`,
+   README. Проверка: `cargo test -p open-bsl`, пример печатает `2`.
+
+2. **Часть B — ABI `MethodCall`.** Сигнатура в `component.rs`;
+   `call_method_from_table` на `&dyn ObjectProtocol`; `as_dyn` в
+   `ObjectDowncast` (blanket сужается до `T: Any + ObjectProtocol`) и
+   `ObjectRef::as_dyn`; default `call_method` через `self.as_dyn()`.
+   Проверка: `cargo build -p bsl-rt`.
+
+3. **VM — быстрый путь метода.** `lib.rs:1920`, `jit/mod.rs:1084` —
+   `call(object.as_dyn(), ...)`. Проверка: `cargo build -p bsl-vm`.
+
+4. **Миграция обработчиков методов.** json, stream, xml+xdto, Counter:
+   сигнатура и даункаст через `as_any()`; удалить чисто-делегирующие
+   `call_method` (кроме bsl-regexp). Проверка: `cargo test --workspace`.
+
+5. **Эргономика.** `TypeDescriptor::new`; убрать зависимость на ядро в
+   `dependencies` компонентов; реэкспорт `folded_eq`; Counter и README на
+   `new`. Проверка: `cargo test --workspace`, пример → `2`.
+
+6. **Часть C — типы свойств.** `PropertyCode`, `PropertyDescriptor`,
+   `PropertyGet`/`PropertySet`, `get/set_property_from_table`
+   (`folded_eq`, `UnknownProperty`), `PropertyReadOnly`;
+   `property_table()` + default `get/set_property` через `self.as_dyn()`.
+   Проверка: `cargo build -p bsl-rt`.
+
+7. **VM — быстрый путь свойств.** `ComponentPropertyMap`,
+   `resolve_component_property`, хелперы `component_prop_get`/`set`;
+   **четыре** ветки интерпретатора и **четыре** шима JIT (sink-контракт
+   двойников). Проверка: `cargo build -p bsl-vm`, `cargo test -p bsl-vm`.
+
+8. **Миграция свойств в таблицы.** По таблице части C; динамические типы
+   — кастом на `folded_eq`. Прицельные регресс-тесты из репро. Проверка:
+   `cargo test --workspace`.
+
+9. **Часть D — ядро.** `folded_eq` в `get_field_by_name`/
+   `set_field_by_name` (`bsl-rt/src/lib.rs:2174-2259`) + тесты.
+   Проверка: `cargo test -p bsl-rt`, репро `КЗ.значение`.
+
+10. **Финальная проверка.** `cargo fmt --all -- --check`; `cargo clippy
+    --workspace --all-targets -- -D warnings`; `RUSTDOCFLAGS="-D warnings"
+    cargo doc --workspace --no-deps`; `cargo test --workspace`;
+    чередующийся A/B против базового бинарника:
+    `benchmarks/run.sh xml_parse textdoc_invoice csv_write json_write 5`
+    (`json_write` добавлен: строковый вход `WriteText` теряет пересборку
+    обёртки — эффект части B).
+
+Поверх шагов 1–10 — три волны, в этом порядке (все — после частей B–C;
+часть D независима и может идти в любой момент):
+
+1. **Часть F — распайка монолитов** (`f1`–`f5` в её разделе). Раньше
+   нельзя: план цитирует строки этих файлов.
+2. **Конверсия оставшихся объектов на таблицы методов** —
+   `bsl-textdoc`, `bsl-pdf`, `bsl-zip`, `bsl-spreadsheet`,
+   `dom`/`xsd`/`xpath` — отдельными задачами, уже под новый ABI (без
+   делегирующего `call_method`) и в уже распаянные файлы; для
+   `dom`/`xsd`/`xpath` — вместе с донарезкой их хвостов «объектный
+   протокол».
+3. **Часть E — снятие `legacy_type_id`** (`e1`–`e5` в её разделе):
+   правит декларации дескрипторов уже в новых файлах.
+
+## Радиус изменений (части A–D)
+
+Радиусы частей E и F — в их разделах.
+
+| Крейт | Часть A | Часть B | Часть C | Часть D |
+|---|---|---|---|---|
+| `open-bsl` | разбивка + example + tests | Counter: удалить бойлерплейт | Counter: таблица из 1 свойства | — |
+| `bsl-rt` | — | ABI `MethodCall`, `as_dyn`, default `call_method`, `TypeDescriptor::new`, реэкспорт `folded_eq` | `PropertyDescriptor`, `property_table`, default `get/set_property`, `PropertyReadOnly` | `folded_eq` в нативном строковом пути (`lib.rs:2174-2259`) |
+| `bsl-vm` | — | `lib.rs:1920`, `jit/mod.rs:1084` | мост свойств, хелперы, 4 ветки + 4 шима | — |
+| `bsl-sema`, `bsl-bytecode` | — | — | — | — |
+| `bsl-regexp` | — | — (таблиц нет, `call_method` кастомный) | таблица свойств, фикс кириллицы, `UnknownProperty` | — |
+| `bsl-json` | — | обработчики, −2 `call_method` | таблицы свойств | — |
+| `bsl-xml` | — | обработчики, −3 `call_method` | таблицы свойств reader/writer; XDTO — кастом | — |
+| `bsl-stream` | — | обработчики, −4 `call_method` | таблицы свойств | — |
+| `bsl-textdoc` | — | — (таблиц нет) | таблицы фиксированных свойств; «Параметры» — кастом | — |
+| `bsl-pdf` | — | — (таблиц нет) | таблицы свойств | — |
+| `bsl-zip` | — | — (таблиц нет) | таблицы свойств | — |
+| `bsl-spreadsheet` | — | — (таблиц нет) | таблицы свойств | — |
+| `bsl-binbuf` | — | — | — | нативный тип, правится в `bsl-rt` |
+| `README.md` | блок «Счётчик» → ссылка на example | `TypeDescriptor::new`, default `call_method` в гайде | — | — |
+
+Убирание зависимости на ядро (`dependencies: &[]`) касается всех
+компонентных крейтов и в таблице не повторяется. `FORMAT_VERSION` не
+меняется: `PropertyDescriptor`/мемо-карты не сериализуются, `Chunk` не
+получает нового поля. `bundle.rs` effects без изменений: все четыре
+опкода свойств уже классифицированы, диспетчеризация внутренняя.
+
+## Сознательные отступления и наблюдаемые изменения
+
+1. **Текст ошибки неизвестного свойства.** Default `get_property` и
+   табличные промахи возвращают `RtError::UnknownProperty` («свойство «X»
+   не найдено») вместо прежних `NotAnObject` (default трейта) и
+   `UnknownColumn` («колонка …» — RegexObject и часть компонентов).
+   Точнее и единообразно; conformance-корпус тексты ошибок свойств не
+   проверяет. Правка первой редакции, где предлагался `UnknownColumn`.
+
+2. **`SetProp` на свойстве только для чтения.** `set: None` →
+   `RtError::PropertyReadOnly { name, receiver }`. Тексты обеих
+   диагностик дёшево снять с платформы парой проб в духе `measure-all`
+   (`Попытка`/`ОписаниеОшибки`, цикл ~6 с) — сделать при ближайшем
+   измерительном заходе; до тех пор тексты наши, это фиксируется здесь и
+   комментарием на месте.
+
+3. **Кириллическая свёртка — исправление бага, не отступление.** На
+   платформе имена членов регистронезависимы (как весь язык; наши
+   структуры через интернер уже ведут себя так же). Репро в «Что
+   проверено» становятся регресс-тестами.
+
+4. **Уровень (2) кэша свойств отложен** — добавляется по замеру, с
+   правками формата и подъёмом `FORMAT_VERSION`.
+
+5. **`State::register_fn` не реализуется** — отдельная задача
+   (`docs/bsl-rt-refactor.md:416-424, 619`).
+
+6. **`TypeDescriptor.legacy_type_id` живёт до части E.** В частях A–D
+   поле остаётся `pub` (официальным компонентам нужен `Some(TypeId::…)`);
+   часть E снимает его целиком вместе с компонентными вариантами
+   `TypeId` — её наблюдаемые изменения перечислены в её разделе.
+
+7. **Тип с динамическими свойствами** (объекты XDTO, «Параметры»
+   макетов) — пустая таблица + кастомный строковый путь на `folded_eq`:
+   штатный режим дизайна, не исключение.
+
+## Что не делаем
+
+В списке три сорта отказов: уже решённое другим путём (1), ждущее замера
+вместо предположения (2, 5, 9) и сознательно отложенные волны, для
+которых план готовит почву, но которые дешевле делать после него
+(3, 4, 7).
+
+1. **`State::register_fn`** — отдельная задача про дизайн, не про чистку
+   ABI. Это несостоявшийся кусок эскиза фасада
+   (`docs/bsl-rt-refactor.md:416-424`): Rust-замыкание прямо на `State`
+   для `exec`/`eval`, без полного `LibraryDescriptor`. У замыкания нет
+   стабильных `package`/`FunctionCode`, поэтому модуль, скомпилированный
+   против него, не сериализуется как переносимый байт-код — а весь
+   механизм `.requires`/`link_components` строится на стабильных кодах.
+   Рабочий путь уже есть: `LibraryDescriptor` через `register_library`,
+   закреплён зеркальным тестом README.
+
+2. **`property_cache` на `Chunk`** — по замеру, если мост всплывёт.
+   Уровень (2) быстрого пути свойств — ячейка инструкции — это третья
+   derived-таблица с инвариантом «длина равна числу инструкций»: правки
+   `chunk.rs`, `compiler.rs`, `text.rs`, `bundle.rs` и подъём
+   `FORMAT_VERSION`. Выигрыш не доказан: у методов HashMap-мост стоил
+   ~7 % `json_write` (`docs/bsl-rt-refactor.md:955, 963`), но там мост
+   на каждом вызове, а бенефициар свойств — `xml_parse`. Триггер —
+   финальный A/B или флеймграф с заметной строкой
+   `resolve_component_property`.
+
+3. **Конверсию таблиц методов** `bsl-textdoc`/`bsl-pdf`/`bsl-zip`/
+   `bsl-spreadsheet`/`dom`/`xsd`/`xpath` — волна 2 после части F, не
+   внутри плана: план меняет саму сигнатуру `MethodCall`, под которую
+   таблицы пишутся. Конвертировать сейчас — написать семь таблиц
+   (+~300 строк каждая, по мерке `32f69b5`) под старый ABI и тут же
+   переписать. После плана они пишутся один раз, под новый ABI, без
+   делегирующего `call_method` и сразу в распаянные файлы.
+
+4. **Замену `eq_ignore_ascii_case` в строковых `call_method` типов без
+   таблиц.** Регистровый баг их методов (репро `ТД.добавитьстроку`)
+   уходит вместе с конверсией из пункта 3 — она удаляет рукописные
+   `if/else` целиком, а табличные пути сворачивают юникод-корректно.
+   Чинить код, который через волну будет выброшен, — двойная работа.
+   Граница сознательная: у свойств строковый путь остаётся жить
+   (динамические типы, fallback), поэтому свойства чинятся сейчас
+   (части C и D), а методы — нет.
+
+5. **Унификацию свёртки методного моста (`to_uppercase`) на
+   `folded_eq`.** Регистронезависимое сравнение имён сейчас живёт в трёх
+   реализациях (`folded_eq`, посимвольное `char::to_uppercase` в
+   `call_method_from_table`, аллокационное `to_uppercase` в мосте);
+   семантика одна, свести к `folded_eq` — опрятность и микровыигрыш. Но
+   `call_method_from_table` стоит на тёплом пути (`WriteText` — каждая
+   запись `csv_write`), а изменение измеряемого пути без чередующегося
+   A/B в этом репозитории не делается. Выигрыш косметический, цена
+   проверки настоящая — по желанию, отдельно, с обязательным A/B.
+
+6. **Скрытие `FunctionKind::Intrinsic`.** `Intrinsic` — функции класса
+   `Вычислить`, которым запрещена процедурная форма вызова; признак
+   читает резолвер из дескрипторов чужих крейтов
+   (`bsl-sema/src/resolver.rs:658`) — это межкрейтовая граница, полю
+   положено быть `pub`. Прятать его от host-авторов — городить второй
+   канал ради гипотетической ошибки разметки. `legacy_type_id` в этот
+   пункт больше не входит — его снимает часть E.
+
+7. **Перевод перечислений и их метатипов на дескрипторы.** `ENUM_NAMES`
+   (`bsl-rt/src/enums.rs`) — таблица, по которой резолвер на этапе
+   компиляции отличает имя перечисления слева от точки от переменной,
+   поэтому типы членов (`JsonValueType`, `XmlNodeType`, …) и
+   `EnumMeta(EnumKind)` остаются вариантами `TypeId`. Перенос
+   перечислений в компоненты — отдельная арка с другим классом проблем:
+   узнавание перечислений из реестра во время компиляции, представление
+   `EnumValue`, REPL-дополнение и подсветка, печать. Кандидат в часть G
+   после приземления части E.
+
+8. **Динамическую загрузку `.dll`/`.so`** — вне контракта компонентной
+   модели: компоненты — это крейты воркспейса, связываемые статически
+   (`docs/bsl-rt-refactor.md:35, 468-491`).
+
+9. **A/B на каждый шаг.** Нативные пути план не трогает, компонентные
+   только ускоряются, а честный A/B — это чередующиеся прогоны с
+   базовым бинарником на дрейфующей машине, дорогая процедура.
+   Финального A/B из шага 10 (четыре сценария) достаточно; внеплановый
+   замер нужен только если какой-то шаг неожиданно заденет горячий путь.
