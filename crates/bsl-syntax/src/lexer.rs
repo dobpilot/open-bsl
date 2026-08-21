@@ -30,6 +30,10 @@ pub struct Lexer<'src> {
     pos: usize,
     symbols: PreprocSymbols,
     open_ifs: Vec<OpenIf>,
+    /// Смещения незакрытых `#Область`. Платформа парность отслеживает:
+    /// и незакрытая область, и одинокий `#КонецОбласти` — ошибки
+    /// компиляции (измерено).
+    open_regions: Vec<usize>,
 }
 
 fn is_ident_start(c: char) -> bool {
@@ -52,6 +56,7 @@ impl<'src> Lexer<'src> {
             pos: 0,
             symbols,
             open_ifs: Vec::new(),
+            open_regions: Vec::new(),
         }
     }
 
@@ -98,6 +103,9 @@ impl<'src> Lexer<'src> {
                         "не закрыта инструкция «#Если»",
                         open.at as u32,
                     ));
+                }
+                if let Some(&at) = self.open_regions.first() {
+                    return Err(LexError::Preproc("не закрыта область", at as u32));
                 }
                 return Ok(self.tok(TokenKind::Eof, start));
             }
@@ -243,8 +251,16 @@ impl<'src> Lexer<'src> {
             preproc::classify(word).ok_or_else(|| fail("неизвестная инструкция препроцессора"))?;
         self.pos = next;
         match directive {
-            Directive::Region => preproc::expect_region_name(rest).map_err(fail)?,
-            Directive::EndRegion => preproc::expect_empty_tail(rest).map_err(fail)?,
+            Directive::Region => {
+                preproc::expect_region_name(rest).map_err(fail)?;
+                self.open_regions.push(at);
+            }
+            Directive::EndRegion => {
+                preproc::expect_empty_tail(rest).map_err(fail)?;
+                if self.open_regions.pop().is_none() {
+                    return Err(fail("«#КонецОбласти» без парного «#Область»"));
+                }
+            }
             Directive::If => {
                 let taken = preproc::eval_condition(rest, &self.symbols).map_err(fail)?;
                 self.open_ifs.push(OpenIf { taken, at });
@@ -795,5 +811,51 @@ mod tests {
         let mut symbols = PreprocSymbols::new();
         symbols.set("Client", true);
         assert!(symbols.is_on("Клиент"));
+    }
+
+    #[test]
+    fn a_region_name_is_one_identifier() {
+        // Измерено: платформа берёт весь хвост строки и проверяет его как
+        // ОДИН идентификатор — указатель ошибки стоит в начале имени, а не
+        // на точке.
+        for bad in [
+            "#Область Имя.Точка\n\"да\"\n#КонецОбласти",
+            "#Область 1Имя\n\"да\"\n#КонецОбласти",
+            "#Область Две Слова\n\"да\"\n#КонецОбласти",
+        ] {
+            assert!(
+                matches!(lex_all(bad), Err(LexError::Preproc(..))),
+                "должно быть ошибкой: {bad}"
+            );
+        }
+        for good in [
+            "#Область Имя_Второе2\n\"да\"\n#КонецОбласти",
+            "#Область LatinName\n\"да\"\n#КонецОбласти",
+        ] {
+            assert_eq!(
+                idents(good),
+                vec!["да".to_string()],
+                "должно приниматься: {good}"
+            );
+        }
+    }
+
+    #[test]
+    fn regions_must_be_balanced() {
+        // Обе формы — измеренные ошибки компиляции; у одинокого закрытия
+        // платформа говорит «Пропущен оператор препроцессора Область».
+        assert!(matches!(
+            lex_all("#Область Незакрытая\n\"да\""),
+            Err(LexError::Preproc(..))
+        ));
+        assert!(matches!(
+            lex_all("\"да\"\n#КонецОбласти"),
+            Err(LexError::Preproc(..))
+        ));
+        // Вложенные области при этом законны.
+        assert_eq!(
+            idents("#Область Внешняя\n#Область Внутренняя\n\"да\"\n#КонецОбласти\n#КонецОбласти"),
+            vec!["да".to_string()]
+        );
     }
 }
