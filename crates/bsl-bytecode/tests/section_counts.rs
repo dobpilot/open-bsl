@@ -28,55 +28,66 @@ fn listing() -> String {
     write_program(&program, None).expect("печать")
 }
 
+/// Все секции листинга, несущие счётчик. Список закрыт: если появится
+/// двенадцатая, тест обязан упасть на её отсутствии в образце, а не
+/// молча её пропустить.
+const COUNTED_SECTIONS: [&str; 11] = [
+    ".requires",
+    ".names",
+    ".shapes",
+    ".top-locals",
+    ".module-vars",
+    ".functions",
+    ".consts",
+    ".argmodes",
+    ".handlers",
+    ".localnames",
+    ".code",
+];
+
+/// Заменяет счётчик первой найденной секции `section` на невозможный.
+/// `None` — такой секции в листинге нет.
+fn with_absurd_count(text: &str, section: &str) -> Option<String> {
+    let mut out = String::new();
+    let mut hit = false;
+    for line in text.lines() {
+        let head = line.trim_start();
+        if !hit && head.starts_with(section) && head[section.len()..].starts_with(' ') {
+            out.push_str(&line[..line.len() - head.len()]);
+            out.push_str(section);
+            out.push_str(" 18446744073709551615");
+            hit = true;
+        } else {
+            out.push_str(line);
+        }
+        out.push('\n');
+    }
+    hit.then_some(out)
+}
+
 #[test]
-fn an_absurd_section_count_is_an_error_and_never_a_crash() {
+fn an_absurd_count_is_caught_by_the_counter_check_in_every_section() {
     let text = listing();
     assert!(
         parse_program(&text).is_ok(),
         "целый листинг обязан читаться"
     );
 
-    let sections = [
-        ".requires",
-        ".names",
-        ".shapes",
-        ".top-locals",
-        ".module-vars",
-        ".functions",
-        ".consts",
-        ".argmodes",
-        ".handlers",
-        ".localnames",
-        ".code",
-    ];
-    let mut seen = 0;
-    for section in sections {
-        let mut broken = String::new();
-        let mut hit = false;
-        for line in text.lines() {
-            let head = line.trim_start();
-            if !hit && head.starts_with(section) && head[section.len()..].starts_with(' ') {
-                let indent = &line[..line.len() - head.len()];
-                broken.push_str(indent);
-                broken.push_str(section);
-                broken.push_str(" 18446744073709551615");
-                hit = true;
-            } else {
-                broken.push_str(line);
-            }
-            broken.push('\n');
-        }
-        if !hit {
-            continue;
-        }
-        seen += 1;
+    for section in COUNTED_SECTIONS {
+        let broken = with_absurd_count(&text, section)
+            .unwrap_or_else(|| panic!("в образце нет секции {section}"));
+        let error = parse_program(&broken)
+            .err()
+            .unwrap_or_else(|| panic!("{section} с невозможным счётчиком обязан быть ошибкой"));
+
+        // Именно РАННЯЯ проверка счётчика, а не случайный сбой дальше по
+        // разбору: у `.shapes`, например, нет `Vec::with_capacity`, и без
+        // этой привязки тест прошёл бы, ничего не доказав — парсер всё
+        // равно споткнулся бы позже, приняв следующую директиву за запись.
+        let text = error.to_string();
         assert!(
-            parse_program(&broken).is_err(),
-            "{section} с невозможным счётчиком обязан быть ошибкой"
+            text.contains("строк осталось"),
+            "{section}: ожидалась диагностика счётчика, получено «{text}»"
         );
     }
-    assert!(
-        seen >= 8,
-        "проверено секций: {seen}, ожидалось не меньше восьми"
-    );
 }
