@@ -493,3 +493,43 @@ fn dynamic_code_sees_the_same_preprocessor_context_as_the_module() {
 Возврат Рез;";
     assert_eq!(state.exec(src).unwrap().to_string(), "клиент");
 }
+
+/// Источник правды для раздела «Как этим пользоваться из встраивающей
+/// программы» в `docs/bsl-preproc.md`: один исходник, две сборки, разные
+/// ветки. Если этот тест поменяется, раздел надо поправить следом.
+#[test]
+fn one_source_compiles_into_a_server_build_and_a_client_build() {
+    const SRC: &str = "\
+Функция Откуда()
+#Если НаСервере Тогда
+	Возврат \"считаю на сервере\";
+#ИначеЕсли НаКлиенте Тогда
+	Возврат \"рисую на клиенте\";
+#Иначе
+	Возврат \"контекст не задан\";
+#КонецЕсли
+КонецФункции
+
+Возврат Откуда();";
+
+    // Набор по умолчанию уже серверный.
+    let server = Engine::builder().build().unwrap();
+    let client = Engine::builder()
+        .preproc_symbol("Сервер", false)
+        .preproc_symbol("НаСервере", false)
+        .preproc_symbol("ВнешнееСоединение", false)
+        .preproc_symbol("Клиент", true)
+        .preproc_symbol("НаКлиенте", true)
+        .preproc_symbol("ТонкийКлиент", true)
+        .build()
+        .unwrap();
+
+    assert_eq!(
+        server.new_state().exec(SRC).unwrap().to_string(),
+        "считаю на сервере"
+    );
+    assert_eq!(
+        client.new_state().exec(SRC).unwrap().to_string(),
+        "рисую на клиенте"
+    );
+}
