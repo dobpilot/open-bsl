@@ -179,3 +179,89 @@ fn tampered_numeric_for_targets_are_rejected_for_both_opcodes() {
         }
     }
 }
+
+#[test]
+fn a_tampered_exception_handler_is_rejected_before_execution() {
+    // Обработчик — тоже цель передачи управления, только со стороны
+    // разматывания. Испорченный `handler_pc` уводил `pc` за конец чанка,
+    // VM принимала это за нормальное завершение — и программа с
+    // `ВызватьИсключение` заканчивалась без вывода и с кодом 0, молча
+    // проглотив исключение.
+    let program = compile(
+        "Попытка\nВызватьИсключение \"бум\";\nИсключение\nСообщить(\"поймано\");\nКонецПопытки;\n",
+    )
+    .expect("сборка");
+    let text = write_program(&program, None).expect("печать");
+    assert!(
+        parse_program(&text).is_ok(),
+        "целый листинг обязан читаться"
+    );
+
+    let at = text.find(".handlers").expect("в листинге есть обработчики");
+    let line_start = at + text[at..].find('\n').expect("строка после директивы") + 1;
+    let line_end = line_start + text[line_start..].find('\n').unwrap_or(0);
+    let line = text[line_start..line_end].to_string();
+    let head = line.split(';').next().unwrap_or(&line).trim().to_string();
+    let mut nums: Vec<&str> = head.split_whitespace().collect();
+    assert_eq!(nums.len(), 4, "строка обработчика: «{head}»");
+
+    for bad in ["9999", "-1"] {
+        nums[3] = bad;
+        let broken = format!(
+            "{}    {}\n{}",
+            &text[..line_start],
+            nums.join(" "),
+            &text[line_end + 1..]
+        );
+        assert!(
+            parse_program(&broken).is_err(),
+            "обработчик {bad} обязан отвергаться"
+        );
+    }
+}
+
+#[test]
+fn tampering_is_rejected_for_each_of_the_six_target_carrying_opcodes() {
+    // По одному источнику на каждый опкод с целью: удаление любого из них
+    // из общего `Instr::jump_target` должно ломать именно свой тест.
+    let sources = [
+        ("JumpIfFalse", "Если Ложь Тогда\nСообщить(1);\nКонецЕсли;\n"),
+        (
+            "Jump",
+            "Если Ложь Тогда\nСообщить(1);\nИначе\nСообщить(2);\nКонецЕсли;\n",
+        ),
+        ("JumpIfTrue", "Сообщить(Истина ИЛИ Ложь);\n"),
+        (
+            "JumpIfNotSkipped",
+            "Функция Ф(а = 3, б = 7)\nВозврат а + б;\nКонецФункции\nСообщить(Ф(1,));\n",
+        ),
+        (
+            "NumericForNext",
+            "Сумма = 0;\nДля н = 1 По 5 Цикл\nСумма = Сумма + н;\nКонецЦикла;\n",
+        ),
+        ("NumericForNextI64", "Для н = 1 По 5 Цикл\nКонецЦикла;\n"),
+    ];
+    for (opcode, src) in sources {
+        let program = compile(src).expect("сборка");
+        let text = write_program(&program, None).expect("печать");
+        assert!(
+            text.contains(opcode),
+            "листинг для {opcode} должен его содержать:\n{text}"
+        );
+
+        let at = text.find(opcode).expect("опкод в листинге");
+        let field = at + text[at..].find("target=").expect("у опкода есть цель");
+        let end = field
+            + text[field..]
+                .find(['\n', ' '])
+                .unwrap_or(text.len() - field);
+        for bad in ["target=-1", "target=9999"] {
+            let mut broken = text.clone();
+            broken.replace_range(field..end, bad);
+            assert!(
+                matches!(parse_program(&broken), Err(TextError::BadJumpTarget { .. })),
+                "{opcode} с {bad} обязан отвергаться"
+            );
+        }
+    }
+}

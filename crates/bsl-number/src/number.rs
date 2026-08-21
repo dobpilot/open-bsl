@@ -155,7 +155,7 @@ impl BslNumber {
     ///
     /// # Errors
     ///
-    /// [`NumError::ScaleOverflow`], если масштаб больше [`MAX_SCALE`].
+    /// [`NumError::ScaleOverflow`], если `|scale| > MAX_SCALE`.
     pub fn from_big_parts(m: BigInt, scale: i32) -> Result<Self, NumError> {
         check_scale(scale)?;
         Ok(BslNumber::big(m, scale))
@@ -165,13 +165,18 @@ impl BslNumber {
     ///
     /// Проверяет масштаб, потому что предел [`MAX_SCALE`] — операционный
     /// инвариант арифметики, а не рекомендация: число, построенное за его
-    /// пределами, ломало бы каждую операцию над собой. Отрицательный
-    /// масштаб законен и не ограничивается — он часть модели (`Формат`
-    /// строит им степени десятки).
+    /// пределами, ломало бы каждую операцию над собой. Предел СИММЕТРИЧЕН:
+    /// отрицательный масштаб законен и нужен (`Формат` строит им степени
+    /// десятки), но ограничен так же, как положительный, иначе разности
+    /// масштабов выходят за `i32`.
+    ///
+    /// Отрицательный масштаб канонизируется на месте: `1×10³` хранится тем
+    /// же представлением, что и `1000`, — иначе равные числа хешировались
+    /// бы по-разному.
     ///
     /// # Errors
     ///
-    /// [`NumError::ScaleOverflow`], если масштаб больше [`MAX_SCALE`].
+    /// [`NumError::ScaleOverflow`], если `|scale| > MAX_SCALE`.
     pub fn from_parts(m: i128, scale: i32) -> Result<Self, NumError> {
         check_scale(scale)?;
         Ok(BslNumber::small(m, scale))
@@ -392,7 +397,14 @@ impl BslNumber {
 
     pub fn neg(&self) -> Self {
         match self {
-            BslNumber::Small { m, scale } => BslNumber::small(-m.get(), *scale),
+            // У `i128::MIN` положительного двойника в `i128` НЕТ, поэтому
+            // обычный минус там паникует в debug и возвращает то же
+            // отрицательное число в release. Такой случай переезжает в
+            // большой ярус, где предела нет.
+            BslNumber::Small { m, scale } => match m.get().checked_neg() {
+                Some(v) => BslNumber::small(v, *scale),
+                None => BslNumber::big(-BigInt::from(m.get()), *scale),
+            },
             BslNumber::Big(b) => BslNumber::big(-b.m.clone(), b.scale),
         }
     }
@@ -448,8 +460,12 @@ impl BslNumber {
                 scale_up_i128(am.get(), s - asc),
                 scale_up_i128(bm.get(), s - bsc),
             )
+            // Единственная переполняющая пара — `i128::MIN % -1`: частное
+            // не влезает в `i128`, хотя остаток равен нулю. `checked_rem`
+            // отдаёт её общему пути, где деление идёт в большом ярусе.
+            && let Some(r) = a.checked_rem(b)
         {
-            return Ok(BslNumber::small(a % b, s));
+            return Ok(BslNumber::small(r, s));
         }
 
         let (a, a_scale) = self.big_parts();
@@ -505,15 +521,37 @@ impl BslNumber {
         crate::float::via_f64_2(self, exp, f64::powf)
     }
 
+    /// Защитный предел показателя степени — по смыслу тот же, что
+    /// `MAX_SCALE` у масштаба.
+    ///
+    /// Без него `Pow(2, 9223372036854775807)` не отвечает вовсе: точный
+    /// результат — число на квинтиллионы разрядов. А `Pow(2, i64::MIN)`
+    /// был ещё хуже: отрицание `i64::MIN` заворачивалось в него же,
+    /// рекурсия не заканчивалась и процесс падал по переполнению стека.
+    /// Единица и ноль в основании считаются дёшево при любом показателе и
+    /// под предел не попадают.
+    const MAX_ABS_EXPONENT: i64 = MAX_SCALE as i64;
+
     fn pow_int(&self, e: i64) -> Result<Self, NumError> {
         if e == 0 {
             return Ok(BslNumber::from_i64(1));
+        }
+        // `unsigned_abs` не спотыкается об `i64::MIN`, в отличие от `-e`.
+        if e.unsigned_abs() > Self::MAX_ABS_EXPONENT.unsigned_abs()
+            && !self.is_zero()
+            && self.abs() != BslNumber::from_i64(1)
+        {
+            return Err(NumError::ScaleOverflow);
         }
         if e < 0 {
             if self.is_zero() {
                 return Err(NumError::DivideByZero);
             }
-            let p = self.pow_int(-e)?;
+            // `checked_neg` вместо `-e`: у `i64::MIN` положительного
+            // двойника нет, и без проверки здесь начиналась бесконечная
+            // рекурсия.
+            let positive = e.checked_neg().ok_or(NumError::ScaleOverflow)?;
+            let p = self.pow_int(positive)?;
             return BslNumber::from_i64(1).div(&p);
         }
         // Бинарное возведение в степень, точное.
@@ -545,10 +583,6 @@ impl BslNumber {
         }
     }
 
-    /// Округление ЗНАЧЕНИЯ (не только для показа) к заданному масштабу,
-    /// половина-вверх-от-нуля — та же схема, что и у деления. Используется
-    /// форматированием (`ЧДЦ=N`) и будущими `Окр`/`Round`. Если `scale`
-    /// не меньше текущего, значение не меняется: досыпать лишние дробные
     /// Оценка сверху числа десятичных разрядов мантиссы.
     ///
     /// Нужна, чтобы решить, не бессмысленно ли округление: если сдвиг
@@ -562,7 +596,11 @@ impl BslNumber {
         }
     }
 
-    /// разряды — забота форматирования (нулями), не самого числа.
+    /// Округление ЗНАЧЕНИЯ (не только для показа) к заданному масштабу,
+    /// половина-вверх-от-нуля — та же схема, что и у деления. Используется
+    /// форматированием (`ЧДЦ=N`) и `Окр`/`Round`. Если `scale` не меньше
+    /// текущего, значение не меняется: лишние дробные разряды — забота
+    /// форматирования (нулями), не самого числа.
     pub fn round_to_scale(&self, target_scale: i32) -> Self {
         let cur_scale = self.scale();
         if target_scale >= cur_scale {

@@ -545,10 +545,41 @@ fn resolve_component_method(
     Ok(resolved)
 }
 
+/// Цели передачи управления лежат внутри своих чанков.
+///
+/// `Program` — публичный тип с публичными полями, и приходит она не только
+/// от собственного кодогена: её собирает разбор текстового байт-кода и
+/// может собрать Rust-клиент. Проверять цель на каждом переходе нельзя —
+/// это горячий цикл, — поэтому проверка идёт один раз при связывании, до
+/// первой инструкции. Без неё цель за концом чанка давала `pc`, который
+/// VM принимает за нормальное завершение: программа заканчивалась без
+/// вывода и с кодом успеха, то есть выдавала неверный ответ вместо ошибки.
+fn check_control_flow(program: &Program) -> Result<(), RtError> {
+    for chunk in &program.chunks {
+        let limit = chunk.instrs.len();
+        for instr in &chunk.instrs {
+            if let Some(target) = instr.jump_target()
+                && (target < 0 || target as usize > limit)
+            {
+                return Err(RtError::InvalidBytecode("цель перехода за пределами чанка"));
+            }
+        }
+        for range in &chunk.exception_ranges {
+            if range.start_pc > range.end_pc || range.end_pc > limit || range.handler_pc >= limit {
+                return Err(RtError::InvalidBytecode(
+                    "диапазон «Попытка» за пределами чанка",
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn link_components<'a>(
     program: &Program,
     env: CompileEnv<'a>,
 ) -> Result<LinkedComponents<'a>, RtError> {
+    check_control_flow(program)?;
     let registry = env.registry;
     let Some(core) = program.requirements.first() else {
         return Err(RtError::Component(

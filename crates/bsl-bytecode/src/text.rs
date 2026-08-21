@@ -116,6 +116,8 @@ pub enum TextError {
         pc: usize,
         target: i16,
     },
+    /// Диапазон `Попытка` ссылается за пределы чанка либо вывернут наизнанку.
+    BadExceptionRange { chunk: usize, what: &'static str },
 }
 
 impl std::fmt::Display for TextError {
@@ -125,6 +127,9 @@ impl std::fmt::Display for TextError {
             TextError::BadHeader(what) => write!(f, "заголовок байт-кода: {what}"),
             TextError::InvalidRequirements(what) => {
                 write!(f, "требования компонентов: {what}")
+            }
+            TextError::BadExceptionRange { chunk, what } => {
+                write!(f, "чанк {chunk}: {what}")
             }
             TextError::BadJumpTarget { chunk, pc, target } => write!(
                 f,
@@ -829,6 +834,25 @@ pub fn parse_program(src: &str) -> Result<Program> {
     // каждом переходе, — горячий цикл её не замечает.
     for (i, chunk) in chunks.iter().enumerate() {
         let limit = chunk.instrs.len();
+        // Обработчик `Попытка` — тоже цель передачи управления, только со
+        // стороны разматывания, и доверия ему ровно столько же. С целью за
+        // концом чанка VM уводила `pc` туда же, принимала это за нормальное
+        // завершение — и программа с `ВызватьИсключение` заканчивалась без
+        // вывода и с нулевым кодом, молча проглотив исключение.
+        for range in &chunk.exception_ranges {
+            let what = if range.start_pc > range.end_pc {
+                Some("начало диапазона «Попытка» больше конца")
+            } else if range.end_pc > limit {
+                Some("конец диапазона «Попытка» за концом чанка")
+            } else if range.handler_pc >= limit {
+                Some("обработчик «Попытка» за концом чанка")
+            } else {
+                None
+            };
+            if let Some(what) = what {
+                return Err(TextError::BadExceptionRange { chunk: i, what });
+            }
+        }
         for (pc, instr) in chunk.instrs.iter().enumerate() {
             let Some(target) = instr.jump_target() else {
                 continue;
