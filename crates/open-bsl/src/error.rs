@@ -15,18 +15,38 @@ pub enum Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Каждая фаза печатается своим `Display`, а не `Debug`. Половина
+        // из них печаталась отладочным представлением, и наружу выходило
+        // «ошибка синтаксиса: Parse(ParseError { message: "...", span:
+        // Span { start: 3, end: 4 } })» — читаемое разработчиком этого
+        // крейта и никем больше. Позиция при этом не потерялась: её несёт
+        // `Display` самой диагностики.
         match self {
-            Self::Parse(error) => write!(formatter, "ошибка синтаксиса: {error:?}"),
-            Self::Semantic(error) => write!(formatter, "ошибка семантики: {error:?}"),
-            Self::Compile(error) => write!(formatter, "ошибка компиляции: {error:?}"),
+            Self::Parse(error) => write!(formatter, "ошибка синтаксиса: {error}"),
+            Self::Semantic(error) => write!(formatter, "ошибка семантики: {error}"),
+            Self::Compile(error) => write!(formatter, "ошибка компиляции: {error}"),
             Self::Registry(error) => write!(formatter, "ошибка компонентов: {error}"),
             Self::Runtime(error) => write!(formatter, "ошибка исполнения: {error}"),
-            Self::Bytecode(error) => write!(formatter, "ошибка байт-кода: {error:?}"),
+            Self::Bytecode(error) => write!(formatter, "ошибка байт-кода: {error}"),
         }
     }
 }
 
-impl std::error::Error for Error {}
+impl std::error::Error for Error {
+    /// Вложенная ошибка фазы — чтобы host-приложение могло дойти до неё
+    /// цепочкой `source()`, не разбирая текст и не сопоставляясь с
+    /// вариантами этого перечисления.
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Parse(error) => Some(error),
+            Self::Semantic(error) => Some(error),
+            Self::Compile(error) => Some(error),
+            Self::Registry(error) => Some(error),
+            Self::Runtime(error) => Some(error),
+            Self::Bytecode(error) => Some(error),
+        }
+    }
+}
 
 impl From<bsl_syntax::Diagnostic> for Error {
     fn from(error: bsl_syntax::Diagnostic) -> Self {

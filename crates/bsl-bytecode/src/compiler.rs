@@ -34,6 +34,32 @@ pub enum CompileError {
     JumpTargetOutOfRange,
 }
 
+impl std::fmt::Display for CompileError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Все пределы — в номерах регистров и индексах таблиц чанка, то
+        // есть в ширине полей `Instr`; менять её нельзя без отдельного
+        // измерения (см. `size_of::<Instr>()`).
+        let what = match self {
+            CompileError::TooManyLocals => "слишком много локальных переменных в кадре",
+            CompileError::TooManyRegisters => "слишком много регистров в кадре",
+            CompileError::TooManyConstants => "слишком много констант в чанке",
+            CompileError::TooManyArgModeTables => "слишком много наборов режимов аргументов",
+            CompileError::TooManyShapes => "слишком много форм структур",
+            CompileError::TooManyNames => "слишком много имён",
+            CompileError::BreakOutsideLoop => "«Прервать» вне цикла",
+            CompileError::ContinueOutsideLoop => "«Продолжить» вне цикла",
+            CompileError::UnknownFunction => "вызов функции, которой нет в модуле",
+            CompileError::JumpTargetOutOfRange => "цель перехода не помещается в чанк",
+            CompileError::UnknownLibrary(name) => {
+                return write!(f, "компонент «{name}» не объявлен в требованиях");
+            }
+        };
+        f.write_str(what)
+    }
+}
+
+impl std::error::Error for CompileError {}
+
 /// Компилирует весь модуль: чанк верхнего уровня плюс чанк на каждую
 /// `Процедура`/`Функция`, в том порядке, в котором их видит `bsl-sema`
 /// (`Call.func` в разрешённом дереве — индекс в `resolved.functions`;

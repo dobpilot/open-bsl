@@ -193,7 +193,7 @@ pub fn run_program(program: &Program) -> Result<BslValue, RtError> {
 ///
 /// # Errors
 ///
-/// До первой инструкции возвращает [`RtError::Component`], если требуемый
+/// До первой инструкции возвращает [`RtError::Link`], если требуемый
 /// пакет, версия или код функции отсутствует. Остальные ошибки совпадают с
 /// [`run_program`].
 pub fn run_program_with_registry(
@@ -712,12 +712,12 @@ fn link_components<'a>(
     check_control_flow(program)?;
     let registry = env.registry;
     let Some(core) = program.requirements.first() else {
-        return Err(RtError::Component(
+        return Err(RtError::Link(
             "в требованиях отсутствует bsl-rt".to_string(),
         ));
     };
     if core.package != bsl_rt::PACKAGE_NAME || core.version != bsl_rt::PACKAGE_VERSION {
-        return Err(RtError::Component(format!(
+        return Err(RtError::Link(format!(
             "необходим {}={}, исполнитель предоставляет {}={}",
             core.package,
             core.version,
@@ -728,19 +728,19 @@ fn link_components<'a>(
 
     for requirement in &program.requirements[1..] {
         let Some(registry) = registry else {
-            return Err(RtError::Component(format!(
+            return Err(RtError::Link(format!(
                 "необходим пакет {}={}, но реестр компонентов не предоставлен",
                 requirement.package, requirement.version
             )));
         };
         let Some(library) = registry.library_by_package(&requirement.package) else {
-            return Err(RtError::Component(format!(
+            return Err(RtError::Link(format!(
                 "необходим пакет {}={}, но он не зарегистрирован",
                 requirement.package, requirement.version
             )));
         };
         if library.version != requirement.version {
-            return Err(RtError::Component(format!(
+            return Err(RtError::Link(format!(
                 "для {} требуется {}, зарегистрирована версия {}",
                 requirement.package, requirement.version, library.version
             )));
@@ -764,7 +764,7 @@ fn link_components<'a>(
                         RtError::InvalidBytecode("индекс библиотеки вне таблицы requirements"),
                     )?;
                     let Some(registry) = registry else {
-                        return Err(RtError::Component(format!(
+                        return Err(RtError::Link(format!(
                             "функция {}/{} требует реестр компонентов",
                             requirement.package, function
                         )));
@@ -772,7 +772,7 @@ fn link_components<'a>(
                     let library_descriptor = registry
                         .library_by_package(&requirement.package)
                         .ok_or_else(|| {
-                            RtError::Component(format!(
+                            RtError::Link(format!(
                                 "необходим пакет {}={}, но он не зарегистрирован",
                                 requirement.package, requirement.version
                             ))
@@ -782,7 +782,7 @@ fn link_components<'a>(
                         .iter()
                         .find(|descriptor| descriptor.code.get() == *function)
                         .ok_or_else(|| {
-                            RtError::Component(format!(
+                            RtError::Link(format!(
                                 "компонент {} не содержит функцию с кодом {}",
                                 requirement.package, function
                             ))
@@ -804,7 +804,7 @@ fn link_components<'a>(
                         RtError::InvalidBytecode("индекс библиотеки вне таблицы requirements"),
                     )?;
                     let Some(registry) = registry else {
-                        return Err(RtError::Component(format!(
+                        return Err(RtError::Link(format!(
                             "конструктор {}/{} требует реестр компонентов",
                             requirement.package, constructor
                         )));
@@ -812,7 +812,7 @@ fn link_components<'a>(
                     let library_descriptor = registry
                         .library_by_package(&requirement.package)
                         .ok_or_else(|| {
-                            RtError::Component(format!(
+                            RtError::Link(format!(
                                 "необходим пакет {}={}, но он не зарегистрирован",
                                 requirement.package, requirement.version
                             ))
@@ -822,7 +822,7 @@ fn link_components<'a>(
                         .iter()
                         .find(|descriptor| descriptor.code.get() == *constructor)
                         .ok_or_else(|| {
-                            RtError::Component(format!(
+                            RtError::Link(format!(
                                 "компонент {} не содержит конструктор с кодом {}",
                                 requirement.package, constructor
                             ))
@@ -2845,7 +2845,7 @@ fn merge_requirements(
             .find(|existing| existing.package == requirement.package)
         {
             Some(existing) if existing.version != requirement.version => {
-                return Err(RtError::Component(format!(
+                return Err(RtError::Link(format!(
                     "для {} одновременно требуются версии {} и {}",
                     requirement.package, existing.version, requirement.version
                 )));

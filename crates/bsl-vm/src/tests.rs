@@ -281,7 +281,7 @@ fn component_mismatch_is_rejected_before_execution() {
 
     assert!(matches!(
         run_program_with_registry(&program, &registry),
-        Err(RtError::Component(message)) if message.contains("9.9.9")
+        Err(RtError::Link(message)) if message.contains("9.9.9")
     ));
 }
 

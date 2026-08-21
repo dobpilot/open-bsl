@@ -60,6 +60,45 @@ pub enum SemaError {
 }
 
 /// Разрешённый динамический фрагмент и полное замыкание его компонентов.
+impl std::fmt::Display for SemaError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SemaError::UndefinedVariable(name) => {
+                write!(f, "переменная «{name}» читается до присваивания")
+            }
+            SemaError::UndefinedFunction(name) => {
+                write!(f, "нет процедуры или функции с именем «{name}»")
+            }
+            SemaError::DuplicateFunction(name) => {
+                write!(f, "процедура или функция «{name}» объявлена дважды")
+            }
+            SemaError::ArgumentCountMismatch {
+                name,
+                expected,
+                found,
+            } => write!(
+                f,
+                "«{name}» принимает аргументов: {expected}, передано: {found}"
+            ),
+            SemaError::MissingRequiredArgument { name, position } => write!(
+                f,
+                "у «{name}» пропущен обязательный аргумент на позиции {position}"
+            ),
+            SemaError::BuiltinFunctionAsStatement(name) => write!(
+                f,
+                "функция встроенного языка «{name}» не может стоять оператором"
+            ),
+            SemaError::ProcedureAsFunction(name) => {
+                write!(f, "процедура «{name}» не возвращает значения")
+            }
+            SemaError::BadDateLiteral(text) => write!(f, "некорректный литерал даты «{text}»"),
+            SemaError::Unsupported(what) => write!(f, "не поддержано: {what}"),
+        }
+    }
+}
+
+impl std::error::Error for SemaError {}
+
 pub type ResolvedSnippetWithRequirements =
     (Vec<String>, Vec<RStmt>, Vec<bsl_rt::LibraryRequirement>);
 

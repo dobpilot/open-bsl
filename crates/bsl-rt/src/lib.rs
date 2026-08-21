@@ -114,6 +114,32 @@ pub enum BslValue {
     Object(Rc<BslObject>),
 }
 
+/// Ошибка, о которой сообщил компонент: пакет, категория и текст.
+///
+/// Отдельная структура за `Box` в [`RtError::Component`] — см. там же,
+/// почему поля не лежат в самом варианте.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ComponentError {
+    /// Cargo-имя пакета компонента.
+    pub package: &'static str,
+    /// Категория ошибки в терминах самого компонента — то, что host
+    /// назвал бы «видом»: «формат», «доступ», «предел».
+    pub kind: &'static str,
+    pub message: String,
+}
+
+impl ComponentError {
+    /// Ошибка компонента как [`RtError`] — форма, в которой её ждёт VM.
+    #[must_use]
+    pub fn raise(package: &'static str, kind: &'static str, message: impl Into<String>) -> RtError {
+        RtError::Component(Box::new(ComponentError {
+            package,
+            kind,
+            message: message.into(),
+        }))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum RtError {
     Num(NumError),
@@ -260,8 +286,28 @@ pub enum RtError {
     /// Ошибка открытия, записи или закрытия файла.
     IoError(String),
     /// Байт-код требует отсутствующий/несовместимый runtime-компонент либо
-    /// неизвестный код функции этого компонента.
-    Component(String),
+    /// неизвестный код функции этого компонента. Ошибка СВЯЗЫВАНИЯ: она
+    /// возникает до первой инструкции и говорит о сборке, а не о данных.
+    Link(String),
+    /// Ошибка, о которой сообщил САМ компонент.
+    ///
+    /// Транспортная форма для того, у кого нет и не должно быть варианта в
+    /// этом перечислении: сторонний компонент, подключённый хостом через
+    /// `register_library`, называет свой пакет и категорию, а подробный
+    /// тип ошибки хранит у себя и переводит сюда на входе в VM.
+    ///
+    /// Варианты ядра ниже (`Json`, `Xml`, `Zip`, ...) сознательно остаются
+    /// как есть: у официальных компонентов текст ошибки — часть измеренной
+    /// совместимости, ловимая `Попыткой`, и переводить его в общий вид
+    /// значило бы переписать двести мест ради единообразия, потеряв
+    /// типизацию там, где она уже есть.
+    ///
+    /// Поля за `Box`: `RtError` едет в каждом `RtResult`, в том числе по
+    /// рекурсивным путям разбора, и его ширина — это глубина стека. Три
+    /// поля здесь подняли бы размер с 48 байт до 56, и предел вложенности
+    /// JSON перестал бы срабатывать раньше переполнения стека — тест
+    /// `too_deep_json_document_is_an_error_not_a_crash` это и показал.
+    Component(Box<ComponentError>),
     /// Превышена глубина стека: слишком глубокая рекурсия вызовов BSL,
     /// вложенность `Выполнить`/`Вычислить` или вложенность данных при
     /// сериализации. `what` уточняет, какой именно предел задет. Это
@@ -326,7 +372,10 @@ impl fmt::Display for RtError {
             RtError::DynamicError(msg) => write!(f, "{msg}"),
             RtError::InvalidBytecode(what) => write!(f, "некорректный байт-код: {what}"),
             RtError::IoError(msg) => write!(f, "ошибка файлового ввода-вывода: {msg}"),
-            RtError::Component(msg) => write!(f, "ошибка runtime-компонента: {msg}"),
+            RtError::Link(msg) => write!(f, "ошибка runtime-компонента: {msg}"),
+            RtError::Component(error) => {
+                write!(f, "{}: {}: {}", error.package, error.kind, error.message)
+            }
             RtError::StackOverflow { what } => {
                 write!(f, "превышена глубина стека: {what}")
             }

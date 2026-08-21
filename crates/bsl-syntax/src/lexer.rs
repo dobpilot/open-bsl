@@ -19,6 +19,33 @@ pub enum LexError {
     Annotation(&'static str, u32),
 }
 
+impl std::fmt::Display for LexError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Число во всех вариантах — смещение в байтах от начала исходника.
+        match self {
+            LexError::UnexpectedChar(c, at) => {
+                write!(f, "неожиданный символ «{c}» (байт {at})")
+            }
+            LexError::UnterminatedString(at) => {
+                write!(f, "незакрытый строковый литерал (байт {at})")
+            }
+            LexError::UnterminatedDate(at) => write!(f, "незакрытый литерал даты (байт {at})"),
+            LexError::ExpectedContinuationBar(at) => {
+                write!(f, "продолжение строки обязано начинаться с «|» (байт {at})")
+            }
+            LexError::BadDateLiteral(at) => write!(f, "некорректный литерал даты (байт {at})"),
+            LexError::Preproc(what, at) => {
+                write!(f, "инструкция препроцессора: {what} (байт {at})")
+            }
+            LexError::Annotation(what, at) => {
+                write!(f, "директива компиляции: {what} (байт {at})")
+            }
+        }
+    }
+}
+
+impl std::error::Error for LexError {}
+
 pub type LexResult<T> = Result<T, LexError>;
 
 /// Открытый `#Если`: помним, взята ли уже какая-то его ветка, и где он

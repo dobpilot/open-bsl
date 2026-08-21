@@ -533,3 +533,103 @@ fn one_source_compiles_into_a_server_build_and_a_client_build() {
         "рисую на клиенте"
     );
 }
+
+// --- Граница ошибок ------------------------------------------------------
+
+fn host_fails(_context: &mut CallContext<'_>, _arguments: &[Value]) -> RtResult<Value> {
+    Err(open_bsl::ComponentError::raise(
+        "example-host",
+        "формат",
+        "не разобрал вход",
+    ))
+}
+
+const FAILING_FUNCTIONS: &[FunctionDescriptor] = &[FunctionDescriptor {
+    code: FunctionCode::new(1),
+    names: &["ОтказХоста", "HostFailure"],
+    arity: Arity::exact(0),
+    kind: FunctionKind::Function,
+    call: host_fails,
+}];
+
+fn failing_library() -> LibraryDescriptor {
+    LibraryDescriptor {
+        package: "example-host",
+        version: "1.0.0",
+        dependencies: &[LibraryDependency {
+            package: bsl_rt::PACKAGE_NAME,
+            version: bsl_rt::PACKAGE_VERSION,
+        }],
+        functions: FAILING_FUNCTIONS,
+        constructors: &[],
+        types: &[],
+    }
+}
+
+/// Сторонний компонент называет пакет и категорию, не имея своего варианта
+/// в `RtError`. Текст при этом остаётся ловимым из BSL, как у любой другой
+/// ошибки исполнения.
+#[test]
+fn a_component_reports_its_own_category_without_a_variant_in_the_core() {
+    let engine = Engine::builder()
+        .register_library(failing_library())
+        .build()
+        .unwrap();
+
+    let error = engine
+        .new_state()
+        .exec("Возврат ОтказХоста();")
+        .expect_err("вызов обязан завершиться ошибкой");
+    assert_eq!(
+        error.to_string(),
+        "ошибка исполнения: example-host: формат: не разобрал вход"
+    );
+
+    // И то же самое ловится «Попыткой»: для BSL это обычное исключение,
+    // а не особая порода ошибки — компонент не обязан знать, кто его
+    // позвал.
+    let mut state = engine.new_state();
+    let caught = state
+        .exec(
+            "Попытка\n\
+             ОтказХоста();\n\
+             Возврат \"не упало\";\n\
+             Исключение\n\
+             Возврат \"поймано\";\n\
+             КонецПопытки;",
+        )
+        .unwrap();
+    assert_eq!(caught.to_string(), "поймано");
+}
+
+/// Ошибка фазы печатается своим `Display`, а не отладочным видом, и
+/// доступна цепочкой `source()` — host не обязан разбирать текст.
+#[test]
+fn a_phase_error_prints_itself_and_is_reachable_through_source() {
+    use std::error::Error as _;
+
+    let engine = Engine::builder().build().unwrap();
+
+    let Err(error) = engine.compile("х = ;") else {
+        panic!("разбор обязан упасть");
+    };
+    let text = error.to_string();
+    assert!(text.starts_with("ошибка синтаксиса: "), "{text}");
+    assert!(
+        !text.contains("ParseError {"),
+        "отладочный вид наружу: {text}"
+    );
+    // Позиция не потерялась вместе с отладочным видом.
+    assert!(text.contains("байты"), "{text}");
+    assert!(error.source().is_some(), "цепочка source оборвана");
+
+    let Err(error) = engine.compile("Возврат Неизвестная();") else {
+        panic!("резолвинг обязан упасть");
+    };
+    let text = error.to_string();
+    assert_eq!(
+        text,
+        "ошибка семантики: нет процедуры или функции с именем «Неизвестная»"
+    );
+    assert!(error.source().is_some(), "цепочка source оборвана");
+}

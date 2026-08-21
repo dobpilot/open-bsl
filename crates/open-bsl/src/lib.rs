@@ -10,11 +10,12 @@ mod state;
 
 pub use bsl_rt::BslValue as Value;
 pub use bsl_rt::{
-    Arity, CallContext, Clock, ConstructorCode, ConstructorDescriptor, FunctionCode,
-    FunctionDescriptor, FunctionKind, HostEnv, LibraryDependency, LibraryDescriptor, MethodCall,
-    MethodCode, MethodDescriptor, ObjectProtocol, PropertyCode, PropertyDescriptor, PropertyGet,
-    PropertySet, RandomSource, RtError, RtResult, SystemClock, SystemRandom, TypeDescriptor,
-    call_method_from_table, folded_eq, get_property_from_table, set_property_from_table,
+    Arity, CallContext, Clock, ComponentError, ConstructorCode, ConstructorDescriptor,
+    FunctionCode, FunctionDescriptor, FunctionKind, HostEnv, LibraryDependency, LibraryDescriptor,
+    MethodCall, MethodCode, MethodDescriptor, ObjectProtocol, PropertyCode, PropertyDescriptor,
+    PropertyGet, PropertySet, RandomSource, RtError, RtResult, SystemClock, SystemRandom,
+    TypeDescriptor, call_method_from_table, folded_eq, get_property_from_table,
+    set_property_from_table,
 };
 
 pub use engine::{Engine, EngineBuilder, Module};
