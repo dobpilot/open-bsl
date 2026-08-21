@@ -886,8 +886,9 @@ enum Step {
 // константы, формы, имени, аргумент builtin'а, — приходит из `Program`, а
 // `Program` VM получает не только от собственного кодогена: её собирает
 // `Выполнить`/`Вычислить` в рантайме, REPL `bsl-cli` по строке, и любой
-// внешний пользователь публичных `run_program`/`run_repl_chunk`. Поэтому
-// такие обращения дают `RtError::InvalidBytecode`, а не роняют процесс.
+// внешний пользователь публичных `run_program` и
+// `run_repl_chunk_with_registry`. Поэтому такие обращения дают
+// `RtError::InvalidBytecode`, а не роняют процесс.
 //
 // Остаются ровно два `expect()` — на `frames.pop()` в
 // `do_return_with_value` и `unwind_to_handler`: это внутренние инварианты
