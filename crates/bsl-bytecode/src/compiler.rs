@@ -588,24 +588,6 @@ impl<'a> Compiler<'a> {
                         (Some(bsl_rt::BuiltinMethod::Close), 0) => {
                             self.emit(Instr::CloseText { dst, obj: o });
                         }
-                        // Переходный путь `bsl-cli`: regex-объект уже
-                        // принадлежит компоненту, даже если старый CLI ещё
-                        // компилирует без `RuntimeRegistry`.
-                        (Some(bsl_rt::BuiltinMethod::RegexGetGroups), _) => {
-                            let method: u16 = self
-                                .names
-                                .intern(method)
-                                .index()
-                                .try_into()
-                                .map_err(|_| CompileError::TooManyNames)?;
-                            self.emit(Instr::CallObjectMethod {
-                                dst,
-                                obj: o,
-                                method,
-                                base,
-                                count,
-                            });
-                        }
                         (Some(method), _) => {
                             self.emit(Instr::CallMethod {
                                 dst,

@@ -927,7 +927,7 @@ impl<'a> Resolver<'a> {
                 // процентов на сценариях с плотным доступом к полям
                 // (`csv_write`). Открытые `GetObjectProp`/`SetObjectProp`
                 // остаются в формате байт-кода ради уже сериализованных
-                // программ и legacy-пути regexp в компиляторе.
+                // программ.
                 Ok(RExpr::Field {
                     obj: Box::new(self.resolve_expr(obj)?),
                     name: name.clone(),
