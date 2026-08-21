@@ -149,7 +149,7 @@ fn bool_arg(v: &BslValue, op: &'static str) -> RtResult<bool> {
 
 /// Результат побитовой функции — всегда целое число.
 fn number(v: u32) -> BslValue {
-    BslValue::Number(BslNumber::from_parts(i128::from(v), 0))
+    BslValue::Number(BslNumber::from_i128(i128::from(v)))
 }
 
 /// `ПобитовоеИ(Число1, Число2)`.
@@ -553,7 +553,7 @@ mod tests {
     }
 
     fn frac() -> BslValue {
-        BslValue::Number(BslNumber::from_parts(15, 1))
+        BslValue::Number(BslNumber::from_parts(15, 1).expect("масштаб 1 допустим"))
     }
 
     fn s(v: &str) -> BslValue {

@@ -122,14 +122,37 @@ impl BslNumber {
         BslNumber::small(v as i128, 0)
     }
 
-    /// Из BigInt-мантиссы и масштаба (используется парсером длинных литералов).
-    pub fn from_big_parts(m: BigInt, scale: i32) -> Self {
-        BslNumber::big(m, scale)
+    /// Целое из `i128`: масштаб ноль, проверять нечего.
+    #[inline]
+    pub fn from_i128(m: i128) -> Self {
+        BslNumber::small(m, 0)
+    }
+
+    /// Из BigInt-мантиссы и масштаба (используется парсером длинных
+    /// литералов).
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::ScaleOverflow`], если масштаб больше [`MAX_SCALE`].
+    pub fn from_big_parts(m: BigInt, scale: i32) -> Result<Self, NumError> {
+        check_scale(scale)?;
+        Ok(BslNumber::big(m, scale))
     }
 
     /// Мантисса и масштаб: значение равно `m / 10^scale`.
-    pub fn from_parts(m: i128, scale: i32) -> Self {
-        BslNumber::small(m, scale)
+    ///
+    /// Проверяет масштаб, потому что предел [`MAX_SCALE`] — операционный
+    /// инвариант арифметики, а не рекомендация: число, построенное за его
+    /// пределами, ломало бы каждую операцию над собой. Отрицательный
+    /// масштаб законен и не ограничивается — он часть модели (`Формат`
+    /// строит им степени десятки).
+    ///
+    /// # Errors
+    ///
+    /// [`NumError::ScaleOverflow`], если масштаб больше [`MAX_SCALE`].
+    pub fn from_parts(m: i128, scale: i32) -> Result<Self, NumError> {
+        check_scale(scale)?;
+        Ok(BslNumber::small(m, scale))
     }
 
     #[inline]
@@ -279,7 +302,14 @@ impl BslNumber {
     /// Умножение точное: масштаб результата — сумма масштабов операндов.
     /// Именно поэтому в 1С расходится n-body: масштаб растёт без границы.
     pub fn mul(&self, other: &Self) -> Result<Self, NumError> {
-        let s = self.scale() + other.scale();
+        // Проверяемое сложение, а не `+`: два больших масштаба переполняют
+        // `i32` ДО того, как до них доберётся `check_scale`, и тогда в debug
+        // это паника, а в release — молча неверный ответ (масштаб
+        // заворачивается в отрицательный и проверку проходит).
+        let s = self
+            .scale()
+            .checked_add(other.scale())
+            .ok_or(NumError::ScaleOverflow)?;
         check_scale(s)?;
 
         if let (Some((a, _)), Some((b, _))) = (self.fast64_parts(), other.fast64_parts())
@@ -403,7 +433,14 @@ impl BslNumber {
 
     fn div_to_scale(&self, other: &Self, target: i32) -> Result<Self, NumError> {
         // value = a.m * 10^(target + b.scale - a.scale) / b.m, округлить half-up
-        let k = target + other.scale() - self.scale();
+        //
+        // Проверяемая арифметика по той же причине, что в `mul`: слагаемые
+        // приходят из масштабов операндов, а `check_scale` здесь до правки
+        // не звался вовсе.
+        let k = target
+            .checked_add(other.scale())
+            .and_then(|k| k.checked_sub(self.scale()))
+            .ok_or(NumError::ScaleOverflow)?;
 
         if let (BslNumber::Small { m: am, .. }, BslNumber::Small { m: bm, .. }) = (self, other) {
             let (n, d) = if k >= 0 {
@@ -1017,7 +1054,8 @@ mod tests {
         assert_eq!(promoted.to_canonical(), "9223372036854775808");
 
         let sum = BslNumber::from_parts(1, 1)
-            .add(&BslNumber::from_parts(2, 1))
+            .unwrap()
+            .add(&BslNumber::from_parts(2, 1).unwrap())
             .unwrap();
         assert_eq!(sum.to_canonical(), "0.3");
     }

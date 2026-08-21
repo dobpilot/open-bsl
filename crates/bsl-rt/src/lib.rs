@@ -3015,7 +3015,7 @@ impl Hash for BslValue {
 /// ошибка. То есть счётчик у неё 64-битный БЕЗ знака, а не `i64`: `2^63`
 /// тоже проходит.
 fn binary_split_max_part() -> BslNumber {
-    BslNumber::from_parts(u64::MAX as i128, 0)
+    BslNumber::from_i128(u64::MAX as i128)
 }
 
 /// Сколько байтов попадает в строковое представление `ДвоичныеДанные`.

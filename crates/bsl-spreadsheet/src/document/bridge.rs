@@ -347,7 +347,7 @@ pub fn drawing_property(
     let mm = |v: f64| -> RtResult<BslValue> {
         let qp = (v * MM_TO_QP).round() as i128;
         let mantissa = (f64::from(qp as i32) * 25.4 / 288.0 * 1e14).round() as i128;
-        Ok(BslValue::Number(BslNumber::from_parts(mantissa, 14)))
+        Ok(BslValue::Number(BslNumber::from_parts(mantissa, 14)?))
     };
     match () {
         _ if folded_eq(name, "Имя") || folded_eq(name, "Name") => {

@@ -268,7 +268,7 @@ fn to_u64(n: &BslNumber) -> Option<u64> {
     if let Some(v) = n.to_i64_exact() {
         return u64::try_from(v).ok();
     }
-    let half = BslNumber::from_parts(1i128 << 63, 0);
+    let half = BslNumber::from_i128(1i128 << 63);
     let rest = n.sub(&half).ok()?;
     let rest = u64::try_from(rest.to_i64_exact()?).ok()?;
     (1u64 << 63).checked_add(rest)
@@ -276,7 +276,7 @@ fn to_u64(n: &BslNumber) -> Option<u64> {
 
 /// Число из беззнакового целого — обратная сторона [`to_u64`].
 fn from_u64(v: u64) -> BslValue {
-    BslValue::Number(BslNumber::from_parts(v as i128, 0))
+    BslValue::Number(BslNumber::from_i128(v as i128))
 }
 
 /// ПОЗИЦИЯ в буфере: число, дробная часть отбрасывается К НУЛЮ (измерено:

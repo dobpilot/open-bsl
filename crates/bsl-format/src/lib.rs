@@ -352,10 +352,12 @@ fn shift_digits(n: &BslNumber, shift: i32) -> RtResult<BslNumber> {
         });
     }
     let factor = if shift > 0 {
-        // 10^-shift: мантисса 1 с масштабом shift.
-        BslNumber::from_parts(1, shift)
+        // 10^-shift: мантисса 1 с масштабом shift. `shift` ограничен ±30
+        // проверкой выше, так что предел масштаба здесь недостижим, — но
+        // проверка всё равно идёт через `?`, а не через утверждение.
+        BslNumber::from_parts(1, shift)?
     } else {
-        BslNumber::from_parts(10i128.pow((-shift) as u32), 0)
+        BslNumber::from_i128(10i128.pow((-shift) as u32))
     };
     Ok(n.mul(&factor)?)
 }

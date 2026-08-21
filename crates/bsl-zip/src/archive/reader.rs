@@ -684,7 +684,7 @@ pub fn entry_prop(entry: &EntryObject, prop: &str) -> RtResult<BslValue> {
     // старший бит завернулся бы в знак, и `РазмерНесжатого` отдал бы
     // отрицательное число, которого платформа дать не может; `i128`
     // вмещает любой `u64` без потерь.
-    let number = |n: u64| Ok(BslValue::Number(BslNumber::from_parts(i128::from(n), 0)));
+    let number = |n: u64| Ok(BslValue::Number(BslNumber::from_i128(i128::from(n))));
     match prop {
         _ if eq(prop, "Имя", "Name") => text(item.name.clone()),
         _ if eq(prop, "ПолноеИмя", "FullName") => text(item.full_name()),

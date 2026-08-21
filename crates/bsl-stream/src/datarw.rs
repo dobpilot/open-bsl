@@ -803,7 +803,7 @@ fn result_bytes<'a>(v: &'a dyn ObjectProtocol, op: &'static str) -> RtResult<&'a
 // --- разбор аргументов ---------------------------------------------------------
 
 fn from_u64(v: u64) -> BslValue {
-    BslValue::Number(BslNumber::from_parts(v as i128, 0))
+    BslValue::Number(BslNumber::from_i128(v as i128))
 }
 
 /// Целое `0..=u64::MAX` из числа BSL — тот же путь, что у буфера и потока.
@@ -814,7 +814,7 @@ fn to_u64(n: &BslNumber) -> Option<u64> {
     if let Some(v) = n.to_i64_exact() {
         return u64::try_from(v).ok();
     }
-    let half = BslNumber::from_parts(1i128 << 63, 0);
+    let half = BslNumber::from_i128(1i128 << 63);
     let rest = n.sub(&half).ok()?;
     let rest = u64::try_from(rest.to_i64_exact()?).ok()?;
     (1u64 << 63).checked_add(rest)
@@ -1710,7 +1710,7 @@ mod tests {
     }
 
     fn frac(units: i128, scale: i32) -> BslValue {
-        BslValue::Number(BslNumber::from_parts(units, scale))
+        BslValue::Number(BslNumber::from_parts(units, scale).expect("масштаб теста допустим"))
     }
 
     fn text(s: &str) -> BslValue {

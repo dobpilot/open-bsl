@@ -84,10 +84,10 @@ impl BslNumber {
         let scale = frac_part.len() as i32;
 
         match digits.parse::<i128>() {
-            Ok(v) => Ok(BslNumber::from_parts(if neg { -v } else { v }, scale)),
+            Ok(v) => BslNumber::from_parts(if neg { -v } else { v }, scale),
             Err(_) => {
                 let m: BigInt = digits.parse().map_err(|_| NumError::BadLiteral)?;
-                Ok(BslNumber::from_big_parts(if neg { -m } else { m }, scale))
+                BslNumber::from_big_parts(if neg { -m } else { m }, scale)
             }
         }
     }

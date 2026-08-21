@@ -47,7 +47,7 @@ impl BslNumber {
         let scale = frac_part.len() as i32 - exp;
         let s = if neg { format!("-{}", digits) } else { digits };
         let m: i128 = s.parse().map_err(|_| NumError::NotFinite)?;
-        Ok(BslNumber::from_parts(m, scale))
+        BslNumber::from_parts(m, scale)
     }
 
     pub fn sqrt(&self) -> Result<Self, NumError> {
