@@ -61,16 +61,48 @@ pub struct TypeDescriptor {
     pub legacy_type_id: Option<TypeId>,
 }
 
-/// Служебная основа безопасного downcast без обязательного метода в
-/// каждой реализации [`ObjectProtocol`].
+impl TypeDescriptor {
+    /// Дескриптор host-типа: пакет и имя, без идентификатора закрытого
+    /// реестра. Официальные компоненты заполняют `legacy_type_id`
+    /// структурным литералом — им нужен `Some(TypeId::…)`.
+    pub const fn new(package: &'static str, name: &'static str) -> Self {
+        Self {
+            package,
+            name,
+            legacy_type_id: None,
+        }
+    }
+}
+
+/// Служебная основа безопасного downcast и приведения к трейт-объекту без
+/// обязательных методов в каждой реализации [`ObjectProtocol`]. `as_dyn`
+/// существует потому, что в теле метода по умолчанию `Self: ?Sized` и
+/// `self` не приводится к `&dyn ObjectProtocol` напрямую, а `where Self:
+/// Sized` выбросил бы метод из vtable — строковый вход VM перестал бы
+/// диспетчеризоваться.
 #[doc(hidden)]
 pub trait ObjectDowncast {
     fn as_any(&self) -> &dyn Any;
+    fn as_dyn(&self) -> &dyn ObjectProtocol;
 }
 
-impl<T: Any> ObjectDowncast for T {
+impl<T: Any + ObjectProtocol> ObjectDowncast for T {
     fn as_any(&self) -> &dyn Any {
         self
+    }
+
+    fn as_dyn(&self) -> &dyn ObjectProtocol {
+        self
+    }
+}
+
+impl dyn ObjectProtocol + '_ {
+    /// Конкретная реализация за трейт-объектом, если она имеет тип `T` —
+    /// как [`ObjectRef::downcast_ref`], но для получателя, каким его видит
+    /// обработчик метода: даункаст без служебного [`ObjectDowncast`] в
+    /// области видимости.
+    pub fn downcast_ref<T: ObjectProtocol + 'static>(&self) -> Option<&T> {
+        self.as_any().downcast_ref()
     }
 }
 
@@ -95,26 +127,34 @@ pub trait ObjectProtocol: fmt::Debug + ObjectDowncast {
         Err(RtError::NotAnObject)
     }
 
+    /// Вход для вызовов с именем-строкой — `WriteText`/`CloseText` и
+    /// legacy-`CallMethod`. По умолчанию диспетчеризует по
+    /// [`ObjectProtocol::method_table`]; пустая таблица даёт прежний
+    /// `UnknownMethod` из [`crate::call_method_from_table`]. Собственная
+    /// реализация нужна только типу, который обрабатывает вызовы мимо
+    /// таблицы (bsl-regexp).
     fn call_method(
         &self,
         name: &str,
-        _arguments: &[BslValue],
-        _context: &mut CallContext<'_>,
+        arguments: &[BslValue],
+        context: &mut CallContext<'_>,
     ) -> RtResult<BslValue> {
-        Err(RtError::UnknownMethod {
-            method: name.to_string(),
-            receiver: self.type_descriptor().name,
-        })
+        crate::call_method_from_table(
+            self.method_table(),
+            self.type_descriptor().name,
+            self.as_dyn(),
+            name,
+            arguments,
+            context,
+        )
     }
 
     /// Статическая таблица методов типа. Пустая — тип диспетчеризуется
     /// только строковым [`ObjectProtocol::call_method`]. Непустая включает
     /// быстрый путь VM «номер имени → обработчик» (разрешение по строке
     /// один раз на пару «тип, имя», дальше без строковых операций);
-    /// `call_method` при этом остаётся входом для вызовов с именем-строкой
-    /// — `WriteText`/`CloseText` и legacy-`CallMethod` — и обычно
-    /// реализуется через [`crate::call_method_from_table`] по той же
-    /// таблице.
+    /// строковый вход обслуживает та же таблица через реализацию
+    /// `call_method` по умолчанию.
     fn method_table(&self) -> &'static [crate::MethodDescriptor] {
         &[]
     }
@@ -207,6 +247,12 @@ impl ObjectRef {
     /// Возвращает конкретную реализацию объекта, если она имеет тип `T`.
     pub fn downcast_ref<T: ObjectProtocol + 'static>(&self) -> Option<&T> {
         self.0.as_ref().as_any().downcast_ref()
+    }
+
+    /// Объект за ссылкой как трейт-объект — для быстрых путей VM, где
+    /// обработчику передаётся получатель без обёртки значения.
+    pub fn as_dyn(&self) -> &dyn ObjectProtocol {
+        &*self.0
     }
 
     pub fn get_property(&self, name: &str, context: &mut CallContext<'_>) -> RtResult<BslValue> {

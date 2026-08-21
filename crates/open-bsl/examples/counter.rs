@@ -6,7 +6,6 @@
 use open_bsl::{
     Arity, CallContext, ConstructorCode, ConstructorDescriptor, Engine, LibraryDescriptor,
     MethodCode, MethodDescriptor, ObjectProtocol, RtError, RtResult, TypeDescriptor, Value,
-    call_method_from_table,
 };
 
 // Состояние объекта живёт за `Rc`: рантайм однопоточный, а обёртка
@@ -16,30 +15,21 @@ struct Counter {
     value: std::rc::Rc<std::cell::Cell<i64>>,
 }
 
-static COUNTER_TYPE: TypeDescriptor = TypeDescriptor {
-    package: "example-host",
-    name: "Счётчик",
-    legacy_type_id: None,
-};
+static COUNTER_TYPE: TypeDescriptor = TypeDescriptor::new("example-host", "Счётчик");
 
-// Обработчик метода получает значение-получателя от вызывающего и
-// возвращается к конкретному типу через downcast.
-fn counter_of<'v>(receiver: &'v Value, method: &'static str) -> RtResult<&'v Counter> {
-    receiver
-        .object_ref()
-        .and_then(|object| object.downcast_ref::<Counter>())
-        .ok_or(RtError::MethodNotApplicable {
-            method,
-            receiver: receiver.type_name(),
-        })
-}
-
+// Обработчик метода получает сам объект-получатель и возвращается к
+// конкретному типу через downcast — без обёртки значения.
 fn counter_increase(
-    receiver: &Value,
+    receiver: &dyn ObjectProtocol,
     _arguments: &[Value],
     _context: &mut CallContext<'_>,
 ) -> RtResult<Value> {
-    let counter = counter_of(receiver, "Увеличить")?;
+    let counter = receiver
+        .downcast_ref::<Counter>()
+        .ok_or(RtError::MethodNotApplicable {
+            method: "Увеличить",
+            receiver: receiver.type_descriptor().name,
+        })?;
     counter.value.set(counter.value.get() + 1);
     Ok(Value::Undefined)
 }
@@ -62,32 +52,14 @@ impl ObjectProtocol for Counter {
         if matches!(name.to_uppercase().as_str(), "ЗНАЧЕНИЕ" | "VALUE") {
             Ok(Value::number_from_i64(self.value.get()))
         } else {
-            Err(RtError::UnknownColumn(name.to_string()))
+            Err(RtError::UnknownProperty(name.to_string()))
         }
     }
 
-    // Вход для вызовов с именем-строкой — реализуется той же таблицей.
-    fn call_method(
-        &self,
-        name: &str,
-        arguments: &[Value],
-        context: &mut CallContext<'_>,
-    ) -> RtResult<Value> {
-        let receiver = Value::new_object(Counter {
-            value: self.value.clone(),
-        });
-        call_method_from_table(
-            COUNTER_METHODS,
-            COUNTER_TYPE.name,
-            &receiver,
-            name,
-            arguments,
-            context,
-        )
-    }
-
     // Непустая таблица включает быстрый путь VM: обработчик находится по
-    // номеру имени без строковых сравнений на каждом вызове.
+    // номеру имени без строковых сравнений на каждом вызове. Вызовы с
+    // именем-строкой обслуживает та же таблица — `call_method` по
+    // умолчанию, писать его не нужно.
     fn method_table(&self) -> &'static [MethodDescriptor] {
         COUNTER_METHODS
     }

@@ -413,7 +413,7 @@ impl ByteStreamProtocol for StreamObject {
 // вызывающего (VM отдаёт регистр без пересборки обёртки), пары имён — те
 // же, что были у этого типа в `BUILTIN_METHOD_NAMES`.
 fn stream_write(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -422,7 +422,7 @@ fn stream_write(
 }
 
 fn stream_read(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -430,7 +430,7 @@ fn stream_read(
 }
 
 fn stream_close(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     _arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -439,7 +439,7 @@ fn stream_close(
 }
 
 fn stream_size(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     _arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -447,7 +447,7 @@ fn stream_size(
 }
 
 fn stream_current_position(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     _arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -455,7 +455,7 @@ fn stream_current_position(
 }
 
 fn stream_seek(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -524,26 +524,6 @@ impl ObjectProtocol for StreamObject {
         }
     }
 
-    fn call_method(
-        &self,
-        name: &str,
-        arguments: &[BslValue],
-        context: &mut CallContext<'_>,
-    ) -> RtResult<BslValue> {
-        let value = BslValue::new_object(StreamObject {
-            kind: self.kind,
-            data: self.data.clone(),
-        });
-        bsl_rt::call_method_from_table(
-            STREAM_METHODS,
-            self.type_descriptor().name,
-            &value,
-            name,
-            arguments,
-            context,
-        )
-    }
-
     fn method_table(&self) -> &'static [MethodDescriptor] {
         STREAM_METHODS
     }
@@ -553,14 +533,13 @@ impl ObjectProtocol for StreamObject {
     }
 }
 
-/// Внутренности потока; для любого другого значения — «метод не применим».
-fn data<'a>(v: &'a BslValue, op: &'static str) -> RtResult<&'a Rc<RefCell<StreamData>>> {
-    v.object_ref()
-        .and_then(|object| object.downcast_ref::<StreamObject>())
+/// Внутренности потока; для любого другого объекта — «метод не применим».
+fn data<'a>(v: &'a dyn ObjectProtocol, op: &'static str) -> RtResult<&'a Rc<RefCell<StreamData>>> {
+    v.downcast_ref::<StreamObject>()
         .map(|object| &object.data)
         .ok_or_else(|| RtError::MethodNotApplicable {
             method: op,
-            receiver: v.type_name(),
+            receiver: v.type_descriptor().name,
         })
 }
 
@@ -951,7 +930,7 @@ pub fn manager_create(args: &[BslValue]) -> RtResult<BslValue> {
 // Методы менеджера файловых потоков: получатель без состояния, поэтому
 // обработчики его не читают.
 fn manager_method_open(
-    _receiver: &BslValue,
+    _receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -959,7 +938,7 @@ fn manager_method_open(
 }
 
 fn manager_method_open_for_read(
-    _receiver: &BslValue,
+    _receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -967,7 +946,7 @@ fn manager_method_open_for_read(
 }
 
 fn manager_method_open_for_write(
-    _receiver: &BslValue,
+    _receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -975,7 +954,7 @@ fn manager_method_open_for_write(
 }
 
 fn manager_method_open_for_append(
-    _receiver: &BslValue,
+    _receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -983,7 +962,7 @@ fn manager_method_open_for_append(
 }
 
 fn manager_method_create(
-    _receiver: &BslValue,
+    _receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -1023,22 +1002,6 @@ impl ObjectProtocol for FileStreamsManager {
         &FILE_STREAMS_MANAGER_TYPE
     }
 
-    fn call_method(
-        &self,
-        name: &str,
-        arguments: &[BslValue],
-        context: &mut CallContext<'_>,
-    ) -> RtResult<BslValue> {
-        bsl_rt::call_method_from_table(
-            FILE_STREAMS_MANAGER_METHODS,
-            FILE_STREAMS_MANAGER_TYPE.name,
-            &BslValue::Undefined,
-            name,
-            arguments,
-            context,
-        )
-    }
-
     fn method_table(&self) -> &'static [MethodDescriptor] {
         FILE_STREAMS_MANAGER_METHODS
     }
@@ -1064,7 +1027,7 @@ enum StreamFlag {
 ///
 /// «Метод не применим», если получатель не поток.
 #[cfg(test)]
-fn flag(v: &BslValue, which: StreamFlag) -> RtResult<BslValue> {
+fn flag(v: &dyn ObjectProtocol, which: StreamFlag) -> RtResult<BslValue> {
     let d = data(v, "ДоступнаЗапись")?;
     let d = d.borrow();
     Ok(BslValue::Boolean(match which {
@@ -1082,7 +1045,7 @@ fn flag(v: &BslValue, which: StreamFlag) -> RtResult<BslValue> {
 ///
 /// [`RtError::IoError`], если поток закрыт (измерено) либо файл не отдал
 /// свои метаданные.
-pub fn size(v: &BslValue) -> RtResult<BslValue> {
+pub fn size(v: &dyn ObjectProtocol) -> RtResult<BslValue> {
     let d = data(v, "Размер")?;
     let len = d.borrow().len("Размер")?;
     Ok(from_u64(len))
@@ -1095,7 +1058,7 @@ pub fn size(v: &BslValue) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// «Метод не применим», если получатель не поток.
-pub fn current_position(v: &BslValue) -> RtResult<BslValue> {
+pub fn current_position(v: &dyn ObjectProtocol) -> RtResult<BslValue> {
     let d = data(v, "ТекущаяПозиция")?;
     let pos = d.borrow().pos;
     Ok(from_u64(pos))
@@ -1109,12 +1072,12 @@ pub fn current_position(v: &BslValue) -> RtResult<BslValue> {
 /// точке отсчёта не из `ПозицияВПотоке` (всё измерено);
 /// [`RtError::IoError`] на закрытом потоке; «метод не применим» при ином
 /// числе аргументов — платформа требует ровно два.
-pub fn seek(v: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn seek(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     const OP: &str = "Перейти";
     let [offset, origin] = args else {
         return Err(RtError::MethodNotApplicable {
             method: OP,
-            receiver: v.type_name(),
+            receiver: v.type_descriptor().name,
         });
     };
     let offset = match offset {
@@ -1172,12 +1135,12 @@ pub fn seek(v: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
 /// на буфере не того типа; [`RtError::IndexOutOfBounds`], если отрезок не
 /// лежит в буфере; [`RtError::IoError`] на закрытом потоке, на потоке без
 /// доступа на запись и на отказе файловой системы.
-pub fn write(v: &BslValue, args: &[BslValue]) -> RtResult<()> {
+pub fn write(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     const OP: &str = "Записать";
     let [buf, offset, count] = args else {
         return Err(RtError::MethodNotApplicable {
             method: OP,
-            receiver: v.type_name(),
+            receiver: v.type_descriptor().name,
         });
     };
     let src = buffer_of(buf, OP)?;
@@ -1206,12 +1169,12 @@ pub fn write(v: &BslValue, args: &[BslValue]) -> RtResult<()> {
 /// # Errors
 ///
 /// Те же, что у [`write`], плюс отсутствие доступа на чтение.
-pub fn read(v: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn read(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     const OP: &str = "Прочитать";
     let [buf, offset, count] = args else {
         return Err(RtError::MethodNotApplicable {
             method: OP,
-            receiver: v.type_name(),
+            receiver: v.type_descriptor().name,
         });
     };
     let dst = buffer_of(buf, OP)?;
@@ -1245,7 +1208,7 @@ fn slice_from(bytes: &[u8], pos: u64, count: usize) -> Vec<u8> {
 /// # Errors
 ///
 /// «Метод не применим», если получатель не поток.
-pub fn close(v: &BslValue) -> RtResult<()> {
+pub fn close(v: &dyn ObjectProtocol) -> RtResult<()> {
     let d = data(v, "Закрыть")?;
     d.borrow_mut().backing = None;
     Ok(())
@@ -1265,6 +1228,11 @@ mod tests {
     }
 
     use super::*;
+
+    /// Поток за значением: обработчики и хелперы принимают объект.
+    fn st(v: &BslValue) -> &dyn ObjectProtocol {
+        v.object_ref().expect("поток").as_dyn()
+    }
 
     fn num(v: i64) -> BslValue {
         BslValue::Number(BslNumber::from_i64(v))
@@ -1313,18 +1281,18 @@ mod tests {
     #[test]
     fn a_new_memory_stream_is_empty_readable_and_writable() {
         let s = memory();
-        assert_eq!(as_u64(&size(&s).unwrap()), 0);
-        assert_eq!(as_u64(&current_position(&s).unwrap()), 0);
+        assert_eq!(as_u64(&size(st(&s)).unwrap()), 0);
+        assert_eq!(as_u64(&current_position(st(&s)).unwrap()), 0);
         assert_eq!(
-            flag(&s, StreamFlag::Writable).unwrap(),
+            flag(st(&s), StreamFlag::Writable).unwrap(),
             BslValue::Boolean(true)
         );
         assert_eq!(
-            flag(&s, StreamFlag::Readable).unwrap(),
+            flag(st(&s), StreamFlag::Readable).unwrap(),
             BslValue::Boolean(true)
         );
         assert_eq!(
-            flag(&s, StreamFlag::Seekable).unwrap(),
+            flag(st(&s), StreamFlag::Seekable).unwrap(),
             BslValue::Boolean(true)
         );
     }
@@ -1334,9 +1302,9 @@ mod tests {
     #[test]
     fn the_numeric_argument_is_a_capacity_not_a_limit() {
         let s = new_memory_stream(&num(2)).unwrap();
-        assert_eq!(as_u64(&size(&s).unwrap()), 0);
-        write(&s, &[buffer(&[1, 2, 3, 4]), num(0), num(4)]).unwrap();
-        assert_eq!(as_u64(&size(&s).unwrap()), 4);
+        assert_eq!(as_u64(&size(st(&s)).unwrap()), 0);
+        write(st(&s), &[buffer(&[1, 2, 3, 4]), num(0), num(4)]).unwrap();
+        assert_eq!(as_u64(&size(st(&s)).unwrap()), 4);
     }
 
     #[test]
@@ -1350,27 +1318,33 @@ mod tests {
     #[test]
     fn writing_advances_the_position_and_grows_the_stream() {
         let s = memory();
-        write(&s, &[buffer(&[10, 20, 30, 40]), num(0), num(4)]).unwrap();
-        assert_eq!(as_u64(&size(&s).unwrap()), 4);
-        assert_eq!(as_u64(&current_position(&s).unwrap()), 4);
-        write(&s, &[buffer(&[10, 20, 30, 40]), num(1), num(2)]).unwrap();
-        assert_eq!(as_u64(&size(&s).unwrap()), 6);
-        assert_eq!(as_u64(&current_position(&s).unwrap()), 6);
+        write(st(&s), &[buffer(&[10, 20, 30, 40]), num(0), num(4)]).unwrap();
+        assert_eq!(as_u64(&size(st(&s)).unwrap()), 4);
+        assert_eq!(as_u64(&current_position(st(&s)).unwrap()), 4);
+        write(st(&s), &[buffer(&[10, 20, 30, 40]), num(1), num(2)]).unwrap();
+        assert_eq!(as_u64(&size(st(&s)).unwrap()), 6);
+        assert_eq!(as_u64(&current_position(st(&s)).unwrap()), 6);
     }
 
     #[test]
     fn seeking_from_all_three_origins() {
         let s = memory();
-        write(&s, &[buffer(&[1, 2, 3, 4, 5, 6]), num(0), num(6)]).unwrap();
+        write(st(&s), &[buffer(&[1, 2, 3, 4, 5, 6]), num(0), num(6)]).unwrap();
         let begin = enum_val(EnumValue::StreamPositionBegin);
         let current = enum_val(EnumValue::StreamPositionCurrent);
         let end = enum_val(EnumValue::StreamPositionEnd);
-        assert_eq!(as_u64(&seek(&s, &[num(0), begin.clone()]).unwrap()), 0);
-        assert_eq!(as_u64(&seek(&s, &[num(2), begin.clone()]).unwrap()), 2);
-        assert_eq!(as_u64(&seek(&s, &[num(1), current.clone()]).unwrap()), 3);
-        assert_eq!(as_u64(&seek(&s, &[num(-1), current.clone()]).unwrap()), 2);
-        assert_eq!(as_u64(&seek(&s, &[num(0), end.clone()]).unwrap()), 6);
-        assert_eq!(as_u64(&seek(&s, &[num(-2), end.clone()]).unwrap()), 4);
+        assert_eq!(as_u64(&seek(st(&s), &[num(0), begin.clone()]).unwrap()), 0);
+        assert_eq!(as_u64(&seek(st(&s), &[num(2), begin.clone()]).unwrap()), 2);
+        assert_eq!(
+            as_u64(&seek(st(&s), &[num(1), current.clone()]).unwrap()),
+            3
+        );
+        assert_eq!(
+            as_u64(&seek(st(&s), &[num(-1), current.clone()]).unwrap()),
+            2
+        );
+        assert_eq!(as_u64(&seek(st(&s), &[num(0), end.clone()]).unwrap()), 6);
+        assert_eq!(as_u64(&seek(st(&s), &[num(-2), end.clone()]).unwrap()), 4);
     }
 
     /// Уход за начало обрезается нулём от ВСЕХ трёх точек, за конец —
@@ -1378,40 +1352,40 @@ mod tests {
     #[test]
     fn seeking_past_the_ends_clamps_at_zero_and_never_resizes() {
         let s = memory();
-        write(&s, &[buffer(&[1, 2, 3, 4, 5, 6]), num(0), num(6)]).unwrap();
+        write(st(&s), &[buffer(&[1, 2, 3, 4, 5, 6]), num(0), num(6)]).unwrap();
         let begin = enum_val(EnumValue::StreamPositionBegin);
         let current = enum_val(EnumValue::StreamPositionCurrent);
         let end = enum_val(EnumValue::StreamPositionEnd);
-        assert_eq!(as_u64(&seek(&s, &[num(-1), begin.clone()]).unwrap()), 0);
-        assert_eq!(as_u64(&seek(&s, &[num(-100), end]).unwrap()), 0);
-        assert_eq!(as_u64(&seek(&s, &[num(-100), current]).unwrap()), 0);
-        assert_eq!(as_u64(&seek(&s, &[num(100), begin]).unwrap()), 100);
-        assert_eq!(as_u64(&size(&s).unwrap()), 6);
+        assert_eq!(as_u64(&seek(st(&s), &[num(-1), begin.clone()]).unwrap()), 0);
+        assert_eq!(as_u64(&seek(st(&s), &[num(-100), end]).unwrap()), 0);
+        assert_eq!(as_u64(&seek(st(&s), &[num(-100), current]).unwrap()), 0);
+        assert_eq!(as_u64(&seek(st(&s), &[num(100), begin]).unwrap()), 100);
+        assert_eq!(as_u64(&size(st(&s)).unwrap()), 6);
     }
 
     #[test]
     fn seeking_rejects_a_fractional_offset_and_a_foreign_enum() {
         let s = memory();
         let begin = enum_val(EnumValue::StreamPositionBegin);
-        assert!(seek(&s, &[frac(15, 1), begin.clone()]).is_err());
-        assert!(seek(&s, &[num(0), num(5)]).is_err());
-        assert!(seek(&s, &[num(0), enum_val(EnumValue::ByteOrderLittle)]).is_err());
-        assert!(seek(&s, &[num(0)]).is_err());
-        assert!(seek(&s, &[num(0), begin.clone(), num(1)]).is_err());
+        assert!(seek(st(&s), &[frac(15, 1), begin.clone()]).is_err());
+        assert!(seek(st(&s), &[num(0), num(5)]).is_err());
+        assert!(seek(st(&s), &[num(0), enum_val(EnumValue::ByteOrderLittle)]).is_err());
+        assert!(seek(st(&s), &[num(0)]).is_err());
+        assert!(seek(st(&s), &[num(0), begin.clone(), num(1)]).is_err());
     }
 
     #[test]
     fn a_hole_left_by_seeking_reads_back_as_zeroes() {
         let s = memory();
         let src = buffer(&[10, 20, 30, 40]);
-        write(&s, &[src.clone(), num(0), num(2)]).unwrap();
-        seek(&s, &[num(6), enum_val(EnumValue::StreamPositionBegin)]).unwrap();
-        write(&s, &[src, num(2), num(2)]).unwrap();
-        assert_eq!(as_u64(&size(&s).unwrap()), 8);
-        seek(&s, &[num(0), enum_val(EnumValue::StreamPositionBegin)]).unwrap();
+        write(st(&s), &[src.clone(), num(0), num(2)]).unwrap();
+        seek(st(&s), &[num(6), enum_val(EnumValue::StreamPositionBegin)]).unwrap();
+        write(st(&s), &[src, num(2), num(2)]).unwrap();
+        assert_eq!(as_u64(&size(st(&s)).unwrap()), 8);
+        seek(st(&s), &[num(0), enum_val(EnumValue::StreamPositionBegin)]).unwrap();
         let dst = buffer(&[0; 8]);
         assert_eq!(
-            as_u64(&read(&s, &[dst.clone(), num(0), num(8)]).unwrap()),
+            as_u64(&read(st(&s), &[dst.clone(), num(0), num(8)]).unwrap()),
             8
         );
         assert_eq!(bytes_of(&dst), vec![10, 20, 0, 0, 0, 0, 30, 40]);
@@ -1420,20 +1394,20 @@ mod tests {
     #[test]
     fn reading_near_the_end_returns_what_is_left() {
         let s = memory();
-        write(&s, &[buffer(&[1, 2, 3]), num(0), num(3)]).unwrap();
-        seek(&s, &[num(2), enum_val(EnumValue::StreamPositionBegin)]).unwrap();
+        write(st(&s), &[buffer(&[1, 2, 3]), num(0), num(3)]).unwrap();
+        seek(st(&s), &[num(2), enum_val(EnumValue::StreamPositionBegin)]).unwrap();
         let dst = buffer(&[0; 4]);
         assert_eq!(
-            as_u64(&read(&s, &[dst.clone(), num(0), num(4)]).unwrap()),
+            as_u64(&read(st(&s), &[dst.clone(), num(0), num(4)]).unwrap()),
             1
         );
         assert_eq!(bytes_of(&dst), vec![3, 0, 0, 0]);
-        assert_eq!(as_u64(&current_position(&s).unwrap()), 3);
+        assert_eq!(as_u64(&current_position(st(&s)).unwrap()), 3);
         assert_eq!(
-            as_u64(&read(&s, &[dst.clone(), num(0), num(4)]).unwrap()),
+            as_u64(&read(st(&s), &[dst.clone(), num(0), num(4)]).unwrap()),
             0
         );
-        assert_eq!(as_u64(&read(&s, &[dst, num(0), num(0)]).unwrap()), 0);
+        assert_eq!(as_u64(&read(st(&s), &[dst, num(0), num(0)]).unwrap()), 0);
     }
 
     /// Дробное СМЕЩЕНИЕ в буфере усекается, дробное КОЛИЧЕСТВО отвергается —
@@ -1442,29 +1416,29 @@ mod tests {
     fn a_fractional_buffer_offset_truncates_but_a_fractional_count_is_rejected() {
         let s = memory();
         let src = buffer(&[10, 20, 30, 40]);
-        write(&s, &[src.clone(), frac(15, 1), num(1)]).unwrap();
-        seek(&s, &[num(0), enum_val(EnumValue::StreamPositionBegin)]).unwrap();
+        write(st(&s), &[src.clone(), frac(15, 1), num(1)]).unwrap();
+        seek(st(&s), &[num(0), enum_val(EnumValue::StreamPositionBegin)]).unwrap();
         let dst = buffer(&[0; 4]);
         assert_eq!(
-            as_u64(&read(&s, &[dst.clone(), num(0), num(1)]).unwrap()),
+            as_u64(&read(st(&s), &[dst.clone(), num(0), num(1)]).unwrap()),
             1
         );
         assert_eq!(bytes_of(&dst)[0], 20);
-        assert!(write(&s, &[src.clone(), num(0), frac(15, 1)]).is_err());
-        assert!(read(&s, &[dst, num(0), frac(15, 1)]).is_err());
+        assert!(write(st(&s), &[src.clone(), num(0), frac(15, 1)]).is_err());
+        assert!(read(st(&s), &[dst, num(0), frac(15, 1)]).is_err());
     }
 
     #[test]
     fn read_and_write_check_the_buffer_bounds_and_the_argument_types() {
         let s = memory();
         let src = buffer(&[10, 20, 30, 40]);
-        assert!(write(&s, &[src.clone(), num(3), num(4)]).is_err());
-        assert!(write(&s, &[src.clone(), num(-1), num(1)]).is_err());
-        assert!(write(&s, &[src.clone(), num(0), num(-1)]).is_err());
-        assert!(write(&s, &[num(5), num(0), num(1)]).is_err());
-        assert!(write(&s, std::slice::from_ref(&src)).is_err());
-        assert!(read(&s, &[src.clone(), num(3), num(4)]).is_err());
-        assert!(read(&s, &[src]).is_err());
+        assert!(write(st(&s), &[src.clone(), num(3), num(4)]).is_err());
+        assert!(write(st(&s), &[src.clone(), num(-1), num(1)]).is_err());
+        assert!(write(st(&s), &[src.clone(), num(0), num(-1)]).is_err());
+        assert!(write(st(&s), &[num(5), num(0), num(1)]).is_err());
+        assert!(write(st(&s), std::slice::from_ref(&src)).is_err());
+        assert!(read(st(&s), &[src.clone(), num(3), num(4)]).is_err());
+        assert!(read(st(&s), &[src]).is_err());
     }
 
     /// Поток над буфером делит с ним память в обе стороны и не растёт.
@@ -1472,17 +1446,17 @@ mod tests {
     fn a_stream_over_a_buffer_shares_its_memory_and_its_fixed_size() {
         let buf = buffer(&[1, 2, 3, 4]);
         let s = new_memory_stream(&buf).unwrap();
-        assert_eq!(as_u64(&size(&s).unwrap()), 4);
-        write(&s, &[buffer(&[9, 9, 9, 9]), num(0), num(2)]).unwrap();
+        assert_eq!(as_u64(&size(st(&s)).unwrap()), 4);
+        write(st(&s), &[buffer(&[9, 9, 9, 9]), num(0), num(2)]).unwrap();
         assert_eq!(bytes_of(&buf), vec![9, 9, 3, 4]);
         bsl_binbuf::binary_buffer_write(&buf, 3, &[77]).unwrap();
-        seek(&s, &[num(3), enum_val(EnumValue::StreamPositionBegin)]).unwrap();
+        seek(st(&s), &[num(3), enum_val(EnumValue::StreamPositionBegin)]).unwrap();
         let dst = buffer(&[0]);
-        read(&s, &[dst.clone(), num(0), num(1)]).unwrap();
+        read(st(&s), &[dst.clone(), num(0), num(1)]).unwrap();
         assert_eq!(bytes_of(&dst), vec![77]);
-        seek(&s, &[num(4), enum_val(EnumValue::StreamPositionBegin)]).unwrap();
-        assert!(write(&s, &[buffer(&[9, 9, 9, 9]), num(0), num(4)]).is_err());
-        assert_eq!(as_u64(&size(&s).unwrap()), 4);
+        seek(st(&s), &[num(4), enum_val(EnumValue::StreamPositionBegin)]).unwrap();
+        assert!(write(st(&s), &[buffer(&[9, 9, 9, 9]), num(0), num(4)]).is_err());
+        assert_eq!(as_u64(&size(st(&s)).unwrap()), 4);
     }
 
     /// Уход за конец `Перейти` разрешает, поэтому позиция доводится до
@@ -1496,14 +1470,14 @@ mod tests {
         let current = enum_val(EnumValue::StreamPositionCurrent);
 
         let s = memory();
-        seek(&s, &[num(i64::MAX), begin.clone()]).unwrap();
-        seek(&s, &[num(i64::MAX), current.clone()]).unwrap();
-        assert!(write(&s, &[buffer(&[1, 2, 3, 4]), num(0), num(4)]).is_err());
+        seek(st(&s), &[num(i64::MAX), begin.clone()]).unwrap();
+        seek(st(&s), &[num(i64::MAX), current.clone()]).unwrap();
+        assert!(write(st(&s), &[buffer(&[1, 2, 3, 4]), num(0), num(4)]).is_err());
 
         let s = new_memory_stream(&buffer(&[0; 4])).unwrap();
-        seek(&s, &[num(i64::MAX), begin]).unwrap();
-        seek(&s, &[num(i64::MAX), current]).unwrap();
-        assert!(write(&s, &[buffer(&[1, 2, 3, 4]), num(0), num(4)]).is_err());
+        seek(st(&s), &[num(i64::MAX), begin]).unwrap();
+        seek(st(&s), &[num(i64::MAX), current]).unwrap();
+        assert!(write(st(&s), &[buffer(&[1, 2, 3, 4]), num(0), num(4)]).is_err());
     }
 
     /// Тот же буфер и источником, и приёмником: два заимствования одного
@@ -1512,46 +1486,48 @@ mod tests {
     fn a_stream_over_a_buffer_survives_that_buffer_as_its_own_argument() {
         let buf = buffer(&[1, 2, 3, 4]);
         let s = new_memory_stream(&buf).unwrap();
-        write(&s, &[buf.clone(), num(0), num(2)]).unwrap();
+        write(st(&s), &[buf.clone(), num(0), num(2)]).unwrap();
         assert_eq!(bytes_of(&buf), vec![1, 2, 3, 4]);
-        seek(&s, &[num(0), enum_val(EnumValue::StreamPositionBegin)]).unwrap();
-        read(&s, &[buf.clone(), num(0), num(2)]).unwrap();
+        seek(st(&s), &[num(0), enum_val(EnumValue::StreamPositionBegin)]).unwrap();
+        read(st(&s), &[buf.clone(), num(0), num(2)]).unwrap();
         assert_eq!(bytes_of(&buf), vec![1, 2, 3, 4]);
     }
 
     #[test]
     fn a_closed_stream_keeps_its_position_and_flags_but_nothing_else() {
         let s = memory();
-        write(&s, &[buffer(&[1, 2, 3, 4]), num(0), num(4)]).unwrap();
-        close(&s).unwrap();
-        assert_eq!(as_u64(&current_position(&s).unwrap()), 4);
+        write(st(&s), &[buffer(&[1, 2, 3, 4]), num(0), num(4)]).unwrap();
+        close(st(&s)).unwrap();
+        assert_eq!(as_u64(&current_position(st(&s)).unwrap()), 4);
         assert_eq!(
-            flag(&s, StreamFlag::Writable).unwrap(),
+            flag(st(&s), StreamFlag::Writable).unwrap(),
             BslValue::Boolean(true)
         );
         assert_eq!(
-            flag(&s, StreamFlag::Readable).unwrap(),
+            flag(st(&s), StreamFlag::Readable).unwrap(),
             BslValue::Boolean(true)
         );
         assert_eq!(
-            flag(&s, StreamFlag::Seekable).unwrap(),
+            flag(st(&s), StreamFlag::Seekable).unwrap(),
             BslValue::Boolean(true)
         );
-        assert!(size(&s).is_err());
-        assert!(seek(&s, &[num(0), enum_val(EnumValue::StreamPositionBegin)]).is_err());
-        assert!(write(&s, &[buffer(&[1]), num(0), num(1)]).is_err());
-        assert!(read(&s, &[buffer(&[0]), num(0), num(1)]).is_err());
+        assert!(size(st(&s)).is_err());
+        assert!(seek(st(&s), &[num(0), enum_val(EnumValue::StreamPositionBegin)]).is_err());
+        assert!(write(st(&s), &[buffer(&[1]), num(0), num(1)]).is_err());
+        assert!(read(st(&s), &[buffer(&[0]), num(0), num(1)]).is_err());
         // Повторное закрытие платформа принимает.
-        close(&s).unwrap();
+        close(st(&s)).unwrap();
     }
 
     #[test]
     fn stream_methods_reject_a_receiver_that_is_not_a_stream() {
-        let not_a_stream = buffer(&[1, 2]);
-        assert!(size(&not_a_stream).is_err());
-        assert!(current_position(&not_a_stream).is_err());
-        assert!(close(&not_a_stream).is_err());
-        assert!(flag(&not_a_stream, StreamFlag::Readable).is_err());
+        // Не-поток здесь — объект другого типа: значение-не-объект ABI
+        // метода уже не пропускает (получатель — `&dyn ObjectProtocol`).
+        let not_a_stream = new_file_streams_manager();
+        assert!(size(st(&not_a_stream)).is_err());
+        assert!(current_position(st(&not_a_stream)).is_err());
+        assert!(close(st(&not_a_stream)).is_err());
+        assert!(flag(st(&not_a_stream), StreamFlag::Readable).is_err());
     }
 
     #[test]
@@ -1586,8 +1562,8 @@ mod tests {
 
         refill();
         let s = open(&path, EnumValue::FileOpenModeOpen, None).unwrap();
-        assert_eq!(as_u64(&size(&s).unwrap()), 13);
-        assert_eq!(as_u64(&current_position(&s).unwrap()), 0);
+        assert_eq!(as_u64(&size(st(&s)).unwrap()), 13);
+        assert_eq!(as_u64(&current_position(st(&s)).unwrap()), 0);
 
         refill();
         let s = open(
@@ -1597,11 +1573,11 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            flag(&s, StreamFlag::Writable).unwrap(),
+            flag(st(&s), StreamFlag::Writable).unwrap(),
             BslValue::Boolean(false)
         );
         assert_eq!(
-            flag(&s, StreamFlag::Readable).unwrap(),
+            flag(st(&s), StreamFlag::Readable).unwrap(),
             BslValue::Boolean(true)
         );
 
@@ -1613,7 +1589,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            flag(&s, StreamFlag::Readable).unwrap(),
+            flag(st(&s), StreamFlag::Readable).unwrap(),
             BslValue::Boolean(false)
         );
 
@@ -1625,7 +1601,7 @@ mod tests {
             Some(EnumValue::FileAccessRead),
         )
         .unwrap();
-        assert_eq!(as_u64(&size(&s).unwrap()), 13);
+        assert_eq!(as_u64(&size(st(&s)).unwrap()), 13);
 
         // `Создать` обрезает, `Чтение` с ним несовместимо.
         refill();
@@ -1638,7 +1614,7 @@ mod tests {
             .is_err()
         );
         let s = open(&path, EnumValue::FileOpenModeCreate, None).unwrap();
-        assert_eq!(as_u64(&size(&s).unwrap()), 0);
+        assert_eq!(as_u64(&size(st(&s)).unwrap()), 0);
 
         // `СоздатьНовый` на существующем файле — всегда ошибка.
         refill();
@@ -1655,7 +1631,7 @@ mod tests {
             .is_err()
         );
         let s = open(&path, EnumValue::FileOpenModeTruncate, None).unwrap();
-        assert_eq!(as_u64(&size(&s).unwrap()), 0);
+        assert_eq!(as_u64(&size(st(&s)).unwrap()), 0);
 
         // `Дописать` ставит позицию в конец и с `Чтение` несовместим.
         refill();
@@ -1668,8 +1644,8 @@ mod tests {
             .is_err()
         );
         let s = open(&path, EnumValue::FileOpenModeAppend, None).unwrap();
-        assert_eq!(as_u64(&size(&s).unwrap()), 13);
-        assert_eq!(as_u64(&current_position(&s).unwrap()), 13);
+        assert_eq!(as_u64(&size(st(&s)).unwrap()), 13);
+        assert_eq!(as_u64(&current_position(st(&s)).unwrap()), 13);
 
         let _ = std::fs::remove_file(&path);
     }
@@ -1703,8 +1679,12 @@ mod tests {
         ] {
             clear();
             let s = open(&path, mode, None).unwrap();
-            assert_eq!(as_u64(&size(&s).unwrap()), 0, "режим {mode:?}");
-            assert_eq!(as_u64(&current_position(&s).unwrap()), 0, "режим {mode:?}");
+            assert_eq!(as_u64(&size(st(&s)).unwrap()), 0, "режим {mode:?}");
+            assert_eq!(
+                as_u64(&current_position(st(&s)).unwrap()),
+                0,
+                "режим {mode:?}"
+            );
             clear();
             assert!(
                 open(&path, mode, Some(EnumValue::FileAccessRead)).is_err(),
@@ -1746,25 +1726,25 @@ mod tests {
         let path = tmp("hole");
         let _ = std::fs::remove_file(&path);
         let s = manager_create(&[BslValue::Str(bsl_rt::BslString::from_str(&path))]).unwrap();
-        assert_eq!(as_u64(&size(&s).unwrap()), 0);
+        assert_eq!(as_u64(&size(st(&s)).unwrap()), 0);
         let src = buffer(&[10, 20, 30, 40]);
-        write(&s, &[src.clone(), num(0), num(4)]).unwrap();
-        assert_eq!(as_u64(&size(&s).unwrap()), 4);
-        seek(&s, &[num(10), enum_val(EnumValue::StreamPositionBegin)]).unwrap();
-        assert_eq!(as_u64(&size(&s).unwrap()), 4);
-        write(&s, &[src, num(0), num(2)]).unwrap();
-        assert_eq!(as_u64(&size(&s).unwrap()), 12);
-        seek(&s, &[num(0), enum_val(EnumValue::StreamPositionBegin)]).unwrap();
+        write(st(&s), &[src.clone(), num(0), num(4)]).unwrap();
+        assert_eq!(as_u64(&size(st(&s)).unwrap()), 4);
+        seek(st(&s), &[num(10), enum_val(EnumValue::StreamPositionBegin)]).unwrap();
+        assert_eq!(as_u64(&size(st(&s)).unwrap()), 4);
+        write(st(&s), &[src, num(0), num(2)]).unwrap();
+        assert_eq!(as_u64(&size(st(&s)).unwrap()), 12);
+        seek(st(&s), &[num(0), enum_val(EnumValue::StreamPositionBegin)]).unwrap();
         let dst = buffer(&[0; 12]);
         assert_eq!(
-            as_u64(&read(&s, &[dst.clone(), num(0), num(12)]).unwrap()),
+            as_u64(&read(st(&s), &[dst.clone(), num(0), num(12)]).unwrap()),
             12
         );
         assert_eq!(
             bytes_of(&dst),
             vec![10, 20, 30, 40, 0, 0, 0, 0, 0, 0, 10, 20]
         );
-        close(&s).unwrap();
+        close(st(&s)).unwrap();
         let _ = std::fs::remove_file(&path);
     }
 
@@ -1775,13 +1755,13 @@ mod tests {
         let path = tmp("append");
         write_file(&path, b"0123456789ABC");
         let s = open(&path, EnumValue::FileOpenModeAppend, None).unwrap();
-        assert_eq!(as_u64(&current_position(&s).unwrap()), 13);
-        write(&s, &[buffer(&[1, 2, 3]), num(0), num(3)]).unwrap();
-        assert_eq!(as_u64(&size(&s).unwrap()), 16);
-        seek(&s, &[num(0), enum_val(EnumValue::StreamPositionBegin)]).unwrap();
-        write(&s, &[buffer(&[10, 20]), num(0), num(2)]).unwrap();
-        assert_eq!(as_u64(&size(&s).unwrap()), 16);
-        close(&s).unwrap();
+        assert_eq!(as_u64(&current_position(st(&s)).unwrap()), 13);
+        write(st(&s), &[buffer(&[1, 2, 3]), num(0), num(3)]).unwrap();
+        assert_eq!(as_u64(&size(st(&s)).unwrap()), 16);
+        seek(st(&s), &[num(0), enum_val(EnumValue::StreamPositionBegin)]).unwrap();
+        write(st(&s), &[buffer(&[10, 20]), num(0), num(2)]).unwrap();
+        assert_eq!(as_u64(&size(st(&s)).unwrap()), 16);
+        close(st(&s)).unwrap();
         assert_eq!(std::fs::read(&path).unwrap()[..4], [10, 20, b'2', b'3']);
         let _ = std::fs::remove_file(&path);
     }
@@ -1792,31 +1772,31 @@ mod tests {
         write_file(&path, b"0123456789");
         let name = BslValue::Str(bsl_rt::BslString::from_str(&path));
         let ro = manager_open_for_read(std::slice::from_ref(&name)).unwrap();
-        assert!(write(&ro, &[buffer(&[1]), num(0), num(1)]).is_err());
+        assert!(write(st(&ro), &[buffer(&[1]), num(0), num(1)]).is_err());
         assert_eq!(
-            as_u64(&read(&ro, &[buffer(&[0]), num(0), num(1)]).unwrap()),
+            as_u64(&read(st(&ro), &[buffer(&[0]), num(0), num(1)]).unwrap()),
             1
         );
-        close(&ro).unwrap();
+        close(st(&ro)).unwrap();
 
         let wo = manager_open_for_write(std::slice::from_ref(&name)).unwrap();
         // `ОткрытьДляЗаписи` НЕ обрезает — измерено.
-        assert_eq!(as_u64(&size(&wo).unwrap()), 10);
-        write(&wo, &[buffer(&[1]), num(0), num(1)]).unwrap();
-        assert!(read(&wo, &[buffer(&[0]), num(0), num(1)]).is_err());
-        close(&wo).unwrap();
+        assert_eq!(as_u64(&size(st(&wo)).unwrap()), 10);
+        write(st(&wo), &[buffer(&[1]), num(0), num(1)]).unwrap();
+        assert!(read(st(&wo), &[buffer(&[0]), num(0), num(1)]).is_err());
+        close(st(&wo)).unwrap();
 
         let ap = manager_open_for_append(std::slice::from_ref(&name)).unwrap();
-        assert_eq!(as_u64(&current_position(&ap).unwrap()), 10);
+        assert_eq!(as_u64(&current_position(st(&ap)).unwrap()), 10);
         assert_eq!(
-            flag(&ap, StreamFlag::Readable).unwrap(),
+            flag(st(&ap), StreamFlag::Readable).unwrap(),
             BslValue::Boolean(false)
         );
-        close(&ap).unwrap();
+        close(st(&ap)).unwrap();
 
         let cr = manager_create(std::slice::from_ref(&name)).unwrap();
-        assert_eq!(as_u64(&size(&cr).unwrap()), 0);
-        close(&cr).unwrap();
+        assert_eq!(as_u64(&size(st(&cr)).unwrap()), 0);
+        close(st(&cr)).unwrap();
         let _ = std::fs::remove_file(&path);
     }
 

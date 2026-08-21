@@ -43,7 +43,7 @@ use bsl_number::BslNumber;
 
 use bsl_rt::{
     Arity, BslValue, CallContext, ConstructorCode, ConstructorDescriptor, FunctionCode,
-    FunctionDescriptor, FunctionKind, LibraryDependency, LibraryDescriptor, RtError, RtResult,
+    FunctionDescriptor, FunctionKind, LibraryDescriptor, RtError, RtResult,
 };
 
 /// Идентификатор компонента в заголовке байткода.
@@ -525,10 +525,9 @@ pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor {
         package: PACKAGE_NAME,
         version: PACKAGE_VERSION,
-        dependencies: &[LibraryDependency {
-            package: bsl_rt::PACKAGE_NAME,
-            version: bsl_rt::PACKAGE_VERSION,
-        }],
+        // Ядро в зависимостях не объявляется: реестр включает его в
+        // требования любой программы (`RuntimeRegistry::requirements_for`).
+        dependencies: &[],
         functions: FUNCTIONS,
         constructors: CONSTRUCTORS,
     }

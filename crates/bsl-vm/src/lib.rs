@@ -1917,7 +1917,7 @@ fn step_cold(
                     name_id,
                     program,
                 )? {
-                    Some(call) => call(ov, args, &mut context)?,
+                    Some(call) => call(object.as_dyn(), args, &mut context)?,
                     None => {
                         let method_name = field_name(program, name_id)?;
                         object.call_method(method_name, args, &mut context)?

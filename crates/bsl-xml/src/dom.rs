@@ -2260,7 +2260,7 @@ pub fn write(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
     }
     let node = need_node(args.first(), op)?;
     let target = &args[1];
-    crate::xml::with_writer(target, |w| {
+    crate::xml::with_writer(crate::xml::arg_object(target)?, |w| {
         let mut ser = DomSerializer {
             w,
             scopes: Vec::new(),
@@ -3032,9 +3032,9 @@ mod tests {
     /// Записать узел через `ЗаписьDOM` и отдать накопленный текст.
     fn serialize(node: &BslValue) -> RtResult<String> {
         let target = crate::xml::new_xml_writer();
-        crate::xml::set_string(&target, &[])?;
+        crate::xml::set_string(crate::xml::arg_object(&target)?, &[])?;
         write(&new_writer(), &[node.clone(), target.clone()])?;
-        match crate::xml::close_writer(&target)? {
+        match crate::xml::close_writer(crate::xml::arg_object(&target)?)? {
             BslValue::Str(s) => Ok(s.to_string()),
             other => panic!("ожидалась строка, получено {other:?}"),
         }

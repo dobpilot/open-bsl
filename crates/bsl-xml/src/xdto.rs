@@ -589,7 +589,7 @@ use std::rc::{Rc, Weak};
 use crate::xsd::{FacetKind, XName, XSD_NS, XsKind, XsSchemaData};
 use bsl_rt::{
     BslNumber, BslObject, BslString, BslValue, CallContext, EnumValue, MethodCode,
-    MethodDescriptor, ObjectProtocol, RtError, RtResult, TypeDescriptor, TypeId,
+    MethodDescriptor, ObjectDowncast, ObjectProtocol, RtError, RtResult, TypeDescriptor, TypeId,
 };
 
 /// Представление объекта XDTO за оболочкой [`XdtoShell`] — прежние
@@ -623,7 +623,13 @@ fn shell_value(repr: XdtoRepr) -> BslValue {
     BslValue::new_object(XdtoShell { repr })
 }
 
-/// Представление за значением, если это объект XDTO.
+/// Представление за ОБЪЕКТОМ — путь получателя метода и свойства.
+fn repr_of_object(object: &dyn ObjectProtocol) -> Option<&XdtoRepr> {
+    object.downcast_ref::<XdtoShell>().map(|s| &s.repr)
+}
+
+/// Представление за ЗНАЧЕНИЕМ — путь аргумента: значения XDTO приходят
+/// аргументами и глобальным функциям, и методам чужих оболочек.
 fn repr_of(value: &BslValue) -> Option<&XdtoRepr> {
     value
         .object_ref()
@@ -2570,16 +2576,19 @@ pub fn is_factory(v: &BslValue) -> bool {
     matches!(repr_of(v), Some(XdtoRepr::Factory(_)))
 }
 
-fn not_applicable(obj: &BslValue, method: &'static str) -> RtError {
+fn not_applicable(obj: &dyn ObjectProtocol, method: &'static str) -> RtError {
     RtError::MethodNotApplicable {
         method,
-        receiver: obj.type_name(),
+        receiver: obj.type_descriptor().name,
     }
 }
 
 /// Модель фабрики-получателя.
-fn factory_model<'a>(obj: &'a BslValue, method: &'static str) -> RtResult<&'a Rc<XdtoModel>> {
-    match repr_of(obj) {
+fn factory_model<'a>(
+    obj: &'a dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'a Rc<XdtoModel>> {
+    match repr_of_object(obj) {
         Some(XdtoRepr::Factory(model)) => Ok(model),
         _ => Err(not_applicable(obj, method)),
     }
@@ -2596,7 +2605,7 @@ fn factory_model<'a>(obj: &'a BslValue, method: &'static str) -> RtResult<&'a Rc
 ///
 /// [`RtError::MethodNotApplicable`], если получатель не фабрика либо
 /// аргументы не той формы.
-pub fn factory_type(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn factory_type(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     let model = factory_model(obj, "Тип")?;
     let found = match args {
         [BslValue::Str(uri), BslValue::Str(name)] => {
@@ -2637,7 +2646,7 @@ pub fn factory_type(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
 /// аргумент не тип XDTO либо аргументов не то количество;
 /// [`RtError::Xdto`], если лексическая форма не разбирается в этом типе,
 /// нарушает его фасет или тип объекта абстрактный.
-pub fn factory_create(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn factory_create(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     factory_model(obj, "Создать")?;
     let [first, rest @ ..] = args else {
         return Err(not_applicable(obj, "Создать"));
@@ -2698,14 +2707,14 @@ pub fn factory_create(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
 ///
 /// [`RtError::MethodNotApplicable`], если получатель не `ОбъектXDTO` либо
 /// вызов с аргументами.
-pub fn object_type(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn object_type(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     if !args.is_empty() {
         return Err(not_applicable(obj, "Тип"));
     }
     // `ЗначениеXDTO` отвечает на `Тип()` так же — типом, по которому
     // разобрана его лексическая форма (измерено: `Создать(xs:int, "42")
     // .Тип()` -> `{...}int`).
-    if let Some(XdtoRepr::Value(model, data)) = repr_of(obj) {
+    if let Some(XdtoRepr::Value(model, data)) = repr_of_object(obj) {
         model.type_at(data.type_index)?;
         return Ok(type_value(model, data.type_index));
     }
@@ -2740,7 +2749,7 @@ fn facet_kind_value(kind: FacetKind) -> EnumValue {
 ///
 /// [`RtError::UnknownColumn`], если такого члена у этого вида значения
 /// нет; [`RtError::Xdto`], если модель ссылается на несуществующий узел.
-pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
+pub fn get_property(obj: &dyn ObjectProtocol, name: &str) -> RtResult<BslValue> {
     let unknown = || RtError::UnknownColumn(name.to_string());
     // Сравнение — через `fold`, а не `eq_ignore_ascii_case`: имена членов
     // здесь РУССКИЕ, а ASCII-свёртка кириллицу не трогает. Имя приходит в
@@ -2748,7 +2757,7 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
     // в скрипте, где раньше встретилось `значение`, доходит сюда строчным.
     let is =
         |ru: &str, en: &str| bsl_rt::fold::folded_eq(name, ru) || bsl_rt::fold::folded_eq(name, en);
-    let Some(o) = repr_of(obj) else {
+    let Some(o) = repr_of_object(obj) else {
         return Err(unknown());
     };
     match o {
@@ -2935,12 +2944,12 @@ pub fn collection_get(obj: &XdtoRepr, i: usize) -> RtResult<BslValue> {
 /// [`RtError::MethodNotApplicable`], если получатель не коллекция модели
 /// типов или аргумент не тот; [`RtError::IndexOutOfBounds`] на номере за
 /// границей.
-pub fn collection_lookup(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn collection_lookup(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     let not_applicable = || RtError::MethodNotApplicable {
         method: "Получить",
-        receiver: obj.type_name(),
+        receiver: obj.type_descriptor().name,
     };
-    let Some(o) = repr_of(obj) else {
+    let Some(o) = repr_of_object(obj) else {
         return Err(not_applicable());
     };
     let [arg] = args else {
@@ -3062,8 +3071,11 @@ fn is_multiple(prop: &XdtoPropertyData) -> bool {
 }
 
 /// Хранилище получателя-экземпляра.
-fn instance_of<'a>(obj: &'a BslValue, method: &'static str) -> RtResult<&'a Rc<XdtoObjectData>> {
-    match repr_of(obj) {
+fn instance_of<'a>(
+    obj: &'a dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'a Rc<XdtoObjectData>> {
+    match repr_of_object(obj) {
         Some(XdtoRepr::Object(data)) => Ok(data),
         _ => Err(not_applicable(obj, method)),
     }
@@ -3071,10 +3083,10 @@ fn instance_of<'a>(obj: &'a BslValue, method: &'static str) -> RtResult<&'a Rc<X
 
 /// Хранилище и свойство получателя-списка.
 fn list_of<'a>(
-    obj: &'a BslValue,
+    obj: &'a dyn ObjectProtocol,
     method: &'static str,
 ) -> RtResult<(&'a Rc<XdtoObjectData>, usize)> {
-    match repr_of(obj) {
+    match repr_of_object(obj) {
         Some(XdtoRepr::List(data, prop)) => Ok((data, *prop)),
         _ => Err(not_applicable(obj, method)),
     }
@@ -3315,7 +3327,7 @@ fn object_get_property(data: &Rc<XdtoObjectData>, name: &str) -> RtResult<BslVal
 /// если свойство множественное (оно наполняется через `СписокXDTO` —
 /// измерено, что присваивание в него ошибка) либо значение не приводится к
 /// типу свойства.
-pub fn set_property(obj: &BslValue, name: &str, value: BslValue) -> RtResult<()> {
+pub fn set_property(obj: &dyn ObjectProtocol, name: &str, value: BslValue) -> RtResult<()> {
     let data = instance_of(obj, "Установить")?;
     let Some(prop) = data.property_by_name(name)? else {
         return Err(RtError::UnknownColumn(name.to_string()));
@@ -3337,7 +3349,7 @@ pub fn set_property(obj: &BslValue, name: &str, value: BslValue) -> RtResult<()>
 ///
 /// [`RtError::MethodNotApplicable`] на чужом получателе или аргументе,
 /// [`RtError::Xdto`], если свойства нет или оно множественное.
-pub fn object_get(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn object_get(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     let data = instance_of(obj, "Получить")?;
     let [arg] = args else {
         return Err(not_applicable(obj, "Получить"));
@@ -3358,7 +3370,7 @@ pub fn object_get(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// Те же, что у [`set_property`].
-pub fn object_set(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn object_set(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     let data = instance_of(obj, "Установить")?;
     let [arg, value] = args else {
         return Err(not_applicable(obj, "Установить"));
@@ -3382,7 +3394,7 @@ pub fn object_set(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// [`RtError::Xdto`], если свойства нет или оно одиночное.
-pub fn object_get_list(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn object_get_list(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     let data = instance_of(obj, "ПолучитьСписок")?;
     let [arg] = args else {
         return Err(not_applicable(obj, "ПолучитьСписок"));
@@ -3406,7 +3418,7 @@ pub fn object_get_list(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> 
 /// # Errors
 ///
 /// [`RtError::Xdto`], если у типа нет такого свойства.
-pub fn object_is_set(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn object_is_set(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     let data = instance_of(obj, "Установлено")?;
     let [arg] = args else {
         return Err(not_applicable(obj, "Установлено"));
@@ -3422,7 +3434,7 @@ pub fn object_is_set(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// [`RtError::Xdto`], если у типа нет такого свойства.
-pub fn object_unset(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn object_unset(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     let data = instance_of(obj, "Сбросить")?;
     let [arg] = args else {
         return Err(not_applicable(obj, "Сбросить"));
@@ -3439,7 +3451,7 @@ pub fn object_unset(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
 ///
 /// [`RtError::MethodNotApplicable`], если получатель не экземпляр либо
 /// вызов с аргументами.
-pub fn object_properties(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn object_properties(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     let data = instance_of(obj, "Свойства")?;
     if !args.is_empty() {
         return Err(not_applicable(obj, "Свойства"));
@@ -3460,7 +3472,7 @@ pub fn object_properties(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue
 /// вызов с аргументами. У `СписокXDTO` и `ПоследовательностьXDTO`
 /// владелец — ЧЛЕН, а не метод (измерено: `Список.Владелец()` — ошибка),
 /// поэтому они сюда не попадают.
-pub fn object_owner(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn object_owner(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     let data = instance_of(obj, "Владелец")?;
     if !args.is_empty() {
         return Err(not_applicable(obj, "Владелец"));
@@ -3492,7 +3504,7 @@ pub fn object_owner(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// [`RtError::Xdto`], если какая-нибудь граница нарушена.
-pub fn object_validate(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn object_validate(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     let data = instance_of(obj, "Проверить")?;
     if !args.is_empty() {
         return Err(not_applicable(obj, "Проверить"));
@@ -3553,7 +3565,7 @@ fn validate_instance(data: &Rc<XdtoObjectData>, depth: usize) -> RtResult<()> {
 ///
 /// [`RtError::MethodNotApplicable`], если получатель не экземпляр либо
 /// вызов с аргументами.
-pub fn object_sequence(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn object_sequence(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     let data = instance_of(obj, "Последовательность")?;
     if !args.is_empty() {
         return Err(not_applicable(obj, "Последовательность"));
@@ -3585,7 +3597,7 @@ fn out_of_bounds(i: usize, len: usize) -> RtError {
 ///
 /// [`RtError::IndexOutOfBounds`], если номера в списке нет (измерено:
 /// платформа отвечает ошибкой, а не `Неопределено`).
-pub fn list_get(obj: &BslValue, i: usize) -> RtResult<BslValue> {
+pub fn list_get(obj: &dyn ObjectProtocol, i: usize) -> RtResult<BslValue> {
     let (data, prop) = list_of(obj, "Получить")?;
     list_item(data, prop, i)
 }
@@ -3610,7 +3622,7 @@ fn list_item(data: &Rc<XdtoObjectData>, prop: usize, i: usize) -> RtResult<BslVa
 /// # Errors
 ///
 /// [`RtError::Xdto`], если значение не приводится к типу свойства.
-pub fn list_add(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn list_add(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     let (data, prop) = list_of(obj, "Добавить")?;
     let [value] = args else {
         return Err(not_applicable(obj, "Добавить"));
@@ -3629,7 +3641,7 @@ pub fn list_add(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
 ///
 /// [`RtError::IndexOutOfBounds`] за границей списка (измерено),
 /// [`RtError::Xdto`], если значение не приводится к типу свойства.
-pub fn list_set(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn list_set(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     let (data, prop) = list_of(obj, "Установить")?;
     let [index, value] = args else {
         return Err(not_applicable(obj, "Установить"));
@@ -3661,7 +3673,7 @@ pub fn list_set(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
 ///
 /// [`RtError::IndexOutOfBounds`] за границей списка, [`RtError::Xdto`],
 /// если значение не приводится к типу свойства.
-pub fn list_insert(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn list_insert(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     let (data, prop) = list_of(obj, "Вставить")?;
     let [index, value] = args else {
         return Err(not_applicable(obj, "Вставить"));
@@ -3687,7 +3699,7 @@ pub fn list_insert(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// [`RtError::IndexOutOfBounds`] за границей списка (измерено).
-pub fn list_delete(obj: &BslValue, index: &BslValue) -> RtResult<()> {
+pub fn list_delete(obj: &dyn ObjectProtocol, index: &BslValue) -> RtResult<()> {
     let (data, prop) = list_of(obj, "Удалить")?;
     let places = data.occurrences(prop);
     let i = index_arg(index, places.len())?;
@@ -3703,7 +3715,7 @@ pub fn list_delete(obj: &BslValue, index: &BslValue) -> RtResult<()> {
 /// # Errors
 ///
 /// [`RtError::MethodNotApplicable`], если получатель не список.
-pub fn list_clear(obj: &BslValue) -> RtResult<()> {
+pub fn list_clear(obj: &dyn ObjectProtocol) -> RtResult<()> {
     let (data, prop) = list_of(obj, "Очистить")?;
     data.entries.borrow_mut().retain(|e| e.prop != prop);
     Ok(())
@@ -3721,8 +3733,11 @@ fn index_arg(index: &BslValue, len: usize) -> RtResult<usize> {
 // --- `ПоследовательностьXDTO` --------------------------------------------
 
 /// Хранилище получателя-последовательности.
-fn sequence_of<'a>(obj: &'a BslValue, method: &'static str) -> RtResult<&'a Rc<XdtoObjectData>> {
-    match repr_of(obj) {
+fn sequence_of<'a>(
+    obj: &'a dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'a Rc<XdtoObjectData>> {
+    match repr_of_object(obj) {
         Some(XdtoRepr::Sequence(data)) => Ok(data),
         _ => Err(not_applicable(obj, method)),
     }
@@ -3754,7 +3769,7 @@ fn sequence_len(data: &Rc<XdtoObjectData>) -> RtResult<usize> {
 /// # Errors
 ///
 /// [`RtError::IndexOutOfBounds`] за границей (измерено).
-pub fn sequence_value(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn sequence_value(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     let data = sequence_of(obj, "ПолучитьЗначение")?;
     let [index] = args else {
         return Err(not_applicable(obj, "ПолучитьЗначение"));
@@ -3777,7 +3792,7 @@ pub fn sequence_value(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// [`RtError::IndexOutOfBounds`] за границей.
-pub fn sequence_property(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn sequence_property(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     let data = sequence_of(obj, "ПолучитьСвойство")?;
     let [index] = args else {
         return Err(not_applicable(obj, "ПолучитьСвойство"));
@@ -3809,7 +3824,7 @@ pub fn sequence_property(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue
 ///
 /// [`RtError::Xdto`], если свойство чужое, атрибутное либо значение не
 /// приводится к его типу.
-pub fn sequence_add(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn sequence_add(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     let data = sequence_of(obj, "Добавить")?;
     let [arg, value] = args else {
         return Err(not_applicable(obj, "Добавить"));
@@ -3841,7 +3856,7 @@ pub fn sequence_add(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// [`RtError::MethodNotApplicable`], если получатель не последовательность.
-pub fn sequence_clear(obj: &BslValue) -> RtResult<()> {
+pub fn sequence_clear(obj: &dyn ObjectProtocol) -> RtResult<()> {
     let data = sequence_of(obj, "Очистить")?;
     let places = sequence_places(data)?;
     let mut entries = data.entries.borrow_mut();
@@ -3907,7 +3922,7 @@ enum ReadOut {
 /// [`RtError::MethodNotApplicable`], если получатель не фабрика;
 /// [`RtError::Xdto`], если аргументы не те, документ не соответствует типу
 /// или в нём нет элементов; [`RtError::Xml`] на битой разметке.
-pub fn factory_read_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn factory_read_xml(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     factory_model(obj, "ПрочитатьXML")?;
     let (reader, type_arg) = match args {
         [reader] => (reader, None),
@@ -3931,7 +3946,9 @@ pub fn factory_read_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue>
         Some(XdtoRepr::Type(model, i)) => (model.clone(), *i),
         _ => return Err(bad_read_type(type_arg)),
     };
-    crate::xml::with_reader(reader, |state| read_document(state, &model, type_index))
+    crate::xml::with_reader(crate::xml::arg_object(reader)?, |state| {
+        read_document(state, &model, type_index)
+    })
 }
 
 fn bad_read_type(arg: &BslValue) -> RtError {
@@ -4603,7 +4620,7 @@ fn attribute_qname(scope: &NsScope, frame: &NsFrame, uri: &str, local: &str) -> 
 /// двоеточие, у значения нет лексической формы либо экземпляр вложен глубже
 /// `MAX_XDTO_DEPTH` (в том числе когда он ссылается сам на себя);
 /// [`RtError::Xml`], если писатель уже закрыт.
-pub fn factory_write_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+pub fn factory_write_xml(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     factory_model(obj, "ЗаписатьXML")?;
     let (writer, value, name, uri) = match args {
         [writer, value] => (writer, value, None, None),
@@ -4655,7 +4672,7 @@ pub fn factory_write_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
         ));
     }
     let uri = uri.unwrap_or_else(|| type_data.ns.clone());
-    crate::xml::with_writer(writer, |w| {
+    crate::xml::with_writer(crate::xml::arg_object(writer)?, |w| {
         let mut scope = NsScope::default();
         write_node(w, &mut scope, &name, &uri, None, &slot, 0)
     })
@@ -5181,15 +5198,12 @@ fn bad_serializer_factory(arg: &BslValue) -> RtError {
     ))
 }
 
-/// `СериализаторXDTO` ли это — нужно диспетчеру методов: имена
-/// `ПрочитатьXML` и `ЗаписатьXML` делят с фабрикой.
-pub fn is_serializer(v: &BslValue) -> bool {
-    matches!(repr_of(v), Some(XdtoRepr::Serializer(_)))
-}
-
 /// Модель сериализатора-получателя.
-fn serializer_model<'a>(obj: &'a BslValue, method: &'static str) -> RtResult<&'a Rc<XdtoModel>> {
-    match repr_of(obj) {
+fn serializer_model<'a>(
+    obj: &'a dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'a Rc<XdtoModel>> {
+    match repr_of_object(obj) {
         Some(XdtoRepr::Serializer(model)) => Ok(model),
         _ => Err(not_applicable(obj, method)),
     }
@@ -5210,8 +5224,8 @@ fn serializer_model<'a>(obj: &'a BslValue, method: &'static str) -> RtResult<&'a
 /// чем попало нельзя ни там, ни там, поэтому вызов даёт перехватываемую
 /// ошибку, а не тишину, — и она называет ту причину, которая есть на самом
 /// деле.
-pub fn serializer_unsupported(obj: &BslValue, method: &'static str) -> RtError {
-    if !is_serializer(obj) {
+pub fn serializer_unsupported(obj: &dyn ObjectProtocol, method: &'static str) -> RtError {
+    if !matches!(repr_of_object(obj), Some(XdtoRepr::Serializer(_))) {
         return not_applicable(obj, method);
     }
     // Список написаний закрыт: сюда приходят ровно три литерала из
@@ -5396,7 +5410,7 @@ fn write_serialized(
 /// [`RtError::MethodNotApplicable`], если получатель не сериализатор;
 /// [`RtError::Xdto`], если аргументы не те или значение не сериализуется;
 /// [`RtError::Xml`], если писатель уже закрыт.
-pub fn serializer_write_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+pub fn serializer_write_xml(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     let model = serializer_model(obj, "ЗаписатьXML")?;
     let (writer, value, name, uri) = match args {
         [writer, value] => (writer, value, None, None),
@@ -5421,7 +5435,9 @@ pub fn serializer_write_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
         Some(name) => (name, given_uri.unwrap_or_default()),
         None => (default_name, default_uri),
     };
-    crate::xml::with_writer(writer, |w| write_serialized(w, &name, &uri, nil, &text))
+    crate::xml::with_writer(crate::xml::arg_object(writer)?, |w| {
+        write_serialized(w, &name, &uri, nil, &text)
+    })
 }
 
 /// Встроенный тип XML Schema, лексической формой которого сериализатор
@@ -5458,7 +5474,7 @@ fn builtin_index_of_type(model: &Rc<XdtoModel>, id: TypeId) -> Option<usize> {
 /// [`RtError::MethodNotApplicable`], если получатель не сериализатор;
 /// [`RtError::Xdto`], если аргументы не те, отображения для типа нет либо
 /// текст не разбирается; [`RtError::Xml`] на битой разметке.
-pub fn serializer_read_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn serializer_read_xml(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     let model = serializer_model(obj, "ПрочитатьXML")?.clone();
     let (reader, type_arg) = match args {
         [reader] => (reader, None),
@@ -5481,7 +5497,7 @@ pub fn serializer_read_xml(obj: &BslValue, args: &[BslValue]) -> RtResult<BslVal
             )));
         }
     };
-    crate::xml::with_reader(reader, |state| {
+    crate::xml::with_reader(crate::xml::arg_object(reader)?, |state| {
         read_one(state, |parser, head| {
             serializer_read_element(parser, &model, head, want)
         })
@@ -5642,38 +5658,21 @@ static SEQUENCE_TYPE: TypeDescriptor = TypeDescriptor {
     legacy_type_id: Some(TypeId::XdtoSequence),
 };
 
-/// Значение оболочки как получатель методов: протокольные хуки передают
-/// `&self`, а поверхность принимает `&BslValue`, поэтому оболочка на время
-/// вызова заворачивается обратно в значение. Клонирование дешёвое — внутри
-/// `Rc`.
-fn as_value(shell: &XdtoShell) -> BslValue {
-    shell_value(match &shell.repr {
-        XdtoRepr::Type(model, i) => XdtoRepr::Type(model.clone(), *i),
-        XdtoRepr::Property(model, i) => XdtoRepr::Property(model.clone(), *i),
-        XdtoRepr::Properties(model, i) => XdtoRepr::Properties(model.clone(), *i),
-        XdtoRepr::Facets(model, i) => XdtoRepr::Facets(model.clone(), *i),
-        XdtoRepr::Facet(model, t, f) => XdtoRepr::Facet(model.clone(), *t, *f),
-        XdtoRepr::Value(model, data) => XdtoRepr::Value(model.clone(), data.clone()),
-        XdtoRepr::Factory(model) => XdtoRepr::Factory(model.clone()),
-        XdtoRepr::Serializer(model) => XdtoRepr::Serializer(model.clone()),
-        XdtoRepr::Object(data) => XdtoRepr::Object(data.clone()),
-        XdtoRepr::List(data, prop) => XdtoRepr::List(data.clone(), *prop),
-        XdtoRepr::Sequence(data) => XdtoRepr::Sequence(data.clone()),
-    })
-}
-
 // Обработчики статической таблицы методов оболочки XDTO. Таблица одна на
 // все представления, как прежний общий диспетчер: имя делится
 // получателями, получатель выбирает семантику по своему `repr`.
-fn shell_repr<'v>(receiver: &'v BslValue, method: &'static str) -> RtResult<&'v XdtoRepr> {
-    repr_of(receiver).ok_or(RtError::MethodNotApplicable {
+fn shell_repr<'v>(
+    receiver: &'v dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'v XdtoRepr> {
+    repr_of_object(receiver).ok_or(RtError::MethodNotApplicable {
         method,
-        receiver: receiver.type_name(),
+        receiver: receiver.type_descriptor().name,
     })
 }
 
 fn xdto_type(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -5684,7 +5683,7 @@ fn xdto_type(
 }
 
 fn xdto_create(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -5692,7 +5691,7 @@ fn xdto_create(
 }
 
 fn xdto_read_xml(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -5703,7 +5702,7 @@ fn xdto_read_xml(
 }
 
 fn xdto_write_xml(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -5716,7 +5715,7 @@ fn xdto_write_xml(
 }
 
 fn xdto_get(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -5727,18 +5726,18 @@ fn xdto_get(
             [index] => list_get(receiver, shell_index(index)?),
             _ => Err(RtError::MethodNotApplicable {
                 method: "Получить",
-                receiver: receiver.type_name(),
+                receiver: receiver.type_descriptor().name,
             }),
         },
         _ => Err(RtError::MethodNotApplicable {
             method: "Получить",
-            receiver: receiver.type_name(),
+            receiver: receiver.type_descriptor().name,
         }),
     }
 }
 
 fn xdto_set(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -5749,7 +5748,7 @@ fn xdto_set(
 }
 
 fn xdto_add(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -5760,7 +5759,7 @@ fn xdto_add(
 }
 
 fn xdto_insert(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -5768,7 +5767,7 @@ fn xdto_insert(
 }
 
 fn xdto_delete(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -5776,13 +5775,13 @@ fn xdto_delete(
         [index] => list_delete(receiver, index).map(|()| BslValue::Undefined),
         _ => Err(RtError::MethodNotApplicable {
             method: "Удалить",
-            receiver: receiver.type_name(),
+            receiver: receiver.type_descriptor().name,
         }),
     }
 }
 
 fn xdto_clear(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     _arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -5793,7 +5792,7 @@ fn xdto_clear(
 }
 
 fn xdto_count(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     _arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -5801,13 +5800,13 @@ fn xdto_count(
         Some(len) => len.map(|len| BslValue::number_from_i64(len as i64)),
         None => Err(RtError::MethodNotApplicable {
             method: "Количество",
-            receiver: receiver.type_name(),
+            receiver: receiver.type_descriptor().name,
         }),
     }
 }
 
 fn xdto_get_list(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -5815,7 +5814,7 @@ fn xdto_get_list(
 }
 
 fn xdto_is_set(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -5823,7 +5822,7 @@ fn xdto_is_set(
 }
 
 fn xdto_unset(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -5831,7 +5830,7 @@ fn xdto_unset(
 }
 
 fn xdto_validate(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -5839,7 +5838,7 @@ fn xdto_validate(
 }
 
 fn xdto_properties(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -5847,7 +5846,7 @@ fn xdto_properties(
 }
 
 fn xdto_owner(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -5855,7 +5854,7 @@ fn xdto_owner(
 }
 
 fn xdto_sequence(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -5863,7 +5862,7 @@ fn xdto_sequence(
 }
 
 fn xdto_sequence_value(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -5871,7 +5870,7 @@ fn xdto_sequence_value(
 }
 
 fn xdto_sequence_property(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -5881,7 +5880,7 @@ fn xdto_sequence_property(
 // Три измеренных члена сериализатора, до которых очередь не дошла: у
 // своего получателя — честный отказ «не поддерживается».
 fn xdto_xml_type(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     _arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -5889,7 +5888,7 @@ fn xdto_xml_type(
 }
 
 fn xdto_xml_type_of(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     _arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -5897,7 +5896,7 @@ fn xdto_xml_type_of(
 }
 
 fn xdto_can_read_xml(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     _arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -6043,7 +6042,7 @@ impl ObjectProtocol for XdtoShell {
     }
 
     fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
-        get_property(&as_value(self), name)
+        get_property(self.as_dyn(), name)
     }
 
     fn set_property(
@@ -6053,25 +6052,9 @@ impl ObjectProtocol for XdtoShell {
         _context: &mut CallContext<'_>,
     ) -> RtResult<()> {
         match &self.repr {
-            XdtoRepr::Object(..) => set_property(&as_value(self), name, value),
+            XdtoRepr::Object(..) => set_property(self.as_dyn(), name, value),
             _ => Err(RtError::NotAnObject),
         }
-    }
-
-    fn call_method(
-        &self,
-        name: &str,
-        arguments: &[BslValue],
-        context: &mut CallContext<'_>,
-    ) -> RtResult<BslValue> {
-        bsl_rt::call_method_from_table(
-            XDTO_METHODS,
-            self.type_descriptor().name,
-            &as_value(self),
-            name,
-            arguments,
-            context,
-        )
     }
 
     fn method_table(&self) -> &'static [MethodDescriptor] {
@@ -6235,8 +6218,13 @@ mod tests {
         type_value(model, index)
     }
 
+    /// Получатель за значением: поверхность XDTO принимает объект.
+    fn ob(v: &BslValue) -> &dyn ObjectProtocol {
+        v.object_ref().expect("объект XDTO").as_dyn()
+    }
+
     fn prop(obj: &BslValue, name: &str) -> BslValue {
-        get_property(obj, name).unwrap_or_else(|e| panic!("член «{name}»: {e}"))
+        get_property(ob(obj), name).unwrap_or_else(|e| panic!("член «{name}»: {e}"))
     }
 
     fn text_of(v: &BslValue) -> String {
@@ -6309,7 +6297,7 @@ mod tests {
         let bounds = |type_name: &str, prop_name: &str| {
             let t = type_of(&m, "urn:test", type_name);
             let props = prop(&t, "Свойства");
-            let p = collection_lookup(&props, &[str_value(prop_name)]).expect("поиск свойства");
+            let p = collection_lookup(ob(&props), &[str_value(prop_name)]).expect("поиск свойства");
             (
                 number_of(&prop(&p, "НижняяГраница")),
                 number_of(&prop(&p, "ВерхняяГраница")),
@@ -6339,7 +6327,7 @@ mod tests {
         let m = model(SAMPLE);
         let root = type_of(&m, "urn:test", "RootType");
         let props = prop(&root, "Свойства");
-        let by_name = |n: &str| collection_lookup(&props, &[str_value(n)]).expect("поиск");
+        let by_name = |n: &str| collection_lookup(ob(&props), &[str_value(n)]).expect("поиск");
         assert_eq!(
             prop(&by_name("name"), "Форма"),
             BslValue::Enum(EnumValue::XmlFormElement)
@@ -6365,7 +6353,7 @@ mod tests {
         );
         // Неизвестное имя — `Неопределено`, а не ошибка.
         assert_eq!(
-            collection_lookup(&props, &[str_value("нетТакого")]).expect("поиск"),
+            collection_lookup(ob(&props), &[str_value("нетТакого")]).expect("поиск"),
             BslValue::Undefined
         );
     }
@@ -6377,7 +6365,7 @@ mod tests {
         let m = model(SAMPLE);
         let root = type_of(&m, "urn:test", "RootType");
         let props = prop(&root, "Свойства");
-        let by_name = |n: &str| collection_lookup(&props, &[str_value(n)]).expect("поиск");
+        let by_name = |n: &str| collection_lookup(ob(&props), &[str_value(n)]).expect("поиск");
         let name_type = prop(&by_name("name"), "Тип");
         assert_eq!(text_of(&prop(&name_type, "Имя")), "string");
         assert_eq!(text_of(&prop(&name_type, "URIПространстваИмен")), XSD_NS);
@@ -6471,8 +6459,8 @@ mod tests {
             vec!["su", "__content"]
         );
         let simp = type_of(&m, "urn:test", "SimpContent");
-        let content =
-            collection_lookup(&prop(&simp, "Свойства"), &[str_value("__content")]).expect("поиск");
+        let content = collection_lookup(ob(&prop(&simp, "Свойства")), &[str_value("__content")])
+            .expect("поиск");
         assert_eq!(
             prop(&content, "Форма"),
             BslValue::Enum(EnumValue::XmlFormText)
@@ -6614,16 +6602,16 @@ mod tests {
     /// Значение своего типа из лексической формы — тем же путём, что и
     /// `ФабрикаXDTO.Создать`, то есть С проверкой фасетов.
     fn checked(f: &BslValue, name: &str, lexical: &str) -> RtResult<BslValue> {
-        let t = factory_type(f, &[str_value("urn:v"), str_value(name)])?;
-        let value = factory_create(f, &[t, str_value(lexical)])?;
-        get_property(&value, "Значение")
+        let t = factory_type(ob(f), &[str_value("urn:v"), str_value(name)])?;
+        let value = factory_create(ob(f), &[t, str_value(lexical)])?;
+        get_property(ob(&value), "Значение")
     }
 
     /// Значение встроенного типа тем же путём.
     fn checked_builtin(f: &BslValue, name: &str, lexical: &str) -> RtResult<BslValue> {
-        let t = factory_type(f, &[str_value(XSD_NS), str_value(name)])?;
-        let value = factory_create(f, &[t, str_value(lexical)])?;
-        get_property(&value, "Значение")
+        let t = factory_type(ob(f), &[str_value(XSD_NS), str_value(name)])?;
+        let value = factory_create(ob(f), &[t, str_value(lexical)])?;
+        get_property(ob(&value), "Значение")
     }
 
     /// Перечисление, длины и границы — та же сетка принятых и отвергнутых
@@ -6705,12 +6693,12 @@ mod tests {
         assert!(checked(&f, "Bin", "0LDQsQ==").is_err());
         // ЗАПИСЬ двоичных данных идёт мимо лексической формы (обратной у
         // них здесь нет), и фасет достаётся им по самому значению.
-        let t = factory_type(&f, &[str_value("urn:v"), str_value("T")]).expect("тип");
-        let o = factory_create(&f, std::slice::from_ref(&t)).expect("экземпляр");
+        let t = factory_type(ob(&f), &[str_value("urn:v"), str_value("T")]).expect("тип");
+        let o = factory_create(ob(&f), std::slice::from_ref(&t)).expect("экземпляр");
         let two = checked_builtin(&f, "base64Binary", "0LA=").expect("два байта");
         let four = checked_builtin(&f, "base64Binary", "0LDQsQ==").expect("четыре байта");
-        assert!(set_property(&o, "bn", two).is_ok());
-        assert!(set_property(&o, "bn", four).is_err());
+        assert!(set_property(ob(&o), "bn", two).is_ok());
+        assert!(set_property(ob(&o), "bn", four).is_err());
         // Списочный тип: длина — число элементов, а сами элементы
         // проверяются типом элемента.
         assert!(checked(&f, "Lst", "аб вг").is_ok());
@@ -6746,34 +6734,34 @@ mod tests {
     #[test]
     fn facet_checks_reach_writes_and_reads() {
         let f = factory(FACETS);
-        let t = factory_type(&f, &[str_value("urn:v"), str_value("T")]).expect("тип");
-        let o = factory_create(&f, std::slice::from_ref(&t)).expect("экземпляр");
+        let t = factory_type(ob(&f), &[str_value("urn:v"), str_value("T")]).expect("тип");
+        let o = factory_create(ob(&f), std::slice::from_ref(&t)).expect("экземпляр");
         // Присваивание и `Установить`.
-        assert!(set_property(&o, "el", str_value("аб")).is_ok());
-        assert!(set_property(&o, "el", str_value("а")).is_err());
-        assert!(object_set(&o, &[str_value("ac"), str_value("green")]).is_ok());
-        assert!(object_set(&o, &[str_value("ac"), str_value("синий")]).is_err());
+        assert!(set_property(ob(&o), "el", str_value("аб")).is_ok());
+        assert!(set_property(ob(&o), "el", str_value("а")).is_err());
+        assert!(object_set(ob(&o), &[str_value("ac"), str_value("green")]).is_ok());
+        assert!(object_set(ob(&o), &[str_value("ac"), str_value("синий")]).is_err());
         // Приведение к лексической форме идёт ДО проверки: число 5
         // становится строкой «5», и она короче двух символов.
-        assert!(set_property(&o, "el", number_value(42)).is_ok());
-        assert!(set_property(&o, "el", number_value(5)).is_err());
+        assert!(set_property(ob(&o), "el", number_value(42)).is_ok());
+        assert!(set_property(ob(&o), "el", number_value(5)).is_err());
         // Встроенные фасеты на записи: «1.5» не целое, 3000000000 вне
         // диапазона `xs:int`.
-        assert!(set_property(&o, "ip", number_value(42)).is_ok());
-        assert!(set_property(&o, "ip", number_value(3_000_000_000)).is_err());
+        assert!(set_property(ob(&o), "ip", number_value(42)).is_ok());
+        assert!(set_property(ob(&o), "ip", number_value(3_000_000_000)).is_err());
         // Список: `Добавить`, `Установить` и `Вставить` проверяют так же.
-        let list = get_property(&o, "ml").expect("список");
-        assert!(list_add(&list, &[str_value("аб")]).is_ok());
-        assert!(list_add(&list, &[str_value("а")]).is_err());
-        assert!(list_set(&list, &[number_value(0), str_value("вгд")]).is_ok());
-        assert!(list_set(&list, &[number_value(0), str_value("в")]).is_err());
-        assert!(list_insert(&list, &[number_value(0), str_value("вг")]).is_ok());
-        assert!(list_insert(&list, &[number_value(0), str_value("в")]).is_err());
+        let list = get_property(ob(&o), "ml").expect("список");
+        assert!(list_add(ob(&list), &[str_value("аб")]).is_ok());
+        assert!(list_add(ob(&list), &[str_value("а")]).is_err());
+        assert!(list_set(ob(&list), &[number_value(0), str_value("вгд")]).is_ok());
+        assert!(list_set(ob(&list), &[number_value(0), str_value("в")]).is_err());
+        assert!(list_insert(ob(&list), &[number_value(0), str_value("вг")]).is_ok());
+        assert!(list_insert(ob(&list), &[number_value(0), str_value("в")]).is_err());
         // Чтение документа с типом проверяет и элемент, и атрибут, а
         // валидный документ читается по-прежнему.
-        let read = |text: &str| factory_read_xml(&f, &[reader(text), t.clone()]);
+        let read = |text: &str| factory_read_xml(ob(&f), &[reader(text), t.clone()]);
         let ok = read(r#"<т xmlns="urn:v" ac="red"><el>аб</el></т>"#).expect("валидный документ");
-        assert_eq!(text_of(&get_property(&ok, "el").expect("el")), "аб");
+        assert_eq!(text_of(&get_property(ob(&ok), "el").expect("el")), "аб");
         assert!(read(r#"<т xmlns="urn:v" ac="синий"/>"#).is_err());
         assert!(read(r#"<т xmlns="urn:v"><el>а</el></т>"#).is_err());
         assert!(read(r#"<т xmlns="urn:v"><ip>3000000000</ip></т>"#).is_err());
@@ -6816,9 +6804,9 @@ mod tests {
         assert!(text.contains("образц"), "текст отказа: {text}");
         assert!(checked(&f, "Pat", "аб").is_err());
         // Запись в свойство такого типа — тот же отказ.
-        let t = factory_type(&f, &[str_value("urn:v"), str_value("T")]).expect("тип");
-        let o = factory_create(&f, std::slice::from_ref(&t)).expect("экземпляр");
-        assert!(set_property(&o, "pt", str_value("AB")).is_err());
+        let t = factory_type(ob(&f), &[str_value("urn:v"), str_value("T")]).expect("тип");
+        let o = factory_create(ob(&f), std::slice::from_ref(&t)).expect("экземпляр");
+        assert!(set_property(ob(&o), "pt", str_value("AB")).is_err());
         // Встроенные типы с образцом работают: целые — по своему разбору,
         // `xs:Name` — с ЗАВЫШЕННОЙ терпимостью (платформа отвергает «1имя»,
         // здесь оно проходит; расхождение названо в шапке модуля).
@@ -6833,7 +6821,7 @@ mod tests {
         let m = model(SAMPLE);
         let root = type_of(&m, "urn:test", "RootType");
         let props = prop(&root, "Свойства");
-        let by_name = |n: &str| collection_lookup(&props, &[str_value(n)]).expect("поиск");
+        let by_name = |n: &str| collection_lookup(ob(&props), &[str_value(n)]).expect("поиск");
         let def = prop(&by_name("def"), "ЗначениеПоУмолчанию");
         assert_eq!(number_of(&prop(&def, "Значение")), 7);
         assert_eq!(text_of(&prop(&def, "ЛексическоеЗначение")), "7");
@@ -7048,7 +7036,7 @@ mod tests {
             BslValue::Type(TypeId::XdtoPropertyCollection)
         );
         assert_eq!(props.to_string(), "КоллекцияСвойствXDTO");
-        let name = collection_lookup(&props, &[str_value("name")]).expect("поиск");
+        let name = collection_lookup(ob(&props), &[str_value("name")]).expect("поиск");
         assert_eq!(name.to_string(), "name", "свойство печатается именем");
         assert_eq!(
             name.type_of().unwrap(),
@@ -7056,7 +7044,7 @@ mod tests {
         );
         // Анонимный тип печатается ПУСТОЙ строкой, хотя URI у него есть.
         let anon = prop(
-            &collection_lookup(&props, &[str_value("anon")]).expect("поиск"),
+            &collection_lookup(ob(&props), &[str_value("anon")]).expect("поиск"),
             "Тип",
         );
         assert_eq!(anon.to_string(), "");
@@ -7074,7 +7062,7 @@ mod tests {
             assert_eq!(f.to_string(), "ФасетXDTO");
         }
         let def = prop(
-            &collection_lookup(&props, &[str_value("def")]).expect("поиск"),
+            &collection_lookup(ob(&props), &[str_value("def")]).expect("поиск"),
             "ЗначениеПоУмолчанию",
         );
         assert_eq!(
@@ -7293,10 +7281,10 @@ mod tests {
         // Неизвестный член — `RtError`, а не паника.
         let m = model(SAMPLE);
         let root = type_of(&m, "urn:test", "RootType");
-        assert!(get_property(&root, "НетТакогоЧлена").is_err());
+        assert!(get_property(ob(&root), "НетТакогоЧлена").is_err());
         // Члены типа ЗНАЧЕНИЯ на типе объекта не отвечают, и наоборот.
-        assert!(get_property(&root, "Фасеты").is_err());
-        assert!(get_property(&type_of(&m, "urn:test", "Code"), "Свойства").is_err());
+        assert!(get_property(ob(&root), "Фасеты").is_err());
+        assert!(get_property(ob(&type_of(&m, "urn:test", "Code")), "Свойства").is_err());
     }
 
     // --- фабрика -----------------------------------------------------------
@@ -7331,34 +7319,34 @@ mod tests {
             r#"</xs:sequence></xs:complexType></xs:schema>"#,
         );
         let f = factory_of_texts(&[a, b]);
-        let row = factory_type(&f, &[str_value("urn:b"), str_value("Row")]).expect("тип");
+        let row = factory_type(ob(&f), &[str_value("urn:b"), str_value("Row")]).expect("тип");
         assert_eq!(row.to_string(), "{urn:b}Row");
-        let code = factory_type(&f, &[str_value("urn:a"), str_value("Code")]).expect("тип");
+        let code = factory_type(ob(&f), &[str_value("urn:a"), str_value("Code")]).expect("тип");
         assert_eq!(code.to_string(), "{urn:a}Code");
         // Свойство схемы B ссылается на тип схемы A — и ссылка связана.
         let by_name =
-            collection_lookup(&prop(&row, "Свойства"), &[str_value("code")]).expect("поиск");
+            collection_lookup(ob(&prop(&row, "Свойства")), &[str_value("code")]).expect("поиск");
         assert_eq!(prop(&by_name, "Тип"), code);
         // Порядок схем в наборе на разрешение не влияет.
         let reversed = factory_of_texts(&[b, a]);
         assert_eq!(
-            factory_type(&reversed, &[str_value("urn:a"), str_value("Code")])
+            factory_type(ob(&reversed), &[str_value("urn:a"), str_value("Code")])
                 .expect("тип")
                 .to_string(),
             "{urn:a}Code"
         );
         // Встроенные типы объявлены ОДИН раз на всю модель, а не по разу
         // на схему: иначе `find` возвращал бы первый из двух одинаковых.
-        let string = factory_type(&f, &[str_value(XSD_NS), str_value("string")]).expect("тип");
+        let string = factory_type(ob(&f), &[str_value(XSD_NS), str_value("string")]).expect("тип");
         assert_eq!(string.to_string(), format!("{{{XSD_NS}}}string"));
         // Пустой набор — это фабрика с одними встроенными типами.
         let empty = factory_of_texts(&[]);
         assert_eq!(
-            factory_type(&empty, &[str_value(XSD_NS), str_value("string")]).expect("тип"),
-            factory_type(&empty, &[str_value(XSD_NS), str_value("string")]).expect("тип")
+            factory_type(ob(&empty), &[str_value(XSD_NS), str_value("string")]).expect("тип"),
+            factory_type(ob(&empty), &[str_value(XSD_NS), str_value("string")]).expect("тип")
         );
         assert_eq!(
-            factory_type(&empty, &[str_value("urn:a"), str_value("Code")]).expect("тип"),
+            factory_type(ob(&empty), &[str_value("urn:a"), str_value("Code")]).expect("тип"),
             BslValue::Undefined
         );
     }
@@ -7369,13 +7357,14 @@ mod tests {
     #[test]
     fn factory_type_takes_a_pair_or_an_expanded_name() {
         let f = factory(SAMPLE);
-        let pair = factory_type(&f, &[str_value("urn:test"), str_value("RootType")]).expect("тип");
+        let pair =
+            factory_type(ob(&f), &[str_value("urn:test"), str_value("RootType")]).expect("тип");
         assert_eq!(pair.to_string(), "{urn:test}RootType");
         let expanded = crate::xsd::new_expanded_name("urn:test", "RootType");
-        assert_eq!(factory_type(&f, &[expanded]).expect("тип"), pair);
+        assert_eq!(factory_type(ob(&f), &[expanded]).expect("тип"), pair);
         // Два обращения за одним именем равны — тип это ссылка в модель.
         assert_eq!(
-            factory_type(&f, &[str_value("urn:test"), str_value("RootType")]).expect("тип"),
+            factory_type(ob(&f), &[str_value("urn:test"), str_value("RootType")]).expect("тип"),
             pair
         );
         // Неизвестное имя и чужой URI — `Неопределено`, а не ошибка.
@@ -7385,14 +7374,17 @@ mod tests {
             // Пустой URI (измерено на `Тип("", "RootType")`).
             [str_value(""), str_value("RootType")],
         ] {
-            assert_eq!(factory_type(&f, &args).expect("поиск"), BslValue::Undefined);
+            assert_eq!(
+                factory_type(ob(&f), &args).expect("поиск"),
+                BslValue::Undefined
+            );
         }
         // Одна строка, три аргумента, числа вместо имён и вызов без
         // аргументов — ошибка (измерено все четыре).
-        assert!(factory_type(&f, &[str_value("RootType")]).is_err());
+        assert!(factory_type(ob(&f), &[str_value("RootType")]).is_err());
         assert!(
             factory_type(
-                &f,
+                ob(&f),
                 &[
                     str_value("urn:test"),
                     str_value("RootType"),
@@ -7401,10 +7393,10 @@ mod tests {
             )
             .is_err()
         );
-        assert!(factory_type(&f, &[number_value(5), number_value(5)]).is_err());
-        assert!(factory_type(&f, &[]).is_err());
+        assert!(factory_type(ob(&f), &[number_value(5), number_value(5)]).is_err());
+        assert!(factory_type(ob(&f), &[]).is_err());
         // Получатель обязан быть фабрикой.
-        assert!(factory_type(&pair, &[str_value("urn:test"), str_value("RootType")]).is_err());
+        assert!(factory_type(ob(&pair), &[str_value("urn:test"), str_value("RootType")]).is_err());
     }
 
     /// `Создать` от типа ЗНАЧЕНИЯ: без лексики — `Неопределено`, с
@@ -7412,8 +7404,8 @@ mod tests {
     #[test]
     fn factory_create_builds_a_value_from_its_lexical_form() {
         let f = factory(SAMPLE);
-        let code = factory_type(&f, &[str_value("urn:test"), str_value("Code")]).expect("тип");
-        let value = factory_create(&f, &[code.clone(), str_value("AB")]).expect("значение");
+        let code = factory_type(ob(&f), &[str_value("urn:test"), str_value("Code")]).expect("тип");
+        let value = factory_create(ob(&f), &[code.clone(), str_value("AB")]).expect("значение");
         assert_eq!(
             value.type_of().unwrap(),
             BslValue::Type(TypeId::XdtoDataValue)
@@ -7422,19 +7414,19 @@ mod tests {
         assert_eq!(text_of(&prop(&value, "ЛексическоеЗначение")), "AB");
         // Лексическая форма разбирается по ТИПУ: свой тип наследует
         // отображение базового, а встроенный числовой даёт число.
-        let int = factory_type(&f, &[str_value(XSD_NS), str_value("int")]).expect("тип");
-        let number = factory_create(&f, &[int.clone(), str_value("-42")]).expect("значение");
+        let int = factory_type(ob(&f), &[str_value(XSD_NS), str_value("int")]).expect("тип");
+        let number = factory_create(ob(&f), &[int.clone(), str_value("-42")]).expect("значение");
         assert_eq!(number_of(&prop(&number, "Значение")), -42);
         // Без лексической формы — `Неопределено` (измерено).
         assert_eq!(
-            factory_create(&f, std::slice::from_ref(&int)).expect("вызов"),
+            factory_create(ob(&f), std::slice::from_ref(&int)).expect("вызов"),
             BslValue::Undefined
         );
         // Третий аргумент платформа принимает, четвёртый — уже нет.
-        assert!(factory_create(&f, &[int.clone(), str_value("1"), number_value(1)]).is_ok());
+        assert!(factory_create(ob(&f), &[int.clone(), str_value("1"), number_value(1)]).is_ok());
         assert!(
             factory_create(
-                &f,
+                ob(&f),
                 &[
                     int.clone(),
                     str_value("1"),
@@ -7445,12 +7437,12 @@ mod tests {
             .is_err()
         );
         // Не разбирающаяся форма — ошибка, а не подстановка.
-        assert!(factory_create(&f, &[int, str_value("ерунда")]).is_err());
+        assert!(factory_create(ob(&f), &[int, str_value("ерунда")]).is_err());
         // Первый аргумент — обязательно тип XDTO, а лексическая форма —
         // обязательно строка (нестроковую см. в шапке модуля).
-        assert!(factory_create(&f, &[str_value("string"), str_value("аб")]).is_err());
-        assert!(factory_create(&f, &[code, number_value(42)]).is_err());
-        assert!(factory_create(&f, &[]).is_err());
+        assert!(factory_create(ob(&f), &[str_value("string"), str_value("аб")]).is_err());
+        assert!(factory_create(ob(&f), &[code, number_value(42)]).is_err());
+        assert!(factory_create(ob(&f), &[]).is_err());
     }
 
     /// `Создать` от типа ОБЪЕКТА даёт экземпляр: он печатается своим
@@ -7458,38 +7450,39 @@ mod tests {
     #[test]
     fn factory_create_builds_an_object_that_knows_its_type() {
         let f = factory(SAMPLE);
-        let root = factory_type(&f, &[str_value("urn:test"), str_value("RootType")]).expect("тип");
-        let object = factory_create(&f, std::slice::from_ref(&root)).expect("экземпляр");
+        let root =
+            factory_type(ob(&f), &[str_value("urn:test"), str_value("RootType")]).expect("тип");
+        let object = factory_create(ob(&f), std::slice::from_ref(&root)).expect("экземпляр");
         assert_eq!(object.to_string(), "ОбъектXDTO");
         assert_eq!(
             object.type_of().unwrap(),
             BslValue::Type(TypeId::XdtoDataObject)
         );
         assert_eq!(TypeId::XdtoDataObject.name(), "Объект XDTO");
-        assert_eq!(object_type(&object, &[]).expect("тип"), root);
+        assert_eq!(object_type(ob(&object), &[]).expect("тип"), root);
         // Аргументов у `Тип()` нет, а два экземпляра одного типа не равны
         // (измерено обе стороны).
-        assert!(object_type(&object, &[number_value(1)]).is_err());
-        assert_ne!(object, factory_create(&f, &[root]).expect("экземпляр"));
+        assert!(object_type(ob(&object), &[number_value(1)]).is_err());
+        assert_ne!(object, factory_create(ob(&f), &[root]).expect("экземпляр"));
         // Лексической формы тип объекта не берёт, абстрактный тип
         // экземпляров не имеет (измерено).
         let abstr =
-            factory_type(&f, &[str_value("urn:test"), str_value("AbstrType")]).expect("тип");
-        assert!(factory_create(&f, &[abstr]).is_err());
+            factory_type(ob(&f), &[str_value("urn:test"), str_value("AbstrType")]).expect("тип");
+        assert!(factory_create(ob(&f), &[abstr]).is_err());
         let empty =
-            factory_type(&f, &[str_value("urn:test"), str_value("EmptyType")]).expect("тип");
-        assert!(factory_create(&f, &[empty.clone(), str_value("аб")]).is_err());
-        assert!(factory_create(&f, &[empty]).is_ok());
+            factory_type(ob(&f), &[str_value("urn:test"), str_value("EmptyType")]).expect("тип");
+        assert!(factory_create(ob(&f), &[empty.clone(), str_value("аб")]).is_err());
+        assert!(factory_create(ob(&f), &[empty]).is_ok());
         // Незаполненное свойство — `Неопределено`, а постороннее имя —
         // ошибка (измерено обе стороны).
         assert_eq!(
-            get_property(&object, "name").expect("свойство читается"),
+            get_property(ob(&object), "name").expect("свойство читается"),
             BslValue::Undefined
         );
-        assert!(get_property(&object, "нетТакого").is_err());
+        assert!(get_property(ob(&object), "нетТакого").is_err());
         // `Тип` у экземпляра — метод, а не член: обращение как к свойству
         // отвечает ошибкой (измерено).
-        assert!(get_property(&object, "Тип").is_err());
+        assert!(get_property(ob(&object), "Тип").is_err());
     }
 
     /// Фабрика по набору схем строится только из набора: путь, схема и
@@ -7523,7 +7516,7 @@ mod tests {
         // `ЗначениеЗаполнено` от фабрики — ошибка (измерено).
         assert!(empty.is_filled().is_err());
         // Постороннего члена у фабрики нет.
-        assert!(get_property(&empty, "Пакеты").is_err());
+        assert!(get_property(ob(&empty), "Пакеты").is_err());
     }
 
     /// `СоздатьФабрикуXDTO` читает файл: несуществующий путь, нестроковый
@@ -7543,7 +7536,7 @@ mod tests {
         .expect("временный файл пишется");
         let f = factory_of_file(&[str_value(&path.to_string_lossy())]).expect("фабрика");
         assert_eq!(
-            factory_type(&f, &[str_value("urn:f"), str_value("Code")])
+            factory_type(ob(&f), &[str_value("urn:f"), str_value("Code")])
                 .expect("тип")
                 .to_string(),
             "{urn:f}Code"
@@ -7579,8 +7572,8 @@ mod tests {
 
     /// Экземпляр `RootType` из фабрики над [`SAMPLE`].
     fn instance(f: &BslValue, name: &str) -> BslValue {
-        let t = factory_type(f, &[str_value("urn:test"), str_value(name)]).expect("тип");
-        factory_create(f, &[t]).expect("экземпляр")
+        let t = factory_type(ob(f), &[str_value("urn:test"), str_value(name)]).expect("тип");
+        factory_create(ob(f), &[t]).expect("экземпляр")
     }
 
     /// Чтение свежего экземпляра: пусто там, где ничего не объявлено, и
@@ -7603,7 +7596,7 @@ mod tests {
         assert_eq!(TypeId::XdtoList.name(), "Список XDTO");
         assert_eq!(list.collection_len().expect("длина"), 0);
         // Постороннее имя — ошибка, а не `Неопределено` (измерено).
-        assert!(get_property(&o, "нетТакого").is_err());
+        assert!(get_property(ob(&o), "нетТакого").is_err());
         // Унаследованное свойство читается у наследника так же.
         assert_eq!(prop(&instance(&f, "ExtType"), "def"), number_value(7));
     }
@@ -7614,43 +7607,43 @@ mod tests {
     fn writing_a_property_goes_through_the_lexical_form() {
         let f = factory(SAMPLE);
         let o = instance(&f, "RootType");
-        set_property(&o, "name", str_value("аб")).expect("строка в строку");
+        set_property(ob(&o), "name", str_value("аб")).expect("строка в строку");
         assert_eq!(text_of(&prop(&o, "name")), "аб");
         // Регистр имени не важен и на записи (измерено).
-        set_property(&o, "NAME", number_value(5)).expect("число в строку");
+        set_property(ob(&o), "NAME", number_value(5)).expect("число в строку");
         assert_eq!(text_of(&prop(&o, "name")), "5");
-        set_property(&o, "name", BslValue::Boolean(true)).expect("булево в строку");
+        set_property(ob(&o), "name", BslValue::Boolean(true)).expect("булево в строку");
         assert_eq!(text_of(&prop(&o, "name")), "true");
         let day = BslValue::Date(bsl_rt::BslDate::from_civil(2026, 8, 13, 0, 0, 0).expect("дата"));
-        set_property(&o, "name", day.clone()).expect("дата в строку");
+        set_property(ob(&o), "name", day.clone()).expect("дата в строку");
         assert_eq!(text_of(&prop(&o, "name")), "2026-08-13T00:00:00");
         // В `xs:int` строка цифрами проходит, а «true» — нет: это не его
         // лексическая форма (измерено обе стороны).
-        set_property(&o, "id", str_value("5")).expect("строка в число");
+        set_property(ob(&o), "id", str_value("5")).expect("строка в число");
         assert_eq!(prop(&o, "id"), number_value(5));
-        assert!(set_property(&o, "id", BslValue::Boolean(true)).is_err());
+        assert!(set_property(ob(&o), "id", BslValue::Boolean(true)).is_err());
         // `Неопределено` и `Null` не пишутся вовсе — сброс делает
         // `Сбросить` (измерено).
-        assert!(set_property(&o, "name", BslValue::Undefined).is_err());
-        assert!(set_property(&o, "name", BslValue::Null).is_err());
+        assert!(set_property(ob(&o), "name", BslValue::Undefined).is_err());
+        assert!(set_property(ob(&o), "name", BslValue::Null).is_err());
         // `ЗначениеXDTO` принимается, и берётся из него ЗНАЧЕНИЕ: тип
         // источника может быть другим (измерено).
         let int_type = factory_type(
-            &f,
+            ob(&f),
             &[
                 str_value("http://www.w3.org/2001/XMLSchema"),
                 str_value("string"),
             ],
         )
         .expect("тип");
-        let value = factory_create(&f, &[int_type, str_value("5")]).expect("значение");
-        set_property(&o, "id", value).expect("значение XDTO в число");
+        let value = factory_create(ob(&f), &[int_type, str_value("5")]).expect("значение");
+        set_property(ob(&o), "id", value).expect("значение XDTO в число");
         assert_eq!(prop(&o, "id"), number_value(5));
         // Множественное свойство присваиванием не пишется (измерено).
-        assert!(set_property(&o, "code", str_value("AB")).is_err());
-        assert!(set_property(&o, "нетТакого", str_value("аб")).is_err());
+        assert!(set_property(ob(&o), "code", str_value("AB")).is_err());
+        assert!(set_property(ob(&o), "нетТакого", str_value("аб")).is_err());
         // Свойство типа `anyType` принимает что угодно как есть (измерено).
-        set_property(&o, "notype", number_value(5)).expect("число в anyType");
+        set_property(ob(&o), "notype", number_value(5)).expect("число в anyType");
         assert_eq!(prop(&o, "notype"), number_value(5));
     }
 
@@ -7660,39 +7653,39 @@ mod tests {
         let f = factory(SAMPLE);
         let o = instance(&f, "RootType");
         let list = prop(&o, "code");
-        list_add(&list, &[str_value("AB")]).expect("добавление");
+        list_add(ob(&list), &[str_value("AB")]).expect("добавление");
         // Видно через второе чтение свойства, и два чтения РАВНЫ
         // (измерено обе стороны).
         assert_eq!(prop(&o, "code").collection_len().expect("длина"), 1);
         assert_eq!(prop(&o, "code"), prop(&o, "code"));
         assert_eq!(prop(&list, "Владелец"), o);
         // В списке лежит само значение, а не `ЗначениеXDTO` (измерено).
-        assert_eq!(text_of(&list_get(&list, 0).expect("элемент")), "AB");
-        assert!(list_get(&list, 1).is_err());
+        assert_eq!(text_of(&list_get(ob(&list), 0).expect("элемент")), "AB");
+        assert!(list_get(ob(&list), 1).is_err());
         // Приведение то же, что при записи свойства.
-        list_add(&prop(&o, "many5"), &[number_value(5)]).expect("число в строку");
+        list_add(ob(&prop(&o, "many5")), &[number_value(5)]).expect("число в строку");
         assert_eq!(
-            text_of(&list_get(&prop(&o, "many5"), 0).expect("элемент")),
+            text_of(&list_get(ob(&prop(&o, "many5")), 0).expect("элемент")),
             "5"
         );
-        assert!(list_add(&list, &[BslValue::Undefined]).is_err());
+        assert!(list_add(ob(&list), &[BslValue::Undefined]).is_err());
         // `Вставить` встаёт на место указанного элемента, `Удалить` и
         // `Очистить` работают по позиции (измерено).
-        list_insert(&list, &[number_value(0), str_value("CD")]).expect("вставка");
-        assert_eq!(text_of(&list_get(&list, 0).expect("элемент")), "CD");
+        list_insert(ob(&list), &[number_value(0), str_value("CD")]).expect("вставка");
+        assert_eq!(text_of(&list_get(ob(&list), 0).expect("элемент")), "CD");
         assert_eq!(list.collection_len().expect("длина"), 2);
-        list_set(&list, &[number_value(0), str_value("EF")]).expect("установка");
-        assert_eq!(text_of(&list_get(&list, 0).expect("элемент")), "EF");
-        assert!(list_set(&list, &[number_value(9), str_value("EF")]).is_err());
+        list_set(ob(&list), &[number_value(0), str_value("EF")]).expect("установка");
+        assert_eq!(text_of(&list_get(ob(&list), 0).expect("элемент")), "EF");
+        assert!(list_set(ob(&list), &[number_value(9), str_value("EF")]).is_err());
         // `Вставить` требует ЗАНЯТОЙ позиции: ни за концом, ни в пустой
         // список платформа не вставляет (измерено оба).
-        assert!(list_insert(&list, &[number_value(2), str_value("EF")]).is_err());
-        list_delete(&list, &number_value(0)).expect("удаление");
+        assert!(list_insert(ob(&list), &[number_value(2), str_value("EF")]).is_err());
+        list_delete(ob(&list), &number_value(0)).expect("удаление");
         assert_eq!(list.collection_len().expect("длина"), 1);
-        list_clear(&list).expect("очистка");
+        list_clear(ob(&list)).expect("очистка");
         assert_eq!(list.collection_len().expect("длина"), 0);
-        assert!(list_delete(&list, &number_value(0)).is_err());
-        assert!(list_insert(&list, &[number_value(0), str_value("EF")]).is_err());
+        assert!(list_delete(ob(&list), &number_value(0)).is_err());
+        assert!(list_insert(ob(&list), &[number_value(0), str_value("EF")]).is_err());
     }
 
     /// Члены экземпляра: заполненность — это ЗАПИСЬ, а не наличие
@@ -7704,50 +7697,50 @@ mod tests {
         // У свойства с `default` чтение даёт 7, а `Установлено` — «Нет»
         // (измерено).
         assert_eq!(
-            object_is_set(&o, &[str_value("def")]).expect("установлено"),
+            object_is_set(ob(&o), &[str_value("def")]).expect("установлено"),
             BslValue::Boolean(false)
         );
-        object_set(&o, &[str_value("name"), str_value("аб")]).expect("установка");
+        object_set(ob(&o), &[str_value("name"), str_value("аб")]).expect("установка");
         assert_eq!(
-            object_is_set(&o, &[str_value("name")]).expect("установлено"),
+            object_is_set(ob(&o), &[str_value("name")]).expect("установлено"),
             BslValue::Boolean(true)
         );
         assert_eq!(
-            text_of(&object_get(&o, &[str_value("name")]).expect("чтение")),
+            text_of(&object_get(ob(&o), &[str_value("name")]).expect("чтение")),
             "аб"
         );
         // Свойство можно назвать и объектом `СвойствоXDTO` (измерено).
-        let properties = prop(&object_type(&o, &[]).expect("тип"), "Свойства");
-        let name = collection_lookup(&properties, &[str_value("name")]).expect("свойство");
+        let properties = prop(&object_type(ob(&o), &[]).expect("тип"), "Свойства");
+        let name = collection_lookup(ob(&properties), &[str_value("name")]).expect("свойство");
         assert_eq!(
-            text_of(&object_get(&o, std::slice::from_ref(&name)).expect("чтение")),
+            text_of(&object_get(ob(&o), std::slice::from_ref(&name)).expect("чтение")),
             "аб"
         );
-        object_unset(&o, &[name]).expect("сброс");
+        object_unset(ob(&o), &[name]).expect("сброс");
         assert_eq!(prop(&o, "name"), BslValue::Undefined);
         // Множественное свойство `Получить` не отдаёт, а `ПолучитьСписок`
         // отдаёт — и это тот же список (измерено).
-        assert!(object_get(&o, &[str_value("code")]).is_err());
-        let list = object_get_list(&o, &[str_value("code")]).expect("список");
-        list_add(&list, &[str_value("AB")]).expect("добавление");
+        assert!(object_get(ob(&o), &[str_value("code")]).is_err());
+        let list = object_get_list(ob(&o), &[str_value("code")]).expect("список");
+        list_add(ob(&list), &[str_value("AB")]).expect("добавление");
         assert_eq!(prop(&o, "code").collection_len().expect("длина"), 1);
-        assert!(object_get_list(&o, &[str_value("name")]).is_err());
+        assert!(object_get_list(ob(&o), &[str_value("name")]).is_err());
         // Постороннее имя — ошибка у всех четырёх (измерено).
-        assert!(object_get(&o, &[str_value("нетТакого")]).is_err());
-        assert!(object_is_set(&o, &[str_value("нетТакого")]).is_err());
-        assert!(object_unset(&o, &[str_value("нетТакого")]).is_err());
-        assert!(object_get_list(&o, &[str_value("нетТакого")]).is_err());
+        assert!(object_get(ob(&o), &[str_value("нетТакого")]).is_err());
+        assert!(object_is_set(ob(&o), &[str_value("нетТакого")]).is_err());
+        assert!(object_unset(ob(&o), &[str_value("нетТакого")]).is_err());
+        assert!(object_get_list(ob(&o), &[str_value("нетТакого")]).is_err());
         // `Свойства()` — коллекция свойств СВОЕГО типа, `Владелец()` у
         // отдельно созданного объекта — `Неопределено` (измерено).
         assert_eq!(
-            object_properties(&o, &[])
+            object_properties(ob(&o), &[])
                 .expect("свойства")
                 .collection_len()
                 .expect("длина"),
             properties.collection_len().expect("длина")
         );
         assert_eq!(
-            object_owner(&o, &[]).expect("владелец"),
+            object_owner(ob(&o), &[]).expect("владелец"),
             BslValue::Undefined
         );
     }
@@ -7760,36 +7753,36 @@ mod tests {
         let o = instance(&f, "RootType");
         let anon = prop(
             &collection_lookup(
-                &prop(&object_type(&o, &[]).expect("тип"), "Свойства"),
+                ob(&prop(&object_type(ob(&o), &[]).expect("тип"), "Свойства")),
                 &[str_value("anon")],
             )
             .expect("свойство"),
             "Тип",
         );
-        let nested = factory_create(&f, &[anon]).expect("экземпляр анонимного типа");
-        set_property(&o, "anon", nested.clone()).expect("объект в объектное свойство");
+        let nested = factory_create(ob(&f), &[anon]).expect("экземпляр анонимного типа");
+        set_property(ob(&o), "anon", nested.clone()).expect("объект в объектное свойство");
         // Записан ТОТ ЖЕ объект, и владелец у него — приёмник (измерено).
         assert_eq!(prop(&o, "anon"), nested);
-        assert_eq!(object_owner(&nested, &[]).expect("владелец"), o);
+        assert_eq!(object_owner(ob(&nested), &[]).expect("владелец"), o);
         // Посторонний тип в это свойство не пишется (измерено; наследник
         // объявленного — пишется, но в этой схеме объектного свойства с
         // ИМЕНОВАННЫМ типом нет, и проверено это на платформе).
-        assert!(set_property(&o, "anon", instance(&f, "EmptyType")).is_err());
+        assert!(set_property(ob(&o), "anon", instance(&f, "EmptyType")).is_err());
         // `Проверить` смотрит и внутрь: вложенный объект пуст, а `inner`
         // у него обязателен (измерено).
-        assert!(object_validate(&o, &[]).is_err());
-        object_validate(&instance(&f, "EmptyType"), &[]).expect("пустой тип проходит");
-        set_property(&nested, "inner", number_value(1)).expect("запись во вложенный");
-        set_property(&o, "name", str_value("аб")).expect("запись");
-        set_property(&o, "uq", str_value("вг")).expect("запись");
-        set_property(&o, "id", number_value(1)).expect("запись");
-        list_add(&prop(&o, "many5"), &[str_value("я")]).expect("добавление");
-        object_validate(&o, &[]).expect("заполненный объект проходит");
+        assert!(object_validate(ob(&o), &[]).is_err());
+        object_validate(ob(&instance(&f, "EmptyType")), &[]).expect("пустой тип проходит");
+        set_property(ob(&nested), "inner", number_value(1)).expect("запись во вложенный");
+        set_property(ob(&o), "name", str_value("аб")).expect("запись");
+        set_property(ob(&o), "uq", str_value("вг")).expect("запись");
+        set_property(ob(&o), "id", number_value(1)).expect("запись");
+        list_add(ob(&prop(&o, "many5")), &[str_value("я")]).expect("добавление");
+        object_validate(ob(&o), &[]).expect("заполненный объект проходит");
         // Верхняя граница тоже проверяется: у `many5` она 5 (измерено).
         for _ in 0..5 {
-            list_add(&prop(&o, "many5"), &[str_value("я")]).expect("добавление");
+            list_add(ob(&prop(&o, "many5")), &[str_value("я")]).expect("добавление");
         }
-        assert!(object_validate(&o, &[]).is_err());
+        assert!(object_validate(ob(&o), &[]).is_err());
     }
 
     /// Последовательность — порядок заполнения свойств-элементов; у
@@ -7800,57 +7793,57 @@ mod tests {
         // `xs:sequence` — упорядоченный тип, у него `Неопределено`
         // (измерено), а `xs:choice` и `xs:all` — последовательные.
         assert_eq!(
-            object_sequence(&instance(&f, "RootType"), &[]).expect("последовательность"),
+            object_sequence(ob(&instance(&f, "RootType")), &[]).expect("последовательность"),
             BslValue::Undefined
         );
         let o = instance(&f, "ChoiceType");
-        let seq = object_sequence(&o, &[]).expect("последовательность");
+        let seq = object_sequence(ob(&o), &[]).expect("последовательность");
         assert_eq!(seq.to_string(), "ПоследовательностьXDTO");
         assert_eq!(seq.type_of().unwrap(), BslValue::Type(TypeId::XdtoSequence));
         assert_eq!(TypeId::XdtoSequence.name(), "Последовательность XDTO");
         assert_eq!(seq.collection_len().expect("длина"), 0);
         // Порядок: заполнение элементов, атрибут в него не попадает
         // (измерено).
-        list_add(&prop(&o, "cb"), &[str_value("аб")]).expect("добавление");
-        set_property(&o, "ca", str_value("вг")).expect("запись");
-        set_property(&o, "cat", str_value("атрибут")).expect("запись атрибута");
-        list_add(&prop(&o, "cb"), &[str_value("де")]).expect("добавление");
+        list_add(ob(&prop(&o, "cb")), &[str_value("аб")]).expect("добавление");
+        set_property(ob(&o), "ca", str_value("вг")).expect("запись");
+        set_property(ob(&o), "cat", str_value("атрибут")).expect("запись атрибута");
+        list_add(ob(&prop(&o, "cb")), &[str_value("де")]).expect("добавление");
         assert_eq!(seq.collection_len().expect("длина"), 3);
         assert_eq!(
-            text_of(&sequence_value(&seq, &[number_value(1)]).expect("значение")),
+            text_of(&sequence_value(ob(&seq), &[number_value(1)]).expect("значение")),
             "вг"
         );
         assert_eq!(
-            sequence_property(&seq, &[number_value(1)])
+            sequence_property(ob(&seq), &[number_value(1)])
                 .expect("свойство")
                 .to_string(),
             "ca"
         );
-        assert!(sequence_value(&seq, &[number_value(3)]).is_err());
+        assert!(sequence_value(ob(&seq), &[number_value(3)]).is_err());
         // Повторная запись одиночного свойства своё место сохраняет
         // (измерено).
-        set_property(&o, "ca", str_value("же")).expect("повторная запись");
+        set_property(ob(&o), "ca", str_value("же")).expect("повторная запись");
         assert_eq!(seq.collection_len().expect("длина"), 3);
         assert_eq!(
-            text_of(&sequence_value(&seq, &[number_value(1)]).expect("значение")),
+            text_of(&sequence_value(ob(&seq), &[number_value(1)]).expect("значение")),
             "же"
         );
         // `Владелец` у последовательности — ЧЛЕН (измерено), а два вызова
         // `Последовательность()` дают равные значения.
         assert_eq!(prop(&seq, "Владелец"), o);
-        assert_eq!(object_sequence(&o, &[]).expect("вторая"), seq);
+        assert_eq!(object_sequence(ob(&o), &[]).expect("вторая"), seq);
         // `Добавить` берёт именно `СвойствоXDTO` и именно элемент, а
         // заполнение видно через само свойство (измерено).
-        let properties = prop(&object_type(&o, &[]).expect("тип"), "Свойства");
-        let ca = collection_lookup(&properties, &[str_value("ca")]).expect("свойство");
-        let cat = collection_lookup(&properties, &[str_value("cat")]).expect("свойство");
-        sequence_add(&seq, &[ca, str_value("зи")]).expect("добавление");
+        let properties = prop(&object_type(ob(&o), &[]).expect("тип"), "Свойства");
+        let ca = collection_lookup(ob(&properties), &[str_value("ca")]).expect("свойство");
+        let cat = collection_lookup(ob(&properties), &[str_value("cat")]).expect("свойство");
+        sequence_add(ob(&seq), &[ca, str_value("зи")]).expect("добавление");
         assert_eq!(seq.collection_len().expect("длина"), 4);
         assert_eq!(text_of(&prop(&o, "ca")), "зи");
-        assert!(sequence_add(&seq, &[cat, str_value("к")]).is_err());
-        assert!(sequence_add(&seq, &[str_value("ca"), str_value("к")]).is_err());
+        assert!(sequence_add(ob(&seq), &[cat, str_value("к")]).is_err());
+        assert!(sequence_add(ob(&seq), &[str_value("ca"), str_value("к")]).is_err());
         // `Очистить` забывает элементы, атрибут уцелевает (измерено).
-        sequence_clear(&seq).expect("очистка");
+        sequence_clear(ob(&seq)).expect("очистка");
         assert_eq!(seq.collection_len().expect("длина"), 0);
         assert_eq!(prop(&o, "ca"), BslValue::Undefined);
         assert_eq!(text_of(&prop(&o, "cat")), "атрибут");
@@ -7907,25 +7900,26 @@ mod tests {
     /// Читатель над текстом.
     fn reader(text: &str) -> BslValue {
         let value = crate::xml::new_xml_reader();
-        crate::xml::set_string(&value, &[str_value(text)]).expect("источник");
+        crate::xml::set_string(crate::xml::arg_object(&value).unwrap(), &[str_value(text)])
+            .expect("источник");
         value
     }
 
     /// Писатель в строку.
     fn writer() -> BslValue {
         let value = crate::xml::new_xml_writer();
-        crate::xml::set_string(&value, &[]).expect("приёмник");
+        crate::xml::set_string(crate::xml::arg_object(&value).unwrap(), &[]).expect("приёмник");
         value
     }
 
     /// Разбор текста типом схемы.
     fn read_with(f: &BslValue, type_name: &str, text: &str) -> RtResult<BslValue> {
-        factory_read_xml(f, &[reader(text), type_of_factory(f, type_name)])
+        factory_read_xml(ob(f), &[reader(text), type_of_factory(f, type_name)])
     }
 
     /// Тип фабрики по имени в `urn:test`.
     fn type_of_factory(f: &BslValue, name: &str) -> BslValue {
-        factory_type(f, &[str_value("urn:test"), str_value(name)]).expect("тип")
+        factory_type(ob(f), &[str_value("urn:test"), str_value(name)]).expect("тип")
     }
 
     /// Запись значения и снятие получившегося текста.
@@ -7935,8 +7929,8 @@ mod tests {
         for a in args {
             call.push(str_value(a));
         }
-        factory_write_xml(f, &call)?;
-        match crate::xml::close_writer(&w)? {
+        factory_write_xml(ob(f), &call)?;
+        match crate::xml::close_writer(crate::xml::arg_object(&w).unwrap())? {
             BslValue::Str(s) => Ok(s.to_string()),
             other => panic!("писатель отдал не строку: {other:?}"),
         }
@@ -7994,9 +7988,9 @@ mod tests {
     fn a_wildcard_opens_the_type_and_switches_the_write_order() {
         let f = factory(ORDER_SAMPLE);
         let filled = |name: &str| {
-            let o = factory_create(&f, &[type_of_factory(&f, name)]).expect("экземпляр");
-            set_property(&o, "b", str_value("бэ")).expect("b");
-            set_property(&o, "a", str_value("а")).expect("a");
+            let o = factory_create(ob(&f), &[type_of_factory(&f, name)]).expect("экземпляр");
+            set_property(ob(&o), "b", str_value("бэ")).expect("b");
+            set_property(ob(&o), "a", str_value("а")).expect("a");
             o
         };
         let is_open = |name: &str| prop(&type_of_factory(&f, name), "Открытый");
@@ -8055,12 +8049,12 @@ mod tests {
         // рекурсивно, и владельцем ему становится родитель.
         let tags = prop(&o, "tag");
         assert_eq!(tags.collection_len().expect("длина"), 2);
-        assert_eq!(text_of(&list_get(&tags, 0).expect("первый")), "один");
-        assert_eq!(text_of(&list_get(&tags, 1).expect("второй")), "два");
+        assert_eq!(text_of(&list_get(ob(&tags), 0).expect("первый")), "один");
+        assert_eq!(text_of(&list_get(ob(&tags), 1).expect("второй")), "два");
         let nested = prop(&o, "nested");
         assert_eq!(text_of(&prop(&nested, "in")), "вг");
         assert_eq!(text_of(&prop(&nested, "qi")), "х");
-        assert_eq!(object_owner(&nested, &[]).expect("владелец"), o);
+        assert_eq!(object_owner(ob(&nested), &[]).expect("владелец"), o);
         // Неквалифицированное свойство ищется по ПУСТОМУ пространству
         // имён, квалифицированное — по целевому.
         assert_eq!(text_of(&prop(&o, "uq")), "де");
@@ -8068,7 +8062,7 @@ mod tests {
         assert_eq!(prop(&o, "codes").collection_len().expect("длина"), 3);
         // Не встретившееся свойство остаётся НЕзаполненным.
         assert_eq!(
-            object_is_set(&o, &[str_value("nilt")]).expect("признак"),
+            object_is_set(ob(&o), &[str_value("nilt")]).expect("признак"),
             BslValue::Boolean(false)
         );
     }
@@ -8122,11 +8116,11 @@ mod tests {
         let f = factory(IO_SAMPLE);
         // Платформа читает такой вызов в ОТКРЫТОЕ содержимое `anyType`;
         // здесь его нет, и отказ честнее подмены разбором по схеме.
-        let err = factory_read_xml(&f, &[reader(IO_DOC)]);
+        let err = factory_read_xml(ob(&f), &[reader(IO_DOC)]);
         assert!(matches!(err, Err(RtError::Xdto(_))));
         // Тип обязан быть типом, а источник — читателем.
-        assert!(factory_read_xml(&f, &[reader(IO_DOC), str_value("RootType")]).is_err());
-        assert!(factory_read_xml(&f, &[str_value(IO_DOC)]).is_err());
+        assert!(factory_read_xml(ob(&f), &[reader(IO_DOC), str_value("RootType")]).is_err());
+        assert!(factory_read_xml(ob(&f), &[str_value(IO_DOC)]).is_err());
     }
 
     #[test]
@@ -8139,21 +8133,27 @@ mod tests {
         // Обёртку читатель проходит сам, а дальше два элемента подряд
         // читаются двумя вызовами БЕЗ `Прочитать()` между ними —
         // измерено, что после разбора читатель стоит на следующем узле.
-        crate::xml::read(&r).expect("обёртка");
-        crate::xml::read(&r).expect("первый корень");
+        crate::xml::read(crate::xml::arg_object(&r).unwrap()).expect("обёртка");
+        crate::xml::read(crate::xml::arg_object(&r).unwrap()).expect("первый корень");
         let t = type_of_factory(&f, "RootType");
-        let first = factory_read_xml(&f, &[r.clone(), t.clone()]).expect("первый");
-        assert_eq!(text_of(&crate::xml::name(&r).expect("имя")), "t:root");
-        let second = factory_read_xml(&f, &[r.clone(), t]).expect("второй");
+        let first = factory_read_xml(ob(&f), &[r.clone(), t.clone()]).expect("первый");
+        assert_eq!(
+            text_of(&crate::xml::name(crate::xml::arg_object(&r).unwrap()).expect("имя")),
+            "t:root"
+        );
+        let second = factory_read_xml(ob(&f), &[r.clone(), t]).expect("второй");
         assert_eq!(number_of(&prop(&first, "id")), 1);
         assert_eq!(number_of(&prop(&second, "id")), 2);
-        assert_eq!(text_of(&crate::xml::name(&r).expect("имя")), "хвост");
+        assert_eq!(
+            text_of(&crate::xml::name(crate::xml::arg_object(&r).unwrap()).expect("имя")),
+            "хвост"
+        );
         // На документе из одного корня читатель после разбора исчерпан.
         let single = reader(IO_DOC);
         let t = type_of_factory(&f, "RootType");
-        factory_read_xml(&f, &[single.clone(), t]).expect("корень");
+        factory_read_xml(ob(&f), &[single.clone(), t]).expect("корень");
         assert_eq!(
-            crate::xml::read(&single).expect("шаг"),
+            crate::xml::read(crate::xml::arg_object(&single).unwrap()).expect("шаг"),
             BslValue::Boolean(false)
         );
     }
@@ -8174,7 +8174,7 @@ mod tests {
         .expect("документ с nil");
         assert_eq!(prop(&o, "nilt"), BslValue::Undefined);
         assert_eq!(
-            object_is_set(&o, &[str_value("nilt")]).expect("признак"),
+            object_is_set(ob(&o), &[str_value("nilt")]).expect("признак"),
             BslValue::Boolean(true)
         );
         assert!(
@@ -8196,7 +8196,7 @@ mod tests {
         .expect("документ с xsi:type");
         let nested = prop(&derived, "nested");
         assert_eq!(
-            object_type(&nested, &[]).expect("тип").to_string(),
+            object_type(ob(&nested), &[]).expect("тип").to_string(),
             "{urn:test}InnerExt"
         );
         assert!(
@@ -8214,7 +8214,7 @@ mod tests {
         )
         .expect("неизвестный xsi:type игнорируется");
         assert_eq!(
-            object_type(&unknown, &[]).expect("тип").to_string(),
+            object_type(ob(&unknown), &[]).expect("тип").to_string(),
             "{urn:test}Inner"
         );
     }
@@ -8222,12 +8222,12 @@ mod tests {
     #[test]
     fn writing_follows_the_measured_lexical_forms() {
         let f = factory(IO_SAMPLE);
-        let o = factory_create(&f, &[type_of_factory(&f, "RootType")]).expect("экземпляр");
-        set_property(&o, "name", str_value("аб")).expect("строка");
-        set_property(&o, "dec", str_value("12.50")).expect("дробное");
-        set_property(&o, "when", str_value("2026-08-13")).expect("дата");
-        set_property(&o, "flag", BslValue::Boolean(true)).expect("булево");
-        set_property(&o, "bin", str_value("0LDQsQ==")).expect("двоичное");
+        let o = factory_create(ob(&f), &[type_of_factory(&f, "RootType")]).expect("экземпляр");
+        set_property(ob(&o), "name", str_value("аб")).expect("строка");
+        set_property(ob(&o), "dec", str_value("12.50")).expect("дробное");
+        set_property(ob(&o), "when", str_value("2026-08-13")).expect("дата");
+        set_property(ob(&o), "flag", BslValue::Boolean(true)).expect("булево");
+        set_property(ob(&o), "bin", str_value("0LDQsQ==")).expect("двоичное");
         let text = write_out(&f, &o, &["к"]).expect("запись");
         // Хвостовой ноль срезан, дата без времени, булево словом,
         // двоичное — base64 (всё измерено).
@@ -8251,23 +8251,23 @@ mod tests {
                 .starts_with("<RootType ")
         );
         // Пустая строка даёт схлопнутый элемент, а не пару тегов.
-        set_property(&o, "name", str_value("")).expect("пустая строка");
+        set_property(ob(&o), "name", str_value("")).expect("пустая строка");
         assert!(
             write_out(&f, &o, &["к"])
                 .expect("запись")
                 .contains("<name/>")
         );
         // Записывать можно только экземпляры.
-        assert!(factory_write_xml(&f, &[writer(), number_value(5)]).is_err());
+        assert!(factory_write_xml(ob(&f), &[writer(), number_value(5)]).is_err());
         // Пустое имя платформа отвергает — и здесь тоже.
-        assert!(factory_write_xml(&f, &[writer(), o.clone(), str_value("")]).is_err());
+        assert!(factory_write_xml(ob(&f), &[writer(), o.clone(), str_value("")]).is_err());
     }
 
     #[test]
     fn write_rejects_element_name_with_colon() {
         let f = factory(IO_SAMPLE);
-        let o = factory_create(&f, &[type_of_factory(&f, "RootType")]).expect("экземпляр");
-        set_property(&o, "name", str_value("аб")).expect("строка");
+        let o = factory_create(ob(&f), &[type_of_factory(&f, "RootType")]).expect("экземпляр");
+        set_property(ob(&o), "name", str_value("аб")).expect("строка");
         // Измерено (`зп имя с двоеточием`): `ЗаписатьXML(Зпис, ОбП,
         // "t:мой")` на 8.3.27 — ошибка, а не документ с префиксом `t`,
         // который никто не объявлял.
@@ -8301,13 +8301,13 @@ mod tests {
     fn write_of_cyclic_instance_is_a_catchable_error() {
         on_main_sized_stack(|| {
             let f = factory(IO_SAMPLE);
-            let o = factory_create(&f, &[type_of_factory(&f, "RootType")]).expect("экземпляр");
-            set_property(&o, "name", str_value("аб")).expect("строка");
+            let o = factory_create(ob(&f), &[type_of_factory(&f, "RootType")]).expect("экземпляр");
+            set_property(ob(&o), "name", str_value("аб")).expect("строка");
             // `notype` объявлен без типа, то есть `anyType`, и принимает
             // любое значение — в том числе своего же владельца. Такой цикл
             // обязан упереться в предел глубины и вернуться ошибкой, а не
             // уронить стек процесса.
-            set_property(&o, "notype", o.clone()).expect("ссылка на себя");
+            set_property(ob(&o), "notype", o.clone()).expect("ссылка на себя");
             assert!(
                 matches!(write_out(&f, &o, &["к"]), Err(RtError::Xdto(_))),
                 "циклический экземпляр обязан давать перехватываемую ошибку"
@@ -8319,16 +8319,17 @@ mod tests {
     fn write_deeper_than_limit_is_a_catchable_error() {
         on_main_sized_stack(|| {
             let f = factory(IO_SAMPLE);
-            let root = factory_create(&f, &[type_of_factory(&f, "RootType")]).expect("экземпляр");
-            set_property(&root, "name", str_value("аб")).expect("строка");
+            let root =
+                factory_create(ob(&f), &[type_of_factory(&f, "RootType")]).expect("экземпляр");
+            set_property(ob(&root), "name", str_value("аб")).expect("строка");
             // Честная цепочка без цикла, но глубже предела: спуск записи
             // рекурсивный, и ограничение у него то же, что у разбора.
             let mut current = root.clone();
             for _ in 0..MAX_XDTO_DEPTH + 5 {
                 let next =
-                    factory_create(&f, &[type_of_factory(&f, "RootType")]).expect("экземпляр");
-                set_property(&next, "name", str_value("аб")).expect("строка");
-                set_property(&current, "notype", next.clone()).expect("вложение");
+                    factory_create(ob(&f), &[type_of_factory(&f, "RootType")]).expect("экземпляр");
+                set_property(ob(&next), "name", str_value("аб")).expect("строка");
+                set_property(ob(&current), "notype", next.clone()).expect("вложение");
                 current = next;
             }
             assert!(
@@ -8343,10 +8344,10 @@ mod tests {
         let f = factory(IO_SAMPLE);
         // У УПОРЯДОЧЕННОГО типа порядок модельный, независимо от того, в
         // каком порядке свойства заполняли (измерено).
-        let o = factory_create(&f, &[type_of_factory(&f, "RootType")]).expect("экземпляр");
-        set_property(&o, "num", number_value(42)).expect("число");
-        set_property(&o, "name", str_value("аб")).expect("строка");
-        set_property(&o, "id", number_value(7)).expect("атрибут");
+        let o = factory_create(ob(&f), &[type_of_factory(&f, "RootType")]).expect("экземпляр");
+        set_property(ob(&o), "num", number_value(42)).expect("число");
+        set_property(ob(&o), "name", str_value("аб")).expect("строка");
+        set_property(ob(&o), "id", number_value(7)).expect("атрибут");
         assert_eq!(
             write_out(&f, &o, &["к"]).expect("запись"),
             concat!(
@@ -8356,10 +8357,10 @@ mod tests {
             )
         );
         // У ПОСЛЕДОВАТЕЛЬНОГО (`xs:choice`) — порядок заполнения.
-        let c = factory_create(&f, &[type_of_factory(&f, "ChoiceType")]).expect("экземпляр");
-        list_add(&prop(&c, "cb"), &[str_value("б1")]).expect("добавление");
-        list_add(&prop(&c, "ca"), &[str_value("а1")]).expect("добавление");
-        list_add(&prop(&c, "cb"), &[str_value("б2")]).expect("добавление");
+        let c = factory_create(ob(&f), &[type_of_factory(&f, "ChoiceType")]).expect("экземпляр");
+        list_add(ob(&prop(&c, "cb")), &[str_value("б1")]).expect("добавление");
+        list_add(ob(&prop(&c, "ca")), &[str_value("а1")]).expect("добавление");
+        list_add(ob(&prop(&c, "cb")), &[str_value("б2")]).expect("добавление");
         let text = write_out(&f, &c, &["в"]).expect("запись");
         assert!(
             text.contains("\t<cb>б1</cb>\n\t<ca>а1</ca>\n\t<cb>б2</cb>\n"),
@@ -8370,9 +8371,9 @@ mod tests {
     #[test]
     fn writing_declares_namespaces_the_way_the_platform_does() {
         let f = factory(IO_SAMPLE);
-        let o = factory_create(&f, &[type_of_factory(&f, "RootType")]).expect("экземпляр");
-        set_property(&o, "name", str_value("аб")).expect("строка");
-        set_property(&o, "uq", str_value("де")).expect("неквалифицированное");
+        let o = factory_create(ob(&f), &[type_of_factory(&f, "RootType")]).expect("экземпляр");
+        set_property(ob(&o), "name", str_value("аб")).expect("строка");
+        set_property(ob(&o), "uq", str_value("де")).expect("неквалифицированное");
         // Неквалифицированное свойство отменяет умолчательное объявление.
         assert!(
             write_out(&f, &o, &["к"])
@@ -8382,7 +8383,7 @@ mod tests {
         // Квалифицированному АТРИБУТУ умолчательное объявление не годится
         // — ему заводится префикс `d<глубина>p<номер>`, а сам элемент
         // остаётся на умолчании (измерено).
-        set_property(&o, "qa", str_value("де")).expect("атрибут");
+        set_property(ob(&o), "qa", str_value("де")).expect("атрибут");
         let text = write_out(&f, &o, &["к"]).expect("запись");
         assert!(
             text.starts_with(r#"<к xmlns="urn:test" xmlns:d1p1="urn:test" "#),
@@ -8391,12 +8392,12 @@ mod tests {
         assert!(text.contains(r#" d1p1:qa="де""#), "{text}");
         // На втором уровне номер глубины другой, и там уже сам элемент
         // уходит под префикс, а за ним и его дети (измерено).
-        let o2 = factory_create(&f, &[type_of_factory(&f, "RootType")]).expect("экземпляр");
-        set_property(&o2, "name", str_value("аб")).expect("строка");
-        let inner = factory_create(&f, &[type_of_factory(&f, "Inner")]).expect("вложенный");
-        set_property(&inner, "in", str_value("вг")).expect("строка");
-        set_property(&inner, "qi", str_value("х")).expect("атрибут");
-        set_property(&o2, "nested", inner).expect("вложение");
+        let o2 = factory_create(ob(&f), &[type_of_factory(&f, "RootType")]).expect("экземпляр");
+        set_property(ob(&o2), "name", str_value("аб")).expect("строка");
+        let inner = factory_create(ob(&f), &[type_of_factory(&f, "Inner")]).expect("вложенный");
+        set_property(ob(&inner), "in", str_value("вг")).expect("строка");
+        set_property(ob(&inner), "qi", str_value("х")).expect("атрибут");
+        set_property(ob(&o2), "nested", inner).expect("вложение");
         let text = write_out(&f, &o2, &["к"]).expect("запись");
         assert!(
             text.contains(r#"<d2p1:nested xmlns:d2p1="urn:test" d2p1:qi="х">"#),
@@ -8404,8 +8405,8 @@ mod tests {
         );
         assert!(text.contains("<d2p1:in>вг</d2p1:in>"), "{text}");
         // Чужой URI элемента заставляет объявиться и свойства.
-        let o3 = factory_create(&f, &[type_of_factory(&f, "RootType")]).expect("экземпляр");
-        set_property(&o3, "name", str_value("аб")).expect("строка");
+        let o3 = factory_create(ob(&f), &[type_of_factory(&f, "RootType")]).expect("экземпляр");
+        set_property(ob(&o3), "name", str_value("аб")).expect("строка");
         let text = write_out(&f, &o3, &["мой", "urn:иное"]).expect("запись");
         assert!(text.starts_with(r#"<мой xmlns="urn:иное" "#), "{text}");
         assert!(
@@ -8417,8 +8418,8 @@ mod tests {
     #[test]
     fn any_type_properties_carry_the_type_of_their_value() {
         let f = factory(IO_SAMPLE);
-        let o = factory_create(&f, &[type_of_factory(&f, "RootType")]).expect("экземпляр");
-        set_property(&o, "name", str_value("аб")).expect("строка");
+        let o = factory_create(ob(&f), &[type_of_factory(&f, "RootType")]).expect("экземпляр");
+        set_property(ob(&o), "name", str_value("аб")).expect("строка");
         // Свойство типа `anyType` принимает что угодно, и запись
         // помечает элемент типом ЗНАЧЕНИЯ (измерено поимённо).
         for (value, marked) in [
@@ -8435,7 +8436,7 @@ mod tests {
                 r#"<notype xsi:type="xs:string">аб</notype>"#,
             ),
         ] {
-            set_property(&o, "notype", value).expect("любое значение");
+            set_property(ob(&o), "notype", value).expect("любое значение");
             let text = write_out(&f, &o, &["к"]).expect("запись");
             assert!(text.contains(marked), "{text}");
         }
@@ -8481,14 +8482,14 @@ mod tests {
     fn values_of_simple_types_read_and_write_as_values() {
         let f = factory(IO_SAMPLE);
         let xsd = factory_type(
-            &f,
+            ob(&f),
             &[
                 str_value("http://www.w3.org/2001/XMLSchema"),
                 str_value("int"),
             ],
         )
         .expect("тип");
-        let value = factory_read_xml(&f, &[reader("<число>42</число>"), xsd.clone()])
+        let value = factory_read_xml(ob(&f), &[reader("<число>42</число>"), xsd.clone()])
             .expect("значение обязано читаться");
         assert_eq!(number_of(&prop(&value, "Значение")), 42);
         assert_eq!(text_of(&prop(&value, "ЛексическоеЗначение")), "42");
@@ -8503,8 +8504,8 @@ mod tests {
         );
         // Посторонний атрибут у элемента простого типа платформа
         // отвергает (измерено), и битая лексика — тоже.
-        assert!(factory_read_xml(&f, &[reader(r#"<ч а="1">42</ч>"#), xsd.clone()]).is_err());
-        assert!(factory_read_xml(&f, &[reader("<ч>ab</ч>"), xsd]).is_err());
+        assert!(factory_read_xml(ob(&f), &[reader(r#"<ч а="1">42</ч>"#), xsd.clone()]).is_err());
+        assert!(factory_read_xml(ob(&f), &[reader("<ч>ab</ч>"), xsd]).is_err());
     }
 
     #[test]
@@ -8563,8 +8564,8 @@ mod tests {
         let w = writer();
         let mut call = vec![w.clone(), value.clone()];
         call.extend(args.iter().cloned());
-        serializer_write_xml(&serializer(), &call)?;
-        match crate::xml::close_writer(&w)? {
+        serializer_write_xml(ob(&serializer()), &call)?;
+        match crate::xml::close_writer(crate::xml::arg_object(&w).unwrap())? {
             BslValue::Str(s) => Ok(s.to_string()),
             other => panic!("писатель отдал не строку: {other:?}"),
         }
@@ -8574,7 +8575,7 @@ mod tests {
     fn deserialize(text: &str, args: &[BslValue]) -> RtResult<BslValue> {
         let mut call = vec![reader(text)];
         call.extend(args.iter().cloned());
-        serializer_read_xml(&serializer(), &call)
+        serializer_read_xml(ob(&serializer()), &call)
     }
 
     /// Дата как значение — тем же путём, что и разбор лексики.
@@ -8741,10 +8742,10 @@ mod tests {
         assert!(serialize(&number_value(42), &[str_value("мой"), number_value(5)]).is_err());
         // Арность: одного аргумента мало, пятого не бывает.
         let s = serializer();
-        assert!(serializer_write_xml(&s, &[writer()]).is_err());
+        assert!(serializer_write_xml(ob(&s), &[writer()]).is_err());
         assert!(
             serializer_write_xml(
-                &s,
+                ob(&s),
                 &[
                     writer(),
                     number_value(42),
@@ -8921,7 +8922,7 @@ mod tests {
         // 8.3.27 отвечает «Несоответствие типов (параметр номер '2')», —
         // но причина у них другая, и текст отказа другой.
         let f = factory(IO_SAMPLE);
-        let o = factory_create(&f, &[type_of_factory(&f, "RootType")]).expect("экземпляр");
+        let o = factory_create(ob(&f), &[type_of_factory(&f, "RootType")]).expect("экземпляр");
         let err = serialize(&o, &[]).expect_err("экземпляр не пишется");
         assert!(err.to_string().contains("не умеет писать"), "{err}");
         // Составной тип схемы не читается тоже — и здесь платформа как раз
@@ -8946,17 +8947,17 @@ mod tests {
             "</об>"
         );
         let r = reader(doc);
-        crate::xml::with_reader(&r, |state| {
+        crate::xml::with_reader(crate::xml::arg_object(&r).unwrap(), |state| {
             state.parser.as_mut().expect("разборщик").read()?;
             Ok(())
         })
         .expect("шаг к корню");
-        let first = serializer_read_xml(&s, std::slice::from_ref(&r)).expect("первый");
-        let second = serializer_read_xml(&s, std::slice::from_ref(&r)).expect("второй");
+        let first = serializer_read_xml(ob(&s), std::slice::from_ref(&r)).expect("первый");
+        let second = serializer_read_xml(ob(&s), std::slice::from_ref(&r)).expect("второй");
         assert_eq!(first, number_value(42));
         assert_eq!(second, str_value("аб"));
         // После корня читатель исчерпан, и следующее чтение — ошибка.
-        assert!(serializer_read_xml(&s, &[r]).is_err());
+        assert!(serializer_read_xml(ob(&s), &[r]).is_err());
     }
 
     #[test]
@@ -8967,7 +8968,7 @@ mod tests {
         let s = serializer();
         // Этим двум нужен тип `ТипДанныхXML`, которого здесь нет.
         for method in ["XMLТип", "XMLТипЗнч"] {
-            let err = serializer_unsupported(&s, method).to_string();
+            let err = serializer_unsupported(ob(&s), method).to_string();
             assert!(err.contains("не поддерживается"), "{err}");
             assert!(err.contains("ТипДанныхXML"), "{err}");
         }
@@ -8975,12 +8976,12 @@ mod tests {
         // `measure-xdto-serializer.platform.txt`, строки 33, 133, 134, 140,
         // 152, 153). Ссылаться на `ТипДанныхXML` здесь значило бы записать
         // в диагностику то, что опровергается собственным замером.
-        let err = serializer_unsupported(&s, "ВозможностьЧтенияXML").to_string();
+        let err = serializer_unsupported(ob(&s), "ВозможностьЧтенияXML").to_string();
         assert!(err.contains("не поддерживается"), "{err}");
         assert!(err.contains("булево"), "{err}");
         assert!(!err.contains("ТипДанныхXML"), "{err}");
         // У чужого получателя это обычное «метод неприменим».
-        let err = serializer_unsupported(&factory(IO_SAMPLE), "XMLТип");
+        let err = serializer_unsupported(ob(&factory(IO_SAMPLE)), "XMLТип");
         assert!(matches!(err, RtError::MethodNotApplicable { .. }), "{err}");
     }
 
@@ -8991,7 +8992,7 @@ mod tests {
         let s = serializer();
         let w = writer();
         let err = serializer_write_xml(
-            &s,
+            ob(&s),
             &[
                 w.clone(),
                 number_value(42),
@@ -9049,9 +9050,10 @@ mod tests {
         // вызова: строка 181 снимка даёт на втором уровне `d2p1`.
         let s = serializer();
         let w = writer();
-        crate::xml::write_start_element(&w, &[str_value("об")]).expect("обёртка");
+        crate::xml::write_start_element(crate::xml::arg_object(&w).unwrap(), &[str_value("об")])
+            .expect("обёртка");
         serializer_write_xml(
-            &s,
+            ob(&s),
             &[
                 w.clone(),
                 BslValue::Undefined,
@@ -9060,8 +9062,10 @@ mod tests {
             ],
         )
         .expect("запись внутрь");
-        crate::xml::write_end_element(&w).expect("конец обёртки");
-        let text = match crate::xml::close_writer(&w).expect("закрытие") {
+        crate::xml::write_end_element(crate::xml::arg_object(&w).unwrap()).expect("конец обёртки");
+        let text = match crate::xml::close_writer(crate::xml::arg_object(&w).unwrap())
+            .expect("закрытие")
+        {
             BslValue::Str(s) => s.to_string(),
             other => panic!("писатель отдал не строку: {other:?}"),
         };

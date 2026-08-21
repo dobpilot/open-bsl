@@ -103,16 +103,10 @@ pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor {
         package: PACKAGE_NAME,
         version: PACKAGE_VERSION,
-        dependencies: &[
-            LibraryDependency {
-                package: bsl_rt::PACKAGE_NAME,
-                version: bsl_rt::PACKAGE_VERSION,
-            },
-            LibraryDependency {
-                package: bsl_binbuf::PACKAGE_NAME,
-                version: bsl_binbuf::PACKAGE_VERSION,
-            },
-        ],
+        dependencies: &[LibraryDependency {
+            package: bsl_binbuf::PACKAGE_NAME,
+            version: bsl_binbuf::PACKAGE_VERSION,
+        }],
         functions: &[],
         constructors: CONSTRUCTORS,
     }

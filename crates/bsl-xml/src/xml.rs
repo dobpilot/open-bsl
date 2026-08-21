@@ -83,31 +83,38 @@ pub struct XmlWriterSettingsObject {
     settings: XmlWriterSettings,
 }
 
-fn as_reader(v: &BslValue) -> RtResult<&RefCell<XmlReaderState>> {
-    match v
-        .object_ref()
-        .and_then(|object| object.downcast_ref::<XmlReaderObject>())
-    {
+fn as_reader(v: &dyn ObjectProtocol) -> RtResult<&RefCell<XmlReaderState>> {
+    match v.downcast_ref::<XmlReaderObject>() {
         Some(reader) => Ok(&reader.state),
         _ => Err(not_applicable(v)),
     }
 }
 
-fn as_writer(v: &BslValue) -> RtResult<&RefCell<Option<XmlWriter>>> {
-    match v
-        .object_ref()
-        .and_then(|object| object.downcast_ref::<XmlWriterObject>())
-    {
+fn as_writer(v: &dyn ObjectProtocol) -> RtResult<&RefCell<Option<XmlWriter>>> {
+    match v.downcast_ref::<XmlWriterObject>() {
         Some(writer) => Ok(&writer.writer),
         _ => Err(not_applicable(v)),
     }
 }
 
-fn not_applicable(v: &BslValue) -> RtError {
+fn not_applicable(v: &dyn ObjectProtocol) -> RtError {
     RtError::MethodNotApplicable {
         method: "метод XML",
-        receiver: v.type_name(),
+        receiver: v.type_descriptor().name,
     }
+}
+
+/// Объект за значением аргумента: мост из мира значений, где читатель или
+/// писатель приходит аргументом глобальной функции (`ПрочитатьXML`,
+/// `ЗаписатьXML`), а не получателем метода. Не-объект получает ту же
+/// ошибку «метод XML не применим», что и объект чужого типа.
+pub(crate) fn arg_object(v: &BslValue) -> RtResult<&dyn ObjectProtocol> {
+    v.object_ref()
+        .map(bsl_rt::ObjectRef::as_dyn)
+        .ok_or_else(|| RtError::MethodNotApplicable {
+            method: "метод XML",
+            receiver: v.type_name(),
+        })
 }
 
 pub fn is_xml_reader(v: &BslValue) -> bool {
@@ -220,7 +227,7 @@ fn settings_from(arg: Option<&BslValue>) -> RtResult<XmlWriterSettings> {
 ///
 /// [`RtError::TypeError`], если получатель не объект XML либо аргумент не
 /// того типа.
-pub fn set_string(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+pub fn set_string(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     if let Ok(reader) = as_reader(obj) {
         let text = need_str(args.first(), "УстановитьСтроку")?;
         *reader.borrow_mut() = XmlReaderState::over(XmlParser::new(&text));
@@ -237,7 +244,7 @@ pub fn set_string(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
 ///
 /// [`RtError::IoError`], если файл не читается; [`RtError::TypeError`] при
 /// неверном аргументе.
-pub fn open_file(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+pub fn open_file(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     let path = need_str(args.first(), "ОткрытьФайл")?;
     if let Ok(reader) = as_reader(obj) {
         let text = std::fs::read_to_string(&path).map_err(|e| RtError::IoError(e.to_string()))?;
@@ -263,7 +270,7 @@ pub fn open_file(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
 /// # Errors
 ///
 /// [`RtError::Xml`] на битой разметке.
-pub fn read(obj: &BslValue) -> RtResult<BslValue> {
+pub fn read(obj: &dyn ObjectProtocol) -> RtResult<BslValue> {
     let reader = as_reader(obj)?;
     let mut state = reader.borrow_mut();
     let Some(parser) = state.parser.as_mut() else {
@@ -291,7 +298,7 @@ pub fn read(obj: &BslValue) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// [`RtError::Xml`] на битой разметке или если пропускать нечего.
-pub fn skip(obj: &BslValue) -> RtResult<()> {
+pub fn skip(obj: &dyn ObjectProtocol) -> RtResult<()> {
     let reader = as_reader(obj)?;
     let mut state = reader.borrow_mut();
     // Глубина снимается ДО заимствования разборщика: после первого же
@@ -325,7 +332,7 @@ pub fn skip(obj: &BslValue) -> RtResult<()> {
 /// # Errors
 ///
 /// [`RtError::MethodNotApplicable`], если получатель не `ЧтениеXML`.
-pub fn read_attribute(obj: &BslValue) -> RtResult<BslValue> {
+pub fn read_attribute(obj: &dyn ObjectProtocol) -> RtResult<BslValue> {
     let reader = as_reader(obj)?;
     let mut state = reader.borrow_mut();
     let count = state.attrs().len();
@@ -346,7 +353,7 @@ pub fn read_attribute(obj: &BslValue) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// [`RtError::Xml`] на битой разметке.
-pub fn move_to_content(obj: &BslValue) -> RtResult<BslValue> {
+pub fn move_to_content(obj: &dyn ObjectProtocol) -> RtResult<BslValue> {
     loop {
         {
             let reader = as_reader(obj)?;
@@ -372,7 +379,7 @@ pub fn move_to_content(obj: &BslValue) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// [`RtError::MethodNotApplicable`], если получатель не `ЧтениеXML`.
-pub fn node_type(obj: &BslValue) -> RtResult<BslValue> {
+pub fn node_type(obj: &dyn ObjectProtocol) -> RtResult<BslValue> {
     node_type_from(as_reader(obj)?)
 }
 
@@ -405,7 +412,7 @@ fn node_type_from(reader: &RefCell<XmlReaderState>) -> RtResult<BslValue> {
 /// ходят через `get_property`/таблицу методов; снаружи модуля имя узла
 /// читает только тест round-trip XDTO.
 #[cfg(test)]
-pub fn name(obj: &BslValue) -> RtResult<BslValue> {
+pub fn name(obj: &dyn ObjectProtocol) -> RtResult<BslValue> {
     name_from(as_reader(obj)?)
 }
 
@@ -505,7 +512,7 @@ fn namespace_uri_from(reader: &RefCell<XmlReaderState>) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// [`RtError::MethodNotApplicable`], если получатель не `ЧтениеXML`.
-pub fn attribute_count(obj: &BslValue) -> RtResult<BslValue> {
+pub fn attribute_count(obj: &dyn ObjectProtocol) -> RtResult<BslValue> {
     let reader = as_reader(obj)?;
     let state = reader.borrow();
     Ok(BslValue::Number(BslNumber::from_i64(
@@ -519,7 +526,7 @@ pub fn attribute_count(obj: &BslValue) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// [`RtError::BadIndex`], если индекс не целое неотрицательное.
-pub fn attribute_name(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn attribute_name(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     let reader = as_reader(obj)?;
     let state = reader.borrow();
     let idx = index_arg(args.first())?;
@@ -536,7 +543,7 @@ pub fn attribute_name(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// [`RtError::TypeError`], если аргумент не строка и не число.
-pub fn attribute_value(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn attribute_value(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     let reader = as_reader(obj)?;
     let state = reader.borrow();
     match args.first() {
@@ -581,7 +588,7 @@ fn index_arg(arg: Option<&BslValue>) -> RtResult<usize> {
 /// Доступ к писателю получателя. `pub(crate)`, потому что тем же писателем
 /// пишет дерево DOM (`dom::write`): второго сериализатора XML в рантайме нет.
 pub fn with_writer<R>(
-    obj: &BslValue,
+    obj: &dyn ObjectProtocol,
     f: impl FnOnce(&mut XmlWriter) -> RtResult<R>,
 ) -> RtResult<R> {
     let writer = as_writer(obj)?;
@@ -603,7 +610,7 @@ pub fn with_writer<R>(
 /// [`RtError::MethodNotApplicable`], если получатель не `ЧтениеXML`, плюс
 /// всё, чем ответит `f`.
 pub fn with_reader<R>(
-    obj: &BslValue,
+    obj: &dyn ObjectProtocol,
     f: impl FnOnce(&mut XmlReaderState) -> RtResult<R>,
 ) -> RtResult<R> {
     let reader = as_reader(obj)?;
@@ -616,7 +623,7 @@ pub fn with_reader<R>(
 /// # Errors
 ///
 /// [`RtError::Xml`], если объявление пишется не первым.
-pub fn write_declaration(obj: &BslValue) -> RtResult<()> {
+pub fn write_declaration(obj: &dyn ObjectProtocol) -> RtResult<()> {
     with_writer(obj, XmlWriter::write_declaration)
 }
 
@@ -626,7 +633,7 @@ pub fn write_declaration(obj: &BslValue) -> RtResult<()> {
 ///
 /// [`RtError::TypeError`], если имя не строка; [`RtError::Xml`], если
 /// корневой элемент уже записан.
-pub fn write_start_element(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+pub fn write_start_element(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     let name = need_str(args.first(), "ЗаписатьНачалоЭлемента")?;
     with_writer(obj, |w| w.write_start_element(&name))
 }
@@ -636,7 +643,7 @@ pub fn write_start_element(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
 /// # Errors
 ///
 /// [`RtError::Xml`], если открытого элемента нет.
-pub fn write_end_element(obj: &BslValue) -> RtResult<()> {
+pub fn write_end_element(obj: &dyn ObjectProtocol) -> RtResult<()> {
     with_writer(obj, XmlWriter::write_end_element)
 }
 
@@ -647,7 +654,7 @@ pub fn write_end_element(obj: &BslValue) -> RtResult<()> {
 ///
 /// [`RtError::TypeError`] на нестроковом аргументе; [`RtError::Xml`], если
 /// начальный тег уже закрыт.
-pub fn write_attribute(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+pub fn write_attribute(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     let name = need_str(args.first(), "ЗаписатьАтрибут")?;
     let value = need_str(args.get(1), "ЗаписатьАтрибут")?;
     with_writer(obj, |w| w.write_attribute(&name, &value))
@@ -658,7 +665,7 @@ pub fn write_attribute(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
 /// # Errors
 ///
 /// [`RtError::TypeError`], если аргумент не строка.
-pub fn write_text(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+pub fn write_text(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     let text = need_str(args.first(), "ЗаписатьТекст")?;
     with_writer(obj, |w| w.write_text(&text))
 }
@@ -668,7 +675,7 @@ pub fn write_text(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
 /// # Errors
 ///
 /// [`RtError::TypeError`], если аргумент не строка.
-pub fn write_comment(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+pub fn write_comment(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     let text = need_str(args.first(), "ЗаписатьКомментарий")?;
     with_writer(obj, |w| w.write_comment(&text))
 }
@@ -678,7 +685,7 @@ pub fn write_comment(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
 /// # Errors
 ///
 /// [`RtError::TypeError`], если аргумент не строка.
-pub fn write_cdata(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+pub fn write_cdata(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     let text = need_str(args.first(), "ЗаписатьСекциюCDATA")?;
     with_writer(obj, |w| w.write_cdata(&text))
 }
@@ -688,7 +695,7 @@ pub fn write_cdata(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
 /// # Errors
 ///
 /// [`RtError::TypeError`], если аргумент не строка.
-pub fn write_processing_instruction(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+pub fn write_processing_instruction(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     let target = need_str(args.first(), "ЗаписатьИнструкциюОбработки")?;
     let data = need_str(args.get(1), "ЗаписатьИнструкциюОбработки")?;
     with_writer(obj, |w| w.write_processing_instruction(&target, &data))
@@ -699,7 +706,7 @@ pub fn write_processing_instruction(obj: &BslValue, args: &[BslValue]) -> RtResu
 /// # Errors
 ///
 /// [`RtError::TypeError`], если аргумент не строка.
-pub fn write_raw(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+pub fn write_raw(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     let text = need_str(args.first(), "ЗаписатьБезОбработки")?;
     with_writer(obj, |w| w.write_raw(&text))
 }
@@ -711,7 +718,7 @@ pub fn write_raw(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
 /// # Errors
 ///
 /// [`RtError::IoError`], если файл не записался.
-pub fn close_writer(obj: &BslValue) -> RtResult<BslValue> {
+pub fn close_writer(obj: &dyn ObjectProtocol) -> RtResult<BslValue> {
     let writer = as_writer(obj)?;
     let mut slot = writer.borrow_mut();
     let Some(w) = slot.as_mut() else {
@@ -738,7 +745,7 @@ pub fn close_writer(obj: &BslValue) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// [`RtError::MethodNotApplicable`], если получатель не `ЧтениеXML`.
-pub fn close_reader(obj: &BslValue) -> RtResult<BslValue> {
+pub fn close_reader(obj: &dyn ObjectProtocol) -> RtResult<BslValue> {
     let reader = as_reader(obj)?;
     *reader.borrow_mut() = XmlReaderState::default();
     Ok(BslValue::Undefined)
@@ -763,22 +770,6 @@ static SETTINGS_TYPE: TypeDescriptor = TypeDescriptor {
     name: "ПараметрыЗаписиXML",
     legacy_type_id: Some(TypeId::XmlWriterSettings),
 };
-
-impl XmlReaderObject {
-    fn as_value(&self) -> BslValue {
-        BslValue::new_object(XmlReaderObject {
-            state: self.state.clone(),
-        })
-    }
-}
-
-impl XmlWriterObject {
-    fn as_value(&self) -> BslValue {
-        BslValue::new_object(XmlWriterObject {
-            writer: self.writer.clone(),
-        })
-    }
-}
 
 impl ObjectProtocol for XmlReaderObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
@@ -810,22 +801,6 @@ impl ObjectProtocol for XmlReaderObject {
         }
     }
 
-    fn call_method(
-        &self,
-        method: &str,
-        arguments: &[BslValue],
-        context: &mut CallContext<'_>,
-    ) -> RtResult<BslValue> {
-        bsl_rt::call_method_from_table(
-            READER_METHODS,
-            READER_TYPE.name,
-            &self.as_value(),
-            method,
-            arguments,
-            context,
-        )
-    }
-
     fn method_table(&self) -> &'static [MethodDescriptor] {
         READER_METHODS
     }
@@ -836,7 +811,7 @@ impl ObjectProtocol for XmlReaderObject {
 // `УстановитьСтроку` и `ОткрытьФайл` общие: свободные функции сами
 // различают читателя и писателя по состоянию получателя.
 fn xml_set_string(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -845,7 +820,7 @@ fn xml_set_string(
 }
 
 fn xml_open_file(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -854,7 +829,7 @@ fn xml_open_file(
 }
 
 fn reader_read(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     _arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -862,7 +837,7 @@ fn reader_read(
 }
 
 fn reader_skip(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -879,7 +854,7 @@ fn reader_skip(
 }
 
 fn reader_read_attribute(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     _arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -887,7 +862,7 @@ fn reader_read_attribute(
 }
 
 fn reader_attribute_count(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     _arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -895,7 +870,7 @@ fn reader_attribute_count(
 }
 
 fn reader_attribute_name(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -903,7 +878,7 @@ fn reader_attribute_name(
 }
 
 fn reader_attribute_value(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -911,7 +886,7 @@ fn reader_attribute_value(
 }
 
 fn reader_move_to_content(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     _arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -919,7 +894,7 @@ fn reader_move_to_content(
 }
 
 fn reader_close(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     _arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -984,29 +959,13 @@ impl ObjectProtocol for XmlWriterObject {
         &WRITER_TYPE
     }
 
-    fn call_method(
-        &self,
-        method: &str,
-        arguments: &[BslValue],
-        context: &mut CallContext<'_>,
-    ) -> RtResult<BslValue> {
-        bsl_rt::call_method_from_table(
-            WRITER_METHODS,
-            WRITER_TYPE.name,
-            &self.as_value(),
-            method,
-            arguments,
-            context,
-        )
-    }
-
     fn method_table(&self) -> &'static [MethodDescriptor] {
         WRITER_METHODS
     }
 }
 
 fn writer_declaration(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     _arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -1015,7 +974,7 @@ fn writer_declaration(
 }
 
 fn writer_start_element(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -1024,7 +983,7 @@ fn writer_start_element(
 }
 
 fn writer_end_element(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     _arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -1033,7 +992,7 @@ fn writer_end_element(
 }
 
 fn writer_attribute(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -1042,7 +1001,7 @@ fn writer_attribute(
 }
 
 fn writer_text(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -1051,7 +1010,7 @@ fn writer_text(
 }
 
 fn writer_comment(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -1060,7 +1019,7 @@ fn writer_comment(
 }
 
 fn writer_cdata(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -1069,7 +1028,7 @@ fn writer_cdata(
 }
 
 fn writer_processing_instruction(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -1078,7 +1037,7 @@ fn writer_processing_instruction(
 }
 
 fn writer_raw(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -1087,7 +1046,7 @@ fn writer_raw(
 }
 
 fn writer_close(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     _arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {

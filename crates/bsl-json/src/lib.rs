@@ -923,8 +923,8 @@ use std::cell::RefCell;
 
 use bsl_rt::{
     Arity, BslObject, CallContext, ConstructorCode, ConstructorDescriptor, EnumValue, FunctionCode,
-    FunctionDescriptor, FunctionKind, LibraryDependency, LibraryDescriptor, MethodCode,
-    MethodDescriptor, ObjectProtocol, StructureStorage, TypeDescriptor, TypeId,
+    FunctionDescriptor, FunctionKind, LibraryDescriptor, MethodCode, MethodDescriptor,
+    ObjectDowncast, ObjectProtocol, StructureStorage, TypeDescriptor, TypeId,
     local_date_from_utc_seconds, pseudo_unix_seconds,
 };
 
@@ -941,9 +941,8 @@ struct JsonReaderObject {
 
 #[derive(Debug, Default)]
 struct JsonWriterObject {
-    /// За `Rc` — чтобы `as_value` мог собрать получателя-значение для
-    /// строкового пути `call_method`, разделяющего то же состояние (у
-    /// читателя ту же роль играет `Rc` вокруг `JsonReaderState`).
+    /// Состояние за `Rc<RefCell>`: обработчики достают его из получателя
+    /// ссылкой через `as_writer`, обёртка значения не пересобирается.
     writer: Rc<RefCell<Option<JsonWriter>>>,
 }
 
@@ -974,25 +973,34 @@ static SERIALIZER_SETTINGS_TYPE: TypeDescriptor = TypeDescriptor {
     legacy_type_id: Some(TypeId::JsonSerializerSettings),
 };
 
-fn as_reader(v: &BslValue) -> RtResult<&std::cell::RefCell<JsonReaderState>> {
-    v.object_ref()
-        .and_then(|object| object.downcast_ref::<JsonReaderObject>())
+fn as_reader(v: &dyn ObjectProtocol) -> RtResult<&std::cell::RefCell<JsonReaderState>> {
+    v.downcast_ref::<JsonReaderObject>()
         .map(|reader| reader.state.as_ref())
         .ok_or_else(|| not_applicable(v, "ЧтениеJSON"))
 }
 
-fn as_writer(v: &BslValue) -> RtResult<&std::cell::RefCell<Option<JsonWriter>>> {
-    v.object_ref()
-        .and_then(|object| object.downcast_ref::<JsonWriterObject>())
+fn as_writer(v: &dyn ObjectProtocol) -> RtResult<&std::cell::RefCell<Option<JsonWriter>>> {
+    v.downcast_ref::<JsonWriterObject>()
         .map(|writer| writer.writer.as_ref())
         .ok_or_else(|| not_applicable(v, "ЗаписьJSON"))
 }
 
-fn not_applicable(v: &BslValue, _expected: &str) -> RtError {
+fn not_applicable(v: &dyn ObjectProtocol, _expected: &str) -> RtError {
     RtError::MethodNotApplicable {
         method: "метод JSON",
-        receiver: v.type_name(),
+        receiver: v.type_descriptor().name,
     }
+}
+
+/// Объект за значением аргумента: не-объект получает ту же ошибку «метод
+/// JSON не применим», что и объект чужого типа.
+fn arg_object(v: &BslValue) -> RtResult<&dyn ObjectProtocol> {
+    v.object_ref()
+        .map(bsl_rt::ObjectRef::as_dyn)
+        .ok_or_else(|| RtError::MethodNotApplicable {
+            method: "метод JSON",
+            receiver: v.type_name(),
+        })
 }
 
 /// Настройки из аргумента `УстановитьСтроку([Параметры])`. Отсутствующий
@@ -1047,10 +1055,9 @@ pub fn serializer_settings_from(arg: Option<&BslValue>) -> RtResult<JsonSerializ
 ///
 /// [`RtError::UnknownColumn`] на неизвестном имени; [`RtError::NotAnObject`],
 /// если получатель не `НастройкиСериализацииJSON`.
-pub fn get_serializer_setting(obj: &BslValue, name: &str) -> RtResult<BslValue> {
+pub fn get_serializer_setting(obj: &dyn ObjectProtocol, name: &str) -> RtResult<BslValue> {
     let settings = obj
-        .object_ref()
-        .and_then(|object| object.downcast_ref::<JsonSerializerSettingsObject>())
+        .downcast_ref::<JsonSerializerSettingsObject>()
         .ok_or(RtError::NotAnObject)?;
     let s = settings.0.borrow();
     if name.eq_ignore_ascii_case("ФорматСериализацииДаты")
@@ -1077,10 +1084,9 @@ pub fn get_serializer_setting(obj: &BslValue, name: &str) -> RtResult<BslValue> 
 /// [`RtError::TypeError`] на значении не того типа; [`RtError::UnknownColumn`]
 /// на неизвестном имени; [`RtError::NotAnObject`], если получатель не
 /// `НастройкиСериализацииJSON`.
-pub fn set_serializer_setting(obj: &BslValue, name: &str, val: BslValue) -> RtResult<()> {
+pub fn set_serializer_setting(obj: &dyn ObjectProtocol, name: &str, val: BslValue) -> RtResult<()> {
     let settings = obj
-        .object_ref()
-        .and_then(|object| object.downcast_ref::<JsonSerializerSettingsObject>())
+        .downcast_ref::<JsonSerializerSettingsObject>()
         .ok_or(RtError::NotAnObject)?;
     if name.eq_ignore_ascii_case("ФорматСериализацииДаты")
         || name.eq_ignore_ascii_case("DateSerializationFormat")
@@ -1137,7 +1143,7 @@ pub fn set_serializer_setting(obj: &BslValue, name: &str, val: BslValue) -> RtRe
 ///
 /// [`RtError::TypeError`], если получатель не объект JSON либо аргумент не
 /// того типа.
-pub fn set_string(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+pub fn set_string(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     if let Ok(reader) = as_reader(obj) {
         let BslValue::Str(text) = args.first().unwrap_or(&BslValue::Undefined) else {
             return Err(RtError::TypeError {
@@ -1164,7 +1170,7 @@ pub fn set_string(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
 ///
 /// [`RtError::IoError`], если файл не читается; [`RtError::TypeError`] при
 /// неверных аргументах.
-pub fn open_file(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+pub fn open_file(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     let BslValue::Str(path) = args.first().unwrap_or(&BslValue::Undefined) else {
         return Err(RtError::TypeError {
             expected: "Строка",
@@ -1198,7 +1204,7 @@ pub fn open_file(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
 ///
 /// [`RtError::Json`] на битом вводе; [`RtError::TypeError`], если источник
 /// ещё не назначен.
-pub fn read(obj: &BslValue) -> RtResult<bool> {
+pub fn read(obj: &dyn ObjectProtocol) -> RtResult<bool> {
     let reader = as_reader(obj)?;
     let mut state = reader.borrow_mut();
     let Some(parser) = state.parser.as_mut() else {
@@ -1220,7 +1226,7 @@ pub fn read(obj: &BslValue) -> RtResult<bool> {
 /// # Errors
 ///
 /// [`RtError::Json`] на битом вводе.
-pub fn skip(obj: &BslValue) -> RtResult<()> {
+pub fn skip(obj: &dyn ObjectProtocol) -> RtResult<()> {
     let reader = as_reader(obj)?;
     let mut state = reader.borrow_mut();
     if state.parser.is_none() {
@@ -1259,7 +1265,7 @@ pub fn skip(obj: &BslValue) -> RtResult<()> {
 }
 
 /// `ЧтениеJSON.ТипТекущегоЗначения` — член `ТипЗначенияJSON`.
-pub fn current_value_type(obj: &BslValue) -> RtResult<BslValue> {
+pub fn current_value_type(obj: &dyn ObjectProtocol) -> RtResult<BslValue> {
     let reader = as_reader(obj)?;
     let state = reader.borrow();
     let v = match &state.current {
@@ -1284,7 +1290,7 @@ pub fn current_value_type(obj: &BslValue) -> RtResult<BslValue> {
 /// [`RtError::Json`], если у текущего элемента значения нет (мы стоим на
 /// скобке). ИЗМЕРЕНО: платформа отвечает ровно так же — «Текущее значение
 /// JSON не может быть получено», — а не `Неопределено`.
-pub fn current_value(obj: &BslValue) -> RtResult<BslValue> {
+pub fn current_value(obj: &dyn ObjectProtocol) -> RtResult<BslValue> {
     let reader = as_reader(obj)?;
     let state = reader.borrow();
     match &state.current {
@@ -1317,7 +1323,10 @@ fn with_writer_cell<T>(
     f(writer)
 }
 
-fn with_writer<T>(obj: &BslValue, f: impl FnOnce(&mut JsonWriter) -> RtResult<T>) -> RtResult<T> {
+fn with_writer<T>(
+    obj: &dyn ObjectProtocol,
+    f: impl FnOnce(&mut JsonWriter) -> RtResult<T>,
+) -> RtResult<T> {
     with_writer_cell(as_writer(obj)?, f)
 }
 
@@ -1334,35 +1343,35 @@ fn close_writer_cell(cell: &RefCell<Option<JsonWriter>>) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// Ошибку структуры документа либо отсутствия приёмника.
-pub fn write_start_object(obj: &BslValue) -> RtResult<()> {
+pub fn write_start_object(obj: &dyn ObjectProtocol) -> RtResult<()> {
     with_writer(obj, JsonWriter::begin_object)
 }
 
 /// # Errors
 ///
 /// См. [`write_start_object`].
-pub fn write_end_object(obj: &BslValue) -> RtResult<()> {
+pub fn write_end_object(obj: &dyn ObjectProtocol) -> RtResult<()> {
     with_writer(obj, JsonWriter::end_object)
 }
 
 /// # Errors
 ///
 /// См. [`write_start_object`].
-pub fn write_start_array(obj: &BslValue) -> RtResult<()> {
+pub fn write_start_array(obj: &dyn ObjectProtocol) -> RtResult<()> {
     with_writer(obj, JsonWriter::begin_array)
 }
 
 /// # Errors
 ///
 /// См. [`write_start_object`].
-pub fn write_end_array(obj: &BslValue) -> RtResult<()> {
+pub fn write_end_array(obj: &dyn ObjectProtocol) -> RtResult<()> {
     with_writer(obj, JsonWriter::end_array)
 }
 
 /// # Errors
 ///
 /// [`RtError::TypeError`], если имя не строка.
-pub fn write_property_name(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+pub fn write_property_name(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     let BslValue::Str(name) = args.first().unwrap_or(&BslValue::Undefined) else {
         return Err(RtError::TypeError {
             expected: "Строка",
@@ -1376,7 +1385,7 @@ pub fn write_property_name(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
 ///
 /// [`RtError::TypeError`] на типе, который платформа не принимает
 /// (`Null`, `Неопределено`, `Дата`).
-pub fn write_value(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
+pub fn write_value(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     let value = args.first().cloned().unwrap_or(BslValue::Undefined);
     with_writer(obj, |w| w.value(&value))
 }
@@ -1387,7 +1396,7 @@ pub fn write_value(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
 /// # Errors
 ///
 /// [`RtError::IoError`] при неудачной записи файла.
-pub fn close_writer(obj: &BslValue) -> RtResult<BslValue> {
+pub fn close_writer(obj: &dyn ObjectProtocol) -> RtResult<BslValue> {
     close_writer_cell(as_writer(obj)?)
 }
 
@@ -1405,7 +1414,7 @@ pub fn is_json_writer(v: &BslValue) -> bool {
 ///
 /// [`RtError::TypeError`], если приёмник ещё не назначен — то же условие,
 /// что и у остальных методов записи.
-pub fn get_check_structure(obj: &BslValue) -> RtResult<BslValue> {
+pub fn get_check_structure(obj: &dyn ObjectProtocol) -> RtResult<BslValue> {
     with_writer(obj, |w| Ok(BslValue::Boolean(w.check_structure())))
 }
 
@@ -1415,7 +1424,7 @@ pub fn get_check_structure(obj: &BslValue) -> RtResult<BslValue> {
 ///
 /// [`RtError::TypeError`], если значение не `Булево` либо приёмник ещё не
 /// назначен.
-pub fn set_check_structure(obj: &BslValue, val: BslValue) -> RtResult<()> {
+pub fn set_check_structure(obj: &dyn ObjectProtocol, val: BslValue) -> RtResult<()> {
     let BslValue::Boolean(b) = val else {
         return Err(RtError::TypeError {
             expected: "Булево",
@@ -1507,47 +1516,19 @@ pub fn new_json_serializer_settings() -> BslValue {
     ))))
 }
 
-impl JsonReaderObject {
-    /// Получатель-значение, разделяющий то же состояние: нужен строковым
-    /// путям (`call_method`, `get_property`), у которых в руках только
-    /// `&self`.
-    fn as_value(&self) -> BslValue {
-        BslValue::new_object(JsonReaderObject {
-            state: self.state.clone(),
-        })
-    }
-}
-
 impl ObjectProtocol for JsonReaderObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         &READER_TYPE
     }
 
     fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
-        let value = self.as_value();
         if method_is(name, "ТипТекущегоЗначения", "CurrentValueType") {
-            current_value_type(&value)
+            current_value_type(self.as_dyn())
         } else if method_is(name, "ТекущееЗначение", "CurrentValue") {
-            current_value(&value)
+            current_value(self.as_dyn())
         } else {
             Err(RtError::UnknownColumn(name.to_string()))
         }
-    }
-
-    fn call_method(
-        &self,
-        name: &str,
-        arguments: &[BslValue],
-        context: &mut CallContext<'_>,
-    ) -> RtResult<BslValue> {
-        bsl_rt::call_method_from_table(
-            READER_METHODS,
-            READER_TYPE.name,
-            &self.as_value(),
-            name,
-            arguments,
-            context,
-        )
     }
 
     fn method_table(&self) -> &'static [MethodDescriptor] {
@@ -1563,7 +1544,7 @@ impl ObjectProtocol for JsonReaderObject {
 // вызывающего (VM отдаёт исходное значение — без пересборки обёртки на
 // каждый вызов), проверки арности — прежние, из веток `method_is`.
 fn reader_set_string(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -1572,7 +1553,7 @@ fn reader_set_string(
 }
 
 fn reader_open_file(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -1581,7 +1562,7 @@ fn reader_open_file(
 }
 
 fn reader_read(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -1590,7 +1571,7 @@ fn reader_read(
 }
 
 fn reader_skip(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -1621,20 +1602,10 @@ const READER_METHODS: &[MethodDescriptor] = &[
     },
 ];
 
-impl JsonWriterObject {
-    /// Получатель-значение с тем же состоянием — для строкового
-    /// `call_method`, у которого в руках только `&self`.
-    fn as_value(&self) -> BslValue {
-        BslValue::new_object(JsonWriterObject {
-            writer: self.writer.clone(),
-        })
-    }
-}
-
 // Обработчики статической таблицы писателя: тела — прежние ветки
 // `invoke`, состояние достаётся из получателя через `as_writer`.
 fn writer_set_string(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -1651,7 +1622,7 @@ fn writer_set_string(
 }
 
 fn writer_open_file(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -1675,7 +1646,7 @@ fn writer_open_file(
 }
 
 fn writer_close(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -1684,7 +1655,7 @@ fn writer_close(
 }
 
 fn writer_start_object(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -1693,7 +1664,7 @@ fn writer_start_object(
 }
 
 fn writer_end_object(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -1702,7 +1673,7 @@ fn writer_end_object(
 }
 
 fn writer_start_array(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -1711,7 +1682,7 @@ fn writer_start_array(
 }
 
 fn writer_end_array(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -1720,7 +1691,7 @@ fn writer_end_array(
 }
 
 fn writer_property_name(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -1738,7 +1709,7 @@ fn writer_property_name(
 }
 
 fn writer_value(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -1832,22 +1803,6 @@ impl ObjectProtocol for JsonWriterObject {
         }
     }
 
-    fn call_method(
-        &self,
-        name: &str,
-        arguments: &[BslValue],
-        context: &mut CallContext<'_>,
-    ) -> RtResult<BslValue> {
-        bsl_rt::call_method_from_table(
-            WRITER_METHODS,
-            WRITER_TYPE.name,
-            &self.as_value(),
-            name,
-            arguments,
-            context,
-        )
-    }
-
     fn method_table(&self) -> &'static [MethodDescriptor] {
         WRITER_METHODS
     }
@@ -1873,8 +1828,7 @@ impl ObjectProtocol for JsonSerializerSettingsObject {
     }
 
     fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
-        let value = BslValue::new_object(JsonSerializerSettingsObject(self.0.clone()));
-        get_serializer_setting(&value, name)
+        get_serializer_setting(self.as_dyn(), name)
     }
 
     fn set_property(
@@ -1883,8 +1837,7 @@ impl ObjectProtocol for JsonSerializerSettingsObject {
         value: BslValue,
         _context: &mut CallContext<'_>,
     ) -> RtResult<()> {
-        let receiver = BslValue::new_object(JsonSerializerSettingsObject(self.0.clone()));
-        set_serializer_setting(&receiver, name, value)
+        set_serializer_setting(self.as_dyn(), name, value)
     }
 
     fn is_filled(&self) -> RtResult<bool> {
@@ -2538,7 +2491,7 @@ pub fn read_json(
     // Первое событие читается здесь же: `ПрочитатьJSON` забирает документ
     // с текущей позиции целиком, и вызывать перед ним `Прочитать()` не
     // требуется.
-    let cell = as_reader(reader)?;
+    let cell = as_reader(arg_object(reader)?)?;
     // Разборщик ВЫНИМАЕТСЯ из ячейки на всё время сборки, а не держится
     // заимствованным: функция восстановления — это пользовательский код,
     // и он волен потрогать тот же самый `ЧтениеJSON`. С `borrow_mut()`
@@ -3001,7 +2954,7 @@ pub fn write_json(
     convert: Option<JsonConvertFn<'_>>,
     rt: &RuntimeShapes,
 ) -> RtResult<()> {
-    let cell = as_writer(writer)?;
+    let cell = as_writer(arg_object(writer)?)?;
     // Приёмник, как и разборщик в `read_json`, ВЫНИМАЕТСЯ из ячейки на
     // время записи: функция преобразования — пользовательский код, который
     // волен позвать `ЗаписатьJSON` на том же самом объекте, а `borrow_mut()`
@@ -3540,10 +3493,9 @@ pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor {
         package: env!("CARGO_PKG_NAME"),
         version: env!("CARGO_PKG_VERSION"),
-        dependencies: &[LibraryDependency {
-            package: bsl_rt::PACKAGE_NAME,
-            version: bsl_rt::PACKAGE_VERSION,
-        }],
+        // Ядро в зависимостях не объявляется: реестр включает его в
+        // требования любой программы (`RuntimeRegistry::requirements_for`).
+        dependencies: &[],
         functions: FUNCTIONS,
         constructors: CONSTRUCTORS,
     }
@@ -4302,38 +4254,39 @@ mod tests {
     #[test]
     fn serializer_setting_accessors_round_trip_every_field() {
         let obj = new_json_serializer_settings();
+        let obj = obj.object_ref().unwrap().as_dyn();
         set_serializer_setting(
-            &obj,
+            obj,
             "ФорматСериализацииДаты",
             BslValue::Enum(EnumValue::DateFormatMicrosoft),
         )
         .unwrap();
         set_serializer_setting(
-            &obj,
+            obj,
             "ВариантЗаписиДаты",
             BslValue::Enum(EnumValue::DateVariantUniversal),
         )
         .unwrap();
         set_serializer_setting(
-            &obj,
+            obj,
             "СериализовыватьМассивыКакОбъекты",
             BslValue::Boolean(true),
         )
         .unwrap();
 
         assert_eq!(
-            get_serializer_setting(&obj, "DateSerializationFormat").unwrap(),
+            get_serializer_setting(obj, "DateSerializationFormat").unwrap(),
             BslValue::Enum(EnumValue::DateFormatMicrosoft)
         );
         assert_eq!(
-            get_serializer_setting(&obj, "DateWritingVariant").unwrap(),
+            get_serializer_setting(obj, "DateWritingVariant").unwrap(),
             BslValue::Enum(EnumValue::DateVariantUniversal)
         );
         assert_eq!(
-            get_serializer_setting(&obj, "SerializeArraysAsObjects").unwrap(),
+            get_serializer_setting(obj, "SerializeArraysAsObjects").unwrap(),
             BslValue::Boolean(true)
         );
-        assert!(get_serializer_setting(&obj, "НетТакогоСвойства").is_err());
+        assert!(get_serializer_setting(obj, "НетТакогоСвойства").is_err());
     }
 
     /// ИЗМЕРЕНО: статья 16.2.3.2 приводит `ФорматСериализацииДат` (без
@@ -4341,7 +4294,8 @@ mod tests {
     #[test]
     fn the_article_typo_spelling_of_date_format_property_is_rejected() {
         let obj = new_json_serializer_settings();
-        assert!(get_serializer_setting(&obj, "ФорматСериализацииДат").is_err());
+        let obj = obj.object_ref().unwrap().as_dyn();
+        assert!(get_serializer_setting(obj, "ФорматСериализацииДат").is_err());
     }
 
     // --- ЗаписатьЗначениеJSON / ПрочитатьЗначениеJSON -------------------
@@ -4392,7 +4346,7 @@ mod tests {
     fn write_json_without_a_convert_function_keeps_the_plain_type_error() {
         let rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
         let writer = new_json_writer();
-        set_string(&writer, &[]).unwrap();
+        set_string(writer.object_ref().unwrap().as_dyn(), &[]).unwrap();
         let table = BslValue::new_table();
         let e = write_json(
             &writer,

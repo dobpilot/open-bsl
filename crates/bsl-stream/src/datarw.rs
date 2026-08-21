@@ -117,7 +117,7 @@ use std::rc::Rc;
 
 use bsl_rt::{
     BslNumber, BslString, BslValue, ByteStreamProtocol, CallContext, EnumValue, MethodCode,
-    MethodDescriptor, ObjectProtocol, RtError, RtResult, TypeDescriptor, TypeId,
+    MethodDescriptor, ObjectDowncast, ObjectProtocol, RtError, RtResult, TypeDescriptor, TypeId,
     encoding::Encoding,
 };
 
@@ -360,9 +360,8 @@ impl ObjectProtocol for DataRwObject {
     }
 
     fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
-        let value = self.as_value();
         match DataRwProp::lookup(name) {
-            Some(property) => get_prop(&value, property),
+            Some(property) => get_prop(self.as_dyn(), property),
             None => Err(RtError::UnknownColumn(name.to_string())),
         }
     }
@@ -373,27 +372,10 @@ impl ObjectProtocol for DataRwObject {
         value: BslValue,
         _context: &mut CallContext<'_>,
     ) -> RtResult<()> {
-        let receiver = self.as_value();
         match DataRwProp::lookup(name) {
-            Some(property) => set_prop(&receiver, property, &value),
+            Some(property) => set_prop(self.as_dyn(), property, &value),
             None => Err(RtError::UnknownColumn(name.to_string())),
         }
-    }
-
-    fn call_method(
-        &self,
-        name: &str,
-        arguments: &[BslValue],
-        context: &mut CallContext<'_>,
-    ) -> RtResult<BslValue> {
-        bsl_rt::call_method_from_table(
-            DATA_RW_METHODS,
-            self.type_descriptor().name,
-            &self.as_value(),
-            name,
-            arguments,
-            context,
-        )
     }
 
     fn method_table(&self) -> &'static [MethodDescriptor] {
@@ -405,7 +387,7 @@ impl ObjectProtocol for DataRwObject {
 // одна на читателя и писателя — применимость метода к стороне проверяют
 // сами операции (измеренные тексты ошибок живут в них).
 fn rw_read(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -413,7 +395,7 @@ fn rw_read(
 }
 
 fn rw_write(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -422,7 +404,7 @@ fn rw_write(
 }
 
 fn rw_close(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     _arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -431,7 +413,7 @@ fn rw_close(
 }
 
 fn rw_skip(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -439,7 +421,7 @@ fn rw_skip(
 }
 
 fn rw_read_int16(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -447,7 +429,7 @@ fn rw_read_int16(
 }
 
 fn rw_read_int32(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -455,7 +437,7 @@ fn rw_read_int32(
 }
 
 fn rw_read_int64(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -463,7 +445,7 @@ fn rw_read_int64(
 }
 
 fn rw_write_int16(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -472,7 +454,7 @@ fn rw_write_int16(
 }
 
 fn rw_write_int32(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -481,7 +463,7 @@ fn rw_write_int32(
 }
 
 fn rw_write_int64(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -490,7 +472,7 @@ fn rw_write_int64(
 }
 
 fn rw_read_byte(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     _arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -498,7 +480,7 @@ fn rw_read_byte(
 }
 
 fn rw_read_into_buffer(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -506,7 +488,7 @@ fn rw_read_into_buffer(
 }
 
 fn rw_read_chars(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -514,7 +496,7 @@ fn rw_read_chars(
 }
 
 fn rw_read_line(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -522,7 +504,7 @@ fn rw_read_line(
 }
 
 fn rw_write_byte(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -531,7 +513,7 @@ fn rw_write_byte(
 }
 
 fn rw_write_chars(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -540,7 +522,7 @@ fn rw_write_chars(
 }
 
 fn rw_write_line(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -636,15 +618,6 @@ const DATA_RW_METHODS: &[MethodDescriptor] = &[
     },
 ];
 
-impl DataRwObject {
-    fn as_value(&self) -> BslValue {
-        BslValue::new_object(Self {
-            side: self.side,
-            state: self.state.clone(),
-        })
-    }
-}
-
 impl ObjectProtocol for DataReadResult {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         &DATA_READ_RESULT_TYPE
@@ -658,25 +631,6 @@ impl ObjectProtocol for DataReadResult {
         }
     }
 
-    fn call_method(
-        &self,
-        name: &str,
-        arguments: &[BslValue],
-        context: &mut CallContext<'_>,
-    ) -> RtResult<BslValue> {
-        let value = BslValue::new_object(DataReadResult {
-            bytes: self.bytes.clone(),
-        });
-        bsl_rt::call_method_from_table(
-            DATA_READ_RESULT_METHODS,
-            DATA_READ_RESULT_TYPE.name,
-            &value,
-            name,
-            arguments,
-            context,
-        )
-    }
-
     fn method_table(&self) -> &'static [MethodDescriptor] {
         DATA_READ_RESULT_METHODS
     }
@@ -684,19 +638,18 @@ impl ObjectProtocol for DataReadResult {
 
 /// Байты результата чтения: обработчики таблицы получают значение и
 /// возвращаются к конкретному типу через downcast.
-fn read_result_bytes(receiver: &BslValue) -> RtResult<&Rc<[u8]>> {
+fn read_result_bytes(receiver: &dyn ObjectProtocol) -> RtResult<&Rc<[u8]>> {
     receiver
-        .object_ref()
-        .and_then(|object| object.downcast_ref::<DataReadResult>())
+        .downcast_ref::<DataReadResult>()
         .map(|result| &result.bytes)
         .ok_or(RtError::MethodNotApplicable {
             method: "ПолучитьДвоичныеДанные",
-            receiver: receiver.type_name(),
+            receiver: receiver.type_descriptor().name,
         })
 }
 
 fn read_result_binary_data(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     _arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -706,7 +659,7 @@ fn read_result_binary_data(
 }
 
 fn read_result_buffer(
-    receiver: &BslValue,
+    receiver: &dyn ObjectProtocol,
     _arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
@@ -727,48 +680,55 @@ const DATA_READ_RESULT_METHODS: &[MethodDescriptor] = &[
 ];
 
 /// Внутренности читателя либо писателя вместе с тем, кто из них это.
-fn data<'a>(v: &'a BslValue, op: &'static str) -> RtResult<(&'a Rc<RefCell<DataRwState>>, Side)> {
+fn data<'a>(
+    v: &'a dyn ObjectProtocol,
+    op: &'static str,
+) -> RtResult<(&'a Rc<RefCell<DataRwState>>, Side)> {
     let not_applicable = || RtError::MethodNotApplicable {
         method: op,
-        receiver: v.type_name(),
+        receiver: v.type_descriptor().name,
     };
-    v.object_ref()
-        .and_then(|object| object.downcast_ref::<DataRwObject>())
+    v.downcast_ref::<DataRwObject>()
         .map(|object| (&object.state, object.side))
         .ok_or_else(not_applicable)
 }
 
 /// Внутренности ЧИТАТЕЛЯ: методы чтения на писателе платформа не знает.
-fn reader<'a>(v: &'a BslValue, op: &'static str) -> RtResult<&'a Rc<RefCell<DataRwState>>> {
+fn reader<'a>(
+    v: &'a dyn ObjectProtocol,
+    op: &'static str,
+) -> RtResult<&'a Rc<RefCell<DataRwState>>> {
     match data(v, op)? {
         (d, Side::Reader) => Ok(d),
         (_, Side::Writer) => Err(RtError::MethodNotApplicable {
             method: op,
-            receiver: v.type_name(),
+            receiver: v.type_descriptor().name,
         }),
     }
 }
 
 /// Внутренности ПИСАТЕЛЯ.
-fn writer<'a>(v: &'a BslValue, op: &'static str) -> RtResult<&'a Rc<RefCell<DataRwState>>> {
+fn writer<'a>(
+    v: &'a dyn ObjectProtocol,
+    op: &'static str,
+) -> RtResult<&'a Rc<RefCell<DataRwState>>> {
     match data(v, op)? {
         (d, Side::Writer) => Ok(d),
         (_, Side::Reader) => Err(RtError::MethodNotApplicable {
             method: op,
-            receiver: v.type_name(),
+            receiver: v.type_descriptor().name,
         }),
     }
 }
 
 /// Байты результата чтения.
 #[cfg(test)]
-fn result_bytes<'a>(v: &'a BslValue, op: &'static str) -> RtResult<&'a Rc<[u8]>> {
-    v.object_ref()
-        .and_then(|object| object.downcast_ref::<DataReadResult>())
+fn result_bytes<'a>(v: &'a dyn ObjectProtocol, op: &'static str) -> RtResult<&'a Rc<[u8]>> {
+    v.downcast_ref::<DataReadResult>()
         .map(|result| &result.bytes)
         .ok_or_else(|| RtError::MethodNotApplicable {
             method: op,
-            receiver: v.type_name(),
+            receiver: v.type_descriptor().name,
         })
 }
 
@@ -887,11 +847,16 @@ fn expand_line_feeds(text: &str) -> String {
 /// параметров» — измерено на `ЗаписьДанных.Записать(Буфер, 0, 4)`). Резолвер
 /// у этих методов арность не фиксирует (необязательные хвостовые аргументы),
 /// поэтому верхнюю границу проверяет рантайм.
-fn at_most(v: &BslValue, args: &[BslValue], max: usize, op: &'static str) -> RtResult<()> {
+fn at_most(
+    v: &dyn ObjectProtocol,
+    args: &[BslValue],
+    max: usize,
+    op: &'static str,
+) -> RtResult<()> {
     if args.len() > max {
         return Err(RtError::MethodNotApplicable {
             method: op,
-            receiver: v.type_name(),
+            receiver: v.type_descriptor().name,
         });
     }
     Ok(())
@@ -1115,7 +1080,7 @@ impl DataRwProp {
 /// # Errors
 ///
 /// «Метод не применим», если получатель не читатель и не писатель.
-pub fn get_prop(v: &BslValue, which: DataRwProp) -> RtResult<BslValue> {
+pub fn get_prop(v: &dyn ObjectProtocol, which: DataRwProp) -> RtResult<BslValue> {
     let (d, _) = data(v, "ПорядокБайтов")?;
     let d = d.borrow();
     Ok(match which {
@@ -1134,7 +1099,7 @@ pub fn get_prop(v: &BslValue, which: DataRwProp) -> RtResult<BslValue> {
 ///
 /// [`RtError::TypeError`] при негодном типе значения; «метод не применим»,
 /// если получатель не читатель и не писатель.
-pub fn set_prop(v: &BslValue, which: DataRwProp, value: &BslValue) -> RtResult<()> {
+pub fn set_prop(v: &dyn ObjectProtocol, which: DataRwProp, value: &BslValue) -> RtResult<()> {
     const OP: &str = "Присваивание свойству";
     let (d, side) = data(v, OP)?;
     let mut d = d.borrow_mut();
@@ -1240,7 +1205,7 @@ fn read_limited(d: &mut DataRwState, limit: Option<u64>, op: &'static str) -> Rt
 ///
 /// [`RtError::TypeError`] на дробном и отрицательном количестве;
 /// [`RtError::IoError`], если позицию целевого потока подвинули извне.
-pub fn read(v: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn read(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     const OP: &str = "Прочитать";
     let d = reader(v, OP)?;
     at_most(v, args, 1, OP)?;
@@ -1265,7 +1230,7 @@ pub fn read(v: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
 ///
 /// Те же, что у [`read`], и [`RtError::TypeError`] на количестве `2^32` и
 /// больше.
-pub fn read_into_buffer(v: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn read_into_buffer(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     const OP: &str = "ПрочитатьВБуферДвоичныхДанных";
     let d = reader(v, OP)?;
     at_most(v, args, 1, OP)?;
@@ -1287,7 +1252,7 @@ fn buffer_of_bytes(bytes: Vec<u8>) -> BslValue {
 /// # Errors
 ///
 /// Те же, что у [`read`].
-pub fn read_byte(v: &BslValue) -> RtResult<BslValue> {
+pub fn read_byte(v: &dyn ObjectProtocol) -> RtResult<BslValue> {
     const OP: &str = "ПрочитатьБайт";
     let d = reader(v, OP)?;
     let mut d = d.borrow_mut();
@@ -1314,7 +1279,7 @@ pub fn read_byte(v: &BslValue) -> RtResult<BslValue> {
 ///
 /// [`RtError::TypeError`], если аргумент не член `ПорядокБайтов`; ошибка
 /// чередования, как у [`read`].
-fn read_int(v: &BslValue, args: &[BslValue], w: IntWidth) -> RtResult<BslValue> {
+fn read_int(v: &dyn ObjectProtocol, args: &[BslValue], w: IntWidth) -> RtResult<BslValue> {
     let op = w.read_op();
     let d = reader(v, op)?;
     at_most(v, args, 1, op)?;
@@ -1341,7 +1306,7 @@ fn read_int(v: &BslValue, args: &[BslValue], w: IntWidth) -> RtResult<BslValue> 
 ///
 /// [`RtError::TypeError`] на дробном и отрицательном количестве (измерено:
 /// `Пропустить(-1)` платформа отвергает); ошибка чередования, как у [`read`].
-pub fn skip(v: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn skip(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     const OP: &str = "Пропустить";
     let d = reader(v, OP)?;
     at_most(v, args, 1, OP)?;
@@ -1368,7 +1333,7 @@ pub fn skip(v: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
 /// [`RtError::TextDoc`] на неизвестном имени кодировки (платформа жалуется
 /// именно здесь, а не в конструкторе — измерено); [`RtError::TypeError`] на
 /// количестве `2^32` и больше; ошибка чередования, как у [`read`].
-pub fn read_chars(v: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn read_chars(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     const OP: &str = "ПрочитатьСимволы";
     let d = reader(v, OP)?;
     at_most(v, args, 2, OP)?;
@@ -1448,7 +1413,7 @@ fn read_exactly_chars(
 /// # Errors
 ///
 /// Те же, что у [`read_chars`].
-pub fn read_line(v: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn read_line(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     const OP: &str = "ПрочитатьСтроку";
     let d = reader(v, OP)?;
     at_most(v, args, 1, OP)?;
@@ -1494,14 +1459,14 @@ pub fn read_line(v: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
 ///
 /// [`RtError::TypeError`] на любом другом аргументе; [`RtError::IoError`],
 /// если позицию целевого потока подвинули извне.
-pub fn write(v: &BslValue, args: &[BslValue]) -> RtResult<()> {
+pub fn write(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     const OP: &str = "Записать";
     let d = writer(v, OP)?;
     let mut d = d.borrow_mut();
     let [data] = args else {
         return Err(RtError::MethodNotApplicable {
             method: OP,
-            receiver: v.type_name(),
+            receiver: v.type_descriptor().name,
         });
     };
     let bytes = bsl_binbuf::binary_data_bytes(data).ok_or(RtError::TypeError {
@@ -1518,7 +1483,7 @@ pub fn write(v: &BslValue, args: &[BslValue]) -> RtResult<()> {
 ///
 /// [`RtError::TypeError`], если значение не целое из `0..=255` (измерено:
 /// платформа отвергает и `256`, и `-1`); ошибка чередования, как у [`write`].
-pub fn write_byte(v: &BslValue, args: &[BslValue]) -> RtResult<()> {
+pub fn write_byte(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     const OP: &str = "ЗаписатьБайт";
     let d = writer(v, OP)?;
     at_most(v, args, 1, OP)?;
@@ -1545,7 +1510,7 @@ pub fn write_byte(v: &BslValue, args: &[BslValue]) -> RtResult<()> {
 /// [`RtError::TypeError`], если значение не целое из `0..=2^N-1` (измерено:
 /// `65536` и `-1` для шестнадцати бит платформа отвергает); ошибка
 /// чередования, как у [`write`].
-fn write_int(v: &BslValue, args: &[BslValue], w: IntWidth) -> RtResult<()> {
+fn write_int(v: &dyn ObjectProtocol, args: &[BslValue], w: IntWidth) -> RtResult<()> {
     let op = w.write_op();
     let d = writer(v, op)?;
     at_most(v, args, 2, op)?;
@@ -1572,7 +1537,7 @@ fn write_int(v: &BslValue, args: &[BslValue], w: IntWidth) -> RtResult<()> {
 /// [`RtError::TypeError`], если первый аргумент не строка;
 /// [`RtError::TextDoc`] на неизвестном имени кодировки; ошибка чередования,
 /// как у [`write`].
-pub fn write_chars(v: &BslValue, args: &[BslValue]) -> RtResult<()> {
+pub fn write_chars(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     const OP: &str = "ЗаписатьСимволы";
     let d = writer(v, OP)?;
     at_most(v, args, 2, OP)?;
@@ -1598,7 +1563,7 @@ pub fn write_chars(v: &BslValue, args: &[BslValue]) -> RtResult<()> {
 /// # Errors
 ///
 /// Те же, что у [`write_chars`].
-pub fn write_line(v: &BslValue, args: &[BslValue]) -> RtResult<()> {
+pub fn write_line(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     const OP: &str = "ЗаписатьСтроку";
     let d = writer(v, OP)?;
     at_most(v, args, 3, OP)?;
@@ -1633,7 +1598,7 @@ pub fn write_line(v: &BslValue, args: &[BslValue]) -> RtResult<()> {
 /// # Errors
 ///
 /// «Метод не применим», если получатель не читатель и не писатель.
-pub fn close(v: &BslValue) -> RtResult<()> {
+pub fn close(v: &dyn ObjectProtocol) -> RtResult<()> {
     data(v, "Закрыть")?;
     Ok(())
 }
@@ -1647,7 +1612,7 @@ pub fn close(v: &BslValue) -> RtResult<()> {
 ///
 /// «Метод не применим», если получатель не результат чтения.
 #[cfg(test)]
-fn result_size(v: &BslValue) -> RtResult<BslValue> {
+fn result_size(v: &dyn ObjectProtocol) -> RtResult<BslValue> {
     let bytes = result_bytes(v, "Размер")?;
     Ok(from_u64(bytes.len() as u64))
 }
@@ -1658,7 +1623,7 @@ fn result_size(v: &BslValue) -> RtResult<BslValue> {
 ///
 /// «Метод не применим», если получатель не результат чтения.
 #[cfg(test)]
-fn result_binary_data(v: &BslValue) -> RtResult<BslValue> {
+fn result_binary_data(v: &dyn ObjectProtocol) -> RtResult<BslValue> {
     let bytes = result_bytes(v, "ПолучитьДвоичныеДанные")?;
     Ok(BslValue::binary_data_of(bytes.to_vec()))
 }
@@ -1669,7 +1634,7 @@ fn result_binary_data(v: &BslValue) -> RtResult<BslValue> {
 ///
 /// «Метод не применим», если получатель не результат чтения.
 #[cfg(test)]
-fn result_binary_buffer(v: &BslValue) -> RtResult<BslValue> {
+fn result_binary_buffer(v: &dyn ObjectProtocol) -> RtResult<BslValue> {
     let bytes = result_bytes(v, "ПолучитьБуферДвоичныхДанных")?;
     Ok(buffer_of_bytes(bytes.to_vec()))
 }
@@ -1688,6 +1653,11 @@ mod tests {
     }
 
     use super::*;
+
+    /// Получатель за значением: обработчики и хелперы принимают объект.
+    fn st(v: &BslValue) -> &dyn ObjectProtocol {
+        v.object_ref().expect("объект").as_dyn()
+    }
     use crate::stream;
 
     fn num(v: i64) -> BslValue {
@@ -1729,9 +1699,9 @@ mod tests {
     fn source_stream() -> BslValue {
         let s = stream::new_memory_stream(&BslValue::Undefined).unwrap();
         let bytes: Vec<u8> = (0..16u8).map(|i| i + 65).collect();
-        stream::write(&s, &[buffer(&bytes), num(0), num(16)]).unwrap();
+        stream::write(st(&s), &[buffer(&bytes), num(0), num(16)]).unwrap();
         stream::seek(
-            &s,
+            st(&s),
             &[num(0), BslValue::Enum(EnumValue::StreamPositionBegin)],
         )
         .unwrap();
@@ -1774,20 +1744,20 @@ mod tests {
     fn reader_rejects_operation_after_target_stream_was_moved_directly() {
         let s = source_stream();
         let r = reader_over(&s);
-        assert_eq!(as_u64(&read_byte(&r).unwrap()), 65);
+        assert_eq!(as_u64(&read_byte(st(&r)).unwrap()), 65);
         stream::seek(
-            &s,
+            st(&s),
             &[num(0), BslValue::Enum(EnumValue::StreamPositionBegin)],
         )
         .unwrap();
-        assert!(read_byte(&r).is_err());
+        assert!(read_byte(st(&r)).is_err());
         // И у остальных операций читателя тот же ответ.
-        assert!(read(&r, &[num(4)]).is_err());
-        assert!(read_int(&r, &[], IntWidth::W32).is_err());
-        assert!(skip(&r, &[num(1)]).is_err());
-        assert!(read_line(&r, &[]).is_err());
-        assert!(read_chars(&r, &[num(1)]).is_err());
-        assert!(read_into_buffer(&r, &[num(1)]).is_err());
+        assert!(read(st(&r), &[num(4)]).is_err());
+        assert!(read_int(st(&r), &[], IntWidth::W32).is_err());
+        assert!(skip(st(&r), &[num(1)]).is_err());
+        assert!(read_line(st(&r), &[]).is_err());
+        assert!(read_chars(st(&r), &[num(1)]).is_err());
+        assert!(read_into_buffer(st(&r), &[num(1)]).is_err());
     }
 
     /// То же у писателя — и отвергнутая запись НИЧЕГО не пишет.
@@ -1795,20 +1765,20 @@ mod tests {
     fn writer_rejects_operation_after_target_stream_was_moved_directly() {
         let s = stream::new_memory_stream(&BslValue::Undefined).unwrap();
         let w = writer_over(&s);
-        write_byte(&w, &[num(65)]).unwrap();
-        let size_before = as_u64(&stream::size(&s).unwrap());
+        write_byte(st(&w), &[num(65)]).unwrap();
+        let size_before = as_u64(&stream::size(st(&s)).unwrap());
         stream::seek(
-            &s,
+            st(&s),
             &[num(0), BslValue::Enum(EnumValue::StreamPositionBegin)],
         )
         .unwrap();
-        assert!(write_byte(&w, &[num(66)]).is_err());
-        assert!(write_int(&w, &[num(1234567)], IntWidth::W32).is_err());
-        assert!(write_chars(&w, &[text("АБ")]).is_err());
-        assert!(write_line(&w, &[text("АБ")]).is_err());
-        assert!(write(&w, &[BslValue::binary_data_of(vec![1, 2])]).is_err());
+        assert!(write_byte(st(&w), &[num(66)]).is_err());
+        assert!(write_int(st(&w), &[num(1234567)], IntWidth::W32).is_err());
+        assert!(write_chars(st(&w), &[text("АБ")]).is_err());
+        assert!(write_line(st(&w), &[text("АБ")]).is_err());
+        assert!(write(st(&w), &[BslValue::binary_data_of(vec![1, 2])]).is_err());
         // Проверка стоит ДО побочного эффекта: размер не изменился (измерено).
-        assert_eq!(as_u64(&stream::size(&s).unwrap()), size_before);
+        assert_eq!(as_u64(&stream::size(st(&s)).unwrap()), size_before);
     }
 
     /// Ошибка НЕ залипает: возврат позиции на ожидаемую лечит объект, а
@@ -1818,35 +1788,35 @@ mod tests {
     fn moving_the_target_back_to_the_expected_position_heals_the_reader() {
         let s = source_stream();
         let r = reader_over(&s);
-        assert_eq!(as_u64(&read_byte(&r).unwrap()), 65);
+        assert_eq!(as_u64(&read_byte(st(&r)).unwrap()), 65);
         stream::seek(
-            &s,
+            st(&s),
             &[num(5), BslValue::Enum(EnumValue::StreamPositionBegin)],
         )
         .unwrap();
-        assert!(read_byte(&r).is_err());
+        assert!(read_byte(st(&r)).is_err());
         stream::seek(
-            &s,
+            st(&s),
             &[num(1), BslValue::Enum(EnumValue::StreamPositionBegin)],
         )
         .unwrap();
-        assert_eq!(as_u64(&read_byte(&r).unwrap()), 66);
+        assert_eq!(as_u64(&read_byte(st(&r)).unwrap()), 66);
 
         // Переход НА ТУ ЖЕ позицию — не чередование.
         let s = source_stream();
         let r = reader_over(&s);
         stream::seek(
-            &s,
+            st(&s),
             &[num(0), BslValue::Enum(EnumValue::StreamPositionBegin)],
         )
         .unwrap();
-        assert_eq!(as_u64(&read_byte(&r).unwrap()), 65);
+        assert_eq!(as_u64(&read_byte(st(&r)).unwrap()), 65);
         stream::seek(
-            &s,
+            st(&s),
             &[num(1), BslValue::Enum(EnumValue::StreamPositionBegin)],
         )
         .unwrap();
-        assert_eq!(as_u64(&read_byte(&r).unwrap()), 66);
+        assert_eq!(as_u64(&read_byte(st(&r)).unwrap()), 66);
     }
 
     /// Над `ДвоичныеДанные` понятия чередования нет: подвинуть такой источник
@@ -1854,8 +1824,8 @@ mod tests {
     #[test]
     fn a_reader_over_binary_data_has_no_interleaving_at_all() {
         let r = reader_over(&BslValue::binary_data_of(vec![65, 66, 67]));
-        assert_eq!(as_u64(&read_byte(&r).unwrap()), 65);
-        assert_eq!(as_u64(&read_byte(&r).unwrap()), 66);
+        assert_eq!(as_u64(&read_byte(st(&r)).unwrap()), 65);
+        assert_eq!(as_u64(&read_byte(st(&r)).unwrap()), 66);
     }
 
     // --- отсутствие собственного буфера -------------------------------------
@@ -1866,11 +1836,11 @@ mod tests {
     fn the_reader_never_reads_ahead_of_the_target_stream() {
         let s = source_stream();
         let r = reader_over(&s);
-        assert_eq!(as_u64(&stream::current_position(&s).unwrap()), 0);
-        read_byte(&r).unwrap();
-        assert_eq!(as_u64(&stream::current_position(&s).unwrap()), 1);
-        read_byte(&r).unwrap();
-        assert_eq!(as_u64(&stream::current_position(&s).unwrap()), 2);
+        assert_eq!(as_u64(&stream::current_position(st(&s)).unwrap()), 0);
+        read_byte(st(&r)).unwrap();
+        assert_eq!(as_u64(&stream::current_position(st(&s)).unwrap()), 1);
+        read_byte(st(&r)).unwrap();
+        assert_eq!(as_u64(&stream::current_position(st(&s)).unwrap()), 2);
     }
 
     /// У писателя симметрично: записанное видно в целевом потоке немедленно,
@@ -1879,9 +1849,9 @@ mod tests {
     fn the_writer_reaches_the_target_stream_immediately() {
         let s = stream::new_memory_stream(&BslValue::Undefined).unwrap();
         let w = writer_over(&s);
-        write_byte(&w, &[num(65)]).unwrap();
-        assert_eq!(as_u64(&stream::size(&s).unwrap()), 1);
-        assert_eq!(as_u64(&stream::current_position(&s).unwrap()), 1);
+        write_byte(st(&w), &[num(65)]).unwrap();
+        assert_eq!(as_u64(&stream::size(st(&s)).unwrap()), 1);
+        assert_eq!(as_u64(&stream::current_position(st(&s)).unwrap()), 1);
     }
 
     // --- край источника -------------------------------------------------------
@@ -1890,13 +1860,13 @@ mod tests {
     fn reading_past_the_end_yields_undefined_for_byte_and_integers() {
         let s = stream::new_memory_stream(&BslValue::Undefined).unwrap();
         let r = reader_over(&s);
-        assert_eq!(read_byte(&r).unwrap(), BslValue::Undefined);
+        assert_eq!(read_byte(st(&r)).unwrap(), BslValue::Undefined);
 
         let s = source_stream();
         let r = reader_over(&s);
-        skip(&r, &[num(13)]).unwrap();
+        skip(st(&r), &[num(13)]).unwrap();
         assert_eq!(
-            read_int(&r, &[], IntWidth::W32).unwrap(),
+            read_int(st(&r), &[], IntWidth::W32).unwrap(),
             BslValue::Undefined
         );
     }
@@ -1908,30 +1878,33 @@ mod tests {
         let s = source_stream();
         let r = reader_over(&s);
         assert_eq!(
-            as_u64(&result_size(&read(&r, &[num(100)]).unwrap()).unwrap()),
+            as_u64(&result_size(st(&read(st(&r), &[num(100)]).unwrap())).unwrap()),
             16
         );
 
         let s = source_stream();
         let r = reader_over(&s);
         assert_eq!(
-            as_u64(&result_size(&read(&r, &[num(0)]).unwrap()).unwrap()),
+            as_u64(&result_size(st(&read(st(&r), &[num(0)]).unwrap())).unwrap()),
             16
         );
 
         let s = source_stream();
         let r = reader_over(&s);
-        assert_eq!(as_u64(&result_size(&read(&r, &[]).unwrap()).unwrap()), 16);
+        assert_eq!(
+            as_u64(&result_size(st(&read(st(&r), &[]).unwrap())).unwrap()),
+            16
+        );
 
         let s = stream::new_memory_stream(&BslValue::Undefined).unwrap();
         let r = reader_over(&s);
         assert_eq!(
-            as_u64(&result_size(&read(&r, &[num(4)]).unwrap()).unwrap()),
+            as_u64(&result_size(st(&read(st(&r), &[num(4)]).unwrap())).unwrap()),
             0
         );
-        let buf = read_into_buffer(&r, &[num(4)]).unwrap();
+        let buf = read_into_buffer(st(&r), &[num(4)]).unwrap();
         assert_eq!(bytes_of(&buf).len(), 0);
-        assert_eq!(as_str(&read_chars(&r, &[num(4)]).unwrap()), "");
+        assert_eq!(as_str(&read_chars(st(&r), &[num(4)]).unwrap()), "");
     }
 
     /// `Пропустить` ПЕРЕВОДИТ позицию, а не вычитывает байты: над
@@ -1941,11 +1914,11 @@ mod tests {
     fn skip_moves_the_position_past_the_end_instead_of_reading() {
         let s = source_stream();
         let r = reader_over(&s);
-        assert_eq!(as_u64(&skip(&r, &[num(100)]).unwrap()), 100);
-        assert_eq!(as_u64(&stream::current_position(&s).unwrap()), 100);
+        assert_eq!(as_u64(&skip(st(&r), &[num(100)]).unwrap()), 100);
+        assert_eq!(as_u64(&stream::current_position(st(&s)).unwrap()), 100);
         // Размер потока от этого не меняется, и читать там уже нечего.
-        assert_eq!(as_u64(&stream::size(&s).unwrap()), 16);
-        assert_eq!(read_byte(&r).unwrap(), BslValue::Undefined);
+        assert_eq!(as_u64(&stream::size(st(&s)).unwrap()), 16);
+        assert_eq!(read_byte(st(&r)).unwrap(), BslValue::Undefined);
     }
 
     /// Неудавшееся чтение целого ОТКАТЫВАЕТ позицию: измерено, что после
@@ -1954,13 +1927,13 @@ mod tests {
     fn a_short_integer_read_consumes_nothing() {
         let s = source_stream();
         let r = reader_over(&s);
-        skip(&r, &[num(13)]).unwrap();
+        skip(st(&r), &[num(13)]).unwrap();
         assert_eq!(
-            read_int(&r, &[], IntWidth::W32).unwrap(),
+            read_int(st(&r), &[], IntWidth::W32).unwrap(),
             BslValue::Undefined
         );
-        assert_eq!(as_u64(&stream::current_position(&s).unwrap()), 13);
-        assert_eq!(as_u64(&read_byte(&r).unwrap()), 78);
+        assert_eq!(as_u64(&stream::current_position(st(&s)).unwrap()), 13);
+        assert_eq!(as_u64(&read_byte(st(&r)).unwrap()), 78);
     }
 
     // --- целые -----------------------------------------------------------------
@@ -1971,21 +1944,27 @@ mod tests {
     fn the_readers_byte_order_property_is_shown_but_not_used() {
         let s = source_stream();
         let r = reader_over(&s);
-        assert_eq!(as_u64(&read_int(&r, &[], IntWidth::W16).unwrap()), 16961);
+        assert_eq!(
+            as_u64(&read_int(st(&r), &[], IntWidth::W16).unwrap()),
+            16961
+        );
 
         let s = source_stream();
         let r = reader_over(&s);
         set_prop(
-            &r,
+            st(&r),
             DataRwProp::ByteOrder,
             &BslValue::Enum(EnumValue::ByteOrderBig),
         )
         .unwrap();
         assert_eq!(
-            get_prop(&r, DataRwProp::ByteOrder).unwrap(),
+            get_prop(st(&r), DataRwProp::ByteOrder).unwrap(),
             BslValue::Enum(EnumValue::ByteOrderBig)
         );
-        assert_eq!(as_u64(&read_int(&r, &[], IntWidth::W16).unwrap()), 16961);
+        assert_eq!(
+            as_u64(&read_int(st(&r), &[], IntWidth::W16).unwrap()),
+            16961
+        );
 
         // Из конструктора — читается.
         let s = source_stream();
@@ -1996,7 +1975,10 @@ mod tests {
             &BslValue::Undefined,
         )
         .unwrap();
-        assert_eq!(as_u64(&read_int(&r, &[], IntWidth::W16).unwrap()), 16706);
+        assert_eq!(
+            as_u64(&read_int(st(&r), &[], IntWidth::W16).unwrap()),
+            16706
+        );
 
         // Явный аргумент — тоже.
         let s = source_stream();
@@ -2004,7 +1986,7 @@ mod tests {
         assert_eq!(
             as_u64(
                 &read_int(
-                    &r,
+                    st(&r),
                     &[BslValue::Enum(EnumValue::ByteOrderBig)],
                     IntWidth::W16
                 )
@@ -2018,22 +2000,22 @@ mod tests {
     #[test]
     fn the_writers_byte_order_property_is_live() {
         let (w, buf) = writer_over_buffer(4);
-        write_int(&w, &[num(258)], IntWidth::W16).unwrap();
+        write_int(st(&w), &[num(258)], IntWidth::W16).unwrap();
         assert_eq!(bytes_of(&buf)[..2], [2, 1]);
 
         let (w, buf) = writer_over_buffer(4);
         set_prop(
-            &w,
+            st(&w),
             DataRwProp::ByteOrder,
             &BslValue::Enum(EnumValue::ByteOrderBig),
         )
         .unwrap();
-        write_int(&w, &[num(258)], IntWidth::W16).unwrap();
+        write_int(st(&w), &[num(258)], IntWidth::W16).unwrap();
         assert_eq!(bytes_of(&buf)[..2], [1, 2]);
 
         let (w, buf) = writer_over_buffer(4);
         write_int(
-            &w,
+            st(&w),
             &[num(258), BslValue::Enum(EnumValue::ByteOrderBig)],
             IntWidth::W16,
         )
@@ -2044,12 +2026,12 @@ mod tests {
     #[test]
     fn integer_and_byte_ranges_match_the_platform() {
         let (w, _buf) = writer_over_buffer(16);
-        assert!(write_byte(&w, &[num(255)]).is_ok());
-        assert!(write_byte(&w, &[num(256)]).is_err());
-        assert!(write_byte(&w, &[num(-1)]).is_err());
-        assert!(write_int(&w, &[num(65535)], IntWidth::W16).is_ok());
-        assert!(write_int(&w, &[num(65536)], IntWidth::W16).is_err());
-        assert!(write_int(&w, &[num(-1)], IntWidth::W16).is_err());
+        assert!(write_byte(st(&w), &[num(255)]).is_ok());
+        assert!(write_byte(st(&w), &[num(256)]).is_err());
+        assert!(write_byte(st(&w), &[num(-1)]).is_err());
+        assert!(write_int(st(&w), &[num(65535)], IntWidth::W16).is_ok());
+        assert!(write_int(st(&w), &[num(65536)], IntWidth::W16).is_err());
+        assert!(write_int(st(&w), &[num(-1)], IntWidth::W16).is_err());
     }
 
     /// Дробное и отрицательное количество платформа отвергает — без усечения,
@@ -2061,29 +2043,36 @@ mod tests {
     fn extra_arguments_are_rejected_at_runtime() {
         let s = source_stream();
         let r = reader_over(&s);
-        assert!(read(&r, &[num(1), num(2)]).is_err());
-        assert!(read_into_buffer(&r, &[num(1), num(2)]).is_err());
-        assert!(skip(&r, &[num(1), num(2)]).is_err());
-        assert!(read_line(&r, &[text("UTF-8"), num(2)]).is_err());
-        assert!(read_chars(&r, &[num(1), text("UTF-8"), num(2)]).is_err());
-        assert!(read_int(&r, &[BslValue::Undefined, num(2)], IntWidth::W16).is_err());
+        assert!(read(st(&r), &[num(1), num(2)]).is_err());
+        assert!(read_into_buffer(st(&r), &[num(1), num(2)]).is_err());
+        assert!(skip(st(&r), &[num(1), num(2)]).is_err());
+        assert!(read_line(st(&r), &[text("UTF-8"), num(2)]).is_err());
+        assert!(read_chars(st(&r), &[num(1), text("UTF-8"), num(2)]).is_err());
+        assert!(read_int(st(&r), &[BslValue::Undefined, num(2)], IntWidth::W16).is_err());
 
         let (w, _buf) = writer_over_buffer(16);
-        assert!(write_byte(&w, &[num(1), num(2)]).is_err());
-        assert!(write_int(&w, &[num(1), BslValue::Undefined, num(2)], IntWidth::W16).is_err());
-        assert!(write_chars(&w, &[text("a"), text("UTF-8"), num(2)]).is_err());
-        assert!(write_line(&w, &[text("a"), text("UTF-8"), text("!"), num(2)]).is_err());
-        assert!(write(&w, &[BslValue::binary_data_of(vec![1]), num(0), num(1)]).is_err());
+        assert!(write_byte(st(&w), &[num(1), num(2)]).is_err());
+        assert!(
+            write_int(
+                st(&w),
+                &[num(1), BslValue::Undefined, num(2)],
+                IntWidth::W16
+            )
+            .is_err()
+        );
+        assert!(write_chars(st(&w), &[text("a"), text("UTF-8"), num(2)]).is_err());
+        assert!(write_line(st(&w), &[text("a"), text("UTF-8"), text("!"), num(2)]).is_err());
+        assert!(write(st(&w), &[BslValue::binary_data_of(vec![1]), num(0), num(1)]).is_err());
     }
 
     #[test]
     fn fractional_and_negative_counts_are_rejected() {
         let s = source_stream();
         let r = reader_over(&s);
-        assert!(read(&r, &[frac(25, 1)]).is_err());
-        assert!(read(&r, &[num(-1)]).is_err());
-        assert!(skip(&r, &[num(-1)]).is_err());
-        assert!(read_chars(&r, &[frac(25, 1)]).is_err());
+        assert!(read(st(&r), &[frac(25, 1)]).is_err());
+        assert!(read(st(&r), &[num(-1)]).is_err());
+        assert!(skip(st(&r), &[num(-1)]).is_err());
+        assert!(read_chars(st(&r), &[frac(25, 1)]).is_err());
     }
 
     // --- текст ---------------------------------------------------------------------
@@ -2093,54 +2082,54 @@ mod tests {
     #[test]
     fn writing_text_adds_no_signature_but_expands_line_feeds() {
         let (w, buf) = writer_over_buffer(16);
-        write_chars(&w, &[text("Аб")]).unwrap();
+        write_chars(st(&w), &[text("Аб")]).unwrap();
         assert_eq!(bytes_of(&buf)[..4], [0xD0, 0x90, 0xD0, 0xB1]);
 
         let (w, buf) = writer_over_buffer(16);
-        write_chars(&w, &[text("A\nB")]).unwrap();
+        write_chars(st(&w), &[text("A\nB")]).unwrap();
         assert_eq!(bytes_of(&buf)[..4], [65, 13, 10, 66]);
 
         let (w, buf) = writer_over_buffer(16);
-        write_chars(&w, &[text("A\r\nB")]).unwrap();
+        write_chars(st(&w), &[text("A\r\nB")]).unwrap();
         assert_eq!(bytes_of(&buf)[..5], [65, 13, 13, 10, 66]);
 
         // Разделитель по умолчанию — один `\n`, ложится как `13 10`.
         let (w, buf) = writer_over_buffer(16);
-        write_line(&w, &[text("AB")]).unwrap();
+        write_line(st(&w), &[text("AB")]).unwrap();
         assert_eq!(bytes_of(&buf)[..4], [65, 66, 13, 10]);
         assert_eq!(
-            as_str(&get_prop(&w, DataRwProp::LineSeparator).unwrap()),
+            as_str(&get_prop(st(&w), DataRwProp::LineSeparator).unwrap()),
             "\n"
         );
 
         // Назначенный явно — как назначили.
         let (w, buf) = writer_over_buffer(16);
-        set_prop(&w, DataRwProp::LineSeparator, &text("!")).unwrap();
-        write_line(&w, &[text("AB")]).unwrap();
+        set_prop(st(&w), DataRwProp::LineSeparator, &text("!")).unwrap();
+        write_line(st(&w), &[text("AB")]).unwrap();
         assert_eq!(bytes_of(&buf)[..3], [65, 66, 33]);
 
         // Третий аргумент `ЗаписатьСтроку` — тоже разделитель.
         let (w, buf) = writer_over_buffer(16);
-        write_line(&w, &[text("AB"), BslValue::Undefined, text("!")]).unwrap();
+        write_line(st(&w), &[text("AB"), BslValue::Undefined, text("!")]).unwrap();
         assert_eq!(bytes_of(&buf)[..3], [65, 66, 33]);
     }
 
     #[test]
     fn text_encoding_is_honoured_on_both_sides() {
         let (w, buf) = writer_over_buffer(8);
-        write_chars(&w, &[text("Аб"), text("windows-1251")]).unwrap();
+        write_chars(st(&w), &[text("Аб"), text("windows-1251")]).unwrap();
         assert_eq!(bytes_of(&buf)[..2], [0xC0, 0xE1]);
 
         // Свойство живое у обеих сторон.
         let (w, buf) = writer_over_buffer(8);
-        set_prop(&w, DataRwProp::TextEncoding, &text("windows-1251")).unwrap();
-        write_chars(&w, &[text("Аб")]).unwrap();
+        set_prop(st(&w), DataRwProp::TextEncoding, &text("windows-1251")).unwrap();
+        write_chars(st(&w), &[text("Аб")]).unwrap();
         assert_eq!(bytes_of(&buf)[..2], [0xC0, 0xE1]);
 
         let src = stream::new_memory_stream(&buffer(&[0xC0, 0xE1])).unwrap();
         let r = reader_over(&src);
-        set_prop(&r, DataRwProp::TextEncoding, &text("windows-1251")).unwrap();
-        assert_eq!(as_str(&read_chars(&r, &[num(2)]).unwrap()), "Аб");
+        set_prop(st(&r), DataRwProp::TextEncoding, &text("windows-1251")).unwrap();
+        assert_eq!(as_str(&read_chars(st(&r), &[num(2)]).unwrap()), "Аб");
     }
 
     /// Количество у `ПрочитатьСимволы` — в СИМВОЛАХ: над кириллицей в UTF-8
@@ -2149,8 +2138,8 @@ mod tests {
     fn read_chars_counts_characters_not_bytes() {
         let src = stream::new_memory_stream(&buffer("АБВГ".as_bytes())).unwrap();
         let r = reader_over(&src);
-        assert_eq!(as_str(&read_chars(&r, &[num(2)]).unwrap()), "АБ");
-        assert_eq!(as_u64(&stream::current_position(&src).unwrap()), 4);
+        assert_eq!(as_str(&read_chars(st(&r), &[num(2)]).unwrap()), "АБ");
+        assert_eq!(as_u64(&stream::current_position(st(&src)).unwrap()), 4);
     }
 
     /// Разделитель поглощается и в результат не входит; обратного перевода
@@ -2159,27 +2148,27 @@ mod tests {
     fn read_line_splits_on_the_separator_without_translating_it_back() {
         let s = source_stream();
         let r = reader_over(&s);
-        set_prop(&r, DataRwProp::LineSeparator, &text("F")).unwrap();
-        assert_eq!(as_str(&read_line(&r, &[]).unwrap()), "ABCDE");
-        assert_eq!(as_str(&read_line(&r, &[]).unwrap()), "GHIJKLMNOP");
+        set_prop(st(&r), DataRwProp::LineSeparator, &text("F")).unwrap();
+        assert_eq!(as_str(&read_line(st(&r), &[]).unwrap()), "ABCDE");
+        assert_eq!(as_str(&read_line(st(&r), &[]).unwrap()), "GHIJKLMNOP");
 
         // Многосимвольный разделитель.
         let s = source_stream();
         let r = reader_over(&s);
-        set_prop(&r, DataRwProp::LineSeparator, &text("CD")).unwrap();
-        assert_eq!(as_str(&read_line(&r, &[]).unwrap()), "AB");
-        assert_eq!(as_str(&read_line(&r, &[]).unwrap()), "EFGHIJKLMNOP");
+        set_prop(st(&r), DataRwProp::LineSeparator, &text("CD")).unwrap();
+        assert_eq!(as_str(&read_line(st(&r), &[]).unwrap()), "AB");
+        assert_eq!(as_str(&read_line(st(&r), &[]).unwrap()), "EFGHIJKLMNOP");
 
         // Пустой разделитель (умолчание читателя) — всё до конца.
         let s = source_stream();
         let r = reader_over(&s);
-        assert_eq!(as_str(&read_line(&r, &[]).unwrap()), "ABCDEFGHIJKLMNOP");
+        assert_eq!(as_str(&read_line(st(&r), &[]).unwrap()), "ABCDEFGHIJKLMNOP");
 
         // Круг: писатель положил `65 66 13 10`, читатель по `\n` отдаёт "AB\r".
         let src = stream::new_memory_stream(&buffer(&[65, 66, 13, 10])).unwrap();
         let r = reader_over(&src);
-        set_prop(&r, DataRwProp::LineSeparator, &text("\n")).unwrap();
-        assert_eq!(as_str(&read_line(&r, &[]).unwrap()), "AB\r");
+        set_prop(st(&r), DataRwProp::LineSeparator, &text("\n")).unwrap();
+        assert_eq!(as_str(&read_line(st(&r), &[]).unwrap()), "AB\r");
     }
 
     // --- результат чтения --------------------------------------------------------
@@ -2188,11 +2177,11 @@ mod tests {
     fn the_read_result_exposes_size_and_both_getters() {
         let s = source_stream();
         let r = reader_over(&s);
-        let res = read(&r, &[num(4)]).unwrap();
-        assert_eq!(as_u64(&result_size(&res).unwrap()), 4);
-        let buf = result_binary_buffer(&res).unwrap();
+        let res = read(st(&r), &[num(4)]).unwrap();
+        assert_eq!(as_u64(&result_size(st(&res)).unwrap()), 4);
+        let buf = result_binary_buffer(st(&res)).unwrap();
         assert_eq!(bytes_of(&buf), vec![65, 66, 67, 68]);
-        let bin = result_binary_data(&res).unwrap();
+        let bin = result_binary_data(st(&res)).unwrap();
         assert_eq!(bin.type_name(), "ДвоичныеДанные");
     }
 
@@ -2246,12 +2235,12 @@ mod tests {
     fn the_constructor_starts_at_the_streams_current_position() {
         let s = source_stream();
         stream::seek(
-            &s,
+            st(&s),
             &[num(4), BslValue::Enum(EnumValue::StreamPositionBegin)],
         )
         .unwrap();
         let r = reader_over(&s);
-        assert_eq!(as_u64(&read_byte(&r).unwrap()), 69);
+        assert_eq!(as_u64(&read_byte(st(&r)).unwrap()), 69);
     }
 
     /// `Закрыть` ничего не закрывает и ничего не запрещает — измерено.
@@ -2259,16 +2248,16 @@ mod tests {
     fn closing_neither_closes_the_target_nor_disables_the_object() {
         let s = source_stream();
         let r = reader_over(&s);
-        close(&r).unwrap();
-        close(&r).unwrap();
-        assert_eq!(as_u64(&stream::size(&s).unwrap()), 16);
-        assert_eq!(as_u64(&read_byte(&r).unwrap()), 65);
+        close(st(&r)).unwrap();
+        close(st(&r)).unwrap();
+        assert_eq!(as_u64(&stream::size(st(&s)).unwrap()), 16);
+        assert_eq!(as_u64(&read_byte(st(&r)).unwrap()), 65);
 
         let s = stream::new_memory_stream(&BslValue::Undefined).unwrap();
         let w = writer_over(&s);
-        close(&w).unwrap();
-        write_byte(&w, &[num(65)]).unwrap();
-        assert_eq!(as_u64(&stream::size(&s).unwrap()), 1);
+        close(st(&w)).unwrap();
+        write_byte(st(&w), &[num(65)]).unwrap();
+        assert_eq!(as_u64(&stream::size(st(&s)).unwrap()), 1);
     }
 
     /// Методы чтения не применимы к писателю и наоборот, а посторонний
@@ -2277,19 +2266,22 @@ mod tests {
     fn methods_reject_the_wrong_side_and_a_foreign_receiver() {
         let s = stream::new_memory_stream(&BslValue::Undefined).unwrap();
         let w = writer_over(&s);
-        assert!(read_byte(&w).is_err());
-        assert!(read_line(&w, &[]).is_err());
+        assert!(read_byte(st(&w)).is_err());
+        assert!(read_line(st(&w), &[]).is_err());
 
         let s = source_stream();
         let r = reader_over(&s);
-        assert!(write_byte(&r, &[num(1)]).is_err());
-        assert!(write_chars(&r, &[text("x")]).is_err());
+        assert!(write_byte(st(&r), &[num(1)]).is_err());
+        assert!(write_chars(st(&r), &[text("x")]).is_err());
 
-        let not_ours = buffer(&[1, 2]);
-        assert!(read_byte(&not_ours).is_err());
-        assert!(write_byte(&not_ours, &[num(1)]).is_err());
-        assert!(close(&not_ours).is_err());
-        assert!(result_size(&not_ours).is_err());
+        // Чужой получатель — объект ДРУГОГО типа: значение-не-объект до
+        // обработчика теперь не доходит, ABI метода несёт `&dyn
+        // ObjectProtocol`, а VM зовёт компонентный метод только на объекте.
+        let not_ours = stream::new_memory_stream(&BslValue::Undefined).unwrap();
+        assert!(read_byte(st(&not_ours)).is_err());
+        assert!(write_byte(st(&not_ours), &[num(1)]).is_err());
+        assert!(close(st(&not_ours)).is_err());
+        assert!(result_size(st(&not_ours)).is_err());
     }
 
     /// Поток без нужного доступа отвечает ошибкой, а не тихо ничего не делает.
@@ -2303,10 +2295,10 @@ mod tests {
         std::fs::write(&path, b"0123456789").expect("временный файл");
         let ro = stream::manager_open_for_read(&[text(&path)]).unwrap();
         let w = writer_over(&ro);
-        assert!(write_byte(&w, &[num(65)]).is_err());
+        assert!(write_byte(st(&w), &[num(65)]).is_err());
         let wo = stream::manager_open_for_write(&[text(&path)]).unwrap();
         let r = reader_over(&wo);
-        assert!(read_byte(&r).is_err());
+        assert!(read_byte(st(&r)).is_err());
         let _ = std::fs::remove_file(&path);
     }
 
@@ -2335,9 +2327,9 @@ mod tests {
         std::fs::write(&path, b"0123456789ABCDEF").expect("временный файл");
 
         let r = reader_over(&text(&path));
-        let by_read = read(&r, &[num(HUGE)]).expect("Прочитать(2^45) над файлом");
+        let by_read = read(st(&r), &[num(HUGE)]).expect("Прочитать(2^45) над файлом");
         assert_eq!(
-            as_u64(&result_size(&by_read).unwrap()),
+            as_u64(&result_size(st(&by_read)).unwrap()),
             16,
             "Прочитать(2^45) над шестнадцатибайтовым файлом обязан дать 16"
         );
@@ -2347,7 +2339,7 @@ mod tests {
         let s = source_stream();
         let r = reader_over(&s);
         assert_eq!(
-            as_u64(&result_size(&read(&r, &[num(HUGE)]).unwrap()).unwrap()),
+            as_u64(&result_size(st(&read(st(&r), &[num(HUGE)]).unwrap())).unwrap()),
             16
         );
 
@@ -2378,22 +2370,22 @@ mod tests {
             // Над памятью: первый байт источника — 65 («A»).
             let r = reader_over(&source_stream());
             assert!(
-                read_into_buffer(&r, &[num(count)]).is_err(),
+                read_into_buffer(st(&r), &[num(count)]).is_err(),
                 "ПрочитатьВБуферДвоичныхДанных({count}) над памятью принято"
             );
             assert_eq!(
-                as_u64(&read_byte(&r).unwrap()),
+                as_u64(&read_byte(st(&r)).unwrap()),
                 65,
                 "отказ ПрочитатьВБуферДвоичныхДанных({count}) сдвинул читателя над памятью"
             );
 
             let r = reader_over(&source_stream());
             assert!(
-                read_chars(&r, &[num(count)]).is_err(),
+                read_chars(st(&r), &[num(count)]).is_err(),
                 "ПрочитатьСимволы({count}) над памятью принято"
             );
             assert_eq!(
-                as_u64(&read_byte(&r).unwrap()),
+                as_u64(&read_byte(st(&r)).unwrap()),
                 65,
                 "отказ ПрочитатьСимволы({count}) сдвинул читателя над памятью"
             );
@@ -2401,22 +2393,22 @@ mod tests {
             // Над файлом: первый байт — 48 («0»).
             let r = reader_over(&text(&path));
             assert!(
-                read_into_buffer(&r, &[num(count)]).is_err(),
+                read_into_buffer(st(&r), &[num(count)]).is_err(),
                 "ПрочитатьВБуферДвоичныхДанных({count}) над файлом принято"
             );
             assert_eq!(
-                as_u64(&read_byte(&r).unwrap()),
+                as_u64(&read_byte(st(&r)).unwrap()),
                 48,
                 "отказ ПрочитатьВБуферДвоичныхДанных({count}) сдвинул читателя над файлом"
             );
 
             let r = reader_over(&text(&path));
             assert!(
-                read_chars(&r, &[num(count)]).is_err(),
+                read_chars(st(&r), &[num(count)]).is_err(),
                 "ПрочитатьСимволы({count}) над файлом принято"
             );
             assert_eq!(
-                as_u64(&read_byte(&r).unwrap()),
+                as_u64(&read_byte(st(&r)).unwrap()),
                 48,
                 "отказ ПрочитатьСимволы({count}) сдвинул читателя над файлом"
             );
@@ -2440,14 +2432,14 @@ mod tests {
 
         let r = reader_over(&source_stream());
         assert_eq!(
-            bytes_of(&read_into_buffer(&r, &[num(JUST_UNDER)]).unwrap()).len(),
+            bytes_of(&read_into_buffer(st(&r), &[num(JUST_UNDER)]).unwrap()).len(),
             16,
             "ПрочитатьВБуферДвоичныхДанных(2^32 - 1) обязан быть принят"
         );
 
         let r = reader_over(&source_stream());
         assert_eq!(
-            as_str(&read_chars(&r, &[num(JUST_UNDER)]).unwrap()),
+            as_str(&read_chars(st(&r), &[num(JUST_UNDER)]).unwrap()),
             "ABCDEFGHIJKLMNOP",
             "ПрочитатьСимволы(2^32 - 1) обязан быть принят"
         );
@@ -2455,7 +2447,7 @@ mod tests {
         // А у `Прочитать` границы нет вовсе — это измеренная асимметрия.
         let r = reader_over(&source_stream());
         assert_eq!(
-            as_u64(&result_size(&read(&r, &[num(AT_BOUND)]).unwrap()).unwrap()),
+            as_u64(&result_size(st(&read(st(&r), &[num(AT_BOUND)]).unwrap())).unwrap()),
             16,
             "Прочитать(2^32) границы двух других форм не наследует"
         );
@@ -2476,13 +2468,13 @@ mod tests {
         let _ = std::fs::remove_file(&path);
 
         let w = writer_over(&text(&path));
-        write_chars(&w, &[text("ABCDEFGH")]).unwrap();
-        close(&w).unwrap();
+        write_chars(st(&w), &[text("ABCDEFGH")]).unwrap();
+        close(st(&w)).unwrap();
         assert_eq!(std::fs::read(&path).unwrap(), b"ABCDEFGH");
 
         let w = writer_over(&text(&path));
-        write_byte(&w, &[num(90)]).unwrap();
-        close(&w).unwrap();
+        write_byte(st(&w), &[num(90)]).unwrap();
+        close(st(&w)).unwrap();
         assert_eq!(std::fs::read(&path).unwrap(), b"ZBCDEFGH");
 
         let _ = std::fs::remove_file(&path);
@@ -2528,8 +2520,8 @@ mod tests {
             &BslValue::Undefined,
         )
         .unwrap();
-        write_chars(&w, &[text("AB")]).unwrap();
-        close(&w).unwrap();
+        write_chars(st(&w), &[text("AB")]).unwrap();
+        close(st(&w)).unwrap();
         assert_eq!(std::fs::read(&path).unwrap(), b"AB");
         let _ = std::fs::remove_file(&path);
     }

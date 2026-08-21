@@ -57,11 +57,14 @@ pub use date::{
     local_date_from_utc_seconds, pseudo_unix_seconds,
 };
 pub use enums::{ENUM_NAMES, EnumKind, EnumValue, lookup_enum, lookup_member, members_of};
+pub use fold::folded_eq;
 pub use interner::{NameId, NameInterner};
 pub use locale::{Locale, NBSP};
 pub use map::MapData;
 pub use object::{BslObject, StructureStorage};
-pub use object_protocol::{ByteStreamProtocol, ObjectProtocol, ObjectRef, TypeDescriptor};
+pub use object_protocol::{
+    ByteStreamProtocol, ObjectDowncast, ObjectProtocol, ObjectRef, TypeDescriptor,
+};
 pub use runtime_shapes::RuntimeShapes;
 pub use shape::{MAX_SHAPE_TRANSITIONS, Shape, ShapeTable};
 pub use string::{BslString, MAX_TEMPLATE_ARGS};

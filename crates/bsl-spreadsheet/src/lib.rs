@@ -9,8 +9,8 @@ mod template;
 mod xlsx;
 
 use bsl_rt::{
-    Arity, BslValue, CallContext, ConstructorCode, ConstructorDescriptor, LibraryDependency,
-    LibraryDescriptor, RtResult,
+    Arity, BslValue, CallContext, ConstructorCode, ConstructorDescriptor, LibraryDescriptor,
+    RtResult,
 };
 
 pub use document::{
@@ -46,10 +46,9 @@ pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor {
         package: PACKAGE_NAME,
         version: PACKAGE_VERSION,
-        dependencies: &[LibraryDependency {
-            package: bsl_rt::PACKAGE_NAME,
-            version: bsl_rt::PACKAGE_VERSION,
-        }],
+        // Ядро в зависимостях не объявляется: реестр включает его в
+        // требования любой программы (`RuntimeRegistry::requirements_for`).
+        dependencies: &[],
         functions: &[],
         constructors: CONSTRUCTORS,
     }

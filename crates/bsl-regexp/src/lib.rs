@@ -144,8 +144,7 @@
 use bsl_number::BslNumber;
 use bsl_rt::{
     Arity, BslString, BslValue, CallContext, EnumValue, FunctionCode, FunctionDescriptor,
-    FunctionKind, LibraryDependency, LibraryDescriptor, ObjectProtocol, RtError, RtResult,
-    TypeDescriptor, TypeId,
+    FunctionKind, LibraryDescriptor, ObjectProtocol, RtError, RtResult, TypeDescriptor, TypeId,
 };
 use std::rc::Rc;
 
@@ -757,10 +756,9 @@ pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor {
         package: env!("CARGO_PKG_NAME"),
         version: env!("CARGO_PKG_VERSION"),
-        dependencies: &[LibraryDependency {
-            package: bsl_rt::PACKAGE_NAME,
-            version: bsl_rt::PACKAGE_VERSION,
-        }],
+        // Ядро в зависимостях не объявляется: реестр включает его в
+        // требования любой программы (`RuntimeRegistry::requirements_for`).
+        dependencies: &[],
         functions: FUNCTIONS,
         constructors: &[],
     }

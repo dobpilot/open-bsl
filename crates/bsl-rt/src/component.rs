@@ -215,11 +215,13 @@ impl MethodCode {
     }
 }
 
-/// Вызов метода объекта компонента. Получатель передаётся значением,
-/// которым владеет вызывающий: VM отдаёт регистр напрямую, без пересборки
-/// обёртки объекта на каждый вызов.
+/// Вызов метода объекта компонента. Получатель — сам объект за
+/// трейт-объектом: VM отдаёт его без пересборки обёртки значения, а
+/// строковый вход по умолчанию приводит `self` через `as_dyn`.
+/// Обработчик возвращается к конкретному типу даункастом
+/// `receiver.as_any().downcast_ref::<T>()`.
 pub type MethodCall =
-    for<'a> fn(&BslValue, &[BslValue], &mut CallContext<'a>) -> RtResult<BslValue>;
+    for<'a> fn(&dyn crate::ObjectProtocol, &[BslValue], &mut CallContext<'a>) -> RtResult<BslValue>;
 
 /// Статический дескриптор метода объекта компонента — как
 /// [`FunctionDescriptor`] для глобальных функций. Непустая таблица методов
@@ -247,7 +249,7 @@ pub struct MethodDescriptor {
 pub fn call_method_from_table(
     table: &'static [MethodDescriptor],
     type_name: &'static str,
-    receiver: &BslValue,
+    receiver: &dyn crate::ObjectProtocol,
     name: &str,
     arguments: &[BslValue],
     context: &mut CallContext<'_>,
