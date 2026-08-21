@@ -2170,12 +2170,17 @@ impl BslValue {
     /// интернировать `NameId` на этапе компиляции. `Структура` в эту
     /// функцию не заходит — у неё есть более быстрый путь через
     /// `get_field`/`NameId`, здесь она просто не находится.
+    ///
+    /// Имена сравниваются через [`folded_eq`], а не `eq_ignore_ascii_case`:
+    /// последняя не сворачивает кириллицу, и `КЗ.значение` не совпадало с
+    /// `Значение` — при том что в языке имена регистронезависимы. Путь
+    /// холодный (у `Структуры` свой), а `folded_eq` начинает с побайтового
+    /// равенства, так что каноничное написание не платит ничего.
     pub fn get_field_by_name(&self, name: &str) -> RtResult<BslValue> {
         match self {
             BslValue::Object(o) => match &**o {
                 BslObject::ValueTable(data) => {
-                    if name.eq_ignore_ascii_case("Колонки") || name.eq_ignore_ascii_case("Columns")
-                    {
+                    if folded_eq(name, "Колонки") || folded_eq(name, "Columns") {
                         Ok(BslValue::Object(Rc::new(BslObject::TableColumns(
                             data.clone(),
                         ))))
@@ -2195,10 +2200,9 @@ impl BslValue {
                         .borrow()
                         .column_index(column_name)
                         .ok_or_else(|| RtError::UnknownColumn(column_name.clone()))?;
-                    if name.eq_ignore_ascii_case("Имя") || name.eq_ignore_ascii_case("Name") {
+                    if folded_eq(name, "Имя") || folded_eq(name, "Name") {
                         Ok(BslValue::Str(BslString::from_str(column_name)))
-                    } else if name.eq_ignore_ascii_case("ТипЗначения")
-                        || name.eq_ignore_ascii_case("ValueType")
+                    } else if folded_eq(name, "ТипЗначения") || folded_eq(name, "ValueType")
                     {
                         let types: Vec<TypeId> = data
                             .borrow()
@@ -2219,11 +2223,9 @@ impl BslValue {
                 // `Б.Размер()` со скобками платформа отвергает (измерено),
                 // поэтому оба живут здесь, а не в таблице методов.
                 BslObject::BinaryBuffer(_) => {
-                    if name.eq_ignore_ascii_case("Размер") || name.eq_ignore_ascii_case("Size")
-                    {
+                    if folded_eq(name, "Размер") || folded_eq(name, "Size") {
                         bindata::size(self)
-                    } else if name.eq_ignore_ascii_case("ПорядокБайтов")
-                        || name.eq_ignore_ascii_case("ByteOrder")
+                    } else if folded_eq(name, "ПорядокБайтов") || folded_eq(name, "ByteOrder")
                     {
                         bindata::get_order(self)
                     } else {
@@ -2231,11 +2233,9 @@ impl BslValue {
                     }
                 }
                 BslObject::KeyValuePair(k, v) => {
-                    if name.eq_ignore_ascii_case("Ключ") || name.eq_ignore_ascii_case("Key") {
+                    if folded_eq(name, "Ключ") || folded_eq(name, "Key") {
                         Ok(k.clone())
-                    } else if name.eq_ignore_ascii_case("Значение")
-                        || name.eq_ignore_ascii_case("Value")
-                    {
+                    } else if folded_eq(name, "Значение") || folded_eq(name, "Value") {
                         Ok(v.clone())
                     } else {
                         Err(RtError::UnknownColumn(name.to_string()))
@@ -2254,13 +2254,10 @@ impl BslValue {
                 // чтение, присваивание в него платформа отвергает
                 // (измерено — прежний размер при этом уцелел).
                 BslObject::BinaryBuffer(_) => {
-                    if name.eq_ignore_ascii_case("ПорядокБайтов")
-                        || name.eq_ignore_ascii_case("ByteOrder")
+                    if folded_eq(name, "ПорядокБайтов") || folded_eq(name, "ByteOrder")
                     {
                         bindata::set_order(self, val)
-                    } else if name.eq_ignore_ascii_case("Размер")
-                        || name.eq_ignore_ascii_case("Size")
-                    {
+                    } else if folded_eq(name, "Размер") || folded_eq(name, "Size") {
                         Err(RtError::TypeError {
                             expected: "Свойство, доступное для записи",
                             op: "Размер",
@@ -3098,6 +3095,34 @@ mod tests {
 
     fn num(s: &str) -> BslValue {
         BslValue::Number(BslNumber::parse_canonical(s).unwrap())
+    }
+
+    /// Имена членов в языке регистронезависимы, и кириллица здесь не
+    /// исключение: `eq_ignore_ascii_case` сворачивала только ASCII, из-за
+    /// чего `КЗ.значение` строчными не находило `Значение`. Корпус
+    /// фикстур этого не ловил: имя приходит сюда в написании ПЕРВОГО
+    /// вхождения в программе, а фикстуры пишут его канонично.
+    #[test]
+    fn native_property_names_fold_cyrillic_in_both_directions() {
+        let pair = BslValue::Object(Rc::new(BslObject::KeyValuePair(
+            BslValue::Str(BslString::from_str("к")),
+            BslValue::Str(BslString::from_str("з")),
+        )));
+        for name in ["Значение", "значение", "ЗНАЧЕНИЕ", "Value", "value"] {
+            assert_eq!(
+                pair.get_field_by_name(name).expect(name),
+                BslValue::Str(BslString::from_str("з")),
+                "член «{name}»"
+            );
+        }
+        for name in ["Ключ", "ключ", "КЛЮЧ"] {
+            assert_eq!(
+                pair.get_field_by_name(name).expect(name),
+                BslValue::Str(BslString::from_str("к")),
+                "член «{name}»"
+            );
+        }
+        assert!(pair.get_field_by_name("НетТакого").is_err());
     }
 
     /// Условие приводится, и правило измерено, а не выведено. Здесь стоял
