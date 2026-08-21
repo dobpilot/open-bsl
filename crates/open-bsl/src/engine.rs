@@ -15,6 +15,7 @@ pub struct Engine {
 
 struct EngineInner {
     registry: bsl_rt::RuntimeRegistry,
+    symbols: bsl_syntax::PreprocSymbols,
 }
 
 impl Engine {
@@ -28,7 +29,7 @@ impl Engine {
     ///
     /// Возвращает ошибку синтаксиса, семантики или генерации байт-кода.
     pub fn compile(&self, source: &str) -> Result<Module, Error> {
-        let syntax = bsl_syntax::parse(source)?;
+        let syntax = bsl_syntax::parse_with_symbols(source, &self.inner.symbols)?;
         let resolved =
             bsl_sema::resolve_program_with_registry(&syntax.items, &self.inner.registry)?;
         let program = bsl_bytecode::compile_program(&resolved)?;
@@ -57,6 +58,12 @@ impl Engine {
         self.state_builder().build()
     }
 
+    /// Символы условной компиляции этого движка.
+    #[must_use]
+    pub fn preproc_symbols(&self) -> bsl_syntax::PreprocSymbols {
+        self.inner.symbols
+    }
+
     pub fn state_builder(&self) -> StateBuilder {
         StateBuilder::new(self.clone())
     }
@@ -65,6 +72,7 @@ impl Engine {
 /// Стадия композиции статически связанных runtime-компонентов.
 pub struct EngineBuilder {
     runtime: bsl_rt::RuntimeBuilder,
+    symbols: bsl_syntax::PreprocSymbols,
 }
 
 impl EngineBuilder {
@@ -89,11 +97,27 @@ impl EngineBuilder {
         runtime.register(bsl_xml::library());
         #[cfg(feature = "spreadsheet")]
         runtime.register(bsl_spreadsheet::library());
-        Self { runtime }
+        Self {
+            runtime,
+            symbols: bsl_syntax::PreprocSymbols::new(),
+        }
     }
 
     pub fn register_library(mut self, library: LibraryDescriptor) -> Self {
         self.runtime.register(library);
+        self
+    }
+
+    /// Включает или выключает символ условной компиляции (`#Если Клиент`).
+    ///
+    /// По умолчанию истинны `Сервер`, `НаСервере` и `ВнешнееСоединение`:
+    /// open-bsl — это BSL, исполняемый внешней программой без интерфейса.
+    /// Хост, который и правда клиентское приложение, вправе сказать это
+    /// движку. Русское и английское написания — один символ, а не два.
+    /// Незнакомое имя игнорируется: в условии оно и без того ложно.
+    #[must_use]
+    pub fn preproc_symbol(mut self, name: &str, value: bool) -> Self {
+        self.symbols.set(name, value);
         self
     }
 
@@ -107,6 +131,7 @@ impl EngineBuilder {
         Ok(Engine {
             inner: Arc::new(EngineInner {
                 registry: self.runtime.build()?,
+                symbols: self.symbols,
             }),
         })
     }

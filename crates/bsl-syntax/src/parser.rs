@@ -66,7 +66,7 @@ pub fn parse_with_symbols(
 const MAX_NESTING: u32 = 500;
 
 fn tokenize_all(src: &str, symbols: &crate::PreprocSymbols) -> Result<Vec<Token>, LexError> {
-    let mut lexer = Lexer::with_symbols(src, symbols.clone());
+    let mut lexer = Lexer::with_symbols(src, *symbols);
     let mut tokens = Vec::new();
     loop {
         let tok = lexer.next_token()?;

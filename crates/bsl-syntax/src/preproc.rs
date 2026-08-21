@@ -53,7 +53,11 @@ const SYMBOLS: &[(&str, &str)] = &[
 const DEFAULT_ON: &[usize] = &[0, 1, 8];
 
 /// Набор символов условной компиляции для одной компиляции.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// `Copy`: внутри — массив из одиннадцати флагов, и набор ездит по
+/// рантайму рядом с реестром компонентов, чтобы динамический код
+/// (`Выполнить`/`Вычислить`) видел тот же контекст, что и статический.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PreprocSymbols {
     on: [bool; SYMBOLS.len()],
 }

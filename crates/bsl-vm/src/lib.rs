@@ -156,7 +156,13 @@ impl CallArgs {
 pub fn run_program(program: &Program) -> Result<BslValue, RtError> {
     let mut stdout = std::io::stdout().lock();
     let mut stderr = std::io::stderr().lock();
-    run_program_with_host(program, None, JitMode::Off, &mut stdout, &mut stderr)
+    run_program_with_host(
+        program,
+        CompileEnv::bare(),
+        JitMode::Off,
+        &mut stdout,
+        &mut stderr,
+    )
 }
 
 /// Исполняет программу с неизменяемым реестром статически подключённых
@@ -175,7 +181,7 @@ pub fn run_program_with_registry(
     let mut stderr = std::io::stderr().lock();
     run_program_with_host(
         program,
-        Some(registry),
+        CompileEnv::with_registry(registry),
         JitMode::Off,
         &mut stdout,
         &mut stderr,
@@ -195,8 +201,13 @@ pub fn run_program_with_registry_and_io(
     registry: &bsl_rt::RuntimeRegistry,
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
+    symbols: bsl_syntax::PreprocSymbols,
 ) -> Result<BslValue, RtError> {
-    run_program_with_host(program, Some(registry), JitMode::Off, stdout, stderr)
+    let env = CompileEnv {
+        registry: Some(registry),
+        symbols,
+    };
+    run_program_with_host(program, env, JitMode::Off, stdout, stderr)
 }
 
 /// Вариант [`run_program_with_registry`] с включённым JIT.
@@ -212,7 +223,7 @@ pub fn run_program_jit_with_registry(
     let mut stderr = std::io::stderr().lock();
     run_program_with_host(
         program,
-        Some(registry),
+        CompileEnv::with_registry(registry),
         JitMode::On,
         &mut stdout,
         &mut stderr,
@@ -230,13 +241,18 @@ pub fn run_program_jit_with_registry_and_io(
     registry: &bsl_rt::RuntimeRegistry,
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
+    symbols: bsl_syntax::PreprocSymbols,
 ) -> Result<BslValue, RtError> {
-    run_program_with_host(program, Some(registry), JitMode::On, stdout, stderr)
+    let env = CompileEnv {
+        registry: Some(registry),
+        symbols,
+    };
+    run_program_with_host(program, env, JitMode::On, stdout, stderr)
 }
 
 fn run_program_with_host(
     program: &Program,
-    registry: Option<&bsl_rt::RuntimeRegistry>,
+    env: CompileEnv<'_>,
     jit_mode: JitMode,
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
@@ -246,7 +262,7 @@ fn run_program_with_host(
         &mut stack,
         at(&program.chunks, 0, "в программе нет чанка верхнего уровня")?,
     );
-    let linked = link_components(program, registry)?;
+    let linked = link_components(program, env)?;
     let mut host = HostIo { stdout, stderr };
     let (value, _) = drive_linked(program, 0, stack, jit_mode, &linked, &mut host)?;
     Ok(value)
@@ -269,7 +285,7 @@ pub fn run_repl_chunk_with_registry(
     locals: Vec<String>,
     stack: Vec<BslValue>,
     requirements: Vec<bsl_bytecode::LibraryRequirement>,
-    registry: &bsl_rt::RuntimeRegistry,
+    env: CompileEnv<'_>,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
     let program = Program {
         requirements,
@@ -281,7 +297,7 @@ pub fn run_repl_chunk_with_registry(
         module_vars: Vec::new(),
         module_base: 0,
     };
-    let linked = link_components(&program, Some(registry))?;
+    let linked = link_components(&program, env)?;
     let mut host = HostIo {
         stdout: &mut std::io::stdout(),
         stderr: &mut std::io::stderr(),
@@ -311,8 +327,44 @@ struct HostIo<'a> {
 }
 
 #[derive(Default)]
+/// Всё, что нужно, чтобы скомпилировать текст ЗДЕСЬ И СЕЙЧАС: каталог
+/// компонентов и символы условной компиляции.
+///
+/// Эти две вещи всегда ходят вместе, потому что обе описывают не программу,
+/// а окружение, в котором её собирают, — и обе нужны фрагменту
+/// `Выполнить`/`Вычислить`, который компилируется уже во время исполнения.
+#[derive(Clone, Copy)]
+pub struct CompileEnv<'a> {
+    /// Каталог компонентов. `None` — сборка без реестра.
+    pub registry: Option<&'a bsl_rt::RuntimeRegistry>,
+    /// Символы условной компиляции. Платформа гасит их все у динамического
+    /// кода; здесь фрагмент видит тот же набор, что и модуль вокруг него —
+    /// сознательное отступление, см. `docs/bsl-preproc.md`.
+    pub symbols: bsl_syntax::PreprocSymbols,
+}
+
+impl<'a> CompileEnv<'a> {
+    /// Окружение с реестром и набором символов по умолчанию.
+    #[must_use]
+    pub fn with_registry(registry: &'a bsl_rt::RuntimeRegistry) -> Self {
+        CompileEnv {
+            registry: Some(registry),
+            symbols: bsl_syntax::PreprocSymbols::new(),
+        }
+    }
+
+    /// Окружение без реестра: только базовый рантайм.
+    #[must_use]
+    pub fn bare() -> Self {
+        CompileEnv {
+            registry: None,
+            symbols: bsl_syntax::PreprocSymbols::new(),
+        }
+    }
+}
+
 struct LinkedComponents<'a> {
-    registry: Option<&'a bsl_rt::RuntimeRegistry>,
+    env: CompileEnv<'a>,
     functions: Vec<Vec<Option<bsl_rt::ComponentCall>>>,
     constructors: Vec<Vec<Option<bsl_rt::ComponentCall>>>,
     /// Обработчики встроенных методов по номеру имени программы. Открытый
@@ -339,7 +391,8 @@ impl LinkedComponents<'_> {
     /// Типы всех библиотек реестра: список короткий (десятки записей на
     /// всю сборку) и строится один раз на прогон.
     fn component_types(&self) -> Vec<&'static bsl_rt::TypeDescriptor> {
-        self.registry
+        self.env
+            .registry
             .map(|registry| registry.types().collect())
             .unwrap_or_default()
     }
@@ -494,8 +547,9 @@ fn resolve_component_method(
 
 fn link_components<'a>(
     program: &Program,
-    registry: Option<&'a bsl_rt::RuntimeRegistry>,
+    env: CompileEnv<'a>,
 ) -> Result<LinkedComponents<'a>, RtError> {
+    let registry = env.registry;
     let Some(core) = program.requirements.first() else {
         return Err(RtError::Component(
             "в требованиях отсутствует bsl-rt".to_string(),
@@ -635,7 +689,7 @@ fn link_components<'a>(
         .map(|name| bsl_rt::BuiltinMethod::lookup(name))
         .collect();
     Ok(LinkedComponents {
-        registry,
+        env,
         functions,
         constructors,
         builtin_methods,
@@ -711,7 +765,7 @@ fn drive_with(
     stack: Vec<BslValue>,
     jit_mode: JitMode,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
-    let linked = link_components(program, None)?;
+    let linked = link_components(program, CompileEnv::bare())?;
     let mut stdout = std::io::stdout().lock();
     let mut stderr = std::io::stderr().lock();
     let mut host = HostIo {
@@ -2113,14 +2167,8 @@ fn run_dynamic_snippet(
     // Предел вложенности — на входе, до разбора: компиляция фрагмента
     // рекурсивна так же, как его исполнение, и тоже расходует стек Rust.
     let _depth = DynamicDepthGuard::enter()?;
-    let compiled = snippets.get_or_compile(
-        code,
-        is_eval,
-        scope_id,
-        scope_locals,
-        program,
-        linked.registry,
-    )?;
+    let compiled =
+        snippets.get_or_compile(code, is_eval, scope_id, scope_locals, program, linked.env)?;
 
     // Значения существующих переменных кадра переезжают во фрагмент по
     // НОМЕРУ СЛОТА: раскладка совпадает, потому что фрагмент резолвился
@@ -2192,7 +2240,7 @@ fn run_dynamic_snippet(
         module_base: module_base as u32,
     };
 
-    let snippet_linked = link_components(&snippet_program, linked.registry)?;
+    let snippet_linked = link_components(&snippet_program, linked.env)?;
     let (value, final_stack) = drive_linked(
         &snippet_program,
         0,
@@ -2280,7 +2328,7 @@ pub fn call_module_function(
     name: &str,
     args: Vec<BslValue>,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
-    let linked = link_components(program, None)?;
+    let linked = link_components(program, CompileEnv::bare())?;
     let mut stdout = std::io::stdout().lock();
     let mut stderr = std::io::stderr().lock();
     let mut host = HostIo {
@@ -2306,7 +2354,7 @@ pub fn call_module_function_with_registry_and_io(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
-    let linked = link_components(program, Some(registry))?;
+    let linked = link_components(program, CompileEnv::with_registry(registry))?;
     let mut host = HostIo { stdout, stderr };
     call_module_function_with_host(program, stack, name, args, &linked, &mut host)
 }
@@ -2451,7 +2499,7 @@ impl SnippetCache {
         scope_id: usize,
         scope_locals: &[String],
         program: &Program,
-        registry: Option<&bsl_rt::RuntimeRegistry>,
+        env: CompileEnv<'_>,
     ) -> Result<std::rc::Rc<CompiledSnippet>, RtError> {
         let key = (scope_id, is_eval, code.to_string());
         if let Some(hit) = self.entries.get(&key) {
@@ -2462,7 +2510,7 @@ impl SnippetCache {
             is_eval,
             scope_locals,
             program,
-            registry,
+            env,
         )?);
         self.entries.insert(key, compiled.clone());
         Ok(compiled)
@@ -2478,7 +2526,7 @@ fn compile_dynamic_snippet(
     is_eval: bool,
     scope_locals: &[String],
     program: &Program,
-    registry: Option<&bsl_rt::RuntimeRegistry>,
+    env: CompileEnv<'_>,
 ) -> Result<CompiledSnippet, RtError> {
     // `is_eval` заворачивает выражение в `Возврат (...)`, чтобы получить
     // значение тем же путём, что и обычный `Возврат` — один движок на
@@ -2489,7 +2537,8 @@ fn compile_dynamic_snippet(
         code.to_string()
     };
 
-    let parsed = bsl_syntax::parse(&src).map_err(|e| RtError::DynamicError(format!("{e:?}")))?;
+    let parsed = bsl_syntax::parse_with_symbols(&src, &env.symbols)
+        .map_err(|e| RtError::DynamicError(format!("{e:?}")))?;
     let mut stmts = Vec::with_capacity(parsed.items.len());
     for item in parsed.items {
         match item {
@@ -2517,7 +2566,7 @@ fn compile_dynamic_snippet(
             (name.clone(), arity)
         })
         .collect();
-    let (all_locals, body, fragment_requirements) = match registry {
+    let (all_locals, body, fragment_requirements) = match env.registry {
         Some(registry) => bsl_sema::resolve_snippet_stmts_with_registry(
             scope_locals,
             &program.module_vars,

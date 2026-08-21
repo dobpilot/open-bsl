@@ -437,3 +437,59 @@ fn missing_regexp_feature_is_a_compile_error() {
             .is_err()
     );
 }
+
+/// Набор символов условной компиляции по умолчанию — внешнее соединение:
+/// open-bsl исполняет BSL из внешней программы и без интерфейса.
+#[test]
+fn the_default_preprocessor_context_is_an_external_connection() {
+    let engine = Engine::builder().build().unwrap();
+    let mut state = engine.new_state();
+    let src = "\
+#Если Сервер И ВнешнееСоединение И НЕ Клиент Тогда
+Возврат \"внешнее соединение\";
+#Иначе
+Возврат \"что-то другое\";
+#КонецЕсли";
+    assert_eq!(state.exec(src).unwrap().to_string(), "внешнее соединение");
+}
+
+/// Значение символа — свойство контекста развёртывания, а не языка,
+/// поэтому хост вправе объявить свой. Оба написания — один символ.
+#[test]
+fn the_host_may_declare_its_own_preprocessor_context() {
+    let engine = Engine::builder()
+        .preproc_symbol("Клиент", true)
+        .preproc_symbol("Server", false)
+        .build()
+        .unwrap();
+    let mut state = engine.new_state();
+    let src = "\
+#Если Клиент И НЕ Сервер Тогда
+Возврат \"клиент\";
+#Иначе
+Возврат \"не клиент\";
+#КонецЕсли";
+    assert_eq!(state.exec(src).unwrap().to_string(), "клиент");
+}
+
+/// СОЗНАТЕЛЬНОЕ ОТСТУПЛЕНИЕ от платформы. На 8.3.27 у кода из
+/// `Выполнить`/`Вычислить` ложны ВСЕ символы: `#Если Сервер Тогда` там не
+/// срабатывает, выбирается `#Иначе` (измерено, см. `docs/bsl-preproc.md`).
+/// Здесь фрагмент видит тот же контекст, что и модуль вокруг него, —
+/// иначе набор, заданный хостом, до динамического кода бы не дошёл, а
+/// платформенное поведение молча выбрасывало бы код без диагностики.
+#[test]
+fn dynamic_code_sees_the_same_preprocessor_context_as_the_module() {
+    let engine = Engine::builder()
+        .preproc_symbol("Клиент", true)
+        .build()
+        .unwrap();
+    let mut state = engine.new_state();
+    let src = "\
+Рез = \"ветка не сработала\";
+Выполнить(\"#Если Клиент Тогда
+|Рез = \"\"клиент\"\";
+|#КонецЕсли\");
+Возврат Рез;";
+    assert_eq!(state.exec(src).unwrap().to_string(), "клиент");
+}

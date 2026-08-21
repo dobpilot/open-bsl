@@ -477,9 +477,21 @@ fn host_streams_are_used_by_builtins_components_dynamic_code_and_jit() {
         let mut stdout = Vec::new();
         let mut stderr = Vec::new();
         let result = if jit {
-            run_program_jit_with_registry_and_io(&program, &registry, &mut stdout, &mut stderr)
+            run_program_jit_with_registry_and_io(
+                &program,
+                &registry,
+                &mut stdout,
+                &mut stderr,
+                bsl_syntax::PreprocSymbols::new(),
+            )
         } else {
-            run_program_with_registry_and_io(&program, &registry, &mut stdout, &mut stderr)
+            run_program_with_registry_and_io(
+                &program,
+                &registry,
+                &mut stdout,
+                &mut stderr,
+                bsl_syntax::PreprocSymbols::new(),
+            )
         };
 
         assert_eq!(result.unwrap(), BslValue::Undefined);
@@ -516,6 +528,7 @@ fn host_writer_error_is_returned_without_a_panic() {
             &registry,
             &mut stdout,
             &mut stderr,
+            bsl_syntax::PreprocSymbols::new(),
         ),
         Err(RtError::IoError(message)) if message.contains("test writer failed")
     ));

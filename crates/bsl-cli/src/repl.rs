@@ -328,7 +328,10 @@ fn eval_repl_line(line: &str, session: &mut Session) -> Result<BslValue, String>
         new_locals.clone(),
         stack,
         requirements.clone(),
-        session.engine.registry(),
+        bsl_vm::CompileEnv {
+            registry: Some(session.engine.registry()),
+            symbols: session.engine.preproc_symbols(),
+        },
     )
     .map_err(|e| e.to_string())?;
     // `final_stack` включает временные регистры этой строки (`chunk.n_regs`

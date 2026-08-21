@@ -105,12 +105,17 @@ impl State {
     /// Возвращает ошибку связывания компонентов или исполнения.
     pub fn run(&mut self, module: &Module) -> Result<Value, Error> {
         let registry = self.engine.registry();
+        // Набор символов едет в VM вместе с реестром: фрагмент
+        // `Выполнить`/`Вычислить` компилируется уже во время исполнения и
+        // обязан видеть тот же контекст, что и остальной модуль.
+        let symbols = self.engine.preproc_symbols();
         let result = if self.jit {
             bsl_vm::run_program_jit_with_registry_and_io(
                 &module.program,
                 registry,
                 &mut self.host.stdout,
                 &mut self.host.stderr,
+                symbols,
             )
         } else {
             bsl_vm::run_program_with_registry_and_io(
@@ -118,6 +123,7 @@ impl State {
                 registry,
                 &mut self.host.stdout,
                 &mut self.host.stderr,
+                symbols,
             )
         }?;
         Ok(result)
