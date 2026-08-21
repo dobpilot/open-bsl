@@ -65,7 +65,7 @@ use std::rc::Rc;
 
 use bsl_rt::{
     BslNumber, BslValue, ByteStreamProtocol, CallContext, EnumValue, MethodCode, MethodDescriptor,
-    ObjectProtocol, RtError, RtResult, TypeDescriptor, TypeId,
+    ObjectProtocol, PropertyCode, PropertyDescriptor, RtError, RtResult, TypeDescriptor, TypeId,
 };
 
 /// Режим открытия файла — член `РежимОткрытияФайла`.
@@ -503,25 +503,8 @@ impl ObjectProtocol for StreamObject {
         }
     }
 
-    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
-        let data = self
-            .data
-            .try_borrow()
-            .map_err(|_| RtError::IoError(format!("{name}: поток уже занят другой операцией")))?;
-        if name.eq_ignore_ascii_case("ДоступнаЗапись") || name.eq_ignore_ascii_case("CanWrite")
-        {
-            Ok(BslValue::Boolean(data.can_write))
-        } else if name.eq_ignore_ascii_case("ДоступноЧтение")
-            || name.eq_ignore_ascii_case("CanRead")
-        {
-            Ok(BslValue::Boolean(data.can_read))
-        } else if name.eq_ignore_ascii_case("ДоступноИзменениеПозиции")
-            || name.eq_ignore_ascii_case("CanSeek")
-        {
-            Ok(BslValue::Boolean(data.can_seek))
-        } else {
-            Err(RtError::UnknownColumn(name.to_string()))
-        }
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        STREAM_PROPERTIES
     }
 
     fn method_table(&self) -> &'static [MethodDescriptor] {
@@ -1009,10 +992,54 @@ impl ObjectProtocol for FileStreamsManager {
 
 // --- признаки доступности ------------------------------------------------------------
 
+// Три признака доступности — свойства (вызов со скобками платформа
+// отвергает, измерено), и все три только на чтение. Обработчики читают
+// состояние через общий `flag`, как читал прежний строковый `if`.
+fn stream_can_write(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    flag(receiver, StreamFlag::Writable)
+}
+
+fn stream_can_read(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    flag(receiver, StreamFlag::Readable)
+}
+
+fn stream_can_seek(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    flag(receiver, StreamFlag::Seekable)
+}
+
+static STREAM_PROPERTIES: &[PropertyDescriptor] = &[
+    PropertyDescriptor {
+        code: PropertyCode::new(1),
+        names: &["ДоступнаЗапись", "CanWrite"],
+        get: stream_can_write,
+        set: None,
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(2),
+        names: &["ДоступноЧтение", "CanRead"],
+        get: stream_can_read,
+        set: None,
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(3),
+        names: &["ДоступноИзменениеПозиции", "CanSeek"],
+        get: stream_can_seek,
+        set: None,
+    },
+];
+
 /// Какой из трёх признаков спрашивают: `ДоступнаЗапись`, `ДоступноЧтение`
 /// либо `ДоступноИзменениеПозиции`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg(test)]
 enum StreamFlag {
     Writable,
     Readable,
@@ -1025,11 +1052,18 @@ enum StreamFlag {
 ///
 /// # Errors
 ///
-/// «Метод не применим», если получатель не поток.
-#[cfg(test)]
+/// «Метод не применим», если получатель не поток; [`RtError::IoError`],
+/// если состояние потока занято другой операцией.
 fn flag(v: &dyn ObjectProtocol, which: StreamFlag) -> RtResult<BslValue> {
-    let d = data(v, "ДоступнаЗапись")?;
-    let d = d.borrow();
+    let name = match which {
+        StreamFlag::Writable => "ДоступнаЗапись",
+        StreamFlag::Readable => "ДоступноЧтение",
+        StreamFlag::Seekable => "ДоступноИзменениеПозиции",
+    };
+    let d = data(v, name)?;
+    let d = d
+        .try_borrow()
+        .map_err(|_| RtError::IoError(format!("{name}: поток уже занят другой операцией")))?;
     Ok(BslValue::Boolean(match which {
         StreamFlag::Writable => d.can_write,
         StreamFlag::Readable => d.can_read,

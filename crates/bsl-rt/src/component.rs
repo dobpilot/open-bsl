@@ -238,6 +238,107 @@ pub struct MethodDescriptor {
     pub call: MethodCall,
 }
 
+/// Код свойства внутри одного типа компонента.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PropertyCode(u16);
+
+impl PropertyCode {
+    pub const fn new(code: u16) -> Self {
+        Self(code)
+    }
+
+    pub const fn get(self) -> u16 {
+        self.0
+    }
+}
+
+/// Чтение свойства объекта компонента. Получатель — как у
+/// [`MethodCall`]: сам объект, без обёртки значения.
+pub type PropertyGet =
+    for<'a> fn(&dyn crate::ObjectProtocol, &mut CallContext<'a>) -> RtResult<BslValue>;
+
+/// Запись свойства объекта компонента.
+pub type PropertySet =
+    for<'a> fn(&dyn crate::ObjectProtocol, BslValue, &mut CallContext<'a>) -> RtResult<()>;
+
+/// Статический дескриптор свойства — как [`MethodDescriptor`] для методов.
+/// Непустая таблица свойств типа (см. `ObjectProtocol::property_table`)
+/// включает быстрый путь VM «номер имени → обработчик»: строка разбирается
+/// один раз на пару «тип, имя», дальше доступ идёт без строковых операций.
+#[derive(Debug, Clone, Copy)]
+pub struct PropertyDescriptor {
+    pub code: PropertyCode,
+    pub names: &'static [&'static str],
+    pub get: PropertyGet,
+    /// `None` — свойство только для чтения: запись отвечает
+    /// [`crate::RtError::PropertyReadOnly`].
+    pub set: Option<PropertySet>,
+}
+
+/// Поиск свойства в таблице по имени. Сворачивание — [`crate::folded_eq`],
+/// единственный судья равенства имён в рантайме.
+fn find_property(
+    table: &'static [PropertyDescriptor],
+    name: &str,
+) -> Option<&'static PropertyDescriptor> {
+    table.iter().find(|descriptor| {
+        descriptor
+            .names
+            .iter()
+            .any(|candidate| crate::folded_eq(candidate, name))
+    })
+}
+
+/// Чтение свойства по статической таблице — реализация `get_property` по
+/// умолчанию и вход для доступа с именем-строкой.
+///
+/// # Errors
+///
+/// [`crate::RtError::UnknownProperty`], если имени нет в таблице; ошибки
+/// самого обработчика — как есть.
+pub fn get_property_from_table(
+    table: &'static [PropertyDescriptor],
+    type_name: &'static str,
+    receiver: &dyn crate::ObjectProtocol,
+    name: &str,
+    context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    match find_property(table, name) {
+        Some(descriptor) => (descriptor.get)(receiver, context),
+        None => {
+            let _ = type_name;
+            Err(crate::RtError::UnknownProperty(name.to_string()))
+        }
+    }
+}
+
+/// Запись свойства по статической таблице.
+///
+/// # Errors
+///
+/// [`crate::RtError::UnknownProperty`], если имени нет в таблице;
+/// [`crate::RtError::PropertyReadOnly`], если у свойства нет обработчика
+/// записи.
+pub fn set_property_from_table(
+    table: &'static [PropertyDescriptor],
+    type_name: &'static str,
+    receiver: &dyn crate::ObjectProtocol,
+    name: &str,
+    value: BslValue,
+    context: &mut CallContext<'_>,
+) -> RtResult<()> {
+    match find_property(table, name) {
+        Some(descriptor) => match descriptor.set {
+            Some(set) => set(receiver, value, context),
+            None => Err(crate::RtError::PropertyReadOnly {
+                property: name.to_string(),
+                receiver: type_name,
+            }),
+        },
+        None => Err(crate::RtError::UnknownProperty(name.to_string())),
+    }
+}
+
 /// Диспетчеризация вызова по статической таблице методов для входов с
 /// именем-строкой: реализация `call_method` конвертированного типа. Имя
 /// сравнивается без учёта регистра, как в остальных таблицах имён.

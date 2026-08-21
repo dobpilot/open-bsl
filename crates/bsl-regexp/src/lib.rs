@@ -144,7 +144,8 @@
 use bsl_number::BslNumber;
 use bsl_rt::{
     Arity, BslString, BslValue, CallContext, EnumValue, FunctionCode, FunctionDescriptor,
-    FunctionKind, LibraryDescriptor, ObjectProtocol, RtError, RtResult, TypeDescriptor, TypeId,
+    FunctionKind, LibraryDescriptor, ObjectProtocol, PropertyCode, PropertyDescriptor, RtError,
+    RtResult, TypeDescriptor, TypeId,
 };
 use std::rc::Rc;
 
@@ -258,19 +259,8 @@ impl ObjectProtocol for RegexObject {
         }
     }
 
-    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
-        let span = self.span()?;
-        if name.eq_ignore_ascii_case("Значение") || name.eq_ignore_ascii_case("Value") {
-            Ok(BslValue::Str(span.value.clone()))
-        } else if name.eq_ignore_ascii_case("НачальнаяПозиция")
-            || name.eq_ignore_ascii_case("StartIndex")
-        {
-            Ok(BslValue::Number(BslNumber::from_i64(span.start as i64)))
-        } else if name.eq_ignore_ascii_case("Длина") || name.eq_ignore_ascii_case("Length") {
-            Ok(BslValue::Number(BslNumber::from_i64(span.length as i64)))
-        } else {
-            Err(RtError::UnknownColumn(name.to_string()))
-        }
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        SPAN_PROPERTIES
     }
 
     fn call_method(
@@ -300,6 +290,58 @@ impl ObjectProtocol for RegexObject {
         Ok(BslValue::new_array(items))
     }
 }
+
+/// Окно результата за получателем: и весь результат, и его группа — одна
+/// реализация, поэтому таблица свойств у них общая.
+fn span_of(receiver: &dyn ObjectProtocol) -> RtResult<&RegexSpan> {
+    receiver
+        .downcast_ref::<RegexObject>()
+        .ok_or(RtError::NotAnObject)?
+        .span()
+}
+
+fn span_value(receiver: &dyn ObjectProtocol, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
+    Ok(BslValue::Str(span_of(receiver)?.value.clone()))
+}
+
+fn span_start(receiver: &dyn ObjectProtocol, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
+    Ok(BslValue::Number(BslNumber::from_i64(
+        span_of(receiver)?.start as i64,
+    )))
+}
+
+fn span_length(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    Ok(BslValue::Number(BslNumber::from_i64(
+        span_of(receiver)?.length as i64,
+    )))
+}
+
+/// Три свойства результата и группы — и только они: `ПолучитьГруппы()`
+/// метод, а нулевой группы среди групп нет (измерено, см. обзор модуля).
+/// Все — только для чтения: платформа записи в них не знает.
+static SPAN_PROPERTIES: &[PropertyDescriptor] = &[
+    PropertyDescriptor {
+        code: PropertyCode::new(1),
+        names: &["Значение", "Value"],
+        get: span_value,
+        set: None,
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(2),
+        names: &["НачальнаяПозиция", "StartIndex"],
+        get: span_start,
+        set: None,
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(3),
+        names: &["Длина", "Length"],
+        get: span_length,
+        set: None,
+    },
+];
 
 // --- разбор аргументов ---------------------------------------------------
 

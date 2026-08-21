@@ -48,8 +48,10 @@ pub use builtin::{
 pub use component::{
     Arity, CallContext, ComponentCall, ConstructorCode, ConstructorDescriptor, FunctionCaller,
     FunctionCode, FunctionDescriptor, FunctionKind, LibraryDependency, LibraryDescriptor,
-    LibraryKey, LibraryRequirement, MethodCall, MethodCode, MethodDescriptor, RegistryError,
-    RuntimeBuilder, RuntimeRegistry, ValueFormatter, call_method_from_table, core_library,
+    LibraryKey, LibraryRequirement, MethodCall, MethodCode, MethodDescriptor, PropertyCode,
+    PropertyDescriptor, PropertyGet, PropertySet, RegistryError, RuntimeBuilder, RuntimeRegistry,
+    ValueFormatter, call_method_from_table, core_library, get_property_from_table,
+    set_property_from_table,
 };
 pub use date::{
     BslDate, DEFAULT_PATTERN as DEFAULT_DATE_PATTERN, DateBoundary, DatePart, UNIX_EPOCH_SECONDS,
@@ -221,6 +223,11 @@ pub enum RtError {
     /// и одинаково относится к обеим сторонам, а не к конкретному
     /// носителю.
     UnknownProperty(String),
+    /// Запись в свойство, у которого есть только чтение.
+    PropertyReadOnly {
+        property: String,
+        receiver: &'static str,
+    },
     /// `Тип("ОпечаткаВИмени")` — такого типа в реестре нет.
     UnknownType(String),
     /// Дата вышла за `0001-01-01 .. 9999-12-31` — при построении
@@ -304,6 +311,10 @@ impl fmt::Display for RtError {
             RtError::RowInvalidated => write!(f, "строка таблицы значений больше не существует"),
             RtError::UnknownColumn(name) => write!(f, "колонка «{name}» не найдена"),
             RtError::UnknownProperty(name) => write!(f, "свойство «{name}» не найдено"),
+            RtError::PropertyReadOnly { property, receiver } => write!(
+                f,
+                "свойство «{property}» объекта «{receiver}» доступно только для чтения"
+            ),
             RtError::Json(msg) => write!(f, "{msg}"),
             RtError::Xml(msg) => write!(f, "{msg}"),
             RtError::Xsd(msg) => write!(f, "{msg}"),

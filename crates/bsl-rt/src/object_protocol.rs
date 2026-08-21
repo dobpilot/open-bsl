@@ -114,17 +114,43 @@ impl dyn ObjectProtocol + '_ {
 pub trait ObjectProtocol: fmt::Debug + ObjectDowncast {
     fn type_descriptor(&self) -> &'static TypeDescriptor;
 
-    fn get_property(&self, _name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
-        Err(RtError::NotAnObject)
+    /// Вход для доступа к свойству с именем-строкой. По умолчанию
+    /// диспетчеризует по [`ObjectProtocol::property_table`]; пустая
+    /// таблица отвечает `UnknownProperty`. Собственная реализация нужна
+    /// типу с ДИНАМИЧЕСКИМ набором имён (объекты XDTO, параметры макета) —
+    /// такой оставляет таблицу пустой и сворачивает имена сам.
+    fn get_property(&self, name: &str, context: &mut CallContext<'_>) -> RtResult<BslValue> {
+        crate::get_property_from_table(
+            self.property_table(),
+            self.type_descriptor().name,
+            self.as_dyn(),
+            name,
+            context,
+        )
     }
 
     fn set_property(
         &self,
-        _name: &str,
-        _value: BslValue,
-        _context: &mut CallContext<'_>,
+        name: &str,
+        value: BslValue,
+        context: &mut CallContext<'_>,
     ) -> RtResult<()> {
-        Err(RtError::NotAnObject)
+        crate::set_property_from_table(
+            self.property_table(),
+            self.type_descriptor().name,
+            self.as_dyn(),
+            name,
+            value,
+            context,
+        )
+    }
+
+    /// Статическая таблица свойств типа — как
+    /// [`ObjectProtocol::method_table`] для методов. Непустая включает
+    /// быстрый путь VM «номер имени → обработчик»; пустая оставляет типу
+    /// только строковый `get_property`/`set_property`.
+    fn property_table(&self) -> &'static [crate::PropertyDescriptor] {
+        &[]
     }
 
     /// Вход для вызовов с именем-строкой — `WriteText`/`CloseText` и
@@ -279,6 +305,10 @@ impl ObjectRef {
 
     pub fn method_table(&self) -> &'static [crate::MethodDescriptor] {
         self.0.method_table()
+    }
+
+    pub fn property_table(&self) -> &'static [crate::PropertyDescriptor] {
+        self.0.property_table()
     }
 
     pub fn get_index(&self, index: &BslValue) -> RtResult<BslValue> {

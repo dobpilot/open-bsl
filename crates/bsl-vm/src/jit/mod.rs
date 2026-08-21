@@ -46,9 +46,10 @@ mod mem;
 mod x64;
 
 use crate::{
-    CallArgs, ComponentMethodMap, Frame, HostIo, LinkedComponents, add_op, at, binop,
-    cached_component_method, call_builtin_with_format, cmp, field_name, neg_op,
-    numeric_for_next_regular, prop_cache, reg_load, reg_store,
+    CallArgs, ComponentMethodMap, ComponentPropertyMap, Frame, HostIo, LinkedComponents, add_op,
+    at, binop, cached_component_method, call_builtin_with_format, cmp, component_prop_get,
+    component_prop_set, field_name, neg_op, numeric_for_next_regular, prop_cache, reg_load,
+    reg_store,
 };
 use bsl_bytecode::{Chunk, Instr, Program};
 use bsl_rt::{BslValue, RtError};
@@ -94,6 +95,10 @@ pub struct JitCtx {
     builtin_methods: *const Option<bsl_rt::BuiltinMethod>,
     builtin_methods_len: usize,
     component_methods: *const ComponentMethodMap,
+    /// То же для свойств: у них нет ячейки инструкции, и мемоизация
+    /// «таблица типа, номер имени → обработчик» — единственный быстрый
+    /// путь.
+    component_properties: *const ComponentPropertyMap,
 }
 
 /// Скомпилированный чанк: машинный код и карта входов.
@@ -130,6 +135,7 @@ impl CompiledChunk {
             builtin_methods: linked.builtin_methods.as_ptr(),
             builtin_methods_len: linked.builtin_methods.len(),
             component_methods: &linked.component_methods,
+            component_properties: &linked.component_properties,
         };
         // Переход в отображённую страницу. Безопасность держится на том,
         // что код туда положил `compile` из этого же файла, а указатели в
@@ -473,6 +479,45 @@ unsafe fn run_shim(
     }
 }
 
+/// Как [`run_shim`], но телу дополнительно отдаётся карта мемоизации
+/// свойств: шимы свойств разрешают имя через неё, как интерпретатор.
+unsafe fn run_prop_shim(
+    ctx: *mut JitCtx,
+    pc: u32,
+    body: impl FnOnce(
+        &mut Vec<Frame>,
+        &mut Vec<BslValue>,
+        &Program,
+        usize,
+        &mut bsl_rt::RuntimeShapes,
+        &ComponentPropertyMap,
+    ) -> Result<u64, RtError>,
+) -> u64 {
+    let properties = unsafe { &*(&*ctx).component_properties };
+    unsafe {
+        run_shim(ctx, pc, |frames, stack, program, idx, shapes| {
+            body(frames, stack, program, idx, shapes, properties)
+        })
+    }
+}
+
+macro_rules! prop_shim {
+    ($name:ident, |$frames:ident, $stack:ident, $program:ident, $idx:ident, $shapes:ident, $props:ident, $pc:ident| $body:block) => {
+        extern "C" fn $name(ctx: *mut JitCtx, pc_arg: u32, _a: u32, _b: u32, _c: u32) -> u64 {
+            unsafe {
+                run_prop_shim(
+                    ctx,
+                    pc_arg,
+                    |$frames, $stack, $program, $idx, $shapes, $props| {
+                        let $pc: u32 = pc_arg;
+                        $body
+                    },
+                )
+            }
+        }
+    };
+}
+
 macro_rules! shim {
     ($name:ident, |$frames:ident, $stack:ident, $program:ident, $idx:ident, $shapes:ident, $pc:ident, $a:ident, $b:ident, $c:ident| $body:block) => {
         #[allow(dead_code)]
@@ -814,15 +859,13 @@ fn own_instr<'a>(
     Ok((chunk, *at(&chunk.instrs, pc, "инструкция вне чанка")?))
 }
 
-shim!(shim_get_prop, |frames,
-                      stack,
-                      program,
-                      idx,
-                      shapes,
-                      pc,
-                      _a,
-                      _b,
-                      _c| {
+prop_shim!(shim_get_prop, |frames,
+                           stack,
+                           program,
+                           idx,
+                           shapes,
+                           props,
+                           pc| {
     let (chunk, instr) = own_instr(frames, program, idx, pc as usize)?;
     let Instr::GetProp { dst, obj, name } = instr else {
         return Err(RtError::InvalidBytecode(
@@ -841,7 +884,7 @@ shim!(shim_get_prop, |frames,
         let mut stderr = std::io::sink();
         let mut context =
             bsl_rt::CallContext::new(shapes, &mut stdout, &mut stderr, bsl_format::format_value);
-        object.get_property(field_name(program, name)?, &mut context)?
+        component_prop_get(object, props, name, program, &mut context)?
     } else {
         match ov.get_field_cached(name, prop_cache(chunk, pc as usize)?) {
             Err(RtError::NotAnObject) => ov.get_field_by_name(field_name(program, name)?)?,
@@ -853,15 +896,13 @@ shim!(shim_get_prop, |frames,
     Ok(OK)
 });
 
-shim!(shim_set_prop, |frames,
-                      stack,
-                      program,
-                      idx,
-                      shapes,
-                      pc,
-                      _a,
-                      _b,
-                      _c| {
+prop_shim!(shim_set_prop, |frames,
+                           stack,
+                           program,
+                           idx,
+                           shapes,
+                           props,
+                           pc| {
     let (chunk, instr) = own_instr(frames, program, idx, pc as usize)?;
     let Instr::SetProp { obj, name, src } = instr else {
         return Err(RtError::InvalidBytecode(
@@ -877,7 +918,7 @@ shim!(shim_set_prop, |frames,
         let mut stderr = std::io::sink();
         let mut context =
             bsl_rt::CallContext::new(shapes, &mut stdout, &mut stderr, bsl_format::format_value);
-        object.set_property(field_name(program, name)?, sv, &mut context)?;
+        component_prop_set(object, props, name, sv, program, &mut context)?;
     } else {
         match ov.set_field_cached(name, sv.clone(), prop_cache(chunk, pc as usize)?) {
             Err(RtError::NotAnObject) => ov.set_field_by_name(field_name(program, name)?, sv)?,
@@ -931,15 +972,13 @@ shim!(shim_call_method, |frames,
 // у закрытых шимов выше: свойства и методы официальных компонентов не
 // пишут в поток вывода, а расхождение с интерпретатором поймала бы
 // `the_jit_agrees_with_the_interpreter_on_every_script`.
-shim!(shim_get_object_prop, |frames,
-                             stack,
-                             program,
-                             idx,
-                             shapes,
-                             pc,
-                             _a,
-                             _b,
-                             _c| {
+prop_shim!(shim_get_object_prop, |frames,
+                                  stack,
+                                  program,
+                                  idx,
+                                  shapes,
+                                  props,
+                                  pc| {
     let (chunk, instr) = own_instr(frames, program, idx, pc as usize)?;
     let Instr::GetObjectProp { dst, obj, name } = instr else {
         return Err(RtError::InvalidBytecode(
@@ -953,7 +992,7 @@ shim!(shim_get_object_prop, |frames,
         let mut stderr = std::io::sink();
         let mut context =
             bsl_rt::CallContext::new(shapes, &mut stdout, &mut stderr, bsl_format::format_value);
-        object.get_property(field_name(program, name_id)?, &mut context)?
+        component_prop_get(object, props, name_id, program, &mut context)?
     } else {
         match ov.get_field_cached(name_id, prop_cache(chunk, pc as usize)?) {
             Err(RtError::NotAnObject) => ov.get_field_by_name(field_name(program, name_id)?)?,
@@ -965,15 +1004,13 @@ shim!(shim_get_object_prop, |frames,
     Ok(OK)
 });
 
-shim!(shim_set_object_prop, |frames,
-                             stack,
-                             program,
-                             idx,
-                             shapes,
-                             pc,
-                             _a,
-                             _b,
-                             _c| {
+prop_shim!(shim_set_object_prop, |frames,
+                                  stack,
+                                  program,
+                                  idx,
+                                  shapes,
+                                  props,
+                                  pc| {
     let (chunk, instr) = own_instr(frames, program, idx, pc as usize)?;
     let Instr::SetObjectProp { obj, name, src } = instr else {
         return Err(RtError::InvalidBytecode(
@@ -988,7 +1025,7 @@ shim!(shim_set_object_prop, |frames,
         let mut stderr = std::io::sink();
         let mut context =
             bsl_rt::CallContext::new(shapes, &mut stdout, &mut stderr, bsl_format::format_value);
-        object.set_property(field_name(program, name_id)?, sv, &mut context)?;
+        component_prop_set(object, props, name_id, sv, program, &mut context)?;
     } else {
         match ov.set_field_cached(name_id, sv.clone(), prop_cache(chunk, pc as usize)?) {
             Err(RtError::NotAnObject) => ov.set_field_by_name(field_name(program, name_id)?, sv)?,

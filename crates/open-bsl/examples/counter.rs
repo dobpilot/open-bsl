@@ -5,7 +5,8 @@
 
 use open_bsl::{
     Arity, CallContext, ConstructorCode, ConstructorDescriptor, Engine, LibraryDescriptor,
-    MethodCode, MethodDescriptor, ObjectProtocol, RtError, RtResult, TypeDescriptor, Value,
+    MethodCode, MethodDescriptor, ObjectProtocol, PropertyCode, PropertyDescriptor, RtError,
+    RtResult, TypeDescriptor, Value,
 };
 
 // Состояние объекта живёт за `Rc`: рантайм однопоточный, а обёртка
@@ -42,18 +43,29 @@ const COUNTER_METHODS: &[MethodDescriptor] = &[MethodDescriptor {
     call: counter_increase,
 }];
 
+fn counter_value(receiver: &dyn ObjectProtocol, _context: &mut CallContext<'_>) -> RtResult<Value> {
+    let counter = receiver
+        .downcast_ref::<Counter>()
+        .ok_or(RtError::NotAnObject)?;
+    Ok(Value::number_from_i64(counter.value.get()))
+}
+
+// Таблица свойств устроена как таблица методов; `set: None` — свойство
+// только для чтения, присваивание в него вернёт ошибку.
+const COUNTER_PROPERTIES: &[PropertyDescriptor] = &[PropertyDescriptor {
+    code: PropertyCode::new(1),
+    names: &["Значение", "Value"],
+    get: counter_value,
+    set: None,
+}];
+
 impl ObjectProtocol for Counter {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         &COUNTER_TYPE
     }
 
-    // Свойства обслуживаются парой get_property/set_property.
-    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<Value> {
-        if matches!(name.to_uppercase().as_str(), "ЗНАЧЕНИЕ" | "VALUE") {
-            Ok(Value::number_from_i64(self.value.get()))
-        } else {
-            Err(RtError::UnknownProperty(name.to_string()))
-        }
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        COUNTER_PROPERTIES
     }
 
     // Непустая таблица включает быстрый путь VM: обработчик находится по

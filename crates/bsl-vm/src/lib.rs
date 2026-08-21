@@ -382,6 +382,11 @@ struct LinkedComponents<'a> {
     /// `None` запоминает и промахи, чтобы типы без таблиц не платили за
     /// строку на каждом вызове. Рантайм однопоточный, `RefCell` достаточно.
     component_methods: ComponentMethodMap,
+    /// То же для статических таблиц СВОЙСТВ (`ObjectProtocol::property_table`).
+    /// Ячейки инструкции у свойств пока нет: она — производная таблица
+    /// `Chunk`, её добавление стоит правок формата байт-кода, а выигрыш не
+    /// измерен (см. `docs/bsl-rt-abi.md`, часть C).
+    component_properties: ComponentPropertyMap,
 }
 
 impl LinkedComponents<'_> {
@@ -425,6 +430,90 @@ type ComponentMethodMap =
 /// одним, у самого типа. Свободная функция, а не метод: тем же разрешением
 /// пользуется шим открытого метода в JIT, у которого карта приходит сырым
 /// указателем из `JitCtx`.
+/// Карта мемоизации «(статическая таблица типа, номер имени) → пара
+/// обработчиков свойства».
+type ComponentPropertyMap = std::cell::RefCell<
+    std::collections::HashMap<
+        (usize, u32),
+        Option<(bsl_rt::PropertyGet, Option<bsl_rt::PropertySet>)>,
+    >,
+>;
+
+/// Разрешение свойства компонентного объекта — зеркало
+/// [`resolve_component_method`]: строка разбирается один раз на пару
+/// «таблица, имя», промахи запоминаются тоже. `None` — имени в таблице нет
+/// (или таблица пустая), и вызывающий уходит строковым путём, где у типа
+/// остаётся единственный источник текста ошибки.
+fn resolve_component_property(
+    map: &ComponentPropertyMap,
+    table: &'static [bsl_rt::PropertyDescriptor],
+    name: bsl_rt::NameId,
+    program: &Program,
+) -> Result<Option<(bsl_rt::PropertyGet, Option<bsl_rt::PropertySet>)>, RtError> {
+    let key = (table.as_ptr() as usize, name.index() as u32);
+    if let Some(resolved) = map.borrow().get(&key) {
+        return Ok(*resolved);
+    }
+    let written = field_name(program, name)?;
+    let resolved = table
+        .iter()
+        .find(|descriptor| {
+            descriptor
+                .names
+                .iter()
+                .any(|candidate| bsl_rt::folded_eq(candidate, written))
+        })
+        .map(|descriptor| (descriptor.get, descriptor.set));
+    map.borrow_mut().insert(key, resolved);
+    Ok(resolved)
+}
+
+/// Чтение свойства компонентного объекта: таблица типа — быстрым путём,
+/// промах и тип без таблицы — строковым `get_property`. Вынесено из арма и
+/// помечено `#[inline(never)]`: тело крупное, а горячий цикл живёт на
+/// грани кеша микроопераций (см. комментарий у `step_cold`).
+#[inline(never)]
+fn component_prop_get(
+    object: &bsl_rt::ObjectRef,
+    properties: &ComponentPropertyMap,
+    name: bsl_rt::NameId,
+    program: &Program,
+    context: &mut bsl_rt::CallContext<'_>,
+) -> Result<BslValue, RtError> {
+    let table = object.property_table();
+    if !table.is_empty()
+        && let Some((get, _)) = resolve_component_property(properties, table, name, program)?
+    {
+        return get(object.as_dyn(), context);
+    }
+    object.get_property(field_name(program, name)?, context)
+}
+
+/// Запись свойства компонентного объекта — двойник `component_prop_get`.
+#[inline(never)]
+fn component_prop_set(
+    object: &bsl_rt::ObjectRef,
+    properties: &ComponentPropertyMap,
+    name: bsl_rt::NameId,
+    value: BslValue,
+    program: &Program,
+    context: &mut bsl_rt::CallContext<'_>,
+) -> Result<(), RtError> {
+    let table = object.property_table();
+    if !table.is_empty()
+        && let Some((_, set)) = resolve_component_property(properties, table, name, program)?
+    {
+        return match set {
+            Some(set) => set(object.as_dyn(), value, context),
+            None => Err(RtError::PropertyReadOnly {
+                property: field_name(program, name)?.to_string(),
+                receiver: object.type_descriptor().name,
+            }),
+        };
+    }
+    object.set_property(field_name(program, name)?, value, context)
+}
+
 fn resolve_component_method(
     map: &ComponentMethodMap,
     table: &'static [bsl_rt::MethodDescriptor],
@@ -597,6 +686,7 @@ fn link_components<'a>(
         constructors,
         builtin_methods,
         component_methods: std::cell::RefCell::new(std::collections::HashMap::new()),
+        component_properties: std::cell::RefCell::new(std::collections::HashMap::new()),
     })
 }
 
@@ -1443,7 +1533,13 @@ fn step(
                         &mut *host.stderr,
                         bsl_format::format_value,
                     );
-                    object.get_property(field_name(program, name)?, &mut context)?
+                    component_prop_get(
+                        object,
+                        &linked.component_properties,
+                        name,
+                        program,
+                        &mut context,
+                    )?
                 } else {
                     match ov.get_field_cached(name, prop_cache(chunk, pc)?) {
                         Err(RtError::NotAnObject) => {
@@ -1459,7 +1555,6 @@ fn step(
             Instr::SetProp { obj, name, src } => {
                 let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
                 let sv = reg_load(stack, frames[frame_idx].reg_index(src))?;
-                let имя = field_name(program, name)?;
                 if let Some(object) = ov.object_ref() {
                     let mut context = bsl_rt::CallContext::new(
                         runtime_shapes,
@@ -1467,8 +1562,16 @@ fn step(
                         &mut *host.stderr,
                         bsl_format::format_value,
                     );
-                    object.set_property(имя, sv, &mut context)?;
+                    component_prop_set(
+                        object,
+                        &linked.component_properties,
+                        name,
+                        sv,
+                        program,
+                        &mut context,
+                    )?;
                 } else {
+                    let имя = field_name(program, name)?;
                     match ov.set_field_cached(name, sv.clone(), prop_cache(chunk, pc)?) {
                         Err(RtError::NotAnObject) => ov.set_field_by_name(имя, sv)?,
                         other => other?,
@@ -1759,7 +1862,6 @@ fn step_cold(
         Instr::GetObjectProp { dst, obj, name } => {
             let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
             let name_id = bsl_rt::NameId::from_index(name as u32);
-            let property_name = field_name(program, name_id)?;
             let value = if let Some(object) = ov.object_ref() {
                 let mut context = bsl_rt::CallContext::new(
                     runtime_shapes,
@@ -1767,10 +1869,18 @@ fn step_cold(
                     &mut *host.stderr,
                     bsl_format::format_value,
                 );
-                object.get_property(property_name, &mut context)?
+                component_prop_get(
+                    object,
+                    &linked.component_properties,
+                    name_id,
+                    program,
+                    &mut context,
+                )?
             } else {
                 match ov.get_field_cached(name_id, prop_cache(chunk, frames[frame_idx].pc)?) {
-                    Err(RtError::NotAnObject) => ov.get_field_by_name(property_name)?,
+                    Err(RtError::NotAnObject) => {
+                        ov.get_field_by_name(field_name(program, name_id)?)?
+                    }
                     other => other?,
                 }
             };
@@ -1782,7 +1892,6 @@ fn step_cold(
             let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
             let value = reg_load(stack, frames[frame_idx].reg_index(src))?;
             let name_id = bsl_rt::NameId::from_index(name as u32);
-            let property_name = field_name(program, name_id)?;
             if let Some(object) = ov.object_ref() {
                 let mut context = bsl_rt::CallContext::new(
                     runtime_shapes,
@@ -1790,14 +1899,23 @@ fn step_cold(
                     &mut *host.stderr,
                     bsl_format::format_value,
                 );
-                object.set_property(property_name, value, &mut context)?;
+                component_prop_set(
+                    object,
+                    &linked.component_properties,
+                    name_id,
+                    value,
+                    program,
+                    &mut context,
+                )?;
             } else {
                 match ov.set_field_cached(
                     name_id,
                     value.clone(),
                     prop_cache(chunk, frames[frame_idx].pc)?,
                 ) {
-                    Err(RtError::NotAnObject) => ov.set_field_by_name(property_name, value)?,
+                    Err(RtError::NotAnObject) => {
+                        ov.set_field_by_name(field_name(program, name_id)?, value)?
+                    }
                     other => other?,
                 }
             }

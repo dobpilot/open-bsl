@@ -14,7 +14,7 @@ use crate::core::{
 };
 use bsl_rt::{
     BslNumber, BslString, BslValue, CallContext, EnumValue, MethodCode, MethodDescriptor,
-    ObjectProtocol, RtError, RtResult, TypeDescriptor, TypeId,
+    ObjectProtocol, PropertyCode, PropertyDescriptor, RtError, RtResult, TypeDescriptor, TypeId,
 };
 
 fn bad(what: impl Into<String>) -> RtError {
@@ -776,35 +776,103 @@ impl ObjectProtocol for XmlReaderObject {
         &READER_TYPE
     }
 
-    fn get_property(&self, prop: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
-        let is =
-            |ru: &str, en: &str| prop.eq_ignore_ascii_case(ru) || prop.eq_ignore_ascii_case(en);
-        // Читатель помнит текущий узел, а свойства показывают его с разных
-        // сторон (прежний арм общей таблицы свойств). Внутренние
-        // `*_from`-функции работают прямо над состоянием: свойство
-        // читается на каждом узле обхода, и пересборка Rc-обёртки ради
-        // обратного даункаста стоила бы аллокации на каждое чтение.
-        if is("ТипУзла", "NodeType") {
-            node_type_from(&self.state)
-        } else if is("Имя", "Name") {
-            name_from(&self.state)
-        } else if is("Значение", "Value") {
-            value_from(&self.state)
-        } else if is("ЛокальноеИмя", "LocalName") {
-            local_name_from(&self.state)
-        } else if is("Префикс", "Prefix") {
-            prefix_from(&self.state)
-        } else if is("URIПространстваИмен", "NamespaceURI") {
-            namespace_uri_from(&self.state)
-        } else {
-            Err(RtError::UnknownColumn(prop.to_string()))
-        }
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        READER_PROPERTIES
     }
 
     fn method_table(&self) -> &'static [MethodDescriptor] {
         READER_METHODS
     }
 }
+
+// Шесть свойств читателя: все только на чтение — текущий узел двигают
+// методы. Обработчики работают прямо над состоянием получателя:
+// `xml_parse` читает `ТипУзла`/`Имя` на каждом узле обхода, и лишняя
+// аллокация здесь была бы видна в замере.
+fn reader_state(receiver: &dyn ObjectProtocol) -> RtResult<&RefCell<XmlReaderState>> {
+    as_reader(receiver)
+}
+
+fn reader_node_type(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    node_type_from(reader_state(receiver)?)
+}
+
+fn reader_name(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    name_from(reader_state(receiver)?)
+}
+
+fn reader_value(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    value_from(reader_state(receiver)?)
+}
+
+fn reader_local_name(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    local_name_from(reader_state(receiver)?)
+}
+
+fn reader_prefix(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    prefix_from(reader_state(receiver)?)
+}
+
+fn reader_namespace_uri(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    namespace_uri_from(reader_state(receiver)?)
+}
+
+static READER_PROPERTIES: &[PropertyDescriptor] = &[
+    PropertyDescriptor {
+        code: PropertyCode::new(1),
+        names: &["ТипУзла", "NodeType"],
+        get: reader_node_type,
+        set: None,
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(2),
+        names: &["Имя", "Name"],
+        get: reader_name,
+        set: None,
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(3),
+        names: &["Значение", "Value"],
+        get: reader_value,
+        set: None,
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(4),
+        names: &["ЛокальноеИмя", "LocalName"],
+        get: reader_local_name,
+        set: None,
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(5),
+        names: &["Префикс", "Prefix"],
+        get: reader_prefix,
+        set: None,
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(6),
+        names: &["URIПространстваИмен", "NamespaceURI"],
+        get: reader_namespace_uri,
+        set: None,
+    },
+];
 
 // Обработчики статических таблиц читателя и писателя XML: получатель
 // приходит от вызывающего, пары имён — прежние ветки `eq`-цепочек.

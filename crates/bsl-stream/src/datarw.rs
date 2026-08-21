@@ -117,8 +117,8 @@ use std::rc::Rc;
 
 use bsl_rt::{
     BslNumber, BslString, BslValue, ByteStreamProtocol, CallContext, EnumValue, MethodCode,
-    MethodDescriptor, ObjectDowncast, ObjectProtocol, RtError, RtResult, TypeDescriptor, TypeId,
-    encoding::Encoding,
+    MethodDescriptor, ObjectProtocol, PropertyCode, PropertyDescriptor, RtError, RtResult,
+    TypeDescriptor, TypeId, encoding::Encoding,
 };
 
 /// Порядок байтов многобайтового целого.
@@ -359,23 +359,8 @@ impl ObjectProtocol for DataRwObject {
         }
     }
 
-    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
-        match DataRwProp::lookup(name) {
-            Some(property) => get_prop(self.as_dyn(), property),
-            None => Err(RtError::UnknownColumn(name.to_string())),
-        }
-    }
-
-    fn set_property(
-        &self,
-        name: &str,
-        value: BslValue,
-        _context: &mut CallContext<'_>,
-    ) -> RtResult<()> {
-        match DataRwProp::lookup(name) {
-            Some(property) => set_prop(self.as_dyn(), property, &value),
-            None => Err(RtError::UnknownColumn(name.to_string())),
-        }
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        DATA_RW_PROPERTIES
     }
 
     fn method_table(&self) -> &'static [MethodDescriptor] {
@@ -623,18 +608,99 @@ impl ObjectProtocol for DataReadResult {
         &DATA_READ_RESULT_TYPE
     }
 
-    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
-        if name.eq_ignore_ascii_case("Размер") || name.eq_ignore_ascii_case("Size") {
-            Ok(from_u64(self.bytes.len() as u64))
-        } else {
-            Err(RtError::UnknownColumn(name.to_string()))
-        }
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        DATA_READ_RESULT_PROPERTIES
     }
 
     fn method_table(&self) -> &'static [MethodDescriptor] {
         DATA_READ_RESULT_METHODS
     }
 }
+
+// Три свойства читателя и писателя — обе стороны носят один и тот же
+// набор, поэтому таблица общая, как и таблица методов.
+fn rw_get_byte_order(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    get_prop(receiver, DataRwProp::ByteOrder)
+}
+
+fn rw_set_byte_order(
+    receiver: &dyn ObjectProtocol,
+    value: BslValue,
+    _context: &mut CallContext<'_>,
+) -> RtResult<()> {
+    set_prop(receiver, DataRwProp::ByteOrder, &value)
+}
+
+fn rw_get_encoding(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    get_prop(receiver, DataRwProp::TextEncoding)
+}
+
+fn rw_set_encoding(
+    receiver: &dyn ObjectProtocol,
+    value: BslValue,
+    _context: &mut CallContext<'_>,
+) -> RtResult<()> {
+    set_prop(receiver, DataRwProp::TextEncoding, &value)
+}
+
+fn rw_get_separator(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    get_prop(receiver, DataRwProp::LineSeparator)
+}
+
+fn rw_set_separator(
+    receiver: &dyn ObjectProtocol,
+    value: BslValue,
+    _context: &mut CallContext<'_>,
+) -> RtResult<()> {
+    set_prop(receiver, DataRwProp::LineSeparator, &value)
+}
+
+static DATA_RW_PROPERTIES: &[PropertyDescriptor] = &[
+    PropertyDescriptor {
+        code: PropertyCode::new(1),
+        names: &["ПорядокБайтов", "ByteOrder"],
+        get: rw_get_byte_order,
+        set: Some(rw_set_byte_order),
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(2),
+        names: &["КодировкаТекста", "TextEncoding"],
+        get: rw_get_encoding,
+        set: Some(rw_set_encoding),
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(3),
+        // ИЗМЕРЕНО: английское имя именно `LineSplitter`; на
+        // `LineSeparator` платформа отвечает «Поле объекта не обнаружено».
+        names: &["РазделительСтрок", "LineSplitter"],
+        get: rw_get_separator,
+        set: Some(rw_set_separator),
+    },
+];
+
+/// `Размер` результата чтения — только на чтение.
+fn read_result_size(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    result_size(receiver)
+}
+
+static DATA_READ_RESULT_PROPERTIES: &[PropertyDescriptor] = &[PropertyDescriptor {
+    code: PropertyCode::new(1),
+    names: &["Размер", "Size"],
+    get: read_result_size,
+    set: None,
+}];
 
 /// Байты результата чтения: обработчики таблицы получают значение и
 /// возвращаются к конкретному типу через downcast.
@@ -722,7 +788,6 @@ fn writer<'a>(
 }
 
 /// Байты результата чтения.
-#[cfg(test)]
 fn result_bytes<'a>(v: &'a dyn ObjectProtocol, op: &'static str) -> RtResult<&'a Rc<[u8]>> {
     v.downcast_ref::<DataReadResult>()
         .map(|result| &result.bytes)
@@ -1051,28 +1116,6 @@ pub enum DataRwProp {
     ByteOrder,
     TextEncoding,
     LineSeparator,
-}
-
-impl DataRwProp {
-    /// Имя свойства по написанию на любом из двух языков.
-    pub fn lookup(name: &str) -> Option<Self> {
-        if name.eq_ignore_ascii_case("ПорядокБайтов") || name.eq_ignore_ascii_case("ByteOrder")
-        {
-            Some(DataRwProp::ByteOrder)
-        } else if name.eq_ignore_ascii_case("КодировкаТекста")
-            || name.eq_ignore_ascii_case("TextEncoding")
-        {
-            Some(DataRwProp::TextEncoding)
-        } else if name.eq_ignore_ascii_case("РазделительСтрок")
-            // ИЗМЕРЕНО: английское имя именно `LineSplitter`; на
-            // `LineSeparator` платформа отвечает «Поле объекта не обнаружено».
-            || name.eq_ignore_ascii_case("LineSplitter")
-        {
-            Some(DataRwProp::LineSeparator)
-        } else {
-            None
-        }
-    }
 }
 
 /// Чтение свойства читателя или писателя.
@@ -1611,7 +1654,6 @@ pub fn close(v: &dyn ObjectProtocol) -> RtResult<()> {
 /// # Errors
 ///
 /// «Метод не применим», если получатель не результат чтения.
-#[cfg(test)]
 fn result_size(v: &dyn ObjectProtocol) -> RtResult<BslValue> {
     let bytes = result_bytes(v, "Размер")?;
     Ok(from_u64(bytes.len() as u64))

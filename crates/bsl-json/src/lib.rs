@@ -924,7 +924,7 @@ use std::cell::RefCell;
 use bsl_rt::{
     Arity, BslObject, CallContext, ConstructorCode, ConstructorDescriptor, EnumValue, FunctionCode,
     FunctionDescriptor, FunctionKind, LibraryDescriptor, MethodCode, MethodDescriptor,
-    ObjectDowncast, ObjectProtocol, StructureStorage, TypeDescriptor, TypeId,
+    ObjectProtocol, PropertyCode, PropertyDescriptor, StructureStorage, TypeDescriptor, TypeId,
     local_date_from_utc_seconds, pseudo_unix_seconds,
 };
 
@@ -1437,10 +1437,6 @@ pub fn set_check_structure(obj: &dyn ObjectProtocol, val: BslValue) -> RtResult<
     })
 }
 
-fn method_is(name: &str, russian: &str, english: &str) -> bool {
-    name.eq_ignore_ascii_case(russian) || name.eq_ignore_ascii_case(english)
-}
-
 fn exact_method_arity(_name: &str, arguments: &[BslValue], count: usize) -> RtResult<()> {
     if arguments.len() == count {
         Ok(())
@@ -1521,14 +1517,8 @@ impl ObjectProtocol for JsonReaderObject {
         &READER_TYPE
     }
 
-    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
-        if method_is(name, "ТипТекущегоЗначения", "CurrentValueType") {
-            current_value_type(self.as_dyn())
-        } else if method_is(name, "ТекущееЗначение", "CurrentValue") {
-            current_value(self.as_dyn())
-        } else {
-            Err(RtError::UnknownColumn(name.to_string()))
-        }
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        READER_PROPERTIES
     }
 
     fn method_table(&self) -> &'static [MethodDescriptor] {
@@ -1539,6 +1529,37 @@ impl ObjectProtocol for JsonReaderObject {
         Ok(true)
     }
 }
+
+// Свойства читателя: оба только на чтение — позиция разбора меняется
+// методами, не присваиванием.
+fn reader_current_value_type(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    current_value_type(receiver)
+}
+
+fn reader_current_value(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    current_value(receiver)
+}
+
+static READER_PROPERTIES: &[PropertyDescriptor] = &[
+    PropertyDescriptor {
+        code: PropertyCode::new(1),
+        names: &["ТипТекущегоЗначения", "CurrentValueType"],
+        get: reader_current_value_type,
+        set: None,
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(2),
+        names: &["ТекущееЗначение", "CurrentValue"],
+        get: reader_current_value,
+        set: None,
+    },
+];
 
 // Обработчики статической таблицы читателя: получатель приходит от
 // вызывающего (VM отдаёт исходное значение — без пересборки обёртки на
@@ -1771,36 +1792,8 @@ impl ObjectProtocol for JsonWriterObject {
         &WRITER_TYPE
     }
 
-    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
-        if method_is(name, "ПроверятьСтруктуру", "CheckStructure") {
-            with_writer_cell(&self.writer, |writer| {
-                Ok(BslValue::Boolean(writer.check_structure()))
-            })
-        } else {
-            Err(RtError::UnknownColumn(name.to_string()))
-        }
-    }
-
-    fn set_property(
-        &self,
-        name: &str,
-        value: BslValue,
-        _context: &mut CallContext<'_>,
-    ) -> RtResult<()> {
-        if method_is(name, "ПроверятьСтруктуру", "CheckStructure") {
-            let BslValue::Boolean(check) = value else {
-                return Err(RtError::TypeError {
-                    expected: "Булево",
-                    op: "ПроверятьСтруктуру",
-                });
-            };
-            with_writer_cell(&self.writer, |writer| {
-                writer.set_check_structure(check);
-                Ok(())
-            })
-        } else {
-            Err(RtError::UnknownColumn(name.to_string()))
-        }
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        WRITER_PROPERTIES
     }
 
     fn method_table(&self) -> &'static [MethodDescriptor] {
@@ -1811,6 +1804,106 @@ impl ObjectProtocol for JsonWriterObject {
         Ok(true)
     }
 }
+
+// `ПроверятьСтруктуру` — единственное свойство писателя, и оно
+// читается-пишется.
+fn writer_get_check_structure(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    get_check_structure(receiver)
+}
+
+fn writer_set_check_structure(
+    receiver: &dyn ObjectProtocol,
+    value: BslValue,
+    _context: &mut CallContext<'_>,
+) -> RtResult<()> {
+    set_check_structure(receiver, value)
+}
+
+static WRITER_PROPERTIES: &[PropertyDescriptor] = &[PropertyDescriptor {
+    code: PropertyCode::new(1),
+    names: &["ПроверятьСтруктуру", "CheckStructure"],
+    get: writer_get_check_structure,
+    set: Some(writer_set_check_structure),
+}];
+
+// Настройки сериализации: три свойства, все с записью. Имена — измеренные
+// (см. `get_serializer_setting`: `ФорматСериализацииДат` без «ы» платформа
+// отвергает, это опечатка статьи 16.2.3.2).
+fn settings_get(receiver: &dyn ObjectProtocol, name: &'static str) -> RtResult<BslValue> {
+    get_serializer_setting(receiver, name)
+}
+
+fn settings_get_date_format(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    settings_get(receiver, "ФорматСериализацииДаты")
+}
+
+fn settings_set_date_format(
+    receiver: &dyn ObjectProtocol,
+    value: BslValue,
+    _context: &mut CallContext<'_>,
+) -> RtResult<()> {
+    set_serializer_setting(receiver, "ФорматСериализацииДаты", value)
+}
+
+fn settings_get_date_variant(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    settings_get(receiver, "ВариантЗаписиДаты")
+}
+
+fn settings_set_date_variant(
+    receiver: &dyn ObjectProtocol,
+    value: BslValue,
+    _context: &mut CallContext<'_>,
+) -> RtResult<()> {
+    set_serializer_setting(receiver, "ВариантЗаписиДаты", value)
+}
+
+fn settings_get_arrays_as_objects(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    settings_get(receiver, "СериализовыватьМассивыКакОбъекты")
+}
+
+fn settings_set_arrays_as_objects(
+    receiver: &dyn ObjectProtocol,
+    value: BslValue,
+    _context: &mut CallContext<'_>,
+) -> RtResult<()> {
+    set_serializer_setting(receiver, "СериализовыватьМассивыКакОбъекты", value)
+}
+
+static SERIALIZER_SETTINGS_PROPERTIES: &[PropertyDescriptor] = &[
+    PropertyDescriptor {
+        code: PropertyCode::new(1),
+        names: &["ФорматСериализацииДаты", "DateSerializationFormat"],
+        get: settings_get_date_format,
+        set: Some(settings_set_date_format),
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(2),
+        names: &["ВариантЗаписиДаты", "DateWritingVariant"],
+        get: settings_get_date_variant,
+        set: Some(settings_set_date_variant),
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(3),
+        names: &[
+            "СериализовыватьМассивыКакОбъекты",
+            "SerializeArraysAsObjects",
+        ],
+        get: settings_get_arrays_as_objects,
+        set: Some(settings_set_arrays_as_objects),
+    },
+];
 
 impl ObjectProtocol for JsonWriterSettingsObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
@@ -1827,17 +1920,8 @@ impl ObjectProtocol for JsonSerializerSettingsObject {
         &SERIALIZER_SETTINGS_TYPE
     }
 
-    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
-        get_serializer_setting(self.as_dyn(), name)
-    }
-
-    fn set_property(
-        &self,
-        name: &str,
-        value: BslValue,
-        _context: &mut CallContext<'_>,
-    ) -> RtResult<()> {
-        set_serializer_setting(self.as_dyn(), name, value)
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        SERIALIZER_SETTINGS_PROPERTIES
     }
 
     fn is_filled(&self) -> RtResult<bool> {
