@@ -50,9 +50,7 @@ pub fn param_names(doc: &SpreadDocData) -> Vec<String> {
     for row in doc.rows.values() {
         for cell in row.cells.values() {
             if !cell.parameter.is_empty()
-                && !out
-                    .iter()
-                    .any(|n: &String| n.eq_ignore_ascii_case(&cell.parameter))
+                && !out.iter().any(|n: &String| folded_eq(n, &cell.parameter))
             {
                 out.push(cell.parameter.clone());
             }

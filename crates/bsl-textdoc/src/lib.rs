@@ -38,7 +38,8 @@ use std::rc::Rc;
 
 use bsl_rt::{
     Arity, BslString, BslValue, CallContext, ConstructorCode, ConstructorDescriptor, EnumValue,
-    LibraryDescriptor, ObjectProtocol, RtError, RtResult, TypeDescriptor, TypeId,
+    LibraryDescriptor, MethodCode, MethodDescriptor, ObjectProtocol, PropertyCode,
+    PropertyDescriptor, RtError, RtResult, TypeDescriptor, TypeId, folded_eq,
 };
 
 fn bad(what: impl Into<String>) -> RtError {
@@ -544,106 +545,256 @@ impl TextDocument {
     }
 }
 
+/// Получатель-документ: чужой тип получает ту же ошибку «метод не
+/// применим», что и прежний строковый путь.
+fn document_of<'r>(
+    receiver: &'r dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'r TextDocument> {
+    receiver
+        .downcast_ref::<TextDocument>()
+        .ok_or_else(|| wrong_method(method, DOCUMENT_TYPE.name))
+}
+
+fn document_parameters(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    Ok(BslValue::new_object(TextDocParams {
+        data: document_of(receiver, "Параметры")?.data.clone(),
+    }))
+}
+
+/// Единственное свойство документа — коллекция параметров макета, только
+/// на чтение.
+static DOCUMENT_PROPERTIES: &[PropertyDescriptor] = &[PropertyDescriptor {
+    code: PropertyCode::new(1),
+    names: &["Параметры", "Parameters"],
+    get: document_parameters,
+    set: None,
+}];
+
+fn document_set_text(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let document = document_of(receiver, "УстановитьТекст")?;
+    exact_arity("УстановитьТекст", arguments, 1, DOCUMENT_TYPE.name)?;
+    let text = need_str(arguments.first(), "УстановитьТекст")?;
+    document.data.borrow_mut().set_text(&text);
+    Ok(BslValue::Undefined)
+}
+
+fn document_get_text(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let document = document_of(receiver, "ПолучитьТекст")?;
+    exact_arity("ПолучитьТекст", arguments, 0, DOCUMENT_TYPE.name)?;
+    Ok(BslValue::Str(BslString::from_str(
+        document.data.borrow().text(),
+    )))
+}
+
+fn document_line_count(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let document = document_of(receiver, "КоличествоСтрок")?;
+    exact_arity("КоличествоСтрок", arguments, 0, DOCUMENT_TYPE.name)?;
+    Ok(BslValue::number_from_i64(
+        document.data.borrow().line_count() as i64,
+    ))
+}
+
+fn document_get_line(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let document = document_of(receiver, "ПолучитьСтроку")?;
+    exact_arity("ПолучитьСтроку", arguments, 1, DOCUMENT_TYPE.name)?;
+    let number = need_number(arguments.first(), "ПолучитьСтроку")?;
+    Ok(BslValue::Str(BslString::from_str(
+        &document.data.borrow().line(number),
+    )))
+}
+
+fn document_add_line(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let document = document_of(receiver, "ДобавитьСтроку")?;
+    exact_arity("ДобавитьСтроку", arguments, 1, DOCUMENT_TYPE.name)?;
+    let line = need_str(arguments.first(), "ДобавитьСтроку")?;
+    document.data.borrow_mut().add_line(&line);
+    Ok(BslValue::Undefined)
+}
+
+fn document_insert_line(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let document = document_of(receiver, "ВставитьСтроку")?;
+    exact_arity("ВставитьСтроку", arguments, 2, DOCUMENT_TYPE.name)?;
+    let number = need_number(arguments.first(), "ВставитьСтроку")?;
+    let line = need_str(arguments.get(1), "ВставитьСтроку")?;
+    document.data.borrow_mut().insert_line(number, &line);
+    Ok(BslValue::Undefined)
+}
+
+fn document_replace_line(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let document = document_of(receiver, "ЗаменитьСтроку")?;
+    exact_arity("ЗаменитьСтроку", arguments, 2, DOCUMENT_TYPE.name)?;
+    let number = need_number(arguments.first(), "ЗаменитьСтроку")?;
+    let line = need_str(arguments.get(1), "ЗаменитьСтроку")?;
+    document.data.borrow_mut().replace_line(number, &line);
+    Ok(BslValue::Undefined)
+}
+
+fn document_delete_line(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let document = document_of(receiver, "УдалитьСтроку")?;
+    exact_arity("УдалитьСтроку", arguments, 1, DOCUMENT_TYPE.name)?;
+    let number = need_number(arguments.first(), "УдалитьСтроку")?;
+    document.data.borrow_mut().delete_line(number);
+    Ok(BslValue::Undefined)
+}
+
+fn document_clear(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let document = document_of(receiver, "Очистить")?;
+    exact_arity("Очистить", arguments, 0, DOCUMENT_TYPE.name)?;
+    document.data.borrow_mut().clear();
+    Ok(BslValue::Undefined)
+}
+
+fn document_read(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    document_of(receiver, "Прочитать")?.read_file(arguments)
+}
+
+fn document_write(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    document_of(receiver, "Записать")?.write_file(arguments)
+}
+
+fn document_get_area(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    document_of(receiver, "ПолучитьОбласть")?.get_area(arguments)
+}
+
+fn document_output(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    document_of(receiver, "Вывести")?.output(arguments, context)
+}
+
+static DOCUMENT_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor {
+        code: MethodCode::new(1),
+        names: &["УстановитьТекст", "SetText"],
+        call: document_set_text,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(2),
+        names: &["ПолучитьТекст", "GetText"],
+        call: document_get_text,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(3),
+        names: &["КоличествоСтрок", "LineCount"],
+        call: document_line_count,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(4),
+        names: &["ПолучитьСтроку", "GetLine"],
+        call: document_get_line,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(5),
+        names: &["ДобавитьСтроку", "AddLine"],
+        call: document_add_line,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(6),
+        names: &["ВставитьСтроку", "InsertLine"],
+        call: document_insert_line,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(7),
+        names: &["ЗаменитьСтроку", "ReplaceLine"],
+        call: document_replace_line,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(8),
+        names: &["УдалитьСтроку", "DeleteLine"],
+        call: document_delete_line,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(9),
+        names: &["Очистить", "Clear"],
+        call: document_clear,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(10),
+        names: &["Прочитать", "Read"],
+        call: document_read,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(11),
+        names: &["Записать", "Write"],
+        call: document_write,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(12),
+        names: &["ПолучитьОбласть", "GetArea"],
+        call: document_get_area,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(13),
+        names: &["Вывести", "Output"],
+        call: document_output,
+    },
+];
+
 impl ObjectProtocol for TextDocument {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         &DOCUMENT_TYPE
     }
 
-    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
-        if name.eq_ignore_ascii_case("Параметры") || name.eq_ignore_ascii_case("Parameters")
-        {
-            Ok(BslValue::new_object(TextDocParams {
-                data: self.data.clone(),
-            }))
-        } else {
-            Err(RtError::UnknownColumn(name.to_string()))
-        }
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        DOCUMENT_PROPERTIES
     }
 
-    fn call_method(
-        &self,
-        name: &str,
-        arguments: &[BslValue],
-        context: &mut CallContext<'_>,
-    ) -> RtResult<BslValue> {
-        if name.eq_ignore_ascii_case("УстановитьТекст") || name.eq_ignore_ascii_case("SetText")
-        {
-            exact_arity(name, arguments, 1, DOCUMENT_TYPE.name)?;
-            let text = need_str(arguments.first(), "УстановитьТекст")?;
-            self.data.borrow_mut().set_text(&text);
-            Ok(BslValue::Undefined)
-        } else if name.eq_ignore_ascii_case("ПолучитьТекст") || name.eq_ignore_ascii_case("GetText")
-        {
-            exact_arity(name, arguments, 0, DOCUMENT_TYPE.name)?;
-            Ok(BslValue::Str(BslString::from_str(
-                self.data.borrow().text(),
-            )))
-        } else if name.eq_ignore_ascii_case("КоличествоСтрок")
-            || name.eq_ignore_ascii_case("LineCount")
-        {
-            exact_arity(name, arguments, 0, DOCUMENT_TYPE.name)?;
-            Ok(BslValue::number_from_i64(
-                self.data.borrow().line_count() as i64
-            ))
-        } else if name.eq_ignore_ascii_case("ПолучитьСтроку")
-            || name.eq_ignore_ascii_case("GetLine")
-        {
-            exact_arity(name, arguments, 1, DOCUMENT_TYPE.name)?;
-            let number = need_number(arguments.first(), "ПолучитьСтроку")?;
-            Ok(BslValue::Str(BslString::from_str(
-                &self.data.borrow().line(number),
-            )))
-        } else if name.eq_ignore_ascii_case("ДобавитьСтроку")
-            || name.eq_ignore_ascii_case("AddLine")
-        {
-            exact_arity(name, arguments, 1, DOCUMENT_TYPE.name)?;
-            let line = need_str(arguments.first(), "ДобавитьСтроку")?;
-            self.data.borrow_mut().add_line(&line);
-            Ok(BslValue::Undefined)
-        } else if name.eq_ignore_ascii_case("ВставитьСтроку")
-            || name.eq_ignore_ascii_case("InsertLine")
-        {
-            exact_arity(name, arguments, 2, DOCUMENT_TYPE.name)?;
-            let number = need_number(arguments.first(), "ВставитьСтроку")?;
-            let line = need_str(arguments.get(1), "ВставитьСтроку")?;
-            self.data.borrow_mut().insert_line(number, &line);
-            Ok(BslValue::Undefined)
-        } else if name.eq_ignore_ascii_case("ЗаменитьСтроку")
-            || name.eq_ignore_ascii_case("ReplaceLine")
-        {
-            exact_arity(name, arguments, 2, DOCUMENT_TYPE.name)?;
-            let number = need_number(arguments.first(), "ЗаменитьСтроку")?;
-            let line = need_str(arguments.get(1), "ЗаменитьСтроку")?;
-            self.data.borrow_mut().replace_line(number, &line);
-            Ok(BslValue::Undefined)
-        } else if name.eq_ignore_ascii_case("УдалитьСтроку")
-            || name.eq_ignore_ascii_case("DeleteLine")
-        {
-            exact_arity(name, arguments, 1, DOCUMENT_TYPE.name)?;
-            let number = need_number(arguments.first(), "УдалитьСтроку")?;
-            self.data.borrow_mut().delete_line(number);
-            Ok(BslValue::Undefined)
-        } else if name.eq_ignore_ascii_case("Очистить") || name.eq_ignore_ascii_case("Clear")
-        {
-            exact_arity(name, arguments, 0, DOCUMENT_TYPE.name)?;
-            self.data.borrow_mut().clear();
-            Ok(BslValue::Undefined)
-        } else if name.eq_ignore_ascii_case("Прочитать") || name.eq_ignore_ascii_case("Read")
-        {
-            self.read_file(arguments)
-        } else if name.eq_ignore_ascii_case("Записать") || name.eq_ignore_ascii_case("Write")
-        {
-            self.write_file(arguments)
-        } else if name.eq_ignore_ascii_case("ПолучитьОбласть")
-            || name.eq_ignore_ascii_case("GetArea")
-        {
-            self.get_area(arguments)
-        } else if name.eq_ignore_ascii_case("Вывести") || name.eq_ignore_ascii_case("Output")
-        {
-            self.output(arguments, context)
-        } else {
-            Err(wrong_method(name, DOCUMENT_TYPE.name))
-        }
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        DOCUMENT_METHODS
     }
 
     fn is_filled(&self) -> RtResult<bool> {
@@ -658,10 +809,13 @@ impl ObjectProtocol for TextDocParams {
 
     fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
         let data = self.data.borrow();
+        // Имена параметров задаёт макет, поэтому таблицы у них нет и
+        // быть не может: путь остаётся строковым, но свёртка — общая
+        // `folded_eq`, а не ASCII-сравнение.
         if !data
             .parameter_names()
             .iter()
-            .any(|candidate| candidate.eq_ignore_ascii_case(name))
+            .any(|candidate| folded_eq(candidate, name))
         {
             return Err(bad(format!("параметра «{name}» в макете нет")));
         }

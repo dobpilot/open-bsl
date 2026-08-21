@@ -350,21 +350,13 @@ pub fn drawing_property(
         Ok(BslValue::Number(BslNumber::from_parts(mantissa, 14)))
     };
     match () {
-        _ if name.eq_ignore_ascii_case("Имя") || name.eq_ignore_ascii_case("Name") => {
+        _ if folded_eq(name, "Имя") || folded_eq(name, "Name") => {
             Ok(BslValue::Str(BslString::from_str(&drawing.name)))
         }
-        _ if name.eq_ignore_ascii_case("Лево") || name.eq_ignore_ascii_case("Left") => {
-            mm(drawing.left)
-        }
-        _ if name.eq_ignore_ascii_case("Верх") || name.eq_ignore_ascii_case("Top") => {
-            mm(drawing.top)
-        }
-        _ if name.eq_ignore_ascii_case("Ширина") || name.eq_ignore_ascii_case("Width") => {
-            mm(drawing.width)
-        }
-        _ if name.eq_ignore_ascii_case("Высота") || name.eq_ignore_ascii_case("Height") => {
-            mm(drawing.height)
-        }
+        _ if folded_eq(name, "Лево") || folded_eq(name, "Left") => mm(drawing.left),
+        _ if folded_eq(name, "Верх") || folded_eq(name, "Top") => mm(drawing.top),
+        _ if folded_eq(name, "Ширина") || folded_eq(name, "Width") => mm(drawing.width),
+        _ if folded_eq(name, "Высота") || folded_eq(name, "Height") => mm(drawing.height),
         _ => Err(RtError::UnknownColumn(name.to_string())),
     }
 }
@@ -375,7 +367,7 @@ pub fn set_drawing_property(
     name: &str,
     val: &BslValue,
 ) -> RtResult<()> {
-    if name.eq_ignore_ascii_case("Имя") || name.eq_ignore_ascii_case("Name") {
+    if folded_eq(name, "Имя") || folded_eq(name, "Name") {
         let name = val.to_string();
         let mut d = doc.borrow_mut();
         if let Some(drawing) = d.drawings_mut().get_mut(i) {
@@ -397,16 +389,12 @@ pub fn set_drawing_property(
             return Ok(());
         };
         match () {
-            _ if name.eq_ignore_ascii_case("Лево") || name.eq_ignore_ascii_case("Left") => {
-                drawing.left = number
-            }
-            _ if name.eq_ignore_ascii_case("Верх") || name.eq_ignore_ascii_case("Top") => {
-                drawing.top = number
-            }
-            _ if name.eq_ignore_ascii_case("Ширина") || name.eq_ignore_ascii_case("Width") => {
+            _ if folded_eq(name, "Лево") || folded_eq(name, "Left") => drawing.left = number,
+            _ if folded_eq(name, "Верх") || folded_eq(name, "Top") => drawing.top = number,
+            _ if folded_eq(name, "Ширина") || folded_eq(name, "Width") => {
                 drawing.width = number
             }
-            _ if name.eq_ignore_ascii_case("Высота") || name.eq_ignore_ascii_case("Height") => {
+            _ if folded_eq(name, "Высота") || folded_eq(name, "Height") => {
                 drawing.height = number
             }
             _ => return Err(RtError::UnknownColumn(name.to_string())),
@@ -493,7 +481,7 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
     let d = doc.borrow();
     if let Some(rect) = rect(obj) {
         return match () {
-            _ if name.eq_ignore_ascii_case("Текст") || name.eq_ignore_ascii_case("Text") => {
+            _ if folded_eq(name, "Текст") || folded_eq(name, "Text") => {
                 // У ячейки со значением `Текст` отдаёт его ПРЕДСТАВЛЕНИЕ —
                 // измерено: после `Значение = 42` текст равен «42».
                 let text = d
@@ -501,33 +489,25 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
                     .unwrap_or_else(|| d.cell_text(rect.r1, rect.c1));
                 Ok(BslValue::Str(BslString::from_str(&text)))
             }
-            _ if name.eq_ignore_ascii_case("Расшифровка")
-                || name.eq_ignore_ascii_case("Details") =>
-            {
+            _ if folded_eq(name, "Расшифровка") || folded_eq(name, "Details") => {
                 Ok(BslValue::Str(BslString::from_str(
                     &d.cell_detail(rect.r1, rect.c1).unwrap_or_default(),
                 )))
             }
-            _ if name.eq_ignore_ascii_case("ПараметрРасшифровки")
-                || name.eq_ignore_ascii_case("DetailsParameter") =>
-            {
+            _ if folded_eq(name, "ПараметрРасшифровки") || folded_eq(name, "DetailsParameter") => {
                 Ok(BslValue::Str(BslString::from_str(
                     &d.cell_detail_param(rect.r1, rect.c1),
                 )))
             }
-            _ if name.eq_ignore_ascii_case("СодержитЗначение")
-                || name.eq_ignore_ascii_case("ContainsValue") =>
-            {
+            _ if folded_eq(name, "СодержитЗначение") || folded_eq(name, "ContainsValue") => {
                 Ok(BslValue::Boolean(d.cell_value(rect.r1, rect.c1).is_some()))
             }
-            _ if name.eq_ignore_ascii_case("Параметр")
-                || name.eq_ignore_ascii_case("Parameter") =>
-            {
+            _ if folded_eq(name, "Параметр") || folded_eq(name, "Parameter") => {
                 // У обычного документа платформа отдаёт параметр ПУСТЫМ даже
                 // из своего файла (измерено), поэтому здесь тоже пусто.
                 Ok(BslValue::Str(BslString::from_str("")))
             }
-            _ if name.eq_ignore_ascii_case("Имя") || name.eq_ignore_ascii_case("Name") => {
+            _ if folded_eq(name, "Имя") || folded_eq(name, "Name") => {
                 let name = d
                     .names_iter()
                     .find(|(_, a)| a.r1 == rect.r1 && a.c1 == rect.c1)
@@ -539,29 +519,19 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
         };
     }
     match () {
-        _ if name.eq_ignore_ascii_case("ВысотаТаблицы")
-            || name.eq_ignore_ascii_case("TableHeight") =>
-        {
+        _ if folded_eq(name, "ВысотаТаблицы") || folded_eq(name, "TableHeight") => {
             Ok(int_value(i64::from(d.height())))
         }
-        _ if name.eq_ignore_ascii_case("ШиринаТаблицы")
-            || name.eq_ignore_ascii_case("TableWidth") =>
-        {
+        _ if folded_eq(name, "ШиринаТаблицы") || folded_eq(name, "TableWidth") => {
             Ok(int_value(i64::from(d.width())))
         }
-        _ if name.eq_ignore_ascii_case("ОтображатьСетку")
-            || name.eq_ignore_ascii_case("ShowGrid") =>
-        {
+        _ if folded_eq(name, "ОтображатьСетку") || folded_eq(name, "ShowGrid") => {
             Ok(BslValue::Boolean(d.show_grid))
         }
-        _ if name.eq_ignore_ascii_case("ФиксацияСверху")
-            || name.eq_ignore_ascii_case("FixedTop") =>
-        {
+        _ if folded_eq(name, "ФиксацияСверху") || folded_eq(name, "FixedTop") => {
             Ok(int_value(d.fix_top))
         }
-        _ if name.eq_ignore_ascii_case("ФиксацияСлева")
-            || name.eq_ignore_ascii_case("FixedLeft") =>
-        {
+        _ if folded_eq(name, "ФиксацияСлева") || folded_eq(name, "FixedLeft") => {
             Ok(int_value(d.fix_left))
         }
         // Поля страницы — в миллиметрах, умолчание 10 у каждого (измерено
@@ -570,25 +540,19 @@ pub fn get_property(obj: &BslValue, name: &str) -> RtResult<BslValue> {
         // `tests/conformance/measure/measure-pdf-write.bsl`: платформа
         // знает `LeftMargin` и его собратьев, а `FieldLeft`, `MarginLeft` и
         // `FieldOnLeft` отвергает — все три пробы дали ошибку.
-        _ if name.eq_ignore_ascii_case("ПолеСлева") || name.eq_ignore_ascii_case("LeftMargin") => {
+        _ if folded_eq(name, "ПолеСлева") || folded_eq(name, "LeftMargin") => {
             Ok(mm_value(d.margins.left))
         }
-        _ if name.eq_ignore_ascii_case("ПолеСправа")
-            || name.eq_ignore_ascii_case("RightMargin") =>
-        {
+        _ if folded_eq(name, "ПолеСправа") || folded_eq(name, "RightMargin") => {
             Ok(mm_value(d.margins.right))
         }
-        _ if name.eq_ignore_ascii_case("ПолеСверху") || name.eq_ignore_ascii_case("TopMargin") => {
+        _ if folded_eq(name, "ПолеСверху") || folded_eq(name, "TopMargin") => {
             Ok(mm_value(d.margins.top))
         }
-        _ if name.eq_ignore_ascii_case("ПолеСнизу")
-            || name.eq_ignore_ascii_case("BottomMargin") =>
-        {
+        _ if folded_eq(name, "ПолеСнизу") || folded_eq(name, "BottomMargin") => {
             Ok(mm_value(d.margins.bottom))
         }
-        _ if name.eq_ignore_ascii_case("ОриентацияСтраницы")
-            || name.eq_ignore_ascii_case("PageOrientation") =>
-        {
+        _ if folded_eq(name, "ОриентацияСтраницы") || folded_eq(name, "PageOrientation") => {
             Ok(BslValue::Enum(if d.landscape {
                 bsl_rt::EnumValue::PageOrientationLandscape
             } else {
@@ -604,7 +568,7 @@ pub fn set_property(obj: &BslValue, name: &str, val: BslValue) -> RtResult<()> {
     let doc = data(obj).ok_or(RtError::NotAnObject)?;
     if let Some(rect) = rect(obj) {
         let mut d = doc.borrow_mut();
-        if name.eq_ignore_ascii_case("Текст") || name.eq_ignore_ascii_case("Text") {
+        if folded_eq(name, "Текст") || folded_eq(name, "Text") {
             let text = val.to_string();
             for r in rect.r1..=rect.r2 {
                 for c in rect.c1..=rect.c2 {
@@ -613,15 +577,12 @@ pub fn set_property(obj: &BslValue, name: &str, val: BslValue) -> RtResult<()> {
             }
             return Ok(());
         }
-        if name.eq_ignore_ascii_case("ПараметрРасшифровки")
-            || name.eq_ignore_ascii_case("DetailsParameter")
+        if folded_eq(name, "ПараметрРасшифровки") || folded_eq(name, "DetailsParameter")
         {
             d.set_cell_detail_param(rect.r1, rect.c1, &val.to_string());
             return Ok(());
         }
-        if name.eq_ignore_ascii_case("СодержитЗначение")
-            || name.eq_ignore_ascii_case("ContainsValue")
-        {
+        if folded_eq(name, "СодержитЗначение") || folded_eq(name, "ContainsValue") {
             // Платформа держит это отдельным переключателем: пока он не
             // взведён, `Значение` не пишется вовсе (измерено — «Поле объекта
             // недоступно для записи»). Взведение само по себе кладёт в
@@ -635,11 +596,11 @@ pub fn set_property(obj: &BslValue, name: &str, val: BslValue) -> RtResult<()> {
             }
             return Ok(());
         }
-        if name.eq_ignore_ascii_case("Параметр") || name.eq_ignore_ascii_case("Parameter") {
+        if folded_eq(name, "Параметр") || folded_eq(name, "Parameter") {
             d.set_cell_parameter(rect.r1, rect.c1, &val.to_string());
             return Ok(());
         }
-        if name.eq_ignore_ascii_case("Имя") || name.eq_ignore_ascii_case("Name") {
+        if folded_eq(name, "Имя") || folded_eq(name, "Name") {
             let name = val.to_string();
             if name.is_empty() {
                 let old: Vec<String> = d
@@ -655,16 +616,14 @@ pub fn set_property(obj: &BslValue, name: &str, val: BslValue) -> RtResult<()> {
             }
             return Ok(());
         }
-        if name.eq_ignore_ascii_case("ШиринаКолонки") || name.eq_ignore_ascii_case("ColumnWidth")
-        {
+        if folded_eq(name, "ШиринаКолонки") || folded_eq(name, "ColumnWidth") {
             let width = number(&val, "ШиринаКолонки")?;
             for c in rect.c1..=rect.c2 {
                 d.set_col_width(c, width);
             }
             return Ok(());
         }
-        if name.eq_ignore_ascii_case("ВысотаСтроки") || name.eq_ignore_ascii_case("RowHeight")
-        {
+        if folded_eq(name, "ВысотаСтроки") || folded_eq(name, "RowHeight") {
             let height = number(&val, "ВысотаСтроки")?;
             for r in rect.r1..=rect.r2 {
                 d.set_row_height(r, height);
@@ -674,18 +633,15 @@ pub fn set_property(obj: &BslValue, name: &str, val: BslValue) -> RtResult<()> {
         return Err(RtError::UnknownColumn(name.to_string()));
     }
     let mut d = doc.borrow_mut();
-    if name.eq_ignore_ascii_case("ОтображатьСетку") || name.eq_ignore_ascii_case("ShowGrid")
-    {
+    if folded_eq(name, "ОтображатьСетку") || folded_eq(name, "ShowGrid") {
         d.show_grid = matches!(val, BslValue::Boolean(true));
         return Ok(());
     }
-    if name.eq_ignore_ascii_case("ФиксацияСверху") || name.eq_ignore_ascii_case("FixedTop")
-    {
+    if folded_eq(name, "ФиксацияСверху") || folded_eq(name, "FixedTop") {
         d.fix_top = number(&val, "ФиксацияСверху")?;
         return Ok(());
     }
-    if name.eq_ignore_ascii_case("ФиксацияСлева") || name.eq_ignore_ascii_case("FixedLeft")
-    {
+    if folded_eq(name, "ФиксацияСлева") || folded_eq(name, "FixedLeft") {
         d.fix_left = number(&val, "ФиксацияСлева")?;
         return Ok(());
     }
@@ -700,7 +656,7 @@ pub fn set_property(obj: &BslValue, name: &str, val: BslValue) -> RtResult<()> {
         ("ПолеСверху", "TopMargin", 2),
         ("ПолеСнизу", "BottomMargin", 3),
     ] {
-        if name.eq_ignore_ascii_case(ru) || name.eq_ignore_ascii_case(en) {
+        if folded_eq(name, ru) || folded_eq(name, en) {
             let mm = number_f64(&val, ru)?;
             let margins = &mut d.margins;
             match field {
@@ -712,8 +668,7 @@ pub fn set_property(obj: &BslValue, name: &str, val: BslValue) -> RtResult<()> {
             return Ok(());
         }
     }
-    if name.eq_ignore_ascii_case("ОриентацияСтраницы")
-        || name.eq_ignore_ascii_case("PageOrientation")
+    if folded_eq(name, "ОриентацияСтраницы") || folded_eq(name, "PageOrientation")
     {
         d.landscape = match val {
             BslValue::Enum(bsl_rt::EnumValue::PageOrientationLandscape) => true,

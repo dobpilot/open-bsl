@@ -11,34 +11,97 @@ pub(crate) fn state_addr<T>(state: &Rc<RefCell<T>>) -> usize {
     Rc::as_ptr(state) as usize
 }
 
+/// Получатель нужного типа: чужой получает ту же ошибку «метод не
+/// применим», что и прежний строковый путь.
+macro_rules! receiver_of {
+    ($name:ident, $ty:ty, $type_name:expr) => {
+        fn $name<'r>(receiver: &'r dyn ObjectProtocol, method: &'static str) -> RtResult<&'r $ty> {
+            receiver
+                .downcast_ref::<$ty>()
+                .ok_or(RtError::MethodNotApplicable {
+                    method,
+                    receiver: $type_name,
+                })
+        }
+    };
+}
+
+receiver_of!(document_of, DocumentObject, DOCUMENT_TYPE.name);
+receiver_of!(pages_of, PagesObject, PAGES_TYPE.name);
+receiver_of!(page_of, PageObject, PAGE_TYPE.name);
+receiver_of!(attachments_of, AttachmentsObject, ATTACHMENTS_TYPE.name);
+receiver_of!(attachment_of, AttachmentObject, ATTACHMENT_TYPE.name);
+
+// --- «ДокументPDF» -----------------------------------------------------------
+
+fn document_attachments(
+    receiver: &dyn ObjectProtocol,
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    document_property(document_of(receiver, "Вложения")?, "Вложения")
+}
+
+fn document_pages(receiver: &dyn ObjectProtocol, _c: &mut CallContext<'_>) -> RtResult<BslValue> {
+    document_property(document_of(receiver, "Страницы")?, "Страницы")
+}
+
+static DOCUMENT_PROPERTIES: &[PropertyDescriptor] = &[
+    PropertyDescriptor {
+        code: PropertyCode::new(1),
+        names: &["Вложения", "Attachments"],
+        get: document_attachments,
+        set: None,
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(2),
+        names: &["Страницы", "Pages"],
+        get: document_pages,
+        set: None,
+    },
+];
+
+fn document_read(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    read(document_of(receiver, "Прочитать")?, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+fn document_write(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    write(document_of(receiver, "Записать")?, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+static DOCUMENT_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor {
+        code: MethodCode::new(1),
+        names: &["Прочитать", "Read"],
+        call: document_read,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(2),
+        names: &["Записать", "Write"],
+        call: document_write,
+    },
+];
+
 impl ObjectProtocol for DocumentObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         &DOCUMENT_TYPE
     }
 
-    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
-        document_property(self, name)
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        DOCUMENT_PROPERTIES
     }
 
-    fn call_method(
-        &self,
-        name: &str,
-        arguments: &[BslValue],
-        _context: &mut CallContext<'_>,
-    ) -> RtResult<BslValue> {
-        if name.eq_ignore_ascii_case("Прочитать") || name.eq_ignore_ascii_case("Read") {
-            read(self, arguments)?;
-            Ok(BslValue::Undefined)
-        } else if name.eq_ignore_ascii_case("Записать") || name.eq_ignore_ascii_case("Write")
-        {
-            write(self, arguments)?;
-            Ok(BslValue::Undefined)
-        } else {
-            Err(RtError::UnknownMethod {
-                method: name.to_string(),
-                receiver: DOCUMENT_TYPE.name,
-            })
-        }
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        DOCUMENT_METHODS
     }
 
     // `ЗначениеЗаполнено(Новый ДокументPDF)` — измеренная ошибка «Проверка
@@ -46,43 +109,71 @@ impl ObjectProtocol for DocumentObject {
     // реализация протокола по умолчанию.
 }
 
+// --- коллекция страниц --------------------------------------------------------
+
+fn pages_count(
+    receiver: &dyn ObjectProtocol,
+    _arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    page_count(pages_of(receiver, "Количество")?).map(|len| BslValue::number_from_i64(len as i64))
+}
+
+fn pages_get(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let pages = pages_of(receiver, "Получить")?;
+    match arguments {
+        [index] => page_get(pages, index),
+        _ => Err(RtError::MethodNotApplicable {
+            method: "Получить",
+            receiver: PAGES_TYPE.name,
+        }),
+    }
+}
+
+fn pages_index_of(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let pages = pages_of(receiver, "Индекс")?;
+    match arguments {
+        [page] => page_index_of(pages, page),
+        _ => Err(RtError::MethodNotApplicable {
+            method: "Индекс",
+            receiver: PAGES_TYPE.name,
+        }),
+    }
+}
+
+static PAGES_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor {
+        code: MethodCode::new(1),
+        names: &["Количество", "Count"],
+        call: pages_count,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(2),
+        names: &["Получить", "Get"],
+        call: pages_get,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(3),
+        names: &["Индекс", "IndexOf"],
+        call: pages_index_of,
+    },
+];
+
 impl ObjectProtocol for PagesObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         &PAGES_TYPE
     }
 
-    fn call_method(
-        &self,
-        name: &str,
-        arguments: &[BslValue],
-        _context: &mut CallContext<'_>,
-    ) -> RtResult<BslValue> {
-        if name.eq_ignore_ascii_case("Количество") || name.eq_ignore_ascii_case("Count") {
-            page_count(self).map(|len| BslValue::number_from_i64(len as i64))
-        } else if name.eq_ignore_ascii_case("Получить") || name.eq_ignore_ascii_case("Get")
-        {
-            match arguments {
-                [index] => page_get(self, index),
-                _ => Err(RtError::MethodNotApplicable {
-                    method: "Получить",
-                    receiver: PAGES_TYPE.name,
-                }),
-            }
-        } else if name.eq_ignore_ascii_case("Индекс") || name.eq_ignore_ascii_case("IndexOf")
-        {
-            match arguments {
-                [page] => page_index_of(self, page),
-                _ => Err(RtError::MethodNotApplicable {
-                    method: "Индекс",
-                    receiver: PAGES_TYPE.name,
-                }),
-            }
-        } else {
-            Err(RtError::UnknownMethod {
-                method: name.to_string(),
-                receiver: PAGES_TYPE.name,
-            })
-        }
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        PAGES_METHODS
     }
 
     fn get_index(&self, index: &BslValue) -> RtResult<BslValue> {
@@ -116,13 +207,105 @@ pub(crate) fn page_index_arg(index: &BslValue) -> RtResult<usize> {
     usize::try_from(index).map_err(|_| RtError::BadIndex)
 }
 
+// --- страница -----------------------------------------------------------------
+
+fn page_number(receiver: &dyn ObjectProtocol, _c: &mut CallContext<'_>) -> RtResult<BslValue> {
+    page_property(page_of(receiver, "Номер")?, "Номер")
+}
+
+fn page_width(receiver: &dyn ObjectProtocol, _c: &mut CallContext<'_>) -> RtResult<BslValue> {
+    page_property(page_of(receiver, "Ширина")?, "Ширина")
+}
+
+fn page_height(receiver: &dyn ObjectProtocol, _c: &mut CallContext<'_>) -> RtResult<BslValue> {
+    page_property(page_of(receiver, "Высота")?, "Высота")
+}
+
+fn page_orientation(receiver: &dyn ObjectProtocol, _c: &mut CallContext<'_>) -> RtResult<BslValue> {
+    page_property(page_of(receiver, "Ориентация")?, "Ориентация")
+}
+
+// Поля печати приходят из `/TrimBox`; правило — в `margins_of`.
+fn page_left_margin(receiver: &dyn ObjectProtocol, _c: &mut CallContext<'_>) -> RtResult<BslValue> {
+    page_property(page_of(receiver, "ПолеСлева")?, "ПолеСлева")
+}
+
+fn page_right_margin(
+    receiver: &dyn ObjectProtocol,
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    page_property(page_of(receiver, "ПолеСправа")?, "ПолеСправа")
+}
+
+fn page_top_margin(receiver: &dyn ObjectProtocol, _c: &mut CallContext<'_>) -> RtResult<BslValue> {
+    page_property(page_of(receiver, "ПолеСверху")?, "ПолеСверху")
+}
+
+fn page_bottom_margin(
+    receiver: &dyn ObjectProtocol,
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    page_property(page_of(receiver, "ПолеСнизу")?, "ПолеСнизу")
+}
+
+static PAGE_PROPERTIES: &[PropertyDescriptor] = &[
+    PropertyDescriptor {
+        code: PropertyCode::new(1),
+        names: &["Номер", "Number"],
+        get: page_number,
+        set: None,
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(2),
+        names: &["Ширина", "Width"],
+        get: page_width,
+        set: None,
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(3),
+        names: &["Высота", "Height"],
+        get: page_height,
+        set: None,
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(4),
+        names: &["Ориентация", "Orientation"],
+        get: page_orientation,
+        set: None,
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(5),
+        names: &["ПолеСлева", "LeftMargin"],
+        get: page_left_margin,
+        set: None,
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(6),
+        names: &["ПолеСправа", "RightMargin"],
+        get: page_right_margin,
+        set: None,
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(7),
+        names: &["ПолеСверху", "TopMargin"],
+        get: page_top_margin,
+        set: None,
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(8),
+        names: &["ПолеСнизу", "BottomMargin"],
+        get: page_bottom_margin,
+        set: None,
+    },
+];
+
 impl ObjectProtocol for PageObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         &PAGE_TYPE
     }
 
-    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
-        page_property(self, name)
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        PAGE_PROPERTIES
     }
 
     // Страница — ССЫЛКА на место в документе: `Страницы[0] = Страницы[0]`
@@ -132,63 +315,134 @@ impl ObjectProtocol for PageObject {
     }
 }
 
+// --- коллекция вложений --------------------------------------------------------
+
+fn attachments_count(
+    receiver: &dyn ObjectProtocol,
+    _arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    attachment_count(attachments_of(receiver, "Количество")?)
+        .map(|len| BslValue::number_from_i64(len as i64))
+}
+
+fn attachments_get(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let items = attachments_of(receiver, "Получить")?;
+    match arguments {
+        [index] => attachment_get(items, index),
+        _ => Err(RtError::MethodNotApplicable {
+            method: "Получить",
+            receiver: ATTACHMENTS_TYPE.name,
+        }),
+    }
+}
+
+fn attachments_find(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    attachment_find(attachments_of(receiver, "Найти")?, arguments)
+}
+
+fn attachments_add(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    attachment_add(attachments_of(receiver, "Добавить")?, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+fn attachments_delete(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    attachment_delete(attachments_of(receiver, "Удалить")?, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+fn attachments_clear(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let items = attachments_of(receiver, "Очистить")?;
+    if !arguments.is_empty() {
+        return Err(RtError::MethodNotApplicable {
+            method: "Очистить",
+            receiver: ATTACHMENTS_TYPE.name,
+        });
+    }
+    attachment_clear(items)?;
+    Ok(BslValue::Undefined)
+}
+
+fn attachments_index_of(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let items = attachments_of(receiver, "Индекс")?;
+    match arguments {
+        [item] => attachment_index_of(items, item),
+        _ => Err(RtError::MethodNotApplicable {
+            method: "Индекс",
+            receiver: ATTACHMENTS_TYPE.name,
+        }),
+    }
+}
+
+static ATTACHMENTS_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor {
+        code: MethodCode::new(1),
+        names: &["Количество", "Count"],
+        call: attachments_count,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(2),
+        names: &["Получить", "Get"],
+        call: attachments_get,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(3),
+        names: &["Найти", "Find"],
+        call: attachments_find,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(4),
+        names: &["Добавить", "Add"],
+        call: attachments_add,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(5),
+        names: &["Удалить", "Delete"],
+        call: attachments_delete,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(6),
+        names: &["Очистить", "Clear"],
+        call: attachments_clear,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(7),
+        names: &["Индекс", "IndexOf"],
+        call: attachments_index_of,
+    },
+];
+
 impl ObjectProtocol for AttachmentsObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         &ATTACHMENTS_TYPE
     }
 
-    fn call_method(
-        &self,
-        name: &str,
-        arguments: &[BslValue],
-        _context: &mut CallContext<'_>,
-    ) -> RtResult<BslValue> {
-        if name.eq_ignore_ascii_case("Количество") || name.eq_ignore_ascii_case("Count") {
-            attachment_count(self).map(|len| BslValue::number_from_i64(len as i64))
-        } else if name.eq_ignore_ascii_case("Получить") || name.eq_ignore_ascii_case("Get")
-        {
-            match arguments {
-                [index] => attachment_get(self, index),
-                _ => Err(RtError::MethodNotApplicable {
-                    method: "Получить",
-                    receiver: ATTACHMENTS_TYPE.name,
-                }),
-            }
-        } else if name.eq_ignore_ascii_case("Найти") || name.eq_ignore_ascii_case("Find") {
-            attachment_find(self, arguments)
-        } else if name.eq_ignore_ascii_case("Добавить") || name.eq_ignore_ascii_case("Add")
-        {
-            attachment_add(self, arguments)?;
-            Ok(BslValue::Undefined)
-        } else if name.eq_ignore_ascii_case("Удалить") || name.eq_ignore_ascii_case("Delete")
-        {
-            attachment_delete(self, arguments)?;
-            Ok(BslValue::Undefined)
-        } else if name.eq_ignore_ascii_case("Очистить") || name.eq_ignore_ascii_case("Clear")
-        {
-            if !arguments.is_empty() {
-                return Err(RtError::MethodNotApplicable {
-                    method: "Очистить",
-                    receiver: ATTACHMENTS_TYPE.name,
-                });
-            }
-            attachment_clear(self)?;
-            Ok(BslValue::Undefined)
-        } else if name.eq_ignore_ascii_case("Индекс") || name.eq_ignore_ascii_case("IndexOf")
-        {
-            match arguments {
-                [item] => attachment_index_of(self, item),
-                _ => Err(RtError::MethodNotApplicable {
-                    method: "Индекс",
-                    receiver: ATTACHMENTS_TYPE.name,
-                }),
-            }
-        } else {
-            Err(RtError::UnknownMethod {
-                method: name.to_string(),
-                receiver: ATTACHMENTS_TYPE.name,
-            })
-        }
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        ATTACHMENTS_METHODS
     }
 
     fn get_index(&self, index: &BslValue) -> RtResult<BslValue> {
@@ -212,22 +466,67 @@ impl ObjectProtocol for AttachmentsObject {
     }
 }
 
+// --- вложение -------------------------------------------------------------------
+
+macro_rules! attachment_property_pair {
+    ($get:ident, $set:ident, $canonical:expr) => {
+        fn $get(receiver: &dyn ObjectProtocol, _c: &mut CallContext<'_>) -> RtResult<BslValue> {
+            attachment_property(attachment_of(receiver, $canonical)?, $canonical)
+        }
+
+        fn $set(
+            receiver: &dyn ObjectProtocol,
+            value: BslValue,
+            _c: &mut CallContext<'_>,
+        ) -> RtResult<()> {
+            set_attachment_property(attachment_of(receiver, $canonical)?, $canonical, &value)
+        }
+    };
+}
+
+attachment_property_pair!(
+    attachment_get_file_name,
+    attachment_set_file_name,
+    "ИмяФайла"
+);
+attachment_property_pair!(attachment_get_mime, attachment_set_mime, "ТипСодержимого");
+attachment_property_pair!(attachment_get_content, attachment_set_content, "Содержимое");
+attachment_property_pair!(attachment_get_relation, attachment_set_relation, "ТипСвязи");
+
+static ATTACHMENT_PROPERTIES: &[PropertyDescriptor] = &[
+    PropertyDescriptor {
+        code: PropertyCode::new(1),
+        names: &["ИмяФайла", "FileName"],
+        get: attachment_get_file_name,
+        set: Some(attachment_set_file_name),
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(2),
+        names: &["ТипСодержимого", "MIMEType"],
+        get: attachment_get_mime,
+        set: Some(attachment_set_mime),
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(3),
+        names: &["Содержимое", "Content"],
+        get: attachment_get_content,
+        set: Some(attachment_set_content),
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(4),
+        names: &["ТипСвязи", "RelationshipType"],
+        get: attachment_get_relation,
+        set: Some(attachment_set_relation),
+    },
+];
+
 impl ObjectProtocol for AttachmentObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         &ATTACHMENT_TYPE
     }
 
-    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
-        attachment_property(self, name)
-    }
-
-    fn set_property(
-        &self,
-        name: &str,
-        value: BslValue,
-        _context: &mut CallContext<'_>,
-    ) -> RtResult<()> {
-        set_attachment_property(self, name, &value)
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        ATTACHMENT_PROPERTIES
     }
 
     fn identity_key(&self) -> Option<(usize, usize)> {

@@ -2,50 +2,119 @@
 
 use super::*;
 
-// --- объектный протокол -----------------------------------------------------
+// --- читатель ---------------------------------------------------------------
+
+/// Получатель-читатель: чужой тип получает ту же ошибку, что и прежний
+/// строковый путь.
+fn reader_of<'r>(
+    receiver: &'r dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'r ReaderObject> {
+    receiver
+        .downcast_ref::<ReaderObject>()
+        .ok_or(RtError::MethodNotApplicable {
+            method,
+            receiver: "ЧтениеZipФайла",
+        })
+}
+
+// У читателя свойств ровно два, и оба измерены; `Кодировка`, `Формат`,
+// `ИмяФайла` и `РазмерАрхива` платформа не знает.
+fn reader_items(receiver: &dyn ObjectProtocol, _c: &mut CallContext<'_>) -> RtResult<BslValue> {
+    entries(reader_of(receiver, "Элементы")?)
+}
+
+fn reader_comment(receiver: &dyn ObjectProtocol, _c: &mut CallContext<'_>) -> RtResult<BslValue> {
+    comment(reader_of(receiver, "Комментарий")?)
+}
+
+static READER_PROPERTIES: &[PropertyDescriptor] = &[
+    PropertyDescriptor {
+        code: PropertyCode::new(1),
+        names: &["Элементы", "Items"],
+        get: reader_items,
+        set: None,
+    },
+    PropertyDescriptor {
+        code: PropertyCode::new(2),
+        names: &["Комментарий", "Comment"],
+        get: reader_comment,
+        set: None,
+    },
+];
+
+fn reader_open(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    open(reader_of(receiver, "Открыть")?, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+fn reader_close(
+    receiver: &dyn ObjectProtocol,
+    _arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    close(reader_of(receiver, "Закрыть")?)?;
+    Ok(BslValue::Undefined)
+}
+
+fn reader_extract(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let reader = reader_of(receiver, "Извлечь")?;
+    extract(&reader.state, reader.descriptor().name, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+fn reader_extract_all(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let reader = reader_of(receiver, "ИзвлечьВсе")?;
+    extract_all(&reader.state, reader.descriptor().name, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+static READER_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor {
+        code: MethodCode::new(1),
+        names: &["Открыть", "Open"],
+        call: reader_open,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(2),
+        names: &["Закрыть", "Close"],
+        call: reader_close,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(3),
+        names: &["Извлечь", "Extract"],
+        call: reader_extract,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(4),
+        names: &["ИзвлечьВсе", "ExtractAll"],
+        call: reader_extract_all,
+    },
+];
 
 impl ObjectProtocol for ReaderObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         self.descriptor()
     }
 
-    fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
-        // У читателя свойств ровно два, и оба измерены; `Кодировка`,
-        // `Формат`, `ИмяФайла` и `РазмерАрхива` платформа не знает.
-        if name.eq_ignore_ascii_case("Элементы") || name.eq_ignore_ascii_case("Items") {
-            entries(self)
-        } else if name.eq_ignore_ascii_case("Комментарий") || name.eq_ignore_ascii_case("Comment")
-        {
-            comment(self)
-        } else {
-            Err(RtError::UnknownColumn(name.to_string()))
-        }
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        READER_PROPERTIES
     }
 
-    fn call_method(
-        &self,
-        name: &str,
-        arguments: &[BslValue],
-        _context: &mut CallContext<'_>,
-    ) -> RtResult<BslValue> {
-        if eq(name, "Открыть", "Open") {
-            open(self, arguments)?;
-            Ok(BslValue::Undefined)
-        } else if eq(name, "Закрыть", "Close") {
-            close(self)?;
-            Ok(BslValue::Undefined)
-        } else if eq(name, "Извлечь", "Extract") {
-            extract(&self.state, self.descriptor().name, arguments)?;
-            Ok(BslValue::Undefined)
-        } else if eq(name, "ИзвлечьВсе", "ExtractAll") {
-            extract_all(&self.state, self.descriptor().name, arguments)?;
-            Ok(BslValue::Undefined)
-        } else {
-            Err(RtError::UnknownMethod {
-                method: name.to_string(),
-                receiver: self.descriptor().name,
-            })
-        }
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        READER_METHODS
     }
 
     // Измерено: `ЗначениеЗаполнено` от читателя — «Да»; ошибка на закрытом
@@ -55,50 +124,115 @@ impl ObjectProtocol for ReaderObject {
     }
 }
 
+// --- коллекция элементов ------------------------------------------------------
+
+fn entries_of<'r>(
+    receiver: &'r dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'r EntriesObject> {
+    receiver
+        .downcast_ref::<EntriesObject>()
+        .ok_or(RtError::MethodNotApplicable {
+            method,
+            receiver: "ЭлементыZipФайла",
+        })
+}
+
+fn entries_count(
+    receiver: &dyn ObjectProtocol,
+    _arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    count(entries_of(receiver, "Количество")?).map(|len| BslValue::number_from_i64(len as i64))
+}
+
+fn entries_get(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let items = entries_of(receiver, "Получить")?;
+    match arguments {
+        [index] => get(items, entry_index(index)?),
+        _ => Err(RtError::MethodNotApplicable {
+            method: "Получить",
+            receiver: items.descriptor().name,
+        }),
+    }
+}
+
+fn entries_find(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let items = entries_of(receiver, "Найти")?;
+    // Аргумент РОВНО один: измерено, что `Элементы.Найти("шум.bin", 1)`
+    // платформа отвергает — «Слишком много фактических параметров».
+    match arguments {
+        [name] => find(items, name),
+        _ => Err(RtError::MethodNotApplicable {
+            method: "Найти",
+            receiver: items.descriptor().name,
+        }),
+    }
+}
+
+fn entries_extract(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let items = entries_of(receiver, "Извлечь")?;
+    extract(&items.state, items.descriptor().name, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+fn entries_extract_all(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let items = entries_of(receiver, "ИзвлечьВсе")?;
+    extract_all(&items.state, items.descriptor().name, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+static ENTRIES_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor {
+        code: MethodCode::new(1),
+        names: &["Количество", "Count"],
+        call: entries_count,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(2),
+        names: &["Получить", "Get"],
+        call: entries_get,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(3),
+        names: &["Найти", "Find"],
+        call: entries_find,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(4),
+        names: &["Извлечь", "Extract"],
+        call: entries_extract,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(5),
+        names: &["ИзвлечьВсе", "ExtractAll"],
+        call: entries_extract_all,
+    },
+];
+
 impl ObjectProtocol for EntriesObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         self.descriptor()
     }
 
-    fn call_method(
-        &self,
-        name: &str,
-        arguments: &[BslValue],
-        _context: &mut CallContext<'_>,
-    ) -> RtResult<BslValue> {
-        if eq(name, "Количество", "Count") {
-            count(self).map(|len| BslValue::number_from_i64(len as i64))
-        } else if eq(name, "Получить", "Get") {
-            match arguments {
-                [index] => get(self, entry_index(index)?),
-                _ => Err(RtError::MethodNotApplicable {
-                    method: "Получить",
-                    receiver: self.descriptor().name,
-                }),
-            }
-        } else if eq(name, "Найти", "Find") {
-            // Аргумент РОВНО один: измерено, что `Элементы.Найти("шум.bin",
-            // 1)` платформа отвергает — «Слишком много фактических
-            // параметров».
-            match arguments {
-                [name] => find(self, name),
-                _ => Err(RtError::MethodNotApplicable {
-                    method: "Найти",
-                    receiver: self.descriptor().name,
-                }),
-            }
-        } else if eq(name, "Извлечь", "Extract") {
-            extract(&self.state, self.descriptor().name, arguments)?;
-            Ok(BslValue::Undefined)
-        } else if eq(name, "ИзвлечьВсе", "ExtractAll") {
-            extract_all(&self.state, self.descriptor().name, arguments)?;
-            Ok(BslValue::Undefined)
-        } else {
-            Err(RtError::UnknownMethod {
-                method: name.to_string(),
-                receiver: self.descriptor().name,
-            })
-        }
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        ENTRIES_METHODS
     }
 
     fn get_index(&self, index: &BslValue) -> RtResult<BslValue> {
@@ -124,35 +258,70 @@ pub(crate) fn entry_index(index: &BslValue) -> RtResult<usize> {
     usize::try_from(index).map_err(|_| RtError::BadIndex)
 }
 
+// --- элемент архива -----------------------------------------------------------
+
+fn entry_of<'r>(
+    receiver: &'r dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'r EntryObject> {
+    receiver
+        .downcast_ref::<EntryObject>()
+        .ok_or(RtError::MethodNotApplicable {
+            method,
+            receiver: "ЭлементZipФайла",
+        })
+}
+
+fn entry_extract(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    // Статус-кво прежней диспетчеризации: `Извлечь`/`ИзвлечьВсе`
+    // принимали любой из трёх объектов чтения, включая элемент.
+    let entry = entry_of(receiver, "Извлечь")?;
+    extract(&entry.state, entry.descriptor().name, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+fn entry_extract_all(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let entry = entry_of(receiver, "ИзвлечьВсе")?;
+    extract_all(&entry.state, entry.descriptor().name, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+static ENTRY_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor {
+        code: MethodCode::new(1),
+        names: &["Извлечь", "Extract"],
+        call: entry_extract,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(2),
+        names: &["ИзвлечьВсе", "ExtractAll"],
+        call: entry_extract_all,
+    },
+];
+
 impl ObjectProtocol for EntryObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         self.descriptor()
     }
 
+    /// Свойства элемента остаются строковым путём: их четырнадцать, все
+    /// читаются из одной записи каталога под одним заимствованием
+    /// состояния, и таблица из четырнадцати обёрток вокруг `entry_prop`
+    /// была бы просто её копией. Свёртка внутри `entry_prop` — общая.
     fn get_property(&self, name: &str, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
         entry_prop(self, name)
     }
 
-    fn call_method(
-        &self,
-        name: &str,
-        arguments: &[BslValue],
-        _context: &mut CallContext<'_>,
-    ) -> RtResult<BslValue> {
-        // Статус-кво прежней диспетчеризации: `Извлечь`/`ИзвлечьВсе`
-        // принимали любой из трёх объектов чтения, включая элемент.
-        if eq(name, "Извлечь", "Extract") {
-            extract(&self.state, self.descriptor().name, arguments)?;
-            Ok(BslValue::Undefined)
-        } else if eq(name, "ИзвлечьВсе", "ExtractAll") {
-            extract_all(&self.state, self.descriptor().name, arguments)?;
-            Ok(BslValue::Undefined)
-        } else {
-            Err(RtError::UnknownMethod {
-                method: name.to_string(),
-                receiver: self.descriptor().name,
-            })
-        }
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        ENTRY_METHODS
     }
 
     fn is_filled(&self) -> RtResult<bool> {
@@ -160,42 +329,94 @@ impl ObjectProtocol for EntryObject {
     }
 }
 
+// --- писатель -----------------------------------------------------------------
+
+fn writer_of<'r>(
+    receiver: &'r dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'r WriterObject> {
+    receiver
+        .downcast_ref::<WriterObject>()
+        .ok_or(RtError::MethodNotApplicable {
+            method,
+            receiver: "ЗаписьZipФайла",
+        })
+}
+
+fn writer_method_open(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    writer_open(writer_of(receiver, "Открыть")?, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+fn writer_method_add(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    writer_add(writer_of(receiver, "Добавить")?, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+fn writer_method_write(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let writer = writer_of(receiver, "Записать")?;
+    // Аргументов нет: измерено, что `Записать(имя)` платформа встречает
+    // «Слишком много фактических параметров».
+    if !arguments.is_empty() {
+        return Err(RtError::MethodNotApplicable {
+            method: "Записать",
+            receiver: writer.descriptor().name,
+        });
+    }
+    writer_write(writer)?;
+    Ok(BslValue::Undefined)
+}
+
+fn writer_method_binary_data(
+    receiver: &dyn ObjectProtocol,
+    _arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    writer_binary_data(writer_of(receiver, "ПолучитьДвоичныеДанные")?)
+}
+
+static WRITER_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor {
+        code: MethodCode::new(1),
+        names: &["Открыть", "Open"],
+        call: writer_method_open,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(2),
+        names: &["Добавить", "Add"],
+        call: writer_method_add,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(3),
+        names: &["Записать", "Write"],
+        call: writer_method_write,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(4),
+        names: &["ПолучитьДвоичныеДанные", "GetBinaryData"],
+        call: writer_method_binary_data,
+    },
+];
+
 impl ObjectProtocol for WriterObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         self.descriptor()
     }
 
-    fn call_method(
-        &self,
-        name: &str,
-        arguments: &[BslValue],
-        _context: &mut CallContext<'_>,
-    ) -> RtResult<BslValue> {
-        if eq(name, "Открыть", "Open") {
-            writer_open(self, arguments)?;
-            Ok(BslValue::Undefined)
-        } else if eq(name, "Добавить", "Add") {
-            writer_add(self, arguments)?;
-            Ok(BslValue::Undefined)
-        } else if eq(name, "Записать", "Write") {
-            // Аргументов нет: измерено, что `Записать(имя)` платформа
-            // встречает «Слишком много фактических параметров».
-            if !arguments.is_empty() {
-                return Err(RtError::MethodNotApplicable {
-                    method: "Записать",
-                    receiver: self.descriptor().name,
-                });
-            }
-            writer_write(self)?;
-            Ok(BslValue::Undefined)
-        } else if eq(name, "ПолучитьДвоичныеДанные", "GetBinaryData") {
-            writer_binary_data(self)
-        } else {
-            Err(RtError::UnknownMethod {
-                method: name.to_string(),
-                receiver: self.descriptor().name,
-            })
-        }
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        WRITER_METHODS
     }
 
     // `ЗначениеЗаполнено` от писателя — измеренная ошибка «Проверка

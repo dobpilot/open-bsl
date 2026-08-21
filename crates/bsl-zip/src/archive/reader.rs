@@ -708,7 +708,7 @@ pub fn entry_prop(entry: &EntryObject, prop: &str) -> RtResult<BslValue> {
             Ok(BslValue::Boolean(item.entry.is_encrypted()))
         }
         // Английского написания у этого свойства нет — измерено.
-        _ if prop.eq_ignore_ascii_case("ВремяИзменения") => {
+        _ if folded_eq(prop, "ВремяИзменения") => {
             Ok(BslValue::Date(item.entry.modified()))
         }
         _ => Err(RtError::UnknownColumn(prop.to_string())),
@@ -728,7 +728,7 @@ pub(crate) fn text_of<'a>(value: &'a BslValue, op: &'static str) -> RtResult<&'a
 
 /// Оба написания одного свойства.
 pub(crate) fn eq(name: &str, ru: &str, en: &str) -> bool {
-    name.eq_ignore_ascii_case(ru) || name.eq_ignore_ascii_case(en)
+    folded_eq(name, ru) || folded_eq(name, en)
 }
 
 /// `Извлечь(Элемент, Каталог[, Режим][, Пароль])`.

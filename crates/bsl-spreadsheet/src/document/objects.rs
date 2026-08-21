@@ -53,24 +53,219 @@ impl SpreadAreaObject {
 
 /// Общие методы документа и области: имена делятся получателями, а данные
 /// у обоих одни (см. `data`).
-pub(crate) fn shared_method(
-    receiver: &BslValue,
-    method: &str,
-    arguments: &[BslValue],
-) -> Option<RtResult<BslValue>> {
-    let eq =
-        |ru: &str, en: &str| method.eq_ignore_ascii_case(ru) || method.eq_ignore_ascii_case(en);
-    if eq("Область", "Area") {
-        return Some(region(receiver, arguments));
-    }
-    if eq("Объединить", "Merge") {
-        return Some(merge_cells(receiver).map(|()| BslValue::Undefined));
-    }
-    if eq("Разъединить", "Unmerge") {
-        return Some(unmerge_cells(receiver).map(|()| BslValue::Undefined));
-    }
-    None
+/// Получатель нужного типа: чужой получает ту же ошибку «метод не
+/// применим», что и прежний строковый путь.
+fn document_of<'r>(
+    receiver: &'r dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'r SpreadDocumentObject> {
+    receiver
+        .downcast_ref::<SpreadDocumentObject>()
+        .ok_or(RtError::MethodNotApplicable {
+            method,
+            receiver: DOCUMENT_TYPE.name,
+        })
 }
+
+fn area_of<'r>(
+    receiver: &'r dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'r SpreadAreaObject> {
+    receiver
+        .downcast_ref::<SpreadAreaObject>()
+        .ok_or(RtError::MethodNotApplicable {
+            method,
+            receiver: AREA_TYPE.name,
+        })
+}
+
+// Три метода — `Область`, `Объединить`, `Разъединить` — есть и у
+// документа, и у области: реализация одна, таблицы разные.
+fn document_region(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    region(&document_of(receiver, "Область")?.as_value(), arguments)
+}
+
+fn document_merge(
+    receiver: &dyn ObjectProtocol,
+    _arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    merge_cells(&document_of(receiver, "Объединить")?.as_value()).map(|()| BslValue::Undefined)
+}
+
+fn document_unmerge(
+    receiver: &dyn ObjectProtocol,
+    _arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    unmerge_cells(&document_of(receiver, "Разъединить")?.as_value()).map(|()| BslValue::Undefined)
+}
+
+fn document_write(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    write(&document_of(receiver, "Записать")?.as_value(), arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+fn document_read(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    read(&document_of(receiver, "Прочитать")?.as_value(), arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+fn document_output(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    output_with_params(&document_of(receiver, "Вывести")?.as_value(), arguments)
+}
+
+fn document_get_area(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    get_area(
+        &document_of(receiver, "ПолучитьОбласть")?.as_value(),
+        arguments,
+    )
+}
+
+fn document_clear(
+    receiver: &dyn ObjectProtocol,
+    _arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    clear(&document_of(receiver, "Очистить")?.as_value())?;
+    Ok(BslValue::Undefined)
+}
+
+fn document_begin_row_group(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    begin_row_group(
+        &document_of(receiver, "НачатьГруппуСтрок")?.as_value(),
+        arguments,
+    )?;
+    Ok(BslValue::Undefined)
+}
+
+fn document_end_row_group(
+    receiver: &dyn ObjectProtocol,
+    _arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    end_row_group(&document_of(receiver, "ЗакончитьГруппуСтрок")?.as_value())?;
+    Ok(BslValue::Undefined)
+}
+
+static DOCUMENT_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor {
+        code: MethodCode::new(1),
+        names: &["Область", "Area"],
+        call: document_region,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(2),
+        names: &["Объединить", "Merge"],
+        call: document_merge,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(3),
+        names: &["Разъединить", "Unmerge"],
+        call: document_unmerge,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(4),
+        names: &["Записать", "Write"],
+        call: document_write,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(5),
+        names: &["Прочитать", "Read"],
+        call: document_read,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(6),
+        names: &["Вывести", "Output"],
+        call: document_output,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(7),
+        names: &["ПолучитьОбласть", "GetArea"],
+        call: document_get_area,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(8),
+        names: &["Очистить", "Clear"],
+        call: document_clear,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(9),
+        names: &["НачатьГруппуСтрок", "StartRowGroup"],
+        call: document_begin_row_group,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(10),
+        names: &["ЗакончитьГруппуСтрок", "EndRowGroup"],
+        call: document_end_row_group,
+    },
+];
+
+fn area_region(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    region(&area_of(receiver, "Область")?.as_value(), arguments)
+}
+
+fn area_merge(
+    receiver: &dyn ObjectProtocol,
+    _arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    merge_cells(&area_of(receiver, "Объединить")?.as_value()).map(|()| BslValue::Undefined)
+}
+
+fn area_unmerge(
+    receiver: &dyn ObjectProtocol,
+    _arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    unmerge_cells(&area_of(receiver, "Разъединить")?.as_value()).map(|()| BslValue::Undefined)
+}
+
+static AREA_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor {
+        code: MethodCode::new(1),
+        names: &["Область", "Area"],
+        call: area_region,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(2),
+        names: &["Объединить", "Merge"],
+        call: area_merge,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(3),
+        names: &["Разъединить", "Unmerge"],
+        call: area_unmerge,
+    },
+];
 
 impl ObjectProtocol for SpreadDocumentObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
@@ -102,48 +297,8 @@ impl ObjectProtocol for SpreadDocumentObject {
         set_property(&self.as_value(), name, value)
     }
 
-    fn call_method(
-        &self,
-        method: &str,
-        arguments: &[BslValue],
-        _context: &mut CallContext<'_>,
-    ) -> RtResult<BslValue> {
-        let receiver = self.as_value();
-        let eq =
-            |ru: &str, en: &str| method.eq_ignore_ascii_case(ru) || method.eq_ignore_ascii_case(en);
-        if let Some(result) = shared_method(&receiver, method, arguments) {
-            return result;
-        }
-        if eq("Записать", "Write") {
-            write(&receiver, arguments)?;
-            return Ok(BslValue::Undefined);
-        }
-        if eq("Прочитать", "Read") {
-            read(&receiver, arguments)?;
-            return Ok(BslValue::Undefined);
-        }
-        if eq("Вывести", "Output") {
-            return output_with_params(&receiver, arguments);
-        }
-        if eq("ПолучитьОбласть", "GetArea") {
-            return get_area(&receiver, arguments);
-        }
-        if eq("Очистить", "Clear") {
-            clear(&receiver)?;
-            return Ok(BslValue::Undefined);
-        }
-        if eq("НачатьГруппуСтрок", "StartRowGroup") {
-            begin_row_group(&receiver, arguments)?;
-            return Ok(BslValue::Undefined);
-        }
-        if eq("ЗакончитьГруппуСтрок", "EndRowGroup") {
-            end_row_group(&receiver)?;
-            return Ok(BslValue::Undefined);
-        }
-        Err(RtError::UnknownMethod {
-            method: method.to_string(),
-            receiver: DOCUMENT_TYPE.name,
-        })
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        DOCUMENT_METHODS
     }
 
     fn is_filled(&self) -> RtResult<bool> {
@@ -205,20 +360,8 @@ impl ObjectProtocol for SpreadAreaObject {
         set_property(&receiver, name, value)
     }
 
-    fn call_method(
-        &self,
-        method: &str,
-        arguments: &[BslValue],
-        _context: &mut CallContext<'_>,
-    ) -> RtResult<BslValue> {
-        let receiver = self.as_value();
-        if let Some(result) = shared_method(&receiver, method, arguments) {
-            return result;
-        }
-        Err(RtError::UnknownMethod {
-            method: method.to_string(),
-            receiver: AREA_TYPE.name,
-        })
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        AREA_METHODS
     }
 
     fn is_filled(&self) -> RtResult<bool> {
@@ -226,33 +369,61 @@ impl ObjectProtocol for SpreadAreaObject {
     }
 }
 
+fn drawings_of<'r>(
+    receiver: &'r dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'r SpreadDrawingsObject> {
+    receiver
+        .downcast_ref::<SpreadDrawingsObject>()
+        .ok_or(RtError::MethodNotApplicable {
+            method,
+            receiver: DRAWINGS_TYPE.name,
+        })
+}
+
+fn drawings_method_add(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let drawings = drawings_of(receiver, "Добавить")?;
+    let receiver = BslValue::new_object(SpreadDrawingsObject {
+        data: drawings.data.clone(),
+    });
+    drawings_add(&receiver, arguments)
+}
+
+fn drawings_method_count(
+    receiver: &dyn ObjectProtocol,
+    _arguments: &[BslValue],
+    _c: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let drawings = drawings_of(receiver, "Количество")?;
+    Ok(BslValue::number_from_i64(
+        drawings.data.borrow().drawings().len() as i64,
+    ))
+}
+
+static DRAWINGS_METHODS: &[MethodDescriptor] = &[
+    MethodDescriptor {
+        code: MethodCode::new(1),
+        names: &["Добавить", "Add"],
+        call: drawings_method_add,
+    },
+    MethodDescriptor {
+        code: MethodCode::new(2),
+        names: &["Количество", "Count"],
+        call: drawings_method_count,
+    },
+];
+
 impl ObjectProtocol for SpreadDrawingsObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         &DRAWINGS_TYPE
     }
 
-    fn call_method(
-        &self,
-        method: &str,
-        arguments: &[BslValue],
-        _context: &mut CallContext<'_>,
-    ) -> RtResult<BslValue> {
-        if method.eq_ignore_ascii_case("Добавить") || method.eq_ignore_ascii_case("Add") {
-            let receiver = BslValue::new_object(SpreadDrawingsObject {
-                data: self.data.clone(),
-            });
-            return drawings_add(&receiver, arguments);
-        }
-        if method.eq_ignore_ascii_case("Количество") || method.eq_ignore_ascii_case("Count")
-        {
-            return Ok(BslValue::number_from_i64(
-                self.data.borrow().drawings().len() as i64,
-            ));
-        }
-        Err(RtError::UnknownMethod {
-            method: method.to_string(),
-            receiver: DRAWINGS_TYPE.name,
-        })
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        DRAWINGS_METHODS
     }
 
     fn collection_len(&self) -> RtResult<usize> {
