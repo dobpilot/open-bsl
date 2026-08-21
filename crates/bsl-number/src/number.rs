@@ -536,11 +536,20 @@ impl BslNumber {
         if e == 0 {
             return Ok(BslNumber::from_i64(1));
         }
+        // Основание ±1 отвечает точно при ЛЮБОМ показателе, и считать тут
+        // нечего. Этот случай обязан уйти раньше отрицания показателя:
+        // иначе `checked_neg(i64::MIN)` срывался и точная единица
+        // превращалась в ошибку.
+        if self.abs() == BslNumber::from_i64(1) {
+            let negative_base = self.is_negative();
+            return Ok(if negative_base && e % 2 != 0 {
+                BslNumber::from_i64(-1)
+            } else {
+                BslNumber::from_i64(1)
+            });
+        }
         // `unsigned_abs` не спотыкается об `i64::MIN`, в отличие от `-e`.
-        if e.unsigned_abs() > Self::MAX_ABS_EXPONENT.unsigned_abs()
-            && !self.is_zero()
-            && self.abs() != BslNumber::from_i64(1)
-        {
+        if e.unsigned_abs() > Self::MAX_ABS_EXPONENT.unsigned_abs() && !self.is_zero() {
             return Err(NumError::ScaleOverflow);
         }
         if e < 0 {

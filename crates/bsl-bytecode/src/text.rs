@@ -844,7 +844,7 @@ pub fn parse_program(src: &str) -> Result<Program> {
                 Some("начало диапазона «Попытка» больше конца")
             } else if range.end_pc > limit {
                 Some("конец диапазона «Попытка» за концом чанка")
-            } else if range.handler_pc >= limit {
+            } else if range.handler_pc > limit {
                 Some("обработчик «Попытка» за концом чанка")
             } else {
                 None

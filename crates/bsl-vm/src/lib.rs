@@ -565,7 +565,12 @@ fn check_control_flow(program: &Program) -> Result<(), RtError> {
             }
         }
         for range in &chunk.exception_ranges {
-            if range.start_pc > range.end_pc || range.end_pc > limit || range.handler_pc >= limit {
+            // `handler_pc == limit` ЗАКОННО и означает пустой обработчик в
+            // конце чанка: управление уходит за последнюю инструкцию, то
+            // есть в обычное завершение — ровно как у перехода с целью
+            // `limit`. Строгое `>=` здесь однажды отвергло корректную
+            // программу с пустым `Исключение` в конце.
+            if range.start_pc > range.end_pc || range.end_pc > limit || range.handler_pc > limit {
                 return Err(RtError::InvalidBytecode(
                     "диапазон «Попытка» за пределами чанка",
                 ));

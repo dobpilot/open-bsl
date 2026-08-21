@@ -249,7 +249,11 @@ fn tampering_is_rejected_for_each_of_the_six_target_carrying_opcodes() {
             "листинг для {opcode} должен его содержать:\n{text}"
         );
 
-        let at = text.find(opcode).expect("опкод в листинге");
+        // Имя ищется С ПРОБЕЛОМ: «Jump» — префикс «JumpIfFalse», и без
+        // этого случай `Jump` подменял бы цель условного перехода,
+        // молча проверяя не тот опкод.
+        let token = format!("{opcode} ");
+        let at = text.find(&token).expect("опкод в листинге");
         let field = at + text[at..].find("target=").expect("у опкода есть цель");
         let end = field
             + text[field..]
@@ -264,4 +268,25 @@ fn tampering_is_rejected_for_each_of_the_six_target_carrying_opcodes() {
             );
         }
     }
+}
+
+#[test]
+fn an_empty_handler_at_the_end_of_the_chunk_is_legal() {
+    // `handler_pc == instrs.len()` — законная цель: пустой обработчик в
+    // конце уводит управление за последнюю инструкцию, то есть в обычное
+    // завершение, ровно как переход с целью `limit`. Строгое `>=` в
+    // проверке однажды отвергло такую программу целиком.
+    let program =
+        compile("Попытка\nСообщить(\"ok\");\nИсключение\nКонецПопытки;\n").expect("сборка");
+    let handler = program.chunks[0].exception_ranges[0].handler_pc;
+    assert_eq!(
+        handler,
+        program.chunks[0].instrs.len(),
+        "обработчик обязан указывать ровно за конец чанка"
+    );
+    let text = write_program(&program, None).expect("печать");
+    assert!(
+        parse_program(&text).is_ok(),
+        "собственный листинг обязан читаться обратно"
+    );
 }

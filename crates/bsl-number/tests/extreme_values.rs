@@ -63,6 +63,32 @@ fn an_extreme_exponent_is_a_clean_error_rather_than_a_panic_or_a_hang() {
 }
 
 #[test]
+fn a_unit_base_is_exact_at_every_exponent_including_the_smallest() {
+    // Предел показателя ±1 не касается — считать тут нечего. Но отрицание
+    // `i64::MIN` всё равно срывалось на `checked_neg` и превращало точный
+    // ответ в ошибку. `i64::MIN` чётен, поэтому `(-1)^i64::MIN` — единица.
+    let one = BslNumber::from_i64(1);
+    let minus_one = BslNumber::from_i64(-1);
+    for exponent in [i64::MIN, i64::MAX, -i64::MAX, -3, 3, 0] {
+        let e = BslNumber::from_i64(exponent);
+        assert_eq!(
+            one.pow(&e).expect("единица в любой степени").to_canonical(),
+            "1",
+            "1^{exponent}"
+        );
+        let expected = if exponent % 2 == 0 { "1" } else { "-1" };
+        assert_eq!(
+            minus_one
+                .pow(&e)
+                .expect("минус единица в любой степени")
+                .to_canonical(),
+            expected,
+            "(-1)^{exponent}"
+        );
+    }
+}
+
+#[test]
 fn ordinary_exponents_keep_working() {
     let two = BslNumber::from_i64(2);
     assert_eq!(

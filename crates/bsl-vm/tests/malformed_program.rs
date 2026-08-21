@@ -15,9 +15,10 @@ fn compile(src: &str) -> Program {
     let resolved = bsl_sema::resolve_program(&parsed.items).expect("резолвинг");
     compile_program(&resolved).expect("кодоген")
 }
-
-/// Ставит цель `target` первой инструкции-переходу в нулевом чанке.
-fn break_first_jump(program: &mut Program, target: i16) {
+/// Ставит цель `target` переходу номер `nth` в нулевом чанке.
+/// `None` — переходов столько не нашлось.
+fn break_jump(program: &mut Program, nth: usize, target: i16) -> Option<()> {
+    let mut seen = 0;
     for instr in &mut program.chunks[0].instrs {
         match instr {
             Instr::Jump { target: t }
@@ -26,27 +27,47 @@ fn break_first_jump(program: &mut Program, target: i16) {
             | Instr::JumpIfNotSkipped { target: t, .. }
             | Instr::NumericForNext { target: t, .. }
             | Instr::NumericForNextI64 { target: t, .. } => {
-                *t = target;
-                return;
+                if seen == nth {
+                    *t = target;
+                    return Some(());
+                }
+                seen += 1;
             }
             _ => {}
         }
     }
-    panic!("в чанке нет ни одного перехода");
+    None
 }
 
 #[test]
-fn a_jump_out_of_the_chunk_is_invalid_bytecode_and_not_a_silent_success() {
-    for target in [-1, 9999] {
-        let mut program = compile("Если Ложь Тогда\nСообщить(1);\nКонецЕсли;\n");
-        break_first_jump(&mut program, target);
-        assert!(
-            matches!(
-                bsl_vm::run_program(&program),
-                Err(RtError::InvalidBytecode(_))
-            ),
-            "цель {target} обязана быть ошибкой"
-        );
+fn every_jump_in_the_chunk_is_checked_not_only_the_first() {
+    // Портится КАЖДЫЙ переход по очереди: проверка, глядящая лишь на
+    // первый, прошла бы мимо остальных пяти опкодов с целью.
+    let src = concat!(
+        "Сумма = 0;\n",
+        "Если Истина ИЛИ Ложь Тогда\n",
+        "Для н = 1 По 5 Цикл\n",
+        "Сумма = Сумма + н;\n",
+        "КонецЦикла;\n",
+        "Иначе\n",
+        "Сообщить(1);\n",
+        "КонецЕсли;\n",
+    );
+    for nth in 0..16 {
+        for target in [-1, 9999] {
+            let mut program = compile(src);
+            if break_jump(&mut program, nth, target).is_none() {
+                assert!(nth > 0, "в чанке не нашлось ни одного перехода");
+                return;
+            }
+            assert!(
+                matches!(
+                    bsl_vm::run_program(&program),
+                    Err(RtError::InvalidBytecode(_))
+                ),
+                "переход {nth} с целью {target} обязан быть ошибкой"
+            );
+        }
     }
 }
 
