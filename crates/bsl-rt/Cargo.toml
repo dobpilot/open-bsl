@@ -5,13 +5,3 @@ edition.workspace = true
 
 [dependencies]
 bsl-number = { path = "../bsl-number" }
-# ZIP-контейнер для архивов (16.7) и XLSX-экспорта (16.6). Крейт подключён
-# с минимальным набором фич: только `deflate` (через `flate2`, не zopfli —
-# при обоих включённых `deflate-flate2` и `deflate-zopfli` крейт `zip`
-# выбирает `flate2` для уровней сжатия по умолчанию). BZIP2, AES, Zstd,
-# LZMA и RAR отключены сознательно — эти форматы реализация отказывает с
-# честной ошибкой «не поддерживается», а не молчаливой попыткой разобрать.
-zip = { version = "2", default-features = false, features = ["deflate"] }
-# PDF хранит потоки в zlib/deflate (RFC 1950/1951) и использует `flate2`
-# напрямую, минуя ZIP-обёртку.
-flate2 = "1"

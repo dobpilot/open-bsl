@@ -179,8 +179,6 @@ name = "bsl-rt"
 version = "0.1.0"
 dependencies = [
  "bsl-number",
- "flate2",
- "zip",
 ]
 
 [[package]]
