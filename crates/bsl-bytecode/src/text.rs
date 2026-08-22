@@ -230,8 +230,16 @@ fn write_chunk(out: &mut String, index: usize, chunk: &Chunk, program: &Program)
     // `kind=proc` пишется ТОЛЬКО у процедур: у функции это умолчание, а
     // у `chunks[0]` вида объявления попросту нет — верхний уровень никто
     // не вызывает, и приписывать ему `kind=func` значило бы утверждать
-    // лишнее.
-    let kind = if chunk.is_procedure { " kind=proc" } else { "" };
+    // лишнее. У нулевого чанка поле не печатается НИКОГДА, даже если флаг
+    // почему-то взведён: у верхнего уровня вида объявления нет по
+    // построению (`signatures` в VM отображает имена только на
+    // `chunks[1..]`), поэтому текстового представления у такого состояния
+    // тоже быть не должно. Разбор его отвергает — см. `parse_chunk`.
+    let kind = if index != 0 && chunk.is_procedure {
+        " kind=proc"
+    } else {
+        ""
+    };
     writeln!(
         out,
         "\n.chunk {index} params={} locals={} regs={} argmodes=[{}]{kind}  ; {what}",
@@ -987,8 +995,16 @@ fn parse_chunk(r: &mut Reader, expected_index: usize) -> Result<Chunk> {
     };
     // `kind=proc` у процедуры, отсутствие поля — функция либо верхний
     // уровень (см. печать выше). `kind=func` разбирается тоже: листинг
-    // бывает и рукописным, и явное «функция» в нём законно.
+    // бывает и рукописным, и явное «функция» в нём законно. У `.chunk 0`
+    // поля не бывает ни в каком виде — у верхнего уровня нет объявления,
+    // и рукописный листинг не должен уметь завести это состояние.
     let is_procedure = match field(&fields, no, "kind") {
+        Ok(_) if expected_index == 0 => {
+            return Err(TextError::At(
+                no,
+                "у верхнего уровня нет вида объявления".to_string(),
+            ));
+        }
         Ok("proc") => true,
         Ok("func") => false,
         Ok(other) => return Err(TextError::At(no, format!("вид объявления «{other}»"))),
@@ -1718,6 +1734,49 @@ mod tests {
         let text = write_program(&program, None).unwrap();
         let reparsed = parse_program(&text).unwrap();
         assert_eq!(reparsed.chunks[0].consts, program.chunks[0].consts);
+    }
+
+    /// Вид объявления в листинге: печатается только у процедур, читается
+    /// обратно, а у ВЕРХНЕГО УРОВНЯ невозможен — у него нет объявления.
+    /// Последнее держится обеими границами формата: печать поля нулевому
+    /// чанку не даёт, разбор такое поле отвергает, поэтому рукописный
+    /// листинг не может завести состояние, объявленное невозможным.
+    #[test]
+    fn the_declaration_kind_is_printed_read_back_and_denied_to_the_top_level() {
+        let program = compile(
+            "Процедура П()\nКонецПроцедуры\nФункция Ф()\nВозврат 1;\nКонецФункции\nП();\nх = Ф();\n",
+        );
+        let text = write_program(&program, None).unwrap();
+        assert_eq!(text.matches("kind=proc").count(), 1, "{text}");
+        assert!(!text.contains("kind=func"), "у функции поля быть не должно");
+
+        let reparsed = parse_program(&text).unwrap();
+        let kinds: Vec<bool> = reparsed.chunks.iter().map(|c| c.is_procedure).collect();
+        assert_eq!(kinds, vec![false, true, false], "верхний уровень, П, Ф");
+
+        // Поле у нулевого чанка — ошибка разбора, а не молчаливое «ну и
+        // пусть»: состояние объявлено невозможным.
+        let smuggled = text.replacen(".chunk 0 params=", ".chunk 0 kind=proc params=", 1);
+        match parse_program(&smuggled) {
+            Err(TextError::At(_, msg)) => assert!(msg.contains("верхнего уровня"), "{msg}"),
+            other => panic!("ожидалась ошибка разбора, получено {other:?}"),
+        }
+
+        // Незнакомое значение — тоже ошибка, а не «значит, функция».
+        let unknown = text.replace("kind=proc", "kind=подпрограмма");
+        match parse_program(&unknown) {
+            Err(TextError::At(_, msg)) => assert!(msg.contains("подпрограмма"), "{msg}"),
+            other => panic!("ожидалась ошибка разбора, получено {other:?}"),
+        }
+
+        // Печать нулевого чанка не зависит от флага: у верхнего уровня
+        // вида объявления нет по построению, и текстового представления у
+        // такого состояния тоже нет.
+        let mut tampered = program.clone();
+        tampered.chunks[0].is_procedure = true;
+        let printed = write_program(&tampered, None).unwrap();
+        assert_eq!(printed.matches("kind=proc").count(), 1, "{printed}");
+        assert!(parse_program(&printed).is_ok());
     }
 
     #[test]

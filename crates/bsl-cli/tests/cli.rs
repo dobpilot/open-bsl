@@ -25,6 +25,21 @@ fn fixture(name: &str) -> PathBuf {
         .join(name)
 }
 
+fn measure(name: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/conformance/measure")
+        .join(name)
+}
+
+fn stdout_of(out: &Output) -> String {
+    assert!(
+        out.status.success(),
+        "прогон завершился ошибкой: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).into_owned()
+}
+
 #[test]
 fn help_is_printed_to_stdout_with_a_zero_exit_code() {
     for flag in ["--help", "-h"] {
@@ -129,4 +144,61 @@ fn a_script_path_still_runs_the_script() {
         actual.trim_end_matches('\n'),
         expected.trim_end_matches('\n')
     );
+}
+
+/// Вид объявления едет от резолвера до исполнения через ЧЕТЫРЕ границы:
+/// `ResolvedFunction` -> компилятор -> `Chunk::is_procedure` -> печать и
+/// разбор листинга -> `SnippetSignature` в VM. Юнит-тесты по краям этой
+/// цепочки зелены и при потере признака посередине: sema-тест собирает
+/// сигнатуру руками, а круговой тест листинга печатает то же, что
+/// разобрал, поэтому одинаково не увидит `kind=proc` с обеих сторон.
+///
+/// Здесь цепочка проходится целиком и сверяется с ПЛАТФОРМЕННЫМ ответом:
+/// `measure-stmtcall.platform.txt` снят на 8.3.27 и содержит, среди
+/// прочего, «своя процедура выражением<таб>отказ» — правило, которое
+/// держится только если признак дошёл до фрагмента `Вычислить`.
+///
+/// В конформансный прогон этот скрипт не попадает: там берутся только
+/// `fixtures/*.bsl`, у которых есть `.expected`, а у скриптов замеров
+/// эталон лежит рядом с ними и называется иначе.
+#[test]
+fn the_declaration_kind_survives_the_whole_pipeline() {
+    let script = measure("measure-stmtcall.bsl");
+    let oracle = std::fs::read_to_string(measure("measure-stmtcall.platform.txt"))
+        .expect("платформенный эталон должен лежать рядом со скриптом");
+    assert!(
+        oracle.contains("своя процедура выражением\tотказ"),
+        "эталон потерял строку про процедуру в выражении:\n{oracle}"
+    );
+
+    // Прямой прогон: резолвер -> компилятор -> VM.
+    let direct = stdout_of(&run(&[script.to_str().unwrap()]));
+    assert_eq!(direct, oracle, "прямой прогон разошёлся с платформой");
+
+    // Тот же путь через ЛИСТИНГ: печать и разбор — отдельные границы, и
+    // признак обязан пережить обе.
+    let listing = std::env::temp_dir().join("bsl-cli-test-stmtcall.bslc");
+    let out = run(&[
+        "--emit-bytecode",
+        script.to_str().unwrap(),
+        listing.to_str().unwrap(),
+    ]);
+    assert!(
+        out.status.success(),
+        "листинг не записан: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let text = std::fs::read_to_string(&listing).unwrap();
+    // Две процедуры скрипта — `П` и `СвояПроцедура`; у функций и у
+    // верхнего уровня поля нет.
+    assert_eq!(
+        text.matches("kind=proc").count(),
+        2,
+        "в листинге не тот набор процедур:\n{text}"
+    );
+
+    let replayed = stdout_of(&run(&["--run-bytecode", listing.to_str().unwrap()]));
+    assert_eq!(replayed, oracle, "прогон листинга разошёлся с платформой");
+
+    let _ = std::fs::remove_file(&listing);
 }
