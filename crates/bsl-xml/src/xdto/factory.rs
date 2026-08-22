@@ -43,7 +43,7 @@ pub(crate) fn instance_value(data: &Rc<XdtoObjectData>) -> BslValue {
 ///
 /// [`RtError::Xdto`], если аргумент не строка или файла нет;
 /// [`RtError::Xsd`] и [`RtError::Xml`], если содержимое файла — не схема.
-pub fn factory_of_file(args: &[BslValue]) -> RtResult<BslValue> {
+pub fn factory_of_file(args: &[BslValue], zone: Rc<dyn bsl_rt::TimeZone>) -> RtResult<BslValue> {
     let [BslValue::Str(path)] = args else {
         return Err(RtError::Xdto(
             "СоздатьФабрикуXDTO берёт один аргумент — путь к файлу XSD".to_string(),
@@ -56,7 +56,7 @@ pub fn factory_of_file(args: &[BslValue]) -> RtResult<BslValue> {
     // так же, как `ЧтениеXML.ОткрытьФайл`.
     let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
     let schema = crate::xsd::schema_of_text(text)?;
-    Ok(factory_value(model_of_schemas(&[schema])?))
+    Ok(factory_value(model_of_schemas(&[schema], zone)?))
 }
 
 /// `Новый ФабрикаXDTO([НаборСхемXML])` — фабрика по набору схем.
@@ -70,7 +70,7 @@ pub fn factory_of_file(args: &[BslValue]) -> RtResult<BslValue> {
 ///
 /// [`RtError::Xdto`], если аргумент не `НаборСхемXML`; ошибки построения
 /// модели — из `model_of_schemas`.
-pub fn factory_of_schema_set(arg: &BslValue) -> RtResult<BslValue> {
+pub fn factory_of_schema_set(arg: &BslValue, zone: Rc<dyn bsl_rt::TimeZone>) -> RtResult<BslValue> {
     let schemas: Vec<Rc<XsSchemaData>> = match arg {
         BslValue::Undefined => Vec::new(),
         _ => match arg
@@ -81,7 +81,7 @@ pub fn factory_of_schema_set(arg: &BslValue) -> RtResult<BslValue> {
             None => return Err(bad_factory_source()),
         },
     };
-    Ok(factory_value(model_of_schemas(&schemas)?))
+    Ok(factory_value(model_of_schemas(&schemas, zone)?))
 }
 
 pub(crate) fn bad_factory_source() -> RtError {

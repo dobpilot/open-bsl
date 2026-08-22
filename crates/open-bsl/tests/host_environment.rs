@@ -255,3 +255,105 @@ mod jit {
         );
     }
 }
+
+/// Часовой пояс — четвёртая возможность окружения, и попадает к
+/// потребителю не так, как три остальные: его читает не ядро, а КОД
+/// КОМПОНЕНТА, которому доступен только `CallContext`. Поэтому зона едет
+/// туда ссылкой, а не через `HostEnv`, и проверка тут не «часы отвечают
+/// заданным», а «две сессии одного движка толкуют один и тот же момент в
+/// разных зонах».
+mod zone {
+    use super::*;
+    use open_bsl::FixedTimeZone;
+
+    /// Дата со СМЕЩЕНИЕМ: единственная запись, в которой зона видна в
+    /// выводе целиком. Момент взят до всякого перехода на летнее время,
+    /// чтобы неподвижная зона была честной моделью.
+    const WRITE_WITH_OFFSET: &str = "Д = Дата(2014, 5, 10, 13, 14, 15);\n\
+         Возврат ЗаписатьДатуJSON(Д, ФорматДатыJSON.ISO, \
+         ВариантЗаписиДатыJSON.ЛокальнаяДатаСоСмещением);";
+
+    #[test]
+    fn two_states_of_one_engine_see_their_own_zone() {
+        let engine = Engine::builder().build().unwrap();
+        let mut east = engine.state_builder().zone(FixedTimeZone(3 * 3600)).build();
+        let mut west = engine
+            .state_builder()
+            .zone(FixedTimeZone(-5 * 3600 - 1800))
+            .build();
+
+        // Порядок запусков ничего не решает: зона не процессная и не
+        // «первая победила», как было с кэшем `/etc/localtime`.
+        assert_eq!(
+            text(&east.exec(WRITE_WITH_OFFSET).unwrap()),
+            "2014-05-10T13:14:15+03:00"
+        );
+        assert_eq!(
+            text(&west.exec(WRITE_WITH_OFFSET).unwrap()),
+            "2014-05-10T13:14:15-05:30"
+        );
+        assert_eq!(
+            text(&east.exec(WRITE_WITH_OFFSET).unwrap()),
+            "2014-05-10T13:14:15+03:00"
+        );
+    }
+
+    /// Универсальная запись вычитает смещение — значит зона видна и там,
+    /// где её самой в выводе нет.
+    #[test]
+    fn the_zone_shifts_the_universal_variant() {
+        let engine = Engine::builder().build().unwrap();
+        let script = "Д = Дата(2014, 5, 10, 13, 14, 15);\n\
+                      Возврат ЗаписатьДатуJSON(Д, ФорматДатыJSON.ISO, \
+                      ВариантЗаписиДатыJSON.УниверсальнаяДата);";
+        let mut utc = engine.state_builder().zone(FixedTimeZone(0)).build();
+        let mut east = engine.state_builder().zone(FixedTimeZone(3 * 3600)).build();
+        assert_eq!(text(&utc.exec(script).unwrap()), "2014-05-10T13:14:15Z");
+        assert_eq!(text(&east.exec(script).unwrap()), "2014-05-10T10:14:15Z");
+    }
+
+    /// Обратный ход: строка с явным поясом читается в местное время СВОЕЙ
+    /// сессии. Без зоны прогона обе сессии дали бы одно и то же.
+    #[test]
+    fn reading_a_dated_string_lands_in_the_sessions_own_zone() {
+        let engine = Engine::builder().build().unwrap();
+        let script = "Д = ПрочитатьДатуJSON(\"2014-05-10T13:14:15Z\", ФорматДатыJSON.ISO);\n\
+                      Возврат Формат(Д, \"ДФ=yyyy-MM-dd HH:mm:ss\");";
+        let mut utc = engine.state_builder().zone(FixedTimeZone(0)).build();
+        let mut east = engine.state_builder().zone(FixedTimeZone(3 * 3600)).build();
+        assert_eq!(text(&utc.exec(script).unwrap()), "2014-05-10 13:14:15");
+        assert_eq!(text(&east.exec(script).unwrap()), "2014-05-10 16:14:15");
+    }
+
+    /// Тот же контракт, что у остальных возможностей окружения, — под
+    /// JIT. Зона до нативного пути доезжает не через `HostEnv`, а через
+    /// связанные компоненты (`LinkedComponents::zone` -> `JitCtx::zone`),
+    /// потому что лишний аргумент у `CompiledChunk::run` измеренно дорог.
+    #[test]
+    fn the_zone_survives_a_jit_run() {
+        let engine = Engine::builder().build().unwrap();
+        let script = "итог = \"\";\n\
+                      Для к = 1 По 3 Цикл\n\
+                      н = 0;\n\
+                      Для ж = 1 По 40 Цикл\n\
+                      н = н + ж * 2 - 1;\n\
+                      КонецЦикла;\n\
+                      Д = Дата(2014, 5, 10, 13, 14, 15);\n\
+                      итог = итог + Формат(н, \"ЧГ=0\") + \"=\" \
+                      + ЗаписатьДатуJSON(Д, ФорматДатыJSON.ISO, \
+                      ВариантЗаписиДатыJSON.ЛокальнаяДатаСоСмещением) + \";\";\n\
+                      КонецЦикла;\n\
+                      Возврат итог;";
+        let expected = "1600=2014-05-10T13:14:15+03:00;\
+                        1600=2014-05-10T13:14:15+03:00;\
+                        1600=2014-05-10T13:14:15+03:00;";
+        for jit in [false, true] {
+            let mut state = engine
+                .state_builder()
+                .jit(jit)
+                .zone(FixedTimeZone(3 * 3600))
+                .build();
+            assert_eq!(text(&state.exec(script).unwrap()), expected, "jit={jit}");
+        }
+    }
+}

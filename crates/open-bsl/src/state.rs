@@ -2,7 +2,7 @@
 
 use std::io::Write;
 
-use bsl_rt::{Clock, HostEnv, RandomSource};
+use bsl_rt::{Clock, HostEnv, RandomSource, TimeZone};
 
 use crate::Value;
 use crate::engine::{Engine, Module};
@@ -66,6 +66,19 @@ impl StateBuilder {
     #[must_use]
     pub fn random(mut self, random: impl RandomSource + 'static) -> Self {
         self.host.env = self.host.env.with_random(random);
+        self
+    }
+
+    /// Часовой пояс сессии: в нём толкуются даты со смещением при чтении
+    /// и записи JSON и лексические формы XDTO.
+    ///
+    /// Он же и ОГРАНИЧЕН этим: `ТекущаяДата` считает от Unix-эпохи и
+    /// смещения не применяет, а фабрика XDTO запоминает зону того прогона,
+    /// в котором построена, — то есть смена зоны у сессии на уже
+    /// построенную фабрику не действует.
+    #[must_use]
+    pub fn zone(mut self, zone: impl TimeZone + 'static) -> Self {
+        self.host.env = self.host.env.with_zone(zone);
         self
     }
 

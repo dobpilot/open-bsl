@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::io::Write;
+use std::rc::Rc;
 
-use crate::{BslValue, RtResult, RuntimeShapes};
+use crate::{BslValue, RtError, RtResult, RuntimeShapes};
 
 /// Стабильный ключ библиотеки между семантическим анализом и компилятором.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -127,6 +128,22 @@ pub struct CallContext<'a> {
     stderr: &'a mut dyn Write,
     formatter: ValueFormatter,
     function_caller: Option<&'a mut FunctionCaller<'a>>,
+    /// Часовой пояс ПРОГОНА либо `None` — «этот путь о зоне не знает».
+    ///
+    /// Компоненту зона нужна там, где записанный момент переводится в
+    /// местное время (даты JSON, лексические формы XDTO), а `HostEnv`
+    /// целиком сюда не дать: он занят вызывающим.
+    ///
+    /// `None` приходит с НАТИВНОГО пути: у JIT-шимов контекст —
+    /// сток (см. `bsl-vm/src/jit`), и зоны там нет по той же причине, что
+    /// и вывода. Это не заглушка, а проверяемая запись контракта: зону
+    /// читают только ГЛОБАЛЬНЫЕ функции и конструкторы компонентов
+    /// (`ЗаписатьДатуJSON`, `ПрочитатьДатуJSON`, `ПрочитатьJSON`,
+    /// `ЗаписатьJSON`, построение фабрики XDTO), а JIT компилирует из
+    /// компонентного только `CallMethod`/`CallObjectMethod` — методы
+    /// объектов, ни один из которых зону не спрашивает. Протухни этот
+    /// разбор, компонент получит ошибку, а не тихо другое время.
+    zone: Option<&'a Rc<dyn crate::TimeZone>>,
 }
 
 impl<'a> CallContext<'a> {
@@ -135,6 +152,7 @@ impl<'a> CallContext<'a> {
         stdout: &'a mut dyn Write,
         stderr: &'a mut dyn Write,
         formatter: ValueFormatter,
+        zone: Option<&'a Rc<dyn crate::TimeZone>>,
     ) -> Self {
         Self {
             runtime_shapes,
@@ -142,6 +160,7 @@ impl<'a> CallContext<'a> {
             stderr,
             formatter,
             function_caller: None,
+            zone,
         }
     }
 
@@ -152,6 +171,7 @@ impl<'a> CallContext<'a> {
         stdout: &'a mut dyn Write,
         stderr: &'a mut dyn Write,
         formatter: ValueFormatter,
+        zone: Option<&'a Rc<dyn crate::TimeZone>>,
         function_caller: &'a mut FunctionCaller<'a>,
     ) -> Self {
         Self {
@@ -160,6 +180,7 @@ impl<'a> CallContext<'a> {
             stderr,
             formatter,
             function_caller: Some(function_caller),
+            zone,
         }
     }
 
@@ -179,6 +200,39 @@ impl<'a> CallContext<'a> {
         (self.formatter)(value, spec)
     }
 
+    /// Часовой пояс прогона — для перевода записанного момента в местное
+    /// время. Отдаётся ссылкой, а не значением смещения: смещение зависит
+    /// от МОМЕНТА, и какой момент интересует, знает только компонент.
+    /// # Errors
+    ///
+    /// [`RtError::InvalidBytecode`], если контекст построен без зоны (см.
+    /// поле `zone`): значит зону спросил путь, который её не получает, и
+    /// честнее ошибка, чем чужое время.
+    pub fn zone(&self) -> RtResult<&dyn crate::TimeZone> {
+        self.zone.map(Rc::as_ref).ok_or(RtError::InvalidBytecode(
+            "часовой пояс запрошен там, где окружения прогона нет",
+        ))
+    }
+
+    /// Зона В СОБСТВЕННОСТЬ — для компонента, который её ЗАПОМИНАЕТ, а не
+    /// читает по ходу вызова (фабрика XDTO хранит зону своего построения).
+    ///
+    /// # Errors
+    ///
+    /// То же, что у [`CallContext::zone`].
+    pub fn zone_rc(&self) -> RtResult<Rc<dyn crate::TimeZone>> {
+        self.zone.map(Rc::clone).ok_or(RtError::InvalidBytecode(
+            "часовой пояс запрошен там, где окружения прогона нет",
+        ))
+    }
+
+    /// Таблица форм и зона ОДНОВРЕМЕННО: `runtime_shapes` берёт `self`
+    /// изменяемо, поэтому после него `zone()` уже не позвать, а нужны они
+    /// вместе на каждом чтении и записи JSON.
+    pub fn shapes_and_zone(&mut self) -> (&mut RuntimeShapes, Option<&dyn crate::TimeZone>) {
+        (self.runtime_shapes, self.zone.map(Rc::as_ref))
+    }
+
     /// Разделяет изменяемые сервисы для операции, которая одновременно
     /// меняет таблицу форм и может вызвать BSL-функцию.
     pub fn execution_parts(
@@ -188,12 +242,14 @@ impl<'a> CallContext<'a> {
         &mut dyn Write,
         &mut dyn Write,
         Option<&mut FunctionCaller<'a>>,
+        Option<&dyn crate::TimeZone>,
     ) {
         (
             self.runtime_shapes,
             self.stdout,
             self.stderr,
             self.function_caller.as_deref_mut(),
+            self.zone.map(Rc::as_ref),
         )
     }
 }

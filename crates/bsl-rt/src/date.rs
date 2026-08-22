@@ -50,11 +50,19 @@ pub fn pseudo_unix_seconds(date: BslDate) -> i64 {
 
 /// Переводит UTC-секунды Unix-эпохи в местную BSL-дату.
 ///
+/// Зона — ПАРАМЕТР, а не свойство процесса: смещение принадлежит прогону
+/// (см. [`crate::TimeZone`]), и функция, переводящая момент в местное
+/// время, обязана спросить у него, а не у машины.
+///
 /// # Errors
 ///
 /// [`RtError::DateOutOfRange`], если дата не помещается в диапазон BSL.
-pub fn local_date_from_utc_seconds(unix_seconds: i64, op: &'static str) -> RtResult<BslDate> {
-    let offset = crate::tz::local_offset_seconds(unix_seconds);
+pub fn local_date_from_utc_seconds(
+    unix_seconds: i64,
+    op: &'static str,
+    zone: &dyn crate::TimeZone,
+) -> RtResult<BslDate> {
+    let offset = zone.offset_seconds(unix_seconds);
     unix_seconds
         .checked_add(i64::from(offset))
         .and_then(|seconds| seconds.checked_add(UNIX_EPOCH_SECONDS))

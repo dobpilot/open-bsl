@@ -292,7 +292,7 @@ fn run_program_with_host(
         &mut stack,
         at(&program.chunks, 0, "в программе нет чанка верхнего уровня")?,
     );
-    let linked = link_components(program, env)?;
+    let linked = link_components(program, env, host_env.zone())?;
     let mut host = HostIo {
         stdout,
         stderr,
@@ -337,7 +337,7 @@ pub fn run_repl_chunk_with_registry(
         module_vars: Vec::new(),
         module_base: 0,
     };
-    let linked = link_components(&program, env)?;
+    let linked = link_components(&program, env, host_env.zone())?;
     let mut host = HostIo {
         stdout: &mut std::io::stdout(),
         stderr: &mut std::io::stderr(),
@@ -430,6 +430,7 @@ impl<'a> CompileEnv<'a> {
 
 struct LinkedComponents<'a> {
     env: CompileEnv<'a>,
+
     functions: Vec<Vec<Option<bsl_rt::ComponentCall>>>,
     constructors: Vec<Vec<Option<bsl_rt::ComponentCall>>>,
     /// Обработчики встроенных методов по номеру имени программы. Открытый
@@ -450,6 +451,14 @@ struct LinkedComponents<'a> {
     /// `Chunk`, её добавление стоит правок формата байт-кода, а выигрыш не
     /// измерен.
     component_properties: ComponentPropertyMap,
+    /// Часовой пояс прогона — единственная возможность окружения, которая
+    /// нужна КОМПОНЕНТАМ, а значит и обеим ветвям исполнения. Лежит здесь,
+    /// а не в `HostIo`, потому что до JIT-шимов доезжает только связанное
+    /// состояние: добавить окружение аргументом `CompiledChunk::run`
+    /// значило бы вернуть тот самый лишний аргумент во внешнем цикле
+    /// диспетчеризации, который при переносе окружения стоил `empty_for`
+    /// +61 % тактов.
+    zone: std::rc::Rc<dyn bsl_rt::TimeZone>,
 }
 
 impl LinkedComponents<'_> {
@@ -708,6 +717,7 @@ fn check_call_geometry(program: &Program, chunk: &Chunk, instr: &Instr) -> Resul
 fn link_components<'a>(
     program: &Program,
     env: CompileEnv<'a>,
+    zone: std::rc::Rc<dyn bsl_rt::TimeZone>,
 ) -> Result<LinkedComponents<'a>, RtError> {
     check_control_flow(program)?;
     let registry = env.registry;
@@ -851,6 +861,7 @@ fn link_components<'a>(
         .collect();
     Ok(LinkedComponents {
         env,
+        zone,
         functions,
         constructors,
         builtin_methods,
@@ -926,10 +937,10 @@ fn drive_with(
     stack: Vec<BslValue>,
     jit_mode: JitMode,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
-    let linked = link_components(program, CompileEnv::bare())?;
+    let mut env = bsl_rt::HostEnv::process();
+    let linked = link_components(program, CompileEnv::bare(), env.zone())?;
     let mut stdout = std::io::stdout().lock();
     let mut stderr = std::io::stderr().lock();
-    let mut env = bsl_rt::HostEnv::process();
     let mut host = HostIo {
         stdout: &mut stdout,
         stderr: &mut stderr,
@@ -1744,6 +1755,7 @@ fn step(
                         &mut *host.stdout,
                         &mut *host.stderr,
                         bsl_format::format_value,
+                        Some(&linked.zone),
                     );
                     component_prop_get(
                         object,
@@ -1773,6 +1785,7 @@ fn step(
                         &mut *host.stdout,
                         &mut *host.stderr,
                         bsl_format::format_value,
+                        Some(&linked.zone),
                     );
                     component_prop_set(
                         object,
@@ -1818,6 +1831,7 @@ fn step(
                         &mut *host.stdout,
                         &mut *host.stderr,
                         bsl_format::format_value,
+                        Some(&linked.zone),
                     );
                     object.call_method(method.primary_name(), args.as_slice(), &mut context)?
                 } else {
@@ -1848,6 +1862,7 @@ fn step(
                             &mut *host.stdout,
                             &mut *host.stderr,
                             bsl_format::format_value,
+                            Some(&linked.zone),
                         );
                         object.call_method("Записать", std::slice::from_ref(sv), &mut context)?
                     } else {
@@ -2080,6 +2095,7 @@ fn step_cold(
                     &mut *host.stdout,
                     &mut *host.stderr,
                     bsl_format::format_value,
+                    Some(&linked.zone),
                 );
                 component_prop_get(
                     object,
@@ -2110,6 +2126,7 @@ fn step_cold(
                     &mut *host.stdout,
                     &mut *host.stderr,
                     bsl_format::format_value,
+                    Some(&linked.zone),
                 );
                 component_prop_set(
                     object,
@@ -2178,6 +2195,7 @@ fn step_cold(
                 &mut **host_stdout,
                 &mut **host_stderr,
                 bsl_format::format_value,
+                Some(&linked.zone),
                 &mut function_caller,
             );
             let value = call(&mut context, args.as_slice())?;
@@ -2195,6 +2213,7 @@ fn step_cold(
                 &mut *host.stdout,
                 &mut *host.stderr,
                 bsl_format::format_value,
+                Some(&linked.zone),
             );
             let value = call(&mut context, args.as_slice())?;
             let destination = frames[frame_idx].reg_index(dst);
@@ -2245,6 +2264,7 @@ fn step_cold(
                     &mut *host.stdout,
                     &mut *host.stderr,
                     bsl_format::format_value,
+                    Some(&linked.zone),
                 );
                 // Тип со статической таблицей методов идёт кэшем ячейки
                 // этой инструкции поверх мемоизированного моста «номер
@@ -2290,6 +2310,7 @@ fn step_cold(
                     &mut *host.stdout,
                     &mut *host.stderr,
                     bsl_format::format_value,
+                    Some(&linked.zone),
                 );
                 extension.call_method("Закрыть", &[], &mut context)?
             } else {
@@ -2451,7 +2472,11 @@ fn run_dynamic_snippet(
         module_base: module_base as u32,
     };
 
-    let snippet_linked = link_components(&snippet_program, linked.env)?;
+    let snippet_linked = link_components(
+        &snippet_program,
+        linked.env,
+        std::rc::Rc::clone(&linked.zone),
+    )?;
     let (value, final_stack) = drive_linked(
         &snippet_program,
         0,
@@ -2538,10 +2563,10 @@ pub fn call_module_function(
     name: &str,
     args: Vec<BslValue>,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
-    let linked = link_components(program, CompileEnv::bare())?;
+    let mut env = bsl_rt::HostEnv::process();
+    let linked = link_components(program, CompileEnv::bare(), env.zone())?;
     let mut stdout = std::io::stdout().lock();
     let mut stderr = std::io::stderr().lock();
-    let mut env = bsl_rt::HostEnv::process();
     let mut host = HostIo {
         stdout: &mut stdout,
         stderr: &mut stderr,
@@ -2568,7 +2593,11 @@ pub fn call_module_function_with_registry_and_io(
     stderr: &mut dyn Write,
     host_env: &mut bsl_rt::HostEnv,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
-    let linked = link_components(program, CompileEnv::with_registry(registry))?;
+    let linked = link_components(
+        program,
+        CompileEnv::with_registry(registry),
+        host_env.zone(),
+    )?;
     let mut host = HostIo {
         stdout,
         stderr,

@@ -60,7 +60,7 @@ pub use date::{
 };
 use date::{DateBoundary, DatePart};
 pub use enums::{EnumKind, EnumValue, lookup_enum, lookup_member};
-pub use env::{Clock, HostEnv, RandomSource, SystemClock, SystemRandom};
+pub use env::{Clock, FixedTimeZone, HostEnv, RandomSource, SystemClock, SystemRandom, TimeZone};
 pub use fold::folded_eq;
 pub use interner::{NameId, NameInterner};
 pub use locale::{Locale, NBSP};
@@ -74,7 +74,7 @@ pub use shape::{MAX_SHAPE_TRANSITIONS, Shape, ShapeTable};
 pub use string::BslString;
 pub use table::ValueTableData;
 pub use types::{TypeId, TypeRef};
-pub use tz::local_offset_seconds;
+pub use tz::SystemTimeZone;
 // Модель типов XDTO наружу крейта нужна целиком: строит её фабрика,
 // которой в этой реализации ещё нет, а до тех пор единственный её
 // потребитель — собственные тесты модуля.

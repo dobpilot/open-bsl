@@ -7,6 +7,13 @@ use bsl_rt::TypeRef;
 
 use super::*;
 
+/// Зона тестов XDTO — неподвижный UTC+3: лексические формы с явным поясом
+/// пересчитываются в местное время, и привязывать ожидания к зоне машины
+/// значило бы получать разный результат на разных машинах.
+fn test_zone() -> std::rc::Rc<dyn bsl_rt::TimeZone> {
+    std::rc::Rc::new(bsl_rt::FixedTimeZone(3 * 3600))
+}
+
 #[test]
 fn method_codes_are_static_and_dense() {
     let codes = objects::XDTO_METHODS
@@ -23,7 +30,7 @@ fn method_codes_are_static_and_dense() {
 /// строит `dom`, схему — `xsd`, а типы — этот модуль.
 fn model(text: &str) -> Rc<XdtoModel> {
     let schema = crate::xsd::schema_of_text(text).expect("схема обязана разбираться");
-    model_of_schema(&schema).expect("модель обязана строиться")
+    model_of_schema(&schema, test_zone()).expect("модель обязана строиться")
 }
 
 /// Схема из `measure-xdto.bsl`, сокращённая до того, что проверяют
@@ -661,11 +668,11 @@ fn a_facet_violating_default_breaks_the_whole_factory() {
         r#"</xs:sequence></xs:complexType></xs:schema>"#,
     );
     let schema = crate::xsd::schema_of_text(bad).expect("схема разбирается");
-    assert!(model_of_schema(&schema).is_err());
+    assert!(model_of_schema(&schema, test_zone()).is_err());
     // Годное умолчание того же вида модель строит.
     let good = bad.replace(r#"default="а""#, r#"default="аб""#);
     let schema = crate::xsd::schema_of_text(&good).expect("схема разбирается");
-    assert!(model_of_schema(&schema).is_ok());
+    assert!(model_of_schema(&schema, test_zone()).is_ok());
 }
 
 /// Фасет образца — честная ошибка «не поддерживается», и она
@@ -712,6 +719,46 @@ fn default_value_comes_from_both_default_and_fixed() {
         prop(&by_name("name"), "ЗначениеПоУмолчанию"),
         BslValue::Undefined
     );
+}
+
+/// Лексическая форма с ПОЯСОМ пересчитывается в местное время той зоны,
+/// в которой построена фабрика, а не машины.
+///
+/// ИЗМЕРЕНО на 8.3.27 (комментарий у `facets::apply_zone`):
+/// `2026-08-12T18:41:17Z` дало 21:41:17 на машине с +03:00, а
+/// `…+02:00` — 19:41:17. Здесь тот же пересчёт делается ДВАЖДЫ на двух
+/// разных зонах: до переноса зоны в прогон второй результат был бы
+/// недостижим, потому что смещение бралось из процессного кэша
+/// `/etc/localtime` и на всю программу было одно.
+#[test]
+fn a_written_zone_is_converted_into_the_factories_own_zone() {
+    let parse_in = |offset_hours: i32, lexical: &str| {
+        let schema = crate::xsd::schema_of_text(SAMPLE).expect("схема");
+        let zone: Rc<dyn bsl_rt::TimeZone> = Rc::new(bsl_rt::FixedTimeZone(offset_hours * 3600));
+        let m = model_of_schema(&schema, zone).expect("модель");
+        let index = m.find(XSD_NS, "dateTime").expect("встроенный тип");
+        value_from_lexical(&m, index, lexical).expect("лексическая форма")
+    };
+    let civil = |v: &BslValue| match v {
+        BslValue::Date(d) => d.to_civil(),
+        other => panic!("ожидалась дата, получено {other:?}"),
+    };
+
+    // Момент один и тот же; зоны разные — и результат разный.
+    let east = civil(&parse_in(3, "2026-08-12T18:41:17Z"));
+    assert_eq!((east.hour, east.minute, east.second), (21, 41, 17));
+    let mid = civil(&parse_in(2, "2026-08-12T18:41:17Z"));
+    assert_eq!((mid.hour, mid.minute, mid.second), (20, 41, 17));
+
+    // Записанный пояс тоже учитывается: `+02:00` в зоне +03:00 — 19:41:17.
+    let written = civil(&parse_in(3, "2026-08-12T18:41:17+02:00"));
+    assert_eq!((written.hour, written.minute, written.second), (19, 41, 17));
+
+    // Без пояса запись остаётся как есть, в какой бы зоне ни читали.
+    for hours in [0, 3, -5] {
+        let bare = civil(&parse_in(hours, "2026-08-12T18:41:17"));
+        assert_eq!((bare.hour, bare.minute, bare.second), (18, 41, 17));
+    }
 }
 
 /// Таблица встроенных типов: каждая строка — из
@@ -1098,7 +1145,7 @@ fn broken_schemas_report_errors_instead_of_panicking() {
         r#"</xs:sequence></xs:complexType></xs:schema>"#,
     ))
     .expect("схема разбирается");
-    let error = model_of_schema(&schema).expect_err("тип не разрешается");
+    let error = model_of_schema(&schema, test_zone()).expect_err("тип не разрешается");
     assert!(
         error.to_string().contains("нетТакого"),
         "в тексте ошибки нет имени типа: {error}"
@@ -1114,7 +1161,8 @@ fn broken_schemas_report_errors_instead_of_panicking() {
         r#"</xs:schema>"#,
     ))
     .expect("схема разбирается");
-    let cyclic = model_of_schema(&schema).expect("модель строится: цикл здесь только у значений");
+    let cyclic = model_of_schema(&schema, test_zone())
+        .expect("модель строится: цикл здесь только у значений");
     let a = cyclic.find("urn:t", "A").expect("тип A");
     assert!(value_from_lexical(&cyclic, a, "что-нибудь").is_err());
     assert!(cyclic.builtin_of(a).is_none(), "кольцо не даёт отображения");
@@ -1130,7 +1178,7 @@ fn broken_schemas_report_errors_instead_of_panicking() {
         r#"</xs:schema>"#,
     ))
     .expect("схема разбирается");
-    let error = model_of_schema(&schema).expect_err("цикл наследования");
+    let error = model_of_schema(&schema, test_zone()).expect_err("цикл наследования");
     assert!(
         error.to_string().contains("цикл"),
         "в тексте ошибки нет слова про цикл: {error}"
@@ -1144,7 +1192,10 @@ fn broken_schemas_report_errors_instead_of_panicking() {
         r#"</xs:sequence></xs:complexType></xs:schema>"#,
     ))
     .expect("схема разбирается");
-    assert!(model_of_schema(&schema).is_err(), "мусор в default");
+    assert!(
+        model_of_schema(&schema, test_zone()).is_err(),
+        "мусор в default"
+    );
 
     // Тот же путь, но лексическая форма испорчена так, что разбор
     // `xs:date` берёт срез по НЕ границе символа: «2026-08-1я» длиннее
@@ -1159,7 +1210,7 @@ fn broken_schemas_report_errors_instead_of_panicking() {
     ))
     .expect("схема разбирается");
     assert!(
-        model_of_schema(&schema).is_err(),
+        model_of_schema(&schema, test_zone()).is_err(),
         "испорченная дата в default"
     );
 
@@ -1185,7 +1236,7 @@ fn factory_of_texts(texts: &[&str]) -> BslValue {
         .iter()
         .map(|t| crate::xsd::schema_of_text(t).expect("схема обязана разбираться"))
         .collect();
-    factory_value(model_of_schemas(&schemas).expect("модель обязана строиться"))
+    factory_value(model_of_schemas(&schemas, test_zone()).expect("модель обязана строиться"))
 }
 
 /// Набор схем даёт ОДНУ модель: типы всех схем видны через одну
@@ -1375,7 +1426,7 @@ fn factory_create_builds_an_object_that_knows_its_type() {
 /// прочее — ошибка (измерено), а `Неопределено` значит «без схем».
 #[test]
 fn a_factory_is_built_from_a_schema_set_or_from_nothing() {
-    let empty = factory_of_schema_set(&BslValue::Undefined).expect("фабрика без схем");
+    let empty = factory_of_schema_set(&BslValue::Undefined, test_zone()).expect("фабрика без схем");
     assert_eq!(empty.to_string(), "ФабрикаXDTO");
     assert_eq!(
         empty.type_of().unwrap(),
@@ -1387,20 +1438,23 @@ fn a_factory_is_built_from_a_schema_set_or_from_nothing() {
     );
     assert!(is_factory(&empty));
     let set = crate::xsd::new_schema_set();
-    assert!(factory_of_schema_set(&set).is_ok());
+    assert!(factory_of_schema_set(&set, test_zone()).is_ok());
     // Путь к файлу, схема и число сюда не годятся.
     for wrong in [
         str_value("/tmp/схема.xsd"),
         crate::xsd::new_schema(),
         number_value(1),
     ] {
-        assert!(factory_of_schema_set(&wrong).is_err(), "{wrong:?}");
+        assert!(
+            factory_of_schema_set(&wrong, test_zone()).is_err(),
+            "{wrong:?}"
+        );
     }
     // Две фабрики от одного и того же набора не равны (измерено на
     // двух фабриках от одного файла).
     assert_ne!(
-        factory_of_schema_set(&set).expect("фабрика"),
-        factory_of_schema_set(&set).expect("фабрика")
+        factory_of_schema_set(&set, test_zone()).expect("фабрика"),
+        factory_of_schema_set(&set, test_zone()).expect("фабрика")
     );
     // `ЗначениеЗаполнено` от фабрики — ошибка (измерено).
     assert!(empty.is_filled().is_err());
@@ -1423,7 +1477,7 @@ fn a_factory_from_a_file_reports_a_missing_or_broken_source() {
         ),
     )
     .expect("временный файл пишется");
-    let f = factory_of_file(&[str_value(&path.to_string_lossy())]).expect("фабрика");
+    let f = factory_of_file(&[str_value(&path.to_string_lossy())], test_zone()).expect("фабрика");
     assert_eq!(
         factory_type(ob(&f), &[str_value("urn:f"), str_value("Code")])
             .expect("тип")
@@ -1431,8 +1485,8 @@ fn a_factory_from_a_file_reports_a_missing_or_broken_source() {
         "{urn:f}Code"
     );
     let missing = dir.join("open-bsl-xdto-factory-нет-такого.xsd");
-    let error =
-        factory_of_file(&[str_value(&missing.to_string_lossy())]).expect_err("файла нет — ошибка");
+    let error = factory_of_file(&[str_value(&missing.to_string_lossy())], test_zone())
+        .expect_err("файла нет — ошибка");
     assert!(
         error
             .to_string()
@@ -1442,15 +1496,18 @@ fn a_factory_from_a_file_reports_a_missing_or_broken_source() {
     // Не схема и не разметка вовсе.
     let broken = dir.join("open-bsl-xdto-factory-test-broken.xsd");
     std::fs::write(&broken, "<чепуха/>").expect("временный файл пишется");
-    assert!(factory_of_file(&[str_value(&broken.to_string_lossy())]).is_err());
+    assert!(factory_of_file(&[str_value(&broken.to_string_lossy())], test_zone()).is_err());
     // Ни без аргумента, ни с двумя, ни с нестроковым (измерено).
-    assert!(factory_of_file(&[]).is_err());
-    assert!(factory_of_file(&[number_value(1)]).is_err());
+    assert!(factory_of_file(&[], test_zone()).is_err());
+    assert!(factory_of_file(&[number_value(1)], test_zone()).is_err());
     assert!(
-        factory_of_file(&[
-            str_value(&path.to_string_lossy()),
-            str_value(&path.to_string_lossy())
-        ])
+        factory_of_file(
+            &[
+                str_value(&path.to_string_lossy()),
+                str_value(&path.to_string_lossy())
+            ],
+            test_zone()
+        )
         .is_err()
     );
     let _ = std::fs::remove_file(&path);

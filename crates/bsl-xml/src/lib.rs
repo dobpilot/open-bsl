@@ -35,8 +35,8 @@ fn argument(arguments: &[BslValue], index: usize) -> &BslValue {
     arguments.get(index).unwrap_or(&BslValue::Undefined)
 }
 
-fn construct_factory(_context: &mut CallContext<'_>, arguments: &[BslValue]) -> RtResult<BslValue> {
-    factory_of_schema_set(argument(arguments, 0))
+fn construct_factory(context: &mut CallContext<'_>, arguments: &[BslValue]) -> RtResult<BslValue> {
+    factory_of_schema_set(argument(arguments, 0), context.zone_rc()?)
 }
 
 fn construct_builder(
@@ -135,10 +135,10 @@ fn construct_serializer(
 }
 
 fn call_create_factory(
-    _context: &mut CallContext<'_>,
+    context: &mut CallContext<'_>,
     arguments: &[BslValue],
 ) -> RtResult<BslValue> {
-    factory_of_file(arguments)
+    factory_of_file(arguments, context.zone_rc()?)
 }
 
 fn call_configuration_factory(

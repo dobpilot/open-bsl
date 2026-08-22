@@ -76,7 +76,7 @@ pub(crate) fn value_from_lexical_at(
     };
     let value = match shape {
         ValueShape::Builtin(bsl) => {
-            let value = builtin_from_lexical(*bsl, lexical)?;
+            let value = builtin_from_lexical(*bsl, lexical, model.zone())?;
             if checked {
                 check_facet_chain(model, data.base, lexical, &value)?;
             }

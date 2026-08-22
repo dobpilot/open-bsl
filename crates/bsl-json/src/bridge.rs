@@ -24,6 +24,7 @@ use crate::{dates::*, objects::*, parse::*, write::*};
 pub fn read_json_builtin(
     arguments: &[BslValue],
     runtime: &mut RuntimeShapes,
+    zone: &dyn bsl_rt::TimeZone,
     call: Option<JsonCallByName<'_>>,
 ) -> RtResult<BslValue> {
     let as_map = match arguments.get(1) {
@@ -73,6 +74,7 @@ pub fn read_json_builtin(
         date_format,
         restore,
         runtime,
+        zone,
     )
 }
 
@@ -87,6 +89,7 @@ pub fn read_json_builtin(
 pub fn write_json_builtin(
     arguments: &[BslValue],
     runtime: &mut RuntimeShapes,
+    zone: &dyn bsl_rt::TimeZone,
     call: Option<JsonCallByName<'_>>,
 ) -> RtResult<BslValue> {
     let settings = serializer_settings_from(arguments.get(2))?;
@@ -108,7 +111,14 @@ pub fn write_json_builtin(
             ));
         }
     };
-    write_json(&arguments[0], &arguments[1], &settings, convert, runtime)?;
+    write_json(
+        &arguments[0],
+        &arguments[1],
+        &settings,
+        convert,
+        runtime,
+        zone,
+    )?;
     Ok(BslValue::Undefined)
 }
 
@@ -203,6 +213,9 @@ pub(crate) struct BuildCtx<'a, 'c> {
     /// Функция восстановления или `None`, если она не задана.
     pub(crate) restore: Option<JsonRestoreFn<'c>>,
     pub(crate) rt: &'a mut RuntimeShapes,
+    /// Часовой пояс прогона: даты `Z` и со смещением переводятся в
+    /// местное время, а какое оно — знает окружение, а не машина.
+    pub(crate) zone: &'a dyn bsl_rt::TimeZone,
     pub(crate) cache: JsonBuildCache,
 }
 
@@ -266,6 +279,7 @@ pub fn read_json(
     date_format: Option<JsonDateFormat>,
     restore: Option<JsonRestoreFn<'_>>,
     rt: &mut RuntimeShapes,
+    zone: &dyn bsl_rt::TimeZone,
 ) -> RtResult<BslValue> {
     // Первое событие читается здесь же: `ПрочитатьJSON` забирает документ
     // с текущей позиции целиком, и вызывать перед ним `Прочитать()` не
@@ -308,6 +322,7 @@ pub fn read_json(
         date_format,
         restore,
         rt,
+        zone,
         cache: JsonBuildCache::default(),
     };
     let built = match first {
@@ -391,7 +406,11 @@ pub fn optional_date_format_from_arg(
 /// [`RtError::TypeError`], если аргумент не строка; [`RtError::Json`] на
 /// пустой строке (в ней нет ни одного события разбора); иначе — см.
 /// [`read_json`].
-pub fn read_json_value(text: &BslValue, rt: &mut RuntimeShapes) -> RtResult<BslValue> {
+pub fn read_json_value(
+    text: &BslValue,
+    rt: &mut RuntimeShapes,
+    zone: &dyn bsl_rt::TimeZone,
+) -> RtResult<BslValue> {
     let BslValue::Str(s) = text else {
         return Err(RtError::TypeError {
             expected: "Строка",
@@ -412,6 +431,7 @@ pub fn read_json_value(text: &BslValue, rt: &mut RuntimeShapes) -> RtResult<BslV
         date_format: None,
         restore: None,
         rt,
+        zone,
         cache: JsonBuildCache::default(),
     };
     build_value(first, &mut parser, None, &mut ctx, 0)
@@ -649,7 +669,7 @@ fn build_raw_value(
             // фикстура `json-dates` упала ровно на этой пробе (была без
             // `Попытка`). Формат по умолчанию — ISO, но именно СТАРЫЙ
             // парсер без сдвига зоны (`parse_json_date`), а не
-            // `parse_json_date_by_format(..., Iso)`: сдвиг `Z`/явного
+            // `parse_json_date_by_format(..., Iso, zone)`: сдвиг `Z`/явного
             // смещения в локальное время машины для ЭТОГО (более раннего)
             // пути — отдельное, ранее измеренное намеренное отклонение
             // (см. doc comment на `parse_json_date`), эта правка его не
@@ -657,7 +677,7 @@ fn build_raw_value(
             // фолбэка), не арифметика разбора.
             if is_date {
                 let d = match ctx.date_format {
-                    Some(fmt) => parse_json_date_by_format(&s, fmt),
+                    Some(fmt) => parse_json_date_by_format(&s, fmt, ctx.zone),
                     None => parse_json_date(&s),
                 }
                 .ok_or_else(bad_date_representation)?;
@@ -732,6 +752,7 @@ pub fn write_json(
     settings: &JsonSerializerSettings,
     convert: Option<JsonConvertFn<'_>>,
     rt: &RuntimeShapes,
+    zone: &dyn bsl_rt::TimeZone,
 ) -> RtResult<()> {
     let cell = as_writer(arg_object(writer)?)?;
     // Приёмник, как и разборщик в `read_json`, ВЫНИМАЕТСЯ из ячейки на
@@ -752,6 +773,7 @@ pub fn write_json(
         single_value_mode: false,
         convert,
         rt,
+        zone,
     };
     let written = write_top_level(&mut w, value, &mut ctx);
     // Приёмник возвращается на место при любом исходе: `Закрыть()` после
@@ -790,7 +812,11 @@ fn write_top_level(
 ///
 /// См. `serialize`; дополнительно [`RtError::TypeError`] на `Дата` или
 /// `Соответствие` в любой позиции дерева значения.
-pub fn write_json_value(value: &BslValue, rt: &RuntimeShapes) -> RtResult<BslValue> {
+pub fn write_json_value(
+    value: &BslValue,
+    rt: &RuntimeShapes,
+    zone: &dyn bsl_rt::TimeZone,
+) -> RtResult<BslValue> {
     let mut w = JsonWriter::to_string_target(JsonWriterSettings::default());
     let mut ctx = SerializeCtx {
         settings: &JsonSerializerSettings::default(),
@@ -799,6 +825,7 @@ pub fn write_json_value(value: &BslValue, rt: &RuntimeShapes) -> RtResult<BslVal
         // у платформы такого параметра здесь нет.
         convert: None,
         rt,
+        zone,
     };
     serialize(&mut w, value, &mut ctx, 0)?;
     Ok(BslValue::Str(bsl_rt::BslString::from_utf8_string(
@@ -829,6 +856,9 @@ pub(crate) struct SerializeCtx<'a, 'c> {
     pub(crate) single_value_mode: bool,
     pub(crate) convert: Option<JsonConvertFn<'c>>,
     pub(crate) rt: &'a RuntimeShapes,
+    /// См. `BuildCtx::zone` — при записи зона нужна вариантам
+    /// «со смещением» и «универсальная».
+    pub(crate) zone: &'a dyn bsl_rt::TimeZone,
 }
 
 /// Что писать на месте очередного значения.
@@ -1018,8 +1048,12 @@ pub(crate) fn serialize(
             // форматов даты. Какой вид вложенная Microsoft-дата примет в
             // ДОКУМЕНТЕ через `НастройкиСериализацииJSON`, замерит фикстура
             // (проба уже есть в `json-dates.bsl`).
-            let content =
-                format_json_date(*d, ctx.settings.date_format, ctx.settings.date_variant)?;
+            let content = format_json_date(
+                *d,
+                ctx.settings.date_format,
+                ctx.settings.date_variant,
+                ctx.zone,
+            )?;
             w.value(&BslValue::Str(bsl_rt::BslString::from_str(&content)))
         }
         BslValue::Object(o) => match &**o {
@@ -1120,15 +1154,16 @@ pub(crate) fn component_read_json(
     context: &mut CallContext<'_>,
     arguments: &[BslValue],
 ) -> RtResult<BslValue> {
-    let (runtime, stdout, stderr, caller) = context.execution_parts();
+    let (runtime, stdout, stderr, caller, zone) = context.execution_parts();
+    let zone = zone.ok_or(missing_zone())?;
     match caller {
         Some(caller) => {
             let mut call = |name: &str, values: Vec<BslValue>| {
                 caller(name, values, &mut *stdout, &mut *stderr)
             };
-            read_json_builtin(arguments, runtime, Some(&mut call))
+            read_json_builtin(arguments, runtime, zone, Some(&mut call))
         }
-        None => read_json_builtin(arguments, runtime, None),
+        None => read_json_builtin(arguments, runtime, zone, None),
     }
 }
 
@@ -1136,48 +1171,62 @@ pub(crate) fn component_write_json(
     context: &mut CallContext<'_>,
     arguments: &[BslValue],
 ) -> RtResult<BslValue> {
-    let (runtime, stdout, stderr, caller) = context.execution_parts();
+    let (runtime, stdout, stderr, caller, zone) = context.execution_parts();
+    let zone = zone.ok_or(missing_zone())?;
     match caller {
         Some(caller) => {
             let mut call = |name: &str, values: Vec<BslValue>| {
                 caller(name, values, &mut *stdout, &mut *stderr)
             };
-            write_json_builtin(arguments, runtime, Some(&mut call))
+            write_json_builtin(arguments, runtime, zone, Some(&mut call))
         }
-        None => write_json_builtin(arguments, runtime, None),
+        None => write_json_builtin(arguments, runtime, zone, None),
     }
 }
 
+/// Контекст без зоны — это НАТИВНЫЙ путь (сток JIT-шимов), а туда
+/// глобальные функции компонента не попадают: JIT компилирует только
+/// вызовы методов объектов. Ошибка здесь недостижима и стоит на месте
+/// ровно затем, чтобы протухший разбор дал её, а не чужое время.
+fn missing_zone() -> RtError {
+    RtError::Json("часовой пояс прогона недоступен в этом контексте".to_string())
+}
+
 pub(crate) fn component_write_json_date(
-    _context: &mut CallContext<'_>,
+    context: &mut CallContext<'_>,
     arguments: &[BslValue],
 ) -> RtResult<BslValue> {
     write_json_date(
         &arguments[0],
         &arguments[1],
         arguments.get(2).unwrap_or(&BslValue::Undefined),
+        context.zone()?,
     )
 }
 
 pub(crate) fn component_read_json_date(
-    _context: &mut CallContext<'_>,
+    context: &mut CallContext<'_>,
     arguments: &[BslValue],
 ) -> RtResult<BslValue> {
-    read_json_date(&arguments[0], &arguments[1])
+    read_json_date(&arguments[0], &arguments[1], context.zone()?)
 }
 
 pub(crate) fn component_write_json_value(
     context: &mut CallContext<'_>,
     arguments: &[BslValue],
 ) -> RtResult<BslValue> {
-    write_json_value(&arguments[0], context.runtime_shapes())
+    let (runtime, zone) = context.shapes_and_zone();
+    let zone = zone.ok_or(missing_zone())?;
+    write_json_value(&arguments[0], runtime, zone)
 }
 
 pub(crate) fn component_read_json_value(
     context: &mut CallContext<'_>,
     arguments: &[BslValue],
 ) -> RtResult<BslValue> {
-    read_json_value(&arguments[0], context.runtime_shapes())
+    let (runtime, zone) = context.shapes_and_zone();
+    let zone = zone.ok_or(missing_zone())?;
+    read_json_value(&arguments[0], runtime, zone)
 }
 
 pub(crate) fn construct_reader(
@@ -1219,6 +1268,10 @@ mod tests {
         BslNumber::parse_canonical(s).unwrap()
     }
 
+    /// Дат со смещением в этих тестах нет, поэтому зона любая — берётся
+    /// UTC, чтобы результат не зависел от машины, на которой идёт прогон.
+    static MACHINE_ZONE: bsl_rt::FixedTimeZone = bsl_rt::FixedTimeZone(0);
+
     /// Контекст сборки без функции восстановления — то, чем был
     /// `build_value` до появления колбэков.
     fn plain_build_ctx(rt: &mut RuntimeShapes) -> BuildCtx<'_, 'static> {
@@ -1228,6 +1281,7 @@ mod tests {
             date_format: None,
             restore: None,
             rt,
+            zone: &MACHINE_ZONE,
             cache: JsonBuildCache::default(),
         }
     }
@@ -1242,6 +1296,7 @@ mod tests {
             single_value_mode: false,
             convert: None,
             rt,
+            zone: &MACHINE_ZONE,
         }
     }
 
@@ -1399,7 +1454,12 @@ mod tests {
     #[test]
     fn write_json_value_rejects_date_at_top_level_and_nested() {
         let rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
-        let e = write_json_value(&BslValue::Date(bsl_rt::BslDate::empty()), &rt).unwrap_err();
+        let e = write_json_value(
+            &BslValue::Date(bsl_rt::BslDate::empty()),
+            &rt,
+            &MACHINE_ZONE,
+        )
+        .unwrap_err();
         assert!(matches!(e, RtError::TypeError { .. }));
 
         let mut rt2 = RuntimeShapes::seeded(Vec::new(), Vec::new());
@@ -1411,7 +1471,7 @@ mod tests {
             &mut rt2.shapes,
         )
         .unwrap();
-        let e2 = write_json_value(&s, &rt2).unwrap_err();
+        let e2 = write_json_value(&s, &rt2, &MACHINE_ZONE).unwrap_err();
         assert!(matches!(e2, RtError::TypeError { .. }));
     }
 
@@ -1427,7 +1487,7 @@ mod tests {
         )
         .unwrap();
 
-        let e = write_json_value(&map, &rt).unwrap_err();
+        let e = write_json_value(&map, &rt, &MACHINE_ZONE).unwrap_err();
         assert!(matches!(e, RtError::TypeError { .. }));
 
         let mut w = JsonWriter::to_string_target(settings_from(None).unwrap());
@@ -1450,6 +1510,7 @@ mod tests {
             &JsonSerializerSettings::default(),
             None,
             &rt,
+            &MACHINE_ZONE,
         )
         .unwrap_err();
         assert!(matches!(e, RtError::TypeError { .. }), "{e:?}");
@@ -1460,15 +1521,19 @@ mod tests {
     #[test]
     fn read_json_value_rejects_an_empty_string() {
         let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
-        let e =
-            read_json_value(&BslValue::Str(bsl_rt::BslString::from_str("")), &mut rt).unwrap_err();
+        let e = read_json_value(
+            &BslValue::Str(bsl_rt::BslString::from_str("")),
+            &mut rt,
+            &MACHINE_ZONE,
+        )
+        .unwrap_err();
         assert!(matches!(e, RtError::Json(_)));
     }
 
     #[test]
     fn write_and_read_json_value_round_trip_scalars_and_structures() {
         let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
-        let s = write_json_value(&BslValue::Number(num("42")), &rt).unwrap();
+        let s = write_json_value(&BslValue::Number(num("42")), &rt, &MACHINE_ZONE).unwrap();
         assert_eq!(s, BslValue::Str(bsl_rt::BslString::from_str("42")));
 
         let id = rt.names.intern("а");
@@ -1476,11 +1541,11 @@ mod tests {
         structure
             .structure_insert(id, BslValue::Number(num("1")), &mut rt.shapes)
             .unwrap();
-        let text = write_json_value(&structure, &rt).unwrap();
+        let text = write_json_value(&structure, &rt, &MACHINE_ZONE).unwrap();
         let BslValue::Str(text) = text else {
             panic!("ожидалась строка")
         };
-        let back = read_json_value(&BslValue::Str(text), &mut rt).unwrap();
+        let back = read_json_value(&BslValue::Str(text), &mut rt, &MACHINE_ZONE).unwrap();
         // ИЗМЕРЕНО (JSON.VALUE.READ_KIND): «Структура».
         assert_eq!(back.type_name(), "Структура");
     }

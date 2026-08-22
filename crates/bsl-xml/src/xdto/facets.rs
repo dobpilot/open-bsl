@@ -321,7 +321,11 @@ pub(crate) fn bad_lexical(lexical: &str, what: &str) -> RtError {
 /// поимённо: у `xs:boolean` принимаются и слова, и цифры; у чисел —
 /// ведущий плюс, хвостовые нули и показатель степени (`1.5E3` -> 1500);
 /// пробелы по краям отбрасываются у всех.
-pub(crate) fn builtin_from_lexical(bsl: BuiltinBsl, lexical: &str) -> RtResult<BslValue> {
+pub(crate) fn builtin_from_lexical(
+    bsl: BuiltinBsl,
+    lexical: &str,
+    zone: &dyn bsl_rt::TimeZone,
+) -> RtResult<BslValue> {
     match bsl {
         // Строка идёт как есть, БЕЗ обрезки: `xs:string` с одними
         // пробелами — это пробелы (фасет `whiteSpace` их не трогает, он
@@ -346,9 +350,9 @@ pub(crate) fn builtin_from_lexical(bsl: BuiltinBsl, lexical: &str) -> RtResult<B
             "false" | "0" => Ok(BslValue::Boolean(false)),
             _ => Err(bad_lexical(lexical, "«xs:boolean»")),
         },
-        BuiltinBsl::Date => parse_xsd_date(lexical.trim()),
-        BuiltinBsl::DateTime => parse_xsd_date_time(lexical.trim()),
-        BuiltinBsl::Time => parse_xsd_time(lexical.trim()),
+        BuiltinBsl::Date => parse_xsd_date(lexical.trim(), zone),
+        BuiltinBsl::DateTime => parse_xsd_date_time(lexical.trim(), zone),
+        BuiltinBsl::Time => parse_xsd_time(lexical.trim(), zone),
         BuiltinBsl::Base64 => {
             let bytes =
                 decode_base64(lexical).ok_or_else(|| bad_lexical(lexical, "«base64Binary»"))?;
@@ -425,7 +429,7 @@ pub(crate) fn parse_exponential(text: &str) -> RtResult<BslValue> {
 /// `xs:date`: `ГГГГ-ММ-ДД` с необязательным поясом. Пояс не отбрасывается,
 /// а пересчитывается в местное время, поэтому `2026-08-12+02:00` на машине
 /// с поясом +03:00 дало 12.08.2026 1:00:00 (измерено).
-pub(crate) fn parse_xsd_date(text: &str) -> RtResult<BslValue> {
+pub(crate) fn parse_xsd_date(text: &str, zone: &dyn bsl_rt::TimeZone) -> RtResult<BslValue> {
     let (body, tail) = split_zone(text, 10);
     let mut parts = body.split('-');
     let year: i64 = parse_part(parts.next(), text, "даты")?;
@@ -436,11 +440,11 @@ pub(crate) fn parse_xsd_date(text: &str) -> RtResult<BslValue> {
     }
     let wall = bsl_rt::BslDate::from_civil(year, month, day, 0, 0, 0)
         .ok_or_else(|| bad_lexical(text, "даты"))?;
-    Ok(BslValue::Date(apply_zone(wall, tail)?))
+    Ok(BslValue::Date(apply_zone(wall, tail, zone)?))
 }
 
 /// `xs:dateTime`: `ГГГГ-ММ-ДДTЧЧ:ММ:СС` с необязательным поясом.
-pub(crate) fn parse_xsd_date_time(text: &str) -> RtResult<BslValue> {
+pub(crate) fn parse_xsd_date_time(text: &str, zone: &dyn bsl_rt::TimeZone) -> RtResult<BslValue> {
     let t = text
         .find('T')
         .ok_or_else(|| bad_lexical(text, "«dateTime»"))?;
@@ -453,16 +457,16 @@ pub(crate) fn parse_xsd_date_time(text: &str) -> RtResult<BslValue> {
     let (hour, minute, second) = parse_clock(&time_part[1..], text)?;
     let wall = bsl_rt::BslDate::from_civil(year, month, day, hour, minute, second)
         .ok_or_else(|| bad_lexical(text, "«dateTime»"))?;
-    Ok(BslValue::Date(apply_zone(wall, tail)?))
+    Ok(BslValue::Date(apply_zone(wall, tail, zone)?))
 }
 
 /// `xs:time`: `ЧЧ:ММ:СС`. Дата у результата — 01.01.0001 (измерено).
-pub(crate) fn parse_xsd_time(text: &str) -> RtResult<BslValue> {
+pub(crate) fn parse_xsd_time(text: &str, zone: &dyn bsl_rt::TimeZone) -> RtResult<BslValue> {
     let (body, tail) = split_zone(text, 0);
     let (hour, minute, second) = parse_clock(body, text)?;
     let wall = bsl_rt::BslDate::from_civil(1, 1, 1, hour, minute, second)
         .ok_or_else(|| bad_lexical(text, "времени"))?;
-    Ok(BslValue::Date(apply_zone(wall, tail)?))
+    Ok(BslValue::Date(apply_zone(wall, tail, zone)?))
 }
 
 pub(crate) fn parse_part<T: std::str::FromStr>(
@@ -518,12 +522,17 @@ pub(crate) fn split_zone(text: &str, from: usize) -> (&str, Option<i32>) {
 /// Пояс пересчитывается в МЕСТНОЕ время машины, как это делает платформа
 /// (измерено: `2026-08-12T18:41:17Z` дало 21:41:17 на машине с +03:00, а
 /// `…+02:00` — 19:41:17). Без пояса запись остаётся как есть.
-pub(crate) fn apply_zone(wall: bsl_rt::BslDate, zone: Option<i32>) -> RtResult<bsl_rt::BslDate> {
-    match zone {
+pub(crate) fn apply_zone(
+    wall: bsl_rt::BslDate,
+    written: Option<i32>,
+    zone: &dyn bsl_rt::TimeZone,
+) -> RtResult<bsl_rt::BslDate> {
+    match written {
         None => Ok(wall),
         Some(offset) => bsl_rt::local_date_from_utc_seconds(
             bsl_rt::pseudo_unix_seconds(wall) - i64::from(offset),
             "лексическая форма XDTO",
+            zone,
         ),
     }
 }

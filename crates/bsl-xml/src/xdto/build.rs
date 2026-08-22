@@ -12,8 +12,11 @@ use super::*;
 /// цикл наследования либо значение по умолчанию, которое не разбирается в
 /// объявленном типе.
 #[cfg_attr(not(test), allow(dead_code))]
-pub fn model_of_schema(schema: &Rc<XsSchemaData>) -> RtResult<Rc<XdtoModel>> {
-    model_of_schemas(std::slice::from_ref(schema))
+pub fn model_of_schema(
+    schema: &Rc<XsSchemaData>,
+    zone: Rc<dyn bsl_rt::TimeZone>,
+) -> RtResult<Rc<XdtoModel>> {
+    model_of_schemas(std::slice::from_ref(schema), zone)
 }
 
 /// Модель типов по НАБОРУ схем — то, что стоит за `Новый
@@ -35,8 +38,11 @@ pub fn model_of_schema(schema: &Rc<XsSchemaData>) -> RtResult<Rc<XdtoModel>> {
 /// [`RtError::Xdto`], если какая-нибудь схема набора ссылается на неизвестный
 /// тип, содержит цикл наследования либо значение по умолчанию, которое не
 /// разбирается в объявленном типе.
-pub fn model_of_schemas(schemas: &[Rc<XsSchemaData>]) -> RtResult<Rc<XdtoModel>> {
-    let mut builder = Builder::new(schemas);
+pub fn model_of_schemas(
+    schemas: &[Rc<XsSchemaData>],
+    zone: Rc<dyn bsl_rt::TimeZone>,
+) -> RtResult<Rc<XdtoModel>> {
+    let mut builder = Builder::new(schemas, zone);
     builder.declare_builtins();
     builder.declare_schema_types()?;
     builder.link_bases()?;
@@ -62,12 +68,16 @@ pub(crate) struct Builder<'a> {
 }
 
 impl<'a> Builder<'a> {
-    pub(crate) fn new(schemas: &'a [Rc<XsSchemaData>]) -> Builder<'a> {
+    pub(crate) fn new(
+        schemas: &'a [Rc<XsSchemaData>],
+        zone: Rc<dyn bsl_rt::TimeZone>,
+    ) -> Builder<'a> {
         Builder {
             schemas,
             model: XdtoModel {
                 types: Vec::new(),
                 properties: Vec::new(),
+                zone,
             },
             from_xs: Vec::new(),
             to_xs: Vec::new(),

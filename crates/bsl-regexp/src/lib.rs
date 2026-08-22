@@ -837,10 +837,14 @@ mod tests {
         let mut shapes = RuntimeShapes::seeded(Vec::new(), Vec::new());
         let mut stdout = std::io::sink();
         let mut stderr = std::io::sink();
-        let mut context =
-            CallContext::new(&mut shapes, &mut stdout, &mut stderr, |_value, _spec| {
-                unreachable!("форматирование в regex-свойствах не используется")
-            });
+        let mut context = CallContext::new(
+            &mut shapes,
+            &mut stdout,
+            &mut stderr,
+            |_value, _spec| unreachable!("форматирование в regex-свойствах не используется"),
+            // Зона регулярным выражениям не нужна вовсе: дат они не разбирают.
+            None,
+        );
         value
             .object_ref()
             .ok_or(RtError::NotAnObject)?
@@ -851,10 +855,14 @@ mod tests {
         let mut shapes = RuntimeShapes::seeded(Vec::new(), Vec::new());
         let mut stdout = std::io::sink();
         let mut stderr = std::io::sink();
-        let mut context =
-            CallContext::new(&mut shapes, &mut stdout, &mut stderr, |_value, _spec| {
-                unreachable!("форматирование в regex-методе не используется")
-            });
+        let mut context = CallContext::new(
+            &mut shapes,
+            &mut stdout,
+            &mut stderr,
+            |_value, _spec| unreachable!("форматирование в regex-методе не используется"),
+            // Зона регулярным выражениям не нужна вовсе: дат они не разбирают.
+            None,
+        );
         value.object_ref().ok_or(RtError::NotAnObject)?.call_method(
             "ПолучитьГруппы",
             &[],

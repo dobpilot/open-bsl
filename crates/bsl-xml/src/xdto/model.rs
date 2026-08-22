@@ -89,13 +89,41 @@ pub struct XdtoValueData {
 /// Разрешённая модель типов одной схемы вместе со встроенными типами XML
 /// Schema. Значение `ТипЗначенияXDTO` — это `Rc` на неё плюс номер типа,
 /// `СвойствоXDTO` — тот же `Rc` плюс номер свойства.
-#[derive(Debug)]
 pub struct XdtoModel {
     pub(crate) types: Vec<XdtoTypeData>,
     pub(crate) properties: Vec<XdtoPropertyData>,
+    /// Часовой пояс ПРОГОНА, в котором фабрика построена.
+    ///
+    /// Зона нужна одному месту — переводу лексической формы `xs:dateTime`
+    /// с явным смещением в местное время (`facets::apply_zone`), — но это
+    /// место лежит на дне разбора, куда параметром её пришлось бы тянуть
+    /// через три десятка сигнатур. Модель же есть у КАЖДОЙ из них: она
+    /// первый аргумент почти всюду. Отсюда и решение: фабрика запоминает
+    /// зону при построении и толкует лексические формы в ней.
+    ///
+    /// Расхождение с «зоной текущего прогона» возможно только если хост
+    /// передаст фабрику из одной `State` в другую — на платформе такого
+    /// понятия нет, и замерить его не у чего.
+    pub(crate) zone: std::rc::Rc<dyn bsl_rt::TimeZone>,
+}
+
+/// Зона в отладочную печать не идёт: у неё нет содержательного
+/// представления, а `{:?}` модели читают в диагностике типов.
+impl std::fmt::Debug for XdtoModel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("XdtoModel")
+            .field("types", &self.types)
+            .field("properties", &self.properties)
+            .finish_non_exhaustive()
+    }
 }
 
 impl XdtoModel {
+    /// Зона, в которой эта фабрика толкует лексические формы дат.
+    pub(crate) fn zone(&self) -> &dyn bsl_rt::TimeZone {
+        self.zone.as_ref()
+    }
+
     pub(crate) fn type_at(&self, i: usize) -> RtResult<&XdtoTypeData> {
         self.types.get(i).ok_or_else(|| broken("тип"))
     }
