@@ -2,7 +2,7 @@
 
 use std::io::Write;
 
-use bsl_rt::{Clock, HostEnv, RandomSource, TimeZone};
+use bsl_rt::{Clock, FileSystem, HostEnv, RandomSource, TimeZone};
 
 use crate::Value;
 use crate::engine::{Engine, Module};
@@ -79,6 +79,19 @@ impl StateBuilder {
     #[must_use]
     pub fn zone(mut self, zone: impl TimeZone + 'static) -> Self {
         self.host.env = self.host.env.with_zone(zone);
+        self
+    }
+
+    /// Файловая система сессии: `ЗначениеВФайл`, `ЗначениеИзФайла` и
+    /// `Новый ДвоичныеДанные(путь)` читают и пишут через неё.
+    ///
+    /// Пока это ПЕРВАЯ волна возможности — файл целиком. Компонентные
+    /// объекты (`ТекстовыйДокумент`, `ЧтениеJSON`, `ЧтениеZIP`, …) ходят
+    /// в `std::fs` напрямую и заданную здесь систему не видят; список
+    /// оставшихся мест — в обзоре `bsl_rt::FileSystem`.
+    #[must_use]
+    pub fn files(mut self, files: impl FileSystem + 'static) -> Self {
+        self.host.env = self.host.env.with_files(files);
         self
     }
 

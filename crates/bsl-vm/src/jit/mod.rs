@@ -416,7 +416,11 @@ fn compile_instr(instr: &Instr) -> Option<Compiled> {
                 bsl_rt::BuiltinFn::Message
                 | bsl_rt::BuiltinFn::CurrentDate
                 | bsl_rt::BuiltinFn::CurrentUniversalDateInMilliseconds
-                | bsl_rt::BuiltinFn::CommandLineArguments,
+                | bsl_rt::BuiltinFn::CommandLineArguments
+                // Файловая система — тоже возможность ПРОГОНА, и до
+                // сокращённого контекста шимов она не доезжает.
+                | bsl_rt::BuiltinFn::ValueToFile
+                | bsl_rt::BuiltinFn::ValueFromFile,
             ..
         } => None,
         Instr::CallBuiltin { .. } => s(shim_call_builtin, [0, 0, 0]),

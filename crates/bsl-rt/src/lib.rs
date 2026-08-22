@@ -44,7 +44,8 @@ pub const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub use builtin::{
     BUILTIN_FN_NAMES, BUILTIN_METHOD_NAMES, BuiltinFn, BuiltinMethod, call_builtin_env,
-    call_builtin_fn, call_builtin_fn_ctx, call_builtin_method, call_builtin_method_ctx,
+    call_builtin_files, call_builtin_fn, call_builtin_fn_ctx, call_builtin_method,
+    call_builtin_method_ctx,
 };
 pub use component::{
     Arity, CallContext, ComponentCall, ConstructorCode, ConstructorDescriptor, FunctionCode,
@@ -61,8 +62,8 @@ pub use date::{
 use date::{DateBoundary, DatePart};
 pub use enums::{EnumKind, EnumValue, lookup_enum, lookup_member};
 pub use env::{
-    Clock, FixedTimeZone, HostEnv, MAX_OFFSET_SECONDS, MIN_TRANSITION_GAP_SECONDS, RandomSource,
-    SystemClock, SystemRandom, TimeZone,
+    Clock, FileSystem, FixedTimeZone, HostEnv, MAX_OFFSET_SECONDS, MIN_TRANSITION_GAP_SECONDS,
+    RandomSource, SystemClock, SystemFileSystem, SystemRandom, TimeZone,
 };
 pub use fold::folded_eq;
 pub use interner::{NameId, NameInterner};
@@ -1601,9 +1602,11 @@ impl BslValue {
     /// если файла нет, он недоступен или это каталог (пробы
     /// `BIN.NEW.MISSING`, `BIN.NEW.DIR` — платформа в обоих случаях
     /// бросает исключение).
-    pub fn new_binary_data(path: &BslValue) -> RtResult<Self> {
+    pub fn new_binary_data(path: &BslValue, files: &dyn crate::FileSystem) -> RtResult<Self> {
         let path = path.as_str("Новый ДвоичныеДанные")?.to_string();
-        let bytes = std::fs::read(&path).map_err(|e| RtError::IoError(format!("{path}: {e}")))?;
+        let bytes = files
+            .read(&path)
+            .map_err(|e| RtError::IoError(format!("{path}: {e}")))?;
         Ok(BslValue::binary_data_of(bytes))
     }
 

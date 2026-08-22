@@ -2110,7 +2110,8 @@ fn step_cold(
         }
         Instr::NewBinaryData { dst, path } => {
             let path = reg_load(stack, frames[frame_idx].reg_index(path))?;
-            let data = BslValue::new_binary_data(&path)?;
+            let files = host.env()?.files();
+            let data = BslValue::new_binary_data(&path, files.as_ref())?;
             let d = frames[frame_idx].reg_index(dst);
             reg_store(stack, d, data)?;
             frames[frame_idx].pc += 1;
@@ -3200,6 +3201,12 @@ fn call_builtin_with_format(
         BuiltinFn::CurrentDate
         | BuiltinFn::CurrentUniversalDateInMilliseconds
         | BuiltinFn::CommandLineArguments => bsl_rt::call_builtin_env(builtin, host.env()?),
+        // `ЗначениеВФайл`/`ЗначениеИзФайла` читают и пишут файл целиком, а
+        // файловая система принадлежит прогону — как часы и зона.
+        BuiltinFn::ValueToFile | BuiltinFn::ValueFromFile => {
+            let files = host.env()?.files();
+            bsl_rt::call_builtin_files(builtin, args, runtime_shapes, files.as_ref())
+        }
         other => bsl_rt::call_builtin_fn_ctx(other, args, runtime_shapes),
     }
 }

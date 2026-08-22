@@ -422,3 +422,106 @@ mod zone {
         }
     }
 }
+
+/// Файловая система — четвёртая возможность прогона, и пока она накрывает
+/// только операции «файл целиком»: `ЗначениеВФайл`, `ЗначениеИзФайла` и
+/// `Новый ДвоичныеДанные(путь)`. Компонентные объекты ходят в `std::fs`
+/// напрямую — вторая и третья волны, см. обзор `bsl_rt::FileSystem`.
+mod files {
+    use super::*;
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+    use std::rc::Rc;
+
+    /// Файловая система в памяти — та самая тестовая реализация, ради
+    /// которой возможность и заводилась: до неё проверить чтение и запись
+    /// можно было только через настоящий диск и временный каталог.
+    #[derive(Default, Clone)]
+    struct MemoryFiles(Rc<RefCell<HashMap<String, Vec<u8>>>>);
+
+    impl open_bsl::FileSystem for MemoryFiles {
+        fn read(&self, path: &str) -> std::io::Result<Vec<u8>> {
+            self.0.borrow().get(path).cloned().ok_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::NotFound, format!("нет файла {path}"))
+            })
+        }
+
+        fn write(&self, path: &str, data: &[u8]) -> std::io::Result<()> {
+            self.0.borrow_mut().insert(path.to_string(), data.to_vec());
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn two_states_write_into_their_own_file_systems() {
+        let engine = Engine::builder().build().unwrap();
+        let first = MemoryFiles::default();
+        let second = MemoryFiles::default();
+        let mut a = engine.state_builder().files(first.clone()).build();
+        let mut b = engine.state_builder().files(second.clone()).build();
+
+        a.exec("ЗначениеВФайл(\"общий.txt\", \"из первой\");")
+            .unwrap();
+        b.exec("ЗначениеВФайл(\"общий.txt\", \"из второй\");")
+            .unwrap();
+
+        // Одно и то же имя, две сессии — и ни одна не видит чужой файл.
+        assert_eq!(
+            text(&a.exec("Возврат ЗначениеИзФайла(\"общий.txt\");").unwrap()),
+            "из первой"
+        );
+        assert_eq!(
+            text(&b.exec("Возврат ЗначениеИзФайла(\"общий.txt\");").unwrap()),
+            "из второй"
+        );
+        // И на настоящем диске не осталось ничего.
+        assert!(!std::path::Path::new("общий.txt").exists());
+    }
+
+    /// `Новый ДвоичныеДанные(путь)` — отдельный опкод VM, а не встроенная
+    /// функция, поэтому проверяется своим прогоном.
+    #[test]
+    fn binary_data_reads_through_the_sessions_file_system() {
+        let engine = Engine::builder().build().unwrap();
+        let disk = MemoryFiles::default();
+        disk.0
+            .borrow_mut()
+            .insert("данные.bin".to_string(), vec![1, 2, 3, 250]);
+        let mut state = engine.state_builder().files(disk).build();
+
+        assert_eq!(
+            text(
+                &state
+                    .exec(
+                        "д = Новый ДвоичныеДанные(\"данные.bin\");\n\
+                         Возврат Формат(д.Размер(), \"ЧГ=0\");"
+                    )
+                    .unwrap()
+            ),
+            "4"
+        );
+    }
+
+    /// Отсутствующий файл — ловимое `Попыткой` исключение, а не паника:
+    /// ошибка реализации переводится в `RtError`, как и раньше у `std::fs`.
+    #[test]
+    fn a_missing_file_is_a_catchable_error() {
+        let engine = Engine::builder().build().unwrap();
+        let mut state = engine.state_builder().files(MemoryFiles::default()).build();
+        assert_eq!(
+            text(
+                &state
+                    .exec(
+                        "Попытка\n\
+                         з = ЗначениеИзФайла(\"нет-такого\");\n\
+                         Исключение\n\
+                         Возврат \"поймано\";\n\
+                         КонецПопытки;\n\
+                         Возврат \"не поймано\";"
+                    )
+                    .unwrap()
+            ),
+            "поймано"
+        );
+    }
+}

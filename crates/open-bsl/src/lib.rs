@@ -10,7 +10,7 @@ mod state;
 
 pub use bsl_rt::BslValue as Value;
 pub use bsl_rt::{
-    Arity, CallContext, Clock, ComponentError, ConstructorCode, ConstructorDescriptor,
+    Arity, CallContext, Clock, ComponentError, ConstructorCode, ConstructorDescriptor, FileSystem,
     FixedTimeZone, FunctionCode, FunctionDescriptor, FunctionKind, HostEnv, LibraryDependency,
     LibraryDescriptor, MethodCall, MethodCode, MethodDescriptor, ObjectProtocol, PropertyCode,
     PropertyDescriptor, PropertyGet, PropertySet, RandomSource, RtError, RtResult, SystemClock,

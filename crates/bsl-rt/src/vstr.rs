@@ -648,25 +648,34 @@ fn table_to_writer(
 /// # Errors
 ///
 /// Ошибки сериализации значения и файлового ввода-вывода.
-pub fn value_to_file(path: &str, v: &BslValue, rt: &RuntimeShapes) -> RtResult<()> {
-    use std::io::Write;
-
+pub fn value_to_file(
+    path: &str,
+    v: &BslValue,
+    rt: &RuntimeShapes,
+    files: &dyn crate::FileSystem,
+) -> RtResult<()> {
     let text = value_to_string_internal(v, rt)?;
-    let io_err = |e: std::io::Error| RtError::IoError(format!("ЗначениеВФайл: {e}"));
-    let mut out = std::io::BufWriter::new(std::fs::File::create(path).map_err(io_err)?);
-    out.write_all("\u{feff}".as_bytes()).map_err(io_err)?;
+    // Файл собирается ЦЕЛИКОМ, а не течёт через `BufWriter`: текст всё
+    // равно уже материализован целиком строкой выше, так что потоковая
+    // запись экономила бы не память, а только одну копию — зато требовала
+    // бы от файловой системы прогона дескрипторов, то есть третьей волны
+    // возможностей (см. `crate::FileSystem`).
+    let mut out = Vec::with_capacity(text.len() + 3);
+    out.extend_from_slice("\u{feff}".as_bytes());
     // Перевод LF в CRLF — кусками между переводами строк, без
     // посимвольного декодирования: байт `\n` не встречается внутри
     // многобайтовых последовательностей UTF-8.
     let mut first = true;
     for chunk in text.split('\n') {
         if !first {
-            out.write_all(b"\r\n").map_err(io_err)?;
+            out.extend_from_slice(b"\r\n");
         }
         first = false;
-        out.write_all(chunk.as_bytes()).map_err(io_err)?;
+        out.extend_from_slice(chunk.as_bytes());
     }
-    out.flush().map_err(io_err)
+    files
+        .write(path, &out)
+        .map_err(|e| RtError::IoError(format!("ЗначениеВФайл: {e}")))
 }
 
 /// `ЗначениеИзФайла(ИмяФайла)`.
@@ -683,11 +692,17 @@ pub fn value_to_file(path: &str, v: &BslValue, rt: &RuntimeShapes) -> RtResult<(
 /// # Errors
 ///
 /// Ошибки файлового ввода-вывода и разбора внутреннего формата.
-pub fn value_from_file(path: &str, rt: &mut RuntimeShapes) -> RtResult<BslValue> {
+pub fn value_from_file(
+    path: &str,
+    rt: &mut RuntimeShapes,
+    files: &dyn crate::FileSystem,
+) -> RtResult<BslValue> {
     // Байты, а не `read_to_string`: валидация UTF-8 идёт лениво, по
     // материализуемым лексемам, — не-UTF-8 в данных даёт ошибку разбора,
     // а не чтения файла.
-    let raw = std::fs::read(path).map_err(|e| RtError::IoError(format!("ЗначениеИзФайла: {e}")))?;
+    let raw = files
+        .read(path)
+        .map_err(|e| RtError::IoError(format!("ЗначениеИзФайла: {e}")))?;
     let text = raw.strip_prefix("\u{feff}".as_bytes()).unwrap_or(&raw);
     parse_and_convert(text, true, rt)
 }
@@ -2538,20 +2553,21 @@ mod tests {
 
         let mut context = rt();
         let value = s("а\"б\nв");
-        value_to_file(path_str, &value, &context).unwrap();
+        let files = crate::SystemFileSystem;
+        value_to_file(path_str, &value, &context, &files).unwrap();
         let bytes = std::fs::read(&path).unwrap();
         assert_eq!(&bytes[..3], [0xEF, 0xBB, 0xBF], "BOM обязателен");
         let body = String::from_utf8(bytes[3..].to_vec()).unwrap();
         assert_eq!(body, "{\"S\",\"а\"\"б\r\nв\"}", "перевод строки — CRLF");
 
         // Чтение нормализует пары обратно: значение равно исходному.
-        let back = value_from_file(path_str, &mut context).unwrap();
+        let back = value_from_file(path_str, &mut context, &files).unwrap();
         assert!(back.eq_value(&value), "строка обязана вернуться без \\r");
 
         // Файл без BOM и с сырыми LF (как выгрузки внешних инструментов)
         // читается так же.
         std::fs::write(&path, "{\"N\",42}\n").unwrap();
-        let n = value_from_file(path_str, &mut context).unwrap();
+        let n = value_from_file(path_str, &mut context, &files).unwrap();
         assert_eq!(n, num("42"));
         let _ = std::fs::remove_dir_all(&dir);
     }

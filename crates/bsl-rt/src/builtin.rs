@@ -1514,26 +1514,56 @@ pub fn call_builtin_fn_ctx(
         };
         return crate::vstr::value_from_string_internal(&text.to_string(), rt);
     }
-    if f == BuiltinFn::ValueToFile {
-        let BslValue::Str(path) = &args[0] else {
-            return Err(RtError::TypeError {
-                expected: "Строка",
-                op: "ЗначениеВФайл(ИмяФайла)",
-            });
-        };
-        crate::vstr::value_to_file(&path.to_string(), &args[1], rt)?;
-        return Ok(BslValue::Undefined);
-    }
-    if f == BuiltinFn::ValueFromFile {
-        let BslValue::Str(path) = &args[0] else {
-            return Err(RtError::TypeError {
-                expected: "Строка",
-                op: "ЗначениеИзФайла(ИмяФайла)",
-            });
-        };
-        return crate::vstr::value_from_file(&path.to_string(), rt);
+    if matches!(f, BuiltinFn::ValueToFile | BuiltinFn::ValueFromFile) {
+        return Err(RtError::InvalidBytecode(
+            "файловая функция вызвана без файловой системы прогона",
+        ));
     }
     call_builtin_fn(f, args)
+}
+
+/// `ЗначениеВФайл`/`ЗначениеИзФайла` — единственные встроенные функции,
+/// которым нужна ФАЙЛОВАЯ СИСТЕМА прогона.
+///
+/// Отдельный вход, а не лишний параметр у [`call_builtin_fn_ctx`], по той
+/// же причине, что и у [`call_builtin_env`]: остальные встроенные функции
+/// об окружении ничего не знают, и требовать его со всех значило бы
+/// уронить `Sqrt` там, где окружения нет, — например на нативном пути.
+///
+/// # Errors
+///
+/// Ошибку типа на нестроковом имени файла, ошибку ввода-вывода и ошибку
+/// разбора внутреннего формата.
+pub fn call_builtin_files(
+    f: BuiltinFn,
+    args: &[BslValue],
+    rt: &mut RuntimeShapes,
+    files: &dyn crate::FileSystem,
+) -> RtResult<BslValue> {
+    match f {
+        BuiltinFn::ValueToFile => {
+            let BslValue::Str(path) = &args[0] else {
+                return Err(RtError::TypeError {
+                    expected: "Строка",
+                    op: "ЗначениеВФайл(ИмяФайла)",
+                });
+            };
+            crate::vstr::value_to_file(&path.to_string(), &args[1], rt, files)?;
+            Ok(BslValue::Undefined)
+        }
+        BuiltinFn::ValueFromFile => {
+            let BslValue::Str(path) = &args[0] else {
+                return Err(RtError::TypeError {
+                    expected: "Строка",
+                    op: "ЗначениеИзФайла(ИмяФайла)",
+                });
+            };
+            crate::vstr::value_from_file(&path.to_string(), rt, files)
+        }
+        _ => Err(RtError::InvalidBytecode(
+            "call_builtin_files вызвана не на файловой функции",
+        )),
+    }
 }
 
 /// Необязательный аргумент метода: отсутствующий читается как

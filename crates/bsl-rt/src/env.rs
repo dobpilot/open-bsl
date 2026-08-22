@@ -216,6 +216,51 @@ impl TimeZone for FixedTimeZone {
     }
 }
 
+/// Файловая система прогона: чтение и запись файла ЦЕЛИКОМ.
+///
+/// Ровно две операции, и это не заготовка под виртуальную ОС, а перепись
+/// того, что рантайм уже делает. Инвентаризация боевых вызовов `std::fs`
+/// по всем крейтам дала двадцать восемь мест, и они делятся на три
+/// волны: файл целиком (`read`/`write`/`read_to_string` — пятнадцать
+/// мест), метаданные и каталоги (`metadata`/`create_dir_all`/`read_dir` —
+/// семь, все в `bsl-zip`) и потоковые дескрипторы (`File::open`,
+/// `File::create`, `OpenOptions` — четыре, в `bsl-rt` и `bsl-stream`).
+/// Здесь первая волна; остальные добавят методы сюда же, когда до них
+/// дойдёт очередь.
+///
+/// `&self`, как у [`TimeZone`], а не `&mut self`: реализация вправе быть
+/// разделяемой, и контекст компонента забирает её ссылкой, не трогая
+/// `HostEnv` целиком.
+///
+/// Ошибки возвращаются как [`std::io::Error`], а не как [`crate::RtError`]:
+/// у каждого вызывающего свой текст с именем операции («Новый
+/// ДвоичныеДанные», «ЗначениеИзФайла»), и переводить ошибку дважды
+/// незачем.
+pub trait FileSystem {
+    /// # Errors
+    ///
+    /// Ошибку чтения — файла нет, нет прав, это каталог.
+    fn read(&self, path: &str) -> std::io::Result<Vec<u8>>;
+
+    /// # Errors
+    ///
+    /// Ошибку записи — нет каталога, нет прав, диск полон.
+    fn write(&self, path: &str, data: &[u8]) -> std::io::Result<()>;
+}
+
+/// Файловая система процесса — обычный `std::fs`.
+pub struct SystemFileSystem;
+
+impl FileSystem for SystemFileSystem {
+    fn read(&self, path: &str) -> std::io::Result<Vec<u8>> {
+        std::fs::read(path)
+    }
+
+    fn write(&self, path: &str, data: &[u8]) -> std::io::Result<()> {
+        std::fs::write(path, data)
+    }
+}
+
 /// Часы процесса.
 pub struct SystemClock;
 
@@ -287,6 +332,7 @@ pub struct HostEnv {
     clock: Box<dyn Clock>,
     random: Box<dyn RandomSource>,
     zone: std::rc::Rc<dyn TimeZone>,
+    files: std::rc::Rc<dyn FileSystem>,
 }
 
 impl HostEnv {
@@ -299,6 +345,7 @@ impl HostEnv {
             clock: Box::new(SystemClock),
             random: Box::new(SystemRandom::default()),
             zone: std::rc::Rc::new(crate::tz::SystemTimeZone::new()),
+            files: std::rc::Rc::new(SystemFileSystem),
         }
     }
 
@@ -332,6 +379,19 @@ impl HostEnv {
     #[must_use]
     pub fn zone(&self) -> std::rc::Rc<dyn TimeZone> {
         std::rc::Rc::clone(&self.zone)
+    }
+
+    #[must_use]
+    pub fn with_files(mut self, files: impl FileSystem + 'static) -> Self {
+        self.files = std::rc::Rc::new(files);
+        self
+    }
+
+    /// Файловая система прогона отдельной ссылкой — как и зона, она
+    /// нужна коду, которому `HostEnv` целиком не дать.
+    #[must_use]
+    pub fn files(&self) -> std::rc::Rc<dyn FileSystem> {
+        std::rc::Rc::clone(&self.files)
     }
 
     #[must_use]
