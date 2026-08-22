@@ -67,6 +67,7 @@ const TYPES: &[&TypeDescriptor] = &[
 pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor {
         package: PACKAGE_NAME,
+        object_jit: bsl_rt::ObjectJitPolicy::NativeContextCompatible,
         version: PACKAGE_VERSION,
         // Ядро в зависимостях не объявляется: реестр включает его в
         // требования любой программы (`RuntimeRegistry::requirements_for`).

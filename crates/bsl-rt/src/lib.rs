@@ -49,8 +49,8 @@ pub use builtin::{
 pub use component::{
     Arity, CallContext, ComponentCall, ConstructorCode, ConstructorDescriptor, FunctionCode,
     FunctionDescriptor, FunctionKind, LibraryDependency, LibraryDescriptor, LibraryKey,
-    LibraryRequirement, MethodCall, MethodCode, MethodDescriptor, PropertyCode, PropertyDescriptor,
-    PropertyGet, PropertySet, RegistryError, RuntimeBuilder, RuntimeRegistry,
+    LibraryRequirement, MethodCall, MethodCode, MethodDescriptor, ObjectJitPolicy, PropertyCode,
+    PropertyDescriptor, PropertyGet, PropertySet, RegistryError, RuntimeBuilder, RuntimeRegistry,
     call_method_from_table, core_library, get_property_from_table, set_property_from_table,
 };
 pub use date::{
@@ -60,7 +60,10 @@ pub use date::{
 };
 use date::{DateBoundary, DatePart};
 pub use enums::{EnumKind, EnumValue, lookup_enum, lookup_member};
-pub use env::{Clock, FixedTimeZone, HostEnv, RandomSource, SystemClock, SystemRandom, TimeZone};
+pub use env::{
+    Clock, FixedTimeZone, HostEnv, MAX_OFFSET_SECONDS, RandomSource, SystemClock, SystemRandom,
+    TimeZone,
+};
 pub use fold::folded_eq;
 pub use interner::{NameId, NameInterner};
 pub use locale::{Locale, NBSP};

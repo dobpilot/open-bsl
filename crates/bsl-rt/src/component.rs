@@ -485,6 +485,16 @@ pub struct LibraryDependency {
 #[derive(Debug, Clone, Copy)]
 pub struct LibraryDescriptor {
     pub package: &'static str,
+    /// Годятся ли объекты этой библиотеки НАТИВНОМУ пути исполнения.
+    ///
+    /// JIT обслуживает обращения к объектам сокращённым [`CallContext`]:
+    /// потоки вывода в нём — стоки, зоны прогона нет. Официальным
+    /// компонентам этого хватает — их методы и свойства ни в вывод, ни в
+    /// зону не ходят, — но реестр открыт, и у стороннего типа обработчик
+    /// вправе делать и то и другое. Библиотека объявляет это сама, а
+    /// связывание переводит объявление в список типов, обращения к
+    /// которым нативный путь возвращает интерпретатору.
+    pub object_jit: ObjectJitPolicy,
     pub version: &'static str,
     pub dependencies: &'static [LibraryDependency],
     pub functions: &'static [FunctionDescriptor],
@@ -496,6 +506,24 @@ pub struct LibraryDescriptor {
     pub types: &'static [&'static crate::TypeDescriptor],
 }
 
+/// Обещание библиотеки о том, что её объекты выдержат нативный контекст.
+///
+/// Умолчания у этого признака нет намеренно: поле обязательное, и автор
+/// компонента отвечает на вопрос осознанно. Ошибиться в безопасную
+/// сторону всегда можно — [`ObjectJitPolicy::InterpreterOnly`] стоит
+/// скорости, но не корректности.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ObjectJitPolicy {
+    /// Обращения к объектам этой библиотеки нативный путь исполнять не
+    /// берётся и возвращает интерпретатору. Единственный выбор для
+    /// компонента, чьи методы или свойства читают зону прогона либо
+    /// пишут в потоки вывода.
+    InterpreterOnly,
+    /// Обработчики обходятся сокращённым контекстом: ни вывода, ни зоны
+    /// они не трогают.
+    NativeContextCompatible,
+}
+
 /// Дескриптор базового компонента. На переходном этапе встроенные функции
 /// и конструкторы ещё обслуживаются старыми таблицами, поэтому каталоги
 /// пусты; по мере миграции они будут перенесены сюда без изменения API
@@ -503,6 +531,7 @@ pub struct LibraryDescriptor {
 pub const fn core_library() -> LibraryDescriptor {
     LibraryDescriptor {
         package: crate::PACKAGE_NAME,
+        object_jit: ObjectJitPolicy::NativeContextCompatible,
         version: crate::PACKAGE_VERSION,
         dependencies: &[],
         functions: &[],
@@ -745,6 +774,16 @@ pub struct RuntimeRegistry {
 }
 
 impl RuntimeRegistry {
+    /// Есть ли библиотека, объявившая
+    /// [`ObjectJitPolicy::InterpreterOnly`]: её обработчикам нужен полный
+    /// контекст исполнения, которого нативный путь не даёт.
+    #[must_use]
+    pub fn has_interpreter_only_objects(&self) -> bool {
+        self.libraries
+            .iter()
+            .any(|library| library.object_jit == ObjectJitPolicy::InterpreterOnly)
+    }
+
     pub fn libraries(&self) -> &[LibraryDescriptor] {
         &self.libraries
     }
@@ -858,6 +897,7 @@ mod tests {
     fn core() -> LibraryDescriptor {
         LibraryDescriptor {
             package: crate::PACKAGE_NAME,
+            object_jit: ObjectJitPolicy::NativeContextCompatible,
             version: crate::PACKAGE_VERSION,
             dependencies: &[],
             functions: CORE_FUNCTIONS,
@@ -869,6 +909,7 @@ mod tests {
     fn json() -> LibraryDescriptor {
         LibraryDescriptor {
             package: "bsl-json",
+            object_jit: ObjectJitPolicy::NativeContextCompatible,
             version: "0.1.0",
             dependencies: &[LibraryDependency {
                 package: crate::PACKAGE_NAME,
@@ -910,6 +951,7 @@ mod tests {
         let mut builder = RuntimeBuilder::new();
         builder.register(core()).register(LibraryDescriptor {
             package: "other",
+            object_jit: ObjectJitPolicy::NativeContextCompatible,
             version: "1.0.0",
             dependencies: &[],
             functions: DUPLICATE,

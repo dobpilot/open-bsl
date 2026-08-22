@@ -724,6 +724,7 @@ mod tests {
             n_params: 0,
             param_by_val: Vec::new(),
             is_procedure: false,
+            touches_objects: false,
             n_locals: 8,
             n_regs: 16,
             prop_cache,

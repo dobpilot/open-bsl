@@ -2040,6 +2040,7 @@ mod tests {
         }];
         const LIBRARY: bsl_rt::LibraryDescriptor = bsl_rt::LibraryDescriptor {
             package: "test-lib",
+            object_jit: bsl_rt::ObjectJitPolicy::NativeContextCompatible,
             version: "0.0.0",
             dependencies: &[],
             functions: FUNCTIONS,

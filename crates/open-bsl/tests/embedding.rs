@@ -46,6 +46,7 @@ const HOST_FUNCTIONS: &[FunctionDescriptor] = &[FunctionDescriptor {
 fn host_library() -> LibraryDescriptor {
     LibraryDescriptor {
         package: "example-host",
+        object_jit: bsl_rt::ObjectJitPolicy::NativeContextCompatible,
         version: "1.0.0",
         dependencies: &[LibraryDependency {
             package: bsl_rt::PACKAGE_NAME,
@@ -555,6 +556,7 @@ const FAILING_FUNCTIONS: &[FunctionDescriptor] = &[FunctionDescriptor {
 fn failing_library() -> LibraryDescriptor {
     LibraryDescriptor {
         package: "example-host",
+        object_jit: bsl_rt::ObjectJitPolicy::NativeContextCompatible,
         version: "1.0.0",
         dependencies: &[LibraryDependency {
             package: bsl_rt::PACKAGE_NAME,
@@ -663,11 +665,30 @@ mod host_zone {
         )))
     }
 
-    const WATCH_METHODS: &[MethodDescriptor] = &[MethodDescriptor {
-        code: MethodCode::new(1),
-        names: &["Смещение", "Offset"],
-        call: watch_offset,
-    }];
+    /// Метод, ПИШУЩИЙ в поток вывода прогона: у нативного пути он сток,
+    /// и без отказа JIT-а эта строка исчезла бы без следа.
+    fn watch_report(
+        _receiver: &dyn ObjectProtocol,
+        _arguments: &[Value],
+        context: &mut CallContext<'_>,
+    ) -> RtResult<Value> {
+        let offset = context.zone()?.offset_seconds(0);
+        writeln!(context.stdout(), "часы: {offset}").expect("сток не отказывает");
+        Ok(Value::Undefined)
+    }
+
+    const WATCH_METHODS: &[MethodDescriptor] = &[
+        MethodDescriptor {
+            code: MethodCode::new(1),
+            names: &["Смещение", "Offset"],
+            call: watch_offset,
+        },
+        MethodDescriptor {
+            code: MethodCode::new(2),
+            names: &["Отметить", "Report"],
+            call: watch_report,
+        },
+    ];
 
     fn watch_offset_property(
         _receiver: &dyn ObjectProtocol,
@@ -734,6 +755,9 @@ mod host_zone {
     fn watch_library() -> LibraryDescriptor {
         LibraryDescriptor {
             package: "example-host",
+            // Обработчики читают зону прогона и пишут в поток вывода —
+            // сокращённый контекст нативного пути им не подходит.
+            object_jit: bsl_rt::ObjectJitPolicy::InterpreterOnly,
             version: "1.0.0",
             dependencies: &[LibraryDependency {
                 package: bsl_rt::PACKAGE_NAME,
@@ -795,7 +819,9 @@ mod host_zone {
         }
     }
 
-    /// А ПОД JIT — не доходит, и это ИЗВЕСТНОЕ ограничение, а не оплошность.
+    /// И ПОД JIT — тоже, потому что обращения к типу, чья библиотека
+    /// объявила `InterpreterOnly`, нативный путь возвращает
+    /// интерпретатору вместе с их `pc`.
     ///
     /// Нативный путь строит контекст-сток, и зоны в нём нет: `zone()`
     /// отвечает ошибкой (см. поле `zone` у `CallContext`). Для официальных
@@ -818,31 +844,57 @@ mod host_zone {
     /// замером.
     ///
     /// Тест закрепляет ограничение НАРОЧНО: ошибка честнее чужого времени,
-    /// а когда обход найдётся, тест упадёт и напомнит о себе.
+    /// Второе, чего сокращённый контекст не давал, — ПОТОКИ ВЫВОДА: у
+    /// шимов они стоки, и запись стороннего метода прежде исчезала бы
+    /// молча. Отказ нативного пути чинит и это, поэтому проверка отдельная:
+    /// зона отвечает ошибкой, а вывод терялся бы без единого признака.
     #[test]
-    fn under_the_jit_a_host_reader_of_the_zone_gets_an_error() {
+    fn a_host_method_writing_to_stdout_is_not_swallowed_by_the_jit() {
         let engine = Engine::builder()
             .register_library(watch_library())
             .build()
             .unwrap();
-        let mut state = engine
-            .state_builder()
-            .jit(true)
-            .zone(FixedTimeZone::new(3 * 3600).expect("допустимое смещение"))
-            .build();
-        for (what, body) in PATHS {
-            let Err(error) = state.exec(&script(body)) else {
-                panic!(
-                    "{what}: под JIT зона у стороннего компонента внезапно \
-                     доступна — ограничение снято, обнови комментарий и \
-                     второй тест"
-                );
-            };
-            let text = error.to_string();
+        for jit in [false, true] {
+            let out = SharedWriter::default();
+            let mut state = engine
+                .state_builder()
+                .jit(jit)
+                .stdout(out.clone())
+                .zone(FixedTimeZone::UTC)
+                .build();
+            state
+                .exec(&script("ч.Отметить();"))
+                .unwrap_or_else(|e| panic!("jit={jit}: {e}"));
+            assert_eq!(out.text().lines().count(), 40, "jit={jit}");
             assert!(
-                text.contains("часовой пояс запрошен там, где окружения прогона нет"),
-                "{what}: ожидалась ошибка об отсутствии зоны, получено: {text}"
+                out.text().starts_with("часы: 0"),
+                "jit={jit}: {}",
+                out.text()
             );
+        }
+    }
+
+    #[test]
+    fn the_zone_reaches_a_host_reader_under_the_jit_too() {
+        let engine = Engine::builder()
+            .register_library(watch_library())
+            .build()
+            .unwrap();
+        for (what, body) in PATHS {
+            let mut state = engine
+                .state_builder()
+                .jit(true)
+                .zone(FixedTimeZone::new(3 * 3600).expect("допустимое смещение"))
+                .build();
+            let value = state
+                .exec(&script(body))
+                .unwrap_or_else(|e| panic!("{what} под JIT: {e}"));
+            let expected = if *what == "запись свойства" {
+                0
+            } else {
+                40 * 3 * 3600
+            };
+            assert_eq!(value.to_string(), expected.to_string(), "{what} под JIT");
         }
     }
 }

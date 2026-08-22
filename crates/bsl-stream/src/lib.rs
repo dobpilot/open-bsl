@@ -112,6 +112,7 @@ const TYPES: &[&TypeDescriptor] = &[
 pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor {
         package: PACKAGE_NAME,
+        object_jit: bsl_rt::ObjectJitPolicy::NativeContextCompatible,
         version: PACKAGE_VERSION,
         dependencies: &[LibraryDependency {
             package: bsl_binbuf::PACKAGE_NAME,

@@ -435,6 +435,103 @@ mod tests {
         assert_eq!(s, "2014-05-10T13:14:15");
     }
 
+    /// Смещение, НЕ КРАТНОЕ минуте, и обе записи одного момента.
+    ///
+    /// Зона синтетическая, а не машинная: правило должно проверяться на
+    /// любой машине, а `measure-zone.platform.txt` снят в Europe/Moscow.
+    /// Значения — оттуда: `1800-01-01T12:00:00+02:30` и
+    /// `1800-01-01T09:29:43Z` для местного солнечного времени Москвы
+    /// `+02:30:17`. Платформа печатает смещение с точностью до минуты, а
+    /// вычитает все 9017 секунд, и две записи расходятся на 17 секунд —
+    /// повторяем это, а не «чиним».
+    #[test]
+    fn a_sub_minute_offset_prints_truncated_and_subtracts_in_full() {
+        struct SolarMoscow;
+
+        impl bsl_rt::TimeZone for SolarMoscow {
+            fn offset_seconds(&self, _unix_seconds: i64) -> i32 {
+                2 * 3600 + 30 * 60 + 17
+            }
+        }
+
+        let d = civil(1800, 1, 1, 12, 0, 0);
+        assert_eq!(
+            format_json_date(
+                d,
+                JsonDateFormat::Iso,
+                JsonDateWritingVariant::LocalOffset,
+                &SolarMoscow
+            )
+            .expect("запись со смещением"),
+            "1800-01-01T12:00:00+02:30"
+        );
+        assert_eq!(
+            format_json_date(
+                d,
+                JsonDateFormat::Iso,
+                JsonDateWritingVariant::Universal,
+                &SolarMoscow
+            )
+            .expect("универсальная запись"),
+            "1800-01-01T09:29:43Z"
+        );
+    }
+
+    /// Переход зоны на уровне ЗАПИСИ JSON, а не только правила: те же
+    /// четыре точки, что сняты с платформы, но на синтетической зоне.
+    #[test]
+    fn a_transition_shifts_both_writing_variants() {
+        /// Осень 2010 в Москве: в `2010-10-30T23:00:00Z` зона уходит с
+        /// +04:00 на +03:00.
+        struct Autumn2010;
+
+        impl bsl_rt::TimeZone for Autumn2010 {
+            fn offset_seconds(&self, unix_seconds: i64) -> i32 {
+                // 2010-10-30T23:00:00Z в секундах Unix.
+                if unix_seconds < 1_288_479_600 {
+                    4 * 3600
+                } else {
+                    3 * 3600
+                }
+            }
+        }
+
+        let write = |d, variant| {
+            format_json_date(d, JsonDateFormat::Iso, variant, &Autumn2010).expect("запись")
+        };
+        // Час 01:00–01:59 прожит дважды; платформа берёт ПЕРВЫЙ проход,
+        // потому что второй приходится уже на 02:00 по новым часам.
+        assert_eq!(
+            write(
+                civil(2010, 10, 31, 1, 30, 0),
+                JsonDateWritingVariant::LocalOffset
+            ),
+            "2010-10-31T01:30:00+04:00"
+        );
+        assert_eq!(
+            write(
+                civil(2010, 10, 31, 1, 30, 0),
+                JsonDateWritingVariant::Universal
+            ),
+            "2010-10-30T21:30:00Z"
+        );
+        // А 02:30 — уже после перехода.
+        assert_eq!(
+            write(
+                civil(2010, 10, 31, 2, 30, 0),
+                JsonDateWritingVariant::LocalOffset
+            ),
+            "2010-10-31T02:30:00+03:00"
+        );
+        assert_eq!(
+            write(
+                civil(2010, 10, 31, 2, 30, 0),
+                JsonDateWritingVariant::Universal
+            ),
+            "2010-10-30T23:30:00Z"
+        );
+    }
+
     #[test]
     fn write_json_date_local_offset_variant_appends_the_machine_offset() {
         let d = civil(2014, 5, 10, 13, 14, 15);

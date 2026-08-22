@@ -193,13 +193,20 @@ fn conformance_fixtures_match_oracle_output() {
 /// Автоматический обход всех `measure-*.bsl` затянул бы сюда и те, что
 /// снимались при особых условиях, и падение говорило бы не о регрессии.
 ///
+/// Так `measure-zone.bsl` сюда НЕ входит, хотя эталон у него есть: его
+/// вывод целиком зависит от `/etc/localtime` машины, а снят он в
+/// Europe/Moscow. На машине с другой зоной верная реализация с этим
+/// эталоном не совпадёт. Само правило разрешения местного времени
+/// проверяется детерминированно — синтетическими зонами в
+/// `bsl_rt::env` и `bsl_json::dates`.
+///
 /// В общий конформансный обход эти файлы не попадают: там берутся только
 /// `fixtures/*.bsl`, у которых есть `.expected`, а у замеров эталон лежит
 /// рядом с ними и называется иначе.
 #[test]
 fn pure_measure_scripts_match_their_platform_output() {
     let _corpus = corpus_lock();
-    for name in ["measure-zone", "measure-lvalue", "measure-stmtcall"] {
+    for name in ["measure-lvalue", "measure-stmtcall"] {
         let script = measure_dir().join(format!("{name}.bsl"));
         let oracle_path = measure_dir().join(format!("{name}.platform.txt"));
         let oracle = std::fs::read_to_string(&oracle_path)

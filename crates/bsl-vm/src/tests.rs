@@ -216,6 +216,7 @@ fn test_component_registry() -> bsl_rt::RuntimeRegistry {
     builder
         .register(bsl_rt::LibraryDescriptor {
             package: bsl_rt::PACKAGE_NAME,
+            object_jit: bsl_rt::ObjectJitPolicy::NativeContextCompatible,
             version: bsl_rt::PACKAGE_VERSION,
             dependencies: &[],
             functions: &[],
@@ -224,6 +225,7 @@ fn test_component_registry() -> bsl_rt::RuntimeRegistry {
         })
         .register(bsl_rt::LibraryDescriptor {
             package: "bsl-test-host",
+            object_jit: bsl_rt::ObjectJitPolicy::NativeContextCompatible,
             version: "1.2.3",
             dependencies: &[bsl_rt::LibraryDependency {
                 package: bsl_rt::PACKAGE_NAME,
@@ -321,6 +323,7 @@ fn a_polymorphic_open_call_site_revalidates_its_method_cache() {
         .register(bsl_json::library())
         .register(bsl_rt::LibraryDescriptor {
             package: "bsl-test-host",
+            object_jit: bsl_rt::ObjectJitPolicy::NativeContextCompatible,
             version: "1.2.3",
             dependencies: &[bsl_rt::LibraryDependency {
                 package: bsl_rt::PACKAGE_NAME,
@@ -1328,6 +1331,7 @@ fn corrupt_program(instrs: Vec<Instr>) -> Program {
         chunks: vec![bsl_bytecode::Chunk {
             param_by_val: Vec::new(),
             is_procedure: false,
+            touches_objects: false,
             instrs,
             consts: Vec::new(),
             call_arg_modes: Vec::new(),

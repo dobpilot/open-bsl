@@ -1104,6 +1104,7 @@ fn parse_chunk(r: &mut Reader, expected_index: usize) -> Result<Chunk> {
     }
 
     Ok(Chunk {
+        touches_objects: instrs.iter().any(crate::compiler::instr_touches_objects),
         is_procedure,
         param_by_val,
         prop_cache: (0..instrs.len()).map(|_| RefCell::new(None)).collect(),
