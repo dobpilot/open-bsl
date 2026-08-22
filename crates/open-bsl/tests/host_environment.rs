@@ -502,26 +502,85 @@ mod files {
         );
     }
 
-    /// Отсутствующий файл — ловимое `Попыткой` исключение, а не паника:
-    /// ошибка реализации переводится в `RtError`, как и раньше у `std::fs`.
+    /// Ошибка файловой системы — ловимое `Попыткой` исключение, а не
+    /// паника, и в ОБЕ стороны: чтение отсутствующего файла и отказ
+    /// записи. Реализация возвращает `io::Error`, рантайм переводит его в
+    /// `RtError`, как и раньше у `std::fs`.
     #[test]
-    fn a_missing_file_is_a_catchable_error() {
+    fn a_file_system_failure_is_a_catchable_error_both_ways() {
+        /// Система, у которой нет ни одного файла и запись всегда
+        /// отказывает: у отказа записи своя ветка перевода ошибки.
+        struct Broken;
+
+        impl open_bsl::FileSystem for Broken {
+            fn read(&self, path: &str) -> std::io::Result<Vec<u8>> {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("нет файла {path}"),
+                ))
+            }
+
+            fn write(&self, _path: &str, _data: &[u8]) -> std::io::Result<()> {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "только чтение",
+                ))
+            }
+        }
+
         let engine = Engine::builder().build().unwrap();
-        let mut state = engine.state_builder().files(MemoryFiles::default()).build();
-        assert_eq!(
-            text(
-                &state
-                    .exec(
-                        "Попытка\n\
-                         з = ЗначениеИзФайла(\"нет-такого\");\n\
-                         Исключение\n\
-                         Возврат \"поймано\";\n\
-                         КонецПопытки;\n\
-                         Возврат \"не поймано\";"
-                    )
-                    .unwrap()
-            ),
-            "поймано"
-        );
+        let catch = |probe: &str| {
+            format!(
+                "Попытка\n\
+                 {probe}\n\
+                 Исключение\n\
+                 Возврат \"поймано\";\n\
+                 КонецПопытки;\n\
+                 Возврат \"не поймано\";"
+            )
+        };
+        for probe in [
+            "з = ЗначениеИзФайла(\"нет-такого\");",
+            "ЗначениеВФайл(\"куда-нибудь\", \"текст\");",
+            "д = Новый ДвоичныеДанные(\"нет-такого\");",
+        ] {
+            let mut state = engine.state_builder().files(Broken).build();
+            assert_eq!(
+                text(&state.exec(&catch(probe)).unwrap()),
+                "поймано",
+                "{probe}"
+            );
+        }
+    }
+
+    /// Заданная файловая система работает и ПОД JIT. Держится это тем,
+    /// что обе файловые функции и опкод `Новый ДвоичныеДанные` нативный
+    /// путь не компилирует — как и функции окружения; тест закрепляет
+    /// именно публичный контракт, а не устройство списка исключений.
+    #[test]
+    fn the_file_system_survives_a_jit_run() {
+        let engine = Engine::builder().build().unwrap();
+        let script = "итог = \"\";\n\
+                      Для к = 1 По 3 Цикл\n\
+                      н = 0;\n\
+                      Для ж = 1 По 40 Цикл\n\
+                      н = н + ж * 2 - 1;\n\
+                      КонецЦикла;\n\
+                      ЗначениеВФайл(\"виток.txt\", Формат(н, \"ЧГ=0\"));\n\
+                      итог = итог + ЗначениеИзФайла(\"виток.txt\") + \";\";\n\
+                      КонецЦикла;\n\
+                      Возврат итог;";
+        for jit in [false, true] {
+            let disk = MemoryFiles::default();
+            let mut state = engine.state_builder().jit(jit).files(disk.clone()).build();
+            assert_eq!(
+                text(&state.exec(script).unwrap()),
+                "1600;1600;1600;",
+                "jit={jit}"
+            );
+            // Файл лёг в заданную систему, а не на диск.
+            assert!(disk.0.borrow().contains_key("виток.txt"), "jit={jit}");
+            assert!(!std::path::Path::new("виток.txt").exists());
+        }
     }
 }

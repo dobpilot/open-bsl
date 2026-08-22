@@ -9,7 +9,8 @@ use crate::{BslObject, BslString, BslValue, NameId, RtError, RtResult};
 /// Отдельный узкий вход, а не четвёртый параметр у `call_builtin_fn_ctx`:
 /// окружение есть не у всякого вызывающего. У шима JIT его нет и быть не
 /// должно — он работает с sink-потоками и не видит `State`, — поэтому эти
-/// три функции JIT не компилирует вовсе и отдаёт интерпретатору, ровно как
+/// три функции (вместе с файловыми, см. [`call_builtin_files`]) JIT не
+/// компилирует вовсе и отдаёт интерпретатору, ровно как
 /// `Сообщить`. Список здесь и список исключений в `bsl-vm::jit` обязаны
 /// совпадать; расхождение поймает первый же вызов.
 ///
@@ -1429,11 +1430,13 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         BuiltinFn::GetBinaryDataBufferFromString => crate::bindata::binary_buffer_from_string(args),
         BuiltinFn::GetStringFromBinaryData => crate::bindata::string_from_binary_data(args),
         BuiltinFn::GetStringFromBinaryDataBuffer => crate::bindata::string_from_binary_buffer(args),
-        BuiltinFn::ValueToStringInternal
-        | BuiltinFn::ValueFromStringInternal
-        | BuiltinFn::ValueToFile
-        | BuiltinFn::ValueFromFile => Err(RtError::InvalidBytecode(
-            "функции внутреннего формата требуют контекста имён: вызывайте call_builtin_fn_ctx",
+        BuiltinFn::ValueToStringInternal | BuiltinFn::ValueFromStringInternal => {
+            Err(RtError::InvalidBytecode(
+                "функции внутреннего формата требуют контекста имён: вызывайте call_builtin_fn_ctx",
+            ))
+        }
+        BuiltinFn::ValueToFile | BuiltinFn::ValueFromFile => Err(RtError::InvalidBytecode(
+            "файловые функции требуют файловой системы прогона: вызывайте call_builtin_files",
         )),
         BuiltinFn::FillPropertyValues => Err(RtError::InvalidBytecode(
             "ЗаполнитьЗначенияСвойств требует контекста имён: вызывайте call_builtin_fn_ctx",
@@ -1516,7 +1519,7 @@ pub fn call_builtin_fn_ctx(
     }
     if matches!(f, BuiltinFn::ValueToFile | BuiltinFn::ValueFromFile) {
         return Err(RtError::InvalidBytecode(
-            "файловая функция вызвана без файловой системы прогона",
+            "файловые функции требуют файловой системы прогона: вызывайте call_builtin_files",
         ));
     }
     call_builtin_fn(f, args)
@@ -1530,29 +1533,42 @@ pub fn call_builtin_fn_ctx(
 /// об окружении ничего не знают, и требовать его со всех значило бы
 /// уронить `Sqrt` там, где окружения нет, — например на нативном пути.
 ///
+/// Арность проверяется ЗДЕСЬ, а не только у вызывающего: функция
+/// публична, и опереться на проверку VM она не вправе — короткий срез
+/// давал бы панику вместо ошибки, одинаково в debug и release.
+///
 /// # Errors
 ///
-/// Ошибку типа на нестроковом имени файла, ошибку ввода-вывода и ошибку
-/// разбора внутреннего формата.
+/// [`RtError::InvalidBytecode`] на неверном числе аргументов и на чужой
+/// встроенной функции, [`RtError::TypeError`] на нестроковом имени файла,
+/// ошибку ввода-вывода и ошибку разбора внутреннего формата.
 pub fn call_builtin_files(
     f: BuiltinFn,
     args: &[BslValue],
     rt: &mut RuntimeShapes,
     files: &dyn crate::FileSystem,
 ) -> RtResult<BslValue> {
+    let bad_arity =
+        || RtError::InvalidBytecode("файловая функция вызвана не с тем числом аргументов");
     match f {
         BuiltinFn::ValueToFile => {
-            let BslValue::Str(path) = &args[0] else {
+            let [path, value] = args else {
+                return Err(bad_arity());
+            };
+            let BslValue::Str(path) = path else {
                 return Err(RtError::TypeError {
                     expected: "Строка",
                     op: "ЗначениеВФайл(ИмяФайла)",
                 });
             };
-            crate::vstr::value_to_file(&path.to_string(), &args[1], rt, files)?;
+            crate::vstr::value_to_file(&path.to_string(), value, rt, files)?;
             Ok(BslValue::Undefined)
         }
         BuiltinFn::ValueFromFile => {
-            let BslValue::Str(path) = &args[0] else {
+            let [path] = args else {
+                return Err(bad_arity());
+            };
+            let BslValue::Str(path) = path else {
                 return Err(RtError::TypeError {
                     expected: "Строка",
                     op: "ЗначениеИзФайла(ИмяФайла)",
@@ -2345,6 +2361,54 @@ pub fn call_builtin_method_ctx(
 #[cfg(test)]
 mod name_table_tests {
     use super::*;
+
+    /// Публичный вход файловых функций проверяет ФОРМУ аргументов сам:
+    /// опереться на проверку арности в VM он не вправе — вызвать его
+    /// может кто угодно, и короткий срез давал бы панику вместо ошибки,
+    /// одинаково в debug и release.
+    #[test]
+    fn the_file_builtins_reject_a_wrong_argument_count_instead_of_panicking() {
+        struct NoFiles;
+
+        impl crate::FileSystem for NoFiles {
+            fn read(&self, _path: &str) -> std::io::Result<Vec<u8>> {
+                unreachable!("до файловой системы дело не доходит")
+            }
+
+            fn write(&self, _path: &str, _data: &[u8]) -> std::io::Result<()> {
+                unreachable!("до файловой системы дело не доходит")
+            }
+        }
+
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let path = BslValue::Str(BslString::from_str("файл"));
+        let bad: [(BuiltinFn, Vec<BslValue>); 5] = [
+            (BuiltinFn::ValueFromFile, vec![]),
+            (BuiltinFn::ValueFromFile, vec![path.clone(), path.clone()]),
+            (BuiltinFn::ValueToFile, vec![]),
+            (BuiltinFn::ValueToFile, vec![path.clone()]),
+            (
+                BuiltinFn::ValueToFile,
+                vec![path.clone(), path.clone(), path.clone()],
+            ),
+        ];
+        for (f, args) in bad {
+            assert!(
+                matches!(
+                    call_builtin_files(f, &args, &mut rt, &NoFiles),
+                    Err(RtError::InvalidBytecode(_))
+                ),
+                "{f:?} с {} аргументами обязана дать ошибку",
+                args.len()
+            );
+        }
+
+        // Чужая встроенная функция — тоже ошибка, а не молчание.
+        assert!(matches!(
+            call_builtin_files(BuiltinFn::Sqrt, &[path], &mut rt, &NoFiles),
+            Err(RtError::InvalidBytecode(_))
+        ));
+    }
 
     /// Таблица имён — источник и для поиска, и для автодополнения REPL;
     /// если она разъедется с реальностью, автодополнение начнёт предлагать
