@@ -61,8 +61,8 @@ pub use date::{
 use date::{DateBoundary, DatePart};
 pub use enums::{EnumKind, EnumValue, lookup_enum, lookup_member};
 pub use env::{
-    Clock, FixedTimeZone, HostEnv, MAX_OFFSET_SECONDS, RandomSource, SystemClock, SystemRandom,
-    TimeZone,
+    Clock, FixedTimeZone, HostEnv, MAX_OFFSET_SECONDS, MIN_TRANSITION_GAP_SECONDS, RandomSource,
+    SystemClock, SystemRandom, TimeZone,
 };
 pub use fold::folded_eq;
 pub use interner::{NameId, NameInterner};
