@@ -1327,6 +1327,7 @@ fn corrupt_program(instrs: Vec<Instr>) -> Program {
         module_base: 0,
         chunks: vec![bsl_bytecode::Chunk {
             param_by_val: Vec::new(),
+            is_procedure: false,
             instrs,
             consts: Vec::new(),
             call_arg_modes: Vec::new(),

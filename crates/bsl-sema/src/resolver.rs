@@ -36,7 +36,10 @@ pub enum SemaError {
     /// параметра `Ф` нет значения по умолчанию: пропустить нечем.
     MissingRequiredArgument {
         name: String,
-        position: usize,
+        /// Номер параметра ОТ НУЛЯ — как он лежит в списке. В тексте
+        /// ошибки печатается человеческая позиция, то есть на единицу
+        /// больше: пользователь считает аргументы с первого.
+        index: usize,
     },
     /// Функция встроенного языка (`Строка`, `СтрДлина`, `Вычислить`, …)
     /// вызвана отдельным оператором. Платформа отказывается компилировать
@@ -80,9 +83,10 @@ impl std::fmt::Display for SemaError {
                 f,
                 "«{name}» принимает аргументов: {expected}, передано: {found}"
             ),
-            SemaError::MissingRequiredArgument { name, position } => write!(
+            SemaError::MissingRequiredArgument { name, index } => write!(
                 f,
-                "у «{name}» пропущен обязательный аргумент на позиции {position}"
+                "у «{name}» пропущен обязательный аргумент на позиции {}",
+                index + 1
             ),
             SemaError::BuiltinFunctionAsStatement(name) => write!(
                 f,
@@ -114,6 +118,25 @@ struct FuncSig {
     /// допустим только там, где здесь `true` — иначе это ошибка резолвинга
     /// вызывающего кода, а не рантайма вызываемой функции.
     has_default: Vec<bool>,
+    /// Объявлена ли `Процедура`. Вызов процедуры в позиции выражения
+    /// платформа отвергает на компиляции — то же правило, что и для
+    /// процедур глобального контекста (`CALL.EXPR.PROCEDURE`), но ветка
+    /// разрешения другая: имя ищется в таблице объявлений модуля, а не в
+    /// реестре компонентов.
+    is_procedure: bool,
+}
+
+/// Сигнатура функции модуля глазами ФРАГМЕНТА `Выполнить`/`Вычислить`:
+/// всё, что фрагменту нужно знать о вызываемой функции, не имея её
+/// резолвнутого дерева. Вид объявления здесь не украшение: процедура в
+/// позиции выражения отвергается и во фрагменте тоже (измерено, строка
+/// «своя процедура выражением» в `measure-stmtcall.platform.txt`), а
+/// после компиляции отличить её от функции больше не по чему — обе
+/// возвращают `Неопределено`, если не сказано иначе.
+pub struct SnippetSignature {
+    pub name: String,
+    pub arity: usize,
+    pub is_procedure: bool,
 }
 
 /// Резолвит весь модуль: собирает сигнатуры всех `Процедура`/`Функция` за
@@ -166,6 +189,7 @@ fn resolve_program_impl(
                     &mut sigs,
                     &f.name,
                     f.params.iter().map(|p| p.default.is_some()).collect(),
+                    false,
                 )?;
                 func_items.push(item);
             }
@@ -174,6 +198,7 @@ fn resolve_program_impl(
                     &mut sigs,
                     &p.name,
                     p.params.iter().map(|p| p.default.is_some()).collect(),
+                    true,
                 )?;
                 func_items.push(item);
             }
@@ -234,9 +259,9 @@ fn resolve_program_impl(
     let mut functions = Vec::with_capacity(func_items.len());
     let mut used_libraries = HashSet::new();
     for (func_index, item) in func_items.iter().enumerate() {
-        let (name, params, body) = match item {
-            Item::Function(f) => (&f.name, &f.params, &f.body),
-            Item::Procedure(p) => (&p.name, &p.params, &p.body),
+        let (name, params, body, is_procedure) = match item {
+            Item::Function(f) => (&f.name, &f.params, &f.body, false),
+            Item::Procedure(p) => (&p.name, &p.params, &p.body, true),
             _ => unreachable!(),
         };
         let mut r = Resolver {
@@ -273,6 +298,7 @@ fn resolve_program_impl(
         used_libraries.extend(r.used_libraries.iter().cloned());
         functions.push(ResolvedFunction {
             name: name.clone(),
+            is_procedure,
             uses_dynamic: crate::resolved::block_uses_dynamic(&resolved_body),
             params: resolved_params,
             locals: r.locals,
@@ -320,13 +346,21 @@ fn declare_sig(
     sigs: &mut HashMap<String, FuncSig>,
     name: &str,
     has_default: Vec<bool>,
+    is_procedure: bool,
 ) -> Result<(), SemaError> {
     let key = name.to_uppercase();
     if sigs.contains_key(&key) {
         return Err(SemaError::DuplicateFunction(name.to_string()));
     }
     let index = sigs.len() as u32;
-    sigs.insert(key, FuncSig { index, has_default });
+    sigs.insert(
+        key,
+        FuncSig {
+            index,
+            has_default,
+            is_procedure,
+        },
+    );
     Ok(())
 }
 
@@ -371,10 +405,10 @@ pub fn resolve_script(stmts: &[AStmt]) -> Result<Resolved, SemaError> {
 ///
 /// ИЗМЕРЕНО на 8.3.27: фрагмент ВИДИТ процедуры и функции модуля —
 /// `Вычислить("Удвоить(21)")` возвращает 42. Поэтому `signatures` тянется
-/// сюда из уже скомпилированной программы: пара «имя -> (номер, арность)»
-/// в том же порядке, в каком функции лежат в `Program::chunks[1..]`.
-/// Пустой список означает «функций нет» (так зовёт REPL до первого
-/// объявления), а не «вызывать нельзя».
+/// сюда из уже скомпилированной программы — [`SnippetSignature`] на
+/// каждую, в том же порядке, в каком функции лежат в
+/// `Program::chunks[1..]`. Пустой список означает «функций нет» (так зовёт
+/// REPL до первого объявления), а не «вызывать нельзя».
 ///
 /// # Errors
 ///
@@ -384,7 +418,7 @@ pub fn resolve_snippet_stmts(
     existing_locals: &[String],
     module_vars: &[String],
     stmts: &[AStmt],
-    signatures: &[(String, usize)],
+    signatures: &[SnippetSignature],
 ) -> Result<(Vec<String>, Vec<RStmt>), SemaError> {
     resolve_snippet_stmts_mode(existing_locals, module_vars, stmts, signatures, true)
 }
@@ -404,7 +438,7 @@ pub fn resolve_repl_stmts(
     existing_locals: &[String],
     module_vars: &[String],
     stmts: &[AStmt],
-    signatures: &[(String, usize)],
+    signatures: &[SnippetSignature],
 ) -> Result<(Vec<String>, Vec<RStmt>), SemaError> {
     resolve_snippet_stmts_mode(existing_locals, module_vars, stmts, signatures, false)
 }
@@ -420,7 +454,7 @@ pub fn resolve_snippet_stmts_with_registry(
     existing_locals: &[String],
     module_vars: &[String],
     stmts: &[AStmt],
-    signatures: &[(String, usize)],
+    signatures: &[SnippetSignature],
     registry: &bsl_rt::RuntimeRegistry,
 ) -> Result<ResolvedSnippetWithRequirements, SemaError> {
     resolve_snippet_stmts_mode_registry(
@@ -444,7 +478,7 @@ pub fn resolve_repl_stmts_with_registry(
     existing_locals: &[String],
     module_vars: &[String],
     stmts: &[AStmt],
-    signatures: &[(String, usize)],
+    signatures: &[SnippetSignature],
     registry: &bsl_rt::RuntimeRegistry,
 ) -> Result<ResolvedSnippetWithRequirements, SemaError> {
     resolve_snippet_stmts_mode_registry(
@@ -461,7 +495,7 @@ fn resolve_snippet_stmts_mode(
     existing_locals: &[String],
     module_vars: &[String],
     stmts: &[AStmt],
-    signatures: &[(String, usize)],
+    signatures: &[SnippetSignature],
     strict_stmt_calls: bool,
 ) -> Result<(Vec<String>, Vec<RStmt>), SemaError> {
     let (locals, body, _) = resolve_snippet_stmts_mode_registry(
@@ -479,19 +513,20 @@ fn resolve_snippet_stmts_mode_registry(
     existing_locals: &[String],
     module_vars: &[String],
     stmts: &[AStmt],
-    signatures: &[(String, usize)],
+    signatures: &[SnippetSignature],
     strict_stmt_calls: bool,
     registry: Option<&bsl_rt::RuntimeRegistry>,
 ) -> Result<ResolvedSnippetWithRequirements, SemaError> {
     let empty_funcs: HashMap<String, FuncSig> = signatures
         .iter()
         .enumerate()
-        .map(|(index, (name, arity))| {
+        .map(|(index, sig)| {
             (
-                name.to_uppercase(),
+                sig.name.to_uppercase(),
                 FuncSig {
                     index: index as u32,
-                    has_default: vec![false; *arity],
+                    has_default: vec![false; sig.arity],
+                    is_procedure: sig.is_procedure,
                 },
             )
         })
@@ -1323,11 +1358,21 @@ impl<'a> Resolver<'a> {
     ) -> Result<RExpr, SemaError> {
         match callee {
             AExpr::Ident(name) => {
-                if let Some((index, has_default)) = self
+                if let Some((index, has_default, is_procedure)) = self
                     .funcs
                     .get(&name.to_uppercase())
-                    .map(|s| (s.index, s.has_default.clone()))
+                    .map(|s| (s.index, s.has_default.clone(), s.is_procedure))
                 {
+                    // Своя процедура подчиняется тому же правилу, что и
+                    // процедура глобального контекста, — измерено на
+                    // 8.3.27 (строка «своя процедура выражением» в
+                    // `measure-stmtcall.platform.txt`: отказ, при том что
+                    // строкой выше та же процедура ОПЕРАТОРОМ принята).
+                    // Проверка стоит до арности, как и в ветке компонента:
+                    // речь о форме вызова, а не о его аргументах.
+                    if is_procedure && position != CallPosition::Statement {
+                        return Err(SemaError::ProcedureAsFunction(name.clone()));
+                    }
                     let arity = has_default.len();
                     if args.len() != arity {
                         return Err(SemaError::ArgumentCountMismatch {
@@ -1349,7 +1394,7 @@ impl<'a> Resolver<'a> {
                             None => {
                                 return Err(SemaError::MissingRequiredArgument {
                                     name: name.clone(),
-                                    position: i,
+                                    index: i,
                                 });
                             }
                         }
@@ -2131,8 +2176,17 @@ mod tests {
             resolve_program(&prog.items).unwrap_err(),
             SemaError::MissingRequiredArgument {
                 name: "Ф".to_string(),
-                position: 1,
+                index: 1,
             }
+        );
+        // В тексте — человеческая позиция: пропущен ВТОРОЙ аргумент.
+        assert_eq!(
+            SemaError::MissingRequiredArgument {
+                name: "Ф".to_string(),
+                index: 1,
+            }
+            .to_string(),
+            "у «Ф» пропущен обязательный аргумент на позиции 2"
         );
     }
 
@@ -2230,6 +2284,87 @@ mod tests {
                 "{src}: {err:?}"
             );
         }
+    }
+
+    /// Своя процедура в позиции выражения — то же «Обращение к процедуре
+    /// как к функции», что и у процедуры глобального контекста, но ветка
+    /// разрешения другая: имя ищется в таблице объявлений модуля.
+    /// ИЗМЕРЕНО на 8.3.27 — строка «своя процедура выражением» в
+    /// `measure-stmtcall.platform.txt`: отказ, при том что строкой выше
+    /// та же процедура ОПЕРАТОРОМ принята.
+    ///
+    /// Проверяется через `resolve_program`, а не `resolve_script`:
+    /// последний разрешает плоский скрипт БЕЗ объявлений, то есть
+    /// объявить в нём процедуру попросту негде.
+    #[test]
+    fn a_user_procedure_in_an_expression_is_rejected() {
+        let decls = concat!(
+            "Процедура П()\n",
+            "КонецПроцедуры\n",
+            "Функция Ф(а)\n",
+            "\tВозврат а;\n",
+            "КонецФункции\n",
+        );
+        let resolve = |tail: &str| {
+            let prog = parse(&format!("{decls}{tail}")).unwrap();
+            resolve_program(&prog.items)
+        };
+
+        for tail in [
+            "Х = П();",
+            "Х = 1 + П();",
+            "Ф(П());",
+            "Х = ?(Истина, П(), 2);",
+            "м = Новый Массив(3);\nм[0] = П();",
+            "м = Новый Массив(3);\nФ(м[П()]);",
+            "с = Новый Структура(\"а\", 1);\nс.а = П();",
+            "Если П() Тогда\nКонецЕсли;",
+            "Возврат П();",
+        ] {
+            let err = resolve(tail).unwrap_err();
+            assert!(
+                matches!(err, SemaError::ProcedureAsFunction(_)),
+                "{tail}: {err:?}"
+            );
+        }
+
+        // Контроль: та же процедура ОПЕРАТОРОМ законна, и своя ФУНКЦИЯ
+        // законна в обеих позициях — запрет держится на виде объявления,
+        // а не на том, что имя пользовательское.
+        for tail in ["П();", "Х = Ф(1);", "Ф(1);", "Х = Ф(Ф(1));"] {
+            assert!(resolve(tail).is_ok(), "должно разрешаться: {tail}");
+        }
+    }
+
+    /// Тот же запрет во ФРАГМЕНТЕ `Выполнить`/`Вычислить`: там резолвинг
+    /// идёт в рантайме по [`SnippetSignature`], и вид объявления должен
+    /// доехать до него через `Chunk::is_procedure`. Именно этой формой
+    /// правило и измерено — ошибку компиляции модуля на платформе иначе
+    /// не увидеть.
+    #[test]
+    fn a_user_procedure_in_a_dynamic_expression_is_rejected() {
+        let sigs = [
+            SnippetSignature {
+                name: "П".to_string(),
+                arity: 0,
+                is_procedure: true,
+            },
+            SnippetSignature {
+                name: "Ф".to_string(),
+                arity: 0,
+                is_procedure: false,
+            },
+        ];
+        let snippet = |src: &str| {
+            let prog = parse(src).unwrap();
+            resolve_snippet_stmts(&[], &[], &items_to_stmts(prog.items), &sigs)
+        };
+        assert!(matches!(
+            snippet("Х = П();").unwrap_err(),
+            SemaError::ProcedureAsFunction(_)
+        ));
+        assert!(snippet("П();").is_ok());
+        assert!(snippet("Х = Ф();").is_ok());
     }
 
     /// REPL мягче модуля: голый вызов функции языка там печатает значение,

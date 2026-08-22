@@ -94,8 +94,8 @@ fn compile(path: &str) -> Result<open_bsl::Module, i32> {
     })?;
     engine.compile(&src).map_err(|e| {
         match e {
-            open_bsl::Error::Parse(e) => eprintln!("ошибка разбора: {e:?}"),
-            open_bsl::Error::Semantic(e) => eprintln!("ошибка резолвинга: {e:?}"),
+            open_bsl::Error::Parse(e) => eprintln!("ошибка разбора: {e}"),
+            open_bsl::Error::Semantic(e) => eprintln!("ошибка резолвинга: {e}"),
             other => eprintln!("ошибка компиляции: {other}"),
         }
         1

@@ -286,7 +286,7 @@ fn eval_and_print(line: &str, session: &mut Session) {
 /// `session` результатами — новые переменные и значения сохраняются для
 /// следующей строки (в отличие от изолированного `Выполнить`).
 fn eval_repl_line(line: &str, session: &mut Session) -> Result<BslValue, String> {
-    let parsed = bsl_syntax::parse(line).map_err(|e| format!("{e:?}"))?;
+    let parsed = bsl_syntax::parse(line).map_err(|e| format!("{e}"))?;
     let mut stmts = Vec::with_capacity(parsed.items.len());
     for item in parsed.items {
         match item {
@@ -303,7 +303,7 @@ fn eval_repl_line(line: &str, session: &mut Session) -> Result<BslValue, String>
         &[],
         session.engine.registry(),
     )
-    .map_err(|e| format!("{e:?}"))?;
+    .map_err(|e| format!("{e}"))?;
     // Формы — ВСЕГДА свежие для этой строки (см. doc comment на
     // `compile_snippet`): shape-индексы внутри `chunk` ссылаются на них, а
     // не на что-то накопленное в сессии. Раньше здесь передавался
@@ -316,7 +316,7 @@ fn eval_repl_line(line: &str, session: &mut Session) -> Result<BslValue, String>
         &[],
         &requirements,
     )
-    .map_err(|e| format!("{e:?}"))?;
+    .map_err(|e| format!("{e}"))?;
 
     let mut stack = session.values.clone();
     stack.resize(chunk.n_regs as usize, BslValue::Undefined);

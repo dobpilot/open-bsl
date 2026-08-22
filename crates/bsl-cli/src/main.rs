@@ -245,11 +245,11 @@ fn run_file(path: &str, engine: Engine, arguments: Vec<String>) {
     let module = match host.compile(&src) {
         Ok(m) => m,
         Err(open_bsl::Error::Parse(e)) => {
-            eprintln!("ошибка разбора: {e:?}");
+            eprintln!("ошибка разбора: {e}");
             std::process::exit(1);
         }
         Err(open_bsl::Error::Semantic(e)) => {
-            eprintln!("ошибка резолвинга: {e:?}");
+            eprintln!("ошибка резолвинга: {e}");
             std::process::exit(1);
         }
         Err(e) => {

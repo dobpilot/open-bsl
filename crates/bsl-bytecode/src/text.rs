@@ -36,7 +36,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 19;
+pub const FORMAT_VERSION: u32 = 20;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -227,9 +227,14 @@ fn write_chunk(out: &mut String, index: usize, chunk: &Chunk, program: &Program)
         .iter()
         .map(|by_val| if *by_val { "value" } else { "byref" })
         .collect();
+    // `kind=proc` пишется ТОЛЬКО у процедур: у функции это умолчание, а
+    // у `chunks[0]` вида объявления попросту нет — верхний уровень никто
+    // не вызывает, и приписывать ему `kind=func` значило бы утверждать
+    // лишнее.
+    let kind = if chunk.is_procedure { " kind=proc" } else { "" };
     writeln!(
         out,
-        "\n.chunk {index} params={} locals={} regs={} argmodes=[{}]  ; {what}",
+        "\n.chunk {index} params={} locals={} regs={} argmodes=[{}]{kind}  ; {what}",
         chunk.n_params,
         chunk.n_locals,
         chunk.n_regs,
@@ -980,6 +985,15 @@ fn parse_chunk(r: &mut Reader, expected_index: usize) -> Result<Chunk> {
         }
         Err(_) => Vec::new(),
     };
+    // `kind=proc` у процедуры, отсутствие поля — функция либо верхний
+    // уровень (см. печать выше). `kind=func` разбирается тоже: листинг
+    // бывает и рукописным, и явное «функция» в нём законно.
+    let is_procedure = match field(&fields, no, "kind") {
+        Ok("proc") => true,
+        Ok("func") => false,
+        Ok(other) => return Err(TextError::At(no, format!("вид объявления «{other}»"))),
+        Err(_) => false,
+    };
 
     let n = r.directive(".consts")?;
     let mut consts = Vec::with_capacity(n);
@@ -1074,6 +1088,7 @@ fn parse_chunk(r: &mut Reader, expected_index: usize) -> Result<Chunk> {
     }
 
     Ok(Chunk {
+        is_procedure,
         param_by_val,
         prop_cache: (0..instrs.len()).map(|_| RefCell::new(None)).collect(),
         method_cache: (0..instrs.len()).map(|_| RefCell::new(None)).collect(),

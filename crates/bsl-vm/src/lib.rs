@@ -2756,7 +2756,7 @@ fn compile_dynamic_snippet(
     };
 
     let parsed = bsl_syntax::parse_with_symbols(&src, &env.symbols)
-        .map_err(|e| RtError::DynamicError(format!("{e:?}")))?;
+        .map_err(|e| RtError::DynamicError(format!("{e}")))?;
     let mut stmts = Vec::with_capacity(parsed.items.len());
     for item in parsed.items {
         match item {
@@ -2774,14 +2774,20 @@ fn compile_dynamic_snippet(
         }
     }
 
-    // Имя + арность каждой функции модуля, в порядке `chunks[1..]`.
-    let signatures: Vec<(String, usize)> = program
+    // Что фрагмент знает о функциях модуля, в порядке `chunks[1..]`: имя,
+    // арность и вид объявления — процедуру он обязан отвергнуть в позиции
+    // выражения так же, как статический резолвер.
+    let signatures: Vec<bsl_sema::SnippetSignature> = program
         .function_names
         .iter()
         .enumerate()
         .map(|(i, name)| {
-            let arity = program.chunks.get(i + 1).map_or(0, |c| c.n_params as usize);
-            (name.clone(), arity)
+            let chunk = program.chunks.get(i + 1);
+            bsl_sema::SnippetSignature {
+                name: name.clone(),
+                arity: chunk.map_or(0, |c| c.n_params as usize),
+                is_procedure: chunk.is_some_and(|c| c.is_procedure),
+            }
         })
         .collect();
     let (all_locals, body, fragment_requirements) = match env.registry {
@@ -2792,7 +2798,7 @@ fn compile_dynamic_snippet(
             &signatures,
             registry,
         )
-        .map_err(|e| RtError::DynamicError(format!("{e:?}")))?,
+        .map_err(|e| RtError::DynamicError(format!("{e}")))?,
         None => {
             let (locals, body) = bsl_sema::resolve_snippet_stmts(
                 scope_locals,
@@ -2800,7 +2806,7 @@ fn compile_dynamic_snippet(
                 &stmts,
                 &signatures,
             )
-            .map_err(|e| RtError::DynamicError(format!("{e:?}")))?;
+            .map_err(|e| RtError::DynamicError(format!("{e}")))?;
             (
                 locals,
                 body,
@@ -2824,7 +2830,7 @@ fn compile_dynamic_snippet(
         &callee_params,
         &requirements,
     )
-    .map_err(|e| RtError::DynamicError(format!("{e:?}")))?;
+    .map_err(|e| RtError::DynamicError(format!("{e}")))?;
 
     Ok(CompiledSnippet {
         chunk,

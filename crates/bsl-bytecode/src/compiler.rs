@@ -87,6 +87,7 @@ pub fn compile_program(resolved: &ResolvedProgram) -> Result<Program, CompileErr
         &[],
         &resolved.requirements,
         resolved.top_level.uses_dynamic,
+        false,
         &mut names,
         &mut shapes,
     )?);
@@ -99,6 +100,7 @@ pub fn compile_program(resolved: &ResolvedProgram) -> Result<Program, CompileErr
             &[],
             &resolved.requirements,
             f.uses_dynamic,
+            f.is_procedure,
             &mut names,
             &mut shapes,
         )?);
@@ -200,6 +202,7 @@ pub fn compile_snippet_with_requirements(
         callee_params,
         requirements,
         true,
+        false,
         &mut names,
         &mut shapes,
     )?;
@@ -210,7 +213,7 @@ pub fn compile_snippet_with_requirements(
     Ok((chunk, names.into_names(), shapes.into_shapes()))
 }
 
-// Девять аргументов — это и есть весь входной контекст чанка; структура
+// Десять аргументов — это и есть весь входной контекст чанка; структура
 #[allow(clippy::too_many_arguments)]
 fn compile_chunk(
     locals: &[String],
@@ -220,6 +223,7 @@ fn compile_chunk(
     callee_params: &[Vec<bool>],
     requirements: &[crate::LibraryRequirement],
     materialize_locals: bool,
+    is_procedure: bool,
     names: &mut NameInterner,
     shapes: &mut ShapeTable,
 ) -> Result<Chunk, CompileError> {
@@ -259,6 +263,7 @@ fn compile_chunk(
         .collect();
     Ok(Chunk {
         param_by_val: params.iter().map(|p| p.by_val).collect(),
+        is_procedure,
         instrs: c.instrs,
         consts: c.consts,
         call_arg_modes: c.call_arg_modes,
