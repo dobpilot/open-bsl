@@ -678,12 +678,31 @@ mod host_zone {
         )))
     }
 
-    const WATCH_PROPERTIES: &[PropertyDescriptor] = &[PropertyDescriptor {
-        code: PropertyCode::new(1),
-        names: &["Смещение", "Offset"],
-        get: watch_offset_property,
-        set: None,
-    }];
+    /// Запись свойства — третий путь до зоны и отдельный шим JIT
+    /// (`SetObjectProp`); значение отбрасывается, важен сам вызов.
+    fn watch_set_mark(
+        _receiver: &dyn ObjectProtocol,
+        _value: Value,
+        context: &mut CallContext<'_>,
+    ) -> RtResult<()> {
+        context.zone()?.offset_seconds(0);
+        Ok(())
+    }
+
+    const WATCH_PROPERTIES: &[PropertyDescriptor] = &[
+        PropertyDescriptor {
+            code: PropertyCode::new(1),
+            names: &["Смещение", "Offset"],
+            get: watch_offset_property,
+            set: None,
+        },
+        PropertyDescriptor {
+            code: PropertyCode::new(2),
+            names: &["Метка", "Mark"],
+            get: watch_offset_property,
+            set: Some(watch_set_mark),
+        },
+    ];
 
     impl ObjectProtocol for Watch {
         fn type_descriptor(&self) -> &'static TypeDescriptor {
@@ -728,13 +747,26 @@ mod host_zone {
 
     /// Цикл — чтобы чанк дошёл до JIT: короткий скрипт нативной точкой
     /// входа не становится, и тест выродился бы во второй прогон
-    /// интерпретатора.
-    const SCRIPT: &str = "ч = Новый Часы();\n\
-                          итог = 0;\n\
-                          Для к = 1 По 40 Цикл\n\
-                          итог = итог + ч.Смещение() + ч.Смещение;\n\
-                          КонецЦикла;\n\
-                          Возврат итог;";
+    /// интерпретатора. Обвязка одна на все три пути, тело подставляется.
+    fn script(body: &str) -> String {
+        format!(
+            "ч = Новый Часы();\n\
+             итог = 0;\n\
+             Для к = 1 По 40 Цикл\n\
+             {body}\n\
+             КонецЦикла;\n\
+             Возврат итог;"
+        )
+    }
+
+    /// Три пути до зоны, каждый — свой опкод и свой шим JIT:
+    /// `CallObjectMethod`, `GetObjectProp`, `SetObjectProp`. Порознь,
+    /// потому что первое же обращение обрывает прогон.
+    const PATHS: &[(&str, &str)] = &[
+        ("метод", "итог = итог + ч.Смещение();"),
+        ("чтение свойства", "итог = итог + ч.Смещение;"),
+        ("запись свойства", "ч.Метка = к;"),
+    ];
 
     /// В ИНТЕРПРЕТАТОРЕ зона доходит до метода и свойства стороннего типа.
     #[test]
@@ -743,15 +775,24 @@ mod host_zone {
             .register_library(watch_library())
             .build()
             .unwrap();
-        let mut state = engine
-            .state_builder()
-            .zone(FixedTimeZone::new(3 * 3600).expect("допустимое смещение"))
-            .build();
-        // 40 витков по два обращения, каждое даёт 3 * 3600.
-        assert_eq!(
-            state.exec(SCRIPT).unwrap().to_string(),
-            (40 * 2 * 3 * 3600).to_string()
-        );
+        for (what, body) in PATHS {
+            let mut state = engine
+                .state_builder()
+                .zone(FixedTimeZone::new(3 * 3600).expect("допустимое смещение"))
+                .build();
+            let value = state
+                .exec(&script(body))
+                .unwrap_or_else(|e| panic!("{what}: {e}"));
+            // У обоих чтений — 40 витков по 3 * 3600; запись в `итог`
+            // ничего не кладёт, и он остаётся нулём: проверяется сам факт,
+            // что setter отработал без ошибки.
+            let expected = if *what == "запись свойства" {
+                0
+            } else {
+                40 * 3 * 3600
+            };
+            assert_eq!(value.to_string(), expected.to_string(), "{what}");
+        }
     }
 
     /// А ПОД JIT — не доходит, и это ИЗВЕСТНОЕ ограничение, а не оплошность.
@@ -789,16 +830,19 @@ mod host_zone {
             .jit(true)
             .zone(FixedTimeZone::new(3 * 3600).expect("допустимое смещение"))
             .build();
-        let Err(error) = state.exec(SCRIPT) else {
-            panic!(
-                "под JIT зона у стороннего компонента внезапно доступна — \
-                    ограничение снято, обнови комментарий и второй тест"
+        for (what, body) in PATHS {
+            let Err(error) = state.exec(&script(body)) else {
+                panic!(
+                    "{what}: под JIT зона у стороннего компонента внезапно \
+                     доступна — ограничение снято, обнови комментарий и \
+                     второй тест"
+                );
+            };
+            let text = error.to_string();
+            assert!(
+                text.contains("часовой пояс запрошен там, где окружения прогона нет"),
+                "{what}: ожидалась ошибка об отсутствии зоны, получено: {text}"
             );
-        };
-        let text = error.to_string();
-        assert!(
-            text.contains("часовой пояс запрошен там, где окружения прогона нет"),
-            "ожидалась ошибка об отсутствии зоны, получено: {text}"
-        );
+        }
     }
 }

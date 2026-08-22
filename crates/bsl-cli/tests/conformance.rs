@@ -184,6 +184,48 @@ fn conformance_fixtures_match_oracle_output() {
 ///
 /// Что этот тест НЕ проверяет и проверять не может: сами значения. Их
 /// эталон приходит только с платформы (`bsl-cli --ingest-measurements`).
+/// Контрактные скрипты замеров, у которых рядом лежит СНЯТЫЙ С ПЛАТФОРМЫ
+/// вывод, сверяются с ним построчно — тем же прогоном, что делался руками.
+///
+/// Список явный, и это не лень. Скрипт замеров годится сюда, только если
+/// он ЧИСТЫЙ: не пишет файлов, не зависит от каталога запуска и не
+/// спрашивает у машины ничего, кроме того, что спрашивает и на платформе.
+/// Автоматический обход всех `measure-*.bsl` затянул бы сюда и те, что
+/// снимались при особых условиях, и падение говорило бы не о регрессии.
+///
+/// В общий конформансный обход эти файлы не попадают: там берутся только
+/// `fixtures/*.bsl`, у которых есть `.expected`, а у замеров эталон лежит
+/// рядом с ними и называется иначе.
+#[test]
+fn pure_measure_scripts_match_their_platform_output() {
+    let _corpus = corpus_lock();
+    for name in ["measure-zone", "measure-lvalue", "measure-stmtcall"] {
+        let script = measure_dir().join(format!("{name}.bsl"));
+        let oracle_path = measure_dir().join(format!("{name}.platform.txt"));
+        let oracle = std::fs::read_to_string(&oracle_path)
+            .unwrap_or_else(|e| panic!("нет платформенного эталона для {name}: {e}"));
+        let output = Command::new(env!("CARGO_BIN_EXE_bsl-cli"))
+            .arg(&script)
+            .output()
+            .unwrap_or_else(|e| panic!("не удалось запустить bsl-cli на {name}: {e}"));
+        assert!(
+            output.status.success(),
+            "{name} не исполнился: {}\n{}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let ours = String::from_utf8_lossy(&output.stdout);
+        for (line, (a, b)) in ours.lines().zip(oracle.lines()).enumerate() {
+            assert_eq!(a, b, "{name}, строка {}", line + 1);
+        }
+        assert_eq!(
+            ours.lines().count(),
+            oracle.lines().count(),
+            "{name}: число строк разошлось с платформенным эталоном"
+        );
+    }
+}
+
 #[test]
 fn measure_script_runs_under_this_interpreter() {
     let _corpus = corpus_lock();
