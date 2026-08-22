@@ -1270,7 +1270,7 @@ mod tests {
 
     /// Дат со смещением в этих тестах нет, поэтому зона любая — берётся
     /// UTC, чтобы результат не зависел от машины, на которой идёт прогон.
-    static MACHINE_ZONE: bsl_rt::FixedTimeZone = bsl_rt::FixedTimeZone(0);
+    static MACHINE_ZONE: bsl_rt::FixedTimeZone = bsl_rt::FixedTimeZone::UTC;
 
     /// Контекст сборки без функции восстановления — то, чем был
     /// `build_value` до появления колбэков.

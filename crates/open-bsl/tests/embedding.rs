@@ -633,3 +633,172 @@ fn a_phase_error_prints_itself_and_is_reachable_through_source() {
     );
     assert!(error.source().is_some(), "цепочка source оборвана");
 }
+
+/// Часовой пояс — ПУБЛИЧНАЯ возможность контекста: `CallContext::zone`
+/// доступен любому обработчику стороннего компонента, а не только
+/// глобальным функциям официальных. Значит и метод, и свойство хост-типа
+/// вправе его спросить — и обязаны получить один ответ в обоих режимах
+/// исполнения.
+mod host_zone {
+    use super::*;
+    use open_bsl::{
+        ConstructorCode, ConstructorDescriptor, FixedTimeZone, MethodCode, MethodDescriptor,
+        ObjectProtocol, PropertyCode, PropertyDescriptor, TypeDescriptor,
+    };
+
+    #[derive(Debug)]
+    struct Watch;
+
+    static WATCH_TYPE: TypeDescriptor = TypeDescriptor::new("example-host", "Часы");
+
+    /// Смещение зоны прогона на фиксированный момент — ровно тот вызов,
+    /// ради которого зона в контексте и появилась.
+    fn watch_offset(
+        _receiver: &dyn ObjectProtocol,
+        _arguments: &[Value],
+        context: &mut CallContext<'_>,
+    ) -> RtResult<Value> {
+        Ok(Value::number_from_i64(i64::from(
+            context.zone()?.offset_seconds(0),
+        )))
+    }
+
+    const WATCH_METHODS: &[MethodDescriptor] = &[MethodDescriptor {
+        code: MethodCode::new(1),
+        names: &["Смещение", "Offset"],
+        call: watch_offset,
+    }];
+
+    fn watch_offset_property(
+        _receiver: &dyn ObjectProtocol,
+        context: &mut CallContext<'_>,
+    ) -> RtResult<Value> {
+        Ok(Value::number_from_i64(i64::from(
+            context.zone()?.offset_seconds(0),
+        )))
+    }
+
+    const WATCH_PROPERTIES: &[PropertyDescriptor] = &[PropertyDescriptor {
+        code: PropertyCode::new(1),
+        names: &["Смещение", "Offset"],
+        get: watch_offset_property,
+        set: None,
+    }];
+
+    impl ObjectProtocol for Watch {
+        fn type_descriptor(&self) -> &'static TypeDescriptor {
+            &WATCH_TYPE
+        }
+
+        fn method_table(&self) -> &'static [MethodDescriptor] {
+            WATCH_METHODS
+        }
+
+        fn property_table(&self) -> &'static [PropertyDescriptor] {
+            WATCH_PROPERTIES
+        }
+    }
+
+    fn construct_watch(_context: &mut CallContext<'_>, _arguments: &[Value]) -> RtResult<Value> {
+        Ok(Value::new_object(Watch))
+    }
+
+    const WATCH_TYPES: &[&TypeDescriptor] = &[&WATCH_TYPE];
+
+    const WATCH_CONSTRUCTORS: &[ConstructorDescriptor] = &[ConstructorDescriptor {
+        code: ConstructorCode::new(1),
+        names: &["Часы", "Watch"],
+        arity: Arity::exact(0),
+        call: construct_watch,
+    }];
+
+    fn watch_library() -> LibraryDescriptor {
+        LibraryDescriptor {
+            package: "example-host",
+            version: "1.0.0",
+            dependencies: &[LibraryDependency {
+                package: bsl_rt::PACKAGE_NAME,
+                version: bsl_rt::PACKAGE_VERSION,
+            }],
+            functions: &[],
+            constructors: WATCH_CONSTRUCTORS,
+            types: WATCH_TYPES,
+        }
+    }
+
+    /// Цикл — чтобы чанк дошёл до JIT: короткий скрипт нативной точкой
+    /// входа не становится, и тест выродился бы во второй прогон
+    /// интерпретатора.
+    const SCRIPT: &str = "ч = Новый Часы();\n\
+                          итог = 0;\n\
+                          Для к = 1 По 40 Цикл\n\
+                          итог = итог + ч.Смещение() + ч.Смещение;\n\
+                          КонецЦикла;\n\
+                          Возврат итог;";
+
+    /// В ИНТЕРПРЕТАТОРЕ зона доходит до метода и свойства стороннего типа.
+    #[test]
+    fn a_host_method_and_property_read_the_zone() {
+        let engine = Engine::builder()
+            .register_library(watch_library())
+            .build()
+            .unwrap();
+        let mut state = engine
+            .state_builder()
+            .zone(FixedTimeZone::new(3 * 3600).expect("допустимое смещение"))
+            .build();
+        // 40 витков по два обращения, каждое даёт 3 * 3600.
+        assert_eq!(
+            state.exec(SCRIPT).unwrap().to_string(),
+            (40 * 2 * 3 * 3600).to_string()
+        );
+    }
+
+    /// А ПОД JIT — не доходит, и это ИЗВЕСТНОЕ ограничение, а не оплошность.
+    ///
+    /// Нативный путь строит контекст-сток, и зоны в нём нет: `zone()`
+    /// отвечает ошибкой (см. поле `zone` у `CallContext`). Для официальных
+    /// компонентов это недостижимо — зону читают только их глобальные
+    /// функции и конструкторы, а JIT компилирует лишь объектные опкоды, —
+    /// но `CallContext::zone` публичен, и метод СТОРОННЕГО типа вправе его
+    /// спросить. Тогда прогон под `--jit` отвечает ошибкой там, где
+    /// интерпретатор отвечает значением.
+    ///
+    /// Почему не исправлено. Зона доводится до шимов ценой измеренной
+    /// регрессии: `empty_for` 59 -> 93 млн тактов при неизменных 192 млн
+    /// инструкций — та же стена укладки кода, что отклонила этап 5
+    /// рефакторинга. Проверены и отвергнуты: поле в `JitCtx` (сам по себе
+    /// свободен — контроль с `usize` не двигает замер), седьмой параметр
+    /// замыкания шимов свойств (тоже свободен), стирание типа до сырого
+    /// указателя, вынос построения контекста в `#[inline(never)]`-помощники.
+    /// Регрессию даёт именно живая зона в `CallContext::new` внутри тел
+    /// шимов. Семантически верный выход — уводить компонентного получателя
+    /// из нативного пути в интерпретатор, но это отдельная работа со своим
+    /// замером.
+    ///
+    /// Тест закрепляет ограничение НАРОЧНО: ошибка честнее чужого времени,
+    /// а когда обход найдётся, тест упадёт и напомнит о себе.
+    #[test]
+    fn under_the_jit_a_host_reader_of_the_zone_gets_an_error() {
+        let engine = Engine::builder()
+            .register_library(watch_library())
+            .build()
+            .unwrap();
+        let mut state = engine
+            .state_builder()
+            .jit(true)
+            .zone(FixedTimeZone::new(3 * 3600).expect("допустимое смещение"))
+            .build();
+        let Err(error) = state.exec(SCRIPT) else {
+            panic!(
+                "под JIT зона у стороннего компонента внезапно доступна — \
+                    ограничение снято, обнови комментарий и второй тест"
+            );
+        };
+        let text = error.to_string();
+        assert!(
+            text.contains("часовой пояс запрошен там, где окружения прогона нет"),
+            "ожидалась ошибка об отсутствии зоны, получено: {text}"
+        );
+    }
+}

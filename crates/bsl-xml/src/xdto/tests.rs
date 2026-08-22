@@ -11,7 +11,7 @@ use super::*;
 /// пересчитываются в местное время, и привязывать ожидания к зоне машины
 /// значило бы получать разный результат на разных машинах.
 fn test_zone() -> std::rc::Rc<dyn bsl_rt::TimeZone> {
-    std::rc::Rc::new(bsl_rt::FixedTimeZone(3 * 3600))
+    std::rc::Rc::new(bsl_rt::FixedTimeZone::new(3 * 3600).expect("допустимое смещение"))
 }
 
 #[test]
@@ -734,7 +734,8 @@ fn default_value_comes_from_both_default_and_fixed() {
 fn a_written_zone_is_converted_into_the_factories_own_zone() {
     let parse_in = |offset_hours: i32, lexical: &str| {
         let schema = crate::xsd::schema_of_text(SAMPLE).expect("схема");
-        let zone: Rc<dyn bsl_rt::TimeZone> = Rc::new(bsl_rt::FixedTimeZone(offset_hours * 3600));
+        let zone: Rc<dyn bsl_rt::TimeZone> =
+            Rc::new(bsl_rt::FixedTimeZone::new(offset_hours * 3600).expect("допустимое смещение"));
         let m = model_of_schema(&schema, zone).expect("модель");
         let index = m.find(XSD_NS, "dateTime").expect("встроенный тип");
         value_from_lexical(&m, index, lexical).expect("лексическая форма")

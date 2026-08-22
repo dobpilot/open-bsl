@@ -276,10 +276,13 @@ mod zone {
     #[test]
     fn two_states_of_one_engine_see_their_own_zone() {
         let engine = Engine::builder().build().unwrap();
-        let mut east = engine.state_builder().zone(FixedTimeZone(3 * 3600)).build();
+        let mut east = engine
+            .state_builder()
+            .zone(FixedTimeZone::new(3 * 3600).expect("допустимое смещение"))
+            .build();
         let mut west = engine
             .state_builder()
-            .zone(FixedTimeZone(-5 * 3600 - 1800))
+            .zone(FixedTimeZone::new(-5 * 3600 - 1800).expect("допустимое смещение"))
             .build();
 
         // Порядок запусков ничего не решает: зона не процессная и не
@@ -306,8 +309,14 @@ mod zone {
         let script = "Д = Дата(2014, 5, 10, 13, 14, 15);\n\
                       Возврат ЗаписатьДатуJSON(Д, ФорматДатыJSON.ISO, \
                       ВариантЗаписиДатыJSON.УниверсальнаяДата);";
-        let mut utc = engine.state_builder().zone(FixedTimeZone(0)).build();
-        let mut east = engine.state_builder().zone(FixedTimeZone(3 * 3600)).build();
+        let mut utc = engine
+            .state_builder()
+            .zone(FixedTimeZone::new(0).expect("допустимое смещение"))
+            .build();
+        let mut east = engine
+            .state_builder()
+            .zone(FixedTimeZone::new(3 * 3600).expect("допустимое смещение"))
+            .build();
         assert_eq!(text(&utc.exec(script).unwrap()), "2014-05-10T13:14:15Z");
         assert_eq!(text(&east.exec(script).unwrap()), "2014-05-10T10:14:15Z");
     }
@@ -319,16 +328,72 @@ mod zone {
         let engine = Engine::builder().build().unwrap();
         let script = "Д = ПрочитатьДатуJSON(\"2014-05-10T13:14:15Z\", ФорматДатыJSON.ISO);\n\
                       Возврат Формат(Д, \"ДФ=yyyy-MM-dd HH:mm:ss\");";
-        let mut utc = engine.state_builder().zone(FixedTimeZone(0)).build();
-        let mut east = engine.state_builder().zone(FixedTimeZone(3 * 3600)).build();
+        let mut utc = engine
+            .state_builder()
+            .zone(FixedTimeZone::new(0).expect("допустимое смещение"))
+            .build();
+        let mut east = engine
+            .state_builder()
+            .zone(FixedTimeZone::new(3 * 3600).expect("допустимое смещение"))
+            .build();
         assert_eq!(text(&utc.exec(script).unwrap()), "2014-05-10 13:14:15");
         assert_eq!(text(&east.exec(script).unwrap()), "2014-05-10 16:14:15");
     }
 
+    /// Фабрика XDTO запоминает зону ТОГО ПРОГОНА, в котором построена,
+    /// и толкует в ней лексические формы с поясом.
+    ///
+    /// Проверяется через настоящую границу — `СоздатьФабрикуXDTO` в
+    /// скрипте, то есть `State` -> VM -> `CallContext::zone_rc` -> модель,
+    /// — а не прямым вызовом построителя модели: потеря зоны на любом
+    /// звене этой цепочки обязана тест уронить.
+    #[test]
+    fn an_xdto_factory_keeps_the_zone_of_the_run_that_built_it() {
+        let schema = std::env::temp_dir().join("open-bsl-zone-factory.xsd");
+        std::fs::write(
+            &schema,
+            "<?xml version=\"1.0\"?>\n\
+             <xs:schema xmlns:xs=\"http://www.w3.org/2001/XMLSchema\" \
+             targetNamespace=\"urn:z\">\n\
+             <xs:simpleType name=\"Момент\">\n\
+             <xs:restriction base=\"xs:dateTime\"/>\n\
+             </xs:simpleType>\n\
+             </xs:schema>\n",
+        )
+        .expect("схема пишется во временный файл");
+
+        let script = format!(
+            "ф = СоздатьФабрикуXDTO(\"{}\");\n\
+             з = ф.Создать(ф.Тип(\"urn:z\", \"Момент\"), \"2026-08-12T18:41:17Z\");\n\
+             Возврат Формат(з.Значение, \"ДФ=HH:mm:ss\");",
+            schema.to_string_lossy()
+        );
+
+        let engine = Engine::builder().build().unwrap();
+        let mut east = engine
+            .state_builder()
+            .zone(FixedTimeZone::new(3 * 3600).expect("допустимое смещение"))
+            .build();
+        let mut utc = engine.state_builder().zone(FixedTimeZone::UTC).build();
+
+        // Тот же момент, две фабрики, два ответа — измеренный пересчёт
+        // (`facets::apply_zone`), но зона теперь из сессии.
+        assert_eq!(text(&east.exec(&script).unwrap()), "21:41:17");
+        assert_eq!(text(&utc.exec(&script).unwrap()), "18:41:17");
+
+        let _ = std::fs::remove_file(&schema);
+    }
+
     /// Тот же контракт, что у остальных возможностей окружения, — под
-    /// JIT. Зона до нативного пути доезжает не через `HostEnv`, а через
-    /// связанные компоненты (`LinkedComponents::zone` -> `JitCtx::zone`),
-    /// потому что лишний аргумент у `CompiledChunk::run` измеренно дорог.
+    /// JIT.
+    ///
+    /// Работает он здесь не потому, что зона доезжает до нативного пути,
+    /// а потому, что доезжать ей некуда: `ЗаписатьДатуJSON` — ГЛОБАЛЬНАЯ
+    /// функция компонента, а из компонентного JIT компилирует только
+    /// объектные опкоды. Сам нативный путь зоны не получает — известное
+    /// ограничение, закреплённое тестом
+    /// `under_the_jit_a_host_reader_of_the_zone_gets_an_error` в
+    /// `embedding.rs`, там же и измерение, почему так.
     #[test]
     fn the_zone_survives_a_jit_run() {
         let engine = Engine::builder().build().unwrap();
@@ -351,7 +416,7 @@ mod zone {
             let mut state = engine
                 .state_builder()
                 .jit(jit)
-                .zone(FixedTimeZone(3 * 3600))
+                .zone(FixedTimeZone::new(3 * 3600).expect("допустимое смещение"))
                 .build();
             assert_eq!(text(&state.exec(script).unwrap()), expected, "jit={jit}");
         }

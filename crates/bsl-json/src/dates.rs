@@ -87,7 +87,7 @@ pub(crate) fn format_json_date(
         }
         JsonDateWritingVariant::LocalOffset => {
             let c = date.to_civil();
-            let offset = zone.offset_seconds(pseudo_unix_seconds(date));
+            let offset = zone.offset_for_local(pseudo_unix_seconds(date));
             Ok(format!(
                 "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}{}",
                 c.year,
@@ -101,7 +101,7 @@ pub(crate) fn format_json_date(
         }
         JsonDateWritingVariant::Universal => {
             let pseudo = pseudo_unix_seconds(date);
-            let offset = zone.offset_seconds(pseudo);
+            let offset = zone.offset_for_local(pseudo);
             let utc_unix = pseudo - i64::from(offset);
             // ИЗМЕРЕНО: `ЗаписатьДатуJSON(Дата(1,1,1), ISO, УниверсальнаяДата)`
             // на платформе даёт `0001-01-01T00:00:00Z`, а не ошибку — хотя
