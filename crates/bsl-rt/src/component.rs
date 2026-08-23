@@ -422,20 +422,16 @@ pub fn call_method_from_table(
     arguments: &[BslValue],
     context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
-    // Посимвольное сравнение без аллокаций: этим путём ходят и вызовы из
-    // JIT-шимов, где строка приходит на каждый вызов, — собирать `String`
-    // на каждую строку таблицы недопустимо.
-    let equals_ci = |candidate: &str| {
-        candidate
-            .chars()
-            .flat_map(char::to_uppercase)
-            .eq(name.chars().flat_map(char::to_uppercase))
-    };
+    // Судья равенства имён один — [`crate::folded_eq`]. Он и без аллокаций
+    // на общем пути (побайтовое сравнение, свёрнутая строка лишь на входе
+    // вне быстрых алфавитов — см. `fold.rs`), поэтому путь JIT-шимов, где
+    // имя приходит на каждый вызов, платит не больше прежнего посимвольного
+    // сравнения через `to_uppercase`, которому он к тому же тождествен.
     for descriptor in table {
         if descriptor
             .names
             .iter()
-            .any(|candidate| equals_ci(candidate))
+            .any(|candidate| crate::folded_eq(candidate, name))
         {
             return (descriptor.call)(receiver, arguments, context);
         }

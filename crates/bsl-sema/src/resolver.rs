@@ -210,7 +210,13 @@ fn resolve_program_impl(
             }
             Item::VarDecl(vd) => {
                 for name in &vd.names {
-                    if !module_vars.iter().any(|n| n.eq_ignore_ascii_case(name)) {
+                    // Свёртка через `folded_eq`, а не `eq_ignore_ascii_case`:
+                    // поиск слота модульной переменной идёт по `to_uppercase`
+                    // (см. `module_index` ниже), и `eq_ignore_ascii_case` на
+                    // кириллице с ним расходится — разнорегистровый дубль
+                    // `Перем` порождал бы второй слот, в который запись из
+                    // тела и чтение из процедуры уходят порознь.
+                    if !module_vars.iter().any(|n| bsl_rt::folded_eq(n, name)) {
                         module_vars.push(name.clone());
                     }
                 }
@@ -1473,7 +1479,7 @@ impl<'a> Resolver<'a> {
                 // `BuiltinFn::Round` в рантайме всегда видит ровно 3
                 // аргумента. `0` для режима означает "умолчание" (см.
                 // `BslValue::round`).
-                if name.eq_ignore_ascii_case("Окр") || name.eq_ignore_ascii_case("Round") {
+                if bsl_rt::folded_eq(name, "Окр") || bsl_rt::folded_eq(name, "Round") {
                     const ROUND_ARITY: usize = 3;
                     if args.is_empty() || args.len() > ROUND_ARITY {
                         return Err(SemaError::ArgumentCountMismatch {
@@ -1526,7 +1532,7 @@ impl<'a> Resolver<'a> {
                         args: rargs,
                     });
                 }
-                if name.eq_ignore_ascii_case("Вычислить") || name.eq_ignore_ascii_case("Eval")
+                if bsl_rt::folded_eq(name, "Вычислить") || bsl_rt::folded_eq(name, "Eval")
                 {
                     if args.len() != 1 {
                         return Err(SemaError::ArgumentCountMismatch {
@@ -2599,6 +2605,55 @@ mod tests {
                 value: RExpr::DynEval(Box::new(RExpr::Str("2+2".to_string()))),
             }
         );
+    }
+
+    /// Строчное написание встроенного имени свёрнуто через `folded_eq`, а не
+    /// `eq_ignore_ascii_case`: на кириллице последнее — ложь, отчего `окр`
+    /// не доходил до спецразбора `Окр` и отвергался, хотя `Окр(1.5)`
+    /// принимался.
+    #[test]
+    fn a_lowercase_okr_resolves_like_its_canonical_form() {
+        let r = resolve_src("х = окр(1.5);");
+        match &r.body[0] {
+            RStmt::AssignLocal {
+                value: RExpr::CallBuiltinFn { builtin, .. },
+                ..
+            } => assert_eq!(*builtin, bsl_rt::BuiltinFn::Round),
+            other => panic!("ожидался вызов Round, получено {other:?}"),
+        }
+    }
+
+    /// Тот же изъян для `Вычислить`: строчное `вычислить` не распознавалось
+    /// ни резолвером, ни пре-проходом `core_receivers` — и оба свёрнуты вместе.
+    #[test]
+    fn a_lowercase_vychislit_resolves_to_dyn_eval() {
+        let r = resolve_src(r#"y = вычислить("2+2");"#);
+        assert_eq!(
+            r.body[0],
+            RStmt::AssignLocal {
+                slot: 0,
+                value: RExpr::DynEval(Box::new(RExpr::Str("2+2".to_string()))),
+            }
+        );
+    }
+
+    /// Разнорегистровый дубль `Перем` — один слот, а не два. Дедуп
+    /// объявлений сворачивается тем же `folded_eq`, что и поиск слота
+    /// (`module_index` по `to_uppercase`): иначе `Счётчик` и `счётчик` дают
+    /// два слота, поиск последним-побеждает уводит их в один, а первый
+    /// остаётся фантомным — запись из процедуры и чтение сверху расходятся.
+    #[test]
+    fn a_mixed_case_repeated_module_var_collapses_to_one_slot() {
+        let resolved = resolve_program_src(
+            "Перем Счётчик;\n\
+             Перем счётчик;\n\
+             Процедура П()\n\
+                 Счётчик = 99;\n\
+             КонецПроцедуры\n\
+             П();\n\
+             Сообщить(Счётчик);",
+        );
+        assert_eq!(resolved.module_vars.len(), 1, "разнорегистровый дубль слит");
     }
 
     #[test]

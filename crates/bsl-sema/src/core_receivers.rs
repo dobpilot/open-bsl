@@ -226,14 +226,19 @@ impl Collector<'_> {
                 to,
                 body,
             } => {
-                self.kill_loop_var(var);
+                // Границы вычисляются в ОБЪЕМЛЮЩЕЙ области, до того как имя
+                // цикла станет локальным: `kill_loop_var` идёт после их
+                // обхода. Иначе пре-проход объявил бы имя локальным раньше
+                // резолвера и разошёлся бы с ним на границе, ссылающейся на
+                // одноимённую переменную.
                 self.walk_expr(from);
                 self.walk_expr(to);
+                self.kill_loop_var(var);
                 self.walk_block(body);
             }
             Stmt::ForEach { var, iter, body } => {
-                self.kill_loop_var(var);
                 self.walk_expr(iter);
+                self.kill_loop_var(var);
                 self.walk_block(body);
             }
             Stmt::Return(value) => {
@@ -295,8 +300,8 @@ impl Collector<'_> {
                                     self.kill(arg_name);
                                 }
                             }
-                        } else if name.eq_ignore_ascii_case("Вычислить")
-                            || name.eq_ignore_ascii_case("Eval")
+                        } else if bsl_rt::folded_eq(name, "Вычислить")
+                            || bsl_rt::folded_eq(name, "Eval")
                         {
                             // Строка `Вычислить` видит слоты кадра и может
                             // вызвать функцию с by-ref параметром —
