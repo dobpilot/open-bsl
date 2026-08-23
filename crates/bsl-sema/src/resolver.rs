@@ -159,6 +159,11 @@ pub struct SnippetSignature {
     pub name: String,
     pub arity: usize,
     pub is_procedure: bool,
+    /// Есть ли у каждого параметра умолчание — в порядке параметров. Без
+    /// него фрагмент подставлял заглушку «умолчаний нет» и отвергал
+    /// `Вычислить("Хвост(1, )")` при том, что тот же текст в модуле
+    /// компилировался (воспроизведение 4).
+    pub has_default: Vec<bool>,
 }
 
 /// Резолвит весь модуль: собирает сигнатуры всех `Процедура`/`Функция` за
@@ -327,7 +332,11 @@ fn resolve_program_impl(
         functions.push(ResolvedFunction {
             name: name.clone(),
             is_procedure,
-            uses_dynamic: crate::resolved::block_uses_dynamic(&resolved_body),
+            // По телу И по умолчаниям параметров: последние компилируются в
+            // тот же чанк прологом, и `Ф(а = Вычислить("..."))` обязан
+            // материализовать `local_names`, даже когда тело статично.
+            uses_dynamic: crate::resolved::block_uses_dynamic(&resolved_body)
+                || crate::resolved::params_use_dynamic(&resolved_params),
             params: resolved_params,
             locals: r.locals,
             body: resolved_body,
@@ -553,7 +562,11 @@ fn resolve_snippet_stmts_mode_registry(
                 sig.name.to_uppercase(),
                 FuncSig {
                     index: index as u32,
-                    has_default: vec![false; sig.arity],
+                    // Реальные умолчания вызываемой функции модуля, а не
+                    // заглушка: фрагмент отличает опущенный хвостовой
+                    // необязательный аргумент от пропущенного обязательного
+                    // так же, как статический резолвер (воспроизведение 4).
+                    has_default: sig.has_default.clone(),
                     is_procedure: sig.is_procedure,
                 },
             )
@@ -2220,11 +2233,13 @@ mod tests {
                 name: "П".to_string(),
                 arity: 0,
                 is_procedure: true,
+                has_default: vec![],
             },
             SnippetSignature {
                 name: "Ф".to_string(),
                 arity: 0,
                 is_procedure: false,
+                has_default: vec![],
             },
         ];
         let snippet = |src: &str| {

@@ -32,6 +32,7 @@ pub fn chunk(instrs: Vec<Instr>) -> Chunk {
         exception_ranges: Vec::new(),
         n_params: 0,
         param_by_val: Vec::new(),
+        param_has_default: Vec::new(),
         is_procedure: false,
         n_locals: 0,
         n_regs: 1,

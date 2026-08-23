@@ -197,7 +197,7 @@ pub fn compile_snippet_with_requirements(
     let mut shapes = ShapeTable::new();
     // Фрагмент всегда получает таблицу имён: он и сам может содержать
     // вложенный `Выполнить`, а стоимость на одноразовом чанке никакая.
-    let mut chunk = compile_chunk(
+    let chunk = compile_chunk(
         all_locals,
         &[],
         body,
@@ -209,10 +209,14 @@ pub fn compile_snippet_with_requirements(
         &mut names,
         &mut shapes,
     )?;
-    // У фрагмента блок модульных переменных лежит ЗА его регистрами
-    // (`module_base != 0`, см. `Program::module_base`), поэтому перекрытия
-    // модульных слотов с регистрами кадра нет.
-    chunk.bundle_len = bundle::compute(&chunk, None);
+    // Разметку VLIW-бандлов фрагмента считает НЕ здесь, а
+    // `run_dynamic_snippet` в bsl-vm: только там известно, накладывается ли
+    // модульный блок фрагмента на регистры кадра — у верхнего уровня
+    // `module_base == 0` и накладывается, у вложенного `Выполнить` нет, — а
+    // от этого зависит пересечение модульных слотов. Прежний расчёт с
+    // `None` опирался на неверную посылку «у фрагмента `module_base != 0`».
+    // Пустой `bundle_len` равнозначен поинструкционному исполнению и
+    // безопасен до пересчёта.
     Ok((chunk, names.into_names(), shapes.into_shapes()))
 }
 
@@ -267,6 +271,7 @@ fn compile_chunk(
     Ok(Chunk {
         touches_objects: c.instrs.iter().any(Instr::touches_objects),
         param_by_val: params.iter().map(|p| p.by_val).collect(),
+        param_has_default: params.iter().map(|p| p.default.is_some()).collect(),
         is_procedure,
         instrs: c.instrs,
         consts: c.consts,

@@ -36,7 +36,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 21;
+pub const FORMAT_VERSION: u32 = 22;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -239,6 +239,11 @@ fn write_chunk(out: &mut String, index: usize, chunk: &Chunk, program: &Program)
         .iter()
         .map(|by_val| if *by_val { "value" } else { "byref" })
         .collect();
+    let defaults: Vec<&str> = chunk
+        .param_has_default
+        .iter()
+        .map(|has| if *has { "yes" } else { "no" })
+        .collect();
     // `kind=proc` пишется ТОЛЬКО у процедур: у функции это умолчание, а
     // у `chunks[0]` вида объявления попросту нет — верхний уровень никто
     // не вызывает, и приписывать ему `kind=func` значило бы утверждать
@@ -254,11 +259,12 @@ fn write_chunk(out: &mut String, index: usize, chunk: &Chunk, program: &Program)
     };
     writeln!(
         out,
-        "\n.chunk {index} params={} locals={} regs={} argmodes=[{}]{kind}  ; {what}",
+        "\n.chunk {index} params={} locals={} regs={} argmodes=[{}] defaults=[{}]{kind}  ; {what}",
         chunk.n_params,
         chunk.n_locals,
         chunk.n_regs,
-        modes.join(",")
+        modes.join(","),
+        defaults.join(",")
     )
     .unwrap();
 
@@ -1031,6 +1037,27 @@ fn parse_chunk(r: &mut Reader, expected_index: usize) -> Result<Chunk> {
         }
         Err(_) => Vec::new(),
     };
+    // `defaults=[yes no]` — есть ли у параметра значение по умолчанию.
+    // Нужен фрагменту `Выполнить`: без него он не отличит опущенный
+    // хвостовой необязательный аргумент от пропущенного обязательного.
+    let param_has_default: Vec<bool> = match field(&fields, no, "defaults") {
+        Ok(list) => {
+            let inner = list
+                .strip_prefix('[')
+                .and_then(|t| t.strip_suffix(']'))
+                .ok_or_else(|| TextError::At(no, format!("ожидался список: «{list}»")))?;
+            inner
+                .split(',')
+                .filter(|t| !t.is_empty())
+                .map(|t| match t {
+                    "yes" => Ok(true),
+                    "no" => Ok(false),
+                    other => Err(TextError::At(no, format!("признак умолчания «{other}»"))),
+                })
+                .collect::<Result<_>>()?
+        }
+        Err(_) => Vec::new(),
+    };
     // `kind=proc` у процедуры, отсутствие поля — функция либо верхний
     // уровень (см. печать выше). `kind=func` разбирается тоже: листинг
     // бывает и рукописным, и явное «функция» в нём законно. У `.chunk 0`
@@ -1148,6 +1175,7 @@ fn parse_chunk(r: &mut Reader, expected_index: usize) -> Result<Chunk> {
 
     Ok(Chunk {
         touches_objects: instrs.iter().any(Instr::touches_objects),
+        param_has_default,
         is_procedure,
         param_by_val,
         prop_cache: (0..instrs.len()).map(|_| RefCell::new(None)).collect(),

@@ -2612,6 +2612,7 @@ fn run_dynamic_snippet(
                 arity: chunk.map_or(0, |c| c.n_params as usize),
                 is_procedure: chunk.is_some_and(|c| c.is_procedure),
                 param_by_val: chunk.map_or(&[][..], |c| &c.param_by_val),
+                param_has_default: chunk.map_or(&[][..], |c| &c.param_has_default),
             }
         })
         .collect();
@@ -2703,6 +2704,18 @@ fn run_dynamic_snippet(
     } else {
         chunks[0] = compiled.chunk.clone();
     }
+    // Разметка бандлов фрагмента остаётся ПУСТОЙ (поинструкционное
+    // исполнение). Прежний расчёт в `compile_snippet` звал `compute` с
+    // `overlap = None` по ложной посылке «у фрагмента `module_base != 0`»:
+    // у верхнего уровня он нулевой, модульные слоты накладываются на первые
+    // `n_module` регистров, и разметка делала ЛОЖНОЕ утверждение о
+    // независимости членов. Верный `overlap` известен только здесь
+    // (`aliased`, `n_module`), но пересчитывать его на КАЖДОМ `Выполнить` —
+    // измеренные +9.6 % на eval-в-цикле ради соундности доказательства,
+    // которое над фрагментами ни в рантайме, ни в тестах не проверяется
+    // (`bundle::verify` идёт по статическому корпусу). Пустой вектор не
+    // делает никакого утверждения — он и сонадёжен, и бесплатен; фрагмент
+    // одноразовый, потеря пакетной диспетчеризации на нём незначима.
     let snippet_program = Program {
         requirements: compiled.requirements.clone(),
         chunks,

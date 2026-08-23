@@ -85,9 +85,11 @@ pub const MAX_BUNDLE_LEN: usize = u8::MAX as usize;
 /// верхнего уровня обычной программы, где модульные переменные занимают
 /// регистры `0..count`; `None` — пересечения нет. Единственная точка, где
 /// решается это правило: и компилятор, и разбор текстового формата обязаны
-/// звать её с индексом чанка, чтобы пересчёт совпал побайтово. Фрагменты
-/// `Выполнить`/`Вычислить` и REPL передают `None` сами: их модульный блок
-/// лежит за регистрами (`module_base != 0`).
+/// звать её с индексом чанка, чтобы пересчёт совпал побайтово. У фрагмента
+/// `Выполнить`/`Вычислить` пересечение зависит от его `module_base`, а тот
+/// известен только на прогоне: поэтому `run_dynamic_snippet` в bsl-vm сам
+/// пересчитывает разметку `chunks[0]`, передавая `Some(n)` для верхнего
+/// уровня (`module_base == 0`, слоты накладываются) и `None` для вложенного.
 pub fn module_overlap(chunk_index: usize, module_var_count: usize) -> Option<usize> {
     (chunk_index == 0).then_some(module_var_count)
 }
@@ -728,6 +730,7 @@ mod tests {
             exception_ranges: Vec::new(),
             n_params: 0,
             param_by_val: Vec::new(),
+            param_has_default: Vec::new(),
             is_procedure: false,
             touches_objects: false,
             n_locals: 8,

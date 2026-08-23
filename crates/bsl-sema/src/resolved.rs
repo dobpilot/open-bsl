@@ -325,6 +325,17 @@ pub fn block_uses_dynamic(body: &[RStmt]) -> bool {
     body.iter().any(stmt_uses_dynamic)
 }
 
+/// Содержит ли динамический код хотя бы одно ВЫРАЖЕНИЕ УМОЛЧАНИЯ параметра.
+/// Умолчания компилируются в тот же чанк прологом, поэтому
+/// `Ф(а = Вычислить("..."))` обязан пометить чанк как использующий
+/// динамику, даже если ТЕЛО функции его не содержит, — иначе `local_names`
+/// не материализуются и вложенный фрагмент не увидит область видимости.
+pub fn params_use_dynamic(params: &[ResolvedParam]) -> bool {
+    params
+        .iter()
+        .any(|p| p.default.as_ref().is_some_and(expr_uses_dynamic))
+}
+
 fn stmt_uses_dynamic(s: &RStmt) -> bool {
     match s {
         RStmt::Execute(_) => true,

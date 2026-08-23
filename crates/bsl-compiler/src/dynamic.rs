@@ -64,6 +64,7 @@ pub fn compile_dynamic_snippet(
             name: f.name.to_string(),
             arity: f.arity,
             is_procedure: f.is_procedure,
+            has_default: f.param_has_default.to_vec(),
         })
         .collect();
     let (all_locals, body, fragment_requirements) = match registry {
