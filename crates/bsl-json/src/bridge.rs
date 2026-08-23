@@ -1154,42 +1154,34 @@ pub(crate) fn component_read_json(
     context: &mut CallContext<'_>,
     arguments: &[BslValue],
 ) -> RtResult<BslValue> {
-    let (runtime, stdout, stderr, caller, zone) = context.execution_parts();
-    let zone = zone.ok_or(missing_zone())?;
-    match caller {
+    context.with_execution_parts(|parts| match parts.function_caller {
         Some(caller) => {
+            let stdout = parts.stdout;
+            let stderr = parts.stderr;
             let mut call = |name: &str, values: Vec<BslValue>| {
                 caller(name, values, &mut *stdout, &mut *stderr)
             };
-            read_json_builtin(arguments, runtime, zone, Some(&mut call))
+            read_json_builtin(arguments, parts.runtime_shapes, parts.zone, Some(&mut call))
         }
-        None => read_json_builtin(arguments, runtime, zone, None),
-    }
+        None => read_json_builtin(arguments, parts.runtime_shapes, parts.zone, None),
+    })
 }
 
 pub(crate) fn component_write_json(
     context: &mut CallContext<'_>,
     arguments: &[BslValue],
 ) -> RtResult<BslValue> {
-    let (runtime, stdout, stderr, caller, zone) = context.execution_parts();
-    let zone = zone.ok_or(missing_zone())?;
-    match caller {
+    context.with_execution_parts(|parts| match parts.function_caller {
         Some(caller) => {
+            let stdout = parts.stdout;
+            let stderr = parts.stderr;
             let mut call = |name: &str, values: Vec<BslValue>| {
                 caller(name, values, &mut *stdout, &mut *stderr)
             };
-            write_json_builtin(arguments, runtime, zone, Some(&mut call))
+            write_json_builtin(arguments, parts.runtime_shapes, parts.zone, Some(&mut call))
         }
-        None => write_json_builtin(arguments, runtime, zone, None),
-    }
-}
-
-/// Контекст без зоны — это НАТИВНЫЙ путь (сток JIT-шимов), а туда
-/// глобальные функции компонента не попадают: JIT компилирует только
-/// вызовы методов объектов. Ошибка здесь недостижима и стоит на месте
-/// ровно затем, чтобы протухший разбор дал её, а не чужое время.
-fn missing_zone() -> RtError {
-    RtError::Json("часовой пояс прогона недоступен в этом контексте".to_string())
+        None => write_json_builtin(arguments, parts.runtime_shapes, parts.zone, None),
+    })
 }
 
 pub(crate) fn component_write_json_date(
@@ -1215,8 +1207,7 @@ pub(crate) fn component_write_json_value(
     context: &mut CallContext<'_>,
     arguments: &[BslValue],
 ) -> RtResult<BslValue> {
-    let (runtime, zone) = context.shapes_and_zone();
-    let zone = zone.ok_or(missing_zone())?;
+    let (runtime, zone) = context.shapes_and_zone()?;
     write_json_value(&arguments[0], runtime, zone)
 }
 
@@ -1224,8 +1215,7 @@ pub(crate) fn component_read_json_value(
     context: &mut CallContext<'_>,
     arguments: &[BslValue],
 ) -> RtResult<BslValue> {
-    let (runtime, zone) = context.shapes_and_zone();
-    let zone = zone.ok_or(missing_zone())?;
+    let (runtime, zone) = context.shapes_and_zone()?;
     read_json_value(&arguments[0], runtime, zone)
 }
 

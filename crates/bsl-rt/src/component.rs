@@ -117,76 +117,98 @@ pub type FunctionCaller<'a> = dyn FnMut(
     ) -> RtResult<(BslValue, Vec<BslValue>)>
     + 'a;
 
+/// Возможность прогона, которой может не быть на конкретном пути
+/// исполнения. Наличие возможности — это ДАННЫЕ контекста, а не отдельный
+/// тип контекста: нативный путь (JIT-шимы) просто не несёт потоков и зоны.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Capability {
+    Stdout,
+    Stderr,
+    Zone,
+    FileSystem,
+    FunctionCaller,
+}
+
+/// Путь, на котором возможность спрошена, — для текста ошибки и только.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExecutionPath {
+    Interpreter,
+    Native,
+}
+
+/// Именованная запись сервисов интерпретаторного пути — вместо шести
+/// позиционных аргументов конструктора. Потоки и зона здесь есть ВСЕГДА
+/// (интерпретатор их несёт); `function_caller` — `None`, если из этого
+/// вызова BSL-функцию модуля звать нельзя.
+pub struct InterpreterServices<'a> {
+    pub runtime_shapes: &'a mut RuntimeShapes,
+    pub formatter: ValueFormatter,
+    pub stdout: &'a mut dyn Write,
+    pub stderr: &'a mut dyn Write,
+    pub zone: &'a Rc<dyn crate::TimeZone>,
+    pub function_caller: Option<&'a mut FunctionCaller<'a>>,
+}
+
 /// Сервисы конкретного состояния исполнения, доступные компоненту.
 ///
 /// Контекст не раскрывает стек и регистры VM. Вывод и таблицы форм
 /// принадлежат сессии, поэтому две VM в одном процессе не разделяют
 /// изменяемое состояние.
+///
+/// Возможности прогона (`stdout`, `stderr`, `zone`, `function_caller`) —
+/// это `Option` В ПОЛЯХ: на НАТИВНОМ пути (JIT-шимы) их нет, и обращение к
+/// отсутствующей отвечает одним типизированным отказом
+/// [`RtError::CapabilityMissing`], а не молчаливым стоком или чужим
+/// временем. Путь (`path`) — факт о вызывающем, он попадает в текст отказа.
 pub struct CallContext<'a> {
+    // Всегда есть — не зависят от пути исполнения.
     runtime_shapes: &'a mut RuntimeShapes,
-    stdout: &'a mut dyn Write,
-    stderr: &'a mut dyn Write,
     formatter: ValueFormatter,
-    function_caller: Option<&'a mut FunctionCaller<'a>>,
+    /// Каким путём построен контекст: факт о вызывающем, попадает в текст
+    /// [`RtError::CapabilityMissing`].
+    path: ExecutionPath,
+    // Возможности: `None` на нативном пути (JIT-шимы).
+    stdout: Option<&'a mut dyn Write>,
+    stderr: Option<&'a mut dyn Write>,
     /// Часовой пояс ПРОГОНА либо `None` — «этот путь о зоне не знает».
-    ///
     /// Компоненту зона нужна там, где записанный момент переводится в
-    /// местное время (даты JSON, лексические формы XDTO), а `HostEnv`
-    /// целиком сюда не дать: он занят вызывающим.
-    ///
-    /// `None` приходит с НАТИВНОГО пути: у JIT-шимов контекст — сток
-    /// (см. `bsl-vm/src/jit`), и зоны там нет по той же причине, что и
-    /// вывода.
-    ///
-    /// Это ИЗВЕСТНОЕ ОГРАНИЧЕНИЕ, а не безопасное умолчание. Компоненты
-    /// ЭТОГО дерева зону читают только из глобальных функций и
-    /// конструкторов (`ЗаписатьДатуJSON`, `ПрочитатьДатуJSON`,
-    /// `ПрочитатьJSON`, `ЗаписатьJSON`, построение фабрики XDTO), а JIT
-    /// их не компилирует, — но реестр компонентов ОТКРЫТ, и метод или
-    /// свойство стороннего типа вправе спросить зону тоже. Тогда прогон
-    /// под `--jit` ответит ошибкой там, где интерпретатор отвечает
-    /// значением; обе стороны закреплены тестами в
-    /// `crates/open-bsl/tests/embedding.rs`, там же измерение, почему
-    /// зона до шимов не доведена. Ошибка здесь выбрана сознательно:
-    /// расхождение видно сразу, а чужое время — нет.
+    /// местное время (даты JSON, лексические формы XDTO). `None` приходит с
+    /// нативного пути: у JIT-шимов зоны нет по той же причине, что и вывода
+    /// — реестр компонентов ОТКРЫТ, и метод стороннего типа под `--jit`
+    /// получит `CapabilityMissing` там, где интерпретатор отвечает значением
+    /// (обе стороны закреплены тестами `crates/open-bsl/tests/embedding.rs`).
     zone: Option<&'a Rc<dyn crate::TimeZone>>,
+    function_caller: Option<&'a mut FunctionCaller<'a>>,
 }
 
 impl<'a> CallContext<'a> {
-    pub fn new(
-        runtime_shapes: &'a mut RuntimeShapes,
-        stdout: &'a mut dyn Write,
-        stderr: &'a mut dyn Write,
-        formatter: ValueFormatter,
-        zone: Option<&'a Rc<dyn crate::TimeZone>>,
-    ) -> Self {
+    /// Контекст ИНТЕРПРЕТАТОРНОГО пути: потоки и зона есть всегда.
+    pub fn interpreter(services: InterpreterServices<'a>) -> Self {
         Self {
-            runtime_shapes,
-            stdout,
-            stderr,
-            formatter,
-            function_caller: None,
-            zone,
+            runtime_shapes: services.runtime_shapes,
+            formatter: services.formatter,
+            path: ExecutionPath::Interpreter,
+            stdout: Some(services.stdout),
+            stderr: Some(services.stderr),
+            zone: Some(services.zone),
+            function_caller: services.function_caller,
         }
     }
 
-    /// Создаёт контекст, в котором компонент может вызвать функцию
-    /// текущего BSL-модуля по имени.
-    pub fn with_function_caller(
-        runtime_shapes: &'a mut RuntimeShapes,
-        stdout: &'a mut dyn Write,
-        stderr: &'a mut dyn Write,
-        formatter: ValueFormatter,
-        zone: Option<&'a Rc<dyn crate::TimeZone>>,
-        function_caller: &'a mut FunctionCaller<'a>,
-    ) -> Self {
+    /// Контекст НАТИВНОГО пути (JIT-шимы): ни потоков, ни зоны, ни вызова
+    /// функции модуля — только таблица форм и форматтер. Обращение к
+    /// отсутствующей возможности отвечает [`RtError::CapabilityMissing`],
+    /// а не молчаливым стоком.
+    pub fn native(runtime_shapes: &'a mut RuntimeShapes, formatter: ValueFormatter) -> Self {
         Self {
             runtime_shapes,
-            stdout,
-            stderr,
             formatter,
-            function_caller: Some(function_caller),
-            zone,
+            path: ExecutionPath::Native,
+            stdout: None,
+            stderr: None,
+            zone: None,
+            function_caller: None,
         }
     }
 
@@ -194,12 +216,37 @@ impl<'a> CallContext<'a> {
         self.runtime_shapes
     }
 
-    pub fn stdout(&mut self) -> &mut dyn Write {
+    /// Поток вывода прогона.
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::CapabilityMissing`], если контекст построен без вывода
+    /// (нативный путь): прежде JIT-шимы подставляли молчаливый сток, теперь
+    /// компонент, пишущий под `--jit`, получает явный отказ.
+    pub fn stdout(&mut self) -> RtResult<&mut (dyn Write + 'a)> {
+        let path = self.path;
         self.stdout
+            .as_deref_mut()
+            .ok_or(RtError::CapabilityMissing {
+                capability: Capability::Stdout,
+                path,
+            })
     }
 
-    pub fn stderr(&mut self) -> &mut dyn Write {
+    /// Поток ошибок прогона.
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::CapabilityMissing`], если контекст построен без потока
+    /// ошибок (нативный путь).
+    pub fn stderr(&mut self) -> RtResult<&mut (dyn Write + 'a)> {
+        let path = self.path;
         self.stderr
+            .as_deref_mut()
+            .ok_or(RtError::CapabilityMissing {
+                capability: Capability::Stderr,
+                path,
+            })
     }
 
     pub fn format_value(&self, value: &BslValue, spec: Option<&str>) -> RtResult<String> {
@@ -211,13 +258,14 @@ impl<'a> CallContext<'a> {
     /// от МОМЕНТА, и какой момент интересует, знает только компонент.
     /// # Errors
     ///
-    /// [`RtError::InvalidBytecode`], если контекст построен без зоны (см.
+    /// [`RtError::CapabilityMissing`], если контекст построен без зоны (см.
     /// поле `zone`): значит зону спросил путь, который её не получает, и
     /// честнее ошибка, чем чужое время.
     pub fn zone(&self) -> RtResult<&dyn crate::TimeZone> {
-        self.zone.map(Rc::as_ref).ok_or(RtError::InvalidBytecode(
-            "часовой пояс запрошен там, где окружения прогона нет",
-        ))
+        self.zone.map(Rc::as_ref).ok_or(RtError::CapabilityMissing {
+            capability: Capability::Zone,
+            path: self.path,
+        })
     }
 
     /// Зона В СОБСТВЕННОСТЬ — для компонента, который её ЗАПОМИНАЕТ, а не
@@ -227,37 +275,91 @@ impl<'a> CallContext<'a> {
     ///
     /// То же, что у [`CallContext::zone`].
     pub fn zone_rc(&self) -> RtResult<Rc<dyn crate::TimeZone>> {
-        self.zone.map(Rc::clone).ok_or(RtError::InvalidBytecode(
-            "часовой пояс запрошен там, где окружения прогона нет",
-        ))
+        self.zone.map(Rc::clone).ok_or(RtError::CapabilityMissing {
+            capability: Capability::Zone,
+            path: self.path,
+        })
     }
 
     /// Таблица форм и зона ОДНОВРЕМЕННО: `runtime_shapes` берёт `self`
     /// изменяемо, поэтому после него `zone()` уже не позвать, а нужны они
-    /// вместе на каждом чтении и записи JSON.
-    pub fn shapes_and_zone(&mut self) -> (&mut RuntimeShapes, Option<&dyn crate::TimeZone>) {
-        (self.runtime_shapes, self.zone.map(Rc::as_ref))
+    /// вместе на каждом чтении и записи JSON-значения.
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::CapabilityMissing`], если зоны нет (нативный путь).
+    pub fn shapes_and_zone(&mut self) -> RtResult<(&mut RuntimeShapes, &dyn crate::TimeZone)> {
+        let zone = self
+            .zone
+            .map(Rc::as_ref)
+            .ok_or(RtError::CapabilityMissing {
+                capability: Capability::Zone,
+                path: self.path,
+            })?;
+        Ok((self.runtime_shapes, zone))
     }
 
-    /// Разделяет изменяемые сервисы для операции, которая одновременно
-    /// меняет таблицу форм и может вызвать BSL-функцию.
-    pub fn execution_parts(
+    /// Выдаёт на время одного замыкания разделённые изменяемые сервисы для
+    /// операции, которая одновременно меняет таблицу форм, пишет в потоки и
+    /// может вызвать BSL-функцию (чтение и запись JSON с обратными
+    /// вызовами). Замыкание, а не набор аксессоров: у полей РАЗНЫЕ
+    /// изменяемые заимствования одного контекста, и вернуть их по отдельности
+    /// нельзя.
+    ///
+    /// Набор ФИКСИРОВАН: `runtime_shapes`, `stdout`, `stderr`, `zone` и
+    /// необязательный `function_caller`. Потоки и зона обязательны — на
+    /// нативном пути их нет, и построить `ExecutionParts` не выйдет.
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::CapabilityMissing`], если вывод, поток ошибок или зона
+    /// отсутствуют (нативный путь), — плюс любая ошибка самого замыкания.
+    pub fn with_execution_parts<R>(
         &mut self,
-    ) -> (
-        &mut RuntimeShapes,
-        &mut dyn Write,
-        &mut dyn Write,
-        Option<&mut FunctionCaller<'a>>,
-        Option<&dyn crate::TimeZone>,
-    ) {
-        (
-            self.runtime_shapes,
-            self.stdout,
-            self.stderr,
-            self.function_caller.as_deref_mut(),
-            self.zone.map(Rc::as_ref),
-        )
+        body: impl FnOnce(ExecutionParts<'_, 'a>) -> RtResult<R>,
+    ) -> RtResult<R> {
+        let path = self.path;
+        let stdout = self
+            .stdout
+            .as_deref_mut()
+            .ok_or(RtError::CapabilityMissing {
+                capability: Capability::Stdout,
+                path,
+            })?;
+        let stderr = self
+            .stderr
+            .as_deref_mut()
+            .ok_or(RtError::CapabilityMissing {
+                capability: Capability::Stderr,
+                path,
+            })?;
+        let zone = self
+            .zone
+            .map(Rc::as_ref)
+            .ok_or(RtError::CapabilityMissing {
+                capability: Capability::Zone,
+                path,
+            })?;
+        let function_caller = self.function_caller.as_deref_mut();
+        body(ExecutionParts {
+            runtime_shapes: &mut *self.runtime_shapes,
+            stdout,
+            stderr,
+            zone,
+            function_caller,
+        })
     }
+}
+
+/// Разделённые изменяемые сервисы, выданные [`CallContext::with_execution_parts`]
+/// на время одного замыкания. Набор фиксирован; `files` здесь нет
+/// намеренно (файловая возможность приходит отдельной волной ABI-G).
+pub struct ExecutionParts<'ctx, 'a> {
+    pub runtime_shapes: &'ctx mut RuntimeShapes,
+    pub stdout: &'ctx mut dyn Write,
+    pub stderr: &'ctx mut dyn Write,
+    pub zone: &'ctx dyn crate::TimeZone,
+    pub function_caller: Option<&'ctx mut FunctionCaller<'a>>,
 }
 
 /// Единый ABI статически зарегистрированной функции или конструктора.
@@ -982,6 +1084,37 @@ mod tests {
         assert!(matches!(
             builder.build(),
             Err(RegistryError::DependencyVersion { .. })
+        ));
+    }
+
+    /// Нативный путь (JIT-шимы) не несёт возможностей: обращение к выводу
+    /// или зоне отвечает ОДНОЙ формой отказа `CapabilityMissing` с пометкой
+    /// пути — а не молчаливым стоком (прежнее поведение) и не чужим
+    /// временем. Это наблюдаемая цель ABI-A.
+    #[test]
+    fn a_native_context_reports_capability_missing() {
+        let mut shapes = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut context = CallContext::native(&mut shapes, |_v, _s| unreachable!());
+        assert!(matches!(
+            context.stdout(),
+            Err(RtError::CapabilityMissing {
+                capability: Capability::Stdout,
+                path: ExecutionPath::Native,
+            })
+        ));
+        assert!(matches!(
+            context.zone(),
+            Err(RtError::CapabilityMissing {
+                capability: Capability::Zone,
+                path: ExecutionPath::Native,
+            })
+        ));
+        assert!(matches!(
+            context.with_execution_parts(|_parts| Ok(())),
+            Err(RtError::CapabilityMissing {
+                path: ExecutionPath::Native,
+                ..
+            })
         ));
     }
 }

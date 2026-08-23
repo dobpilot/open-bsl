@@ -892,15 +892,7 @@ prop_shim!(shim_get_prop, |frames,
         // Legacy-байткод не помечает компонентное свойство открытым.
         // Мигрированные официальные объекты не используют IO в свойствах;
         // новый байткод получает настоящий CallContext через интерпретатор.
-        let mut stdout = std::io::sink();
-        let mut stderr = std::io::sink();
-        let mut context = bsl_rt::CallContext::new(
-            shapes,
-            &mut stdout,
-            &mut stderr,
-            bsl_format::format_value,
-            None,
-        );
+        let mut context = bsl_rt::CallContext::native(shapes, bsl_format::format_value);
         component_prop_get(object, props, name, program, &mut context)?
     } else {
         match ov.get_field_cached(name, prop_cache(chunk, pc as usize)?) {
@@ -931,15 +923,7 @@ prop_shim!(shim_set_prop, |frames,
     // `Значение` перехватывается ТАК ЖЕ, как в ветке интерпретатора: ему
     // нужно форматирование из `bsl-format`.
     if let Some(object) = ov.object_ref() {
-        let mut stdout = std::io::sink();
-        let mut stderr = std::io::sink();
-        let mut context = bsl_rt::CallContext::new(
-            shapes,
-            &mut stdout,
-            &mut stderr,
-            bsl_format::format_value,
-            None,
-        );
+        let mut context = bsl_rt::CallContext::native(shapes, bsl_format::format_value);
         component_prop_set(object, props, name, sv, program, &mut context)?;
     } else {
         match ov.set_field_cached(name, sv.clone(), prop_cache(chunk, pc as usize)?) {
@@ -975,15 +959,7 @@ shim!(shim_call_method, |frames,
     let ov = reg_load(stack, frames[idx].reg_index(obj))?;
     let args = CallArgs::load(stack, &frames[idx], base, count)?;
     let v = if let Some(object) = ov.object_ref() {
-        let mut stdout = std::io::sink();
-        let mut stderr = std::io::sink();
-        let mut context = bsl_rt::CallContext::new(
-            shapes,
-            &mut stdout,
-            &mut stderr,
-            bsl_format::format_value,
-            None,
-        );
+        let mut context = bsl_rt::CallContext::native(shapes, bsl_format::format_value);
         object.call_method(method.primary_name(), args.as_slice(), &mut context)?
     } else {
         bsl_rt::call_builtin_method_ctx(method, &ov, args.as_slice(), shapes)?
@@ -1015,15 +991,7 @@ prop_shim!(shim_get_object_prop, |frames,
     let name_id = bsl_rt::NameId::from_index(name as u32);
     let ov = reg_load(stack, frames[idx].reg_index(obj))?;
     let v = if let Some(object) = ov.object_ref() {
-        let mut stdout = std::io::sink();
-        let mut stderr = std::io::sink();
-        let mut context = bsl_rt::CallContext::new(
-            shapes,
-            &mut stdout,
-            &mut stderr,
-            bsl_format::format_value,
-            None,
-        );
+        let mut context = bsl_rt::CallContext::native(shapes, bsl_format::format_value);
         component_prop_get(object, props, name_id, program, &mut context)?
     } else {
         match ov.get_field_cached(name_id, prop_cache(chunk, pc as usize)?) {
@@ -1053,15 +1021,7 @@ prop_shim!(shim_set_object_prop, |frames,
     let ov = reg_load(stack, frames[idx].reg_index(obj))?;
     let sv = reg_load(stack, frames[idx].reg_index(src))?;
     if let Some(object) = ov.object_ref() {
-        let mut stdout = std::io::sink();
-        let mut stderr = std::io::sink();
-        let mut context = bsl_rt::CallContext::new(
-            shapes,
-            &mut stdout,
-            &mut stderr,
-            bsl_format::format_value,
-            None,
-        );
+        let mut context = bsl_rt::CallContext::native(shapes, bsl_format::format_value);
         component_prop_set(object, props, name_id, sv, program, &mut context)?;
     } else {
         match ov.set_field_cached(name_id, sv.clone(), prop_cache(chunk, pc as usize)?) {
@@ -1134,15 +1094,7 @@ extern "C" fn shim_call_object_method(
                 fallback_args.as_slice()
             };
             let v = if let Some(object) = ov.object_ref() {
-                let mut stdout = std::io::sink();
-                let mut stderr = std::io::sink();
-                let mut context = bsl_rt::CallContext::new(
-                    shapes,
-                    &mut stdout,
-                    &mut stderr,
-                    bsl_format::format_value,
-                    None,
-                );
+                let mut context = bsl_rt::CallContext::native(shapes, bsl_format::format_value);
                 // Тот же кэш ячейки инструкции поверх мемоизированного
                 // моста, что у интерпретатора: без моста каждый вызов
                 // конвертированного типа шёл бы строковым сканом таблицы,

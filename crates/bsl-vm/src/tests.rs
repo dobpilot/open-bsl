@@ -262,7 +262,8 @@ fn component_message(
     context: &mut bsl_rt::CallContext<'_>,
     _args: &[BslValue],
 ) -> bsl_rt::RtResult<BslValue> {
-    writeln!(context.stdout(), "component").map_err(|error| RtError::IoError(error.to_string()))?;
+    writeln!(context.stdout()?, "component")
+        .map_err(|error| RtError::IoError(error.to_string()))?;
     Ok(BslValue::Undefined)
 }
 

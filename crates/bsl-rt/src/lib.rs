@@ -48,10 +48,11 @@ pub use builtin::{
     call_builtin_method_ctx,
 };
 pub use component::{
-    Arity, CallContext, ComponentCall, ConstructorCode, ConstructorDescriptor, FunctionCode,
-    FunctionDescriptor, FunctionKind, LibraryDependency, LibraryDescriptor, LibraryKey,
-    LibraryRequirement, MethodCall, MethodCode, MethodDescriptor, ObjectJitPolicy, PropertyCode,
-    PropertyDescriptor, PropertyGet, PropertySet, RegistryError, RuntimeBuilder, RuntimeRegistry,
+    Arity, CallContext, Capability, ComponentCall, ConstructorCode, ConstructorDescriptor,
+    ExecutionParts, ExecutionPath, FunctionCode, FunctionDescriptor, FunctionKind,
+    InterpreterServices, LibraryDependency, LibraryDescriptor, LibraryKey, LibraryRequirement,
+    MethodCall, MethodCode, MethodDescriptor, ObjectJitPolicy, PropertyCode, PropertyDescriptor,
+    PropertyGet, PropertySet, RegistryError, RuntimeBuilder, RuntimeRegistry,
     call_method_from_table, core_library, get_property_from_table, set_property_from_table,
 };
 pub use date::{
@@ -321,6 +322,16 @@ pub enum RtError {
     StackOverflow {
         what: &'static str,
     },
+    /// Возможность прогона (`stdout`, зона, файловая система, вызов функции
+    /// модуля) спрошена на пути, который её не несёт. ОДНА форма отказа
+    /// вместо молчаливого стока JIT-шимов, локального `missing_zone` в
+    /// bsl-json и `InvalidBytecode` о зоне: расхождение путей исполнения —
+    /// это отсутствие возможности, а не повреждённый образ. Ловится
+    /// `Попыткой`, как и прочие рантайм-условия.
+    CapabilityMissing {
+        capability: crate::component::Capability,
+        path: crate::component::ExecutionPath,
+    },
 }
 
 impl RtError {
@@ -369,7 +380,8 @@ impl RtError {
             | RtError::IoError(_)
             | RtError::Link(_)
             | RtError::Component(_)
-            | RtError::StackOverflow { .. } => true,
+            | RtError::StackOverflow { .. }
+            | RtError::CapabilityMissing { .. } => true,
         }
     }
 }
@@ -433,6 +445,20 @@ impl fmt::Display for RtError {
             }
             RtError::StackOverflow { what } => {
                 write!(f, "превышена глубина стека: {what}")
+            }
+            RtError::CapabilityMissing { capability, path } => {
+                let cap = match capability {
+                    crate::component::Capability::Stdout => "вывод",
+                    crate::component::Capability::Stderr => "поток ошибок",
+                    crate::component::Capability::Zone => "часовой пояс",
+                    crate::component::Capability::FileSystem => "файловая система",
+                    crate::component::Capability::FunctionCaller => "вызов функции модуля",
+                };
+                let path = match path {
+                    crate::component::ExecutionPath::Interpreter => "интерпретатора",
+                    crate::component::ExecutionPath::Native => "нативного пути",
+                };
+                write!(f, "возможность «{cap}» недоступна на этом пути ({path})")
             }
         }
     }

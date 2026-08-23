@@ -1942,13 +1942,15 @@ fn step(
                 // говорит "это не такой объект") VM резолвит имя в текст
                 // через Program::names и идёт по строковому пути.
                 let v = if let Some(object) = ov.object_ref() {
-                    let mut context = bsl_rt::CallContext::new(
-                        runtime_shapes,
-                        &mut *host.stdout,
-                        &mut *host.stderr,
-                        bsl_format::format_value,
-                        Some(&linked.zone),
-                    );
+                    let mut context =
+                        bsl_rt::CallContext::interpreter(bsl_rt::InterpreterServices {
+                            runtime_shapes,
+                            stdout: &mut *host.stdout,
+                            stderr: &mut *host.stderr,
+                            formatter: bsl_format::format_value,
+                            zone: &linked.zone,
+                            function_caller: None,
+                        });
                     component_prop_get(
                         object,
                         &linked.component_properties,
@@ -1972,13 +1974,15 @@ fn step(
                 let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
                 let sv = reg_load(stack, frames[frame_idx].reg_index(src))?;
                 if let Some(object) = ov.object_ref() {
-                    let mut context = bsl_rt::CallContext::new(
-                        runtime_shapes,
-                        &mut *host.stdout,
-                        &mut *host.stderr,
-                        bsl_format::format_value,
-                        Some(&linked.zone),
-                    );
+                    let mut context =
+                        bsl_rt::CallContext::interpreter(bsl_rt::InterpreterServices {
+                            runtime_shapes,
+                            stdout: &mut *host.stdout,
+                            stderr: &mut *host.stderr,
+                            formatter: bsl_format::format_value,
+                            zone: &linked.zone,
+                            function_caller: None,
+                        });
                     component_prop_set(
                         object,
                         &linked.component_properties,
@@ -2018,13 +2022,15 @@ fn step(
                 let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
                 let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
                 let v = if let Some(object) = ov.object_ref() {
-                    let mut context = bsl_rt::CallContext::new(
-                        runtime_shapes,
-                        &mut *host.stdout,
-                        &mut *host.stderr,
-                        bsl_format::format_value,
-                        Some(&linked.zone),
-                    );
+                    let mut context =
+                        bsl_rt::CallContext::interpreter(bsl_rt::InterpreterServices {
+                            runtime_shapes,
+                            stdout: &mut *host.stdout,
+                            stderr: &mut *host.stderr,
+                            formatter: bsl_format::format_value,
+                            zone: &linked.zone,
+                            function_caller: None,
+                        });
                     object.call_method(method.primary_name(), args.as_slice(), &mut context)?
                 } else {
                     bsl_rt::call_builtin_method_ctx(method, &ov, args.as_slice(), runtime_shapes)?
@@ -2049,13 +2055,15 @@ fn step(
                     // `ТекстовыйДокумент.Записать(путь)` попадёт в чужую
                     // ветку и получит «метод не применим».
                     if let Some(object) = ov.object_ref() {
-                        let mut context = bsl_rt::CallContext::new(
-                            runtime_shapes,
-                            &mut *host.stdout,
-                            &mut *host.stderr,
-                            bsl_format::format_value,
-                            Some(&linked.zone),
-                        );
+                        let mut context =
+                            bsl_rt::CallContext::interpreter(bsl_rt::InterpreterServices {
+                                runtime_shapes,
+                                stdout: &mut *host.stdout,
+                                stderr: &mut *host.stderr,
+                                formatter: bsl_format::format_value,
+                                zone: &linked.zone,
+                                function_caller: None,
+                            });
                         object.call_method("Записать", std::slice::from_ref(sv), &mut context)?
                     } else {
                         ov.text_writer_write(sv)?
@@ -2281,13 +2289,14 @@ fn step_cold(
             let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
             let name_id = bsl_rt::NameId::from_index(name as u32);
             let value = if let Some(object) = ov.object_ref() {
-                let mut context = bsl_rt::CallContext::new(
+                let mut context = bsl_rt::CallContext::interpreter(bsl_rt::InterpreterServices {
                     runtime_shapes,
-                    &mut *host.stdout,
-                    &mut *host.stderr,
-                    bsl_format::format_value,
-                    Some(&linked.zone),
-                );
+                    stdout: &mut *host.stdout,
+                    stderr: &mut *host.stderr,
+                    formatter: bsl_format::format_value,
+                    zone: &linked.zone,
+                    function_caller: None,
+                });
                 component_prop_get(
                     object,
                     &linked.component_properties,
@@ -2312,13 +2321,14 @@ fn step_cold(
             let value = reg_load(stack, frames[frame_idx].reg_index(src))?;
             let name_id = bsl_rt::NameId::from_index(name as u32);
             if let Some(object) = ov.object_ref() {
-                let mut context = bsl_rt::CallContext::new(
+                let mut context = bsl_rt::CallContext::interpreter(bsl_rt::InterpreterServices {
                     runtime_shapes,
-                    &mut *host.stdout,
-                    &mut *host.stderr,
-                    bsl_format::format_value,
-                    Some(&linked.zone),
-                );
+                    stdout: &mut *host.stdout,
+                    stderr: &mut *host.stderr,
+                    formatter: bsl_format::format_value,
+                    zone: &linked.zone,
+                    function_caller: None,
+                });
                 component_prop_set(
                     object,
                     &linked.component_properties,
@@ -2386,14 +2396,14 @@ fn step_cold(
                         &mut nested_host,
                     )
                 };
-            let mut context = bsl_rt::CallContext::with_function_caller(
+            let mut context = bsl_rt::CallContext::interpreter(bsl_rt::InterpreterServices {
                 runtime_shapes,
-                &mut **host_stdout,
-                &mut **host_stderr,
-                bsl_format::format_value,
-                Some(&linked.zone),
-                &mut function_caller,
-            );
+                stdout: &mut **host_stdout,
+                stderr: &mut **host_stderr,
+                formatter: bsl_format::format_value,
+                zone: &linked.zone,
+                function_caller: Some(&mut function_caller),
+            });
             let value = call(&mut context, args.as_slice())?;
             let destination = frames[frame_idx].reg_index(dst);
             reg_store(stack, destination, value)?;
@@ -2404,13 +2414,14 @@ fn step_cold(
         } => {
             let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
             let call = linked.constructor(func_id, frames[frame_idx].pc)?;
-            let mut context = bsl_rt::CallContext::new(
+            let mut context = bsl_rt::CallContext::interpreter(bsl_rt::InterpreterServices {
                 runtime_shapes,
-                &mut *host.stdout,
-                &mut *host.stderr,
-                bsl_format::format_value,
-                Some(&linked.zone),
-            );
+                stdout: &mut *host.stdout,
+                stderr: &mut *host.stderr,
+                formatter: bsl_format::format_value,
+                zone: &linked.zone,
+                function_caller: None,
+            });
             let value = call(&mut context, args.as_slice())?;
             let destination = frames[frame_idx].reg_index(dst);
             reg_store(stack, destination, value)?;
@@ -2455,13 +2466,14 @@ fn step_cold(
             };
             let name_id = bsl_rt::NameId::from_index(method as u32);
             let value = if let Some(object) = ov.object_ref() {
-                let mut context = bsl_rt::CallContext::new(
+                let mut context = bsl_rt::CallContext::interpreter(bsl_rt::InterpreterServices {
                     runtime_shapes,
-                    &mut *host.stdout,
-                    &mut *host.stderr,
-                    bsl_format::format_value,
-                    Some(&linked.zone),
-                );
+                    stdout: &mut *host.stdout,
+                    stderr: &mut *host.stderr,
+                    formatter: bsl_format::format_value,
+                    zone: &linked.zone,
+                    function_caller: None,
+                });
                 // Тип со статической таблицей методов идёт кэшем ячейки
                 // этой инструкции поверх мемоизированного моста «номер
                 // имени → обработчик»; промах и тип без таблицы —
@@ -2501,13 +2513,14 @@ fn step_cold(
             let obj_idx = frames[frame_idx].reg_index(obj);
             let object = at(stack, obj_idx, "чтение объекта за границей стека значений")?;
             let v = if let Some(extension) = object.object_ref() {
-                let mut context = bsl_rt::CallContext::new(
+                let mut context = bsl_rt::CallContext::interpreter(bsl_rt::InterpreterServices {
                     runtime_shapes,
-                    &mut *host.stdout,
-                    &mut *host.stderr,
-                    bsl_format::format_value,
-                    Some(&linked.zone),
-                );
+                    stdout: &mut *host.stdout,
+                    stderr: &mut *host.stderr,
+                    formatter: bsl_format::format_value,
+                    zone: &linked.zone,
+                    function_caller: None,
+                });
                 extension.call_method("Закрыть", &[], &mut context)?
             } else {
                 object.close_object()?
