@@ -20,7 +20,7 @@ fn run(src: &str) -> BslValue {
     let resolved =
         bsl_sema::resolve_program(&program.items).unwrap_or_else(|e| panic!("sema error: {e:?}"));
     let compiled =
-        bsl_bytecode::compile_program(&resolved).unwrap_or_else(|e| panic!("compile error: {e:?}"));
+        bsl_compiler::compile_program(&resolved).unwrap_or_else(|e| panic!("compile error: {e:?}"));
     bsl_vm::run_program(&compiled).unwrap_or_else(|e| panic!("runtime error: {e:?}"))
 }
 

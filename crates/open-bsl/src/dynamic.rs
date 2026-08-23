@@ -98,7 +98,7 @@ impl DynamicCompiler for DynamicCode {
         }
         self.scopes += 1;
         self.compiles += 1;
-        let unit = Rc::new(bsl_bytecode::compile_dynamic_snippet(
+        let unit = Rc::new(bsl_compiler::compile_dynamic_snippet(
             request,
             Some(self.engine.registry()),
             &self.engine.preproc_symbols(),

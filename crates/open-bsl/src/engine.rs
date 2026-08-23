@@ -40,7 +40,7 @@ impl Engine {
         let syntax = bsl_syntax::parse_with_symbols(source, &self.inner.symbols)?;
         let resolved =
             bsl_sema::resolve_program_with_registry(&syntax.items, &self.inner.registry)?;
-        let program = bsl_bytecode::compile_program(&resolved)?;
+        let program = bsl_compiler::compile_program(&resolved)?;
         Ok(Module {
             id: self.next_module_id(),
             program,

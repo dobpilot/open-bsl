@@ -8,10 +8,12 @@
 //! котором нет ни кадра, ни стека, ни связанных компонентов, — и получает
 //! [`DynamicUnit`], готовый к исполнению.
 //!
-//! Реализация [`DynamicCompiler`] живёт снаружи VM (в фасаде `open-bsl`);
-//! здесь же лежит [`compile_dynamic_snippet`] — чистая функция «текст →
-//! артефакт», которой эта реализация и пользуется. Кэш скомпилированных
-//! фрагментов принадлежит хосту, а не этому модулю и не VM.
+//! Здесь только сам контракт — его знают обе стороны, поэтому он и лежит в
+//! общем для них крейте. Фронтенд не знает ни та ни другая: разбором и
+//! кодогеном фрагмента занимается `bsl_compiler::compile_dynamic_snippet`,
+//! а реализация [`DynamicCompiler`] поверх него — фасад `open-bsl`. Кэш
+//! скомпилированных фрагментов принадлежит хосту, а не этому модулю и не
+//! VM.
 
 use std::rc::Rc;
 
@@ -150,133 +152,4 @@ pub trait DynamicCompiler {
     /// динамическая ошибка исполнения, ловимая `Попытка`, и решать это за
     /// VM хост не вправе.
     fn compile(&mut self, request: &DynamicRequest<'_>) -> Result<Rc<DynamicUnit>, String>;
-}
-
-/// Лексика, разбор, резолвинг и кодоген фрагмента — весь фронтенд одним
-/// вызовом.
-///
-/// Это ровно тот путь, которым компилируется статический код: один движок,
-/// одна семантика, второго интерпретатора динамики не существует.
-///
-/// `symbols` — символы условной компиляции окружения. Платформа гасит их
-/// все у динамического кода; здесь фрагмент видит тот же набор, что и
-/// модуль вокруг него — сознательное отступление, см. `docs/bsl-preproc.md`.
-///
-/// `scope` — номер, под которым хост будет знать область этого фрагмента
-/// (см. [`DynamicUnit::scope`]); здесь он только переносится в результат.
-/// Придумывать идентичность прогона компилятору нечем и незачем.
-///
-/// # Errors
-///
-/// Текст первой ошибки любой из фаз, а также сообщение о конфликте версий
-/// компонентов между программой и фрагментом.
-pub fn compile_dynamic_snippet(
-    request: &DynamicRequest<'_>,
-    registry: Option<&bsl_rt::RuntimeRegistry>,
-    symbols: &bsl_syntax::PreprocSymbols,
-    scope: u64,
-) -> Result<DynamicUnit, String> {
-    // `Вычислить` заворачивается в `Возврат (...)`, чтобы значение
-    // выражения получалось тем же путём, что и у обычного `Возврат`.
-    let source = match request.kind {
-        DynamicKind::Eval => format!("Возврат ({});", request.source),
-        DynamicKind::Execute => request.source.to_string(),
-    };
-
-    let parsed = bsl_syntax::parse_with_symbols(&source, symbols).map_err(|e| format!("{e}"))?;
-    let mut stmts = Vec::with_capacity(parsed.items.len());
-    for item in parsed.items {
-        match item {
-            bsl_syntax::Item::Stmt(s) => stmts.push(s),
-            bsl_syntax::Item::VarDecl(vd) => stmts.push(bsl_syntax::Stmt::VarDecl(vd)),
-            // НЕ ИЗМЕРЕНО(EXEC.PROC_DECLARATION): может ли фрагмент вообще
-            // объявлять процедуры и функции. Взято «нет» — объявленную
-            // процедуру было бы некуда деть: таблица чанков программы уже
-            // скомпилирована.
-            _ => {
-                return Err(
-                    "Выполнить/Вычислить не поддерживают объявление процедур/функций".to_string(),
-                );
-            }
-        }
-    }
-
-    let signatures: Vec<bsl_sema::SnippetSignature> = request
-        .functions
-        .iter()
-        .map(|f| bsl_sema::SnippetSignature {
-            name: f.name.to_string(),
-            arity: f.arity,
-            is_procedure: f.is_procedure,
-        })
-        .collect();
-    let (all_locals, body, fragment_requirements) = match registry {
-        Some(registry) => bsl_sema::resolve_snippet_stmts_with_registry(
-            request.locals,
-            request.module_vars,
-            &stmts,
-            &signatures,
-            registry,
-        )
-        .map_err(|e| format!("{e}"))?,
-        None => {
-            let (locals, body) = bsl_sema::resolve_snippet_stmts(
-                request.locals,
-                request.module_vars,
-                &stmts,
-                &signatures,
-            )
-            .map_err(|e| format!("{e}"))?;
-            (locals, body, vec![LibraryRequirement::bsl_rt()])
-        }
-    };
-    let requirements = merge_requirements(request.requirements, &fragment_requirements)?;
-    let callee_params: Vec<Vec<bool>> = request
-        .functions
-        .iter()
-        .map(|f| f.param_by_val.to_vec())
-        .collect();
-    let (chunk, names, shapes) = crate::compile_snippet_with_requirements(
-        &all_locals,
-        &body,
-        request.names,
-        &callee_params,
-        &requirements,
-    )
-    .map_err(|e| format!("{e}"))?;
-
-    Ok(DynamicUnit {
-        scope,
-        chunk,
-        names,
-        shapes,
-        requirements,
-    })
-}
-
-/// Требования программы плюс требования фрагмента. Нулевая позиция —
-/// всегда `bsl-rt`, остальные упорядочены по имени пакета, потому что от
-/// этого порядка зависят номера библиотек в инструкциях.
-fn merge_requirements(
-    base: &[LibraryRequirement],
-    extra: &[LibraryRequirement],
-) -> Result<Vec<LibraryRequirement>, String> {
-    let mut merged = base.to_vec();
-    for requirement in extra {
-        match merged
-            .iter()
-            .find(|existing| existing.package == requirement.package)
-        {
-            Some(existing) if existing.version != requirement.version => {
-                return Err(format!(
-                    "для {} одновременно требуются версии {} и {}",
-                    requirement.package, existing.version, requirement.version
-                ));
-            }
-            Some(_) => {}
-            None => merged.push(requirement.clone()),
-        }
-    }
-    merged[1..].sort_by(|left, right| left.package.cmp(&right.package));
-    Ok(merged)
 }

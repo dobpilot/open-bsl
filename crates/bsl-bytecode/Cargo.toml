@@ -3,8 +3,11 @@ name = "bsl-bytecode"
 version.workspace = true
 edition.workspace = true
 
+# Ни `bsl-syntax`, ни `bsl-sema` — ни в обычных зависимостях, ни в
+# тестовых: здесь только представление байт-кода и его текстовый формат,
+# а кодоген живёт в `bsl-compiler`, который зависит от этого крейта. Тесты
+# собирают программы руками (см. `tests/support`) именно поэтому: обратная
+# dev-зависимость вернула бы цикл, от которого крейт и разделяли.
 [dependencies]
-bsl-syntax = { path = "../bsl-syntax" }
-bsl-sema = { path = "../bsl-sema" }
 bsl-rt = { path = "../bsl-rt" }
 bsl-number = { path = "../bsl-number" }

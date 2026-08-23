@@ -1,7 +1,7 @@
 //! Тесты цикла диспетчеризации: опкоды, кадры, компоненты, динамика.
 
 use super::*;
-use bsl_bytecode::compile_program;
+use bsl_compiler::compile_program;
 use bsl_number::BslNumber;
 use bsl_sema::resolve_program;
 use bsl_syntax::parse;
@@ -42,7 +42,7 @@ impl bsl_bytecode::DynamicCompiler for TestDynamic<'_> {
         request: &bsl_bytecode::DynamicRequest<'_>,
     ) -> Result<std::rc::Rc<bsl_bytecode::DynamicUnit>, String> {
         self.scopes += 1;
-        bsl_bytecode::compile_dynamic_snippet(
+        bsl_compiler::compile_dynamic_snippet(
             request,
             self.registry,
             &bsl_syntax::PreprocSymbols::new(),
@@ -3264,7 +3264,7 @@ fn a_dynamic_fragment_comes_from_the_host_not_from_the_vm() {
                 names: request.names,
                 requirements: request.requirements,
             };
-            bsl_bytecode::compile_dynamic_snippet(
+            bsl_compiler::compile_dynamic_snippet(
                 &substitute,
                 None,
                 &bsl_syntax::PreprocSymbols::new(),

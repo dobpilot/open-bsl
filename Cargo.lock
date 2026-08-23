@@ -116,8 +116,6 @@ version = "0.1.0"
 dependencies = [
  "bsl-number",
  "bsl-rt",
- "bsl-sema",
- "bsl-syntax",
 ]
 
 [[package]]
@@ -125,6 +123,7 @@ name = "bsl-cli"
 version = "0.1.0"
 dependencies = [
  "bsl-bytecode",
+ "bsl-compiler",
  "bsl-format",
  "bsl-rt",
  "bsl-sema",
@@ -132,6 +131,17 @@ dependencies = [
  "bsl-vm",
  "open-bsl",
  "rustyline",
+]
+
+[[package]]
+name = "bsl-compiler"
+version = "0.1.0"
+dependencies = [
+ "bsl-bytecode",
+ "bsl-number",
+ "bsl-rt",
+ "bsl-sema",
+ "bsl-syntax",
 ]
 
 [[package]]
@@ -229,6 +239,7 @@ name = "bsl-vm"
 version = "0.1.0"
 dependencies = [
  "bsl-bytecode",
+ "bsl-compiler",
  "bsl-format",
  "bsl-json",
  "bsl-number",
@@ -700,6 +711,7 @@ version = "0.2.0"
 dependencies = [
  "bsl-binbuf",
  "bsl-bytecode",
+ "bsl-compiler",
  "bsl-json",
  "bsl-pdf",
  "bsl-regexp",

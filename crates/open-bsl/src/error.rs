@@ -7,7 +7,7 @@ use std::fmt;
 pub enum Error {
     Parse(bsl_syntax::Diagnostic),
     Semantic(bsl_sema::SemaError),
-    Compile(bsl_bytecode::CompileError),
+    Compile(bsl_compiler::CompileError),
     Registry(bsl_rt::RegistryError),
     Runtime(bsl_rt::RtError),
     Bytecode(bsl_bytecode::TextError),
@@ -60,8 +60,8 @@ impl From<bsl_sema::SemaError> for Error {
     }
 }
 
-impl From<bsl_bytecode::CompileError> for Error {
-    fn from(error: bsl_bytecode::CompileError) -> Self {
+impl From<bsl_compiler::CompileError> for Error {
+    fn from(error: bsl_compiler::CompileError) -> Self {
         Self::Compile(error)
     }
 }

@@ -16,6 +16,7 @@ members = [
     "crates/bsl-zip",
     "crates/bsl-format",
     "crates/bsl-bytecode",
+    "crates/bsl-compiler",
     "crates/bsl-vm",
     "crates/bsl-cli",
     "crates/open-bsl",

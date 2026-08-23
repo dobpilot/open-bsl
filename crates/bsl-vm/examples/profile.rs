@@ -10,7 +10,7 @@ use bsl_rt::BslValue;
 fn run(src: &str) -> BslValue {
     let program = bsl_syntax::parse(src).expect("parse");
     let resolved = bsl_sema::resolve_program(&program.items).expect("sema");
-    let compiled = bsl_bytecode::compile_program(&resolved).expect("compile");
+    let compiled = bsl_compiler::compile_program(&resolved).expect("compile");
     bsl_vm::run_program(&compiled).expect("runtime")
 }
 

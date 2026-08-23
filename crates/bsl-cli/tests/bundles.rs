@@ -52,7 +52,7 @@ fn bundle_invariants_hold_on_the_whole_corpus() {
                 skipped += 1;
                 continue;
             };
-            let Ok(program) = bsl_bytecode::compile_program(&resolved) else {
+            let Ok(program) = bsl_compiler::compile_program(&resolved) else {
                 skipped += 1;
                 continue;
             };

@@ -7,7 +7,8 @@
 //! переводила цель через `as usize`, а `pc` за концом чанка принимала за
 //! нормальное завершение — и остаток программы молча пропадал.
 
-use bsl_bytecode::{ArgMode, Instr, Program, compile_program, parse_program, write_program};
+use bsl_bytecode::{ArgMode, Instr, Program, parse_program, write_program};
+use bsl_compiler::compile_program;
 use bsl_rt::RtError;
 
 fn compile(src: &str) -> Program {

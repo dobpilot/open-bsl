@@ -2,8 +2,7 @@ use bsl_rt::{BslValue, NameInterner, ShapeTable};
 use bsl_sema::{RExpr, RStmt, ResolvedArg, ResolvedFunction, ResolvedParam, ResolvedProgram};
 use bsl_syntax::{BinaryOp, UnaryOp};
 
-use crate::chunk::{Chunk, ExceptionRange, Program};
-use crate::instr::{ArgMode, Instr};
+use bsl_bytecode::{ArgMode, Chunk, ExceptionRange, Instr, LibraryRequirement, Program, bundle};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompileError {
@@ -106,10 +105,8 @@ pub fn compile_program(resolved: &ResolvedProgram) -> Result<Program, CompileErr
         )?);
     }
     for (i, chunk) in chunks.iter_mut().enumerate() {
-        chunk.bundle_len = crate::bundle::compute(
-            chunk,
-            crate::bundle::module_overlap(i, resolved.module_vars.len()),
-        );
+        chunk.bundle_len =
+            bundle::compute(chunk, bundle::module_overlap(i, resolved.module_vars.len()));
     }
     Ok(Program {
         requirements: resolved.requirements.clone(),
@@ -168,7 +165,7 @@ pub fn compile_snippet(
         body,
         program_names,
         callee_params,
-        &[crate::LibraryRequirement::bsl_rt()],
+        &[LibraryRequirement::bsl_rt()],
     )
 }
 
@@ -185,7 +182,7 @@ pub fn compile_snippet_with_requirements(
     body: &[RStmt],
     program_names: &[String],
     callee_params: &[Vec<bool>],
-    requirements: &[crate::LibraryRequirement],
+    requirements: &[LibraryRequirement],
 ) -> Result<SnippetOutput, CompileError> {
     let mut names = NameInterner::new();
     for n in program_names {
@@ -209,7 +206,7 @@ pub fn compile_snippet_with_requirements(
     // У фрагмента блок модульных переменных лежит ЗА его регистрами
     // (`module_base != 0`, см. `Program::module_base`), поэтому перекрытия
     // модульных слотов с регистрами кадра нет.
-    chunk.bundle_len = crate::bundle::compute(&chunk, None);
+    chunk.bundle_len = bundle::compute(&chunk, None);
     Ok((chunk, names.into_names(), shapes.into_shapes()))
 }
 
@@ -221,7 +218,7 @@ fn compile_chunk(
     body: &[RStmt],
     functions: &[ResolvedFunction],
     callee_params: &[Vec<bool>],
-    requirements: &[crate::LibraryRequirement],
+    requirements: &[LibraryRequirement],
     materialize_locals: bool,
     is_procedure: bool,
     names: &mut NameInterner,
@@ -314,7 +311,7 @@ struct Compiler<'a> {
     /// Режимы параметров вызываемых функций по их номеру — заполняется
     /// только для фрагментов `Выполнить`, где `functions` пуст.
     callee_params: Vec<Vec<bool>>,
-    requirements: &'a [crate::LibraryRequirement],
+    requirements: &'a [LibraryRequirement],
     /// Общие на весь модуль — см. `compile_program`.
     names: &'a mut NameInterner,
     shapes: &'a mut ShapeTable,

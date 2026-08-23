@@ -2,40 +2,18 @@
 //! программе: `Program` и `Chunk` — структуры с открытыми полями, поэтому
 //! «такого байт-кода компилятор не выпускает» здесь не аргумент.
 
-use bsl_bytecode::{Chunk, Instr, Program, TextError, write_program};
+mod support;
 
-/// Пустой чанк с одной инструкцией: остальные поля — то, что получилось бы
-/// у `Program`, собранной руками, а не компилятором.
-fn chunk(instrs: Vec<Instr>) -> Chunk {
-    Chunk {
-        instrs,
-        consts: Vec::new(),
-        call_arg_modes: vec![Vec::new()],
-        exception_ranges: Vec::new(),
-        n_params: 0,
-        param_by_val: Vec::new(),
-        is_procedure: false,
-        n_locals: 0,
-        n_regs: 1,
-        prop_cache: Vec::new(),
-        method_cache: Vec::new(),
-        local_names: Vec::new(),
-        bundle_len: Vec::new(),
-        touches_objects: false,
-    }
-}
+use bsl_bytecode::{Instr, TextError, write_program};
+use support::{chunk, program};
 
-fn program(instrs: Vec<Instr>) -> Program {
-    Program {
-        requirements: vec![bsl_bytecode::LibraryRequirement::bsl_rt()],
-        chunks: vec![chunk(instrs)],
-        names: Vec::new(),
-        shapes: Vec::new(),
-        top_level_locals: Vec::new(),
-        module_vars: Vec::new(),
-        module_base: 0,
-        function_names: Vec::new(),
-    }
+fn one_call(func: u16) -> bsl_bytecode::Program {
+    program(vec![chunk(vec![Instr::Call {
+        func,
+        base: 0,
+        arg_modes: 0,
+        ret: 0,
+    }])])
 }
 
 /// Нулевой номер функции — это ссылка на `chunks[0]`, то есть на верхний
@@ -45,13 +23,7 @@ fn program(instrs: Vec<Instr>) -> Program {
 /// вместо ошибки.
 #[test]
 fn a_call_of_chunk_zero_is_an_error_not_a_panic() {
-    let bad = program(vec![Instr::Call {
-        func: 0,
-        base: 0,
-        arg_modes: 0,
-        ret: 0,
-    }]);
-    match write_program(&bad, None) {
+    match write_program(&one_call(0), None) {
         Err(TextError::BadCallTarget { chunk, pc, func }) => {
             assert_eq!((chunk, pc, func), (0, 0, 0));
         }
@@ -63,14 +35,8 @@ fn a_call_of_chunk_zero_is_an_error_not_a_panic() {
 /// нельзя было бы разобрать обратно во что-то исполнимое.
 #[test]
 fn a_call_past_the_last_function_is_an_error() {
-    let bad = program(vec![Instr::Call {
-        func: 3,
-        base: 0,
-        arg_modes: 0,
-        ret: 0,
-    }]);
     assert!(matches!(
-        write_program(&bad, None),
+        write_program(&one_call(3), None),
         Err(TextError::BadCallTarget { func: 3, .. })
     ));
 }

@@ -1,0 +1,11 @@
+[package]
+name = "bsl-compiler"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+bsl-bytecode = { path = "../bsl-bytecode" }
+bsl-sema = { path = "../bsl-sema" }
+bsl-syntax = { path = "../bsl-syntax" }
+bsl-rt = { path = "../bsl-rt" }
+bsl-number = { path = "../bsl-number" }

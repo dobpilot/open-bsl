@@ -314,7 +314,7 @@ fn eval_repl_line(line: &str, session: &mut Session) -> Result<BslValue, String>
     // не на что-то накопленное в сессии. Раньше здесь передавался
     // `session.shapes` (всегда пустой) — падало на первой же строке,
     // создающей `Новый Структура(...)`, с индексом за границами.
-    let (chunk, new_names, shapes) = bsl_bytecode::compile_snippet_with_requirements(
+    let (chunk, new_names, shapes) = bsl_compiler::compile_snippet_with_requirements(
         &new_locals,
         &body,
         &session.names,

@@ -5,27 +5,15 @@
 //! процесс с «capacity overflow» и кодом 101 — в debug и в release
 //! одинаково, — вместо `TextError`.
 
-use bsl_bytecode::{compile_program, parse_program, write_program};
+mod support;
+
+use bsl_bytecode::{parse_program, write_program};
 
 fn listing() -> String {
-    // Программа с непустыми секциями: константы, имена, обработчик,
-    // объявленная функция и режимы аргументов.
-    let src = concat!(
-        "Функция Ф(а = 3, б = 7)\n",
-        "Возврат а + б;\n",
-        "КонецФункции\n",
-        "Перем М;\n",
-        "Попытка\n",
-        "С = Новый Структура(\"Поле\", 1);\n",
-        "Сообщить(С.Поле + Ф(1,));\n",
-        "Исключение\n",
-        "Сообщить(\"поймано\");\n",
-        "КонецПопытки;\n",
-    );
-    let parsed = bsl_syntax::parse(src).expect("разбор");
-    let resolved = bsl_sema::resolve_program(&parsed.items).expect("резолвинг");
-    let program = compile_program(&resolved).expect("кодоген");
-    write_program(&program, None).expect("печать")
+    // Образец, у которого непуста КАЖДАЯ секция со счётчиком: собран
+    // руками, потому что предмет проверки — разбор листинга, а не то,
+    // какой листинг выпускает кодоген.
+    write_program(&support::every_section(), None).expect("печать")
 }
 
 /// Все секции листинга, несущие счётчик. Список закрыт: если появится
