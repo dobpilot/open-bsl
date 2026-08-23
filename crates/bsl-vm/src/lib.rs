@@ -686,11 +686,23 @@ fn resolve_component_method(
 fn check_control_flow(program: &Program) -> Result<(), RtError> {
     for chunk in &program.chunks {
         let limit = chunk.instrs.len();
-        for instr in &chunk.instrs {
+        for (pc, instr) in chunk.instrs.iter().enumerate() {
             if let Some(target) = instr.jump_target()
                 && (target < 0 || target as usize > limit)
             {
                 return Err(RtError::InvalidBytecode("цель перехода за пределами чанка"));
+            }
+            // `NumericForNextI64` несёт предусловие «цель — собственный pc»:
+            // на продолжении цикла она прыгает на `target`, а скрытое
+            // состояние ищется по совпадению `state.pc == pc`. Цель, не
+            // равная своей позиции, увела бы управление на чужую инструкцию,
+            // а состояние осиротело бы.
+            if let Instr::NumericForNextI64 { target, .. } = instr
+                && *target as usize != pc
+            {
+                return Err(RtError::InvalidBytecode(
+                    "числовой цикл: цель не указывает на собственную инструкцию",
+                ));
             }
             check_call_geometry(program, chunk, instr)?;
         }
@@ -757,7 +769,43 @@ fn check_call_geometry(program: &Program, chunk: &Chunk, instr: &Instr) -> Resul
                     "регистры аргументов вызова выходят за кадр",
                 ));
             }
+            // Параметр по ссылке (`byref:slot`) — алиас ЛОКАЛИ вызывающего.
+            // Граница — именно `n_locals`, а не `n_regs`: временный регистр
+            // локальной переменной не является, и проверка по `n_regs`
+            // пропустила бы алиас на чужой временный слот.
+            for mode in modes {
+                if let ArgMode::ByRefLocal(slot) = mode
+                    && *slot as usize >= chunk.n_locals as usize
+                {
+                    return Err(RtError::InvalidBytecode(
+                        "параметр по ссылке указывает за локали кадра",
+                    ));
+                }
+            }
             Ok(())
+        }
+        Instr::NewStructure {
+            shape, base, count, ..
+        } => {
+            let Some(shape_rc) = program.shapes.get(*shape as usize) else {
+                return Err(RtError::InvalidBytecode(
+                    "номер формы структуры вне таблицы форм программы",
+                ));
+            };
+            if *count as usize != shape_rc.names.len() {
+                return Err(RtError::InvalidBytecode(
+                    "число полей структуры не равно длине её формы",
+                ));
+            }
+            // `base + i` в исполнении считается как `u8`, поэтому границу
+            // проверяем тем же типом через `checked_add`: заворот дал бы
+            // первое поле верным, а следующее — алиасом чужого регистра.
+            match (*base).checked_add(*count) {
+                Some(end) if end as usize <= chunk.n_regs as usize => Ok(()),
+                _ => Err(RtError::InvalidBytecode(
+                    "регистры полей структуры выходят за кадр",
+                )),
+            }
         }
         _ => Ok(()),
     }
@@ -3003,6 +3051,13 @@ fn unwind_to_handler(
     err: &RtError,
     current_exception: &mut Option<BslValue>,
 ) -> bool {
+    // Повреждённый образ не ловится `Попытка`: иначе битый байт-код ушёл бы
+    // наружу с признаком успеха. `Link`, `StackOverflow`, `DynamicError` и
+    // ошибки форматов приходят из пользовательских данных и остаются
+    // ловимыми (см. `RtError::is_bsl_exception`).
+    if !err.is_bsl_exception() {
+        return false;
+    }
     let mut first = true;
     loop {
         let frame_idx = frames.len() - 1;

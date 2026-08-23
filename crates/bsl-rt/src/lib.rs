@@ -323,6 +323,57 @@ pub enum RtError {
     },
 }
 
+impl RtError {
+    /// Ловится ли ошибка оператором `Попытка`. Повреждённый ОБРАЗ программы
+    /// (`InvalidBytecode`) — не пользовательское исключение: если его
+    /// поймать, битый байт-код уйдёт наружу с признаком успеха, а это ровно
+    /// тот класс «недостоверному входу доверяют», который периметр образа и
+    /// закрывает. Всё остальное приходит из пользовательских данных или
+    /// чужого слоя (`Link`, `StackOverflow`, `DynamicError`, ошибки
+    /// форматов) и ловится штатно.
+    ///
+    /// `match` исчерпывающий и без `_` НАРОЧНО: новый вариант `RtError` не
+    /// соберётся, пока его не отнесут к ловимым или нет.
+    #[must_use]
+    pub fn is_bsl_exception(&self) -> bool {
+        match self {
+            RtError::InvalidBytecode(_) => false,
+            RtError::Num(_)
+            | RtError::TypeError { .. }
+            | RtError::NotIndexable
+            | RtError::IndexOutOfBounds { .. }
+            | RtError::BadIndex
+            | RtError::NotAnObject
+            | RtError::UnknownField(_)
+            | RtError::Raised(_)
+            | RtError::RowInvalidated
+            | RtError::UnknownColumn(_)
+            | RtError::Json(_)
+            | RtError::Xml(_)
+            | RtError::Xsd(_)
+            | RtError::Xdto(_)
+            | RtError::XPath(_)
+            | RtError::TextDoc(_)
+            | RtError::Spread(_)
+            | RtError::Regex(_)
+            | RtError::Vstr(_)
+            | RtError::Zip(_)
+            | RtError::Pdf(_)
+            | RtError::UnknownProperty(_)
+            | RtError::PropertyReadOnly { .. }
+            | RtError::UnknownType(_)
+            | RtError::DateOutOfRange { .. }
+            | RtError::MethodNotApplicable { .. }
+            | RtError::UnknownMethod { .. }
+            | RtError::DynamicError(_)
+            | RtError::IoError(_)
+            | RtError::Link(_)
+            | RtError::Component(_)
+            | RtError::StackOverflow { .. } => true,
+        }
+    }
+}
+
 impl From<NumError> for RtError {
     fn from(e: NumError) -> Self {
         RtError::Num(e)

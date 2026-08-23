@@ -297,3 +297,165 @@ fn a_default_prologue_pointing_past_the_parameters_is_invalid_bytecode() {
         "пролог умолчаний ссылается на несуществующий параметр"
     );
 }
+
+// --- Дыры периметра образа, достроенные этапом 4 --------------------------
+
+/// Как `tampered`, но для произвольного исходника: форма NewStructure и
+/// вызов по ссылке в CALL_SAMPLE не встречаются.
+fn tampered_in(src: &str, anchor: &str, edit: impl Fn(&str) -> String) -> Program {
+    let listing = write_program(&compile(src), None).expect("печать листинга");
+    let hits: Vec<&str> = listing.lines().filter(|l| l.contains(anchor)).collect();
+    assert_eq!(
+        hits.len(),
+        1,
+        "«{anchor}» обязан встречаться в листинге ровно раз:\n{listing}"
+    );
+    let broken = listing.replace(hits[0], &edit(hits[0]));
+    parse_program(&broken).unwrap_or_else(|e| panic!("разбор обязан принять правку: {e}\n{broken}"))
+}
+
+/// Параметр по ссылке — алиас ЛОКАЛИ вызывающего. `byref:slot` за числом
+/// локалей кадра делал параметр алиасом чужой ячейки, и вызванная функция
+/// писала мимо: код возврата 0. Граница — `n_locals`, не `n_regs`.
+#[test]
+fn a_byref_local_past_the_frame_locals_is_invalid_bytecode() {
+    let src = "Функция Ф(а)\nа = 5;\nКонецФункции\nх = 1;\nФ(х);\nВозврат х;\n";
+    // Контроль: `а` без `Знач` — ссылка, `а = 5` пишет в `х` вызывающего.
+    assert_eq!(bsl_vm::run_program(&compile(src)).unwrap().to_string(), "5");
+
+    let mut program = compile(src);
+    let mut patched = false;
+    for chunk in &mut program.chunks {
+        let byref_sets: Vec<usize> = chunk
+            .instrs
+            .iter()
+            .filter_map(|i| match i {
+                Instr::Call { arg_modes, .. } => Some(*arg_modes as usize),
+                _ => None,
+            })
+            .filter(|&idx| {
+                matches!(
+                    chunk.call_arg_modes[idx].first(),
+                    Some(ArgMode::ByRefLocal(_))
+                )
+            })
+            .collect();
+        for idx in byref_sets {
+            chunk.call_arg_modes[idx][0] = ArgMode::ByRefLocal(250);
+            patched = true;
+        }
+    }
+    assert!(
+        patched,
+        "в программе обязан быть вызов с параметром по ссылке"
+    );
+    assert_eq!(
+        invalid(&program),
+        "параметр по ссылке указывает за локали кадра"
+    );
+}
+
+/// `Новый Структура("а, б", 1, 2)` — форма из двух полей, значения в
+/// регистрах `base..base+count`. `count`, не равный длине формы, давал
+/// верное первое поле и `index out of bounds` на втором; `base + count`
+/// считается как `u8`, и заворот делал поле алиасом чужого регистра.
+#[test]
+fn a_new_structure_with_a_broken_geometry_is_invalid_bytecode() {
+    const STRUCT_SAMPLE: &str = "х = Новый Структура(\"а, б\", 1, 2);\nВозврат х.а;\n";
+    // Контроль: неиспорченный листинг проходит тот же путь и даёт 1.
+    let listing = write_program(&compile(STRUCT_SAMPLE), None).expect("печать");
+    assert_eq!(
+        bsl_vm::run_program(&parse_program(&listing).expect("разбор"))
+            .unwrap()
+            .to_string(),
+        "1"
+    );
+
+    // Число полей, не равное длине формы.
+    let count_off = tampered_in(STRUCT_SAMPLE, "NewStructure", |line| {
+        retoken(line, "count", "1")
+    });
+    assert_eq!(
+        invalid(&count_off),
+        "число полей структуры не равно длине её формы"
+    );
+
+    // Регистры полей за кадром: `base + count` заворачивается в `u8`.
+    let base_off = tampered_in(STRUCT_SAMPLE, "NewStructure", |line| {
+        retoken(line, "base", "255")
+    });
+    assert_eq!(
+        invalid(&base_off),
+        "регистры полей структуры выходят за кадр"
+    );
+}
+
+/// `NumericForNextI64` на продолжении прыгает на `target`, а скрытое
+/// состояние ищет по `state.pc == pc`. Цель в границах чанка, но не равная
+/// собственной позиции, увела бы управление на чужую инструкцию — это
+/// предусловие нигде не проверялось.
+#[test]
+fn a_numeric_for_target_that_is_not_its_own_pc_is_invalid_bytecode() {
+    let mut program = compile(ALL_SIX);
+    let mut patched = false;
+    for chunk in &mut program.chunks {
+        let limit = chunk.instrs.len();
+        for (pc, instr) in chunk.instrs.iter_mut().enumerate() {
+            if let Instr::NumericForNextI64 { target, .. } = instr {
+                // Цель в границах `[0, limit]`, но не равная своей позиции.
+                let wrong = if pc == 0 { 1 } else { 0 };
+                debug_assert!(wrong <= limit);
+                *target = wrong as i16;
+                patched = true;
+            }
+        }
+    }
+    assert!(patched, "образец обязан содержать NumericForNextI64");
+    assert_eq!(
+        invalid(&program),
+        "числовой цикл: цель не указывает на собственную инструкцию"
+    );
+}
+
+/// Рантайм-`InvalidBytecode` (номер модульной переменной за таблицей)
+/// внутри `Попытка` НЕ ловится: повреждённый образ обязан уйти наружу, а не
+/// быть проглоченным обработчиком с признаком успеха.
+#[test]
+fn a_runtime_invalid_bytecode_is_not_caught_by_an_exception_handler() {
+    // Модульную переменную читаем ИЗ ФУНКЦИИ: на верхнем уровне она —
+    // локаль кадра, и `GetModuleVar` кодоген порождает только в теле
+    // функции.
+    let src = concat!(
+        "Перем М;\n",
+        "Функция Читать()\n",
+        "Попытка\n",
+        "Возврат М;\n",
+        "Исключение\n",
+        "Возврат 0;\n",
+        "КонецПопытки;\n",
+        "КонецФункции\n",
+        "М = 5;\n",
+        "Возврат Читать();\n",
+    );
+    // Контроль: годная программа возвращает 5 (обработчик не срабатывает).
+    assert_eq!(bsl_vm::run_program(&compile(src)).unwrap().to_string(), "5");
+
+    let mut program = compile(src);
+    let mut patched = false;
+    for chunk in &mut program.chunks {
+        for instr in &mut chunk.instrs {
+            if let Instr::GetModuleVar { slot, .. } = instr {
+                *slot = 250;
+                patched = true;
+            }
+        }
+    }
+    assert!(patched, "в программе обязан быть GetModuleVar");
+    assert!(
+        matches!(
+            bsl_vm::run_program(&program),
+            Err(RtError::InvalidBytecode(_))
+        ),
+        "повреждённый образ не должен ловиться Попыткой"
+    );
+}

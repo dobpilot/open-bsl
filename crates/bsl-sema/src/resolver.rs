@@ -56,6 +56,11 @@ pub enum SemaError {
     /// `'20240230'` — литерал прошёл лексер (цифры, верная длина), но
     /// такой календарной даты не существует.
     BadDateLiteral(String),
+    /// `0.333…` со scale больше `bsl_number::MAX_SCALE`: литерал прошёл
+    /// лексер, но `BslNumber` его не представляет. Позиции пока нет — узел
+    /// числа span не хранит; она придёт вместе с позицией у всей
+    /// `SemaError` (остаток плана abi-refactor-f).
+    BadNumericLiteral(String),
     /// Конструкция языка, для которой ещё нет резолвинга (коллекции,
     /// `Выполнить`/`Вычислить`, значения по умолчанию/пропуски аргументов,
     /// ... — приходят в последующих milestone'ах).
@@ -102,6 +107,17 @@ impl std::fmt::Display for SemaError {
                 write!(f, "процедура «{name}» не возвращает значения")
             }
             SemaError::BadDateLiteral(text) => write!(f, "некорректный литерал даты «{text}»"),
+            SemaError::BadNumericLiteral(text) => {
+                // Литерал может быть в сотню тысяч цифр — печатаем начало,
+                // а не заваливаем диагностику всем его телом.
+                let preview: String = text.chars().take(24).collect();
+                let tail = if text.chars().nth(24).is_some() {
+                    "…"
+                } else {
+                    ""
+                };
+                write!(f, "некорректный числовой литерал «{preview}{tail}»")
+            }
             SemaError::Unsupported(what) => write!(f, "не поддержано: {what}"),
         }
     }
@@ -872,9 +888,13 @@ impl<'a> Resolver<'a> {
     fn resolve_expr_at(&mut self, e: &AExpr, position: CallPosition) -> Result<RExpr, SemaError> {
         match e {
             AExpr::Number(text) => {
-                let n = BslNumber::parse_canonical(text).unwrap_or_else(|err| {
-                    panic!("лексер пропустил некорректный числовой литерал {text:?}: {err}")
-                });
+                // Лексер пропускает и `0.` со scale больше
+                // `bsl_number::MAX_SCALE` (сотня тысяч дробных цифр) — такой
+                // литерал `BslNumber` не представляет. `Engine::compile`
+                // объявлена возвращающей `Result` и обязана им быть, а не
+                // ронять процесс.
+                let n = BslNumber::parse_canonical(text)
+                    .map_err(|_| SemaError::BadNumericLiteral(text.clone()))?;
                 Ok(RExpr::Number(n))
             }
             AExpr::Bool(b) => Ok(RExpr::Bool(*b)),
@@ -2289,6 +2309,20 @@ mod tests {
             .to_string(),
             "у «Ф» пропущен обязательный аргумент на позиции 3"
         );
+    }
+
+    /// Литерал со scale больше `bsl_number::MAX_SCALE` проходит лексер, но
+    /// `BslNumber` его не представляет. `Engine::compile` обязана вернуть
+    /// `Result`, а не паниковать, — и в ЛЮБОМ профиле (прежде это была
+    /// паника, а debug и release расходятся ровно на переполнении).
+    #[test]
+    fn a_numeric_literal_beyond_max_scale_is_an_error_not_a_panic() {
+        let src = format!("х = 0.{};", "3".repeat(100_001));
+        let prog = parse(&src).expect("лексер принимает длинную дробь");
+        assert!(matches!(
+            resolve_program(&prog.items),
+            Err(SemaError::BadNumericLiteral(_))
+        ));
     }
 
     /// У ВСТРОЕННОЙ функции объявленных умолчаний нет, поэтому пропуск —
