@@ -672,12 +672,17 @@ pub(crate) fn add_file(
     meta: &std::fs::Metadata,
 ) -> RtResult<()> {
     let (key, name) = planned;
-    reserve(state, key, &path.display().to_string())?;
+    // Файл читается ДО занятия имени: если он нечитаем, имя не занимается, и
+    // законный следующий файл с тем же плоским ключом не получит ложное «уже
+    // существует» при пустом архиве (состояние-до-эффекта). После успешного
+    // чтения `reserve` и `push` идут подряд без фаллибельных операций между
+    // ними, то есть занятие имени и укладка записи атомарны.
     let data = std::fs::read(path)
         .map_err(|e| zip_err(&format!("не удалось прочитать «{}»: {e}", path.display())))?;
     if data.len() > u32::MAX as usize {
         return Err(zip_err(&format!("файл «{}» больше 4 ГиБ", path.display())));
     }
+    reserve(state, key, &path.display().to_string())?;
     let (time, date) = dos_fields(meta);
     state.entries.push(PendingEntry {
         name,
@@ -824,4 +829,43 @@ pub(crate) fn build_archive(entries: &[PendingEntry], comment: &str) -> RtResult
     }
     let cursor = zip.finish().map_err(zip_error_to_rt)?;
     Ok(cursor.into_inner())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Нечитаемый файл не занимает имя: прежде `add_file` вызывал `reserve`
+    /// ДО чтения, и после отказа чтения законный следующий файл с тем же
+    /// плоским ключом получал ложное «уже существует» при пустом архиве.
+    #[test]
+    fn an_unreadable_file_does_not_reserve_its_name() {
+        let readable = std::env::temp_dir().join("open-bsl-zip-dup.txt");
+        std::fs::write(&readable, b"payload").expect("создать читаемый файл");
+        let meta = std::fs::metadata(&readable).expect("метаданные");
+        let mut state = WriterState {
+            target: None,
+            method: WriteMethod::Stored,
+            comment: String::new(),
+            entries: Vec::new(),
+            used: Vec::new(),
+        };
+        let planned = ("dup.txt".to_string(), "dup.txt".to_string());
+        assert!(
+            add_file(
+                &mut state,
+                std::path::Path::new("/no/such/open-bsl/file"),
+                planned.clone(),
+                &meta,
+            )
+            .is_err(),
+            "нечитаемый файл — ошибка"
+        );
+        assert!(state.used.is_empty(), "имя нечитаемого файла не занято");
+        assert!(
+            add_file(&mut state, &readable, planned, &meta).is_ok(),
+            "законный файл с тем же ключом добавляется"
+        );
+        assert_eq!(state.entries.len(), 1);
+    }
 }
