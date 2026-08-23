@@ -36,7 +36,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 20;
+pub const FORMAT_VERSION: u32 = 21;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -274,6 +274,7 @@ fn write_chunk(out: &mut String, index: usize, chunk: &Chunk, program: &Program)
             .map(|m| match m {
                 ArgMode::Value => "value".to_string(),
                 ArgMode::ByRefLocal(slot) => format!("byref:{slot}"),
+                ArgMode::ByRefModuleVar(slot) => format!("bymodvar:{slot}"),
                 ArgMode::Default => "default".to_string(),
             })
             .collect();
@@ -1077,6 +1078,11 @@ fn parse_chunk(r: &mut Reader, expected_index: usize) -> Result<Chunk> {
             modes.push(match token {
                 "value" => ArgMode::Value,
                 "default" => ArgMode::Default,
+                t if t.starts_with("bymodvar:") => ArgMode::ByRefModuleVar(
+                    t["bymodvar:".len()..]
+                        .parse()
+                        .map_err(|_| TextError::At(no, format!("«{t}» не слот модуля")))?,
+                ),
                 t => match t.strip_prefix("byref:") {
                     Some(slot) => ArgMode::ByRefLocal(
                         slot.parse()

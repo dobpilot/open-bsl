@@ -12,6 +12,11 @@ pub enum CompileError {
     TooManyArgModeTables,
     TooManyShapes,
     TooManyNames,
+    /// Номер модульной переменной не помещается в `u16` при передаче её по
+    /// ссылке (`ArgMode::ByRefModuleVar`). Модуль с четвертью миллиона
+    /// переменных — тот же класс, что `JumpTargetOutOfRange`: `as u16` молча
+    /// обрезал бы слот, и параметр по ссылке алиасил бы чужую переменную.
+    TooManyModuleVars,
     BreakOutsideLoop,
     ContinueOutsideLoop,
     /// Фрагмент `Выполнить` зовёт функцию с номером, которого нет ни среди
@@ -45,6 +50,7 @@ impl std::fmt::Display for CompileError {
             CompileError::TooManyArgModeTables => "слишком много наборов режимов аргументов",
             CompileError::TooManyShapes => "слишком много форм структур",
             CompileError::TooManyNames => "слишком много имён",
+            CompileError::TooManyModuleVars => "слишком много переменных модуля для ссылки",
             CompileError::BreakOutsideLoop => "«Прервать» вне цикла",
             CompileError::ContinueOutsideLoop => "«Продолжить» вне цикла",
             CompileError::UnknownFunction => "вызов функции, которой нет в модуле",
@@ -904,12 +910,21 @@ impl<'a> Compiler<'a> {
                 modes.push(ArgMode::ByRefLocal(*slot as u8));
                 continue;
             }
-            // НЕ ИЗМЕРЕНО(CALL.BYREF.MODULEVAR): передаётся ли модульная
-            // переменная в параметр без `Знач` ПО ССЫЛКЕ. Сейчас образец ловит
-            // только `RExpr::Local`, поэтому `RExpr::ModuleVar` молча уходит в
-            // `ArgMode::Value` (копией) ниже — и `Подменить(МодульнаяПерем)`
-            // даёт разный результат в теле модуля и внутри процедуры. Замер
-            // выбирает, какую из двух веток чинить (этап 5 плана abi-refactor-f).
+            // ИЗМЕРЕНО(CALL.BYREF.MODULEVAR): 8.3.27 передаёт модульную
+            // переменную в параметр без `Знач` ПО ССЫЛКЕ и из тела модуля, и
+            // изнутри процедуры (`изменено|изменено`). Прежде образец ловил
+            // только `RExpr::Local`, и `RExpr::ModuleVar` уходил копией
+            // (`ArgMode::Value`) — второй случай расходился с платформой.
+            if !by_val && let RExpr::ModuleVar(slot) = arg {
+                self.alloc_temp()?; // держим диапазон [base,base+argc) непрерывным
+                let slot = u16::try_from(*slot).map_err(|_| {
+                    // Слот модульной переменной шире 16 бит — тот же класс,
+                    // что чинил этап 1 предыдущего плана: `as` молча обрезал бы.
+                    CompileError::TooManyModuleVars
+                })?;
+                modes.push(ArgMode::ByRefModuleVar(slot));
+                continue;
+            }
             let r = self.alloc_temp()?;
             self.compile_expr(arg, r)?;
             modes.push(ArgMode::Value);

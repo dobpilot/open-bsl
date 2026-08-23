@@ -774,12 +774,23 @@ fn check_call_geometry(program: &Program, chunk: &Chunk, instr: &Instr) -> Resul
             // локальной переменной не является, и проверка по `n_regs`
             // пропустила бы алиас на чужой временный слот.
             for mode in modes {
-                if let ArgMode::ByRefLocal(slot) = mode
-                    && *slot as usize >= chunk.n_locals as usize
-                {
-                    return Err(RtError::InvalidBytecode(
-                        "параметр по ссылке указывает за локали кадра",
-                    ));
+                match mode {
+                    ArgMode::ByRefLocal(slot) if *slot as usize >= chunk.n_locals as usize => {
+                        return Err(RtError::InvalidBytecode(
+                            "параметр по ссылке указывает за локали кадра",
+                        ));
+                    }
+                    // Модульная переменная по ссылке — алиас module-слота;
+                    // граница — число переменных модуля, иначе алиас указывал
+                    // бы за таблицу модульных слотов.
+                    ArgMode::ByRefModuleVar(slot)
+                        if *slot as usize >= program.module_vars.len() =>
+                    {
+                        return Err(RtError::InvalidBytecode(
+                            "параметр по ссылке указывает за переменные модуля",
+                        ));
+                    }
+                    _ => {}
                 }
             }
             Ok(())
@@ -1842,6 +1853,15 @@ fn step(
                         },
                         ArgMode::ByRefLocal(slot) => ParamSlot {
                             idx: frames[frame_idx].reg_index(*slot),
+                            provided: true,
+                        },
+                        // Модульная переменная лежит по АБСОЛЮТНОМУ индексу
+                        // `module_base + slot` (первые слоты кадра нулевого
+                        // уровня), а не в кадре вызывающего: алиас указывает
+                        // прямо туда, поэтому запись из вызванной функции
+                        // видна и телу модуля, и другим функциям.
+                        ArgMode::ByRefModuleVar(slot) => ParamSlot {
+                            idx: program.module_base as usize + *slot as usize,
                             provided: true,
                         },
                         // Вызывающий в этот регистр ничего не вычислял, там

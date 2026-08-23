@@ -432,16 +432,6 @@ pub const OPEN_QUESTIONS: &[OpenQuestion] = &[
                  представление масок — отдельная работа",
     },
     OpenQuestion {
-        id: "CALL.BYREF.MODULEVAR",
-        what: "передаётся ли модульная переменная в параметр без `Знач` по \
-               ссылке — и одинаково ли из тела модуля и изнутри процедуры",
-        chosen: "модульная переменная уходит `ArgMode::Value` (копией): \
-                 `RExpr::ModuleVar` не ловится образцом `RExpr::Local` в \
-                 bsl-compiler; наблюдаемо `изменено|исходное`",
-        blocks: "этап 5 плана abi-refactor-f: `ArgMode::ByRefModuleVar` в \
-                 bsl-compiler/src/compiler.rs",
-    },
-    OpenQuestion {
         id: "OBJ.METHOD.EXTRA_ARGS",
         what: "как платформа отвечает на лишний и недостающий аргумент метода \
                объекта: отказ на компиляции, ошибка в рантайме или пропуск",
