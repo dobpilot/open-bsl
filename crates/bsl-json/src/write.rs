@@ -141,17 +141,39 @@ enum WCtx {
     Array,
 }
 
+/// Состояние КАДРА контейнера — одно перечисление вместо параллельных
+/// `has_member`/`awaiting_value`. «Член уже записан» (`AfterValue`) и «ждём
+/// значение после имени» (`AwaitingValue`) не могут быть истинны
+/// одновременно по построению: прежде их держали два булевых поля рядом, и
+/// невозможная комбинация «члена нет, но значение ждём» была представима.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum FrameState {
+    /// Контейнер пуст — ни одного члена ещё не записано.
+    Empty,
+    /// Последним записан член (значение либо закрытый контейнер): перед
+    /// следующим нужна запятая.
+    AfterValue,
+    /// В объекте записано имя свойства, ждём его значение: следующий член
+    /// идёт без запятой и без переноса — отступ уже поставлен именем.
+    AwaitingValue,
+}
+
+/// Кадр стека контейнеров: что открыто и в каком оно состоянии.
+#[derive(Debug, Clone, Copy)]
+struct Frame {
+    ctx: WCtx,
+    state: FrameState,
+}
+
 /// Состояние `ЗаписьJSON`.
 #[derive(Debug)]
 pub struct JsonWriter {
     out: String,
     settings: JsonWriterSettings,
-    stack: Vec<WCtx>,
-    /// В текущем контейнере уже что-то записано — значит, перед следующим
-    /// членом нужна запятая.
-    has_member: Vec<bool>,
-    /// Имя свойства записано, ждём значение.
-    awaiting_value: bool,
+    /// Стек открытых контейнеров: каждый несёт своё состояние
+    /// (`FrameState`), чем и заменяет прежние параллельные `has_member` и
+    /// `awaiting_value`.
+    stack: Vec<Frame>,
     /// Куда уйдёт результат: `None` — в строку (`УстановитьСтроку`).
     path: Option<std::path::PathBuf>,
     /// `ЗаписьJSON.ПроверятьСтруктуру`. Умолчание `true` — ИЗМЕРЕНО
@@ -171,8 +193,6 @@ impl JsonWriter {
             out: String::new(),
             settings,
             stack: Vec::new(),
-            has_member: Vec::new(),
-            awaiting_value: false,
             path: None,
             check_structure: true,
         }
@@ -207,20 +227,35 @@ impl JsonWriter {
         }
     }
 
-    /// Разделитель перед очередным членом контейнера.
+    /// Разделитель перед очередным членом контейнера — по СОСТОЯНИЮ верхнего
+    /// кадра. Само состояние проставляет вызывающий после записи через
+    /// `mark_value_written`/`mark_awaiting_value`.
     fn before_member(&mut self) {
-        if self.awaiting_value {
-            // Значение после имени свойства: отступ уже поставлен именем.
+        let Some(&Frame { state, .. }) = self.stack.last() else {
             return;
-        }
-        if let Some(last) = self.has_member.last_mut() {
-            let had = *last;
-            *last = true;
-            if had {
+        };
+        match state {
+            // Значение после имени свойства: отступ уже поставлен именем.
+            FrameState::AwaitingValue => {}
+            FrameState::AfterValue => {
                 self.out.push(',');
+                self.newline(self.stack.len());
             }
-            let depth = self.stack.len();
-            self.newline(depth);
+            FrameState::Empty => self.newline(self.stack.len()),
+        }
+    }
+
+    /// Верхний кадр: член записан (значение либо закрытый контейнер).
+    fn mark_value_written(&mut self) {
+        if let Some(top) = self.stack.last_mut() {
+            top.state = FrameState::AfterValue;
+        }
+    }
+
+    /// Верхний кадр: записано имя свойства, ждём значение.
+    fn mark_awaiting_value(&mut self) {
+        if let Some(top) = self.stack.last_mut() {
+            top.state = FrameState::AwaitingValue;
         }
     }
 
@@ -230,9 +265,13 @@ impl JsonWriter {
     pub fn begin_object(&mut self) -> RtResult<()> {
         self.before_member();
         self.out.push('{');
-        self.stack.push(WCtx::Object);
-        self.has_member.push(false);
-        self.awaiting_value = false;
+        // Открытый контейнер — это ЗНАЧЕНИЕ родителя: помечаем родителя, а
+        // затем кладём собственный пустой кадр.
+        self.mark_value_written();
+        self.stack.push(Frame {
+            ctx: WCtx::Object,
+            state: FrameState::Empty,
+        });
         Ok(())
     }
 
@@ -245,16 +284,19 @@ impl JsonWriter {
     /// проба дала «ошибка» и здесь, и у `end_array`/`begin_property_name`,
     /// то есть ни одна из известных проверок настройкой не управляется).
     pub fn end_object(&mut self) -> RtResult<()> {
-        if self.stack.last() != Some(&WCtx::Object) {
+        let Some(&Frame { ctx, state }) = self.stack.last() else {
+            return Err(RtError::Json(
+                "ЗаписатьКонецОбъекта без открытого объекта".to_string(),
+            ));
+        };
+        if ctx != WCtx::Object {
             return Err(RtError::Json(
                 "ЗаписатьКонецОбъекта без открытого объекта".to_string(),
             ));
         }
-        let had = self.has_member.pop().unwrap_or(false);
         self.stack.pop();
-        if had {
-            let depth = self.stack.len();
-            self.newline(depth);
+        if state != FrameState::Empty {
+            self.newline(self.stack.len());
         }
         self.out.push('}');
         Ok(())
@@ -267,9 +309,11 @@ impl JsonWriter {
     pub fn begin_array(&mut self) -> RtResult<()> {
         self.before_member();
         self.out.push('[');
-        self.stack.push(WCtx::Array);
-        self.has_member.push(false);
-        self.awaiting_value = false;
+        self.mark_value_written();
+        self.stack.push(Frame {
+            ctx: WCtx::Array,
+            state: FrameState::Empty,
+        });
         Ok(())
     }
 
@@ -278,16 +322,19 @@ impl JsonWriter {
     /// [`RtError::Json`], если открытого массива нет — БЕЗУСЛОВНО, см.
     /// `end_object`.
     pub fn end_array(&mut self) -> RtResult<()> {
-        if self.stack.last() != Some(&WCtx::Array) {
+        let Some(&Frame { ctx, state }) = self.stack.last() else {
+            return Err(RtError::Json(
+                "ЗаписатьКонецМассива без открытого массива".to_string(),
+            ));
+        };
+        if ctx != WCtx::Array {
             return Err(RtError::Json(
                 "ЗаписатьКонецМассива без открытого массива".to_string(),
             ));
         }
-        let had = self.has_member.pop().unwrap_or(false);
         self.stack.pop();
-        if had {
-            let depth = self.stack.len();
-            self.newline(depth);
+        if state != FrameState::Empty {
+            self.newline(self.stack.len());
         }
         self.out.push(']');
         Ok(())
@@ -297,7 +344,7 @@ impl JsonWriter {
     ///
     /// ИЗМЕРЕНО: проверка контекста БЕЗУСЛОВНАЯ, см. `end_object`.
     fn begin_property_name(&mut self) -> RtResult<()> {
-        if self.stack.last() != Some(&WCtx::Object) {
+        if self.stack.last().map(|f| f.ctx) != Some(WCtx::Object) {
             return Err(RtError::Json("ЗаписатьИмяСвойства вне объекта".to_string()));
         }
         self.before_member();
@@ -316,7 +363,7 @@ impl JsonWriter {
         if self.pretty() {
             self.out.push(' ');
         }
-        self.awaiting_value = true;
+        self.mark_awaiting_value();
     }
 
     /// # Errors
@@ -341,7 +388,7 @@ impl JsonWriter {
     fn raw_value(&mut self, text: &str) {
         self.before_member();
         self.out.push_str(text);
-        self.awaiting_value = false;
+        self.mark_value_written();
     }
 
     /// # Errors
@@ -356,7 +403,10 @@ impl JsonWriter {
     /// именно отключает эта настройка (если хоть что-то), остаётся
     /// открытым вопросом — свойство при этом читаемо и записываемо.
     pub fn value(&mut self, v: &BslValue) -> RtResult<()> {
-        if self.stack.last() == Some(&WCtx::Object) && !self.awaiting_value {
+        if let Some(top) = self.stack.last()
+            && top.ctx == WCtx::Object
+            && top.state != FrameState::AwaitingValue
+        {
             return Err(RtError::Json(
                 "значение в объекте без имени свойства".to_string(),
             ));
@@ -391,7 +441,7 @@ impl JsonWriter {
             BslValue::Boolean(false) => self.out.push_str("false"),
             _ => unreachable!("типы проверены выше"),
         }
-        self.awaiting_value = false;
+        self.mark_value_written();
         Ok(())
     }
 
