@@ -161,8 +161,11 @@ type Result<T> = std::result::Result<T, TextError>;
 ///
 /// # Errors
 ///
-/// Возвращает [`TextError::Unrepresentable`], если константа программы не имеет текстового
-/// представления в формате байт-кода.
+/// - [`TextError::InvalidRequirements`] — манифест компонентов пуст,
+///   неупорядочен или содержит дубликаты.
+/// - [`TextError::Unrepresentable`] — константа программы не имеет
+///   текстового представления в формате байт-кода.
+/// - [`TextError::BadCallTarget`] — `Call` ссылается не на функцию.
 pub fn write_program(program: &Program, source: Option<&str>) -> Result<String> {
     validate_requirements(&program.requirements).map_err(TextError::InvalidRequirements)?;
     let mut out = String::with_capacity(4096);
@@ -304,12 +307,19 @@ fn write_chunk(out: &mut String, index: usize, chunk: &Chunk, program: &Program)
         }
         // Номер вызываемой функции проверяется ЗДЕСЬ, до печати: дальше
         // комментатор листинга индексирует таблицу функций без запасного
-        // пути. Нулевой номер — ссылка на верхний уровень, номер за концом
-        // таблицы — ссылка в никуда; и то и другое дало бы листинг, который
-        // не разбирается обратно во что-то исполнимое, а печать возвращает
-        // `Result` именно затем, чтобы такое сказать, а не напечатать.
+        // пути. Целым номер считается, только если он проходит ОБЕ таблицы,
+        // которые связывает: `function_names[func - 1]` — подпись, которую
+        // печатает комментатор, а `chunks[func]` — тело, которое будет
+        // вызвано (VM проверяет именно его, см. `Instr::Call` в `bsl-vm`).
+        // Порознь эти границы не совпадают: программу с одним именем в
+        // таблице функций, но без соответствующего чанка, собрать можно, и
+        // напечатанный листинг разобрался бы в программу, которую VM
+        // отвергает уже на исполнении. Ноль — ссылка на верхний уровень,
+        // которого не вызывает никто.
         if let Instr::Call { func, .. } = instr
-            && (*func == 0 || *func as usize > program.function_names.len())
+            && (*func == 0
+                || *func as usize > program.function_names.len()
+                || *func as usize >= program.chunks.len())
         {
             return Err(TextError::BadCallTarget {
                 chunk: index,

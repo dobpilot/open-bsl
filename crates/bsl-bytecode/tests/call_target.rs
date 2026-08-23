@@ -40,3 +40,24 @@ fn a_call_past_the_last_function_is_an_error() {
         Err(TextError::BadCallTarget { func: 3, .. })
     ));
 }
+
+/// Номер в границах таблицы ИМЁН, но без своего чанка — тоже ссылка в
+/// никуда: имя и тело связаны сдвигом на единицу, и наличие подписи ничего
+/// не говорит о наличии кода. Такой листинг разобрался бы обратно, а VM
+/// отвергла бы программу уже на исполнении (`Instr::Call` проверяет
+/// `chunks.get(func)`), то есть печать выпустила бы заведомо неисполнимое.
+#[test]
+fn a_named_function_without_a_chunk_is_an_error() {
+    let mut bad = one_call(1);
+    bad.function_names = vec!["Ф".to_string()];
+    assert_eq!(bad.chunks.len(), 1, "тела у функции нет по построению");
+    assert!(matches!(
+        write_program(&bad, None),
+        Err(TextError::BadCallTarget { func: 1, .. })
+    ));
+
+    // А с телом — печатается и читается обратно.
+    bad.chunks.push(chunk(vec![Instr::Return { src: None }]));
+    let text = write_program(&bad, None).expect("целая программа обязана печататься");
+    assert!(bsl_bytecode::parse_program(&text).is_ok());
+}
