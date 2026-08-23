@@ -213,20 +213,6 @@ pub fn compile_snippet_with_requirements(
     Ok((chunk, names.into_names(), shapes.into_shapes()))
 }
 
-/// Обращение к объекту: шесть опкодов, у которых обработчик компонента
-/// получает `CallContext`.
-pub(crate) fn instr_touches_objects(instr: &Instr) -> bool {
-    matches!(
-        instr,
-        Instr::GetProp { .. }
-            | Instr::SetProp { .. }
-            | Instr::CallMethod { .. }
-            | Instr::GetObjectProp { .. }
-            | Instr::SetObjectProp { .. }
-            | Instr::CallObjectMethod { .. }
-    )
-}
-
 // Десять аргументов — это и есть весь входной контекст чанка; структура
 #[allow(clippy::too_many_arguments)]
 fn compile_chunk(
@@ -276,7 +262,7 @@ fn compile_chunk(
         .map(|_| std::cell::RefCell::new(None))
         .collect();
     Ok(Chunk {
-        touches_objects: c.instrs.iter().any(instr_touches_objects),
+        touches_objects: c.instrs.iter().any(Instr::touches_objects),
         param_by_val: params.iter().map(|p| p.by_val).collect(),
         is_procedure,
         instrs: c.instrs,

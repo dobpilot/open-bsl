@@ -1131,7 +1131,7 @@ fn parse_chunk(r: &mut Reader, expected_index: usize) -> Result<Chunk> {
     }
 
     Ok(Chunk {
-        touches_objects: instrs.iter().any(crate::compiler::instr_touches_objects),
+        touches_objects: instrs.iter().any(Instr::touches_objects),
         is_procedure,
         param_by_val,
         prop_cache: (0..instrs.len()).map(|_| RefCell::new(None)).collect(),
@@ -1811,73 +1811,6 @@ mod tests {
         let printed = write_program(&tampered, None).unwrap();
         assert_eq!(printed.matches("kind=proc").count(), 1, "{printed}");
         assert!(parse_program(&printed).is_ok());
-    }
-
-    /// Классификация всех ШЕСТИ объектных опкодов: от неё зависит, уйдёт
-    /// ли чанк мимо нативного пути, а исполнением она не проверяется —
-    /// потеря любой строки оставила бы embedding-тесты зелёными.
-    #[test]
-    fn every_object_opcode_is_classified_as_touching_objects() {
-        use crate::instr::Instr;
-
-        let object = [
-            Instr::GetProp {
-                dst: 0,
-                obj: 1,
-                name: bsl_rt::NameId::from_index(0),
-            },
-            Instr::SetProp {
-                obj: 0,
-                name: bsl_rt::NameId::from_index(0),
-                src: 1,
-            },
-            Instr::CallMethod {
-                dst: 0,
-                obj: 1,
-                method: bsl_rt::BuiltinMethod::Add,
-                base: 2,
-                count: 0,
-            },
-            Instr::GetObjectProp {
-                dst: 0,
-                obj: 1,
-                name: 0,
-            },
-            Instr::SetObjectProp {
-                obj: 0,
-                name: 0,
-                src: 1,
-            },
-            Instr::CallObjectMethod {
-                dst: 0,
-                obj: 1,
-                method: 0,
-                base: 2,
-                count: 0,
-            },
-        ];
-        for instr in &object {
-            assert!(
-                crate::compiler::instr_touches_objects(instr),
-                "опкод не опознан как обращение к объекту: {instr:?}"
-            );
-        }
-        // А соседние по смыслу — нет: индексация и поле структуры идут
-        // мимо компонентного ABI.
-        for instr in [
-            Instr::GetIndex {
-                dst: 0,
-                obj: 1,
-                idx: 2,
-            },
-            Instr::Move { dst: 0, src: 1 },
-            Instr::LoadUndefined { dst: 0 },
-        ] {
-            assert!(
-                !crate::compiler::instr_touches_objects(&instr),
-                "лишний опкод причислен к обращениям: {instr:?}"
-            );
-        }
     }
 
     #[test]

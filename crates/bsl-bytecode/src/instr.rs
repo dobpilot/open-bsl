@@ -411,6 +411,28 @@ impl Instr {
             _ => None,
         }
     }
+
+    /// Обращается ли инструкция к ОБЪЕКТУ: шесть опкодов, у которых
+    /// обработчик компонента получает `CallContext`.
+    ///
+    /// Классификация принадлежит самой инструкции, а не тому, кто её
+    /// выпустил: спрашивают её двое — кодоген, заполняя
+    /// `Chunk::touches_objects`, и разбор листинга, восстанавливая то же
+    /// поле по прочитанным инструкциям. Ответы обязаны совпадать, иначе
+    /// разобранная программа пошла бы мимо того пути исполнения, по
+    /// которому шла скомпилированная.
+    #[must_use]
+    pub fn touches_objects(&self) -> bool {
+        matches!(
+            self,
+            Instr::GetProp { .. }
+                | Instr::SetProp { .. }
+                | Instr::CallMethod { .. }
+                | Instr::GetObjectProp { .. }
+                | Instr::SetObjectProp { .. }
+                | Instr::CallObjectMethod { .. }
+        )
+    }
 }
 
 #[cfg(test)]
@@ -420,5 +442,70 @@ mod tests {
     #[test]
     fn instruction_stays_eight_bytes() {
         assert_eq!(std::mem::size_of::<Instr>(), 8);
+    }
+
+    /// Классификация всех ШЕСТИ объектных опкодов: от неё зависит, уйдёт
+    /// ли чанк мимо нативного пути, а исполнением она не проверяется —
+    /// потеря любой строки оставила бы embedding-тесты зелёными.
+    #[test]
+    fn every_object_opcode_is_classified_as_touching_objects() {
+        let object = [
+            Instr::GetProp {
+                dst: 0,
+                obj: 1,
+                name: bsl_rt::NameId::from_index(0),
+            },
+            Instr::SetProp {
+                obj: 0,
+                name: bsl_rt::NameId::from_index(0),
+                src: 1,
+            },
+            Instr::CallMethod {
+                dst: 0,
+                obj: 1,
+                method: bsl_rt::BuiltinMethod::Add,
+                base: 2,
+                count: 0,
+            },
+            Instr::GetObjectProp {
+                dst: 0,
+                obj: 1,
+                name: 0,
+            },
+            Instr::SetObjectProp {
+                obj: 0,
+                name: 0,
+                src: 1,
+            },
+            Instr::CallObjectMethod {
+                dst: 0,
+                obj: 1,
+                method: 0,
+                base: 2,
+                count: 0,
+            },
+        ];
+        for instr in &object {
+            assert!(
+                instr.touches_objects(),
+                "опкод не опознан как обращение к объекту: {instr:?}"
+            );
+        }
+        // А соседние по смыслу — нет: индексация и поле структуры идут
+        // мимо компонентного ABI.
+        for instr in [
+            Instr::GetIndex {
+                dst: 0,
+                obj: 1,
+                idx: 2,
+            },
+            Instr::Move { dst: 0, src: 1 },
+            Instr::LoadUndefined { dst: 0 },
+        ] {
+            assert!(
+                !instr.touches_objects(),
+                "лишний опкод причислен к обращениям: {instr:?}"
+            );
+        }
     }
 }
