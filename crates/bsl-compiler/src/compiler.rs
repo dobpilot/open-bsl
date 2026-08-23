@@ -904,6 +904,12 @@ impl<'a> Compiler<'a> {
                 modes.push(ArgMode::ByRefLocal(*slot as u8));
                 continue;
             }
+            // НЕ ИЗМЕРЕНО(CALL.BYREF.MODULEVAR): передаётся ли модульная
+            // переменная в параметр без `Знач` ПО ССЫЛКЕ. Сейчас образец ловит
+            // только `RExpr::Local`, поэтому `RExpr::ModuleVar` молча уходит в
+            // `ArgMode::Value` (копией) ниже — и `Подменить(МодульнаяПерем)`
+            // даёт разный результат в теле модуля и внутри процедуры. Замер
+            // выбирает, какую из двух веток чинить (этап 5 плана abi-refactor-f).
             let r = self.alloc_temp()?;
             self.compile_expr(arg, r)?;
             modes.push(ArgMode::Value);

@@ -1380,6 +1380,13 @@ impl<'a> Resolver<'a> {
                         return Err(SemaError::ProcedureAsFunction(name.clone()));
                     }
                     let arity = has_default.len();
+                    // НЕ ИЗМЕРЕНО(CALL.OMITTED_TRAILING): принимает ли 8.3.27
+                    // `Ф(1)` при `Ф(а, б = 100)`. Здесь пока требуется ТОЧНОЕ
+                    // совпадение числа аргументов — опущенный хвостовой
+                    // необязательный отвергается на компиляции, — а умолчание
+                    // учитывается только для позиции, занятой запятой. Замер
+                    // выбирает, дополнять ли недостающие хвостовые позиции
+                    // `ResolvedArg::Default` (этап 1 плана abi-refactor-f).
                     if args.len() != arity {
                         return Err(SemaError::ArgumentCountMismatch {
                             name: name.clone(),
