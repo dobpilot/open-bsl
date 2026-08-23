@@ -3015,18 +3015,25 @@ impl Hash for BslValue {
             BslValue::Object(o) => match &**o {
                 BslObject::VstrOpaque(text) => text.hash(state),
                 BslObject::BinaryData(bytes) => bytes.hash(state),
-                // Внешний объект хэширует то же, чем равняется: ключ места
-                // (`identity_key`), содержимое (типы-значения с `value_eq`
-                // хэшируют своё представление) — и только при чистом
-                // тождестве адрес обёртки. Иначе два равных по `PartialEq`
-                // выше значения давали бы разные хэши и ключ `Соответствие`
-                // терялся бы.
+                // УИД — значение: хэшируем байты, ровно как `PartialEq` их
+                // сравнивает (воспроизведение 3 — иначе два равных УИД дают
+                // два ключа `Соответствия`). Совпадение с хэшем `BinaryData`
+                // из тех же байтов законно: это коллизия, равными их
+                // `PartialEq` не делает (кросс-тип уходит в `_ => false`).
+                BslObject::Uuid(bytes) => bytes.hash(state),
+                // Внешний объект хэширует то же, чем равняется, и в ТОМ ЖЕ
+                // порядке правил, что `PartialEq` выше: сперва содержимое
+                // (`value_eq` у типов-значений хэширует представление), затем
+                // ключ места (`identity_key`), и только при чистом тождестве —
+                // адрес обёртки. Обратный порядок ломал бы ключ `Соответствия`
+                // для типа, реализующего ОБА метода: он равнялся бы по
+                // `value_eq`, а хэшировался по чужому `identity_key`.
                 BslObject::Extension(object) => {
                     std::ptr::from_ref(object.type_descriptor()).hash(state);
-                    if let Some(key) = object.identity_key() {
-                        key.hash(state);
-                    } else if object.value_eq(object).is_some() {
+                    if object.value_eq(object).is_some() {
                         object.display().hash(state);
+                    } else if let Some(key) = object.identity_key() {
+                        key.hash(state);
                     } else {
                         Rc::as_ptr(o).hash(state);
                     }
@@ -3206,6 +3213,83 @@ mod tests {
     #[test]
     fn equality_by_value_across_representations() {
         assert!(num("1.0").eq_value(&num("1.00")));
+    }
+
+    /// Воспроизведение 3: два `УникальныйИдентификатор` из одних байтов
+    /// равны по `PartialEq`, значит ОБЯЗАНЫ давать равный хэш — иначе
+    /// `Соответствие` держит их двумя ключами. На прежнем дереве `Uuid`
+    /// проваливался в `_ => Rc::as_ptr`, и хэши расходились.
+    #[test]
+    fn equal_value_objects_hash_equal() {
+        use std::collections::hash_map::DefaultHasher;
+        fn hash_of(value: &BslValue) -> u64 {
+            let mut hasher = DefaultHasher::new();
+            value.hash(&mut hasher);
+            hasher.finish()
+        }
+        let bytes = [
+            0x11, 0x11, 0x22, 0x22, 0x33, 0x33, 0x44, 0x44, 0x55, 0x55, 0x66, 0x66, 0x77, 0x77,
+            0x88, 0x88,
+        ];
+        let a = BslValue::Object(Rc::new(BslObject::Uuid(bytes)));
+        let b = BslValue::Object(Rc::new(BslObject::Uuid(bytes)));
+        assert_eq!(a, b, "равные УИД равны по значению");
+        assert_eq!(hash_of(&a), hash_of(&b), "равные значения — равный хэш");
+    }
+
+    /// Хэш согласован с `PartialEq` по ПОРЯДКУ правил. Тип, реализующий и
+    /// `value_eq`, и `identity_key`, равняется по `value_eq` — это его
+    /// `PartialEq`, — поэтому и хэшироваться обязан по нему: два объекта с
+    /// одними байтами, но разными местами равны и дают один хэш. До
+    /// выравнивания `Hash` брал `identity_key` первым и расходился, ломая
+    /// ключ `Соответствия` для любого будущего типа с обоими методами.
+    #[test]
+    fn hash_follows_partial_eq_when_value_eq_and_identity_key_both_exist() {
+        use std::collections::hash_map::DefaultHasher;
+
+        #[derive(Debug)]
+        struct BytesAtPlace {
+            bytes: Vec<u8>,
+            place: (usize, usize),
+        }
+        static BOTH: TypeDescriptor = TypeDescriptor::new("test", "БайтыСМестом");
+        impl ObjectProtocol for BytesAtPlace {
+            fn type_descriptor(&self) -> &'static TypeDescriptor {
+                &BOTH
+            }
+            fn identity_key(&self) -> Option<(usize, usize)> {
+                Some(self.place)
+            }
+            fn value_eq(&self, other: &ObjectRef) -> Option<bool> {
+                other
+                    .downcast_ref::<BytesAtPlace>()
+                    .map(|o| o.bytes == self.bytes)
+            }
+            fn display(&self) -> String {
+                format!("байты:{:?}", self.bytes)
+            }
+        }
+
+        fn hash_of(value: &BslValue) -> u64 {
+            let mut hasher = DefaultHasher::new();
+            value.hash(&mut hasher);
+            hasher.finish()
+        }
+        // Одни байты, РАЗНЫЕ места: равны по value_eq, различны по identity_key.
+        let a = BslValue::new_object(BytesAtPlace {
+            bytes: vec![1, 2, 3],
+            place: (10, 0),
+        });
+        let b = BslValue::new_object(BytesAtPlace {
+            bytes: vec![1, 2, 3],
+            place: (20, 0),
+        });
+        assert_eq!(a, b, "равны по value_eq");
+        assert_eq!(
+            hash_of(&a),
+            hash_of(&b),
+            "хэш обязан следовать value_eq, а не identity_key"
+        );
     }
 
     #[test]
