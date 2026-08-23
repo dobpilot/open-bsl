@@ -1380,31 +1380,35 @@ impl<'a> Resolver<'a> {
                         return Err(SemaError::ProcedureAsFunction(name.clone()));
                     }
                     let arity = has_default.len();
-                    // НЕ ИЗМЕРЕНО(CALL.OMITTED_TRAILING): принимает ли 8.3.27
-                    // `Ф(1)` при `Ф(а, б = 100)`. Здесь пока требуется ТОЧНОЕ
-                    // совпадение числа аргументов — опущенный хвостовой
-                    // необязательный отвергается на компиляции, — а умолчание
-                    // учитывается только для позиции, занятой запятой. Замер
-                    // выбирает, дополнять ли недостающие хвостовые позиции
-                    // `ResolvedArg::Default` (этап 1 плана abi-refactor-f).
-                    if args.len() != arity {
+                    // ИЗМЕРЕНО(CALL.OMITTED_TRAILING): 8.3.27 принимает `Ф(1)`
+                    // при `Ф(а, б = 100)` и возвращает `1/100` — опущенные
+                    // ХВОСТОВЫЕ позиции берут умолчание. Правило ПОЗИЦИОННОЕ, а
+                    // не по числу обязательных: платформа принимает и
+                    // обязательный параметр ПОСЛЕ необязательного (фикстура
+                    // `ПоСсылкеРядомСПропуском`), поэтому счётное правило
+                    // «допустить [required, arity]» пропустило бы `Ф(1, 2)` при
+                    // `Ф(а, б = 2, в)` с непереданным обязательным `в`. Больше
+                    // переданных позиций, чем параметров, — по-прежнему ошибка.
+                    if args.len() > arity {
                         return Err(SemaError::ArgumentCountMismatch {
                             name: name.clone(),
                             expected: arity,
                             found: args.len(),
                         });
                     }
-                    // В отличие от `resolve_required_args` (используется
-                    // ниже для builtin'ов, у которых нет объявленных
-                    // умолчаний) — пропуск позиции здесь допустим, если у
-                    // ЭТОГО параметра есть значение по умолчанию: тогда
-                    // получается `ResolvedArg::Default`, а не ошибка.
-                    let mut rargs = Vec::with_capacity(args.len());
-                    for (i, a) in args.iter().enumerate() {
-                        match a {
-                            Some(e) => rargs.push(ResolvedArg::Value(self.resolve_expr(e)?)),
-                            None if has_default[i] => rargs.push(ResolvedArg::Default),
-                            None => {
+                    // Каждая позиция `[0, arity)` разрешается сама: явный
+                    // аргумент — `Value`; пропуск (`Ф(1, , 3)`) или опущенный
+                    // хвост (`i >= args.len()`) допустимы лишь при умолчании у
+                    // ЭТОГО параметра — тогда `ResolvedArg::Default`, — иначе
+                    // обязательный параметр не передан.
+                    let mut rargs = Vec::with_capacity(arity);
+                    for (i, has_default_i) in has_default.iter().enumerate() {
+                        match args.get(i) {
+                            Some(Some(e)) => rargs.push(ResolvedArg::Value(self.resolve_expr(e)?)),
+                            Some(None) | None if *has_default_i => {
+                                rargs.push(ResolvedArg::Default);
+                            }
+                            Some(None) | None => {
                                 return Err(SemaError::MissingRequiredArgument {
                                     name: name.clone(),
                                     index: i,
@@ -2232,6 +2236,53 @@ mod tests {
             }
             other => panic!("expected AssignLocal(Call), got {other:?}"),
         }
+    }
+
+    /// ИЗМЕРЕНО(CALL.OMITTED_TRAILING): 8.3.27 принимает `Ф(1)` при
+    /// `Ф(а, б = 100)` и возвращает `1/100`. Опущенная ХВОСТОВАЯ позиция
+    /// берёт умолчание (`ResolvedArg::Default`), а не отвергается по числу
+    /// аргументов — правило арности вызова позиционное.
+    #[test]
+    fn an_omitted_trailing_optional_argument_takes_its_default() {
+        let prog = parse("Функция Ф(а, б = 100)\nВозврат а;\nКонецФункции\nx = Ф(1);").unwrap();
+        let resolved = resolve_program(&prog.items).unwrap();
+        match &resolved.top_level.body[0] {
+            RStmt::AssignLocal {
+                value: RExpr::Call { args, .. },
+                ..
+            } => {
+                assert_eq!(args.len(), 2, "хвостовая позиция добита до арности");
+                assert!(matches!(args[0], ResolvedArg::Value(_)));
+                assert_eq!(args[1], ResolvedArg::Default);
+            }
+            other => panic!("ожидался AssignLocal(Call), получено {other:?}"),
+        }
+    }
+
+    /// ИЗМЕРЕНО: платформа принимает обязательный параметр ПОСЛЕ
+    /// необязательного (фикстура `ПоСсылкеРядомСПропуском`), поэтому правило
+    /// не «число позиций без умолчания». При `Ф(а, б = 100, в)` вызов
+    /// `Ф(1, 2)` — не «мало аргументов», а пропущенный обязательный `в` на
+    /// третьей позиции: счётное правило приняло бы его ошибочно.
+    #[test]
+    fn a_required_parameter_after_an_optional_one_must_be_supplied() {
+        let prog =
+            parse("Функция Ф(а, б = 100, в)\nВозврат а;\nКонецФункции\nx = Ф(1, 2);").unwrap();
+        assert_eq!(
+            resolve_program(&prog.items).unwrap_err(),
+            SemaError::MissingRequiredArgument {
+                name: "Ф".to_string(),
+                index: 2,
+            }
+        );
+        assert_eq!(
+            SemaError::MissingRequiredArgument {
+                name: "Ф".to_string(),
+                index: 2,
+            }
+            .to_string(),
+            "у «Ф» пропущен обязательный аргумент на позиции 3"
+        );
     }
 
     /// У ВСТРОЕННОЙ функции объявленных умолчаний нет, поэтому пропуск —
