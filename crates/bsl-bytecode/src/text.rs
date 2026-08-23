@@ -117,6 +117,11 @@ pub enum TextError {
     },
     /// Диапазон `Попытка` ссылается за пределы чанка либо вывернут наизнанку.
     BadExceptionRange { chunk: usize, what: &'static str },
+    /// `Call` ссылается не на функцию: номер чанка, `pc` инструкции и сам
+    /// номер. Нумерация в `Call` начинается с единицы, потому что
+    /// `function_names[i]` — это `chunks[i+1]`, а нулевой чанк (верхний
+    /// уровень) не вызывает никто.
+    BadCallTarget { chunk: usize, pc: usize, func: u16 },
 }
 
 impl std::fmt::Display for TextError {
@@ -133,6 +138,10 @@ impl std::fmt::Display for TextError {
             TextError::BadJumpTarget { chunk, pc, target } => write!(
                 f,
                 "чанк {chunk}, инструкция {pc}: цель перехода {target} вне чанка"
+            ),
+            TextError::BadCallTarget { chunk, pc, func } => write!(
+                f,
+                "чанк {chunk}, инструкция {pc}: вызов {func} не ссылается на функцию"
             ),
             TextError::Unrepresentable(what) => {
                 write!(f, "значение не представимо в текстовом байт-коде: {what}")
@@ -293,6 +302,21 @@ fn write_chunk(out: &mut String, index: usize, chunk: &Chunk, program: &Program)
         {
             writeln!(out, "    ; бандл {w}").unwrap();
         }
+        // Номер вызываемой функции проверяется ЗДЕСЬ, до печати: дальше
+        // комментатор листинга индексирует таблицу функций без запасного
+        // пути. Нулевой номер — ссылка на верхний уровень, номер за концом
+        // таблицы — ссылка в никуда; и то и другое дало бы листинг, который
+        // не разбирается обратно во что-то исполнимое, а печать возвращает
+        // `Result` именно затем, чтобы такое сказать, а не напечатать.
+        if let Instr::Call { func, .. } = instr
+            && (*func == 0 || *func as usize > program.function_names.len())
+        {
+            return Err(TextError::BadCallTarget {
+                chunk: index,
+                pc,
+                func: *func,
+            });
+        }
         let text = write_instr(instr);
         match instr_comment(instr, chunk, program) {
             Some(c) => writeln!(out, "    {pc:04} {text}  ; {c}").unwrap(),
@@ -329,10 +353,13 @@ fn instr_comment(instr: &Instr, chunk: &Chunk, program: &Program) -> Option<Stri
             .module_vars
             .get(*slot as usize)
             .map(|n| format!("модульная {n}")),
-        Instr::Call { func, .. } => Some(match program.function_names.get(*func as usize - 1) {
-            Some(name) => format!("-> {name} (.chunk {func})"),
-            None => format!("-> .chunk {func}"),
-        }),
+        // Номер уже проверен в `write_chunk`, поэтому индексация прямая:
+        // решение о том, что считать целым номером функции, принимается в
+        // одном месте, а не размазывается по запасным веткам печати.
+        Instr::Call { func, .. } => Some(format!(
+            "-> {} (.chunk {func})",
+            program.function_names[*func as usize - 1]
+        )),
         _ => None,
     }
 }
