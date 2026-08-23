@@ -3123,18 +3123,26 @@ fn call_builtin_with_format(
         }
         // Не `call_builtin_fn`: `ЗаполнитьЗначенияСвойств` читает таблицу
         // имён, и путь без контекста для неё кончается ошибкой.
-        // Часы, часы в миллисекундах и аргументы запуска отвечают из
-        // окружения прогона, а не из состояния процесса.
-        BuiltinFn::CurrentDate
-        | BuiltinFn::CurrentUniversalDateInMilliseconds
-        | BuiltinFn::CommandLineArguments => bsl_rt::call_builtin_env(builtin, host.env()?),
-        // `ЗначениеВФайл`/`ЗначениеИзФайла` читают и пишут файл целиком, а
-        // файловая система принадлежит прогону — как часы и зона.
-        BuiltinFn::ValueToFile | BuiltinFn::ValueFromFile => {
-            let files = host.env()?.files();
-            bsl_rt::call_builtin_files(builtin, args, runtime_shapes, files.as_ref())
-        }
-        other => bsl_rt::call_builtin_fn_ctx(other, args, runtime_shapes),
+        // Куда именно функция ходит наружу, говорит один источник истины —
+        // `BuiltinFn::host_effect`; по нему же JIT решает, чего не
+        // компилировать.
+        other => match other.host_effect() {
+            // Часы, часы в миллисекундах и аргументы запуска отвечают из
+            // окружения прогона, а не из состояния процесса.
+            Some(bsl_rt::HostEffect::Env) => bsl_rt::call_builtin_env(other, host.env()?),
+            // `ЗначениеВФайл`/`ЗначениеИзФайла` читают и пишут файл
+            // целиком, а файловая система принадлежит прогону — как часы
+            // и зона.
+            Some(bsl_rt::HostEffect::Files) => {
+                let files = host.env()?.files();
+                bsl_rt::call_builtin_files(other, args, runtime_shapes, files.as_ref())
+            }
+            // `Сообщить` перехвачен веткой выше — до сюда доходит только
+            // то, что считает ответ по одним аргументам.
+            Some(bsl_rt::HostEffect::Output) | None => {
+                bsl_rt::call_builtin_fn_ctx(other, args, runtime_shapes)
+            }
+        },
     }
 }
 

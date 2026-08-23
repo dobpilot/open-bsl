@@ -43,7 +43,7 @@ pub const PACKAGE_NAME: &str = env!("CARGO_PKG_NAME");
 pub const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub use builtin::{
-    BUILTIN_FN_NAMES, BUILTIN_METHOD_NAMES, BuiltinFn, BuiltinMethod, call_builtin_env,
+    BUILTIN_FN_NAMES, BUILTIN_METHOD_NAMES, BuiltinFn, BuiltinMethod, HostEffect, call_builtin_env,
     call_builtin_files, call_builtin_fn, call_builtin_fn_ctx, call_builtin_method,
     call_builtin_method_ctx,
 };

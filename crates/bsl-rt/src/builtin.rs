@@ -3,16 +3,26 @@ use crate::env::HostEnv;
 use crate::runtime_shapes::RuntimeShapes;
 use crate::{BslObject, BslString, BslValue, NameId, RtError, RtResult};
 
-/// Три встроенные функции, ответ которых берётся не из аргументов, а из
+/// Возможность ПРОГОНА, за которой встроенная функция ходит помимо своих
+/// аргументов (см. [`BuiltinFn::host_effect`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HostEffect {
+    /// Пишет в поток вывода прогона: `Сообщить`.
+    Output,
+    /// Отвечает из часов, случайности или аргументов запуска.
+    Env,
+    /// Читает или пишет через файловую систему прогона.
+    Files,
+}
+
+/// Встроенные функции, ответ которых берётся не из аргументов, а из
 /// ОКРУЖЕНИЯ прогона: часы, часы в миллисекундах и аргументы запуска.
+/// Какие именно — говорит [`BuiltinFn::host_effect`], один источник истины
+/// на весь рабочий процесс.
 ///
 /// Отдельный узкий вход, а не четвёртый параметр у `call_builtin_fn_ctx`:
 /// окружение есть не у всякого вызывающего. У шима JIT его нет и быть не
-/// должно — он работает с sink-потоками и не видит `State`, — поэтому эти
-/// три функции (вместе с файловыми, см. [`call_builtin_files`]) JIT не
-/// компилирует вовсе и отдаёт интерпретатору, ровно как
-/// `Сообщить`. Список здесь и список исключений в `bsl-vm::jit` обязаны
-/// совпадать; расхождение поймает первый же вызов.
+/// должно — он работает с sink-потоками и не видит `State`.
 ///
 /// # Errors
 ///
@@ -487,6 +497,29 @@ impl BuiltinFn {
                 | BuiltinFn::TypeOf
                 | BuiltinFn::Upper
         )
+    }
+
+    /// За чем встроенная функция ходит наружу, помимо своих аргументов.
+    ///
+    /// ЕДИНСТВЕННЫЙ источник истины на весь рабочий процесс: по нему
+    /// интерпретатор выбирает узкий вход ([`call_builtin_env`],
+    /// [`call_builtin_files`]), а JIT решает, что не компилировать вовсе.
+    /// Раньше это были три независимых списка с комментарием «обязаны
+    /// совпадать» — то есть три возможности разойтись.
+    ///
+    /// `None` — функция считает ответ по одним аргументам, и её вправе
+    /// исполнить кто угодно, в том числе шим нативного пути с
+    /// sink-потоками и без окружения.
+    #[must_use]
+    pub fn host_effect(self) -> Option<HostEffect> {
+        match self {
+            BuiltinFn::Message => Some(HostEffect::Output),
+            BuiltinFn::CurrentDate
+            | BuiltinFn::CurrentUniversalDateInMilliseconds
+            | BuiltinFn::CommandLineArguments => Some(HostEffect::Env),
+            BuiltinFn::ValueToFile | BuiltinFn::ValueFromFile => Some(HostEffect::Files),
+            _ => None,
+        }
     }
 
     /// Глобальная ПРОЦЕДУРА: оператором звать можно, а в позиции выражения
@@ -1517,7 +1550,7 @@ pub fn call_builtin_fn_ctx(
         };
         return crate::vstr::value_from_string_internal(&text.to_string(), rt);
     }
-    if matches!(f, BuiltinFn::ValueToFile | BuiltinFn::ValueFromFile) {
+    if f.host_effect() == Some(HostEffect::Files) {
         return Err(RtError::InvalidBytecode(
             "файловые функции требуют файловой системы прогона: вызывайте call_builtin_files",
         ));
