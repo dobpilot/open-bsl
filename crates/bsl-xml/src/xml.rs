@@ -724,19 +724,29 @@ pub fn close_writer(obj: &dyn ObjectProtocol) -> RtResult<BslValue> {
     let Some(w) = slot.as_mut() else {
         return Ok(BslValue::Str(BslString::from_str("")));
     };
-    let text = w.finish();
-    if let Some(path) = w.take_path() {
-        // Файл платформа начинает сигнатурой UTF-8 — измерено побайтным
-        // сличением выгрузки `edata_writer` (первые три байта EF BB BF).
-        let mut bytes = Vec::with_capacity(3 + text.len());
-        bytes.extend_from_slice(b"\xef\xbb\xbf");
-        bytes.extend_from_slice(text.as_bytes());
-        std::fs::write(&path, bytes).map_err(|e| RtError::IoError(e.to_string()))?;
-        *slot = None;
-        return Ok(BslValue::Str(BslString::from_str("")));
+    // Порядок: чистое построение по приёмнику → эффект → снятие писателя
+    // ТОЛЬКО при успехе. Прежде `finish()` и `take_path()` мутировали
+    // писатель ДО `fs::write`, и на отказе он оставался `Some` с пустым
+    // содержимым — повторный `Закрыть()` возвращал пустую строку, тот же
+    // ответ, что рядом задокументирован как признак УСПЕШНОЙ записи в файл.
+    // НЕ ИЗМЕРЕНО(XML.WRITE.CLOSE_IO_FAIL): поведение писателя XML платформы
+    // после отказа ФС в `Закрыть()` не снято; здесь выбрано «остаётся
+    // файловым, повторить можно» (см. `measure-all.bsl`).
+    match w.file_path() {
+        Some(path) => {
+            // Файл платформа начинает сигнатурой UTF-8 — измерено побайтным
+            // сличением выгрузки `edata_writer` (первые три байта EF BB BF).
+            let bytes = w.finished_bytes();
+            std::fs::write(path, bytes).map_err(|e| RtError::IoError(e.to_string()))?;
+            *slot = None;
+            Ok(BslValue::Str(BslString::from_str("")))
+        }
+        None => {
+            let text = w.finished_text();
+            *slot = None;
+            Ok(BslValue::Str(BslString::from_str(&text)))
+        }
     }
-    *slot = None;
-    Ok(BslValue::Str(BslString::from_str(&text)))
 }
 
 /// `ЧтениеXML.Закрыть()` — источник отпускается, объект остаётся годным для

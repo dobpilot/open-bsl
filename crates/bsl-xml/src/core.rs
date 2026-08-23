@@ -1672,8 +1672,35 @@ impl XmlWriter {
         std::mem::take(&mut self.out)
     }
 
-    pub fn take_path(&mut self) -> Option<PathBuf> {
-        self.path.take()
+    /// Готовый документ, НЕ трогая `out`, `stack` и `pending_start`. Нужен
+    /// `close_writer`, чтобы собрать текст ДО файлового эффекта: на отказе
+    /// `fs::write` писатель обязан остаться прежним, а повторный `Закрыть()`
+    /// — пробовать снова. Мутирующий `finish` для этого не годится (после
+    /// отказа он оставил бы писатель с пустым содержимым, и второй
+    /// `Закрыть()` вернул бы пустую строку — измеренный признак успешной
+    /// записи в файл).
+    pub(crate) fn finished_text(&self) -> String {
+        let mut text = self.out.clone();
+        if self.pending_start {
+            text.push('>');
+        }
+        text
+    }
+
+    /// То же с сигнатурой UTF-8 впереди — чтобы файловый путь не собирал
+    /// текст, а потом копировал его во второй буфер.
+    pub(crate) fn finished_bytes(&self) -> Vec<u8> {
+        let text = self.finished_text();
+        let mut bytes = Vec::with_capacity(3 + text.len());
+        bytes.extend_from_slice(b"\xef\xbb\xbf");
+        bytes.extend_from_slice(text.as_bytes());
+        bytes
+    }
+
+    /// Путь файлового приёмника, НЕ забирая его: писатель остаётся файловым
+    /// до успеха записи.
+    pub(crate) fn file_path(&self) -> Option<&std::path::Path> {
+        self.path.as_deref()
     }
 }
 
@@ -2361,5 +2388,36 @@ mod tests {
         assert!(fails(
             "<!DOCTYPE к [<!ENTITY % а \"%б;\"><!ENTITY % б \"%а;\">%а;]><к/>"
         ));
+    }
+
+    /// `finished_text` не мутирует писатель и даёт то же, что мутирующий
+    /// `finish`: висящий начальный тег закрывается одним `>`. На этом
+    /// свойстве стоит атомарность `close_writer`.
+    #[test]
+    fn finished_text_is_non_mutating_and_matches_finish() {
+        let mut w = XmlWriter::to_string_target(XmlWriterSettings::default());
+        w.write_start_element("а").unwrap();
+        let first = w.finished_text();
+        let second = w.finished_text();
+        assert_eq!(first, second, "finished_text не мутирует писатель");
+        assert_eq!(w.finish(), first, "совпадает с мутирующим finish");
+    }
+
+    /// Отказ записи на закрытии оставляет файловый писатель прежним: путь
+    /// на месте, содержимое цело, повтор даёт то же. Прежде `finish` +
+    /// `take_path` мутировали его ДО записи, и повторный `Закрыть()` отдавал
+    /// пустую строку — измеренный признак успешной записи в файл.
+    #[test]
+    fn a_file_writer_survives_a_failed_close_write() {
+        let dir = std::env::temp_dir();
+        let mut w = XmlWriter::to_file(dir.clone(), XmlWriterSettings::default());
+        w.write_start_element("корень").unwrap();
+        let bytes = w.finished_bytes();
+        assert!(
+            std::fs::write(&dir, &bytes).is_err(),
+            "запись в каталог падает"
+        );
+        assert!(w.file_path().is_some(), "путь остался у писателя");
+        assert_eq!(w.finished_bytes(), bytes, "повторная сборка даёт то же");
     }
 }

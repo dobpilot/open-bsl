@@ -416,15 +416,25 @@ impl JsonWriter {
     ///
     /// [`RtError::IoError`], если файл не записался.
     pub fn finish(&mut self) -> RtResult<String> {
-        match self.path.take() {
-            None => Ok(std::mem::take(&mut self.out)),
-            Some(path) => {
-                std::fs::write(&path, self.out.as_bytes())
-                    .map_err(|e| RtError::IoError(format!("{}: {e}", path.display())))?;
-                self.out.clear();
-                Ok(String::new())
-            }
-        }
+        let Some(path) = self.path.clone() else {
+            return Ok(std::mem::take(&mut self.out));
+        };
+        // НЕ ИЗМЕРЕНО(JSON.WRITE.CLOSE_IO_FAIL): как ведёт себя писатель JSON
+        // платформы после отказа ФС в `Закрыть()`. Здесь выбрано: писатель
+        // остаётся файловым и повторный `Закрыть()` пробует снова, а не
+        // отдаёт документ текстом. Поведение второго `Закрыть()` платформы
+        // не снято (см. `measure-all.bsl`).
+        // Пишем НЕ снимая путь заранее: прежде `path.take()` шёл ДО `write`,
+        // и на отказе ФС писатель молча становился строковым — повторный
+        // `Закрыть()` отдавал весь документ текстом, тем самым ответом,
+        // который рядом означает успешную запись в файл. Путь снимается
+        // (и буфер чистится) ТОЛЬКО после успеха; на отказе писатель
+        // остаётся файловым и повторный `Закрыть()` пробует снова.
+        std::fs::write(&path, self.out.as_bytes())
+            .map_err(|e| RtError::IoError(format!("{}: {e}", path.display())))?;
+        self.out.clear();
+        self.path = None;
+        Ok(String::new())
     }
 }
 
@@ -647,5 +657,25 @@ mod tests {
         let mut w3 = JsonWriter::to_string_target(settings_from(None).unwrap());
         w3.set_check_structure(false);
         assert!(w3.property_name("х").is_err());
+    }
+
+    /// Отказ записи в файл на `Закрыть()` не делает писатель строковым.
+    /// Путь-директория: `fs::write` туда не проходит. Прежде `path.take()`
+    /// шёл до записи, и повторный `Закрыть()` отдавал документ («42»)
+    /// текстом; теперь он снова падает — писатель остаётся файловым.
+    #[test]
+    fn a_failed_file_write_keeps_the_writer_a_file_writer_for_retry() {
+        let dir = std::env::temp_dir();
+        let mut w = JsonWriter::to_file(dir, JsonWriterSettings::default());
+        w.value(&BslValue::Number(num("42")))
+            .expect("запись значения");
+        assert!(
+            matches!(w.finish(), Err(RtError::IoError(_))),
+            "запись в каталог обязана упасть"
+        );
+        match w.finish() {
+            Err(RtError::IoError(_)) => {}
+            other => panic!("повторный Закрыть обязан снова упасть, а не {other:?}"),
+        }
     }
 }
