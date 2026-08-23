@@ -235,6 +235,10 @@ pub struct DataRwState {
     order_used: ByteOrder,
     /// `РазделительСтрок`.
     separator: String,
+    /// Кто получатель. Держится в состоянии, чтобы `check_not_moved` брал
+    /// текст стороны отсюда, а не получал его двенадцатью литералами
+    /// `Side::X.who()` с мест вызова.
+    side: Side,
 }
 
 impl DataRwState {
@@ -246,9 +250,11 @@ impl DataRwState {
     /// у которых своего потока нет (`ДвоичныеДанные`, имя файла), она просто
     /// всегда сходится — двигать такой поток извне некому, наружу он не
     /// отдаётся.
-    fn check_not_moved(&self, who: &'static str) -> RtResult<()> {
-        // Заимствование короткое и не пересекается с рабочим: `position`
-        // только читает поле.
+    fn check_not_moved(&self) -> RtResult<()> {
+        // Сторона берётся из состояния, а не приходит литералом с места
+        // вызова. Заимствование короткое и не пересекается с рабочим:
+        // `position` только читает поле.
+        let who = self.side.who();
         let actual = self.stream(who)?.position(who)?;
         if actual == self.pos {
             return Ok(());
@@ -1046,6 +1052,7 @@ fn new_state(
         order_shown: order,
         order_used: order,
         separator,
+        side,
     })
 }
 
@@ -1257,7 +1264,7 @@ pub fn read(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     at_most(v, args, 1, OP)?;
     let mut d = d.borrow_mut();
     let limit = limit_arg(args.first(), OP)?;
-    d.check_not_moved(Side::Reader.who())?;
+    d.check_not_moved()?;
     let bytes = read_limited(&mut d, limit, OP)?;
     Ok(BslValue::new_object(DataReadResult {
         bytes: bytes.into(),
@@ -1282,7 +1289,7 @@ pub fn read_into_buffer(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<B
     at_most(v, args, 1, OP)?;
     let mut d = d.borrow_mut();
     let limit = bounded_limit_arg(args.first(), OP)?;
-    d.check_not_moved(Side::Reader.who())?;
+    d.check_not_moved()?;
     let bytes = read_limited(&mut d, limit, OP)?;
     Ok(buffer_of_bytes(bytes))
 }
@@ -1302,7 +1309,7 @@ pub fn read_byte(v: &dyn ObjectProtocol) -> RtResult<BslValue> {
     const OP: &str = "ПрочитатьБайт";
     let d = reader(v, OP)?;
     let mut d = d.borrow_mut();
-    d.check_not_moved(Side::Reader.who())?;
+    d.check_not_moved()?;
     let chunk = d.read_bytes(1, OP)?;
     Ok(match chunk.first() {
         Some(b) => from_u64(*b as u64),
@@ -1331,7 +1338,7 @@ fn read_int(v: &dyn ObjectProtocol, args: &[BslValue], w: IntWidth) -> RtResult<
     at_most(v, args, 1, op)?;
     let mut d = d.borrow_mut();
     let order = order_arg(args.first(), d.order_used, op)?;
-    d.check_not_moved(Side::Reader.who())?;
+    d.check_not_moved()?;
     let before = d.pos;
     let chunk = d.read_bytes(w.bytes(), op)?;
     if chunk.len() < w.bytes() {
@@ -1358,7 +1365,7 @@ pub fn skip(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     at_most(v, args, 1, OP)?;
     let mut d = d.borrow_mut();
     let count = count_arg(args.first(), OP)?.unwrap_or(0);
-    d.check_not_moved(Side::Reader.who())?;
+    d.check_not_moved()?;
     let to = d.pos.checked_add(count).ok_or(RtError::TypeError {
         expected: "Позиция, умещающаяся в потоке",
         op: OP,
@@ -1386,7 +1393,7 @@ pub fn read_chars(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValu
     let mut d = d.borrow_mut();
     let limit = bounded_limit_arg(args.first(), OP)?;
     let enc = encoding_of(&d, args.get(1), OP)?;
-    d.check_not_moved(Side::Reader.who())?;
+    d.check_not_moved()?;
     let bytes = match limit {
         None => read_limited(&mut d, None, OP)?,
         Some(chars) => read_exactly_chars(&mut d, enc, chars, OP)?,
@@ -1465,7 +1472,7 @@ pub fn read_line(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue
     at_most(v, args, 1, OP)?;
     let mut d = d.borrow_mut();
     let enc = encoding_of(&d, args.first(), OP)?;
-    d.check_not_moved(Side::Reader.who())?;
+    d.check_not_moved()?;
     // Разделитель ищется ПОБАЙТОВО, в той же кодировке, и без разворачивания
     // `\n` в `\r\n` — этот перевод существует только на записи (измерено).
     let sep = enc.encode_without_signature(&d.separator);
@@ -1519,7 +1526,7 @@ pub fn write(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
         expected: "ДвоичныеДанные",
         op: OP,
     })?;
-    d.check_not_moved(Side::Writer.who())?;
+    d.check_not_moved()?;
     d.write_bytes(bytes, OP)
 }
 
@@ -1542,7 +1549,7 @@ pub fn write_byte(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
         Ok(Some(n)) if n <= 255 => n as u8,
         _ => return Err(bad()),
     };
-    d.check_not_moved(Side::Writer.who())?;
+    d.check_not_moved()?;
     d.write_bytes(&[byte], OP)
 }
 
@@ -1570,7 +1577,7 @@ fn write_int(v: &dyn ObjectProtocol, args: &[BslValue], w: IntWidth) -> RtResult
         _ => return Err(bad()),
     };
     let order = order_arg(args.get(1), d.order_used, op)?;
-    d.check_not_moved(Side::Writer.who())?;
+    d.check_not_moved()?;
     let bytes = w.encode(value, order);
     d.write_bytes(&bytes, op)
 }
@@ -1598,7 +1605,7 @@ pub fn write_chars(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
         }
     };
     let enc = encoding_of(&d, args.get(1), OP)?;
-    d.check_not_moved(Side::Writer.who())?;
+    d.check_not_moved()?;
     let bytes = enc.encode_without_signature(&expand_line_feeds(&text));
     d.write_bytes(&bytes, OP)
 }
@@ -1625,7 +1632,7 @@ pub fn write_line(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     };
     let enc = encoding_of(&d, args.get(1), OP)?;
     let sep = str_arg(args.get(2), OP)?.unwrap_or_else(|| d.separator.clone());
-    d.check_not_moved(Side::Writer.who())?;
+    d.check_not_moved()?;
     // Перевод `\n` -> `\r\n` накрывает и тело, и разделитель: измерено, что
     // разделитель по умолчанию (один `\n`) ложится байтами `13 10`, а явно
     // назначенный `\r\n` — байтами `13 13 10`.
