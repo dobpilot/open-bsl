@@ -459,3 +459,47 @@ fn a_runtime_invalid_bytecode_is_not_caught_by_an_exception_handler() {
         "повреждённый образ не должен ловиться Попыткой"
     );
 }
+
+/// Периметр образа проверяет арность встроенной функции и метода с
+/// ФИКСИРОВАННОЙ арностью: `bsl-vm` не видит `bsl-sema`, а крафтнутый `count`
+/// ронял бы `call_builtin_*` на `args[0]`. Арности берутся из `bsl-rt`.
+#[test]
+fn a_wrong_builtin_arg_count_is_invalid_bytecode() {
+    // CallBuiltin: `Sqrt` берёт ровно один аргумент; `count = 0` — за арностью.
+    let mut program = compile("x = Sqrt(4);\nВозврат x;\n");
+    let mut patched = false;
+    for chunk in &mut program.chunks {
+        for instr in &mut chunk.instrs {
+            if let Instr::CallBuiltin { count, .. } = instr {
+                *count = 0;
+                patched = true;
+            }
+        }
+    }
+    assert!(patched, "в программе обязан быть CallBuiltin");
+    assert_eq!(
+        invalid(&program),
+        "число аргументов встроенной функции вне её арности"
+    );
+}
+
+/// То же для метода с фиксированной арностью: `Количество()` берёт ноль
+/// аргументов, а `count = 1` не совпадает с `static_arity`.
+#[test]
+fn a_wrong_fixed_arity_method_arg_count_is_invalid_bytecode() {
+    let mut program = compile("С = Новый Соответствие;\nВозврат С.Количество();\n");
+    let mut patched = false;
+    for chunk in &mut program.chunks {
+        for instr in &mut chunk.instrs {
+            if let Instr::CallMethod { count, .. } = instr {
+                *count = 1;
+                patched = true;
+            }
+        }
+    }
+    assert!(patched, "в программе обязан быть CallMethod");
+    assert_eq!(
+        invalid(&program),
+        "число аргументов метода не совпадает с его арностью"
+    );
+}

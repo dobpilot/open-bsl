@@ -807,6 +807,33 @@ fn check_call_geometry(program: &Program, chunk: &Chunk, instr: &Instr) -> Resul
                 )),
             }
         }
+        // Число аргументов встроенной функции и метода проверяется здесь, на
+        // связывании: `bsl-vm` не видит `bsl-sema`, и без этого крафтнутый
+        // байт-код с недостающим аргументом ронял бы `call_builtin_*` на
+        // `args[0]`. Арности берутся из `bsl-rt` — единственного источника,
+        // видного и резолверу, и VM.
+        Instr::CallBuiltin { builtin, count, .. } => {
+            let (min, max) = builtin.arity_range();
+            let argc = *count as usize;
+            if argc < min || argc > max {
+                return Err(RtError::InvalidBytecode(
+                    "число аргументов встроенной функции вне её арности",
+                ));
+            }
+            Ok(())
+        }
+        Instr::CallMethod { method, count, .. } => {
+            // `None` — арность полиморфна по получателю; её проверяет сам
+            // обработчик в рантайме (ловимо `Попыткой`), как на платформе.
+            if let Some(expected) = method.static_arity()
+                && *count as usize != expected
+            {
+                return Err(RtError::InvalidBytecode(
+                    "число аргументов метода не совпадает с его арностью",
+                ));
+            }
+            Ok(())
+        }
         _ => Ok(()),
     }
 }

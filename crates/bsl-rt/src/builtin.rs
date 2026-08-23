@@ -1386,9 +1386,270 @@ impl BuiltinMethod {
             .map(|(name, _)| *name)
             .expect("каждый BuiltinMethod обязан иметь строку в таблице имён")
     }
+
+    /// Статическая арность метода: `Some(n)` — метод берёт ровно `n`
+    /// аргументов при ЛЮБОМ получателе; `None` — арность полиморфна по типу
+    /// получателя (`Добавить` — 0 у таблицы, 1 у массива; `Получить`,
+    /// `Прочитать`, ...) и решается рантаймом (см. [`call_builtin_method`]).
+    ///
+    /// Живёт здесь, а не в `bsl-sema`: проверить арность обязан и `bsl-vm`
+    /// на КРАФТНУТОМ байт-коде (`bsl-vm` не видит `bsl-sema`), иначе метод с
+    /// недостающим аргументом уронил бы VM на `args[0]`. Матч исчерпывающий
+    /// и без `_`: новый метод не соберётся, пока его арность не отнесут к
+    /// фиксированной или полиморфной. Числа ИЗМЕРЕНЫ — см. комментарии у
+    /// ветвей.
+    #[must_use]
+    pub fn static_arity(self) -> Option<usize> {
+        match self {
+            // DOM. Признаки — строго без аргументов, поиск
+            // элемента по идентификатору — строго с одним, а у
+            // четырёх «атрибутных» методов форм две (имя либо
+            // URI и локальное имя), поэтому их арность решает
+            // рантайм. Всё измерено: платформа отвергает и
+            // `ЕстьАтрибут()`, и `ЕстьАтрибут("а", "б", "в")`.
+            BuiltinMethod::DomHasChildNodes | BuiltinMethod::DomHasAttributes => Some(0),
+            BuiltinMethod::DomGetElementById => Some(1),
+            // Фабрики узлов и мутация. Строго один аргумент — у
+            // текстоподобных фабрик и у операций с одним узлом,
+            // строго два — у инструкции обработки, вставки перед,
+            // замены; у форм с пространством имён (`СоздатьЭлемент`,
+            // `СоздатьАтрибут`, `УстановитьАтрибут`,
+            // `УдалитьАтрибут`) арность решает рантайм.
+            BuiltinMethod::DomCreateTextNode
+            | BuiltinMethod::DomCreateCdataSection
+            | BuiltinMethod::DomCreateComment
+            | BuiltinMethod::DomAppendChild
+            | BuiltinMethod::DomRemoveChild
+            | BuiltinMethod::DomSetAttributeNode
+            | BuiltinMethod::DomRemoveAttributeNode => Some(1),
+            BuiltinMethod::DomCreateProcessingInstruction
+            | BuiltinMethod::DomInsertBefore
+            | BuiltinMethod::DomReplaceChild => Some(2),
+            BuiltinMethod::DomCreateElement
+            | BuiltinMethod::DomCreateAttribute
+            | BuiltinMethod::DomSetAttribute
+            | BuiltinMethod::DomRemoveAttribute => None,
+            BuiltinMethod::DomGetAttribute
+            | BuiltinMethod::DomHasAttribute
+            | BuiltinMethod::DomGetAttributeNode
+            | BuiltinMethod::DomGetElementsByName => None,
+            // XPath. Строго фиксированы три имени: создание
+            // выражения — ровно два аргумента, поиск URI — один,
+            // обход — ноль (измерено, что платформа отвергает и
+            // `СоздатьВыражениеXPath(в)`, и
+            // `НайтиURIПространстваИмен()`). У вычисления форм две
+            // (три аргумента и четыре), у создания разыменователя
+            // — три (ноль, один и два), у `Вычислить` — две (узел
+            // и узел с видом), у `ЭлементСнимка` имя совпало бы с
+            // чужим, будь оно у кого-то ещё; всё это решает
+            // рантайм.
+            BuiltinMethod::XPathCreateExpression => Some(2),
+            BuiltinMethod::XPathLookupNamespaceUri | BuiltinMethod::XPathSnapshotItem => Some(1),
+            BuiltinMethod::XPathNext => Some(0),
+            // `ПолучитьГруппы()` аргументов не берёт: измерено, что
+            // синтаксис статьи 16.5.4 — ровно пустые скобки.
+            BuiltinMethod::RegexGetGroups => Some(0),
+            BuiltinMethod::XPathEvaluate
+            | BuiltinMethod::XPathCreateNsResolver
+            | BuiltinMethod::XPathEvaluateExpression => None,
+            BuiltinMethod::Count | BuiltinMethod::Clear | BuiltinMethod::Close => Some(0),
+            // `Размер` есть только у двоичных данных, и лишний
+            // аргумент платформа отвергает (проба
+            // `BIN.SIZE.EXTRAARG`) — арность фиксированная.
+            BuiltinMethod::Size => Some(0),
+            BuiltinMethod::Delete => Some(1),
+            // `Получить` полиморфен, как и `Добавить`: у
+            // `Соответствие` и буфера это один аргумент, а у
+            // именованной коллекции компонент схемы — ещё и пара
+            // (URI, имя) (измерено). Арность решает рантайм.
+            BuiltinMethod::Get => None,
+            // `СоздатьСхемуXML` — строго один аргумент: ни без
+            // аргументов, ни с двумя платформа его не берёт
+            // (измерено).
+            BuiltinMethod::CreateXmlSchema => Some(1),
+            // Методы буфера. `Установить` и побитовые — строго два
+            // аргумента, `Разделить`/`Соединить` — один (измерено:
+            // ни без аргументов, ни с двумя платформа их не берёт).
+            BuiltinMethod::BufSet
+            | BuiltinMethod::WriteBitwiseAnd
+            | BuiltinMethod::WriteBitwiseOr
+            | BuiltinMethod::WriteBitwiseXor
+            | BuiltinMethod::WriteBitwiseAndNot => Some(2),
+            BuiltinMethod::BufSplit | BuiltinMethod::BufConcat => Some(1),
+            // `ПолучитьСрез` — 1 или 2 (количество необязательно),
+            // арность решает рантайм.
+            BuiltinMethod::BufSlice => None,
+            // У чтения целого 1..2 аргумента, у записи 2..3, у
+            // `Инвертировать` 0..2 — арность решает рантайм.
+            BuiltinMethod::ReadInt16
+            | BuiltinMethod::ReadInt32
+            | BuiltinMethod::ReadInt64
+            | BuiltinMethod::WriteInt16
+            | BuiltinMethod::WriteInt32
+            | BuiltinMethod::WriteInt64
+            | BuiltinMethod::Invert => None,
+            BuiltinMethod::Insert => Some(2),
+            BuiltinMethod::FindRows | BuiltinMethod::Total => Some(1),
+            // `Записать` — 1 у `ЗаписьТекста` (кусок текста) и 1..2 у
+            // `ТекстовыйДокумент` (путь и кодировка). Как и у
+            // `Прочитать`, арность решает рантайм.
+            BuiltinMethod::Write => None,
+            BuiltinMethod::UnloadColumn | BuiltinMethod::IndexOf => Some(1),
+            BuiltinMethod::LoadColumn | BuiltinMethod::Move => Some(2),
+            // `Свойство` — 1 или 2 (см. `BslValue::structure_property`),
+            // `Найти` — 1 или 2 (список колонок необязателен), как и
+            // у `Добавить` арность решает рантайм. Из волны 3 так же
+            // устроены `Скопировать` (0..2), `СкопироватьКолонки`
+            // (0..1) и `Свернуть` (1..2).
+            BuiltinMethod::Add
+            | BuiltinMethod::Property
+            | BuiltinMethod::Find
+            | BuiltinMethod::Sort
+            | BuiltinMethod::FillValues
+            | BuiltinMethod::Copy
+            | BuiltinMethod::CopyColumns
+            | BuiltinMethod::Collapse => None,
+            // JSON. Без аргументов — обход читателя и открытие/
+            // закрытие контейнеров записи.
+            BuiltinMethod::WriteStartObject
+            | BuiltinMethod::WriteEndObject
+            | BuiltinMethod::WriteStartArray
+            | BuiltinMethod::WriteEndArray => Some(0),
+            // `Пропустить` — 0 у читателей JSON/XML (шаг через узел) и
+            // 1 у `ЧтениеДанных` (сколько байтов перешагнуть). Тип
+            // получателя здесь ещё не известен, поэтому арность решает
+            // рантайм.
+            BuiltinMethod::SkipNode => None,
+            // Методы `ЧтениеДанных`/`ЗаписьДанных`. Необязательные
+            // хвостовые аргументы (количество, кодировка, разделитель)
+            // проверяет рантайм; фиксированы только те, у кого форма
+            // ровно одна.
+            BuiltinMethod::DataReadByte
+            | BuiltinMethod::GetBinaryData
+            | BuiltinMethod::GetBinaryDataBuffer => Some(0),
+            BuiltinMethod::DataWriteByte => Some(1),
+            BuiltinMethod::DataReadIntoBuffer
+            | BuiltinMethod::DataReadChars
+            | BuiltinMethod::DataReadLine
+            | BuiltinMethod::DataWriteChars
+            | BuiltinMethod::DataWriteLine => None,
+            BuiltinMethod::WritePropertyName | BuiltinMethod::WriteJsonValue => Some(1),
+            // `УстановитьСтроку` — 1 у читателя (текст) и 0..1 у
+            // писателя (параметры), `ОткрытьФайл` — 1..2. Тип
+            // получателя здесь ещё не известен, поэтому арность,
+            // как у `Добавить`, решает рантайм.
+            // `Прочитать` — 0 у читателей JSON/XML (шаг по потоку) и 1 у
+            // `ТекстовыйДокумент` (путь к файлу). Тип получателя здесь
+            // ещё не известен, поэтому арность решает рантайм.
+            BuiltinMethod::SetString | BuiltinMethod::OpenFile | BuiltinMethod::ReadNext => None,
+            // XML. Обход читателя и закрытие элемента — без
+            // аргументов, остальное — по числу измеренных
+            // параметров.
+            BuiltinMethod::GetText | BuiltinMethod::LineCount => Some(0),
+            BuiltinMethod::SetText
+            | BuiltinMethod::GetLine
+            | BuiltinMethod::AddLine
+            | BuiltinMethod::DeleteLine
+            | BuiltinMethod::OutputArea => Some(1),
+            // `ПолучитьОбласть` у платформы проверяет число
+            // аргументов в РАНТАЙМЕ: `ПолучитьОбласть(2, 3)` — не
+            // ошибка компиляции, а ловимое исключение.
+            BuiltinMethod::GetArea => None,
+            // `Область` — 1 аргумент (адрес строкой) либо 4
+            // (координаты), поэтому арность решает рантайм.
+            BuiltinMethod::Region => None,
+            BuiltinMethod::MergeCells
+            | BuiltinMethod::UnmergeCells
+            | BuiltinMethod::EndRowGroup => Some(0),
+            // `НачатьГруппуСтрок` — от нуля до двух аргументов.
+            BuiltinMethod::BeginRowGroup => None,
+            BuiltinMethod::InsertLine | BuiltinMethod::ReplaceLine => Some(2),
+            BuiltinMethod::XmlReadAttribute
+            | BuiltinMethod::XmlAttributeCount
+            | BuiltinMethod::XmlMoveToContent
+            | BuiltinMethod::WriteXmlDeclaration
+            | BuiltinMethod::WriteEndElement => Some(0),
+            BuiltinMethod::XmlAttributeName
+            | BuiltinMethod::XmlAttributeValue
+            | BuiltinMethod::WriteStartElement
+            | BuiltinMethod::WriteXmlText
+            | BuiltinMethod::WriteXmlComment
+            | BuiltinMethod::WriteCdataSection
+            | BuiltinMethod::WriteXmlRaw => Some(1),
+            BuiltinMethod::WriteXmlAttribute | BuiltinMethod::WriteXmlProcessingInstruction => {
+                Some(2)
+            }
+            // Потоки. `ТекущаяПозиция` — без аргументов, `Перейти`
+            // — строго со смещением и точкой отсчёта: `Перейти(0)`
+            // платформа отвергает, и это ошибка КОМПИЛЯЦИИ, а не
+            // ловимое исключение (измерено).
+            BuiltinMethod::CurrentPosition => Some(0),
+            BuiltinMethod::Seek => Some(2),
+            // У `Открыть` доступ необязателен (2..3), поэтому
+            // арность решает рантайм; остальные три метода
+            // менеджера берут ровно имя файла.
+            BuiltinMethod::StreamOpen => None,
+            BuiltinMethod::StreamOpenForRead
+            | BuiltinMethod::StreamOpenForWrite
+            | BuiltinMethod::StreamOpenForAppend => Some(1),
+            // `Создать` и `Тип` полиморфны по получателю, как
+            // `Получить` и `Добавить`: у менеджера потоков
+            // `Создать` — один аргумент, у фабрики XDTO — от одного
+            // до трёх; `Тип` у фабрики — пара (URI, имя) либо
+            // расширенное имя, а у экземпляра `ОбъектXDTO` —
+            // вообще без аргументов. Всё измерено, и решает рантайм.
+            BuiltinMethod::Create | BuiltinMethod::XdtoType => None,
+            // Экземпляр XDTO. Арности измерены поимённо: имя
+            // свойства — один аргумент, `Установить` — два (оно
+            // делит вариант с `БуферДвоичныхДанных`, см. выше), а
+            // `Проверить`, `Свойства`, `Владелец` и
+            // `Последовательность` берут ровно ноль: лишний
+            // аргумент — ошибка на всех четырёх (пробы «объект …
+            // с аргументом» в `measure-xdto.bsl`; какая именно —
+            // компиляции или исполнения — не различима, они сняты
+            // через `Выполнить` внутри `Попытка`, здесь это
+            // ошибка компиляции).
+            BuiltinMethod::XdtoGetList
+            | BuiltinMethod::XdtoIsSet
+            | BuiltinMethod::XdtoUnset
+            | BuiltinMethod::XdtoSequenceValue
+            | BuiltinMethod::XdtoSequenceProperty => Some(1),
+            BuiltinMethod::XdtoValidate
+            | BuiltinMethod::XdtoObjectProperties
+            | BuiltinMethod::XdtoOwner
+            | BuiltinMethod::XdtoSequenceOf => Some(0),
+            // Ввод-вывод фабрики: у `ПрочитатьXML` форм две
+            // (читатель и читатель с типом), у `ЗаписатьXML` три
+            // (писатель со значением, плюс имя, плюс URI) —
+            // измерено, что третий аргумент чтения и пятый записи
+            // платформа отвергает. Арность решает рантайм.
+            BuiltinMethod::XdtoReadXml | BuiltinMethod::XdtoWriteXml => None,
+            // Три члена сериализатора, которых здесь нет: они
+            // не поддержаны ни при какой арности, и проверять её
+            // значило бы отвечать на `Сер.XMLТип()` рассказом про
+            // число аргументов вместо главного — что метода нет.
+            // Отказ даёт рантайм, и он перехватывается `Попытка`,
+            // как на платформе.
+            BuiltinMethod::XdtoXmlTypeOfType
+            | BuiltinMethod::XdtoXmlTypeOfValue
+            | BuiltinMethod::XdtoCanReadXml => None,
+            // Распаковка. У `Извлечь` форм три (элемент с
+            // каталогом, с режимом и с паролем), у `ИзвлечьВсе` —
+            // две; всё измерено, и обе арности решает рантайм.
+            BuiltinMethod::ArchiveExtract | BuiltinMethod::ArchiveExtractAll => None,
+        }
+    }
 }
 
 pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
+    // Сторож входа публичной функции: без него недостающий аргумент падает
+    // на `args[0]`. Путь VM защищён периметром образа (`check_call_geometry`),
+    // но функция публична — прямой вызывающий её проверки не проходит.
+    if args.len() < f.arity_range().0 {
+        return Err(RtError::InvalidBytecode(
+            "встроенной функции передано меньше аргументов, чем требует её арность",
+        ));
+    }
     match f {
         BuiltinFn::Sqrt => args[0].sqrt(),
         BuiltinFn::Pow => args[0].pow(&args[1]),
@@ -1664,6 +1925,16 @@ pub fn call_builtin_method(
     obj: &BslValue,
     args: &[BslValue],
 ) -> RtResult<BslValue> {
+    // Сторож входа: у метода с ФИКСИРОВАННОЙ арностью недостающий аргумент
+    // падал бы на `args[0]`. Полиморфные (`static_arity() == None`) проверяет
+    // сам обработчик. Путь VM защищён периметром образа, но функция публична.
+    if let Some(expected) = m.static_arity()
+        && args.len() < expected
+    {
+        return Err(RtError::InvalidBytecode(
+            "методу передано меньше аргументов, чем требует его арность",
+        ));
+    }
     match m {
         BuiltinMethod::Count => {
             let len = obj.collection_len()?;
@@ -2394,6 +2665,28 @@ pub fn call_builtin_method_ctx(
 #[cfg(test)]
 mod name_table_tests {
     use super::*;
+
+    /// Сторож входа `call_builtin_fn`: недостающий аргумент отвергается
+    /// ошибкой образа, а не роняет процесс на `args[0]`. Путь VM защищён
+    /// периметром (`check_call_geometry`), но функция публична.
+    #[test]
+    fn call_builtin_fn_rejects_too_few_arguments() {
+        assert!(matches!(
+            call_builtin_fn(BuiltinFn::Pow, &[]),
+            Err(crate::RtError::InvalidBytecode(_))
+        ));
+    }
+
+    /// То же для метода с ФИКСИРОВАННОЙ арностью (`static_arity() == Some`);
+    /// полиморфные (`None`) проверяет сам обработчик в рантайме.
+    #[test]
+    fn call_builtin_method_rejects_too_few_arguments() {
+        assert_eq!(BuiltinMethod::Delete.static_arity(), Some(1));
+        assert!(matches!(
+            call_builtin_method(BuiltinMethod::Delete, &crate::BslValue::Undefined, &[]),
+            Err(crate::RtError::InvalidBytecode(_))
+        ));
+    }
 
     /// Публичный вход файловых функций проверяет ФОРМУ аргументов сам:
     /// опереться на проверку арности в VM он не вправе — вызвать его
