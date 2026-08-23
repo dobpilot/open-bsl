@@ -1621,11 +1621,20 @@ impl BslValue {
         match self {
             BslValue::Object(obj) => match &**obj {
                 BslObject::TextWriter(writer) => {
-                    if let Some(mut writer) = writer.borrow_mut().take() {
+                    let mut slot = writer.borrow_mut();
+                    // Сброс НА МЕСТЕ, а писатель снимается только ПОСЛЕ
+                    // успеха: прежде `take()` забирал буфер ДО `flush()`, и на
+                    // отказе `?` уносил ошибку наружу с уже опустевшим слотом
+                    // — накопленный текст терялся, а повторный `Закрыть()`
+                    // находил `None` и врал успехом при незаписанном тексте.
+                    // Теперь на отказе слот цел, и повторный `Закрыть()`
+                    // пробует снова.
+                    if let Some(writer) = slot.as_mut() {
                         writer
                             .flush()
                             .map_err(|e| RtError::IoError(e.to_string()))?;
                     }
+                    *slot = None;
                     Ok(BslValue::Undefined)
                 }
                 _ => Err(RtError::MethodNotApplicable {
@@ -3290,6 +3299,48 @@ mod tests {
     #[test]
     fn equality_by_value_across_representations() {
         assert!(num("1.0").eq_value(&num("1.00")));
+    }
+
+    /// `ЗаписьТекста.Закрыть()` не теряет буфер при отказе сброса. Файл,
+    /// открытый ТОЛЬКО НА ЧТЕНИЕ, заворачивается в `BufWriter`: маленькая
+    /// запись остаётся в памяти, а `flush` на закрытии падает. Прежде
+    /// `take()` снимал писатель ДО `flush`, и второй `Закрыть()` находил
+    /// `None` и врал успехом при незаписанном тексте.
+    #[test]
+    fn text_writer_close_keeps_the_buffer_when_flush_fails() {
+        use std::io::Write as _;
+        let path = std::env::temp_dir().join("open-bsl-text-writer-close-fail.txt");
+        std::fs::File::create(&path).expect("создать файл");
+        let read_only = std::fs::OpenOptions::new()
+            .read(true)
+            .open(&path)
+            .expect("открыть на чтение");
+        let mut buffered = std::io::BufWriter::new(read_only);
+        buffered
+            .write_all("незаписанный текст".as_bytes())
+            .expect("в буфер");
+        let writer = BslValue::Object(Rc::new(BslObject::TextWriter(std::cell::RefCell::new(
+            Some(buffered),
+        ))));
+        assert!(
+            matches!(writer.text_writer_close(), Err(RtError::IoError(_))),
+            "сброс в файл только на чтение обязан упасть"
+        );
+        assert!(
+            matches!(writer.text_writer_close(), Err(RtError::IoError(_))),
+            "повторный Закрыть() снова падает — буфер не потерян"
+        );
+
+        let ok_path = std::env::temp_dir().join("open-bsl-text-writer-close-ok.txt");
+        let ok_file = std::fs::File::create(&ok_path).expect("создать файл");
+        let writer_ok = BslValue::Object(Rc::new(BslObject::TextWriter(std::cell::RefCell::new(
+            Some(std::io::BufWriter::new(ok_file)),
+        ))));
+        assert!(writer_ok.text_writer_close().is_ok(), "исправный закрылся");
+        assert!(
+            writer_ok.text_writer_close().is_ok(),
+            "повторный Закрыть() идемпотентен"
+        );
     }
 
     /// Воспроизведение 5: заявленное входом число не превращается в
