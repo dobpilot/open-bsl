@@ -442,6 +442,32 @@ impl std::error::Error for RtError {}
 
 pub type RtResult<T> = Result<T, RtError>;
 
+/// Предвыделяет ёмкость под НЕДОСТОВЕРНОЕ число из входного формата, не
+/// роняя процесс, и возвращает то же число, зажатое в `[0, bound]`.
+///
+/// `declared` — заявленное входом количество, ЗНАКОВОЕ: счётчики MXL
+/// приходят из `Node::number()` как `i64`, и отрицательное при `as usize`
+/// стало бы огромным ещё до всякой проверки. `bound` — сколько элементов
+/// реально осталось во входе (байтов у `ЗначениеИзСтрокиВнутр`, узлов у
+/// MXL). Ограничение входом убирает абсурдные числа, `try_reserve` —
+/// оставшиеся: законный, но большой `bound` иначе всё равно завершил бы
+/// процесс на аллокации (`Vec::with_capacity` при отказе делает `abort`,
+/// а не ловимое `Попыткой` исключение — это и есть воспроизведение 5).
+///
+/// # Errors
+///
+/// [`std::collections::TryReserveError`], если аллокация не удалась;
+/// вызывающий превращает её в свою ошибку формата.
+pub fn reserve_hint<T>(
+    vec: &mut Vec<T>,
+    declared: i64,
+    bound: usize,
+) -> Result<usize, std::collections::TryReserveError> {
+    let hint = declared.clamp(0, i64::try_from(bound).unwrap_or(i64::MAX)) as usize;
+    vec.try_reserve(hint)?;
+    Ok(hint)
+}
+
 /// `TypeId` перечисления, к которому принадлежит член, — используется и
 /// для `ТипЗнч()` конкретного члена (`BslValue::Enum`), и для голого имени
 /// перечисления как выражения (`BslValue::EnumType`, см. doc comment на
@@ -2408,7 +2434,7 @@ impl BslValue {
         match self {
             BslValue::Object(o) => match &**o {
                 BslObject::ValueTable(data) => {
-                    let row_id = data.borrow_mut().add_row();
+                    let row_id = data.borrow_mut().add_row()?;
                     Ok(BslValue::Object(Rc::new(BslObject::TableRow(
                         data.clone(),
                         row_id,
@@ -3264,6 +3290,20 @@ mod tests {
     #[test]
     fn equality_by_value_across_representations() {
         assert!(num("1.0").eq_value(&num("1.00")));
+    }
+
+    /// Воспроизведение 5: заявленное входом число не превращается в
+    /// огромную ёмкость. Отрицательное (счётчик MXL из `i64`) зажимается в
+    /// ноль ДО преобразования в `usize`, а превышающее остаток входа — по
+    /// границе; в пределах границы проходит как есть.
+    #[test]
+    fn reserve_hint_clamps_untrusted_counts() {
+        let mut a: Vec<u8> = Vec::new();
+        assert_eq!(reserve_hint(&mut a, -1, 100).unwrap(), 0);
+        let mut b: Vec<u8> = Vec::new();
+        assert_eq!(reserve_hint(&mut b, 1_000_000_000, 8).unwrap(), 8);
+        let mut c: Vec<u8> = Vec::new();
+        assert_eq!(reserve_hint(&mut c, 5, 8).unwrap(), 5);
     }
 
     /// Воспроизведение 3: два `УникальныйИдентификатор` из одних байтов

@@ -554,7 +554,7 @@ mod tests {
             for c in columns {
                 d.add_column(c);
             }
-            d.add_row()
+            d.add_row().unwrap()
         };
         BslValue::Object(Rc::new(BslObject::TableRow(data, row_id)))
     }

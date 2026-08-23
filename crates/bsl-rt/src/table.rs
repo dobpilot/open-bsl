@@ -468,27 +468,42 @@ impl ValueTableData {
         })
     }
 
-    pub fn add_column(&mut self, name: &str) {
-        self.add_typed_column(name, None);
+    /// Добавляет колонку и возвращает её номер, либо `None`, если имя уже
+    /// занято. Номер обязателен вызывающему: разбор внутреннего формата
+    /// брал его как `len() - 1`, и при занятом имени уцелевшая чужая колонка
+    /// получала бы тип и заголовок новой. `Колонки.Добавить` этот `None`
+    /// игнорирует — его поведение при занятом имени не измерено.
+    pub fn add_column(&mut self, name: &str) -> Option<usize> {
+        self.add_typed_column(name, None)
     }
 
-    pub fn add_typed_column(&mut self, name: &str, value_types: Option<Vec<crate::TypeRef>>) {
+    pub fn add_typed_column(
+        &mut self,
+        name: &str,
+        value_types: Option<Vec<crate::TypeRef>>,
+    ) -> Option<usize> {
         self.add_constrained_column(
             name,
             value_types.map(|ids| ids.into_iter().map(ColumnType::plain).collect()),
-        );
+        )
     }
 
-    pub fn add_constrained_column(&mut self, name: &str, value_types: Option<Vec<ColumnType>>) {
+    pub fn add_constrained_column(
+        &mut self,
+        name: &str,
+        value_types: Option<Vec<ColumnType>>,
+    ) -> Option<usize> {
         if self.column_index(name).is_some() {
-            return; // колонка с таким именем уже есть — не дублируем.
+            return None; // колонка с таким именем уже есть — не дублируем.
         }
+        let index = self.column_names.len();
         self.column_names.push(name.to_string());
         self.column_types.push(value_types);
         self.column_vstr.push(ColumnVstr::default());
         self.columns
             .push(vec![BslValue::Undefined; self.row_count()]);
         self.schema_revision = self.schema_revision.wrapping_add(1);
+        Some(index)
     }
 
     /// Текущая версия порядка колонок для инвалидизации внешних планов.
@@ -500,30 +515,67 @@ impl ValueTableData {
     /// нужен чтению внутреннего формата (`ЗначениеИзСтрокиВнутр`): у
     /// платформы вторая лексема узла строки — именно её внутренний номер,
     /// и после `Свернуть`/`Скопировать` номера разрежены, а не 0..n-1.
-    /// Терять их при транзите нельзя. Длина обязана совпасть с текущим
-    /// числом строк; дубликаты — ошибка вызывающего (здесь не проверяются:
-    /// формат платформы их не порождает).
-    pub fn set_row_ids(&mut self, ids: Vec<u64>) {
-        debug_assert_eq!(ids.len(), self.row_ids.len());
-        self.next_id = ids.iter().max().map_or(0, |m| m + 1);
+    /// Терять их при транзите нельзя. Вход приходит из НЕДОСТОВЕРНОГО
+    /// внутреннего формата, поэтому длина (обязана совпасть с числом строк),
+    /// переполнение `max + 1` и уникальность номеров (дубликат сделал бы
+    /// обратный индекс неоднозначным) проверяются как ошибка формата, а не
+    /// `debug_assert`, гаснущий в release.
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::Vstr`], если длина не совпала, `max + 1` переполнил `u64`
+    /// или среди идентификаторов есть повтор.
+    pub fn set_row_ids(&mut self, ids: Vec<u64>) -> crate::RtResult<()> {
+        if ids.len() != self.row_ids.len() {
+            return Err(crate::RtError::Vstr(
+                "число внутренних номеров строк не совпадает с числом строк".to_string(),
+            ));
+        }
+        let next_id = match ids.iter().max() {
+            Some(&max) => max.checked_add(1).ok_or_else(|| {
+                crate::RtError::Vstr("внутренний номер строки переполняет u64".to_string())
+            })?,
+            None => 0,
+        };
+        let mut seen = std::collections::HashSet::with_capacity(ids.len());
+        for &id in &ids {
+            if !seen.insert(id) {
+                return Err(crate::RtError::Vstr(
+                    "повтор внутреннего номера строки".to_string(),
+                ));
+            }
+        }
+        self.next_id = next_id;
         self.row_positions = RowPositions::rebuild(&ids, self.next_id);
         self.row_ids = ids;
+        Ok(())
     }
 
     /// Добавляет строку (все колонки — `Неопределено`) и возвращает её
     /// стабильный `row_id`.
-    pub fn add_row(&mut self) -> u64 {
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::Vstr`], если номера строк исчерпаны (`next_id == u64::MAX`):
+    /// один `checked_add` в `set_row_ids` этого не ловит — он оставляет
+    /// законное `next_id == u64::MAX`, а переполнилась бы уже СЛЕДУЮЩАЯ
+    /// строка. Проверка идёт ДО записи в колонки, иначе отказ оставил бы
+    /// таблицу частично изменённой.
+    pub fn add_row(&mut self) -> crate::RtResult<u64> {
+        let id = self.next_id;
+        let next = id.checked_add(1).ok_or_else(|| {
+            crate::RtError::Vstr("исчерпаны внутренние номера строк таблицы".to_string())
+        })?;
         for col in &mut self.columns {
             col.push(BslValue::Undefined);
         }
-        let id = self.next_id;
-        self.next_id += 1;
+        self.next_id = next;
         let pos = self.row_ids.len();
         self.row_ids.push(id);
         if usize::try_from(id).ok() != Some(pos) {
             self.row_positions.insert(id, pos);
         }
-        id
+        Ok(id)
     }
 
     /// Удаляет строку по ТЕКУЩЕЙ физической позиции. Позиции строк после
@@ -1297,14 +1349,76 @@ pub fn parse_sort_spec(
 mod tests {
     use super::*;
 
+    /// `set_row_ids` берёт вход из недостоверного внутреннего формата,
+    /// поэтому длина, переполнение `max + 1` и уникальность номеров —
+    /// ошибка формата, а не `debug_assert`, гаснущий в release.
+    #[test]
+    fn set_row_ids_rejects_malformed_input() {
+        let table = ValueTableData::new();
+        let mut t = table.borrow_mut();
+        t.add_column("к");
+        t.add_row().unwrap();
+        t.add_row().unwrap();
+        assert!(
+            matches!(t.set_row_ids(vec![5]), Err(crate::RtError::Vstr(_))),
+            "длина не совпала с числом строк"
+        );
+        assert!(
+            matches!(t.set_row_ids(vec![7, 7]), Err(crate::RtError::Vstr(_))),
+            "повтор номера"
+        );
+        assert!(
+            matches!(
+                t.set_row_ids(vec![0, u64::MAX]),
+                Err(crate::RtError::Vstr(_))
+            ),
+            "max + 1 переполняет u64"
+        );
+        assert!(
+            t.set_row_ids(vec![10, 20]).is_ok(),
+            "корректный вход принят"
+        );
+    }
+
+    /// После `set_row_ids` с `u64::MAX - 1` следующая строка исчерпала бы
+    /// счётчик: `add_row` обязан вернуть ошибку ДО записи в колонки, а не
+    /// переполниться на `+= 1` этажом ниже.
+    #[test]
+    fn add_row_reports_exhaustion_before_touching_columns() {
+        let table = ValueTableData::new();
+        let mut t = table.borrow_mut();
+        t.add_column("к");
+        t.add_row().unwrap();
+        t.set_row_ids(vec![u64::MAX - 1]).unwrap();
+        let before = t.row_count();
+        assert!(matches!(t.add_row(), Err(crate::RtError::Vstr(_))));
+        assert_eq!(t.row_count(), before, "отказ не оставил таблицу изменённой");
+    }
+
+    /// Колонка с занятым именем не добавляется, и `add_column` возвращает
+    /// `None`: разбор внутреннего формата брал бы номер как `len() - 1` и
+    /// приписал бы тип и заголовок чужой колонке.
+    #[test]
+    fn add_column_reports_a_taken_name() {
+        let table = ValueTableData::new();
+        let mut t = table.borrow_mut();
+        assert_eq!(t.add_column("к"), Some(0));
+        assert_eq!(t.add_column("м"), Some(1));
+        assert_eq!(
+            t.add_column("к"),
+            None,
+            "повтор имени — None, не тихий номер"
+        );
+    }
+
     #[test]
     fn sequential_row_ids_need_no_reverse_map_and_fallback_after_delete() {
         let table = ValueTableData::new();
         let mut table = table.borrow_mut();
         table.add_column("к");
-        let first = table.add_row();
-        let second = table.add_row();
-        let third = table.add_row();
+        let first = table.add_row().unwrap();
+        let second = table.add_row().unwrap();
+        let third = table.add_row().unwrap();
 
         assert!(matches!(
             &table.row_positions,
@@ -1325,9 +1439,9 @@ mod tests {
         let table = ValueTableData::new();
         let mut table = table.borrow_mut();
         table.add_column("к");
-        let first = table.add_row();
-        let second = table.add_row();
-        let third = table.add_row();
+        let first = table.add_row().unwrap();
+        let second = table.add_row().unwrap();
+        let third = table.add_row().unwrap();
 
         table.move_row(0, 2).unwrap();
 
@@ -1346,7 +1460,7 @@ mod tests {
         let mut table = table.borrow_mut();
         table.add_column("к");
         for value in ["а", "б"] {
-            let row = table.add_row();
+            let row = table.add_row().unwrap();
             table.set_cell(row, 0, BslValue::Str(BslString::from_str(value)));
         }
         let original_buffer = table.columns[0].as_ptr();
@@ -1368,7 +1482,7 @@ mod tests {
         table.add_column("с");
 
         for (key, value) in [("а", 1), ("б", 2), ("а", 3)] {
-            let row = table.add_row();
+            let row = table.add_row().unwrap();
             table.set_cell(row, 0, BslValue::Str(BslString::from_str(key)));
             table.set_cell(row, 1, BslValue::Number(BslNumber::from_i64(value)));
         }
@@ -1408,7 +1522,7 @@ mod tests {
         };
         let marker_ptr = Rc::as_ptr(marker_rc);
         for value in [3, 1, 2] {
-            let row = table.add_row();
+            let row = table.add_row().unwrap();
             table.set_cell(row, 0, BslValue::Number(BslNumber::from_i64(value)));
             if value == 3 {
                 table.set_cell(row, 1, marker.clone());
@@ -1449,7 +1563,7 @@ mod tests {
                     .collect(),
             ),
         );
-        let id = t.add_row();
+        let id = t.add_row().unwrap();
         t.set_cell(id, 0, value);
         t.columns[0][0].clone()
     }

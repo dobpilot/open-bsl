@@ -1491,8 +1491,9 @@ impl<'a> Reader<'a, '_> {
                 let width = utf8(self.p.read_bare_tok()?)?;
                 self.expect_close(col_shape)?;
 
-                t.add_column(&name);
-                let slot = t.column_types.len() - 1;
+                let slot = t
+                    .add_column(&name)
+                    .ok_or_else(|| err("повтор имени колонки во внутреннем формате"))?;
                 t.column_types[slot] = types;
                 t.column_vstr[slot] = crate::table::ColumnVstr {
                     id: Some(col_id.to_string()),
@@ -1553,7 +1554,16 @@ impl<'a> Reader<'a, '_> {
             let declared_rows = String::from_utf8_lossy(self.p.read_bare_tok()?).into_owned();
             let expected_rows: Option<usize> = declared_rows.parse().ok();
 
-            let mut file_row_ids = Vec::with_capacity(expected_rows.unwrap_or(0));
+            // `declared_rows` приходит из недостоверного файла: зажимаем по
+            // остатку байтов (строка — минимум несколько байт) и выделяем
+            // через `try_reserve`, чтобы огромное число не уронило процесс на
+            // аллокации.
+            let mut file_row_ids = Vec::new();
+            let declared = expected_rows
+                .and_then(|n| i64::try_from(n).ok())
+                .unwrap_or(0);
+            crate::reserve_hint(&mut file_row_ids, declared, self.p.text.len() - self.p.pos)
+                .map_err(|_| err("слишком много строк заявлено во внутреннем формате таблицы"))?;
             while self.next_item()? {
                 self.p.skip_ws();
                 if self.p.peek() != Some(b'{') {
@@ -1593,7 +1603,7 @@ impl<'a> Reader<'a, '_> {
                     )));
                 }
                 file_row_ids.push(row_id);
-                let _ = t.add_row();
+                t.add_row()?;
                 let pos = t.row_ids.len() - 1;
                 for k in 0..stored {
                     if self.expect_comma(short).is_err() {
@@ -1649,7 +1659,7 @@ impl<'a> Reader<'a, '_> {
                 }
                 first_after = false;
             }
-            t.set_row_ids(file_row_ids);
+            t.set_row_ids(file_row_ids)?;
         }
 
         // Индексы — один любой узел, затем конец нагрузки: ровно четыре
@@ -1954,8 +1964,9 @@ fn table_from_payload(
                 ));
             };
             let (types, raw) = column_pattern(pattern)?;
-            t.add_column(name);
-            let slot = t.column_types.len() - 1;
+            let slot = t
+                .add_column(name)
+                .ok_or_else(|| err("повтор имени колонки во внутреннем формате"))?;
             t.column_types[slot] = types;
             t.column_vstr[slot] = crate::table::ColumnVstr {
                 id: Some(col_id.clone()),
@@ -2022,7 +2033,7 @@ fn table_from_payload(
                     values.len()
                 )));
             }
-            let _ = t.add_row();
+            t.add_row()?;
             let pos = t.row_ids.len() - 1;
             for (k, node) in values.iter().enumerate() {
                 t.columns[k][pos] = convert(node, rt, depth + 1)?;
@@ -2030,7 +2041,7 @@ fn table_from_payload(
             // Хвост до `ncols` остаётся `Неопределено` — так платформа
             // кодирует пропуски (измерено: хвостовые не пишутся).
         }
-        t.set_row_ids(file_row_ids);
+        t.set_row_ids(file_row_ids)?;
     }
     Ok(BslValue::Object(Rc::new(BslObject::ValueTable(table))))
 }
@@ -2320,7 +2331,7 @@ mod tests {
         {
             let mut t = t.borrow_mut();
             t.add_column("А");
-            t.add_row();
+            t.add_row().unwrap();
             t.columns[0][0] = num("5");
         }
         assert_eq!(
@@ -2422,7 +2433,7 @@ mod tests {
             t.add_column("А");
             t.add_column("Б");
             t.add_column("В");
-            t.add_row();
+            t.add_row().unwrap();
             t.columns[0][0] = num("1");
             t.columns[2][0] = num("3");
         }

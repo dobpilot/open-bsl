@@ -131,6 +131,13 @@ impl<'a> Cursor<'a> {
         }
         Ok(())
     }
+
+    /// Сколько узлов ещё осталось прочитать — верхняя граница предвыделения
+    /// (`bsl_rt::reserve_hint`): больше узлов, чем есть, счётчик из
+    /// недостоверного файла обещать не может.
+    pub(crate) fn remaining(&self) -> usize {
+        self.items.len() - self.pos
+    }
 }
 
 /// Прочитать документ из байтов .mxl.
@@ -171,8 +178,9 @@ pub fn from_mxl_bytes(bytes: &[u8]) -> RtResult<SpreadDocData> {
     // идут тройками, потому что каждая обёрнута парой служебных чисел.
     let line_palette = {
         let g = cur.next()?.group()?;
-        let count = g.first().map_or(Ok(0), Node::number)? as usize;
-        let mut out = Vec::with_capacity(count);
+        let mut out = Vec::new();
+        let count = bsl_rt::reserve_hint(&mut out, g.first().map_or(Ok(0), Node::number)?, g.len())
+            .map_err(|_| bad("слишком большой счётчик записей в палитре линий MXL"))?;
         for i in 0..count {
             if let Some(Node::Group(record)) = g.get(2 + i * 3) {
                 out.push(Line {
@@ -281,8 +289,9 @@ pub fn from_mxl_bytes(bytes: &[u8]) -> RtResult<SpreadDocData> {
     // общей сетке, — но пропустить их надо точно, иначе разъедется всё
     // дальше. В простом документе оба счётчика нулевые, и раздел выглядит
     // как два нуля; настоящий отчёт из 1С показал, что это не константа.
-    let set_count = cur.number()? as usize;
-    let mut raw_sets: Vec<RawColumnSet> = Vec::with_capacity(set_count);
+    let mut raw_sets: Vec<RawColumnSet> = Vec::new();
+    let set_count = bsl_rt::reserve_hint(&mut raw_sets, cur.number()?, cur.remaining())
+        .map_err(|_| bad("слишком большой счётчик наборов колонок MXL"))?;
     for _ in 0..set_count {
         let g = cur.next()?.group()?;
         let count = g.first().map_or(Ok(0), Node::number)?.max(0) as u32;
@@ -301,8 +310,9 @@ pub fn from_mxl_bytes(bytes: &[u8]) -> RtResult<SpreadDocData> {
         }
         raw_sets.push((id, count, formats));
     }
-    let binding_count = cur.number()? as usize;
-    let mut bindings = Vec::with_capacity(binding_count);
+    let mut bindings = Vec::new();
+    let binding_count = bsl_rt::reserve_hint(&mut bindings, cur.number()?, cur.remaining())
+        .map_err(|_| bad("слишком большой счётчик привязок строк MXL"))?;
     for _ in 0..binding_count {
         let row = cur.number()?.max(0) as u32;
         let set = cur.number()?.max(0) as u32;
@@ -315,8 +325,10 @@ pub fn from_mxl_bytes(bytes: &[u8]) -> RtResult<SpreadDocData> {
     // осталось. Различить их удалось только на документе, где рисунок
     // добавили и удалили: там `1,0`.
     cur.skip(1)?;
-    let drawing_count = cur.number()? as usize;
-    let mut drawing_cells_raw = Vec::with_capacity(drawing_count);
+    let mut drawing_cells_raw = Vec::new();
+    let drawing_count =
+        bsl_rt::reserve_hint(&mut drawing_cells_raw, cur.number()?, cur.remaining())
+            .map_err(|_| bad("слишком большой счётчик рисованных ячеек MXL"))?;
     for _ in 0..drawing_count {
         let g = cur.next()?.group()?;
         // `{{0,<формат>},2,<кол1>,<стр1>,<смещ>,<смещ>,<кол2>,<стр2>,...}`
@@ -332,8 +344,9 @@ pub fn from_mxl_bytes(bytes: &[u8]) -> RtResult<SpreadDocData> {
             num(9)?,
         ));
     }
-    let group_count = cur.number()? as usize;
-    let mut groups = Vec::with_capacity(group_count);
+    let mut groups = Vec::new();
+    let group_count = bsl_rt::reserve_hint(&mut groups, cur.number()?, cur.remaining())
+        .map_err(|_| bad("слишком большой счётчик группировок строк MXL"))?;
     for _ in 0..group_count {
         let g = cur.next()?.group()?;
         let name = match g.get(3) {
@@ -486,13 +499,15 @@ pub fn from_mxl_bytes(bytes: &[u8]) -> RtResult<SpreadDocData> {
     }
     cur.skip(10)?;
 
-    let format_count = cur.number()? as usize;
-    let mut palette: Vec<Vec<(u64, i64)>> = Vec::with_capacity(format_count);
+    let mut palette: Vec<Vec<(u64, i64)>> = Vec::new();
+    let format_count = bsl_rt::reserve_hint(&mut palette, cur.number()?, cur.remaining())
+        .map_err(|_| bad("слишком большой счётчик форматов MXL"))?;
     for _ in 0..format_count {
         palette.push(parse_format(cur.next()?.group()?)?);
     }
-    let font_count = cur.number()? as usize;
-    let mut fonts_test: Vec<Font> = Vec::with_capacity(font_count);
+    let mut fonts_test: Vec<Font> = Vec::new();
+    let font_count = bsl_rt::reserve_hint(&mut fonts_test, cur.number()?, cur.remaining())
+        .map_err(|_| bad("слишком большой счётчик шрифтов MXL"))?;
     for _ in 0..font_count {
         let g = cur.next()?.group()?;
         fonts_test.push(parse_font(g)?);
@@ -505,8 +520,9 @@ pub fn from_mxl_bytes(bytes: &[u8]) -> RtResult<SpreadDocData> {
     // {<язык>,<строка>},…}`. У пустой записи — ноль языков. Берём
     // русскую строку, а при её отсутствии — первую попавшуюся: как и
     // шаблон, формат хранится в `CellData::format_spec` для ВМ.
-    let num_format_count = cur.number()? as usize;
-    let mut num_formats: Vec<Option<String>> = Vec::with_capacity(num_format_count);
+    let mut num_formats: Vec<Option<String>> = Vec::new();
+    let num_format_count = bsl_rt::reserve_hint(&mut num_formats, cur.number()?, cur.remaining())
+        .map_err(|_| bad("слишком большой счётчик числовых форматов MXL"))?;
     for _ in 0..num_format_count {
         let g = cur.next()?.group()?;
         let lang_count = g.get(1).map_or(Ok(0), Node::number)?.max(0) as usize;
@@ -526,8 +542,9 @@ pub fn from_mxl_bytes(bytes: &[u8]) -> RtResult<SpreadDocData> {
     cur.skip(type_count)?;
     let guid = cur.number()? as usize;
     cur.skip(guid)?;
-    let color_count = cur.number()? as usize;
-    let mut colors: Vec<Option<Color>> = Vec::with_capacity(color_count);
+    let mut colors: Vec<Option<Color>> = Vec::new();
+    let color_count = bsl_rt::reserve_hint(&mut colors, cur.number()?, cur.remaining())
+        .map_err(|_| bad("слишком большой счётчик цветов MXL"))?;
     for _ in 0..color_count {
         let g = cur.next()?.group()?;
         // `{3,0,{<цвет>}}` — заданный цвет, `{3,3,{...}}` — цвет стиля,
