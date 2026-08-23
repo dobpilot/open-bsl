@@ -5,6 +5,7 @@ use std::io::Write;
 use bsl_rt::{Clock, FileSystem, HostEnv, RandomSource, TimeZone};
 
 use crate::Value;
+use crate::dynamic::DynamicCode;
 use crate::engine::{Engine, Module};
 use crate::error::Error;
 
@@ -97,6 +98,7 @@ impl StateBuilder {
 
     pub fn build(self) -> State {
         State {
+            dynamic: self.engine.dynamic_code(),
             engine: self.engine,
             host: self.host,
             jit: self.jit,
@@ -129,6 +131,11 @@ impl HostServices {
 pub struct State {
     engine: Engine,
     host: HostServices,
+    /// Компилятор `Выполнить`/`Вычислить` этой сессии. Лежит рядом с
+    /// потоками и окружением, потому что это такой же сервис прогона: VM
+    /// динамический код только исполняет, а компилирует — он. Свой у
+    /// каждой сессии, поэтому и кэш фрагментов у сессий раздельный.
+    dynamic: DynamicCode,
     jit: bool,
 }
 
@@ -168,17 +175,18 @@ impl State {
     /// Возвращает ошибку связывания компонентов или исполнения.
     pub fn run(&mut self, module: &Module) -> Result<Value, Error> {
         let registry = self.engine.registry();
-        // Набор символов едет в VM вместе с реестром: фрагмент
-        // `Выполнить`/`Вычислить` компилируется уже во время исполнения и
-        // обязан видеть тот же контекст, что и остальной модуль.
-        let symbols = self.engine.preproc_symbols();
+        // Компилятор фрагментов едет в VM отдельным сервисом прогона:
+        // реестр и символы условной компиляции нужны ЕМУ, а не VM. Перед
+        // прогоном он узнаёт, чей модуль пойдёт, — иначе нулевой чанк
+        // одного модуля столкнулся бы в его кэше с нулевым чанком другого.
+        self.dynamic.bind_module(module.id);
         let result = if self.jit {
             bsl_vm::run_program_jit_with_registry_and_io(
                 &module.program,
                 registry,
                 &mut self.host.stdout,
                 &mut self.host.stderr,
-                symbols,
+                &mut self.dynamic,
                 &mut self.host.env,
             )
         } else {
@@ -187,10 +195,109 @@ impl State {
                 registry,
                 &mut self.host.stdout,
                 &mut self.host.stderr,
-                symbols,
+                &mut self.dynamic,
                 &mut self.host.env,
             )
         }?;
         Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Кэш фрагментов переживает запуск, поэтому обязан быть УСТОЙЧИВЫМ:
+    /// повторный `run` того же модуля не компилирует ничего заново и не
+    /// добавляет записей. Иначе долгоживущая сессия копила бы недостижимые
+    /// чанки на каждый запуск.
+    #[test]
+    fn repeated_runs_of_one_module_reuse_the_cached_fragments() {
+        let engine = Engine::builder().build().expect("сборка движка");
+        let module = engine
+            .compile(
+                "сумма = 0;\n\
+                 Для ном = 1 По 3 Цикл\n\
+                 Выполнить(\"сумма = сумма + ном\");\n\
+                 КонецЦикла;\n\
+                 Возврат сумма + Вычислить(\"1\");",
+            )
+            .expect("компиляция модуля");
+        let mut state = engine.new_state();
+
+        assert_eq!(state.run(&module).unwrap().to_string(), "7");
+        let after_first = (state.dynamic.cached(), state.dynamic.compiles());
+        // Два места `Выполнить`/`Вычислить` — две записи, и цикл из трёх
+        // итераций их не размножил.
+        assert_eq!(after_first, (2, 2));
+
+        for _ in 0..5 {
+            assert_eq!(state.run(&module).unwrap().to_string(), "7");
+        }
+        assert_eq!(
+            (state.dynamic.cached(), state.dynamic.compiles()),
+            after_first,
+            "повторные запуски не должны ни компилировать, ни копить"
+        );
+    }
+
+    /// То же для ВЛОЖЕННОГО динамического кода: фрагмент внутри фрагмента
+    /// получает область по номеру внешнего фрагмента, а тот приезжает из
+    /// кэша — значит и вложенный на повторе в кэш попадает.
+    #[test]
+    fn nested_dynamic_code_is_not_recompiled_on_a_repeat_run() {
+        let engine = Engine::builder().build().expect("сборка движка");
+        let module = engine
+            .compile("х = 1;\nВыполнить(\"Выполнить(\"\"х = х + 41\"\")\");\nВозврат х;")
+            .expect("компиляция модуля");
+        let mut state = engine.new_state();
+
+        assert_eq!(state.run(&module).unwrap().to_string(), "42");
+        // Внешний фрагмент и вложенный — две компиляции, не больше.
+        assert_eq!(state.dynamic.compiles(), 2);
+        assert_eq!(state.dynamic.cached(), 2);
+
+        assert_eq!(state.run(&module).unwrap().to_string(), "42");
+        assert_eq!(
+            (state.dynamic.cached(), state.dynamic.compiles()),
+            (2, 2),
+            "вложенный фрагмент обязан попадать в кэш на повторном запуске"
+        );
+    }
+
+    /// Кэш принадлежит СЕССИИ: у второй `State` того же движка он свой.
+    #[test]
+    fn two_states_do_not_share_the_fragment_cache() {
+        let engine = Engine::builder().build().expect("сборка движка");
+        let module = engine
+            .compile("Возврат Вычислить(\"2 + 2\");")
+            .expect("компиляция модуля");
+        let mut first = engine.new_state();
+        let mut second = engine.new_state();
+
+        assert_eq!(first.run(&module).unwrap().to_string(), "4");
+        assert_eq!(first.dynamic.compiles(), 1);
+        assert_eq!(second.dynamic.compiles(), 0);
+
+        assert_eq!(second.run(&module).unwrap().to_string(), "4");
+        assert_eq!(second.dynamic.compiles(), 1);
+    }
+
+    /// Два РАЗНЫХ модуля в одной сессии не делят чанк: нулевой чанк есть у
+    /// каждого, а таблицы локальных у них свои.
+    #[test]
+    fn two_modules_in_one_state_get_their_own_fragments() {
+        let engine = Engine::builder().build().expect("сборка движка");
+        let first = engine
+            .compile("х = 40;\nВозврат Вычислить(\"х + 2\");")
+            .expect("первый модуль");
+        let second = engine
+            .compile("у = 1;\nх = 5;\nВозврат Вычислить(\"х + 2\");")
+            .expect("второй модуль");
+        let mut state = engine.new_state();
+
+        assert_eq!(state.run(&first).unwrap().to_string(), "42");
+        assert_eq!(state.run(&second).unwrap().to_string(), "7");
+        assert_eq!(state.dynamic.compiles(), 2);
     }
 }

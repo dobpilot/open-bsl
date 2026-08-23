@@ -6,11 +6,97 @@ use bsl_number::BslNumber;
 use bsl_sema::resolve_program;
 use bsl_syntax::parse;
 
+/// Компилятор фрагментов `Выполнить`/`Вычислить` для тестов VM.
+///
+/// Настоящий живёт в фасаде (`open_bsl::DynamicCode`) вместе с кэшем; VM о
+/// нём не знает и знать не должна. Здесь — тот же фронтенд без кэша: тестам
+/// нужен факт компиляции, а не её скорость.
+pub(crate) struct TestDynamic<'a> {
+    registry: Option<&'a bsl_rt::RuntimeRegistry>,
+    /// Номера областей раздаёт хост — здесь их роль играет этот счётчик.
+    /// Кэша у тестового компилятора нет: тестам нужен факт компиляции, а
+    /// не её скорость, и устойчивость ключа проверяется там, где кэш и
+    /// живёт, — в фасаде.
+    scopes: u64,
+}
+
+impl<'a> TestDynamic<'a> {
+    pub(crate) fn bare() -> Self {
+        TestDynamic {
+            registry: None,
+            scopes: bsl_bytecode::DynamicScope::ROOT,
+        }
+    }
+
+    fn with_registry(registry: &'a bsl_rt::RuntimeRegistry) -> Self {
+        TestDynamic {
+            registry: Some(registry),
+            scopes: bsl_bytecode::DynamicScope::ROOT,
+        }
+    }
+}
+
+impl bsl_bytecode::DynamicCompiler for TestDynamic<'_> {
+    fn compile(
+        &mut self,
+        request: &bsl_bytecode::DynamicRequest<'_>,
+    ) -> Result<std::rc::Rc<bsl_bytecode::DynamicUnit>, String> {
+        self.scopes += 1;
+        bsl_bytecode::compile_dynamic_snippet(
+            request,
+            self.registry,
+            &bsl_syntax::PreprocSymbols::new(),
+            self.scopes,
+        )
+        .map(std::rc::Rc::new)
+    }
+}
+
+/// Прогон без реестра, но с компилятором фрагментов: `run_program` его не
+/// даёт намеренно (см. её doc comment), а большинству тестов здесь
+/// `Выполнить`/`Вычислить` нужны.
+fn run_with_dynamic(program: &Program, jit_mode: JitMode) -> Result<BslValue, RtError> {
+    let mut env = bsl_rt::HostEnv::process();
+    let mut stdout = std::io::stdout().lock();
+    let mut stderr = std::io::stderr().lock();
+    let mut dynamic = TestDynamic::bare();
+    run_program_with_host(
+        program,
+        None,
+        jit_mode,
+        &mut stdout,
+        &mut stderr,
+        Some(&mut dynamic),
+        &mut env,
+    )
+}
+
+/// То же с реестром компонентов.
+fn run_with_dynamic_and_registry(
+    program: &Program,
+    registry: &bsl_rt::RuntimeRegistry,
+    jit_mode: JitMode,
+) -> Result<BslValue, RtError> {
+    let mut env = bsl_rt::HostEnv::process();
+    let mut stdout = std::io::stdout().lock();
+    let mut stderr = std::io::stderr().lock();
+    let mut dynamic = TestDynamic::with_registry(registry);
+    run_program_with_host(
+        program,
+        Some(registry),
+        jit_mode,
+        &mut stdout,
+        &mut stderr,
+        Some(&mut dynamic),
+        &mut env,
+    )
+}
+
 fn run_src(src: &str) -> BslValue {
     let prog = parse(src).unwrap_or_else(|e| panic!("parse error: {e:?}"));
     let resolved = resolve_program(&prog.items).unwrap_or_else(|e| panic!("sema error: {e:?}"));
     let program = compile_program(&resolved).unwrap_or_else(|e| panic!("compile error: {e:?}"));
-    run_program(&program).unwrap_or_else(|e| panic!("runtime error: {e:?}"))
+    run_with_dynamic(&program, JitMode::Off).unwrap_or_else(|e| panic!("runtime error: {e:?}"))
 }
 
 /// Как `run_src`, но с подключённым `bsl-json`: JSON строится только
@@ -26,7 +112,7 @@ fn run_src_with_json(src: &str) -> BslValue {
     let resolved = bsl_sema::resolve_program_with_registry(&prog.items, &registry)
         .unwrap_or_else(|e| panic!("sema error: {e:?}"));
     let program = compile_program(&resolved).unwrap_or_else(|e| panic!("compile error: {e:?}"));
-    run_program_with_registry(&program, &registry)
+    run_with_dynamic_and_registry(&program, &registry, JitMode::Off)
         .unwrap_or_else(|e| panic!("runtime error: {e:?}"))
 }
 
@@ -264,11 +350,11 @@ fn component_function_resolves_compiles_links_and_runs() {
         }
     )));
     assert_eq!(
-        run_program_with_registry(&program, &registry).unwrap(),
+        run_with_dynamic_and_registry(&program, &registry, JitMode::Off).unwrap(),
         num("42")
     );
     assert_eq!(
-        run_program_jit_with_registry(&program, &registry).unwrap(),
+        run_with_dynamic_and_registry(&program, &registry, JitMode::On).unwrap(),
         num("42")
     );
 }
@@ -282,7 +368,7 @@ fn component_mismatch_is_rejected_before_execution() {
     program.requirements[1].version = "9.9.9".to_string();
 
     assert!(matches!(
-        run_program_with_registry(&program, &registry),
+        run_with_dynamic_and_registry(&program, &registry, JitMode::Off),
         Err(RtError::Link(message)) if message.contains("9.9.9")
     ));
 }
@@ -304,7 +390,7 @@ fn component_constructor_resolves_compiles_links_and_runs() {
         }
     )));
     assert_eq!(
-        run_program_with_registry(&program, &registry).unwrap(),
+        run_with_dynamic_and_registry(&program, &registry, JitMode::Off).unwrap(),
         num("43")
     );
 }
@@ -356,11 +442,11 @@ fn a_polymorphic_open_call_site_revalidates_its_method_cache() {
     );
     let expected = BslValue::Str(bsl_rt::BslString::from_str("+-+-"));
     assert_eq!(
-        run_program_with_registry(&program, &registry).unwrap(),
+        run_with_dynamic_and_registry(&program, &registry, JitMode::Off).unwrap(),
         expected
     );
     assert_eq!(
-        run_program_jit_with_registry(&program, &registry).unwrap(),
+        run_with_dynamic_and_registry(&program, &registry, JitMode::On).unwrap(),
         expected
     );
 }
@@ -445,11 +531,11 @@ fn component_object_owns_properties_methods_and_indexes() {
     );
 
     assert_eq!(
-        run_program_with_registry(&program, &registry).unwrap(),
+        run_with_dynamic_and_registry(&program, &registry, JitMode::Off).unwrap(),
         num("51")
     );
     assert_eq!(
-        run_program_jit_with_registry(&program, &registry).unwrap(),
+        run_with_dynamic_and_registry(&program, &registry, JitMode::On).unwrap(),
         num("51")
     );
 }
@@ -461,7 +547,7 @@ fn dynamic_fragment_resolves_its_own_component_requirement() {
 
     assert_eq!(program.requirements.len(), 1);
     assert_eq!(
-        run_program_with_registry(&program, &registry).unwrap(),
+        run_with_dynamic_and_registry(&program, &registry, JitMode::Off).unwrap(),
         num("42")
     );
 }
@@ -485,7 +571,7 @@ fn host_streams_are_used_by_builtins_components_dynamic_code_and_jit() {
                 &registry,
                 &mut stdout,
                 &mut stderr,
-                bsl_syntax::PreprocSymbols::new(),
+                &mut TestDynamic::with_registry(&registry),
                 &mut bsl_rt::HostEnv::process(),
             )
         } else {
@@ -494,7 +580,7 @@ fn host_streams_are_used_by_builtins_components_dynamic_code_and_jit() {
                 &registry,
                 &mut stdout,
                 &mut stderr,
-                bsl_syntax::PreprocSymbols::new(),
+                &mut TestDynamic::with_registry(&registry),
                 &mut bsl_rt::HostEnv::process(),
             )
         };
@@ -533,7 +619,7 @@ fn host_writer_error_is_returned_without_a_panic() {
             &registry,
             &mut stdout,
             &mut stderr,
-            bsl_syntax::PreprocSymbols::new(),
+            &mut TestDynamic::with_registry(&registry),
             &mut bsl_rt::HostEnv::process(),
         ),
         Err(RtError::IoError(message)) if message.contains("test writer failed")
@@ -631,7 +717,7 @@ fn run_src_err(src: &str) -> RtError {
     let prog = parse(src).unwrap();
     let resolved = resolve_program(&prog.items).unwrap();
     let program = compile_program(&resolved).unwrap();
-    run_program(&program).unwrap_err()
+    run_with_dynamic(&program, JitMode::Off).unwrap_err()
 }
 
 fn num(s: &str) -> BslValue {
@@ -671,7 +757,7 @@ fn exception_on_a_non_first_bundle_member_lands_in_the_right_handler() {
          независимо); если компилятор стал раскладывать иначе — \
          подберите скрипту новую пару"
     );
-    let v = run_program(&program).unwrap();
+    let v = run_with_dynamic(&program, JitMode::Off).unwrap();
     // `г = 7` исполнилось, деление упало, `г = 100` не исполнялось.
     assert_eq!(v, num("7"));
 }
@@ -1356,39 +1442,51 @@ fn corrupt_program(instrs: Vec<Instr>) -> Program {
 fn corrupt_bytecode_is_an_error_not_a_panic() {
     // Регистр за границей кадра.
     assert!(matches!(
-        run_program(&corrupt_program(vec![Instr::Move { dst: 200, src: 0 }])),
+        run_with_dynamic(
+            &corrupt_program(vec![Instr::Move { dst: 200, src: 0 }]),
+            JitMode::Off
+        ),
         Err(RtError::InvalidBytecode(_))
     ));
     // Номер константы за границей таблицы констант.
     assert!(matches!(
-        run_program(&corrupt_program(vec![Instr::LoadConst { dst: 0, k: 42 }])),
+        run_with_dynamic(
+            &corrupt_program(vec![Instr::LoadConst { dst: 0, k: 42 }]),
+            JitMode::Off
+        ),
         Err(RtError::InvalidBytecode(_))
     ));
     // Номер вызываемого чанка за границей таблицы функций.
     assert!(matches!(
-        run_program(&corrupt_program(vec![Instr::Call {
-            func: 99,
-            base: 0,
-            arg_modes: 0,
-            ret: 0,
-        }])),
+        run_with_dynamic(
+            &corrupt_program(vec![Instr::Call {
+                func: 99,
+                base: 0,
+                arg_modes: 0,
+                ret: 0,
+            }]),
+            JitMode::Off
+        ),
         Err(RtError::InvalidBytecode(_))
     ));
     // Номер формы за границей таблицы форм.
     assert!(matches!(
-        run_program(&corrupt_program(vec![Instr::NewStructure {
-            dst: 0,
-            shape: 7,
-            base: 0,
-            count: 0,
-        }])),
+        run_with_dynamic(
+            &corrupt_program(vec![Instr::NewStructure {
+                dst: 0,
+                shape: 7,
+                base: 0,
+                count: 0,
+            }]),
+            JitMode::Off
+        ),
         Err(RtError::InvalidBytecode(_))
     ));
     // Программа вообще без чанка верхнего уровня.
     let mut empty = corrupt_program(Vec::new());
     empty.chunks.clear();
     assert!(matches!(
-        run_program(&empty),
+        run_with_dynamic(&empty, JitMode::Off),
         Err(RtError::InvalidBytecode(_))
     ));
 }
@@ -1414,7 +1512,7 @@ fn corrupt_bytecode_inside_a_call_unwinds_to_an_error_not_a_panic() {
     program.chunks.push(callee);
 
     assert!(matches!(
-        run_program(&program),
+        run_with_dynamic(&program, JitMode::Off),
         Err(RtError::InvalidBytecode(_))
     ));
 }
@@ -3140,6 +3238,134 @@ fn dynamic_code_inside_a_loop_reuses_the_compiled_chunk() {
     assert_eq!(v, num("15"));
 }
 
+/// Байт-код фрагмента приходит СНАРУЖИ, а не из VM: подставной
+/// компилятор игнорирует текст `Вычислить` и отдаёт артефакт для `2 + 2`.
+/// Ответ `4` вместо `1` — доказательство делегирования: своего фронтенда у
+/// VM больше нет, и подменить ей результат может только хост.
+#[test]
+fn a_dynamic_fragment_comes_from_the_host_not_from_the_vm() {
+    struct Substitute {
+        calls: usize,
+    }
+
+    impl bsl_bytecode::DynamicCompiler for Substitute {
+        fn compile(
+            &mut self,
+            request: &bsl_bytecode::DynamicRequest<'_>,
+        ) -> Result<std::rc::Rc<bsl_bytecode::DynamicUnit>, String> {
+            self.calls += 1;
+            let substitute = bsl_bytecode::DynamicRequest {
+                source: "2 + 2",
+                kind: request.kind,
+                scope: request.scope,
+                locals: request.locals,
+                module_vars: request.module_vars,
+                functions: request.functions,
+                names: request.names,
+                requirements: request.requirements,
+            };
+            bsl_bytecode::compile_dynamic_snippet(
+                &substitute,
+                None,
+                &bsl_syntax::PreprocSymbols::new(),
+                self.calls as u64,
+            )
+            .map(std::rc::Rc::new)
+        }
+    }
+
+    let program = compile_src("Возврат Вычислить(\"1\");");
+    let mut env = bsl_rt::HostEnv::process();
+    let mut stdout = std::io::stdout().lock();
+    let mut stderr = std::io::stderr().lock();
+    let mut dynamic = Substitute { calls: 0 };
+    let value = run_program_with_host(
+        &program,
+        None,
+        JitMode::Off,
+        &mut stdout,
+        &mut stderr,
+        Some(&mut dynamic),
+        &mut env,
+    )
+    .unwrap();
+    assert_eq!(value, num("4"));
+    assert_eq!(dynamic.calls, 1);
+}
+
+/// Отказ компилятора хоста — обычное исключение В МОМЕНТ ИСПОЛНЕНИЯ:
+/// текст ошибки доезжает до `Попытка` целиком, а не роняет прогон.
+#[test]
+fn a_host_compile_failure_becomes_a_catchable_dynamic_error() {
+    struct Refusing;
+
+    impl bsl_bytecode::DynamicCompiler for Refusing {
+        fn compile(
+            &mut self,
+            _request: &bsl_bytecode::DynamicRequest<'_>,
+        ) -> Result<std::rc::Rc<bsl_bytecode::DynamicUnit>, String> {
+            Err("хост отказал".to_string())
+        }
+    }
+
+    fn run(src: &str) -> Result<BslValue, RtError> {
+        let program = compile_src(src);
+        let mut env = bsl_rt::HostEnv::process();
+        let mut stdout = std::io::stdout().lock();
+        let mut stderr = std::io::stderr().lock();
+        let mut dynamic = Refusing;
+        run_program_with_host(
+            &program,
+            None,
+            JitMode::Off,
+            &mut stdout,
+            &mut stderr,
+            Some(&mut dynamic),
+            &mut env,
+        )
+    }
+
+    assert!(matches!(
+        run("Выполнить(\"х = 1\");"),
+        Err(RtError::DynamicError(message)) if message == "хост отказал"
+    ));
+
+    let caught = run("рез = \"ок\";\n\
+         Попытка\n\
+         Выполнить(\"х = 1\");\n\
+         рез = \"не сработало\";\n\
+         Исключение\n\
+         рез = \"поймано\";\n\
+         КонецПопытки;\n\
+         Возврат рез;")
+    .unwrap();
+    assert_eq!(str_val(&caught), "поймано");
+}
+
+/// Прогон, запущенный входом БЕЗ компилятора фрагментов, динамический код
+/// не исполняет — но и не падает молча: это определённая ошибка, которую
+/// ловит `Попытка`. Тихая поддержка `Выполнить` мимо хоста означала бы,
+/// что фронтенд остался в VM.
+#[test]
+fn without_a_host_compiler_dynamic_code_is_a_catchable_error() {
+    let program = compile_src("Возврат Вычислить(\"1\");");
+    assert!(matches!(
+        run_program(&program),
+        Err(RtError::DynamicError(message)) if message.contains("без компилятора")
+    ));
+
+    let program = compile_src(
+        "рез = \"ок\";\n\
+         Попытка\n\
+         Выполнить(\"х = 1\");\n\
+         Исключение\n\
+         рез = \"поймано\";\n\
+         КонецПопытки;\n\
+         Возврат рез;",
+    );
+    assert_eq!(str_val(&run_program(&program).unwrap()), "поймано");
+}
+
 #[test]
 fn dynamic_compile_error_is_catchable_at_runtime() {
     // Ошибка компиляции фрагмента — обычное исключение в момент
@@ -3448,8 +3674,30 @@ fn call_module_function_with_dynamic_eval_inside() {
     );
     let mut stack = module_state(&program);
     assert_eq!(stack[0], num("4"));
-    let (value, params) =
-        call_module_function(&program, &mut stack, "Крутить", Vec::new()).unwrap();
+    // Не `call_module_function`: у неё компилятора фрагментов нет
+    // намеренно. В боевом пути он приезжает вместе с потоками и
+    // окружением — тем же `HostIo`, который VM протаскивает всюду.
+    let mut env = bsl_rt::HostEnv::process();
+    let linked =
+        link_components(&program, None, env.zone(), bsl_bytecode::DynamicScope::ROOT).unwrap();
+    let mut stdout = std::io::stdout().lock();
+    let mut stderr = std::io::stderr().lock();
+    let mut dynamic = TestDynamic::bare();
+    let mut host = HostIo {
+        stdout: &mut stdout,
+        stderr: &mut stderr,
+        env: Some(&mut env),
+        dynamic: Some(&mut dynamic),
+    };
+    let (value, params) = call_module_function_with_host(
+        &program,
+        &mut stack,
+        "Крутить",
+        Vec::new(),
+        &linked,
+        &mut host,
+    )
+    .unwrap();
     // 50, а не 40: `Вычислить` видит запись, сделанную предыдущим
     // `Выполнить`, а не исходное значение слота.
     assert_eq!(value, num("50"));

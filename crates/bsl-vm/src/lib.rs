@@ -40,7 +40,7 @@ pub(crate) mod jit {
     }
 }
 
-use bsl_bytecode::{ArgMode, Chunk, Instr, Program};
+use bsl_bytecode::{ArgMode, Chunk, DynamicCompiler, Instr, Program};
 use bsl_rt::{BslValue, RtError};
 use std::io::Write;
 
@@ -170,6 +170,11 @@ impl CallArgs {
 /// через вызовы. Не нашли нигде — ошибка настоящая, возвращаем её вызывающему
 /// Rust-коду.
 ///
+/// Компилятора динамического кода у этого входа нет: `Выполнить` и
+/// `Вычислить` дают ловимую [`RtError::DynamicError`]. Прогон с
+/// динамическим кодом идёт через `*_and_io` — там компилятор фрагментов
+/// передаётся явно (см. [`bsl_bytecode::DynamicCompiler`]).
+///
 /// # Errors
 ///
 /// Возвращает [`RtError`], если выполнение завершилось неперехваченным исключением или
@@ -180,16 +185,18 @@ pub fn run_program(program: &Program) -> Result<BslValue, RtError> {
     let mut env = bsl_rt::HostEnv::process();
     run_program_with_host(
         program,
-        CompileEnv::bare(),
+        None,
         JitMode::Off,
         &mut stdout,
         &mut stderr,
+        None,
         &mut env,
     )
 }
 
 /// Исполняет программу с неизменяемым реестром статически подключённых
-/// runtime-компонентов.
+/// runtime-компонентов. Компилятора фрагментов здесь нет — как и у
+/// [`run_program`].
 ///
 /// # Errors
 ///
@@ -205,10 +212,11 @@ pub fn run_program_with_registry(
     let mut env = bsl_rt::HostEnv::process();
     run_program_with_host(
         program,
-        CompileEnv::with_registry(registry),
+        Some(registry),
         JitMode::Off,
         &mut stdout,
         &mut stderr,
+        None,
         &mut env,
     )
 }
@@ -217,26 +225,35 @@ pub fn run_program_with_registry(
 /// `Сообщить` пишет только в `stdout`; библиотечный API возвращает ошибки и
 /// не печатает их в `stderr` автоматически.
 ///
+/// `dynamic` — компилятор `Выполнить`/`Вычислить` этого прогона. VM
+/// динамический код только исполняет: текст, вид операции и описание
+/// области видимости уходят сюда, а обратно приходит готовый чанк.
+///
 /// # Errors
 ///
 /// Возвращает те же ошибки, что [`run_program_with_registry`], включая
 /// ошибку записи в пользовательский поток.
-pub fn run_program_with_registry_and_io(
+pub fn run_program_with_registry_and_io<'a>(
     program: &Program,
     registry: &bsl_rt::RuntimeRegistry,
-    stdout: &mut dyn Write,
-    stderr: &mut dyn Write,
-    symbols: bsl_syntax::PreprocSymbols,
-    host_env: &mut bsl_rt::HostEnv,
+    stdout: &'a mut dyn Write,
+    stderr: &'a mut dyn Write,
+    dynamic: &'a mut dyn DynamicCompiler,
+    host_env: &'a mut bsl_rt::HostEnv,
 ) -> Result<BslValue, RtError> {
-    let env = CompileEnv {
-        registry: Some(registry),
-        symbols,
-    };
-    run_program_with_host(program, env, JitMode::Off, stdout, stderr, host_env)
+    run_program_with_host(
+        program,
+        Some(registry),
+        JitMode::Off,
+        stdout,
+        stderr,
+        Some(dynamic),
+        host_env,
+    )
 }
 
-/// Вариант [`run_program_with_registry`] с включённым JIT.
+/// Вариант [`run_program_with_registry`] с включённым JIT. Компилятора
+/// фрагментов здесь тоже нет.
 ///
 /// # Errors
 ///
@@ -250,10 +267,11 @@ pub fn run_program_jit_with_registry(
     let mut env = bsl_rt::HostEnv::process();
     run_program_with_host(
         program,
-        CompileEnv::with_registry(registry),
+        Some(registry),
         JitMode::On,
         &mut stdout,
         &mut stderr,
+        None,
         &mut env,
     )
 }
@@ -264,39 +282,51 @@ pub fn run_program_jit_with_registry(
 /// # Errors
 ///
 /// Возвращает те же ошибки, что [`run_program_with_registry_and_io`].
-pub fn run_program_jit_with_registry_and_io(
+pub fn run_program_jit_with_registry_and_io<'a>(
     program: &Program,
     registry: &bsl_rt::RuntimeRegistry,
-    stdout: &mut dyn Write,
-    stderr: &mut dyn Write,
-    symbols: bsl_syntax::PreprocSymbols,
-    host_env: &mut bsl_rt::HostEnv,
+    stdout: &'a mut dyn Write,
+    stderr: &'a mut dyn Write,
+    dynamic: &'a mut dyn DynamicCompiler,
+    host_env: &'a mut bsl_rt::HostEnv,
 ) -> Result<BslValue, RtError> {
-    let env = CompileEnv {
-        registry: Some(registry),
-        symbols,
-    };
-    run_program_with_host(program, env, JitMode::On, stdout, stderr, host_env)
+    run_program_with_host(
+        program,
+        Some(registry),
+        JitMode::On,
+        stdout,
+        stderr,
+        Some(dynamic),
+        host_env,
+    )
 }
 
-fn run_program_with_host(
+#[allow(clippy::too_many_arguments)]
+fn run_program_with_host<'a>(
     program: &Program,
-    env: CompileEnv<'_>,
+    registry: Option<&bsl_rt::RuntimeRegistry>,
     jit_mode: JitMode,
-    stdout: &mut dyn Write,
-    stderr: &mut dyn Write,
-    host_env: &mut bsl_rt::HostEnv,
+    stdout: &'a mut dyn Write,
+    stderr: &'a mut dyn Write,
+    dynamic: Option<&'a mut dyn DynamicCompiler>,
+    host_env: &'a mut bsl_rt::HostEnv,
 ) -> Result<BslValue, RtError> {
     let mut stack = Vec::new();
     push_own_registers(
         &mut stack,
         at(&program.chunks, 0, "в программе нет чанка верхнего уровня")?,
     );
-    let linked = link_components(program, env, host_env.zone())?;
+    let linked = link_components(
+        program,
+        registry,
+        host_env.zone(),
+        bsl_bytecode::DynamicScope::ROOT,
+    )?;
     let mut host = HostIo {
         stdout,
         stderr,
         env: Some(host_env),
+        dynamic,
     };
     let (value, _) = drive_linked(program, 0, stack, jit_mode, &linked, &mut host)?;
     Ok(value)
@@ -317,15 +347,16 @@ fn run_program_with_host(
 // одному, и связывать их в тип ради счётчика аргументов значило бы
 // придумать сущность, которой в REPL нет.
 #[allow(clippy::too_many_arguments)]
-pub fn run_repl_chunk_with_registry(
+pub fn run_repl_chunk_with_registry<'a>(
     chunk: &bsl_bytecode::Chunk,
     names: Vec<String>,
     shapes: Vec<std::rc::Rc<bsl_rt::Shape>>,
     locals: Vec<String>,
     stack: Vec<BslValue>,
     requirements: Vec<bsl_bytecode::LibraryRequirement>,
-    env: CompileEnv<'_>,
-    host_env: &mut bsl_rt::HostEnv,
+    registry: &bsl_rt::RuntimeRegistry,
+    dynamic: &'a mut dyn DynamicCompiler,
+    host_env: &'a mut bsl_rt::HostEnv,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
     let program = Program {
         requirements,
@@ -337,11 +368,17 @@ pub fn run_repl_chunk_with_registry(
         module_vars: Vec::new(),
         module_base: 0,
     };
-    let linked = link_components(&program, env, host_env.zone())?;
+    let linked = link_components(
+        &program,
+        Some(registry),
+        host_env.zone(),
+        bsl_bytecode::DynamicScope::ROOT,
+    )?;
     let mut host = HostIo {
         stdout: &mut std::io::stdout(),
         stderr: &mut std::io::stderr(),
         env: Some(host_env),
+        dynamic: Some(dynamic),
     };
     drive_linked(&program, 0, stack, JitMode::Off, &linked, &mut host)
 }
@@ -367,16 +404,24 @@ fn drive(
 ///
 /// Вывод и окружение ходят вместе, потому что оба принадлежат ПРОГОНУ, а
 /// не программе: `Program` сериализуется, а это — нет.
-struct HostIo<'a> {
+struct HostIo<'a, 'd> {
     stdout: &'a mut dyn Write,
     stderr: &'a mut dyn Write,
     /// `None` — у вызывающего окружения нет: так работает шим JIT, у
     /// которого нет и потоков. Функции, которым окружение нужно, туда не
     /// компилируются, поэтому `None` — запись контракта, а не заглушка.
     env: Option<&'a mut bsl_rt::HostEnv>,
+    /// Компилятор динамического кода. Он тоже принадлежит ПРОГОНУ, а не
+    /// программе, и лежит здесь по той же причине, что и вывод: VM его
+    /// зовёт, но не реализует (см. `bsl_bytecode::dynamic`).
+    ///
+    /// `None` — прогон запущен входом без компилятора фрагментов
+    /// (`run_program`, `call_module_function`): тогда `Выполнить` и
+    /// `Вычислить` дают ловимую динамическую ошибку, а не тихо ничего.
+    dynamic: Option<&'a mut (dyn DynamicCompiler + 'd)>,
 }
 
-impl HostIo<'_> {
+impl HostIo<'_, '_> {
     /// Окружение прогона или ошибка, если его нет.
     ///
     /// # Errors
@@ -389,47 +434,35 @@ impl HostIo<'_> {
             "функция окружения вызвана там, где окружения прогона нет",
         ))
     }
-}
 
-#[derive(Default)]
-/// Всё, что нужно, чтобы скомпилировать текст ЗДЕСЬ И СЕЙЧАС: каталог
-/// компонентов и символы условной компиляции.
-///
-/// Эти две вещи всегда ходят вместе, потому что обе описывают не программу,
-/// а окружение, в котором её собирают, — и обе нужны фрагменту
-/// `Выполнить`/`Вычислить`, который компилируется уже во время исполнения.
-#[derive(Clone, Copy)]
-pub struct CompileEnv<'a> {
-    /// Каталог компонентов. `None` — сборка без реестра.
-    pub registry: Option<&'a bsl_rt::RuntimeRegistry>,
-    /// Символы условной компиляции. Платформа гасит их все у динамического
-    /// кода; здесь фрагмент видит тот же набор, что и модуль вокруг него —
-    /// сознательное отступление, см. `docs/bsl-preproc.md`.
-    pub symbols: bsl_syntax::PreprocSymbols,
-}
-
-impl<'a> CompileEnv<'a> {
-    /// Окружение с реестром и набором символов по умолчанию.
-    #[must_use]
-    pub fn with_registry(registry: &'a bsl_rt::RuntimeRegistry) -> Self {
-        CompileEnv {
-            registry: Some(registry),
-            symbols: bsl_syntax::PreprocSymbols::new(),
-        }
-    }
-
-    /// Окружение без реестра: только базовый рантайм.
-    #[must_use]
-    pub fn bare() -> Self {
-        CompileEnv {
-            registry: None,
-            symbols: bsl_syntax::PreprocSymbols::new(),
+    /// Компилятор фрагментов этого прогона или ловимая ошибка.
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::DynamicError`], если прогон запущен входом без
+    /// компилятора: динамический код в таком прогоне недоступен, и узнаётся
+    /// это только сейчас — значит, ошибка обычная, ловимая `Попытка`.
+    fn dynamic(&mut self) -> Result<&mut dyn DynamicCompiler, RtError> {
+        match self.dynamic.as_deref_mut() {
+            Some(compiler) => Ok(compiler),
+            None => Err(RtError::DynamicError(
+                "Выполнить/Вычислить недоступны: прогон запущен без компилятора динамического кода"
+                    .to_string(),
+            )),
         }
     }
 }
 
 struct LinkedComponents<'a> {
-    env: CompileEnv<'a>,
+    /// Каталог компонентов прогона. `None` — прогон без реестра: базовый
+    /// рантайм и ничего сверх него.
+    registry: Option<&'a bsl_rt::RuntimeRegistry>,
+    /// Чей нулевой чанк исполняется: `DynamicScope::ROOT` у самого модуля
+    /// и номер фрагмента (`DynamicUnit::scope`) у программы, собранной
+    /// вокруг фрагмента. Половина ключа, по которому хост кэширует
+    /// скомпилированные фрагменты, — и приезжает она СНАРУЖИ, потому что
+    /// раздаёт номера хост, а не VM.
+    scope: u64,
 
     functions: Vec<Vec<Option<bsl_rt::ComponentCall>>>,
     constructors: Vec<Vec<Option<bsl_rt::ComponentCall>>>,
@@ -482,8 +515,7 @@ impl LinkedComponents<'_> {
     /// Типы всех библиотек реестра: список короткий (десятки записей на
     /// всю сборку) и строится один раз на прогон.
     fn component_types(&self) -> Vec<&'static bsl_rt::TypeDescriptor> {
-        self.env
-            .registry
+        self.registry
             .map(|registry| registry.types().collect())
             .unwrap_or_default()
     }
@@ -733,11 +765,11 @@ fn check_call_geometry(program: &Program, chunk: &Chunk, instr: &Instr) -> Resul
 
 fn link_components<'a>(
     program: &Program,
-    env: CompileEnv<'a>,
+    registry: Option<&'a bsl_rt::RuntimeRegistry>,
     zone: std::rc::Rc<dyn bsl_rt::TimeZone>,
+    scope: u64,
 ) -> Result<LinkedComponents<'a>, RtError> {
     check_control_flow(program)?;
-    let registry = env.registry;
     // Список собирается ОДИН РАЗ на программу: у обычного движка он пуст,
     // и нативный путь остаётся ровно таким, каким был.
     let interpreter_only_objects =
@@ -881,7 +913,8 @@ fn link_components<'a>(
         .map(|name| bsl_rt::BuiltinMethod::lookup(name))
         .collect();
     Ok(LinkedComponents {
-        env,
+        registry,
+        scope,
         interpreter_only_objects,
         zone,
         functions,
@@ -960,38 +993,43 @@ fn drive_with(
     jit_mode: JitMode,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
     let mut env = bsl_rt::HostEnv::process();
-    let linked = link_components(program, CompileEnv::bare(), env.zone())?;
+    let linked = link_components(program, None, env.zone(), bsl_bytecode::DynamicScope::ROOT)?;
     let mut stdout = std::io::stdout().lock();
     let mut stderr = std::io::stderr().lock();
+    let mut dynamic = tests::TestDynamic::bare();
     let mut host = HostIo {
         stdout: &mut stdout,
         stderr: &mut stderr,
         env: Some(&mut env),
+        dynamic: Some(&mut dynamic),
     };
     drive_linked(program, func_id, stack, jit_mode, &linked, &mut host)
 }
 
-fn drive_linked(
+/// Одноразовая подготовка прогона: таблица имён и форм плюс место под
+/// скомпилированные чанки.
+///
+/// Отдельная функция, а не первые строки `drive_linked`, и `inline(never)`
+/// здесь — не украшение, а ИЗМЕРЕНИЕ. Пока этот пролог лежал в теле
+/// `drive_linked`, положение горячего цикла зависело от его размера:
+/// точка входа выровнена (`-align-all-functions=5` в `.cargo/config.toml`),
+/// а цикл — на столько байтов дальше, сколько занял пролог. Любая правка
+/// подготовки двигала цикл относительно границ декодера, и `empty_for`
+/// платил за это десятками процентов при НЕИЗМЕННОМ числе инструкций:
+/// именно так он подорожал 58 -> 83 млн тактов на `6c6b6a9` и ещё раз
+/// 82 -> 92 при выносе фронтенда из VM. С вынесенным прологом цикл стоит
+/// сразу за выровненным входом: `empty_for` вернулся к 58 млн тактов
+/// (−30 % к базе), остальной набор — в пределах ±5 %, число инструкций
+/// везде совпало.
+#[inline(never)]
+fn drive_prologue(
     program: &Program,
-    func_id: usize,
-    mut stack: Vec<BslValue>,
     jit_mode: JitMode,
     linked: &LinkedComponents,
-    host: &mut HostIo<'_>,
-) -> Result<(BslValue, Vec<BslValue>), RtError> {
-    let mut frames = vec![Frame {
-        func_id,
-        pc: 0,
-        param_aliases: Vec::new(),
-        own_base: 0,
-        call_start: 0,
-        return_reg: 0,
-        numeric_for_state: None,
-    }];
-    let mut current_exception: Option<BslValue> = None;
-    // Кэш скомпилированных фрагментов `Выполнить`/`Вычислить` на всё это
-    // исполнение — см. `SnippetCache`.
-    let mut snippets: SnippetCache = SnippetCache::new();
+) -> (
+    bsl_rt::RuntimeShapes,
+    Vec<Option<Option<jit::CompiledChunk>>>,
+) {
     // Затравлена формами/именами ЭТОЙ программы — см. `bsl_rt::RuntimeShapes`
     // doc comment про то, почему не общий на процесс синглтон: у вложенного
     // `Program` (см. `run_dynamic_snippet`) свои `names`/`shapes`, и рантайм-
@@ -1005,12 +1043,34 @@ fn drive_linked(
     // Скомпилированные чанки. Внешний `None` — «ещё не пробовали»,
     // внутренний — «пробовали, JIT отказался»: компилировать чанк заново
     // на каждом входе в него стоило бы дороже любого выигрыша.
-    let mut native: Vec<Option<Option<jit::CompiledChunk>>> =
+    let native: Vec<Option<Option<jit::CompiledChunk>>> =
         if jit_mode == JitMode::On && jit::AVAILABLE {
             (0..program.chunks.len()).map(|_| None).collect()
         } else {
             Vec::new()
         };
+    (runtime_shapes, native)
+}
+
+fn drive_linked(
+    program: &Program,
+    func_id: usize,
+    mut stack: Vec<BslValue>,
+    jit_mode: JitMode,
+    linked: &LinkedComponents,
+    host: &mut HostIo<'_, '_>,
+) -> Result<(BslValue, Vec<BslValue>), RtError> {
+    let mut frames = vec![Frame {
+        func_id,
+        pc: 0,
+        param_aliases: Vec::new(),
+        own_base: 0,
+        call_start: 0,
+        return_reg: 0,
+        numeric_for_state: None,
+    }];
+    let mut current_exception: Option<BslValue> = None;
+    let (mut runtime_shapes, mut native) = drive_prologue(program, jit_mode, linked);
     // Без JIT `step` может сцеплять линейные цепочки бандлов, не
     // возвращаясь сюда: единственная оставшаяся проба — fast numeric-for,
     // а её `pc` достижим только взятым back-edge, на котором цепочка и так
@@ -1122,7 +1182,6 @@ fn drive_linked(
             program,
             &mut current_exception,
             &mut runtime_shapes,
-            &mut snippets,
             linked,
             host,
             merge_linear,
@@ -1389,9 +1448,8 @@ fn step(
     program: &Program,
     current_exception: &mut Option<BslValue>,
     runtime_shapes: &mut bsl_rt::RuntimeShapes,
-    snippets: &mut SnippetCache,
     linked: &LinkedComponents,
-    host: &mut HostIo<'_>,
+    host: &mut HostIo<'_, '_>,
     merge_linear: bool,
 ) -> Result<Step, RtError> {
     let frame_idx = frames.len() - 1;
@@ -1952,7 +2010,6 @@ fn step(
                     stack,
                     program,
                     current_exception,
-                    snippets,
                     linked,
                     host,
                     runtime_shapes,
@@ -2031,9 +2088,8 @@ fn step_cold(
     stack: &mut [BslValue],
     program: &Program,
     current_exception: &Option<BslValue>,
-    snippets: &mut SnippetCache,
     linked: &LinkedComponents<'_>,
-    host: &mut HostIo<'_>,
+    host: &mut HostIo<'_, '_>,
     runtime_shapes: &mut bsl_rt::RuntimeShapes,
     frame_idx: usize,
     func_id: usize,
@@ -2210,6 +2266,7 @@ fn step_cold(
                 stdout: host_stdout,
                 stderr: host_stderr,
                 env: host_env,
+                dynamic: host_dynamic,
             } = host;
             let mut function_caller =
                 |name: &str,
@@ -2220,6 +2277,10 @@ fn step_cold(
                         stdout,
                         stderr,
                         env: host_env.as_deref_mut(),
+                        // Функция модуля, позванная компонентом, вправе
+                        // содержать `Выполнить`: компилятор фрагментов едет
+                        // в обратный вызов вместе с потоками и окружением.
+                        dynamic: host_dynamic.as_deref_mut(),
                     };
                     call_module_function_with_host(
                         program,
@@ -2390,7 +2451,6 @@ fn step_cold(
                 func_id,
                 stack,
                 &frames[frame_idx],
-                snippets,
                 linked,
                 host,
             )?;
@@ -2407,11 +2467,13 @@ fn step_cold(
     Ok(())
 }
 
-/// Компилирует и исполняет `code` в контексте top-level переменных
-/// программы (см. `Instr::RunDynamic`). `is_eval` заворачивает `code` в
-/// `Возврат (...)`, чтобы получить значение выражения тем же путём, что
-/// и обычный оператор `Возврат` — общий движок для `Выполнить`/`Вычислить`
-/// без раздвоения семантики.
+/// Исполняет `code` в контексте переменных текущего кадра (см.
+/// `Instr::RunDynamic`).
+///
+/// Компилирует НЕ эта функция: текст, вид операции и описание области
+/// уходят компилятору хоста (`bsl_bytecode::DynamicCompiler`), а обратно
+/// приходит готовый `DynamicUnit`. Здесь остаётся ровно механика
+/// исполнения — перенос значений внутрь фрагмента и обратно.
 ///
 /// Изолированность: фрагмент исполняется на ОТДЕЛЬНОМ стеке — копии
 /// текущих значений top-level переменных плюс новые слоты под то, что
@@ -2432,15 +2494,67 @@ fn run_dynamic_snippet(
     scope_id: usize,
     stack: &mut [BslValue],
     frame: &Frame,
-    snippets: &mut SnippetCache,
     linked: &LinkedComponents<'_>,
-    host: &mut HostIo<'_>,
+    host: &mut HostIo<'_, '_>,
 ) -> Result<BslValue, RtError> {
-    // Предел вложенности — на входе, до разбора: компиляция фрагмента
-    // рекурсивна так же, как его исполнение, и тоже расходует стек Rust.
+    // Предел вложенности — на входе, до обращения к хосту: компиляция
+    // фрагмента рекурсивна так же, как его исполнение, и тоже расходует
+    // стек Rust.
     let _depth = DynamicDepthGuard::enter()?;
-    let compiled =
-        snippets.get_or_compile(code, is_eval, scope_id, scope_locals, program, linked.env)?;
+
+    // Что фрагмент знает о функциях модуля, в порядке `chunks[1..]`: имя,
+    // арность, вид объявления и режимы параметров. Всё заимствовано у
+    // программы — запрос собирается на каждом `RunDynamic`, в том числе
+    // когда фрагмент уже лежит в кэше хоста.
+    let functions: Vec<bsl_bytecode::DynamicSignature<'_>> = program
+        .function_names
+        .iter()
+        .enumerate()
+        .map(|(i, name)| {
+            let chunk = program.chunks.get(i + 1);
+            bsl_bytecode::DynamicSignature {
+                name,
+                arity: chunk.map_or(0, |c| c.n_params as usize),
+                is_procedure: chunk.is_some_and(|c| c.is_procedure),
+                param_by_val: chunk.map_or(&[][..], |c| &c.param_by_val),
+            }
+        })
+        .collect();
+    let request = bsl_bytecode::DynamicRequest {
+        source: code,
+        kind: if is_eval {
+            bsl_bytecode::DynamicKind::Eval
+        } else {
+            bsl_bytecode::DynamicKind::Execute
+        },
+        scope: bsl_bytecode::DynamicScope {
+            // Чанки 1.. — процедуры и функции ИСХОДНОГО модуля: во
+            // фрагмент они едут как есть, таблицы локальных у них те же, и
+            // область у них корневая на любой глубине вложенности. Своя
+            // таблица только у нулевого чанка — вот он и берёт номер того,
+            // чей он: модуля или фрагмента вокруг.
+            program: if scope_id == 0 {
+                linked.scope
+            } else {
+                bsl_bytecode::DynamicScope::ROOT
+            },
+            chunk: scope_id as u32,
+        },
+        locals: scope_locals,
+        module_vars: &program.module_vars,
+        functions: &functions,
+        names: &program.names,
+        requirements: &program.requirements,
+    };
+    // Неудача любой фазы фронтенда — обычное исключение В МОМЕНТ
+    // ИСПОЛНЕНИЯ, а не паника: текст фрагмента становится известен только
+    // сейчас, и кривой текст обязан ловиться `Попытка`. Поэтому контракт
+    // хоста и отдаёт текст ошибки, а не готовый `RtError`: каким видом
+    // ошибки станет неудача, решает VM, а не хост.
+    let compiled = host
+        .dynamic()?
+        .compile(&request)
+        .map_err(RtError::DynamicError)?;
 
     // Значения существующих переменных кадра переезжают во фрагмент по
     // НОМЕРУ СЛОТА: раскладка совпадает, потому что фрагмент резолвился
@@ -2500,7 +2614,7 @@ fn run_dynamic_snippet(
         // СОБСТВЕННАЯ таблица фрагмента, не `program.names`: она — префикс
         // (те же имена, в том же порядке, значит те же `NameId`) плюс,
         // возможно, новые поля, которых в статическом коде не было (см.
-        // doc comment `CompiledSnippet`). Старые `GetProp`/`SetProp` — и
+        // doc comment `bsl_bytecode::DynamicUnit`). Старые `GetProp`/`SetProp` — и
         // статического кода вокруг, и вложенных вызовов функций программы
         // (см. ниже про `chunks`) — по-прежнему резолвятся: их `NameId`
         // меньше длины `program.names` и указывают на тот же префикс.
@@ -2514,8 +2628,9 @@ fn run_dynamic_snippet(
 
     let snippet_linked = link_components(
         &snippet_program,
-        linked.env,
+        linked.registry,
         std::rc::Rc::clone(&linked.zone),
+        compiled.scope,
     )?;
     let (value, final_stack) = drive_linked(
         &snippet_program,
@@ -2593,6 +2708,9 @@ fn run_dynamic_snippet(
 ///   вызовов: вызов по имени — такой же вложенный `drive` на стеке Rust,
 ///   как `Выполнить`, и рекурсия через него не должна валить процесс мимо
 ///   `Попытка`.
+/// - [`RtError::DynamicError`] — вызванный код содержит
+///   `Выполнить`/`Вычислить`: компилятора фрагментов у этого входа нет,
+///   он есть у [`call_module_function_with_registry_and_io`].
 /// - Любая ошибка самого исполнения, не перехваченная внутри вызванного
 ///   кода, а также [`RtError::InvalidBytecode`], если `program`
 ///   рассогласована (имя функции есть, чанка под него нет) или `stack`
@@ -2604,13 +2722,14 @@ pub fn call_module_function(
     args: Vec<BslValue>,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
     let mut env = bsl_rt::HostEnv::process();
-    let linked = link_components(program, CompileEnv::bare(), env.zone())?;
+    let linked = link_components(program, None, env.zone(), bsl_bytecode::DynamicScope::ROOT)?;
     let mut stdout = std::io::stdout().lock();
     let mut stderr = std::io::stderr().lock();
     let mut host = HostIo {
         stdout: &mut stdout,
         stderr: &mut stderr,
         env: Some(&mut env),
+        dynamic: None,
     };
     call_module_function_with_host(program, stack, name, args, &linked, &mut host)
 }
@@ -2623,25 +2742,28 @@ pub fn call_module_function(
 /// Помимо ошибок [`call_module_function`] возвращает ошибку связывания,
 /// если модулю недоступен требуемый компонент или его точная версия.
 #[allow(clippy::too_many_arguments)]
-pub fn call_module_function_with_registry_and_io(
+pub fn call_module_function_with_registry_and_io<'a>(
     program: &Program,
     stack: &mut [BslValue],
     name: &str,
     args: Vec<BslValue>,
     registry: &bsl_rt::RuntimeRegistry,
-    stdout: &mut dyn Write,
-    stderr: &mut dyn Write,
-    host_env: &mut bsl_rt::HostEnv,
+    stdout: &'a mut dyn Write,
+    stderr: &'a mut dyn Write,
+    dynamic: &'a mut dyn DynamicCompiler,
+    host_env: &'a mut bsl_rt::HostEnv,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
     let linked = link_components(
         program,
-        CompileEnv::with_registry(registry),
+        Some(registry),
         host_env.zone(),
+        bsl_bytecode::DynamicScope::ROOT,
     )?;
     let mut host = HostIo {
         stdout,
         stderr,
         env: Some(host_env),
+        dynamic: Some(dynamic),
     };
     call_module_function_with_host(program, stack, name, args, &linked, &mut host)
 }
@@ -2652,7 +2774,7 @@ fn call_module_function_with_host(
     name: &str,
     args: Vec<BslValue>,
     linked: &LinkedComponents<'_>,
-    host: &mut HostIo<'_>,
+    host: &mut HostIo<'_, '_>,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
     let _depth = DynamicDepthGuard::enter()?;
 
@@ -2736,201 +2858,6 @@ fn call_module_function_with_host(
         final_params.push(reg_load(&final_stack, i)?);
     }
     Ok((value, final_params))
-}
-
-/// Один скомпилированный фрагмент. `shapes` — СОБСТВЕННЫЙ список форм
-/// фрагмента: индексы `shape` внутри `chunk` ссылаются именно на него, а
-/// не на `program.shapes` (был баг ровно на этом — `NewStructure` попадал
-/// по чужому индексу). `names` — по той же причине СОБСТВЕННАЯ (расширенная)
-/// таблица имён полей: `compile_snippet` сеет свежий интернер именами
-/// ОСНОВНОЙ программы, чтобы старые `NameId` совпали, но имя поля, которого
-/// в статическом коде вообще не было (например, поле объекта, известное
-/// только рантайму, как у `НастройкиСериализацииJSON`), получает НОВЫЙ
-/// `NameId` ЗА пределами `program.names`. Раньше эта расширенная таблица
-/// отбрасывалась (`let (chunk, _names, shapes) = ...`), и `GetProp`/`SetProp`
-/// на такое поле падали с «идентификатор имени вне таблицы имён программы»
-/// — тот же класс бага, что и с формами, просто не пойманный тогда.
-struct CompiledSnippet {
-    chunk: bsl_bytecode::Chunk,
-    names: Vec<String>,
-    shapes: Vec<std::rc::Rc<bsl_rt::Shape>>,
-    requirements: Vec<bsl_bytecode::LibraryRequirement>,
-}
-
-/// Кэш «текст фрагмента -> скомпилированный чанк» на одно исполнение
-/// (`drive`). Без него `Выполнить(...)` в цикле заново лексирует, парсит,
-/// резолвит и компилирует одну и ту же строку на каждой итерации.
-///
-/// Ключ — пара (ОБЛАСТЬ ВИДИМОСТИ, текст), а не один текст: один и тот же
-/// исходник, выполненный в разных кадрах, резолвится в РАЗНЫЕ номера
-/// слотов, и переиспользовать чанк между ними нельзя. Область
-/// идентифицируется номером чанка (`func_id`), потому что таблица имён
-/// (`Chunk::local_names`) у чанка одна и та же на всех его вызовах.
-/// `is_eval` тоже входит в ключ — от него зависит сам компилируемый текст
-/// (`Возврат (...)` вместо операторов).
-struct SnippetCache {
-    entries: std::collections::HashMap<(usize, bool, String), std::rc::Rc<CompiledSnippet>>,
-}
-
-impl SnippetCache {
-    fn new() -> Self {
-        SnippetCache {
-            entries: std::collections::HashMap::new(),
-        }
-    }
-
-    fn get_or_compile(
-        &mut self,
-        code: &str,
-        is_eval: bool,
-        scope_id: usize,
-        scope_locals: &[String],
-        program: &Program,
-        env: CompileEnv<'_>,
-    ) -> Result<std::rc::Rc<CompiledSnippet>, RtError> {
-        let key = (scope_id, is_eval, code.to_string());
-        if let Some(hit) = self.entries.get(&key) {
-            return Ok(hit.clone());
-        }
-        let compiled = std::rc::Rc::new(compile_dynamic_snippet(
-            code,
-            is_eval,
-            scope_locals,
-            program,
-            env,
-        )?);
-        self.entries.insert(key, compiled.clone());
-        Ok(compiled)
-    }
-}
-
-/// Лексика/парсинг/резолвинг/кодоген фрагмента. Любая ошибка на этом пути
-/// — `RtError::DynamicError` В МОМЕНТ ИСПОЛНЕНИЯ, а не паника и не ошибка
-/// сборки: текст фрагмента становится известен только сейчас, и кривой
-/// текст обязан ловиться обычной `Попытка`.
-fn compile_dynamic_snippet(
-    code: &str,
-    is_eval: bool,
-    scope_locals: &[String],
-    program: &Program,
-    env: CompileEnv<'_>,
-) -> Result<CompiledSnippet, RtError> {
-    // `is_eval` заворачивает выражение в `Возврат (...)`, чтобы получить
-    // значение тем же путём, что и обычный `Возврат` — один движок на
-    // `Выполнить` и `Вычислить`, без раздвоения семантики.
-    let src = if is_eval {
-        format!("Возврат ({code});")
-    } else {
-        code.to_string()
-    };
-
-    let parsed = bsl_syntax::parse_with_symbols(&src, &env.symbols)
-        .map_err(|e| RtError::DynamicError(format!("{e}")))?;
-    let mut stmts = Vec::with_capacity(parsed.items.len());
-    for item in parsed.items {
-        match item {
-            bsl_syntax::Item::Stmt(s) => stmts.push(s),
-            bsl_syntax::Item::VarDecl(vd) => stmts.push(bsl_syntax::Stmt::VarDecl(vd)),
-            // НЕ ИЗМЕРЕНО(EXEC.PROC_DECLARATION): может ли фрагмент вообще
-            // объявлять процедуры и функции. Взято «нет» — объявленную
-            // процедуру было бы некуда деть: таблица чанков программы уже
-            // скомпилирована.
-            _ => {
-                return Err(RtError::DynamicError(
-                    "Выполнить/Вычислить не поддерживают объявление процедур/функций".to_string(),
-                ));
-            }
-        }
-    }
-
-    // Что фрагмент знает о функциях модуля, в порядке `chunks[1..]`: имя,
-    // арность и вид объявления — процедуру он обязан отвергнуть в позиции
-    // выражения так же, как статический резолвер.
-    let signatures: Vec<bsl_sema::SnippetSignature> = program
-        .function_names
-        .iter()
-        .enumerate()
-        .map(|(i, name)| {
-            let chunk = program.chunks.get(i + 1);
-            bsl_sema::SnippetSignature {
-                name: name.clone(),
-                arity: chunk.map_or(0, |c| c.n_params as usize),
-                is_procedure: chunk.is_some_and(|c| c.is_procedure),
-            }
-        })
-        .collect();
-    let (all_locals, body, fragment_requirements) = match env.registry {
-        Some(registry) => bsl_sema::resolve_snippet_stmts_with_registry(
-            scope_locals,
-            &program.module_vars,
-            &stmts,
-            &signatures,
-            registry,
-        )
-        .map_err(|e| RtError::DynamicError(format!("{e}")))?,
-        None => {
-            let (locals, body) = bsl_sema::resolve_snippet_stmts(
-                scope_locals,
-                &program.module_vars,
-                &stmts,
-                &signatures,
-            )
-            .map_err(|e| RtError::DynamicError(format!("{e}")))?;
-            (
-                locals,
-                body,
-                vec![bsl_bytecode::LibraryRequirement::bsl_rt()],
-            )
-        }
-    };
-    let requirements = merge_requirements(&program.requirements, &fragment_requirements)?;
-    // Режимы параметров каждой функции модуля: фрагмент может её звать, и
-    // компилятору надо знать, какой аргумент идёт по ссылке.
-    let callee_params: Vec<Vec<bool>> = program
-        .chunks
-        .iter()
-        .skip(1)
-        .map(|c| c.param_by_val.clone())
-        .collect();
-    let (chunk, names, shapes) = bsl_bytecode::compile_snippet_with_requirements(
-        &all_locals,
-        &body,
-        &program.names,
-        &callee_params,
-        &requirements,
-    )
-    .map_err(|e| RtError::DynamicError(format!("{e}")))?;
-
-    Ok(CompiledSnippet {
-        chunk,
-        names,
-        shapes,
-        requirements,
-    })
-}
-
-fn merge_requirements(
-    base: &[bsl_bytecode::LibraryRequirement],
-    extra: &[bsl_bytecode::LibraryRequirement],
-) -> Result<Vec<bsl_bytecode::LibraryRequirement>, RtError> {
-    let mut merged = base.to_vec();
-    for requirement in extra {
-        match merged
-            .iter()
-            .find(|existing| existing.package == requirement.package)
-        {
-            Some(existing) if existing.version != requirement.version => {
-                return Err(RtError::Link(format!(
-                    "для {} одновременно требуются версии {} и {}",
-                    requirement.package, existing.version, requirement.version
-                )));
-            }
-            Some(_) => {}
-            None => merged.push(requirement.clone()),
-        }
-    }
-    merged[1..].sort_by(|left, right| left.package.cmp(&right.package));
-    Ok(merged)
 }
 
 fn remap_chunk_libraries(
@@ -3145,7 +3072,7 @@ fn call_builtin_with_format(
     builtin: bsl_rt::BuiltinFn,
     args: &[BslValue],
     runtime_shapes: &mut bsl_rt::RuntimeShapes,
-    host: &mut HostIo<'_>,
+    host: &mut HostIo<'_, '_>,
 ) -> Result<BslValue, RtError> {
     use bsl_rt::BuiltinFn;
     // Проверка по МАКСИМУМУ, а не по минимуму: резолвер добивает

@@ -1,9 +1,11 @@
 //! Движок и модуль: компиляция и переносимый байт-код.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use bsl_rt::LibraryDescriptor;
 
+use crate::dynamic::DynamicCode;
 use crate::error::Error;
 use crate::state::{State, StateBuilder};
 
@@ -16,6 +18,12 @@ pub struct Engine {
 struct EngineInner {
     registry: bsl_rt::RuntimeRegistry,
     symbols: bsl_syntax::PreprocSymbols,
+    /// Сколько модулей движок уже выдал. Номер модуля устойчив: он
+    /// присваивается один раз, при компиляции, и не меняется от запуска к
+    /// запуску — на этом стоит кэш динамических фрагментов сессии
+    /// (`DynamicCode`), который иначе накапливал бы недостижимые записи на
+    /// каждый повторный `State::run`.
+    modules: AtomicU64,
 }
 
 impl Engine {
@@ -33,7 +41,10 @@ impl Engine {
         let resolved =
             bsl_sema::resolve_program_with_registry(&syntax.items, &self.inner.registry)?;
         let program = bsl_bytecode::compile_program(&resolved)?;
-        Ok(Module { program })
+        Ok(Module {
+            id: self.next_module_id(),
+            program,
+        })
     }
 
     /// Загружает текстовый байт-код. Совместимость компонентов проверяется
@@ -44,8 +55,15 @@ impl Engine {
     /// Возвращает ошибку формата байт-кода.
     pub fn load_bytecode(&self, source: &str) -> Result<Module, Error> {
         Ok(Module {
+            id: self.next_module_id(),
             program: bsl_bytecode::parse_program(source)?,
         })
+    }
+
+    /// Номер очередного модуля. `Relaxed` достаточно: от счётчика нужна
+    /// только различимость, а не порядок относительно других записей.
+    fn next_module_id(&self) -> u64 {
+        self.inner.modules.fetch_add(1, Ordering::Relaxed)
     }
 
     /// Каталог компонентов движка — для клиентов, собирающих фрагменты
@@ -56,6 +74,18 @@ impl Engine {
 
     pub fn new_state(&self) -> State {
         self.state_builder().build()
+    }
+
+    /// Компилятор `Выполнить`/`Вычислить` с этим каталогом компонентов и
+    /// этими символами условной компиляции.
+    ///
+    /// Нужен клиентам, которые запускают чанки в обход [`State`], — REPL с
+    /// накоплением локалей. У обычного встраивания свой такой компилятор
+    /// уже есть внутри `State`, и заводить второй не надо: у каждого свой
+    /// кэш фрагментов.
+    #[must_use]
+    pub fn dynamic_code(&self) -> DynamicCode {
+        DynamicCode::new(self.clone())
     }
 
     /// Символы условной компиляции этого движка.
@@ -132,6 +162,7 @@ impl EngineBuilder {
             inner: Arc::new(EngineInner {
                 registry: self.runtime.build()?,
                 symbols: self.symbols,
+                modules: AtomicU64::new(0),
             }),
         })
     }
@@ -146,6 +177,11 @@ impl Default for EngineBuilder {
 /// Скомпилированный переносимый модуль.
 #[derive(Clone)]
 pub struct Module {
+    /// Номер, выданный движком при компиляции. В байт-код не входит и
+    /// наружу не показывается: он нужен ровно затем, чтобы сессия
+    /// отличала области ОДНОГО модуля от областей другого, запущенного той
+    /// же сессией. Клон модуля номер сохраняет — это тот же модуль.
+    pub(crate) id: u64,
     pub(crate) program: bsl_bytecode::Program,
 }
 

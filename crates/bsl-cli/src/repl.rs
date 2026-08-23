@@ -43,6 +43,10 @@ pub struct Session {
     /// Одно на всю сессию, как и таблица имён, — иначе `ТекущаяДата` в
     /// соседних строках отвечала бы из разных окружений.
     env: bsl_rt::HostEnv,
+    /// Компилятор `Выполнить`/`Вычислить`: строка REPL вправе содержать
+    /// динамический код, а VM его только исполняет. Один на сессию — по
+    /// той же причине, что и окружение.
+    dynamic: open_bsl::DynamicCode,
 }
 
 impl Session {
@@ -52,6 +56,7 @@ impl Session {
             std::process::exit(1);
         });
         Session {
+            dynamic: engine.dynamic_code(),
             engine,
             locals: Vec::new(),
             names: Vec::new(),
@@ -333,10 +338,8 @@ fn eval_repl_line(line: &str, session: &mut Session) -> Result<BslValue, String>
         new_locals.clone(),
         stack,
         requirements.clone(),
-        bsl_vm::CompileEnv {
-            registry: Some(session.engine.registry()),
-            symbols: session.engine.preproc_symbols(),
-        },
+        session.engine.registry(),
+        &mut session.dynamic,
         &mut session.env,
     )
     .map_err(|e| e.to_string())?;

@@ -853,6 +853,9 @@ shim!(shim_call_builtin, |frames,
         stdout: &mut stdout,
         stderr: &mut stderr,
         env: None,
+        // Динамический код нативным путём не идёт вовсе: `RunDynamic`
+        // остаётся интерпретатору, и компилятор фрагментов сюда не едет.
+        dynamic: None,
     };
     let v = call_builtin_with_format(builtin, args.as_slice(), shapes, &mut host)?;
     let d = frames[idx].reg_index(dst);

@@ -4,6 +4,7 @@
 //! компилирует [`Module`]. [`State`] владеет сервисами конкретной сессии,
 //! включая независимые потоки вывода.
 
+mod dynamic;
 mod engine;
 mod error;
 mod state;
@@ -18,6 +19,7 @@ pub use bsl_rt::{
     get_property_from_table, set_property_from_table,
 };
 
+pub use dynamic::DynamicCode;
 pub use engine::{Engine, EngineBuilder, Module};
 pub use error::Error;
 pub use state::{HostServices, State, StateBuilder};
