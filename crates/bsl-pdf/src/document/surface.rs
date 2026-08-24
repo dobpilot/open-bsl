@@ -68,9 +68,10 @@ pub struct PdfDocState {
 }
 
 /// `Новый ДокументPDF` — пустой документ без источника.
-pub fn new_pdf_document() -> BslValue {
+pub fn new_pdf_document(files: Rc<dyn bsl_rt::FileSystem>) -> BslValue {
     BslValue::new_object(DocumentObject {
         state: Rc::new(RefCell::new(PdfDocState::default())),
+        files,
     })
 }
 
@@ -92,6 +93,10 @@ pub fn new_pdf_attachments() -> BslValue {
 #[derive(Debug)]
 pub struct DocumentObject {
     pub(crate) state: Rc<RefCell<PdfDocState>>,
+    /// Файловая система сессии (ABI-G): пришла к документу при построении и
+    /// держится здесь, потому что `Прочитать`/`Записать` — методы, а под JIT
+    /// метод исполняется по натуральному пути без доступа к контексту.
+    pub(crate) files: Rc<dyn bsl_rt::FileSystem>,
 }
 
 /// `КоллекцияСтраницPDF` — окно в тот же документ.
@@ -204,7 +209,9 @@ pub fn read(document: &DocumentObject, args: &[BslValue]) -> RtResult<()> {
         )));
     };
     let name = name.to_string();
-    let bytes = std::fs::read(&name)
+    let bytes = document
+        .files
+        .read(&name)
         .map_err(|e| pdf_err(format!("не удалось прочитать файл «{name}»: {e}")))?;
     let file = PdfFile::parse(&bytes)?;
     {
@@ -265,7 +272,9 @@ pub fn write(document: &DocumentObject, args: &[BslValue]) -> RtResult<()> {
     })?;
     let bytes = file.write_with_attachments(&state.attachments.borrow())?;
     let name = name.to_string();
-    std::fs::write(&name, bytes)
+    document
+        .files
+        .write(&name, &bytes)
         .map_err(|e| pdf_err(format!("не удалось записать файл «{name}»: {e}")))?;
     Ok(())
 }

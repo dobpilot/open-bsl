@@ -23,10 +23,10 @@ pub const PACKAGE_NAME: &str = env!("CARGO_PKG_NAME");
 pub const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn construct_document(
-    _context: &mut CallContext<'_>,
+    context: &mut CallContext<'_>,
     _arguments: &[BslValue],
 ) -> RtResult<BslValue> {
-    Ok(new_pdf_document())
+    Ok(new_pdf_document(context.files_rc()?))
 }
 
 fn construct_attachments(
