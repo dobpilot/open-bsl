@@ -749,8 +749,8 @@ fn stream_value(kind: StreamKind, data: Rc<RefCell<StreamData>>) -> BslValue {
 }
 
 /// Открытие файла и построение состояния потока — через файловую систему
-/// сессии (ABI-G0). Умолчание вызывающих — процессная ФС; на ABI-G сюда
-/// начнёт приходить ФС из `CallContext`.
+/// сессии (ABI-G): она приходит вызывающему из `CallContext` (у тестов —
+/// процессная `SystemFileSystem`).
 fn open_file_data(
     path: &str,
     mode: FileOpenMode,
