@@ -13,6 +13,7 @@
 pub mod bundle;
 mod chunk;
 pub mod dynamic;
+pub mod image;
 mod instr;
 mod text;
 
