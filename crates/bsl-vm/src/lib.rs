@@ -1814,41 +1814,6 @@ fn step(
                 reg_store(stack, d, v)?;
                 frames[frame_idx].pc += 1;
             }
-            Instr::WriteText { dst, obj, src } => {
-                let obj_idx = frames[frame_idx].reg_index(obj);
-                let src_idx = frames[frame_idx].reg_index(src);
-                let v = {
-                    let ov = at(stack, obj_idx, "чтение объекта за границей стека значений")?;
-                    let sv = at(
-                        stack,
-                        src_idx,
-                        "чтение аргумента за границей стека значений",
-                    )?;
-                    // `Записать` полиморфен по получателю, а эта инструкция —
-                    // быстрый путь `ЗаписьТекста` в обход вызова метода.
-                    // Значит развести получателей надо и здесь, иначе
-                    // `ТекстовыйДокумент.Записать(путь)` попадёт в чужую
-                    // ветку и получит «метод не применим».
-                    if let Some(object) = ov.object_ref() {
-                        let mut context =
-                            bsl_rt::CallContext::interpreter(bsl_rt::InterpreterServices {
-                                runtime_shapes,
-                                stdout: &mut *host.stdout,
-                                stderr: &mut *host.stderr,
-                                formatter: bsl_format::format_value,
-                                zone: &linked.zone,
-                                files: &linked.files,
-                                function_caller: None,
-                            });
-                        object.call_method("Записать", std::slice::from_ref(sv), &mut context)?
-                    } else {
-                        ov.text_writer_write(sv)?
-                    }
-                };
-                let d = frames[frame_idx].reg_index(dst);
-                reg_store(stack, d, v)?;
-                frames[frame_idx].pc += 1;
-            }
             // Холодные опкоды: конструирование объектов, возбуждение
             // исключения, закрытие файла и динамическое исполнение. Тела
             // вынесены в `step_cold`, чтобы код диспетчера не разъезжался
@@ -1857,7 +1822,7 @@ fn step(
             // полутора раз при том же числе исполненных инструкций.
             //
             // Граница проведена по стоимости тела, а не по редкости
-            // опкода: `CallBuiltin`, `CallMethod` и `WriteText`
+            // опкода: `CallBuiltin` и `CallMethod`
             // остались здесь, потому что исполняются миллионами и лишний
             // вызов на каждый стоит дороже, чем занятое ими место (измерено
             // — `csv_write` теряет 7%, если унести и их). Открытый
@@ -1876,7 +1841,6 @@ fn step(
             | Instr::NewUuid { .. }
             | Instr::NewBinaryData { .. }
             | Instr::Raise { .. }
-            | Instr::CloseText { .. }
             | Instr::CallObjectMethod { .. }
             | Instr::GetObjectProp { .. }
             | Instr::SetObjectProp { .. }
@@ -2300,27 +2264,6 @@ fn step_cold(
             };
             let destination = frames[frame_idx].reg_index(dst);
             reg_store(stack, destination, value)?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::CloseText { dst, obj } => {
-            let obj_idx = frames[frame_idx].reg_index(obj);
-            let object = at(stack, obj_idx, "чтение объекта за границей стека значений")?;
-            let v = if let Some(extension) = object.object_ref() {
-                let mut context = bsl_rt::CallContext::interpreter(bsl_rt::InterpreterServices {
-                    runtime_shapes,
-                    stdout: &mut *host.stdout,
-                    stderr: &mut *host.stderr,
-                    formatter: bsl_format::format_value,
-                    zone: &linked.zone,
-                    files: &linked.files,
-                    function_caller: None,
-                });
-                extension.call_method("Закрыть", &[], &mut context)?
-            } else {
-                object.close_object()?
-            };
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, v)?;
             frames[frame_idx].pc += 1;
         }
         Instr::RunDynamic { src, dst, is_eval } => {

@@ -562,21 +562,6 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
             e.heap_write = true;
             e.io = true;
         }
-        Instr::WriteText { dst, obj, src } => {
-            read!(obj);
-            read!(src);
-            write!(dst);
-            e.heap_read = true;
-            e.heap_write = true;
-            e.io = true;
-        }
-        Instr::CloseText { dst, obj } => {
-            read!(obj);
-            write!(dst);
-            e.heap_read = true;
-            e.heap_write = true;
-            e.io = true;
-        }
         // Фрагмент читает и пишет все именованные локали кадра по именам
         // и исполняет произвольный код — всегда одиночный.
         Instr::RunDynamic { .. } => {

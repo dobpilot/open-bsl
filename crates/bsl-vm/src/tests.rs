@@ -451,9 +451,11 @@ fn a_polymorphic_open_call_site_revalidates_its_method_cache() {
 }
 
 /// Приёмник, статически доказанный ядровым (см. `core_receivers` в
-/// `bsl-sema`), и с реестром компилируется в закрытые опкоды: путь
-/// `csv_write` — `WriteText` с инкрементом `pc` вместо холодного
-/// `CallObjectMethod` на каждую запись.
+/// `bsl-sema`), и с реестром компилируется в ЗАКРЫТЫЕ опкоды: `Записать` и
+/// `Закрыть` уходят в `CallMethod` с разрешённым на компиляции номером
+/// метода, а не в открытый `CallObjectMethod` с поиском по номеру имени.
+/// Спец-опкодов у `ЗаписьТекста` больше нет — тип адресуется так же, как
+/// любой другой (см. границу VM и мира).
 #[test]
 fn a_proven_core_receiver_compiles_closed_even_with_a_registry() {
     let registry = test_component_registry();
@@ -467,16 +469,20 @@ fn a_proven_core_receiver_compiles_closed_even_with_a_registry() {
         &registry,
     );
     let instructions = &program.chunks[0].instrs;
-    assert!(
-        instructions
-            .iter()
-            .any(|instruction| matches!(instruction, Instr::WriteText { .. }))
-    );
-    assert!(
-        instructions
-            .iter()
-            .any(|instruction| matches!(instruction, Instr::CloseText { .. }))
-    );
+    assert!(instructions.iter().any(|instruction| matches!(
+        instruction,
+        Instr::CallMethod {
+            method: bsl_rt::BuiltinMethod::Write,
+            ..
+        }
+    )));
+    assert!(instructions.iter().any(|instruction| matches!(
+        instruction,
+        Instr::CallMethod {
+            method: bsl_rt::BuiltinMethod::Close,
+            ..
+        }
+    )));
     assert!(
         instructions
             .iter()

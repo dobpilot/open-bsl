@@ -647,16 +647,6 @@ impl<'a> Compiler<'a> {
                     });
                 } else {
                     match (builtin, args.len()) {
-                        (Some(bsl_rt::BuiltinMethod::Write), 1) => {
-                            self.emit(Instr::WriteText {
-                                dst,
-                                obj: o,
-                                src: base,
-                            });
-                        }
-                        (Some(bsl_rt::BuiltinMethod::Close), 0) => {
-                            self.emit(Instr::CloseText { dst, obj: o });
-                        }
                         (Some(method), _) => {
                             self.emit(Instr::CallMethod {
                                 dst,

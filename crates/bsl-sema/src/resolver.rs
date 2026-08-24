@@ -1604,20 +1604,10 @@ impl<'a> Resolver<'a> {
                 // статически доказан ядровым (все его перепривязки — один
                 // `Новый T` из `NEW_TYPES`, см. `core_receivers`),
                 // закрытый путь семантически совпадает с открытым и
-                // остаётся измеренным горячим. Спец-опкоды
-                // `WriteText`/`CloseText` компилятор выбирает по паре
-                // «метод, арность» без знания типа, поэтому эти пары
-                // закрываются только для доказанного `ЗаписьТекста`;
-                // имена вне ядровой таблицы компилятор и при open=false
-                // выпускает открытым `CallObjectMethod`.
-                let core = self.core_receiver_of(&obj);
-                let closed_is_safe = match (method, args.len()) {
-                    (Some(bsl_rt::BuiltinMethod::Write), 1)
-                    | (Some(bsl_rt::BuiltinMethod::Close), 0) => {
-                        core == Some(CoreReceiver::TextWriter)
-                    }
-                    _ => core.is_some(),
-                };
+                // остаётся измеренным горячим. Имена вне ядровой таблицы
+                // компилятор и при `open=false` выпускает открытым
+                // `CallObjectMethod`.
+                let closed_is_safe = self.core_receiver_of(&obj).is_some();
                 Ok(RExpr::CallMethod {
                     obj: Box::new(obj),
                     method: name.clone(),
@@ -2639,10 +2629,14 @@ mod tests {
         );
     }
 
-    /// Спец-опкоды `WriteText`/`CloseText` выбираются по паре «метод,
-    /// арность» — для прочих ядровых типов эти пары остаются открытыми.
+    /// `Записать`/`Закрыть` больше не выделены: спец-опкодов у
+    /// `ЗаписьТекста` нет, и пара «метод, арность» ничего не решает.
+    /// Доказанный ядровой приёмник закрывается ВСЕГДА, каким бы ни был
+    /// метод, — а применим ли метод к этому получателю, решает рантайм
+    /// ровно так же, как на открытом пути (проверено: `Структура.Записать`
+    /// по-прежнему ловится `Попыткой`).
     #[test]
-    fn write_and_close_specializations_require_a_text_writer() {
+    fn a_core_receiver_closes_every_method_not_just_some() {
         let opens = opens_with_registry(
             "с = Новый Структура(\"а\", 1);\n\
              с.Записать(1);\n\
@@ -2651,8 +2645,8 @@ mod tests {
         assert_eq!(
             opens,
             vec![
-                ("Записать".to_string(), true),
-                ("Закрыть".to_string(), true),
+                ("Записать".to_string(), false),
+                ("Закрыть".to_string(), false),
             ]
         );
     }

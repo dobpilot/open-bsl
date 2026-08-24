@@ -36,7 +36,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 22;
+pub const FORMAT_VERSION: u32 = 23;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -71,7 +71,7 @@ opcodes! {
     JumpIfFalse, JumpIfTrue, JumpIfNotSkipped, NumericForNext, NumericForNextI64, Call, Return,
     GetIndex, SetIndex, GetProp, SetProp, CreateObject, NewArray, NewStructure,
     NewTable, NewTypeDescription, NewValueComparison, NewMap, NewTextWriter, NewBinaryData, NewUuid,
-    CollectionLen, Raise, CallBuiltin, CallComponent, CallMethod, WriteText, CloseText,
+    CollectionLen, Raise, CallBuiltin, CallComponent, CallMethod,
     RunDynamic, CallObjectMethod, GetObjectProp, SetObjectProp,
 }
 
@@ -546,8 +546,6 @@ fn write_instr(instr: &Instr) -> String {
         Instr::SetObjectProp { obj, name, src } => {
             format!("{op} obj={obj} name={name} src={src}")
         }
-        Instr::WriteText { dst, obj, src } => format!("{op} dst={dst} obj={obj} src={src}"),
-        Instr::CloseText { dst, obj } => format!("{op} dst={dst} obj={obj}"),
         Instr::RunDynamic { src, dst, is_eval } => {
             format!("{op} src={src} dst={dst} is_eval={is_eval}")
         }
@@ -1528,15 +1526,6 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
             obj: obj(&f)?,
             name: field_u16(&f, no, "name")?,
             src: src(&f)?,
-        },
-        "WriteText" => Instr::WriteText {
-            dst: dst(&f)?,
-            obj: obj(&f)?,
-            src: src(&f)?,
-        },
-        "CloseText" => Instr::CloseText {
-            dst: dst(&f)?,
-            obj: obj(&f)?,
         },
         "RunDynamic" => Instr::RunDynamic {
             src: src(&f)?,
