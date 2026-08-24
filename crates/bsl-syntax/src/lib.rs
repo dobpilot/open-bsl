@@ -12,7 +12,7 @@ mod preproc;
 mod token;
 
 pub use ast::*;
-pub use diagnostics::{Diagnostic, ParseError};
+pub use diagnostics::{Diagnostic, Expectation, FoundToken, ParseError, ParseErrorKind};
 pub use keywords::{Keyword, SPELLINGS as KEYWORD_SPELLINGS, lookup as lookup_keyword};
 pub use lexer::{LexError, LexResult, Lexer};
 pub use parser::{parse, parse_with_symbols};

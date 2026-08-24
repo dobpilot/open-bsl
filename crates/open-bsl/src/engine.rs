@@ -88,9 +88,10 @@ impl Engine {
         DynamicCode::new(self.clone())
     }
 
-    /// Символы условной компиляции этого движка.
-    #[must_use]
-    pub fn preproc_symbols(&self) -> bsl_syntax::PreprocSymbols {
+    /// Символы условной компиляции этого движка. Внутренний сервис:
+    /// единственный вызывающий — `DynamicCode::compile` (см. `dynamic.rs`),
+    /// в публичной сигнатуре не встречается, поэтому `pub(crate)`.
+    pub(crate) fn preproc_symbols(&self) -> bsl_syntax::PreprocSymbols {
         self.inner.symbols
     }
 

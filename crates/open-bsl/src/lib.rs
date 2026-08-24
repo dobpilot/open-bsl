@@ -11,16 +11,31 @@ mod state;
 
 pub use bsl_rt::BslValue as Value;
 pub use bsl_rt::{
-    Arity, CallContext, Clock, ComponentError, ConstructorCode, ConstructorDescriptor, DirEntry,
+    Arity, BslDate, BslNumber, BslObject, BslString, ByteStreamProtocol, CallContext, Clock,
+    ComponentError, ConstructorCode, ConstructorDescriptor, DirEntry, EnumKind, EnumValue,
     FileCreate, FileHandle, FileMetadata, FileOpenOptions, FileSystem, FixedTimeZone, FunctionCode,
-    FunctionDescriptor, FunctionKind, HostEnv, LibraryDependency, LibraryDescriptor, MethodCall,
-    MethodDescriptor, ObjectProtocol, PropertyDescriptor, PropertyGet, PropertySet, RandomSource,
-    RtError, RtResult, SystemClock, SystemRandom, SystemTimeZone, TimeZone, TypeDescriptor,
-    call_method_from_table, folded_eq, get_property_from_table, set_property_from_table,
+    FunctionDescriptor, FunctionKind, HostEnv, LibraryDependency, LibraryDescriptor,
+    LibraryRequirement, MethodCall, MethodDescriptor, ObjectJitPolicy, ObjectProtocol, ObjectRef,
+    PropertyDescriptor, PropertyGet, PropertySet, RandomSource, RegistryError, RtError, RtResult,
+    RuntimeRegistry, RuntimeShapes, SystemClock, SystemRandom, SystemTimeZone, TimeZone,
+    TypeDescriptor, TypeRef, call_method_from_table, folded_eq, get_property_from_table,
+    set_property_from_table,
 };
 
+// Замыкание поверхности: типы, до которых достаёт публичная сигнатура
+// фасада, обязаны быть достижимы через него, а не только упомянуты.
+// `Error` раскрывает диагностику каждой фазы (см. `error.rs`), `Diagnostic`
+// — лексическую и синтаксическую ошибку с их видами, а `Value` — типы
+// своих вариантов. Без этих имён хост получил бы ошибку или значение и не
+// смог бы написать по нему `match`.
+pub use bsl_bytecode::TextError;
+pub use bsl_compiler::CompileError;
 pub use bsl_format::format_value;
+pub use bsl_sema::SemaError;
+pub use bsl_syntax::{
+    Diagnostic, Expectation, FoundToken, LexError, ParseError, ParseErrorKind, PreprocSymbols, Span,
+};
 pub use dynamic::DynamicCode;
 pub use engine::{Engine, EngineBuilder, Module};
 pub use error::Error;
-pub use state::{HostServices, State, StateBuilder};
+pub use state::{State, StateBuilder};

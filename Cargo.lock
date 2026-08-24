@@ -728,6 +728,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "open-bsl-consumer"
+version = "0.0.0"
+dependencies = [
+ "open-bsl",
+]
+
+[[package]]
 name = "parking_lot"
 version = "0.12.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"

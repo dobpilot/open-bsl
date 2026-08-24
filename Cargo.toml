@@ -20,6 +20,7 @@ members = [
     "crates/bsl-vm",
     "crates/bsl-cli",
     "crates/open-bsl",
+    "crates/open-bsl-consumer",
 ]
 
 [workspace.package]

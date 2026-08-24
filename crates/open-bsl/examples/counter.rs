@@ -5,7 +5,8 @@
 
 use open_bsl::{
     Arity, CallContext, ConstructorCode, ConstructorDescriptor, Engine, LibraryDescriptor,
-    MethodDescriptor, ObjectProtocol, PropertyDescriptor, RtError, RtResult, TypeDescriptor, Value,
+    MethodDescriptor, ObjectJitPolicy, ObjectProtocol, PropertyDescriptor, RtError, RtResult,
+    TypeDescriptor, Value,
 };
 
 // Состояние объекта живёт за `Rc`: рантайм однопоточный, а обёртка
@@ -95,7 +96,7 @@ fn counter_library() -> LibraryDescriptor {
     LibraryDescriptor::new(
         "example-host",
         "1.0.0",
-        bsl_rt::ObjectJitPolicy::NativeContextCompatible,
+        ObjectJitPolicy::NativeContextCompatible,
     )
     .with_constructors(COUNTER_CONSTRUCTORS)
     .with_types(COUNTER_TYPES)
