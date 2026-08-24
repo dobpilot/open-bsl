@@ -432,15 +432,6 @@ pub const OPEN_QUESTIONS: &[OpenQuestion] = &[
                  представление масок — отдельная работа",
     },
     OpenQuestion {
-        id: "OBJ.METHOD.EXTRA_ARGS",
-        what: "как платформа отвечает на лишний и недостающий аргумент метода \
-               объекта: отказ на компиляции, ошибка в рантайме или пропуск",
-        chosen: "статической проверки арности метода нет (дескриптор её не \
-                 несёт); обработчики отвечают ошибкой на оба случая",
-        blocks: "ABI-C плана abi-refactor-f: арность в MethodDescriptor и ветка \
-                 check_call_geometry; bsl-rt/src/component.rs",
-    },
-    OpenQuestion {
         id: "JSON.WRITE.CLOSE_IO_FAIL",
         what: "как ведёт себя писатель JSON после отказа ФС в `Закрыть()`",
         chosen: "писатель остаётся файловым, повторный `Закрыть()` пробует \

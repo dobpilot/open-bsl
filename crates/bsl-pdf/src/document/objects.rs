@@ -77,14 +77,8 @@ fn document_write(
 }
 
 static DOCUMENT_METHODS: &[MethodDescriptor] = &[
-    MethodDescriptor {
-        names: &["Прочитать", "Read"],
-        call: document_read,
-    },
-    MethodDescriptor {
-        names: &["Записать", "Write"],
-        call: document_write,
-    },
+    MethodDescriptor::new(&["Прочитать", "Read"], Arity::range(1, 2), document_read),
+    MethodDescriptor::new(&["Записать", "Write"], Arity::range(1, 2), document_write),
 ];
 
 impl ObjectProtocol for DocumentObject {
@@ -146,18 +140,9 @@ fn pages_index_of(
 }
 
 static PAGES_METHODS: &[MethodDescriptor] = &[
-    MethodDescriptor {
-        names: &["Количество", "Count"],
-        call: pages_count,
-    },
-    MethodDescriptor {
-        names: &["Получить", "Get"],
-        call: pages_get,
-    },
-    MethodDescriptor {
-        names: &["Индекс", "IndexOf"],
-        call: pages_index_of,
-    },
+    MethodDescriptor::new(&["Количество", "Count"], Arity::exact(0), pages_count),
+    MethodDescriptor::new(&["Получить", "Get"], Arity::exact(1), pages_get),
+    MethodDescriptor::new(&["Индекс", "IndexOf"], Arity::exact(1), pages_index_of),
 ];
 
 impl ObjectProtocol for PagesObject {
@@ -384,34 +369,17 @@ fn attachments_index_of(
 }
 
 static ATTACHMENTS_METHODS: &[MethodDescriptor] = &[
-    MethodDescriptor {
-        names: &["Количество", "Count"],
-        call: attachments_count,
-    },
-    MethodDescriptor {
-        names: &["Получить", "Get"],
-        call: attachments_get,
-    },
-    MethodDescriptor {
-        names: &["Найти", "Find"],
-        call: attachments_find,
-    },
-    MethodDescriptor {
-        names: &["Добавить", "Add"],
-        call: attachments_add,
-    },
-    MethodDescriptor {
-        names: &["Удалить", "Delete"],
-        call: attachments_delete,
-    },
-    MethodDescriptor {
-        names: &["Очистить", "Clear"],
-        call: attachments_clear,
-    },
-    MethodDescriptor {
-        names: &["Индекс", "IndexOf"],
-        call: attachments_index_of,
-    },
+    MethodDescriptor::new(&["Количество", "Count"], Arity::exact(0), attachments_count),
+    MethodDescriptor::new(&["Получить", "Get"], Arity::exact(1), attachments_get),
+    MethodDescriptor::new(&["Найти", "Find"], Arity::exact(1), attachments_find),
+    MethodDescriptor::new(&["Добавить", "Add"], Arity::range(2, 4), attachments_add),
+    MethodDescriptor::new(&["Удалить", "Delete"], Arity::exact(1), attachments_delete),
+    MethodDescriptor::new(&["Очистить", "Clear"], Arity::exact(0), attachments_clear),
+    MethodDescriptor::new(
+        &["Индекс", "IndexOf"],
+        Arity::exact(1),
+        attachments_index_of,
+    ),
 ];
 
 impl ObjectProtocol for AttachmentsObject {

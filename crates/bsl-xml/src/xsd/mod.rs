@@ -199,8 +199,8 @@ use std::rc::Rc;
 use crate::dom::{DomKind, DomNode};
 
 use bsl_rt::{
-    BslNumber, BslString, BslValue, CallContext, EnumValue, MethodDescriptor, ObjectProtocol,
-    PropertyDescriptor, RtError, RtResult, TypeDescriptor, folded_eq,
+    Arity, BslNumber, BslString, BslValue, CallContext, EnumValue, MethodDescriptor,
+    ObjectProtocol, PropertyDescriptor, RtError, RtResult, TypeDescriptor, folded_eq,
 };
 // Модуль разложен по подсистемам, но остаётся одним пространством имён:
 // подмодули видят друг друга через `use super::*`.

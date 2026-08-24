@@ -435,33 +435,6 @@ fn wrong_method(name: &str, receiver: &'static str) -> RtError {
     }
 }
 
-fn exact_arity(
-    name: &str,
-    arguments: &[BslValue],
-    expected: usize,
-    receiver: &'static str,
-) -> RtResult<()> {
-    if arguments.len() == expected {
-        Ok(())
-    } else {
-        Err(wrong_method(name, receiver))
-    }
-}
-
-fn range_arity(
-    name: &str,
-    arguments: &[BslValue],
-    min: usize,
-    max: usize,
-    receiver: &'static str,
-) -> RtResult<()> {
-    if (min..=max).contains(&arguments.len()) {
-        Ok(())
-    } else {
-        Err(wrong_method(name, receiver))
-    }
-}
-
 fn encoding_arg(arg: Option<&BslValue>) -> RtResult<bsl_rt::encoding::Encoding> {
     use bsl_rt::encoding::Encoding;
 
@@ -500,7 +473,6 @@ impl TextDocument {
     }
 
     fn read_file(&self, arguments: &[BslValue]) -> RtResult<BslValue> {
-        range_arity("Прочитать", arguments, 1, 2, DOCUMENT_TYPE.name)?;
         let path = need_str(arguments.first(), "Прочитать")?;
         let encoding = encoding_arg(arguments.get(1))?;
         let bytes = std::fs::read(&path).map_err(|error| RtError::IoError(error.to_string()))?;
@@ -509,7 +481,6 @@ impl TextDocument {
     }
 
     fn write_file(&self, arguments: &[BslValue]) -> RtResult<BslValue> {
-        range_arity("Записать", arguments, 1, 2, DOCUMENT_TYPE.name)?;
         let path = need_str(arguments.first(), "Записать")?;
         let encoding = encoding_arg(arguments.get(1))?;
         let data = self.data.borrow();
@@ -519,7 +490,6 @@ impl TextDocument {
     }
 
     fn output(&self, arguments: &[BslValue], context: &mut CallContext<'_>) -> RtResult<BslValue> {
-        exact_arity("Вывести", arguments, 1, DOCUMENT_TYPE.name)?;
         let source = arguments[0]
             .object_ref()
             .and_then(|object| object.downcast_ref::<TextDocument>())
@@ -581,7 +551,6 @@ fn document_set_text(
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
     let document = document_of(receiver, "УстановитьТекст")?;
-    exact_arity("УстановитьТекст", arguments, 1, DOCUMENT_TYPE.name)?;
     let text = need_str(arguments.first(), "УстановитьТекст")?;
     document.data.borrow_mut().set_text(&text);
     Ok(BslValue::Undefined)
@@ -589,11 +558,10 @@ fn document_set_text(
 
 fn document_get_text(
     receiver: &dyn ObjectProtocol,
-    arguments: &[BslValue],
+    _arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
     let document = document_of(receiver, "ПолучитьТекст")?;
-    exact_arity("ПолучитьТекст", arguments, 0, DOCUMENT_TYPE.name)?;
     Ok(BslValue::Str(BslString::from_str(
         document.data.borrow().text(),
     )))
@@ -601,11 +569,10 @@ fn document_get_text(
 
 fn document_line_count(
     receiver: &dyn ObjectProtocol,
-    arguments: &[BslValue],
+    _arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
     let document = document_of(receiver, "КоличествоСтрок")?;
-    exact_arity("КоличествоСтрок", arguments, 0, DOCUMENT_TYPE.name)?;
     Ok(BslValue::number_from_i64(
         document.data.borrow().line_count() as i64,
     ))
@@ -617,7 +584,6 @@ fn document_get_line(
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
     let document = document_of(receiver, "ПолучитьСтроку")?;
-    exact_arity("ПолучитьСтроку", arguments, 1, DOCUMENT_TYPE.name)?;
     let number = need_number(arguments.first(), "ПолучитьСтроку")?;
     Ok(BslValue::Str(BslString::from_str(
         &document.data.borrow().line(number),
@@ -630,7 +596,6 @@ fn document_add_line(
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
     let document = document_of(receiver, "ДобавитьСтроку")?;
-    exact_arity("ДобавитьСтроку", arguments, 1, DOCUMENT_TYPE.name)?;
     let line = need_str(arguments.first(), "ДобавитьСтроку")?;
     document.data.borrow_mut().add_line(&line);
     Ok(BslValue::Undefined)
@@ -642,7 +607,6 @@ fn document_insert_line(
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
     let document = document_of(receiver, "ВставитьСтроку")?;
-    exact_arity("ВставитьСтроку", arguments, 2, DOCUMENT_TYPE.name)?;
     let number = need_number(arguments.first(), "ВставитьСтроку")?;
     let line = need_str(arguments.get(1), "ВставитьСтроку")?;
     document.data.borrow_mut().insert_line(number, &line);
@@ -655,7 +619,6 @@ fn document_replace_line(
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
     let document = document_of(receiver, "ЗаменитьСтроку")?;
-    exact_arity("ЗаменитьСтроку", arguments, 2, DOCUMENT_TYPE.name)?;
     let number = need_number(arguments.first(), "ЗаменитьСтроку")?;
     let line = need_str(arguments.get(1), "ЗаменитьСтроку")?;
     document.data.borrow_mut().replace_line(number, &line);
@@ -668,7 +631,6 @@ fn document_delete_line(
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
     let document = document_of(receiver, "УдалитьСтроку")?;
-    exact_arity("УдалитьСтроку", arguments, 1, DOCUMENT_TYPE.name)?;
     let number = need_number(arguments.first(), "УдалитьСтроку")?;
     document.data.borrow_mut().delete_line(number);
     Ok(BslValue::Undefined)
@@ -676,11 +638,10 @@ fn document_delete_line(
 
 fn document_clear(
     receiver: &dyn ObjectProtocol,
-    arguments: &[BslValue],
+    _arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
     let document = document_of(receiver, "Очистить")?;
-    exact_arity("Очистить", arguments, 0, DOCUMENT_TYPE.name)?;
     document.data.borrow_mut().clear();
     Ok(BslValue::Undefined)
 }
@@ -718,58 +679,55 @@ fn document_output(
 }
 
 static DOCUMENT_METHODS: &[MethodDescriptor] = &[
-    MethodDescriptor {
-        names: &["УстановитьТекст", "SetText"],
-        call: document_set_text,
-    },
-    MethodDescriptor {
-        names: &["ПолучитьТекст", "GetText"],
-        call: document_get_text,
-    },
-    MethodDescriptor {
-        names: &["КоличествоСтрок", "LineCount"],
-        call: document_line_count,
-    },
-    MethodDescriptor {
-        names: &["ПолучитьСтроку", "GetLine"],
-        call: document_get_line,
-    },
-    MethodDescriptor {
-        names: &["ДобавитьСтроку", "AddLine"],
-        call: document_add_line,
-    },
-    MethodDescriptor {
-        names: &["ВставитьСтроку", "InsertLine"],
-        call: document_insert_line,
-    },
-    MethodDescriptor {
-        names: &["ЗаменитьСтроку", "ReplaceLine"],
-        call: document_replace_line,
-    },
-    MethodDescriptor {
-        names: &["УдалитьСтроку", "DeleteLine"],
-        call: document_delete_line,
-    },
-    MethodDescriptor {
-        names: &["Очистить", "Clear"],
-        call: document_clear,
-    },
-    MethodDescriptor {
-        names: &["Прочитать", "Read"],
-        call: document_read,
-    },
-    MethodDescriptor {
-        names: &["Записать", "Write"],
-        call: document_write,
-    },
-    MethodDescriptor {
-        names: &["ПолучитьОбласть", "GetArea"],
-        call: document_get_area,
-    },
-    MethodDescriptor {
-        names: &["Вывести", "Output"],
-        call: document_output,
-    },
+    MethodDescriptor::new(
+        &["УстановитьТекст", "SetText"],
+        Arity::exact(1),
+        document_set_text,
+    ),
+    MethodDescriptor::new(
+        &["ПолучитьТекст", "GetText"],
+        Arity::exact(0),
+        document_get_text,
+    ),
+    MethodDescriptor::new(
+        &["КоличествоСтрок", "LineCount"],
+        Arity::exact(0),
+        document_line_count,
+    ),
+    MethodDescriptor::new(
+        &["ПолучитьСтроку", "GetLine"],
+        Arity::exact(1),
+        document_get_line,
+    ),
+    MethodDescriptor::new(
+        &["ДобавитьСтроку", "AddLine"],
+        Arity::exact(1),
+        document_add_line,
+    ),
+    MethodDescriptor::new(
+        &["ВставитьСтроку", "InsertLine"],
+        Arity::exact(2),
+        document_insert_line,
+    ),
+    MethodDescriptor::new(
+        &["ЗаменитьСтроку", "ReplaceLine"],
+        Arity::exact(2),
+        document_replace_line,
+    ),
+    MethodDescriptor::new(
+        &["УдалитьСтроку", "DeleteLine"],
+        Arity::exact(1),
+        document_delete_line,
+    ),
+    MethodDescriptor::new(&["Очистить", "Clear"], Arity::exact(0), document_clear),
+    MethodDescriptor::new(&["Прочитать", "Read"], Arity::range(1, 2), document_read),
+    MethodDescriptor::new(&["Записать", "Write"], Arity::range(1, 2), document_write),
+    MethodDescriptor::new(
+        &["ПолучитьОбласть", "GetArea"],
+        Arity::exact(1),
+        document_get_area,
+    ),
+    MethodDescriptor::new(&["Вывести", "Output"], Arity::exact(1), document_output),
 ];
 
 impl ObjectProtocol for TextDocument {

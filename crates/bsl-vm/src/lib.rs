@@ -548,9 +548,12 @@ impl LinkedComponents<'_> {
     }
 }
 
-/// Карта мемоизации «(статическая таблица типа, номер имени) → обработчик».
-type ComponentMethodMap =
-    std::cell::RefCell<std::collections::HashMap<(usize, u32), Option<bsl_rt::MethodCall>>>;
+/// Карта мемоизации «(статическая таблица типа, номер имени) → дескриптор».
+/// Хранится дескриптор, а не голый обработчик: рантаймная проверка арности
+/// метода (арм `CallObjectMethod`, шим JIT) читает из него `arity`.
+type ComponentMethodMap = std::cell::RefCell<
+    std::collections::HashMap<(usize, u32), Option<&'static bsl_rt::MethodDescriptor>>,
+>;
 
 /// Разрешение метода компонентного объекта по статической таблице типа и
 /// номеру имени. Строка разбирается один раз на пару «таблица, имя»;
@@ -649,21 +652,18 @@ fn resolve_component_method(
     table: &'static [bsl_rt::MethodDescriptor],
     name: bsl_rt::NameId,
     program: &Program,
-) -> Result<Option<bsl_rt::MethodCall>, RtError> {
+) -> Result<Option<&'static bsl_rt::MethodDescriptor>, RtError> {
     let key = (table.as_ptr() as usize, name.index() as u32);
     if let Some(resolved) = map.borrow().get(&key) {
         return Ok(*resolved);
     }
     let upper = field_name(program, name)?.to_uppercase();
-    let resolved = table
-        .iter()
-        .find(|descriptor| {
-            descriptor
-                .names
-                .iter()
-                .any(|candidate| candidate.to_uppercase() == upper)
-        })
-        .map(|descriptor| descriptor.call);
+    let resolved = table.iter().find(|descriptor| {
+        descriptor
+            .names
+            .iter()
+            .any(|candidate| candidate.to_uppercase() == upper)
+    });
     map.borrow_mut().insert(key, resolved);
     Ok(resolved)
 }
@@ -1496,7 +1496,7 @@ fn cached_component_method(
     table: &'static [bsl_rt::MethodDescriptor],
     name: bsl_rt::NameId,
     program: &Program,
-) -> Result<Option<bsl_rt::MethodCall>, RtError> {
+) -> Result<Option<&'static bsl_rt::MethodDescriptor>, RtError> {
     let slot = method_cache(chunk, pc)?;
     let key = table.as_ptr() as usize;
     if let Some((cached_table, resolved)) = *slot.borrow()
@@ -2487,7 +2487,10 @@ fn step_cold(
                     name_id,
                     program,
                 )? {
-                    Some(call) => call(object.as_dyn(), args, &mut context)?,
+                    Some(descriptor) => {
+                        descriptor.check_arity(count, object.type_descriptor().name)?;
+                        (descriptor.call)(object.as_dyn(), args, &mut context)?
+                    }
                     None => {
                         let method_name = field_name(program, name_id)?;
                         object.call_method(method_name, args, &mut context)?

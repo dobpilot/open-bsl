@@ -88,6 +88,5 @@ REGEX.DOTALL	нел=Да|снятие=Нет
 REGEX.POSSESSIVE	звезда=Нет|атомарная=Нет
 REGEX.CLASSOPS	пересечение=Нет|разность=Да
 ZIP.WRITER.TAIL	строка=Ошибка|перечисление=Ошибка|пусто=Принят|восьмое=Принят
-OBJ.METHOD.EXTRA_ARGS	Ошибка|Ошибка
 JSON.WRITE.CLOSE_IO_FAIL	открытие не прошло
 XML.WRITE.CLOSE_IO_FAIL	открытие не прошло

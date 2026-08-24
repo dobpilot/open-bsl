@@ -218,8 +218,8 @@ use std::rc::Rc;
 
 use crate::dom::{DomKind, DomNode, DomNodeObject};
 use bsl_rt::{
-    BslNumber, BslString, BslValue, CallContext, EnumValue, MethodDescriptor, ObjectProtocol,
-    PropertyDescriptor, RtError, RtResult, TypeDescriptor, folded_eq,
+    Arity, BslNumber, BslString, BslValue, CallContext, EnumValue, MethodDescriptor,
+    ObjectProtocol, PropertyDescriptor, RtError, RtResult, TypeDescriptor, folded_eq,
 };
 
 fn bad(what: impl Into<String>) -> RtError {
@@ -2659,10 +2659,11 @@ fn resolver_lookup(
     lookup_namespace_uri(&receiver, arguments)
 }
 
-static RESOLVER_METHODS: &[MethodDescriptor] = &[MethodDescriptor {
-    names: &["НайтиURIПространстваИмен", "LookupNamespaceURI"],
-    call: resolver_lookup,
-}];
+static RESOLVER_METHODS: &[MethodDescriptor] = &[MethodDescriptor::new(
+    &["НайтиURIПространстваИмен", "LookupNamespaceURI"],
+    Arity::exact(1),
+    resolver_lookup,
+)];
 
 impl ObjectProtocol for ResolverObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
@@ -2686,10 +2687,11 @@ fn expression_evaluate(
     evaluate_expression(&receiver, arguments)
 }
 
-static EXPRESSION_METHODS: &[MethodDescriptor] = &[MethodDescriptor {
-    names: &["Вычислить", "Evaluate"],
-    call: expression_evaluate,
-}];
+static EXPRESSION_METHODS: &[MethodDescriptor] = &[MethodDescriptor::new(
+    &["Вычислить", "Evaluate"],
+    Arity::range(1, 2),
+    expression_evaluate,
+)];
 
 impl ObjectProtocol for ExpressionObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
@@ -2787,14 +2789,16 @@ fn result_snapshot_item(
 }
 
 static RESULT_METHODS: &[MethodDescriptor] = &[
-    MethodDescriptor {
-        names: &["ПолучитьСледующий", "IterateNext"],
-        call: result_next_node,
-    },
-    MethodDescriptor {
-        names: &["ЭлементСнимка", "SnapshotItem"],
-        call: result_snapshot_item,
-    },
+    MethodDescriptor::new(
+        &["ПолучитьСледующий", "IterateNext"],
+        Arity::exact(0),
+        result_next_node,
+    ),
+    MethodDescriptor::new(
+        &["ЭлементСнимка", "SnapshotItem"],
+        Arity::exact(1),
+        result_snapshot_item,
+    ),
 ];
 
 impl ObjectProtocol for XPathResultObject {

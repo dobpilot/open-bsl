@@ -679,14 +679,8 @@ mod host_zone {
     }
 
     const WATCH_METHODS: &[MethodDescriptor] = &[
-        MethodDescriptor {
-            names: &["Смещение", "Offset"],
-            call: watch_offset,
-        },
-        MethodDescriptor {
-            names: &["Отметить", "Report"],
-            call: watch_report,
-        },
+        MethodDescriptor::new(&["Смещение", "Offset"], Arity::exact(0), watch_offset),
+        MethodDescriptor::new(&["Отметить", "Report"], Arity::exact(0), watch_report),
     ];
 
     fn watch_offset_property(

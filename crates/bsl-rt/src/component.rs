@@ -378,18 +378,55 @@ pub type MethodCall =
 /// типа (см. `ObjectProtocol::method_table`) включает быстрый путь VM
 /// «номер имени → обработчик» без строковых операций на вызове.
 ///
-/// Арность здесь сознательно не объявляется: у методов нет точки
-/// статической проверки — получатель известен только в рантайме, — а
-/// тексты ошибок о числе аргументов уже живут в самих обработчиках.
-///
-/// `НЕ ИЗМЕРЕНО(OBJ.METHOD.EXTRA_ARGS)`: как платформа отвечает на лишний и
-/// недостающий аргумент метода объекта (отказ на компиляции, ошибка в
-/// рантайме или тихий пропуск). Ответ выбирает, что именно отвергает
-/// статическая проверка арности метода из ABI-C (план abi-refactor-f).
+/// Арность у метода — рантаймная, а не статическая. Статической точки нет:
+/// получатель известен только в исполнении, а имена делятся между типами
+/// (`Открыть` есть и у менеджера потоков, и у читателя архива), поэтому
+/// код вызова не знает, чью арность проверять. Зато рантаймная точка есть
+/// и одна — там, где получатель уже выбран: [`crate::call_method_from_table`]
+/// и арм `CallObjectMethod` в VM сверяют число аргументов с полем `arity`
+/// до вызова обработчика. Измерено (`OBJ.METHOD.EXTRA_ARGS`): платформа
+/// отвечает ошибкой и на лишний, и на недостающий аргумент — прежнее
+/// допущение «тексты ошибок о числе аргументов уже живут в самих
+/// обработчиках» опровергнуто (`ТабличныйДокумент.НачатьГруппуСтрок` молча
+/// принимал пять аргументов при двух объявленных).
 #[derive(Debug, Clone, Copy)]
 pub struct MethodDescriptor {
     pub names: &'static [&'static str],
+    pub arity: Arity,
     pub call: MethodCall,
+}
+
+impl MethodDescriptor {
+    /// Дескриптор метода. Кода здесь нет (см. `MethodCode`, удалённый в
+    /// ABI-F): связать байт-код по коду метода нельзя, а `arity` проверяется
+    /// в рантайме, где получатель уже известен.
+    pub const fn new(names: &'static [&'static str], arity: Arity, call: MethodCall) -> Self {
+        Self { names, arity, call }
+    }
+
+    /// Рантаймная проверка арности перед вызовом обработчика — единый
+    /// источник для всех путей диспетчеризации: `call_method_from_table`
+    /// (строковый путь и откат шимов JIT), арм `CallObjectMethod` VM и его
+    /// шим JIT. Живёт здесь, а не в `bsl-vm`: горячий цикл VM на грани кеша
+    /// микроопераций, и лишняя функция в его `lib.rs` сдвигает укладку кода
+    /// (измерено на `call_overhead`). Измерено `OBJ.METHOD.EXTRA_ARGS`:
+    /// платформа отвечает ошибкой и на лишний, и на недостающий аргумент;
+    /// ошибка — [`RtError::MethodNotApplicable`], ловимая `Попыткой`.
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::MethodNotApplicable`], если `count` не в диапазоне `arity`.
+    #[inline]
+    pub fn check_arity(&self, count: u8, receiver: &'static str) -> RtResult<()> {
+        if self.arity.accepts(count) {
+            Ok(())
+        } else {
+            Err(crate::RtError::MethodNotApplicable {
+                method: self.names.first().copied().unwrap_or("метод"),
+                receiver,
+            })
+        }
+    }
 }
 
 /// Чтение свойства объекта компонента. Получатель — как у
@@ -505,6 +542,12 @@ pub fn call_method_from_table(
             .iter()
             .any(|candidate| crate::folded_eq(candidate, name))
         {
+            // Рантаймная проверка арности до вызова обработчика — та же
+            // [`MethodDescriptor::check_arity`], что в арме `CallObjectMethod`
+            // у VM. Этот путь проходят строковый `call_method` и его откат в
+            // шимах JIT.
+            let count = u8::try_from(arguments.len()).unwrap_or(u8::MAX);
+            descriptor.check_arity(count, type_name)?;
             return (descriptor.call)(receiver, arguments, context);
         }
     }

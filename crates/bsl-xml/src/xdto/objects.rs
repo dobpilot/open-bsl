@@ -334,98 +334,65 @@ pub(crate) fn xdto_can_read_xml(
 }
 
 pub(crate) const XDTO_METHODS: &[MethodDescriptor] = &[
-    MethodDescriptor {
-        names: &["Тип", "Type"],
-        call: xdto_type,
-    },
-    MethodDescriptor {
-        names: &["Создать", "Create"],
-        call: xdto_create,
-    },
-    MethodDescriptor {
-        names: &["ПрочитатьXML", "ReadXML"],
-        call: xdto_read_xml,
-    },
-    MethodDescriptor {
-        names: &["ЗаписатьXML", "WriteXML"],
-        call: xdto_write_xml,
-    },
-    MethodDescriptor {
-        names: &["Получить", "Get"],
-        call: xdto_get,
-    },
-    MethodDescriptor {
-        names: &["Установить", "Set"],
-        call: xdto_set,
-    },
-    MethodDescriptor {
-        names: &["Добавить", "Add"],
-        call: xdto_add,
-    },
-    MethodDescriptor {
-        names: &["Вставить", "Insert"],
-        call: xdto_insert,
-    },
-    MethodDescriptor {
-        names: &["Удалить", "Delete"],
-        call: xdto_delete,
-    },
-    MethodDescriptor {
-        names: &["Очистить", "Clear"],
-        call: xdto_clear,
-    },
-    MethodDescriptor {
-        names: &["Количество", "Count"],
-        call: xdto_count,
-    },
-    MethodDescriptor {
-        names: &["ПолучитьСписок", "GetList"],
-        call: xdto_get_list,
-    },
-    MethodDescriptor {
-        names: &["Установлено", "IsSet"],
-        call: xdto_is_set,
-    },
-    MethodDescriptor {
-        names: &["Сбросить", "Unset"],
-        call: xdto_unset,
-    },
-    MethodDescriptor {
-        names: &["Проверить", "Validate"],
-        call: xdto_validate,
-    },
-    MethodDescriptor {
-        names: &["Свойства", "Properties"],
-        call: xdto_properties,
-    },
-    MethodDescriptor {
-        names: &["Владелец", "Owner"],
-        call: xdto_owner,
-    },
-    MethodDescriptor {
-        names: &["Последовательность", "Sequence"],
-        call: xdto_sequence,
-    },
-    MethodDescriptor {
-        names: &["ПолучитьЗначение", "GetValue"],
-        call: xdto_sequence_value,
-    },
-    MethodDescriptor {
-        names: &["ПолучитьСвойство", "GetProperty"],
-        call: xdto_sequence_property,
-    },
-    MethodDescriptor {
-        names: &["XMLТип", "XMLType"],
-        call: xdto_xml_type,
-    },
-    MethodDescriptor {
-        names: &["XMLТипЗнч", "XMLTypeOf"],
-        call: xdto_xml_type_of,
-    },
-    MethodDescriptor {
-        names: &["ВозможностьЧтенияXML", "CanReadXML"],
-        call: xdto_can_read_xml,
-    },
+    MethodDescriptor::new(&["Тип", "Type"], Arity::range(0, 2), xdto_type),
+    MethodDescriptor::new(&["Создать", "Create"], Arity::range(1, 2), xdto_create),
+    MethodDescriptor::new(
+        &["ПрочитатьXML", "ReadXML"],
+        Arity::range(1, 2),
+        xdto_read_xml,
+    ),
+    MethodDescriptor::new(
+        &["ЗаписатьXML", "WriteXML"],
+        Arity::range(2, 4),
+        xdto_write_xml,
+    ),
+    MethodDescriptor::new(&["Получить", "Get"], Arity::exact(1), xdto_get),
+    MethodDescriptor::new(&["Установить", "Set"], Arity::exact(2), xdto_set),
+    MethodDescriptor::new(&["Добавить", "Add"], Arity::range(1, 2), xdto_add),
+    MethodDescriptor::new(&["Вставить", "Insert"], Arity::exact(2), xdto_insert),
+    MethodDescriptor::new(&["Удалить", "Delete"], Arity::exact(1), xdto_delete),
+    MethodDescriptor::new(&["Очистить", "Clear"], Arity::exact(0), xdto_clear),
+    MethodDescriptor::new(&["Количество", "Count"], Arity::exact(0), xdto_count),
+    MethodDescriptor::new(
+        &["ПолучитьСписок", "GetList"],
+        Arity::exact(1),
+        xdto_get_list,
+    ),
+    MethodDescriptor::new(&["Установлено", "IsSet"], Arity::exact(1), xdto_is_set),
+    MethodDescriptor::new(&["Сбросить", "Unset"], Arity::exact(1), xdto_unset),
+    MethodDescriptor::new(&["Проверить", "Validate"], Arity::exact(0), xdto_validate),
+    MethodDescriptor::new(
+        &["Свойства", "Properties"],
+        Arity::exact(0),
+        xdto_properties,
+    ),
+    MethodDescriptor::new(&["Владелец", "Owner"], Arity::exact(0), xdto_owner),
+    MethodDescriptor::new(
+        &["Последовательность", "Sequence"],
+        Arity::exact(0),
+        xdto_sequence,
+    ),
+    MethodDescriptor::new(
+        &["ПолучитьЗначение", "GetValue"],
+        Arity::exact(1),
+        xdto_sequence_value,
+    ),
+    MethodDescriptor::new(
+        &["ПолучитьСвойство", "GetProperty"],
+        Arity::exact(1),
+        xdto_sequence_property,
+    ),
+    MethodDescriptor::new(&["XMLТип", "XMLType"], Arity::exact(0), xdto_xml_type),
+    MethodDescriptor::new(
+        &["XMLТипЗнч", "XMLTypeOf"],
+        Arity::exact(1),
+        xdto_xml_type_of,
+    ),
+    MethodDescriptor::new(
+        &["ВозможностьЧтенияXML", "CanReadXML"],
+        Arity::exact(1),
+        xdto_can_read_xml,
+    ),
 ];
 
 impl ObjectProtocol for XdtoShell {

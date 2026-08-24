@@ -116,8 +116,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use bsl_rt::{
-    BslNumber, BslString, BslValue, ByteStreamProtocol, CallContext, EnumValue, MethodDescriptor,
-    ObjectProtocol, PropertyDescriptor, RtError, RtResult, TypeDescriptor, encoding::Encoding,
+    Arity, BslNumber, BslString, BslValue, ByteStreamProtocol, CallContext, EnumValue,
+    MethodDescriptor, ObjectProtocol, PropertyDescriptor, RtError, RtResult, TypeDescriptor,
+    encoding::Encoding,
 };
 
 /// Порядок байтов многобайтового целого.
@@ -524,74 +525,75 @@ fn rw_write_line(
 }
 
 const DATA_RW_METHODS: &[MethodDescriptor] = &[
-    MethodDescriptor {
-        names: &["Прочитать", "Read"],
-        call: rw_read,
-    },
-    MethodDescriptor {
-        names: &["Записать", "Write"],
-        call: rw_write,
-    },
-    MethodDescriptor {
-        names: &["Закрыть", "Close"],
-        call: rw_close,
-    },
-    MethodDescriptor {
-        names: &["Пропустить", "Skip"],
-        call: rw_skip,
-    },
-    MethodDescriptor {
-        names: &["ПрочитатьЦелое16", "ReadInt16"],
-        call: rw_read_int16,
-    },
-    MethodDescriptor {
-        names: &["ПрочитатьЦелое32", "ReadInt32"],
-        call: rw_read_int32,
-    },
-    MethodDescriptor {
-        names: &["ПрочитатьЦелое64", "ReadInt64"],
-        call: rw_read_int64,
-    },
-    MethodDescriptor {
-        names: &["ЗаписатьЦелое16", "WriteInt16"],
-        call: rw_write_int16,
-    },
-    MethodDescriptor {
-        names: &["ЗаписатьЦелое32", "WriteInt32"],
-        call: rw_write_int32,
-    },
-    MethodDescriptor {
-        names: &["ЗаписатьЦелое64", "WriteInt64"],
-        call: rw_write_int64,
-    },
-    MethodDescriptor {
-        names: &["ПрочитатьБайт", "ReadByte"],
-        call: rw_read_byte,
-    },
-    MethodDescriptor {
-        names: &["ПрочитатьВБуферДвоичныхДанных", "ReadIntoBinaryDataBuffer"],
-        call: rw_read_into_buffer,
-    },
-    MethodDescriptor {
-        names: &["ПрочитатьСимволы", "ReadChars"],
-        call: rw_read_chars,
-    },
-    MethodDescriptor {
-        names: &["ПрочитатьСтроку", "ReadLine"],
-        call: rw_read_line,
-    },
-    MethodDescriptor {
-        names: &["ЗаписатьБайт", "WriteByte"],
-        call: rw_write_byte,
-    },
-    MethodDescriptor {
-        names: &["ЗаписатьСимволы", "WriteChars"],
-        call: rw_write_chars,
-    },
-    MethodDescriptor {
-        names: &["ЗаписатьСтроку", "WriteLine"],
-        call: rw_write_line,
-    },
+    MethodDescriptor::new(&["Прочитать", "Read"], Arity::range(0, 1), rw_read),
+    MethodDescriptor::new(&["Записать", "Write"], Arity::exact(1), rw_write),
+    MethodDescriptor::new(&["Закрыть", "Close"], Arity::exact(0), rw_close),
+    MethodDescriptor::new(&["Пропустить", "Skip"], Arity::range(0, 1), rw_skip),
+    MethodDescriptor::new(
+        &["ПрочитатьЦелое16", "ReadInt16"],
+        Arity::range(0, 1),
+        rw_read_int16,
+    ),
+    MethodDescriptor::new(
+        &["ПрочитатьЦелое32", "ReadInt32"],
+        Arity::range(0, 1),
+        rw_read_int32,
+    ),
+    MethodDescriptor::new(
+        &["ПрочитатьЦелое64", "ReadInt64"],
+        Arity::range(0, 1),
+        rw_read_int64,
+    ),
+    MethodDescriptor::new(
+        &["ЗаписатьЦелое16", "WriteInt16"],
+        Arity::range(1, 2),
+        rw_write_int16,
+    ),
+    MethodDescriptor::new(
+        &["ЗаписатьЦелое32", "WriteInt32"],
+        Arity::range(1, 2),
+        rw_write_int32,
+    ),
+    MethodDescriptor::new(
+        &["ЗаписатьЦелое64", "WriteInt64"],
+        Arity::range(1, 2),
+        rw_write_int64,
+    ),
+    MethodDescriptor::new(
+        &["ПрочитатьБайт", "ReadByte"],
+        Arity::exact(0),
+        rw_read_byte,
+    ),
+    MethodDescriptor::new(
+        &["ПрочитатьВБуферДвоичныхДанных", "ReadIntoBinaryDataBuffer"],
+        Arity::range(0, 3),
+        rw_read_into_buffer,
+    ),
+    MethodDescriptor::new(
+        &["ПрочитатьСимволы", "ReadChars"],
+        Arity::range(0, 2),
+        rw_read_chars,
+    ),
+    MethodDescriptor::new(
+        &["ПрочитатьСтроку", "ReadLine"],
+        Arity::range(0, 2),
+        rw_read_line,
+    ),
+    MethodDescriptor::new(
+        &["ЗаписатьБайт", "WriteByte"],
+        Arity::exact(1),
+        rw_write_byte,
+    ),
+    MethodDescriptor::new(
+        &["ЗаписатьСимволы", "WriteChars"],
+        Arity::range(1, 2),
+        rw_write_chars,
+    ),
+    MethodDescriptor::new(
+        &["ЗаписатьСтроку", "WriteLine"],
+        Arity::range(1, 3),
+        rw_write_line,
+    ),
 ];
 
 impl ObjectProtocol for DataReadResult {
@@ -720,14 +722,16 @@ fn read_result_buffer(
 }
 
 const DATA_READ_RESULT_METHODS: &[MethodDescriptor] = &[
-    MethodDescriptor {
-        names: &["ПолучитьДвоичныеДанные", "GetBinaryData"],
-        call: read_result_binary_data,
-    },
-    MethodDescriptor {
-        names: &["ПолучитьБуферДвоичныхДанных", "GetBinaryDataBuffer"],
-        call: read_result_buffer,
-    },
+    MethodDescriptor::new(
+        &["ПолучитьДвоичныеДанные", "GetBinaryData"],
+        Arity::exact(0),
+        read_result_binary_data,
+    ),
+    MethodDescriptor::new(
+        &["ПолучитьБуферДвоичныхДанных", "GetBinaryDataBuffer"],
+        Arity::exact(0),
+        read_result_buffer,
+    ),
 ];
 
 /// Внутренности читателя либо писателя вместе с тем, кто из них это.

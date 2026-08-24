@@ -163,3 +163,47 @@ fn output_shifts_rows_down() {
     assert_eq!(a.cell_text(1, 0), "B");
     assert_eq!(a.height(), 2);
 }
+
+/// `НачатьГруппуСтрок` объявляет два аргумента (`[Имя][, Сворачиваемость]`),
+/// а обработчик до ABI-C читал только первые два и молча глотал остальные —
+/// дыра, из-за которой `т.НачатьГруппуСтрок("г", Истина, 5, 6, 7)` проходил.
+/// Рантаймная проверка арности метода (`OBJ.METHOD.EXTRA_ARGS`: платформа
+/// отвечает ошибкой на лишний аргумент) закрывает её в `call_method_from_table`
+/// — путь, которым идёт диспетчеризация метода объекта.
+#[test]
+fn begin_row_group_rejects_extra_arguments() {
+    fn fmt(_: &BslValue, _: Option<&str>) -> RtResult<String> {
+        Ok(String::new())
+    }
+    let doc = new_document();
+    let object = doc.object_ref().expect("документ — объект");
+    let mut shapes = bsl_rt::RuntimeShapes::seeded(Vec::new(), Vec::new());
+    let mut ctx = CallContext::native(&mut shapes, fmt);
+
+    let five = [
+        BslValue::Str(BslString::from_str("г")),
+        BslValue::Boolean(true),
+        int_value(5),
+        int_value(6),
+        int_value(7),
+    ];
+    let extra = object
+        .as_dyn()
+        .call_method("НачатьГруппуСтрок", &five, &mut ctx);
+    assert!(
+        matches!(extra, Err(RtError::MethodNotApplicable { .. })),
+        "лишние аргументы должны отвергаться, получено {extra:?}"
+    );
+
+    // Объявленная форма (Имя, Открыта) проходит.
+    let two = [
+        BslValue::Str(BslString::from_str("г")),
+        BslValue::Boolean(true),
+    ];
+    assert!(
+        object
+            .as_dyn()
+            .call_method("НачатьГруппуСтрок", &two, &mut ctx)
+            .is_ok()
+    );
+}

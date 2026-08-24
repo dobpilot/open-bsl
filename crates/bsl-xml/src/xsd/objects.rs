@@ -300,10 +300,11 @@ pub(crate) fn builder_create_schema(
     create_schema(&new_builder(), arguments)
 }
 
-pub(crate) static BUILDER_METHODS: &[MethodDescriptor] = &[MethodDescriptor {
-    names: &["СоздатьСхемуXML", "CreateXMLSchema"],
-    call: builder_create_schema,
-}];
+pub(crate) static BUILDER_METHODS: &[MethodDescriptor] = &[MethodDescriptor::new(
+    &["СоздатьСхемуXML", "CreateXMLSchema"],
+    Arity::range(0, 1),
+    builder_create_schema,
+)];
 
 impl ObjectProtocol for BuilderObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
@@ -357,18 +358,13 @@ pub(crate) fn schema_set_method_count(
 }
 
 pub(crate) static SCHEMA_SET_METHODS: &[MethodDescriptor] = &[
-    MethodDescriptor {
-        names: &["Добавить", "Add"],
-        call: schema_set_method_add,
-    },
-    MethodDescriptor {
-        names: &["Получить", "Get"],
-        call: schema_set_method_get,
-    },
-    MethodDescriptor {
-        names: &["Количество", "Count"],
-        call: schema_set_method_count,
-    },
+    MethodDescriptor::new(&["Добавить", "Add"], Arity::exact(1), schema_set_method_add),
+    MethodDescriptor::new(&["Получить", "Get"], Arity::exact(1), schema_set_method_get),
+    MethodDescriptor::new(
+        &["Количество", "Count"],
+        Arity::exact(0),
+        schema_set_method_count,
+    ),
 ];
 
 impl ObjectProtocol for SchemaSetObject {
@@ -450,14 +446,16 @@ pub(crate) fn schema_list_method_count(
 }
 
 pub(crate) static SCHEMA_LIST_METHODS: &[MethodDescriptor] = &[
-    MethodDescriptor {
-        names: &["Получить", "Get"],
-        call: schema_list_method_get,
-    },
-    MethodDescriptor {
-        names: &["Количество", "Count"],
-        call: schema_list_method_count,
-    },
+    MethodDescriptor::new(
+        &["Получить", "Get"],
+        Arity::range(1, 2),
+        schema_list_method_get,
+    ),
+    MethodDescriptor::new(
+        &["Количество", "Count"],
+        Arity::exact(0),
+        schema_list_method_count,
+    ),
 ];
 
 impl ObjectProtocol for SchemaListObject {
@@ -540,10 +538,11 @@ pub(crate) fn name_list_method_count(
     Ok(BslValue::number_from_i64(list.names.len() as i64))
 }
 
-pub(crate) static NAME_LIST_METHODS: &[MethodDescriptor] = &[MethodDescriptor {
-    names: &["Количество", "Count"],
-    call: name_list_method_count,
-}];
+pub(crate) static NAME_LIST_METHODS: &[MethodDescriptor] = &[MethodDescriptor::new(
+    &["Количество", "Count"],
+    Arity::exact(0),
+    name_list_method_count,
+)];
 
 impl ObjectProtocol for NameListObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {

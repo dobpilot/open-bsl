@@ -80,22 +80,14 @@ fn reader_extract_all(
 }
 
 static READER_METHODS: &[MethodDescriptor] = &[
-    MethodDescriptor {
-        names: &["Открыть", "Open"],
-        call: reader_open,
-    },
-    MethodDescriptor {
-        names: &["Закрыть", "Close"],
-        call: reader_close,
-    },
-    MethodDescriptor {
-        names: &["Извлечь", "Extract"],
-        call: reader_extract,
-    },
-    MethodDescriptor {
-        names: &["ИзвлечьВсе", "ExtractAll"],
-        call: reader_extract_all,
-    },
+    MethodDescriptor::new(&["Открыть", "Open"], Arity::range(1, 2), reader_open),
+    MethodDescriptor::new(&["Закрыть", "Close"], Arity::exact(0), reader_close),
+    MethodDescriptor::new(&["Извлечь", "Extract"], Arity::range(2, 4), reader_extract),
+    MethodDescriptor::new(
+        &["ИзвлечьВсе", "ExtractAll"],
+        Arity::range(1, 2),
+        reader_extract_all,
+    ),
 ];
 
 impl ObjectProtocol for ReaderObject {
@@ -193,26 +185,15 @@ fn entries_extract_all(
 }
 
 static ENTRIES_METHODS: &[MethodDescriptor] = &[
-    MethodDescriptor {
-        names: &["Количество", "Count"],
-        call: entries_count,
-    },
-    MethodDescriptor {
-        names: &["Получить", "Get"],
-        call: entries_get,
-    },
-    MethodDescriptor {
-        names: &["Найти", "Find"],
-        call: entries_find,
-    },
-    MethodDescriptor {
-        names: &["Извлечь", "Extract"],
-        call: entries_extract,
-    },
-    MethodDescriptor {
-        names: &["ИзвлечьВсе", "ExtractAll"],
-        call: entries_extract_all,
-    },
+    MethodDescriptor::new(&["Количество", "Count"], Arity::exact(0), entries_count),
+    MethodDescriptor::new(&["Получить", "Get"], Arity::exact(1), entries_get),
+    MethodDescriptor::new(&["Найти", "Find"], Arity::exact(1), entries_find),
+    MethodDescriptor::new(&["Извлечь", "Extract"], Arity::range(2, 4), entries_extract),
+    MethodDescriptor::new(
+        &["ИзвлечьВсе", "ExtractAll"],
+        Arity::range(1, 2),
+        entries_extract_all,
+    ),
 ];
 
 impl ObjectProtocol for EntriesObject {
@@ -284,14 +265,12 @@ fn entry_extract_all(
 }
 
 static ENTRY_METHODS: &[MethodDescriptor] = &[
-    MethodDescriptor {
-        names: &["Извлечь", "Extract"],
-        call: entry_extract,
-    },
-    MethodDescriptor {
-        names: &["ИзвлечьВсе", "ExtractAll"],
-        call: entry_extract_all,
-    },
+    MethodDescriptor::new(&["Извлечь", "Extract"], Arity::range(2, 4), entry_extract),
+    MethodDescriptor::new(
+        &["ИзвлечьВсе", "ExtractAll"],
+        Arity::range(1, 2),
+        entry_extract_all,
+    ),
 ];
 
 impl ObjectProtocol for EntryObject {
@@ -375,22 +354,14 @@ fn writer_method_binary_data(
 }
 
 static WRITER_METHODS: &[MethodDescriptor] = &[
-    MethodDescriptor {
-        names: &["Открыть", "Open"],
-        call: writer_method_open,
-    },
-    MethodDescriptor {
-        names: &["Добавить", "Add"],
-        call: writer_method_add,
-    },
-    MethodDescriptor {
-        names: &["Записать", "Write"],
-        call: writer_method_write,
-    },
-    MethodDescriptor {
-        names: &["ПолучитьДвоичныеДанные", "GetBinaryData"],
-        call: writer_method_binary_data,
-    },
+    MethodDescriptor::new(&["Открыть", "Open"], Arity::range(1, 7), writer_method_open),
+    MethodDescriptor::new(&["Добавить", "Add"], Arity::range(1, 3), writer_method_add),
+    MethodDescriptor::new(&["Записать", "Write"], Arity::exact(0), writer_method_write),
+    MethodDescriptor::new(
+        &["ПолучитьДвоичныеДанные", "GetBinaryData"],
+        Arity::exact(0),
+        writer_method_binary_data,
+    ),
 ];
 
 impl ObjectProtocol for WriterObject {

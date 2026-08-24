@@ -178,46 +178,32 @@ fn document_end_row_group(
 }
 
 static DOCUMENT_METHODS: &[MethodDescriptor] = &[
-    MethodDescriptor {
-        names: &["Область", "Area"],
-        call: document_region,
-    },
-    MethodDescriptor {
-        names: &["Объединить", "Merge"],
-        call: document_merge,
-    },
-    MethodDescriptor {
-        names: &["Разъединить", "Unmerge"],
-        call: document_unmerge,
-    },
-    MethodDescriptor {
-        names: &["Записать", "Write"],
-        call: document_write,
-    },
-    MethodDescriptor {
-        names: &["Прочитать", "Read"],
-        call: document_read,
-    },
-    MethodDescriptor {
-        names: &["Вывести", "Output"],
-        call: document_output,
-    },
-    MethodDescriptor {
-        names: &["ПолучитьОбласть", "GetArea"],
-        call: document_get_area,
-    },
-    MethodDescriptor {
-        names: &["Очистить", "Clear"],
-        call: document_clear,
-    },
-    MethodDescriptor {
-        names: &["НачатьГруппуСтрок", "StartRowGroup"],
-        call: document_begin_row_group,
-    },
-    MethodDescriptor {
-        names: &["ЗакончитьГруппуСтрок", "EndRowGroup"],
-        call: document_end_row_group,
-    },
+    MethodDescriptor::new(&["Область", "Area"], Arity::range(1, 4), document_region),
+    MethodDescriptor::new(&["Объединить", "Merge"], Arity::range(0, 1), document_merge),
+    MethodDescriptor::new(
+        &["Разъединить", "Unmerge"],
+        Arity::range(0, 1),
+        document_unmerge,
+    ),
+    MethodDescriptor::new(&["Записать", "Write"], Arity::range(1, 2), document_write),
+    MethodDescriptor::new(&["Прочитать", "Read"], Arity::range(1, 2), document_read),
+    MethodDescriptor::new(&["Вывести", "Output"], Arity::range(1, 2), document_output),
+    MethodDescriptor::new(
+        &["ПолучитьОбласть", "GetArea"],
+        Arity::range(1, 4),
+        document_get_area,
+    ),
+    MethodDescriptor::new(&["Очистить", "Clear"], Arity::exact(0), document_clear),
+    MethodDescriptor::new(
+        &["НачатьГруппуСтрок", "StartRowGroup"],
+        Arity::range(0, 2),
+        document_begin_row_group,
+    ),
+    MethodDescriptor::new(
+        &["ЗакончитьГруппуСтрок", "EndRowGroup"],
+        Arity::exact(0),
+        document_end_row_group,
+    ),
 ];
 
 fn area_region(
@@ -245,18 +231,9 @@ fn area_unmerge(
 }
 
 static AREA_METHODS: &[MethodDescriptor] = &[
-    MethodDescriptor {
-        names: &["Область", "Area"],
-        call: area_region,
-    },
-    MethodDescriptor {
-        names: &["Объединить", "Merge"],
-        call: area_merge,
-    },
-    MethodDescriptor {
-        names: &["Разъединить", "Unmerge"],
-        call: area_unmerge,
-    },
+    MethodDescriptor::new(&["Область", "Area"], Arity::range(1, 4), area_region),
+    MethodDescriptor::new(&["Объединить", "Merge"], Arity::exact(0), area_merge),
+    MethodDescriptor::new(&["Разъединить", "Unmerge"], Arity::exact(0), area_unmerge),
 ];
 
 impl ObjectProtocol for SpreadDocumentObject {
@@ -397,14 +374,16 @@ fn drawings_method_count(
 }
 
 static DRAWINGS_METHODS: &[MethodDescriptor] = &[
-    MethodDescriptor {
-        names: &["Добавить", "Add"],
-        call: drawings_method_add,
-    },
-    MethodDescriptor {
-        names: &["Количество", "Count"],
-        call: drawings_method_count,
-    },
+    MethodDescriptor::new(
+        &["Добавить", "Add"],
+        Arity::range(0, 4),
+        drawings_method_add,
+    ),
+    MethodDescriptor::new(
+        &["Количество", "Count"],
+        Arity::exact(0),
+        drawings_method_count,
+    ),
 ];
 
 impl ObjectProtocol for SpreadDrawingsObject {

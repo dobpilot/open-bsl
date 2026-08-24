@@ -16,7 +16,7 @@ use bsl_rt::RuntimeShapes;
 use crate::{parse::*, write::*};
 
 use bsl_rt::{
-    BslValue, CallContext, EnumValue, MethodDescriptor, ObjectProtocol, PropertyDescriptor,
+    Arity, BslValue, CallContext, EnumValue, MethodDescriptor, ObjectProtocol, PropertyDescriptor,
     RtError, RtResult, TypeDescriptor,
 };
 
@@ -701,22 +701,18 @@ fn reader_skip(
 }
 
 const READER_METHODS: &[MethodDescriptor] = &[
-    MethodDescriptor {
-        names: &["УстановитьСтроку", "SetString"],
-        call: reader_set_string,
-    },
-    MethodDescriptor {
-        names: &["ОткрытьФайл", "OpenFile"],
-        call: reader_open_file,
-    },
-    MethodDescriptor {
-        names: &["Прочитать", "Read"],
-        call: reader_read,
-    },
-    MethodDescriptor {
-        names: &["Пропустить", "Skip"],
-        call: reader_skip,
-    },
+    MethodDescriptor::new(
+        &["УстановитьСтроку", "SetString"],
+        Arity::exact(1),
+        reader_set_string,
+    ),
+    MethodDescriptor::new(
+        &["ОткрытьФайл", "OpenFile"],
+        Arity::range(1, 2),
+        reader_open_file,
+    ),
+    MethodDescriptor::new(&["Прочитать", "Read"], Arity::exact(0), reader_read),
+    MethodDescriptor::new(&["Пропустить", "Skip"], Arity::exact(0), reader_skip),
 ];
 
 // Обработчики статической таблицы писателя: тела — прежние ветки
@@ -836,42 +832,47 @@ fn writer_value(
 }
 
 const WRITER_METHODS: &[MethodDescriptor] = &[
-    MethodDescriptor {
-        names: &["УстановитьСтроку", "SetString"],
-        call: writer_set_string,
-    },
-    MethodDescriptor {
-        names: &["ОткрытьФайл", "OpenFile"],
-        call: writer_open_file,
-    },
-    MethodDescriptor {
-        names: &["Закрыть", "Close"],
-        call: writer_close,
-    },
-    MethodDescriptor {
-        names: &["ЗаписатьНачалоОбъекта", "WriteStartObject"],
-        call: writer_start_object,
-    },
-    MethodDescriptor {
-        names: &["ЗаписатьКонецОбъекта", "WriteEndObject"],
-        call: writer_end_object,
-    },
-    MethodDescriptor {
-        names: &["ЗаписатьНачалоМассива", "WriteStartArray"],
-        call: writer_start_array,
-    },
-    MethodDescriptor {
-        names: &["ЗаписатьКонецМассива", "WriteEndArray"],
-        call: writer_end_array,
-    },
-    MethodDescriptor {
-        names: &["ЗаписатьИмяСвойства", "WritePropertyName"],
-        call: writer_property_name,
-    },
-    MethodDescriptor {
-        names: &["ЗаписатьЗначение", "WriteValue"],
-        call: writer_value,
-    },
+    MethodDescriptor::new(
+        &["УстановитьСтроку", "SetString"],
+        Arity::range(0, 1),
+        writer_set_string,
+    ),
+    MethodDescriptor::new(
+        &["ОткрытьФайл", "OpenFile"],
+        Arity::range(1, 2),
+        writer_open_file,
+    ),
+    MethodDescriptor::new(&["Закрыть", "Close"], Arity::exact(0), writer_close),
+    MethodDescriptor::new(
+        &["ЗаписатьНачалоОбъекта", "WriteStartObject"],
+        Arity::exact(0),
+        writer_start_object,
+    ),
+    MethodDescriptor::new(
+        &["ЗаписатьКонецОбъекта", "WriteEndObject"],
+        Arity::exact(0),
+        writer_end_object,
+    ),
+    MethodDescriptor::new(
+        &["ЗаписатьНачалоМассива", "WriteStartArray"],
+        Arity::exact(0),
+        writer_start_array,
+    ),
+    MethodDescriptor::new(
+        &["ЗаписатьКонецМассива", "WriteEndArray"],
+        Arity::exact(0),
+        writer_end_array,
+    ),
+    MethodDescriptor::new(
+        &["ЗаписатьИмяСвойства", "WritePropertyName"],
+        Arity::exact(1),
+        writer_property_name,
+    ),
+    MethodDescriptor::new(
+        &["ЗаписатьЗначение", "WriteValue"],
+        Arity::exact(1),
+        writer_value,
+    ),
 ];
 
 impl ObjectProtocol for JsonWriterObject {

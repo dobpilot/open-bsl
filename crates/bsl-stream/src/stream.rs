@@ -64,7 +64,7 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::rc::Rc;
 
 use bsl_rt::{
-    BslNumber, BslValue, ByteStreamProtocol, CallContext, EnumValue, MethodDescriptor,
+    Arity, BslNumber, BslValue, ByteStreamProtocol, CallContext, EnumValue, MethodDescriptor,
     ObjectProtocol, PropertyDescriptor, RtError, RtResult, TypeDescriptor,
 };
 
@@ -465,30 +465,16 @@ fn stream_seek(
 }
 
 const STREAM_METHODS: &[MethodDescriptor] = &[
-    MethodDescriptor {
-        names: &["Записать", "Write"],
-        call: stream_write,
-    },
-    MethodDescriptor {
-        names: &["Прочитать", "Read"],
-        call: stream_read,
-    },
-    MethodDescriptor {
-        names: &["Закрыть", "Close"],
-        call: stream_close,
-    },
-    MethodDescriptor {
-        names: &["Размер", "Size"],
-        call: stream_size,
-    },
-    MethodDescriptor {
-        names: &["ТекущаяПозиция", "CurrentPosition"],
-        call: stream_current_position,
-    },
-    MethodDescriptor {
-        names: &["Перейти", "Seek"],
-        call: stream_seek,
-    },
+    MethodDescriptor::new(&["Записать", "Write"], Arity::exact(3), stream_write),
+    MethodDescriptor::new(&["Прочитать", "Read"], Arity::exact(3), stream_read),
+    MethodDescriptor::new(&["Закрыть", "Close"], Arity::exact(0), stream_close),
+    MethodDescriptor::new(&["Размер", "Size"], Arity::exact(0), stream_size),
+    MethodDescriptor::new(
+        &["ТекущаяПозиция", "CurrentPosition"],
+        Arity::exact(0),
+        stream_current_position,
+    ),
+    MethodDescriptor::new(&["Перейти", "Seek"], Arity::exact(2), stream_seek),
 ];
 
 impl ObjectProtocol for StreamObject {
@@ -950,26 +936,31 @@ fn manager_method_create(
 }
 
 const FILE_STREAMS_MANAGER_METHODS: &[MethodDescriptor] = &[
-    MethodDescriptor {
-        names: &["Открыть", "Open"],
-        call: manager_method_open,
-    },
-    MethodDescriptor {
-        names: &["ОткрытьДляЧтения", "OpenForRead"],
-        call: manager_method_open_for_read,
-    },
-    MethodDescriptor {
-        names: &["ОткрытьДляЗаписи", "OpenForWrite"],
-        call: manager_method_open_for_write,
-    },
-    MethodDescriptor {
-        names: &["ОткрытьДляДописывания", "OpenForAppend"],
-        call: manager_method_open_for_append,
-    },
-    MethodDescriptor {
-        names: &["Создать", "Create"],
-        call: manager_method_create,
-    },
+    MethodDescriptor::new(
+        &["Открыть", "Open"],
+        Arity::range(2, 3),
+        manager_method_open,
+    ),
+    MethodDescriptor::new(
+        &["ОткрытьДляЧтения", "OpenForRead"],
+        Arity::exact(1),
+        manager_method_open_for_read,
+    ),
+    MethodDescriptor::new(
+        &["ОткрытьДляЗаписи", "OpenForWrite"],
+        Arity::exact(1),
+        manager_method_open_for_write,
+    ),
+    MethodDescriptor::new(
+        &["ОткрытьДляДописывания", "OpenForAppend"],
+        Arity::exact(1),
+        manager_method_open_for_append,
+    ),
+    MethodDescriptor::new(
+        &["Создать", "Create"],
+        Arity::exact(1),
+        manager_method_create,
+    ),
 ];
 
 impl ObjectProtocol for FileStreamsManager {

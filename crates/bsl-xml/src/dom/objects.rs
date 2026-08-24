@@ -177,10 +177,11 @@ pub(crate) fn builder_read(
     read(&new_builder(), arguments)
 }
 
-pub(crate) static BUILDER_METHODS: &[MethodDescriptor] = &[MethodDescriptor {
-    names: &["Прочитать", "Read"],
-    call: builder_read,
-}];
+pub(crate) static BUILDER_METHODS: &[MethodDescriptor] = &[MethodDescriptor::new(
+    &["Прочитать", "Read"],
+    Arity::exact(1),
+    builder_read,
+)];
 
 impl ObjectProtocol for DomBuilderObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
@@ -201,10 +202,11 @@ pub(crate) fn writer_write(
     write(&new_writer(), arguments)
 }
 
-pub(crate) static WRITER_METHODS: &[MethodDescriptor] = &[MethodDescriptor {
-    names: &["Записать", "Write"],
-    call: writer_write,
-}];
+pub(crate) static WRITER_METHODS: &[MethodDescriptor] = &[MethodDescriptor::new(
+    &["Записать", "Write"],
+    Arity::range(1, 2),
+    writer_write,
+)];
 
 impl ObjectProtocol for DomWriterObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
@@ -595,102 +597,126 @@ pub(crate) fn node_method_24(
 }
 
 pub(crate) static NODE_METHODS: &[MethodDescriptor] = &[
-    MethodDescriptor {
-        names: &["ЕстьДочерниеУзлы", "HasChildNodes"],
-        call: node_method_1,
-    },
-    MethodDescriptor {
-        names: &["ЕстьАтрибуты", "HasAttributes"],
-        call: node_method_2,
-    },
-    MethodDescriptor {
-        names: &["ПолучитьАтрибут", "GetAttribute"],
-        call: node_method_3,
-    },
-    MethodDescriptor {
-        names: &["ЕстьАтрибут", "HasAttribute"],
-        call: node_method_4,
-    },
-    MethodDescriptor {
-        names: &["ПолучитьУзелАтрибута", "GetAttributeNode"],
-        call: node_method_5,
-    },
-    MethodDescriptor {
-        names: &["ПолучитьЭлементыПоИмени", "GetElementByTagName"],
-        call: node_method_6,
-    },
-    MethodDescriptor {
-        names: &["ПолучитьЭлементПоИдентификатору", "GetElementById"],
-        call: node_method_7,
-    },
-    MethodDescriptor {
-        names: &["СоздатьЭлемент", "CreateElement"],
-        call: node_method_8,
-    },
-    MethodDescriptor {
-        names: &["СоздатьАтрибут", "CreateAttribute"],
-        call: node_method_9,
-    },
-    MethodDescriptor {
-        names: &["СоздатьТекстовыйУзел", "CreateTextNode"],
-        call: node_method_10,
-    },
-    MethodDescriptor {
-        names: &["СоздатьСекциюCDATA", "CreateCDATASection"],
-        call: node_method_11,
-    },
-    MethodDescriptor {
-        names: &["СоздатьКомментарий", "CreateComment"],
-        call: node_method_12,
-    },
-    MethodDescriptor {
-        names: &["СоздатьИнструкциюОбработки", "CreateProcessingInstruction"],
-        call: node_method_13,
-    },
-    MethodDescriptor {
-        names: &["ДобавитьДочерний", "AppendChild"],
-        call: node_method_14,
-    },
-    MethodDescriptor {
-        names: &["ВставитьПеред", "InsertBefore"],
-        call: node_method_15,
-    },
-    MethodDescriptor {
-        names: &["УдалитьДочерний", "RemoveChild"],
-        call: node_method_16,
-    },
-    MethodDescriptor {
-        names: &["ЗаменитьДочерний", "ReplaceChild"],
-        call: node_method_17,
-    },
-    MethodDescriptor {
-        names: &["УстановитьАтрибут", "SetAttribute"],
-        call: node_method_18,
-    },
-    MethodDescriptor {
-        names: &["УдалитьАтрибут", "RemoveAttribute"],
-        call: node_method_19,
-    },
-    MethodDescriptor {
-        names: &["УстановитьУзелАтрибута", "SetAttributeNode"],
-        call: node_method_20,
-    },
-    MethodDescriptor {
-        names: &["УдалитьУзелАтрибута", "RemoveAttributeNode"],
-        call: node_method_21,
-    },
-    MethodDescriptor {
-        names: &["ВычислитьВыражениеXPath", "EvaluateXPathExpression"],
-        call: node_method_22,
-    },
-    MethodDescriptor {
-        names: &["СоздатьВыражениеXPath", "CreateXPathExpression"],
-        call: node_method_23,
-    },
-    MethodDescriptor {
-        names: &["СоздатьРазыменовательПИ", "CreateNSResolver"],
-        call: node_method_24,
-    },
+    MethodDescriptor::new(
+        &["ЕстьДочерниеУзлы", "HasChildNodes"],
+        Arity::exact(0),
+        node_method_1,
+    ),
+    MethodDescriptor::new(
+        &["ЕстьАтрибуты", "HasAttributes"],
+        Arity::exact(0),
+        node_method_2,
+    ),
+    MethodDescriptor::new(
+        &["ПолучитьАтрибут", "GetAttribute"],
+        Arity::range(1, 2),
+        node_method_3,
+    ),
+    MethodDescriptor::new(
+        &["ЕстьАтрибут", "HasAttribute"],
+        Arity::range(1, 2),
+        node_method_4,
+    ),
+    MethodDescriptor::new(
+        &["ПолучитьУзелАтрибута", "GetAttributeNode"],
+        Arity::range(1, 2),
+        node_method_5,
+    ),
+    MethodDescriptor::new(
+        &["ПолучитьЭлементыПоИмени", "GetElementByTagName"],
+        Arity::range(1, 2),
+        node_method_6,
+    ),
+    MethodDescriptor::new(
+        &["ПолучитьЭлементПоИдентификатору", "GetElementById"],
+        Arity::exact(1),
+        node_method_7,
+    ),
+    MethodDescriptor::new(
+        &["СоздатьЭлемент", "CreateElement"],
+        Arity::range(1, 2),
+        node_method_8,
+    ),
+    MethodDescriptor::new(
+        &["СоздатьАтрибут", "CreateAttribute"],
+        Arity::range(1, 2),
+        node_method_9,
+    ),
+    MethodDescriptor::new(
+        &["СоздатьТекстовыйУзел", "CreateTextNode"],
+        Arity::exact(1),
+        node_method_10,
+    ),
+    MethodDescriptor::new(
+        &["СоздатьСекциюCDATA", "CreateCDATASection"],
+        Arity::exact(1),
+        node_method_11,
+    ),
+    MethodDescriptor::new(
+        &["СоздатьКомментарий", "CreateComment"],
+        Arity::exact(1),
+        node_method_12,
+    ),
+    MethodDescriptor::new(
+        &["СоздатьИнструкциюОбработки", "CreateProcessingInstruction"],
+        Arity::exact(2),
+        node_method_13,
+    ),
+    MethodDescriptor::new(
+        &["ДобавитьДочерний", "AppendChild"],
+        Arity::exact(1),
+        node_method_14,
+    ),
+    MethodDescriptor::new(
+        &["ВставитьПеред", "InsertBefore"],
+        Arity::exact(2),
+        node_method_15,
+    ),
+    MethodDescriptor::new(
+        &["УдалитьДочерний", "RemoveChild"],
+        Arity::exact(1),
+        node_method_16,
+    ),
+    MethodDescriptor::new(
+        &["ЗаменитьДочерний", "ReplaceChild"],
+        Arity::exact(2),
+        node_method_17,
+    ),
+    MethodDescriptor::new(
+        &["УстановитьАтрибут", "SetAttribute"],
+        Arity::range(2, 3),
+        node_method_18,
+    ),
+    MethodDescriptor::new(
+        &["УдалитьАтрибут", "RemoveAttribute"],
+        Arity::range(1, 2),
+        node_method_19,
+    ),
+    MethodDescriptor::new(
+        &["УстановитьУзелАтрибута", "SetAttributeNode"],
+        Arity::exact(1),
+        node_method_20,
+    ),
+    MethodDescriptor::new(
+        &["УдалитьУзелАтрибута", "RemoveAttributeNode"],
+        Arity::exact(1),
+        node_method_21,
+    ),
+    MethodDescriptor::new(
+        &["ВычислитьВыражениеXPath", "EvaluateXPathExpression"],
+        Arity::range(3, 4),
+        node_method_22,
+    ),
+    MethodDescriptor::new(
+        &["СоздатьВыражениеXPath", "CreateXPathExpression"],
+        Arity::range(1, 2),
+        node_method_23,
+    ),
+    MethodDescriptor::new(
+        &["СоздатьРазыменовательПИ", "CreateNSResolver"],
+        Arity::range(1, 2),
+        node_method_24,
+    ),
 ];
 
 impl ObjectProtocol for DomNodeObject {
@@ -739,14 +765,8 @@ pub(crate) fn list_get(
 }
 
 pub(crate) static LIST_METHODS: &[MethodDescriptor] = &[
-    MethodDescriptor {
-        names: &["Количество", "Count"],
-        call: list_count,
-    },
-    MethodDescriptor {
-        names: &["Получить", "Get"],
-        call: list_get,
-    },
+    MethodDescriptor::new(&["Количество", "Count"], Arity::exact(0), list_count),
+    MethodDescriptor::new(&["Получить", "Get"], Arity::exact(1), list_get),
 ];
 
 impl ObjectProtocol for DomListObject {

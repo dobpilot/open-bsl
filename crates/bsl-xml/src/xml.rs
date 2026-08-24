@@ -13,8 +13,8 @@ use crate::core::{
     local_of, prefix_of,
 };
 use bsl_rt::{
-    BslNumber, BslString, BslValue, CallContext, EnumValue, MethodDescriptor, ObjectProtocol,
-    PropertyDescriptor, RtError, RtResult, TypeDescriptor,
+    Arity, BslNumber, BslString, BslValue, CallContext, EnumValue, MethodDescriptor,
+    ObjectProtocol, PropertyDescriptor, RtError, RtResult, TypeDescriptor,
 };
 
 fn bad(what: impl Into<String>) -> RtError {
@@ -977,46 +977,44 @@ fn reader_close(
 }
 
 const READER_METHODS: &[MethodDescriptor] = &[
-    MethodDescriptor {
-        names: &["УстановитьСтроку", "SetString"],
-        call: xml_set_string,
-    },
-    MethodDescriptor {
-        names: &["ОткрытьФайл", "OpenFile"],
-        call: xml_open_file,
-    },
-    MethodDescriptor {
-        names: &["Прочитать", "Read"],
-        call: reader_read,
-    },
-    MethodDescriptor {
-        names: &["Пропустить", "Skip"],
-        call: reader_skip,
-    },
-    MethodDescriptor {
-        names: &["ПрочитатьАтрибут", "ReadAttribute"],
-        call: reader_read_attribute,
-    },
-    MethodDescriptor {
-        names: &["КоличествоАтрибутов", "AttributeCount"],
-        call: reader_attribute_count,
-    },
-    MethodDescriptor {
-        names: &["ИмяАтрибута", "AttributeName"],
-        call: reader_attribute_name,
-    },
-    MethodDescriptor {
-        names: &["ЗначениеАтрибута", "AttributeValue"],
-        call: reader_attribute_value,
-    },
-    MethodDescriptor {
-        names: &["ПерейтиКСодержимому", "MoveToContent"],
-        call: reader_move_to_content,
-    },
-    MethodDescriptor {
-        names: &["Закрыть", "Close"],
-        call: reader_close,
-    },
+    MethodDescriptor::new(
+        &["УстановитьСтроку", "SetString"],
+        Arity::range(0, 1),
+        xml_set_string,
+    ),
+    MethodDescriptor::new(
+        &["ОткрытьФайл", "OpenFile"],
+        Arity::range(1, 2),
+        xml_open_file,
+    ),
+    MethodDescriptor::new(&["Прочитать", "Read"], Arity::exact(0), reader_read),
+    MethodDescriptor::new(&["Пропустить", "Skip"], Arity::exact(0), reader_skip),
+    MethodDescriptor::new(
+        &["ПрочитатьАтрибут", "ReadAttribute"],
+        Arity::exact(0),
+        reader_read_attribute,
+    ),
+    MethodDescriptor::new(
+        &["КоличествоАтрибутов", "AttributeCount"],
+        Arity::exact(0),
+        reader_attribute_count,
+    ),
+    MethodDescriptor::new(
+        &["ИмяАтрибута", "AttributeName"],
+        Arity::range(0, 1),
+        reader_attribute_name,
+    ),
+    MethodDescriptor::new(
+        &["ЗначениеАтрибута", "AttributeValue"],
+        Arity::range(0, 1),
+        reader_attribute_value,
+    ),
+    MethodDescriptor::new(
+        &["ПерейтиКСодержимому", "MoveToContent"],
+        Arity::exact(0),
+        reader_move_to_content,
+    ),
+    MethodDescriptor::new(&["Закрыть", "Close"], Arity::exact(0), reader_close),
 ];
 
 impl ObjectProtocol for XmlWriterObject {
@@ -1119,54 +1117,62 @@ fn writer_close(
 }
 
 const WRITER_METHODS: &[MethodDescriptor] = &[
-    MethodDescriptor {
-        names: &["УстановитьСтроку", "SetString"],
-        call: xml_set_string,
-    },
-    MethodDescriptor {
-        names: &["ОткрытьФайл", "OpenFile"],
-        call: xml_open_file,
-    },
-    MethodDescriptor {
-        names: &["ЗаписатьОбъявлениеXML", "WriteXMLDeclaration"],
-        call: writer_declaration,
-    },
-    MethodDescriptor {
-        names: &["ЗаписатьНачалоЭлемента", "WriteStartElement"],
-        call: writer_start_element,
-    },
-    MethodDescriptor {
-        names: &["ЗаписатьКонецЭлемента", "WriteEndElement"],
-        call: writer_end_element,
-    },
-    MethodDescriptor {
-        names: &["ЗаписатьАтрибут", "WriteAttribute"],
-        call: writer_attribute,
-    },
-    MethodDescriptor {
-        names: &["ЗаписатьТекст", "WriteText"],
-        call: writer_text,
-    },
-    MethodDescriptor {
-        names: &["ЗаписатьКомментарий", "WriteComment"],
-        call: writer_comment,
-    },
-    MethodDescriptor {
-        names: &["ЗаписатьСекциюCDATA", "WriteCDATASection"],
-        call: writer_cdata,
-    },
-    MethodDescriptor {
-        names: &["ЗаписатьИнструкциюОбработки", "WriteProcessingInstruction"],
-        call: writer_processing_instruction,
-    },
-    MethodDescriptor {
-        names: &["ЗаписатьБезОбработки", "WriteRaw"],
-        call: writer_raw,
-    },
-    MethodDescriptor {
-        names: &["Закрыть", "Close"],
-        call: writer_close,
-    },
+    MethodDescriptor::new(
+        &["УстановитьСтроку", "SetString"],
+        Arity::range(0, 1),
+        xml_set_string,
+    ),
+    MethodDescriptor::new(
+        &["ОткрытьФайл", "OpenFile"],
+        Arity::range(1, 2),
+        xml_open_file,
+    ),
+    MethodDescriptor::new(
+        &["ЗаписатьОбъявлениеXML", "WriteXMLDeclaration"],
+        Arity::exact(0),
+        writer_declaration,
+    ),
+    MethodDescriptor::new(
+        &["ЗаписатьНачалоЭлемента", "WriteStartElement"],
+        Arity::range(1, 3),
+        writer_start_element,
+    ),
+    MethodDescriptor::new(
+        &["ЗаписатьКонецЭлемента", "WriteEndElement"],
+        Arity::exact(0),
+        writer_end_element,
+    ),
+    MethodDescriptor::new(
+        &["ЗаписатьАтрибут", "WriteAttribute"],
+        Arity::range(2, 3),
+        writer_attribute,
+    ),
+    MethodDescriptor::new(
+        &["ЗаписатьТекст", "WriteText"],
+        Arity::exact(1),
+        writer_text,
+    ),
+    MethodDescriptor::new(
+        &["ЗаписатьКомментарий", "WriteComment"],
+        Arity::exact(1),
+        writer_comment,
+    ),
+    MethodDescriptor::new(
+        &["ЗаписатьСекциюCDATA", "WriteCDATASection"],
+        Arity::exact(1),
+        writer_cdata,
+    ),
+    MethodDescriptor::new(
+        &["ЗаписатьИнструкциюОбработки", "WriteProcessingInstruction"],
+        Arity::exact(2),
+        writer_processing_instruction,
+    ),
+    MethodDescriptor::new(
+        &["ЗаписатьБезОбработки", "WriteRaw"],
+        Arity::exact(1),
+        writer_raw,
+    ),
+    MethodDescriptor::new(&["Закрыть", "Close"], Arity::exact(0), writer_close),
 ];
 
 impl ObjectProtocol for XmlWriterSettingsObject {

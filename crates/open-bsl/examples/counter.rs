@@ -36,10 +36,11 @@ fn counter_increase(
 
 // Таблица методов типа: плотные коды от единицы, русское и английское
 // написания. Имена регистронезависимы.
-const COUNTER_METHODS: &[MethodDescriptor] = &[MethodDescriptor {
-    names: &["Увеличить", "Increase"],
-    call: counter_increase,
-}];
+const COUNTER_METHODS: &[MethodDescriptor] = &[MethodDescriptor::new(
+    &["Увеличить", "Increase"],
+    Arity::exact(0),
+    counter_increase,
+)];
 
 fn counter_value(receiver: &dyn ObjectProtocol, _context: &mut CallContext<'_>) -> RtResult<Value> {
     let counter = receiver
