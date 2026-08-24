@@ -424,14 +424,32 @@ fn compile_instr(instr: &Instr) -> Option<Compiled> {
         Instr::CallMethod { .. } => s(shim_call_method, [0, 0, 0]),
         // Открытые двойники троих закрытых выше: нативный получатель идёт
         // тем же инлайн-кэшем и таблицей связывания, что и в интерпретаторе,
-        // компонентный — через sink-контекст, как у закрытых (методы и
-        // свойства официальных компонентов не пишут в stdout; расхождение
-        // поймала бы `the_jit_agrees_with_the_interpreter_on_every_script`).
-        // С реестром в эти опкоды компилируется каждое обращение программы,
-        // и выход в интерпретатор на каждом из них съедал целые чанки.
-        Instr::GetObjectProp { .. } => s(shim_get_object_prop, [0, 0, 0]),
-        Instr::SetObjectProp { .. } => s(shim_set_object_prop, [0, 0, 0]),
-        Instr::CallObjectMethod { .. } => s(shim_call_object_method, [0, 0, 0]),
+        // компонентный — через НАТИВНЫЙ контекст (`CallContext::native`),
+        // у которого нет ни вывода, ни зоны. Это законно ровно потому, что
+        // эти опкоды ОБЪЕКТНЫЕ (`touches_objects`), а методы и свойства
+        // объектов в stdout не пишут: такой опкод, обратившись к выводу,
+        // получит `CapabilityMissing`, а не молча его проглотит. Инвариант
+        // «нативный шим эмитится только на объектном опкоде» проверяется
+        // `debug_assert` здесь, на КОМПИЛЯЦИИ шима (per-call проверка в теле
+        // шима стоила бы `empty_for` 58 -> 83 млн — см. `docs/abi-refactor-f`):
+        // добавить нативный шим для не-объектного опкода — значит уронить
+        // отладочную сборку. С реестром в эти опкоды компилируется каждое
+        // обращение программы, и выход в интерпретатор на каждом из них
+        // съедал целые чанки.
+        Instr::GetObjectProp { .. }
+        | Instr::SetObjectProp { .. }
+        | Instr::CallObjectMethod { .. } => {
+            debug_assert!(
+                instr.touches_objects(),
+                "нативный шим объектного опкода эмитится только на touches_objects"
+            );
+            match instr {
+                Instr::GetObjectProp { .. } => s(shim_get_object_prop, [0, 0, 0]),
+                Instr::SetObjectProp { .. } => s(shim_set_object_prop, [0, 0, 0]),
+                Instr::CallObjectMethod { .. } => s(shim_call_object_method, [0, 0, 0]),
+                _ => unreachable!("внешний образец ограничен тремя объектными опкодами"),
+            }
+        }
         _ => None,
     }
 }
