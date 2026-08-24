@@ -857,6 +857,7 @@ shim!(shim_call_builtin, |frames,
     // список исключений выше), и `None` — не заглушка, а запись этого
     // контракта: если исключение когда-нибудь протухнет, будет ошибка, а
     // не молча другое время.
+    let dynamic_depth = std::cell::Cell::new(0);
     let mut host = HostIo {
         stdout: &mut stdout,
         stderr: &mut stderr,
@@ -864,6 +865,7 @@ shim!(shim_call_builtin, |frames,
         // Динамический код нативным путём не идёт вовсе: `RunDynamic`
         // остаётся интерпретатору, и компилятор фрагментов сюда не едет.
         dynamic: None,
+        dynamic_depth: &dynamic_depth,
     };
     let v = call_builtin_with_format(builtin, args.as_slice(), shapes, &mut host)?;
     let d = frames[idx].reg_index(dst);

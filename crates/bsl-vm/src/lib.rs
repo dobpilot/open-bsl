@@ -322,11 +322,13 @@ fn run_program_with_host<'a>(
         host_env.zone(),
         bsl_bytecode::DynamicScope::ROOT,
     )?;
+    let dynamic_depth = std::cell::Cell::new(0);
     let mut host = HostIo {
         stdout,
         stderr,
         env: Some(host_env),
         dynamic,
+        dynamic_depth: &dynamic_depth,
     };
     let (value, _) = drive_linked(program, 0, stack, jit_mode, &linked, &mut host)?;
     Ok(value)
@@ -374,11 +376,13 @@ pub fn run_repl_chunk_with_registry<'a>(
         host_env.zone(),
         bsl_bytecode::DynamicScope::ROOT,
     )?;
+    let dynamic_depth = std::cell::Cell::new(0);
     let mut host = HostIo {
         stdout: &mut std::io::stdout(),
         stderr: &mut std::io::stderr(),
         env: Some(host_env),
         dynamic: Some(dynamic),
+        dynamic_depth: &dynamic_depth,
     };
     drive_linked(&program, 0, stack, JitMode::Off, &linked, &mut host)
 }
@@ -419,6 +423,12 @@ struct HostIo<'a, 'd> {
     /// (`run_program`, `call_module_function`): тогда `Выполнить` и
     /// `Вычислить` дают ловимую динамическую ошибку, а не тихо ничего.
     dynamic: Option<&'a mut (dyn DynamicCompiler + 'd)>,
+    /// Текущая вложенность `Выполнить`/`Вычислить` ЭТОГО прогона. Раньше
+    /// была потоковой (`thread_local`) и делилась между сессиями одного
+    /// потока; теперь принадлежит прогону. Вложенный `drive`
+    /// переиспользует тот же `HostIo`, а обратный вызов функции модуля
+    /// строит новый с тем же счётчиком (см. `DynamicDepthGuard`).
+    dynamic_depth: &'a std::cell::Cell<usize>,
 }
 
 impl HostIo<'_, '_> {
@@ -1024,36 +1034,35 @@ const MAX_CALL_DEPTH: usize = 1000;
 // замер даёт только нижнюю границу (40 уровней обязаны работать).
 const MAX_DYNAMIC_DEPTH: usize = 64;
 
-thread_local! {
-    /// Текущая вложенность динамических фрагментов этого потока. Счётчик
-    /// потоковый, а не поле VM: вложенный `drive` создаётся заново на
-    /// каждый фрагмент, и общего состояния, через которое уровень можно
-    /// было бы протащить, у них нет.
-    static DYNAMIC_DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
-}
-
 /// Вход в очередной уровень динамического кода; выход — в `Drop`, чтобы
 /// счётчик не съезжал ни на одном из путей ошибки.
-struct DynamicDepthGuard;
+///
+/// Счётчик — не потоковый, а поле [`HostIo`] прогона: две сессии в одном
+/// потоке (например, вложенный `Engine` за обратным вызовом функции) не
+/// делят вложенность `Выполнить`. Вложенный `drive` переиспользует тот же
+/// `HostIo`, а обратный вызов функции модуля строит новый — но с тем же
+/// `dynamic_depth` родителя, — так что уровень протаскивается через
+/// прогон, а не через поток.
+struct DynamicDepthGuard<'a> {
+    depth: &'a std::cell::Cell<usize>,
+}
 
-impl DynamicDepthGuard {
-    fn enter() -> Result<Self, RtError> {
-        DYNAMIC_DEPTH.with(|d| {
-            if d.get() >= MAX_DYNAMIC_DEPTH {
-                Err(RtError::StackOverflow {
-                    what: "слишком глубокая вложенность Выполнить/Вычислить",
-                })
-            } else {
-                d.set(d.get() + 1);
-                Ok(DynamicDepthGuard)
-            }
-        })
+impl<'a> DynamicDepthGuard<'a> {
+    fn enter(depth: &'a std::cell::Cell<usize>) -> Result<Self, RtError> {
+        if depth.get() >= MAX_DYNAMIC_DEPTH {
+            Err(RtError::StackOverflow {
+                what: "слишком глубокая вложенность Выполнить/Вычислить",
+            })
+        } else {
+            depth.set(depth.get() + 1);
+            Ok(DynamicDepthGuard { depth })
+        }
     }
 }
 
-impl Drop for DynamicDepthGuard {
+impl Drop for DynamicDepthGuard<'_> {
     fn drop(&mut self) {
-        DYNAMIC_DEPTH.with(|d| d.set(d.get() - 1));
+        self.depth.set(self.depth.get() - 1);
     }
 }
 
@@ -1077,11 +1086,13 @@ fn drive_with(
     let mut stdout = std::io::stdout().lock();
     let mut stderr = std::io::stderr().lock();
     let mut dynamic = tests::TestDynamic::bare();
+    let dynamic_depth = std::cell::Cell::new(0);
     let mut host = HostIo {
         stdout: &mut stdout,
         stderr: &mut stderr,
         env: Some(&mut env),
         dynamic: Some(&mut dynamic),
+        dynamic_depth: &dynamic_depth,
     };
     drive_linked(program, func_id, stack, jit_mode, &linked, &mut host)
 }
@@ -2370,6 +2381,7 @@ fn step_cold(
                 stderr: host_stderr,
                 env: host_env,
                 dynamic: host_dynamic,
+                dynamic_depth: host_dynamic_depth,
             } = host;
             let mut function_caller =
                 |name: &str,
@@ -2384,6 +2396,9 @@ fn step_cold(
                         // содержать `Выполнить`: компилятор фрагментов едет
                         // в обратный вызов вместе с потоками и окружением.
                         dynamic: host_dynamic.as_deref_mut(),
+                        // Тот же счётчик вложенности, что у прогона: обратный
+                        // вызов продолжает ту же сессию, а не открывает свою.
+                        dynamic_depth: host_dynamic_depth,
                     };
                     call_module_function_with_host(
                         program,
@@ -2609,7 +2624,7 @@ fn run_dynamic_snippet(
     // Предел вложенности — на входе, до обращения к хосту: компиляция
     // фрагмента рекурсивна так же, как его исполнение, и тоже расходует
     // стек Rust.
-    let _depth = DynamicDepthGuard::enter()?;
+    let _depth = DynamicDepthGuard::enter(host.dynamic_depth)?;
 
     // Что фрагмент знает о функциях модуля, в порядке `chunks[1..]`: имя,
     // арность, вид объявления и режимы параметров. Всё заимствовано у
@@ -2847,11 +2862,13 @@ pub fn call_module_function(
     let linked = link_components(program, None, env.zone(), bsl_bytecode::DynamicScope::ROOT)?;
     let mut stdout = std::io::stdout().lock();
     let mut stderr = std::io::stderr().lock();
+    let dynamic_depth = std::cell::Cell::new(0);
     let mut host = HostIo {
         stdout: &mut stdout,
         stderr: &mut stderr,
         env: Some(&mut env),
         dynamic: None,
+        dynamic_depth: &dynamic_depth,
     };
     call_module_function_with_host(program, stack, name, args, &linked, &mut host)
 }
@@ -2881,11 +2898,13 @@ pub fn call_module_function_with_registry_and_io<'a>(
         host_env.zone(),
         bsl_bytecode::DynamicScope::ROOT,
     )?;
+    let dynamic_depth = std::cell::Cell::new(0);
     let mut host = HostIo {
         stdout,
         stderr,
         env: Some(host_env),
         dynamic: Some(dynamic),
+        dynamic_depth: &dynamic_depth,
     };
     call_module_function_with_host(program, stack, name, args, &linked, &mut host)
 }
@@ -2898,7 +2917,7 @@ fn call_module_function_with_host(
     linked: &LinkedComponents<'_>,
     host: &mut HostIo<'_, '_>,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
-    let _depth = DynamicDepthGuard::enter()?;
+    let _depth = DynamicDepthGuard::enter(host.dynamic_depth)?;
 
     let upper = name.to_uppercase();
     let index = program

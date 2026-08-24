@@ -3683,11 +3683,13 @@ fn call_module_function_with_dynamic_eval_inside() {
     let mut stdout = std::io::stdout().lock();
     let mut stderr = std::io::stderr().lock();
     let mut dynamic = TestDynamic::bare();
+    let dynamic_depth = std::cell::Cell::new(0);
     let mut host = HostIo {
         stdout: &mut stdout,
         stderr: &mut stderr,
         env: Some(&mut env),
         dynamic: Some(&mut dynamic),
+        dynamic_depth: &dynamic_depth,
     };
     let (value, params) = call_module_function_with_host(
         &program,
@@ -3865,4 +3867,25 @@ fn json_callback_raise_propagates_to_the_caller() {
          КонецПопытки;\n",
     );
     assert_eq!(v, BslValue::Str(bsl_rt::BslString::from_str("поймано")));
+}
+
+/// Счётчик вложенности `Выполнить`/`Вычислить` принадлежит ПРОГОНУ, а не
+/// потоку (шаг 16 плана abi-refactor-f). Раньше он был `thread_local` и
+/// делился между сессиями одного потока: набранная одной сессией глубина
+/// урезала бы вложенность у другой (например, у вложенного `Engine` за
+/// обратным вызовом). Теперь у каждого `HostIo` свой `Cell`, и полностью
+/// занятый счётчик одной сессии не мешает другой.
+#[test]
+fn two_sessions_do_not_share_dynamic_nesting_depth() {
+    let first = std::cell::Cell::new(0);
+    let second = std::cell::Cell::new(0);
+
+    let mut held = Vec::new();
+    for _ in 0..MAX_DYNAMIC_DEPTH {
+        held.push(DynamicDepthGuard::enter(&first).expect("в пределах лимита"));
+    }
+    // Первая сессия заполнена — следующий уровень в ней отвергается.
+    assert!(DynamicDepthGuard::enter(&first).is_err());
+    // Вторая сессия того же потока не затронута.
+    assert!(DynamicDepthGuard::enter(&second).is_ok());
 }
