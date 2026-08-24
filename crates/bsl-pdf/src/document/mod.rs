@@ -10,8 +10,8 @@ use std::rc::Rc;
 
 use crate::writer::{PdfValue, inflate_with_limit, write_value, zlib_compress};
 use bsl_rt::{
-    BslNumber, BslString, BslValue, CallContext, EnumValue, MethodCode, MethodDescriptor,
-    ObjectProtocol, PropertyCode, PropertyDescriptor, RtError, RtResult, TypeDescriptor,
+    BslNumber, BslString, BslValue, CallContext, EnumValue, MethodDescriptor, ObjectProtocol,
+    PropertyDescriptor, RtError, RtResult, TypeDescriptor,
 };
 
 // Модуль разложен по подсистемам, но остаётся одним пространством

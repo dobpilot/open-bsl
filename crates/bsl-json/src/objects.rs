@@ -16,8 +16,8 @@ use bsl_rt::RuntimeShapes;
 use crate::{parse::*, write::*};
 
 use bsl_rt::{
-    BslValue, CallContext, EnumValue, MethodCode, MethodDescriptor, ObjectProtocol, PropertyCode,
-    PropertyDescriptor, RtError, RtResult, TypeDescriptor,
+    BslValue, CallContext, EnumValue, MethodDescriptor, ObjectProtocol, PropertyDescriptor,
+    RtError, RtResult, TypeDescriptor,
 };
 
 #[derive(Debug, Default)]
@@ -650,13 +650,11 @@ fn reader_current_value(
 
 static READER_PROPERTIES: &[PropertyDescriptor] = &[
     PropertyDescriptor {
-        code: PropertyCode::new(1),
         names: &["ТипТекущегоЗначения", "CurrentValueType"],
         get: reader_current_value_type,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(2),
         names: &["ТекущееЗначение", "CurrentValue"],
         get: reader_current_value,
         set: None,
@@ -704,22 +702,18 @@ fn reader_skip(
 
 const READER_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor {
-        code: MethodCode::new(1),
         names: &["УстановитьСтроку", "SetString"],
         call: reader_set_string,
     },
     MethodDescriptor {
-        code: MethodCode::new(2),
         names: &["ОткрытьФайл", "OpenFile"],
         call: reader_open_file,
     },
     MethodDescriptor {
-        code: MethodCode::new(3),
         names: &["Прочитать", "Read"],
         call: reader_read,
     },
     MethodDescriptor {
-        code: MethodCode::new(4),
         names: &["Пропустить", "Skip"],
         call: reader_skip,
     },
@@ -843,47 +837,38 @@ fn writer_value(
 
 const WRITER_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor {
-        code: MethodCode::new(1),
         names: &["УстановитьСтроку", "SetString"],
         call: writer_set_string,
     },
     MethodDescriptor {
-        code: MethodCode::new(2),
         names: &["ОткрытьФайл", "OpenFile"],
         call: writer_open_file,
     },
     MethodDescriptor {
-        code: MethodCode::new(3),
         names: &["Закрыть", "Close"],
         call: writer_close,
     },
     MethodDescriptor {
-        code: MethodCode::new(4),
         names: &["ЗаписатьНачалоОбъекта", "WriteStartObject"],
         call: writer_start_object,
     },
     MethodDescriptor {
-        code: MethodCode::new(5),
         names: &["ЗаписатьКонецОбъекта", "WriteEndObject"],
         call: writer_end_object,
     },
     MethodDescriptor {
-        code: MethodCode::new(6),
         names: &["ЗаписатьНачалоМассива", "WriteStartArray"],
         call: writer_start_array,
     },
     MethodDescriptor {
-        code: MethodCode::new(7),
         names: &["ЗаписатьКонецМассива", "WriteEndArray"],
         call: writer_end_array,
     },
     MethodDescriptor {
-        code: MethodCode::new(8),
         names: &["ЗаписатьИмяСвойства", "WritePropertyName"],
         call: writer_property_name,
     },
     MethodDescriptor {
-        code: MethodCode::new(9),
         names: &["ЗаписатьЗначение", "WriteValue"],
         call: writer_value,
     },
@@ -925,7 +910,6 @@ fn writer_set_check_structure(
 }
 
 static WRITER_PROPERTIES: &[PropertyDescriptor] = &[PropertyDescriptor {
-    code: PropertyCode::new(1),
     names: &["ПроверятьСтруктуру", "CheckStructure"],
     get: writer_get_check_structure,
     set: Some(writer_set_check_structure),
@@ -985,19 +969,16 @@ fn settings_set_arrays_as_objects(
 
 static SERIALIZER_SETTINGS_PROPERTIES: &[PropertyDescriptor] = &[
     PropertyDescriptor {
-        code: PropertyCode::new(1),
         names: &["ФорматСериализацииДаты", "DateSerializationFormat"],
         get: settings_get_date_format,
         set: Some(settings_set_date_format),
     },
     PropertyDescriptor {
-        code: PropertyCode::new(2),
         names: &["ВариантЗаписиДаты", "DateWritingVariant"],
         get: settings_get_date_variant,
         set: Some(settings_set_date_variant),
     },
     PropertyDescriptor {
-        code: PropertyCode::new(3),
         names: &[
             "СериализовыватьМассивыКакОбъекты",
             "SerializeArraysAsObjects",

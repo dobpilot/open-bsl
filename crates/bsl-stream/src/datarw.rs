@@ -116,9 +116,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use bsl_rt::{
-    BslNumber, BslString, BslValue, ByteStreamProtocol, CallContext, EnumValue, MethodCode,
-    MethodDescriptor, ObjectProtocol, PropertyCode, PropertyDescriptor, RtError, RtResult,
-    TypeDescriptor, encoding::Encoding,
+    BslNumber, BslString, BslValue, ByteStreamProtocol, CallContext, EnumValue, MethodDescriptor,
+    ObjectProtocol, PropertyDescriptor, RtError, RtResult, TypeDescriptor, encoding::Encoding,
 };
 
 /// Порядок байтов многобайтового целого.
@@ -526,87 +525,70 @@ fn rw_write_line(
 
 const DATA_RW_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor {
-        code: MethodCode::new(1),
         names: &["Прочитать", "Read"],
         call: rw_read,
     },
     MethodDescriptor {
-        code: MethodCode::new(2),
         names: &["Записать", "Write"],
         call: rw_write,
     },
     MethodDescriptor {
-        code: MethodCode::new(3),
         names: &["Закрыть", "Close"],
         call: rw_close,
     },
     MethodDescriptor {
-        code: MethodCode::new(4),
         names: &["Пропустить", "Skip"],
         call: rw_skip,
     },
     MethodDescriptor {
-        code: MethodCode::new(5),
         names: &["ПрочитатьЦелое16", "ReadInt16"],
         call: rw_read_int16,
     },
     MethodDescriptor {
-        code: MethodCode::new(6),
         names: &["ПрочитатьЦелое32", "ReadInt32"],
         call: rw_read_int32,
     },
     MethodDescriptor {
-        code: MethodCode::new(7),
         names: &["ПрочитатьЦелое64", "ReadInt64"],
         call: rw_read_int64,
     },
     MethodDescriptor {
-        code: MethodCode::new(8),
         names: &["ЗаписатьЦелое16", "WriteInt16"],
         call: rw_write_int16,
     },
     MethodDescriptor {
-        code: MethodCode::new(9),
         names: &["ЗаписатьЦелое32", "WriteInt32"],
         call: rw_write_int32,
     },
     MethodDescriptor {
-        code: MethodCode::new(10),
         names: &["ЗаписатьЦелое64", "WriteInt64"],
         call: rw_write_int64,
     },
     MethodDescriptor {
-        code: MethodCode::new(11),
         names: &["ПрочитатьБайт", "ReadByte"],
         call: rw_read_byte,
     },
     MethodDescriptor {
-        code: MethodCode::new(12),
         names: &["ПрочитатьВБуферДвоичныхДанных", "ReadIntoBinaryDataBuffer"],
         call: rw_read_into_buffer,
     },
     MethodDescriptor {
-        code: MethodCode::new(13),
         names: &["ПрочитатьСимволы", "ReadChars"],
         call: rw_read_chars,
     },
     MethodDescriptor {
-        code: MethodCode::new(14),
         names: &["ПрочитатьСтроку", "ReadLine"],
         call: rw_read_line,
     },
     MethodDescriptor {
-        code: MethodCode::new(15),
         names: &["ЗаписатьБайт", "WriteByte"],
         call: rw_write_byte,
     },
     MethodDescriptor {
-        code: MethodCode::new(16),
         names: &["ЗаписатьСимволы", "WriteChars"],
         call: rw_write_chars,
     },
     MethodDescriptor {
-        code: MethodCode::new(17),
         names: &["ЗаписатьСтроку", "WriteLine"],
         call: rw_write_line,
     },
@@ -675,19 +657,16 @@ fn rw_set_separator(
 
 static DATA_RW_PROPERTIES: &[PropertyDescriptor] = &[
     PropertyDescriptor {
-        code: PropertyCode::new(1),
         names: &["ПорядокБайтов", "ByteOrder"],
         get: rw_get_byte_order,
         set: Some(rw_set_byte_order),
     },
     PropertyDescriptor {
-        code: PropertyCode::new(2),
         names: &["КодировкаТекста", "TextEncoding"],
         get: rw_get_encoding,
         set: Some(rw_set_encoding),
     },
     PropertyDescriptor {
-        code: PropertyCode::new(3),
         // ИЗМЕРЕНО: английское имя именно `LineSplitter`; на
         // `LineSeparator` платформа отвечает «Поле объекта не обнаружено».
         names: &["РазделительСтрок", "LineSplitter"],
@@ -705,7 +684,6 @@ fn read_result_size(
 }
 
 static DATA_READ_RESULT_PROPERTIES: &[PropertyDescriptor] = &[PropertyDescriptor {
-    code: PropertyCode::new(1),
     names: &["Размер", "Size"],
     get: read_result_size,
     set: None,
@@ -743,12 +721,10 @@ fn read_result_buffer(
 
 const DATA_READ_RESULT_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor {
-        code: MethodCode::new(1),
         names: &["ПолучитьДвоичныеДанные", "GetBinaryData"],
         call: read_result_binary_data,
     },
     MethodDescriptor {
-        code: MethodCode::new(2),
         names: &["ПолучитьБуферДвоичныхДанных", "GetBinaryDataBuffer"],
         call: read_result_buffer,
     },
@@ -1693,17 +1669,6 @@ fn result_binary_buffer(v: &dyn ObjectProtocol) -> RtResult<BslValue> {
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn method_codes_are_static_and_dense() {
-        for table in [super::DATA_RW_METHODS, super::DATA_READ_RESULT_METHODS] {
-            let codes = table
-                .iter()
-                .map(|method| method.code.get())
-                .collect::<Vec<_>>();
-            assert_eq!(codes, (1..=table.len() as u16).collect::<Vec<_>>());
-        }
-    }
-
     use super::*;
 
     /// Получатель за значением: обработчики и хелперы принимают объект.

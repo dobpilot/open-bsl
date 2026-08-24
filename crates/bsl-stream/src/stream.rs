@@ -64,8 +64,8 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::rc::Rc;
 
 use bsl_rt::{
-    BslNumber, BslValue, ByteStreamProtocol, CallContext, EnumValue, MethodCode, MethodDescriptor,
-    ObjectProtocol, PropertyCode, PropertyDescriptor, RtError, RtResult, TypeDescriptor,
+    BslNumber, BslValue, ByteStreamProtocol, CallContext, EnumValue, MethodDescriptor,
+    ObjectProtocol, PropertyDescriptor, RtError, RtResult, TypeDescriptor,
 };
 
 /// Режим открытия файла — член `РежимОткрытияФайла`.
@@ -466,32 +466,26 @@ fn stream_seek(
 
 const STREAM_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor {
-        code: MethodCode::new(1),
         names: &["Записать", "Write"],
         call: stream_write,
     },
     MethodDescriptor {
-        code: MethodCode::new(2),
         names: &["Прочитать", "Read"],
         call: stream_read,
     },
     MethodDescriptor {
-        code: MethodCode::new(3),
         names: &["Закрыть", "Close"],
         call: stream_close,
     },
     MethodDescriptor {
-        code: MethodCode::new(4),
         names: &["Размер", "Size"],
         call: stream_size,
     },
     MethodDescriptor {
-        code: MethodCode::new(5),
         names: &["ТекущаяПозиция", "CurrentPosition"],
         call: stream_current_position,
     },
     MethodDescriptor {
-        code: MethodCode::new(6),
         names: &["Перейти", "Seek"],
         call: stream_seek,
     },
@@ -957,27 +951,22 @@ fn manager_method_create(
 
 const FILE_STREAMS_MANAGER_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor {
-        code: MethodCode::new(1),
         names: &["Открыть", "Open"],
         call: manager_method_open,
     },
     MethodDescriptor {
-        code: MethodCode::new(2),
         names: &["ОткрытьДляЧтения", "OpenForRead"],
         call: manager_method_open_for_read,
     },
     MethodDescriptor {
-        code: MethodCode::new(3),
         names: &["ОткрытьДляЗаписи", "OpenForWrite"],
         call: manager_method_open_for_write,
     },
     MethodDescriptor {
-        code: MethodCode::new(4),
         names: &["ОткрытьДляДописывания", "OpenForAppend"],
         call: manager_method_open_for_append,
     },
     MethodDescriptor {
-        code: MethodCode::new(5),
         names: &["Создать", "Create"],
         call: manager_method_create,
     },
@@ -1021,19 +1010,16 @@ fn stream_can_seek(
 
 static STREAM_PROPERTIES: &[PropertyDescriptor] = &[
     PropertyDescriptor {
-        code: PropertyCode::new(1),
         names: &["ДоступнаЗапись", "CanWrite"],
         get: stream_can_write,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(2),
         names: &["ДоступноЧтение", "CanRead"],
         get: stream_can_read,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(3),
         names: &["ДоступноИзменениеПозиции", "CanSeek"],
         get: stream_can_seek,
         set: None,
@@ -1288,17 +1274,6 @@ mod tests {
             MEMORY_STREAM_TYPE.name
         );
     }
-    #[test]
-    fn method_codes_are_static_and_dense() {
-        for table in [super::STREAM_METHODS, super::FILE_STREAMS_MANAGER_METHODS] {
-            let codes = table
-                .iter()
-                .map(|method| method.code.get())
-                .collect::<Vec<_>>();
-            assert_eq!(codes, (1..=table.len() as u16).collect::<Vec<_>>());
-        }
-    }
-
     use super::*;
 
     /// Поток за значением: обработчики и хелперы принимают объект.

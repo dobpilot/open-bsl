@@ -14,18 +14,6 @@ fn test_zone() -> std::rc::Rc<dyn bsl_rt::TimeZone> {
     std::rc::Rc::new(bsl_rt::FixedTimeZone::new(3 * 3600).expect("допустимое смещение"))
 }
 
-#[test]
-fn method_codes_are_static_and_dense() {
-    let codes = objects::XDTO_METHODS
-        .iter()
-        .map(|method| method.code.get())
-        .collect::<Vec<_>>();
-    assert_eq!(
-        codes,
-        (1..=objects::XDTO_METHODS.len() as u16).collect::<Vec<_>>()
-    );
-}
-
 /// Модель типов из текста XSD — тем же путём, что и в бою: дерево
 /// строит `dom`, схему — `xsd`, а типы — этот модуль.
 fn model(text: &str) -> Rc<XdtoModel> {

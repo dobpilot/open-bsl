@@ -179,52 +179,42 @@ fn document_end_row_group(
 
 static DOCUMENT_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor {
-        code: MethodCode::new(1),
         names: &["Область", "Area"],
         call: document_region,
     },
     MethodDescriptor {
-        code: MethodCode::new(2),
         names: &["Объединить", "Merge"],
         call: document_merge,
     },
     MethodDescriptor {
-        code: MethodCode::new(3),
         names: &["Разъединить", "Unmerge"],
         call: document_unmerge,
     },
     MethodDescriptor {
-        code: MethodCode::new(4),
         names: &["Записать", "Write"],
         call: document_write,
     },
     MethodDescriptor {
-        code: MethodCode::new(5),
         names: &["Прочитать", "Read"],
         call: document_read,
     },
     MethodDescriptor {
-        code: MethodCode::new(6),
         names: &["Вывести", "Output"],
         call: document_output,
     },
     MethodDescriptor {
-        code: MethodCode::new(7),
         names: &["ПолучитьОбласть", "GetArea"],
         call: document_get_area,
     },
     MethodDescriptor {
-        code: MethodCode::new(8),
         names: &["Очистить", "Clear"],
         call: document_clear,
     },
     MethodDescriptor {
-        code: MethodCode::new(9),
         names: &["НачатьГруппуСтрок", "StartRowGroup"],
         call: document_begin_row_group,
     },
     MethodDescriptor {
-        code: MethodCode::new(10),
         names: &["ЗакончитьГруппуСтрок", "EndRowGroup"],
         call: document_end_row_group,
     },
@@ -256,17 +246,14 @@ fn area_unmerge(
 
 static AREA_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor {
-        code: MethodCode::new(1),
         names: &["Область", "Area"],
         call: area_region,
     },
     MethodDescriptor {
-        code: MethodCode::new(2),
         names: &["Объединить", "Merge"],
         call: area_merge,
     },
     MethodDescriptor {
-        code: MethodCode::new(3),
         names: &["Разъединить", "Unmerge"],
         call: area_unmerge,
     },
@@ -411,12 +398,10 @@ fn drawings_method_count(
 
 static DRAWINGS_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor {
-        code: MethodCode::new(1),
         names: &["Добавить", "Add"],
         call: drawings_method_add,
     },
     MethodDescriptor {
-        code: MethodCode::new(2),
         names: &["Количество", "Count"],
         call: drawings_method_count,
     },

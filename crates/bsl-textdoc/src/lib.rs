@@ -38,8 +38,8 @@ use std::rc::Rc;
 
 use bsl_rt::{
     Arity, BslString, BslValue, CallContext, ConstructorCode, ConstructorDescriptor, EnumValue,
-    LibraryDescriptor, MethodCode, MethodDescriptor, ObjectProtocol, PropertyCode,
-    PropertyDescriptor, RtError, RtResult, TypeDescriptor, folded_eq,
+    LibraryDescriptor, MethodDescriptor, ObjectProtocol, PropertyDescriptor, RtError, RtResult,
+    TypeDescriptor, folded_eq,
 };
 
 fn bad(what: impl Into<String>) -> RtError {
@@ -570,7 +570,6 @@ fn document_parameters(
 /// Единственное свойство документа — коллекция параметров макета, только
 /// на чтение.
 static DOCUMENT_PROPERTIES: &[PropertyDescriptor] = &[PropertyDescriptor {
-    code: PropertyCode::new(1),
     names: &["Параметры", "Parameters"],
     get: document_parameters,
     set: None,
@@ -720,67 +719,54 @@ fn document_output(
 
 static DOCUMENT_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor {
-        code: MethodCode::new(1),
         names: &["УстановитьТекст", "SetText"],
         call: document_set_text,
     },
     MethodDescriptor {
-        code: MethodCode::new(2),
         names: &["ПолучитьТекст", "GetText"],
         call: document_get_text,
     },
     MethodDescriptor {
-        code: MethodCode::new(3),
         names: &["КоличествоСтрок", "LineCount"],
         call: document_line_count,
     },
     MethodDescriptor {
-        code: MethodCode::new(4),
         names: &["ПолучитьСтроку", "GetLine"],
         call: document_get_line,
     },
     MethodDescriptor {
-        code: MethodCode::new(5),
         names: &["ДобавитьСтроку", "AddLine"],
         call: document_add_line,
     },
     MethodDescriptor {
-        code: MethodCode::new(6),
         names: &["ВставитьСтроку", "InsertLine"],
         call: document_insert_line,
     },
     MethodDescriptor {
-        code: MethodCode::new(7),
         names: &["ЗаменитьСтроку", "ReplaceLine"],
         call: document_replace_line,
     },
     MethodDescriptor {
-        code: MethodCode::new(8),
         names: &["УдалитьСтроку", "DeleteLine"],
         call: document_delete_line,
     },
     MethodDescriptor {
-        code: MethodCode::new(9),
         names: &["Очистить", "Clear"],
         call: document_clear,
     },
     MethodDescriptor {
-        code: MethodCode::new(10),
         names: &["Прочитать", "Read"],
         call: document_read,
     },
     MethodDescriptor {
-        code: MethodCode::new(11),
         names: &["Записать", "Write"],
         call: document_write,
     },
     MethodDescriptor {
-        code: MethodCode::new(12),
         names: &["ПолучитьОбласть", "GetArea"],
         call: document_get_area,
     },
     MethodDescriptor {
-        code: MethodCode::new(13),
         names: &["Вывести", "Output"],
         call: document_output,
     },

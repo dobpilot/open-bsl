@@ -13,8 +13,8 @@ use crate::core::{
     local_of, prefix_of,
 };
 use bsl_rt::{
-    BslNumber, BslString, BslValue, CallContext, EnumValue, MethodCode, MethodDescriptor,
-    ObjectProtocol, PropertyCode, PropertyDescriptor, RtError, RtResult, TypeDescriptor,
+    BslNumber, BslString, BslValue, CallContext, EnumValue, MethodDescriptor, ObjectProtocol,
+    PropertyDescriptor, RtError, RtResult, TypeDescriptor,
 };
 
 fn bad(what: impl Into<String>) -> RtError {
@@ -850,37 +850,31 @@ fn reader_namespace_uri(
 
 static READER_PROPERTIES: &[PropertyDescriptor] = &[
     PropertyDescriptor {
-        code: PropertyCode::new(1),
         names: &["ТипУзла", "NodeType"],
         get: reader_node_type,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(2),
         names: &["Имя", "Name"],
         get: reader_name,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(3),
         names: &["Значение", "Value"],
         get: reader_value,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(4),
         names: &["ЛокальноеИмя", "LocalName"],
         get: reader_local_name,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(5),
         names: &["Префикс", "Prefix"],
         get: reader_prefix,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(6),
         names: &["URIПространстваИмен", "NamespaceURI"],
         get: reader_namespace_uri,
         set: None,
@@ -984,52 +978,42 @@ fn reader_close(
 
 const READER_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor {
-        code: MethodCode::new(1),
         names: &["УстановитьСтроку", "SetString"],
         call: xml_set_string,
     },
     MethodDescriptor {
-        code: MethodCode::new(2),
         names: &["ОткрытьФайл", "OpenFile"],
         call: xml_open_file,
     },
     MethodDescriptor {
-        code: MethodCode::new(3),
         names: &["Прочитать", "Read"],
         call: reader_read,
     },
     MethodDescriptor {
-        code: MethodCode::new(4),
         names: &["Пропустить", "Skip"],
         call: reader_skip,
     },
     MethodDescriptor {
-        code: MethodCode::new(5),
         names: &["ПрочитатьАтрибут", "ReadAttribute"],
         call: reader_read_attribute,
     },
     MethodDescriptor {
-        code: MethodCode::new(6),
         names: &["КоличествоАтрибутов", "AttributeCount"],
         call: reader_attribute_count,
     },
     MethodDescriptor {
-        code: MethodCode::new(7),
         names: &["ИмяАтрибута", "AttributeName"],
         call: reader_attribute_name,
     },
     MethodDescriptor {
-        code: MethodCode::new(8),
         names: &["ЗначениеАтрибута", "AttributeValue"],
         call: reader_attribute_value,
     },
     MethodDescriptor {
-        code: MethodCode::new(9),
         names: &["ПерейтиКСодержимому", "MoveToContent"],
         call: reader_move_to_content,
     },
     MethodDescriptor {
-        code: MethodCode::new(10),
         names: &["Закрыть", "Close"],
         call: reader_close,
     },
@@ -1136,62 +1120,50 @@ fn writer_close(
 
 const WRITER_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor {
-        code: MethodCode::new(1),
         names: &["УстановитьСтроку", "SetString"],
         call: xml_set_string,
     },
     MethodDescriptor {
-        code: MethodCode::new(2),
         names: &["ОткрытьФайл", "OpenFile"],
         call: xml_open_file,
     },
     MethodDescriptor {
-        code: MethodCode::new(3),
         names: &["ЗаписатьОбъявлениеXML", "WriteXMLDeclaration"],
         call: writer_declaration,
     },
     MethodDescriptor {
-        code: MethodCode::new(4),
         names: &["ЗаписатьНачалоЭлемента", "WriteStartElement"],
         call: writer_start_element,
     },
     MethodDescriptor {
-        code: MethodCode::new(5),
         names: &["ЗаписатьКонецЭлемента", "WriteEndElement"],
         call: writer_end_element,
     },
     MethodDescriptor {
-        code: MethodCode::new(6),
         names: &["ЗаписатьАтрибут", "WriteAttribute"],
         call: writer_attribute,
     },
     MethodDescriptor {
-        code: MethodCode::new(7),
         names: &["ЗаписатьТекст", "WriteText"],
         call: writer_text,
     },
     MethodDescriptor {
-        code: MethodCode::new(8),
         names: &["ЗаписатьКомментарий", "WriteComment"],
         call: writer_comment,
     },
     MethodDescriptor {
-        code: MethodCode::new(9),
         names: &["ЗаписатьСекциюCDATA", "WriteCDATASection"],
         call: writer_cdata,
     },
     MethodDescriptor {
-        code: MethodCode::new(10),
         names: &["ЗаписатьИнструкциюОбработки", "WriteProcessingInstruction"],
         call: writer_processing_instruction,
     },
     MethodDescriptor {
-        code: MethodCode::new(11),
         names: &["ЗаписатьБезОбработки", "WriteRaw"],
         call: writer_raw,
     },
     MethodDescriptor {
-        code: MethodCode::new(12),
         names: &["Закрыть", "Close"],
         call: writer_close,
     },
@@ -1200,19 +1172,5 @@ const WRITER_METHODS: &[MethodDescriptor] = &[
 impl ObjectProtocol for XmlWriterSettingsObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         &SETTINGS_TYPE
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn method_codes_are_static_and_dense() {
-        for table in [super::READER_METHODS, super::WRITER_METHODS] {
-            let codes = table
-                .iter()
-                .map(|method| method.code.get())
-                .collect::<Vec<_>>();
-            assert_eq!(codes, (1..=table.len() as u16).collect::<Vec<_>>());
-        }
     }
 }

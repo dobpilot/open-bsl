@@ -125,8 +125,8 @@
 use std::collections::BTreeMap;
 
 use bsl_rt::{
-    BslNumber, BslString, BslValue, CallContext, MethodCode, MethodDescriptor, ObjectProtocol,
-    RtError, RtResult, TypeDescriptor, folded_eq,
+    BslNumber, BslString, BslValue, CallContext, MethodDescriptor, ObjectProtocol, RtError,
+    RtResult, TypeDescriptor, folded_eq,
 };
 use std::cell::RefCell;
 use std::rc::Rc;

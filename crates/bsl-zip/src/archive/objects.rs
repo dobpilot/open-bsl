@@ -30,13 +30,11 @@ fn reader_comment(receiver: &dyn ObjectProtocol, _c: &mut CallContext<'_>) -> Rt
 
 static READER_PROPERTIES: &[PropertyDescriptor] = &[
     PropertyDescriptor {
-        code: PropertyCode::new(1),
         names: &["Элементы", "Items"],
         get: reader_items,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(2),
         names: &["Комментарий", "Comment"],
         get: reader_comment,
         set: None,
@@ -83,22 +81,18 @@ fn reader_extract_all(
 
 static READER_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor {
-        code: MethodCode::new(1),
         names: &["Открыть", "Open"],
         call: reader_open,
     },
     MethodDescriptor {
-        code: MethodCode::new(2),
         names: &["Закрыть", "Close"],
         call: reader_close,
     },
     MethodDescriptor {
-        code: MethodCode::new(3),
         names: &["Извлечь", "Extract"],
         call: reader_extract,
     },
     MethodDescriptor {
-        code: MethodCode::new(4),
         names: &["ИзвлечьВсе", "ExtractAll"],
         call: reader_extract_all,
     },
@@ -200,27 +194,22 @@ fn entries_extract_all(
 
 static ENTRIES_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor {
-        code: MethodCode::new(1),
         names: &["Количество", "Count"],
         call: entries_count,
     },
     MethodDescriptor {
-        code: MethodCode::new(2),
         names: &["Получить", "Get"],
         call: entries_get,
     },
     MethodDescriptor {
-        code: MethodCode::new(3),
         names: &["Найти", "Find"],
         call: entries_find,
     },
     MethodDescriptor {
-        code: MethodCode::new(4),
         names: &["Извлечь", "Extract"],
         call: entries_extract,
     },
     MethodDescriptor {
-        code: MethodCode::new(5),
         names: &["ИзвлечьВсе", "ExtractAll"],
         call: entries_extract_all,
     },
@@ -296,12 +285,10 @@ fn entry_extract_all(
 
 static ENTRY_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor {
-        code: MethodCode::new(1),
         names: &["Извлечь", "Extract"],
         call: entry_extract,
     },
     MethodDescriptor {
-        code: MethodCode::new(2),
         names: &["ИзвлечьВсе", "ExtractAll"],
         call: entry_extract_all,
     },
@@ -389,22 +376,18 @@ fn writer_method_binary_data(
 
 static WRITER_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor {
-        code: MethodCode::new(1),
         names: &["Открыть", "Open"],
         call: writer_method_open,
     },
     MethodDescriptor {
-        code: MethodCode::new(2),
         names: &["Добавить", "Add"],
         call: writer_method_add,
     },
     MethodDescriptor {
-        code: MethodCode::new(3),
         names: &["Записать", "Write"],
         call: writer_method_write,
     },
     MethodDescriptor {
-        code: MethodCode::new(4),
         names: &["ПолучитьДвоичныеДанные", "GetBinaryData"],
         call: writer_method_binary_data,
     },

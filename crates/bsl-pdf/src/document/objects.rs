@@ -47,13 +47,11 @@ fn document_pages(receiver: &dyn ObjectProtocol, _c: &mut CallContext<'_>) -> Rt
 
 static DOCUMENT_PROPERTIES: &[PropertyDescriptor] = &[
     PropertyDescriptor {
-        code: PropertyCode::new(1),
         names: &["Вложения", "Attachments"],
         get: document_attachments,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(2),
         names: &["Страницы", "Pages"],
         get: document_pages,
         set: None,
@@ -80,12 +78,10 @@ fn document_write(
 
 static DOCUMENT_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor {
-        code: MethodCode::new(1),
         names: &["Прочитать", "Read"],
         call: document_read,
     },
     MethodDescriptor {
-        code: MethodCode::new(2),
         names: &["Записать", "Write"],
         call: document_write,
     },
@@ -151,17 +147,14 @@ fn pages_index_of(
 
 static PAGES_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor {
-        code: MethodCode::new(1),
         names: &["Количество", "Count"],
         call: pages_count,
     },
     MethodDescriptor {
-        code: MethodCode::new(2),
         names: &["Получить", "Get"],
         call: pages_get,
     },
     MethodDescriptor {
-        code: MethodCode::new(3),
         names: &["Индекс", "IndexOf"],
         call: pages_index_of,
     },
@@ -250,49 +243,41 @@ fn page_bottom_margin(
 
 static PAGE_PROPERTIES: &[PropertyDescriptor] = &[
     PropertyDescriptor {
-        code: PropertyCode::new(1),
         names: &["Номер", "Number"],
         get: page_number,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(2),
         names: &["Ширина", "Width"],
         get: page_width,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(3),
         names: &["Высота", "Height"],
         get: page_height,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(4),
         names: &["Ориентация", "Orientation"],
         get: page_orientation,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(5),
         names: &["ПолеСлева", "LeftMargin"],
         get: page_left_margin,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(6),
         names: &["ПолеСправа", "RightMargin"],
         get: page_right_margin,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(7),
         names: &["ПолеСверху", "TopMargin"],
         get: page_top_margin,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(8),
         names: &["ПолеСнизу", "BottomMargin"],
         get: page_bottom_margin,
         set: None,
@@ -400,37 +385,30 @@ fn attachments_index_of(
 
 static ATTACHMENTS_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor {
-        code: MethodCode::new(1),
         names: &["Количество", "Count"],
         call: attachments_count,
     },
     MethodDescriptor {
-        code: MethodCode::new(2),
         names: &["Получить", "Get"],
         call: attachments_get,
     },
     MethodDescriptor {
-        code: MethodCode::new(3),
         names: &["Найти", "Find"],
         call: attachments_find,
     },
     MethodDescriptor {
-        code: MethodCode::new(4),
         names: &["Добавить", "Add"],
         call: attachments_add,
     },
     MethodDescriptor {
-        code: MethodCode::new(5),
         names: &["Удалить", "Delete"],
         call: attachments_delete,
     },
     MethodDescriptor {
-        code: MethodCode::new(6),
         names: &["Очистить", "Clear"],
         call: attachments_clear,
     },
     MethodDescriptor {
-        code: MethodCode::new(7),
         names: &["Индекс", "IndexOf"],
         call: attachments_index_of,
     },
@@ -495,25 +473,21 @@ attachment_property_pair!(attachment_get_relation, attachment_set_relation, "Т�
 
 static ATTACHMENT_PROPERTIES: &[PropertyDescriptor] = &[
     PropertyDescriptor {
-        code: PropertyCode::new(1),
         names: &["ИмяФайла", "FileName"],
         get: attachment_get_file_name,
         set: Some(attachment_set_file_name),
     },
     PropertyDescriptor {
-        code: PropertyCode::new(2),
         names: &["ТипСодержимого", "MIMEType"],
         get: attachment_get_mime,
         set: Some(attachment_set_mime),
     },
     PropertyDescriptor {
-        code: PropertyCode::new(3),
         names: &["Содержимое", "Content"],
         get: attachment_get_content,
         set: Some(attachment_set_content),
     },
     PropertyDescriptor {
-        code: PropertyCode::new(4),
         names: &["ТипСвязи", "RelationshipType"],
         get: attachment_get_relation,
         set: Some(attachment_set_relation),

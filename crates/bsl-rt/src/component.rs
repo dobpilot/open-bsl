@@ -365,20 +365,6 @@ pub struct ExecutionParts<'ctx, 'a> {
 /// Единый ABI статически зарегистрированной функции или конструктора.
 pub type ComponentCall = for<'a> fn(&mut CallContext<'a>, &[BslValue]) -> RtResult<BslValue>;
 
-/// Код метода внутри одного типа компонента.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct MethodCode(u16);
-
-impl MethodCode {
-    pub const fn new(code: u16) -> Self {
-        Self(code)
-    }
-
-    pub const fn get(self) -> u16 {
-        self.0
-    }
-}
-
 /// Вызов метода объекта компонента. Получатель — сам объект за
 /// трейт-объектом: VM отдаёт его без пересборки обёртки значения, а
 /// строковый вход по умолчанию приводит `self` через `as_dyn`.
@@ -402,23 +388,8 @@ pub type MethodCall =
 /// статическая проверка арности метода из ABI-C (план abi-refactor-f).
 #[derive(Debug, Clone, Copy)]
 pub struct MethodDescriptor {
-    pub code: MethodCode,
     pub names: &'static [&'static str],
     pub call: MethodCall,
-}
-
-/// Код свойства внутри одного типа компонента.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct PropertyCode(u16);
-
-impl PropertyCode {
-    pub const fn new(code: u16) -> Self {
-        Self(code)
-    }
-
-    pub const fn get(self) -> u16 {
-        self.0
-    }
 }
 
 /// Чтение свойства объекта компонента. Получатель — как у
@@ -436,7 +407,6 @@ pub type PropertySet =
 /// один раз на пару «тип, имя», дальше доступ идёт без строковых операций.
 #[derive(Debug, Clone, Copy)]
 pub struct PropertyDescriptor {
-    pub code: PropertyCode,
     pub names: &'static [&'static str],
     pub get: PropertyGet,
     /// `None` — свойство только для чтения: запись отвечает

@@ -144,8 +144,8 @@
 use bsl_number::BslNumber;
 use bsl_rt::{
     Arity, BslString, BslValue, CallContext, EnumValue, FunctionCode, FunctionDescriptor,
-    FunctionKind, LibraryDescriptor, ObjectProtocol, PropertyCode, PropertyDescriptor, RtError,
-    RtResult, TypeDescriptor,
+    FunctionKind, LibraryDescriptor, ObjectProtocol, PropertyDescriptor, RtError, RtResult,
+    TypeDescriptor,
 };
 use std::rc::Rc;
 
@@ -326,19 +326,16 @@ fn span_length(
 /// Все — только для чтения: платформа записи в них не знает.
 static SPAN_PROPERTIES: &[PropertyDescriptor] = &[
     PropertyDescriptor {
-        code: PropertyCode::new(1),
         names: &["Значение", "Value"],
         get: span_value,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(2),
         names: &["НачальнаяПозиция", "StartIndex"],
         get: span_start,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(3),
         names: &["Длина", "Length"],
         get: span_length,
         set: None,

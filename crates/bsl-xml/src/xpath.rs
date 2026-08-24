@@ -218,8 +218,8 @@ use std::rc::Rc;
 
 use crate::dom::{DomKind, DomNode, DomNodeObject};
 use bsl_rt::{
-    BslNumber, BslString, BslValue, CallContext, EnumValue, MethodCode, MethodDescriptor,
-    ObjectProtocol, PropertyCode, PropertyDescriptor, RtError, RtResult, TypeDescriptor, folded_eq,
+    BslNumber, BslString, BslValue, CallContext, EnumValue, MethodDescriptor, ObjectProtocol,
+    PropertyDescriptor, RtError, RtResult, TypeDescriptor, folded_eq,
 };
 
 fn bad(what: impl Into<String>) -> RtError {
@@ -2660,7 +2660,6 @@ fn resolver_lookup(
 }
 
 static RESOLVER_METHODS: &[MethodDescriptor] = &[MethodDescriptor {
-    code: MethodCode::new(1),
     names: &["НайтиURIПространстваИмен", "LookupNamespaceURI"],
     call: resolver_lookup,
 }];
@@ -2688,7 +2687,6 @@ fn expression_evaluate(
 }
 
 static EXPRESSION_METHODS: &[MethodDescriptor] = &[MethodDescriptor {
-    code: MethodCode::new(1),
     names: &["Вычислить", "Evaluate"],
     call: expression_evaluate,
 }];
@@ -2729,43 +2727,36 @@ result_property!(result_single_node, "SingleNodeValue");
 
 static RESULT_PROPERTIES: &[PropertyDescriptor] = &[
     PropertyDescriptor {
-        code: PropertyCode::new(1),
         names: &["ТипРезультата", "ResultType"],
         get: result_kind,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(2),
         names: &["ЧисловоеЗначение", "NumberValue"],
         get: result_number,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(3),
         names: &["СтроковоеЗначение", "StringValue"],
         get: result_string,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(4),
         names: &["БулевоЗначение", "BooleanValue"],
         get: result_boolean,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(5),
         names: &["РазмерСнимка", "SnapshotLength"],
         get: result_snapshot_length,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(6),
         names: &["НеверноеСостояниеИтератора", "InvalidIteratorState"],
         get: result_invalid_iterator,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(7),
         // Русского написания у этого члена НЕТ — измерено перебором.
         names: &["SingleNodeValue"],
         get: result_single_node,
@@ -2797,12 +2788,10 @@ fn result_snapshot_item(
 
 static RESULT_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor {
-        code: MethodCode::new(1),
         names: &["ПолучитьСледующий", "IterateNext"],
         call: result_next_node,
     },
     MethodDescriptor {
-        code: MethodCode::new(2),
         names: &["ЭлементСнимка", "SnapshotItem"],
         call: result_snapshot_item,
     },

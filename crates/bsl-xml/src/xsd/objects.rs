@@ -301,7 +301,6 @@ pub(crate) fn builder_create_schema(
 }
 
 pub(crate) static BUILDER_METHODS: &[MethodDescriptor] = &[MethodDescriptor {
-    code: MethodCode::new(1),
     names: &["СоздатьСхемуXML", "CreateXMLSchema"],
     call: builder_create_schema,
 }];
@@ -359,17 +358,14 @@ pub(crate) fn schema_set_method_count(
 
 pub(crate) static SCHEMA_SET_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor {
-        code: MethodCode::new(1),
         names: &["Добавить", "Add"],
         call: schema_set_method_add,
     },
     MethodDescriptor {
-        code: MethodCode::new(2),
         names: &["Получить", "Get"],
         call: schema_set_method_get,
     },
     MethodDescriptor {
-        code: MethodCode::new(3),
         names: &["Количество", "Count"],
         call: schema_set_method_count,
     },
@@ -455,12 +451,10 @@ pub(crate) fn schema_list_method_count(
 
 pub(crate) static SCHEMA_LIST_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor {
-        code: MethodCode::new(1),
         names: &["Получить", "Get"],
         call: schema_list_method_get,
     },
     MethodDescriptor {
-        code: MethodCode::new(2),
         names: &["Количество", "Count"],
         call: schema_list_method_count,
     },
@@ -502,13 +496,11 @@ pub(crate) fn expanded_namespace_uri(
 
 pub(crate) static EXPANDED_NAME_PROPERTIES: &[PropertyDescriptor] = &[
     PropertyDescriptor {
-        code: PropertyCode::new(1),
         names: &["ЛокальноеИмя", "LocalName"],
         get: expanded_local_name,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(2),
         names: &["URIПространстваИмен", "NamespaceURI"],
         get: expanded_namespace_uri,
         set: None,
@@ -549,7 +541,6 @@ pub(crate) fn name_list_method_count(
 }
 
 pub(crate) static NAME_LIST_METHODS: &[MethodDescriptor] = &[MethodDescriptor {
-    code: MethodCode::new(1),
     names: &["Количество", "Count"],
     call: name_list_method_count,
 }];

@@ -588,8 +588,8 @@ use std::rc::{Rc, Weak};
 
 use crate::xsd::{FacetKind, XName, XSD_NS, XsKind, XsSchemaData};
 use bsl_rt::{
-    BslNumber, BslObject, BslString, BslValue, CallContext, EnumValue, MethodCode,
-    MethodDescriptor, ObjectDowncast, ObjectProtocol, RtError, RtResult, TypeDescriptor, TypeId,
+    BslNumber, BslObject, BslString, BslValue, CallContext, EnumValue, MethodDescriptor,
+    ObjectDowncast, ObjectProtocol, RtError, RtResult, TypeDescriptor, TypeId,
 };
 
 mod build;

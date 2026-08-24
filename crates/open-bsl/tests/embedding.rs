@@ -644,8 +644,8 @@ fn a_phase_error_prints_itself_and_is_reachable_through_source() {
 mod host_zone {
     use super::*;
     use open_bsl::{
-        ConstructorCode, ConstructorDescriptor, FixedTimeZone, MethodCode, MethodDescriptor,
-        ObjectProtocol, PropertyCode, PropertyDescriptor, TypeDescriptor,
+        ConstructorCode, ConstructorDescriptor, FixedTimeZone, MethodDescriptor, ObjectProtocol,
+        PropertyDescriptor, TypeDescriptor,
     };
 
     #[derive(Debug)]
@@ -680,12 +680,10 @@ mod host_zone {
 
     const WATCH_METHODS: &[MethodDescriptor] = &[
         MethodDescriptor {
-            code: MethodCode::new(1),
             names: &["Смещение", "Offset"],
             call: watch_offset,
         },
         MethodDescriptor {
-            code: MethodCode::new(2),
             names: &["Отметить", "Report"],
             call: watch_report,
         },
@@ -713,13 +711,11 @@ mod host_zone {
 
     const WATCH_PROPERTIES: &[PropertyDescriptor] = &[
         PropertyDescriptor {
-            code: PropertyCode::new(1),
             names: &["Смещение", "Offset"],
             get: watch_offset_property,
             set: None,
         },
         PropertyDescriptor {
-            code: PropertyCode::new(2),
             names: &["Метка", "Mark"],
             get: watch_offset_property,
             set: Some(watch_set_mark),

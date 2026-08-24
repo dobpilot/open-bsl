@@ -233,8 +233,8 @@ use crate::core::{CDATA_NODE_NAME, COMMENT_NODE_NAME, DOCUMENT_NODE_NAME, TEXT_N
 use crate::core::{XmlEvent, XmlParser, XmlWriter, local_of, prefix_of};
 use crate::xml::XmlReaderState;
 use bsl_rt::{
-    BslString, BslValue, CallContext, EnumValue, MethodCode, MethodDescriptor, ObjectProtocol,
-    PropertyCode, PropertyDescriptor, RtError, RtResult, TypeDescriptor, folded_eq,
+    BslString, BslValue, CallContext, EnumValue, MethodDescriptor, ObjectProtocol,
+    PropertyDescriptor, RtError, RtResult, TypeDescriptor, folded_eq,
 };
 
 // Модуль разложен по подсистемам, но остаётся одним пространством имён:

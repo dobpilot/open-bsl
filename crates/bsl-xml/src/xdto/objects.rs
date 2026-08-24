@@ -335,117 +335,94 @@ pub(crate) fn xdto_can_read_xml(
 
 pub(crate) const XDTO_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor {
-        code: MethodCode::new(1),
         names: &["Тип", "Type"],
         call: xdto_type,
     },
     MethodDescriptor {
-        code: MethodCode::new(2),
         names: &["Создать", "Create"],
         call: xdto_create,
     },
     MethodDescriptor {
-        code: MethodCode::new(3),
         names: &["ПрочитатьXML", "ReadXML"],
         call: xdto_read_xml,
     },
     MethodDescriptor {
-        code: MethodCode::new(4),
         names: &["ЗаписатьXML", "WriteXML"],
         call: xdto_write_xml,
     },
     MethodDescriptor {
-        code: MethodCode::new(5),
         names: &["Получить", "Get"],
         call: xdto_get,
     },
     MethodDescriptor {
-        code: MethodCode::new(6),
         names: &["Установить", "Set"],
         call: xdto_set,
     },
     MethodDescriptor {
-        code: MethodCode::new(7),
         names: &["Добавить", "Add"],
         call: xdto_add,
     },
     MethodDescriptor {
-        code: MethodCode::new(8),
         names: &["Вставить", "Insert"],
         call: xdto_insert,
     },
     MethodDescriptor {
-        code: MethodCode::new(9),
         names: &["Удалить", "Delete"],
         call: xdto_delete,
     },
     MethodDescriptor {
-        code: MethodCode::new(10),
         names: &["Очистить", "Clear"],
         call: xdto_clear,
     },
     MethodDescriptor {
-        code: MethodCode::new(11),
         names: &["Количество", "Count"],
         call: xdto_count,
     },
     MethodDescriptor {
-        code: MethodCode::new(12),
         names: &["ПолучитьСписок", "GetList"],
         call: xdto_get_list,
     },
     MethodDescriptor {
-        code: MethodCode::new(13),
         names: &["Установлено", "IsSet"],
         call: xdto_is_set,
     },
     MethodDescriptor {
-        code: MethodCode::new(14),
         names: &["Сбросить", "Unset"],
         call: xdto_unset,
     },
     MethodDescriptor {
-        code: MethodCode::new(15),
         names: &["Проверить", "Validate"],
         call: xdto_validate,
     },
     MethodDescriptor {
-        code: MethodCode::new(16),
         names: &["Свойства", "Properties"],
         call: xdto_properties,
     },
     MethodDescriptor {
-        code: MethodCode::new(17),
         names: &["Владелец", "Owner"],
         call: xdto_owner,
     },
     MethodDescriptor {
-        code: MethodCode::new(18),
         names: &["Последовательность", "Sequence"],
         call: xdto_sequence,
     },
     MethodDescriptor {
-        code: MethodCode::new(19),
         names: &["ПолучитьЗначение", "GetValue"],
         call: xdto_sequence_value,
     },
     MethodDescriptor {
-        code: MethodCode::new(20),
         names: &["ПолучитьСвойство", "GetProperty"],
         call: xdto_sequence_property,
     },
     MethodDescriptor {
-        code: MethodCode::new(21),
         names: &["XMLТип", "XMLType"],
         call: xdto_xml_type,
     },
     MethodDescriptor {
-        code: MethodCode::new(22),
         names: &["XMLТипЗнч", "XMLTypeOf"],
         call: xdto_xml_type_of,
     },
     MethodDescriptor {
-        code: MethodCode::new(23),
         names: &["ВозможностьЧтенияXML", "CanReadXML"],
         call: xdto_can_read_xml,
     },

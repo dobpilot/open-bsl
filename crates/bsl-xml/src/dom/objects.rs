@@ -178,7 +178,6 @@ pub(crate) fn builder_read(
 }
 
 pub(crate) static BUILDER_METHODS: &[MethodDescriptor] = &[MethodDescriptor {
-    code: MethodCode::new(1),
     names: &["Прочитать", "Read"],
     call: builder_read,
 }];
@@ -203,7 +202,6 @@ pub(crate) fn writer_write(
 }
 
 pub(crate) static WRITER_METHODS: &[MethodDescriptor] = &[MethodDescriptor {
-    code: MethodCode::new(1),
     names: &["Записать", "Write"],
     call: writer_write,
 }];
@@ -269,133 +267,111 @@ node_property!(node_get_22, "Цель");
 
 pub(crate) static NODE_PROPERTIES: &[PropertyDescriptor] = &[
     PropertyDescriptor {
-        code: PropertyCode::new(1),
         names: &["ИмяУзла", "NodeName"],
         get: node_get_1,
         set: Some(node_set_1),
     },
     PropertyDescriptor {
-        code: PropertyCode::new(2),
         names: &["ТипУзла", "NodeType"],
         get: node_get_2,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(3),
         names: &["ЗначениеУзла", "NodeValue"],
         get: node_get_3,
         set: Some(node_set_3),
     },
     PropertyDescriptor {
-        code: PropertyCode::new(4),
         names: &["ТекстовоеСодержимое", "TextContent"],
         get: node_get_4,
         set: Some(node_set_4),
     },
     PropertyDescriptor {
-        code: PropertyCode::new(5),
         names: &["ЛокальноеИмя", "LocalName"],
         get: node_get_5,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(6),
         names: &["Префикс", "Prefix"],
         get: node_get_6,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(7),
         names: &["URIПространстваИмен", "NamespaceURI"],
         get: node_get_7,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(8),
         names: &["РодительскийУзел", "ParentNode"],
         get: node_get_8,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(9),
         names: &["ДокументВладелец", "OwnerDocument"],
         get: node_get_9,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(10),
         names: &["ПервыйДочерний", "FirstChild"],
         get: node_get_10,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(11),
         names: &["ПоследнийДочерний", "LastChild"],
         get: node_get_11,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(12),
         names: &["СледующийСоседний", "NextSibling"],
         get: node_get_12,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(13),
         names: &["ПредыдущийСоседний", "PreviousSibling"],
         get: node_get_13,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(14),
         names: &["ДочерниеУзлы", "ChildNodes"],
         get: node_get_14,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(15),
         names: &["Атрибуты", "Attributes"],
         get: node_get_15,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(16),
         names: &["ЭлементДокумента", "DocumentElement"],
         get: node_get_16,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(17),
         names: &["ВерсияXML", "XmlVersion"],
         get: node_get_17,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(18),
         names: &["Имя", "Name"],
         get: node_get_18,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(19),
         names: &["Значение", "Value"],
         get: node_get_19,
         set: Some(node_set_19),
     },
     PropertyDescriptor {
-        code: PropertyCode::new(20),
         names: &["ЭлементВладелец", "OwnerElement"],
         get: node_get_20,
         set: None,
     },
     PropertyDescriptor {
-        code: PropertyCode::new(21),
         names: &["Данные", "Data"],
         get: node_get_21,
         set: Some(node_set_21),
     },
     PropertyDescriptor {
-        code: PropertyCode::new(22),
         names: &["Цель", "Target"],
         get: node_get_22,
         set: None,
@@ -620,122 +596,98 @@ pub(crate) fn node_method_24(
 
 pub(crate) static NODE_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor {
-        code: MethodCode::new(1),
         names: &["ЕстьДочерниеУзлы", "HasChildNodes"],
         call: node_method_1,
     },
     MethodDescriptor {
-        code: MethodCode::new(2),
         names: &["ЕстьАтрибуты", "HasAttributes"],
         call: node_method_2,
     },
     MethodDescriptor {
-        code: MethodCode::new(3),
         names: &["ПолучитьАтрибут", "GetAttribute"],
         call: node_method_3,
     },
     MethodDescriptor {
-        code: MethodCode::new(4),
         names: &["ЕстьАтрибут", "HasAttribute"],
         call: node_method_4,
     },
     MethodDescriptor {
-        code: MethodCode::new(5),
         names: &["ПолучитьУзелАтрибута", "GetAttributeNode"],
         call: node_method_5,
     },
     MethodDescriptor {
-        code: MethodCode::new(6),
         names: &["ПолучитьЭлементыПоИмени", "GetElementByTagName"],
         call: node_method_6,
     },
     MethodDescriptor {
-        code: MethodCode::new(7),
         names: &["ПолучитьЭлементПоИдентификатору", "GetElementById"],
         call: node_method_7,
     },
     MethodDescriptor {
-        code: MethodCode::new(8),
         names: &["СоздатьЭлемент", "CreateElement"],
         call: node_method_8,
     },
     MethodDescriptor {
-        code: MethodCode::new(9),
         names: &["СоздатьАтрибут", "CreateAttribute"],
         call: node_method_9,
     },
     MethodDescriptor {
-        code: MethodCode::new(10),
         names: &["СоздатьТекстовыйУзел", "CreateTextNode"],
         call: node_method_10,
     },
     MethodDescriptor {
-        code: MethodCode::new(11),
         names: &["СоздатьСекциюCDATA", "CreateCDATASection"],
         call: node_method_11,
     },
     MethodDescriptor {
-        code: MethodCode::new(12),
         names: &["СоздатьКомментарий", "CreateComment"],
         call: node_method_12,
     },
     MethodDescriptor {
-        code: MethodCode::new(13),
         names: &["СоздатьИнструкциюОбработки", "CreateProcessingInstruction"],
         call: node_method_13,
     },
     MethodDescriptor {
-        code: MethodCode::new(14),
         names: &["ДобавитьДочерний", "AppendChild"],
         call: node_method_14,
     },
     MethodDescriptor {
-        code: MethodCode::new(15),
         names: &["ВставитьПеред", "InsertBefore"],
         call: node_method_15,
     },
     MethodDescriptor {
-        code: MethodCode::new(16),
         names: &["УдалитьДочерний", "RemoveChild"],
         call: node_method_16,
     },
     MethodDescriptor {
-        code: MethodCode::new(17),
         names: &["ЗаменитьДочерний", "ReplaceChild"],
         call: node_method_17,
     },
     MethodDescriptor {
-        code: MethodCode::new(18),
         names: &["УстановитьАтрибут", "SetAttribute"],
         call: node_method_18,
     },
     MethodDescriptor {
-        code: MethodCode::new(19),
         names: &["УдалитьАтрибут", "RemoveAttribute"],
         call: node_method_19,
     },
     MethodDescriptor {
-        code: MethodCode::new(20),
         names: &["УстановитьУзелАтрибута", "SetAttributeNode"],
         call: node_method_20,
     },
     MethodDescriptor {
-        code: MethodCode::new(21),
         names: &["УдалитьУзелАтрибута", "RemoveAttributeNode"],
         call: node_method_21,
     },
     MethodDescriptor {
-        code: MethodCode::new(22),
         names: &["ВычислитьВыражениеXPath", "EvaluateXPathExpression"],
         call: node_method_22,
     },
     MethodDescriptor {
-        code: MethodCode::new(23),
         names: &["СоздатьВыражениеXPath", "CreateXPathExpression"],
         call: node_method_23,
     },
     MethodDescriptor {
-        code: MethodCode::new(24),
         names: &["СоздатьРазыменовательПИ", "CreateNSResolver"],
         call: node_method_24,
     },
@@ -788,12 +740,10 @@ pub(crate) fn list_get(
 
 pub(crate) static LIST_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor {
-        code: MethodCode::new(1),
         names: &["Количество", "Count"],
         call: list_count,
     },
     MethodDescriptor {
-        code: MethodCode::new(2),
         names: &["Получить", "Get"],
         call: list_get,
     },
