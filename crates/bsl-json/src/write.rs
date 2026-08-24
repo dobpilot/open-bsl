@@ -165,6 +165,25 @@ struct Frame {
     state: FrameState,
 }
 
+/// Куда уйдёт результат записи — ОДИН приёмник вместо параллельных
+/// `path`/`files`, где было представимо «строка, но с путём» и «файл, но без
+/// файловой системы». Файловый приёмник ВСЕГДА несёт и путь, и файловую
+/// систему сессии, поэтому недостижимая комбинация исчезает вместе с
+/// `expect` на неё.
+#[derive(Debug)]
+enum WriterSink {
+    /// `УстановитьСтроку`: `Закрыть()` отдаёт накопленный текст.
+    String,
+    /// `ОткрытьФайл`: `Закрыть()` пишет документ файловой системой сессии.
+    /// Оба поля берутся у объекта при `ОткрытьФайл` и хранятся, потому что
+    /// запись идёт в `Закрыть()`, который под JIT нативен и контекста уже не
+    /// несёт (ABI-G).
+    File {
+        path: std::path::PathBuf,
+        files: std::rc::Rc<dyn bsl_rt::FileSystem>,
+    },
+}
+
 /// Состояние `ЗаписьJSON`.
 #[derive(Debug)]
 pub struct JsonWriter {
@@ -174,13 +193,7 @@ pub struct JsonWriter {
     /// (`FrameState`), чем и заменяет прежние параллельные `has_member` и
     /// `awaiting_value`.
     stack: Vec<Frame>,
-    /// Куда уйдёт результат: `None` — в строку (`УстановитьСтроку`).
-    path: Option<std::path::PathBuf>,
-    /// Файловая система сессии для `Закрыть()` файлового приёмника; `None`
-    /// у строкового (ABI-G). Писатель берёт её у своего объекта при
-    /// `ОткрытьФайл` и хранит, потому что запись идёт в `Закрыть()`, который
-    /// под JIT нативен и контекста уже не несёт.
-    files: Option<std::rc::Rc<dyn bsl_rt::FileSystem>>,
+    sink: WriterSink,
     /// `ЗаписьJSON.ПроверятьСтруктуру`. Умолчание `true` — ИЗМЕРЕНО
     /// (`JSON.WRITE.CHECK_STRUCTURE_DEFAULT`). Свойство читается и
     /// пишется, но ни на одну из известных проверок структуры документа
@@ -198,8 +211,7 @@ impl JsonWriter {
             out: String::new(),
             settings,
             stack: Vec::new(),
-            path: None,
-            files: None,
+            sink: WriterSink::String,
             check_structure: true,
         }
     }
@@ -210,8 +222,7 @@ impl JsonWriter {
         files: std::rc::Rc<dyn bsl_rt::FileSystem>,
     ) -> Self {
         let mut w = Self::to_string_target(settings);
-        w.path = Some(path);
-        w.files = Some(files);
+        w.sink = WriterSink::File { path, files };
         w
     }
 
@@ -463,7 +474,7 @@ impl JsonWriter {
     }
 
     pub fn is_string_target(&self) -> bool {
-        self.path.is_none()
+        matches!(self.sink, WriterSink::String)
     }
 
     pub fn text(&self) -> &str {
@@ -477,30 +488,29 @@ impl JsonWriter {
     ///
     /// [`RtError::IoError`], если файл не записался.
     pub fn finish(&mut self) -> RtResult<String> {
-        let Some(path) = self.path.clone() else {
-            return Ok(std::mem::take(&mut self.out));
+        // Клонируем путь и (дёшево, счётчик ссылок) файловую систему, чтобы
+        // не держать заимствование `self.sink` во время записи и снятия
+        // приёмника ниже.
+        let (path, files) = match &self.sink {
+            WriterSink::String => return Ok(std::mem::take(&mut self.out)),
+            WriterSink::File { path, files } => (path.clone(), files.clone()),
         };
         // НЕ ИЗМЕРЕНО(JSON.WRITE.CLOSE_IO_FAIL): как ведёт себя писатель JSON
         // платформы после отказа ФС в `Закрыть()`. Здесь выбрано: писатель
         // остаётся файловым и повторный `Закрыть()` пробует снова, а не
         // отдаёт документ текстом. Поведение второго `Закрыть()` платформы
         // не снято (см. `measure-all.bsl`).
-        // Пишем НЕ снимая путь заранее: прежде `path.take()` шёл ДО `write`,
-        // и на отказе ФС писатель молча становился строковым — повторный
-        // `Закрыть()` отдавал весь документ текстом, тем самым ответом,
-        // который рядом означает успешную запись в файл. Путь снимается
-        // (и буфер чистится) ТОЛЬКО после успеха; на отказе писатель
-        // остаётся файловым и повторный `Закрыть()` пробует снова.
-        let files = self
-            .files
-            .as_ref()
-            .expect("у файлового приёмника есть файловая система");
+        // Приёмник становится строковым (и буфер чистится) ТОЛЬКО после
+        // успеха: `?` ниже выходит раньше присваивания, оставляя `sink`
+        // файловым. Прежде путь снимался ДО `write`, и на отказе ФС писатель
+        // молча становился строковым — повторный `Закрыть()` отдавал весь
+        // документ текстом, тем самым ответом, который рядом означает
+        // успешную запись в файл.
         files
             .write(&path.to_string_lossy(), self.out.as_bytes())
             .map_err(|e| RtError::IoError(format!("{}: {e}", path.display())))?;
         self.out.clear();
-        self.path = None;
-        self.files = None;
+        self.sink = WriterSink::String;
         Ok(String::new())
     }
 }
