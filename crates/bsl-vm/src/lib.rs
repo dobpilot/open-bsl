@@ -117,12 +117,28 @@ impl Frame {
 /// Аргументы подавляющего большинства встроенных вызовов помещаются сюда
 /// без heap-аллокации. Более длинные вариативные вызовы используют `Vec`.
 enum CallArgs {
-    Inline { values: [BslValue; 3], len: usize },
+    /// Ноль и один аргумент — подавляющее большинство вызовов методов
+    /// (`Записать(строка)`, `Добавить(значение)`, `Количество()`). Отдельные
+    /// варианты нужны, чтобы не строить и не ронять трёхэлементный массив
+    /// `BslValue` там, где занят один слот: по профилю `csv_write` на это
+    /// уходило заметное время в `CallArgs::load` и в `drop_glue`.
+    None,
+    One(BslValue),
+    Inline {
+        values: [BslValue; 3],
+        len: usize,
+    },
     Heap(Vec<BslValue>),
 }
 
 impl CallArgs {
     fn load(stack: &[BslValue], frame: &Frame, base: u8, count: u8) -> Result<Self, RtError> {
+        if count == 0 {
+            return Ok(CallArgs::None);
+        }
+        if count == 1 {
+            return Ok(CallArgs::One(reg_load(stack, frame.reg_index(base))?));
+        }
         if count <= 3 {
             let mut values = [
                 BslValue::Undefined,
@@ -153,6 +169,8 @@ impl CallArgs {
 
     fn as_slice(&self) -> &[BslValue] {
         match self {
+            CallArgs::None => &[],
+            CallArgs::One(value) => std::slice::from_ref(value),
             CallArgs::Inline { values, len } => &values[..*len],
             CallArgs::Heap(values) => values,
         }
