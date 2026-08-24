@@ -398,9 +398,10 @@ pub(crate) static PARAMS_TYPE: TypeDescriptor = TypeDescriptor {
     type_names: &["TextTemplateParameters"],
 };
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 struct TextDocument {
     data: Rc<RefCell<TextDocData>>,
+    files: Rc<dyn bsl_rt::FileSystem>,
 }
 
 #[derive(Debug, Clone)]
@@ -469,13 +470,17 @@ impl TextDocument {
         let area = self.data.borrow().area(&name)?;
         Ok(BslValue::new_object(TextDocument {
             data: Rc::new(RefCell::new(area)),
+            files: self.files.clone(),
         }))
     }
 
     fn read_file(&self, arguments: &[BslValue]) -> RtResult<BslValue> {
         let path = need_str(arguments.first(), "Прочитать")?;
         let encoding = encoding_arg(arguments.get(1))?;
-        let bytes = std::fs::read(&path).map_err(|error| RtError::IoError(error.to_string()))?;
+        let bytes = self
+            .files
+            .read(&path)
+            .map_err(|error| RtError::IoError(error.to_string()))?;
         self.data.borrow_mut().set_text(&encoding.decode(&bytes));
         Ok(BslValue::Undefined)
     }
@@ -484,7 +489,8 @@ impl TextDocument {
         let path = need_str(arguments.first(), "Записать")?;
         let encoding = encoding_arg(arguments.get(1))?;
         let data = self.data.borrow();
-        std::fs::write(&path, encoding.encode(data.text()))
+        self.files
+            .write(&path, &encoding.encode(data.text()))
             .map_err(|error| RtError::IoError(error.to_string()))?;
         Ok(BslValue::Undefined)
     }
@@ -783,13 +789,16 @@ impl ObjectProtocol for TextDocParams {
 }
 
 /// Создаёт пустой ТекстовыйДокумент.
-pub fn new_text_document() -> BslValue {
-    BslValue::new_object(TextDocument::default())
+pub fn new_text_document(files: Rc<dyn bsl_rt::FileSystem>) -> BslValue {
+    BslValue::new_object(TextDocument {
+        data: Rc::new(RefCell::new(TextDocData::default())),
+        files,
+    })
 }
 
-fn construct(_context: &mut CallContext<'_>, arguments: &[BslValue]) -> RtResult<BslValue> {
+fn construct(context: &mut CallContext<'_>, arguments: &[BslValue]) -> RtResult<BslValue> {
     if arguments.is_empty() {
-        Ok(new_text_document())
+        Ok(new_text_document(context.files_rc()?))
     } else {
         Err(wrong_method("Новый ТекстовыйДокумент", DOCUMENT_TYPE.name))
     }
