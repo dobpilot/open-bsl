@@ -2279,7 +2279,8 @@ fn step_cold(
         }
         Instr::NewTextWriter { dst, path } => {
             let path = reg_load(stack, frames[frame_idx].reg_index(path))?;
-            let writer = BslValue::new_text_writer(&path)?;
+            let files = host.env()?.files();
+            let writer = BslValue::new_text_writer_with_files(&path, files.as_ref())?;
             let d = frames[frame_idx].reg_index(dst);
             reg_store(stack, d, writer)?;
             frames[frame_idx].pc += 1;

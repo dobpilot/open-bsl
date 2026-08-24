@@ -651,4 +651,92 @@ mod files {
             assert!(!std::path::Path::new("виток.txt").exists());
         }
     }
+
+    /// Отказ файловой системы при ЗАКРЫТИИ `ЗаписьТекста` — ловимая ошибка,
+    /// и на интерпретаторе, и под JIT (ABI-G, сквозная проверка канала через
+    /// `StateBuilder::files`). Дескриптор пришёл из файловой системы СЕССИИ
+    /// на построении (`NewTextWriter`, интерпретаторный путь), а неудачное
+    /// `Закрыть()` ловится `Попыткой`, как любая ошибка рантайма.
+    #[test]
+    fn a_failing_close_from_the_session_file_system_is_catchable() {
+        use std::io::{self, Read, Seek, SeekFrom, Write};
+
+        fn denied(what: &str) -> io::Error {
+            io::Error::new(io::ErrorKind::PermissionDenied, what.to_string())
+        }
+
+        #[derive(Debug)]
+        struct FailingHandle;
+        impl Read for FailingHandle {
+            fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+                Ok(0)
+            }
+        }
+        impl Seek for FailingHandle {
+            fn seek(&mut self, _pos: SeekFrom) -> io::Result<u64> {
+                Ok(0)
+            }
+        }
+        impl Write for FailingHandle {
+            fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+                Err(denied("запись запрещена"))
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                Err(denied("сброс запрещён"))
+            }
+        }
+        impl open_bsl::FileHandle for FailingHandle {
+            fn len(&self) -> io::Result<u64> {
+                Ok(0)
+            }
+            fn close(&mut self) -> io::Result<()> {
+                Err(denied("закрытие запрещено"))
+            }
+        }
+
+        #[derive(Debug)]
+        struct FailOnClose;
+        impl open_bsl::FileSystem for FailOnClose {
+            fn read(&self, path: &str) -> io::Result<Vec<u8>> {
+                Err(io::Error::new(io::ErrorKind::NotFound, path.to_string()))
+            }
+            fn write(&self, _path: &str, _data: &[u8]) -> io::Result<()> {
+                Err(denied("запись запрещена"))
+            }
+            fn metadata(&self, path: &str) -> io::Result<open_bsl::FileMetadata> {
+                Err(io::Error::new(io::ErrorKind::NotFound, path.to_string()))
+            }
+            fn read_dir<'fs>(
+                &'fs self,
+                path: &str,
+            ) -> io::Result<Box<dyn Iterator<Item = io::Result<open_bsl::DirEntry>> + 'fs>>
+            {
+                Err(io::Error::new(io::ErrorKind::NotFound, path.to_string()))
+            }
+            fn create_dir_all(&self, _path: &str) -> io::Result<()> {
+                Ok(())
+            }
+            fn open(
+                &self,
+                _path: &str,
+                _options: open_bsl::FileOpenOptions,
+            ) -> io::Result<Box<dyn open_bsl::FileHandle>> {
+                Ok(Box::new(FailingHandle))
+            }
+        }
+
+        let engine = Engine::builder().build().unwrap();
+        let script = "Попытка\n\
+                      \tзп = Новый ЗаписьТекста(\"вых.txt\");\n\
+                      \tзп.Записать(\"x\");\n\
+                      \tзп.Закрыть();\n\
+                      \tВозврат \"не поймано\";\n\
+                      Исключение\n\
+                      \tВозврат \"поймано\";\n\
+                      КонецПопытки;";
+        for jit in [false, true] {
+            let mut state = engine.state_builder().jit(jit).files(FailOnClose).build();
+            assert_eq!(text(&state.exec(script).unwrap()), "поймано", "jit={jit}");
+        }
+    }
 }
