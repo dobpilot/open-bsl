@@ -1466,7 +1466,12 @@ fn a_factory_from_a_file_reports_a_missing_or_broken_source() {
         ),
     )
     .expect("временный файл пишется");
-    let f = factory_of_file(&[str_value(&path.to_string_lossy())], test_zone()).expect("фабрика");
+    let f = factory_of_file(
+        &[str_value(&path.to_string_lossy())],
+        test_zone(),
+        &bsl_rt::SystemFileSystem,
+    )
+    .expect("фабрика");
     assert_eq!(
         factory_type(ob(&f), &[str_value("urn:f"), str_value("Code")])
             .expect("тип")
@@ -1474,8 +1479,12 @@ fn a_factory_from_a_file_reports_a_missing_or_broken_source() {
         "{urn:f}Code"
     );
     let missing = dir.join("open-bsl-xdto-factory-нет-такого.xsd");
-    let error = factory_of_file(&[str_value(&missing.to_string_lossy())], test_zone())
-        .expect_err("файла нет — ошибка");
+    let error = factory_of_file(
+        &[str_value(&missing.to_string_lossy())],
+        test_zone(),
+        &bsl_rt::SystemFileSystem,
+    )
+    .expect_err("файла нет — ошибка");
     assert!(
         error
             .to_string()
@@ -1485,17 +1494,25 @@ fn a_factory_from_a_file_reports_a_missing_or_broken_source() {
     // Не схема и не разметка вовсе.
     let broken = dir.join("open-bsl-xdto-factory-test-broken.xsd");
     std::fs::write(&broken, "<чепуха/>").expect("временный файл пишется");
-    assert!(factory_of_file(&[str_value(&broken.to_string_lossy())], test_zone()).is_err());
+    assert!(
+        factory_of_file(
+            &[str_value(&broken.to_string_lossy())],
+            test_zone(),
+            &bsl_rt::SystemFileSystem
+        )
+        .is_err()
+    );
     // Ни без аргумента, ни с двумя, ни с нестроковым (измерено).
-    assert!(factory_of_file(&[], test_zone()).is_err());
-    assert!(factory_of_file(&[number_value(1)], test_zone()).is_err());
+    assert!(factory_of_file(&[], test_zone(), &bsl_rt::SystemFileSystem).is_err());
+    assert!(factory_of_file(&[number_value(1)], test_zone(), &bsl_rt::SystemFileSystem).is_err());
     assert!(
         factory_of_file(
             &[
                 str_value(&path.to_string_lossy()),
                 str_value(&path.to_string_lossy())
             ],
-            test_zone()
+            test_zone(),
+            &bsl_rt::SystemFileSystem
         )
         .is_err()
     );

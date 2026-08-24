@@ -43,15 +43,25 @@ pub(crate) fn instance_value(data: &Rc<XdtoObjectData>) -> BslValue {
 ///
 /// [`RtError::Xdto`], если аргумент не строка или файла нет;
 /// [`RtError::Xsd`] и [`RtError::Xml`], если содержимое файла — не схема.
-pub fn factory_of_file(args: &[BslValue], zone: Rc<dyn bsl_rt::TimeZone>) -> RtResult<BslValue> {
+pub fn factory_of_file(
+    args: &[BslValue],
+    zone: Rc<dyn bsl_rt::TimeZone>,
+    files: &dyn bsl_rt::FileSystem,
+) -> RtResult<BslValue> {
     let [BslValue::Str(path)] = args else {
         return Err(RtError::Xdto(
             "СоздатьФабрикуXDTO берёт один аргумент — путь к файлу XSD".to_string(),
         ));
     };
     let path = path.to_string();
-    let text = std::fs::read_to_string(&path)
+    // Схема читается файловой системой СЕССИИ (ABI-G). Фабрика после
+    // построения к путям не обращается, поэтому берёт ФС ссылкой на время
+    // конструктора (BORROW), а не запоминает её.
+    let bytes = files
+        .read(&path)
         .map_err(|e| RtError::Xdto(format!("файл схемы «{path}» не прочитан: {e}")))?;
+    let text = String::from_utf8(bytes)
+        .map_err(|e| RtError::Xdto(format!("файл схемы «{path}» не в UTF-8: {e}")))?;
     // Сигнатуру UTF-8 разборщик видит как символ перед `<` — снимаем её
     // так же, как `ЧтениеXML.ОткрытьФайл`.
     let text = text.strip_prefix('\u{feff}').unwrap_or(&text);

@@ -138,7 +138,8 @@ fn call_create_factory(
     context: &mut CallContext<'_>,
     arguments: &[BslValue],
 ) -> RtResult<BslValue> {
-    factory_of_file(arguments, context.zone_rc()?)
+    let files = context.files()?;
+    factory_of_file(arguments, context.zone_rc()?, files)
 }
 
 fn call_configuration_factory(
