@@ -43,6 +43,7 @@ impl SpreadDocumentObject {
     pub(crate) fn as_value(&self) -> BslValue {
         BslValue::new_object(SpreadDocumentObject {
             data: self.data.clone(),
+            files: self.files.clone(),
         })
     }
 }

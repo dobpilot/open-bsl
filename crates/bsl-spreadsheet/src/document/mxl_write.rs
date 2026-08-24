@@ -652,14 +652,21 @@ pub fn to_txt_bytes(doc: &SpreadDocData) -> Vec<u8> {
 /// Записать документ в файл. Тип выбирается по члену
 /// `ТипФайлаТабличногоДокумента`; без него — MXL (измерено: `Записать(путь)`
 /// без второго аргумента дал файл, побайтно равный записи с MXL).
-pub fn write_file(doc: &SpreadDocData, path: &str, kind: FileKind) -> RtResult<()> {
+pub fn write_file(
+    doc: &SpreadDocData,
+    path: &str,
+    kind: FileKind,
+    files: &dyn bsl_rt::FileSystem,
+) -> RtResult<()> {
     let bytes = match kind {
         FileKind::Mxl => to_mxl_bytes(doc),
         FileKind::Txt => to_txt_bytes(doc),
         FileKind::Xlsx => crate::xlsx::to_xlsx_bytes(doc),
         FileKind::Pdf => crate::pdf_layout::to_pdf_bytes(doc)?,
     };
-    std::fs::write(path, bytes).map_err(|e| bad(format!("не удалось записать {path}: {e}")))
+    files
+        .write(path, &bytes)
+        .map_err(|e| bad(format!("не удалось записать {path}: {e}")))
 }
 
 /// Форматы, в которые этот интерпретатор умеет писать. Остальные члены

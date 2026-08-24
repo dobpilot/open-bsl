@@ -58,6 +58,12 @@ pub(crate) fn number_f64(v: &BslValue, what: &str) -> RtResult<f64> {
 #[derive(Debug)]
 pub struct SpreadDocumentObject {
     pub(crate) data: Rc<RefCell<SpreadDocData>>,
+    /// Файловая система сессии (ABI-G): пришла к документу при построении и
+    /// держится здесь, потому что `Прочитать`/`Записать` — методы, а под JIT
+    /// метод исполняется по натуральному пути без доступа к контексту. Окна
+    /// в тот же документ (область, рисунки, параметры) файлов не трогают, им
+    /// она не нужна.
+    pub(crate) files: Rc<dyn bsl_rt::FileSystem>,
 }
 
 /// `ОбластьЯчеекТабличногоДокумента` — ссылка на прямоугольник в документе.
@@ -95,6 +101,14 @@ pub(crate) fn data(v: &BslValue) -> Option<Rc<RefCell<SpreadDocData>>> {
     object
         .downcast_ref::<SpreadAreaObject>()
         .map(|area| area.data.clone())
+}
+
+/// Файловая система документа-получателя. Есть только у самого
+/// `ТабличныйДокумент`: область и прочие окна файлов не читают и не пишут.
+pub(crate) fn files_of(v: &BslValue) -> Option<Rc<dyn bsl_rt::FileSystem>> {
+    v.object_ref()?
+        .downcast_ref::<SpreadDocumentObject>()
+        .map(|document| document.files.clone())
 }
 
 pub(crate) fn rect(v: &BslValue) -> Option<Rect> {
@@ -142,9 +156,10 @@ pub fn is_spread_document(v: &BslValue) -> bool {
         .is_some_and(|object| object.downcast_ref::<SpreadDocumentObject>().is_some())
 }
 
-pub fn new_document() -> BslValue {
+pub fn new_document(files: Rc<dyn bsl_rt::FileSystem>) -> BslValue {
     BslValue::new_object(SpreadDocumentObject {
         data: Rc::new(RefCell::new(SpreadDocData::new())),
+        files,
     })
 }
 
@@ -262,9 +277,13 @@ pub fn get_area(obj: &BslValue, args: &[BslValue]) -> RtResult<BslValue> {
         }
         _ => return Err(bad("ПолучитьОбласть: ожидалось 1 или 4 аргумента")),
     };
+    // Копия — самостоятельный документ; ей достаётся файловая система
+    // исходного, чтобы `Записать` на области-копии работал (ABI-G).
+    let files = files_of(obj).ok_or_else(|| bad("ПолучитьОбласть: не табличный документ"))?;
     let cut = doc.borrow().extract(rect.r1, rect.c1, rect.r2, rect.c2);
     Ok(BslValue::new_object(SpreadDocumentObject {
         data: Rc::new(RefCell::new(cut)),
+        files,
     }))
 }
 
@@ -291,7 +310,11 @@ pub fn read(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
         Some(BslValue::Str(s)) => s.to_string(),
         _ => return Err(bad("Прочитать: ожидался путь к файлу")),
     };
-    let bytes = std::fs::read(&path).map_err(|e| bad(format!("не читается {path}: {e}")))?;
+    // Файл читается файловой системой СЕССИИ (ABI-G).
+    let files = files_of(obj).ok_or_else(|| bad("Прочитать: не табличный документ"))?;
+    let bytes = files
+        .read(&path)
+        .map_err(|e| bad(format!("не читается {path}: {e}")))?;
     // Формат выбирается по СОДЕРЖИМОМУ, а не по расширению.
     //
     // ОТСТУПЛЕНИЕ ОТ ПЛАТФОРМЫ, намеренное. У неё `Прочитать` берёт .mxl и
@@ -449,8 +472,10 @@ pub fn write(obj: &BslValue, args: &[BslValue]) -> RtResult<()> {
         },
         Some(_) => return Err(bad("Записать: ожидался ТипФайлаТабличногоДокумента")),
     };
+    // Файл пишется файловой системой СЕССИИ (ABI-G).
+    let files = files_of(obj).ok_or_else(|| bad("Записать: не табличный документ"))?;
     let d = doc.borrow();
-    write_file(&d, &path, kind)
+    write_file(&d, &path, kind, files.as_ref())
 }
 
 pub fn merge_cells(obj: &BslValue) -> RtResult<()> {
