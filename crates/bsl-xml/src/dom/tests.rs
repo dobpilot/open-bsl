@@ -406,7 +406,7 @@ fn kids_names(node: &BslValue) -> String {
 
 /// Записать узел через `ЗаписьDOM` и отдать накопленный текст.
 fn serialize(node: &BslValue) -> RtResult<String> {
-    let target = crate::xml::new_xml_writer();
+    let target = crate::xml::new_xml_writer(std::rc::Rc::new(bsl_rt::SystemFileSystem));
     crate::xml::set_string(crate::xml::arg_object(&target)?, &[])?;
     write(&new_writer(), &[node.clone(), target.clone()])?;
     match crate::xml::close_writer(crate::xml::arg_object(&target)?)? {

@@ -103,17 +103,17 @@ fn construct_ns_resolver(
 }
 
 fn construct_xml_reader(
-    _context: &mut CallContext<'_>,
+    context: &mut CallContext<'_>,
     _arguments: &[BslValue],
 ) -> RtResult<BslValue> {
-    Ok(new_xml_reader())
+    Ok(new_xml_reader(context.files_rc()?))
 }
 
 fn construct_xml_writer(
-    _context: &mut CallContext<'_>,
+    context: &mut CallContext<'_>,
     _arguments: &[BslValue],
 ) -> RtResult<BslValue> {
-    Ok(new_xml_writer())
+    Ok(new_xml_writer(context.files_rc()?))
 }
 
 fn construct_xml_writer_settings(

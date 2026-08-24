@@ -2821,7 +2821,7 @@ mod tests {
 
     fn document_of(text: &str) -> BslValue {
         let builder = dom::new_builder();
-        let reader = crate::xml::new_xml_reader();
+        let reader = crate::xml::new_xml_reader(std::rc::Rc::new(bsl_rt::SystemFileSystem));
         crate::xml::set_string(crate::xml::arg_object(&reader).unwrap(), &[str_value(text)])
             .unwrap();
         dom::read(&builder, &[reader]).unwrap()

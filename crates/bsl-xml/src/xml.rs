@@ -69,12 +69,19 @@ impl XmlReaderState {
 #[derive(Debug)]
 pub struct XmlReaderObject {
     pub(crate) state: Rc<RefCell<XmlReaderState>>,
+    /// Файловая система сессии (ABI-G): пришла к объекту при построении и
+    /// держится здесь, потому что `ОткрытьФайл` — метод, а под JIT метод
+    /// исполняется по натуральному пути без доступа к контексту.
+    files: Rc<dyn bsl_rt::FileSystem>,
 }
 
 /// `ЗаписьXML` — до `УстановитьСтроку`/`ОткрытьФайл` писателя нет.
 #[derive(Debug)]
 pub struct XmlWriterObject {
     writer: Rc<RefCell<Option<XmlWriter>>>,
+    /// Файловая система сессии (ABI-G): запись идёт в `Закрыть()`, метод под
+    /// JIT без контекста, поэтому ФС хранится на объекте с построения.
+    files: Rc<dyn bsl_rt::FileSystem>,
 }
 
 /// `ПараметрыЗаписиXML` — неизменяемый набор настроек.
@@ -128,16 +135,18 @@ pub fn is_xml_writer(v: &BslValue) -> bool {
 }
 
 /// `Новый ЧтениеXML` — читатель без источника.
-pub fn new_xml_reader() -> BslValue {
+pub fn new_xml_reader(files: Rc<dyn bsl_rt::FileSystem>) -> BslValue {
     BslValue::new_object(XmlReaderObject {
         state: Rc::new(RefCell::new(XmlReaderState::default())),
+        files,
     })
 }
 
 /// `Новый ЗаписьXML` — писатель без приёмника.
-pub fn new_xml_writer() -> BslValue {
+pub fn new_xml_writer(files: Rc<dyn bsl_rt::FileSystem>) -> BslValue {
     BslValue::new_object(XmlWriterObject {
         writer: Rc::new(RefCell::new(None)),
+        files,
     })
 }
 
@@ -246,12 +255,18 @@ pub fn set_string(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
 /// неверном аргументе.
 pub fn open_file(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     let path = need_str(args.first(), "ОткрытьФайл")?;
-    if let Ok(reader) = as_reader(obj) {
-        let text = std::fs::read_to_string(&path).map_err(|e| RtError::IoError(e.to_string()))?;
+    // Файл читается файловой системой СЕССИИ (ABI-G) — той, что пришла к
+    // объекту при построении.
+    if let Some(reader) = obj.downcast_ref::<XmlReaderObject>() {
+        let bytes = reader
+            .files
+            .read(&path)
+            .map_err(|e| RtError::IoError(e.to_string()))?;
+        let text = String::from_utf8(bytes).map_err(|e| RtError::IoError(e.to_string()))?;
         // Платформа терпит сигнатуру UTF-8 в начале файла, а разборщику
         // она видна как символ перед `<` — снимаем.
         let text = text.strip_prefix('\u{feff}').unwrap_or(&text).to_string();
-        *reader.borrow_mut() = XmlReaderState::over(XmlParser::new(&text));
+        *reader.state.borrow_mut() = XmlReaderState::over(XmlParser::new(&text));
         return Ok(());
     }
     let writer = as_writer(obj)?;
@@ -719,8 +734,10 @@ pub fn write_raw(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
 ///
 /// [`RtError::IoError`], если файл не записался.
 pub fn close_writer(obj: &dyn ObjectProtocol) -> RtResult<BslValue> {
-    let writer = as_writer(obj)?;
-    let mut slot = writer.borrow_mut();
+    let writer_obj = obj
+        .downcast_ref::<XmlWriterObject>()
+        .ok_or_else(|| not_applicable(obj))?;
+    let mut slot = writer_obj.writer.borrow_mut();
     let Some(w) = slot.as_mut() else {
         return Ok(BslValue::Str(BslString::from_str("")));
     };
@@ -737,7 +754,11 @@ pub fn close_writer(obj: &dyn ObjectProtocol) -> RtResult<BslValue> {
             // Файл платформа начинает сигнатурой UTF-8 — измерено побайтным
             // сличением выгрузки `edata_writer` (первые три байта EF BB BF).
             let bytes = w.finished_bytes();
-            std::fs::write(path, bytes).map_err(|e| RtError::IoError(e.to_string()))?;
+            // Запись — через файловую систему СЕССИИ (ABI-G).
+            writer_obj
+                .files
+                .write(&path.to_string_lossy(), &bytes)
+                .map_err(|e| RtError::IoError(e.to_string()))?;
             *slot = None;
             Ok(BslValue::Str(BslString::from_str("")))
         }

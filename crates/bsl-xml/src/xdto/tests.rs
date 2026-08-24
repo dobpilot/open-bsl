@@ -1860,7 +1860,7 @@ const IO_DOC: &str = concat!(
 
 /// Читатель над текстом.
 fn reader(text: &str) -> BslValue {
-    let value = crate::xml::new_xml_reader();
+    let value = crate::xml::new_xml_reader(std::rc::Rc::new(bsl_rt::SystemFileSystem));
     crate::xml::set_string(crate::xml::arg_object(&value).unwrap(), &[str_value(text)])
         .expect("источник");
     value
@@ -1868,7 +1868,7 @@ fn reader(text: &str) -> BslValue {
 
 /// Писатель в строку.
 fn writer() -> BslValue {
-    let value = crate::xml::new_xml_writer();
+    let value = crate::xml::new_xml_writer(std::rc::Rc::new(bsl_rt::SystemFileSystem));
     crate::xml::set_string(crate::xml::arg_object(&value).unwrap(), &[]).expect("приёмник");
     value
 }
