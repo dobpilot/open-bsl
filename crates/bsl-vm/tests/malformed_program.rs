@@ -399,7 +399,46 @@ fn a_new_structure_with_a_broken_geometry_is_invalid_bytecode() {
 #[test]
 fn a_call_targeting_the_top_level_chunk_is_invalid_bytecode() {
     let program = tampered(" Call func=", |line| retoken(line, "func", "0"));
-    assert_eq!(invalid(&program), "вызов ссылается на чанк верхнего уровня");
+    assert_eq!(
+        invalid(&program),
+        "номер вызываемой функции — ноль или вне таблицы имён функций"
+    );
+}
+
+/// ВТОРАЯ граница того же номера: тело есть, подписи нет. `func` адресует и
+/// `function_names[func-1]`, и `chunks[func]`, и печать листинга проверяет обе
+/// (`BadCallTarget`), а разбор — ни одной. Чанк без имени вызывается
+/// статически, но для `Выполнить`/`Вычислить` не существует вовсе: фрагмент
+/// видит функции модуля как `function_names`, сшитые с `chunks[i+1]`. До
+/// проверки образ с урезанной таблицей имён исполнялся молча и возвращал 42.
+#[test]
+fn a_call_to_a_chunk_without_a_name_is_invalid_bytecode() {
+    const TWO: &str = concat!(
+        "Функция Первая()\n",
+        "Возврат 1;\n",
+        "КонецФункции\n",
+        "Функция Вторая()\n",
+        "Возврат 42;\n",
+        "КонецФункции\n",
+        "Возврат Вторая();\n",
+    );
+    // Контроль: неиспорченный листинг проходит тот же путь и даёт 42.
+    let listing = write_program(&compile(TWO), None).expect("печать листинга");
+    assert_eq!(
+        bsl_vm::run_program(&parse_program(&listing).expect("разбор"))
+            .unwrap()
+            .to_string(),
+        "42"
+    );
+    // Имя второй функции убрано, её чанк и вызов `func=2` остались.
+    let broken = listing
+        .replace(".functions 2", ".functions 1")
+        .replace("  1 \"Вторая\"  ; .chunk 2\n", "");
+    let program = parse_program(&broken).expect("разбор обязан принять правку");
+    assert_eq!(
+        invalid(&program),
+        "номер вызываемой функции — ноль или вне таблицы имён функций"
+    );
 }
 
 /// Режимы (`argmodes`) и умолчания (`defaults`) параметров — по одному на

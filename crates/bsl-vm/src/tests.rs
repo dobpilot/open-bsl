@@ -1502,6 +1502,10 @@ fn corrupt_bytecode_inside_a_call_unwinds_to_an_error_not_a_panic() {
     let mut callee = program.chunks[0].clone();
     callee.instrs = vec![Instr::Move { dst: 250, src: 0 }];
     program.chunks.push(callee);
+    // Имя вызываемой функции обязательно: `func` адресует и таблицу имён, и
+    // таблицу чанков, и без записи периметр отверг бы образ ещё при
+    // связывании — тест перестал бы проверять РАЗМОТКУ, ради которой написан.
+    program.function_names = vec!["Вызванная".to_string()];
 
     assert!(matches!(
         run_with_dynamic(&program, JitMode::Off),
