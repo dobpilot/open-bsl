@@ -218,6 +218,54 @@ fn effectful_core_constructors_use_the_component_abi() {
     assert_eq!(constructors, [(0, 1, 1), (0, 2, 0), (0, 2, 1)]);
 }
 
+/// Метод компонентного получателя не может попасть в закрытый `CallMethod`.
+/// `Закрыть` остаётся в базовом `BuiltinMethod`, остальные имена принадлежали
+/// разным вынесенным пакетам; решение о форме опкода зависит от получателя,
+/// а не от общего словаря имён.
+#[test]
+fn component_receiver_methods_compile_only_to_the_open_opcode() {
+    fn construct(
+        _context: &mut bsl_rt::CallContext<'_>,
+        _arguments: &[bsl_rt::BslValue],
+    ) -> bsl_rt::RtResult<bsl_rt::BslValue> {
+        Ok(bsl_rt::BslValue::Undefined)
+    }
+    const CONSTRUCTORS: &[bsl_rt::ConstructorDescriptor] = &[bsl_rt::ConstructorDescriptor {
+        code: bsl_rt::ConstructorCode::new(1),
+        names: &["Внешний"],
+        arity: bsl_rt::Arity::exact(0),
+        call: construct,
+    }];
+    const LIBRARY: bsl_rt::LibraryDescriptor =
+        bsl_rt::LibraryDescriptor::new("test-world", "0.0.0", bsl_rt::ObjectContextNeed::Reduced)
+            .with_constructors(CONSTRUCTORS);
+
+    let mut builder = bsl_rt::RuntimeBuilder::new();
+    builder.register(bsl_rt::core_library()).register(LIBRARY);
+    let registry = builder.build().unwrap();
+    let src = "о = Новый Внешний;\n\
+               о.Закрыть();\n\
+               о.ЗаписатьНачалоОбъекта();\n\
+               о.ПрочитатьБайт();\n\
+               о.ПолучитьТекст();\n\
+               о.ТекущаяПозиция();";
+    let parsed = bsl_syntax::parse(src).unwrap();
+    let resolved = bsl_sema::resolve_program_with_registry(&parsed.items, &registry).unwrap();
+    let program = bsl_compiler::compile_program(&resolved).unwrap();
+
+    let mut open = 0;
+    for instruction in &program.chunks[0].instrs {
+        match instruction {
+            Instr::CallObjectMethod { .. } => open += 1,
+            Instr::CallMethod { method, .. } => {
+                panic!("компонентный метод ушёл в закрытый опкод: {method:?}")
+            }
+            _ => {}
+        }
+    }
+    assert_eq!(open, 5);
+}
+
 #[test]
 fn the_corpus_covers_every_opcode() {
     let mut seen: Vec<&str> = Vec::new();

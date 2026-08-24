@@ -590,414 +590,59 @@ impl BuiltinFn {
     }
 }
 
-/// Методы объектов, вызываемые как `а.Метод(...)`. `Добавить`/`Удалить`/
-/// `Очистить` полиморфны по типу получателя в самой 1С (элемент массива,
-/// строка таблицы, колонка, ...) — здесь это один идентификатор на все
-/// смыслы, арность и поведение решает рантайм (см. `BslValue::push_element`
-/// и соседние методы), а не резолвинг в `bsl-sema`, который не может знать
-/// заранее, каким объектом окажется получатель.
+/// Методы, которые исполняет базовый рантайм.
 ///
-/// Методы `ТаблицаЗначений` добавлялись волнами: волна 2 — `Найти`,
-/// `НайтиСтроки`, `Сортировать`, `Итог`; волна 3 — `Скопировать`,
-/// `СкопироватьКолонки`, `ВыгрузитьКолонку`, `ЗагрузитьКолонку`,
-/// `Сдвинуть`, `Индекс`, `Свернуть`.
+/// Методы компонентных объектов живут в `MethodDescriptor` своего пакета:
+/// общий слой не перечисляет внешний мир и не резервирует его имена.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BuiltinMethod {
     Count,
     Add,
     Delete,
     Clear,
-    /// `Структура.Вставить(Ключ, Значение)` / `Соответствие.Вставить(Ключ,
-    /// Значение)` — тоже полиморфен по получателю, но это ДРУГОЙ метод в
-    /// самой 1С, чем `Добавить` (разные имена, `Insert` не синоним `Add`),
-    /// поэтому отдельный вариант, а не переиспользование `Add`.
+    /// `Структура.Вставить(Ключ, Значение)` / `Соответствие.Вставить(Ключ, Значение)`.
     Insert,
-    /// `Соответствие.Получить(Ключ)`.
+    /// `Соответствие.Получить(Ключ)` и `БуферДвоичныхДанных.Получить(Позиция)`.
     Get,
-    /// `Структура.Свойство(Ключ[, ЗначениеПоУмолчанию])` — см. doc comment
-    /// на `BslValue::structure_property` про отклонение от реальной
-    /// сигнатуры (там `Значение` — выходной параметр, здесь — значение по
-    /// умолчанию).
+    /// `Структура.Свойство(Ключ[, ЗначениеПоУмолчанию])`.
     Property,
-
-    // --- ТаблицаЗначений, волна 2 -------------------------------------
-    /// `Найти(Значение[, Колонки])`.
     Find,
-    /// `НайтиСтроки(СтруктураПоиска)`.
     FindRows,
-    /// `Сортировать("Кол1 Возр, Кол2 Убыв")`.
     Sort,
-    /// `ЗаполнитьЗначения(Значение[, Колонки])`.
     FillValues,
-    /// `Итог("Колонка")`.
     Total,
-
-    // --- ТаблицаЗначений, волна 3 -------------------------------------
-    /// `Скопировать([Строки], [Колонки])` -> новая таблица.
     Copy,
-    /// `СкопироватьКолонки([Колонки])` -> пустая таблица той же структуры.
     CopyColumns,
-    /// `ВыгрузитьКолонку(Колонка)` -> `Массив`.
     UnloadColumn,
-    /// `ЗагрузитьКолонку(Массив, Колонка)`.
     LoadColumn,
-    /// `Сдвинуть(Строка, Смещение)`.
     Move,
-    /// `Индекс(Строка)` -> `Число`.
     IndexOf,
-    /// `Свернуть(КолонкиГруппировки[, КолонкиСуммирования])`.
     Collapse,
-
-    /// `ЗаписьТекста.Записать(Текст)` — добавляет текст в буфер файла.
+    /// `ЗаписьТекста.Записать(Текст)` и блочная запись в буфер.
     Write,
-    /// `ЗаписьТекста.Закрыть()` — сбрасывает буфер и закрывает файл.
-    /// У `ЗаписьJSON` тот же метод ОТДАЁТ накопленный текст, поэтому
-    /// поведение выбирается по типу получателя, как у `Добавить`.
+    /// `ЗаписьТекста.Закрыть()`.
     Close,
-
-    // --- JSON ----------------------------------------------------------
-    /// `ЧтениеJSON.УстановитьСтроку(Текст)` и
-    /// `ЗаписьJSON.УстановитьСтроку([Параметры])` — одно имя на два
-    /// объекта, как в платформе.
-    SetString,
-    /// `ОткрытьФайл(Имя[, Параметры])` у обоих объектов JSON.
-    OpenFile,
-    /// `ЧтениеJSON.Прочитать()` / `ЧтениеXML.Прочитать()` -> `Булево`.
-    /// Один вариант на два объекта: имя у платформы общее, а смысл
-    /// («следующее значение» против «следующий узел») выбирается по
-    /// получателю — как у `Закрыть` и `УстановитьСтроку`.
-    ReadNext,
-    /// `ЧтениеJSON.Пропустить()` / `ЧтениеXML.Пропустить()`. Имя именно
-    /// такое: `ПропуститьЗначение` платформа не знает — измерено.
-    SkipNode,
-    WriteStartObject,
-    WriteEndObject,
-    WriteStartArray,
-    WriteEndArray,
-    WritePropertyName,
-    /// `ЗаписьJSON.ЗаписатьЗначение(Значение)` — отдельный метод от
-    /// `Записать` у `ЗаписьТекста`.
-    WriteJsonValue,
-
-    // --- XML -----------------------------------------------------------
-    // `УстановитьСтроку`, `ОткрытьФайл` и `Закрыть` переиспользуются от
-    // JSON: у платформы это те же имена, а смысл и там, и там выбирается
-    // по получателю. `Прочитать` — НЕТ: у `ЧтениеJSON` он отдаёт следующее
-    // ЗНАЧЕНИЕ, у `ЧтениеXML` — следующий УЗЕЛ, и получатель у них разный,
-    // так что разделение проходит по типу объекта в одном варианте.
-    /// `ЧтениеXML.ПрочитатьАтрибут()` -> `Булево` — курсор по атрибутам.
-    XmlReadAttribute,
-    /// `ЧтениеXML.КоличествоАтрибутов()`.
-    XmlAttributeCount,
-    /// `ЧтениеXML.ИмяАтрибута(Индекс)`.
-    XmlAttributeName,
-    /// `ЧтениеXML.ЗначениеАтрибута(ИмяЛибоИндекс)`.
-    XmlAttributeValue,
-    /// `ЧтениеXML.ПерейтиКСодержимому()` -> член `ТипУзлаXML`.
-    XmlMoveToContent,
-    WriteXmlDeclaration,
-    WriteStartElement,
-    WriteEndElement,
-    WriteXmlAttribute,
-    WriteXmlText,
-    WriteXmlComment,
-    WriteCdataSection,
-    WriteXmlProcessingInstruction,
-    WriteXmlRaw,
-
-    // --- DOM ------------------------------------------------------------
-    // `Прочитать` у `ПостроительDOM` переиспользует общий `ReadNext`: имя
-    // у платформы то же, а смысл выбирается по получателю. Остальные
-    // шесть имён — свои, и все они измерены на 8.3.27.
-    /// `ЭлементDOM.ЕстьДочерниеУзлы()` / `ДокументDOM.ЕстьДочерниеУзлы()`
-    /// — есть у любого узла.
-    DomHasChildNodes,
-    /// `ЕстьАтрибуты()` — тоже у любого узла: у документа и у текста
-    /// платформа отвечает «Нет», а не ошибкой (измерено).
-    DomHasAttributes,
-    /// `ПолучитьАтрибут(Имя)` / `(URI, ЛокальноеИмя)` -> значение либо
-    /// `Неопределено`.
-    DomGetAttribute,
-    /// `ЕстьАтрибут(Имя)` / `(URI, ЛокальноеИмя)` -> `Булево`.
-    DomHasAttribute,
-    /// `ПолучитьУзелАтрибута(Имя)` / `(URI, ЛокальноеИмя)` -> `АтрибутDOM`.
-    DomGetAttributeNode,
-    /// `ПолучитьЭлементыПоИмени(Имя)` / `(URI, Имя)` -> `СписокЭлементовDOM`.
-    DomGetElementsByName,
-    /// `ДокументDOM.ПолучитьЭлементПоИдентификатору(Ид)`.
-    DomGetElementById,
-
-    // Фабрики узлов есть ТОЛЬКО у документа, и формы с пространством имён —
-    // это ВТОРЫЕ формы тех же методов, а не отдельные `...NS`: справка врёт,
-    // измерено перебором на 8.3.27.
-    /// `ДокументDOM.СоздатьЭлемент(Имя)` / `(URI, Имя)`.
-    DomCreateElement,
-    /// `ДокументDOM.СоздатьАтрибут(Имя)` / `(URI, Имя)`.
-    DomCreateAttribute,
-    /// `ДокументDOM.СоздатьТекстовыйУзел(Текст)`.
-    DomCreateTextNode,
-    /// `ДокументDOM.СоздатьСекциюCDATA(Текст)`.
-    DomCreateCdataSection,
-    /// `ДокументDOM.СоздатьКомментарий(Текст)`.
-    DomCreateComment,
-    /// `ДокументDOM.СоздатьИнструкциюОбработки(Цель, Данные)`.
-    DomCreateProcessingInstruction,
-    /// `ДобавитьДочерний(Узел)` -> тот же узел.
-    DomAppendChild,
-    /// `ВставитьПеред(Новый, Опорный)` -> вставленный узел.
-    DomInsertBefore,
-    /// `УдалитьДочерний(Узел)` -> удалённый узел.
-    DomRemoveChild,
-    /// `ЗаменитьДочерний(Новый, Старый)` -> СТАРЫЙ узел.
-    DomReplaceChild,
-    /// `ЭлементDOM.УстановитьАтрибут(Имя, Значение)` / `(URI, Имя, Значение)`.
-    DomSetAttribute,
-    /// `ЭлементDOM.УдалитьАтрибут(Имя)` / `(URI, ЛокальноеИмя)`.
-    DomRemoveAttribute,
-    /// `ЭлементDOM.УстановитьУзелАтрибута(Атрибут)` -> замещённый атрибут.
-    DomSetAttributeNode,
-    /// `ЭлементDOM.УдалитьУзелАтрибута(Атрибут)` -> удалённый атрибут.
-    DomRemoveAttributeNode,
-
-    // --- XPath над DOM ---------------------------------------------------
-    // Все семь имён и их английские синонимы ИЗМЕРЕНЫ перебором: у
-    // документа живут три метода, у разыменователя, выражения и
-    // результата — по одному-два. Ни `ВычислитьВыражение`, ни `Evaluate`
-    // у документа, ни `СоздатьРазыменовательПространствИмен` платформа не
-    // знает.
-    /// `ДокументDOM.ВычислитьВыражениеXPath(Выражение, Узел, Разыменователь[, Вид])`.
-    XPathEvaluate,
-    /// `ДокументDOM.СоздатьВыражениеXPath(Выражение, Разыменователь)`.
-    XPathCreateExpression,
-    /// `ДокументDOM.СоздатьРазыменовательПИ([Узел])` — имя именно такое,
-    /// сокращённое: полное `СоздатьРазыменовательПространствИмен`
-    /// платформа отвергает (измерено).
-    XPathCreateNsResolver,
-    /// `РазыменовательПространствИменDOM.НайтиURIПространстваИмен(Префикс)`.
-    XPathLookupNamespaceUri,
-    /// `РезультатXPath.ПолучитьСледующий()` — обход узлов результата.
-    XPathNext,
-    /// `РезультатПоискаПоРегулярномуВыражению.ПолучитьГруппы()` -> `Массив`
-    /// групп БЕЗ нулевой (измерено: у `б(в)` на «абвг» массив длиной 1).
-    /// Аргументов не берёт.
-    RegexGetGroups,
-    /// `РезультатXPath.ЭлементСнимка(Номер)`.
-    XPathSnapshotItem,
-    /// `ВыражениеXPath.Вычислить(Узел[, Вид])`. Имя совпадает с
-    /// ГЛОБАЛЬНОЙ `Вычислить(Текст)`, но пересечься они не могут:
-    /// глобальную резолвер разбирает голым вызовом, а сюда попадает
-    /// только вызов через точку.
-    XPathEvaluateExpression,
-
-    // --- объектная модель XML-схемы ------------------------------------
-    /// `ПостроительСхемXML.СоздатьСхемуXML(ДокументDOM | ЭлементDOM)` ->
-    /// `СхемаXML` либо `Неопределено`, если корень — не схема.
-    CreateXmlSchema,
-
-    // --- ТекстовыйДокумент ---------------------------------------------
-    // `Прочитать`, `Записать` и `Очистить` переиспользуются: у платформы
-    // это те же имена, что у JSON/XML/ЗаписьТекста, а смысл выбирается по
-    // получателю.
-    SetText,
-    GetText,
-    LineCount,
-    GetLine,
-    AddLine,
-    InsertLine,
-    ReplaceLine,
-    DeleteLine,
-    GetArea,
-    /// `Вывести(Область)` — перехватывается в `bsl-vm`: подстановка
-    /// параметров форматирует значения, а форматирование живёт в
-    /// `bsl-format`, который зависит от этого крейта, не наоборот.
-    OutputArea,
-
-    // --- ТабличныйДокумент ----------------------------------------------
-    /// `Область(...)` — ССЫЛКА на прямоугольник документа.
-    Region,
-    /// `Объединить()` у области ячеек.
-    MergeCells,
-    /// `Разъединить()` у области ячеек.
-    UnmergeCells,
-    /// `НачатьГруппуСтрок` / `ЗакончитьГруппуСтрок`.
-    BeginRowGroup,
-    EndRowGroup,
-
-    // --- ДвоичныеДанные --------------------------------------------------
-    /// `ДвоичныеДанные.Размер()` — число байтов. Не `Количество()`:
-    /// двоичные данные не коллекция, и имя у метода своё.
-    ///
-    /// У `БуферДвоичныхДанных` `Размер` — наоборот, СВОЙСТВО (см.
-    /// `BslValue::get_field_by_name`), и вызов со скобками на нём ошибка:
-    /// измерено, что платформа отвергает `Буфер.Размер()`.
+    /// `ДвоичныеДанные.Размер()`.
     Size,
-
-    // --- БуферДвоичныхДанных ---------------------------------------------
-    /// `Установить(Позиция, Значение)` — то же, что `Буфер[Позиция] = ...`.
-    /// Пары `Получить`/`Get` у буфера нет своей: он делит `BuiltinMethod::Get`
-    /// с `Соответствие`, и получатель разводится в рантайме.
     BufSet,
-    /// `ПрочитатьЦелое16/32/64` и парные `ЗаписатьЦелое16/32/64`.
-    /// Восьмибитных методов у платформы НЕТ ни в каком написании
-    /// (проверено перебором `ПрочитатьЦелое8`, `ReadInt8`, `ПрочитатьБайт`,
-    /// `ПолучитьБайт`) — один байт берётся индексом либо `Получить`.
     ReadInt16,
     ReadInt32,
     ReadInt64,
     WriteInt16,
     WriteInt32,
     WriteInt64,
-    /// `Разделить(Разделитель)` — раскрой по вхождениям БУФЕРА-разделителя,
-    /// а не нарезка на куски заданной длины (измерено: число платформа
-    /// отвергает).
     BufSplit,
-    /// `Соединить(Другой)` -> НОВЫЙ буфер; получатель не меняется.
     BufConcat,
-    /// `ПолучитьСрез(Позиция[, Количество])` -> ОКНО в тот же массив
-    /// байтов, а не копия (измерено, см. `crate::bindata::get_slice`).
-    /// Копию отдаёт `Скопировать`, которое буфер делит с `ТаблицаЗначений`
-    /// — получатель разводится в рантайме.
     BufSlice,
-    /// Побитовые операции с БУФЕРОМ-маской, накладываемой с позиции.
     WriteBitwiseAnd,
     WriteBitwiseOr,
     WriteBitwiseXor,
     WriteBitwiseAndNot,
-    /// `Инвертировать([Позиция][, Количество])` — побитовое НЕ по месту.
     Invert,
-
-    // --- Потоки ------------------------------------------------------------
-    // `Размер`, `Записать`, `Прочитать` и `Закрыть` у потоков переиспользуют
-    // уже заведённые варианты: у платформы это те же имена, а смысл
-    // выбирается по получателю. Своих вариантов два, и оба — потому что
-    // такого имени в таблице ещё нет.
-    /// `Поток.ТекущаяПозиция()` — именно МЕТОД, в отличие от трёх признаков
-    /// доступности, которые у потока СВОЙСТВА (измерено обеими формами).
-    /// На ЗАКРЫТОМ потоке продолжает работать и отдаёт последнюю позицию.
-    CurrentPosition,
-    /// `Поток.Перейти(Смещение, ПозицияВПотоке)` -> новая позиция числом.
-    Seek,
-
-    // --- ФайловыеПотоки (менеджер) ------------------------------------------
-    /// `ФайловыеПотоки.Открыть(Имя, Режим[, Доступ])` — то же, что
-    /// конструктор `ФайловыйПоток`. Имя делит с читателем архива
-    /// (`ЧтениеZipФайла.Открыть(Источник[, Пароль])`), поэтому диспетчер
-    /// смотрит на получателя, как у `Прочитать` и `Закрыть`.
-    StreamOpen,
-    /// `ОткрытьДляЧтения(Имя)` — `Открыть` плюс доступ `Чтение`.
-    StreamOpenForRead,
-    /// `ОткрытьДляЗаписи(Имя)` — `ОткрытьИлиСоздать` плюс доступ `Запись`;
-    /// существующий файл НЕ обрезается (измерено).
-    StreamOpenForWrite,
-    /// `ОткрытьДляДописывания(Имя)` — `Дописать` плюс доступ `Запись`.
-    StreamOpenForAppend,
-    /// `Тип`/`Type` — тоже полиморфное имя: у `ФабрикаXDTO` это поиск типа
-    /// по паре (URI, имя) или по расширенному имени, у `ОбъектXDTO` —
-    /// собственный тип экземпляра БЕЗ аргументов. Обращение к `Тип` как к
-    /// СВОЙСТВУ у экземпляра — ошибка (измерено), поэтому вариант метода
-    /// здесь и нужен.
-    XdtoType,
-    /// `Создать`/`Create` — имя ПОЛИМОРФНОЕ, как `Получить` и `Добавить`:
-    /// у менеджера файловых потоков это `Создать(Имя)` (создать файл с
-    /// доступом по умолчанию), у `ФабрикаXDTO` — `Создать(Тип[, Лексика])`.
-    /// Кто именно имелся в виду, решает получатель в
-    /// [`call_builtin_method`], а арность — он же: у менеджера аргумент
-    /// один, у фабрики их от одного до трёх (измерено).
-    Create,
-
-    // --- ЧтениеДанных / ЗаписьДанных ----------------------------------------
-    // `Прочитать`, `Записать`, `Закрыть`, `Пропустить` и шесть
-    // `Прочитать/ЗаписатьЦелоеN` переиспользуют уже заведённые варианты: у
-    // платформы это те же имена, а смысл выбирается по получателю. Свои
-    // варианты — только у имён, которых в таблице ещё нет.
-    /// `ЧтениеДанных.ПрочитатьБайт()` -> число либо `Неопределено` на краю.
-    /// Одноимённого метода у `БуферДвоичныхДанных` НЕТ (проверено перебором),
-    /// так что это имя принадлежит читателю целиком.
-    DataReadByte,
-    /// `ЧтениеДанных.ПрочитатьВБуферДвоичныхДанных([Количество])` -> буфер
-    /// ровно по числу прочитанных байтов.
-    DataReadIntoBuffer,
-    /// `ЧтениеДанных.ПрочитатьСимволы([Количество][, Кодировка])` — счёт в
-    /// СИМВОЛАХ, а не в байтах (измерено).
-    DataReadChars,
-    /// `ЧтениеДанных.ПрочитатьСтроку([Кодировка])` — до разделителя строк.
-    DataReadLine,
-    /// `ЗаписьДанных.ЗаписатьБайт(0..255)`.
-    DataWriteByte,
-    /// `ЗаписьДанных.ЗаписатьСимволы(Строка[, Кодировка])` — текст без
-    /// разделителя.
-    DataWriteChars,
-    /// `ЗаписьДанных.ЗаписатьСтроку(Строка[, Кодировка][, Разделитель])`.
-    DataWriteLine,
-    /// `РезультатЧтенияДанных.ПолучитьДвоичныеДанные()`.
-    GetBinaryData,
-    /// `РезультатЧтенияДанных.ПолучитьБуферДвоичныхДанных()`.
-    GetBinaryDataBuffer,
-
-    // --- экземпляр XDTO -----------------------------------------------------
-    // `Получить`, `Установить`, `Добавить`, `Вставить`, `Удалить`,
-    // `Очистить` и `Количество` у экземпляра и его списка — те же имена,
-    // что у остальных коллекций, и переиспользуют заведённые варианты.
-    // Свои варианты — только у имён, которых в таблице ещё не было; все
-    // они измерены поимённо на 8.3.27, вместе с английскими написаниями.
-    /// `ОбъектXDTO.ПолучитьСписок(Имя|Свойство)` — список множественного
-    /// свойства; у одиночного это ошибка (измерено).
-    XdtoGetList,
-    /// `ОбъектXDTO.Установлено(Имя|Свойство)` — было ли свойство
-    /// ЗАПОЛНЕНО. У свойства с `default` это «Нет», хотя чтение отдаёт
-    /// значение по умолчанию (измерено).
-    XdtoIsSet,
-    /// `ОбъектXDTO.Сбросить(Имя|Свойство)`. Написание `Сброс` платформа
-    /// отвергает (измерено).
-    XdtoUnset,
-    /// `ОбъектXDTO.Проверить()` — границы вхождения, рекурсивно.
-    XdtoValidate,
-    /// `ОбъектXDTO.Свойства()` — именно МЕТОД: обращение к `Свойства` как
-    /// к члену платформа отвергает (измерено).
-    XdtoObjectProperties,
-    /// `ОбъектXDTO.Владелец()` — тоже метод, в отличие от `Владелец` у
-    /// списка и последовательности, где это ЧЛЕН (измерено обе стороны).
-    XdtoOwner,
-    /// `ОбъектXDTO.Последовательность()` — у непоследовательного типа
-    /// отдаёт `Неопределено`, а не ошибку (измерено).
-    XdtoSequenceOf,
-    /// `ПоследовательностьXDTO.ПолучитьЗначение(i)`.
-    XdtoSequenceValue,
-    /// `ПоследовательностьXDTO.ПолучитьСвойство(i)` -> `СвойствоXDTO`.
-    XdtoSequenceProperty,
-    /// `ПрочитатьXML` — разбор документа. Имя делят ровно два получателя:
-    /// у фабрики это разбор в экземпляр XDTO по типу схемы, у
-    /// `СериализаторXDTO` — разбор в значение BSL. У `ЧтениеXML` метод
-    /// обхода называется `Прочитать`, так что больше на имя никто не
-    /// претендует, но диспетчер всё равно проверяет получателя.
-    XdtoReadXml,
-    /// `ЗаписатьXML` — та же пара получателей: `ФабрикаXDTO.ЗаписатьXML(
-    /// ЗаписьXML, Значение[, Имя[, УРИ]])` пишет экземпляр XDTO, а
-    /// `СериализаторXDTO.ЗаписатьXML(ЗаписьXML, Значение[, Имя[, УРИ]])` —
-    /// значение BSL.
-    XdtoWriteXml,
-    /// `СериализаторXDTO.XMLТип(Тип)` — отображение типа BSL в тип XML.
-    /// ИЗМЕРЕН существующим (отдаёт `ТипДанныхXML`), но здесь не
-    /// поддержан: вызов даёт перехватываемый отказ «не поддерживается»
-    /// (прежний `serializer_unsupported`, теперь в компоненте bsl-xml).
-    XdtoXmlTypeOfType,
-    /// `СериализаторXDTO.XMLТипЗнч(Значение)` — то же от значения.
-    XdtoXmlTypeOfValue,
-    /// `СериализаторXDTO.ВозможностьЧтенияXML(ЧтениеXML)` — прочитается ли
-    /// текущий элемент. ИЗМЕРЕН существующим, здесь не поддержан.
-    XdtoCanReadXml,
-
-    /// `ЧтениеZipФайла.Извлечь(Элемент, Каталог[, Режим][, Пароль])` —
-    /// распаковка ОДНОЙ записи. Имя ничьё больше: `Извлечь` есть только у
-    /// читателей архива.
-    ArchiveExtract,
-    /// `ЧтениеZipФайла.ИзвлечьВсе(Каталог[, Режим])`.
-    ArchiveExtractAll,
 }
 
-/// Написания МЕТОДОВ объектов — тот же принцип, что и у
-/// [`BUILTIN_FN_NAMES`]: единственный источник и для поиска, и для
-/// автодополнения после точки.
+/// Написания методов, которые исполняет базовый рантайм. Методы компонентных
+/// объектов перечисляет `MethodDescriptor` соответствующей библиотеки.
 pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
     ("Количество", BuiltinMethod::Count),
     ("Count", BuiltinMethod::Count),
@@ -1041,100 +686,8 @@ pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
     ("Write", BuiltinMethod::Write),
     ("Закрыть", BuiltinMethod::Close),
     ("Close", BuiltinMethod::Close),
-    ("УстановитьСтроку", BuiltinMethod::SetString),
-    ("SetString", BuiltinMethod::SetString),
-    ("ОткрытьФайл", BuiltinMethod::OpenFile),
-    ("OpenFile", BuiltinMethod::OpenFile),
-    ("Прочитать", BuiltinMethod::ReadNext),
-    ("Read", BuiltinMethod::ReadNext),
-    ("Пропустить", BuiltinMethod::SkipNode),
-    ("Skip", BuiltinMethod::SkipNode),
-    ("ЗаписатьНачалоОбъекта", BuiltinMethod::WriteStartObject),
-    ("WriteStartObject", BuiltinMethod::WriteStartObject),
-    ("ЗаписатьКонецОбъекта", BuiltinMethod::WriteEndObject),
-    ("WriteEndObject", BuiltinMethod::WriteEndObject),
-    ("ЗаписатьНачалоМассива", BuiltinMethod::WriteStartArray),
-    ("WriteStartArray", BuiltinMethod::WriteStartArray),
-    ("ЗаписатьКонецМассива", BuiltinMethod::WriteEndArray),
-    ("WriteEndArray", BuiltinMethod::WriteEndArray),
-    ("ЗаписатьИмяСвойства", BuiltinMethod::WritePropertyName),
-    ("WritePropertyName", BuiltinMethod::WritePropertyName),
-    ("ЗаписатьЗначение", BuiltinMethod::WriteJsonValue),
-    ("WriteValue", BuiltinMethod::WriteJsonValue),
-    ("ПрочитатьАтрибут", BuiltinMethod::XmlReadAttribute),
-    ("ReadAttribute", BuiltinMethod::XmlReadAttribute),
-    ("КоличествоАтрибутов", BuiltinMethod::XmlAttributeCount),
-    ("AttributeCount", BuiltinMethod::XmlAttributeCount),
-    ("ИмяАтрибута", BuiltinMethod::XmlAttributeName),
-    ("AttributeName", BuiltinMethod::XmlAttributeName),
-    ("ЗначениеАтрибута", BuiltinMethod::XmlAttributeValue),
-    ("AttributeValue", BuiltinMethod::XmlAttributeValue),
-    ("ПерейтиКСодержимому", BuiltinMethod::XmlMoveToContent),
-    ("MoveToContent", BuiltinMethod::XmlMoveToContent),
-    ("ЗаписатьОбъявлениеXML", BuiltinMethod::WriteXmlDeclaration),
-    ("WriteXMLDeclaration", BuiltinMethod::WriteXmlDeclaration),
-    ("ЗаписатьНачалоЭлемента", BuiltinMethod::WriteStartElement),
-    ("WriteStartElement", BuiltinMethod::WriteStartElement),
-    ("ЗаписатьКонецЭлемента", BuiltinMethod::WriteEndElement),
-    ("WriteEndElement", BuiltinMethod::WriteEndElement),
-    ("ЗаписатьАтрибут", BuiltinMethod::WriteXmlAttribute),
-    ("WriteAttribute", BuiltinMethod::WriteXmlAttribute),
-    ("ЗаписатьТекст", BuiltinMethod::WriteXmlText),
-    ("WriteText", BuiltinMethod::WriteXmlText),
-    ("ЗаписатьКомментарий", BuiltinMethod::WriteXmlComment),
-    ("WriteComment", BuiltinMethod::WriteXmlComment),
-    ("ЗаписатьСекциюCDATA", BuiltinMethod::WriteCdataSection),
-    ("WriteCDATASection", BuiltinMethod::WriteCdataSection),
-    (
-        "ЗаписатьИнструкциюОбработки",
-        BuiltinMethod::WriteXmlProcessingInstruction,
-    ),
-    (
-        "WriteProcessingInstruction",
-        BuiltinMethod::WriteXmlProcessingInstruction,
-    ),
-    ("ЗаписатьБезОбработки", BuiltinMethod::WriteXmlRaw),
-    ("WriteRaw", BuiltinMethod::WriteXmlRaw),
-    ("УстановитьТекст", BuiltinMethod::SetText),
-    ("SetText", BuiltinMethod::SetText),
-    ("ПолучитьТекст", BuiltinMethod::GetText),
-    ("GetText", BuiltinMethod::GetText),
-    ("КоличествоСтрок", BuiltinMethod::LineCount),
-    ("LineCount", BuiltinMethod::LineCount),
-    ("ПолучитьСтроку", BuiltinMethod::GetLine),
-    ("GetLine", BuiltinMethod::GetLine),
-    ("ДобавитьСтроку", BuiltinMethod::AddLine),
-    ("AddLine", BuiltinMethod::AddLine),
-    ("ВставитьСтроку", BuiltinMethod::InsertLine),
-    ("InsertLine", BuiltinMethod::InsertLine),
-    ("ЗаменитьСтроку", BuiltinMethod::ReplaceLine),
-    ("ReplaceLine", BuiltinMethod::ReplaceLine),
-    ("УдалитьСтроку", BuiltinMethod::DeleteLine),
-    ("DeleteLine", BuiltinMethod::DeleteLine),
-    ("ПолучитьОбласть", BuiltinMethod::GetArea),
-    ("GetArea", BuiltinMethod::GetArea),
-    ("Вывести", BuiltinMethod::OutputArea),
-    ("Output", BuiltinMethod::OutputArea),
-    ("Область", BuiltinMethod::Region),
-    ("Area", BuiltinMethod::Region),
-    ("Объединить", BuiltinMethod::MergeCells),
-    ("Merge", BuiltinMethod::MergeCells),
-    ("Разъединить", BuiltinMethod::UnmergeCells),
-    ("Unmerge", BuiltinMethod::UnmergeCells),
-    ("НачатьГруппуСтрок", BuiltinMethod::BeginRowGroup),
-    ("StartRowGroup", BuiltinMethod::BeginRowGroup),
-    ("ЗакончитьГруппуСтрок", BuiltinMethod::EndRowGroup),
-    ("EndRowGroup", BuiltinMethod::EndRowGroup),
-    // Английское написание проверено пробой `BIN.SIZE.EN`: платформа
-    // принимает `ДД.Size()`.
     ("Размер", BuiltinMethod::Size),
     ("Size", BuiltinMethod::Size),
-    // Английские написания методов буфера ИЗМЕРЕНЫ, а не достроены по
-    // образцу: платформа принимает `Set`, `ReadInt16`, `WriteInt16`,
-    // `Split`, `Concat`, `WriteBitwiseAnd`, `WriteBitwiseXor`,
-    // `WriteBitwiseAndNot`, `Invert`. Русское имя исключающего ИЛИ —
-    // `ЗаписатьПобитовоеИсключительноеИли`; `...ИсключающееИли` платформа
-    // НЕ знает, и это стоило отдельного захода.
     ("Установить", BuiltinMethod::BufSet),
     ("Set", BuiltinMethod::BufSet),
     ("ПрочитатьЦелое16", BuiltinMethod::ReadInt16),
@@ -1168,190 +721,6 @@ pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
     ("WriteBitwiseAndNot", BuiltinMethod::WriteBitwiseAndNot),
     ("Инвертировать", BuiltinMethod::Invert),
     ("Invert", BuiltinMethod::Invert),
-    // Английские написания у потоков и их менеджера ИЗМЕРЕНЫ: фикстура
-    // `binary-streams` зовёт `Size`, `CurrentPosition`, `Seek`, а у
-    // менеджера — `OpenForRead`, `OpenForWrite`, `OpenForAppend`, `Create`.
-    // Русское имя дописывания — `ОткрытьДляДописывания`, а не
-    // `ОткрытьДляДобавления`.
-    ("ТекущаяПозиция", BuiltinMethod::CurrentPosition),
-    ("CurrentPosition", BuiltinMethod::CurrentPosition),
-    ("Перейти", BuiltinMethod::Seek),
-    ("Seek", BuiltinMethod::Seek),
-    ("Открыть", BuiltinMethod::StreamOpen),
-    ("Open", BuiltinMethod::StreamOpen),
-    ("ОткрытьДляЧтения", BuiltinMethod::StreamOpenForRead),
-    ("OpenForRead", BuiltinMethod::StreamOpenForRead),
-    ("ОткрытьДляЗаписи", BuiltinMethod::StreamOpenForWrite),
-    ("OpenForWrite", BuiltinMethod::StreamOpenForWrite),
-    ("ОткрытьДляДописывания", BuiltinMethod::StreamOpenForAppend),
-    ("OpenForAppend", BuiltinMethod::StreamOpenForAppend),
-    ("Создать", BuiltinMethod::Create),
-    ("Create", BuiltinMethod::Create),
-    // Английские написания обоих методов распаковки ИЗМЕРЕНЫ: `Extract` и
-    // `ExtractAll` платформа принимает и делает ими то же самое.
-    ("Извлечь", BuiltinMethod::ArchiveExtract),
-    ("Extract", BuiltinMethod::ArchiveExtract),
-    ("ИзвлечьВсе", BuiltinMethod::ArchiveExtractAll),
-    ("ExtractAll", BuiltinMethod::ArchiveExtractAll),
-    // Модель типов XDTO. Английские написания обоих методов фабрики
-    // ИЗМЕРЕНЫ: `Фаб.Type("urn:test", "RootType")` и
-    // `Фаб.Create(Тип, "аб")` платформа принимает.
-    ("Тип", BuiltinMethod::XdtoType),
-    ("Type", BuiltinMethod::XdtoType),
-    // Экземпляр XDTO. Оба написания каждого имени ИЗМЕРЕНЫ вызовом на
-    // живом экземпляре, и отвергнутые платформой (`Сброс`, `ЭтоNull`,
-    // `УстановитьNull`, `ДобавитьЗначение`) сюда сознательно не попали.
-    ("ПолучитьСписок", BuiltinMethod::XdtoGetList),
-    ("GetList", BuiltinMethod::XdtoGetList),
-    ("Установлено", BuiltinMethod::XdtoIsSet),
-    ("IsSet", BuiltinMethod::XdtoIsSet),
-    ("Сбросить", BuiltinMethod::XdtoUnset),
-    ("Unset", BuiltinMethod::XdtoUnset),
-    ("Проверить", BuiltinMethod::XdtoValidate),
-    ("Validate", BuiltinMethod::XdtoValidate),
-    ("Свойства", BuiltinMethod::XdtoObjectProperties),
-    ("Properties", BuiltinMethod::XdtoObjectProperties),
-    ("Владелец", BuiltinMethod::XdtoOwner),
-    ("Owner", BuiltinMethod::XdtoOwner),
-    ("Последовательность", BuiltinMethod::XdtoSequenceOf),
-    ("Sequence", BuiltinMethod::XdtoSequenceOf),
-    ("ПолучитьЗначение", BuiltinMethod::XdtoSequenceValue),
-    ("GetValue", BuiltinMethod::XdtoSequenceValue),
-    ("ПолучитьСвойство", BuiltinMethod::XdtoSequenceProperty),
-    ("GetProperty", BuiltinMethod::XdtoSequenceProperty),
-    ("ПрочитатьXML", BuiltinMethod::XdtoReadXml),
-    ("ReadXML", BuiltinMethod::XdtoReadXml),
-    ("ЗаписатьXML", BuiltinMethod::XdtoWriteXml),
-    ("WriteXML", BuiltinMethod::XdtoWriteXml),
-    // Английские написания трёх членов сериализатора ИЗМЕРЕНЫ поимённо:
-    // `XMLType`, `XMLTypeOf` и `CanReadXML` платформа принимает и отвечает
-    // тем же, что и на русские.
-    ("XMLТип", BuiltinMethod::XdtoXmlTypeOfType),
-    ("XMLType", BuiltinMethod::XdtoXmlTypeOfType),
-    ("XMLТипЗнч", BuiltinMethod::XdtoXmlTypeOfValue),
-    ("XMLTypeOf", BuiltinMethod::XdtoXmlTypeOfValue),
-    ("ВозможностьЧтенияXML", BuiltinMethod::XdtoCanReadXml),
-    ("CanReadXML", BuiltinMethod::XdtoCanReadXml),
-    // `ЧтениеДанных`/`ЗаписьДанных`/`РезультатЧтенияДанных`. Английские
-    // написания ИЗМЕРЕНЫ перебором: каждое вызвано на живом объекте, и
-    // отсутствующее имя платформа отличает («Метод объекта не обнаружен»)
-    // от существующего, но не возвращающего значения («Обращение к
-    // процедуре объекта как к функции»). Так отпали `ReadToBinaryDataBuffer`
-    // и `ReadIntoBuffer` в пользу `ReadIntoBinaryDataBuffer`.
-    ("ПрочитатьБайт", BuiltinMethod::DataReadByte),
-    ("ReadByte", BuiltinMethod::DataReadByte),
-    (
-        "ПрочитатьВБуферДвоичныхДанных",
-        BuiltinMethod::DataReadIntoBuffer,
-    ),
-    (
-        "ReadIntoBinaryDataBuffer",
-        BuiltinMethod::DataReadIntoBuffer,
-    ),
-    ("ПрочитатьСимволы", BuiltinMethod::DataReadChars),
-    ("ReadChars", BuiltinMethod::DataReadChars),
-    ("ПрочитатьСтроку", BuiltinMethod::DataReadLine),
-    ("ReadLine", BuiltinMethod::DataReadLine),
-    ("ЗаписатьБайт", BuiltinMethod::DataWriteByte),
-    ("WriteByte", BuiltinMethod::DataWriteByte),
-    ("ЗаписатьСимволы", BuiltinMethod::DataWriteChars),
-    ("WriteChars", BuiltinMethod::DataWriteChars),
-    ("ЗаписатьСтроку", BuiltinMethod::DataWriteLine),
-    ("WriteLine", BuiltinMethod::DataWriteLine),
-    ("ПолучитьДвоичныеДанные", BuiltinMethod::GetBinaryData),
-    ("GetBinaryData", BuiltinMethod::GetBinaryData),
-    (
-        "ПолучитьБуферДвоичныхДанных",
-        BuiltinMethod::GetBinaryDataBuffer,
-    ),
-    ("GetBinaryDataBuffer", BuiltinMethod::GetBinaryDataBuffer),
-    // DOM. Английские написания ИЗМЕРЕНЫ перебором на 8.3.27 вместе с
-    // русскими — платформа принимает обе формы.
-    ("ЕстьДочерниеУзлы", BuiltinMethod::DomHasChildNodes),
-    ("HasChildNodes", BuiltinMethod::DomHasChildNodes),
-    ("ЕстьАтрибуты", BuiltinMethod::DomHasAttributes),
-    ("HasAttributes", BuiltinMethod::DomHasAttributes),
-    ("ПолучитьАтрибут", BuiltinMethod::DomGetAttribute),
-    ("GetAttribute", BuiltinMethod::DomGetAttribute),
-    ("ЕстьАтрибут", BuiltinMethod::DomHasAttribute),
-    ("HasAttribute", BuiltinMethod::DomHasAttribute),
-    ("ПолучитьУзелАтрибута", BuiltinMethod::DomGetAttributeNode),
-    ("GetAttributeNode", BuiltinMethod::DomGetAttributeNode),
-    (
-        "ПолучитьЭлементыПоИмени",
-        BuiltinMethod::DomGetElementsByName,
-    ),
-    ("GetElementByTagName", BuiltinMethod::DomGetElementsByName),
-    (
-        "ПолучитьЭлементПоИдентификатору",
-        BuiltinMethod::DomGetElementById,
-    ),
-    ("GetElementById", BuiltinMethod::DomGetElementById),
-    ("СоздатьЭлемент", BuiltinMethod::DomCreateElement),
-    ("CreateElement", BuiltinMethod::DomCreateElement),
-    ("СоздатьАтрибут", BuiltinMethod::DomCreateAttribute),
-    ("CreateAttribute", BuiltinMethod::DomCreateAttribute),
-    ("СоздатьТекстовыйУзел", BuiltinMethod::DomCreateTextNode),
-    ("CreateTextNode", BuiltinMethod::DomCreateTextNode),
-    ("СоздатьСекциюCDATA", BuiltinMethod::DomCreateCdataSection),
-    ("CreateCDATASection", BuiltinMethod::DomCreateCdataSection),
-    ("СоздатьКомментарий", BuiltinMethod::DomCreateComment),
-    ("CreateComment", BuiltinMethod::DomCreateComment),
-    (
-        "СоздатьИнструкциюОбработки",
-        BuiltinMethod::DomCreateProcessingInstruction,
-    ),
-    (
-        "CreateProcessingInstruction",
-        BuiltinMethod::DomCreateProcessingInstruction,
-    ),
-    ("ДобавитьДочерний", BuiltinMethod::DomAppendChild),
-    ("AppendChild", BuiltinMethod::DomAppendChild),
-    ("ВставитьПеред", BuiltinMethod::DomInsertBefore),
-    ("InsertBefore", BuiltinMethod::DomInsertBefore),
-    ("УдалитьДочерний", BuiltinMethod::DomRemoveChild),
-    ("RemoveChild", BuiltinMethod::DomRemoveChild),
-    ("ЗаменитьДочерний", BuiltinMethod::DomReplaceChild),
-    ("ReplaceChild", BuiltinMethod::DomReplaceChild),
-    ("УстановитьАтрибут", BuiltinMethod::DomSetAttribute),
-    ("SetAttribute", BuiltinMethod::DomSetAttribute),
-    ("УдалитьАтрибут", BuiltinMethod::DomRemoveAttribute),
-    ("RemoveAttribute", BuiltinMethod::DomRemoveAttribute),
-    ("УстановитьУзелАтрибута", BuiltinMethod::DomSetAttributeNode),
-    ("SetAttributeNode", BuiltinMethod::DomSetAttributeNode),
-    ("УдалитьУзелАтрибута", BuiltinMethod::DomRemoveAttributeNode),
-    ("RemoveAttributeNode", BuiltinMethod::DomRemoveAttributeNode),
-    ("СоздатьСхемуXML", BuiltinMethod::CreateXmlSchema),
-    ("CreateXMLSchema", BuiltinMethod::CreateXmlSchema),
-    // XPath. Английские написания ИЗМЕРЕНЫ вместе с русскими.
-    ("ВычислитьВыражениеXPath", BuiltinMethod::XPathEvaluate),
-    ("EvaluateXPathExpression", BuiltinMethod::XPathEvaluate),
-    (
-        "СоздатьВыражениеXPath",
-        BuiltinMethod::XPathCreateExpression,
-    ),
-    (
-        "CreateXPathExpression",
-        BuiltinMethod::XPathCreateExpression,
-    ),
-    (
-        "СоздатьРазыменовательПИ",
-        BuiltinMethod::XPathCreateNsResolver,
-    ),
-    ("CreateNSResolver", BuiltinMethod::XPathCreateNsResolver),
-    (
-        "НайтиURIПространстваИмен",
-        BuiltinMethod::XPathLookupNamespaceUri,
-    ),
-    ("LookupNamespaceURI", BuiltinMethod::XPathLookupNamespaceUri),
-    ("ПолучитьСледующий", BuiltinMethod::XPathNext),
-    ("IterateNext", BuiltinMethod::XPathNext),
-    ("ПолучитьГруппы", BuiltinMethod::RegexGetGroups),
-    ("GetGroups", BuiltinMethod::RegexGetGroups),
-    ("ЭлементСнимка", BuiltinMethod::XPathSnapshotItem),
-    ("SnapshotItem", BuiltinMethod::XPathSnapshotItem),
-    ("Вычислить", BuiltinMethod::XPathEvaluateExpression),
-    ("Evaluate", BuiltinMethod::XPathEvaluateExpression),
 ];
 
 impl BuiltinMethod {
@@ -1389,8 +758,8 @@ impl BuiltinMethod {
 
     /// Статическая арность метода: `Some(n)` — метод берёт ровно `n`
     /// аргументов при ЛЮБОМ получателе; `None` — арность полиморфна по типу
-    /// получателя (`Добавить` — 0 у таблицы, 1 у массива; `Получить`,
-    /// `Прочитать`, ...) и решается рантаймом (см. [`call_builtin_method`]).
+    /// получателя (`Добавить` — 0 у таблицы, 1 у массива) или имеет несколько
+    /// допустимых форм и решается рантаймом (см. [`call_builtin_method`]).
     ///
     /// Живёт здесь, а не в `bsl-sema`: проверить арность обязан и `bsl-vm`
     /// на КРАФТНУТОМ байт-коде (`bsl-vm` не видит `bsl-sema`), иначе метод с
@@ -1401,242 +770,43 @@ impl BuiltinMethod {
     #[must_use]
     pub fn static_arity(self) -> Option<usize> {
         match self {
-            // DOM. Признаки — строго без аргументов, поиск
-            // элемента по идентификатору — строго с одним, а у
-            // четырёх «атрибутных» методов форм две (имя либо
-            // URI и локальное имя), поэтому их арность решает
-            // рантайм. Всё измерено: платформа отвергает и
-            // `ЕстьАтрибут()`, и `ЕстьАтрибут("а", "б", "в")`.
-            BuiltinMethod::DomHasChildNodes | BuiltinMethod::DomHasAttributes => Some(0),
-            BuiltinMethod::DomGetElementById => Some(1),
-            // Фабрики узлов и мутация. Строго один аргумент — у
-            // текстоподобных фабрик и у операций с одним узлом,
-            // строго два — у инструкции обработки, вставки перед,
-            // замены; у форм с пространством имён (`СоздатьЭлемент`,
-            // `СоздатьАтрибут`, `УстановитьАтрибут`,
-            // `УдалитьАтрибут`) арность решает рантайм.
-            BuiltinMethod::DomCreateTextNode
-            | BuiltinMethod::DomCreateCdataSection
-            | BuiltinMethod::DomCreateComment
-            | BuiltinMethod::DomAppendChild
-            | BuiltinMethod::DomRemoveChild
-            | BuiltinMethod::DomSetAttributeNode
-            | BuiltinMethod::DomRemoveAttributeNode => Some(1),
-            BuiltinMethod::DomCreateProcessingInstruction
-            | BuiltinMethod::DomInsertBefore
-            | BuiltinMethod::DomReplaceChild => Some(2),
-            BuiltinMethod::DomCreateElement
-            | BuiltinMethod::DomCreateAttribute
-            | BuiltinMethod::DomSetAttribute
-            | BuiltinMethod::DomRemoveAttribute => None,
-            BuiltinMethod::DomGetAttribute
-            | BuiltinMethod::DomHasAttribute
-            | BuiltinMethod::DomGetAttributeNode
-            | BuiltinMethod::DomGetElementsByName => None,
-            // XPath. Строго фиксированы три имени: создание
-            // выражения — ровно два аргумента, поиск URI — один,
-            // обход — ноль (измерено, что платформа отвергает и
-            // `СоздатьВыражениеXPath(в)`, и
-            // `НайтиURIПространстваИмен()`). У вычисления форм две
-            // (три аргумента и четыре), у создания разыменователя
-            // — три (ноль, один и два), у `Вычислить` — две (узел
-            // и узел с видом), у `ЭлементСнимка` имя совпало бы с
-            // чужим, будь оно у кого-то ещё; всё это решает
-            // рантайм.
-            BuiltinMethod::XPathCreateExpression => Some(2),
-            BuiltinMethod::XPathLookupNamespaceUri | BuiltinMethod::XPathSnapshotItem => Some(1),
-            BuiltinMethod::XPathNext => Some(0),
-            // `ПолучитьГруппы()` аргументов не берёт: измерено, что
-            // синтаксис статьи 16.5.4 — ровно пустые скобки.
-            BuiltinMethod::RegexGetGroups => Some(0),
-            BuiltinMethod::XPathEvaluate
-            | BuiltinMethod::XPathCreateNsResolver
-            | BuiltinMethod::XPathEvaluateExpression => None,
-            BuiltinMethod::Count | BuiltinMethod::Clear | BuiltinMethod::Close => Some(0),
-            // `Размер` есть только у двоичных данных, и лишний
-            // аргумент платформа отвергает (проба
-            // `BIN.SIZE.EXTRAARG`) — арность фиксированная.
-            BuiltinMethod::Size => Some(0),
-            BuiltinMethod::Delete => Some(1),
-            // `Получить` полиморфен, как и `Добавить`: у
-            // `Соответствие` и буфера это один аргумент, а у
-            // именованной коллекции компонент схемы — ещё и пара
-            // (URI, имя) (измерено). Арность решает рантайм.
-            BuiltinMethod::Get => None,
-            // `СоздатьСхемуXML` — строго один аргумент: ни без
-            // аргументов, ни с двумя платформа его не берёт
-            // (измерено).
-            BuiltinMethod::CreateXmlSchema => Some(1),
-            // Методы буфера. `Установить` и побитовые — строго два
-            // аргумента, `Разделить`/`Соединить` — один (измерено:
-            // ни без аргументов, ни с двумя платформа их не берёт).
-            BuiltinMethod::BufSet
+            BuiltinMethod::Count
+            | BuiltinMethod::Clear
+            | BuiltinMethod::Close
+            | BuiltinMethod::Size => Some(0),
+            BuiltinMethod::Delete
+            | BuiltinMethod::FindRows
+            | BuiltinMethod::Total
+            | BuiltinMethod::UnloadColumn
+            | BuiltinMethod::IndexOf
+            | BuiltinMethod::BufSplit
+            | BuiltinMethod::BufConcat => Some(1),
+            BuiltinMethod::Insert
+            | BuiltinMethod::LoadColumn
+            | BuiltinMethod::Move
+            | BuiltinMethod::BufSet
             | BuiltinMethod::WriteBitwiseAnd
             | BuiltinMethod::WriteBitwiseOr
             | BuiltinMethod::WriteBitwiseXor
             | BuiltinMethod::WriteBitwiseAndNot => Some(2),
-            BuiltinMethod::BufSplit | BuiltinMethod::BufConcat => Some(1),
-            // `ПолучитьСрез` — 1 или 2 (количество необязательно),
-            // арность решает рантайм.
-            BuiltinMethod::BufSlice => None,
-            // У чтения целого 1..2 аргумента, у записи 2..3, у
-            // `Инвертировать` 0..2 — арность решает рантайм.
-            BuiltinMethod::ReadInt16
-            | BuiltinMethod::ReadInt32
-            | BuiltinMethod::ReadInt64
-            | BuiltinMethod::WriteInt16
-            | BuiltinMethod::WriteInt32
-            | BuiltinMethod::WriteInt64
-            | BuiltinMethod::Invert => None,
-            BuiltinMethod::Insert => Some(2),
-            BuiltinMethod::FindRows | BuiltinMethod::Total => Some(1),
-            // `Записать` — 1 у `ЗаписьТекста` (кусок текста) и 1..2 у
-            // `ТекстовыйДокумент` (путь и кодировка). Как и у
-            // `Прочитать`, арность решает рантайм.
-            BuiltinMethod::Write => None,
-            BuiltinMethod::UnloadColumn | BuiltinMethod::IndexOf => Some(1),
-            BuiltinMethod::LoadColumn | BuiltinMethod::Move => Some(2),
-            // `Свойство` — 1 или 2 (см. `BslValue::structure_property`),
-            // `Найти` — 1 или 2 (список колонок необязателен), как и
-            // у `Добавить` арность решает рантайм. Из волны 3 так же
-            // устроены `Скопировать` (0..2), `СкопироватьКолонки`
-            // (0..1) и `Свернуть` (1..2).
             BuiltinMethod::Add
+            | BuiltinMethod::Get
             | BuiltinMethod::Property
             | BuiltinMethod::Find
             | BuiltinMethod::Sort
             | BuiltinMethod::FillValues
             | BuiltinMethod::Copy
             | BuiltinMethod::CopyColumns
-            | BuiltinMethod::Collapse => None,
-            // JSON. Без аргументов — обход читателя и открытие/
-            // закрытие контейнеров записи.
-            BuiltinMethod::WriteStartObject
-            | BuiltinMethod::WriteEndObject
-            | BuiltinMethod::WriteStartArray
-            | BuiltinMethod::WriteEndArray => Some(0),
-            // `Пропустить` — 0 у читателей JSON/XML (шаг через узел) и
-            // 1 у `ЧтениеДанных` (сколько байтов перешагнуть). Тип
-            // получателя здесь ещё не известен, поэтому арность решает
-            // рантайм.
-            BuiltinMethod::SkipNode => None,
-            // Методы `ЧтениеДанных`/`ЗаписьДанных`. Необязательные
-            // хвостовые аргументы (количество, кодировка, разделитель)
-            // проверяет рантайм; фиксированы только те, у кого форма
-            // ровно одна.
-            BuiltinMethod::DataReadByte
-            | BuiltinMethod::GetBinaryData
-            | BuiltinMethod::GetBinaryDataBuffer => Some(0),
-            BuiltinMethod::DataWriteByte => Some(1),
-            BuiltinMethod::DataReadIntoBuffer
-            | BuiltinMethod::DataReadChars
-            | BuiltinMethod::DataReadLine
-            | BuiltinMethod::DataWriteChars
-            | BuiltinMethod::DataWriteLine => None,
-            BuiltinMethod::WritePropertyName | BuiltinMethod::WriteJsonValue => Some(1),
-            // `УстановитьСтроку` — 1 у читателя (текст) и 0..1 у
-            // писателя (параметры), `ОткрытьФайл` — 1..2. Тип
-            // получателя здесь ещё не известен, поэтому арность,
-            // как у `Добавить`, решает рантайм.
-            // `Прочитать` — 0 у читателей JSON/XML (шаг по потоку) и 1 у
-            // `ТекстовыйДокумент` (путь к файлу). Тип получателя здесь
-            // ещё не известен, поэтому арность решает рантайм.
-            BuiltinMethod::SetString | BuiltinMethod::OpenFile | BuiltinMethod::ReadNext => None,
-            // XML. Обход читателя и закрытие элемента — без
-            // аргументов, остальное — по числу измеренных
-            // параметров.
-            BuiltinMethod::GetText | BuiltinMethod::LineCount => Some(0),
-            BuiltinMethod::SetText
-            | BuiltinMethod::GetLine
-            | BuiltinMethod::AddLine
-            | BuiltinMethod::DeleteLine
-            | BuiltinMethod::OutputArea => Some(1),
-            // `ПолучитьОбласть` у платформы проверяет число
-            // аргументов в РАНТАЙМЕ: `ПолучитьОбласть(2, 3)` — не
-            // ошибка компиляции, а ловимое исключение.
-            BuiltinMethod::GetArea => None,
-            // `Область` — 1 аргумент (адрес строкой) либо 4
-            // (координаты), поэтому арность решает рантайм.
-            BuiltinMethod::Region => None,
-            BuiltinMethod::MergeCells
-            | BuiltinMethod::UnmergeCells
-            | BuiltinMethod::EndRowGroup => Some(0),
-            // `НачатьГруппуСтрок` — от нуля до двух аргументов.
-            BuiltinMethod::BeginRowGroup => None,
-            BuiltinMethod::InsertLine | BuiltinMethod::ReplaceLine => Some(2),
-            BuiltinMethod::XmlReadAttribute
-            | BuiltinMethod::XmlAttributeCount
-            | BuiltinMethod::XmlMoveToContent
-            | BuiltinMethod::WriteXmlDeclaration
-            | BuiltinMethod::WriteEndElement => Some(0),
-            BuiltinMethod::XmlAttributeName
-            | BuiltinMethod::XmlAttributeValue
-            | BuiltinMethod::WriteStartElement
-            | BuiltinMethod::WriteXmlText
-            | BuiltinMethod::WriteXmlComment
-            | BuiltinMethod::WriteCdataSection
-            | BuiltinMethod::WriteXmlRaw => Some(1),
-            BuiltinMethod::WriteXmlAttribute | BuiltinMethod::WriteXmlProcessingInstruction => {
-                Some(2)
-            }
-            // Потоки. `ТекущаяПозиция` — без аргументов, `Перейти`
-            // — строго со смещением и точкой отсчёта: `Перейти(0)`
-            // платформа отвергает, и это ошибка КОМПИЛЯЦИИ, а не
-            // ловимое исключение (измерено).
-            BuiltinMethod::CurrentPosition => Some(0),
-            BuiltinMethod::Seek => Some(2),
-            // У `Открыть` доступ необязателен (2..3), поэтому
-            // арность решает рантайм; остальные три метода
-            // менеджера берут ровно имя файла.
-            BuiltinMethod::StreamOpen => None,
-            BuiltinMethod::StreamOpenForRead
-            | BuiltinMethod::StreamOpenForWrite
-            | BuiltinMethod::StreamOpenForAppend => Some(1),
-            // `Создать` и `Тип` полиморфны по получателю, как
-            // `Получить` и `Добавить`: у менеджера потоков
-            // `Создать` — один аргумент, у фабрики XDTO — от одного
-            // до трёх; `Тип` у фабрики — пара (URI, имя) либо
-            // расширенное имя, а у экземпляра `ОбъектXDTO` —
-            // вообще без аргументов. Всё измерено, и решает рантайм.
-            BuiltinMethod::Create | BuiltinMethod::XdtoType => None,
-            // Экземпляр XDTO. Арности измерены поимённо: имя
-            // свойства — один аргумент, `Установить` — два (оно
-            // делит вариант с `БуферДвоичныхДанных`, см. выше), а
-            // `Проверить`, `Свойства`, `Владелец` и
-            // `Последовательность` берут ровно ноль: лишний
-            // аргумент — ошибка на всех четырёх (пробы «объект …
-            // с аргументом» в `measure-xdto.bsl`; какая именно —
-            // компиляции или исполнения — не различима, они сняты
-            // через `Выполнить` внутри `Попытка`, здесь это
-            // ошибка компиляции).
-            BuiltinMethod::XdtoGetList
-            | BuiltinMethod::XdtoIsSet
-            | BuiltinMethod::XdtoUnset
-            | BuiltinMethod::XdtoSequenceValue
-            | BuiltinMethod::XdtoSequenceProperty => Some(1),
-            BuiltinMethod::XdtoValidate
-            | BuiltinMethod::XdtoObjectProperties
-            | BuiltinMethod::XdtoOwner
-            | BuiltinMethod::XdtoSequenceOf => Some(0),
-            // Ввод-вывод фабрики: у `ПрочитатьXML` форм две
-            // (читатель и читатель с типом), у `ЗаписатьXML` три
-            // (писатель со значением, плюс имя, плюс URI) —
-            // измерено, что третий аргумент чтения и пятый записи
-            // платформа отвергает. Арность решает рантайм.
-            BuiltinMethod::XdtoReadXml | BuiltinMethod::XdtoWriteXml => None,
-            // Три члена сериализатора, которых здесь нет: они
-            // не поддержаны ни при какой арности, и проверять её
-            // значило бы отвечать на `Сер.XMLТип()` рассказом про
-            // число аргументов вместо главного — что метода нет.
-            // Отказ даёт рантайм, и он перехватывается `Попытка`,
-            // как на платформе.
-            BuiltinMethod::XdtoXmlTypeOfType
-            | BuiltinMethod::XdtoXmlTypeOfValue
-            | BuiltinMethod::XdtoCanReadXml => None,
-            // Распаковка. У `Извлечь` форм три (элемент с
-            // каталогом, с режимом и с паролем), у `ИзвлечьВсе` —
-            // две; всё измерено, и обе арности решает рантайм.
-            BuiltinMethod::ArchiveExtract | BuiltinMethod::ArchiveExtractAll => None,
+            | BuiltinMethod::Collapse
+            | BuiltinMethod::Write
+            | BuiltinMethod::ReadInt16
+            | BuiltinMethod::ReadInt32
+            | BuiltinMethod::ReadInt64
+            | BuiltinMethod::WriteInt16
+            | BuiltinMethod::WriteInt32
+            | BuiltinMethod::WriteInt64
+            | BuiltinMethod::BufSlice
+            | BuiltinMethod::Invert => None,
         }
     }
 }
@@ -1887,8 +1057,7 @@ fn arg(args: &[BslValue], i: usize) -> &BslValue {
     args.get(i).unwrap_or(&BslValue::Undefined)
 }
 
-/// `ПрочитатьЦелоеN` по получателю: у буфера первым аргументом идёт ПОЗИЦИЯ,
-/// у `ЧтениеДанных` позиции нет — он читает с собственной и сдвигает её.
+/// Читает целое из буфера, начиная с позиции из первого аргумента.
 fn read_int_by_receiver(
     obj: &BslValue,
     args: &[BslValue],
@@ -1897,7 +1066,7 @@ fn read_int_by_receiver(
     crate::bindata::read_int(obj, args, w)
 }
 
-/// `ЗаписатьЦелоеN` по получателю — то же различие, что и у чтения.
+/// Записывает целое в буфер, начиная с позиции из первого аргумента.
 fn write_int_by_receiver(
     obj: &BslValue,
     args: &[BslValue],
@@ -1988,9 +1157,7 @@ pub fn call_builtin_method(
         // `Получить` полиморфен: у `Соответствие` это чтение по ключу, у
         // буфера — байт по позиции (измерено, что `Буфер.Получить(0)`
         // делает ровно то же, что `Буфер[0]`).
-        // Арность `Получить` резолвер больше не проверяет (у именованной
-        // коллекции компонент схемы есть форма из двух аргументов), поэтому
-        // однозначные получатели проверяют её здесь сами: `Получить()` без
+        // Арность проверяет обработчик: `Получить()` без
         // аргументов обязано стать понятной ошибкой, а не паникой на
         // `args[0]`.
         BuiltinMethod::Get => match obj {
@@ -2110,9 +1277,8 @@ pub fn call_builtin_method(
             obj.table_collapse(group, arg(args, 1))?;
             Ok(BslValue::Undefined)
         }
-        // `Записать` у `ЗаписьТекста` — дописать кусок, у
-        // `ТекстовыйДокумент` — сохранить файл. Одно имя, разный смысл по
-        // получателю, как и у `Закрыть`.
+        // `Записать` дописывает кусок в `ЗаписьТекста` либо выполняет
+        // блочную запись в `БуферДвоичныхДанных`.
         BuiltinMethod::Write => {
             if crate::bindata::is_buffer(obj) {
                 // У буфера `Записать(Позиция, Источник[, Количество])` —
@@ -2131,83 +1297,9 @@ pub fn call_builtin_method(
                 }
             }
         }
-        // `Закрыть` полиморфен: у `ЗаписьТекста` он ничего не возвращает,
-        // у `ЗаписьJSON` — отдаёт накопленный текст.
+        // `ЗаписьТекста.Закрыть()` сбрасывает буфер и закрывает файл.
         BuiltinMethod::Close => obj.close_object(),
-
-        // Имя метода общее для JSON и XML — ветвление по получателю, а не
-        // по имени: у платформы это ровно один метод.
-        BuiltinMethod::SetString => Err(RtError::MethodNotApplicable {
-            method: "УстановитьСтроку",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::OpenFile => Err(RtError::MethodNotApplicable {
-            method: "ОткрытьФайл",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::ReadNext => Err(RtError::MethodNotApplicable {
-            method: "Прочитать",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::SkipNode => {
-            // У читателей JSON/XML `Пропустить()` — шаг через узел без
-            // результата, у `ЧтениеДанных` — перевод позиции на заданное
-            // число байтов, и он ОТДАЁТ это число.
-            // Из-за аргумента у `ЧтениеДанных` резолвер арность этого имени
-            // больше не фиксирует (была `Some(0)`), поэтому у читателей
-            // XML-читателя верхнюю границу проверяет рантайм — иначе
-            // `ЧтениеXML.Пропустить(5)` прошёл бы молча: `xml::skip`
-            // аргументы попросту не смотрит.
-            too_many(obj, "Пропустить", args, 0)?;
-            Err(RtError::MethodNotApplicable {
-                method: "Пропустить",
-                receiver: obj.type_name(),
-            })
-        }
-        BuiltinMethod::SetText
-        | BuiltinMethod::GetText
-        | BuiltinMethod::LineCount
-        | BuiltinMethod::GetLine
-        | BuiltinMethod::AddLine
-        | BuiltinMethod::InsertLine
-        | BuiltinMethod::ReplaceLine
-        | BuiltinMethod::DeleteLine => Err(RtError::MethodNotApplicable {
-            method: "метод bsl-textdoc",
-            receiver: obj.type_name(),
-        }),
-        // Методы табличного документа: получатели стали внешними
-        // объектами компонента bsl-spreadsheet и перехватываются
-        // протоколом раньше этой таблицы.
-        BuiltinMethod::GetArea => Err(RtError::MethodNotApplicable {
-            method: "ПолучитьОбласть",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::Region => Err(RtError::MethodNotApplicable {
-            method: "Область",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::MergeCells => Err(RtError::MethodNotApplicable {
-            method: "ОбъединитьЯчейки",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::UnmergeCells => Err(RtError::MethodNotApplicable {
-            method: "РазъединитьЯчейки",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::BeginRowGroup => Err(RtError::MethodNotApplicable {
-            method: "НачатьГруппуСтрок",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::EndRowGroup => Err(RtError::MethodNotApplicable {
-            method: "ЗакончитьГруппуСтрок",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::OutputArea => Err(RtError::MethodNotApplicable {
-            method: "Вывести",
-            receiver: obj.type_name(),
-        }),
-        // `Размер()` — метод и у `ДвоичныеДанные`, и у потока (а вот у
-        // БУФЕРА это свойство, см. `BslValue::get_field_by_name`).
+        // У `ДвоичныеДанные` размер — метод; у буфера это свойство.
         BuiltinMethod::Size => obj.binary_data_size(),
 
         // --- БуферДвоичныхДанных ------------------------------------------
@@ -2218,10 +1310,7 @@ pub fn call_builtin_method(
                 receiver: obj.type_name(),
             }),
         },
-        // Шесть имён целых общие у `БуферДвоичныхДанных` и у
-        // `ЧтениеДанных`/`ЗаписьДанных`, но смысл аргументов разный: у буфера
-        // первым идёт ПОЗИЦИЯ, у читателя и писателя её нет вовсе (позиция
-        // своя). Разводится по получателю.
+        // У буфера первым аргументом чтения и записи целого идёт позиция.
         BuiltinMethod::ReadInt16 => read_int_by_receiver(obj, args, crate::bindata::IntWidth::W16),
         BuiltinMethod::ReadInt32 => read_int_by_receiver(obj, args, crate::bindata::IntWidth::W32),
         BuiltinMethod::ReadInt64 => read_int_by_receiver(obj, args, crate::bindata::IntWidth::W64),
@@ -2233,24 +1322,6 @@ pub fn call_builtin_method(
         }
         BuiltinMethod::WriteInt64 => {
             write_int_by_receiver(obj, args, crate::bindata::IntWidth::W64)
-        }
-        BuiltinMethod::DataReadByte
-        | BuiltinMethod::DataReadIntoBuffer
-        | BuiltinMethod::DataReadChars
-        | BuiltinMethod::DataReadLine
-        | BuiltinMethod::DataWriteByte
-        | BuiltinMethod::DataWriteChars
-        | BuiltinMethod::DataWriteLine => Err(RtError::MethodNotApplicable {
-            method: "метод bsl-stream",
-            receiver: obj.type_name(),
-        }),
-        // Имя делят результат чтения данных и писатель архива — ветвление
-        // по получателю.
-        BuiltinMethod::GetBinaryData | BuiltinMethod::GetBinaryDataBuffer => {
-            Err(RtError::MethodNotApplicable {
-                method: "метод bsl-stream",
-                receiver: obj.type_name(),
-            })
         }
         BuiltinMethod::BufSplit => crate::bindata::split(obj, &args[0]),
         BuiltinMethod::BufConcat => crate::bindata::concat(obj, &args[0]),
@@ -2268,306 +1339,6 @@ pub fn call_builtin_method(
             crate::bindata::bitwise(obj, args, crate::bindata::BitOp::AndNot)
         }
         BuiltinMethod::Invert => crate::bindata::invert(obj, args),
-        BuiltinMethod::XmlReadAttribute => Err(RtError::MethodNotApplicable {
-            method: "ПрочитатьАтрибут",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::XmlAttributeCount => Err(RtError::MethodNotApplicable {
-            method: "КоличествоАтрибутов",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::XmlAttributeName => Err(RtError::MethodNotApplicable {
-            method: "ИмяАтрибута",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::XmlAttributeValue => Err(RtError::MethodNotApplicable {
-            method: "ЗначениеАтрибута",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::XmlMoveToContent => Err(RtError::MethodNotApplicable {
-            method: "ПерейтиКСодержимому",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::DomHasChildNodes => Err(RtError::MethodNotApplicable {
-            method: "ЕстьДочерниеУзлы",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::DomHasAttributes => Err(RtError::MethodNotApplicable {
-            method: "ЕстьАтрибуты",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::DomGetAttribute => Err(RtError::MethodNotApplicable {
-            method: "ПолучитьАтрибут",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::DomHasAttribute => Err(RtError::MethodNotApplicable {
-            method: "ЕстьАтрибут",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::DomGetAttributeNode => Err(RtError::MethodNotApplicable {
-            method: "ПолучитьУзелАтрибута",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::DomGetElementsByName => Err(RtError::MethodNotApplicable {
-            method: "ПолучитьЭлементыПоИмени",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::DomGetElementById => Err(RtError::MethodNotApplicable {
-            method: "ПолучитьЭлементПоИдентификатору",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::DomCreateElement => Err(RtError::MethodNotApplicable {
-            method: "СоздатьЭлемент",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::DomCreateAttribute => Err(RtError::MethodNotApplicable {
-            method: "СоздатьАтрибут",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::DomCreateTextNode => Err(RtError::MethodNotApplicable {
-            method: "СоздатьТекстовыйУзел",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::DomCreateCdataSection => Err(RtError::MethodNotApplicable {
-            method: "СоздатьСекциюCDATA",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::DomCreateComment => Err(RtError::MethodNotApplicable {
-            method: "СоздатьКомментарий",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::DomCreateProcessingInstruction => Err(RtError::MethodNotApplicable {
-            method: "СоздатьИнструкциюОбработки",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::DomAppendChild => Err(RtError::MethodNotApplicable {
-            method: "ДобавитьДочерний",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::DomInsertBefore => Err(RtError::MethodNotApplicable {
-            method: "ВставитьПеред",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::DomRemoveChild => Err(RtError::MethodNotApplicable {
-            method: "УдалитьДочерний",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::DomReplaceChild => Err(RtError::MethodNotApplicable {
-            method: "ЗаменитьДочерний",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::DomSetAttribute => Err(RtError::MethodNotApplicable {
-            method: "УстановитьАтрибут",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::DomRemoveAttribute => Err(RtError::MethodNotApplicable {
-            method: "УдалитьАтрибут",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::DomSetAttributeNode => Err(RtError::MethodNotApplicable {
-            method: "УстановитьУзелАтрибута",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::DomRemoveAttributeNode => Err(RtError::MethodNotApplicable {
-            method: "УдалитьУзелАтрибута",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::XPathEvaluate => Err(RtError::MethodNotApplicable {
-            method: "ВычислитьВыражениеXPath",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::XPathCreateExpression => Err(RtError::MethodNotApplicable {
-            method: "СоздатьВыражениеXPath",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::XPathCreateNsResolver => Err(RtError::MethodNotApplicable {
-            method: "СоздатьРазыменовательПИ",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::XPathLookupNamespaceUri => Err(RtError::MethodNotApplicable {
-            method: "НайтиURIПространстваИмен",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::XPathNext => Err(RtError::MethodNotApplicable {
-            method: "ПолучитьСледующий",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::RegexGetGroups => Err(RtError::MethodNotApplicable {
-            method: "ПолучитьГруппы",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::XPathSnapshotItem => Err(RtError::MethodNotApplicable {
-            method: "ЭлементСнимка",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::XPathEvaluateExpression => Err(RtError::MethodNotApplicable {
-            method: "Вычислить",
-            receiver: obj.type_name(),
-        }),
-        // `СоздатьСхемуXML` — метод построителя, ставшего внешним объектом
-        // компонента bsl-xml; сюда доходит только чужой получатель.
-        BuiltinMethod::CreateXmlSchema => Err(RtError::MethodNotApplicable {
-            method: "СоздатьСхемуXML",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::WriteXmlDeclaration => Err(RtError::MethodNotApplicable {
-            method: "ЗаписатьОбъявлениеXML",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::WriteStartElement => Err(RtError::MethodNotApplicable {
-            method: "ЗаписатьНачалоЭлемента",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::WriteEndElement => Err(RtError::MethodNotApplicable {
-            method: "ЗаписатьКонецЭлемента",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::WriteXmlAttribute => Err(RtError::MethodNotApplicable {
-            method: "ЗаписатьАтрибут",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::WriteXmlText => Err(RtError::MethodNotApplicable {
-            method: "ЗаписатьТекст",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::WriteXmlComment => Err(RtError::MethodNotApplicable {
-            method: "ЗаписатьКомментарий",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::WriteCdataSection => Err(RtError::MethodNotApplicable {
-            method: "ЗаписатьСекциюCDATA",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::WriteXmlProcessingInstruction => Err(RtError::MethodNotApplicable {
-            method: "ЗаписатьИнструкциюОбработки",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::WriteXmlRaw => Err(RtError::MethodNotApplicable {
-            method: "ЗаписатьБезОбработки",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::WriteStartObject
-        | BuiltinMethod::WriteEndObject
-        | BuiltinMethod::WriteStartArray
-        | BuiltinMethod::WriteEndArray
-        | BuiltinMethod::WritePropertyName
-        | BuiltinMethod::WriteJsonValue => Err(RtError::MethodNotApplicable {
-            method: "метод bsl-json",
-            receiver: obj.type_name(),
-        }),
-
-        // --- Потоки -------------------------------------------------------
-        BuiltinMethod::CurrentPosition | BuiltinMethod::Seek => Err(RtError::MethodNotApplicable {
-            method: "метод bsl-stream",
-            receiver: obj.type_name(),
-        }),
-
-        // Пять методов менеджера открывают файл, а не работают с
-        // получателем, поэтому получателя надо проверить здесь: сами
-        // функции в `stream.rs` видят только аргументы, и без этой
-        // проверки `Поток.Создать("файл")` завёл бы файл. Что платформа
-        // такой вызов отвергает — ИЗМЕРЕНО (`Поток.Создать` и
-        // `Поток.ОткрытьДляЧтения` на `ПотокВПамяти` дают ошибку).
-        // Имя `Открыть` делят менеджер файловых потоков и читатель архива —
-        // ветвление по получателю, как у `Прочитать`.
-        BuiltinMethod::StreamOpen => Err(RtError::MethodNotApplicable {
-            method: "Открыть",
-            receiver: obj.type_name(),
-        }),
-        // `Извлечь`/`ИзвлечьВсе` остались только у объектов архива, а они
-        // стали Extension и диспетчеризуются протоколом раньше этой таблицы.
-        BuiltinMethod::ArchiveExtract | BuiltinMethod::ArchiveExtractAll => {
-            Err(RtError::MethodNotApplicable {
-                method: match m {
-                    BuiltinMethod::ArchiveExtract => "Извлечь",
-                    _ => "ИзвлечьВсе",
-                },
-                receiver: obj.type_name(),
-            })
-        }
-        BuiltinMethod::StreamOpenForRead
-        | BuiltinMethod::StreamOpenForWrite
-        | BuiltinMethod::StreamOpenForAppend => Err(RtError::MethodNotApplicable {
-            method: "метод bsl-stream",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::Create => Err(RtError::MethodNotApplicable {
-            method: "Создать",
-            receiver: obj.type_name(),
-        }),
-        // Все получатели методов XDTO стали внешними объектами компонента
-        // bsl-xml и перехватываются протоколом раньше этой таблицы; сюда
-        // доходит только чужой получатель.
-        BuiltinMethod::XdtoType => Err(RtError::MethodNotApplicable {
-            method: "Тип",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::XdtoGetList => Err(RtError::MethodNotApplicable {
-            method: "ПолучитьСписок",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::XdtoIsSet => Err(RtError::MethodNotApplicable {
-            method: "Установлено",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::XdtoUnset => Err(RtError::MethodNotApplicable {
-            method: "Сбросить",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::XdtoValidate => Err(RtError::MethodNotApplicable {
-            method: "Проверить",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::XdtoObjectProperties => Err(RtError::MethodNotApplicable {
-            method: "Свойства",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::XdtoOwner => Err(RtError::MethodNotApplicable {
-            method: "Владелец",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::XdtoSequenceOf => Err(RtError::MethodNotApplicable {
-            method: "Последовательность",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::XdtoSequenceValue => Err(RtError::MethodNotApplicable {
-            method: "ПолучитьЗначение",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::XdtoSequenceProperty => Err(RtError::MethodNotApplicable {
-            method: "ПолучитьСвойство",
-            receiver: obj.type_name(),
-        }),
-        // --- ввод-вывод: фабрика и сериализатор -----------------------------
-        //
-        // Оба имени принадлежат этим двум получателям и никому больше;
-        // любой другой получает ту же ошибку «метод неприменим», что и
-        // всегда. Семантика у них РАЗНАЯ: фабрика ходит по типам схемы и
-        // строит `ОбъектXDTO`/`ЗначениеXDTO`, сериализатор переводит
-        // значения BSL, — поэтому разбор идёт по получателю, а не по имени.
-        BuiltinMethod::XdtoReadXml => Err(RtError::MethodNotApplicable {
-            method: "ПрочитатьXML",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::XdtoWriteXml => Err(RtError::MethodNotApplicable {
-            method: "ЗаписатьXML",
-            receiver: obj.type_name(),
-        }),
-        // Три измеренных члена сериализатора, до которых очередь не дошла:
-        // у своего получателя — честный отказ «не поддерживается», у
-        // чужого — обычное «метод неприменим».
-        BuiltinMethod::XdtoXmlTypeOfType => Err(RtError::MethodNotApplicable {
-            method: "XMLТип",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::XdtoXmlTypeOfValue => Err(RtError::MethodNotApplicable {
-            method: "XMLТипЗнч",
-            receiver: obj.type_name(),
-        }),
-        BuiltinMethod::XdtoCanReadXml => Err(RtError::MethodNotApplicable {
-            method: "ВозможностьЧтенияXML",
-            receiver: obj.type_name(),
-        }),
     }
 }
 
@@ -2702,6 +1473,27 @@ mod name_table_tests {
             call_builtin_method(BuiltinMethod::Delete, &crate::BslValue::Undefined, &[]),
             Err(crate::RtError::InvalidBytecode(_))
         ));
+    }
+
+    /// `BuiltinMethod` — словарь только базового рантайма. Вариант, который умеет ответить
+    /// только «метод `bsl-*`», перечисляет мир из общего слоя и обязан жить в таблице своего
+    /// компонента. Перебор арностей доходит до ветки метода и не даёт сторожу `static_arity`
+    /// скрыть чужой вариант ранним `InvalidBytecode`.
+    #[test]
+    fn no_builtin_method_answers_for_a_foreign_package() {
+        for (_, method) in BUILTIN_METHOD_NAMES {
+            for count in 0..=4 {
+                let arguments = vec![BslValue::Undefined; count];
+                if let Err(RtError::MethodNotApplicable { method: answer, .. }) =
+                    call_builtin_method(*method, &BslValue::Undefined, &arguments)
+                {
+                    assert!(
+                        !answer.starts_with("метод bsl-"),
+                        "{method:?} принадлежит чужому пакету: {answer}"
+                    );
+                }
+            }
+        }
     }
 
     /// Публичный вход файловых функций проверяет ФОРМУ аргументов сам:
