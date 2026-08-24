@@ -3632,7 +3632,11 @@ mod tests {
         /// `equal` (разные `Rc` — иначе быстрый путь `Rc::ptr_eq` подменил бы
         /// проверку) и одна заведомо НЕравная.
         struct Samples {
-            equal: fn() -> BslValue,
+            /// Образец РАВНОГО содержимого. Аргумент — «метка», которая по
+            /// закону вида НЕ ДОЛЖНА влиять на равенство: у вида по месту в
+            /// ней лежит различающееся содержимое (равенство обязано идти по
+            /// ключу вопреки ему), у прочих видов она не используется.
+            equal: fn(u8) -> BslValue,
             different: fn() -> BslValue,
         }
 
@@ -3641,7 +3645,7 @@ mod tests {
         fn samples(kind: Kind) -> Samples {
             match kind {
                 Kind::BinaryData => Samples {
-                    equal: || {
+                    equal: |_| {
                         BslValue::Object(Rc::new(BslObject::BinaryData(Rc::from(&[1u8, 2, 3][..]))))
                     },
                     different: || {
@@ -3649,17 +3653,17 @@ mod tests {
                     },
                 },
                 Kind::Uuid => Samples {
-                    equal: || BslValue::Object(Rc::new(BslObject::Uuid([0x11; 16]))),
+                    equal: |_| BslValue::Object(Rc::new(BslObject::Uuid([0x11; 16]))),
                     different: || BslValue::Object(Rc::new(BslObject::Uuid([0x22; 16]))),
                 },
                 Kind::VstrOpaque => Samples {
-                    equal: || BslValue::Object(Rc::new(BslObject::VstrOpaque("реф".to_string()))),
+                    equal: |_| BslValue::Object(Rc::new(BslObject::VstrOpaque("реф".to_string()))),
                     different: || {
                         BslValue::Object(Rc::new(BslObject::VstrOpaque("другой".to_string())))
                     },
                 },
                 Kind::ExtensionByValue => Samples {
-                    equal: || BslValue::new_object(ByValue(vec![1, 2, 3])),
+                    equal: |_| BslValue::new_object(ByValue(vec![1, 2, 3])),
                     different: || BslValue::new_object(ByValue(vec![9])),
                 },
                 Kind::ExtensionByKey => Samples {
@@ -3680,7 +3684,7 @@ mod tests {
                     },
                 },
                 Kind::ExtensionBare => Samples {
-                    equal: || BslValue::new_object(Bare(1)),
+                    equal: |_| BslValue::new_object(Bare(1)),
                     different: || BslValue::new_object(Bare(2)),
                 },
             }
@@ -3695,7 +3699,9 @@ mod tests {
 
         for kind in ALL_KINDS {
             let Samples { equal, different } = samples(kind);
-            let (a, b, c, other) = (equal(), equal(), equal(), different());
+            // Три РАЗНЫЕ метки: для вида по месту это три разных содержимого
+            // при одном ключе, и равенство обязано их не различать.
+            let (a, b, c, other) = (equal(1), equal(2), equal(3), different());
 
             // Round-trip: образец действительно того вида, за который выдан, —
             // иначе закон проверялся бы не на той ветке дисптача.
@@ -3734,7 +3740,7 @@ mod tests {
         // Ответ `value_eq` УСТОЙЧИВ: тот же ответ при повторном спросе, иначе
         // и равенство, и хэш зависели бы от момента вызова.
         let stable = samples(Kind::ExtensionByValue);
-        let (x, y) = ((stable.equal)(), (stable.equal)());
+        let (x, y) = ((stable.equal)(1), (stable.equal)(2));
         assert_eq!(x == y, x == y, "устойчивость ответа value_eq");
         assert_eq!(hash_of(&x), hash_of(&y), "устойчивость хэша");
     }
