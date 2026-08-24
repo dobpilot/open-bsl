@@ -523,7 +523,7 @@ impl ValueTableData {
     ///
     /// # Errors
     ///
-    /// [`RtError::Vstr`], если длина не совпала, `max + 1` переполнил `u64`
+    /// [`crate::RtError::Vstr`], если длина не совпала, `max + 1` переполнил `u64`
     /// или среди идентификаторов есть повтор.
     pub fn set_row_ids(&mut self, ids: Vec<u64>) -> crate::RtResult<()> {
         if ids.len() != self.row_ids.len() {
@@ -556,7 +556,7 @@ impl ValueTableData {
     ///
     /// # Errors
     ///
-    /// [`RtError::Vstr`], если номера строк исчерпаны (`next_id == u64::MAX`):
+    /// [`crate::RtError::Vstr`], если номера строк исчерпаны (`next_id == u64::MAX`):
     /// один `checked_add` в `set_row_ids` этого не ловит — он оставляет
     /// законное `next_id == u64::MAX`, а переполнилась бы уже СЛЕДУЮЩАЯ
     /// строка. Проверка идёт ДО записи в колонки, иначе отказ оставил бы
