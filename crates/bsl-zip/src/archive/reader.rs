@@ -443,7 +443,7 @@ pub fn new_archive_reader(
     check_archive_type(archive_type)?;
     let state = Rc::new(RefCell::new(ArchiveState::default()));
     if !matches!(source, BslValue::Undefined) {
-        let (bytes, from) = read_source(source, "ЧтениеZipФайла")?;
+        let (bytes, from) = read_source(source, &SystemFileSystem, "ЧтениеZipФайла")?;
         open_bytes(&state, bytes, from)?;
     }
     // Пароль хранить негде и незачем — см. doc comment.
@@ -474,11 +474,16 @@ pub(crate) fn check_archive_type(value: &BslValue) -> RtResult<()> {
 }
 
 /// Байты источника вместе с его именем для сообщений.
-pub(crate) fn read_source(source: &BslValue, op: &'static str) -> RtResult<(Vec<u8>, String)> {
+pub(crate) fn read_source(
+    source: &BslValue,
+    files: &dyn FileSystem,
+    op: &'static str,
+) -> RtResult<(Vec<u8>, String)> {
     match source {
         BslValue::Str(s) => {
             let path = s.to_string();
-            let bytes = std::fs::read(&path)
+            let bytes = files
+                .read(&path)
                 .map_err(|e| zip_err(&format!("не удалось прочитать файл «{path}»: {e}")))?;
             Ok((bytes, path))
         }
@@ -529,7 +534,7 @@ pub(crate) fn open_bytes(
 ///
 /// [`RtError::Zip`], если архив уже открыт или источник не является
 /// читаемым архивом ZIP.
-pub fn open(reader: &ReaderObject, args: &[BslValue]) -> RtResult<()> {
+pub fn open(reader: &ReaderObject, files: &dyn FileSystem, args: &[BslValue]) -> RtResult<()> {
     let state = reader.state.clone();
     if let Some(open) = &state.borrow().open {
         return Err(zip_err(&format!("архив уже открыт: {}", open.source)));
@@ -538,7 +543,7 @@ pub fn open(reader: &ReaderObject, args: &[BslValue]) -> RtResult<()> {
         method: "Открыть",
         receiver: reader.descriptor().name,
     })?;
-    let (bytes, from) = read_source(source, "Открыть")?;
+    let (bytes, from) = read_source(source, files, "Открыть")?;
     open_bytes(&state, bytes, from)
 }
 
@@ -757,6 +762,7 @@ pub(crate) fn eq(name: &str, ru: &str, en: &str) -> bool {
 /// архива, а вторым — не строка.
 pub fn extract(
     state: &Rc<RefCell<ArchiveState>>,
+    files: &dyn FileSystem,
     receiver: &'static str,
     args: &[BslValue],
 ) -> RtResult<()> {
@@ -797,6 +803,7 @@ pub fn extract(
     let open = state.opened("Извлечь")?;
     extract_item(
         open,
+        files,
         state.item(index, generation, "Извлечь")?,
         &dir,
         restore,
@@ -812,6 +819,7 @@ pub fn extract(
 /// отказывает).
 pub fn extract_all(
     state: &Rc<RefCell<ArchiveState>>,
+    files: &dyn FileSystem,
     receiver: &'static str,
     args: &[BslValue],
 ) -> RtResult<()> {
@@ -830,7 +838,7 @@ pub fn extract_all(
     let state = state.borrow();
     let open = state.opened("ИзвлечьВсе")?;
     for item in &open.items {
-        extract_item(open, item, &dir, restore)?;
+        extract_item(open, files, item, &dir, restore)?;
     }
     Ok(())
 }
@@ -871,12 +879,15 @@ pub(crate) fn destination(dir: &BslValue, op: &'static str) -> RtResult<std::pat
 /// Распаковать одну запись.
 pub(crate) fn extract_item(
     open: &OpenArchive,
+    files: &dyn FileSystem,
     item: &ArchiveItem,
     dir: &std::path::Path,
     restore: bool,
 ) -> RtResult<()> {
+    // Пути по-прежнему собираются через `Path::join` (чистая работа со
+    // строкой), а вот обращения к диску идут через файловую систему сессии.
     let mkdir = |path: &std::path::Path| {
-        std::fs::create_dir_all(path).map_err(|e| {
+        files.create_dir_all(&path.to_string_lossy()).map_err(|e| {
             zip_err(&format!(
                 "не удалось создать каталог «{}»: {e}",
                 path.display()
@@ -906,7 +917,8 @@ pub(crate) fn extract_item(
         mkdir(parent)?;
     }
     let bytes = read_entry(&open.data, item.index, &item.entry)?;
-    std::fs::write(&target, bytes)
+    files
+        .write(&target.to_string_lossy(), &bytes)
         .map_err(|e| zip_err(&format!("не удалось записать «{}»: {e}", target.display())))
 }
 

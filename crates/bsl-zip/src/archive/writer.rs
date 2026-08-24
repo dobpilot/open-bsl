@@ -357,7 +357,11 @@ pub(crate) fn check_names_encoding(value: &BslValue, op: &'static str) -> RtResu
 /// [`RtError::Zip`], если файла или каталога маски нет, если имя в архиве
 /// уже занято (измерено: «Файл с таким именем в архиве уже существует») или
 /// если файл не читается; [`RtError::TypeError`] на режиме не того типа.
-pub fn writer_add(writer: &WriterObject, args: &[BslValue]) -> RtResult<()> {
+pub fn writer_add(
+    writer: &WriterObject,
+    files: &dyn FileSystem,
+    args: &[BslValue],
+) -> RtResult<()> {
     let state = &writer.state;
     let (path, mode, subdirs) = match args {
         [path] => (path, None, None),
@@ -374,7 +378,7 @@ pub fn writer_add(writer: &WriterObject, args: &[BslValue]) -> RtResult<()> {
     let mode = path_mode(mode)?;
     let subdirs = subdir_mode(subdirs)?;
     let mut state = state.borrow_mut();
-    add_by_pattern(&mut state, &path, mode, subdirs)
+    add_by_pattern(&mut state, files, &path, mode, subdirs)
 }
 
 /// Путь или маска первым аргументом `Добавить`.
@@ -480,6 +484,7 @@ pub(crate) fn mask_matches(mask: &str, name: &str) -> bool {
 /// Разложить `Добавить` на записи и сложить их в состояние.
 pub(crate) fn add_by_pattern(
     state: &mut WriterState,
+    files: &dyn FileSystem,
     path: &str,
     mode: PathMode,
     subdirs: SubdirMode,
@@ -493,7 +498,7 @@ pub(crate) fn add_by_pattern(
     // каталогом и тем же режимом подкаталогов.
     if pattern.is_empty()
         && (path.ends_with('/') || path.ends_with('\\'))
-        && std::fs::metadata(&base).is_ok_and(|meta| meta.is_dir())
+        && files.metadata(&base).is_ok_and(|meta| meta.is_dir())
     {
         pattern = "*".to_string();
     }
@@ -501,22 +506,21 @@ pub(crate) fn add_by_pattern(
         // Не маска, а имя. Каталог по такому имени платформа молча
         // пропускает: `Добавить("/т/под")` — «прошло» и ноль записей, даже
         // с рекурсией.
-        let full = std::path::PathBuf::from(path);
-        let meta = std::fs::metadata(&full)
+        let meta = files
+            .metadata(path)
             .map_err(|_| zip_err(&format!("файл не обнаружен «{path}»")))?;
         if meta.is_dir() {
             return Ok(());
         }
         let name = plan_name(mode, &pattern, &pattern, path, false);
-        return add_file(state, &full, name, &meta);
+        return add_file(state, files, path, name, meta.modified());
     }
 
-    let dir = if base.is_empty() {
-        std::path::PathBuf::from(".")
-    } else {
-        std::path::PathBuf::from(&base)
-    };
-    let meta = std::fs::metadata(&dir).map_err(|_| {
+    // Путь файловой системы базового каталога: пустой — это «.», как и
+    // раньше строил `PathBuf::from(".")`. Отображаемое имя (`base`) при
+    // этом остаётся прежним — на нём строятся имена записей.
+    let dir_path = if base.is_empty() { "." } else { &base };
+    let meta = files.metadata(dir_path).map_err(|_| {
         // Платформа называет в этой ошибке каталог со слэшем, а не всю
         // маску (измерено).
         zip_err(&format!("файл не обнаружен «{base}»"))
@@ -524,7 +528,18 @@ pub(crate) fn add_by_pattern(
     if !meta.is_dir() {
         return Err(zip_err(&format!("файл не обнаружен «{base}»")));
     }
-    walk_dir(state, &dir, &base, "", &pattern, mode, subdirs, true)
+    walk_dir(
+        state, files, dir_path, &base, "", &pattern, mode, subdirs, true,
+    )
+}
+
+/// Путь дочернего элемента каталога — тем же способом, что `entry.path()`
+/// (`Path::join`), только над строкой: `FileSystem` работает с `&str`.
+fn child_path(dir: &str, name: &str) -> String {
+    std::path::Path::new(dir)
+        .join(name)
+        .to_string_lossy()
+        .into_owned()
 }
 
 /// Обойти один каталог: файлы по маске, подкаталоги — вглубь на месте.
@@ -541,7 +556,8 @@ pub(crate) fn add_by_pattern(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn walk_dir(
     state: &mut WriterState,
-    dir: &std::path::Path,
+    files: &dyn FileSystem,
+    dir: &str,
     dir_display: &str,
     rel: &str,
     mask: &str,
@@ -549,7 +565,7 @@ pub(crate) fn walk_dir(
     subdirs: SubdirMode,
     selected: bool,
 ) -> RtResult<()> {
-    let reader = std::fs::read_dir(dir).map_err(|e| {
+    let reader = files.read_dir(dir).map_err(|e| {
         zip_err(&format!(
             "не удалось прочитать каталог «{dir_display}»: {e}"
         ))
@@ -563,21 +579,19 @@ pub(crate) fn walk_dir(
             ))
         })?;
         children += 1;
-        let name = entry.file_name().to_string_lossy().into_owned();
-        let path = entry.path();
+        let name = entry.name().to_string();
+        let path = child_path(dir, &name);
         // Каталог ли это — решается по САМОМУ элементу каталога, без
         // перехода по символической ссылке. Иначе ссылка на предка
         // зациклила бы рекурсию и уронила процесс переполнением стека, а
         // вход здесь чужой: маску задаёт скрипт, дерево — файловая система.
-        let Ok(kind) = entry.file_type() else {
-            continue;
-        };
-        if kind.is_dir() {
+        if entry.is_dir() {
             if subdirs == SubdirMode::Recurse {
                 let child_rel = format!("{rel}{name}/");
                 let child_display = format!("{dir_display}{name}/");
                 walk_dir(
                     state,
+                    files,
                     &path,
                     &child_display,
                     &child_rel,
@@ -594,14 +608,14 @@ pub(crate) fn walk_dir(
         }
         // А вот содержимое и время берутся по ПУТИ: ссылка на файл ложится
         // в архив тем, на что указывает.
-        let Ok(meta) = std::fs::metadata(&path) else {
+        let Ok(meta) = files.metadata(&path) else {
             continue;
         };
         matched_here += 1;
         let rel_name = format!("{rel}{name}");
         let full = format!("{dir_display}{name}");
         let planned = plan_name(mode, &name, &rel_name, &full, false);
-        add_file(state, &path, planned, &meta)?;
+        add_file(state, files, &path, planned, meta.modified())?;
     }
 
     // Каталог, в котором маска не нашла ни одного файла, платформа
@@ -610,8 +624,8 @@ pub(crate) fn walk_dir(
     // ничего.
     if matched_here == 0 && !(selected && children == 0) {
         let planned = plan_name(mode, "", rel, dir_display, true);
-        let stamp = std::fs::metadata(dir).ok();
-        add_directory(state, planned, stamp.as_ref())?;
+        let stamp = files.metadata(dir).ok().and_then(|m| m.modified());
+        add_directory(state, planned, stamp)?;
     }
     Ok(())
 }
@@ -667,9 +681,10 @@ pub(crate) fn reserve(state: &mut WriterState, key: String, source: &str) -> RtR
 /// Прочитать файл и запомнить запись.
 pub(crate) fn add_file(
     state: &mut WriterState,
-    path: &std::path::Path,
+    files: &dyn FileSystem,
+    path: &str,
     planned: (String, String),
-    meta: &std::fs::Metadata,
+    modified: Option<i64>,
 ) -> RtResult<()> {
     let (key, name) = planned;
     // Файл читается ДО занятия имени: если он нечитаем, имя не занимается, и
@@ -677,13 +692,14 @@ pub(crate) fn add_file(
     // существует» при пустом архиве (состояние-до-эффекта). После успешного
     // чтения `reserve` и `push` идут подряд без фаллибельных операций между
     // ними, то есть занятие имени и укладка записи атомарны.
-    let data = std::fs::read(path)
-        .map_err(|e| zip_err(&format!("не удалось прочитать «{}»: {e}", path.display())))?;
+    let data = files
+        .read(path)
+        .map_err(|e| zip_err(&format!("не удалось прочитать «{path}»: {e}")))?;
     if data.len() > u32::MAX as usize {
-        return Err(zip_err(&format!("файл «{}» больше 4 ГиБ", path.display())));
+        return Err(zip_err(&format!("файл «{path}» больше 4 ГиБ")));
     }
-    reserve(state, key, &path.display().to_string())?;
-    let (time, date) = dos_fields(meta);
+    reserve(state, key, path)?;
+    let (time, date) = dos_fields(modified);
     state.entries.push(PendingEntry {
         name,
         data,
@@ -700,17 +716,15 @@ pub(crate) fn add_file(
 pub(crate) fn add_directory(
     state: &mut WriterState,
     planned: (String, String),
-    meta: Option<&std::fs::Metadata>,
+    modified: Option<i64>,
 ) -> RtResult<()> {
     let (key, mut name) = planned;
     reserve(state, key, &name.clone())?;
     if !name.ends_with('/') {
         name.push('/');
     }
-    let (time, date) = match meta {
-        Some(meta) => dos_fields(meta),
-        None => (0, 0),
-    };
+    // `dos_fields(None)` уже даёт `(0, 0)`.
+    let (time, date) = dos_fields(modified);
     state.entries.push(PendingEntry {
         name,
         data: Vec::new(),
@@ -729,14 +743,14 @@ pub(crate) fn add_directory(
 /// смещение локальной зоны, а тип даты в 1С зоны не хранит вовсе. Файл
 /// раньше 1980 года формату не представим, поэтому такие даты зажимаются в
 /// начало 1980-го — иначе поле года ушло бы в минус.
-pub(crate) fn dos_fields(meta: &std::fs::Metadata) -> (u16, u16) {
-    let Ok(modified) = meta.modified() else {
+pub(crate) fn dos_fields(modified: Option<i64>) -> (u16, u16) {
+    // `modified` — секунды Unix из `FileMetadata` (та же величина, что
+    // раньше давал `SystemTime::duration_since(UNIX_EPOCH).as_secs()`),
+    // поэтому байты полей не меняются.
+    let Some(unix_secs) = modified else {
         return (0, 0);
     };
-    let Ok(since) = modified.duration_since(std::time::UNIX_EPOCH) else {
-        return (0, 0);
-    };
-    let secs = since.as_secs() as i64 + UNIX_EPOCH_SECONDS;
+    let secs = unix_secs + UNIX_EPOCH_SECONDS;
     let Some(date) = BslDate::from_seconds(secs) else {
         return (0, 0);
     };
@@ -759,7 +773,7 @@ pub(crate) fn dos_fields(meta: &std::fs::Metadata) -> (u16, u16) {
 ///
 /// [`RtError::Zip`], если архив не открыт (измерено: «Архив не открыт!» —
 /// в том числе на втором `Записать` подряд) либо если цель не пишется.
-pub fn writer_write(writer: &WriterObject) -> RtResult<()> {
+pub fn writer_write(writer: &WriterObject, files: &dyn FileSystem) -> RtResult<()> {
     let mut state = writer.state.borrow_mut();
     let Some(target) = state.target.take() else {
         return Err(zip_err("архив не открыт"));
@@ -773,7 +787,8 @@ pub fn writer_write(writer: &WriterObject) -> RtResult<()> {
     state.entries.clear();
     state.used.clear();
     match target {
-        WriteTarget::File(path) => std::fs::write(&path, &bytes)
+        WriteTarget::File(path) => files
+            .write(&path.to_string_lossy(), &bytes)
             .map_err(|e| zip_err(&format!("не удалось записать «{}»: {e}", path.display()))),
         // Приёмник проверен при `Открыть`, но объект живёт между вызовами:
         // повторная проверка с типизированной ошибкой вместо `expect`. По
@@ -849,7 +864,7 @@ mod tests {
     fn an_unreadable_file_does_not_reserve_its_name() {
         let readable = std::env::temp_dir().join("open-bsl-zip-dup.txt");
         std::fs::write(&readable, b"payload").expect("создать читаемый файл");
-        let meta = std::fs::metadata(&readable).expect("метаданные");
+        let readable = readable.to_string_lossy().into_owned();
         let mut state = WriterState {
             target: None,
             method: WriteMethod::Stored,
@@ -861,16 +876,17 @@ mod tests {
         assert!(
             add_file(
                 &mut state,
-                std::path::Path::new("/no/such/open-bsl/file"),
+                &SystemFileSystem,
+                "/no/such/open-bsl/file",
                 planned.clone(),
-                &meta,
+                None,
             )
             .is_err(),
             "нечитаемый файл — ошибка"
         );
         assert!(state.used.is_empty(), "имя нечитаемого файла не занято");
         assert!(
-            add_file(&mut state, &readable, planned, &meta).is_ok(),
+            add_file(&mut state, &SystemFileSystem, &readable, planned, None).is_ok(),
             "законный файл с тем же ключом добавляется"
         );
         assert_eq!(state.entries.len(), 1);

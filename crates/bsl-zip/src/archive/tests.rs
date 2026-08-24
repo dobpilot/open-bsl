@@ -51,7 +51,7 @@ fn state_of(value: &BslValue) -> (&Rc<RefCell<ArchiveState>>, &'static str) {
 }
 
 fn open(value: &BslValue, args: &[BslValue]) -> RtResult<()> {
-    super::open(reader_of(value), args)
+    super::open(reader_of(value), &SystemFileSystem, args)
 }
 
 fn close(value: &BslValue) -> RtResult<()> {
@@ -84,12 +84,12 @@ fn entry_prop(value: &BslValue, prop: &str) -> RtResult<BslValue> {
 
 fn extract(value: &BslValue, args: &[BslValue]) -> RtResult<()> {
     let (state, receiver) = state_of(value);
-    super::extract(state, receiver, args)
+    super::extract(state, &SystemFileSystem, receiver, args)
 }
 
 fn extract_all(value: &BslValue, args: &[BslValue]) -> RtResult<()> {
     let (state, receiver) = state_of(value);
-    super::extract_all(state, receiver, args)
+    super::extract_all(state, &SystemFileSystem, receiver, args)
 }
 
 fn writer_open(value: &BslValue, args: &[BslValue]) -> RtResult<()> {
@@ -97,11 +97,11 @@ fn writer_open(value: &BslValue, args: &[BslValue]) -> RtResult<()> {
 }
 
 fn writer_add(value: &BslValue, args: &[BslValue]) -> RtResult<()> {
-    super::writer_add(writer_of(value), args)
+    super::writer_add(writer_of(value), &SystemFileSystem, args)
 }
 
 fn writer_write(value: &BslValue) -> RtResult<()> {
-    super::writer_write(writer_of(value))
+    super::writer_write(writer_of(value), &SystemFileSystem)
 }
 
 fn writer_binary_data(value: &BslValue) -> RtResult<BslValue> {
@@ -1883,4 +1883,159 @@ fn directory_entries_read_back_as_directories() {
         .collect();
     dirs.sort();
     assert_eq!(dirs, vec!["c/", "пуст/"]);
+}
+
+/// In-memory файловая система проводит ВСЕ обращения bsl-zip к диску
+/// (ABI-G0): архив пишется из дерева в памяти и распаковывается обратно в
+/// память, реального диска не касаясь. Так проверяется, что
+/// `Добавить`/`Записать`/`Извлечь` ходят в файловую систему СЕССИИ
+/// (`metadata`, `read_dir`, `read`, `write`, `create_dir_all`), а не в
+/// `std::fs`.
+#[test]
+fn the_archive_goes_through_the_session_file_system() {
+    use std::collections::{HashMap, HashSet};
+
+    #[derive(Default)]
+    struct MemFs {
+        files: RefCell<HashMap<String, Vec<u8>>>,
+        dirs: RefCell<HashSet<String>>,
+    }
+
+    fn not_found(path: &str) -> std::io::Error {
+        std::io::Error::new(std::io::ErrorKind::NotFound, path.to_string())
+    }
+
+    impl bsl_rt::FileSystem for MemFs {
+        fn read(&self, path: &str) -> std::io::Result<Vec<u8>> {
+            self.files
+                .borrow()
+                .get(path)
+                .cloned()
+                .ok_or_else(|| not_found(path))
+        }
+
+        fn write(&self, path: &str, data: &[u8]) -> std::io::Result<()> {
+            self.files
+                .borrow_mut()
+                .insert(path.to_string(), data.to_vec());
+            Ok(())
+        }
+
+        fn metadata(&self, path: &str) -> std::io::Result<bsl_rt::FileMetadata> {
+            if self.dirs.borrow().contains(path.trim_end_matches('/')) {
+                Ok(bsl_rt::FileMetadata::directory(Some(0)))
+            } else if self.files.borrow().contains_key(path) {
+                Ok(bsl_rt::FileMetadata::file(Some(0)))
+            } else {
+                Err(not_found(path))
+            }
+        }
+
+        fn read_dir<'fs>(
+            &'fs self,
+            path: &str,
+        ) -> std::io::Result<Box<dyn Iterator<Item = std::io::Result<bsl_rt::DirEntry>> + 'fs>>
+        {
+            if !self.dirs.borrow().contains(path.trim_end_matches('/')) {
+                return Err(not_found(path));
+            }
+            let prefix = format!("{}/", path.trim_end_matches('/'));
+            let mut out: Vec<bsl_rt::DirEntry> = Vec::new();
+            let immediate = |full: &str, is_dir: bool| -> Option<bsl_rt::DirEntry> {
+                full.strip_prefix(&prefix).and_then(|rest| {
+                    (!rest.is_empty() && !rest.contains('/'))
+                        .then(|| bsl_rt::DirEntry::new(rest.to_string(), is_dir))
+                })
+            };
+            for f in self.files.borrow().keys() {
+                out.extend(immediate(f, false));
+            }
+            for d in self.dirs.borrow().iter() {
+                out.extend(immediate(d, true));
+            }
+            out.sort_by(|a, b| a.name().cmp(b.name()));
+            Ok(Box::new(out.into_iter().map(Ok)))
+        }
+
+        fn create_dir_all(&self, path: &str) -> std::io::Result<()> {
+            let mut acc = String::new();
+            for comp in path.split('/').filter(|c| !c.is_empty()) {
+                acc.push('/');
+                acc.push_str(comp);
+                self.dirs.borrow_mut().insert(acc.clone());
+            }
+            Ok(())
+        }
+
+        fn open(
+            &self,
+            path: &str,
+            _options: bsl_rt::FileOpenOptions,
+        ) -> std::io::Result<Box<dyn bsl_rt::FileHandle>> {
+            // bsl-zip работает «файлом целиком»: дескриптор ему не нужен.
+            Err(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                path.to_string(),
+            ))
+        }
+    }
+
+    let mem = MemFs::default();
+    mem.dirs.borrow_mut().insert("/т".to_string());
+    mem.files
+        .borrow_mut()
+        .insert("/т/a.txt".to_string(), b"AAA".to_vec());
+    mem.files
+        .borrow_mut()
+        .insert("/т/b.txt".to_string(), b"BBB".to_vec());
+
+    let sv = |s: &str| BslValue::Str(BslString::from_str(s));
+
+    // Записать архив из каталога в памяти: metadata + read_dir + read + write.
+    let writer = new_archive_writer(true, &[sv("/архив.zip")]).unwrap();
+    super::writer_add(writer_of(&writer), &mem, &[sv("/т/*")]).unwrap();
+    super::writer_write(writer_of(&writer), &mem).unwrap();
+
+    let bytes = mem
+        .files
+        .borrow()
+        .get("/архив.zip")
+        .cloned()
+        .expect("архив лёг в память");
+    assert!(bytes.starts_with(b"PK"), "подпись ZIP");
+    assert!(
+        !std::path::Path::new("/архив.zip").exists(),
+        "реального диска работа не касалась"
+    );
+
+    // Распаковать обратно в память: read + create_dir_all + write.
+    let reader = new_archive_reader(
+        true,
+        &BslValue::Undefined,
+        &BslValue::Undefined,
+        &BslValue::Undefined,
+    )
+    .unwrap();
+    super::open(reader_of(&reader), &mem, &[sv("/архив.zip")]).unwrap();
+    super::extract_all(
+        &reader_of(&reader).state,
+        &mem,
+        "ЧтениеZipФайла",
+        &[sv("/распак")],
+    )
+    .unwrap();
+
+    let files = mem.files.borrow();
+    assert!(
+        files
+            .keys()
+            .any(|k| k.starts_with("/распак") && k.ends_with("a.txt")),
+        "a.txt распакован в память"
+    );
+    assert!(
+        files
+            .keys()
+            .any(|k| k.starts_with("/распак") && k.ends_with("b.txt")),
+        "b.txt распакован в память"
+    );
 }

@@ -17,9 +17,9 @@ use std::io::Write as _;
 use std::rc::Rc;
 
 use bsl_rt::{
-    Arity, BslDate, BslNumber, BslString, BslValue, CallContext, EnumKind, EnumValue,
-    MethodDescriptor, ObjectProtocol, PropertyDescriptor, RtError, RtResult, TypeDescriptor,
-    UNIX_EPOCH_SECONDS, folded_eq,
+    Arity, BslDate, BslNumber, BslString, BslValue, CallContext, EnumKind, EnumValue, FileSystem,
+    MethodDescriptor, ObjectProtocol, PropertyDescriptor, RtError, RtResult, SystemFileSystem,
+    TypeDescriptor, UNIX_EPOCH_SECONDS, folded_eq,
 };
 
 // Модуль разложен по подсистемам, но остаётся одним пространством имён:

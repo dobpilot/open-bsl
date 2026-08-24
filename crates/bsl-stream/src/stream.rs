@@ -59,13 +59,14 @@
 //! * `Обрезать` — отказывает, если файла НЕТ (в отличие от `Создать`).
 
 use std::cell::RefCell;
-use std::fs::OpenOptions;
+
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::rc::Rc;
 
 use bsl_rt::{
-    Arity, BslNumber, BslValue, ByteStreamProtocol, CallContext, EnumValue, FileHandle,
-    MethodDescriptor, ObjectProtocol, PropertyDescriptor, RtError, RtResult, TypeDescriptor,
+    Arity, BslNumber, BslValue, ByteStreamProtocol, CallContext, EnumValue, FileCreate, FileHandle,
+    FileOpenOptions, FileSystem, MethodDescriptor, ObjectProtocol, PropertyDescriptor, RtError,
+    RtResult, SystemFileSystem, TypeDescriptor,
 };
 
 /// Режим открытия файла — член `РежимОткрытияФайла`.
@@ -694,7 +695,7 @@ pub fn new_file_stream(path: &BslValue, mode: &BslValue, access: &BslValue) -> R
             });
         }
     };
-    open_file_stream(&path, mode, access)
+    open_file_stream(&path, mode, access, &SystemFileSystem)
 }
 
 /// Поток над ГОТОВЫМИ байтами — носитель для `ЧтениеДанных` поверх
@@ -721,14 +722,19 @@ pub(crate) fn data_over_file(
     mode: FileOpenMode,
     access: FileAccess,
 ) -> RtResult<BslValue> {
-    open_file_stream(path, mode, access)
+    open_file_stream(path, mode, access, &SystemFileSystem)
 }
 
 /// Общая часть конструктора и методов менеджера.
-fn open_file_stream(path: &str, mode: FileOpenMode, access: FileAccess) -> RtResult<BslValue> {
+fn open_file_stream(
+    path: &str,
+    mode: FileOpenMode,
+    access: FileAccess,
+    files: &dyn FileSystem,
+) -> RtResult<BslValue> {
     Ok(stream_value(
         StreamKind::File,
-        open_file_data(path, mode, access)?,
+        open_file_data(path, mode, access, files)?,
     ))
 }
 
@@ -736,61 +742,67 @@ fn stream_value(kind: StreamKind, data: Rc<RefCell<StreamData>>) -> BslValue {
     BslValue::new_object(StreamObject { kind, data })
 }
 
-/// Открытие файла и построение состояния потока.
+/// Открытие файла и построение состояния потока — через файловую систему
+/// сессии (ABI-G0). Умолчание вызывающих — процессная ФС; на ABI-G сюда
+/// начнёт приходить ФС из `CallContext`.
 fn open_file_data(
     path: &str,
     mode: FileOpenMode,
     access: FileAccess,
+    files: &dyn FileSystem,
 ) -> RtResult<Rc<RefCell<StreamData>>> {
     // Существование файла спрашивается ЗАРАНЕЕ, потому что от него зависит и
     // совместимость режима с доступом (`ОткрытьИлиСоздать` + `Чтение`), и
-    // то, разрешает ли `OpenOptions` создание вообще: с одним лишь `read`
-    // std отказывается ставить `create`, а платформа в этом случае просто
-    // открывает уже существующий файл.
-    let exists = std::path::Path::new(path).exists();
+    // правило создания: с одним лишь `read` создание не запрашивается вовсе,
+    // а платформа в этом случае просто открывает уже существующий файл.
+    let exists = files.metadata(path).is_ok();
     if mode.needs_write(exists) && !access.can_write() {
         return Err(RtError::IoError(format!(
             "{path}: режим открытия требует доступа на запись"
         )));
     }
-    let mut options = OpenOptions::new();
-    options.read(access.can_read()).write(access.can_write());
-    match mode {
-        FileOpenMode::Open => {}
-        // Создание запрашивается, только когда файла нет: иначе `create`
-        // потребовал бы записи там, где платформа обходится чтением.
+    // Правило создания зависит от существования файла ровно как раньше:
+    // `ОткрытьИлиСоздать`/`Дописать` создают ТОЛЬКО когда файла нет.
+    let create = match mode {
+        FileOpenMode::Open | FileOpenMode::Truncate => FileCreate::Never,
         FileOpenMode::OpenOrCreate | FileOpenMode::Append => {
-            if !exists {
-                options.create(true);
+            if exists {
+                FileCreate::Never
+            } else {
+                FileCreate::OpenOrCreate
             }
         }
-        FileOpenMode::Create => {
-            options.create(true).truncate(true);
-        }
-        FileOpenMode::CreateNew => {
-            options.create_new(true);
-        }
-        // Обрезание НЕ создаёт: на отсутствующем файле платформа отвечает
-        // ошибкой (измерено), в отличие от `Создать`.
-        FileOpenMode::Truncate => {
-            options.truncate(true);
-        }
+        FileOpenMode::Create => FileCreate::OpenOrCreate,
+        FileOpenMode::CreateNew => FileCreate::CreateNew,
+    };
+    // Обрезание НЕ создаёт: на отсутствующем файле платформа отвечает
+    // ошибкой (измерено), в отличие от `Создать`.
+    let truncate = matches!(mode, FileOpenMode::Create | FileOpenMode::Truncate);
+    let options = if access.can_read() && access.can_write() {
+        FileOpenOptions::read_write(create)
+    } else if access.can_write() {
+        FileOpenOptions::write(create)
+    } else {
+        // Только чтение: создание здесь всегда `Never` (проверка выше это
+        // гарантирует), обрезание недостижимо.
+        FileOpenOptions::read()
     }
-    let file = options
-        .open(path)
+    .truncate(truncate);
+    let handle = files
+        .open(path, options)
         .map_err(|e| RtError::IoError(format!("{path}: {e}")))?;
     // `Дописать` — это только НАЧАЛЬНАЯ позиция в конце файла, а не режим
     // `O_APPEND`: измерено, что после `Перейти(0, Начало)` запись ложится в
     // начало файла и размера не меняет.
     let pos = if mode == FileOpenMode::Append {
-        file.metadata()
-            .map_err(|e| RtError::IoError(format!("{path}: {e}")))?
+        handle
             .len()
+            .map_err(|e| RtError::IoError(format!("{path}: {e}")))?
     } else {
         0
     };
     Ok(Rc::new(RefCell::new(StreamData {
-        backing: Some(Backing::File(Box::new(file))),
+        backing: Some(Backing::File(handle)),
         pos,
         can_read: access.can_read(),
         can_write: access.can_write(),
@@ -861,7 +873,12 @@ pub fn manager_open(args: &[BslValue]) -> RtResult<BslValue> {
 /// Те же, что у [`new_file_stream`].
 pub fn manager_open_for_read(args: &[BslValue]) -> RtResult<BslValue> {
     let path = manager_path(args, "ОткрытьДляЧтения")?;
-    open_file_stream(&path, FileOpenMode::Open, FileAccess::Read)
+    open_file_stream(
+        &path,
+        FileOpenMode::Open,
+        FileAccess::Read,
+        &SystemFileSystem,
+    )
 }
 
 /// `ФайловыеПотоки.ОткрытьДляЗаписи(Имя)` — `ОткрытьИлиСоздать` плюс доступ
@@ -873,7 +890,12 @@ pub fn manager_open_for_read(args: &[BslValue]) -> RtResult<BslValue> {
 /// Те же, что у [`new_file_stream`].
 pub fn manager_open_for_write(args: &[BslValue]) -> RtResult<BslValue> {
     let path = manager_path(args, "ОткрытьДляЗаписи")?;
-    open_file_stream(&path, FileOpenMode::OpenOrCreate, FileAccess::Write)
+    open_file_stream(
+        &path,
+        FileOpenMode::OpenOrCreate,
+        FileAccess::Write,
+        &SystemFileSystem,
+    )
 }
 
 /// `ФайловыеПотоки.ОткрытьДляДописывания(Имя)` — `Дописать` плюс доступ
@@ -885,7 +907,12 @@ pub fn manager_open_for_write(args: &[BslValue]) -> RtResult<BslValue> {
 /// Те же, что у [`new_file_stream`].
 pub fn manager_open_for_append(args: &[BslValue]) -> RtResult<BslValue> {
     let path = manager_path(args, "ОткрытьДляДописывания")?;
-    open_file_stream(&path, FileOpenMode::Append, FileAccess::Write)
+    open_file_stream(
+        &path,
+        FileOpenMode::Append,
+        FileAccess::Write,
+        &SystemFileSystem,
+    )
 }
 
 /// `ФайловыеПотоки.Создать(Имя)` — `Создать` с доступом по умолчанию
@@ -896,7 +923,12 @@ pub fn manager_open_for_append(args: &[BslValue]) -> RtResult<BslValue> {
 /// Те же, что у [`new_file_stream`].
 pub fn manager_create(args: &[BslValue]) -> RtResult<BslValue> {
     let path = manager_path(args, "Создать")?;
-    open_file_stream(&path, FileOpenMode::Create, FileAccess::ReadWrite)
+    open_file_stream(
+        &path,
+        FileOpenMode::Create,
+        FileAccess::ReadWrite,
+        &SystemFileSystem,
+    )
 }
 
 // Методы менеджера файловых потоков: получатель без состояния, поэтому
@@ -1999,5 +2031,152 @@ mod tests {
         // Третий `Закрыть()` успешен и до дескриптора уже не идёт.
         assert!(close(obj).is_ok());
         assert_eq!(closes.get(), 2, "третий close дескриптора не касается");
+    }
+
+    /// Второй долгоживущий дескриптор (после `ЗаписьТекста`) — `ФайловыйПоток`
+    /// — тоже открывается через файловую систему СЕССИИ (ABI-G0): in-memory
+    /// ФС с рабочим `open`/`FileHandle` проводит запись, чтение и закрытие,
+    /// реального диска не касаясь.
+    #[test]
+    fn a_file_stream_opens_through_the_session_file_system() {
+        use std::collections::HashMap;
+        use std::io::Cursor;
+
+        type Store = Rc<RefCell<HashMap<String, Vec<u8>>>>;
+
+        #[derive(Default)]
+        struct MemFs {
+            store: Store,
+        }
+
+        #[derive(Debug)]
+        struct MemHandle {
+            store: Store,
+            path: String,
+            cursor: Cursor<Vec<u8>>,
+        }
+
+        impl MemHandle {
+            fn sync(&self) {
+                self.store
+                    .borrow_mut()
+                    .insert(self.path.clone(), self.cursor.get_ref().clone());
+            }
+        }
+
+        impl std::io::Read for MemHandle {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                self.cursor.read(buf)
+            }
+        }
+        impl std::io::Write for MemHandle {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                let n = self.cursor.write(buf)?;
+                self.sync();
+                Ok(n)
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                self.sync();
+                Ok(())
+            }
+        }
+        impl std::io::Seek for MemHandle {
+            fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+                self.cursor.seek(pos)
+            }
+        }
+        impl FileHandle for MemHandle {
+            fn len(&self) -> std::io::Result<u64> {
+                Ok(self.cursor.get_ref().len() as u64)
+            }
+            fn close(&mut self) -> std::io::Result<()> {
+                self.sync();
+                Ok(())
+            }
+        }
+
+        impl bsl_rt::FileSystem for MemFs {
+            fn read(&self, path: &str) -> std::io::Result<Vec<u8>> {
+                self.store.borrow().get(path).cloned().ok_or_else(|| {
+                    std::io::Error::new(std::io::ErrorKind::NotFound, path.to_string())
+                })
+            }
+            fn write(&self, path: &str, data: &[u8]) -> std::io::Result<()> {
+                self.store
+                    .borrow_mut()
+                    .insert(path.to_string(), data.to_vec());
+                Ok(())
+            }
+            fn metadata(&self, path: &str) -> std::io::Result<bsl_rt::FileMetadata> {
+                if self.store.borrow().contains_key(path) {
+                    Ok(bsl_rt::FileMetadata::file(Some(0)))
+                } else {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        path.to_string(),
+                    ))
+                }
+            }
+            fn read_dir<'fs>(
+                &'fs self,
+                path: &str,
+            ) -> std::io::Result<Box<dyn Iterator<Item = std::io::Result<bsl_rt::DirEntry>> + 'fs>>
+            {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    path.to_string(),
+                ))
+            }
+            fn create_dir_all(&self, _path: &str) -> std::io::Result<()> {
+                Ok(())
+            }
+            fn open(
+                &self,
+                path: &str,
+                options: FileOpenOptions,
+            ) -> std::io::Result<Box<dyn FileHandle>> {
+                let existing = self.store.borrow().get(path).cloned();
+                let bytes = if options.should_truncate() {
+                    Vec::new()
+                } else {
+                    existing.unwrap_or_default()
+                };
+                Ok(Box::new(MemHandle {
+                    store: Rc::clone(&self.store),
+                    path: path.to_string(),
+                    cursor: Cursor::new(bytes),
+                }))
+            }
+        }
+
+        let mem = MemFs::default();
+        let data = open_file_data(
+            "/поток.bin",
+            FileOpenMode::Create,
+            FileAccess::ReadWrite,
+            &mem,
+        )
+        .unwrap();
+
+        // Запись идёт через дескриптор in-memory ФС.
+        data.borrow_mut().write_bytes(b"hello", "Записать").unwrap();
+        assert_eq!(
+            mem.store.borrow().get("/поток.bin").map(Vec::as_slice),
+            Some(b"hello".as_slice()),
+            "запись легла в память"
+        );
+
+        // Чтение с начала.
+        data.borrow_mut().set_position(0);
+        let got = data.borrow_mut().read_bytes(5, "Прочитать").unwrap();
+        assert_eq!(got, b"hello");
+
+        // Закрытие через объект — по закону `close`.
+        let value = stream_value(StreamKind::File, data);
+        close(value.object_ref().expect("поток").as_dyn()).unwrap();
+        assert!(
+            !std::path::Path::new("/поток.bin").exists(),
+            "реального диска работа не касалась"
+        );
     }
 }

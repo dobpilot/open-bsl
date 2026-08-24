@@ -46,7 +46,11 @@ fn reader_open(
     arguments: &[BslValue],
     _c: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
-    open(reader_of(receiver, "Открыть")?, arguments)?;
+    open(
+        reader_of(receiver, "Открыть")?,
+        &SystemFileSystem,
+        arguments,
+    )?;
     Ok(BslValue::Undefined)
 }
 
@@ -65,7 +69,12 @@ fn reader_extract(
     _c: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
     let reader = reader_of(receiver, "Извлечь")?;
-    extract(&reader.state, reader.descriptor().name, arguments)?;
+    extract(
+        &reader.state,
+        &SystemFileSystem,
+        reader.descriptor().name,
+        arguments,
+    )?;
     Ok(BslValue::Undefined)
 }
 
@@ -75,7 +84,12 @@ fn reader_extract_all(
     _c: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
     let reader = reader_of(receiver, "ИзвлечьВсе")?;
-    extract_all(&reader.state, reader.descriptor().name, arguments)?;
+    extract_all(
+        &reader.state,
+        &SystemFileSystem,
+        reader.descriptor().name,
+        arguments,
+    )?;
     Ok(BslValue::Undefined)
 }
 
@@ -170,7 +184,12 @@ fn entries_extract(
     _c: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
     let items = entries_of(receiver, "Извлечь")?;
-    extract(&items.state, items.descriptor().name, arguments)?;
+    extract(
+        &items.state,
+        &SystemFileSystem,
+        items.descriptor().name,
+        arguments,
+    )?;
     Ok(BslValue::Undefined)
 }
 
@@ -180,7 +199,12 @@ fn entries_extract_all(
     _c: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
     let items = entries_of(receiver, "ИзвлечьВсе")?;
-    extract_all(&items.state, items.descriptor().name, arguments)?;
+    extract_all(
+        &items.state,
+        &SystemFileSystem,
+        items.descriptor().name,
+        arguments,
+    )?;
     Ok(BslValue::Undefined)
 }
 
@@ -250,7 +274,12 @@ fn entry_extract(
     // Статус-кво прежней диспетчеризации: `Извлечь`/`ИзвлечьВсе`
     // принимали любой из трёх объектов чтения, включая элемент.
     let entry = entry_of(receiver, "Извлечь")?;
-    extract(&entry.state, entry.descriptor().name, arguments)?;
+    extract(
+        &entry.state,
+        &SystemFileSystem,
+        entry.descriptor().name,
+        arguments,
+    )?;
     Ok(BslValue::Undefined)
 }
 
@@ -260,7 +289,12 @@ fn entry_extract_all(
     _c: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
     let entry = entry_of(receiver, "ИзвлечьВсе")?;
-    extract_all(&entry.state, entry.descriptor().name, arguments)?;
+    extract_all(
+        &entry.state,
+        &SystemFileSystem,
+        entry.descriptor().name,
+        arguments,
+    )?;
     Ok(BslValue::Undefined)
 }
 
@@ -323,7 +357,11 @@ fn writer_method_add(
     arguments: &[BslValue],
     _c: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
-    writer_add(writer_of(receiver, "Добавить")?, arguments)?;
+    writer_add(
+        writer_of(receiver, "Добавить")?,
+        &SystemFileSystem,
+        arguments,
+    )?;
     Ok(BslValue::Undefined)
 }
 
@@ -341,7 +379,7 @@ fn writer_method_write(
             receiver: writer.descriptor().name,
         });
     }
-    writer_write(writer)?;
+    writer_write(writer, &SystemFileSystem)?;
     Ok(BslValue::Undefined)
 }
 
