@@ -128,7 +128,11 @@ impl std::fmt::Debug for WriterState {
 /// методе сжатия BZIP2 и на формате архива, кроме ZIP: всё это платформа
 /// умеет, а здесь честный отказ вместо тихой подмены;
 /// [`RtError::TypeError`], если аргумент не того типа.
-pub fn new_archive_writer(zip: bool, args: &[BslValue]) -> RtResult<BslValue> {
+pub fn new_archive_writer(
+    zip: bool,
+    args: &[BslValue],
+    files: Rc<dyn bsl_rt::FileSystem>,
+) -> RtResult<BslValue> {
     let kind = if zip {
         ArchiveKind::Zip
     } else {
@@ -136,7 +140,7 @@ pub fn new_archive_writer(zip: bool, args: &[BslValue]) -> RtResult<BslValue> {
     };
     let state = Rc::new(RefCell::new(WriterState::default()));
     configure(kind, &state, args, "ЗаписьZipФайла")?;
-    Ok(BslValue::new_object(WriterObject { kind, state }))
+    Ok(BslValue::new_object(WriterObject { kind, state, files }))
 }
 
 /// `Открыть(Файл[, ...])` у писателя — те же аргументы, что у его
@@ -856,6 +860,7 @@ pub(crate) fn build_archive(entries: &[PendingEntry], comment: &str) -> RtResult
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bsl_rt::SystemFileSystem;
 
     /// Нечитаемый файл не занимает имя: прежде `add_file` вызывал `reserve`
     /// ДО чтения, и после отказа чтения законный следующий файл с тем же

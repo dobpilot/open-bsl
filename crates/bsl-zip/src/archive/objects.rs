@@ -46,11 +46,8 @@ fn reader_open(
     arguments: &[BslValue],
     _c: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
-    open(
-        reader_of(receiver, "Открыть")?,
-        &SystemFileSystem,
-        arguments,
-    )?;
+    let reader = reader_of(receiver, "Открыть")?;
+    open(reader, reader.files.as_ref(), arguments)?;
     Ok(BslValue::Undefined)
 }
 
@@ -71,7 +68,7 @@ fn reader_extract(
     let reader = reader_of(receiver, "Извлечь")?;
     extract(
         &reader.state,
-        &SystemFileSystem,
+        reader.files.as_ref(),
         reader.descriptor().name,
         arguments,
     )?;
@@ -86,7 +83,7 @@ fn reader_extract_all(
     let reader = reader_of(receiver, "ИзвлечьВсе")?;
     extract_all(
         &reader.state,
-        &SystemFileSystem,
+        reader.files.as_ref(),
         reader.descriptor().name,
         arguments,
     )?;
@@ -186,7 +183,7 @@ fn entries_extract(
     let items = entries_of(receiver, "Извлечь")?;
     extract(
         &items.state,
-        &SystemFileSystem,
+        items.files.as_ref(),
         items.descriptor().name,
         arguments,
     )?;
@@ -201,7 +198,7 @@ fn entries_extract_all(
     let items = entries_of(receiver, "ИзвлечьВсе")?;
     extract_all(
         &items.state,
-        &SystemFileSystem,
+        items.files.as_ref(),
         items.descriptor().name,
         arguments,
     )?;
@@ -276,7 +273,7 @@ fn entry_extract(
     let entry = entry_of(receiver, "Извлечь")?;
     extract(
         &entry.state,
-        &SystemFileSystem,
+        entry.files.as_ref(),
         entry.descriptor().name,
         arguments,
     )?;
@@ -291,7 +288,7 @@ fn entry_extract_all(
     let entry = entry_of(receiver, "ИзвлечьВсе")?;
     extract_all(
         &entry.state,
-        &SystemFileSystem,
+        entry.files.as_ref(),
         entry.descriptor().name,
         arguments,
     )?;
@@ -357,11 +354,8 @@ fn writer_method_add(
     arguments: &[BslValue],
     _c: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
-    writer_add(
-        writer_of(receiver, "Добавить")?,
-        &SystemFileSystem,
-        arguments,
-    )?;
+    let writer = writer_of(receiver, "Добавить")?;
+    writer_add(writer, writer.files.as_ref(), arguments)?;
     Ok(BslValue::Undefined)
 }
 
@@ -379,7 +373,7 @@ fn writer_method_write(
             receiver: writer.descriptor().name,
         });
     }
-    writer_write(writer, &SystemFileSystem)?;
+    writer_write(writer, writer.files.as_ref())?;
     Ok(BslValue::Undefined)
 }
 

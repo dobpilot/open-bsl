@@ -26,7 +26,7 @@ fn argument(arguments: &[BslValue], index: usize) -> &BslValue {
 }
 
 fn construct_zip_reader(
-    _context: &mut CallContext<'_>,
+    context: &mut CallContext<'_>,
     arguments: &[BslValue],
 ) -> RtResult<BslValue> {
     new_archive_reader(
@@ -34,11 +34,12 @@ fn construct_zip_reader(
         argument(arguments, 0),
         argument(arguments, 1),
         &BslValue::Undefined,
+        context.files_rc()?,
     )
 }
 
 fn construct_archive_reader(
-    _context: &mut CallContext<'_>,
+    context: &mut CallContext<'_>,
     arguments: &[BslValue],
 ) -> RtResult<BslValue> {
     new_archive_reader(
@@ -46,21 +47,22 @@ fn construct_archive_reader(
         argument(arguments, 0),
         argument(arguments, 1),
         argument(arguments, 2),
+        context.files_rc()?,
     )
 }
 
 fn construct_zip_writer(
-    _context: &mut CallContext<'_>,
+    context: &mut CallContext<'_>,
     arguments: &[BslValue],
 ) -> RtResult<BslValue> {
-    new_archive_writer(true, arguments)
+    new_archive_writer(true, arguments, context.files_rc()?)
 }
 
 fn construct_archive_writer(
-    _context: &mut CallContext<'_>,
+    context: &mut CallContext<'_>,
     arguments: &[BslValue],
 ) -> RtResult<BslValue> {
-    new_archive_writer(false, arguments)
+    new_archive_writer(false, arguments, context.files_rc()?)
 }
 
 // Арности сняты с платформы и повторяют legacy-ветку `resolve_new`: у

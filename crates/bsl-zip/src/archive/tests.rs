@@ -1,6 +1,29 @@
 //! Тесты архивов: поверхность чтения и записи над общими фикстурами.
 
 use super::*;
+use bsl_rt::SystemFileSystem;
+
+/// Конструкторы читателя/писателя после ABI-G берут файловую систему
+/// сессии; сценарии, которым файловая система безразлична, зовут эти тёзки
+/// с процессной ФС по умолчанию.
+fn new_archive_reader(
+    zip: bool,
+    source: &BslValue,
+    password: &BslValue,
+    archive_type: &BslValue,
+) -> RtResult<BslValue> {
+    super::new_archive_reader(
+        zip,
+        source,
+        password,
+        archive_type,
+        std::rc::Rc::new(SystemFileSystem),
+    )
+}
+
+fn new_archive_writer(zip: bool, args: &[BslValue]) -> RtResult<BslValue> {
+    super::new_archive_writer(zip, args, std::rc::Rc::new(SystemFileSystem))
+}
 
 // Тесты написаны до перевода объектов на протокол и обращаются к ним
 // значениями BSL. Локальные тёзки функций поверхности принимают

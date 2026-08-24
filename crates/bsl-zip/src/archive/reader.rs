@@ -290,6 +290,7 @@ pub(crate) fn resolve_dir(nodes: &mut Vec<DirNode>, parent: usize, part: &str) -
 pub struct ReaderObject {
     pub(crate) kind: ArchiveKind,
     pub(crate) state: Rc<RefCell<ArchiveState>>,
+    pub(crate) files: Rc<dyn bsl_rt::FileSystem>,
 }
 
 /// `ЭлементыZipФайла` / `ЭлементыФайлаАрхива` — не снимок, а окно в то же
@@ -298,6 +299,7 @@ pub struct ReaderObject {
 pub struct EntriesObject {
     pub(crate) kind: ArchiveKind,
     pub(crate) state: Rc<RefCell<ArchiveState>>,
+    pub(crate) files: Rc<dyn bsl_rt::FileSystem>,
 }
 
 /// `ЭлементZipФайла` / `ЭлементФайлаАрхива` — то же состояние плюс номер
@@ -308,6 +310,7 @@ pub struct EntryObject {
     pub(crate) state: Rc<RefCell<ArchiveState>>,
     pub(crate) index: usize,
     pub(crate) generation: u64,
+    pub(crate) files: Rc<dyn bsl_rt::FileSystem>,
 }
 
 /// `ЗаписьZipФайла` / `ЗаписьФайлаАрхива`.
@@ -315,6 +318,7 @@ pub struct EntryObject {
 pub struct WriterObject {
     pub(crate) kind: ArchiveKind,
     pub(crate) state: Rc<RefCell<WriterState>>,
+    pub(crate) files: Rc<dyn bsl_rt::FileSystem>,
 }
 
 pub(crate) static ZIP_READER_TYPE: TypeDescriptor = TypeDescriptor {
@@ -434,6 +438,7 @@ pub fn new_archive_reader(
     source: &BslValue,
     password: &BslValue,
     archive_type: &BslValue,
+    files: Rc<dyn bsl_rt::FileSystem>,
 ) -> RtResult<BslValue> {
     let kind = if zip {
         ArchiveKind::Zip
@@ -443,12 +448,12 @@ pub fn new_archive_reader(
     check_archive_type(archive_type)?;
     let state = Rc::new(RefCell::new(ArchiveState::default()));
     if !matches!(source, BslValue::Undefined) {
-        let (bytes, from) = read_source(source, &SystemFileSystem, "ЧтениеZipФайла")?;
+        let (bytes, from) = read_source(source, files.as_ref(), "ЧтениеZipФайла")?;
         open_bytes(&state, bytes, from)?;
     }
     // Пароль хранить негде и незачем — см. doc comment.
     let _ = password;
-    Ok(BslValue::new_object(ReaderObject { kind, state }))
+    Ok(BslValue::new_object(ReaderObject { kind, state, files }))
 }
 
 /// Третий аргумент конструктора `ЧтениеФайлаАрхива`.
@@ -571,6 +576,7 @@ pub fn entries(reader: &ReaderObject) -> RtResult<BslValue> {
     Ok(BslValue::new_object(EntriesObject {
         kind: reader.kind,
         state: reader.state.clone(),
+        files: reader.files.clone(),
     }))
 }
 
@@ -618,6 +624,7 @@ pub fn get(entries: &EntriesObject, index: usize) -> RtResult<BslValue> {
         state: entries.state.clone(),
         index,
         generation,
+        files: entries.files.clone(),
     }))
 }
 
@@ -661,6 +668,7 @@ pub fn find(entries: &EntriesObject, name: &BslValue) -> RtResult<BslValue> {
             state: entries.state.clone(),
             index,
             generation,
+            files: entries.files.clone(),
         })),
         None => Ok(BslValue::Undefined),
     }
