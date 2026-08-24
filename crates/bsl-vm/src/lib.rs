@@ -623,6 +623,22 @@ fn resolve_component_method(
 /// испортить чужой регистр или подменить значение параметра.
 fn check_control_flow(program: &Program) -> Result<(), RtError> {
     for chunk in &program.chunks {
+        // Режимы и умолчания параметров — по одному на параметр (кодоген
+        // строит оба массива ровно длины `n_params`). При рассинхроне
+        // фрагмент `Выполнить`/`Вычислить` резолвит вызов этой функции по
+        // неверной арности (`param_has_default.len()`, см. `bsl-sema`) или по
+        // неверному режиму: недостающий `param_by_val` кодоген фрагмента молча
+        // считает `Знач` (см. `bsl-compiler`), и переданный ПО ССЫЛКЕ
+        // параметр становится переданным ЗНАЧЕНИЕМ — образ выдаёт неверный
+        // ответ вместо отказа. Проверка статическая, поэтому стоит здесь, а
+        // не на каждом `RunDynamic`.
+        if chunk.param_by_val.len() != chunk.n_params as usize
+            || chunk.param_has_default.len() != chunk.n_params as usize
+        {
+            return Err(RtError::InvalidBytecode(
+                "число режимов или умолчаний параметров не совпадает с числом параметров",
+            ));
+        }
         let limit = chunk.instrs.len();
         for (pc, instr) in chunk.instrs.iter().enumerate() {
             if let Some(target) = instr.jump_target()
@@ -687,6 +703,22 @@ fn check_call_geometry(program: &Program, chunk: &Chunk, instr: &Instr) -> Resul
             arg_modes,
             ..
         } => {
+            // Ноль — это `chunks[0]`, тело модуля, которого не вызывает
+            // никто. Без явного отсева `chunks.get(0)` вернул бы `Some`, и
+            // вызов рекурсивно входил бы в верхний уровень: получается
+            // ловимый `StackOverflow` (в отличие от `InvalidBytecode` он
+            // считается исключением BSL), который окружающая `Попытка`
+            // проглотила бы, обратив битый образ в неверный ответ с кодом
+            // успеха. Текстовый формат отвергает такой `Call` при печати
+            // (`BadCallTarget`, см. `bsl-bytecode`), но разбор листинга его
+            // принимает — значит, периметр образа обязан закрыть его здесь.
+            // Верхнюю границу (`func < chunks.len()`) держит `chunks.get`
+            // ниже: единственная цель исполнения — `chunks[func]`.
+            if *func == 0 {
+                return Err(RtError::InvalidBytecode(
+                    "вызов ссылается на чанк верхнего уровня",
+                ));
+            }
             let Some(callee) = program.chunks.get(*func as usize) else {
                 return Err(RtError::InvalidBytecode(
                     "номер вызываемого чанка вне таблицы функций",
