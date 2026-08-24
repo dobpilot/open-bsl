@@ -30,7 +30,7 @@ pub fn compile_dynamic_snippet(
     request: &DynamicRequest<'_>,
     registry: Option<&bsl_rt::RuntimeRegistry>,
     symbols: &bsl_syntax::PreprocSymbols,
-    scope: u64,
+    scope: std::num::NonZeroU64,
 ) -> Result<DynamicUnit, String> {
     // `Вычислить` заворачивается в `Возврат (...)`, чтобы значение
     // выражения получалось тем же путём, что и у обычного `Возврат`.

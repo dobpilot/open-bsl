@@ -2790,7 +2790,7 @@ fn run_dynamic_snippet(
         linked.registry,
         std::rc::Rc::clone(&linked.zone),
         std::rc::Rc::clone(&linked.files),
-        compiled.scope,
+        compiled.scope.get(),
     )?;
     let (value, final_stack) = drive_linked(
         &snippet_program,

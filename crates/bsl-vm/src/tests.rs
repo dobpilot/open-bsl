@@ -46,7 +46,7 @@ impl bsl_bytecode::DynamicCompiler for TestDynamic<'_> {
             request,
             self.registry,
             &bsl_syntax::PreprocSymbols::new(),
-            self.scopes,
+            std::num::NonZeroU64::new(self.scopes).expect("счётчик увеличен перед вызовом"),
         )
         .map(std::rc::Rc::new)
     }
@@ -3268,7 +3268,8 @@ fn a_dynamic_fragment_comes_from_the_host_not_from_the_vm() {
                 &substitute,
                 None,
                 &bsl_syntax::PreprocSymbols::new(),
-                self.calls as u64,
+                std::num::NonZeroU64::new(self.calls as u64)
+                    .expect("счётчик увеличен перед вызовом"),
             )
             .map(std::rc::Rc::new)
         }

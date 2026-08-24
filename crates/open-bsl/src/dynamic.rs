@@ -96,13 +96,22 @@ impl DynamicCompiler for DynamicCode {
         if let Some(hit) = self.cache.get(&key) {
             return Ok(Rc::clone(hit));
         }
-        self.scopes += 1;
+        // `checked_add`, а не `+=`: номер области монотонно растёт за всё
+        // время жизни сессии, и переполнение `u64` — пусть и недостижимое
+        // на практике — обязано быть явной паникой, а не тихим заворотом в
+        // ноль (то есть в [`DynamicScope::ROOT`], чужой ключ кэша).
+        self.scopes = self
+            .scopes
+            .checked_add(1)
+            .expect("переполнение счётчика областей динамического кода");
         self.compiles += 1;
+        let scope = std::num::NonZeroU64::new(self.scopes)
+            .expect("счётчик увеличен перед этим вызовом, ноль недостижим");
         let unit = Rc::new(bsl_compiler::compile_dynamic_snippet(
             request,
             Some(self.engine.registry()),
             &self.engine.preproc_symbols(),
-            self.scopes,
+            scope,
         )?);
         self.cache.insert(key, Rc::clone(&unit));
         Ok(unit)
@@ -179,7 +188,7 @@ mod tests {
             .compile(&request(
                 "2 + 2",
                 DynamicScope {
-                    program: first.scope,
+                    program: first.scope.get(),
                     chunk: 0,
                 },
                 &core(),
@@ -208,8 +217,10 @@ mod tests {
         let mut dynamic = code();
         let first = dynamic.compile(&request("2 + 2", root(), &core())).unwrap();
         let second = dynamic.compile(&request("3 + 3", root(), &core())).unwrap();
-        assert_ne!(first.scope, DynamicScope::ROOT);
-        assert_ne!(second.scope, DynamicScope::ROOT);
+        // `scope` теперь `NonZeroU64` — совпасть с корнем (нулём) он не
+        // может по типу; сравнение оставлено как явная документация цели.
+        assert_ne!(first.scope.get(), DynamicScope::ROOT);
+        assert_ne!(second.scope.get(), DynamicScope::ROOT);
         assert_ne!(first.scope, second.scope);
         // Повтор номера не тратит: он приезжает вместе с записью кэша.
         let again = dynamic.compile(&request("2 + 2", root(), &core())).unwrap();
