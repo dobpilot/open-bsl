@@ -450,6 +450,39 @@ mod files {
             self.0.borrow_mut().insert(path.to_string(), data.to_vec());
             Ok(())
         }
+
+        // Эти тесты работают только с «файлом целиком»; операции с
+        // метаданными и дескрипторами не задействованы.
+        fn metadata(&self, path: &str) -> std::io::Result<open_bsl::FileMetadata> {
+            unsupported(path)
+        }
+
+        fn read_dir<'fs>(
+            &'fs self,
+            path: &str,
+        ) -> std::io::Result<Box<dyn Iterator<Item = std::io::Result<open_bsl::DirEntry>> + 'fs>>
+        {
+            unsupported(path)
+        }
+
+        fn create_dir_all(&self, _path: &str) -> std::io::Result<()> {
+            Ok(())
+        }
+
+        fn open(
+            &self,
+            path: &str,
+            _options: open_bsl::FileOpenOptions,
+        ) -> std::io::Result<Box<dyn open_bsl::FileHandle>> {
+            unsupported(path)
+        }
+    }
+
+    fn unsupported<T>(path: &str) -> std::io::Result<T> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            format!("операция не поддержана тестовой ФС: {path}"),
+        ))
     }
 
     #[test]
@@ -525,6 +558,33 @@ mod files {
                     std::io::ErrorKind::PermissionDenied,
                     "только чтение",
                 ))
+            }
+
+            fn metadata(&self, _path: &str) -> std::io::Result<open_bsl::FileMetadata> {
+                Err(std::io::Error::new(std::io::ErrorKind::NotFound, "нет"))
+            }
+
+            fn read_dir<'fs>(
+                &'fs self,
+                _path: &str,
+            ) -> std::io::Result<Box<dyn Iterator<Item = std::io::Result<open_bsl::DirEntry>> + 'fs>>
+            {
+                Err(std::io::Error::new(std::io::ErrorKind::NotFound, "нет"))
+            }
+
+            fn create_dir_all(&self, _path: &str) -> std::io::Result<()> {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "только чтение",
+                ))
+            }
+
+            fn open(
+                &self,
+                _path: &str,
+                _options: open_bsl::FileOpenOptions,
+            ) -> std::io::Result<Box<dyn open_bsl::FileHandle>> {
+                Err(std::io::Error::new(std::io::ErrorKind::NotFound, "нет"))
             }
         }
 

@@ -27,7 +27,8 @@
 //! `Rc`. Разделяемая ссылка тут не роскошь: контекст компонента строится,
 //! пока `HostEnv` уже занят чем-то другим, и `&mut` не дался бы.
 
-use std::io::Read;
+use std::fmt;
+use std::io::{self, Read};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Часы прогона: миллисекунды от Unix-эпохи в UTC.
@@ -262,28 +263,303 @@ impl TimeZone for FixedTimeZone {
 /// у каждого вызывающего свой текст с именем операции («Новый
 /// ДвоичныеДанные», «ЗначениеИзФайла»), и переводить ошибку дважды
 /// незачем.
+/// Что делать, если файла нет при открытии на запись. НЕ реэкспорт
+/// `std::fs::OpenOptions` — иначе реализация в памяти невозможна.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileCreate {
+    /// Не создавать: отсутствующий файл — ошибка.
+    Never,
+    /// Открыть существующий либо создать.
+    OpenOrCreate,
+    /// Создать новый; существующий — ошибка.
+    CreateNew,
+}
+
+/// Переносимые параметры открытия файла — ровно те сочетания, которые
+/// сегодня строит `bsl-stream`. Поля закрыты (`#[non_exhaustive]`): строит
+/// их вызывающий через `const`-конструкторы, а РАЗБИРАЕТ реализация
+/// файловой системы, в том числе чужая, — иначе host не узнал бы режима.
+#[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
+pub struct FileOpenOptions {
+    read: bool,
+    write: bool,
+    create: FileCreate,
+    truncate: bool,
+}
+
+impl FileOpenOptions {
+    /// Только чтение.
+    pub const fn read() -> Self {
+        Self {
+            read: true,
+            write: false,
+            create: FileCreate::Never,
+            truncate: false,
+        }
+    }
+
+    /// Только запись, с заданным правилом создания.
+    pub const fn write(create: FileCreate) -> Self {
+        Self {
+            read: false,
+            write: true,
+            create,
+            truncate: false,
+        }
+    }
+
+    /// Чтение и запись, с заданным правилом создания.
+    pub const fn read_write(create: FileCreate) -> Self {
+        Self {
+            read: true,
+            write: true,
+            create,
+            truncate: false,
+        }
+    }
+
+    /// Обрезать содержимое при открытии.
+    pub const fn truncate(mut self, yes: bool) -> Self {
+        self.truncate = yes;
+        self
+    }
+
+    pub const fn can_read(&self) -> bool {
+        self.read
+    }
+
+    pub const fn can_write(&self) -> bool {
+        self.write
+    }
+
+    pub const fn create(&self) -> FileCreate {
+        self.create
+    }
+
+    pub const fn should_truncate(&self) -> bool {
+        self.truncate
+    }
+}
+
+/// Метаданные файла или каталога — ровно то, что читает боевой код:
+/// признак каталога и время изменения. Длины здесь нет — её `bsl-stream`
+/// берёт у ОТКРЫТОГО файла ([`FileHandle::len`]). НЕ реэкспорт
+/// `std::fs::Metadata`, иначе реализация в памяти невозможна.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct FileMetadata {
+    is_dir: bool,
+    modified: Option<i64>,
+}
+
+impl FileMetadata {
+    /// Метаданные файла. Строит РЕАЛИЗАЦИЯ файловой системы, включая чужую.
+    pub fn file(modified: Option<i64>) -> Self {
+        Self {
+            is_dir: false,
+            modified,
+        }
+    }
+
+    /// Метаданные каталога.
+    pub fn directory(modified: Option<i64>) -> Self {
+        Self {
+            is_dir: true,
+            modified,
+        }
+    }
+
+    pub fn is_dir(&self) -> bool {
+        self.is_dir
+    }
+
+    /// Секунды Unix. `None` — носитель времени не хранит.
+    pub fn modified(&self) -> Option<i64> {
+        self.modified
+    }
+}
+
+/// Элемент каталога. `is_dir` — вид САМОГО элемента, БЕЗ перехода по
+/// ссылке (в отличие от [`FileSystem::metadata`], которая по ссылке
+/// переходит): `bsl-zip` различает их, и потеря различия положила бы в
+/// архив каталог вместо ссылки.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct DirEntry {
+    name: String,
+    is_dir: bool,
+}
+
+impl DirEntry {
+    pub fn new(name: impl Into<String>, is_dir: bool) -> Self {
+        Self {
+            name: name.into(),
+            is_dir,
+        }
+    }
+
+    /// Имя без пути — то, что складывается с путём каталога.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn is_dir(&self) -> bool {
+        self.is_dir
+    }
+}
+
+/// Переносимый дескриптор открытого файла: долгоживущий, в отличие от
+/// операций «файл целиком». Супертрейты не оформление — `ЗаписьТекста`
+/// держит `BufWriter<Box<dyn FileHandle>>`, а `BufWriter` требует именно
+/// `io::Write`; `Debug` нужен, потому что хранилища `BslValue` выводят его.
+// `len` здесь — не длина контейнера, а отказоспособный запрос к носителю
+// (`io::Result<u64>`), поэтому `is_empty` бессмыслен: у него была бы форма
+// `io::Result<bool>`, которую линт всё равно не принял бы за пару к `len`.
+#[allow(clippy::len_without_is_empty)]
+pub trait FileHandle: io::Read + io::Write + io::Seek + fmt::Debug {
+    /// Длина отдельным запросом: `seek(End)` менял бы позицию.
+    ///
+    /// # Errors
+    ///
+    /// Ошибку носителя.
+    fn len(&self) -> io::Result<u64>;
+
+    /// ЯВНОЕ закрытие: `Drop` не умеет ответить ошибкой, а `BufWriter` на
+    /// нём молча глотает отказ записи. Берёт `&mut self`, а не
+    /// `self: Box<Self>`: при `Err` дескриптор ОСТАЁТСЯ пригоден для
+    /// повторной попытки, и владелец переводит объект в закрытое состояние
+    /// только после `Ok`. Ошибку системного `close` безопасный `std` не
+    /// отдаёт — наблюдаема ошибка СБРОСА буфера; физическое освобождение
+    /// остаётся за `Drop`.
+    ///
+    /// # Errors
+    ///
+    /// Ошибку сброса буфера на носитель.
+    fn close(&mut self) -> io::Result<()>;
+}
+
+/// `std::fs::File` уже умеет `Read`/`Write`/`Seek`/`Debug`; добавляем длину
+/// и закрытие. У сырого файла пользовательского буфера нет, поэтому
+/// `close` — это `flush` (всегда `Ok`), а физическое закрытие делает `Drop`.
+impl FileHandle for std::fs::File {
+    fn len(&self) -> io::Result<u64> {
+        Ok(self.metadata()?.len())
+    }
+
+    fn close(&mut self) -> io::Result<()> {
+        io::Write::flush(self)
+    }
+}
+
 pub trait FileSystem {
     /// # Errors
     ///
     /// Ошибку чтения — файла нет, нет прав, это каталог.
-    fn read(&self, path: &str) -> std::io::Result<Vec<u8>>;
+    fn read(&self, path: &str) -> io::Result<Vec<u8>>;
 
     /// # Errors
     ///
     /// Ошибку записи — нет каталога, нет прав, диск полон.
-    fn write(&self, path: &str, data: &[u8]) -> std::io::Result<()>;
+    fn write(&self, path: &str, data: &[u8]) -> io::Result<()>;
+
+    /// Метаданные ПО ПУТИ, то есть по символической ссылке переходит.
+    ///
+    /// # Errors
+    ///
+    /// Ошибку доступа к пути.
+    fn metadata(&self, path: &str) -> io::Result<FileMetadata>;
+
+    /// Обход каталога. Итератор, а не `Vec`: ошибка ОТКРЫТИЯ каталога и
+    /// ошибка ОТДЕЛЬНОГО элемента — разные события, и `bsl-zip`
+    /// обрабатывает элементы по одному (отказ на пятом наступает после
+    /// того, как первые четыре уже в архиве). Порядок элементов сохраняется
+    /// — он ложится в архив как есть.
+    ///
+    /// # Errors
+    ///
+    /// Ошибку открытия каталога (ошибки отдельных элементов — в самом
+    /// итераторе).
+    fn read_dir<'fs>(
+        &'fs self,
+        path: &str,
+    ) -> io::Result<Box<dyn Iterator<Item = io::Result<DirEntry>> + 'fs>>;
+
+    /// # Errors
+    ///
+    /// Ошибку создания каталога.
+    fn create_dir_all(&self, path: &str) -> io::Result<()>;
+
+    /// Открывает файл. Объектобезопасно: трейт-объект за `Box`.
+    ///
+    /// # Errors
+    ///
+    /// Ошибку открытия — файла нет при `Never`, файл есть при `CreateNew`,
+    /// нет прав.
+    fn open(&self, path: &str, options: FileOpenOptions) -> io::Result<Box<dyn FileHandle>>;
 }
 
 /// Файловая система процесса — обычный `std::fs`.
 pub struct SystemFileSystem;
 
 impl FileSystem for SystemFileSystem {
-    fn read(&self, path: &str) -> std::io::Result<Vec<u8>> {
+    fn read(&self, path: &str) -> io::Result<Vec<u8>> {
         std::fs::read(path)
     }
 
-    fn write(&self, path: &str, data: &[u8]) -> std::io::Result<()> {
+    fn write(&self, path: &str, data: &[u8]) -> io::Result<()> {
         std::fs::write(path, data)
+    }
+
+    fn metadata(&self, path: &str) -> io::Result<FileMetadata> {
+        let meta = std::fs::metadata(path)?;
+        let modified = meta
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+            .and_then(|d| i64::try_from(d.as_secs()).ok());
+        Ok(if meta.is_dir() {
+            FileMetadata::directory(modified)
+        } else {
+            FileMetadata::file(modified)
+        })
+    }
+
+    fn read_dir<'fs>(
+        &'fs self,
+        path: &str,
+    ) -> io::Result<Box<dyn Iterator<Item = io::Result<DirEntry>> + 'fs>> {
+        let iter = std::fs::read_dir(path)?.map(|entry| {
+            let entry = entry?;
+            let is_dir = entry.file_type()?.is_dir();
+            Ok(DirEntry::new(
+                entry.file_name().to_string_lossy().into_owned(),
+                is_dir,
+            ))
+        });
+        Ok(Box::new(iter))
+    }
+
+    fn create_dir_all(&self, path: &str) -> io::Result<()> {
+        std::fs::create_dir_all(path)
+    }
+
+    fn open(&self, path: &str, options: FileOpenOptions) -> io::Result<Box<dyn FileHandle>> {
+        let mut open = std::fs::OpenOptions::new();
+        open.read(options.can_read()).write(options.can_write());
+        match options.create() {
+            FileCreate::Never => {}
+            FileCreate::OpenOrCreate => {
+                open.create(true);
+            }
+            FileCreate::CreateNew => {
+                open.create_new(true);
+            }
+        }
+        if options.should_truncate() {
+            open.truncate(true);
+        }
+        Ok(Box::new(open.open(path)?))
     }
 }
 

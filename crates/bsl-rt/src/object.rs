@@ -1,10 +1,10 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::fs::File;
 use std::io::BufWriter;
 use std::rc::Rc;
 
 use crate::BslValue;
+use crate::FileHandle;
 use crate::interner::NameId;
 use crate::map::MapData;
 use crate::shape::{Shape, ShapeTable};
@@ -54,7 +54,7 @@ pub enum BslObject {
     /// `СтрокаТаблицыЗначений`, а не через `Shape`/`NameId`.
     KeyValuePair(BslValue, BslValue),
     /// Буферизованный `ЗаписьТекста`; `None` после `Закрыть()`.
-    TextWriter(RefCell<Option<BufWriter<File>>>),
+    TextWriter(RefCell<Option<BufWriter<Box<dyn FileHandle>>>>),
 
     /// `ДвоичныеДанные` — ИММУТАБЕЛЬНЫЙ буфер байтов, поэтому без
     /// `RefCell`: менять содержимое платформа не даёт, всякая операция

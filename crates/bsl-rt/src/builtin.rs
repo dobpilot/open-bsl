@@ -2707,6 +2707,30 @@ mod name_table_tests {
             fn write(&self, _path: &str, _data: &[u8]) -> std::io::Result<()> {
                 unreachable!("до файловой системы дело не доходит")
             }
+
+            fn metadata(&self, _path: &str) -> std::io::Result<crate::FileMetadata> {
+                unreachable!("до файловой системы дело не доходит")
+            }
+
+            fn read_dir<'fs>(
+                &'fs self,
+                _path: &str,
+            ) -> std::io::Result<Box<dyn Iterator<Item = std::io::Result<crate::DirEntry>> + 'fs>>
+            {
+                unreachable!("до файловой системы дело не доходит")
+            }
+
+            fn create_dir_all(&self, _path: &str) -> std::io::Result<()> {
+                unreachable!("до файловой системы дело не доходит")
+            }
+
+            fn open(
+                &self,
+                _path: &str,
+                _options: crate::FileOpenOptions,
+            ) -> std::io::Result<Box<dyn crate::FileHandle>> {
+                unreachable!("до файловой системы дело не доходит")
+            }
         }
 
         let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);

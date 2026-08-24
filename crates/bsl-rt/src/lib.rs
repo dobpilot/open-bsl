@@ -63,8 +63,9 @@ pub use date::{
 use date::{DateBoundary, DatePart};
 pub use enums::{EnumKind, EnumValue, lookup_enum, lookup_member};
 pub use env::{
-    Clock, FileSystem, FixedTimeZone, HostEnv, MAX_OFFSET_SECONDS, MIN_TRANSITION_GAP_SECONDS,
-    RandomSource, SystemClock, SystemFileSystem, SystemRandom, TimeZone,
+    Clock, DirEntry, FileCreate, FileHandle, FileMetadata, FileOpenOptions, FileSystem,
+    FixedTimeZone, HostEnv, MAX_OFFSET_SECONDS, MIN_TRANSITION_GAP_SECONDS, RandomSource,
+    SystemClock, SystemFileSystem, SystemRandom, TimeZone,
 };
 pub use fold::folded_eq;
 pub use interner::{NameId, NameInterner};
@@ -1587,10 +1588,30 @@ impl BslValue {
     /// Возвращает [`RtError::TypeError`], если путь не является строкой,
     /// или [`RtError::IoError`], если файл невозможно создать.
     pub fn new_text_writer(path: &BslValue) -> RtResult<Self> {
+        Self::new_text_writer_with_files(path, &crate::SystemFileSystem)
+    }
+
+    /// `ЗаписьТекста` над заданной файловой системой. Публичная форма пока
+    /// прежняя (умолчание — процессная ФС); на ABI-G VM начнёт передавать
+    /// сюда файловую систему сессии из `CallContext` (см. abi-refactor-f).
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::TypeError`], если путь не строка; [`RtError::IoError`],
+    /// если файл невозможно создать.
+    pub(crate) fn new_text_writer_with_files(
+        path: &BslValue,
+        files: &dyn crate::FileSystem,
+    ) -> RtResult<Self> {
         let path = path.as_str("Новый ЗаписьТекста")?.to_string();
-        let file =
-            std::fs::File::create(&path).map_err(|e| RtError::IoError(format!("{path}: {e}")))?;
-        let mut buffered = std::io::BufWriter::new(file);
+        // `File::create` = открыть-или-создать с обрезанием.
+        let handle = files
+            .open(
+                &path,
+                crate::FileOpenOptions::write(crate::FileCreate::OpenOrCreate).truncate(true),
+            )
+            .map_err(|e| RtError::IoError(format!("{path}: {e}")))?;
+        let mut buffered = std::io::BufWriter::new(handle);
         std::io::Write::write_all(&mut buffered, &[0xef, 0xbb, 0xbf])
             .map_err(|e| RtError::IoError(format!("{path}: {e}")))?;
         Ok(BslValue::Object(Rc::new(BslObject::TextWriter(
@@ -1656,8 +1677,17 @@ impl BslValue {
                     // Теперь на отказе слот цел, и повторный `Закрыть()`
                     // пробует снова.
                     if let Some(writer) = slot.as_mut() {
+                        // Сброс буфера в дескриптор, затем ЯВНОЕ закрытие
+                        // дескриптора: оба на `?` оставляют слот целым, так
+                        // что повторный `Закрыть()` пробует снова (закон
+                        // `close` из ABI-G0). `BufWriter` на `Drop` молча
+                        // проглотил бы отказ — здесь он наблюдаем.
                         writer
                             .flush()
+                            .map_err(|e| RtError::IoError(e.to_string()))?;
+                        writer
+                            .get_mut()
+                            .close()
                             .map_err(|e| RtError::IoError(e.to_string()))?;
                     }
                     *slot = None;
@@ -3341,7 +3371,7 @@ mod tests {
             .read(true)
             .open(&path)
             .expect("открыть на чтение");
-        let mut buffered = std::io::BufWriter::new(read_only);
+        let mut buffered = std::io::BufWriter::new(Box::new(read_only) as Box<dyn FileHandle>);
         buffered
             .write_all("незаписанный текст".as_bytes())
             .expect("в буфер");
@@ -3360,7 +3390,9 @@ mod tests {
         let ok_path = std::env::temp_dir().join("open-bsl-text-writer-close-ok.txt");
         let ok_file = std::fs::File::create(&ok_path).expect("создать файл");
         let writer_ok = BslValue::Object(Rc::new(BslObject::TextWriter(std::cell::RefCell::new(
-            Some(std::io::BufWriter::new(ok_file)),
+            Some(std::io::BufWriter::new(
+                Box::new(ok_file) as Box<dyn FileHandle>
+            )),
         ))));
         assert!(writer_ok.text_writer_close().is_ok(), "исправный закрылся");
         assert!(
