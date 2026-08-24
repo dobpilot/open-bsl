@@ -137,7 +137,14 @@ impl Encoding {
             Encoding::Windows1251 => Some(&WINDOWS_1251),
             Encoding::Cp866 => Some(&CP866),
             Encoding::Koi8R => Some(&KOI8_R),
-            _ => None,
+            // Многобайтовые перечислены поимённо, а не через `_`: новая
+            // кодировка обязана здесь решить, однобайтовая ли она, а не
+            // молча провалиться в `None` и упасть при первом преобразовании.
+            Encoding::Utf8
+            | Encoding::Utf16Le
+            | Encoding::Utf16Be
+            | Encoding::Utf32Le
+            | Encoding::Utf32Be => None,
         }
     }
 
@@ -196,7 +203,7 @@ impl Encoding {
                 }
                 out
             }
-            _ => {
+            Encoding::Windows1251 | Encoding::Cp866 | Encoding::Koi8R => {
                 let table = self.single_byte_table().expect("однобайтовая таблица");
                 text.chars()
                     .map(|c| {
@@ -261,7 +268,7 @@ impl Encoding {
                     })
                     .collect()
             }
-            _ => {
+            Encoding::Windows1251 | Encoding::Cp866 | Encoding::Koi8R => {
                 let table = self.single_byte_table().expect("однобайтовая таблица");
                 bytes
                     .iter()
