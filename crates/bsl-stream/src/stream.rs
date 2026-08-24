@@ -59,13 +59,13 @@
 //! * `Обрезать` — отказывает, если файла НЕТ (в отличие от `Создать`).
 
 use std::cell::RefCell;
-use std::fs::{File, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::rc::Rc;
 
 use bsl_rt::{
-    Arity, BslNumber, BslValue, ByteStreamProtocol, CallContext, EnumValue, MethodDescriptor,
-    ObjectProtocol, PropertyDescriptor, RtError, RtResult, TypeDescriptor,
+    Arity, BslNumber, BslValue, ByteStreamProtocol, CallContext, EnumValue, FileHandle,
+    MethodDescriptor, ObjectProtocol, PropertyDescriptor, RtError, RtResult, TypeDescriptor,
 };
 
 /// Режим открытия файла — член `РежимОткрытияФайла`.
@@ -169,7 +169,11 @@ enum Backing {
     /// `Новый ПотокВПамяти(Буфер)` — ТА ЖЕ память, что у буфера, и потому
     /// фиксированный размер.
     Buffer(BslValue),
-    File(File),
+    /// Открытый файл за переносимым дескриптором (ABI-G0): раньше был голым
+    /// `std::fs::File`, теперь `Box<dyn FileHandle>` — тот же контракт
+    /// `Read`/`Write`/`Seek` плюс `len`/`close`, но открыть его может и
+    /// файловая система сессии, а не только процессная.
+    File(Box<dyn FileHandle>),
 }
 
 /// Состояние потока — общее для обоих типов.
@@ -204,8 +208,7 @@ impl StreamData {
                 .expect("в носитель попадает только буфер")
                 as u64),
             Backing::File(file) => file
-                .metadata()
-                .map(|m| m.len())
+                .len()
                 .map_err(|e| RtError::IoError(format!("Размер: {e}"))),
         }
     }
@@ -787,7 +790,7 @@ fn open_file_data(
         0
     };
     Ok(Rc::new(RefCell::new(StreamData {
-        backing: Some(Backing::File(file)),
+        backing: Some(Backing::File(Box::new(file))),
         pos,
         can_read: access.can_read(),
         can_write: access.can_write(),
@@ -1227,7 +1230,18 @@ fn slice_from(bytes: &[u8], pos: u64, count: usize) -> Vec<u8> {
 /// «Метод не применим», если получатель не поток.
 pub fn close(v: &dyn ObjectProtocol) -> RtResult<()> {
     let d = data(v, "Закрыть")?;
-    d.borrow_mut().backing = None;
+    let mut state = d.borrow_mut();
+    // Закон `close` (ABI-G0): у файлового носителя сначала ЯВНОЕ закрытие
+    // дескриптора; на отказе носитель СОХРАНЯЕТСЯ — поток остаётся
+    // полузакрыт (`Размер()` ещё работает, позиция и признаки целы), и
+    // повторный `Закрыть()` пробует снова. Носитель снимается только после
+    // успеха. У памяти закрывать нечего.
+    if let Some(Backing::File(handle)) = state.backing.as_mut() {
+        handle
+            .close()
+            .map_err(|e| RtError::IoError(format!("Закрыть: {e}")))?;
+    }
+    state.backing = None;
     Ok(())
 }
 
@@ -1903,5 +1917,87 @@ mod tests {
             &BslValue::Undefined,
         );
         assert!(matches!(s, Err(RtError::IoError(_))));
+    }
+
+    /// Закон `close` файлового потока (ABI-G0), судья — `Размер()`, потому
+    /// что закрытый поток жив наполовину (измерено): после `Закрыть()`
+    /// позиция и признаки целы, а ошибкой отвечает `Размер()`. Дескриптор
+    /// отказывает на ПЕРВОМ `close`; проверяется вся вилка.
+    #[test]
+    fn a_file_stream_obeys_the_close_law() {
+        use std::cell::Cell;
+
+        #[derive(Debug)]
+        struct FlakyHandle {
+            closes: Rc<Cell<u32>>,
+        }
+
+        impl std::io::Read for FlakyHandle {
+            fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+                Ok(0)
+            }
+        }
+        impl std::io::Write for FlakyHandle {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                Ok(buf.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        impl std::io::Seek for FlakyHandle {
+            fn seek(&mut self, _pos: SeekFrom) -> std::io::Result<u64> {
+                Ok(0)
+            }
+        }
+        impl FileHandle for FlakyHandle {
+            fn len(&self) -> std::io::Result<u64> {
+                Ok(42)
+            }
+            fn close(&mut self) -> std::io::Result<()> {
+                let n = self.closes.get();
+                self.closes.set(n + 1);
+                if n == 0 {
+                    Err(std::io::Error::other("первый close падает"))
+                } else {
+                    Ok(())
+                }
+            }
+        }
+
+        let closes = Rc::new(Cell::new(0));
+        let data = Rc::new(RefCell::new(StreamData {
+            backing: Some(Backing::File(Box::new(FlakyHandle {
+                closes: closes.clone(),
+            }))),
+            pos: 7,
+            can_read: true,
+            can_write: false,
+            can_seek: true,
+        }));
+        let value = BslValue::new_object(StreamObject {
+            kind: StreamKind::File,
+            data: data.clone(),
+        });
+        let obj = value.object_ref().expect("поток").as_dyn();
+
+        // Первый `Закрыть()` — отказ дескриптора; носитель сохранён.
+        assert!(close(obj).is_err());
+        assert_eq!(closes.get(), 1, "дескриптор закрывали один раз");
+        // Поток полузакрыт: `Размер()` ещё работает, позиция и признаки целы.
+        assert!(data.borrow().len("Размер").is_ok(), "Размер() после отказа");
+        assert_eq!(data.borrow().position(), 7, "позиция цела");
+        assert!(!data.borrow().can_write, "признак записи цел");
+        assert!(data.borrow().can_read, "признак чтения цел");
+
+        // Второй `Закрыть()` доходит до дескриптора и успешен.
+        assert!(close(obj).is_ok());
+        assert_eq!(closes.get(), 2, "второй close дошёл до дескриптора");
+        // Теперь поток закрыт: `Размер()` отвечает ошибкой.
+        assert!(data.borrow().len("Размер").is_err(), "поток закрыт");
+
+        // Третий `Закрыть()` успешен и до дескриптора уже не идёт.
+        assert!(close(obj).is_ok());
+        assert_eq!(closes.get(), 2, "третий close дескриптора не касается");
     }
 }
