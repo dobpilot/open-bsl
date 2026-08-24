@@ -807,17 +807,13 @@ const TYPES: &[&TypeDescriptor] = &[&crate::DOCUMENT_TYPE, &crate::PARAMS_TYPE];
 
 /// Дескриптор статически подключаемого компонента текстовых документов.
 pub const fn library() -> LibraryDescriptor {
-    LibraryDescriptor {
-        package: env!("CARGO_PKG_NAME"),
-        object_jit: bsl_rt::ObjectJitPolicy::NativeContextCompatible,
-        version: env!("CARGO_PKG_VERSION"),
-        // Ядро в зависимостях не объявляется: реестр включает его в
-        // требования любой программы (`RuntimeRegistry::requirements_for`).
-        dependencies: &[],
-        functions: &[],
-        constructors: CONSTRUCTORS,
-        types: TYPES,
-    }
+    LibraryDescriptor::new(
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION"),
+        bsl_rt::ObjectJitPolicy::NativeContextCompatible,
+    )
+    .with_constructors(CONSTRUCTORS)
+    .with_types(TYPES)
 }
 
 #[cfg(test)]
@@ -832,8 +828,8 @@ mod tests {
 
     #[test]
     fn constructor_code_is_static() {
-        assert_eq!(library().constructors.len(), 1);
-        assert_eq!(library().constructors[0].code.get(), 1);
+        assert_eq!(library().constructors().len(), 1);
+        assert_eq!(library().constructors()[0].code.get(), 1);
     }
 
     /// Модель строк платформы: пустой текст — ноль строк, одинокий перевод

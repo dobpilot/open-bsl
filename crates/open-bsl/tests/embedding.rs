@@ -44,18 +44,16 @@ const HOST_FUNCTIONS: &[FunctionDescriptor] = &[FunctionDescriptor {
 }];
 
 fn host_library() -> LibraryDescriptor {
-    LibraryDescriptor {
-        package: "example-host",
-        object_jit: bsl_rt::ObjectJitPolicy::NativeContextCompatible,
-        version: "1.0.0",
-        dependencies: &[LibraryDependency {
-            package: bsl_rt::PACKAGE_NAME,
-            version: bsl_rt::PACKAGE_VERSION,
-        }],
-        functions: HOST_FUNCTIONS,
-        constructors: &[],
-        types: &[],
-    }
+    LibraryDescriptor::new(
+        "example-host",
+        "1.0.0",
+        bsl_rt::ObjectJitPolicy::NativeContextCompatible,
+    )
+    .with_dependencies(&[LibraryDependency {
+        package: bsl_rt::PACKAGE_NAME,
+        version: bsl_rt::PACKAGE_VERSION,
+    }])
+    .with_functions(HOST_FUNCTIONS)
 }
 
 #[test]
@@ -168,7 +166,7 @@ fn textdoc_feature_registers_constructor_methods_and_parameters() {
     assert_eq!(module.requirements()[1].package, "bsl-textdoc");
     assert_eq!(
         module.requirements()[1].version,
-        bsl_textdoc::library().version
+        bsl_textdoc::library().version()
     );
     assert_eq!(
         engine.new_state().run(&module).unwrap().to_string(),
@@ -554,18 +552,16 @@ const FAILING_FUNCTIONS: &[FunctionDescriptor] = &[FunctionDescriptor {
 }];
 
 fn failing_library() -> LibraryDescriptor {
-    LibraryDescriptor {
-        package: "example-host",
-        object_jit: bsl_rt::ObjectJitPolicy::NativeContextCompatible,
-        version: "1.0.0",
-        dependencies: &[LibraryDependency {
-            package: bsl_rt::PACKAGE_NAME,
-            version: bsl_rt::PACKAGE_VERSION,
-        }],
-        functions: FAILING_FUNCTIONS,
-        constructors: &[],
-        types: &[],
-    }
+    LibraryDescriptor::new(
+        "example-host",
+        "1.0.0",
+        bsl_rt::ObjectJitPolicy::NativeContextCompatible,
+    )
+    .with_dependencies(&[LibraryDependency {
+        package: bsl_rt::PACKAGE_NAME,
+        version: bsl_rt::PACKAGE_VERSION,
+    }])
+    .with_functions(FAILING_FUNCTIONS)
 }
 
 /// Сторонний компонент называет пакет и категорию, не имея своего варианта
@@ -744,20 +740,17 @@ mod host_zone {
     }];
 
     fn watch_library() -> LibraryDescriptor {
-        LibraryDescriptor {
-            package: "example-host",
-            // Обработчики читают зону прогона и пишут в поток вывода —
-            // сокращённый контекст нативного пути им не подходит.
-            object_jit: bsl_rt::ObjectJitPolicy::InterpreterOnly,
-            version: "1.0.0",
-            dependencies: &[LibraryDependency {
-                package: bsl_rt::PACKAGE_NAME,
-                version: bsl_rt::PACKAGE_VERSION,
-            }],
-            functions: &[],
-            constructors: WATCH_CONSTRUCTORS,
-            types: WATCH_TYPES,
-        }
+        LibraryDescriptor::new(
+            "example-host",
+            "1.0.0",
+            bsl_rt::ObjectJitPolicy::InterpreterOnly,
+        )
+        .with_dependencies(&[LibraryDependency {
+            package: bsl_rt::PACKAGE_NAME,
+            version: bsl_rt::PACKAGE_VERSION,
+        }])
+        .with_constructors(WATCH_CONSTRUCTORS)
+        .with_types(WATCH_TYPES)
     }
 
     /// Цикл — чтобы чанк дошёл до JIT: короткий скрипт нативной точкой

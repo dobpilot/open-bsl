@@ -660,7 +660,7 @@ fn resolve_component_method(
     let upper = field_name(program, name)?.to_uppercase();
     let resolved = table.iter().find(|descriptor| {
         descriptor
-            .names
+            .names()
             .iter()
             .any(|candidate| candidate.to_uppercase() == upper)
     });
@@ -888,10 +888,12 @@ fn link_components<'a>(
                 requirement.package, requirement.version
             )));
         };
-        if library.version != requirement.version {
+        if library.version() != requirement.version {
             return Err(RtError::Link(format!(
                 "для {} требуется {}, зарегистрирована версия {}",
-                requirement.package, requirement.version, library.version
+                requirement.package,
+                requirement.version,
+                library.version()
             )));
         }
     }
@@ -927,7 +929,7 @@ fn link_components<'a>(
                             ))
                         })?;
                     let descriptor = library_descriptor
-                        .functions
+                        .functions()
                         .iter()
                         .find(|descriptor| descriptor.code.get() == *function)
                         .ok_or_else(|| {
@@ -967,7 +969,7 @@ fn link_components<'a>(
                             ))
                         })?;
                     let descriptor = library_descriptor
-                        .constructors
+                        .constructors()
                         .iter()
                         .find(|descriptor| descriptor.code.get() == *constructor)
                         .ok_or_else(|| {
@@ -2489,7 +2491,7 @@ fn step_cold(
                 )? {
                     Some(descriptor) => {
                         descriptor.check_arity(count, object.type_descriptor().name)?;
-                        (descriptor.call)(object.as_dyn(), args, &mut context)?
+                        (descriptor.call())(object.as_dyn(), args, &mut context)?
                     }
                     None => {
                         let method_name = field_name(program, name_id)?;

@@ -390,10 +390,11 @@ pub type MethodCall =
 /// обработчиках» опровергнуто (`ТабличныйДокумент.НачатьГруппуСтрок` молча
 /// принимал пять аргументов при двух объявленных).
 #[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
 pub struct MethodDescriptor {
-    pub names: &'static [&'static str],
-    pub arity: Arity,
-    pub call: MethodCall,
+    names: &'static [&'static str],
+    arity: Arity,
+    call: MethodCall,
 }
 
 impl MethodDescriptor {
@@ -402,6 +403,23 @@ impl MethodDescriptor {
     /// в рантайме, где получатель уже известен.
     pub const fn new(names: &'static [&'static str], arity: Arity, call: MethodCall) -> Self {
         Self { names, arity, call }
+    }
+
+    /// Написания метода — первое каноническое (русское).
+    pub const fn names(&self) -> &'static [&'static str] {
+        self.names
+    }
+
+    /// Допустимое число аргументов.
+    pub const fn arity(&self) -> Arity {
+        self.arity
+    }
+
+    /// Обработчик вызова. Нужен VM: кэш `CallObjectMethod` держит дескриптор
+    /// и на попадании берёт из него обработчик, не разбирая имя (см.
+    /// `resolve_component_method` в `bsl-vm`).
+    pub const fn call(&self) -> MethodCall {
+        self.call
     }
 
     /// Рантаймная проверка арности перед вызовом обработчика — единый
@@ -599,8 +617,9 @@ pub struct LibraryDependency {
 }
 
 #[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
 pub struct LibraryDescriptor {
-    pub package: &'static str,
+    package: &'static str,
     /// Годятся ли объекты этой библиотеки НАТИВНОМУ пути исполнения.
     ///
     /// JIT обслуживает обращения к объектам сокращённым [`CallContext`]:
@@ -613,16 +632,118 @@ pub struct LibraryDescriptor {
     /// обращающийся к ОБЪЕКТАМ, целиком минует нативный путь. Различать
     /// получателей по типу было бы точнее, но цена этого измерена и
     /// велика — см. `LinkedComponents` в `bsl-vm`.
-    pub object_jit: ObjectJitPolicy,
-    pub version: &'static str,
-    pub dependencies: &'static [LibraryDependency],
-    pub functions: &'static [FunctionDescriptor],
-    pub constructors: &'static [ConstructorDescriptor],
+    object_jit: ObjectJitPolicy,
+    version: &'static str,
+    dependencies: &'static [LibraryDependency],
+    functions: &'static [FunctionDescriptor],
+    constructors: &'static [ConstructorDescriptor],
     /// Типы объектов, которые компонент вводит в язык. По ним `Тип("Имя")`
     /// находит тип: закрытый реестр `TypeId` ядра компонентных типов
     /// больше не знает. Не объявленный здесь тип остаётся доступен через
     /// `ТипЗнч(объект)`, но по имени не ищется.
-    pub types: &'static [&'static crate::TypeDescriptor],
+    types: &'static [&'static crate::TypeDescriptor],
+    /// Написания, на которые откликается больше одного типа: пара
+    /// «псевдоним → тип-владелец» (см. ABI-D). Пусто, пока конфликта имён
+    /// нет; каталог типов реестра разрешает неоднозначность по этому списку,
+    /// а не по порядку `types`.
+    type_aliases: &'static [(&'static str, &'static crate::TypeDescriptor)],
+}
+
+impl LibraryDescriptor {
+    /// Обязательный минимум библиотеки. Остальные таблицы добавляются
+    /// `with_*`; `object_jit` входит сюда, а не в умолчание, — решение о
+    /// пригодности объектов нативному пути каждая библиотека принимает
+    /// явно.
+    pub const fn new(
+        package: &'static str,
+        version: &'static str,
+        object_jit: ObjectJitPolicy,
+    ) -> Self {
+        Self {
+            package,
+            object_jit,
+            version,
+            dependencies: &[],
+            functions: &[],
+            constructors: &[],
+            types: &[],
+            type_aliases: &[],
+        }
+    }
+
+    /// Зависимости от других библиотек (ядро не объявляется — реестр
+    /// включает его в требования любой программы).
+    pub const fn with_dependencies(mut self, d: &'static [LibraryDependency]) -> Self {
+        self.dependencies = d;
+        self
+    }
+
+    /// Глобальные функции библиотеки.
+    pub const fn with_functions(mut self, f: &'static [FunctionDescriptor]) -> Self {
+        self.functions = f;
+        self
+    }
+
+    /// Конструкторы (`Новый ...`) библиотеки.
+    pub const fn with_constructors(mut self, c: &'static [ConstructorDescriptor]) -> Self {
+        self.constructors = c;
+        self
+    }
+
+    /// Типы объектов, которые библиотека вводит в язык.
+    pub const fn with_types(mut self, t: &'static [&'static crate::TypeDescriptor]) -> Self {
+        self.types = t;
+        self
+    }
+
+    /// Написания, на которые откликается больше одного типа (см. ABI-D).
+    pub const fn with_type_aliases(
+        mut self,
+        a: &'static [(&'static str, &'static crate::TypeDescriptor)],
+    ) -> Self {
+        self.type_aliases = a;
+        self
+    }
+
+    /// Имя пакета библиотеки.
+    pub const fn package(&self) -> &'static str {
+        self.package
+    }
+
+    /// Версия библиотеки.
+    pub const fn version(&self) -> &'static str {
+        self.version
+    }
+
+    /// Пригодность объектов библиотеки нативному пути исполнения.
+    pub const fn object_jit(&self) -> ObjectJitPolicy {
+        self.object_jit
+    }
+
+    /// Зависимости библиотеки.
+    pub const fn dependencies(&self) -> &'static [LibraryDependency] {
+        self.dependencies
+    }
+
+    /// Глобальные функции библиотеки.
+    pub const fn functions(&self) -> &'static [FunctionDescriptor] {
+        self.functions
+    }
+
+    /// Конструкторы библиотеки.
+    pub const fn constructors(&self) -> &'static [ConstructorDescriptor] {
+        self.constructors
+    }
+
+    /// Типы, которые библиотека вводит в язык.
+    pub const fn types(&self) -> &'static [&'static crate::TypeDescriptor] {
+        self.types
+    }
+
+    /// Псевдонимы имён типов, владельцев которых объявила библиотека.
+    pub const fn type_aliases(&self) -> &'static [(&'static str, &'static crate::TypeDescriptor)] {
+        self.type_aliases
+    }
 }
 
 /// Обещание библиотеки о том, что её объекты выдержат нативный контекст.
@@ -648,15 +769,11 @@ pub enum ObjectJitPolicy {
 /// пусты; по мере миграции они будут перенесены сюда без изменения API
 /// фасада.
 pub const fn core_library() -> LibraryDescriptor {
-    LibraryDescriptor {
-        package: crate::PACKAGE_NAME,
-        object_jit: ObjectJitPolicy::NativeContextCompatible,
-        version: crate::PACKAGE_VERSION,
-        dependencies: &[],
-        functions: &[],
-        constructors: &[],
-        types: &[],
-    }
+    LibraryDescriptor::new(
+        crate::PACKAGE_NAME,
+        crate::PACKAGE_VERSION,
+        ObjectJitPolicy::NativeContextCompatible,
+    )
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1014,30 +1131,25 @@ mod tests {
     }];
 
     fn core() -> LibraryDescriptor {
-        LibraryDescriptor {
-            package: crate::PACKAGE_NAME,
-            object_jit: ObjectJitPolicy::NativeContextCompatible,
-            version: crate::PACKAGE_VERSION,
-            dependencies: &[],
-            functions: CORE_FUNCTIONS,
-            constructors: &[],
-            types: &[],
-        }
+        LibraryDescriptor::new(
+            crate::PACKAGE_NAME,
+            crate::PACKAGE_VERSION,
+            ObjectJitPolicy::NativeContextCompatible,
+        )
+        .with_functions(CORE_FUNCTIONS)
     }
 
     fn json() -> LibraryDescriptor {
-        LibraryDescriptor {
-            package: "bsl-json",
-            object_jit: ObjectJitPolicy::NativeContextCompatible,
-            version: "0.1.0",
-            dependencies: &[LibraryDependency {
-                package: crate::PACKAGE_NAME,
-                version: crate::PACKAGE_VERSION,
-            }],
-            functions: &[],
-            constructors: JSON_CONSTRUCTORS,
-            types: &[],
-        }
+        LibraryDescriptor::new(
+            "bsl-json",
+            "0.1.0",
+            ObjectJitPolicy::NativeContextCompatible,
+        )
+        .with_dependencies(&[LibraryDependency {
+            package: crate::PACKAGE_NAME,
+            version: crate::PACKAGE_VERSION,
+        }])
+        .with_constructors(JSON_CONSTRUCTORS)
     }
 
     #[test]
@@ -1068,15 +1180,10 @@ mod tests {
             call: no_call,
         }];
         let mut builder = RuntimeBuilder::new();
-        builder.register(core()).register(LibraryDescriptor {
-            package: "other",
-            object_jit: ObjectJitPolicy::NativeContextCompatible,
-            version: "1.0.0",
-            dependencies: &[],
-            functions: DUPLICATE,
-            constructors: &[],
-            types: &[],
-        });
+        builder.register(core()).register(
+            LibraryDescriptor::new("other", "1.0.0", ObjectJitPolicy::NativeContextCompatible)
+                .with_functions(DUPLICATE),
+        );
 
         assert!(matches!(
             builder.build(),
@@ -1129,5 +1236,23 @@ mod tests {
                 ..
             })
         ));
+    }
+}
+
+#[cfg(test)]
+mod descriptor_sizes {
+    use super::{LibraryDescriptor, MethodDescriptor};
+
+    /// Размеры дескрипторов зафиксированы намеренно (ABI-E плана
+    /// abi-refactor-f). `LibraryDescriptor` вырос ровно на толстый указатель
+    /// (16 байт на x86-64) — поле `type_aliases`, добавленное под каталог
+    /// типов ABI-D; записи статические, так что рост платится один раз на
+    /// библиотеку, а не на объект. `MethodDescriptor` — 32 байта (написания,
+    /// `arity`, обработчик), закрытие полей его не изменило. Тест ловит
+    /// незамеченный рост дескриптора.
+    #[test]
+    fn descriptors_have_the_expected_size() {
+        assert_eq!(std::mem::size_of::<LibraryDescriptor>(), 120);
+        assert_eq!(std::mem::size_of::<MethodDescriptor>(), 32);
     }
 }

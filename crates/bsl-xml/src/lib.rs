@@ -335,17 +335,14 @@ const TYPES: &[&TypeDescriptor] = &[
 
 /// Дескриптор статически подключаемого компонента стека XML.
 pub const fn library() -> LibraryDescriptor {
-    LibraryDescriptor {
-        package: PACKAGE_NAME,
-        object_jit: bsl_rt::ObjectJitPolicy::NativeContextCompatible,
-        version: PACKAGE_VERSION,
-        // Ядро в зависимостях не объявляется: реестр включает его в
-        // требования любой программы (`RuntimeRegistry::requirements_for`).
-        dependencies: &[],
-        functions: FUNCTIONS,
-        constructors: CONSTRUCTORS,
-        types: TYPES,
-    }
+    LibraryDescriptor::new(
+        PACKAGE_NAME,
+        PACKAGE_VERSION,
+        bsl_rt::ObjectJitPolicy::NativeContextCompatible,
+    )
+    .with_functions(FUNCTIONS)
+    .with_constructors(CONSTRUCTORS)
+    .with_types(TYPES)
 }
 
 #[cfg(test)]
@@ -355,13 +352,13 @@ mod tests {
     #[test]
     fn constructor_and_function_codes_are_static_and_dense() {
         let constructors = library()
-            .constructors
+            .constructors()
             .iter()
             .map(|constructor| constructor.code.get())
             .collect::<Vec<_>>();
         assert_eq!(constructors, (1..=13).collect::<Vec<_>>());
         let functions = library()
-            .functions
+            .functions()
             .iter()
             .map(|function| function.code.get())
             .collect::<Vec<_>>();

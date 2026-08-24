@@ -797,17 +797,13 @@ const TYPES: &[&TypeDescriptor] = &[&crate::GROUP_TYPE, &crate::MATCH_TYPE];
 
 /// Дескриптор статически подключаемого regex-компонента.
 pub const fn library() -> LibraryDescriptor {
-    LibraryDescriptor {
-        package: env!("CARGO_PKG_NAME"),
-        object_jit: bsl_rt::ObjectJitPolicy::NativeContextCompatible,
-        version: env!("CARGO_PKG_VERSION"),
-        // Ядро в зависимостях не объявляется: реестр включает его в
-        // требования любой программы (`RuntimeRegistry::requirements_for`).
-        dependencies: &[],
-        functions: FUNCTIONS,
-        constructors: &[],
-        types: TYPES,
-    }
+    LibraryDescriptor::new(
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION"),
+        bsl_rt::ObjectJitPolicy::NativeContextCompatible,
+    )
+    .with_functions(FUNCTIONS)
+    .with_types(TYPES)
 }
 
 #[cfg(test)]

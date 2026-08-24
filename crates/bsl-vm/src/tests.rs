@@ -301,27 +301,24 @@ const TEST_COMPONENT_CONSTRUCTORS: &[bsl_rt::ConstructorDescriptor] = &[
 fn test_component_registry() -> bsl_rt::RuntimeRegistry {
     let mut builder = bsl_rt::RuntimeBuilder::new();
     builder
-        .register(bsl_rt::LibraryDescriptor {
-            package: bsl_rt::PACKAGE_NAME,
-            object_jit: bsl_rt::ObjectJitPolicy::NativeContextCompatible,
-            version: bsl_rt::PACKAGE_VERSION,
-            dependencies: &[],
-            functions: &[],
-            constructors: &[],
-            types: &[],
-        })
-        .register(bsl_rt::LibraryDescriptor {
-            package: "bsl-test-host",
-            object_jit: bsl_rt::ObjectJitPolicy::NativeContextCompatible,
-            version: "1.2.3",
-            dependencies: &[bsl_rt::LibraryDependency {
+        .register(bsl_rt::LibraryDescriptor::new(
+            bsl_rt::PACKAGE_NAME,
+            bsl_rt::PACKAGE_VERSION,
+            bsl_rt::ObjectJitPolicy::NativeContextCompatible,
+        ))
+        .register(
+            bsl_rt::LibraryDescriptor::new(
+                "bsl-test-host",
+                "1.2.3",
+                bsl_rt::ObjectJitPolicy::NativeContextCompatible,
+            )
+            .with_dependencies(&[bsl_rt::LibraryDependency {
                 package: bsl_rt::PACKAGE_NAME,
                 version: bsl_rt::PACKAGE_VERSION,
-            }],
-            functions: TEST_COMPONENT_FUNCTIONS,
-            constructors: TEST_COMPONENT_CONSTRUCTORS,
-            types: &[],
-        });
+            }])
+            .with_functions(TEST_COMPONENT_FUNCTIONS)
+            .with_constructors(TEST_COMPONENT_CONSTRUCTORS),
+        );
     builder.build().unwrap()
 }
 
@@ -408,18 +405,19 @@ fn a_polymorphic_open_call_site_revalidates_its_method_cache() {
     builder
         .register(bsl_rt::core_library())
         .register(bsl_json::library())
-        .register(bsl_rt::LibraryDescriptor {
-            package: "bsl-test-host",
-            object_jit: bsl_rt::ObjectJitPolicy::NativeContextCompatible,
-            version: "1.2.3",
-            dependencies: &[bsl_rt::LibraryDependency {
+        .register(
+            bsl_rt::LibraryDescriptor::new(
+                "bsl-test-host",
+                "1.2.3",
+                bsl_rt::ObjectJitPolicy::NativeContextCompatible,
+            )
+            .with_dependencies(&[bsl_rt::LibraryDependency {
                 package: bsl_rt::PACKAGE_NAME,
                 version: bsl_rt::PACKAGE_VERSION,
-            }],
-            functions: TEST_COMPONENT_FUNCTIONS,
-            constructors: TEST_COMPONENT_CONSTRUCTORS,
-            types: &[],
-        });
+            }])
+            .with_functions(TEST_COMPONENT_FUNCTIONS)
+            .with_constructors(TEST_COMPONENT_CONSTRUCTORS),
+        );
     let registry = builder.build().unwrap();
     let program = compile_with_registry(
         "з = Новый ЗаписьJSON;\n\

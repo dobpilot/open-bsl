@@ -92,15 +92,13 @@ const COUNTER_CONSTRUCTORS: &[ConstructorDescriptor] = &[ConstructorDescriptor {
 }];
 
 fn counter_library() -> LibraryDescriptor {
-    LibraryDescriptor {
-        package: "example-host",
-        object_jit: bsl_rt::ObjectJitPolicy::NativeContextCompatible,
-        version: "1.0.0",
-        dependencies: &[],
-        functions: &[],
-        constructors: COUNTER_CONSTRUCTORS,
-        types: COUNTER_TYPES,
-    }
+    LibraryDescriptor::new(
+        "example-host",
+        "1.0.0",
+        bsl_rt::ObjectJitPolicy::NativeContextCompatible,
+    )
+    .with_constructors(COUNTER_CONSTRUCTORS)
+    .with_types(COUNTER_TYPES)
 }
 
 fn main() -> Result<(), open_bsl::Error> {

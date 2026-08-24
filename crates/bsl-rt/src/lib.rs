@@ -146,6 +146,7 @@ impl ComponentError {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum RtError {
     Num(NumError),
     /// Операция получила значение не того типа — например, `Если 1 Тогда`:

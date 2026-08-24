@@ -957,7 +957,7 @@ impl<'a> Resolver<'a> {
                         let package = registry
                             .library(library_index)
                             .expect("индекс получен из таблицы имён этого реестра")
-                            .package;
+                            .package();
                         let library = bsl_rt::LibraryKey::new(package);
                         self.used_libraries.insert(library.clone());
                         Ok(RExpr::CallComponent {
@@ -1001,7 +1001,7 @@ impl<'a> Resolver<'a> {
                         let package = registry
                             .library(library_index)
                             .expect("индекс получен из таблицы имён этого реестра")
-                            .package;
+                            .package();
                         let library = bsl_rt::LibraryKey::new(package);
                         self.used_libraries.insert(library.clone());
                         Ok(RExpr::CreateObject {
@@ -1113,7 +1113,7 @@ impl<'a> Resolver<'a> {
             let package = registry
                 .library(library_index)
                 .expect("индекс получен из таблицы имён этого реестра")
-                .package;
+                .package();
             let library = bsl_rt::LibraryKey::new(package);
             self.used_libraries.insert(library.clone());
             return Ok(RExpr::CreateObject {
@@ -1493,7 +1493,7 @@ impl<'a> Resolver<'a> {
                     let package = registry
                         .library(library_index)
                         .expect("индекс получен из таблицы имён этого реестра")
-                        .package;
+                        .package();
                     let library = bsl_rt::LibraryKey::new(package);
                     self.used_libraries.insert(library.clone());
                     return Ok(RExpr::CallComponent {
@@ -1840,15 +1840,13 @@ mod tests {
             kind: bsl_rt::FunctionKind::Procedure,
             call,
         }];
-        const LIBRARY: bsl_rt::LibraryDescriptor = bsl_rt::LibraryDescriptor {
-            package: "test-lib",
-            object_jit: bsl_rt::ObjectJitPolicy::NativeContextCompatible,
-            version: "0.0.0",
-            dependencies: &[],
-            functions: FUNCTIONS,
-            constructors: CONSTRUCTORS,
-            types: &[],
-        };
+        const LIBRARY: bsl_rt::LibraryDescriptor = bsl_rt::LibraryDescriptor::new(
+            "test-lib",
+            "0.0.0",
+            bsl_rt::ObjectJitPolicy::NativeContextCompatible,
+        )
+        .with_functions(FUNCTIONS)
+        .with_constructors(CONSTRUCTORS);
         let mut builder = bsl_rt::RuntimeBuilder::new();
         builder.register(bsl_rt::core_library()).register(LIBRARY);
         builder.build().unwrap()

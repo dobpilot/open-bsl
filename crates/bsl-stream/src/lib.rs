@@ -110,18 +110,17 @@ const TYPES: &[&TypeDescriptor] = &[
 
 /// Дескриптор статически подключаемого компонента потоков.
 pub const fn library() -> LibraryDescriptor {
-    LibraryDescriptor {
-        package: PACKAGE_NAME,
-        object_jit: bsl_rt::ObjectJitPolicy::NativeContextCompatible,
-        version: PACKAGE_VERSION,
-        dependencies: &[LibraryDependency {
-            package: bsl_binbuf::PACKAGE_NAME,
-            version: bsl_binbuf::PACKAGE_VERSION,
-        }],
-        functions: &[],
-        constructors: CONSTRUCTORS,
-        types: TYPES,
-    }
+    LibraryDescriptor::new(
+        PACKAGE_NAME,
+        PACKAGE_VERSION,
+        bsl_rt::ObjectJitPolicy::NativeContextCompatible,
+    )
+    .with_dependencies(&[LibraryDependency {
+        package: bsl_binbuf::PACKAGE_NAME,
+        version: bsl_binbuf::PACKAGE_VERSION,
+    }])
+    .with_constructors(CONSTRUCTORS)
+    .with_types(TYPES)
 }
 
 #[cfg(test)]
@@ -131,7 +130,7 @@ mod tests {
     #[test]
     fn constructor_codes_are_static_and_dense() {
         let codes = library()
-            .constructors
+            .constructors()
             .iter()
             .map(|constructor| constructor.code.get())
             .collect::<Vec<_>>();

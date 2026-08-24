@@ -52,17 +52,13 @@ const TYPES: &[&TypeDescriptor] = &[
 
 /// Дескриптор статически подключаемого компонента табличного документа.
 pub const fn library() -> LibraryDescriptor {
-    LibraryDescriptor {
-        package: PACKAGE_NAME,
-        object_jit: bsl_rt::ObjectJitPolicy::NativeContextCompatible,
-        version: PACKAGE_VERSION,
-        // Ядро в зависимостях не объявляется: реестр включает его в
-        // требования любой программы (`RuntimeRegistry::requirements_for`).
-        dependencies: &[],
-        functions: &[],
-        constructors: CONSTRUCTORS,
-        types: TYPES,
-    }
+    LibraryDescriptor::new(
+        PACKAGE_NAME,
+        PACKAGE_VERSION,
+        bsl_rt::ObjectJitPolicy::NativeContextCompatible,
+    )
+    .with_constructors(CONSTRUCTORS)
+    .with_types(TYPES)
 }
 
 #[cfg(test)]
@@ -72,7 +68,7 @@ mod tests {
     #[test]
     fn constructor_codes_are_static_and_dense() {
         let codes = library()
-            .constructors
+            .constructors()
             .iter()
             .map(|constructor| constructor.code.get())
             .collect::<Vec<_>>();

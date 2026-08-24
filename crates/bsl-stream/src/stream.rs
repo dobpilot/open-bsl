@@ -1257,7 +1257,7 @@ mod tests {
     #[test]
     fn the_shared_display_name_resolves_to_the_file_stream() {
         let mut rt = bsl_rt::RuntimeShapes::seeded(Vec::new(), Vec::new());
-        rt.component_types = crate::library().types.to_vec();
+        rt.component_types = crate::library().types().to_vec();
         let found = rt.component_type("Файловый поток").expect("тип найден");
         assert_eq!(found.name, FILE_STREAM_TYPE.name);
         assert_eq!(

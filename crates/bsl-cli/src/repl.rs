@@ -73,10 +73,10 @@ impl Session {
         let mut constructors = Vec::new();
         let mut functions = Vec::new();
         for library in self.engine.registry().libraries() {
-            for constructor in library.constructors {
+            for constructor in library.constructors() {
                 constructors.extend(constructor.names.iter().map(|n| n.to_string()));
             }
-            for function in library.functions {
+            for function in library.functions() {
                 functions.extend(function.names.iter().map(|n| n.to_string()));
             }
         }

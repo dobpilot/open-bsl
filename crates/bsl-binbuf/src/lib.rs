@@ -522,17 +522,13 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
 /// двоичных данных и буфера остаются в переходном слое `bsl-rt`, пока
 /// `bsl-stream`, PDF и XDTO не переведены на общий двоичный протокол.
 pub const fn library() -> LibraryDescriptor {
-    LibraryDescriptor {
-        package: PACKAGE_NAME,
-        object_jit: bsl_rt::ObjectJitPolicy::NativeContextCompatible,
-        version: PACKAGE_VERSION,
-        // Ядро в зависимостях не объявляется: реестр включает его в
-        // требования любой программы (`RuntimeRegistry::requirements_for`).
-        dependencies: &[],
-        functions: FUNCTIONS,
-        constructors: CONSTRUCTORS,
-        types: &[],
-    }
+    LibraryDescriptor::new(
+        PACKAGE_NAME,
+        PACKAGE_VERSION,
+        bsl_rt::ObjectJitPolicy::NativeContextCompatible,
+    )
+    .with_functions(FUNCTIONS)
+    .with_constructors(CONSTRUCTORS)
 }
 
 #[cfg(test)]
@@ -542,7 +538,7 @@ mod tests {
     #[test]
     fn component_function_codes_are_static_and_dense() {
         let codes = library()
-            .functions
+            .functions()
             .iter()
             .map(|function| function.code.get())
             .collect::<Vec<_>>();

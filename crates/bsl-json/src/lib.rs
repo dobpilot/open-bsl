@@ -127,17 +127,14 @@ const TYPES: &[&TypeDescriptor] = &[
 
 /// Дескриптор статически подключаемого JSON-компонента.
 pub const fn library() -> LibraryDescriptor {
-    LibraryDescriptor {
-        package: env!("CARGO_PKG_NAME"),
-        object_jit: bsl_rt::ObjectJitPolicy::NativeContextCompatible,
-        version: env!("CARGO_PKG_VERSION"),
-        // Ядро в зависимостях не объявляется: реестр включает его в
-        // требования любой программы (`RuntimeRegistry::requirements_for`).
-        dependencies: &[],
-        functions: FUNCTIONS,
-        constructors: CONSTRUCTORS,
-        types: TYPES,
-    }
+    LibraryDescriptor::new(
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION"),
+        bsl_rt::ObjectJitPolicy::NativeContextCompatible,
+    )
+    .with_functions(FUNCTIONS)
+    .with_constructors(CONSTRUCTORS)
+    .with_types(TYPES)
 }
 
 #[cfg(test)]
@@ -149,7 +146,7 @@ mod tests {
         let descriptor = library();
         assert_eq!(
             descriptor
-                .functions
+                .functions()
                 .iter()
                 .map(|function| function.code.get())
                 .collect::<Vec<_>>(),
@@ -157,7 +154,7 @@ mod tests {
         );
         assert_eq!(
             descriptor
-                .constructors
+                .constructors()
                 .iter()
                 .map(|constructor| constructor.code.get())
                 .collect::<Vec<_>>(),

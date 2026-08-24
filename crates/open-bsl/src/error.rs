@@ -4,6 +4,7 @@ use std::fmt;
 
 /// Ошибка одной из фаз публичного конвейера.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum Error {
     Parse(bsl_syntax::Diagnostic),
     Semantic(bsl_sema::SemaError),

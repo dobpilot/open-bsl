@@ -1128,7 +1128,7 @@ extern "C" fn shim_call_object_method(
                 )? {
                     Some(descriptor) => {
                         descriptor.check_arity(count, object.type_descriptor().name)?;
-                        (descriptor.call)(object.as_dyn(), args, &mut context)?
+                        (descriptor.call())(object.as_dyn(), args, &mut context)?
                     }
                     None => {
                         object.call_method(field_name(program, name_id)?, args, &mut context)?
