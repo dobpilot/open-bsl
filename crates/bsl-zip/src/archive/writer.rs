@@ -775,10 +775,17 @@ pub fn writer_write(writer: &WriterObject) -> RtResult<()> {
     match target {
         WriteTarget::File(path) => std::fs::write(&path, &bytes)
             .map_err(|e| zip_err(&format!("не удалось записать «{}»: {e}", path.display()))),
-        WriteTarget::Stream(stream) => stream
-            .byte_stream()
-            .expect("приёмник проверен при открытии")
-            .write_all(&bytes, "Записать"),
+        // Приёмник проверен при `Открыть`, но объект живёт между вызовами:
+        // повторная проверка с типизированной ошибкой вместо `expect`. По
+        // контракту `ObjectProtocol::byte_stream` (отвечает одинаково всю
+        // жизнь объекта) сюда не попасть, но `expect` уронил бы процесс.
+        WriteTarget::Stream(stream) => match stream.byte_stream() {
+            Some(bs) => bs.write_all(&bytes, "Записать"),
+            None => Err(RtError::TypeError {
+                expected: "Поток",
+                op: "Записать",
+            }),
+        },
     }
 }
 

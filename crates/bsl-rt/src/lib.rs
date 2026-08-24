@@ -72,7 +72,7 @@ pub use locale::{Locale, NBSP};
 use map::MapData;
 pub use object::{BslObject, StructureStorage};
 pub use object_protocol::{
-    ByteStreamProtocol, ObjectDowncast, ObjectProtocol, ObjectRef, TypeDescriptor,
+    ByteStreamProtocol, ObjectDowncast, ObjectProtocol, ObjectRef, TypeDescriptor, receiver_of,
 };
 pub use runtime_shapes::RuntimeShapes;
 pub use shape::{MAX_SHAPE_TRANSITIONS, Shape, ShapeTable};

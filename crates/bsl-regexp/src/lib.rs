@@ -144,8 +144,8 @@
 use bsl_number::BslNumber;
 use bsl_rt::{
     Arity, BslString, BslValue, CallContext, EnumValue, FunctionCode, FunctionDescriptor,
-    FunctionKind, LibraryDescriptor, ObjectProtocol, PropertyDescriptor, RtError, RtResult,
-    TypeDescriptor,
+    FunctionKind, LibraryDescriptor, MethodDescriptor, ObjectProtocol, PropertyDescriptor, RtError,
+    RtResult, TypeDescriptor,
 };
 use std::rc::Rc;
 
@@ -235,71 +235,89 @@ pub(crate) static GROUP_TYPE: TypeDescriptor = TypeDescriptor {
     type_names: &["ResultOfSearchByRegularExpressionGroup"],
 };
 
-/// Результат и группа используют одну реализацию: `group = None` означает
-/// весь результат, номер — окно в соответствующую группу того же снимка.
+/// Весь результат поиска. `ПолучитьГруппы()` — обычный метод таблицы
+/// (`MATCH_METHODS`), а не разбор строки: с ABI-F у результата больше нет
+/// переопределения `call_method` — единственного в боевом дереве.
 #[derive(Debug)]
-struct RegexObject {
+struct RegexMatchObject {
     data: Rc<RegexMatchData>,
-    group: Option<usize>,
 }
 
-impl RegexObject {
-    fn span(&self) -> RtResult<&RegexSpan> {
-        match self.group {
-            Some(index) => self.data.groups.get(index).ok_or(RtError::NotAnObject),
-            None => Ok(&self.data.whole),
-        }
-    }
+/// Одна группа результата. Номер группы проверен ПРИ ПОСТРОЕНИИ (только
+/// `match_get_groups` создаёт группу, и только по `0..groups.len()`),
+/// поэтому окно всегда есть — «номер в диапазоне» стал инвариантом, а не
+/// проверкой на каждом доступе.
+#[derive(Debug)]
+struct RegexGroupObject {
+    data: Rc<RegexMatchData>,
+    index: usize,
 }
 
-impl ObjectProtocol for RegexObject {
+impl ObjectProtocol for RegexMatchObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
-        if self.group.is_some() {
-            &GROUP_TYPE
-        } else {
-            &MATCH_TYPE
-        }
+        &MATCH_TYPE
     }
 
     fn property_table(&self) -> &'static [PropertyDescriptor] {
         SPAN_PROPERTIES
     }
 
-    fn call_method(
-        &self,
-        name: &str,
-        arguments: &[BslValue],
-        _context: &mut CallContext<'_>,
-    ) -> RtResult<BslValue> {
-        if self.group.is_some()
-            || (!name.eq_ignore_ascii_case("ПолучитьГруппы")
-                && !name.eq_ignore_ascii_case("GetGroups"))
-            || !arguments.is_empty()
-        {
-            return Err(RtError::UnknownMethod {
-                method: name.to_string(),
-                receiver: self.type_descriptor().name,
-            });
-        }
-        let items = (0..self.data.groups.len())
-            .map(|index| {
-                BslValue::new_object(RegexObject {
-                    data: self.data.clone(),
-                    group: Some(index),
-                })
-            })
-            .collect();
-        Ok(BslValue::new_array(items))
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        MATCH_METHODS
     }
 }
 
-/// Окно результата за получателем: и весь результат, и его группа — одна
-/// реализация, поэтому таблица свойств у них общая.
+impl ObjectProtocol for RegexGroupObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &GROUP_TYPE
+    }
+
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        SPAN_PROPERTIES
+    }
+}
+
+/// `РезультатПоискаПоРегулярномуВыражению.ПолучитьГруппы()` -> массив групп.
+fn match_get_groups(
+    receiver: &dyn ObjectProtocol,
+    _arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let result = receiver
+        .downcast_ref::<RegexMatchObject>()
+        .ok_or(RtError::NotAnObject)?;
+    let items = (0..result.data.groups.len())
+        .map(|index| {
+            BslValue::new_object(RegexGroupObject {
+                data: result.data.clone(),
+                index,
+            })
+        })
+        .collect();
+    Ok(BslValue::new_array(items))
+}
+
+static MATCH_METHODS: &[MethodDescriptor] = &[MethodDescriptor::new(
+    &["ПолучитьГруппы", "GetGroups"],
+    Arity::exact(0),
+    match_get_groups,
+)];
+
+/// Окно результата за получателем: и весь результат, и его группа делят
+/// таблицу свойств, поэтому геттеры принимают любой из двух типов. У группы
+/// номер проверен построением, так что окно всегда есть.
 fn span_of(receiver: &dyn ObjectProtocol) -> RtResult<&RegexSpan> {
-    receiver
-        .downcast_ref::<RegexObject>()
-        .ok_or(RtError::NotAnObject)?
-        .span()
+    if let Some(result) = receiver.downcast_ref::<RegexMatchObject>() {
+        return Ok(&result.data.whole);
+    }
+    if let Some(group) = receiver.downcast_ref::<RegexGroupObject>() {
+        return group
+            .data
+            .groups
+            .get(group.index)
+            .ok_or(RtError::NotAnObject);
+    }
+    Err(RtError::NotAnObject)
 }
 
 fn span_value(receiver: &dyn ObjectProtocol, _context: &mut CallContext<'_>) -> RtResult<BslValue> {
@@ -504,9 +522,8 @@ fn scan_back(
 // --- четыре функции --------------------------------------------------------
 
 fn match_value(data: RegexMatchData) -> BslValue {
-    BslValue::new_object(RegexObject {
+    BslValue::new_object(RegexMatchObject {
         data: Rc::new(data),
-        group: None,
     })
 }
 

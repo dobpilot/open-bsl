@@ -199,7 +199,8 @@ impl StreamData {
     fn len(&self, op: &'static str) -> RtResult<u64> {
         match self.open(op)? {
             Backing::Owned(bytes) => Ok(bytes.len() as u64),
-            Backing::Buffer(buffer) => Ok(bsl_binbuf::binary_buffer_len(buffer)
+            Backing::Buffer(buffer) => Ok(buffer
+                .binary_buffer_len()
                 .expect("в носитель попадает только буфер")
                 as u64),
             Backing::File(file) => file
@@ -239,7 +240,8 @@ impl StreamData {
         let pos = self.pos;
         let chunk: Vec<u8> = match self.open_mut(op)? {
             Backing::Owned(bytes) => slice_from(bytes, pos, count),
-            Backing::Buffer(source) => bsl_binbuf::binary_buffer_slice(source, pos, count)
+            Backing::Buffer(source) => source
+                .binary_buffer_slice(pos, count)
                 .expect("в носитель попадает только буфер"),
             Backing::File(file) => {
                 file.seek(SeekFrom::Start(pos))
@@ -322,7 +324,8 @@ impl StreamData {
                 bytes[start..end].copy_from_slice(chunk);
             }
             Backing::Buffer(target) => {
-                let len = bsl_binbuf::binary_buffer_len(target)
+                let len = target
+                    .binary_buffer_len()
                     .expect("в носитель попадает только буфер");
                 if end > len as u64 {
                     return Err(RtError::IndexOutOfBounds {
@@ -331,7 +334,7 @@ impl StreamData {
                     });
                 }
                 let start = pos as usize;
-                bsl_binbuf::binary_buffer_write(target, start, chunk)?;
+                target.binary_buffer_write(start, chunk)?;
             }
             Backing::File(file) => {
                 file.seek(SeekFrom::Start(pos))
@@ -557,7 +560,7 @@ fn count_of(v: &BslValue, truncate: bool, op: &'static str) -> RtResult<usize> {
 /// Буфер двоичных данных из аргумента: `Записать`/`Прочитать` работают
 /// только с ним (измерено — число и `ДвоичныеДанные` платформа отвергает).
 fn buffer_of<'a>(v: &'a BslValue, op: &'static str) -> RtResult<&'a BslValue> {
-    if bsl_binbuf::is_binary_buffer(v) {
+    if v.binary_buffer_len().is_some() {
         Ok(v)
     } else {
         Err(RtError::TypeError {
@@ -626,7 +629,7 @@ pub fn new_memory_stream(arg: &BslValue) -> RtResult<BslValue> {
                 })?;
             Backing::Owned(bytes)
         }
-        value if bsl_binbuf::is_binary_buffer(value) => Backing::Buffer(value.clone()),
+        value if value.binary_buffer_len().is_some() => Backing::Buffer(value.clone()),
         _ => {
             return Err(RtError::TypeError {
                 expected: "Число либо БуферДвоичныхДанных",
@@ -1162,7 +1165,7 @@ pub fn write(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     // заимствование приёмника: у потока над буфером источник и приёмник
     // могут оказаться одним и тем же `RefCell`, и два заимствования разом
     // уронили бы процесс.
-    let bytes = bsl_binbuf::binary_buffer_bytes(src).expect("тип проверен `buffer_of`");
+    let bytes = src.binary_buffer_bytes().expect("тип проверен `buffer_of`");
     let (offset, count) = slice_in_buffer(offset, count, bytes.len(), OP)?;
     let chunk = bytes[offset..offset + count].to_vec();
     let d = data(v, OP)?;
@@ -1192,7 +1195,7 @@ pub fn read(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
         });
     };
     let dst = buffer_of(buf, OP)?;
-    let len = bsl_binbuf::binary_buffer_len(dst).expect("тип проверен `buffer_of`");
+    let len = dst.binary_buffer_len().expect("тип проверен `buffer_of`");
     let (offset, count) = slice_in_buffer(offset, count, len, OP)?;
     let d = data(v, OP)?;
     // Байты сначала снимаются, и только потом берётся изменяемое
@@ -1200,7 +1203,7 @@ pub fn read(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     // оказаться одним и тем же `RefCell`, и два заимствования разом уронили бы
     // процесс.
     let chunk = d.borrow_mut().read_bytes(count, OP)?;
-    bsl_binbuf::binary_buffer_write(dst, offset, &chunk)?;
+    dst.binary_buffer_write(offset, &chunk)?;
     Ok(from_u64(chunk.len() as u64))
 }
 
@@ -1312,11 +1315,11 @@ mod tests {
     }
 
     fn buffer(bytes: &[u8]) -> BslValue {
-        bsl_binbuf::binary_buffer_of(bytes.to_vec())
+        BslValue::binary_buffer_of(bytes.to_vec())
     }
 
     fn bytes_of(b: &BslValue) -> Vec<u8> {
-        bsl_binbuf::binary_buffer_bytes(b).expect("буфер")
+        b.binary_buffer_bytes().expect("буфер")
     }
 
     fn as_u64(v: &BslValue) -> u64 {
@@ -1518,7 +1521,7 @@ mod tests {
         assert_eq!(as_u64(&size(st(&s)).unwrap()), 4);
         write(st(&s), &[buffer(&[9, 9, 9, 9]), num(0), num(2)]).unwrap();
         assert_eq!(bytes_of(&buf), vec![9, 9, 3, 4]);
-        bsl_binbuf::binary_buffer_write(&buf, 3, &[77]).unwrap();
+        buf.binary_buffer_write(3, &[77]).unwrap();
         seek(st(&s), &[num(3), enum_val(EnumValue::StreamPositionBegin)]).unwrap();
         let dst = buffer(&[0]);
         read(st(&s), &[dst.clone(), num(0), num(1)]).unwrap();

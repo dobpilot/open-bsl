@@ -128,6 +128,29 @@ impl dyn ObjectProtocol + '_ {
     }
 }
 
+/// Даункаст получателя к ожидаемому типу — одна операция ABI в одном месте
+/// вместо четырёх байт-в-байт совпадающих `macro_rules! receiver_of` по
+/// компонентам (ABI-F). Не тот же тип — ошибка «метод не применим», где имя
+/// получателя берётся у САМОГО получателя: обработчик уже знает, какой тип
+/// ждёт (`T`), а в тексте важнее, ЧТО пришло вместо него. Ручные помощники
+/// крейтов с другим видом ошибки (`bsl-json`, `bsl-xml::as_reader`) этим не
+/// заменяются.
+///
+/// # Errors
+///
+/// [`RtError::MethodNotApplicable`], если получатель не имеет типа `T`.
+pub fn receiver_of<'r, T: ObjectProtocol + 'static>(
+    receiver: &'r dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'r T> {
+    receiver
+        .downcast_ref::<T>()
+        .ok_or(RtError::MethodNotApplicable {
+            method,
+            receiver: receiver.type_descriptor().name,
+        })
+}
+
 /// Расширяемый протокол объекта BSL.
 ///
 /// Реализация не получает стек или регистры VM. Операции, которые тип не
@@ -178,9 +201,8 @@ pub trait ObjectProtocol: fmt::Debug + ObjectDowncast {
     /// Вход для вызовов с именем-строкой — `WriteText`/`CloseText` и
     /// legacy-`CallMethod`. По умолчанию диспетчеризует по
     /// [`ObjectProtocol::method_table`]; пустая таблица даёт прежний
-    /// `UnknownMethod` из [`crate::call_method_from_table`]. Собственная
-    /// реализация нужна только типу, который обрабатывает вызовы мимо
-    /// таблицы (bsl-regexp).
+    /// `UnknownMethod` из [`crate::call_method_from_table`]. Все боевые типы
+    /// пользуются умолчанием — переопределять его незачем.
     fn call_method(
         &self,
         name: &str,
@@ -236,6 +258,11 @@ pub trait ObjectProtocol: fmt::Debug + ObjectDowncast {
     }
 
     /// Возвращает потоковую возможность объекта, если он ею является.
+    ///
+    /// Реализация обязана отвечать ОДИНАКОВО на протяжении жизни объекта:
+    /// если однажды вернула `Some`, то и дальше возвращает `Some`. На это
+    /// опирается `bsl-zip`, который проверяет приёмник при `Открыть`, а
+    /// пишет в него при `Записать`, между которыми объект живёт.
     fn byte_stream(&self) -> Option<&dyn ByteStreamProtocol> {
         None
     }

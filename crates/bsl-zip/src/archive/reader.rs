@@ -482,17 +482,19 @@ pub(crate) fn read_source(source: &BslValue, op: &'static str) -> RtResult<(Vec<
                 .map_err(|e| zip_err(&format!("не удалось прочитать файл «{path}»: {e}")))?;
             Ok((bytes, path))
         }
-        _ if source.byte_stream().is_some() => {
-            let bytes = source
-                .byte_stream()
-                .expect("условие проверило протокол")
-                .read_all(op)?;
-            Ok((bytes, "поток".to_string()))
+        _ => {
+            // Читателя не сохраняем — достаточно одной проверки: `if let`
+            // вместо пары «проверил условием — развернул `expect`».
+            if let Some(stream) = source.byte_stream() {
+                let bytes = stream.read_all(op)?;
+                Ok((bytes, "поток".to_string()))
+            } else {
+                Err(RtError::TypeError {
+                    expected: "Строка или Поток",
+                    op,
+                })
+            }
         }
-        _ => Err(RtError::TypeError {
-            expected: "Строка или Поток",
-            op,
-        }),
     }
 }
 

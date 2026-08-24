@@ -147,26 +147,30 @@ impl DomNodeObject {
 
 /// Получатель нужного типа: чужой получает ту же ошибку, что и прежний
 /// строковый путь.
-macro_rules! receiver_of {
-    ($fn_name:ident, $ty:ty, $type_name:expr) => {
-        fn $fn_name<'r>(
-            receiver: &'r dyn ObjectProtocol,
-            method: &'static str,
-        ) -> RtResult<&'r $ty> {
-            receiver
-                .downcast_ref::<$ty>()
-                .ok_or(RtError::MethodNotApplicable {
-                    method,
-                    receiver: $type_name,
-                })
-        }
-    };
+fn builder_of<'r>(
+    receiver: &'r dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'r DomBuilderObject> {
+    bsl_rt::receiver_of(receiver, method)
 }
-
-receiver_of!(builder_of, DomBuilderObject, DOM_BUILDER_TYPE.name);
-receiver_of!(writer_of, DomWriterObject, DOM_WRITER_TYPE.name);
-receiver_of!(node_of, DomNodeObject, "Узел DOM");
-receiver_of!(list_of, DomListObject, "Список DOM");
+fn writer_of<'r>(
+    receiver: &'r dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'r DomWriterObject> {
+    bsl_rt::receiver_of(receiver, method)
+}
+fn node_of<'r>(
+    receiver: &'r dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'r DomNodeObject> {
+    bsl_rt::receiver_of(receiver, method)
+}
+fn list_of<'r>(
+    receiver: &'r dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'r DomListObject> {
+    bsl_rt::receiver_of(receiver, method)
+}
 
 pub(crate) fn builder_read(
     receiver: &dyn ObjectProtocol,

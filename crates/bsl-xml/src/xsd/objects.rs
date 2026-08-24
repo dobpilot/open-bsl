@@ -269,27 +269,36 @@ pub(crate) fn list_descriptor(kind: &XsListKind) -> &'static TypeDescriptor {
     }
 }
 
-macro_rules! receiver_of {
-    ($fn_name:ident, $ty:ty, $type_name:expr) => {
-        fn $fn_name<'r>(
-            receiver: &'r dyn ObjectProtocol,
-            method: &'static str,
-        ) -> RtResult<&'r $ty> {
-            receiver
-                .downcast_ref::<$ty>()
-                .ok_or(RtError::MethodNotApplicable {
-                    method,
-                    receiver: $type_name,
-                })
-        }
-    };
+fn builder_of<'r>(
+    receiver: &'r dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'r BuilderObject> {
+    bsl_rt::receiver_of(receiver, method)
 }
-
-receiver_of!(builder_of, BuilderObject, BUILDER_TYPE.name);
-receiver_of!(schema_set_of, SchemaSetObject, SCHEMA_SET_TYPE.name);
-receiver_of!(schema_list_of, SchemaListObject, "Список компонент XS");
-receiver_of!(expanded_of, ExpandedNameObject, EXPANDED_NAME_TYPE.name);
-receiver_of!(name_list_of, NameListObject, NAME_LIST_TYPE.name);
+fn schema_set_of<'r>(
+    receiver: &'r dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'r SchemaSetObject> {
+    bsl_rt::receiver_of(receiver, method)
+}
+fn schema_list_of<'r>(
+    receiver: &'r dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'r SchemaListObject> {
+    bsl_rt::receiver_of(receiver, method)
+}
+fn expanded_of<'r>(
+    receiver: &'r dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'r ExpandedNameObject> {
+    bsl_rt::receiver_of(receiver, method)
+}
+fn name_list_of<'r>(
+    receiver: &'r dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'r NameListObject> {
+    bsl_rt::receiver_of(receiver, method)
+}
 
 pub(crate) fn builder_create_schema(
     receiver: &dyn ObjectProtocol,

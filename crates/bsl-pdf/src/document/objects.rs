@@ -13,24 +13,33 @@ pub(crate) fn state_addr<T>(state: &Rc<RefCell<T>>) -> usize {
 
 /// Получатель нужного типа: чужой получает ту же ошибку «метод не
 /// применим», что и прежний строковый путь.
-macro_rules! receiver_of {
-    ($name:ident, $ty:ty, $type_name:expr) => {
-        fn $name<'r>(receiver: &'r dyn ObjectProtocol, method: &'static str) -> RtResult<&'r $ty> {
-            receiver
-                .downcast_ref::<$ty>()
-                .ok_or(RtError::MethodNotApplicable {
-                    method,
-                    receiver: $type_name,
-                })
-        }
-    };
+fn document_of<'r>(
+    receiver: &'r dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'r DocumentObject> {
+    bsl_rt::receiver_of(receiver, method)
 }
-
-receiver_of!(document_of, DocumentObject, DOCUMENT_TYPE.name);
-receiver_of!(pages_of, PagesObject, PAGES_TYPE.name);
-receiver_of!(page_of, PageObject, PAGE_TYPE.name);
-receiver_of!(attachments_of, AttachmentsObject, ATTACHMENTS_TYPE.name);
-receiver_of!(attachment_of, AttachmentObject, ATTACHMENT_TYPE.name);
+fn pages_of<'r>(
+    receiver: &'r dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'r PagesObject> {
+    bsl_rt::receiver_of(receiver, method)
+}
+fn page_of<'r>(receiver: &'r dyn ObjectProtocol, method: &'static str) -> RtResult<&'r PageObject> {
+    bsl_rt::receiver_of(receiver, method)
+}
+fn attachments_of<'r>(
+    receiver: &'r dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'r AttachmentsObject> {
+    bsl_rt::receiver_of(receiver, method)
+}
+fn attachment_of<'r>(
+    receiver: &'r dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'r AttachmentObject> {
+    bsl_rt::receiver_of(receiver, method)
+}
 
 // --- «ДокументPDF» -----------------------------------------------------------
 

@@ -2627,25 +2627,24 @@ pub struct XPathResultObject {
 
 /// Получатель нужного типа: чужой получает ту же ошибку «метод не
 /// применим», что и прежний строковый путь.
-macro_rules! receiver_of {
-    ($fn_name:ident, $ty:ty, $type_name:expr) => {
-        fn $fn_name<'r>(
-            receiver: &'r dyn ObjectProtocol,
-            method: &'static str,
-        ) -> RtResult<&'r $ty> {
-            receiver
-                .downcast_ref::<$ty>()
-                .ok_or(RtError::MethodNotApplicable {
-                    method,
-                    receiver: $type_name,
-                })
-        }
-    };
+fn resolver_of<'r>(
+    receiver: &'r dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'r ResolverObject> {
+    bsl_rt::receiver_of(receiver, method)
 }
-
-receiver_of!(resolver_of, ResolverObject, RESOLVER_TYPE.name);
-receiver_of!(expression_of, ExpressionObject, EXPRESSION_TYPE.name);
-receiver_of!(result_of, XPathResultObject, RESULT_TYPE.name);
+fn expression_of<'r>(
+    receiver: &'r dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'r ExpressionObject> {
+    bsl_rt::receiver_of(receiver, method)
+}
+fn result_of<'r>(
+    receiver: &'r dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'r XPathResultObject> {
+    bsl_rt::receiver_of(receiver, method)
+}
 
 fn resolver_lookup(
     receiver: &dyn ObjectProtocol,

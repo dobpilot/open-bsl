@@ -940,9 +940,10 @@ fn new_state(
     let bad_source = || RtError::TypeError { expected, op };
     let target = match source {
         value if value.byte_stream().is_some() => value.clone(),
-        value if side == Side::Reader && bsl_binbuf::binary_data_bytes(value).is_some() => {
+        value if side == Side::Reader && value.binary_data_bytes().is_some() => {
             crate::stream::data_over_bytes(
-                bsl_binbuf::binary_data_bytes(value)
+                value
+                    .binary_data_bytes()
                     .expect("проверено guard'ом")
                     .to_vec(),
             )
@@ -1277,7 +1278,7 @@ pub fn read_into_buffer(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<B
 /// Буфер двоичных данных над готовыми байтами. Порядок у него собственный,
 /// по умолчанию `LittleEndian`, как у `Новый БуферДвоичныхДанных`.
 fn buffer_of_bytes(bytes: Vec<u8>) -> BslValue {
-    bsl_binbuf::binary_buffer_of(bytes)
+    BslValue::binary_buffer_of(bytes)
 }
 
 /// `ЧтениеДанных.ПрочитатьБайт()` -> число либо `Неопределено` на краю.
@@ -1502,7 +1503,7 @@ pub fn write(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
             receiver: v.type_descriptor().name,
         });
     };
-    let bytes = bsl_binbuf::binary_data_bytes(data).ok_or(RtError::TypeError {
+    let bytes = data.binary_data_bytes().ok_or(RtError::TypeError {
         expected: "ДвоичныеДанные",
         op: OP,
     })?;
@@ -1694,11 +1695,11 @@ mod tests {
     }
 
     fn buffer(bytes: &[u8]) -> BslValue {
-        bsl_binbuf::binary_buffer_of(bytes.to_vec())
+        BslValue::binary_buffer_of(bytes.to_vec())
     }
 
     fn bytes_of(b: &BslValue) -> Vec<u8> {
-        bsl_binbuf::binary_buffer_bytes(b).expect("буфер")
+        b.binary_buffer_bytes().expect("буфер")
     }
 
     fn as_u64(v: &BslValue) -> u64 {

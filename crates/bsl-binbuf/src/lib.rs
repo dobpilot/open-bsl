@@ -51,45 +51,6 @@ pub const PACKAGE_NAME: &str = env!("CARGO_PKG_NAME");
 /// Версия компонента в заголовке байткода.
 pub const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Проверяет, что значение является `БуферомДвоичныхДанных`.
-pub fn is_binary_buffer(value: &BslValue) -> bool {
-    value.binary_buffer_len().is_some()
-}
-
-/// Размер `БуфераДвоичныхДанных`.
-pub fn binary_buffer_len(value: &BslValue) -> Option<usize> {
-    value.binary_buffer_len()
-}
-
-/// Снимок байтов `БуфераДвоичныхДанных`.
-pub fn binary_buffer_bytes(value: &BslValue) -> Option<Vec<u8>> {
-    value.binary_buffer_bytes()
-}
-
-/// Копирует не больше `count` байтов буфера с заданной позиции.
-pub fn binary_buffer_slice(value: &BslValue, offset: u64, count: usize) -> Option<Vec<u8>> {
-    value.binary_buffer_slice(offset, count)
-}
-
-/// Записывает отрезок в буфер без изменения его размера.
-///
-/// # Errors
-///
-/// Возвращает ошибку типа или границ из `bsl-rt`.
-pub fn binary_buffer_write(value: &BslValue, offset: usize, bytes: &[u8]) -> RtResult<()> {
-    value.binary_buffer_write(offset, bytes)
-}
-
-/// Создаёт `БуферДвоичныхДанных` над готовыми байтами.
-pub fn binary_buffer_of(bytes: Vec<u8>) -> BslValue {
-    BslValue::binary_buffer_of(bytes)
-}
-
-/// Байты `ДвоичныхДанных` без копирования.
-pub fn binary_data_bytes(value: &BslValue) -> Option<&[u8]> {
-    value.binary_data_bytes()
-}
-
 /// Операнд побитовой функции: целое `0..=4294967295` (измерено).
 ///
 /// Один помощник на все двенадцать функций — чтобы граница `2^32` была
