@@ -180,25 +180,22 @@ impl State {
         // прогоном он узнаёт, чей модуль пойдёт, — иначе нулевой чанк
         // одного модуля столкнулся бы в его кэше с нулевым чанком другого.
         self.dynamic.bind_module(module.id);
-        let result = if self.jit {
-            bsl_vm::run_program_jit_with_registry_and_io(
-                &module.program,
-                registry,
-                &mut self.host.stdout,
-                &mut self.host.stderr,
-                &mut self.dynamic,
-                &mut self.host.env,
-            )
+        // JIT — параметр, а не отдельная функция: булев флаг сессии
+        // превращается в ось возможностей полной формы запуска.
+        let jit = if self.jit {
+            bsl_vm::JitMode::On
         } else {
-            bsl_vm::run_program_with_registry_and_io(
-                &module.program,
-                registry,
-                &mut self.host.stdout,
-                &mut self.host.stderr,
-                &mut self.dynamic,
-                &mut self.host.env,
-            )
-        }?;
+            bsl_vm::JitMode::Off
+        };
+        let result = bsl_vm::run_program_with_registry_and_io(
+            &module.program,
+            registry,
+            jit,
+            &mut self.host.stdout,
+            &mut self.host.stderr,
+            &mut self.dynamic,
+            &mut self.host.env,
+        )?;
         Ok(result)
     }
 }

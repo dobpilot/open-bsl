@@ -564,25 +564,16 @@ fn host_streams_are_used_by_builtins_components_dynamic_code_and_jit() {
     for jit in [false, true] {
         let mut stdout = Vec::new();
         let mut stderr = Vec::new();
-        let result = if jit {
-            run_program_jit_with_registry_and_io(
-                &program,
-                &registry,
-                &mut stdout,
-                &mut stderr,
-                &mut TestDynamic::with_registry(&registry),
-                &mut bsl_rt::HostEnv::process(),
-            )
-        } else {
-            run_program_with_registry_and_io(
-                &program,
-                &registry,
-                &mut stdout,
-                &mut stderr,
-                &mut TestDynamic::with_registry(&registry),
-                &mut bsl_rt::HostEnv::process(),
-            )
-        };
+        let jit_mode = if jit { JitMode::On } else { JitMode::Off };
+        let result = run_program_with_registry_and_io(
+            &program,
+            &registry,
+            jit_mode,
+            &mut stdout,
+            &mut stderr,
+            &mut TestDynamic::with_registry(&registry),
+            &mut bsl_rt::HostEnv::process(),
+        );
 
         assert_eq!(result.unwrap(), BslValue::Undefined);
         assert_eq!(
@@ -616,6 +607,7 @@ fn host_writer_error_is_returned_without_a_panic() {
         run_program_with_registry_and_io(
             &program,
             &registry,
+            JitMode::Off,
             &mut stdout,
             &mut stderr,
             &mut TestDynamic::with_registry(&registry),
@@ -3703,6 +3695,7 @@ fn call_module_function_with_dynamic_eval_inside() {
         &mut stack,
         "Крутить",
         Vec::new(),
+        JitMode::Off,
         &linked,
         &mut host,
     )

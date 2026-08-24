@@ -194,36 +194,15 @@ pub fn run_program(program: &Program) -> Result<BslValue, RtError> {
     )
 }
 
-/// Исполняет программу с неизменяемым реестром статически подключённых
-/// runtime-компонентов. Компилятора фрагментов здесь нет — как и у
-/// [`run_program`].
-///
-/// # Errors
-///
-/// До первой инструкции возвращает [`RtError::Link`], если требуемый
-/// пакет, версия или код функции отсутствует. Остальные ошибки совпадают с
-/// [`run_program`].
-pub fn run_program_with_registry(
-    program: &Program,
-    registry: &bsl_rt::RuntimeRegistry,
-) -> Result<BslValue, RtError> {
-    let mut stdout = std::io::stdout().lock();
-    let mut stderr = std::io::stderr().lock();
-    let mut env = bsl_rt::HostEnv::process();
-    run_program_with_host(
-        program,
-        Some(registry),
-        JitMode::Off,
-        &mut stdout,
-        &mut stderr,
-        None,
-        &mut env,
-    )
-}
-
 /// Исполняет программу с выводом в потоки, принадлежащие host-приложению.
 /// `Сообщить` пишет только в `stdout`; библиотечный API возвращает ошибки и
 /// не печатает их в `stderr` автоматически.
+///
+/// Это ЕДИНСТВЕННАЯ полная форма запуска: JIT — не суффикс имени, а
+/// параметр `jit`, потому что это ось возможностей, а не отдельная функция.
+/// Формы без ввода-вывода (`*_with_registry`, с JIT и без) удалены: в
+/// workspace их никто не звал, а нужный им путь — это `jit` со стандартными
+/// потоками процесса.
 ///
 /// `dynamic` — компилятор `Выполнить`/`Вычислить` этого прогона. VM
 /// динамический код только исполняет: текст, вид операции и описание
@@ -231,11 +210,13 @@ pub fn run_program_with_registry(
 ///
 /// # Errors
 ///
-/// Возвращает те же ошибки, что [`run_program_with_registry`], включая
-/// ошибку записи в пользовательский поток.
+/// До первой инструкции возвращает [`RtError::Link`], если требуемый пакет,
+/// версия или код функции отсутствует; далее — те же ошибки, что
+/// [`run_program`], включая ошибку записи в пользовательский поток.
 pub fn run_program_with_registry_and_io<'a>(
     program: &Program,
     registry: &bsl_rt::RuntimeRegistry,
+    jit: JitMode,
     stdout: &'a mut dyn Write,
     stderr: &'a mut dyn Write,
     dynamic: &'a mut dyn DynamicCompiler,
@@ -244,56 +225,7 @@ pub fn run_program_with_registry_and_io<'a>(
     run_program_with_host(
         program,
         Some(registry),
-        JitMode::Off,
-        stdout,
-        stderr,
-        Some(dynamic),
-        host_env,
-    )
-}
-
-/// Вариант [`run_program_with_registry`] с включённым JIT. Компилятора
-/// фрагментов здесь тоже нет.
-///
-/// # Errors
-///
-/// Возвращает те же ошибки, что [`run_program_with_registry`].
-pub fn run_program_jit_with_registry(
-    program: &Program,
-    registry: &bsl_rt::RuntimeRegistry,
-) -> Result<BslValue, RtError> {
-    let mut stdout = std::io::stdout().lock();
-    let mut stderr = std::io::stderr().lock();
-    let mut env = bsl_rt::HostEnv::process();
-    run_program_with_host(
-        program,
-        Some(registry),
-        JitMode::On,
-        &mut stdout,
-        &mut stderr,
-        None,
-        &mut env,
-    )
-}
-
-/// Исполняет программу с JIT, реестром компонентов и потоками конкретного
-/// host-состояния.
-///
-/// # Errors
-///
-/// Возвращает те же ошибки, что [`run_program_with_registry_and_io`].
-pub fn run_program_jit_with_registry_and_io<'a>(
-    program: &Program,
-    registry: &bsl_rt::RuntimeRegistry,
-    stdout: &'a mut dyn Write,
-    stderr: &'a mut dyn Write,
-    dynamic: &'a mut dyn DynamicCompiler,
-    host_env: &'a mut bsl_rt::HostEnv,
-) -> Result<BslValue, RtError> {
-    run_program_with_host(
-        program,
-        Some(registry),
-        JitMode::On,
+        jit,
         stdout,
         stderr,
         Some(dynamic),
@@ -2423,6 +2355,10 @@ fn step_cold(
                         stack,
                         name,
                         call_args,
+                        // Обратный вызов функции модуля из компонента всегда
+                        // шёл интерпретатором (форма `..._with_host` зашивала
+                        // `Off`); параметр эту семантику сохраняет.
+                        JitMode::Off,
                         linked,
                         &mut nested_host,
                     )
@@ -2899,11 +2835,16 @@ pub fn call_module_function(
         dynamic: None,
         dynamic_depth: &dynamic_depth,
     };
-    call_module_function_with_host(program, stack, name, args, &linked, &mut host)
+    call_module_function_with_host(program, stack, name, args, JitMode::Off, &linked, &mut host)
 }
 
 /// Вызывает функцию модуля с реестром компонентов и потоками текущего
 /// host-состояния.
+///
+/// `jit` — ось возможностей, как у [`run_program_with_registry_and_io`]:
+/// тонкая обёртка [`call_module_function`] передаёт [`JitMode::Off`], а
+/// полная форма принимает его параметром. Стоит ли фасаду когда-то давать
+/// сюда что-то кроме `Off`, решается замером, а не формой API.
 ///
 /// # Errors
 ///
@@ -2916,6 +2857,7 @@ pub fn call_module_function_with_registry_and_io<'a>(
     name: &str,
     args: Vec<BslValue>,
     registry: &bsl_rt::RuntimeRegistry,
+    jit: JitMode,
     stdout: &'a mut dyn Write,
     stderr: &'a mut dyn Write,
     dynamic: &'a mut dyn DynamicCompiler,
@@ -2936,7 +2878,7 @@ pub fn call_module_function_with_registry_and_io<'a>(
         dynamic: Some(dynamic),
         dynamic_depth: &dynamic_depth,
     };
-    call_module_function_with_host(program, stack, name, args, &linked, &mut host)
+    call_module_function_with_host(program, stack, name, args, jit, &linked, &mut host)
 }
 
 fn call_module_function_with_host(
@@ -2944,6 +2886,7 @@ fn call_module_function_with_host(
     stack: &mut [BslValue],
     name: &str,
     args: Vec<BslValue>,
+    jit: JitMode,
     linked: &LinkedComponents<'_>,
     host: &mut HostIo<'_, '_>,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
@@ -3002,14 +2945,8 @@ fn call_module_function_with_host(
         ..program.clone()
     };
 
-    let (value, final_stack) = drive_linked(
-        &callee_program,
-        func_id,
-        call_stack,
-        JitMode::Off,
-        linked,
-        host,
-    )?;
+    let (value, final_stack) =
+        drive_linked(&callee_program, func_id, call_stack, jit, linked, host)?;
 
     // Мутации модульных переменных обязаны пережить вызов — та же
     // дисциплина, что в `run_dynamic_snippet`.
