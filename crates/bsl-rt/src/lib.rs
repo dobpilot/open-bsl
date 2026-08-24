@@ -3485,6 +3485,109 @@ mod tests {
         );
     }
 
+    /// Закон равенства и хэша по ВИДАМ объектов, исчерпывающе.
+    ///
+    /// `PartialEq` и `Hash` для `BslValue` — две РАЗДЕЛЬНЫЕ реализации, и их
+    /// рассогласование теряет ключ `Соответствия` (воспроизведение 3). Этот
+    /// тест — предохранитель против такого рассогласования: `classify`
+    /// перечисляет КАЖДЫЙ вариант `BslObject` матчем без `_`, поэтому новый
+    /// вид не соберётся, пока автор не решит, сравнивается он ПО ЗНАЧЕНИЮ или
+    /// ПО ТОЖДЕСТВУ — то есть не заведёт его ветку и в `PartialEq`, и в
+    /// `Hash`, а не в одной из двух. Для видов по значению проверяются
+    /// рефлексивность, симметрия, транзитивность и равный хэш при равенстве;
+    /// для вида по тождеству — что две РАЗНЫЕ обёртки одного содержимого не
+    /// равны, а объект равен себе.
+    #[test]
+    fn the_value_equality_and_hash_law_holds_across_object_kinds() {
+        use std::collections::hash_map::DefaultHasher;
+        fn hash_of(value: &BslValue) -> u64 {
+            let mut hasher = DefaultHasher::new();
+            value.hash(&mut hasher);
+            hasher.finish()
+        }
+
+        #[derive(Debug, PartialEq)]
+        enum Rel {
+            ByValue,
+            ByIdentity,
+        }
+        // Исчерпывающий матч БЕЗ `_`: новый вариант `BslObject` не соберётся,
+        // пока его не классифицируют здесь. Классификация обязана совпадать с
+        // тем, что делают `PartialEq`/`Hash` для `BslValue` выше.
+        fn classify(object: &BslObject) -> Rel {
+            match object {
+                BslObject::BinaryData(_)
+                | BslObject::Uuid(_)
+                | BslObject::VstrOpaque(_)
+                | BslObject::Extension(_) => Rel::ByValue,
+                BslObject::Array(_)
+                | BslObject::Structure(_)
+                | BslObject::ValueTable(_)
+                | BslObject::TableColumns(_)
+                | BslObject::TableColumn(..)
+                | BslObject::TableRow(..)
+                | BslObject::TypeDescription(_)
+                | BslObject::ValueComparison
+                | BslObject::Map(_)
+                | BslObject::KeyValuePair(..)
+                | BslObject::TextWriter(_)
+                | BslObject::BinaryBuffer(_) => Rel::ByIdentity,
+            }
+        }
+
+        fn object_of(value: &BslValue) -> &BslObject {
+            match value {
+                BslValue::Object(object) => object,
+                other => panic!("ожидался объект, получено {other:?}"),
+            }
+        }
+
+        // `make` отдаёт СВЕЖУЮ обёртку одинакового содержимого на каждый
+        // вызов (разные `Rc`), чтобы отличить равенство по значению от
+        // равенства по тождеству.
+        fn assert_value_law(expected: Rel, make: impl Fn() -> BslValue) {
+            let a = make();
+            let b = make();
+            let c = make();
+            assert_eq!(classify(object_of(&a)), expected);
+            assert_eq!(a, a, "рефлексивность");
+            assert_eq!(a, b, "равное содержимое равно");
+            assert_eq!(b, a, "симметрия");
+            assert!(a == b && b == c && a == c, "транзитивность");
+            assert_eq!(hash_of(&a), hash_of(&b), "равные значения — равный хэш");
+        }
+
+        fn assert_identity_law(expected: Rel, make: impl Fn() -> BslValue) {
+            let a = make();
+            let b = make();
+            assert_eq!(classify(object_of(&a)), expected);
+            assert_eq!(a, a, "объект равен себе");
+            assert_ne!(
+                a, b,
+                "разные обёртки одного содержимого не равны по тождеству"
+            );
+        }
+
+        assert_value_law(Rel::ByValue, || {
+            BslValue::Object(Rc::new(BslObject::BinaryData(Rc::from(&[1u8, 2, 3][..]))))
+        });
+        assert_value_law(Rel::ByValue, || {
+            BslValue::Object(Rc::new(BslObject::Uuid([
+                0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
+                0xff, 0x00,
+            ])))
+        });
+        assert_value_law(Rel::ByValue, || {
+            BslValue::Object(Rc::new(BslObject::VstrOpaque("реф".to_string())))
+        });
+        // Вид по тождеству — на представителе `Массив`: две разные обёртки
+        // одинакового содержимого не равны (`Extension` с обоими законами
+        // равенства покрыт соседним тестом выше).
+        assert_identity_law(Rel::ByIdentity, || {
+            BslValue::new_array(vec![BslValue::number_from_i64(1)])
+        });
+    }
+
     #[test]
     fn display_matches_measured_platform_strings() {
         assert_eq!(BslValue::Boolean(true).to_string(), "Да");
