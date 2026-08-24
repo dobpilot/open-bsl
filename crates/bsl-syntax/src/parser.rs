@@ -1,5 +1,5 @@
 use crate::ast::*;
-use crate::diagnostics::{Diagnostic, ParseError};
+use crate::diagnostics::{Diagnostic, Expectation, FoundToken, ParseError, ParseErrorKind};
 use crate::keywords::Keyword;
 use crate::lexer::{LexError, Lexer};
 use crate::token::{Span, Token, TokenKind};
@@ -121,7 +121,7 @@ impl<'src> Parser<'src> {
         if self.at(kind) {
             Ok(self.bump())
         } else {
-            Err(self.error_here(format!("ожидался {kind:?}, найден {:?}", self.peek().kind)))
+            Err(self.expected(Expectation::Token(kind.clone())))
         }
     }
 
@@ -154,10 +154,7 @@ impl<'src> Parser<'src> {
         if self.eat_keyword(kw) {
             Ok(())
         } else {
-            Err(self.error_here(format!(
-                "ожидалось ключевое слово {kw:?}, найден {:?}",
-                self.peek().kind
-            )))
+            Err(self.expected(Expectation::Keyword(kw)))
         }
     }
 
@@ -172,10 +169,7 @@ impl<'src> Parser<'src> {
             let tok = self.bump();
             Ok(self.text(tok.span).to_string())
         } else {
-            Err(self.error_here(format!(
-                "ожидалось имя после точки, найден {:?}",
-                self.peek().kind
-            )))
+            Err(self.expected(Expectation::MemberName))
         }
     }
 
@@ -184,10 +178,7 @@ impl<'src> Parser<'src> {
             let tok = self.bump();
             Ok(self.text(tok.span).to_string())
         } else {
-            Err(self.error_here(format!(
-                "ожидался идентификатор, найден {:?}",
-                self.peek().kind
-            )))
+            Err(self.expected(Expectation::Identifier))
         }
     }
 
@@ -199,17 +190,26 @@ impl<'src> Parser<'src> {
         while self.eat(&TokenKind::Semicolon) {}
     }
 
-    fn error_here(&self, message: String) -> ParseError {
+    fn error_here(&self, kind: ParseErrorKind) -> ParseError {
         ParseError {
-            message,
+            kind,
             span: self.peek().span,
         }
     }
 
     /// Ошибка с ЗАДАННЫМ участком исходника — для случаев, когда виновник
     /// уже разобран и стоит позади курсора (цель присваивания).
-    fn error_at(&self, span: Span, message: String) -> ParseError {
-        ParseError { message, span }
+    fn error_at(&self, span: Span, kind: ParseErrorKind) -> ParseError {
+        ParseError { kind, span }
+    }
+
+    /// Ошибка «ожидалось `what`, встречено то, что под курсором» — без
+    /// содержимого литерала: категорию находит [`FoundToken::of`].
+    fn expected(&self, what: Expectation) -> ParseError {
+        self.error_here(ParseErrorKind::Expected {
+            what,
+            found: FoundToken::of(&self.peek().kind),
+        })
     }
 
     /// Вход в очередной уровень вложенности (выражение или оператор) с
@@ -219,9 +219,7 @@ impl<'src> Parser<'src> {
     fn enter_nesting(&mut self) -> Result<(), ParseError> {
         self.depth += 1;
         if self.depth > MAX_NESTING {
-            return Err(self.error_here(format!(
-                "превышена максимальная глубина вложенности ({MAX_NESTING})"
-            )));
+            return Err(self.error_here(ParseErrorKind::NestingTooDeep { limit: MAX_NESTING }));
         }
         Ok(())
     }
@@ -480,18 +478,11 @@ impl<'src> Parser<'src> {
             // `ЦЕЛЬ.*СКОБК*` в `measure-lvalue.platform.txt` — «отказ»,
             // включая `(х[0]) = 4` и `(х).а = 4`), поэтому отвергаем и мы.
             if self.tokens[first].kind == TokenKind::LParen {
-                return Err(self.error_at(
-                    target_span,
-                    "цель присваивания не может быть заключена в скобки".to_string(),
-                ));
+                return Err(self.error_at(target_span, ParseErrorKind::ParenthesizedTarget));
             }
             // По форме узла законны только имя, индекс и поле (см. `LValue`).
-            let target = LValue::from_expr(expr).ok_or_else(|| {
-                self.error_at(
-                    target_span,
-                    "слева от «=» ожидались переменная, элемент по индексу или поле".to_string(),
-                )
-            })?;
+            let target = LValue::from_expr(expr)
+                .ok_or_else(|| self.error_at(target_span, ParseErrorKind::BadAssignTarget))?;
             self.bump();
             let value = self.parse_expr()?;
             Ok(Stmt::Assign { target, value })
@@ -731,7 +722,7 @@ impl<'src> Parser<'src> {
                 Ok(e)
             }
             TokenKind::Question => self.parse_ternary(),
-            other => Err(self.error_here(format!("неожиданный токен в выражении: {other:?}"))),
+            _ => Err(self.expected(Expectation::Expression)),
         }
     }
 
@@ -796,6 +787,34 @@ mod tests {
     // НЕ ИЗМЕРЕНО(SYNTAX.MAX_NESTING) — тесты фиксируют ВЫБРАННОЕ поведение:
     // диагностика вместо переполнения стека процесса; сам предел платформы
     // не замерен.
+    /// Содержимое литерала НЕ попадает в текст диагностики: ошибка уходит в
+    /// журналы хоста, и печатать в ней исходник нельзя. Раньше здесь стоял
+    /// `{:?}` по `TokenKind`, и строковый литерал печатался целиком —
+    /// `найден String("секрет")`.
+    #[test]
+    fn a_literal_value_never_reaches_the_diagnostic_text() {
+        // Пропущена запятая: после `1` разбор ждёт `)`, а видит строку.
+        let err = parse("Ф(1 \"секрет\");").expect_err("пропуск запятой — ошибка");
+        let Diagnostic::Parse(e) = err else {
+            panic!("ожидалась синтаксическая ошибка, получено {err:?}");
+        };
+        assert!(
+            matches!(
+                e.kind,
+                ParseErrorKind::Expected {
+                    found: FoundToken::StringLiteral,
+                    ..
+                }
+            ),
+            "{:?}",
+            e.kind
+        );
+        assert!(
+            !e.to_string().contains("секрет"),
+            "содержимое литерала утекло: {e}"
+        );
+    }
+
     #[test]
     fn deep_expression_nesting_is_a_parse_error_not_a_crash() {
         on_main_sized_stack(|| {
@@ -805,7 +824,11 @@ mod tests {
             let Diagnostic::Parse(e) = err else {
                 panic!("ожидалась синтаксическая ошибка, получено {err:?}");
             };
-            assert!(e.message.contains("глубина вложенности"), "{}", e.message);
+            assert!(
+                matches!(e.kind, ParseErrorKind::NestingTooDeep { .. }),
+                "{:?}",
+                e.kind
+            );
         });
     }
 

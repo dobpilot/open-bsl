@@ -88,6 +88,19 @@ pub const SPELLINGS: &[(&str, &str, Keyword)] = &[
     ("Выполнить", "Execute", Keyword::Execute),
 ];
 
+impl Keyword {
+    /// Каноническое РУССКОЕ написание ключевого слова — для диагностики,
+    /// вся проза которой русская. Берётся из той же [`SPELLINGS`], поэтому
+    /// второго списка, способного разъехаться, не заводится.
+    pub fn spelling(self) -> &'static str {
+        SPELLINGS
+            .iter()
+            .find(|(_, _, kw)| *kw == self)
+            .map(|(ru, _, _)| *ru)
+            .expect("каждый вариант Keyword перечислен в SPELLINGS")
+    }
+}
+
 /// Регистронезависимый поиск ключевого слова по идентификатору.
 /// `None` значит, что это обычный идентификатор, а не ключевое слово.
 pub fn lookup(ident: &str) -> Option<Keyword> {
