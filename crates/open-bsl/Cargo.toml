@@ -19,6 +19,7 @@ regexp = ["dep:bsl-regexp"]
 [dependencies]
 bsl-bytecode = { path = "../bsl-bytecode" }
 bsl-compiler = { path = "../bsl-compiler" }
+bsl-format = { path = "../bsl-format" }
 bsl-rt = { path = "../bsl-rt" }
 bsl-sema = { path = "../bsl-sema" }
 bsl-syntax = { path = "../bsl-syntax" }

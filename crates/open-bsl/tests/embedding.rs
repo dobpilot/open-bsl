@@ -56,6 +56,15 @@ fn host_library() -> LibraryDescriptor {
     .with_functions(HOST_FUNCTIONS)
 }
 
+/// Строку в BSL хост передаёт так же, как число и свой объект: `into()` на
+/// `Value::Str`. А пользовательский вывод рендерится через `format_value`,
+/// который `README` предписывает, — оба доступны через фасад.
+#[test]
+fn a_str_becomes_a_value_and_format_value_renders_it() {
+    let greeting = Value::Str("привет".into());
+    assert_eq!(open_bsl::format_value(&greeting, None).unwrap(), "привет");
+}
+
 #[test]
 fn state_exec_and_eval_hide_the_internal_pipeline() {
     let engine = Engine::builder().build().unwrap();

@@ -712,6 +712,7 @@ dependencies = [
  "bsl-binbuf",
  "bsl-bytecode",
  "bsl-compiler",
+ "bsl-format",
  "bsl-json",
  "bsl-pdf",
  "bsl-regexp",

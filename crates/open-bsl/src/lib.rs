@@ -19,6 +19,7 @@ pub use bsl_rt::{
     call_method_from_table, folded_eq, get_property_from_table, set_property_from_table,
 };
 
+pub use bsl_format::format_value;
 pub use dynamic::DynamicCode;
 pub use engine::{Engine, EngineBuilder, Module};
 pub use error::Error;

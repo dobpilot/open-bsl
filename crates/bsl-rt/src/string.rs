@@ -191,6 +191,16 @@ fn utf16_units(s: &str) -> Vec<u16> {
     units
 }
 
+// `From<&str>` — та же безошибочная конвертация, что и [`BslString::from_str`]
+// (не `FromStr`, см. пояснение там же). Нужна фасаду встраивания: без неё
+// хост может передать в BSL число и свой объект, но не строку —
+// `Value::Str("привет".into())` без этого не компилируется.
+impl From<&str> for BslString {
+    fn from(s: &str) -> Self {
+        BslString::from_str(s)
+    }
+}
+
 impl BslString {
     // Не `std::str::FromStr`: тот обязывает возвращать `Result`, а эта
     // конвертация безошибочная, и вызывающим нужен обычный конструктор,
