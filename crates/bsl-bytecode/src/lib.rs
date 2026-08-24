@@ -17,7 +17,7 @@ mod instr;
 mod text;
 
 pub use bsl_rt::LibraryRequirement;
-pub use chunk::{Chunk, ExceptionRange, MethodCacheSlot, Program, PropCacheSlot};
+pub use chunk::{Chunk, ExceptionRange, MethodCacheSlot, Program, PropCacheSlot, SnippetUnit};
 pub use dynamic::{
     DynamicCompiler, DynamicKind, DynamicRequest, DynamicScope, DynamicSignature, DynamicUnit,
 };

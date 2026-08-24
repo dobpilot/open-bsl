@@ -314,7 +314,7 @@ fn eval_repl_line(line: &str, session: &mut Session) -> Result<BslValue, String>
     // не на что-то накопленное в сессии. Раньше здесь передавался
     // `session.shapes` (всегда пустой) — падало на первой же строке,
     // создающей `Новый Структура(...)`, с индексом за границами.
-    let (chunk, new_names, shapes) = bsl_compiler::compile_snippet_with_requirements(
+    let unit = bsl_compiler::compile_snippet_with_requirements(
         &new_locals,
         &body,
         &session.names,
@@ -324,33 +324,40 @@ fn eval_repl_line(line: &str, session: &mut Session) -> Result<BslValue, String>
     .map_err(|e| format!("{e}"))?;
 
     let mut stack = session.values.clone();
-    stack.resize(chunk.n_regs as usize, BslValue::Undefined);
+    stack.resize(unit.chunk.n_regs as usize, BslValue::Undefined);
 
-    // В VM уходит именно `new_names`, а НЕ `session.names`: чанк
-    // скомпилирован против расширенной таблицы, и `NameId` для поля, впервые
-    // упомянутого этой же строкой (`т.Колонки`), в старую таблицу не
-    // попадает. Раньше сюда передавалась старая — и первая же строка с
-    // новым именем поля падала с `InvalidBytecode`.
+    // Потоки REPL — стандартные потоки процесса: `Сообщить` печатается в
+    // терминал, а не перехватывается; JIT в REPL выключен. Раньше эти три
+    // сервиса были зашиты в самой `run_repl_chunk_with_registry`, теперь она
+    // принимает их параметрами (см. C.2).
+    let mut stdout = std::io::stdout();
+    let mut stderr = std::io::stderr();
+    // В VM уходит именно таблица имён фрагмента (`unit.names`), а НЕ
+    // `session.names`: чанк скомпилирован против расширенной таблицы, и
+    // `NameId` для поля, впервые упомянутого этой же строкой (`т.Колонки`),
+    // в старую таблицу не попадает. Раньше сюда передавалась старая — и
+    // первая же строка с новым именем поля падала с `InvalidBytecode`.
     let (value, mut final_stack) = bsl_vm::run_repl_chunk_with_registry(
-        &chunk,
-        new_names.clone(),
-        shapes,
+        &unit,
         new_locals.clone(),
         stack,
         requirements.clone(),
         session.engine.registry(),
+        bsl_vm::JitMode::Off,
+        &mut stdout,
+        &mut stderr,
         &mut session.dynamic,
         &mut session.env,
     )
     .map_err(|e| e.to_string())?;
-    // `final_stack` включает временные регистры этой строки (`chunk.n_regs`
-    // может быть больше числа локалей) — обрезаем до настоящих локалей,
-    // иначе следующая строка увидит мусор от чужих temp-регистров на месте
-    // ещё не проинициализированной новой переменной.
+    // `final_stack` включает временные регистры этой строки
+    // (`unit.chunk.n_regs` может быть больше числа локалей) — обрезаем до
+    // настоящих локалей, иначе следующая строка увидит мусор от чужих
+    // temp-регистров на месте ещё не проинициализированной новой переменной.
     final_stack.truncate(new_locals.len());
 
     session.locals = new_locals;
-    session.names = new_names;
+    session.names = unit.names;
     session.values = final_stack;
     Ok(value)
 }

@@ -126,9 +126,7 @@ pub fn compile_program(resolved: &ResolvedProgram) -> Result<Program, CompileErr
     })
 }
 
-/// Результат компиляции фрагмента: чанк, полная таблица имён полей и
-/// полная таблица форм (подробности — в doc comment `compile_snippet`).
-pub type SnippetOutput = (Chunk, Vec<String>, Vec<std::rc::Rc<bsl_rt::Shape>>);
+pub use bsl_bytecode::SnippetUnit;
 
 /// Компилирует фрагмент для `Выполнить`/`Вычислить`: `all_locals` — уже
 /// расширенный список (существующие переменные верхнего уровня + новые,
@@ -165,7 +163,7 @@ pub fn compile_snippet(
     body: &[RStmt],
     program_names: &[String],
     callee_params: &[Vec<bool>],
-) -> Result<SnippetOutput, CompileError> {
+) -> Result<SnippetUnit, CompileError> {
     compile_snippet_with_requirements(
         all_locals,
         body,
@@ -189,7 +187,7 @@ pub fn compile_snippet_with_requirements(
     program_names: &[String],
     callee_params: &[Vec<bool>],
     requirements: &[LibraryRequirement],
-) -> Result<SnippetOutput, CompileError> {
+) -> Result<SnippetUnit, CompileError> {
     let mut names = NameInterner::new();
     for n in program_names {
         names.intern(n);
@@ -217,7 +215,11 @@ pub fn compile_snippet_with_requirements(
     // `None` опирался на неверную посылку «у фрагмента `module_base != 0`».
     // Пустой `bundle_len` равнозначен поинструкционному исполнению и
     // безопасен до пересчёта.
-    Ok((chunk, names.into_names(), shapes.into_shapes()))
+    Ok(SnippetUnit {
+        chunk,
+        names: names.into_names(),
+        shapes: shapes.into_shapes(),
+    })
 }
 
 // Десять аргументов — это и есть весь входной контекст чанка; структура

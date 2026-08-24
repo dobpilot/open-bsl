@@ -93,7 +93,11 @@ pub fn compile_dynamic_snippet(
         .iter()
         .map(|f| f.param_by_val.to_vec())
         .collect();
-    let (chunk, names, shapes) = crate::compile_snippet_with_requirements(
+    let crate::SnippetUnit {
+        chunk,
+        names,
+        shapes,
+    } = crate::compile_snippet_with_requirements(
         &all_locals,
         &body,
         request.names,

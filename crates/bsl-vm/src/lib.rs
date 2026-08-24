@@ -277,27 +277,28 @@ fn run_program_with_host<'a>(
 /// Возвращает [`RtError`] при неперехваченном исключении или некорректных
 /// таблицах имён, форм и регистров чанка, плюс ошибку
 /// связывания компонентов.
-// Восемь параметров — это состояние REPL-сессии, разложенное по местам:
-// таблицы имён и форм, локали, стек и требования собираются вызывающим по
-// одному, и связывать их в тип ради счётчика аргументов значило бы
-// придумать сущность, которой в REPL нет.
+// Семь параметров сверх `unit` — это состояние REPL-сессии, разложенное по
+// местам: локали, стек и требования собираются вызывающим по одному, а
+// потоки, JIT и окружение — сервисы прогона. Чанк, имена и формы, чей
+// инвариант связан позицией, теперь приезжают одним [`SnippetUnit`].
 #[allow(clippy::too_many_arguments)]
 pub fn run_repl_chunk_with_registry<'a>(
-    chunk: &bsl_bytecode::Chunk,
-    names: Vec<String>,
-    shapes: Vec<std::rc::Rc<bsl_rt::Shape>>,
+    unit: &bsl_bytecode::SnippetUnit,
     locals: Vec<String>,
     stack: Vec<BslValue>,
     requirements: Vec<bsl_bytecode::LibraryRequirement>,
     registry: &bsl_rt::RuntimeRegistry,
+    jit: JitMode,
+    stdout: &'a mut dyn Write,
+    stderr: &'a mut dyn Write,
     dynamic: &'a mut dyn DynamicCompiler,
     host_env: &'a mut bsl_rt::HostEnv,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
     let program = Program {
         requirements,
-        chunks: vec![chunk.clone()],
-        names,
-        shapes,
+        chunks: vec![unit.chunk.clone()],
+        names: unit.names.clone(),
+        shapes: unit.shapes.clone(),
         top_level_locals: locals,
         function_names: Vec::new(),
         module_vars: Vec::new(),
@@ -312,13 +313,13 @@ pub fn run_repl_chunk_with_registry<'a>(
     )?;
     let dynamic_depth = std::cell::Cell::new(0);
     let mut host = HostIo {
-        stdout: &mut std::io::stdout(),
-        stderr: &mut std::io::stderr(),
+        stdout,
+        stderr,
         env: Some(host_env),
         dynamic: Some(dynamic),
         dynamic_depth: &dynamic_depth,
     };
-    drive_linked(&program, 0, stack, JitMode::Off, &linked, &mut host)
+    drive_linked(&program, 0, stack, jit, &linked, &mut host)
 }
 
 /// Прогон без реестра — остался входом для собственных тестов VM:
