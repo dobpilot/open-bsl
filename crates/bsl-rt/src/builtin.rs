@@ -2600,6 +2600,19 @@ pub fn call_builtin_method_ctx(
     args: &[BslValue],
     rt: &mut RuntimeShapes,
 ) -> RtResult<BslValue> {
+    // Тот же сторож входа, что и у [`call_builtin_method`], и обязательно ДО
+    // быстрого пути структуры: `Вставить`/`Удалить` читают `args[0]`/`args[1]`
+    // сразу. Статическая проверка арности на связывании закрывает только
+    // ЗАКРЫТЫЙ опкод `CallMethod`; у ОТКРЫТОГО (`CallObjectMethod`) метод
+    // выбирается по номеру имени уже в рантайме, и до этого сторожа
+    // недостающий аргумент ронял процесс, а не давал ошибку.
+    if let Some(expected) = m.static_arity()
+        && args.len() < expected
+    {
+        return Err(RtError::InvalidBytecode(
+            "методу передано меньше аргументов, чем требует его арность",
+        ));
+    }
     if is_structure(obj) {
         match m {
             BuiltinMethod::Insert => {
@@ -2809,5 +2822,21 @@ mod name_table_tests {
             assert_eq!(BuiltinFn::lookup(name), None, "{name}");
         }
         assert_eq!(BuiltinMethod::lookup("Опечатка"), None);
+    }
+
+    /// Сторож арности стоит ДО быстрого пути структуры. `Вставить` читает
+    /// `args[0]`/`args[1]` сразу, а ОТКРЫТЫЙ опкод `CallObjectMethod`
+    /// выбирает метод по номеру имени уже в рантайме — статическая проверка
+    /// на связывании (она закрывает только закрытый `CallMethod`) сюда не
+    /// достаёт. До сторожа недостающий аргумент ронял процесс.
+    #[test]
+    fn a_structure_method_with_too_few_arguments_is_an_error_not_a_panic() {
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
+        let structure = BslValue::new_structure(rt.shapes.empty(), Vec::new());
+        for method in [BuiltinMethod::Insert, BuiltinMethod::Delete] {
+            let error = call_builtin_method_ctx(method, &structure, &[], &mut rt)
+                .expect_err("недостающий аргумент обязан быть ошибкой");
+            assert!(matches!(error, RtError::InvalidBytecode(_)), "{error:?}");
+        }
     }
 }
