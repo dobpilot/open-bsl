@@ -697,8 +697,8 @@ pub struct LibraryDescriptor {
 
 impl LibraryDescriptor {
     /// Обязательный минимум библиотеки. Остальные таблицы добавляются
-    /// `with_*`; `object_context` входит сюда, а не в умолчание, — решение о
-    /// пригодности объектов нативному пути каждая библиотека принимает
+    /// `with_*`; `object_context` входит сюда, а не в умолчание, — потребность
+    /// объектных обработчиков в полном контексте каждая библиотека объявляет
     /// явно.
     pub const fn new(
         package: &'static str,
@@ -761,7 +761,7 @@ impl LibraryDescriptor {
         self.version
     }
 
-    /// Пригодность объектов библиотеки нативному пути исполнения.
+    /// Какой контекст прогона нужен объектным обработчикам библиотеки.
     pub const fn object_context(&self) -> ObjectContextNeed {
         self.object_context
     }
@@ -1255,7 +1255,7 @@ pub struct RuntimeRegistry {
 impl RuntimeRegistry {
     /// Есть ли библиотека, объявившая
     /// [`ObjectContextNeed::Full`]: её обработчикам нужен полный
-    /// контекст исполнения, которого нативный путь не даёт.
+    /// контекст исполнения.
     #[must_use]
     pub fn has_full_context_objects(&self) -> bool {
         self.libraries
