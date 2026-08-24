@@ -175,3 +175,31 @@ impl NameInterner {
         self.names
     }
 }
+
+/// Есть ли в списке два имени, равных ПО СВЁРТКЕ, — и какое из них второе.
+///
+/// Таблица имён образа обязана быть биекцией `NameId <-> имя`: её строит
+/// интернер, у которого одно написание даёт один идентификатор. Повтор
+/// ломает эту биекцию — одно написание начинает адресовать два разных поля,
+/// и обращение по имени попадает в первое из них.
+///
+/// Правило свёртки здесь ровно то же, что и у самого интернирования
+/// (свёрнутый хэш плюс подтверждение [`folded_eq`] внутри корзины), потому
+/// что второе правило рано или поздно разошлось бы с первым. Проход
+/// линейный: сравнения идут только внутри корзины одного хэша, а не
+/// каждого с каждым.
+pub fn first_folded_duplicate(names: &[String]) -> Option<usize> {
+    let mut buckets: HashMap<u64, Vec<usize>, BuildHasherDefault<PassHasher>> =
+        HashMap::with_capacity_and_hasher(names.len(), Default::default());
+    for (i, name) in names.iter().enumerate() {
+        let bucket = buckets.entry(folded_hash(name)).or_default();
+        if bucket
+            .iter()
+            .any(|&earlier| folded_eq(&names[earlier], name))
+        {
+            return Some(i);
+        }
+        bucket.push(i);
+    }
+    None
+}

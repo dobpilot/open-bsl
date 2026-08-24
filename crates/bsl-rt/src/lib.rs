@@ -68,7 +68,7 @@ pub use env::{
     SystemClock, SystemFileSystem, SystemRandom, TimeZone,
 };
 pub use fold::folded_eq;
-pub use interner::{NameId, NameInterner};
+pub use interner::{NameId, NameInterner, first_folded_duplicate};
 pub use locale::{Locale, NBSP};
 use map::MapData;
 pub use object::{BslObject, StructureStorage};
@@ -3664,11 +3664,12 @@ mod tests {
                 },
                 Kind::ExtensionByKey => Samples {
                     // Одно место, РАЗНЫЕ метки: равенство обязано идти по
-                    // ключу места, а не по содержимому.
-                    equal: || {
+                    // ключу места ВОПРЕКИ различному содержимому — метка и
+                    // есть то содержимое, которое не должно ни на что влиять.
+                    equal: |tag| {
                         BslValue::new_object(ByKey {
                             place: (10, 0),
-                            tag: 1,
+                            tag,
                         })
                     },
                     different: || {
