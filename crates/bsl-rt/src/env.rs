@@ -452,7 +452,11 @@ impl FileHandle for std::fs::File {
     }
 }
 
-pub trait FileSystem {
+// Супертрейт `Debug` — не оформление: реализацию файловой системы хранят
+// объекты (`ТекстовыйДокумент`, читатель/писатель архива, менеджер потоков),
+// а `ObjectProtocol` требует `Debug`. `FileHandle` уже с ним по той же
+// причине.
+pub trait FileSystem: fmt::Debug {
     /// # Errors
     ///
     /// Ошибку чтения — файла нет, нет прав, это каталог.
@@ -500,6 +504,7 @@ pub trait FileSystem {
 }
 
 /// Файловая система процесса — обычный `std::fs`.
+#[derive(Debug)]
 pub struct SystemFileSystem;
 
 impl FileSystem for SystemFileSystem {

@@ -320,6 +320,7 @@ fn run_program_with_host<'a>(
         program,
         registry,
         host_env.zone(),
+        host_env.files(),
         bsl_bytecode::DynamicScope::ROOT,
     )?;
     let dynamic_depth = std::cell::Cell::new(0);
@@ -374,6 +375,7 @@ pub fn run_repl_chunk_with_registry<'a>(
         &program,
         Some(registry),
         host_env.zone(),
+        host_env.files(),
         bsl_bytecode::DynamicScope::ROOT,
     )?;
     let dynamic_depth = std::cell::Cell::new(0);
@@ -519,6 +521,7 @@ struct LinkedComponents<'a> {
     /// диспетчеризации, который при переносе окружения стоил `empty_for`
     /// +61 % тактов.
     zone: std::rc::Rc<dyn bsl_rt::TimeZone>,
+    files: std::rc::Rc<dyn bsl_rt::FileSystem>,
 }
 
 impl LinkedComponents<'_> {
@@ -855,6 +858,7 @@ fn link_components<'a>(
     program: &Program,
     registry: Option<&'a bsl_rt::RuntimeRegistry>,
     zone: std::rc::Rc<dyn bsl_rt::TimeZone>,
+    files: std::rc::Rc<dyn bsl_rt::FileSystem>,
     scope: u64,
 ) -> Result<LinkedComponents<'a>, RtError> {
     check_control_flow(program)?;
@@ -1007,6 +1011,7 @@ fn link_components<'a>(
         scope,
         interpreter_only_objects,
         zone,
+        files,
         functions,
         constructors,
         builtin_methods,
@@ -1082,7 +1087,13 @@ fn drive_with(
     jit_mode: JitMode,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
     let mut env = bsl_rt::HostEnv::process();
-    let linked = link_components(program, None, env.zone(), bsl_bytecode::DynamicScope::ROOT)?;
+    let linked = link_components(
+        program,
+        None,
+        env.zone(),
+        env.files(),
+        bsl_bytecode::DynamicScope::ROOT,
+    )?;
     let mut stdout = std::io::stdout().lock();
     let mut stderr = std::io::stderr().lock();
     let mut dynamic = tests::TestDynamic::bare();
@@ -1958,6 +1969,7 @@ fn step(
                             stderr: &mut *host.stderr,
                             formatter: bsl_format::format_value,
                             zone: &linked.zone,
+                            files: &linked.files,
                             function_caller: None,
                         });
                     component_prop_get(
@@ -1990,6 +2002,7 @@ fn step(
                             stderr: &mut *host.stderr,
                             formatter: bsl_format::format_value,
                             zone: &linked.zone,
+                            files: &linked.files,
                             function_caller: None,
                         });
                     component_prop_set(
@@ -2038,6 +2051,7 @@ fn step(
                             stderr: &mut *host.stderr,
                             formatter: bsl_format::format_value,
                             zone: &linked.zone,
+                            files: &linked.files,
                             function_caller: None,
                         });
                     object.call_method(method.primary_name(), args.as_slice(), &mut context)?
@@ -2071,6 +2085,7 @@ fn step(
                                 stderr: &mut *host.stderr,
                                 formatter: bsl_format::format_value,
                                 zone: &linked.zone,
+                                files: &linked.files,
                                 function_caller: None,
                             });
                         object.call_method("Записать", std::slice::from_ref(sv), &mut context)?
@@ -2304,6 +2319,7 @@ fn step_cold(
                     stderr: &mut *host.stderr,
                     formatter: bsl_format::format_value,
                     zone: &linked.zone,
+                    files: &linked.files,
                     function_caller: None,
                 });
                 component_prop_get(
@@ -2336,6 +2352,7 @@ fn step_cold(
                     stderr: &mut *host.stderr,
                     formatter: bsl_format::format_value,
                     zone: &linked.zone,
+                    files: &linked.files,
                     function_caller: None,
                 });
                 component_prop_set(
@@ -2415,6 +2432,7 @@ fn step_cold(
                 stderr: &mut **host_stderr,
                 formatter: bsl_format::format_value,
                 zone: &linked.zone,
+                files: &linked.files,
                 function_caller: Some(&mut function_caller),
             });
             let value = call(&mut context, args.as_slice())?;
@@ -2433,6 +2451,7 @@ fn step_cold(
                 stderr: &mut *host.stderr,
                 formatter: bsl_format::format_value,
                 zone: &linked.zone,
+                files: &linked.files,
                 function_caller: None,
             });
             let value = call(&mut context, args.as_slice())?;
@@ -2485,6 +2504,7 @@ fn step_cold(
                     stderr: &mut *host.stderr,
                     formatter: bsl_format::format_value,
                     zone: &linked.zone,
+                    files: &linked.files,
                     function_caller: None,
                 });
                 // Тип со статической таблицей методов идёт кэшем ячейки
@@ -2535,6 +2555,7 @@ fn step_cold(
                     stderr: &mut *host.stderr,
                     formatter: bsl_format::format_value,
                     zone: &linked.zone,
+                    files: &linked.files,
                     function_caller: None,
                 });
                 extension.call_method("Закрыть", &[], &mut context)?
@@ -2767,6 +2788,7 @@ fn run_dynamic_snippet(
         &snippet_program,
         linked.registry,
         std::rc::Rc::clone(&linked.zone),
+        std::rc::Rc::clone(&linked.files),
         compiled.scope,
     )?;
     let (value, final_stack) = drive_linked(
@@ -2859,7 +2881,13 @@ pub fn call_module_function(
     args: Vec<BslValue>,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
     let mut env = bsl_rt::HostEnv::process();
-    let linked = link_components(program, None, env.zone(), bsl_bytecode::DynamicScope::ROOT)?;
+    let linked = link_components(
+        program,
+        None,
+        env.zone(),
+        env.files(),
+        bsl_bytecode::DynamicScope::ROOT,
+    )?;
     let mut stdout = std::io::stdout().lock();
     let mut stderr = std::io::stderr().lock();
     let dynamic_depth = std::cell::Cell::new(0);
@@ -2896,6 +2924,7 @@ pub fn call_module_function_with_registry_and_io<'a>(
         program,
         Some(registry),
         host_env.zone(),
+        host_env.files(),
         bsl_bytecode::DynamicScope::ROOT,
     )?;
     let dynamic_depth = std::cell::Cell::new(0);

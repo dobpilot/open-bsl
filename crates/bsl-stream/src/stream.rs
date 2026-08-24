@@ -2044,7 +2044,7 @@ mod tests {
 
         type Store = Rc<RefCell<HashMap<String, Vec<u8>>>>;
 
-        #[derive(Default)]
+        #[derive(Debug, Default)]
         struct MemFs {
             store: Store,
         }

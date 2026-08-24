@@ -1895,7 +1895,7 @@ fn directory_entries_read_back_as_directories() {
 fn the_archive_goes_through_the_session_file_system() {
     use std::collections::{HashMap, HashSet};
 
-    #[derive(Default)]
+    #[derive(Debug, Default)]
     struct MemFs {
         files: RefCell<HashMap<String, Vec<u8>>>,
         dirs: RefCell<HashSet<String>>,

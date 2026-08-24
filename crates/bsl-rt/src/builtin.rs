@@ -2697,6 +2697,7 @@ mod name_table_tests {
     /// одинаково в debug и release.
     #[test]
     fn the_file_builtins_reject_a_wrong_argument_count_instead_of_panicking() {
+        #[derive(Debug)]
         struct NoFiles;
 
         impl crate::FileSystem for NoFiles {

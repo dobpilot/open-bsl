@@ -3678,8 +3678,14 @@ fn call_module_function_with_dynamic_eval_inside() {
     // намеренно. В боевом пути он приезжает вместе с потоками и
     // окружением — тем же `HostIo`, который VM протаскивает всюду.
     let mut env = bsl_rt::HostEnv::process();
-    let linked =
-        link_components(&program, None, env.zone(), bsl_bytecode::DynamicScope::ROOT).unwrap();
+    let linked = link_components(
+        &program,
+        None,
+        env.zone(),
+        env.files(),
+        bsl_bytecode::DynamicScope::ROOT,
+    )
+    .unwrap();
     let mut stdout = std::io::stdout().lock();
     let mut stderr = std::io::stderr().lock();
     let mut dynamic = TestDynamic::bare();

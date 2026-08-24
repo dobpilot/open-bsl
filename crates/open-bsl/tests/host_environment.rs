@@ -436,7 +436,7 @@ mod files {
     /// Файловая система в памяти — та самая тестовая реализация, ради
     /// которой возможность и заводилась: до неё проверить чтение и запись
     /// можно было только через настоящий диск и временный каталог.
-    #[derive(Default, Clone)]
+    #[derive(Debug, Default, Clone)]
     struct MemoryFiles(Rc<RefCell<HashMap<String, Vec<u8>>>>);
 
     impl open_bsl::FileSystem for MemoryFiles {
@@ -543,6 +543,7 @@ mod files {
     fn a_file_system_failure_is_a_catchable_error_both_ways() {
         /// Система, у которой нет ни одного файла и запись всегда
         /// отказывает: у отказа записи своя ветка перевода ошибки.
+        #[derive(Debug)]
         struct Broken;
 
         impl open_bsl::FileSystem for Broken {

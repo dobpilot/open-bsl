@@ -148,6 +148,7 @@ pub struct InterpreterServices<'a> {
     pub stdout: &'a mut dyn Write,
     pub stderr: &'a mut dyn Write,
     pub zone: &'a Rc<dyn crate::TimeZone>,
+    pub files: &'a Rc<dyn crate::FileSystem>,
     pub function_caller: Option<&'a mut FunctionCaller<'a>>,
 }
 
@@ -180,6 +181,12 @@ pub struct CallContext<'a> {
     /// получит `CapabilityMissing` там, где интерпретатор отвечает значением
     /// (обе стороны закреплены тестами `crates/open-bsl/tests/embedding.rs`).
     zone: Option<&'a Rc<dyn crate::TimeZone>>,
+    /// Файловая система ПРОГОНА либо `None` — «этот путь о ней не знает».
+    /// `None` приходит с нативного пути (JIT-шимы), как и у зоны: объект,
+    /// которому нужна ФС, забирает её у своего КОНСТРУКТОРА (тот идёт
+    /// интерпретатором, `CreateObject` не шимится) и хранит сам, а не
+    /// спрашивает контекст на каждом вызове метода.
+    files: Option<&'a Rc<dyn crate::FileSystem>>,
     function_caller: Option<&'a mut FunctionCaller<'a>>,
 }
 
@@ -193,6 +200,7 @@ impl<'a> CallContext<'a> {
             stdout: Some(services.stdout),
             stderr: Some(services.stderr),
             zone: Some(services.zone),
+            files: Some(services.files),
             function_caller: services.function_caller,
         }
     }
@@ -209,6 +217,7 @@ impl<'a> CallContext<'a> {
             stdout: None,
             stderr: None,
             zone: None,
+            files: None,
             function_caller: None,
         }
     }
@@ -278,6 +287,39 @@ impl<'a> CallContext<'a> {
     pub fn zone_rc(&self) -> RtResult<Rc<dyn crate::TimeZone>> {
         self.zone.map(Rc::clone).ok_or(RtError::CapabilityMissing {
             capability: Capability::Zone,
+            path: self.path,
+        })
+    }
+
+    /// Файловая система прогона ссылкой — для компонента, который открывает
+    /// файл ПРЯМО В КОНСТРУКТОРЕ и дальше держит только дескриптор
+    /// (`ЗаписьТекста`, `ФайловыйПоток`).
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::CapabilityMissing`], если контекст без файловой системы
+    /// (нативный путь).
+    pub fn files(&self) -> RtResult<&dyn crate::FileSystem> {
+        let path = self.path;
+        self.files
+            .map(Rc::as_ref)
+            .ok_or(RtError::CapabilityMissing {
+                capability: Capability::FileSystem,
+                path,
+            })
+    }
+
+    /// Файловая система прогона В СОБСТВЕННОСТЬ — для компонента, который её
+    /// ЗАПОМИНАЕТ и обращается к путям в своих методах (`ТекстовыйДокумент`,
+    /// читатель/писатель архива, менеджер файловых потоков): метод может
+    /// пойти нативным путём под JIT, где контекста с ФС уже нет.
+    ///
+    /// # Errors
+    ///
+    /// То же, что у [`CallContext::files`].
+    pub fn files_rc(&self) -> RtResult<Rc<dyn crate::FileSystem>> {
+        self.files.map(Rc::clone).ok_or(RtError::CapabilityMissing {
+            capability: Capability::FileSystem,
             path: self.path,
         })
     }
