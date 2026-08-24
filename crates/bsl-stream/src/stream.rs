@@ -66,7 +66,7 @@ use std::rc::Rc;
 use bsl_rt::{
     Arity, BslNumber, BslValue, ByteStreamProtocol, CallContext, EnumValue, FileCreate, FileHandle,
     FileOpenOptions, FileSystem, MethodDescriptor, ObjectProtocol, PropertyDescriptor, RtError,
-    RtResult, SystemFileSystem, TypeDescriptor,
+    RtResult, TypeDescriptor,
 };
 
 /// Режим открытия файла — член `РежимОткрытияФайла`.
@@ -663,7 +663,12 @@ pub fn new_memory_stream(arg: &BslValue) -> RtResult<BslValue> {
 /// заголовке модуля). [`RtError::IoError`] — отказ операционной системы:
 /// нет файла у `Открыть`/`Обрезать`, файл уже есть у `СоздатьНовый`, нет
 /// каталога, пустое имя.
-pub fn new_file_stream(path: &BslValue, mode: &BslValue, access: &BslValue) -> RtResult<BslValue> {
+pub fn new_file_stream(
+    path: &BslValue,
+    mode: &BslValue,
+    access: &BslValue,
+    files: &dyn FileSystem,
+) -> RtResult<BslValue> {
     const OP: &str = "Новый ФайловыйПоток";
     let BslValue::Str(path) = path else {
         return Err(RtError::TypeError {
@@ -695,7 +700,7 @@ pub fn new_file_stream(path: &BslValue, mode: &BslValue, access: &BslValue) -> R
             });
         }
     };
-    open_file_stream(&path, mode, access, &SystemFileSystem)
+    open_file_stream(&path, mode, access, files)
 }
 
 /// Поток над ГОТОВЫМИ байтами — носитель для `ЧтениеДанных` поверх
@@ -721,8 +726,9 @@ pub(crate) fn data_over_file(
     path: &str,
     mode: FileOpenMode,
     access: FileAccess,
+    files: &dyn FileSystem,
 ) -> RtResult<BslValue> {
-    open_file_stream(path, mode, access, &SystemFileSystem)
+    open_file_stream(path, mode, access, files)
 }
 
 /// Общая часть конструктора и методов менеджера.
@@ -816,8 +822,8 @@ fn open_file_data(
 /// `ФайловыеПотоки = ФайловыеПотоки` — «Нет». Поэтому менеджер и не может
 /// быть константой в таблице чанка, как голое имя перечисления, — его
 /// строит отдельная инструкция.
-pub fn new_file_streams_manager() -> BslValue {
-    BslValue::new_object(FileStreamsManager)
+pub fn new_file_streams_manager(files: Rc<dyn FileSystem>) -> BslValue {
+    BslValue::new_object(FileStreamsManager { files })
 }
 
 pub(crate) static FILE_STREAMS_MANAGER_TYPE: TypeDescriptor = TypeDescriptor {
@@ -828,7 +834,11 @@ pub(crate) static FILE_STREAMS_MANAGER_TYPE: TypeDescriptor = TypeDescriptor {
 };
 
 #[derive(Debug)]
-struct FileStreamsManager;
+struct FileStreamsManager {
+    /// Файловая система сессии: менеджер открывает файлы в СВОИХ методах,
+    /// а те под JIT идут нативным путём без контекста, — потому владеет `Rc`.
+    files: Rc<dyn FileSystem>,
+}
 
 // --- методы менеджера -------------------------------------------------------------
 
@@ -853,10 +863,10 @@ fn manager_path(args: &[BslValue], op: &'static str) -> RtResult<String> {
 ///
 /// Те же, что у [`new_file_stream`], плюс «метод не применим» при неверном
 /// числе аргументов (одного платформа не берёт — измерено).
-pub fn manager_open(args: &[BslValue]) -> RtResult<BslValue> {
+pub fn manager_open(args: &[BslValue], files: &dyn FileSystem) -> RtResult<BslValue> {
     match args {
-        [path, mode] => new_file_stream(path, mode, &BslValue::Undefined),
-        [path, mode, access] => new_file_stream(path, mode, access),
+        [path, mode] => new_file_stream(path, mode, &BslValue::Undefined, files),
+        [path, mode, access] => new_file_stream(path, mode, access, files),
         _ => Err(RtError::MethodNotApplicable {
             method: "Открыть",
             receiver: "МенеджерФайловыхПотоков",
@@ -871,14 +881,9 @@ pub fn manager_open(args: &[BslValue]) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// Те же, что у [`new_file_stream`].
-pub fn manager_open_for_read(args: &[BslValue]) -> RtResult<BslValue> {
+pub fn manager_open_for_read(args: &[BslValue], files: &dyn FileSystem) -> RtResult<BslValue> {
     let path = manager_path(args, "ОткрытьДляЧтения")?;
-    open_file_stream(
-        &path,
-        FileOpenMode::Open,
-        FileAccess::Read,
-        &SystemFileSystem,
-    )
+    open_file_stream(&path, FileOpenMode::Open, FileAccess::Read, files)
 }
 
 /// `ФайловыеПотоки.ОткрытьДляЗаписи(Имя)` — `ОткрытьИлиСоздать` плюс доступ
@@ -888,14 +893,9 @@ pub fn manager_open_for_read(args: &[BslValue]) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// Те же, что у [`new_file_stream`].
-pub fn manager_open_for_write(args: &[BslValue]) -> RtResult<BslValue> {
+pub fn manager_open_for_write(args: &[BslValue], files: &dyn FileSystem) -> RtResult<BslValue> {
     let path = manager_path(args, "ОткрытьДляЗаписи")?;
-    open_file_stream(
-        &path,
-        FileOpenMode::OpenOrCreate,
-        FileAccess::Write,
-        &SystemFileSystem,
-    )
+    open_file_stream(&path, FileOpenMode::OpenOrCreate, FileAccess::Write, files)
 }
 
 /// `ФайловыеПотоки.ОткрытьДляДописывания(Имя)` — `Дописать` плюс доступ
@@ -905,14 +905,9 @@ pub fn manager_open_for_write(args: &[BslValue]) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// Те же, что у [`new_file_stream`].
-pub fn manager_open_for_append(args: &[BslValue]) -> RtResult<BslValue> {
+pub fn manager_open_for_append(args: &[BslValue], files: &dyn FileSystem) -> RtResult<BslValue> {
     let path = manager_path(args, "ОткрытьДляДописывания")?;
-    open_file_stream(
-        &path,
-        FileOpenMode::Append,
-        FileAccess::Write,
-        &SystemFileSystem,
-    )
+    open_file_stream(&path, FileOpenMode::Append, FileAccess::Write, files)
 }
 
 /// `ФайловыеПотоки.Создать(Имя)` — `Создать` с доступом по умолчанию
@@ -921,56 +916,69 @@ pub fn manager_open_for_append(args: &[BslValue]) -> RtResult<BslValue> {
 /// # Errors
 ///
 /// Те же, что у [`new_file_stream`].
-pub fn manager_create(args: &[BslValue]) -> RtResult<BslValue> {
+pub fn manager_create(args: &[BslValue], files: &dyn FileSystem) -> RtResult<BslValue> {
     let path = manager_path(args, "Создать")?;
-    open_file_stream(
-        &path,
-        FileOpenMode::Create,
-        FileAccess::ReadWrite,
-        &SystemFileSystem,
-    )
+    open_file_stream(&path, FileOpenMode::Create, FileAccess::ReadWrite, files)
 }
 
-// Методы менеджера файловых потоков: получатель без состояния, поэтому
-// обработчики его не читают.
+/// Получатель-менеджер: чужой тип получает ту же ошибку «метод не применим».
+fn manager_of<'r>(
+    receiver: &'r dyn ObjectProtocol,
+    method: &'static str,
+) -> RtResult<&'r FileStreamsManager> {
+    receiver
+        .downcast_ref::<FileStreamsManager>()
+        .ok_or(RtError::MethodNotApplicable {
+            method,
+            receiver: "МенеджерФайловыхПотоков",
+        })
+}
+
+// Методы менеджера файловых потоков: файловую систему берут у получателя,
+// который запомнил её при построении.
 fn manager_method_open(
-    _receiver: &dyn ObjectProtocol,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
-    manager_open(arguments)
+    let manager = manager_of(receiver, "Открыть")?;
+    manager_open(arguments, manager.files.as_ref())
 }
 
 fn manager_method_open_for_read(
-    _receiver: &dyn ObjectProtocol,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
-    manager_open_for_read(arguments)
+    let manager = manager_of(receiver, "ОткрытьДляЧтения")?;
+    manager_open_for_read(arguments, manager.files.as_ref())
 }
 
 fn manager_method_open_for_write(
-    _receiver: &dyn ObjectProtocol,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
-    manager_open_for_write(arguments)
+    let manager = manager_of(receiver, "ОткрытьДляЗаписи")?;
+    manager_open_for_write(arguments, manager.files.as_ref())
 }
 
 fn manager_method_open_for_append(
-    _receiver: &dyn ObjectProtocol,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
-    manager_open_for_append(arguments)
+    let manager = manager_of(receiver, "ОткрытьДляДописывания")?;
+    manager_open_for_append(arguments, manager.files.as_ref())
 }
 
 fn manager_method_create(
-    _receiver: &dyn ObjectProtocol,
+    receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
-    manager_create(arguments)
+    let manager = manager_of(receiver, "Создать")?;
+    manager_create(arguments, manager.files.as_ref())
 }
 
 const FILE_STREAMS_MANAGER_METHODS: &[MethodDescriptor] = &[
@@ -1346,6 +1354,32 @@ mod tests {
         ));
     }
     use super::*;
+    use bsl_rt::SystemFileSystem;
+
+    // Конструкторы потоков и методы менеджера после ABI-G берут файловую
+    // систему сессии; сценарии, которым она безразлична, зовут эти тёзки с
+    // процессной ФС по умолчанию.
+    fn new_file_stream(path: &BslValue, mode: &BslValue, access: &BslValue) -> RtResult<BslValue> {
+        super::new_file_stream(path, mode, access, &SystemFileSystem)
+    }
+    fn new_file_streams_manager() -> BslValue {
+        super::new_file_streams_manager(std::rc::Rc::new(SystemFileSystem))
+    }
+    fn manager_open(args: &[BslValue]) -> RtResult<BslValue> {
+        super::manager_open(args, &SystemFileSystem)
+    }
+    fn manager_open_for_read(args: &[BslValue]) -> RtResult<BslValue> {
+        super::manager_open_for_read(args, &SystemFileSystem)
+    }
+    fn manager_open_for_write(args: &[BslValue]) -> RtResult<BslValue> {
+        super::manager_open_for_write(args, &SystemFileSystem)
+    }
+    fn manager_open_for_append(args: &[BslValue]) -> RtResult<BslValue> {
+        super::manager_open_for_append(args, &SystemFileSystem)
+    }
+    fn manager_create(args: &[BslValue]) -> RtResult<BslValue> {
+        super::manager_create(args, &SystemFileSystem)
+    }
 
     /// Поток за значением: обработчики и хелперы принимают объект.
     fn st(v: &BslValue) -> &dyn ObjectProtocol {

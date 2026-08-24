@@ -927,6 +927,7 @@ fn new_state(
     separator: &BslValue,
     side: Side,
     op: &'static str,
+    files: &dyn bsl_rt::FileSystem,
 ) -> RtResult<DataRwState> {
     // Набор допустимых источников у сторон РАЗНЫЙ, и это измерено:
     // `ДвоичныеДанные` читателю годятся, а писателю платформа отвечает
@@ -965,11 +966,13 @@ fn new_state(
                     &path,
                     crate::stream::FileOpenMode::Open,
                     crate::stream::FileAccess::Read,
+                    files,
                 )?,
                 Side::Writer => crate::stream::data_over_file(
                     &path,
                     crate::stream::FileOpenMode::OpenOrCreate,
                     crate::stream::FileAccess::ReadWrite,
+                    files,
                 )?,
             }
         }
@@ -1049,6 +1052,7 @@ pub fn new_data_reader(
     encoding: &BslValue,
     order: &BslValue,
     separator: &BslValue,
+    files: &dyn bsl_rt::FileSystem,
 ) -> RtResult<BslValue> {
     let state = new_state(
         source,
@@ -1057,6 +1061,7 @@ pub fn new_data_reader(
         separator,
         Side::Reader,
         "Новый ЧтениеДанных",
+        files,
     )?;
     Ok(BslValue::new_object(DataRwObject {
         side: Side::Reader,
@@ -1074,6 +1079,7 @@ pub fn new_data_writer(
     encoding: &BslValue,
     order: &BslValue,
     separator: &BslValue,
+    files: &dyn bsl_rt::FileSystem,
 ) -> RtResult<BslValue> {
     let state = new_state(
         target,
@@ -1082,6 +1088,7 @@ pub fn new_data_writer(
         separator,
         Side::Writer,
         "Новый ЗаписьДанных",
+        files,
     )?;
     Ok(BslValue::new_object(DataRwObject {
         side: Side::Writer,
@@ -1675,6 +1682,39 @@ fn result_binary_buffer(v: &dyn ObjectProtocol) -> RtResult<BslValue> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Конструкторы читателя/писателя данных после ABI-G берут файловую
+    /// систему сессии; сценарии, которым она безразлична, зовут эти тёзки с
+    /// процессной ФС по умолчанию.
+    fn new_data_reader(
+        source: &BslValue,
+        encoding: &BslValue,
+        order: &BslValue,
+        separator: &BslValue,
+    ) -> RtResult<BslValue> {
+        super::new_data_reader(
+            source,
+            encoding,
+            order,
+            separator,
+            &bsl_rt::SystemFileSystem,
+        )
+    }
+
+    fn new_data_writer(
+        target: &BslValue,
+        encoding: &BslValue,
+        order: &BslValue,
+        separator: &BslValue,
+    ) -> RtResult<BslValue> {
+        super::new_data_writer(
+            target,
+            encoding,
+            order,
+            separator,
+            &bsl_rt::SystemFileSystem,
+        )
+    }
 
     /// Получатель за значением: обработчики и хелперы принимают объект.
     fn st(v: &BslValue) -> &dyn ObjectProtocol {
@@ -2315,10 +2355,10 @@ mod tests {
             std::process::id()
         );
         std::fs::write(&path, b"0123456789").expect("временный файл");
-        let ro = stream::manager_open_for_read(&[text(&path)]).unwrap();
+        let ro = stream::manager_open_for_read(&[text(&path)], &bsl_rt::SystemFileSystem).unwrap();
         let w = writer_over(&ro);
         assert!(write_byte(st(&w), &[num(65)]).is_err());
-        let wo = stream::manager_open_for_write(&[text(&path)]).unwrap();
+        let wo = stream::manager_open_for_write(&[text(&path)], &bsl_rt::SystemFileSystem).unwrap();
         let r = reader_over(&wo);
         assert!(read_byte(st(&r)).is_err());
         let _ = std::fs::remove_file(&path);

@@ -28,14 +28,19 @@ fn construct_memory_stream(
 }
 
 fn construct_file_stream(
-    _context: &mut CallContext<'_>,
+    context: &mut CallContext<'_>,
     arguments: &[BslValue],
 ) -> RtResult<BslValue> {
-    new_file_stream(&arguments[0], &arguments[1], argument(arguments, 2))
+    new_file_stream(
+        &arguments[0],
+        &arguments[1],
+        argument(arguments, 2),
+        context.files()?,
+    )
 }
 
 fn construct_data_reader(
-    _context: &mut CallContext<'_>,
+    context: &mut CallContext<'_>,
     arguments: &[BslValue],
 ) -> RtResult<BslValue> {
     new_data_reader(
@@ -43,11 +48,12 @@ fn construct_data_reader(
         argument(arguments, 1),
         argument(arguments, 2),
         argument(arguments, 3),
+        context.files()?,
     )
 }
 
 fn construct_data_writer(
-    _context: &mut CallContext<'_>,
+    context: &mut CallContext<'_>,
     arguments: &[BslValue],
 ) -> RtResult<BslValue> {
     new_data_writer(
@@ -55,14 +61,15 @@ fn construct_data_writer(
         argument(arguments, 1),
         argument(arguments, 2),
         argument(arguments, 3),
+        context.files()?,
     )
 }
 
 fn construct_file_streams_manager(
-    _context: &mut CallContext<'_>,
+    context: &mut CallContext<'_>,
     _arguments: &[BslValue],
 ) -> RtResult<BslValue> {
-    Ok(new_file_streams_manager())
+    Ok(new_file_streams_manager(context.files_rc()?))
 }
 
 const CONSTRUCTORS: &[ConstructorDescriptor] = &[
