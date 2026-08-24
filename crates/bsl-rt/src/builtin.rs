@@ -1932,10 +1932,10 @@ pub fn call_builtin_method(
     // падал бы на `args[0]`. Полиморфные (`static_arity() == None`) проверяет
     // сам обработчик. Путь VM защищён периметром образа, но функция публична.
     if let Some(expected) = m.static_arity()
-        && args.len() < expected
+        && args.len() != expected
     {
         return Err(RtError::InvalidBytecode(
-            "методу передано меньше аргументов, чем требует его арность",
+            "число аргументов метода не совпадает с его арностью",
         ));
     }
     match m {
@@ -2607,10 +2607,10 @@ pub fn call_builtin_method_ctx(
     // выбирается по номеру имени уже в рантайме, и до этого сторожа
     // недостающий аргумент ронял процесс, а не давал ошибку.
     if let Some(expected) = m.static_arity()
-        && args.len() < expected
+        && args.len() != expected
     {
         return Err(RtError::InvalidBytecode(
-            "методу передано меньше аргументов, чем требует его арность",
+            "число аргументов метода не совпадает с его арностью",
         ));
     }
     if is_structure(obj) {
@@ -2838,5 +2838,26 @@ mod name_table_tests {
                 .expect_err("недостающий аргумент обязан быть ошибкой");
             assert!(matches!(error, RtError::InvalidBytecode(_)), "{error:?}");
         }
+    }
+
+    /// Арность `static_arity` — ТОЧНАЯ (измерено: платформа отвергает и
+    /// `ЕстьАтрибут()`, и `ЕстьАтрибут("а","б","в")`), поэтому сторож ловит и
+    /// ЛИШНИЙ аргумент. Быстрый путь структуры читает первые два и молча
+    /// игнорировал третий: образ с завышенным `count` исполнялся успешно.
+    #[test]
+    fn a_structure_method_with_too_many_arguments_is_an_error_too() {
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
+        let structure = BslValue::new_structure(rt.shapes.empty(), Vec::new());
+        let extra = [
+            BslValue::Str(crate::BslString::from_str("б")),
+            BslValue::Number(bsl_number::BslNumber::from_i64(2)),
+            BslValue::Number(bsl_number::BslNumber::from_i64(3)),
+        ];
+        let error = call_builtin_method_ctx(BuiltinMethod::Insert, &structure, &extra, &mut rt)
+            .expect_err("лишний аргумент обязан быть ошибкой");
+        assert!(matches!(error, RtError::InvalidBytecode(_)), "{error:?}");
+        // Контроль: ровно два аргумента по-прежнему принимаются.
+        call_builtin_method_ctx(BuiltinMethod::Insert, &structure, &extra[..2], &mut rt)
+            .expect("верная арность обязана работать");
     }
 }
