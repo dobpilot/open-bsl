@@ -131,11 +131,14 @@ pub enum Capability {
     FunctionCaller,
 }
 
-/// Путь, на котором возможность спрошена, — для текста ошибки и только.
+/// Каким контекстом прогона располагал вызов, у которого спросили
+/// возможность, — для текста ошибки и только.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ExecutionPath {
-    Interpreter,
-    Native,
+pub enum ContextKind {
+    /// Полный контекст: потоки вывода и зона на месте.
+    Full,
+    /// Сокращённый: ни потоков, ни зоны.
+    Reduced,
 }
 
 /// Именованная запись сервисов интерпретаторного пути — вместо шести
@@ -169,7 +172,7 @@ pub struct CallContext<'a> {
     formatter: ValueFormatter,
     /// Каким путём построен контекст: факт о вызывающем, попадает в текст
     /// [`RtError::CapabilityMissing`].
-    path: ExecutionPath,
+    path: ContextKind,
     // Возможности: `None` на нативном пути (JIT-шимы).
     stdout: Option<&'a mut dyn Write>,
     stderr: Option<&'a mut dyn Write>,
@@ -196,7 +199,7 @@ impl<'a> CallContext<'a> {
         Self {
             runtime_shapes: services.runtime_shapes,
             formatter: services.formatter,
-            path: ExecutionPath::Interpreter,
+            path: ContextKind::Full,
             stdout: Some(services.stdout),
             stderr: Some(services.stderr),
             zone: Some(services.zone),
@@ -213,7 +216,7 @@ impl<'a> CallContext<'a> {
         Self {
             runtime_shapes,
             formatter,
-            path: ExecutionPath::Native,
+            path: ContextKind::Reduced,
             stdout: None,
             stderr: None,
             zone: None,
@@ -671,11 +674,11 @@ pub struct LibraryDescriptor {
     /// зону не ходят, — но реестр открыт, и у стороннего типа обработчик
     /// вправе делать и то и другое. Библиотека объявляет это сама, а
     /// связывание сводит объявления реестра к одному признаку
-    /// ([`RuntimeRegistry::has_interpreter_only_objects`]): при нём чанк,
+    /// ([`RuntimeRegistry::has_full_context_objects`]): при нём чанк,
     /// обращающийся к ОБЪЕКТАМ, целиком минует нативный путь. Различать
     /// получателей по типу было бы точнее, но цена этого измерена и
     /// велика — см. `LinkedComponents` в `bsl-vm`.
-    object_jit: ObjectJitPolicy,
+    object_context: ObjectContextNeed,
     version: &'static str,
     dependencies: &'static [LibraryDependency],
     functions: &'static [FunctionDescriptor],
@@ -694,17 +697,17 @@ pub struct LibraryDescriptor {
 
 impl LibraryDescriptor {
     /// Обязательный минимум библиотеки. Остальные таблицы добавляются
-    /// `with_*`; `object_jit` входит сюда, а не в умолчание, — решение о
+    /// `with_*`; `object_context` входит сюда, а не в умолчание, — решение о
     /// пригодности объектов нативному пути каждая библиотека принимает
     /// явно.
     pub const fn new(
         package: &'static str,
         version: &'static str,
-        object_jit: ObjectJitPolicy,
+        object_context: ObjectContextNeed,
     ) -> Self {
         Self {
             package,
-            object_jit,
+            object_context,
             version,
             dependencies: &[],
             functions: &[],
@@ -759,8 +762,8 @@ impl LibraryDescriptor {
     }
 
     /// Пригодность объектов библиотеки нативному пути исполнения.
-    pub const fn object_jit(&self) -> ObjectJitPolicy {
-        self.object_jit
+    pub const fn object_context(&self) -> ObjectContextNeed {
+        self.object_context
     }
 
     /// Зависимости библиотеки.
@@ -789,22 +792,24 @@ impl LibraryDescriptor {
     }
 }
 
-/// Обещание библиотеки о том, что её объекты выдержат нативный контекст.
+/// Какой контекст прогона нужен обработчикам объектов этой библиотеки.
 ///
-/// Умолчания у этого признака нет намеренно: поле обязательное, и автор
-/// компонента отвечает на вопрос осознанно. Ошибиться в безопасную
-/// сторону всегда можно — [`ObjectJitPolicy::InterpreterOnly`] стоит
-/// скорости, но не корректности.
+/// Компонент объявляет СВОЮ потребность, а не устройство движка: как
+/// именно тот исполнит обращение — его дело, и в этом ABI ему нет имени.
+///
+/// Умолчания у признака нет намеренно: поле обязательное, и автор
+/// компонента отвечает на вопрос осознанно. Ошибиться в безопасную сторону
+/// всегда можно — [`ObjectContextNeed::Full`] стоит скорости, но не
+/// корректности.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ObjectJitPolicy {
-    /// Обращения к объектам этой библиотеки нативный путь исполнять не
-    /// берётся и возвращает интерпретатору. Единственный выбор для
-    /// компонента, чьи методы или свойства читают зону прогона либо
-    /// пишут в потоки вывода.
-    InterpreterOnly,
-    /// Обработчики обходятся сокращённым контекстом: ни вывода, ни зоны
+pub enum ObjectContextNeed {
+    /// Обработчикам нужен ПОЛНЫЙ контекст: они читают зону прогона либо
+    /// пишут в потоки вывода. Движок обязан дать такой контекст или
+    /// отступить на путь, где он есть.
+    Full,
+    /// Обработчики обходятся СОКРАЩЁННЫМ контекстом: ни вывода, ни зоны
     /// они не трогают.
-    NativeContextCompatible,
+    Reduced,
 }
 
 /// Дескриптор базового компонента. На переходном этапе встроенные функции
@@ -815,7 +820,7 @@ pub const fn core_library() -> LibraryDescriptor {
     LibraryDescriptor::new(
         crate::PACKAGE_NAME,
         crate::PACKAGE_VERSION,
-        ObjectJitPolicy::NativeContextCompatible,
+        ObjectContextNeed::Reduced,
     )
 }
 
@@ -1249,13 +1254,13 @@ pub struct RuntimeRegistry {
 
 impl RuntimeRegistry {
     /// Есть ли библиотека, объявившая
-    /// [`ObjectJitPolicy::InterpreterOnly`]: её обработчикам нужен полный
+    /// [`ObjectContextNeed::Full`]: её обработчикам нужен полный
     /// контекст исполнения, которого нативный путь не даёт.
     #[must_use]
-    pub fn has_interpreter_only_objects(&self) -> bool {
+    pub fn has_full_context_objects(&self) -> bool {
         self.libraries
             .iter()
-            .any(|library| library.object_jit == ObjectJitPolicy::InterpreterOnly)
+            .any(|library| library.object_context == ObjectContextNeed::Full)
     }
 
     pub fn libraries(&self) -> &[LibraryDescriptor] {
@@ -1378,22 +1383,18 @@ mod tests {
         LibraryDescriptor::new(
             crate::PACKAGE_NAME,
             crate::PACKAGE_VERSION,
-            ObjectJitPolicy::NativeContextCompatible,
+            ObjectContextNeed::Reduced,
         )
         .with_functions(CORE_FUNCTIONS)
     }
 
     fn json() -> LibraryDescriptor {
-        LibraryDescriptor::new(
-            "bsl-json",
-            "0.1.0",
-            ObjectJitPolicy::NativeContextCompatible,
-        )
-        .with_dependencies(&[LibraryDependency {
-            package: crate::PACKAGE_NAME,
-            version: crate::PACKAGE_VERSION,
-        }])
-        .with_constructors(JSON_CONSTRUCTORS)
+        LibraryDescriptor::new("bsl-json", "0.1.0", ObjectContextNeed::Reduced)
+            .with_dependencies(&[LibraryDependency {
+                package: crate::PACKAGE_NAME,
+                version: crate::PACKAGE_VERSION,
+            }])
+            .with_constructors(JSON_CONSTRUCTORS)
     }
 
     #[test]
@@ -1425,7 +1426,7 @@ mod tests {
         }];
         let mut builder = RuntimeBuilder::new();
         builder.register(core()).register(
-            LibraryDescriptor::new("other", "1.0.0", ObjectJitPolicy::NativeContextCompatible)
+            LibraryDescriptor::new("other", "1.0.0", ObjectContextNeed::Reduced)
                 .with_functions(DUPLICATE),
         );
 
@@ -1463,20 +1464,20 @@ mod tests {
             context.stdout(),
             Err(RtError::CapabilityMissing {
                 capability: Capability::Stdout,
-                path: ExecutionPath::Native,
+                path: ContextKind::Reduced,
             })
         ));
         assert!(matches!(
             context.zone(),
             Err(RtError::CapabilityMissing {
                 capability: Capability::Zone,
-                path: ExecutionPath::Native,
+                path: ContextKind::Reduced,
             })
         ));
         assert!(matches!(
             context.with_execution_parts(|_parts| Ok(())),
             Err(RtError::CapabilityMissing {
-                path: ExecutionPath::Native,
+                path: ContextKind::Reduced,
                 ..
             })
         ));

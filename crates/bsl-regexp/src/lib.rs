@@ -817,7 +817,7 @@ pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor::new(
         env!("CARGO_PKG_NAME"),
         env!("CARGO_PKG_VERSION"),
-        bsl_rt::ObjectJitPolicy::NativeContextCompatible,
+        bsl_rt::ObjectContextNeed::Reduced,
     )
     .with_functions(FUNCTIONS)
     .with_types(TYPES)

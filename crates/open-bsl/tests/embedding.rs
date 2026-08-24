@@ -44,16 +44,12 @@ const HOST_FUNCTIONS: &[FunctionDescriptor] = &[FunctionDescriptor {
 }];
 
 fn host_library() -> LibraryDescriptor {
-    LibraryDescriptor::new(
-        "example-host",
-        "1.0.0",
-        bsl_rt::ObjectJitPolicy::NativeContextCompatible,
-    )
-    .with_dependencies(&[LibraryDependency {
-        package: bsl_rt::PACKAGE_NAME,
-        version: bsl_rt::PACKAGE_VERSION,
-    }])
-    .with_functions(HOST_FUNCTIONS)
+    LibraryDescriptor::new("example-host", "1.0.0", bsl_rt::ObjectContextNeed::Reduced)
+        .with_dependencies(&[LibraryDependency {
+            package: bsl_rt::PACKAGE_NAME,
+            version: bsl_rt::PACKAGE_VERSION,
+        }])
+        .with_functions(HOST_FUNCTIONS)
 }
 
 /// Строку в BSL хост передаёт так же, как число и свой объект: `into()` на
@@ -561,16 +557,12 @@ const FAILING_FUNCTIONS: &[FunctionDescriptor] = &[FunctionDescriptor {
 }];
 
 fn failing_library() -> LibraryDescriptor {
-    LibraryDescriptor::new(
-        "example-host",
-        "1.0.0",
-        bsl_rt::ObjectJitPolicy::NativeContextCompatible,
-    )
-    .with_dependencies(&[LibraryDependency {
-        package: bsl_rt::PACKAGE_NAME,
-        version: bsl_rt::PACKAGE_VERSION,
-    }])
-    .with_functions(FAILING_FUNCTIONS)
+    LibraryDescriptor::new("example-host", "1.0.0", bsl_rt::ObjectContextNeed::Reduced)
+        .with_dependencies(&[LibraryDependency {
+            package: bsl_rt::PACKAGE_NAME,
+            version: bsl_rt::PACKAGE_VERSION,
+        }])
+        .with_functions(FAILING_FUNCTIONS)
 }
 
 /// Сторонний компонент называет пакет и категорию, не имея своего варианта
@@ -749,17 +741,13 @@ mod host_zone {
     }];
 
     fn watch_library() -> LibraryDescriptor {
-        LibraryDescriptor::new(
-            "example-host",
-            "1.0.0",
-            bsl_rt::ObjectJitPolicy::InterpreterOnly,
-        )
-        .with_dependencies(&[LibraryDependency {
-            package: bsl_rt::PACKAGE_NAME,
-            version: bsl_rt::PACKAGE_VERSION,
-        }])
-        .with_constructors(WATCH_CONSTRUCTORS)
-        .with_types(WATCH_TYPES)
+        LibraryDescriptor::new("example-host", "1.0.0", bsl_rt::ObjectContextNeed::Full)
+            .with_dependencies(&[LibraryDependency {
+                package: bsl_rt::PACKAGE_NAME,
+                version: bsl_rt::PACKAGE_VERSION,
+            }])
+            .with_constructors(WATCH_CONSTRUCTORS)
+            .with_types(WATCH_TYPES)
     }
 
     /// Цикл — чтобы чанк дошёл до JIT: короткий скрипт нативной точкой
@@ -817,7 +805,7 @@ mod host_zone {
     /// Нативный путь не несёт возможностей: `stdout()` и `zone()` в нём
     /// отвечают `CapabilityMissing`, а не молчаливым стоком. Поэтому
     /// библиотека «Часы» объявила себя
-    /// `ObjectJitPolicy::InterpreterOnly`, и чанк, обращающийся к её
+    /// `ObjectContextNeed::Full`, и чанк, обращающийся к её
     /// объектам, JIT не компилирует — обращения идут интерпретатором со
     /// всем окружением. Цена решения и почему оно принимается на чанк, а
     /// не на получателя, — в комментарии у `LinkedComponents` в `bsl-vm`.

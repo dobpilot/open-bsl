@@ -448,7 +448,7 @@ struct LinkedComponents<'a> {
     /// измерен.
     component_properties: ComponentPropertyMap,
     /// Есть ли в реестре библиотека, объявившая
-    /// `ObjectJitPolicy::InterpreterOnly`, — то есть такая, чьи методы и
+    /// `ObjectContextNeed::Full`, — то есть такая, чьи методы и
     /// свойства вправе читать зону прогона и писать в потоки вывода.
     ///
     /// Сокращённый контекст JIT-шимов ни того, ни другого не даёт, и для
@@ -635,7 +635,7 @@ fn link_components<'a>(
     // Список собирается ОДИН РАЗ на программу: у обычного движка он пуст,
     // и нативный путь остаётся ровно таким, каким был.
     let interpreter_only_objects =
-        registry.is_some_and(bsl_rt::RuntimeRegistry::has_interpreter_only_objects);
+        registry.is_some_and(bsl_rt::RuntimeRegistry::has_full_context_objects);
     let Some(core) = program.requirements.first() else {
         return Err(RtError::Link(
             "в требованиях отсутствует bsl-rt".to_string(),

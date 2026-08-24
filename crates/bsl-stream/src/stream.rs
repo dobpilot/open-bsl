@@ -1342,7 +1342,7 @@ mod tests {
         let ambiguous = bsl_rt::LibraryDescriptor::new(
             crate::PACKAGE_NAME,
             crate::PACKAGE_VERSION,
-            bsl_rt::ObjectJitPolicy::NativeContextCompatible,
+            bsl_rt::ObjectContextNeed::Reduced,
         )
         .with_types(AMBIGUOUS_TYPES);
         let mut builder = bsl_rt::RuntimeBuilder::new();

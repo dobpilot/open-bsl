@@ -304,13 +304,13 @@ fn test_component_registry() -> bsl_rt::RuntimeRegistry {
         .register(bsl_rt::LibraryDescriptor::new(
             bsl_rt::PACKAGE_NAME,
             bsl_rt::PACKAGE_VERSION,
-            bsl_rt::ObjectJitPolicy::NativeContextCompatible,
+            bsl_rt::ObjectContextNeed::Reduced,
         ))
         .register(
             bsl_rt::LibraryDescriptor::new(
                 "bsl-test-host",
                 "1.2.3",
-                bsl_rt::ObjectJitPolicy::NativeContextCompatible,
+                bsl_rt::ObjectContextNeed::Reduced,
             )
             .with_dependencies(&[bsl_rt::LibraryDependency {
                 package: bsl_rt::PACKAGE_NAME,
@@ -409,7 +409,7 @@ fn a_polymorphic_open_call_site_revalidates_its_method_cache() {
             bsl_rt::LibraryDescriptor::new(
                 "bsl-test-host",
                 "1.2.3",
-                bsl_rt::ObjectJitPolicy::NativeContextCompatible,
+                bsl_rt::ObjectContextNeed::Reduced,
             )
             .with_dependencies(&[bsl_rt::LibraryDependency {
                 package: bsl_rt::PACKAGE_NAME,

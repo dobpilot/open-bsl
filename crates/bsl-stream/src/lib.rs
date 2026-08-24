@@ -120,7 +120,7 @@ pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor::new(
         PACKAGE_NAME,
         PACKAGE_VERSION,
-        bsl_rt::ObjectJitPolicy::NativeContextCompatible,
+        bsl_rt::ObjectContextNeed::Reduced,
     )
     .with_dependencies(&[LibraryDependency {
         package: bsl_binbuf::PACKAGE_NAME,

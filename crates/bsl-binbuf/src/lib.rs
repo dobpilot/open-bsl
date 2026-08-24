@@ -486,7 +486,7 @@ pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor::new(
         PACKAGE_NAME,
         PACKAGE_VERSION,
-        bsl_rt::ObjectJitPolicy::NativeContextCompatible,
+        bsl_rt::ObjectContextNeed::Reduced,
     )
     .with_functions(FUNCTIONS)
     .with_constructors(CONSTRUCTORS)

@@ -5,7 +5,7 @@
 
 use open_bsl::{
     Arity, CallContext, ConstructorCode, ConstructorDescriptor, Engine, LibraryDescriptor,
-    MethodDescriptor, ObjectJitPolicy, ObjectProtocol, PropertyDescriptor, RtError, RtResult,
+    MethodDescriptor, ObjectContextNeed, ObjectProtocol, PropertyDescriptor, RtError, RtResult,
     TypeDescriptor, Value,
 };
 
@@ -93,13 +93,9 @@ const COUNTER_CONSTRUCTORS: &[ConstructorDescriptor] = &[ConstructorDescriptor {
 }];
 
 fn counter_library() -> LibraryDescriptor {
-    LibraryDescriptor::new(
-        "example-host",
-        "1.0.0",
-        ObjectJitPolicy::NativeContextCompatible,
-    )
-    .with_constructors(COUNTER_CONSTRUCTORS)
-    .with_types(COUNTER_TYPES)
+    LibraryDescriptor::new("example-host", "1.0.0", ObjectContextNeed::Reduced)
+        .with_constructors(COUNTER_CONSTRUCTORS)
+        .with_types(COUNTER_TYPES)
 }
 
 fn main() -> Result<(), open_bsl::Error> {

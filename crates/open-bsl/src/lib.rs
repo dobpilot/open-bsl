@@ -15,7 +15,7 @@ pub use bsl_rt::{
     ComponentError, ConstructorCode, ConstructorDescriptor, DirEntry, EnumKind, EnumValue,
     FileCreate, FileHandle, FileMetadata, FileOpenOptions, FileSystem, FixedTimeZone, FunctionCode,
     FunctionDescriptor, FunctionKind, HostEnv, LibraryDependency, LibraryDescriptor,
-    LibraryRequirement, MethodCall, MethodDescriptor, ObjectJitPolicy, ObjectProtocol, ObjectRef,
+    LibraryRequirement, MethodCall, MethodDescriptor, ObjectContextNeed, ObjectProtocol, ObjectRef,
     PropertyDescriptor, PropertyGet, PropertySet, RandomSource, RegistryError, RtError, RtResult,
     RuntimeRegistry, RuntimeShapes, SystemClock, SystemRandom, SystemTimeZone, TimeZone,
     TypeDescriptor, TypeRef, call_method_from_table, folded_eq, get_property_from_table,

@@ -1830,13 +1830,10 @@ mod tests {
             kind: bsl_rt::FunctionKind::Procedure,
             call,
         }];
-        const LIBRARY: bsl_rt::LibraryDescriptor = bsl_rt::LibraryDescriptor::new(
-            "test-lib",
-            "0.0.0",
-            bsl_rt::ObjectJitPolicy::NativeContextCompatible,
-        )
-        .with_functions(FUNCTIONS)
-        .with_constructors(CONSTRUCTORS);
+        const LIBRARY: bsl_rt::LibraryDescriptor =
+            bsl_rt::LibraryDescriptor::new("test-lib", "0.0.0", bsl_rt::ObjectContextNeed::Reduced)
+                .with_functions(FUNCTIONS)
+                .with_constructors(CONSTRUCTORS);
         let mut builder = bsl_rt::RuntimeBuilder::new();
         builder.register(bsl_rt::core_library()).register(LIBRARY);
         builder.build().unwrap()

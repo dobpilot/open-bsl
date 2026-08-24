@@ -10,7 +10,7 @@ use std::rc::Rc;
 use open_bsl::{
     Arity, ByteStreamProtocol, CallContext, CompileError, ConstructorCode, ConstructorDescriptor,
     Diagnostic, Engine, Error, Expectation, FoundToken, LexError, LibraryDependency,
-    LibraryDescriptor, LibraryRequirement, MethodDescriptor, ObjectJitPolicy, ObjectProtocol,
+    LibraryDescriptor, LibraryRequirement, MethodDescriptor, ObjectContextNeed, ObjectProtocol,
     ObjectRef, ParseError, ParseErrorKind, PreprocSymbols, PropertyDescriptor, RegistryError,
     RtError, RtResult, RuntimeRegistry, RuntimeShapes, SemaError, Span, TextError, TypeDescriptor,
     Value, format_value,
@@ -86,14 +86,10 @@ const METER_CONSTRUCTORS: &[ConstructorDescriptor] = &[ConstructorDescriptor {
 /// Дескриптор компонента — с ОБЪЯВЛЕННОЙ зависимостью, чтобы через фасад
 /// был достижим и [`LibraryDependency`].
 pub fn meter_library() -> LibraryDescriptor {
-    LibraryDescriptor::new(
-        "consumer-host",
-        "1.0.0",
-        ObjectJitPolicy::NativeContextCompatible,
-    )
-    .with_dependencies(NO_DEPENDENCIES)
-    .with_constructors(METER_CONSTRUCTORS)
-    .with_types(METER_TYPES)
+    LibraryDescriptor::new("consumer-host", "1.0.0", ObjectContextNeed::Reduced)
+        .with_dependencies(NO_DEPENDENCIES)
+        .with_constructors(METER_CONSTRUCTORS)
+        .with_types(METER_TYPES)
 }
 
 const NO_DEPENDENCIES: &[LibraryDependency] = &[];

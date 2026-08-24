@@ -49,9 +49,9 @@ pub use builtin::{
 };
 pub use component::{
     Arity, CallContext, Capability, ComponentCall, ConstructorCode, ConstructorDescriptor,
-    ExecutionParts, ExecutionPath, FunctionCode, FunctionDescriptor, FunctionKind,
+    ContextKind, ExecutionParts, FunctionCode, FunctionDescriptor, FunctionKind,
     InterpreterServices, LibraryDependency, LibraryDescriptor, LibraryKey, LibraryRequirement,
-    MethodCall, MethodDescriptor, ObjectJitPolicy, PropertyDescriptor, PropertyGet, PropertySet,
+    MethodCall, MethodDescriptor, ObjectContextNeed, PropertyDescriptor, PropertyGet, PropertySet,
     RegistryError, RuntimeBuilder, RuntimeRegistry, call_method_from_table, core_library,
     get_property_from_table, set_property_from_table,
 };
@@ -332,7 +332,7 @@ pub enum RtError {
     /// `Попыткой`, как и прочие рантайм-условия.
     CapabilityMissing {
         capability: crate::component::Capability,
-        path: crate::component::ExecutionPath,
+        path: crate::component::ContextKind,
     },
 }
 
@@ -457,8 +457,8 @@ impl fmt::Display for RtError {
                     crate::component::Capability::FunctionCaller => "вызов функции модуля",
                 };
                 let path = match path {
-                    crate::component::ExecutionPath::Interpreter => "интерпретатора",
-                    crate::component::ExecutionPath::Native => "нативного пути",
+                    crate::component::ContextKind::Full => "интерпретатора",
+                    crate::component::ContextKind::Reduced => "нативного пути",
                 };
                 write!(f, "возможность «{cap}» недоступна на этом пути ({path})")
             }
