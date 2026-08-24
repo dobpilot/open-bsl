@@ -26,16 +26,18 @@ pub(crate) struct JsonReaderState {
     pub(crate) current: Option<JsonEvent>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct JsonReaderObject {
     state: Rc<RefCell<JsonReaderState>>,
+    files: Rc<dyn bsl_rt::FileSystem>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct JsonWriterObject {
     /// Состояние за `Rc<RefCell>`: обработчики достают его из получателя
     /// ссылкой через `as_writer`, обёртка значения не пересобирается.
     writer: Rc<RefCell<Option<JsonWriter>>>,
+    files: Rc<dyn bsl_rt::FileSystem>,
 }
 
 #[derive(Debug, Clone)]
@@ -276,21 +278,30 @@ pub fn open_file(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
         });
     };
     let path = path.to_string();
-    if let Ok(reader) = as_reader(obj) {
-        let text =
-            std::fs::read_to_string(&path).map_err(|e| RtError::IoError(format!("{path}: {e}")))?;
+    // Файл читается/пишется файловой системой СЕССИИ (ABI-G): она пришла к
+    // объекту при построении и хранится на нём.
+    if let Some(reader) = obj.downcast_ref::<JsonReaderObject>() {
+        let bytes = reader
+            .files
+            .read(&path)
+            .map_err(|e| RtError::IoError(format!("{path}: {e}")))?;
+        let text = String::from_utf8(bytes)
+            .map_err(|e| RtError::IoError(format!("{path}: не UTF-8: {e}")))?;
         // Метка порядка байтов в начале файла — не часть документа.
         let text = text.strip_prefix('\u{feff}').unwrap_or(&text).to_string();
-        *reader.borrow_mut() = JsonReaderState {
+        *reader.state.borrow_mut() = JsonReaderState {
             parser: Some(JsonParser::from_string(text)),
             current: None,
         };
         return Ok(());
     }
-    let writer = as_writer(obj)?;
-    *writer.borrow_mut() = Some(JsonWriter::to_file(
+    let writer = obj
+        .downcast_ref::<JsonWriterObject>()
+        .ok_or_else(|| not_applicable(obj, "ЗаписьJSON"))?;
+    *writer.writer.borrow_mut() = Some(JsonWriter::to_file(
         std::path::PathBuf::from(path),
         settings_from(args.get(1))?,
+        writer.files.clone(),
     ));
     Ok(())
 }
@@ -551,16 +562,18 @@ pub(crate) fn exact_method_arity(
 }
 
 /// Создаёт ненастроенный `ЧтениеJSON`.
-pub fn new_json_reader() -> BslValue {
+pub fn new_json_reader(files: Rc<dyn bsl_rt::FileSystem>) -> BslValue {
     BslValue::new_object(JsonReaderObject {
         state: Rc::new(RefCell::new(JsonReaderState::default())),
+        files,
     })
 }
 
 /// Создаёт ненастроенный `ЗаписьJSON`.
-pub fn new_json_writer() -> BslValue {
+pub fn new_json_writer(files: Rc<dyn bsl_rt::FileSystem>) -> BslValue {
     BslValue::new_object(JsonWriterObject {
         writer: Rc::new(RefCell::new(None)),
+        files,
     })
 }
 
@@ -751,9 +764,16 @@ fn writer_open_file(
             op: "ОткрытьФайл",
         });
     };
-    *as_writer(receiver)?.borrow_mut() = Some(JsonWriter::to_file(
+    // Файловая система — та, что пришла объекту при построении (ABI-G): под
+    // JIT метод исполняется по натуральному пути, где `context.files()`
+    // отсутствует, поэтому ФС берётся с получателя, а не из контекста.
+    let writer = receiver
+        .downcast_ref::<JsonWriterObject>()
+        .ok_or_else(|| not_applicable(receiver, "ЗаписьJSON"))?;
+    *writer.writer.borrow_mut() = Some(JsonWriter::to_file(
         std::path::PathBuf::from(path.to_string()),
         settings_from(arguments.get(1))?,
+        writer.files.clone(),
     ));
     Ok(BslValue::Undefined)
 }

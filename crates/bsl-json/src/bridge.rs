@@ -1220,17 +1220,17 @@ pub(crate) fn component_read_json_value(
 }
 
 pub(crate) fn construct_reader(
-    _context: &mut CallContext<'_>,
+    context: &mut CallContext<'_>,
     _arguments: &[BslValue],
 ) -> RtResult<BslValue> {
-    Ok(new_json_reader())
+    Ok(new_json_reader(context.files_rc()?))
 }
 
 pub(crate) fn construct_writer(
-    _context: &mut CallContext<'_>,
+    context: &mut CallContext<'_>,
     _arguments: &[BslValue],
 ) -> RtResult<BslValue> {
-    Ok(new_json_writer())
+    Ok(new_json_writer(context.files_rc()?))
 }
 
 pub(crate) fn construct_writer_settings(
@@ -1256,6 +1256,14 @@ mod tests {
 
     fn num(s: &str) -> BslNumber {
         BslNumber::parse_canonical(s).unwrap()
+    }
+
+    /// Тестам файловая система не нужна: запись/чтение здесь идут через
+    /// `УстановитьСтроку`, не `ОткрытьФайл`. Обёртка отдаёт объекту
+    /// системную ФС, чтобы прежние места вызова компилировались без правок
+    /// (ABI-G, тот же приём, что в `bsl-stream`/`bsl-zip`).
+    fn new_json_writer() -> BslValue {
+        super::new_json_writer(std::rc::Rc::new(bsl_rt::SystemFileSystem))
     }
 
     /// Дат со смещением в этих тестах нет, поэтому зона любая — берётся

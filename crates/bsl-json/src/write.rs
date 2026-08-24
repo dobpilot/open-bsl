@@ -176,6 +176,11 @@ pub struct JsonWriter {
     stack: Vec<Frame>,
     /// Куда уйдёт результат: `None` — в строку (`УстановитьСтроку`).
     path: Option<std::path::PathBuf>,
+    /// Файловая система сессии для `Закрыть()` файлового приёмника; `None`
+    /// у строкового (ABI-G). Писатель берёт её у своего объекта при
+    /// `ОткрытьФайл` и хранит, потому что запись идёт в `Закрыть()`, который
+    /// под JIT нативен и контекста уже не несёт.
+    files: Option<std::rc::Rc<dyn bsl_rt::FileSystem>>,
     /// `ЗаписьJSON.ПроверятьСтруктуру`. Умолчание `true` — ИЗМЕРЕНО
     /// (`JSON.WRITE.CHECK_STRUCTURE_DEFAULT`). Свойство читается и
     /// пишется, но ни на одну из известных проверок структуры документа
@@ -194,13 +199,19 @@ impl JsonWriter {
             settings,
             stack: Vec::new(),
             path: None,
+            files: None,
             check_structure: true,
         }
     }
 
-    pub fn to_file(path: std::path::PathBuf, settings: JsonWriterSettings) -> Self {
+    pub fn to_file(
+        path: std::path::PathBuf,
+        settings: JsonWriterSettings,
+        files: std::rc::Rc<dyn bsl_rt::FileSystem>,
+    ) -> Self {
         let mut w = Self::to_string_target(settings);
         w.path = Some(path);
+        w.files = Some(files);
         w
     }
 
@@ -480,10 +491,16 @@ impl JsonWriter {
         // который рядом означает успешную запись в файл. Путь снимается
         // (и буфер чистится) ТОЛЬКО после успеха; на отказе писатель
         // остаётся файловым и повторный `Закрыть()` пробует снова.
-        std::fs::write(&path, self.out.as_bytes())
+        let files = self
+            .files
+            .as_ref()
+            .expect("у файлового приёмника есть файловая система");
+        files
+            .write(&path.to_string_lossy(), self.out.as_bytes())
             .map_err(|e| RtError::IoError(format!("{}: {e}", path.display())))?;
         self.out.clear();
         self.path = None;
+        self.files = None;
         Ok(String::new())
     }
 }
@@ -716,7 +733,11 @@ mod tests {
     #[test]
     fn a_failed_file_write_keeps_the_writer_a_file_writer_for_retry() {
         let dir = std::env::temp_dir();
-        let mut w = JsonWriter::to_file(dir, JsonWriterSettings::default());
+        let mut w = JsonWriter::to_file(
+            dir,
+            JsonWriterSettings::default(),
+            std::rc::Rc::new(bsl_rt::SystemFileSystem),
+        );
         w.value(&BslValue::Number(num("42")))
             .expect("запись значения");
         assert!(
