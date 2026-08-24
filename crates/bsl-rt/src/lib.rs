@@ -3485,18 +3485,29 @@ mod tests {
         );
     }
 
-    /// Закон равенства и хэша по ВИДАМ объектов, исчерпывающе.
+    /// Закон равенства и хэша по ВИДАМ объектов.
     ///
     /// `PartialEq` и `Hash` для `BslValue` — две РАЗДЕЛЬНЫЕ реализации, и их
-    /// рассогласование теряет ключ `Соответствия` (воспроизведение 3). Этот
-    /// тест — предохранитель против такого рассогласования: `classify`
-    /// перечисляет КАЖДЫЙ вариант `BslObject` матчем без `_`, поэтому новый
-    /// вид не соберётся, пока автор не решит, сравнивается он ПО ЗНАЧЕНИЮ или
-    /// ПО ТОЖДЕСТВУ — то есть не заведёт его ветку и в `PartialEq`, и в
-    /// `Hash`, а не в одной из двух. Для видов по значению проверяются
-    /// рефлексивность, симметрия, транзитивность и равный хэш при равенстве;
-    /// для вида по тождеству — что две РАЗНЫЕ обёртки одного содержимого не
-    /// равны, а объект равен себе.
+    /// рассогласование теряет ключ `Соответствия` (воспроизведение 3). Тест —
+    /// предохранитель против такого рассогласования, и он устроен так, чтобы
+    /// новый вид объекта нельзя было забыть:
+    ///
+    /// * `kind_of` перечисляет КАЖДЫЙ вариант `BslObject` матчем без `_`,
+    ///   поэтому новый вариант не соберётся, пока автор не решит, идёт он по
+    ///   общему пути тождества (`None`) или по собственному закону (`Some`);
+    /// * `samples` — исчерпывающий матч по `Kind`, поэтому вид, объявленный
+    ///   собственным, обязан принести и образцы, а значит пройти закон целиком.
+    ///
+    /// Виды с общим путём (`None`) представлены ОДНИМ образцом намеренно: у
+    /// них в `PartialEq`/`Hash` не по ветке на вариант, а одна общая —
+    /// `Rc::ptr_eq` и адрес обёртки, — и двенадцатикратный её повтор проверял
+    /// бы один и тот же код.
+    ///
+    /// `Extension` — не один вид, а ТРИ: внешний объект выбирает между
+    /// `value_eq`, `identity_key` и чистым тождеством обёртки, и у каждого
+    /// выбора своя ветка в обеих реализациях (у `value_eq` хэшируется
+    /// `display()`, у `identity_key` — ключ, иначе адрес). Классификатор
+    /// повторяет ровно этот порядок правил.
     #[test]
     fn the_value_equality_and_hash_law_holds_across_object_kinds() {
         use std::collections::hash_map::DefaultHasher;
@@ -3506,20 +3517,102 @@ mod tests {
             hasher.finish()
         }
 
-        #[derive(Debug, PartialEq)]
-        enum Rel {
-            ByValue,
-            ByIdentity,
+        /// Виды, у которых равенство СВОЁ, — по одному на ветку
+        /// `PartialEq`/`Hash`.
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        enum Kind {
+            BinaryData,
+            Uuid,
+            VstrOpaque,
+            /// Внешний объект с `value_eq`: равен по содержимому.
+            ExtensionByValue,
+            /// Внешний объект без `value_eq`, но с `identity_key`: равен по
+            /// объявленному месту.
+            ExtensionByKey,
+            /// Внешний объект без обоих: равен только сам себе.
+            ExtensionBare,
         }
-        // Исчерпывающий матч БЕЗ `_`: новый вариант `BslObject` не соберётся,
-        // пока его не классифицируют здесь. Классификация обязана совпадать с
-        // тем, что делают `PartialEq`/`Hash` для `BslValue` выше.
-        fn classify(object: &BslObject) -> Rel {
+
+        /// Все виды со своим законом. Единственное место теста, которое
+        /// поддерживается руками; `samples` ниже не даст забыть образцы, а
+        /// проверка round-trip в конце — перепутать вид.
+        const ALL_KINDS: [Kind; 6] = [
+            Kind::BinaryData,
+            Kind::Uuid,
+            Kind::VstrOpaque,
+            Kind::ExtensionByValue,
+            Kind::ExtensionByKey,
+            Kind::ExtensionBare,
+        ];
+
+        // --- Три внешних типа: по одному на ветку дисптача -----------------
+
+        static BY_VALUE: TypeDescriptor = TypeDescriptor::new("test", "ВнешнийПоЗначению");
+        static BY_KEY: TypeDescriptor = TypeDescriptor::new("test", "ВнешнийПоМесту");
+        static BARE: TypeDescriptor = TypeDescriptor::new("test", "ВнешнийБезЗакона");
+
+        #[derive(Debug)]
+        struct ByValue(Vec<u8>);
+        impl ObjectProtocol for ByValue {
+            fn type_descriptor(&self) -> &'static TypeDescriptor {
+                &BY_VALUE
+            }
+            fn value_eq(&self, other: &ObjectRef) -> Option<bool> {
+                other.downcast_ref::<ByValue>().map(|o| o.0 == self.0)
+            }
+            // `Hash` для этой ветки берёт `display()`, поэтому равные по
+            // `value_eq` объекты ОБЯЗАНЫ печататься одинаково — иначе ключ
+            // `Соответствия` разъедется. Тест это и проверяет.
+            fn display(&self) -> String {
+                format!("по-значению:{:?}", self.0)
+            }
+        }
+
+        #[derive(Debug)]
+        struct ByKey {
+            place: (usize, usize),
+            /// Содержимое РАЗНОЕ у равных по месту: доказывает, что сравнение
+            /// идёт по ключу, а не случайно по содержимому.
+            tag: u8,
+        }
+        impl ObjectProtocol for ByKey {
+            fn type_descriptor(&self) -> &'static TypeDescriptor {
+                &BY_KEY
+            }
+            fn identity_key(&self) -> Option<(usize, usize)> {
+                Some(self.place)
+            }
+            fn display(&self) -> String {
+                format!("по-месту:{:?}:{}", self.place, self.tag)
+            }
+        }
+
+        #[derive(Debug)]
+        struct Bare(u8);
+        impl ObjectProtocol for Bare {
+            fn type_descriptor(&self) -> &'static TypeDescriptor {
+                &BARE
+            }
+            fn display(&self) -> String {
+                format!("без-закона:{}", self.0)
+            }
+        }
+
+        /// Вид объекта — исчерпывающе по вариантам `BslObject`. `None` —
+        /// общий путь: равенство и хэш по адресу обёртки.
+        fn kind_of(object: &BslObject) -> Option<Kind> {
             match object {
-                BslObject::BinaryData(_)
-                | BslObject::Uuid(_)
-                | BslObject::VstrOpaque(_)
-                | BslObject::Extension(_) => Rel::ByValue,
+                BslObject::BinaryData(_) => Some(Kind::BinaryData),
+                BslObject::Uuid(_) => Some(Kind::Uuid),
+                BslObject::VstrOpaque(_) => Some(Kind::VstrOpaque),
+                // Порядок правил — тот же, что в `PartialEq`/`Hash`.
+                BslObject::Extension(external) => Some(if external.value_eq(external).is_some() {
+                    Kind::ExtensionByValue
+                } else if external.identity_key().is_some() {
+                    Kind::ExtensionByKey
+                } else {
+                    Kind::ExtensionBare
+                }),
                 BslObject::Array(_)
                 | BslObject::Structure(_)
                 | BslObject::ValueTable(_)
@@ -3531,7 +3624,64 @@ mod tests {
                 | BslObject::Map(_)
                 | BslObject::KeyValuePair(..)
                 | BslObject::TextWriter(_)
-                | BslObject::BinaryBuffer(_) => Rel::ByIdentity,
+                | BslObject::BinaryBuffer(_) => None,
+            }
+        }
+
+        /// Образцы вида: свежая обёртка РАВНОГО содержимого на каждый вызов
+        /// `equal` (разные `Rc` — иначе быстрый путь `Rc::ptr_eq` подменил бы
+        /// проверку) и одна заведомо НЕравная.
+        struct Samples {
+            equal: fn() -> BslValue,
+            different: fn() -> BslValue,
+        }
+
+        /// Исчерпывающий матч: новый вид со своим законом обязан принести
+        /// образцы, иначе тест не соберётся.
+        fn samples(kind: Kind) -> Samples {
+            match kind {
+                Kind::BinaryData => Samples {
+                    equal: || {
+                        BslValue::Object(Rc::new(BslObject::BinaryData(Rc::from(&[1u8, 2, 3][..]))))
+                    },
+                    different: || {
+                        BslValue::Object(Rc::new(BslObject::BinaryData(Rc::from(&[9u8][..]))))
+                    },
+                },
+                Kind::Uuid => Samples {
+                    equal: || BslValue::Object(Rc::new(BslObject::Uuid([0x11; 16]))),
+                    different: || BslValue::Object(Rc::new(BslObject::Uuid([0x22; 16]))),
+                },
+                Kind::VstrOpaque => Samples {
+                    equal: || BslValue::Object(Rc::new(BslObject::VstrOpaque("реф".to_string()))),
+                    different: || {
+                        BslValue::Object(Rc::new(BslObject::VstrOpaque("другой".to_string())))
+                    },
+                },
+                Kind::ExtensionByValue => Samples {
+                    equal: || BslValue::new_object(ByValue(vec![1, 2, 3])),
+                    different: || BslValue::new_object(ByValue(vec![9])),
+                },
+                Kind::ExtensionByKey => Samples {
+                    // Одно место, РАЗНЫЕ метки: равенство обязано идти по
+                    // ключу места, а не по содержимому.
+                    equal: || {
+                        BslValue::new_object(ByKey {
+                            place: (10, 0),
+                            tag: 1,
+                        })
+                    },
+                    different: || {
+                        BslValue::new_object(ByKey {
+                            place: (20, 0),
+                            tag: 1,
+                        })
+                    },
+                },
+                Kind::ExtensionBare => Samples {
+                    equal: || BslValue::new_object(Bare(1)),
+                    different: || BslValue::new_object(Bare(2)),
+                },
             }
         }
 
@@ -3542,50 +3692,50 @@ mod tests {
             }
         }
 
-        // `make` отдаёт СВЕЖУЮ обёртку одинакового содержимого на каждый
-        // вызов (разные `Rc`), чтобы отличить равенство по значению от
-        // равенства по тождеству.
-        fn assert_value_law(expected: Rel, make: impl Fn() -> BslValue) {
-            let a = make();
-            let b = make();
-            let c = make();
-            assert_eq!(classify(object_of(&a)), expected);
-            assert_eq!(a, a, "рефлексивность");
-            assert_eq!(a, b, "равное содержимое равно");
-            assert_eq!(b, a, "симметрия");
-            assert!(a == b && b == c && a == c, "транзитивность");
-            assert_eq!(hash_of(&a), hash_of(&b), "равные значения — равный хэш");
+        for kind in ALL_KINDS {
+            let Samples { equal, different } = samples(kind);
+            let (a, b, c, other) = (equal(), equal(), equal(), different());
+
+            // Round-trip: образец действительно того вида, за который выдан, —
+            // иначе закон проверялся бы не на той ветке дисптача.
+            assert_eq!(kind_of(object_of(&a)), Some(kind), "вид образца {kind:?}");
+
+            // Рефлексивность — общая для всех видов.
+            assert_eq!(a, a, "{kind:?}: рефлексивность");
+            assert_eq!(hash_of(&a), hash_of(&a), "{kind:?}: хэш устойчив");
+
+            // Разное содержимое не равно ни при каком виде.
+            assert_ne!(a, other, "{kind:?}: разное содержимое не равно");
+
+            if kind == Kind::ExtensionBare {
+                // Чистое тождество: две обёртки одного содержимого НЕ равны.
+                assert_ne!(a, b, "{kind:?}: равны только сами себе");
+                continue;
+            }
+
+            // Симметрия и транзитивность на трёх свежих обёртках.
+            assert_eq!(a, b, "{kind:?}: равное содержимое равно");
+            assert_eq!(b, a, "{kind:?}: симметрия");
+            assert!(b == c && a == c, "{kind:?}: транзитивность");
+            // Согласованность двух реализаций — то, ради чего тест написан.
+            assert_eq!(hash_of(&a), hash_of(&b), "{kind:?}: равные — равный хэш");
         }
 
-        fn assert_identity_law(expected: Rel, make: impl Fn() -> BslValue) {
-            let a = make();
-            let b = make();
-            assert_eq!(classify(object_of(&a)), expected);
-            assert_eq!(a, a, "объект равен себе");
-            assert_ne!(
-                a, b,
-                "разные обёртки одного содержимого не равны по тождеству"
-            );
-        }
+        // Виды с ОБЩИМ путём тождества: одна ветка `Rc::ptr_eq` на все, здесь
+        // проверяется она, а не каждый вариант по отдельности.
+        let shared = BslValue::new_array(vec![BslValue::number_from_i64(1)]);
+        let twin = BslValue::new_array(vec![BslValue::number_from_i64(1)]);
+        assert_eq!(kind_of(object_of(&shared)), None, "общий путь тождества");
+        assert_eq!(shared, shared, "объект равен себе");
+        assert_eq!(shared, shared.clone(), "клон той же обёртки равен");
+        assert_ne!(shared, twin, "разные обёртки одного содержимого не равны");
 
-        assert_value_law(Rel::ByValue, || {
-            BslValue::Object(Rc::new(BslObject::BinaryData(Rc::from(&[1u8, 2, 3][..]))))
-        });
-        assert_value_law(Rel::ByValue, || {
-            BslValue::Object(Rc::new(BslObject::Uuid([
-                0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee,
-                0xff, 0x00,
-            ])))
-        });
-        assert_value_law(Rel::ByValue, || {
-            BslValue::Object(Rc::new(BslObject::VstrOpaque("реф".to_string())))
-        });
-        // Вид по тождеству — на представителе `Массив`: две разные обёртки
-        // одинакового содержимого не равны (`Extension` с обоими законами
-        // равенства покрыт соседним тестом выше).
-        assert_identity_law(Rel::ByIdentity, || {
-            BslValue::new_array(vec![BslValue::number_from_i64(1)])
-        });
+        // Ответ `value_eq` УСТОЙЧИВ: тот же ответ при повторном спросе, иначе
+        // и равенство, и хэш зависели бы от момента вызова.
+        let stable = samples(Kind::ExtensionByValue);
+        let (x, y) = ((stable.equal)(), (stable.equal)());
+        assert_eq!(x == y, x == y, "устойчивость ответа value_eq");
+        assert_eq!(hash_of(&x), hash_of(&y), "устойчивость хэша");
     }
 
     #[test]
