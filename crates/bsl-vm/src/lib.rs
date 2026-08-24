@@ -271,6 +271,7 @@ fn run_program_with_host<'a>(
         registry,
         host_env.zone(),
         host_env.files(),
+        host_env.random(),
         bsl_bytecode::DynamicScope::ROOT,
     )?;
     let dynamic_depth = std::cell::Cell::new(0);
@@ -327,6 +328,7 @@ pub fn run_repl_chunk_with_registry<'a>(
         Some(registry),
         host_env.zone(),
         host_env.files(),
+        host_env.random(),
         bsl_bytecode::DynamicScope::ROOT,
     )?;
     let dynamic_depth = std::cell::Cell::new(0);
@@ -473,6 +475,7 @@ struct LinkedComponents<'a> {
     /// +61 % тактов.
     zone: std::rc::Rc<dyn bsl_rt::TimeZone>,
     files: std::rc::Rc<dyn bsl_rt::FileSystem>,
+    random: bsl_rt::RandomHandle,
 }
 
 impl LinkedComponents<'_> {
@@ -629,6 +632,7 @@ fn link_components<'a>(
     registry: Option<&'a bsl_rt::RuntimeRegistry>,
     zone: std::rc::Rc<dyn bsl_rt::TimeZone>,
     files: std::rc::Rc<dyn bsl_rt::FileSystem>,
+    random: bsl_rt::RandomHandle,
     scope: u64,
 ) -> Result<LinkedComponents<'a>, RtError> {
     bsl_bytecode::image::verify(program)?;
@@ -730,20 +734,25 @@ fn link_components<'a>(
                     let requirement = program.requirements.get(*library as usize).ok_or(
                         RtError::InvalidBytecode("индекс библиотеки вне таблицы requirements"),
                     )?;
-                    let Some(registry) = registry else {
-                        return Err(RtError::Link(format!(
-                            "конструктор {}/{} требует реестр компонентов",
-                            requirement.package, constructor
-                        )));
+                    let library_descriptor = match registry {
+                        Some(registry) => *registry
+                            .library_by_package(&requirement.package)
+                            .ok_or_else(|| {
+                                RtError::Link(format!(
+                                    "необходим пакет {}={}, но он не зарегистрирован",
+                                    requirement.package, requirement.version
+                                ))
+                            })?,
+                        None if requirement.package == bsl_rt::PACKAGE_NAME => {
+                            bsl_rt::core_library()
+                        }
+                        None => {
+                            return Err(RtError::Link(format!(
+                                "конструктор {}/{} требует реестр компонентов",
+                                requirement.package, constructor
+                            )));
+                        }
                     };
-                    let library_descriptor = registry
-                        .library_by_package(&requirement.package)
-                        .ok_or_else(|| {
-                            RtError::Link(format!(
-                                "необходим пакет {}={}, но он не зарегистрирован",
-                                requirement.package, requirement.version
-                            ))
-                        })?;
                     let descriptor = library_descriptor
                         .constructors()
                         .iter()
@@ -782,6 +791,7 @@ fn link_components<'a>(
         interpreter_only_objects,
         zone,
         files,
+        random,
         functions,
         constructors,
         builtin_methods,
@@ -862,6 +872,7 @@ fn drive_with(
         None,
         env.zone(),
         env.files(),
+        env.random(),
         bsl_bytecode::DynamicScope::ROOT,
     )?;
     let mut stdout = std::io::stdout().lock();
@@ -1740,6 +1751,7 @@ fn step(
                             formatter: bsl_format::format_value,
                             zone: &linked.zone,
                             files: &linked.files,
+                            random: &linked.random,
                             function_caller: None,
                         });
                     component_prop_get(
@@ -1773,6 +1785,7 @@ fn step(
                             formatter: bsl_format::format_value,
                             zone: &linked.zone,
                             files: &linked.files,
+                            random: &linked.random,
                             function_caller: None,
                         });
                     component_prop_set(
@@ -1822,6 +1835,7 @@ fn step(
                             formatter: bsl_format::format_value,
                             zone: &linked.zone,
                             files: &linked.files,
+                            random: &linked.random,
                             function_caller: None,
                         });
                     object.call_method(method.primary_name(), args.as_slice(), &mut context)?
@@ -1856,8 +1870,6 @@ fn step(
             | Instr::NewValueComparison { .. }
             | Instr::NewMap { .. }
             | Instr::NewTextWriter { .. }
-            | Instr::NewUuid { .. }
-            | Instr::NewBinaryData { .. }
             | Instr::Raise { .. }
             | Instr::CallObjectMethod { .. }
             | Instr::GetObjectProp { .. }
@@ -2019,21 +2031,6 @@ fn step_cold(
             reg_store(stack, d, writer)?;
             frames[frame_idx].pc += 1;
         }
-        Instr::NewUuid { dst, arg } => {
-            let arg = reg_load(stack, frames[frame_idx].reg_index(arg))?;
-            let uuid = BslValue::new_uuid(&arg, host.env()?)?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, uuid)?;
-            frames[frame_idx].pc += 1;
-        }
-        Instr::NewBinaryData { dst, path } => {
-            let path = reg_load(stack, frames[frame_idx].reg_index(path))?;
-            let files = host.env()?.files();
-            let data = BslValue::new_binary_data(&path, files.as_ref())?;
-            let d = frames[frame_idx].reg_index(dst);
-            reg_store(stack, d, data)?;
-            frames[frame_idx].pc += 1;
-        }
         Instr::Raise { src } => {
             let value = match src {
                 Some(r) => reg_load(stack, frames[frame_idx].reg_index(r))?,
@@ -2055,6 +2052,7 @@ fn step_cold(
                     formatter: bsl_format::format_value,
                     zone: &linked.zone,
                     files: &linked.files,
+                    random: &linked.random,
                     function_caller: None,
                 });
                 component_prop_get(
@@ -2088,6 +2086,7 @@ fn step_cold(
                     formatter: bsl_format::format_value,
                     zone: &linked.zone,
                     files: &linked.files,
+                    random: &linked.random,
                     function_caller: None,
                 });
                 component_prop_set(
@@ -2172,6 +2171,7 @@ fn step_cold(
                 formatter: bsl_format::format_value,
                 zone: &linked.zone,
                 files: &linked.files,
+                random: &linked.random,
                 function_caller: Some(&mut function_caller),
             });
             let value = call(&mut context, args.as_slice())?;
@@ -2191,6 +2191,7 @@ fn step_cold(
                 formatter: bsl_format::format_value,
                 zone: &linked.zone,
                 files: &linked.files,
+                random: &linked.random,
                 function_caller: None,
             });
             let value = call(&mut context, args.as_slice())?;
@@ -2216,8 +2217,8 @@ fn step_cold(
             // измеримая часть цены вызова: Rc-инкременты и сбросы на
             // каждый аргумент). Регистры-алиасы параметров смежности не
             // гарантируют — такая база уходит запасным путём с копиями.
-            // Приёмник тоже заимствуется, как у горячего `WriteText`:
-            // обработчики не достают до стека VM (их `CallContext` — без
+            // Приёмник тоже заимствуется: обработчики не достают до стека VM
+            // (их `CallContext` — без
             // канала обратного вызова), поэтому заём безопасен, а
             // `reg_store` идёт уже после того, как значение вычислено.
             let contiguous_args = base as usize >= frames[frame_idx].param_aliases.len();
@@ -2244,6 +2245,7 @@ fn step_cold(
                     formatter: bsl_format::format_value,
                     zone: &linked.zone,
                     files: &linked.files,
+                    random: &linked.random,
                     function_caller: None,
                 });
                 // Тип со статической таблицей методов идёт кэшем ячейки
@@ -2507,6 +2509,7 @@ fn run_dynamic_snippet(
         linked.registry,
         std::rc::Rc::clone(&linked.zone),
         std::rc::Rc::clone(&linked.files),
+        linked.random.clone(),
         compiled.scope.get(),
     )?;
     let (value, final_stack) = drive_linked(
@@ -2604,6 +2607,7 @@ pub fn call_module_function(
         None,
         env.zone(),
         env.files(),
+        env.random(),
         bsl_bytecode::DynamicScope::ROOT,
     )?;
     let mut stdout = std::io::stdout().lock();
@@ -2649,6 +2653,7 @@ pub fn call_module_function_with_registry_and_io<'a>(
         Some(registry),
         host_env.zone(),
         host_env.files(),
+        host_env.random(),
         bsl_bytecode::DynamicScope::ROOT,
     )?;
     let dynamic_depth = std::cell::Cell::new(0);

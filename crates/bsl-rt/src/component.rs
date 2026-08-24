@@ -119,8 +119,8 @@ pub type FunctionCaller<'a> = dyn FnMut(
     + 'a;
 
 /// Возможность прогона, которой может не быть на конкретном пути
-/// исполнения. Наличие возможности — это ДАННЫЕ контекста, а не отдельный
-/// тип контекста: нативный путь (JIT-шимы) просто не несёт потоков и зоны.
+/// исполнения. Наличие возможности — это данные контекста, а не отдельный
+/// тип контекста: сокращённый контекст просто не несёт внешних возможностей.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Capability {
@@ -129,20 +129,21 @@ pub enum Capability {
     Zone,
     FileSystem,
     FunctionCaller,
+    Random,
 }
 
 /// Каким контекстом прогона располагал вызов, у которого спросили
 /// возможность, — для текста ошибки и только.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ContextKind {
-    /// Полный контекст: потоки вывода и зона на месте.
+    /// Полный контекст с внешними возможностями прогона.
     Full,
-    /// Сокращённый: ни потоков, ни зоны.
+    /// Сокращённый контекст без внешних возможностей.
     Reduced,
 }
 
-/// Именованная запись сервисов интерпретаторного пути — вместо шести
-/// позиционных аргументов конструктора. Потоки и зона здесь есть ВСЕГДА
+/// Именованная запись сервисов интерпретаторного пути — вместо позиционных
+/// аргументов конструктора. Внешние возможности здесь есть всегда
 /// (интерпретатор их несёт); `function_caller` — `None`, если из этого
 /// вызова BSL-функцию модуля звать нельзя.
 pub struct InterpreterServices<'a> {
@@ -152,6 +153,7 @@ pub struct InterpreterServices<'a> {
     pub stderr: &'a mut dyn Write,
     pub zone: &'a Rc<dyn crate::TimeZone>,
     pub files: &'a Rc<dyn crate::FileSystem>,
+    pub random: &'a crate::RandomHandle,
     pub function_caller: Option<&'a mut FunctionCaller<'a>>,
 }
 
@@ -161,7 +163,7 @@ pub struct InterpreterServices<'a> {
 /// принадлежат сессии, поэтому две VM в одном процессе не разделяют
 /// изменяемое состояние.
 ///
-/// Возможности прогона (`stdout`, `stderr`, `zone`, `function_caller`) —
+/// Возможности прогона (`stdout`, `stderr`, `zone`, `files`, `random`, `function_caller`) —
 /// это `Option` В ПОЛЯХ: на НАТИВНОМ пути (JIT-шимы) их нет, и обращение к
 /// отсутствующей отвечает одним типизированным отказом
 /// [`RtError::CapabilityMissing`], а не молчаливым стоком или чужим
@@ -190,6 +192,7 @@ pub struct CallContext<'a> {
     /// интерпретатором, `CreateObject` не шимится) и хранит сам, а не
     /// спрашивает контекст на каждом вызове метода.
     files: Option<&'a Rc<dyn crate::FileSystem>>,
+    random: Option<&'a crate::RandomHandle>,
     function_caller: Option<&'a mut FunctionCaller<'a>>,
 }
 
@@ -204,6 +207,7 @@ impl<'a> CallContext<'a> {
             stderr: Some(services.stderr),
             zone: Some(services.zone),
             files: Some(services.files),
+            random: Some(services.random),
             function_caller: services.function_caller,
         }
     }
@@ -221,6 +225,7 @@ impl<'a> CallContext<'a> {
             stderr: None,
             zone: None,
             files: None,
+            random: None,
             function_caller: None,
         }
     }
@@ -327,6 +332,19 @@ impl<'a> CallContext<'a> {
         })
     }
 
+    /// Источник случайности прогона. Расстановку битов версии UUID делает
+    /// конструктор значения, а не источник.
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::CapabilityMissing`], если контекст сокращённый.
+    pub fn random(&self) -> RtResult<&crate::RandomHandle> {
+        self.random.ok_or(RtError::CapabilityMissing {
+            capability: Capability::Random,
+            path: self.path,
+        })
+    }
+
     /// Таблица форм и зона ОДНОВРЕМЕННО: `runtime_shapes` берёт `self`
     /// изменяемо, поэтому после него `zone()` уже не позвать, а нужны они
     /// вместе на каждом чтении и записи JSON-значения.
@@ -398,8 +416,9 @@ impl<'a> CallContext<'a> {
 }
 
 /// Разделённые изменяемые сервисы, выданные [`CallContext::with_execution_parts`]
-/// на время одного замыкания. Набор фиксирован; `files` здесь нет
-/// намеренно (файловая возможность приходит отдельной волной ABI-G).
+/// на время одного замыкания. Набор фиксирован; `files` и `random` здесь нет намеренно:
+/// конструкторы получают их отдельными аксессорами и не делят изменяемые заимствования с этой
+/// составной операцией.
 pub struct ExecutionParts<'ctx, 'a> {
     pub runtime_shapes: &'ctx mut RuntimeShapes,
     pub stdout: &'ctx mut dyn Write,
@@ -803,25 +822,55 @@ impl LibraryDescriptor {
 /// корректности.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ObjectContextNeed {
-    /// Обработчикам нужен ПОЛНЫЙ контекст: они читают зону прогона либо
-    /// пишут в потоки вывода. Движок обязан дать такой контекст или
-    /// отступить на путь, где он есть.
+    /// Обработчикам нужен полный контекст: они читают хотя бы одну его внешнюю
+    /// возможность. Движок обязан дать такой контекст или отступить на путь, где он есть.
     Full,
-    /// Обработчики обходятся СОКРАЩЁННЫМ контекстом: ни вывода, ни зоны
-    /// они не трогают.
+    /// Обработчики обходятся сокращённым контекстом и не читают его внешние
+    /// возможности.
     Reduced,
 }
 
+fn construct_binary_data(
+    context: &mut CallContext<'_>,
+    arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    let path = arguments.first().ok_or(RtError::InvalidBytecode(
+        "конструктор ДвоичныеДанные вызван без аргумента",
+    ))?;
+    BslValue::new_binary_data(path, context.files()?)
+}
+
+fn construct_uuid(context: &mut CallContext<'_>, arguments: &[BslValue]) -> RtResult<BslValue> {
+    let undefined = BslValue::Undefined;
+    let argument = arguments.first().unwrap_or(&undefined);
+    BslValue::new_uuid(argument, context.random()?)
+}
+
+const CORE_CONSTRUCTORS: &[ConstructorDescriptor] = &[
+    ConstructorDescriptor {
+        code: ConstructorCode::new(1),
+        names: &["ДвоичныеДанные", "BinaryData"],
+        arity: Arity::exact(1),
+        call: construct_binary_data,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(2),
+        names: &["УникальныйИдентификатор", "UUID"],
+        arity: Arity::range(0, 1),
+        call: construct_uuid,
+    },
+];
+
 /// Дескриптор базового компонента. На переходном этапе встроенные функции
-/// и конструкторы ещё обслуживаются старыми таблицами, поэтому каталоги
-/// пусты; по мере миграции они будут перенесены сюда без изменения API
-/// фасада.
+/// ещё обслуживаются старой таблицей; конструкторы, которым нужны
+/// возможности прогона, проходят обычную компонентную границу.
 pub const fn core_library() -> LibraryDescriptor {
     LibraryDescriptor::new(
         crate::PACKAGE_NAME,
         crate::PACKAGE_VERSION,
         ObjectContextNeed::Reduced,
     )
+    .with_constructors(CORE_CONSTRUCTORS)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1471,6 +1520,13 @@ mod tests {
             context.zone(),
             Err(RtError::CapabilityMissing {
                 capability: Capability::Zone,
+                path: ContextKind::Reduced,
+            })
+        ));
+        assert!(matches!(
+            context.random(),
+            Err(RtError::CapabilityMissing {
+                capability: Capability::Random,
                 path: ContextKind::Reduced,
             })
         ));

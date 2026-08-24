@@ -8,12 +8,12 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use open_bsl::{
-    Arity, ByteStreamProtocol, CallContext, CompileError, ConstructorCode, ConstructorDescriptor,
-    Diagnostic, Engine, Error, Expectation, FoundToken, LexError, LibraryDependency,
-    LibraryDescriptor, LibraryRequirement, MethodDescriptor, ObjectContextNeed, ObjectProtocol,
-    ObjectRef, ParseError, ParseErrorKind, PreprocSymbols, PropertyDescriptor, RegistryError,
-    RtError, RtResult, RuntimeRegistry, RuntimeShapes, SemaError, Span, TextError, TypeDescriptor,
-    Value, format_value,
+    Arity, ByteStreamProtocol, CallContext, Capability, CompileError, ConstructorCode,
+    ConstructorDescriptor, ContextKind, Diagnostic, Engine, Error, Expectation, FoundToken,
+    LexError, LibraryDependency, LibraryDescriptor, LibraryRequirement, MethodDescriptor,
+    ObjectContextNeed, ObjectProtocol, ObjectRef, ParseError, ParseErrorKind, PreprocSymbols,
+    PropertyDescriptor, RandomHandle, RegistryError, RtError, RtResult, RuntimeRegistry,
+    RuntimeShapes, SemaError, Span, TextError, TypeDescriptor, Value, format_value,
 };
 
 // --- Свой компонент целиком, только через фасад --------------------------
@@ -93,6 +93,12 @@ pub fn meter_library() -> LibraryDescriptor {
 }
 
 const NO_DEPENDENCIES: &[LibraryDependency] = &[];
+
+// Эти типы раскрываются полями `RtError::CapabilityMissing` и результатом
+// `CallContext::random`; фасад обязан дать хосту имена для их разбора.
+const _: Option<Capability> = None;
+const _: Option<ContextKind> = None;
+const _: Option<RandomHandle> = None;
 
 // --- Разбор ошибки по фазам, только через фасад --------------------------
 

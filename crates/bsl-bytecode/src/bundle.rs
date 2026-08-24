@@ -486,20 +486,12 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
             read!(names);
             write!(dst);
         }
-        Instr::NewTextWriter { dst, path } | Instr::NewBinaryData { dst, path } => {
+        Instr::NewTextWriter { dst, path } => {
             read!(path);
             write!(dst);
             // Конструктор открывает файл — порядок относительно другого
-            // вывода наблюдаем. У `NewBinaryData` это чтение, но соседство
-            // с записью в тот же файл наблюдаемо ровно так же.
+            // вывода наблюдаем.
             e.io = true;
-        }
-        // УИД без аргумента читает системный источник случайности, но
-        // порядок случайных значений программе не обещан и наблюдаемым
-        // вводом-выводом не является — эффектов нет, как у `NewTable`.
-        Instr::NewUuid { dst, arg } => {
-            read!(arg);
-            write!(dst);
         }
         Instr::CollectionLen { dst, obj } => {
             read!(obj);

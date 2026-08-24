@@ -13,22 +13,20 @@
 //! параметром. Реализации по умолчанию ([`HostEnv::process`]) сохраняют
 //! прежнее поведение процесса бит в бит.
 //!
-//! Местное смещение времени — четвёртая возможность, и попадает она к
-//! потребителю иначе, чем три остальные. Часы, аргументы и случайность
-//! читает код ядра, у которого есть `HostEnv` напрямую; зону читает
-//! перевод УЖЕ ЗАПИСАННЫХ моментов в `bsl-json` и `bsl-xml`, то есть код
-//! компонентных крейтов, которому доступен только `CallContext`. Поэтому
-//! зона и едет через `CallContext` — расширение ABI компонентов здесь
-//! неизбежно, а половинчатый перенос завёл бы второй источник правды.
+//! Часы и аргументы читает код ядра из `HostEnv` напрямую. Источник случайности
+//! и часовой пояс нужны также коду компонентов, которому доступен только `CallContext`,
+//! и поэтому едут через эту границу явными возможностями прогона.
 //!
-//! Отсюда и разница в форме: `Clock` и `RandomSource` берут `&mut self`
-//! (тестовые часы шагают, источник выдаёт последовательность) и живут в
-//! `Box`, а [`TimeZone`] — чистый запрос «смещение на момент», `&self` и
-//! `Rc`. Разделяемая ссылка тут не роскошь: контекст компонента строится,
-//! пока `HostEnv` уже занят чем-то другим, и `&mut` не дался бы.
+//! Отсюда и разница в форме: `Clock` и `RandomSource` берут `&mut self`, потому что тестовые часы
+//! шагают, а источник выдаёт последовательность. Первые живут в `Box`, второй — в
+//! [`RandomHandle`] с узкой внутренней изменяемостью, а [`TimeZone`] даёт чистый ответ по `&self` и живёт в `Rc`.
+//! Обе разделяемые ссылки позволяют строить контекст компонента без второго изменяемого
+//! заимствования `HostEnv`.
 
+use std::cell::RefCell;
 use std::fmt;
 use std::io::{self, Read};
+use std::rc::Rc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Часы прогона: миллисекунды от Unix-эпохи в UTC.
@@ -52,6 +50,26 @@ pub trait Clock {
 /// значило бы позволить тестовой реализации выдать не-UUID.
 pub trait RandomSource {
     fn fill(&mut self, buffer: &mut [u8; 16]);
+}
+
+/// Разделяемая возможность получить случайные байты одного прогона.
+///
+/// Обёртка нужна границе компонентов: обратный вызов BSL-функции и
+/// обработчик компонента используют одно окружение, поэтому держать рядом
+/// два изменяемых заимствования `HostEnv` нельзя. Внутренняя изменяемость
+/// ограничена одним коротким вызовом [`RandomSource::fill`]; источник
+/// по-прежнему принадлежит конкретному `HostEnv`, а не процессу.
+#[derive(Clone)]
+pub struct RandomHandle(Rc<RefCell<Box<dyn RandomSource>>>);
+
+impl RandomHandle {
+    fn new(source: impl RandomSource + 'static) -> Self {
+        Self(Rc::new(RefCell::new(Box::new(source))))
+    }
+
+    pub fn fill(&self, buffer: &mut [u8; 16]) {
+        self.0.borrow_mut().fill(buffer);
+    }
 }
 
 /// Часовой пояс прогона: смещение от UTC в секундах на ЗАДАННЫЙ момент
@@ -637,7 +655,7 @@ impl RandomSource for SystemRandom {
 pub struct HostEnv {
     arguments: Vec<String>,
     clock: Box<dyn Clock>,
-    random: Box<dyn RandomSource>,
+    random: RandomHandle,
     zone: std::rc::Rc<dyn TimeZone>,
     files: std::rc::Rc<dyn FileSystem>,
 }
@@ -650,7 +668,7 @@ impl HostEnv {
         HostEnv {
             arguments: Vec::new(),
             clock: Box::new(SystemClock),
-            random: Box::new(SystemRandom::default()),
+            random: RandomHandle::new(SystemRandom::default()),
             zone: std::rc::Rc::new(crate::tz::SystemTimeZone::new()),
             files: std::rc::Rc::new(SystemFileSystem),
         }
@@ -671,7 +689,7 @@ impl HostEnv {
 
     #[must_use]
     pub fn with_random(mut self, random: impl RandomSource + 'static) -> Self {
-        self.random = Box::new(random);
+        self.random = RandomHandle::new(random);
         self
     }
 
@@ -710,7 +728,14 @@ impl HostEnv {
         self.clock.unix_millis()
     }
 
-    pub fn fill_random(&mut self, buffer: &mut [u8; 16]) {
+    /// Источник случайности этого прогона отдельным дескриптором — для
+    /// полного [`crate::CallContext`] компонента.
+    #[must_use]
+    pub fn random(&self) -> RandomHandle {
+        self.random.clone()
+    }
+
+    pub fn fill_random(&self, buffer: &mut [u8; 16]) {
         self.random.fill(buffer);
     }
 }
@@ -945,7 +970,7 @@ mod tests {
 
     #[test]
     fn a_given_random_sequence_comes_back_in_order() {
-        let mut env = HostEnv::process().with_random(Sequence(vec![[1; 16], [2; 16]]));
+        let env = HostEnv::process().with_random(Sequence(vec![[1; 16], [2; 16]]));
         let mut buffer = [0u8; 16];
         env.fill_random(&mut buffer);
         assert_eq!(buffer, [1; 16]);
@@ -972,7 +997,7 @@ mod tests {
     /// невезение.
     #[test]
     fn the_process_random_source_does_not_repeat_itself() {
-        let mut env = HostEnv::process();
+        let env = HostEnv::process();
         let (mut first, mut second) = ([0u8; 16], [0u8; 16]);
         env.fill_random(&mut first);
         env.fill_random(&mut second);

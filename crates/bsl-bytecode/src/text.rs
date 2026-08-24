@@ -36,7 +36,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 23;
+pub const FORMAT_VERSION: u32 = 24;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -70,7 +70,7 @@ opcodes! {
     Eq, NotEq, Lt, Gt, Le, Ge, Jump,
     JumpIfFalse, JumpIfTrue, JumpIfNotSkipped, NumericForNext, NumericForNextI64, Call, Return,
     GetIndex, SetIndex, GetProp, SetProp, CreateObject, NewArray, NewStructure,
-    NewTable, NewTypeDescription, NewValueComparison, NewMap, NewTextWriter, NewBinaryData, NewUuid,
+    NewTable, NewTypeDescription, NewValueComparison, NewMap, NewTextWriter,
     CollectionLen, Raise, CallBuiltin, CallComponent, CallMethod,
     RunDynamic, CallObjectMethod, GetObjectProp, SetObjectProp,
 }
@@ -495,8 +495,6 @@ fn write_instr(instr: &Instr) -> String {
         Instr::NewValueComparison { dst } => format!("{op} dst={dst}"),
         Instr::NewMap { dst } => format!("{op} dst={dst}"),
         Instr::NewTextWriter { dst, path } => format!("{op} dst={dst} path={path}"),
-        Instr::NewBinaryData { dst, path } => format!("{op} dst={dst} path={path}"),
-        Instr::NewUuid { dst, arg } => format!("{op} dst={dst} arg={arg}"),
         Instr::CollectionLen { dst, obj } => format!("{op} dst={dst} obj={obj}"),
         Instr::Raise { src } => match src {
             Some(src) => format!("{op} src={src}"),
@@ -1462,14 +1460,6 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
         "NewTextWriter" => Instr::NewTextWriter {
             dst: dst(&f)?,
             path: field_u8(&f, no, "path")?,
-        },
-        "NewBinaryData" => Instr::NewBinaryData {
-            dst: dst(&f)?,
-            path: field_u8(&f, no, "path")?,
-        },
-        "NewUuid" => Instr::NewUuid {
-            dst: dst(&f)?,
-            arg: field_u8(&f, no, "arg")?,
         },
         "CollectionLen" => Instr::CollectionLen {
             dst: dst(&f)?,

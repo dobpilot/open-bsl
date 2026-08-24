@@ -65,7 +65,7 @@ const CORPUS: &[&str] = &[
      Общая = 0;\nПишет();\nх = Читает();\n",
     // Запись текста: NewTextWriter и оба горячих пути.
     "з = Новый ЗаписьТекста(\"/dev/null\");\nз.Записать(\"строка\");\nз.Закрыть();\n",
-    // Двоичные данные: NewBinaryData плюс метод `Размер` и обе
+    // Двоичные данные: ядровой `CreateObject`, метод `Размер` и обе
     // глобальные функции — печать и разбор имён у них общие с
     // остальными CallBuiltin/CallMethod, но задеть их корпус обязан.
     "д = Новый ДвоичныеДанные(\"/dev/null\");\nн = д.Размер();\n\
@@ -190,6 +190,32 @@ fn reparsed_program_matches_the_original_structurally() {
             assert_eq!(x.touches_objects, y.touches_objects, "{src}");
         }
     }
+}
+
+/// Конструкторы ядра с внешними возможностями проходят ту же границу, что
+/// конструкторы подключаемых библиотек: кодоген не знает ни файловой
+/// системы, ни источника случайности, ни отдельных опкодов для этих типов.
+#[test]
+fn effectful_core_constructors_use_the_component_abi() {
+    let program = compile(
+        "д = Новый ДвоичныеДанные(\"/dev/null\");\n\
+         у = Новый УникальныйИдентификатор;\n\
+         ф = Новый UUID(\"abcdef12-3456-7890-abcd-ef1234567890\");",
+    );
+    let constructors: Vec<(u8, u16, u8)> = program.chunks[0]
+        .instrs
+        .iter()
+        .filter_map(|instruction| match instruction {
+            Instr::CreateObject {
+                library,
+                constructor,
+                count,
+                ..
+            } => Some((*library, *constructor, *count)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(constructors, [(0, 1, 1), (0, 2, 0), (0, 2, 1)]);
 }
 
 #[test]

@@ -198,8 +198,8 @@ pub trait ObjectProtocol: fmt::Debug + ObjectDowncast {
         &[]
     }
 
-    /// Вход для вызовов с именем-строкой — `WriteText`/`CloseText` и
-    /// legacy-`CallMethod`. По умолчанию диспетчеризует по
+    /// Вход для вызовов с именем-строкой из `CallMethod` и
+    /// `CallObjectMethod`. По умолчанию диспетчеризует по
     /// [`ObjectProtocol::method_table`]; пустая таблица даёт прежний
     /// `UnknownMethod` из [`crate::call_method_from_table`]. Все боевые типы
     /// пользуются умолчанием — переопределять его незачем.

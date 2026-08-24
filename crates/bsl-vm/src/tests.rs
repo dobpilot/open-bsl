@@ -3686,6 +3686,7 @@ fn call_module_function_with_dynamic_eval_inside() {
         None,
         env.zone(),
         env.files(),
+        env.random(),
         bsl_bytecode::DynamicScope::ROOT,
     )
     .unwrap();

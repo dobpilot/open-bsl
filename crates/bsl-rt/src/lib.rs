@@ -64,8 +64,8 @@ use date::{DateBoundary, DatePart};
 pub use enums::{EnumKind, EnumValue, lookup_enum, lookup_member};
 pub use env::{
     Clock, DirEntry, FileCreate, FileHandle, FileMetadata, FileOpenOptions, FileSystem,
-    FixedTimeZone, HostEnv, MAX_OFFSET_SECONDS, MIN_TRANSITION_GAP_SECONDS, RandomSource,
-    SystemClock, SystemFileSystem, SystemRandom, TimeZone,
+    FixedTimeZone, HostEnv, MAX_OFFSET_SECONDS, MIN_TRANSITION_GAP_SECONDS, RandomHandle,
+    RandomSource, SystemClock, SystemFileSystem, SystemRandom, TimeZone,
 };
 pub use fold::folded_eq;
 pub use interner::{NameId, NameInterner, first_folded_duplicate};
@@ -324,8 +324,8 @@ pub enum RtError {
     StackOverflow {
         what: &'static str,
     },
-    /// Возможность прогона (`stdout`, зона, файловая система, вызов функции
-    /// модуля) спрошена на пути, который её не несёт. ОДНА форма отказа
+    /// Возможность прогона (`stdout`, зона, файловая система, источник случайности,
+    /// вызов функции модуля) спрошена на пути, который её не несёт. Одна форма отказа
     /// вместо молчаливого стока JIT-шимов, локального `missing_zone` в
     /// bsl-json и `InvalidBytecode` о зоне: расхождение путей исполнения —
     /// это отсутствие возможности, а не повреждённый образ. Ловится
@@ -455,10 +455,11 @@ impl fmt::Display for RtError {
                     crate::component::Capability::Zone => "часовой пояс",
                     crate::component::Capability::FileSystem => "файловая система",
                     crate::component::Capability::FunctionCaller => "вызов функции модуля",
+                    crate::component::Capability::Random => "источник случайности",
                 };
                 let path = match path {
-                    crate::component::ContextKind::Full => "интерпретатора",
-                    crate::component::ContextKind::Reduced => "нативного пути",
+                    crate::component::ContextKind::Full => "полного контекста",
+                    crate::component::ContextKind::Reduced => "сокращённого контекста",
                 };
                 write!(f, "возможность «{cap}» недоступна на этом пути ({path})")
             }
@@ -1562,10 +1563,8 @@ impl BslValue {
     /// буфер и ничего не возвращает, `ЗаписьJSON` отдаёт накопленный
     /// текст.
     ///
-    /// Отдельным методом, потому что зовут его ДВОЕ: ветка
-    /// `call_builtin_method` и горячий путь `Instr::CloseText`, который
-    /// компилятор ставит на любой `.Закрыть()` без аргументов. Разъедься
-    /// они — `ЗаписьJSON.Закрыть()` работал бы только в одном из режимов.
+    /// Разведение делает сам объект: общая диспетчеризация метода не знает его
+    /// конкретный тип заранее.
     ///
     /// # Errors
     ///
@@ -1737,7 +1736,10 @@ impl BslValue {
     /// если файла нет, он недоступен или это каталог (пробы
     /// `BIN.NEW.MISSING`, `BIN.NEW.DIR` — платформа в обоих случаях
     /// бросает исключение).
-    pub fn new_binary_data(path: &BslValue, files: &dyn crate::FileSystem) -> RtResult<Self> {
+    pub(crate) fn new_binary_data(
+        path: &BslValue,
+        files: &dyn crate::FileSystem,
+    ) -> RtResult<Self> {
         let path = path.as_str("Новый ДвоичныеДанные")?.to_string();
         let bytes = files
             .read(&path)
@@ -1773,11 +1775,11 @@ impl BslValue {
     ///
     /// [`RtError::TypeError`], если аргумент не строка, не идентификатор и
     /// не `Неопределено`, либо строка не в канонической форме.
-    pub fn new_uuid(arg: &BslValue, env: &mut HostEnv) -> RtResult<Self> {
+    pub(crate) fn new_uuid(arg: &BslValue, random: &RandomHandle) -> RtResult<Self> {
         let bytes = match arg {
             BslValue::Undefined => {
                 let mut bytes = [0u8; 16];
-                env.fill_random(&mut bytes);
+                random.fill(&mut bytes);
                 uuid::v4_from_bytes(bytes)
             }
             BslValue::Str(s) => uuid::parse(&s.to_string())?,

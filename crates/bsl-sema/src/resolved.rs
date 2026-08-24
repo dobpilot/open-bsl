@@ -136,16 +136,6 @@ pub enum RExpr {
     NewTextWriter {
         path: Box<RExpr>,
     },
-    /// `Новый ДвоичныеДанные(ИмяФайла)` — файл читается целиком в момент
-    /// создания.
-    NewBinaryData {
-        path: Box<RExpr>,
-    },
-    /// `Новый УникальныйИдентификатор([Строка])` — аргумент необязателен:
-    /// без него порождается случайный идентификатор, со строкой — разбор.
-    NewUuid {
-        arg: Box<RExpr>,
-    },
     /// `Вычислить(<строка>)` — компилирует строку как ОДНО выражение (через
     /// внутреннюю обёртку `Возврат (<строка>);`, см. `bsl-vm`) и исполняет
     /// его в текущей области видимости верхнего уровня, возвращая значение.
@@ -401,8 +391,7 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
         } => {
             expr_uses_dynamic(cond) || expr_uses_dynamic(then_expr) || expr_uses_dynamic(else_expr)
         }
-        RExpr::NewTextWriter { path } | RExpr::NewBinaryData { path } => expr_uses_dynamic(path),
-        RExpr::NewUuid { arg } => expr_uses_dynamic(arg),
+        RExpr::NewTextWriter { path } => expr_uses_dynamic(path),
         RExpr::NewTypeDescription(names) => expr_uses_dynamic(names),
         RExpr::Number(_)
         | RExpr::Date(_)

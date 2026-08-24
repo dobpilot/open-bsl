@@ -11,14 +11,14 @@ mod state;
 
 pub use bsl_rt::BslValue as Value;
 pub use bsl_rt::{
-    Arity, BslDate, BslNumber, BslObject, BslString, ByteStreamProtocol, CallContext, Clock,
-    ComponentError, ConstructorCode, ConstructorDescriptor, DirEntry, EnumKind, EnumValue,
-    FileCreate, FileHandle, FileMetadata, FileOpenOptions, FileSystem, FixedTimeZone, FunctionCode,
-    FunctionDescriptor, FunctionKind, HostEnv, LibraryDependency, LibraryDescriptor,
+    Arity, BslDate, BslNumber, BslObject, BslString, ByteStreamProtocol, CallContext, Capability,
+    Clock, ComponentError, ConstructorCode, ConstructorDescriptor, ContextKind, DirEntry, EnumKind,
+    EnumValue, FileCreate, FileHandle, FileMetadata, FileOpenOptions, FileSystem, FixedTimeZone,
+    FunctionCode, FunctionDescriptor, FunctionKind, HostEnv, LibraryDependency, LibraryDescriptor,
     LibraryRequirement, MethodCall, MethodDescriptor, ObjectContextNeed, ObjectProtocol, ObjectRef,
-    PropertyDescriptor, PropertyGet, PropertySet, RandomSource, RegistryError, RtError, RtResult,
-    RuntimeRegistry, RuntimeShapes, SystemClock, SystemRandom, SystemTimeZone, TimeZone,
-    TypeDescriptor, TypeRef, call_method_from_table, folded_eq, get_property_from_table,
+    PropertyDescriptor, PropertyGet, PropertySet, RandomHandle, RandomSource, RegistryError,
+    RtError, RtResult, RuntimeRegistry, RuntimeShapes, SystemClock, SystemRandom, SystemTimeZone,
+    TimeZone, TypeDescriptor, TypeRef, call_method_from_table, folded_eq, get_property_from_table,
     set_property_from_table,
 };
 

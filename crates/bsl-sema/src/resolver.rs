@@ -185,8 +185,8 @@ pub fn resolve_program(items: &[Item]) -> Result<ResolvedProgram, SemaError> {
 }
 
 /// Разрешает модуль с каталогом функций и конструкторов собранного
-/// runtime. Старый [`resolve_program`] на время миграции сохраняет закрытые
-/// встроенные таблицы, а этот вход открывает компонентные функции.
+/// runtime. [`resolve_program`] без реестра видит только ядровые дескрипторы, а этот
+/// вход добавляет к ним функции и конструкторы зарегистрированных компонентов.
 ///
 /// # Errors
 ///
@@ -702,15 +702,16 @@ impl<'a> Resolver<'a> {
                 self.core_locals?.get(&name.to_uppercase()).copied()
             }
             RExpr::ModuleVar(slot) => self.core_module?.get(slot).copied(),
-            RExpr::NewTextWriter { .. } => Some(CoreReceiver::TextWriter),
+            RExpr::NewTextWriter { .. } => Some(CoreReceiver),
+            RExpr::CreateObject { library, .. } if library.as_str() == bsl_rt::PACKAGE_NAME => {
+                Some(CoreReceiver)
+            }
             RExpr::NewArray { .. }
             | RExpr::NewStructure { .. }
             | RExpr::NewTable
             | RExpr::NewMap
             | RExpr::NewTypeDescription(_)
-            | RExpr::NewValueComparison
-            | RExpr::NewBinaryData { .. }
-            | RExpr::NewUuid { .. } => Some(CoreReceiver::Other),
+            | RExpr::NewValueComparison => Some(CoreReceiver),
             _ => None,
         }
     }
@@ -1085,12 +1086,36 @@ impl<'a> Resolver<'a> {
     /// Разбирает известные платформенные типы из [`NEW_TYPES`]. Общие
     /// пользовательские типы пока не поддержаны.
     fn resolve_new(&mut self, type_name: &str, args: &[AExpr]) -> Result<RExpr, SemaError> {
-        if let Some(registry) = self.registry
-            && let Some((library_index, constructor)) = registry.lookup_constructor(type_name)
-        {
-            let descriptor = registry
-                .constructor(library_index, constructor)
-                .expect("индекс получен из таблицы имён этого реестра");
+        let registered = self
+            .registry
+            .and_then(|registry| {
+                let (library_index, constructor) = registry.lookup_constructor(type_name)?;
+                let descriptor = *registry
+                    .constructor(library_index, constructor)
+                    .expect("индекс получен из таблицы имён этого реестра");
+                let package = registry
+                    .library(library_index)
+                    .expect("индекс получен из таблицы имён этого реестра")
+                    .package();
+                Some((package, descriptor))
+            })
+            .or_else(|| {
+                if self.registry.is_some() {
+                    return None;
+                }
+                bsl_rt::core_library()
+                    .constructors()
+                    .iter()
+                    .find(|descriptor| {
+                        descriptor
+                            .names
+                            .iter()
+                            .any(|candidate| bsl_rt::folded_eq(candidate, type_name))
+                    })
+                    .copied()
+                    .map(|descriptor| (bsl_rt::PACKAGE_NAME, descriptor))
+            });
+        if let Some((package, descriptor)) = registered {
             let found: u8 =
                 args.len()
                     .try_into()
@@ -1110,15 +1135,11 @@ impl<'a> Resolver<'a> {
             for argument in args {
                 resolved_args.push(self.resolve_expr(argument)?);
             }
-            let package = registry
-                .library(library_index)
-                .expect("индекс получен из таблицы имён этого реестра")
-                .package();
             let library = bsl_rt::LibraryKey::new(package);
             self.used_libraries.insert(library.clone());
             return Ok(RExpr::CreateObject {
                 library,
-                constructor,
+                constructor: descriptor.code,
                 args: resolved_args,
             });
         }
@@ -1357,37 +1378,6 @@ impl<'a> Resolver<'a> {
                 Ok(RExpr::NewTextWriter {
                     path: Box::new(self.resolve_expr(&args[0])?),
                 })
-            }
-            // Ровно один аргумент — имя файла. Ни пустой конструктор, ни
-            // два аргумента платформа не принимает (пробы `BIN.NEW.NOARG`,
-            // `BIN.NEW.TWOARGS`), поэтому арность проверяется здесь, а не
-            // в рантайме.
-            "ДВОИЧНЫЕДАННЫЕ" | "BINARYDATA" => {
-                if args.len() != 1 {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: "Новый ДвоичныеДанные".to_string(),
-                        expected: 1,
-                        found: args.len(),
-                    });
-                }
-                Ok(RExpr::NewBinaryData {
-                    path: Box::new(self.resolve_expr(&args[0])?),
-                })
-            }
-            // Размер обязателен, порядок байтов необязателен, третьего
-            "УНИКАЛЬНЫЙИДЕНТИФИКАТОР" | "UUID" => {
-                if args.len() > 1 {
-                    return Err(SemaError::ArgumentCountMismatch {
-                        name: "Новый УникальныйИдентификатор".to_string(),
-                        expected: 1,
-                        found: args.len(),
-                    });
-                }
-                let arg = match args.first() {
-                    Some(a) => self.resolve_expr(a)?,
-                    None => RExpr::Undefined,
-                };
-                Ok(RExpr::NewUuid { arg: Box::new(arg) })
             }
             _ => Err(SemaError::Unsupported(
                 "этот тип в выражении Новый пока не поддержан",
@@ -2624,6 +2614,57 @@ mod tests {
                 ("Вставить".to_string(), false),
             ]
         );
+    }
+
+    /// Ядровой конструктор, перенесённый в реестр, не становится от этого
+    /// компонентным: пре-проход смотрит на принадлежность имени ядру, а не
+    /// на сам факт присутствия дескриптора в реестре.
+    #[test]
+    fn a_registered_core_constructor_still_proves_a_core_receiver() {
+        let opens = opens_with_registry(
+            "д = Новый ДвоичныеДанные(\"вход.bin\");\n\
+             д.Размер();",
+        );
+        assert_eq!(opens, vec![("Размер".to_string(), false)]);
+    }
+
+    /// После удаления спец-опкодов конкретный ядровой тип больше не важен:
+    /// перепривязка между двумя ядровыми объектами остаётся закрытой.
+    #[test]
+    fn different_core_constructors_still_prove_a_core_receiver() {
+        let opens = opens_with_registry(
+            "з = Новый Массив;\n\
+             з = Новый Структура;\n\
+             з.Количество();",
+        );
+        assert_eq!(opens, vec![("Количество".to_string(), false)]);
+    }
+
+    /// Внешний конструктор всё ещё может перехватить имя того ядрового
+    /// конструктора, который ещё не перенесён в `core_library`; такой приёмник не ядровой.
+    #[test]
+    fn an_external_constructor_that_shadows_a_legacy_core_name_stays_open() {
+        fn construct(
+            _context: &mut bsl_rt::CallContext<'_>,
+            _arguments: &[bsl_rt::BslValue],
+        ) -> bsl_rt::RtResult<bsl_rt::BslValue> {
+            Ok(bsl_rt::BslValue::Undefined)
+        }
+        const CONSTRUCTORS: &[bsl_rt::ConstructorDescriptor] = &[bsl_rt::ConstructorDescriptor {
+            code: bsl_rt::ConstructorCode::new(1),
+            names: &["Массив", "Array"],
+            arity: bsl_rt::Arity::exact(0),
+            call: construct,
+        }];
+        const LIBRARY: bsl_rt::LibraryDescriptor =
+            bsl_rt::LibraryDescriptor::new("shadow", "0.0.0", bsl_rt::ObjectContextNeed::Reduced)
+                .with_constructors(CONSTRUCTORS);
+        let mut builder = bsl_rt::RuntimeBuilder::new();
+        builder.register(bsl_rt::core_library()).register(LIBRARY);
+        let registry = builder.build().unwrap();
+        let prog = parse("м = Новый Массив;\nм.Добавить(1);").unwrap();
+        let resolved = resolve_program_with_registry(&prog.items, &registry).unwrap();
+        assert_eq!(call_opens(&resolved), vec![("Добавить".to_string(), true)]);
     }
 
     /// `Записать`/`Закрыть` больше не выделены: спец-опкодов у
