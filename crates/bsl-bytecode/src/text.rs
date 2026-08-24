@@ -42,61 +42,38 @@ pub const FORMAT_VERSION: u32 = 22;
 /// `parse_instr`. Список публичен, потому что на нём держится тест
 /// покрытия: корпус round-trip обязан задеть каждый опкод, иначе
 /// расхождение печати и разбора обнаружится не здесь, а у пользователя.
-pub const OPCODES: &[&str] = &[
-    "Move",
-    "GetModuleVar",
-    "SetModuleVar",
-    "LoadConst",
-    "LoadBool",
-    "LoadUndefined",
-    "LoadNull",
-    "Add",
-    "Sub",
-    "Mul",
-    "Div",
-    "Mod",
-    "Neg",
-    "Not",
-    "Eq",
-    "NotEq",
-    "Lt",
-    "Gt",
-    "Le",
-    "Ge",
-    "Jump",
-    "JumpIfFalse",
-    "JumpIfTrue",
-    "JumpIfNotSkipped",
-    "NumericForNext",
-    "NumericForNextI64",
-    "Call",
-    "Return",
-    "GetIndex",
-    "SetIndex",
-    "GetProp",
-    "SetProp",
-    "CreateObject",
-    "NewArray",
-    "NewStructure",
-    "NewTable",
-    "NewTypeDescription",
-    "NewValueComparison",
-    "NewMap",
-    "NewTextWriter",
-    "NewBinaryData",
-    "NewUuid",
-    "CollectionLen",
-    "Raise",
-    "CallBuiltin",
-    "CallComponent",
-    "CallMethod",
-    "WriteText",
-    "CloseText",
-    "RunDynamic",
-    "CallObjectMethod",
-    "GetObjectProp",
-    "SetObjectProp",
-];
+/// Единый источник имён опкодов: макрос порождает и список [`OPCODES`]
+/// (его сверяет разбор), и [`Instr::opcode`] (его зовёт печать). Имя опкода
+/// совпадает с идентификатором варианта `Instr`; сам `enum` остаётся
+/// рукописным со всеми измеренными комментариями, а несовпадение имени в
+/// этом списке с вариантом `Instr` — ошибка сборки (`Instr::$name`), не
+/// молчаливое расхождение. Разбор (`parse_instr`) рукописный и связан с
+/// этим источником круговым тестом формата (`text_round_trip`).
+macro_rules! opcodes {
+    ($($name:ident),+ $(,)?) => {
+        pub const OPCODES: &[&str] = &[$(stringify!($name)),+];
+
+        impl Instr {
+            /// Имя опкода — то же, что печатает формат и принимает разбор.
+            pub fn opcode(&self) -> &'static str {
+                match self {
+                    $(Instr::$name { .. } => stringify!($name),)+
+                }
+            }
+        }
+    };
+}
+
+opcodes! {
+    Move, GetModuleVar, SetModuleVar, LoadConst, LoadBool, LoadUndefined, LoadNull,
+    Add, Sub, Mul, Div, Mod, Neg, Not,
+    Eq, NotEq, Lt, Gt, Le, Ge, Jump,
+    JumpIfFalse, JumpIfTrue, JumpIfNotSkipped, NumericForNext, NumericForNextI64, Call, Return,
+    GetIndex, SetIndex, GetProp, SetProp, CreateObject, NewArray, NewStructure,
+    NewTable, NewTypeDescription, NewValueComparison, NewMap, NewTextWriter, NewBinaryData, NewUuid,
+    CollectionLen, Raise, CallBuiltin, CallComponent, CallMethod, WriteText, CloseText,
+    RunDynamic, CallObjectMethod, GetObjectProp, SetObjectProp,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TextError {
@@ -439,60 +416,61 @@ fn write_const(v: &BslValue) -> Result<String> {
 }
 
 fn write_instr(instr: &Instr) -> String {
+    let op = instr.opcode();
     match instr {
-        Instr::Move { dst, src } => format!("Move dst={dst} src={src}"),
-        Instr::GetModuleVar { dst, slot } => format!("GetModuleVar dst={dst} slot={slot}"),
-        Instr::SetModuleVar { slot, src } => format!("SetModuleVar slot={slot} src={src}"),
-        Instr::LoadConst { dst, k } => format!("LoadConst dst={dst} k={k}"),
-        Instr::LoadBool { dst, val } => format!("LoadBool dst={dst} val={val}"),
-        Instr::LoadUndefined { dst } => format!("LoadUndefined dst={dst}"),
-        Instr::LoadNull { dst } => format!("LoadNull dst={dst}"),
-        Instr::Add { dst, a, b } => format!("Add dst={dst} a={a} b={b}"),
-        Instr::Sub { dst, a, b } => format!("Sub dst={dst} a={a} b={b}"),
-        Instr::Mul { dst, a, b } => format!("Mul dst={dst} a={a} b={b}"),
-        Instr::Div { dst, a, b } => format!("Div dst={dst} a={a} b={b}"),
-        Instr::Mod { dst, a, b } => format!("Mod dst={dst} a={a} b={b}"),
-        Instr::Neg { dst, src } => format!("Neg dst={dst} src={src}"),
-        Instr::Not { dst, src } => format!("Not dst={dst} src={src}"),
-        Instr::Eq { dst, a, b } => format!("Eq dst={dst} a={a} b={b}"),
-        Instr::NotEq { dst, a, b } => format!("NotEq dst={dst} a={a} b={b}"),
-        Instr::Lt { dst, a, b } => format!("Lt dst={dst} a={a} b={b}"),
-        Instr::Gt { dst, a, b } => format!("Gt dst={dst} a={a} b={b}"),
-        Instr::Le { dst, a, b } => format!("Le dst={dst} a={a} b={b}"),
-        Instr::Ge { dst, a, b } => format!("Ge dst={dst} a={a} b={b}"),
-        Instr::Jump { target } => format!("Jump target={target}"),
-        Instr::JumpIfFalse { cond, target } => format!("JumpIfFalse cond={cond} target={target}"),
-        Instr::JumpIfTrue { cond, target } => format!("JumpIfTrue cond={cond} target={target}"),
+        Instr::Move { dst, src } => format!("{op} dst={dst} src={src}"),
+        Instr::GetModuleVar { dst, slot } => format!("{op} dst={dst} slot={slot}"),
+        Instr::SetModuleVar { slot, src } => format!("{op} slot={slot} src={src}"),
+        Instr::LoadConst { dst, k } => format!("{op} dst={dst} k={k}"),
+        Instr::LoadBool { dst, val } => format!("{op} dst={dst} val={val}"),
+        Instr::LoadUndefined { dst } => format!("{op} dst={dst}"),
+        Instr::LoadNull { dst } => format!("{op} dst={dst}"),
+        Instr::Add { dst, a, b } => format!("{op} dst={dst} a={a} b={b}"),
+        Instr::Sub { dst, a, b } => format!("{op} dst={dst} a={a} b={b}"),
+        Instr::Mul { dst, a, b } => format!("{op} dst={dst} a={a} b={b}"),
+        Instr::Div { dst, a, b } => format!("{op} dst={dst} a={a} b={b}"),
+        Instr::Mod { dst, a, b } => format!("{op} dst={dst} a={a} b={b}"),
+        Instr::Neg { dst, src } => format!("{op} dst={dst} src={src}"),
+        Instr::Not { dst, src } => format!("{op} dst={dst} src={src}"),
+        Instr::Eq { dst, a, b } => format!("{op} dst={dst} a={a} b={b}"),
+        Instr::NotEq { dst, a, b } => format!("{op} dst={dst} a={a} b={b}"),
+        Instr::Lt { dst, a, b } => format!("{op} dst={dst} a={a} b={b}"),
+        Instr::Gt { dst, a, b } => format!("{op} dst={dst} a={a} b={b}"),
+        Instr::Le { dst, a, b } => format!("{op} dst={dst} a={a} b={b}"),
+        Instr::Ge { dst, a, b } => format!("{op} dst={dst} a={a} b={b}"),
+        Instr::Jump { target } => format!("{op} target={target}"),
+        Instr::JumpIfFalse { cond, target } => format!("{op} cond={cond} target={target}"),
+        Instr::JumpIfTrue { cond, target } => format!("{op} cond={cond} target={target}"),
         Instr::JumpIfNotSkipped { src, target } => {
-            format!("JumpIfNotSkipped src={src} target={target}")
+            format!("{op} src={src} target={target}")
         }
         Instr::NumericForNext {
             counter,
             bound,
             target,
-        } => format!("NumericForNext counter={counter} bound={bound} target={target}"),
+        } => format!("{op} counter={counter} bound={bound} target={target}"),
         Instr::NumericForNextI64 {
             counter,
             bound,
             target,
-        } => format!("NumericForNextI64 counter={counter} bound={bound} target={target}"),
+        } => format!("{op} counter={counter} bound={bound} target={target}"),
         Instr::Call {
             func,
             base,
             arg_modes,
             ret,
-        } => format!("Call func={func} base={base} arg_modes={arg_modes} ret={ret}"),
+        } => format!("{op} func={func} base={base} arg_modes={arg_modes} ret={ret}"),
         Instr::Return { src } => match src {
-            Some(src) => format!("Return src={src}"),
-            None => "Return".to_string(),
+            Some(src) => format!("{op} src={src}"),
+            None => op.to_string(),
         },
-        Instr::GetIndex { dst, obj, idx } => format!("GetIndex dst={dst} obj={obj} idx={idx}"),
-        Instr::SetIndex { obj, idx, src } => format!("SetIndex obj={obj} idx={idx} src={src}"),
+        Instr::GetIndex { dst, obj, idx } => format!("{op} dst={dst} obj={obj} idx={idx}"),
+        Instr::SetIndex { obj, idx, src } => format!("{op} obj={obj} idx={idx} src={src}"),
         Instr::GetProp { dst, obj, name } => {
-            format!("GetProp dst={dst} obj={obj} name={}", name.index())
+            format!("{op} dst={dst} obj={obj} name={}", name.index())
         }
         Instr::SetProp { obj, name, src } => {
-            format!("SetProp obj={obj} name={} src={src}", name.index())
+            format!("{op} obj={obj} name={} src={src}", name.index())
         }
         Instr::CreateObject {
             dst,
@@ -500,31 +478,29 @@ fn write_instr(instr: &Instr) -> String {
             constructor,
             base,
             count,
-        } => format!(
-            "CreateObject dst={dst} lib={library} ctor={constructor} base={base} count={count}"
-        ),
+        } => format!("{op} dst={dst} lib={library} ctor={constructor} base={base} count={count}"),
         Instr::NewArray { dst, base, count } => {
-            format!("NewArray dst={dst} base={base} count={count}")
+            format!("{op} dst={dst} base={base} count={count}")
         }
         Instr::NewStructure {
             dst,
             shape,
             base,
             count,
-        } => format!("NewStructure dst={dst} shape={shape} base={base} count={count}"),
-        Instr::NewTable { dst } => format!("NewTable dst={dst}"),
+        } => format!("{op} dst={dst} shape={shape} base={base} count={count}"),
+        Instr::NewTable { dst } => format!("{op} dst={dst}"),
         Instr::NewTypeDescription { dst, names } => {
-            format!("NewTypeDescription dst={dst} names={names}")
+            format!("{op} dst={dst} names={names}")
         }
-        Instr::NewValueComparison { dst } => format!("NewValueComparison dst={dst}"),
-        Instr::NewMap { dst } => format!("NewMap dst={dst}"),
-        Instr::NewTextWriter { dst, path } => format!("NewTextWriter dst={dst} path={path}"),
-        Instr::NewBinaryData { dst, path } => format!("NewBinaryData dst={dst} path={path}"),
-        Instr::NewUuid { dst, arg } => format!("NewUuid dst={dst} arg={arg}"),
-        Instr::CollectionLen { dst, obj } => format!("CollectionLen dst={dst} obj={obj}"),
+        Instr::NewValueComparison { dst } => format!("{op} dst={dst}"),
+        Instr::NewMap { dst } => format!("{op} dst={dst}"),
+        Instr::NewTextWriter { dst, path } => format!("{op} dst={dst} path={path}"),
+        Instr::NewBinaryData { dst, path } => format!("{op} dst={dst} path={path}"),
+        Instr::NewUuid { dst, arg } => format!("{op} dst={dst} arg={arg}"),
+        Instr::CollectionLen { dst, obj } => format!("{op} dst={dst} obj={obj}"),
         Instr::Raise { src } => match src {
-            Some(src) => format!("Raise src={src}"),
-            None => "Raise".to_string(),
+            Some(src) => format!("{op} src={src}"),
+            None => op.to_string(),
         },
         Instr::CallBuiltin {
             dst,
@@ -532,7 +508,7 @@ fn write_instr(instr: &Instr) -> String {
             base,
             count,
         } => format!(
-            "CallBuiltin dst={dst} builtin={} base={base} count={count}",
+            "{op} dst={dst} builtin={} base={base} count={count}",
             builtin_name(*builtin)
         ),
         Instr::CallComponent {
@@ -542,7 +518,7 @@ fn write_instr(instr: &Instr) -> String {
             base,
             count,
         } => {
-            format!("CallComponent dst={dst} lib={library} fn={function} base={base} count={count}")
+            format!("{op} dst={dst} lib={library} fn={function} base={base} count={count}")
         }
         Instr::CallMethod {
             dst,
@@ -551,7 +527,7 @@ fn write_instr(instr: &Instr) -> String {
             base,
             count,
         } => format!(
-            "CallMethod dst={dst} obj={obj} method={} base={base} count={count}",
+            "{op} dst={dst} obj={obj} method={} base={base} count={count}",
             builtin_method_name(*method)
         ),
         Instr::CallObjectMethod {
@@ -561,19 +537,19 @@ fn write_instr(instr: &Instr) -> String {
             base,
             count,
         } => format!(
-            "CallObjectMethod dst={dst} obj={obj} method={} base={base} count={count}",
+            "{op} dst={dst} obj={obj} method={} base={base} count={count}",
             method
         ),
         Instr::GetObjectProp { dst, obj, name } => {
-            format!("GetObjectProp dst={dst} obj={obj} name={name}")
+            format!("{op} dst={dst} obj={obj} name={name}")
         }
         Instr::SetObjectProp { obj, name, src } => {
-            format!("SetObjectProp obj={obj} name={name} src={src}")
+            format!("{op} obj={obj} name={name} src={src}")
         }
-        Instr::WriteText { dst, obj, src } => format!("WriteText dst={dst} obj={obj} src={src}"),
-        Instr::CloseText { dst, obj } => format!("CloseText dst={dst} obj={obj}"),
+        Instr::WriteText { dst, obj, src } => format!("{op} dst={dst} obj={obj} src={src}"),
+        Instr::CloseText { dst, obj } => format!("{op} dst={dst} obj={obj}"),
         Instr::RunDynamic { src, dst, is_eval } => {
-            format!("RunDynamic src={src} dst={dst} is_eval={is_eval}")
+            format!("{op} src={src} dst={dst} is_eval={is_eval}")
         }
     }
 }
