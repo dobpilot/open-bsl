@@ -2140,7 +2140,7 @@ mod tests {
     use super::*;
 
     fn rt() -> RuntimeShapes {
-        RuntimeShapes::seeded(Vec::new(), Vec::new())
+        RuntimeShapes::seeded(Vec::new(), Vec::new(), None)
     }
 
     fn num(s: &str) -> BslValue {

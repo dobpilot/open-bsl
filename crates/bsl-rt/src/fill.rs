@@ -517,7 +517,7 @@ mod tests {
     use std::rc::Rc;
 
     fn rt() -> RuntimeShapes {
-        RuntimeShapes::seeded(Vec::new(), Vec::new())
+        RuntimeShapes::seeded(Vec::new(), Vec::new(), None)
     }
 
     fn num(n: i64) -> BslValue {

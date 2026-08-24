@@ -1250,20 +1250,51 @@ mod tests {
 
     /// НАПРАВЛЕНИЕ асимметрии: на общее представление «Файловый поток»
     /// откликаются ОБА типа, а `Тип("Файловый поток")` обязан отдать
-    /// именно `ФайловыйПоток` — измерено. Разрешение берёт ПЕРВОЕ
-    /// совпадение в списке типов библиотеки, поэтому порядок в нём —
-    /// часть контракта, а не оформление: без этого теста перестановка
-    /// строки молча развернула бы измеренный факт.
+    /// именно `ФайловыйПоток` — измерено. После ABI-D это свойство
+    /// принадлежит КАТАЛОГУ типов реестра (объявленный владелец псевдонима),
+    /// а не порядку списка, поэтому разрешение идёт через собранный реестр,
+    /// а не заполнением поля напрямую.
     #[test]
     fn the_shared_display_name_resolves_to_the_file_stream() {
-        let mut rt = bsl_rt::RuntimeShapes::seeded(Vec::new(), Vec::new());
-        rt.component_types = crate::library().types().to_vec();
-        let found = rt.component_type("Файловый поток").expect("тип найден");
-        assert_eq!(found.name, FILE_STREAM_TYPE.name);
-        assert_eq!(
-            rt.component_type("ПотокВПамяти").expect("тип найден").name,
-            MEMORY_STREAM_TYPE.name
-        );
+        let mut builder = bsl_rt::RuntimeBuilder::new();
+        builder.register(bsl_rt::core_library());
+        builder.register(bsl_binbuf::library());
+        builder.register(crate::library());
+        let registry = builder.build().expect("реестр собирается");
+        let rt = bsl_rt::RuntimeShapes::seeded(Vec::new(), Vec::new(), Some(&registry));
+
+        let file = match rt.resolve_type("Файловый поток") {
+            Some(bsl_rt::TypeRef::Object(d)) => d,
+            other => panic!("ожидался тип объекта, получено {other:?}"),
+        };
+        assert_eq!(file.name, FILE_STREAM_TYPE.name);
+        let memory = match rt.resolve_type("ПотокВПамяти") {
+            Some(bsl_rt::TypeRef::Object(d)) => d,
+            other => panic!("ожидался тип объекта, получено {other:?}"),
+        };
+        assert_eq!(memory.name, MEMORY_STREAM_TYPE.name);
+    }
+
+    /// Библиотека без объявленного владельца общего написания отвергается на
+    /// сборке (ABI-D): та же пара потоков, но `with_type_aliases` не задан —
+    /// каталог не может разрешить «Файловый поток» и даёт `AmbiguousTypeAlias`.
+    #[test]
+    fn a_shared_spelling_without_a_declared_owner_is_rejected() {
+        static AMBIGUOUS_TYPES: &[&bsl_rt::TypeDescriptor] =
+            &[&MEMORY_STREAM_TYPE, &FILE_STREAM_TYPE];
+        let ambiguous = bsl_rt::LibraryDescriptor::new(
+            crate::PACKAGE_NAME,
+            crate::PACKAGE_VERSION,
+            bsl_rt::ObjectJitPolicy::NativeContextCompatible,
+        )
+        .with_types(AMBIGUOUS_TYPES);
+        let mut builder = bsl_rt::RuntimeBuilder::new();
+        builder.register(bsl_rt::core_library());
+        builder.register(ambiguous);
+        assert!(matches!(
+            builder.build(),
+            Err(bsl_rt::RegistryError::AmbiguousTypeAlias(_))
+        ));
     }
     use super::*;
 

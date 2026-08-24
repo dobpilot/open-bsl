@@ -512,14 +512,6 @@ struct LinkedComponents<'a> {
 }
 
 impl LinkedComponents<'_> {
-    /// Типы всех библиотек реестра: список короткий (десятки записей на
-    /// всю сборку) и строится один раз на прогон.
-    fn component_types(&self) -> Vec<&'static bsl_rt::TypeDescriptor> {
-        self.registry
-            .map(|registry| registry.types().collect())
-            .unwrap_or_default()
-    }
-
     fn function(&self, func_id: usize, pc: usize) -> Result<bsl_rt::ComponentCall, RtError> {
         self.functions
             .get(func_id)
@@ -1123,11 +1115,15 @@ fn drive_prologue(
     // `Program` (см. `run_dynamic_snippet`) свои `names`/`shapes`, и рантайм-
     // расширения этой таблицы (`Вставить`/`Удалить` на структуре, меняющие
     // её форму) актуальны только для объектов внутри ОДНОГО такого вызова.
-    let mut runtime_shapes =
-        bsl_rt::RuntimeShapes::seeded(program.names.clone(), program.shapes.clone());
-    // Типы, объявленные компонентами этого прогона: по ним `Тип("Имя")`
-    // находит то, чего нет в закрытом реестре ядра (см. `TypeRef`).
-    runtime_shapes.component_types = linked.component_types();
+    // Типы компонентов и каталог их написаний приходят из реестра ОДНИМ
+    // вызовом: промежуточного состояния «формы есть, типов ещё нет» не
+    // существует. По ним `Тип("Имя")` находит то, чего нет в закрытом
+    // реестре ядра (см. `TypeRef`).
+    let runtime_shapes = bsl_rt::RuntimeShapes::seeded(
+        program.names.clone(),
+        program.shapes.clone(),
+        linked.registry,
+    );
     // Скомпилированные чанки. Внешний `None` — «ещё не пробовали»,
     // внутренний — «пробовали, JIT отказался»: компилировать чанк заново
     // на каждом входе в него стоило бы дороже любого выигрыша.

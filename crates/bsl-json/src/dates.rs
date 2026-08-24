@@ -602,7 +602,7 @@ mod tests {
     /// нём не меняет.
     #[test]
     fn nested_microsoft_date_matches_the_standalone_content_in_the_document() {
-        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
         let id = rt.names.intern("д");
         let d = civil(2014, 5, 10, 13, 14, 15);
         let structure = BslValue::new_structure(rt.shapes.empty(), Vec::new());

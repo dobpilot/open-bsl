@@ -1297,7 +1297,7 @@ mod tests {
     fn too_deep_json_document_is_an_error_not_a_crash() {
         let depth = MAX_JSON_DEPTH + 100;
         let text = format!("{}1{}", "[".repeat(depth), "]".repeat(depth));
-        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
         let mut parser = JsonParser::new(&text);
         let first = parser.next_event().unwrap().unwrap();
         let e =
@@ -1310,7 +1310,7 @@ mod tests {
         // 400 уровней — нижняя граница из замера: обязана работать.
         let depth = 400;
         let text = format!("{}1{}", "[".repeat(depth), "]".repeat(depth));
-        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
         let mut parser = JsonParser::new(&text);
         let first = parser.next_event().unwrap().unwrap();
         build_value(first, &mut parser, None, &mut plain_build_ctx(&mut rt), 0)
@@ -1323,7 +1323,7 @@ mod tests {
         // `serialize` рекурсировал бы до переполнения стека процесса.
         let arr = BslValue::new_array(Vec::new());
         arr.push_element(arr.clone()).unwrap();
-        let rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let rt = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
         let mut w = JsonWriter::to_string_target(settings_from(None).unwrap());
         let settings = JsonSerializerSettings::default();
         let e = serialize(&mut w, &arr, &mut plain_serialize_ctx(&settings, &rt), 0).unwrap_err();
@@ -1332,7 +1332,7 @@ mod tests {
 
     #[test]
     fn json_key_cache_reuses_exact_spelling_and_preserves_case_insensitivity() {
-        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
         let mut cache = JsonKeyCache::new();
 
         let first = json_field_id("Поле", &mut rt, &mut cache).unwrap();
@@ -1346,7 +1346,7 @@ mod tests {
 
     #[test]
     fn invalid_json_key_is_not_cached() {
-        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
         let mut cache = JsonKeyCache::new();
 
         let error = json_field_id("не имя", &mut rt, &mut cache).unwrap_err();
@@ -1357,7 +1357,7 @@ mod tests {
 
     #[test]
     fn repeated_json_schema_reuses_shape_and_duplicate_overwrites_slot() {
-        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
         let mut cache = JsonBuildCache::default();
 
         let first = build_json_structure(
@@ -1410,7 +1410,7 @@ mod tests {
 
     #[test]
     fn oversized_json_schema_stays_dictionary_and_is_not_cached() {
-        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
         let mut cache = JsonBuildCache::default();
         let field_count = bsl_rt::MAX_SHAPE_TRANSITIONS as usize + 1;
         let keys = (0..field_count).map(|i| format!("f{i}")).collect();
@@ -1443,7 +1443,7 @@ mod tests {
 
     #[test]
     fn write_json_value_rejects_date_at_top_level_and_nested() {
-        let rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let rt = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
         let e = write_json_value(
             &BslValue::Date(bsl_rt::BslDate::empty()),
             &rt,
@@ -1452,7 +1452,7 @@ mod tests {
         .unwrap_err();
         assert!(matches!(e, RtError::TypeError { .. }));
 
-        let mut rt2 = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut rt2 = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
         let id = rt2.names.intern("д");
         let s = BslValue::new_structure(rt2.shapes.empty(), Vec::new());
         s.structure_insert(
@@ -1469,7 +1469,7 @@ mod tests {
     /// как `ЗаписатьJSON` с тем же `Соответствие` по-прежнему работает.
     #[test]
     fn write_json_value_rejects_a_map_while_write_json_still_accepts_it() {
-        let rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let rt = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
         let map = BslValue::new_map();
         map.map_insert(
             BslValue::Str(bsl_rt::BslString::from_str("ключ")),
@@ -1490,7 +1490,7 @@ mod tests {
     /// типа — `JSON.SERIALIZE.UNSUPPORTED_TYPE`, поведение не изменилось.
     #[test]
     fn write_json_without_a_convert_function_keeps_the_plain_type_error() {
-        let rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let rt = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
         let writer = new_json_writer();
         set_string(writer.object_ref().unwrap().as_dyn(), &[]).unwrap();
         let table = BslValue::new_table();
@@ -1510,7 +1510,7 @@ mod tests {
     /// не тихое `Неопределено`.
     #[test]
     fn read_json_value_rejects_an_empty_string() {
-        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
         let e = read_json_value(
             &BslValue::Str(bsl_rt::BslString::from_str("")),
             &mut rt,
@@ -1522,7 +1522,7 @@ mod tests {
 
     #[test]
     fn write_and_read_json_value_round_trip_scalars_and_structures() {
-        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
         let s = write_json_value(&BslValue::Number(num("42")), &rt, &MACHINE_ZONE).unwrap();
         assert_eq!(s, BslValue::Str(bsl_rt::BslString::from_str("42")));
 

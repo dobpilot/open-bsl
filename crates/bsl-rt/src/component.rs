@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::io::Write;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::{BslValue, RtError, RtResult, RuntimeShapes};
 
@@ -782,6 +783,36 @@ pub enum RegistryError {
     TooManyLibraries,
     EmptyIdentity,
     DuplicatePackage(String),
+    /// Два компонента объявили одно каноническое `name` типа.
+    DuplicateTypeName(String),
+    /// Компонент объявил каноническим именем типа то, которым назван тип
+    /// ядра: имя ядра нельзя тихо перекрыть регистрацией библиотеки.
+    TypeShadowsCore(String),
+    /// На написание откликается больше одного типа, а владельца никто не
+    /// объявил, — прежде это разрешалось порядком списка, то есть молча.
+    AmbiguousTypeAlias(String),
+    /// Владелец псевдонима объявлен, но его дескриптора нет в
+    /// `LibraryDescriptor::types` этой же библиотеки. Проверяется
+    /// `std::ptr::eq`, а не структурным равенством: у `TypeDescriptor`
+    /// структурный `PartialEq`, и вторая статика с теми же полями прошла
+    /// бы проверку, не будучи зарегистрированной.
+    AliasOwnerNotDeclared {
+        alias: String,
+        package: String,
+    },
+    /// Одно написание объявлено собственным больше одного раза.
+    DuplicateAliasOwner(String),
+    /// Владелец объявлен, но сам на это написание не откликается
+    /// (`TypeDescriptor::answers_to` ложно): запись не разрешает
+    /// неоднозначность, а вводит имя, которого у типа нет.
+    AliasOwnerDoesNotAnswer {
+        alias: String,
+        type_name: String,
+    },
+    /// Написание объявлено в `type_aliases`, хотя неоднозначным не
+    /// является: таблица — разрешение конфликта, а не второй источник имён
+    /// (в том числе для написания, которым владеет тип ядра).
+    AliasIsNotAmbiguous(String),
     DuplicateFunctionCode {
         package: String,
         code: FunctionCode,
@@ -849,11 +880,170 @@ impl fmt::Display for RegistryError {
                 f,
                 "компоненту {package} необходим {dependency}={expected}, зарегистрирован {actual}"
             ),
+            Self::DuplicateTypeName(name) => {
+                write!(f, "имя типа {name} объявлено дважды")
+            }
+            Self::TypeShadowsCore(name) => {
+                write!(f, "имя типа {name} уже принадлежит типу ядра")
+            }
+            Self::AmbiguousTypeAlias(name) => write!(
+                f,
+                "на написание {name} откликается больше одного типа, владелец не объявлен"
+            ),
+            Self::AliasOwnerNotDeclared { alias, package } => write!(
+                f,
+                "владелец псевдонима {alias} не объявлен в types компонента {package}"
+            ),
+            Self::DuplicateAliasOwner(name) => {
+                write!(f, "владелец написания {name} объявлен дважды")
+            }
+            Self::AliasOwnerDoesNotAnswer { alias, type_name } => write!(
+                f,
+                "тип {type_name} объявлен владельцем {alias}, но на это написание не откликается"
+            ),
+            Self::AliasIsNotAmbiguous(name) => {
+                write!(
+                    f,
+                    "написание {name} объявлено псевдонимом, но неоднозначным не является"
+                )
+            }
         }
     }
 }
 
 impl std::error::Error for RegistryError {}
+
+/// Проверенный каталог типов компонентов: свёрнутое написание → дескриптор,
+/// каждое написание разрешено ровно в один тип. Строится один раз в
+/// [`RuntimeBuilder::build`] и дальше неизменяем; [`RuntimeShapes`] несёт
+/// его `Rc` весь прогон. Приоритет разрешения зашит в ПОСТРОЕНИЕ, а не в
+/// вызывающих: тип ядра (через `TypeId::lookup` в `resolve_type`) → затем
+/// этот каталог, где каноническое имя и объявленный владелец псевдонима
+/// уже разведены.
+#[derive(Debug, Default)]
+pub(crate) struct TypeCatalog {
+    by_spelling: HashMap<String, &'static crate::TypeDescriptor>,
+}
+
+impl TypeCatalog {
+    /// Тип по написанию — регистронезависимо и без учёта пробелов, тем же
+    /// судьёй [`crate::types::squash`], что и `TypeDescriptor::answers_to`,
+    /// иначе проверка разошлась бы с поиском на «ЧтениеXML» против
+    /// «Чтение XML».
+    pub(crate) fn resolve(&self, name: &str) -> Option<&'static crate::TypeDescriptor> {
+        self.by_spelling.get(&crate::types::squash(name)).copied()
+    }
+}
+
+/// Спелинги, на которые откликается тип: каноническое имя, представление и
+/// дополнительные написания. Тот же набор, что проверяет `answers_to`.
+fn type_spellings(ty: &'static crate::TypeDescriptor) -> impl Iterator<Item = &'static str> {
+    [ty.name, ty.type_display]
+        .into_iter()
+        .chain(ty.type_names.iter().copied())
+}
+
+/// Строит проверенный каталог типов из объявлений библиотек. Порядок
+/// проверок — модель псевдонимов ABI-D: сначала запрет затенения ядра и
+/// повтора канонических имён, потом объявленные владельцы, потом разрешение
+/// написаний; каждое правило даёт свой [`RegistryError`].
+///
+/// # Errors
+///
+/// Любой из вариантов [`RegistryError`], относящихся к типам и псевдонимам.
+fn build_type_catalog(libraries: &[LibraryDescriptor]) -> Result<TypeCatalog, RegistryError> {
+    // Написание (свёрнутое) -> типы, которые на него откликаются, и одно
+    // исходное написание для текста ошибки.
+    let mut answered: HashMap<String, (Vec<&'static crate::TypeDescriptor>, String)> =
+        HashMap::new();
+    // Свёрнутое каноническое имя -> тип: ловит повтор канонического имени.
+    let mut canonical: HashMap<String, &'static crate::TypeDescriptor> = HashMap::new();
+
+    for library in libraries {
+        for &ty in library.types() {
+            // Правило 1: каноническое имя, совпавшее с ЛЮБЫМ написанием типа
+            // ядра, — отказ. Тихо перекрыть имя ядра регистрацией нельзя.
+            if crate::TypeId::lookup(ty.name).is_some() {
+                return Err(RegistryError::TypeShadowsCore(ty.name.to_string()));
+            }
+            let canon = crate::types::squash(ty.name);
+            match canonical.get(&canon) {
+                Some(prev) if !std::ptr::eq(*prev, ty) => {
+                    return Err(RegistryError::DuplicateTypeName(ty.name.to_string()));
+                }
+                Some(_) => {}
+                None => {
+                    canonical.insert(canon, ty);
+                }
+            }
+            for spelling in type_spellings(ty) {
+                let entry = answered
+                    .entry(crate::types::squash(spelling))
+                    .or_insert_with(|| (Vec::new(), spelling.to_string()));
+                if !entry.0.iter().any(|t| std::ptr::eq(*t, ty)) {
+                    entry.0.push(ty);
+                }
+            }
+        }
+    }
+
+    // Объявленные владельцы псевдонимов.
+    let mut declared: HashMap<String, (&'static crate::TypeDescriptor, String)> = HashMap::new();
+    for library in libraries {
+        for &(alias, owner) in library.type_aliases() {
+            if !library.types().iter().any(|t| std::ptr::eq(*t, owner)) {
+                return Err(RegistryError::AliasOwnerNotDeclared {
+                    alias: alias.to_string(),
+                    package: library.package.to_string(),
+                });
+            }
+            if !owner.answers_to(alias) {
+                return Err(RegistryError::AliasOwnerDoesNotAnswer {
+                    alias: alias.to_string(),
+                    type_name: owner.name.to_string(),
+                });
+            }
+            if declared
+                .insert(crate::types::squash(alias), (owner, alias.to_string()))
+                .is_some()
+            {
+                return Err(RegistryError::DuplicateAliasOwner(alias.to_string()));
+            }
+        }
+    }
+
+    // Псевдоним обязан разрешать РЕАЛЬНУЮ неоднозначность: не написание ядра
+    // (там владелец — само ядро, порядок в `resolve_type`) и не написание,
+    // на которое откликается один тип.
+    for (sq, (_owner, original)) in &declared {
+        let ambiguous = answered.get(sq).map(|(t, _)| t.len()).unwrap_or(0) > 1;
+        if crate::TypeId::lookup(sq).is_some() || !ambiguous {
+            return Err(RegistryError::AliasIsNotAmbiguous(original.clone()));
+        }
+    }
+
+    // Разрешение написаний в дескрипторы.
+    let mut by_spelling = HashMap::new();
+    for (sq, (types, original)) in &answered {
+        // Правило 2: написание, которым владеет тип ядра, в компонентный
+        // каталог не попадает — молча, ядро выигрывает в `resolve_type`.
+        if crate::TypeId::lookup(sq).is_some() {
+            continue;
+        }
+        if types.len() == 1 {
+            by_spelling.insert(sq.clone(), types[0]);
+        } else {
+            match declared.get(sq) {
+                Some((owner, _)) => {
+                    by_spelling.insert(sq.clone(), *owner);
+                }
+                None => return Err(RegistryError::AmbiguousTypeAlias(original.clone())),
+            }
+        }
+    }
+
+    Ok(TypeCatalog { by_spelling })
+}
 
 /// Изменяемая стадия композиции runtime-компонентов.
 #[derive(Default)]
@@ -994,10 +1184,13 @@ impl RuntimeBuilder {
             }
         }
 
+        let type_catalog = Arc::new(build_type_catalog(&self.libraries)?);
+
         Ok(RuntimeRegistry {
             libraries: self.libraries,
             function_names,
             constructor_names,
+            type_catalog,
         })
     }
 }
@@ -1007,6 +1200,7 @@ pub struct RuntimeRegistry {
     libraries: Vec<LibraryDescriptor>,
     function_names: HashMap<String, (u8, FunctionCode)>,
     constructor_names: HashMap<String, (u8, ConstructorCode)>,
+    type_catalog: Arc<TypeCatalog>,
 }
 
 impl RuntimeRegistry {
@@ -1046,7 +1240,13 @@ impl RuntimeRegistry {
     pub fn types(&self) -> impl Iterator<Item = &'static crate::TypeDescriptor> + '_ {
         self.libraries
             .iter()
-            .flat_map(|library| library.types.iter().copied())
+            .flat_map(|library| library.types().iter().copied())
+    }
+
+    /// Проверенный каталог типов — мост внутри крейта: поля реестра закрыты,
+    /// а каталог нужен [`RuntimeShapes::seeded`] из соседнего модуля.
+    pub(crate) fn type_catalog(&self) -> Arc<TypeCatalog> {
+        Arc::clone(&self.type_catalog)
     }
 
     pub fn requirements_for(
@@ -1213,7 +1413,7 @@ mod tests {
     /// временем. Это наблюдаемая цель ABI-A.
     #[test]
     fn a_native_context_reports_capability_missing() {
-        let mut shapes = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut shapes = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
         let mut context = CallContext::native(&mut shapes, |_v, _s| unreachable!());
         assert!(matches!(
             context.stdout(),

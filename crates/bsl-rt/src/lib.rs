@@ -1537,9 +1537,8 @@ impl BslValue {
             .map(str::trim)
             .filter(|name| !name.is_empty())
         {
-            let ty = TypeId::lookup(name)
-                .map(TypeRef::Native)
-                .or_else(|| rt.component_type(name).map(TypeRef::Object))
+            let ty = rt
+                .resolve_type(name)
                 .ok_or_else(|| RtError::UnknownType(name.to_string()))?;
             if !types.contains(&ty) {
                 types.push(ty);
@@ -3556,7 +3555,7 @@ mod tests {
     /// Пустая структура плюс рантайм-контекст форм — общая затравка для
     /// тестов деградации.
     fn fresh_structure() -> (BslValue, RuntimeShapes) {
-        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
         let empty = rt.shapes.empty();
         (BslValue::new_structure(empty, Vec::new()), rt)
     }
@@ -3686,7 +3685,7 @@ mod tests {
 
     #[test]
     fn dictionary_structure_does_not_poison_inline_cache_for_shaped_objects() {
-        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
         // `Поле0` — первое имя и у `shaped`, и у сгенерированной серии, так
         // что оба объекта проходят через одну и ту же форму `[Поле0]`.
         let x = rt.names.intern("Поле0");

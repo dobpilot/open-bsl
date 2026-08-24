@@ -177,7 +177,7 @@ fn begin_row_group_rejects_extra_arguments() {
     }
     let doc = new_document();
     let object = doc.object_ref().expect("документ — объект");
-    let mut shapes = bsl_rt::RuntimeShapes::seeded(Vec::new(), Vec::new());
+    let mut shapes = bsl_rt::RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
     let mut ctx = CallContext::native(&mut shapes, fmt);
 
     let five = [

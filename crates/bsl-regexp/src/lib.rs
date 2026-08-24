@@ -828,7 +828,7 @@ mod tests {
     }
 
     fn get_property(value: &BslValue, name: &str) -> RtResult<BslValue> {
-        let mut shapes = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut shapes = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
         // Нативный контекст: свойствам regex ни потоки, ни зона не нужны.
         let mut context = CallContext::native(&mut shapes, |_value, _spec| {
             unreachable!("форматирование в regex-свойствах не используется")
@@ -840,7 +840,7 @@ mod tests {
     }
 
     fn get_groups(value: &BslValue) -> RtResult<BslValue> {
-        let mut shapes = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut shapes = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
         // Нативный контекст: методу `ПолучитьГруппы` ни потоки, ни зона не нужны.
         let mut context = CallContext::native(&mut shapes, |_value, _spec| {
             unreachable!("форматирование в regex-методе не используется")

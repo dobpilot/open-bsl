@@ -121,7 +121,15 @@ pub const fn library() -> LibraryDescriptor {
     }])
     .with_constructors(CONSTRUCTORS)
     .with_types(TYPES)
+    .with_type_aliases(TYPE_ALIASES)
 }
+
+/// «Файловый поток» — представление ОБОИХ потоков (измерено), но
+/// `Тип("Файловый поток")` обязан отдать `ФайловыйПоток`: единственный
+/// случай неоднозначного написания в дереве, владелец объявлен явно
+/// (см. ABI-D, каталог типов реестра).
+const TYPE_ALIASES: &[(&str, &TypeDescriptor)] =
+    &[("Файловый поток", &crate::stream::FILE_STREAM_TYPE)];
 
 #[cfg(test)]
 mod tests {

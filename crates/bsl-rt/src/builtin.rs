@@ -1793,10 +1793,13 @@ pub fn call_builtin_fn_ctx(
     }
     if f == BuiltinFn::TypeByName {
         let name = args[0].as_str("Тип")?.to_string();
-        if let Some(descriptor) = rt.component_type(&name) {
-            return Ok(BslValue::Type(crate::TypeRef::Object(descriptor)));
-        }
-        return args[0].type_by_name();
+        // Одно разрешение на оба вызывающих (см. `RuntimeShapes::resolve_type`):
+        // ядро раньше компонентов, порядок записан в одной функции. Прежде
+        // `Тип` спрашивал компоненты первыми, а `ОписаниеТипов` — ядро.
+        return match rt.resolve_type(&name) {
+            Some(ty) => Ok(BslValue::Type(ty)),
+            None => Err(RtError::UnknownType(name)),
+        };
     }
     if f == BuiltinFn::ValueToStringInternal {
         let text = crate::vstr::value_to_string_internal(&args[0], rt)?;
@@ -2706,7 +2709,7 @@ mod name_table_tests {
             }
         }
 
-        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new());
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
         let path = BslValue::Str(BslString::from_str("файл"));
         let bad: [(BuiltinFn, Vec<BslValue>); 5] = [
             (BuiltinFn::ValueFromFile, vec![]),
