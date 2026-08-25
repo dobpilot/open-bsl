@@ -83,7 +83,10 @@ impl<'src> Lexer<'src> {
     pub fn with_symbols(src: &'src str, symbols: PreprocSymbols) -> Self {
         Lexer {
             src,
-            pos: 0,
+            // `read_to_string` декодирует UTF-8 BOM как `U+FEFF`, но это
+            // сигнатура кодировки, а не знак BSL. Исходник не срезаем:
+            // диапазоны токенов остаются байтовыми смещениями в исходном файле.
+            pos: usize::from(src.starts_with('\u{feff}')) * '\u{feff}'.len_utf8(),
             symbols,
             open_ifs: Vec::new(),
             open_regions: Vec::new(),
@@ -602,6 +605,19 @@ mod tests {
             lex_all("ПеременнаяX").unwrap(),
             vec![TokenKind::Ident, TokenKind::Eof]
         );
+    }
+
+    #[test]
+    fn utf8_bom_is_accepted_only_at_the_start_of_the_source() {
+        let mut lexer = Lexer::new("\u{feff}А = 1;");
+        let first = lexer.next_token().expect("BOM перед модулем не токен");
+        assert_eq!(first.kind, TokenKind::Ident);
+        assert_eq!(first.span, Span { start: 3, end: 5 });
+
+        assert!(matches!(
+            lex_all("А;\u{feff}"),
+            Err(LexError::UnexpectedChar('\u{feff}', 3))
+        ));
     }
 
     #[test]

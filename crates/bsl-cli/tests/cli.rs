@@ -146,6 +146,24 @@ fn a_script_path_still_runs_the_script() {
     );
 }
 
+#[test]
+fn a_script_with_a_utf8_bom_runs() {
+    let path =
+        std::env::temp_dir().join(format!("bsl-cli-test-utf8-bom-{}.bsl", std::process::id()));
+    let mut source = vec![0xef, 0xbb, 0xbf];
+    source.extend_from_slice("Сообщить(1);\n".as_bytes());
+    std::fs::write(&path, source).expect("не удалось записать BOM-скрипт");
+
+    let out = run(&[path.to_str().unwrap()]);
+    let _ = std::fs::remove_file(&path);
+    assert!(
+        out.status.success(),
+        "BOM-скрипт не исполнился: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&out.stdout), "1\n");
+}
+
 /// Вид объявления едет от резолвера до исполнения через ЧЕТЫРЕ границы:
 /// `ResolvedFunction` -> компилятор -> `Chunk::is_procedure` -> печать и
 /// разбор листинга -> `SnippetSignature` в VM. Юнит-тесты по краям этой
