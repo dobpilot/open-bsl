@@ -27,6 +27,8 @@ pub enum TokenKind {
     Dot,
     Semicolon,
     Colon,
+    /// `~` — префикс имени метки в `~Метка:` и `Перейти ~Метка`.
+    Tilde,
     Question,
     Plus,
     Minus,

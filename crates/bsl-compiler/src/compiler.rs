@@ -1,5 +1,7 @@
 use bsl_rt::{BslValue, NameInterner, ShapeTable};
-use bsl_sema::{RExpr, RStmt, ResolvedArg, ResolvedFunction, ResolvedParam, ResolvedProgram};
+use bsl_sema::{
+    LabelId, RExpr, RStmt, ResolvedArg, ResolvedFunction, ResolvedParam, ResolvedProgram,
+};
 use bsl_syntax::{BinaryOp, UnaryOp};
 
 use bsl_bytecode::{ArgMode, Chunk, ExceptionRange, Instr, LibraryRequirement, Program, bundle};
@@ -252,6 +254,8 @@ fn compile_chunk(
         next_reg: n_locals,
         max_reg: n_locals,
         loop_stack: Vec::new(),
+        label_targets: Vec::new(),
+        goto_patches: Vec::new(),
         functions,
         callee_params: callee_params.to_vec(),
         requirements,
@@ -260,6 +264,7 @@ fn compile_chunk(
     };
     c.compile_param_defaults(params)?;
     c.compile_block(body)?;
+    c.patch_gotos()?;
     let prop_cache = c
         .instrs
         .iter()
@@ -317,6 +322,10 @@ struct Compiler<'a> {
     next_reg: u8,
     max_reg: u8,
     loop_stack: Vec<LoopCtx>,
+    /// `LabelId` -> абсолютный `pc`. Сама метка инструкции не занимает.
+    label_targets: Vec<Option<usize>>,
+    /// Ещё не пропатченные `Instr::Jump`: индекс инструкции и целевая метка.
+    goto_patches: Vec<(usize, LabelId)>,
     /// Сигнатуры всех функций модуля — нужны при компиляции вызова, чтобы
     /// решить режим передачи каждого аргумента (`Знач` смотрится у
     /// вызываемой функции, а не у самого вызова).
@@ -381,6 +390,8 @@ impl<'a> Compiler<'a> {
             Instr::Jump { target: t } => *t = target,
             Instr::JumpIfFalse { target: t, .. } => *t = target,
             Instr::JumpIfTrue { target: t, .. } => *t = target,
+            Instr::JumpIfNotEqConst { target: t, .. } => *t = target,
+            Instr::JumpIfNotLtConst { target: t, .. } => *t = target,
             Instr::JumpIfNotSkipped { target: t, .. } => *t = target,
             other => unreachable!("patch_jump on non-jump instruction: {other:?}"),
         }
@@ -389,6 +400,76 @@ impl<'a> Compiler<'a> {
 
     fn here(&self) -> usize {
         self.instrs.len()
+    }
+
+    /// Выпускает переход по ложному условию. Равенство локальной и литерала
+    /// не требует ни временного регистра, ни отдельного булева значения.
+    fn compile_jump_if_false(&mut self, cond: &RExpr) -> Result<usize, CompileError> {
+        if let RExpr::Binary {
+            op: BinaryOp::Eq,
+            lhs,
+            rhs,
+        } = cond
+        {
+            let pair = match (&**lhs, &**rhs) {
+                (RExpr::Local(src), literal) | (literal, RExpr::Local(src)) => {
+                    condition_literal(literal).map(|value| (*src, value))
+                }
+                _ => None,
+            };
+            if let Some((src, value)) = pair {
+                let k = self.add_const(value)?;
+                return Ok(self.emit(Instr::JumpIfNotEqConst {
+                    src: src as u8,
+                    k,
+                    target: 0,
+                }));
+            }
+        }
+        if let RExpr::Binary {
+            op: BinaryOp::Lt,
+            lhs,
+            rhs,
+        } = cond
+            && let (RExpr::Local(src), RExpr::Number(number)) = (&**lhs, &**rhs)
+        {
+            let k = self.add_const(BslValue::Number(number.clone()))?;
+            return Ok(self.emit(Instr::JumpIfNotLtConst {
+                src: *src as u8,
+                k,
+                target: 0,
+            }));
+        }
+
+        let reg = self.alloc_temp()?;
+        self.compile_expr(cond, reg)?;
+        self.free_temp(1);
+        Ok(self.emit(Instr::JumpIfFalse {
+            cond: reg,
+            target: 0,
+        }))
+    }
+
+    fn define_label(&mut self, id: LabelId) {
+        let index = id.0 as usize;
+        if self.label_targets.len() <= index {
+            self.label_targets.resize(index + 1, None);
+        }
+        let target = self.here();
+        let old = self.label_targets[index].replace(target);
+        debug_assert!(old.is_none(), "дубль метки отсеян в sema");
+    }
+
+    fn patch_gotos(&mut self) -> Result<(), CompileError> {
+        for (jump, label) in std::mem::take(&mut self.goto_patches) {
+            let target = self
+                .label_targets
+                .get(label.0 as usize)
+                .and_then(|target| *target)
+                .expect("неизвестная метка отсеяна в sema");
+            self.patch_jump(jump, target)?;
+        }
+        Ok(())
     }
 
     /// Пролог функции: для каждого параметра со значением по умолчанию —
@@ -533,6 +614,40 @@ impl<'a> Compiler<'a> {
                 self.patch_jump(to_end, end)?;
             }
             RExpr::Binary { op, lhs, rhs } => {
+                // Для `локальная + число` константа остаётся в таблице
+                // чанка: отдельный регистр и отдельный dispatch для её
+                // загрузки не нужны. Обратную форму не переставляем —
+                // сложение BSL зависит от типа левого операнда.
+                if matches!(op, BinaryOp::Add)
+                    && let (RExpr::Local(src), RExpr::Number(number)) = (&**lhs, &**rhs)
+                {
+                    let k = self.add_const(BslValue::Number(number.clone()))?;
+                    self.emit(Instr::AddConst {
+                        dst,
+                        src: *src as u8,
+                        k,
+                    });
+                    return Ok(());
+                }
+                // Числовой литерал не имеет побочных эффектов и не может
+                // изменить соседнюю локальную переменную. Поэтому локальную
+                // читаем прямо из её слота, а временный регистр нужен только
+                // литералу. Порядок операндов сохраняется: для вычитания,
+                // деления и сравнений он существенен.
+                if let (RExpr::Local(a), RExpr::Number(_)) = (&**lhs, &**rhs) {
+                    let b = self.alloc_temp()?;
+                    self.compile_expr(rhs, b)?;
+                    self.emit(binop_instr(*op, dst, *a as u8, b));
+                    self.free_temp(1);
+                    return Ok(());
+                }
+                if let (RExpr::Number(_), RExpr::Local(b)) = (&**lhs, &**rhs) {
+                    let a = self.alloc_temp()?;
+                    self.compile_expr(lhs, a)?;
+                    self.emit(binop_instr(*op, dst, a, *b as u8));
+                    self.free_temp(1);
+                    return Ok(());
+                }
                 // Оба операнда — просто переменные: копировать их во
                 // временные регистры незачем, инструкция читает любой.
                 //
@@ -811,10 +926,7 @@ impl<'a> Compiler<'a> {
                 then_expr,
                 else_expr,
             } => {
-                let c = self.alloc_temp()?;
-                self.compile_expr(cond, c)?;
-                let to_else = self.emit(Instr::JumpIfFalse { cond: c, target: 0 });
-                self.free_temp(1);
+                let to_else = self.compile_jump_if_false(cond)?;
                 self.compile_expr(then_expr, dst)?;
                 let to_end = self.emit(Instr::Jump { target: 0 });
                 let else_at = self.here();
@@ -999,6 +1111,11 @@ impl<'a> Compiler<'a> {
                     self.emit(Instr::Return { src: None });
                 }
             },
+            RStmt::Label(id) => self.define_label(*id),
+            RStmt::Goto(id) => {
+                let jump = self.emit(Instr::Jump { target: 0 });
+                self.goto_patches.push((jump, *id));
+            }
             RStmt::If {
                 cond,
                 then_branch,
@@ -1007,19 +1124,13 @@ impl<'a> Compiler<'a> {
             } => {
                 let mut end_patches = Vec::new();
 
-                let r = self.alloc_temp()?;
-                self.compile_expr(cond, r)?;
-                self.free_temp(1);
-                let mut jf = self.emit(Instr::JumpIfFalse { cond: r, target: 0 });
+                let mut jf = self.compile_jump_if_false(cond)?;
                 self.compile_block(then_branch)?;
                 end_patches.push(self.emit(Instr::Jump { target: 0 }));
 
                 for (c, body) in elsif_branches {
                     self.patch_jump(jf, self.here())?;
-                    let r = self.alloc_temp()?;
-                    self.compile_expr(c, r)?;
-                    self.free_temp(1);
-                    jf = self.emit(Instr::JumpIfFalse { cond: r, target: 0 });
+                    jf = self.compile_jump_if_false(c)?;
                     self.compile_block(body)?;
                     end_patches.push(self.emit(Instr::Jump { target: 0 }));
                 }
@@ -1036,10 +1147,7 @@ impl<'a> Compiler<'a> {
             }
             RStmt::While { cond, body } => {
                 let cond_pc = self.here();
-                let r = self.alloc_temp()?;
-                self.compile_expr(cond, r)?;
-                self.free_temp(1);
-                let jf = self.emit(Instr::JumpIfFalse { cond: r, target: 0 });
+                let jf = self.compile_jump_if_false(cond)?;
 
                 self.loop_stack.push(LoopCtx {
                     break_patches: Vec::new(),
@@ -1248,6 +1356,20 @@ impl<'a> Compiler<'a> {
             }
         }
         Ok(())
+    }
+}
+
+/// Литерал, который можно безопасно перенести в таблицу констант условного
+/// перехода. Значение уже полностью известно и не имеет побочных эффектов.
+fn condition_literal(expr: &RExpr) -> Option<BslValue> {
+    match expr {
+        RExpr::Number(number) => Some(BslValue::Number(number.clone())),
+        RExpr::Date(date) => Some(BslValue::Date(*date)),
+        RExpr::Bool(value) => Some(BslValue::Boolean(*value)),
+        RExpr::Undefined => Some(BslValue::Undefined),
+        RExpr::Null => Some(BslValue::Null),
+        RExpr::Str(value) => Some(BslValue::Str(bsl_rt::BslString::from_str(value))),
+        _ => None,
     }
 }
 

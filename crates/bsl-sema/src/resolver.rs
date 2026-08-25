@@ -5,7 +5,7 @@ use bsl_syntax::{Expr as AExpr, Item, LValue, Stmt as AStmt};
 
 use crate::core_receivers::{self, CoreReceiver};
 use crate::resolved::{
-    RExpr, RStmt, Resolved, ResolvedArg, ResolvedFunction, ResolvedParam, ResolvedProgram,
+    LabelId, RExpr, RStmt, Resolved, ResolvedArg, ResolvedFunction, ResolvedParam, ResolvedProgram,
 };
 
 /// Позиция, в которой разрешается вызов.
@@ -27,6 +27,12 @@ pub enum SemaError {
     /// этом модуле (методов объектов и встроенных функций пока нет).
     UndefinedFunction(String),
     DuplicateFunction(String),
+    /// Две метки с одинаковым именем в одном теле. Регистр не различается.
+    DuplicateLabel(String),
+    /// `Перейти` ссылается на метку, которой нет в том же теле.
+    UndefinedLabel(String),
+    /// Переход входит в структурный блок или соседнюю ветвь.
+    InvalidGotoTarget(String),
     ArgumentCountMismatch {
         name: String,
         expected: usize,
@@ -79,6 +85,15 @@ impl std::fmt::Display for SemaError {
             }
             SemaError::DuplicateFunction(name) => {
                 write!(f, "процедура или функция «{name}» объявлена дважды")
+            }
+            SemaError::DuplicateLabel(name) => {
+                write!(f, "метка «{name}» объявлена дважды")
+            }
+            SemaError::UndefinedLabel(name) => {
+                write!(f, "нет метки «{name}» в этом теле")
+            }
+            SemaError::InvalidGotoTarget(name) => {
+                write!(f, "переход к метке «{name}» входит в структурный блок")
             }
             SemaError::ArgumentCountMismatch {
                 name,
@@ -297,6 +312,7 @@ fn resolve_program_impl(
             Item::Procedure(p) => (&p.name, &p.params, &p.body, true),
             _ => unreachable!(),
         };
+        let labels = resolve_labels(body)?;
         let mut r = Resolver {
             locals: Vec::new(),
             index: HashMap::new(),
@@ -307,6 +323,7 @@ fn resolve_program_impl(
             strict_stmt_calls: true,
             core_locals: Some(&core_maps.functions[func_index]),
             core_module: Some(&core_maps.module_slots),
+            labels: &labels,
         };
         for p in params {
             r.declare(&p.name);
@@ -346,6 +363,7 @@ fn resolve_program_impl(
     // Тело модуля видит те же переменные как ОБЫЧНЫЕ локальные: его кадр и
     // есть их хранилище, и номер слота совпадает с номером в `module_index`
     // — на этом совпадении держится доступ из функций.
+    let top_labels = resolve_labels(&top_stmts)?;
     let mut r = Resolver {
         locals: Vec::new(),
         index: HashMap::new(),
@@ -356,6 +374,7 @@ fn resolve_program_impl(
         strict_stmt_calls: true,
         core_locals: Some(&core_maps.top),
         core_module: None,
+        labels: &top_labels,
     };
     for name in &module_vars {
         r.declare(name);
@@ -411,6 +430,7 @@ fn declare_sig(
 pub fn resolve_script(stmts: &[AStmt]) -> Result<Resolved, SemaError> {
     let empty_funcs = HashMap::new();
     let empty_module = HashMap::new();
+    let labels = resolve_labels(stmts)?;
     let mut r = Resolver {
         locals: Vec::new(),
         index: HashMap::new(),
@@ -421,6 +441,7 @@ pub fn resolve_script(stmts: &[AStmt]) -> Result<Resolved, SemaError> {
         strict_stmt_calls: true,
         core_locals: None,
         core_module: None,
+        labels: &labels,
     };
     let body = r.resolve_block(stmts)?;
     Ok(Resolved {
@@ -591,6 +612,7 @@ fn resolve_snippet_stmts_mode_registry(
         .enumerate()
         .map(|(i, name)| (name.to_uppercase(), i as u32))
         .collect();
+    let labels = resolve_labels(stmts)?;
     let mut r = Resolver {
         locals: existing_locals.to_vec(),
         index,
@@ -601,6 +623,7 @@ fn resolve_snippet_stmts_mode_registry(
         strict_stmt_calls,
         core_locals: None,
         core_module: None,
+        labels: &labels,
     };
     let body = r.resolve_block(stmts)?;
     let requirements = match registry {
@@ -641,6 +664,114 @@ pub const NEW_TYPES: &[&str] = &[
     "UUID",
 ];
 
+/// Объявлённая метка и путь её структурных блоков от корня тела.
+struct LabelDef {
+    id: LabelId,
+    blocks: Vec<u32>,
+}
+
+/// Символический переход до проверки его цели.
+struct GotoRef {
+    name: String,
+    blocks: Vec<u32>,
+}
+
+#[derive(Default)]
+struct LabelCollector {
+    defs: HashMap<String, LabelDef>,
+    gotos: Vec<GotoRef>,
+    next_block: u32,
+}
+
+impl LabelCollector {
+    fn child_block(&mut self, stmts: &[AStmt], parent: &[u32]) -> Result<(), SemaError> {
+        let block = self.next_block;
+        self.next_block += 1;
+        let mut path = parent.to_vec();
+        path.push(block);
+        self.walk_block(stmts, &path)
+    }
+
+    fn walk_block(&mut self, stmts: &[AStmt], path: &[u32]) -> Result<(), SemaError> {
+        for stmt in stmts {
+            match stmt {
+                AStmt::Label(name) => {
+                    let upper = name.to_uppercase();
+                    let id = LabelId(self.defs.len() as u32);
+                    if self
+                        .defs
+                        .insert(
+                            upper,
+                            LabelDef {
+                                id,
+                                blocks: path.to_vec(),
+                            },
+                        )
+                        .is_some()
+                    {
+                        return Err(SemaError::DuplicateLabel(name.clone()));
+                    }
+                }
+                AStmt::Goto(name) => self.gotos.push(GotoRef {
+                    name: name.clone(),
+                    blocks: path.to_vec(),
+                }),
+                AStmt::If {
+                    then_branch,
+                    elsif_branches,
+                    else_branch,
+                    ..
+                } => {
+                    self.child_block(then_branch, path)?;
+                    for (_, body) in elsif_branches {
+                        self.child_block(body, path)?;
+                    }
+                    if let Some(body) = else_branch {
+                        self.child_block(body, path)?;
+                    }
+                }
+                AStmt::While { body, .. }
+                | AStmt::ForNumeric { body, .. }
+                | AStmt::ForEach { body, .. } => self.child_block(body, path)?,
+                AStmt::Try { body, except_body } => {
+                    self.child_block(body, path)?;
+                    self.child_block(except_body, path)?;
+                }
+                AStmt::Assign { .. }
+                | AStmt::ExprStmt(_)
+                | AStmt::Return(_)
+                | AStmt::Break
+                | AStmt::Continue
+                | AStmt::Raise(_)
+                | AStmt::VarDecl(_)
+                | AStmt::Execute(_) => {}
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Связывает метки одного тела и проверяет измеренное на 1С правило
+/// структурных границ: переход может остаться в том же блоке или выйти
+/// в объемлющий, но не может войти в блок или соседнюю ветвь.
+fn resolve_labels(stmts: &[AStmt]) -> Result<HashMap<String, LabelId>, SemaError> {
+    let mut collector = LabelCollector::default();
+    collector.walk_block(stmts, &[])?;
+    for jump in collector.gotos {
+        let Some(target) = collector.defs.get(&jump.name.to_uppercase()) else {
+            return Err(SemaError::UndefinedLabel(jump.name));
+        };
+        if !jump.blocks.starts_with(&target.blocks) {
+            return Err(SemaError::InvalidGotoTarget(jump.name));
+        }
+    }
+    Ok(collector
+        .defs
+        .into_iter()
+        .map(|(name, def)| (name, def.id))
+        .collect())
+}
+
 struct Resolver<'a> {
     locals: Vec<String>,
     /// Ключ — имя в верхнем регистре: доступ к переменным регистронезависим.
@@ -674,6 +805,8 @@ struct Resolver<'a> {
     /// Модульные переменные — по номеру слота (для `RExpr::ModuleVar` из
     /// тел функций).
     core_module: Option<&'a HashMap<u32, CoreReceiver>>,
+    /// Метки этого тела, проверенные предварительным обходом.
+    labels: &'a HashMap<String, LabelId>,
 }
 
 impl<'a> Resolver<'a> {
@@ -851,6 +984,18 @@ impl<'a> Resolver<'a> {
             }
             AStmt::Break => Ok(Some(RStmt::Break)),
             AStmt::Continue => Ok(Some(RStmt::Continue)),
+            AStmt::Label(name) => Ok(Some(RStmt::Label(
+                *self
+                    .labels
+                    .get(&name.to_uppercase())
+                    .expect("предварительный обход видел метку"),
+            ))),
+            AStmt::Goto(name) => Ok(Some(RStmt::Goto(
+                *self
+                    .labels
+                    .get(&name.to_uppercase())
+                    .expect("предварительный обход разрешил цель"),
+            ))),
             AStmt::Return(opt) => {
                 let r = match opt {
                     Some(e) => Some(self.resolve_expr(e)?),
@@ -1686,6 +1831,88 @@ mod tests {
     fn resolve_program_src(src: &str) -> ResolvedProgram {
         let prog = parse(src).unwrap_or_else(|e| panic!("parse error: {e:?}"));
         resolve_program(&prog.items).unwrap_or_else(|e| panic!("sema error: {e:?}"))
+    }
+
+    fn resolve_error(src: &str) -> SemaError {
+        let prog = parse(src).unwrap_or_else(|e| panic!("parse error: {e:?}"));
+        let stmts = items_to_stmts(prog.items);
+        resolve_script(&stmts).expect_err("ожидалась ошибка sema")
+    }
+
+    #[test]
+    fn goto_resolves_forward_case_insensitive_and_keyword_labels() {
+        let resolved = resolve_src("Goto ~метка; ~МЕТКА:; Перейти ~Если; ~Если:;");
+        assert_eq!(
+            resolved.body,
+            vec![
+                RStmt::Goto(LabelId(0)),
+                RStmt::Label(LabelId(0)),
+                RStmt::Goto(LabelId(1)),
+                RStmt::Label(LabelId(1)),
+            ]
+        );
+    }
+
+    #[test]
+    fn labels_are_scoped_to_one_module_or_function_body() {
+        let resolved = resolve_program_src(
+            "Функция Ф()\nGoto ~0; ~0:; Возврат 1;\nКонецФункции\nGoto ~0; ~0:;",
+        );
+        assert!(matches!(
+            resolved.functions[0].body[0],
+            RStmt::Goto(LabelId(0))
+        ));
+        assert!(matches!(
+            resolved.top_level.body[0],
+            RStmt::Goto(LabelId(0))
+        ));
+    }
+
+    #[test]
+    fn duplicate_and_unknown_labels_are_sema_errors() {
+        assert!(matches!(
+            resolve_error("~М:; ~м:;"),
+            SemaError::DuplicateLabel(name) if name == "м"
+        ));
+        assert!(matches!(
+            resolve_error("Goto ~Нет;"),
+            SemaError::UndefinedLabel(name) if name == "Нет"
+        ));
+    }
+
+    #[test]
+    fn goto_may_stay_in_a_block_or_leave_it() {
+        for src in [
+            "Если Истина Тогда Goto ~М; ~М:; КонецЕсли;",
+            "Если Истина Тогда Goto ~М; КонецЕсли; ~М:;",
+            "Пока Ложь Цикл Goto ~М; ~М:; КонецЦикла;",
+            "Пока Истина Цикл Goto ~М; КонецЦикла; ~М:;",
+            "Для Счёт = 1 По 1 Цикл Goto ~М; ~М:; КонецЦикла;",
+            "Для Счёт = 1 По 1 Цикл Goto ~М; КонецЦикла; ~М:;",
+            "Попытка Goto ~М; ~М:; Исключение КонецПопытки;",
+            "Попытка Goto ~М; Исключение КонецПопытки; ~М:;",
+            "Попытка Исключение Goto ~М; ~М:; КонецПопытки;",
+        ] {
+            resolve_src(src);
+        }
+    }
+
+    #[test]
+    fn goto_may_not_enter_a_block_or_a_sibling_branch() {
+        for src in [
+            "Если Ложь Тогда ~М:; КонецЕсли; Goto ~М;",
+            "Если Истина Тогда Goto ~М; Иначе ~М:; КонецЕсли;",
+            "Пока Ложь Цикл ~М:; КонецЦикла; Goto ~М;",
+            "Для Счёт = 1 По 0 Цикл ~М:; КонецЦикла; Goto ~М;",
+            "Попытка ~М:; Исключение КонецПопытки; Goto ~М;",
+            "Попытка Исключение ~М:; КонецПопытки; Goto ~М;",
+            "Попытка Goto ~М; Исключение ~М:; КонецПопытки;",
+        ] {
+            assert!(matches!(
+                resolve_error(src),
+                SemaError::InvalidGotoTarget(name) if name == "М"
+            ));
+        }
     }
 
     /// `NEW_TYPES` — список для автодополнения, а разбор `Новый` живёт в

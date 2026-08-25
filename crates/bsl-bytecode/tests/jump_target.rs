@@ -13,18 +13,36 @@
 
 mod support;
 
-use bsl_bytecode::{ExceptionRange, Instr, TextError, parse_program, write_program};
+use bsl_bytecode::{ExceptionRange, Instr, TextError, image, parse_program, write_program};
+use bsl_number::BslNumber;
+use bsl_rt::{BslValue, RtError};
 use support::{chunk, program};
 
-/// Все ШЕСТЬ опкодов, несущих цель, в одном чанке — по одному на каждый
+/// Все ВОСЕМЬ опкодов, несущих цель, в одном чанке — по одному на каждый
 /// вариант `Instr::jump_target`. Цели законные и указывают за последнюю
 /// инструкцию: это нормальное завершение чанка.
 fn every_target_carrying_opcode() -> Vec<(&'static str, Instr)> {
-    let target = 6;
+    let target = 8;
     vec![
         ("Jump", Instr::Jump { target }),
         ("JumpIfFalse", Instr::JumpIfFalse { cond: 0, target }),
         ("JumpIfTrue", Instr::JumpIfTrue { cond: 0, target }),
+        (
+            "JumpIfNotEqConst",
+            Instr::JumpIfNotEqConst {
+                src: 0,
+                k: 0,
+                target,
+            },
+        ),
+        (
+            "JumpIfNotLtConst",
+            Instr::JumpIfNotLtConst {
+                src: 0,
+                k: 0,
+                target,
+            },
+        ),
         (
             "JumpIfNotSkipped",
             Instr::JumpIfNotSkipped { src: 0, target },
@@ -56,6 +74,7 @@ fn jumps() -> bsl_bytecode::Program {
             .collect(),
     );
     c.n_regs = 2;
+    c.consts.push(BslValue::Number(BslNumber::from_i64(1)));
     program(vec![c])
 }
 
@@ -94,7 +113,7 @@ fn a_hand_edited_bytecode_target_is_rejected_before_execution() {
 }
 
 #[test]
-fn tampering_is_rejected_for_each_of_the_six_target_carrying_opcodes() {
+fn tampering_is_rejected_for_each_of_the_eight_target_carrying_opcodes() {
     // По одному опкоду на каждый вариант `Instr::jump_target`: удаление
     // любого из них оттуда должно ломать именно свою строку этого теста.
     let text = write_program(&jumps(), None).expect("печать");
@@ -114,6 +133,28 @@ fn tampering_is_rejected_for_each_of_the_six_target_carrying_opcodes() {
             );
         }
     }
+}
+
+#[test]
+fn fused_equality_jump_rejects_an_invalid_register_and_constant() {
+    let make = |src, k| {
+        let mut c = chunk(vec![Instr::JumpIfNotEqConst { src, k, target: 1 }]);
+        c.consts.push(BslValue::Number(BslNumber::from_i64(1)));
+        program(vec![c])
+    };
+
+    assert!(matches!(
+        image::verify(&make(1, 0)),
+        Err(RtError::InvalidBytecode(
+            "регистр условного перехода выходит за кадр"
+        ))
+    ));
+    assert!(matches!(
+        image::verify(&make(0, 1)),
+        Err(RtError::InvalidBytecode(
+            "номер константы условного перехода вне таблицы чанка"
+        ))
+    ));
 }
 
 #[test]

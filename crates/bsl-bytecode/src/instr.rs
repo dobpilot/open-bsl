@@ -44,6 +44,13 @@ pub enum Instr {
         a: u8,
         b: u8,
     },
+    /// Сложение регистра с константой без её предварительной загрузки во
+    /// временный регистр. Порядок операндов фиксирован: `src + const[k]`.
+    AddConst {
+        dst: u8,
+        src: u8,
+        k: u16,
+    },
     Sub {
         dst: u8,
         a: u8,
@@ -120,6 +127,21 @@ pub enum Instr {
     /// проверка на `Булево`, что и у `JumpIfFalse`.
     JumpIfTrue {
         cond: u8,
+        target: i16,
+    },
+    /// Сравнивает регистр с константой структурным равенством и прыгает,
+    /// если значения не равны. Не материализует промежуточное `Булево`:
+    /// это слитый путь для условий вида `локальная = литерал`.
+    JumpIfNotEqConst {
+        src: u8,
+        k: u16,
+        target: i16,
+    },
+    /// Сравнивает регистр с константой через обычное упорядочивание BSL и
+    /// прыгает, если `src < const[k]` ложно.
+    JumpIfNotLtConst {
+        src: u8,
+        k: u16,
         target: i16,
     },
     /// Пролог параметров по умолчанию (см. `compiler.rs`, `compile_chunk`):
@@ -385,6 +407,8 @@ impl Instr {
             Instr::Jump { target }
             | Instr::JumpIfFalse { target, .. }
             | Instr::JumpIfTrue { target, .. }
+            | Instr::JumpIfNotEqConst { target, .. }
+            | Instr::JumpIfNotLtConst { target, .. }
             | Instr::JumpIfNotSkipped { target, .. }
             | Instr::NumericForNext { target, .. }
             | Instr::NumericForNextI64 { target, .. } => Some(*target),

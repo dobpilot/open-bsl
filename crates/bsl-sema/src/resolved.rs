@@ -162,6 +162,12 @@ pub enum ResolvedArg {
     Default,
 }
 
+/// Номер метки внутри одного тела модуля, процедуры или функции.
+/// Имя свёрнуто в этот номер резолвером, поэтому компилятор
+/// байт-кода больше не сравнивает строки.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct LabelId(pub u32);
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum RStmt {
     AssignLocal {
@@ -213,6 +219,10 @@ pub enum RStmt {
     },
     Break,
     Continue,
+    /// Точка входа, не порождающая отдельной инструкции.
+    Label(LabelId),
+    /// Безусловный переход к метке того же тела.
+    Goto(LabelId),
     /// `Неопределено` при отсутствии выражения — функция без `Возврат`
     /// возвращает `Неопределено` (совпадает с неявным возвратом в конце тела).
     Return(Option<RExpr>),
@@ -358,7 +368,7 @@ fn stmt_uses_dynamic(s: &RStmt) -> bool {
         RStmt::Try { body, except_body } => {
             block_uses_dynamic(body) || block_uses_dynamic(except_body)
         }
-        RStmt::Break | RStmt::Continue => false,
+        RStmt::Break | RStmt::Continue | RStmt::Label(_) | RStmt::Goto(_) => false,
     }
 }
 

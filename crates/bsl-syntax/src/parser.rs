@@ -182,6 +182,23 @@ impl<'src> Parser<'src> {
         }
     }
 
+    /// Имя метки идёт после `~`, поэтому его позиция уже однозначна:
+    /// платформа принимает здесь даже ключевое слово (`~Если:`). Числовая
+    /// форма только целая: `~1.2:` платформа отвергает.
+    fn expect_label_name(&mut self) -> Result<String, ParseError> {
+        match &self.peek().kind {
+            TokenKind::Ident | TokenKind::Keyword(_) => {
+                let tok = self.bump();
+                Ok(self.text(tok.span).to_string())
+            }
+            TokenKind::Number if !self.text(self.peek().span).contains('.') => {
+                let tok = self.bump();
+                Ok(self.text(tok.span).to_string())
+            }
+            _ => Err(self.expected(Expectation::LabelName)),
+        }
+    }
+
     fn at_eof(&self) -> bool {
         matches!(self.peek().kind, TokenKind::Eof)
     }
@@ -342,7 +359,12 @@ impl<'src> Parser<'src> {
     }
 
     fn parse_stmt_inner(&mut self) -> Result<Stmt, ParseError> {
-        if self.at_keyword(Keyword::If) {
+        if self.at(&TokenKind::Tilde) {
+            self.expect(&TokenKind::Tilde)?;
+            let name = self.expect_label_name()?;
+            self.expect(&TokenKind::Colon)?;
+            Ok(Stmt::Label(name))
+        } else if self.at_keyword(Keyword::If) {
             self.parse_if()
         } else if self.at_keyword(Keyword::While) {
             self.parse_while()
@@ -361,6 +383,9 @@ impl<'src> Parser<'src> {
             Ok(Stmt::Break)
         } else if self.eat_keyword(Keyword::Continue) {
             Ok(Stmt::Continue)
+        } else if self.eat_keyword(Keyword::Goto) {
+            self.expect(&TokenKind::Tilde)?;
+            Ok(Stmt::Goto(self.expect_label_name()?))
         } else if self.eat_keyword(Keyword::Raise) {
             let value = if self.at_stmt_boundary() {
                 None
@@ -1136,5 +1161,38 @@ mod tests {
     fn try_except() {
         let prog = parse_ok("Попытка\nx = 1;\nИсключение\ny = 2;\nКонецПопытки");
         assert!(matches!(prog.items[0], Item::Stmt(Stmt::Try { .. })));
+    }
+
+    #[test]
+    fn labels_and_goto_accept_both_languages_numbers_and_keywords() {
+        let prog = parse_ok("Goto ~0; ~0:; Перейти ~Если; ~Если: x = 1;");
+        assert_eq!(
+            prog.items,
+            vec![
+                Item::Stmt(Stmt::Goto("0".into())),
+                Item::Stmt(Stmt::Label("0".into())),
+                Item::Stmt(Stmt::Goto("Если".into())),
+                Item::Stmt(Stmt::Label("Если".into())),
+                Item::Stmt(Stmt::Assign {
+                    target: LValue::Name("x".into()),
+                    value: Expr::Number("1".into()),
+                }),
+            ]
+        );
+    }
+
+    #[test]
+    fn fractional_label_is_rejected() {
+        let err = parse("~1.2:;").expect_err("дробь не может быть именем метки");
+        let Diagnostic::Parse(err) = err else {
+            panic!("ожидалась ошибка разбора");
+        };
+        assert!(matches!(
+            err.kind,
+            ParseErrorKind::Expected {
+                what: Expectation::LabelName,
+                found: FoundToken::NumberLiteral,
+            }
+        ));
     }
 }

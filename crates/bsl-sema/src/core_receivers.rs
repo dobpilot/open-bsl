@@ -235,7 +235,7 @@ impl Collector<'_> {
                     self.walk_expr(expr);
                 }
             }
-            Stmt::Break | Stmt::Continue => {}
+            Stmt::Break | Stmt::Continue | Stmt::Label(_) | Stmt::Goto(_) => {}
             Stmt::VarDecl(decl) => {
                 // `Перем` объявляет локальные; с этого места одноимённая
                 // модульная в области не видна — ровно как у резолвера.

@@ -154,6 +154,7 @@ fn name_expectation(what: &Expectation) -> String {
         Expectation::Identifier => "идентификатор".to_string(),
         Expectation::MemberName => "имя члена".to_string(),
         Expectation::Expression => "выражение".to_string(),
+        Expectation::LabelName => "имя метки".to_string(),
     }
 }
 

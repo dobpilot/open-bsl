@@ -46,10 +46,10 @@ mod mem;
 mod x64;
 
 use crate::{
-    CallArgs, ComponentMethodMap, ComponentPropertyMap, Frame, HostIo, LinkedComponents, add_op,
-    at, binop, cached_component_method, call_builtin_with_format, cmp, component_prop_get,
-    component_prop_set, field_name, neg_op, numeric_for_next_regular, prop_cache, reg_load,
-    reg_store,
+    CallArgs, ComponentMethodMap, ComponentPropertyMap, Frame, HostIo, LinkedComponents,
+    add_const_op, add_op, at, binop, cached_component_method, call_builtin_with_format, cmp,
+    component_prop_get, component_prop_set, field_name, neg_op, numeric_for_next_regular,
+    prop_cache, reg_load, reg_store,
 };
 use bsl_bytecode::{Chunk, Instr, Program};
 use bsl_rt::{BslValue, RtError};
@@ -362,6 +362,16 @@ fn compile_instr(instr: &Instr) -> Option<Compiled> {
             args: [cond as u32, 0, 0],
             target: target as usize,
         }),
+        Instr::JumpIfNotEqConst { src, k, target } => Some(Compiled::Branch {
+            func: shim_jump_if_not_eq_const,
+            args: [src as u32, k as u32, 0],
+            target: target as usize,
+        }),
+        Instr::JumpIfNotLtConst { src, k, target } => Some(Compiled::Branch {
+            func: shim_jump_if_not_lt_const,
+            args: [src as u32, k as u32, 0],
+            target: target as usize,
+        }),
         // Инструкция, ЗАМЫКАЮЩАЯ числовой цикл. Без неё тело цикла
         // компилировалось, а шаг счётчика — нет, и нативный код выходил в
         // интерпретатор на КАЖДОЙ итерации: весь смысл нативных переходов
@@ -381,6 +391,7 @@ fn compile_instr(instr: &Instr) -> Option<Compiled> {
         Instr::LoadUndefined { dst } => s(shim_load_undefined, [dst as u32, 0, 0]),
         Instr::LoadNull { dst } => s(shim_load_null, [dst as u32, 0, 0]),
         Instr::Add { dst, a, b } => s(shim_add, [dst as u32, a as u32, b as u32]),
+        Instr::AddConst { dst, src, k } => s(shim_add_const, [dst as u32, src as u32, k as u32]),
         Instr::Sub { dst, a, b } => s(shim_sub, [dst as u32, a as u32, b as u32]),
         Instr::Mul { dst, a, b } => s(shim_mul, [dst as u32, a as u32, b as u32]),
         Instr::Div { dst, a, b } => s(shim_div, [dst as u32, a as u32, b as u32]),
@@ -655,6 +666,19 @@ shim!(shim_add, |frames,
     Ok(OK)
 });
 
+shim!(shim_add_const, |frames,
+                       stack,
+                       program,
+                       idx,
+                       shapes,
+                       _pc,
+                       dst,
+                       src,
+                       k| {
+    add_const_op(program, frames, stack, idx, dst as u8, src as u8, k as u16)?;
+    Ok(OK)
+});
+
 macro_rules! binop_shim {
     ($name:ident, $f:path) => {
         shim!($name, |frames,
@@ -789,6 +813,46 @@ shim!(shim_jump_if_false, |frames,
         JUMPED
     })
 });
+
+shim!(
+    shim_jump_if_not_eq_const,
+    |frames, stack, program, idx, shapes, _pc, src, k, _c| {
+        let chunk = at(
+            &program.chunks,
+            frames[idx].func_id,
+            "номер чанка вне таблицы функций",
+        )?;
+        let value = reg_load(stack, frames[idx].reg_index(src as u8))?;
+        let constant = at(
+            &chunk.consts,
+            k as usize,
+            "номер константы вне таблицы констант чанка",
+        )?;
+        Ok(if value.eq_value(constant) { OK } else { JUMPED })
+    }
+);
+
+shim!(
+    shim_jump_if_not_lt_const,
+    |frames, stack, program, idx, shapes, _pc, src, k, _c| {
+        let chunk = at(
+            &program.chunks,
+            frames[idx].func_id,
+            "номер чанка вне таблицы функций",
+        )?;
+        let value = reg_load(stack, frames[idx].reg_index(src as u8))?;
+        let constant = at(
+            &chunk.consts,
+            k as usize,
+            "номер константы вне таблицы констант чанка",
+        )?;
+        Ok(if value.compare(constant, "<")?.is_lt() {
+            OK
+        } else {
+            JUMPED
+        })
+    }
+);
 
 // Шаг счётчика делает та же `numeric_for_next_regular`, что и ветка
 // интерпретатора: она сама решает, куда поставить pc — на цель или на

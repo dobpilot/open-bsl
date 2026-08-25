@@ -74,6 +74,32 @@ pub fn verify(program: &Program) -> Result<(), RtError> {
             {
                 return Err(RtError::InvalidBytecode("цель перехода за пределами чанка"));
             }
+            if let Instr::JumpIfNotEqConst { src, k, .. } | Instr::JumpIfNotLtConst { src, k, .. } =
+                instr
+            {
+                if *src >= chunk.n_regs {
+                    return Err(RtError::InvalidBytecode(
+                        "регистр условного перехода выходит за кадр",
+                    ));
+                }
+                if *k as usize >= chunk.consts.len() {
+                    return Err(RtError::InvalidBytecode(
+                        "номер константы условного перехода вне таблицы чанка",
+                    ));
+                }
+            }
+            if let Instr::AddConst { dst, src, k } = instr {
+                if *dst >= chunk.n_regs || *src >= chunk.n_regs {
+                    return Err(RtError::InvalidBytecode(
+                        "регистр сложения с константой выходит за кадр",
+                    ));
+                }
+                if *k as usize >= chunk.consts.len() {
+                    return Err(RtError::InvalidBytecode(
+                        "номер константы сложения вне таблицы чанка",
+                    ));
+                }
+            }
             // `NumericForNextI64` несёт предусловие «цель — собственный pc»:
             // на продолжении цикла она прыгает на `target`, а скрытое
             // состояние ищется по совпадению `state.pc == pc`. Цель, не

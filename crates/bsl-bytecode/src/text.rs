@@ -36,7 +36,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 25;
+pub const FORMAT_VERSION: u32 = 26;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -66,9 +66,10 @@ macro_rules! opcodes {
 
 opcodes! {
     Move, GetModuleVar, SetModuleVar, LoadConst, LoadBool, LoadUndefined, LoadNull,
-    Add, Sub, Mul, Div, Mod, Neg, Not,
+    Add, AddConst, Sub, Mul, Div, Mod, Neg, Not,
     Eq, NotEq, Lt, Gt, Le, Ge, Jump,
-    JumpIfFalse, JumpIfTrue, JumpIfNotSkipped, NumericForNext, NumericForNextI64, Call, Return,
+    JumpIfFalse, JumpIfTrue, JumpIfNotEqConst, JumpIfNotLtConst, JumpIfNotSkipped, NumericForNext,
+    NumericForNextI64, Call, Return,
     GetIndex, SetIndex, GetProp, SetProp, CreateObject, NewArray, NewStructure,
     NewTable, NewTypeDescription, NewValueComparison, NewMap, NewTextWriter,
     CollectionLen, Raise, CallBuiltin, CallComponent, CallMethod,
@@ -426,6 +427,7 @@ fn write_instr(instr: &Instr) -> String {
         Instr::LoadUndefined { dst } => format!("{op} dst={dst}"),
         Instr::LoadNull { dst } => format!("{op} dst={dst}"),
         Instr::Add { dst, a, b } => format!("{op} dst={dst} a={a} b={b}"),
+        Instr::AddConst { dst, src, k } => format!("{op} dst={dst} src={src} k={k}"),
         Instr::Sub { dst, a, b } => format!("{op} dst={dst} a={a} b={b}"),
         Instr::Mul { dst, a, b } => format!("{op} dst={dst} a={a} b={b}"),
         Instr::Div { dst, a, b } => format!("{op} dst={dst} a={a} b={b}"),
@@ -441,6 +443,12 @@ fn write_instr(instr: &Instr) -> String {
         Instr::Jump { target } => format!("{op} target={target}"),
         Instr::JumpIfFalse { cond, target } => format!("{op} cond={cond} target={target}"),
         Instr::JumpIfTrue { cond, target } => format!("{op} cond={cond} target={target}"),
+        Instr::JumpIfNotEqConst { src, k, target } => {
+            format!("{op} src={src} k={k} target={target}")
+        }
+        Instr::JumpIfNotLtConst { src, k, target } => {
+            format!("{op} src={src} k={k} target={target}")
+        }
         Instr::JumpIfNotSkipped { src, target } => {
             format!("{op} src={src} target={target}")
         }
@@ -1317,6 +1325,11 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
             a: a(&f)?,
             b: b(&f)?,
         },
+        "AddConst" => Instr::AddConst {
+            dst: dst(&f)?,
+            src: src(&f)?,
+            k: field_u16(&f, no, "k")?,
+        },
         "Sub" => Instr::Sub {
             dst: dst(&f)?,
             a: a(&f)?,
@@ -1384,6 +1397,16 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
         },
         "JumpIfTrue" => Instr::JumpIfTrue {
             cond: cond(&f)?,
+            target: target(&f)?,
+        },
+        "JumpIfNotEqConst" => Instr::JumpIfNotEqConst {
+            src: src(&f)?,
+            k: field_u16(&f, no, "k")?,
+            target: target(&f)?,
+        },
+        "JumpIfNotLtConst" => Instr::JumpIfNotLtConst {
+            src: src(&f)?,
+            k: field_u16(&f, no, "k")?,
             target: target(&f)?,
         },
         "JumpIfNotSkipped" => Instr::JumpIfNotSkipped {

@@ -183,6 +183,10 @@ impl<'src> Lexer<'src> {
                 self.bump();
                 Ok(self.tok(TokenKind::Colon, start))
             }
+            '~' => {
+                self.bump();
+                Ok(self.tok(TokenKind::Tilde, start))
+            }
             '?' => {
                 self.bump();
                 Ok(self.tok(TokenKind::Question, start))
@@ -676,7 +680,7 @@ mod tests {
     #[test]
     fn operators_and_punctuation() {
         assert_eq!(
-            lex_all("<> <= >= < > = + - * / ( ) [ ] , . ; : ?").unwrap(),
+            lex_all("<> <= >= < > = + - * / ( ) [ ] , . ; : ~ ?").unwrap(),
             vec![
                 TokenKind::NotEq,
                 TokenKind::Le,
@@ -696,6 +700,7 @@ mod tests {
                 TokenKind::Dot,
                 TokenKind::Semicolon,
                 TokenKind::Colon,
+                TokenKind::Tilde,
                 TokenKind::Question,
                 TokenKind::Eof,
             ]

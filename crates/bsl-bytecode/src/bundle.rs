@@ -342,6 +342,10 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
             read!(b);
             write!(dst);
         }
+        Instr::AddConst { dst, src, .. } => {
+            read!(src);
+            write!(dst);
+        }
         Instr::Neg { dst, src } | Instr::Not { dst, src } => {
             read!(src);
             write!(dst);
@@ -351,6 +355,10 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
         }
         Instr::JumpIfFalse { cond, .. } | Instr::JumpIfTrue { cond, .. } => {
             read!(cond);
+            e.ctl = Ctl::Trailing;
+        }
+        Instr::JumpIfNotEqConst { src, .. } | Instr::JumpIfNotLtConst { src, .. } => {
+            read!(src);
             e.ctl = Ctl::Trailing;
         }
         // Регистров не читает вовсе: признак пропущенного аргумента лежит

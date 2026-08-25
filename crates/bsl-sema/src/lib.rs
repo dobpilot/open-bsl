@@ -9,7 +9,7 @@ mod resolved;
 mod resolver;
 
 pub use resolved::{
-    RExpr, RStmt, Resolved, ResolvedArg, ResolvedFunction, ResolvedParam, ResolvedProgram,
+    LabelId, RExpr, RStmt, Resolved, ResolvedArg, ResolvedFunction, ResolvedParam, ResolvedProgram,
 };
 pub use resolver::{
     NEW_TYPES, ResolvedSnippetWithRequirements, SemaError, SnippetSignature, resolve_program,

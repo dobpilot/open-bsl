@@ -1120,14 +1120,15 @@ enum Step {
 // связь надо разрывать явно.
 #[inline(always)]
 fn at<'a, T>(xs: &'a [T], i: usize, what: &'static str) -> Result<&'a T, RtError> {
-    xs.get(i).ok_or(RtError::InvalidBytecode(what))
+    xs.get(i).ok_or_else(|| RtError::InvalidBytecode(what))
 }
 
 #[inline(always)]
 fn reg_load(stack: &[BslValue], i: usize) -> Result<BslValue, RtError> {
-    stack.get(i).cloned().ok_or(RtError::InvalidBytecode(
-        "чтение регистра за границей стека значений",
-    ))
+    stack
+        .get(i)
+        .cloned()
+        .ok_or_else(|| RtError::InvalidBytecode("чтение регистра за границей стека значений"))
 }
 
 #[inline(always)]
@@ -1444,6 +1445,10 @@ fn step(
                 add_op(frames, stack, frame_idx, dst, a, b)?;
                 frames[frame_idx].pc += 1;
             }
+            Instr::AddConst { dst, src, k } => {
+                add_const_op(program, frames, stack, frame_idx, dst, src, k)?;
+                frames[frame_idx].pc += 1;
+            }
             Instr::Sub { dst, a, b } => {
                 binop(frames, stack, frame_idx, dst, a, b, BslValue::sub)?;
                 frames[frame_idx].pc += 1;
@@ -1523,6 +1528,42 @@ fn step(
                     frames[frame_idx].pc = target as usize;
                 } else {
                     frames[frame_idx].pc += 1;
+                }
+            }
+            Instr::JumpIfNotEqConst { src, k, target } => {
+                let chunk = at(
+                    &program.chunks,
+                    frames[frame_idx].func_id,
+                    "номер чанка вне таблицы функций",
+                )?;
+                let value = reg_load(stack, frames[frame_idx].reg_index(src))?;
+                let constant = at(
+                    &chunk.consts,
+                    k as usize,
+                    "номер константы вне таблицы констант чанка",
+                )?;
+                if value.eq_value(constant) {
+                    frames[frame_idx].pc += 1;
+                } else {
+                    frames[frame_idx].pc = target as usize;
+                }
+            }
+            Instr::JumpIfNotLtConst { src, k, target } => {
+                let chunk = at(
+                    &program.chunks,
+                    frames[frame_idx].func_id,
+                    "номер чанка вне таблицы функций",
+                )?;
+                let value = reg_load(stack, frames[frame_idx].reg_index(src))?;
+                let constant = at(
+                    &chunk.consts,
+                    k as usize,
+                    "номер константы вне таблицы констант чанка",
+                )?;
+                if value.compare(constant, "<")?.is_lt() {
+                    frames[frame_idx].pc += 1;
+                } else {
+                    frames[frame_idx].pc = target as usize;
                 }
             }
             Instr::JumpIfNotSkipped { src, target } => {
@@ -3061,6 +3102,46 @@ fn add_op(
     a: u8,
     b: u8,
 ) -> Result<(), RtError> {
+    let bv = reg_load(stack, frames[frame_idx].reg_index(b))?;
+    add_rhs_op(frames, stack, frame_idx, dst, a, &bv)
+}
+
+/// Тело `AddConst` вынесено из `step`: разворачивание двух проверок таблиц
+/// в цикл диспетчеризации сдвигает код остальных опкодов, хотя они этой
+/// инструкцией не пользуются.
+#[inline(never)]
+fn add_const_op(
+    program: &Program,
+    frames: &mut [Frame],
+    stack: &mut [BslValue],
+    frame_idx: usize,
+    dst: u8,
+    src: u8,
+    k: u16,
+) -> Result<(), RtError> {
+    let chunk = at(
+        &program.chunks,
+        frames[frame_idx].func_id,
+        "номер чанка вне таблицы функций",
+    )?;
+    let value = at(
+        &chunk.consts,
+        k as usize,
+        "номер константы вне таблицы констант чанка",
+    )?;
+    add_rhs_op(frames, stack, frame_idx, dst, src, value)
+}
+
+/// Общее тело `Add` и `AddConst`: правый операнд уже найден, но порядок и
+/// все преобразования остаются прежними.
+fn add_rhs_op(
+    frames: &mut [Frame],
+    stack: &mut [BslValue],
+    frame_idx: usize,
+    dst: u8,
+    a: u8,
+    bv: &BslValue,
+) -> Result<(), RtError> {
     // Накопление строки в саму себя (`Текст = Текст + Кусок`
     // — приёмник и левый операнд один регистр) идёт особым
     // путём: значение ЗАБИРАЕТСЯ из регистра, а не копируется.
@@ -3074,14 +3155,13 @@ fn add_op(
     // дальше с потерянным значением.
     let d = frames[frame_idx].reg_index(dst);
     let ia = frames[frame_idx].reg_index(a);
-    let bv = reg_load(stack, frames[frame_idx].reg_index(b))?;
     let both_strings = matches!(
-        (stack.get(ia), &bv),
+        (stack.get(ia), bv),
         (Some(BslValue::Str(_)), BslValue::Str(_))
     );
     if d == ia && both_strings {
         let av = std::mem::replace(&mut stack[ia], BslValue::Undefined);
-        let (BslValue::Str(left), BslValue::Str(right)) = (av, &bv) else {
+        let (BslValue::Str(left), BslValue::Str(right)) = (av, bv) else {
             unreachable!("типы проверены выше")
         };
         stack[d] = BslValue::Str(left.append(right));
@@ -3096,7 +3176,7 @@ fn add_op(
         let BslValue::Str(left) = av else {
             unreachable!("тип проверен выше")
         };
-        let right = bsl_format::format_value(&bv, None)?;
+        let right = bsl_format::format_value(bv, None)?;
         let joined = left.append(&bsl_rt::BslString::from_str(&right));
         reg_store(stack, d, BslValue::Str(joined))?;
     } else {
@@ -3105,11 +3185,11 @@ fn add_op(
         // разобрала ветка выше), поэтому подменить склейку арифметикой
         // этот повтор не может.
         let av = reg_load(stack, ia)?;
-        let sum = match av.add(&bv) {
+        let sum = match av.add(bv) {
             Ok(v) => v,
             Err(first) => {
-                if needs_arith_coercion(&av) || needs_arith_coercion(&bv) {
-                    arith(&av)?.add(arith(&bv)?.as_ref())?
+                if needs_arith_coercion(&av) || needs_arith_coercion(bv) {
+                    arith(&av)?.add(arith(bv)?.as_ref())?
                 } else {
                     return Err(first);
                 }

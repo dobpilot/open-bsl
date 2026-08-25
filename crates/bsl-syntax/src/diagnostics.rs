@@ -49,6 +49,8 @@ pub enum Expectation {
     MemberName,
     /// Начало выражения.
     Expression,
+    /// Имя метки после `~`: идентификатор, ключевое слово или целое число.
+    LabelName,
 }
 
 /// КАТЕГОРИЯ встреченного токена — без его содержимого. Идентификатор и
@@ -96,6 +98,7 @@ fn symbol_text(kind: &TokenKind) -> &'static str {
         TokenKind::Dot => "«.»",
         TokenKind::Semicolon => "«;»",
         TokenKind::Colon => "«:»",
+        TokenKind::Tilde => "«~»",
         TokenKind::Question => "«?»",
         TokenKind::Plus => "«+»",
         TokenKind::Minus => "«-»",
@@ -127,6 +130,7 @@ impl std::fmt::Display for Expectation {
             Expectation::Identifier => f.write_str("идентификатор"),
             Expectation::MemberName => f.write_str("имя члена после точки"),
             Expectation::Expression => f.write_str("выражение"),
+            Expectation::LabelName => f.write_str("имя метки"),
         }
     }
 }

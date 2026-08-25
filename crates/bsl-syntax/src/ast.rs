@@ -124,6 +124,10 @@ pub enum Stmt {
     Return(Option<Expr>),
     Break,
     Continue,
+    /// Метка `~Имя:`. Строка ещё не свёрнута по регистру.
+    Label(String),
+    /// Безусловный переход `Перейти ~Имя` / `Goto ~Name`.
+    Goto(String),
     Try {
         body: Vec<Stmt>,
         except_body: Vec<Stmt>,
