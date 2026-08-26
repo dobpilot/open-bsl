@@ -1408,6 +1408,68 @@ impl ProgramExecution {
         self.session_modules = SessionModules::for_catalog(catalog);
     }
 
+    /// Планирует НЕленивую инициализацию модулей: тела выполняются до
+    /// первой инструкции entry, в порядке `order` (post-order файлового
+    /// графа — семантика расширения CLI `//@используй`; политика job
+    /// остаётся ленивой до замера `JOB.MODULE.INIT`). Кадры кладутся в
+    /// корневую задачу до первого poll; повторный вызов — ошибка контракта.
+    ///
+    /// # Errors
+    ///
+    /// `RtError::InvalidBytecode` при номере модуля вне каталога.
+    pub fn schedule_eager_init(
+        &mut self,
+        catalog: &bsl_bytecode::ConfigurationProgram,
+        order: &[u32],
+    ) -> Result<(), RtError> {
+        let root = self
+            .async_state
+            .tasks
+            .first_mut()
+            .and_then(Option::as_mut)
+            .ok_or(RtError::InvalidBytecode(
+                "инициализация планируется до первого poll",
+            ))?;
+        // Кадры исполняются с вершины стека: обратный порядок пуша даёт
+        // прямой порядок исполнения.
+        for module in order.iter().rev() {
+            let instance = self
+                .session_modules
+                .instances
+                .get_mut(*module as usize)
+                .ok_or(RtError::InvalidBytecode(
+                    "номер модуля инициализации вне каталога",
+                ))?;
+            if instance.init != ModuleInitState::NotStarted {
+                continue;
+            }
+            instance.init = ModuleInitState::Initializing;
+            let body = catalog
+                .modules
+                .get(*module as usize)
+                .map(|m| &m.program)
+                .ok_or(RtError::InvalidBytecode(
+                    "номер модуля инициализации вне каталога",
+                ))?;
+            let chunk0 = at(&body.chunks, 0, "у модуля каталога нет тела")?;
+            let call_start = root.stack.len();
+            let own_base = root.stack.len();
+            push_own_registers(&mut root.stack, chunk0);
+            root.frames.push(Frame {
+                module: *module,
+                func_id: 0,
+                pc: 0,
+                param_aliases: Vec::new(),
+                own_base,
+                call_start,
+                return_reg: 0,
+                module_copybacks: Vec::new(),
+                numeric_for_state: None,
+            });
+        }
+        Ok(())
+    }
+
     /// Создаёт отдельный запуск верхнего уровня и связывает его компоненты.
     ///
     /// # Errors

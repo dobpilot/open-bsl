@@ -25,6 +25,10 @@ pub struct Engine {
 struct EngineConfiguration {
     catalog: bsl_bytecode::ConfigurationProgram,
     entry_imports: Vec<bsl_sema::ImportedModule>,
+    /// Post-order файлового графа — порядок нележивой инициализации.
+    init_order: Vec<u32>,
+    /// Выполнять инициализацию до entry (расширение CLI), а не лениво.
+    eager_init: bool,
 }
 
 struct EngineInner {
@@ -112,9 +116,60 @@ impl Engine {
         })
     }
 
+    /// Принимает entry конфигурационного образа: программа проходит
+    /// периметр `verify_configuration` против каталога этого движка и
+    /// становится обычным `Module`.
+    ///
+    /// # Errors
+    ///
+    /// `Error::Configuration` без каталога; ошибки периметра образа.
+    pub fn load_entry(&self, entry: bsl_bytecode::EntryProgram) -> Result<Module, Error> {
+        let Some(catalog) = self.catalog() else {
+            return Err(Error::Configuration(
+                "entry конфигурационного образа требует движка с каталогом".to_string(),
+            ));
+        };
+        bsl_bytecode::image::verify_configuration(catalog, Some(&entry)).map_err(Error::Runtime)?;
+        Ok(Module {
+            id: self.next_module_id(),
+            program: entry.program,
+        })
+    }
+
+    /// Печатает переносимый образ: конфигурацию с entry, если у движка
+    /// есть каталог, иначе одиночную программу. `--emit-bytecode` пишет
+    /// весь граф, а не набор несвязанных файлов.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку печати текстового формата.
+    pub fn image_bytecode(&self, entry: &Module, source: Option<&str>) -> Result<String, Error> {
+        match self.catalog() {
+            Some(catalog) => {
+                let image = bsl_bytecode::BytecodeImage::Configuration {
+                    catalog: catalog.clone(),
+                    entry: Some(bsl_bytecode::EntryProgram {
+                        id: bsl_bytecode::EntryId::new(entry.id),
+                        program: entry.program.clone(),
+                    }),
+                };
+                Ok(bsl_bytecode::write_image(&image, source)?)
+            }
+            None => Ok(bsl_bytecode::write_program(&entry.program, source)?),
+        }
+    }
+
     /// Каталог общих модулей движка, если он был собран.
     pub(crate) fn catalog(&self) -> Option<&bsl_bytecode::ConfigurationProgram> {
         self.configuration.as_ref().map(|c| &c.catalog)
+    }
+
+    /// Порядок нележивой инициализации, если она включена рецептом.
+    pub(crate) fn eager_init_order(&self) -> Option<&[u32]> {
+        self.configuration
+            .as_ref()
+            .filter(|c| c.eager_init)
+            .map(|c| c.init_order.as_slice())
     }
 
     /// Загружает текстовый байт-код. Совместимость компонентов проверяется
@@ -188,6 +243,11 @@ pub struct ModuleRecipe {
 #[derive(Debug, Clone, Default)]
 pub struct ModuleGraphRecipe {
     pub modules: Vec<ModuleRecipe>,
+    /// Инициализировать тела модулей до первой инструкции entry, в
+    /// post-order файлового графа. Семантика расширения CLI
+    /// `//@используй`; по умолчанию инициализация ленивая — при первом
+    /// касании символа модуля.
+    pub eager_init: bool,
 }
 
 /// Стадия композиции статически связанных runtime-компонентов.
@@ -195,6 +255,7 @@ pub struct EngineBuilder {
     runtime: bsl_rt::RuntimeBuilder,
     symbols: bsl_syntax::PreprocSymbols,
     recipe: ModuleGraphRecipe,
+    image: Option<(bsl_bytecode::ConfigurationProgram, bool)>,
 }
 
 impl EngineBuilder {
@@ -227,6 +288,7 @@ impl EngineBuilder {
             runtime,
             symbols: bsl_syntax::PreprocSymbols::new(),
             recipe: ModuleGraphRecipe::default(),
+            image: None,
         }
     }
 
@@ -240,6 +302,21 @@ impl EngineBuilder {
     #[must_use]
     pub fn configuration(mut self, recipe: ModuleGraphRecipe) -> Self {
         self.recipe.modules.extend(recipe.modules);
+        self.recipe.eager_init |= recipe.eager_init;
+        self
+    }
+
+    /// Принимает уже разобранный каталог конфигурации — путь
+    /// `--run-bytecode` и worker фонового задания. Каталог проходит тот же
+    /// периметр `verify_configuration`, что и скомпилированный из рецепта;
+    /// сочетание с `configuration`/`common_module` — ошибка сборки.
+    #[must_use]
+    pub fn configuration_image(
+        mut self,
+        catalog: bsl_bytecode::ConfigurationProgram,
+        eager_init: bool,
+    ) -> Self {
+        self.image = Some((catalog, eager_init));
         self
     }
 
@@ -276,13 +353,38 @@ impl EngineBuilder {
     /// версий компонентов.
     pub fn build(self) -> Result<Engine, Error> {
         let registry = self.runtime.build()?;
-        let configuration = if self.recipe.modules.is_empty() {
-            None
-        } else {
-            let (catalog, entry_imports) = compile_catalog(&self.recipe, &registry, &self.symbols)?;
+        if self.image.is_some() && !self.recipe.modules.is_empty() {
+            return Err(Error::Configuration(
+                "каталог задан и рецептом, и образом — источник должен быть один".to_string(),
+            ));
+        }
+        let configuration = if let Some((catalog, eager_init)) = self.image {
+            bsl_bytecode::image::verify_configuration(&catalog, None).map_err(Error::Runtime)?;
+            let entry_imports = catalog
+                .modules
+                .iter()
+                .enumerate()
+                .map(|(i, module)| {
+                    imported_module_from_program(&module.name, i as u32, &module.program)
+                })
+                .collect();
+            let init_order = image_init_order(&catalog);
             Some(std::rc::Rc::new(EngineConfiguration {
                 catalog,
                 entry_imports,
+                init_order,
+                eager_init,
+            }))
+        } else if self.recipe.modules.is_empty() {
+            None
+        } else {
+            let (catalog, entry_imports, init_order) =
+                compile_catalog(&self.recipe, &registry, &self.symbols)?;
+            Some(std::rc::Rc::new(EngineConfiguration {
+                catalog,
+                entry_imports,
+                init_order,
+                eager_init: self.recipe.eager_init,
             }))
         };
         Ok(Engine {
@@ -349,6 +451,7 @@ fn compile_catalog(
     (
         bsl_bytecode::ConfigurationProgram,
         Vec<bsl_sema::ImportedModule>,
+        Vec<u32>,
     ),
     Error,
 > {
@@ -375,37 +478,45 @@ fn compile_catalog(
             .position(|module| bsl_rt::folded_eq(&module.name, name))
     };
 
-    // Topo-сортировка Кана по импортам: цикл — ошибка конфигурации, как и
-    // импорт неизвестного модуля.
-    let mut in_degree = vec![0usize; modules.len()];
-    let mut dependants: Vec<Vec<usize>> = vec![Vec::new(); modules.len()];
-    for (i, module) in modules.iter().enumerate() {
-        for (_, target) in &module.imports {
-            let Some(target) = index_of(target) else {
+    // DFS post-order по импортам: зависимости раньше зависимых, при
+    // нескольких — в порядке следования импортов, корни — в порядке
+    // рецепта. Этот же порядок служит нележивой инициализации
+    // (`//@используй`); цикл — ошибка конфигурации, как и импорт
+    // неизвестного модуля.
+    fn visit(
+        modules: &[ModuleRecipe],
+        index_of: &dyn Fn(&str) -> Option<usize>,
+        state: &mut [u8],
+        order: &mut Vec<usize>,
+        current: usize,
+    ) -> Result<(), Error> {
+        match state[current] {
+            1 => {
+                return Err(Error::Configuration(
+                    "граф импортов общих модулей содержит цикл".to_string(),
+                ));
+            }
+            2 => return Ok(()),
+            _ => {}
+        }
+        state[current] = 1;
+        for (_, target) in &modules[current].imports {
+            let Some(target_index) = index_of(target) else {
                 return Err(Error::Configuration(format!(
                     "модуль «{}» импортирует неизвестный «{target}»",
-                    module.name
+                    modules[current].name
                 )));
             };
-            in_degree[i] += 1;
-            dependants[target].push(i);
+            visit(modules, index_of, state, order, target_index)?;
         }
+        state[current] = 2;
+        order.push(current);
+        Ok(())
     }
-    let mut queue: Vec<usize> = (0..modules.len()).filter(|i| in_degree[*i] == 0).collect();
-    let mut topo = Vec::with_capacity(modules.len());
-    while let Some(next) = queue.pop() {
-        topo.push(next);
-        for &dependant in &dependants[next] {
-            in_degree[dependant] -= 1;
-            if in_degree[dependant] == 0 {
-                queue.push(dependant);
-            }
-        }
-    }
-    if topo.len() != modules.len() {
-        return Err(Error::Configuration(
-            "граф импортов общих модулей содержит цикл".to_string(),
-        ));
+    let mut state = vec![0u8; modules.len()];
+    let mut topo: Vec<usize> = Vec::with_capacity(modules.len());
+    for i in 0..modules.len() {
+        visit(modules, &index_of, &mut state, &mut topo, i)?;
     }
 
     let mut resolved: Vec<Option<bsl_sema::ResolvedProgram>> = vec![None; modules.len()];
@@ -453,5 +564,83 @@ fn compile_catalog(
             bsl_sema::ImportedModule::from_resolved(&module.name, i as u32, resolved)
         })
         .collect();
-    Ok((catalog, entry_imports))
+    let init_order = topo.iter().map(|&i| i as u32).collect();
+    Ok((catalog, entry_imports, init_order))
+}
+
+/// Экспортная поверхность модуля, снятая с его ПРОГРАММЫ, — для движка,
+/// собранного из образа: `ResolvedProgram` у него нет, а всё нужное
+/// (имена, экспортность, сигнатуры чанков) байт-код уже несёт.
+fn imported_module_from_program(
+    alias: &str,
+    module: u32,
+    program: &bsl_bytecode::Program,
+) -> bsl_sema::ImportedModule {
+    let functions = program
+        .function_names
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| program.exported_functions[*i])
+        .map(|(i, name)| {
+            let chunk = &program.chunks[i + 1];
+            bsl_sema::ImportedFunction {
+                name: name.clone(),
+                chunk: (i + 1) as u16,
+                is_procedure: chunk.is_procedure,
+                is_async: chunk.is_async,
+                param_by_val: chunk.param_by_val.clone(),
+                param_has_default: chunk.param_has_default.clone(),
+            }
+        })
+        .collect();
+    let variables = program
+        .module_vars
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| program.exported_module_vars[*i])
+        .map(|(i, name)| bsl_sema::ImportedVariable {
+            name: name.clone(),
+            slot: i as u16,
+        })
+        .collect();
+    bsl_sema::ImportedModule {
+        alias: alias.to_string(),
+        module,
+        functions,
+        variables,
+    }
+}
+
+/// Порядок нележивой инициализации для каталога из образа: DFS post-order
+/// по таблицам связей в порядке манифеста. Порядок следования директив
+/// исходного файла образ не хранит, поэтому здесь допустимо отличие от
+/// прогона исходника при независимых поддеревьях — зависимости по-прежнему
+/// раньше зависимых.
+fn image_init_order(catalog: &bsl_bytecode::ConfigurationProgram) -> Vec<u32> {
+    fn visit(
+        catalog: &bsl_bytecode::ConfigurationProgram,
+        state: &mut [u8],
+        order: &mut Vec<u32>,
+        current: usize,
+    ) {
+        if state[current] != 0 {
+            return;
+        }
+        state[current] = 1;
+        for link in &catalog.modules[current].program.links {
+            let target = match link {
+                bsl_bytecode::LinkEntry::Function { module, .. }
+                | bsl_bytecode::LinkEntry::Variable { module, .. } => module.index(),
+            };
+            visit(catalog, state, order, target);
+        }
+        state[current] = 2;
+        order.push(current as u32);
+    }
+    let mut state = vec![0u8; catalog.modules.len()];
+    let mut order = Vec::with_capacity(catalog.modules.len());
+    for i in 0..catalog.modules.len() {
+        visit(catalog, &mut state, &mut order, i);
+    }
+    order
 }

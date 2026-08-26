@@ -69,6 +69,7 @@ fn common_modules_import_each_other() {
                 imports: vec![("Служебный".to_string(), "Служебный".to_string())],
             },
         ],
+        eager_init: false,
     };
     let engine = Engine::builder()
         .configuration(recipe)
@@ -80,6 +81,55 @@ fn common_modules_import_each_other() {
     let mut state = engine.new_state();
     let value = state.run(&module).expect("прогон завершается");
     assert_eq!(open_bsl::format_value(&value, None).unwrap(), "23");
+}
+
+/// Нележивая инициализация (`eager_init`): тело модуля выполняется до
+/// первой инструкции entry, даже если entry не касается его символов.
+#[test]
+fn eager_init_runs_module_bodies_before_the_entry() {
+    use std::io::Write;
+    use std::rc::Rc;
+    use std::sync::Mutex;
+
+    #[derive(Clone, Default)]
+    struct Capture(Rc<Mutex<Vec<u8>>>);
+    impl Write for Capture {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    let run = |eager: bool| -> String {
+        let recipe = open_bsl::ModuleGraphRecipe {
+            modules: vec![open_bsl::ModuleRecipe {
+                name: "Служебный".to_string(),
+                source: "Сообщить(\"из тела\");".to_string(),
+                imports: Vec::new(),
+            }],
+            eager_init: eager,
+        };
+        let engine = Engine::builder()
+            .configuration(recipe)
+            .build()
+            .expect("движок собирается");
+        // Entry не касается символов модуля: разница выводов — ровно
+        // нележивая инициализация.
+        let module = engine
+            .compile_entry("Сообщить(\"из entry\");")
+            .expect("entry компилируется");
+        let capture = Capture::default();
+        let mut state = engine.state_builder().stdout(capture.clone()).build();
+        state.run(&module).expect("прогон завершается");
+        let bytes = capture.0.lock().unwrap().clone();
+        String::from_utf8(bytes).unwrap()
+    };
+
+    assert_eq!(run(true), "из тела\nиз entry\n");
+    assert_eq!(run(false), "из entry\n");
 }
 
 /// Цикл импортов отвергается на сборке движка, а не в рантайме.
@@ -98,6 +148,7 @@ fn an_import_cycle_is_a_build_error() {
                 imports: vec![("А".to_string(), "А".to_string())],
             },
         ],
+        eager_init: false,
     };
     let Err(error) = Engine::builder().configuration(recipe).build() else {
         panic!("цикл импортов должен отвергаться");

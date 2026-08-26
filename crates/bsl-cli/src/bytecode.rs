@@ -14,11 +14,11 @@ use std::path::Path;
 /// Компилирует и печатает байт-код: в файл, если путь задан, иначе в
 /// stdout. Возвращает код возврата процесса.
 pub fn emit(source: &str, out: Option<&str>) -> i32 {
-    let module = match compile(source) {
-        Ok(m) => m,
+    let (engine, module) = match compile(source) {
+        Ok(pair) => pair,
         Err(code) => return code,
     };
-    let text = match module.bytecode_with_source(source) {
+    let text = match engine.image_bytecode(&module, Some(source)) {
         Ok(t) => t,
         Err(e) => {
             eprintln!("не удалось напечатать байт-код: {e}");
@@ -54,18 +54,59 @@ pub fn run(path: &str, arguments: Vec<String>) -> i32 {
             return 1;
         }
     };
-    let engine = match crate::engine() {
-        Ok(engine) => engine,
-        Err(e) => {
-            eprintln!("ошибка сборки движка: {e}");
-            return 1;
-        }
-    };
-    let module = match engine.load_bytecode(&text) {
-        Ok(m) => m,
+    // Образ может быть и одиночной программой, и конфигурацией с entry:
+    // `--run-bytecode` требует entry, каталог без него — ошибка команды.
+    let image = match bsl_bytecode::parse_image(&text) {
+        Ok(image) => image,
         Err(e) => {
             eprintln!("{}: {e}", Path::new(path).display());
             return 1;
+        }
+    };
+    let (engine, module) = match image {
+        bsl_bytecode::BytecodeImage::Program(_) => {
+            let engine = match crate::engine() {
+                Ok(engine) => engine,
+                Err(e) => {
+                    eprintln!("ошибка сборки движка: {e}");
+                    return 1;
+                }
+            };
+            match engine.load_bytecode(&text) {
+                Ok(m) => (engine, m),
+                Err(e) => {
+                    eprintln!("{}: {e}", Path::new(path).display());
+                    return 1;
+                }
+            }
+        }
+        bsl_bytecode::BytecodeImage::Configuration { catalog, entry } => {
+            let Some(entry) = entry else {
+                eprintln!(
+                    "{}: конфигурационный образ без entry исполнить нечем",
+                    Path::new(path).display()
+                );
+                return 1;
+            };
+            // Расширение CLI: как и прогон исходника с `//@используй`,
+            // тела модулей выполняются до entry.
+            let engine = match open_bsl::Engine::builder()
+                .configuration_image(catalog, true)
+                .build()
+            {
+                Ok(engine) => engine,
+                Err(e) => {
+                    eprintln!("ошибка сборки конфигурации: {e}");
+                    return 1;
+                }
+            };
+            match engine.load_entry(entry) {
+                Ok(m) => (engine, m),
+                Err(e) => {
+                    eprintln!("{}: {e}", Path::new(path).display());
+                    return 1;
+                }
+            }
         }
     };
     let mut state = engine.state_builder().arguments(arguments).build();
@@ -82,22 +123,42 @@ pub fn run(path: &str, arguments: Vec<String>) -> i32 {
     }
 }
 
-/// Тот же путь компиляции, что и у обычного запуска файла, — до VM.
-fn compile(path: &str) -> Result<open_bsl::Module, i32> {
+/// Тот же путь компиляции, что и у обычного запуска файла, — до VM:
+/// шапка с `//@используй` включает конфигурационный путь.
+fn compile(path: &str) -> Result<(open_bsl::Engine, open_bsl::Module), i32> {
     let src = std::fs::read_to_string(path).map_err(|e| {
         eprintln!("не удалось прочитать «{path}»: {e}");
         1
     })?;
-    let engine = crate::engine().map_err(|e| {
-        eprintln!("ошибка сборки движка: {e}");
+    let directives = crate::usemod::parse_directives(&src).map_err(|e| {
+        eprintln!("{path}: {e}");
         1
     })?;
-    engine.compile(&src).map_err(|e| {
+    let engine = if directives.is_empty() {
+        crate::engine().map_err(|e| {
+            eprintln!("ошибка сборки движка: {e}");
+            1
+        })?
+    } else {
+        let recipe = crate::usemod::load_graph(Path::new(path), &src).map_err(|e| {
+            eprintln!("{e}");
+            1
+        })?;
+        open_bsl::Engine::builder()
+            .configuration(recipe)
+            .build()
+            .map_err(|e| {
+                eprintln!("ошибка сборки конфигурации: {e}");
+                1
+            })?
+    };
+    let module = engine.compile_entry(&src).map_err(|e| {
         match e {
             open_bsl::Error::Parse(e) => eprintln!("ошибка разбора: {e}"),
             open_bsl::Error::Semantic(e) => eprintln!("ошибка резолвинга: {e}"),
             other => eprintln!("ошибка компиляции: {other}"),
         }
         1
-    })
+    })?;
+    Ok((engine, module))
 }

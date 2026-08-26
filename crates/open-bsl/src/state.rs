@@ -295,6 +295,12 @@ impl State {
         // сеансами не разделяется.
         if let Some(catalog) = self.engine.catalog() {
             vm.attach_catalog(catalog);
+            // Расширение CLI `//@используй`: тела модулей выполняются до
+            // entry в post-order файлового графа. Обычная политика —
+            // ленивая инициализация при первом касании.
+            if let Some(order) = self.engine.eager_init_order() {
+                vm.schedule_eager_init(catalog, order)?;
+            }
         }
         Ok(Execution {
             state: self,

@@ -14,6 +14,7 @@ mod complete;
 mod highlight;
 mod ingest;
 mod repl;
+mod usemod;
 
 use bsl_rt::BslValue;
 
@@ -235,14 +236,40 @@ fn run_file(path: &str, engine: Engine, arguments: Vec<String>) {
         }
     };
 
-    let host = match crate::engine() {
-        Ok(engine) => engine,
+    // Шапка с `//@используй` включает конфигурационный путь: файловый
+    // граф превращается в рецепт каталога, main компилируется как entry.
+    let directives = match usemod::parse_directives(&src) {
+        Ok(directives) => directives,
         Err(e) => {
-            eprintln!("ошибка сборки движка: {e}");
+            eprintln!("{path}: {e}");
             std::process::exit(1);
         }
     };
-    let module = match host.compile(&src) {
+    let host = if directives.is_empty() {
+        match crate::engine() {
+            Ok(engine) => engine,
+            Err(e) => {
+                eprintln!("ошибка сборки движка: {e}");
+                std::process::exit(1);
+            }
+        }
+    } else {
+        let recipe = match usemod::load_graph(std::path::Path::new(path), &src) {
+            Ok(recipe) => recipe,
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        };
+        match open_bsl::Engine::builder().configuration(recipe).build() {
+            Ok(engine) => engine,
+            Err(e) => {
+                eprintln!("ошибка сборки конфигурации: {e}");
+                std::process::exit(1);
+            }
+        }
+    };
+    let module = match host.compile_entry(&src) {
         Ok(m) => m,
         Err(open_bsl::Error::Parse(e)) => {
             eprintln!("ошибка разбора: {e}");
