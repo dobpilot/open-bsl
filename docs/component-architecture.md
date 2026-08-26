@@ -305,7 +305,7 @@ flowchart TB
     program["Program<br/>chunks + export table + typed link table"]
     function_link["Function link<br/>ModuleId + FunctionId"]
     variable_link["Variable link<br/>ModuleId + module_slot"]
-    call["CallImported<br/>link_slot:u16, base:u8,<br/>arg_modes:u16, ret:u8"]
+    call_instr["CallImported<br/>link_slot:u16, base:u8,<br/>arg_modes:u16, ret:u8"]
     getset["GetImportedVar / SetImportedVar<br/>ByRefImportedVar(u16)"]
     frame["Frame<br/>ModuleId + FunctionId"]
     session["SessionModules<br/>ModuleId → ModuleInstance"]
@@ -322,11 +322,11 @@ flowchart TB
     entry --> program
     program --> function_link
     program --> variable_link
-    call -->|"LinkSlot(u16)"| function_link
+    call_instr -->|"LinkSlot(u16)"| function_link
     getset -->|"LinkSlot(u16)"| variable_link
     function_link --> frame --> session
     variable_link --> session
-    call --> width
+    call_instr --> width
     getset --> width
 ```
 
@@ -553,7 +553,7 @@ sequenceDiagram
     Note over Runtime,Child: профиль наследуется без повышения возможностей
     Parent->>Runtime: wait Child → PendingHostCall
     Note over Parent,Runtime: ⚠ НЕ ИЗМЕРЕНО(JOB.NESTED.WAIT)<br/>⚠ НЕ ИЗМЕРЕНО(JOB.CANCEL.RACES)
-    Runtime-->>Parent: parked; OS worker свободен
+    Runtime-->>Parent: parked, OS worker свободен
     Runtime->>Child: запустить из FIFO даже при занятом пуле
     Child->>Storage: доступен mailbox P, но не F
     Child-->>Runtime: terminal
@@ -572,7 +572,7 @@ temporary-storage capability нет. Связывать отмену parent и c
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Cold: Engine::build
+    [*] --> Cold: Engine build
     Cold --> Starting: первый успешно admitted submit
     Starting --> Running: workers готовы
     Starting --> Broken: ошибка каталога или 3 startup panic
@@ -904,13 +904,14 @@ caller-close race `JOB.TEMP.CALLER_CLOSE_RACE`. Измеренный foreign-к�
 ```mermaid
 sequenceDiagram
     autonumber
-    participant BSL as Сообщить / СообщениеПользователю<br/>⚠ НЕ ИЗМЕРЕНО(JOB.MESSAGES)
+    participant BSL as Сообщить и СообщениеПользователю
     participant Format as bsl-format
     participant Registry as JobRegistry message history
     participant Sink as UserMessageSink
     participant Host as bsl-cli stdout queue / другой host
     participant Reader as ПолучитьСообщенияПользователю
 
+    Note over BSL: ⚠ НЕ ИЗМЕРЕНО(JOB.MESSAGES)
     BSL->>Format: format_value, не BslValue::Display
     Format-->>BSL: UserMessageDto
     alt вызов внутри job
@@ -923,7 +924,7 @@ sequenceDiagram
         Note over Sink,Host: принятое DTO может отобразиться после shutdown
     else backpressure
         Sink-->>BSL: ловимая HostBackpressure
-        Note over Registry: сообщение остаётся в истории,<br/>скрытого retry нет
+        Note over Registry: сообщение остаётся в истории, скрытого retry нет
     end
     Reader->>Registry: read или atomic drain FIFO-prefix
     Registry-->>Reader: live/terminal messages
