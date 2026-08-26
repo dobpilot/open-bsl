@@ -31,6 +31,7 @@ mod type_description;
 mod types;
 mod tz;
 mod uuid;
+mod value_graph;
 mod value_list;
 mod vstr;
 use std::cmp::Ordering;
@@ -38,6 +39,7 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::rc::Rc;
+pub use value_graph::{GraphLimits, SerializedValueGraph};
 
 pub use bsl_number::BslNumber;
 use bsl_number::NumError;
@@ -184,6 +186,10 @@ pub enum RtError {
     UnknownField(NameId),
     /// `ВызватьИсключение <значение>;` — значение, с которым бросили.
     Raised(BslValue),
+    /// Явный ресурсный лимит host-а: бюджет снимка значений, admission
+    /// фонового задания, staging временного хранилища. Ловимая ошибка:
+    /// платформенные лимиты BSL-код перехватывает обычной «Попыткой».
+    ResourceLimit(String),
     /// Обращение к `СтрокаТаблицы`, чья строка уже удалена (`row_id` не
     /// не резолвится обратным индексом) — не тихое чтение чужих данных.
     RowInvalidated,
@@ -365,6 +371,7 @@ impl RtError {
     pub fn is_bsl_exception(&self) -> bool {
         match self {
             RtError::InvalidBytecode(_) => false,
+            RtError::ResourceLimit(_) => true,
             RtError::Num(_)
             | RtError::TypeError { .. }
             | RtError::NotIndexable
@@ -412,6 +419,7 @@ impl fmt::Display for RtError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             RtError::Num(e) => write!(f, "{e}"),
+            RtError::ResourceLimit(what) => write!(f, "превышен ресурсный лимит: {what}"),
             RtError::TypeError { expected, op } => {
                 write!(f, "ожидался тип «{expected}» для операции «{op}»")
             }
