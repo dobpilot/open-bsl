@@ -4123,6 +4123,7 @@ fn call_module_function_with_dynamic_eval_inside() {
         env.random(),
         env.network(),
         env.background_jobs(),
+        env.temp_storage(),
         bsl_bytecode::DynamicScope::ROOT,
     )
     .unwrap();

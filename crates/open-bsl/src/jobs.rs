@@ -388,15 +388,39 @@ mod tests {
         });
         let params = graph(64);
         registry
-            .admit(id(1), "М.Ф".into(), (0, 1), params.clone(), None, None)
+            .admit(
+                id(1),
+                "М.Ф".into(),
+                (0, 1),
+                params.clone(),
+                None,
+                None,
+                None,
+            )
             .map_err(|_| ())
             .expect("первое задание принято");
         registry
-            .admit(id(2), "М.Ф".into(), (0, 1), params.clone(), None, None)
+            .admit(
+                id(2),
+                "М.Ф".into(),
+                (0, 1),
+                params.clone(),
+                None,
+                None,
+                None,
+            )
             .map_err(|_| ())
             .expect("второе задание принято");
         assert!(matches!(
-            registry.admit(id(3), "М.Ф".into(), (0, 1), params.clone(), None, None),
+            registry.admit(
+                id(3),
+                "М.Ф".into(),
+                (0, 1),
+                params.clone(),
+                None,
+                None,
+                None
+            ),
             Err(AdmissionError::ResourceLimit(_))
         ));
         assert!(registry.finish(id(1), JobStateDto::Completed, None, None));
@@ -405,7 +429,7 @@ mod tests {
             "terminal transition ровно один раз"
         );
         registry
-            .admit(id(3), "М.Ф".into(), (0, 1), params, None, None)
+            .admit(id(3), "М.Ф".into(), (0, 1), params, None, None, None)
             .map_err(|_| ())
             .expect("слот освобождён");
         assert_eq!(registry.history_len(), 1);
@@ -441,6 +465,7 @@ mod tests {
                 params.clone(),
                 Some(key.clone()),
                 None,
+                None,
             )
             .map_err(|_| ())
             .expect("первое принято");
@@ -451,7 +476,8 @@ mod tests {
                 (0, 1),
                 params.clone(),
                 Some(key.clone()),
-                None
+                None,
+                None,
             ),
             Err(AdmissionError::DuplicateKey)
         ));
@@ -464,12 +490,13 @@ mod tests {
                 params.clone(),
                 Some(key.clone()),
                 None,
+                None,
             )
             .map_err(|_| ())
             .expect("другая цель принята");
         registry.finish(id(1), JobStateDto::Canceled, None, None);
         registry
-            .admit(id(4), "М.Ф".into(), (0, 1), params, Some(key), None)
+            .admit(id(4), "М.Ф".into(), (0, 1), params, Some(key), None, None)
             .map_err(|_| ())
             .expect("ключ освобождён terminal transition");
     }
@@ -483,7 +510,15 @@ mod tests {
         let params = graph(16);
         for i in 1..=4u8 {
             registry
-                .admit(id(i), "М.Ф".into(), (0, 1), params.clone(), None, None)
+                .admit(
+                    id(i),
+                    "М.Ф".into(),
+                    (0, 1),
+                    params.clone(),
+                    None,
+                    None,
+                    None,
+                )
                 .map_err(|_| ())
                 .expect("принято");
             registry.finish(id(i), JobStateDto::Completed, None, None);
@@ -1615,6 +1650,7 @@ mod pool_tests {
                 params(&[number(2), number(3)]),
                 None,
                 None,
+                None,
             )
             .expect("задание принято");
         assert_eq!(snapshot.state, JobStateDto::Queued);
@@ -1638,7 +1674,7 @@ mod pool_tests {
         let target = resolve_target(engine.catalog().unwrap(), "Служебный.Упасть")
             .expect("цель разрешается");
         let snapshot = runtime
-            .submit("Служебный.Упасть", target, params(&[]), None, None)
+            .submit("Служебный.Упасть", target, params(&[]), None, None, None)
             .expect("задание принято");
         assert!(runtime.wait_terminal(&[snapshot.id], Some(Duration::from_secs(30))));
         let done = runtime.snapshot(snapshot.id).expect("снимок");
@@ -1663,6 +1699,7 @@ mod pool_tests {
                 "Служебный.Сложить",
                 target,
                 params(&[number(1)]),
+                None,
                 None,
                 None,
             )
@@ -1702,6 +1739,7 @@ mod pool_tests {
                         "Служебный.Сложить",
                         target,
                         params(&[number(i), number(i)]),
+                        None,
                         None,
                         None,
                     )
