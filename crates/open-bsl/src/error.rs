@@ -12,6 +12,9 @@ pub enum Error {
     Registry(bsl_rt::RegistryError),
     Runtime(bsl_rt::RtError),
     Bytecode(bsl_bytecode::TextError),
+    /// Структурная ошибка каталога конфигурации: дубль имени модуля,
+    /// неизвестный импорт, цикл графа импортов.
+    Configuration(String),
 }
 
 impl fmt::Display for Error {
@@ -29,6 +32,9 @@ impl fmt::Display for Error {
             Self::Registry(error) => write!(formatter, "ошибка компонентов: {error}"),
             Self::Runtime(error) => write!(formatter, "ошибка исполнения: {error}"),
             Self::Bytecode(error) => write!(formatter, "ошибка байт-кода: {error}"),
+            Self::Configuration(what) => {
+                write!(formatter, "ошибка конфигурации: {what}")
+            }
         }
     }
 }
@@ -45,6 +51,7 @@ impl std::error::Error for Error {
             Self::Registry(error) => Some(error),
             Self::Runtime(error) => Some(error),
             Self::Bytecode(error) => Some(error),
+            Self::Configuration(_) => None,
         }
     }
 }

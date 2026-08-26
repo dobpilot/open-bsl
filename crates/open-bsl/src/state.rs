@@ -209,15 +209,27 @@ impl Execution<'_, '_> {
     /// завершения также является ошибкой контракта host-приложения.
     pub fn poll(&mut self, host_slice: usize) -> Result<ExecutionPoll, Error> {
         let registry = self.state.engine.registry();
-        let result = self.vm.poll_with_registry_and_io(
-            &self.module.program,
-            registry,
-            &mut self.state.host.stdout,
-            &mut self.state.host.stderr,
-            &mut self.state.dynamic,
-            &mut self.state.host.env,
-            host_slice,
-        )?;
+        let result = match self.state.engine.catalog() {
+            Some(catalog) => self.vm.poll_configuration_with_registry_and_io(
+                &self.module.program,
+                catalog,
+                registry,
+                &mut self.state.host.stdout,
+                &mut self.state.host.stderr,
+                &mut self.state.dynamic,
+                &mut self.state.host.env,
+                host_slice,
+            )?,
+            None => self.vm.poll_with_registry_and_io(
+                &self.module.program,
+                registry,
+                &mut self.state.host.stdout,
+                &mut self.state.host.stderr,
+                &mut self.state.dynamic,
+                &mut self.state.host.env,
+                host_slice,
+            )?,
+        };
         Ok(match result {
             bsl_vm::ProgramPoll::Complete(value, _) => ExecutionPoll::Complete(value),
             bsl_vm::ProgramPoll::Runnable => ExecutionPoll::Runnable,
@@ -271,13 +283,19 @@ impl State {
         } else {
             bsl_vm::JitMode::Off
         };
-        let vm = bsl_vm::ProgramExecution::start_with_registry_and_scheduler(
+        let mut vm = bsl_vm::ProgramExecution::start_with_registry_and_scheduler(
             &module.program,
             self.engine.registry(),
             jit,
             &self.host.env,
             self.scheduler,
         )?;
+        // У движка с конфигурацией каждый запуск получает свои сессионные
+        // экземпляры общих модулей: `ModuleState` между запусками и
+        // сеансами не разделяется.
+        if let Some(catalog) = self.engine.catalog() {
+            vm.attach_catalog(catalog);
+        }
         Ok(Execution {
             state: self,
             module,

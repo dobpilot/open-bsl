@@ -140,6 +140,30 @@ pub fn compile_configuration(
     Ok((catalog, entry_program))
 }
 
+/// Компилирует transient entry поверх уже собранного каталога: таблицы
+/// имён и форм entry начинаются с каталожных, поэтому `NameId` каталога
+/// остаются валидными в его программе (правило то же, что у динамических
+/// фрагментов — префикс плюс новые имена).
+///
+/// # Errors
+///
+/// Ошибка генерации байт-кода entry.
+pub fn compile_entry_program(
+    resolved: &ResolvedProgram,
+    base_names: &[String],
+    base_shapes: &[std::rc::Rc<bsl_rt::Shape>],
+) -> Result<Program, CompileError> {
+    let mut names = NameInterner::from_existing(base_names.to_vec());
+    let mut shapes = ShapeTable::from_existing(base_shapes.to_vec());
+    let chunks = compile_module_chunks(resolved, &mut names, &mut shapes)?;
+    Ok(assemble_program(
+        resolved,
+        chunks,
+        names.into_names(),
+        shapes.into_shapes(),
+    ))
+}
+
 fn compile_module_chunks(
     resolved: &ResolvedProgram,
     names: &mut NameInterner,

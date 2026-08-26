@@ -13,6 +13,18 @@ use crate::state::{State, StateBuilder};
 #[derive(Clone)]
 pub struct Engine {
     inner: Arc<EngineInner>,
+    /// Каталог общих модулей и импортное окружение entry. Отдельное
+    /// `Rc`-поле, а не часть `EngineInner`: программы каталога несут
+    /// `Rc`-значения и в `Arc` не переносимы; worker фонового задания
+    /// получает Send-рецепт (текстовый bytecode), а не этот объект.
+    configuration: Option<std::rc::Rc<EngineConfiguration>>,
+}
+
+/// Замороженная конфигурация движка: каталог и экспортные поверхности
+/// корневых модулей для `compile_entry`.
+struct EngineConfiguration {
+    catalog: bsl_bytecode::ConfigurationProgram,
+    entry_imports: Vec<bsl_sema::ImportedModule>,
 }
 
 struct EngineInner {
@@ -40,11 +52,69 @@ impl Engine {
         let syntax = bsl_syntax::parse_with_symbols(source, &self.inner.symbols)?;
         let resolved =
             bsl_sema::resolve_program_with_registry(&syntax.items, &self.inner.registry)?;
-        let program = bsl_compiler::compile_program(&resolved)?;
+        let program = match self.catalog() {
+            // Внутри конфигурации даже entry без импортов обязан делить
+            // пространство имён каталога: его значения ходят через границы
+            // модулей вместе со своими `NameId`.
+            Some(catalog) => {
+                let base = catalog
+                    .modules
+                    .first()
+                    .expect("непустой каталог: build отвергает пустой рецепт");
+                bsl_compiler::compile_entry_program(
+                    &resolved,
+                    &base.program.names,
+                    &base.program.shapes,
+                )?
+            }
+            None => bsl_compiler::compile_program(&resolved)?,
+        };
         Ok(Module {
             id: self.next_module_id(),
             program,
         })
+    }
+
+    /// Компилирует entry с корневыми импортами каталога: квалифицированные
+    /// обращения `ИмяМодуля.Метод(...)` разрешаются по его экспортным
+    /// поверхностям. У движка без конфигурации ведёт себя как
+    /// [`Engine::compile`].
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку синтаксиса, семантики или генерации байт-кода.
+    pub fn compile_entry(&self, source: &str) -> Result<Module, Error> {
+        let Some(catalog) = self.catalog() else {
+            return self.compile(source);
+        };
+        let syntax = bsl_syntax::parse_with_symbols(source, &self.inner.symbols)?;
+        let resolved = bsl_sema::resolve_program_with_imports(
+            &syntax.items,
+            &self.inner.registry,
+            &self
+                .configuration
+                .as_ref()
+                .expect("каталог проверен веткой выше")
+                .entry_imports,
+        )?;
+        let base = catalog
+            .modules
+            .first()
+            .expect("непустой каталог: build отвергает пустой рецепт");
+        let program = bsl_compiler::compile_entry_program(
+            &resolved,
+            &base.program.names,
+            &base.program.shapes,
+        )?;
+        Ok(Module {
+            id: self.next_module_id(),
+            program,
+        })
+    }
+
+    /// Каталог общих модулей движка, если он был собран.
+    pub(crate) fn catalog(&self) -> Option<&bsl_bytecode::ConfigurationProgram> {
+        self.configuration.as_ref().map(|c| &c.catalog)
     }
 
     /// Загружает текстовый байт-код. Совместимость компонентов проверяется
@@ -100,10 +170,31 @@ impl Engine {
     }
 }
 
+/// Описание одного общего модуля будущего каталога: стабильное имя,
+/// исходник и импорты по именам других модулей рецепта.
+#[derive(Debug, Clone)]
+pub struct ModuleRecipe {
+    pub name: String,
+    pub source: String,
+    /// Пары «псевдоним -> имя модуля рецепта». Обычно псевдоним совпадает
+    /// с именем; отдельный нужен файловому загрузчику `bsl-cli`, где
+    /// вложенные псевдонимы локальны импортёру.
+    pub imports: Vec<(String, String)>,
+}
+
+/// Не зависящее от файловой системы описание графа общих модулей.
+/// Строится загрузчиком (`bsl-cli` для `//@используй`) либо host-кодом и
+/// передаётся в [`EngineBuilder::configuration`] до `build`.
+#[derive(Debug, Clone, Default)]
+pub struct ModuleGraphRecipe {
+    pub modules: Vec<ModuleRecipe>,
+}
+
 /// Стадия композиции статически связанных runtime-компонентов.
 pub struct EngineBuilder {
     runtime: bsl_rt::RuntimeBuilder,
     symbols: bsl_syntax::PreprocSymbols,
+    recipe: ModuleGraphRecipe,
 }
 
 impl EngineBuilder {
@@ -135,11 +226,32 @@ impl EngineBuilder {
         Self {
             runtime,
             symbols: bsl_syntax::PreprocSymbols::new(),
+            recipe: ModuleGraphRecipe::default(),
         }
     }
 
     pub fn register_library(mut self, library: LibraryDescriptor) -> Self {
         self.runtime.register(library);
+        self
+    }
+
+    /// Передаёт весь граф общих модулей разом. Модули уже добавленные
+    /// `common_module` сохраняются; каталог замораживается в `build`.
+    #[must_use]
+    pub fn configuration(mut self, recipe: ModuleGraphRecipe) -> Self {
+        self.recipe.modules.extend(recipe.modules);
+        self
+    }
+
+    /// Добавляет общий модуль без импортов — сокращение для host-кода,
+    /// которому не нужен полный рецепт.
+    #[must_use]
+    pub fn common_module(mut self, name: &str, source: &str) -> Self {
+        self.recipe.modules.push(ModuleRecipe {
+            name: name.to_string(),
+            source: source.to_string(),
+            imports: Vec::new(),
+        });
         self
     }
 
@@ -163,12 +275,23 @@ impl EngineBuilder {
     /// Возвращает ошибку при конфликте идентичностей, имён, кодов или
     /// версий компонентов.
     pub fn build(self) -> Result<Engine, Error> {
+        let registry = self.runtime.build()?;
+        let configuration = if self.recipe.modules.is_empty() {
+            None
+        } else {
+            let (catalog, entry_imports) = compile_catalog(&self.recipe, &registry, &self.symbols)?;
+            Some(std::rc::Rc::new(EngineConfiguration {
+                catalog,
+                entry_imports,
+            }))
+        };
         Ok(Engine {
             inner: Arc::new(EngineInner {
-                registry: self.runtime.build()?,
+                registry,
                 symbols: self.symbols,
                 modules: AtomicU64::new(0),
             }),
+            configuration,
         })
     }
 }
@@ -213,4 +336,122 @@ impl Module {
     pub fn bytecode(&self) -> Result<String, Error> {
         Ok(bsl_bytecode::write_program(&self.program, None)?)
     }
+}
+
+/// Компилирует каталог по рецепту: topo-порядок для резолвинга, порядок
+/// манифеста для номеров модулей, общий интернер имён и форм, периметр
+/// `verify_configuration` до заморозки.
+fn compile_catalog(
+    recipe: &ModuleGraphRecipe,
+    registry: &bsl_rt::RuntimeRegistry,
+    symbols: &bsl_syntax::PreprocSymbols,
+) -> Result<
+    (
+        bsl_bytecode::ConfigurationProgram,
+        Vec<bsl_sema::ImportedModule>,
+    ),
+    Error,
+> {
+    let modules = &recipe.modules;
+    // Имена каталога уникальны без учёта регистра — правило свёртки то же,
+    // что у остальных имён BSL.
+    for (i, module) in modules.iter().enumerate() {
+        if module.name.is_empty() {
+            return Err(Error::Configuration("имя общего модуля пусто".to_string()));
+        }
+        if modules[..i]
+            .iter()
+            .any(|other| bsl_rt::folded_eq(&other.name, &module.name))
+        {
+            return Err(Error::Configuration(format!(
+                "имя общего модуля «{}» повторяется",
+                module.name
+            )));
+        }
+    }
+    let index_of = |name: &str| -> Option<usize> {
+        modules
+            .iter()
+            .position(|module| bsl_rt::folded_eq(&module.name, name))
+    };
+
+    // Topo-сортировка Кана по импортам: цикл — ошибка конфигурации, как и
+    // импорт неизвестного модуля.
+    let mut in_degree = vec![0usize; modules.len()];
+    let mut dependants: Vec<Vec<usize>> = vec![Vec::new(); modules.len()];
+    for (i, module) in modules.iter().enumerate() {
+        for (_, target) in &module.imports {
+            let Some(target) = index_of(target) else {
+                return Err(Error::Configuration(format!(
+                    "модуль «{}» импортирует неизвестный «{target}»",
+                    module.name
+                )));
+            };
+            in_degree[i] += 1;
+            dependants[target].push(i);
+        }
+    }
+    let mut queue: Vec<usize> = (0..modules.len()).filter(|i| in_degree[*i] == 0).collect();
+    let mut topo = Vec::with_capacity(modules.len());
+    while let Some(next) = queue.pop() {
+        topo.push(next);
+        for &dependant in &dependants[next] {
+            in_degree[dependant] -= 1;
+            if in_degree[dependant] == 0 {
+                queue.push(dependant);
+            }
+        }
+    }
+    if topo.len() != modules.len() {
+        return Err(Error::Configuration(
+            "граф импортов общих модулей содержит цикл".to_string(),
+        ));
+    }
+
+    let mut resolved: Vec<Option<bsl_sema::ResolvedProgram>> = vec![None; modules.len()];
+    for &i in &topo {
+        let module = &modules[i];
+        let imports: Vec<bsl_sema::ImportedModule> = module
+            .imports
+            .iter()
+            .map(|(alias, target)| {
+                let target_index = index_of(target).expect("проверено при построении графа выше");
+                bsl_sema::ImportedModule::from_resolved(
+                    alias,
+                    target_index as u32,
+                    resolved[target_index]
+                        .as_ref()
+                        .expect("topo-порядок: цель разрешена раньше импортёра"),
+                )
+            })
+            .collect();
+        let syntax = bsl_syntax::parse_with_symbols(&module.source, symbols)?;
+        resolved[i] = Some(bsl_sema::resolve_program_with_imports(
+            &syntax.items,
+            registry,
+            &imports,
+        )?);
+    }
+    let resolved: Vec<bsl_sema::ResolvedProgram> = resolved
+        .into_iter()
+        .map(|module| module.expect("каждый модуль разрешён topo-обходом"))
+        .collect();
+
+    let pairs: Vec<(String, &bsl_sema::ResolvedProgram)> = modules
+        .iter()
+        .zip(&resolved)
+        .map(|(module, resolved)| (module.name.clone(), resolved))
+        .collect();
+    let (catalog, _) = bsl_compiler::compile_configuration(&pairs, None)?;
+    bsl_bytecode::image::verify_configuration(&catalog, None).map_err(Error::Runtime)?;
+
+    let entry_imports = modules
+        .iter()
+        .zip(&resolved)
+        .enumerate()
+        .map(|(i, (module, resolved))| {
+            bsl_sema::ImportedModule::from_resolved(&module.name, i as u32, resolved)
+        })
+        .collect();
+    Ok((catalog, entry_imports))
 }

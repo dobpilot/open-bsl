@@ -476,14 +476,18 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
         // Слоты чужого модуля живут вне регистров и вне `ModSet` текущего:
         // для порядка обращений достаточно кучи — два доступа к одному
         // импортированному слоту не попадут в один бандл, если хотя бы один
-        // из них запись.
+        // из них запись. Оба опкода — хвостовые: первое касание модуля
+        // пушит кадр его инициализации, и продолжать бандл прежнего кадра
+        // после этого нельзя.
         Instr::GetImportedVar { dst, .. } => {
             write!(dst);
             e.heap_read = true;
+            e.ctl = Ctl::Trailing;
         }
         Instr::SetImportedVar { src, .. } => {
             read!(src);
             e.heap_write = true;
+            e.ctl = Ctl::Trailing;
         }
         Instr::Await { dst, promise } => {
             read!(promise);
