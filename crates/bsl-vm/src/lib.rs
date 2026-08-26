@@ -1371,6 +1371,11 @@ pub struct ProgramExecution {
     /// Экземпляры общих модулей каталога этого сеанса; у одиночной
     /// программы пуст.
     session_modules: SessionModules,
+    /// Всегда квантовать, даже с одной BSL-задачей: фоновый owned-прогон
+    /// чередуется с соседями по worker бюджетом poll, и неограниченный
+    /// однозадачный fast path для него выключен. Обычный State остаётся
+    /// с false и за проверку не платит.
+    force_scheduled: bool,
     finished: bool,
 }
 
@@ -1416,6 +1421,7 @@ impl ProgramExecution {
             root_result: None,
             module_state,
             session_modules: SessionModules::default(),
+            force_scheduled: false,
             finished: false,
         }
     }
@@ -1425,6 +1431,13 @@ impl ProgramExecution {
     /// один раз при создании конфигурационного запуска.
     pub fn attach_catalog(&mut self, catalog: &bsl_bytecode::ConfigurationProgram) {
         self.session_modules = SessionModules::for_catalog(catalog);
+    }
+
+    /// Включает постоянное квантование — для фонового прогона, которым
+    /// драйвер worker чередует несколько заданий (см.
+    /// poll_configuration_with_budget).
+    pub fn set_always_scheduled(&mut self, value: bool) {
+        self.force_scheduled = value;
     }
 
     /// Планирует НЕленивую инициализацию модулей: тела выполняются до
@@ -1588,7 +1601,7 @@ impl ProgramExecution {
             dynamic: Some(dynamic),
             dynamic_depth: &dynamic_depth,
         };
-        self.poll_linked(program, &linked, None, &mut host, host_slice)
+        self.poll_linked(program, &linked, None, &mut host, host_slice, None)
     }
 
     /// Конфигурационный аналог [`Self::poll_with_registry_and_io`]:
@@ -1611,6 +1624,32 @@ impl ProgramExecution {
         dynamic: &'a mut dyn DynamicCompiler,
         host_env: &'a mut bsl_rt::HostEnv,
         host_slice: usize,
+    ) -> Result<ProgramPoll, RtError> {
+        self.poll_configuration_with_budget(
+            entry, catalog, registry, stdout, stderr, dynamic, host_env, host_slice, None,
+        )
+    }
+
+    /// То же с бюджетом квантов планировщика: после `max_quanta`
+    /// исчерпанных квантов poll возвращает `Runnable`, не дожидаясь
+    /// завершения. Драйвер worker пула чередует НЕСКОЛЬКО заданий на
+    /// одном потоке именно этим бюджетом; `None` — без предела.
+    ///
+    /// # Errors
+    ///
+    /// Те же, что у [`Self::poll_configuration_with_registry_and_io`].
+    #[allow(clippy::too_many_arguments)]
+    pub fn poll_configuration_with_budget<'a>(
+        &mut self,
+        entry: &Program,
+        catalog: &bsl_bytecode::ConfigurationProgram,
+        registry: &bsl_rt::RuntimeRegistry,
+        stdout: &'a mut dyn Write,
+        stderr: &'a mut dyn Write,
+        dynamic: &'a mut dyn DynamicCompiler,
+        host_env: &'a mut bsl_rt::HostEnv,
+        host_slice: usize,
+        quanta_budget: Option<usize>,
     ) -> Result<ProgramPoll, RtError> {
         let linked = link_components(
             entry,
@@ -1650,7 +1689,14 @@ impl ProgramExecution {
             dynamic: Some(dynamic),
             dynamic_depth: &dynamic_depth,
         };
-        self.poll_linked(entry, &linked, Some(&ctx), &mut host, host_slice)
+        self.poll_linked(
+            entry,
+            &linked,
+            Some(&ctx),
+            &mut host,
+            host_slice,
+            quanta_budget,
+        )
     }
 
     fn poll_linked(
@@ -1660,6 +1706,7 @@ impl ProgramExecution {
         catalog: Option<&CatalogContext<'_>>,
         host: &mut HostIo<'_, '_>,
         host_slice: usize,
+        mut quanta_budget: Option<usize>,
     ) -> Result<ProgramPoll, RtError> {
         if self.finished {
             return Err(RtError::DynamicError(
@@ -1678,6 +1725,7 @@ impl ProgramExecution {
             root_result,
             module_state,
             session_modules,
+            force_scheduled,
             finished,
             ..
         } = self;
@@ -1715,7 +1763,7 @@ impl ProgramExecution {
                 .ok_or(RtError::InvalidBytecode(
                     "готовая очередь ссылается на отсутствующую задачу",
                 ))?;
-            let scheduled = async_state.has_other_live_task();
+            let scheduled = async_state.has_other_live_task() || *force_scheduled;
             if task.quantum_remaining == 0 || !scheduled {
                 task.quantum_remaining = async_state.scheduler_quantum();
             }
@@ -1750,6 +1798,12 @@ impl ProgramExecution {
                     ) {
                         async_state.tasks[task_id] = Some(task);
                         async_state.ready.push_back(task_id);
+                        if let Some(budget) = quanta_budget.as_mut() {
+                            *budget = budget.saturating_sub(1);
+                            if *budget == 0 {
+                                return Ok(ProgramPoll::Runnable);
+                            }
+                        }
                         break;
                     }
                     continue;
@@ -1840,6 +1894,12 @@ impl ProgramExecution {
                                     }
                                     async_state.tasks[task_id] = Some(task);
                                     async_state.ready.push_back(task_id);
+                                    if let Some(budget) = quanta_budget.as_mut() {
+                                        *budget = budget.saturating_sub(1);
+                                        if *budget == 0 {
+                                            return Ok(ProgramPoll::Runnable);
+                                        }
+                                    }
                                     break;
                                 }
                                 Err(e) => {
@@ -1933,6 +1993,12 @@ impl ProgramExecution {
                         {
                             async_state.tasks[task_id] = Some(task);
                             async_state.ready.push_back(task_id);
+                            if let Some(budget) = quanta_budget.as_mut() {
+                                *budget = budget.saturating_sub(1);
+                                if *budget == 0 {
+                                    return Ok(ProgramPoll::Runnable);
+                                }
+                            }
                             break;
                         }
                         continue;
@@ -1940,6 +2006,12 @@ impl ProgramExecution {
                     Ok(Step::Yield) => {
                         async_state.tasks[task_id] = Some(task);
                         async_state.ready.push_back(task_id);
+                        if let Some(budget) = quanta_budget.as_mut() {
+                            *budget = budget.saturating_sub(1);
+                            if *budget == 0 {
+                                return Ok(ProgramPoll::Runnable);
+                            }
+                        }
                         break;
                     }
                     Ok(Step::StartAsync(child_id)) => {
@@ -2020,7 +2092,7 @@ fn drive_linked(
         SchedulerConfig::default(),
     );
     let result = loop {
-        match execution.poll_linked(program, linked, None, host, usize::MAX) {
+        match execution.poll_linked(program, linked, None, host, usize::MAX, None) {
             Ok(ProgramPoll::Complete(value, stack)) => break Ok((value, stack)),
             Ok(ProgramPoll::Runnable | ProgramPoll::Waiting) => continue,
             Err(error) => break Err(error),

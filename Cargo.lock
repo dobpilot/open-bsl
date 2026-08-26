@@ -1241,6 +1241,7 @@ dependencies = [
  "bsl-vm",
  "bsl-xml",
  "bsl-zip",
+ "tokio",
 ]
 
 [[package]]

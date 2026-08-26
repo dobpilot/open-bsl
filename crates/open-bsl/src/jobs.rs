@@ -601,6 +601,107 @@ pub(crate) struct JobRuntimeShared {
     pub targets: TargetTable,
 }
 
+impl JobRuntimeShared {
+    /// Все перечисленные задания terminal (неизвестные считаются
+    /// вытесненными и потому terminal).
+    fn all_terminal(registry: &JobRegistry, ids: &[JobId]) -> bool {
+        ids.iter().all(|id| {
+            registry
+                .snapshot(*id)
+                .is_none_or(|snapshot| snapshot.state.is_terminal())
+        })
+    }
+
+    /// Admission нового задания в общий реестр. Пул не поднимает: это
+    /// обязанность внешнего `JobRuntime::submit`; вложенный submit из
+    /// worker приходит, когда потоки уже работают.
+    pub(crate) fn submit_shared(
+        &self,
+        method_name: &str,
+        target: (u32, u16),
+        params: Arc<SerializedValueGraph>,
+        key: Option<Arc<JobKeyDto>>,
+        description: Option<String>,
+    ) -> Result<JobSnapshotDto, SubmitError> {
+        let id = self.id_source.next_id();
+        let mut registry = self.registry.lock().expect("реестр без отравления");
+        let snapshot = registry
+            .admit(
+                id,
+                method_name.to_string(),
+                target,
+                params,
+                key,
+                description,
+            )
+            .map_err(|error| match error {
+                AdmissionError::ResourceLimit(text) => SubmitError::Rejected(text),
+                AdmissionError::DuplicateKey => {
+                    SubmitError::Rejected("задание с таким ключом уже активно".to_string())
+                }
+                AdmissionError::Unavailable(_) => SubmitError::Unavailable,
+            })?;
+        if registry.state == RuntimeState::Cold {
+            registry.state = RuntimeState::Starting;
+        }
+        Ok(snapshot)
+    }
+
+    /// То же по имени «Модуль.Метод» — для вложенного submit из worker.
+    pub(crate) fn submit_by_name_shared(
+        &self,
+        method_name: &str,
+        params: Arc<SerializedValueGraph>,
+        key: Option<Arc<JobKeyDto>>,
+        description: Option<String>,
+    ) -> Result<JobSnapshotDto, SubmitError> {
+        let target = self
+            .targets
+            .resolve(method_name)
+            .map_err(SubmitError::BadTarget)?;
+        let snapshot = self.submit_shared(method_name, target, params, key, description)?;
+        self.work_available.notify_one();
+        Ok(snapshot)
+    }
+
+    /// Блокирующее ожидание terminal-состояния всех `ids` — путь
+    /// foreground-сеанса; worker вместо блокировки помогает пулу (см.
+    /// `WorkerJobService`).
+    pub(crate) fn wait_terminal_blocking(&self, ids: &[JobId], timeout: Option<Duration>) -> bool {
+        let deadline = timeout.map(|t| std::time::Instant::now() + t);
+        let mut registry = self.registry.lock().expect("реестр без отравления");
+        loop {
+            if Self::all_terminal(&registry, ids) {
+                return true;
+            }
+            match deadline {
+                None => {
+                    registry = self
+                        .terminal_watch
+                        .wait(registry)
+                        .expect("реестр без отравления");
+                }
+                Some(deadline) => {
+                    let now = std::time::Instant::now();
+                    let Some(left) = deadline.checked_duration_since(now) else {
+                        return false;
+                    };
+                    let (guard, result) = self
+                        .terminal_watch
+                        .wait_timeout(registry, left)
+                        .expect("реестр без отравления");
+                    registry = guard;
+                    if result.timed_out() {
+                        // Последняя проверка под локом — событие могло
+                        // прийти на границе таймаута.
+                        return Self::all_terminal(&registry, ids);
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Нативный runtime фоновых заданий одного `Engine`. Клоны `Engine`
 /// разделяют runtime; OS-потоки поднимаются лениво при первом успешном
 /// admission — движок без заданий потоков не создаёт.
@@ -675,30 +776,9 @@ impl JobRuntime {
         key: Option<Arc<JobKeyDto>>,
         description: Option<String>,
     ) -> Result<JobSnapshotDto, SubmitError> {
-        let id = self.shared.id_source.next_id();
-        let snapshot = {
-            let mut registry = self.shared.registry.lock().expect("реестр без отравления");
-            let snapshot = registry
-                .admit(
-                    id,
-                    method_name.to_string(),
-                    target,
-                    params,
-                    key,
-                    description,
-                )
-                .map_err(|error| match error {
-                    AdmissionError::ResourceLimit(text) => SubmitError::Rejected(text),
-                    AdmissionError::DuplicateKey => {
-                        SubmitError::Rejected("задание с таким ключом уже активно".to_string())
-                    }
-                    AdmissionError::Unavailable(_) => SubmitError::Unavailable,
-                })?;
-            if registry.state == RuntimeState::Cold {
-                registry.state = RuntimeState::Starting;
-            }
-            snapshot
-        };
+        let snapshot = self
+            .shared
+            .submit_shared(method_name, target, params, key, description)?;
         self.ensure_workers();
         self.shared.work_available.notify_one();
         Ok(snapshot)
@@ -775,48 +855,7 @@ impl JobRuntime {
     /// any/all уточняется замером `JOB.WAIT.MANY`). `None` — без предела.
     /// Возвращает `true`, если дождались; `false` — таймаут.
     pub fn wait_terminal(&self, ids: &[JobId], timeout: Option<Duration>) -> bool {
-        let deadline = timeout.map(|t| std::time::Instant::now() + t);
-        let mut registry = self.shared.registry.lock().expect("реестр без отравления");
-        loop {
-            let all_terminal = ids.iter().all(|id| {
-                registry
-                    .snapshot(*id)
-                    .is_none_or(|snapshot| snapshot.state.is_terminal())
-            });
-            if all_terminal {
-                return true;
-            }
-            match deadline {
-                None => {
-                    registry = self
-                        .shared
-                        .terminal_watch
-                        .wait(registry)
-                        .expect("реестр без отравления");
-                }
-                Some(deadline) => {
-                    let now = std::time::Instant::now();
-                    let Some(left) = deadline.checked_duration_since(now) else {
-                        return false;
-                    };
-                    let (guard, result) = self
-                        .shared
-                        .terminal_watch
-                        .wait_timeout(registry, left)
-                        .expect("реестр без отравления");
-                    registry = guard;
-                    if result.timed_out() {
-                        // Последняя проверка под локом — событие могло
-                        // прийти на границе таймаута.
-                        return ids.iter().all(|id| {
-                            registry
-                                .snapshot(*id)
-                                .is_none_or(|snapshot| snapshot.state.is_terminal())
-                        });
-                    }
-                }
-            }
-        }
+        self.shared.wait_terminal_blocking(ids, timeout)
     }
 }
 
@@ -890,25 +929,88 @@ fn worker_main(shared: &Arc<JobRuntimeShared>) {
             return;
         }
     };
+    // Локальная FIFO резидентов: runnable чередуются бюджетными квантами,
+    // waiting опрашиваются вместе с ними (host-completions подбирает их
+    // собственный poll). Новый глобальный job извлекается только когда
+    // локально нет runnable-резидентов — по плану фоновых заданий.
+    let mut local: VecDeque<RunningJob> = VecDeque::new();
     loop {
-        let job = {
+        let runnable_locally = local.iter().any(|job| !job.waiting);
+        let next_global = {
             let mut registry = shared.registry.lock().expect("реестр без отравления");
             loop {
                 match registry.state {
                     RuntimeState::Closed | RuntimeState::Broken => return,
                     _ => {}
                 }
-                if let Some(id) = registry.queue.pop_front() {
-                    break id;
+                if runnable_locally {
+                    // Есть чем заняться — глобальную очередь не трогаем.
+                    break None;
                 }
-                registry = shared
-                    .work_available
-                    .wait(registry)
-                    .expect("реестр без отравления");
+                if let Some(id) = registry.queue.pop_front() {
+                    break Some(id);
+                }
+                if local.is_empty() {
+                    // Совсем пусто: спим до появления работы.
+                    registry = shared
+                        .work_available
+                        .wait(registry)
+                        .expect("реестр без отравления");
+                } else {
+                    // Все резиденты ждут host-completion: короткая пауза
+                    // вместо busy-loop; ExecutionWaker с tokio-каналом
+                    // заменит её вместе с pending host-calls.
+                    let (guard, _) = shared
+                        .work_available
+                        .wait_timeout(registry, Duration::from_millis(2))
+                        .expect("реестр без отравления");
+                    registry = guard;
+                    break None;
+                }
             }
         };
-        run_one_job(shared, &engine, job);
-        shared.terminal_watch.notify_all();
+        if let Some(id) = next_global {
+            match start_job(shared, &engine, id) {
+                None => continue,
+                Some(Ok(job)) => local.push_back(job),
+                Some(Err(error)) => {
+                    finish_job(shared, id, JobStateDto::Failed, Some(error));
+                    continue;
+                }
+            }
+        }
+        let Some(mut job) = local.pop_front() else {
+            continue;
+        };
+        // Паника BSL-исполнения ловится на границе кванта и роняет только
+        // это задание; соседи-резиденты продолжают.
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| job.poll(&engine)));
+        match outcome {
+            Ok(Ok(bsl_vm::ProgramPoll::Complete(..))) => {
+                finish_job(shared, job.id, JobStateDto::Completed, None);
+            }
+            Ok(Ok(bsl_vm::ProgramPoll::Runnable)) => {
+                job.waiting = false;
+                local.push_back(job);
+            }
+            Ok(Ok(bsl_vm::ProgramPoll::Waiting)) => {
+                job.waiting = true;
+                local.push_back(job);
+            }
+            Ok(Err(error)) => {
+                finish_job(shared, job.id, JobStateDto::Failed, Some(error));
+            }
+            Err(_) => {
+                finish_job(
+                    shared,
+                    job.id,
+                    JobStateDto::Failed,
+                    Some(JobErrorDto::from_text(
+                        "исполнение задания прервано паникой",
+                    )),
+                );
+            }
+        }
     }
 }
 
@@ -927,48 +1029,93 @@ fn build_worker_engine(recipe: &WorkerRecipe) -> Result<crate::Engine, String> {
         .map_err(|e| e.to_string())
 }
 
-/// Исполняет одно задание: `Queued -> Running`, изолированный сеанс,
-/// terminal transition ровно один раз. Паника BSL-исполнения ловится на
-/// границе задания и роняет только его.
-fn run_one_job(shared: &Arc<JobRuntimeShared>, engine: &crate::Engine, id: JobId) {
-    let Some((target, params)) = ({
-        let mut registry = shared.registry.lock().expect("реестр без отравления");
-        let begin = shared.time_source.wall_now();
-        registry.record_mut(id).map(|record| {
-            record.snapshot.state = JobStateDto::Running;
-            record.snapshot.begin = begin;
-            (record.target, Arc::clone(&record.snapshot.params))
-        })
-    }) else {
-        return; // задание уже terminal (отменено до старта)
-    };
-
-    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        execute_target(engine, target, &params)
-    }));
-    let (state, error) = match outcome {
-        Ok(Ok(())) => (JobStateDto::Completed, None),
-        Ok(Err(error)) => (JobStateDto::Failed, Some(Arc::new(error))),
-        Err(_) => (
-            JobStateDto::Failed,
-            Some(Arc::new(JobErrorDto::from_text(
-                "исполнение задания прервано паникой",
-            ))),
-        ),
-    };
-    let end = shared.time_source.wall_now();
-    let mut registry = shared.registry.lock().expect("реестр без отравления");
-    registry.finish(id, state, end, error);
+/// Резидент worker: изолированный сеанс одного задания с pollable
+/// VM-прогоном. Начатый резидент закреплён за своим worker — `Rc`-графы
+/// его сеанса поток не покидают.
+struct RunningJob {
+    id: JobId,
+    state: crate::State,
+    module: crate::Module,
+    vm: bsl_vm::ProgramExecution,
+    /// Последний poll вернул `Waiting`: задание ждёт host-completion и
+    /// runnable-резидентом не считается.
+    waiting: bool,
 }
 
-/// Вызов цели без компилятора: entry-программа собирается руками —
-/// аргументы приходят готовыми регистрами кадра 0, вызов идёт обычным
-/// `CallImported` по числовому манифесту.
-fn execute_target(
+/// Стартует резидента: `Queued -> Running`, entry-программа цели,
+/// изолированный сеанс, pollable-прогон с постоянным квантованием.
+/// `None` — запись уже terminal (например, отменена до старта).
+fn start_job(
+    shared: &Arc<JobRuntimeShared>,
+    engine: &crate::Engine,
+    id: JobId,
+) -> Option<Result<RunningJob, JobErrorDto>> {
+    let (target, params) = {
+        let mut registry = shared.registry.lock().expect("реестр без отравления");
+        let begin = shared.time_source.wall_now();
+        let record = registry.record_mut(id)?;
+        record.snapshot.state = JobStateDto::Running;
+        record.snapshot.begin = begin;
+        (record.target, Arc::clone(&record.snapshot.params))
+    };
+    Some(
+        prepare_job(shared, engine, target, &params).map(|(state, module, vm)| RunningJob {
+            id,
+            state,
+            module,
+            vm,
+            waiting: false,
+        }),
+    )
+}
+
+impl RunningJob {
+    /// Один бюджетный квант задания. Поток не блокируется: completions
+    /// подбираются конечным срезом без ожидания первого.
+    fn poll(&mut self, engine: &crate::Engine) -> Result<bsl_vm::ProgramPoll, JobErrorDto> {
+        let catalog = engine
+            .catalog()
+            .expect("worker строится только с каталогом");
+        self.vm
+            .poll_configuration_with_budget(
+                &self.module.program,
+                catalog,
+                engine.registry(),
+                &mut self.state.host.stdout,
+                &mut self.state.host.stderr,
+                &mut self.state.dynamic,
+                &mut self.state.host.env,
+                1024,
+                Some(1),
+            )
+            .map_err(|error| JobErrorDto::from_text(error.to_string()))
+    }
+}
+
+/// Terminal transition резидента с пробуждением ожидающих.
+fn finish_job(
+    shared: &Arc<JobRuntimeShared>,
+    id: JobId,
+    state: JobStateDto,
+    error: Option<JobErrorDto>,
+) {
+    let end = shared.time_source.wall_now();
+    let mut registry = shared.registry.lock().expect("реестр без отравления");
+    registry.finish(id, state, end, error.map(Arc::new));
+    drop(registry);
+    shared.terminal_watch.notify_all();
+}
+
+/// Готовит сеанс задания без компилятора: entry-программа собирается
+/// руками — аргументы приходят константами чанка, вызов идёт обычным
+/// `CallImported` по числовому манифесту. Возвращает изолированный сеанс,
+/// модуль entry и pollable-прогон с постоянным квантованием.
+fn prepare_job(
+    shared: &Arc<JobRuntimeShared>,
     engine: &crate::Engine,
     target: (u32, u16),
     params: &SerializedValueGraph,
-) -> Result<(), JobErrorDto> {
+) -> Result<(crate::State, crate::Module, bsl_vm::ProgramExecution), JobErrorDto> {
     let catalog = engine
         .catalog()
         .expect("worker строится только с каталогом");
@@ -1084,10 +1231,32 @@ fn execute_target(
         .map_err(|error| JobErrorDto::from_text(error.to_string()))?;
 
     let mut state = engine.new_state();
+    // Вложенные задания идут в ОБЩИЙ реестр родительского runtime, а не в
+    // пул воркерного движка: сервис сеанса подменяется worker-обёрткой с
+    // helping-ожиданием.
     state
-        .run(&module)
-        .map(|_| ())
-        .map_err(|error| JobErrorDto::from_text(error.to_string()))
+        .host
+        .env
+        .set_background_jobs(std::rc::Rc::new(WorkerJobService {
+            shared: Arc::clone(shared),
+            engine: engine.clone(),
+        }));
+    let mut vm = bsl_vm::ProgramExecution::start_with_registry_and_scheduler(
+        &module.program,
+        engine.registry(),
+        bsl_vm::JitMode::Off,
+        &state.host.env,
+        state.scheduler,
+    )
+    .map_err(|error| JobErrorDto::from_text(error.to_string()))?;
+    let catalog = engine
+        .catalog()
+        .expect("worker строится только с каталогом");
+    vm.attach_catalog(catalog);
+    // Фоновый прогон всегда квантуется: бюджетный poll возвращает
+    // управление драйверу, и worker чередует резидентов.
+    vm.set_always_scheduled(true);
+    Ok((state, module, vm))
 }
 
 /// Разрешает цель `Модуль.Метод` по каталогу: неглобальный общий модуль,
@@ -1312,6 +1481,134 @@ mod pool_tests {
             .expect("runtime собирается");
         // Ложный идентификатор: задания нет — считается terminal (вытеснен).
         assert!(runtime.wait_terminal(&[JobId([9; 16])], Some(Duration::from_millis(10))));
+    }
+}
+
+/// Сервис worker-сеансов: тот же общий реестр, но ожидание не блокирует
+/// пул — поток-родитель ПОМОГАЕТ: пока свои задания не terminal, он
+/// исполняет чужие из глобальной FIFO. Это разблокирует вложенное
+/// ожидание при полностью занятом пуле (два родителя, ждущие детей,
+/// доводят их сами). Полный pending-механизм плана — `PendingHostCall` с
+/// парковкой execution — приходит вместе с переводом синхронного HTTP;
+/// helping не меняет ABI и наблюдаемой семантики ожидания.
+pub(crate) struct WorkerJobService {
+    pub shared: Arc<JobRuntimeShared>,
+    /// Клон worker-движка: живёт только в потоке этого worker.
+    pub engine: crate::Engine,
+}
+
+impl bsl_rt::BackgroundJobService for WorkerJobService {
+    fn submit(
+        &self,
+        method_name: &str,
+        params: Arc<SerializedValueGraph>,
+        key: Option<Arc<bsl_rt::JobKeyDto>>,
+        description: Option<String>,
+    ) -> Result<Arc<JobSnapshotDto>, String> {
+        self.shared
+            .submit_by_name_shared(method_name, params, key, description)
+            .map(Arc::new)
+            .map_err(|error| match error {
+                SubmitError::Rejected(text) | SubmitError::BadTarget(text) => text,
+                SubmitError::Unavailable => "фоновый runtime закрыт или сломан".to_string(),
+            })
+    }
+
+    fn snapshot(&self, id: JobId) -> Option<Arc<JobSnapshotDto>> {
+        self.shared
+            .registry
+            .lock()
+            .expect("реестр без отравления")
+            .snapshot(id)
+    }
+
+    fn snapshots(&self) -> Vec<Arc<JobSnapshotDto>> {
+        self.shared
+            .registry
+            .lock()
+            .expect("реестр без отравления")
+            .snapshots()
+    }
+
+    fn wait_terminal(&self, ids: &[JobId], timeout: Option<Duration>) -> bool {
+        let deadline = timeout.map(|t| std::time::Instant::now() + t);
+        loop {
+            let next = {
+                let registry = self.shared.registry.lock().expect("реестр без отравления");
+                if JobRuntimeShared::all_terminal(&registry, ids) {
+                    return true;
+                }
+                if matches!(registry.state, RuntimeState::Closed | RuntimeState::Broken) {
+                    return JobRuntimeShared::all_terminal(&registry, ids);
+                }
+                drop(registry);
+                if deadline.is_some_and(|deadline| std::time::Instant::now() >= deadline) {
+                    return false;
+                }
+                let mut registry = self.shared.registry.lock().expect("реестр без отравления");
+                registry.queue.pop_front()
+            };
+            match next {
+                Some(id) => {
+                    // Помощь пулу: чужое задание доводится этим потоком.
+                    drive_to_terminal(&self.shared, &self.engine, id);
+                }
+                None => {
+                    // Некому помогать — короткое ожидание terminal-событий.
+                    let registry = self.shared.registry.lock().expect("реестр без отравления");
+                    let _ = self
+                        .shared
+                        .terminal_watch
+                        .wait_timeout(registry, Duration::from_millis(2))
+                        .expect("реестр без отравления");
+                }
+            }
+        }
+    }
+
+    fn cancel(&self, _id: JobId) -> Result<(), String> {
+        Err("отмена фонового задания появится вместе с кооперативными safe points".to_string())
+    }
+}
+
+/// Доводит одно задание до terminal в текущем потоке — мини-драйвер
+/// helping-ожидания. `Waiting`-паузы пережидаются коротким сном.
+fn drive_to_terminal(shared: &Arc<JobRuntimeShared>, engine: &crate::Engine, id: JobId) {
+    let mut job = match start_job(shared, engine, id) {
+        None => return,
+        Some(Ok(job)) => job,
+        Some(Err(error)) => {
+            finish_job(shared, id, JobStateDto::Failed, Some(error));
+            return;
+        }
+    };
+    loop {
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| job.poll(engine)));
+        match outcome {
+            Ok(Ok(bsl_vm::ProgramPoll::Complete(..))) => {
+                finish_job(shared, job.id, JobStateDto::Completed, None);
+                return;
+            }
+            Ok(Ok(bsl_vm::ProgramPoll::Runnable)) => {}
+            Ok(Ok(bsl_vm::ProgramPoll::Waiting)) => {
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            Ok(Err(error)) => {
+                finish_job(shared, job.id, JobStateDto::Failed, Some(error));
+                return;
+            }
+            Err(_) => {
+                finish_job(
+                    shared,
+                    job.id,
+                    JobStateDto::Failed,
+                    Some(JobErrorDto::from_text(
+                        "исполнение задания прервано паникой",
+                    )),
+                );
+                return;
+            }
+        }
     }
 }
 

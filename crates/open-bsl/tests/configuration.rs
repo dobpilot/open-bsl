@@ -293,3 +293,66 @@ fn without_a_catalog_the_manager_raises_a_catchable_error() {
     let mut state = engine.new_state();
     state.run(&module).expect("ловимая ошибка перехвачена");
 }
+
+/// Вложенное задание при пуле из ОДНОГО worker: родитель ждёт ребёнка —
+/// helping-ожидание доводит ребёнка потоком родителя, deadlock нет.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn a_nested_job_completes_on_a_single_worker_pool() {
+    let engine = Engine::builder()
+        .common_module(
+            "Служебный",
+            "Функция Ребёнок(Знач х) Экспорт\n\
+                 Возврат х * 2;\n\
+             КонецФункции\n\
+             Функция Родитель() Экспорт\n\
+                 Параметры = Новый Массив;\n\
+                 Параметры.Добавить(21);\n\
+                 Дитя = ФоновыеЗадания.Выполнить(\"Служебный.Ребёнок\", Параметры);\n\
+                 Дитя.ОжидатьЗавершенияВыполнения(30);\n\
+                 Свежее = ФоновыеЗадания.НайтиПоУникальномуИдентификатору(Дитя.УникальныйИдентификатор);\n\
+                 Если Свежее.Состояние <> СостояниеФоновогоЗадания.Завершено Тогда\n\
+                     ВызватьИсключение \"ребёнок не завершился\";\n\
+                 КонецЕсли;\n\
+                 Возврат 1;\n\
+             КонецФункции",
+        )
+        .background_jobs(open_bsl::jobs::BackgroundJobConfig {
+            workers: Some(1),
+            ..open_bsl::jobs::BackgroundJobConfig::default()
+        })
+        .build()
+        .expect("движок собирается");
+    let module = engine
+        .compile_entry(
+            "Родитель = ФоновыеЗадания.Выполнить(\"Служебный.Родитель\");\n\
+             Родитель.ОжидатьЗавершенияВыполнения(60);\n\
+             Свежий = ФоновыеЗадания.НайтиПоУникальномуИдентификатору(Родитель.УникальныйИдентификатор);\n\
+             Если Свежий.Состояние = СостояниеФоновогоЗадания.Завершено Тогда\n\
+                 Сообщить(\"родитель завершён\");\n\
+             Иначе\n\
+                 Сообщить(Свежий.ИнформацияОбОшибке.Подробно);\n\
+             КонецЕсли;",
+        )
+        .expect("entry компилируется");
+
+    use std::io::Write;
+    use std::rc::Rc;
+    use std::sync::Mutex;
+    #[derive(Clone, Default)]
+    struct Capture(Rc<Mutex<Vec<u8>>>);
+    impl Write for Capture {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let capture = Capture::default();
+    let mut state = engine.state_builder().stdout(capture.clone()).build();
+    state.run(&module).expect("прогон завершается");
+    let bytes = capture.0.lock().unwrap().clone();
+    assert_eq!(String::from_utf8(bytes).unwrap(), "родитель завершён\n");
+}

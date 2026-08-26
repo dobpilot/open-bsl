@@ -153,9 +153,9 @@ impl StateBuilder {
 /// публичной сигнатуры, где он встречался бы, — поэтому `pub(crate)`, а не
 /// `pub` (см. C.2, «замкнутость»).
 pub(crate) struct HostServices {
-    stdout: Box<dyn Write>,
-    stderr: Box<dyn Write>,
-    env: HostEnv,
+    pub(crate) stdout: Box<dyn Write>,
+    pub(crate) stderr: Box<dyn Write>,
+    pub(crate) env: HostEnv,
 }
 
 impl HostServices {
@@ -173,15 +173,15 @@ impl HostServices {
 
 /// Изолированные изменяемые host-сервисы одной BSL-сессии.
 pub struct State {
-    engine: Engine,
-    host: HostServices,
+    pub(crate) engine: Engine,
+    pub(crate) host: HostServices,
     /// Компилятор `Выполнить`/`Вычислить` этой сессии. Лежит рядом с
     /// потоками и окружением, потому что это такой же сервис прогона: VM
     /// динамический код только исполняет, а компилирует — он. Свой у
     /// каждой сессии, поэтому и кэш фрагментов у сессий раздельный.
-    dynamic: DynamicCode,
+    pub(crate) dynamic: DynamicCode,
     jit: bool,
-    scheduler: bsl_vm::SchedulerConfig,
+    pub(crate) scheduler: bsl_vm::SchedulerConfig,
 }
 
 /// Результат одного шага pollable-исполнения.
