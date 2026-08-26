@@ -68,10 +68,9 @@
 9. **Бенчмарк.** `cbr_rates.bsl` переводится на директиву; механизм `@prepend-bsl`
    удаляется из `run.sh` полностью (им пользовался только этот сценарий). Колонка
    1С остаётся через `build-combined.py`. Колонка oscript — новый близнец
-   `benchmarks/cbr_rates.os` с нативным `#Использовать connector` (библиотека
-   ставится из исходников <https://github.com/vbondarevsky/1connector> —
-   `opm install connector` из хаба не работает, ставить клонированный репозиторий
-   через `opm install -s`; сегодня колонка и так в ошибке — фикстура 1С-версии
+   `benchmarks/cbr_rates.os` с нативным `#Использовать connector` (библиотека —
+   oscript-порт <https://github.com/vbondarevsky/1connector>, ставится командой
+   `opm install 1connector`; сегодня колонка и так в ошибке — фикстура 1С-версии
    Connector не компилируется oscript из-за `ФабрикаXDTO`, проверено запуском).
    Версия oscript-порта может отличаться от 2.6.0 — близнец обязан давать
    байт-идентичный результат, «тот же наблюдаемый ответ», как lua-близнец с
@@ -265,9 +264,9 @@ pub fn compile_linked_program(
    `.bsl` как сейчас; отсутствие установленной библиотеки `connector` даёт
    обычный пропуск колонки (той же строкой «пропуск», какой печатается при
    отсутствии рантайма).
-3. Поставить библиотеку из исходников: клонировать
-   <https://github.com/vbondarevsky/1connector> и `opm install -s <клон>`
-   (из хаба `opm install connector` не работает); написать `benchmarks/cbr_rates.os` с
+3. Поставить библиотеку: `opm install 1connector` (oscript-порт
+   <https://github.com/vbondarevsky/1connector>; имя пакета — `1connector`,
+   пакета `connector` в хабе нет); написать `benchmarks/cbr_rates.os` с
    `#Использовать connector` — та же последовательность запросов и то же
    представление курсов; включить в байт-сравнение выходов протокола бенчмарка.
 4. `build-combined.py`: регэксп `@prepend-bsl` заменить разбором обеих форм
