@@ -1037,6 +1037,7 @@ const CORE_CONSTRUCTORS: &[ConstructorDescriptor] = &[
 const CORE_TYPES: &[&crate::TypeDescriptor] = &[
     &crate::background_jobs::BACKGROUND_JOBS_TYPE,
     &crate::background_jobs::BACKGROUND_JOB_TYPE,
+    &crate::background_jobs::USER_MESSAGE_TYPE,
     &crate::error_info::ERROR_INFO_TYPE,
     &crate::value_list::VALUE_LIST_TYPE,
     &crate::value_list::VALUE_LIST_ITEM_TYPE,

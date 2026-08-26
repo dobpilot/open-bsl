@@ -151,6 +151,8 @@ pub(crate) struct JobRecord {
     pub cancel_requested: Arc<std::sync::atomic::AtomicBool>,
     /// Token временного хранилища сеанса-вызывателя — приёмник staging.
     pub caller_token: Option<[u8; 16]>,
+    /// Сообщения пользователю (`Сообщить` внутри задания), FIFO.
+    pub messages: Vec<String>,
 }
 
 /// Ключ уникальности: пара «цель + снимок ключа» резервируется до
@@ -256,6 +258,7 @@ impl JobRegistry {
             begin: None,
             end: None,
             error: None,
+            messages: Vec::new(),
         };
         self.records.insert(
             id,
@@ -265,6 +268,7 @@ impl JobRegistry {
                 target,
                 cancel_requested: Arc::new(std::sync::atomic::AtomicBool::new(false)),
                 caller_token,
+                messages: Vec::new(),
             },
         );
         self.queue.push_back(id);
@@ -306,6 +310,7 @@ impl JobRegistry {
         record.snapshot.state = state;
         record.snapshot.end = end;
         record.snapshot.error = error;
+        record.snapshot.messages = std::mem::take(&mut record.messages);
         self.inflight -= 1;
         self.live_payload_bytes -= record.payload_bytes;
         self.keys.retain(|(_, owner)| *owner != id);
@@ -334,7 +339,9 @@ impl JobRegistry {
     /// Снимок задания: живая запись либо история.
     pub fn snapshot(&self, id: JobId) -> Option<Arc<JobSnapshotDto>> {
         if let Some(record) = self.records.get(&id) {
-            return Some(Arc::new(record.snapshot.clone()));
+            let mut snapshot = record.snapshot.clone();
+            snapshot.messages = record.messages.clone();
+            return Some(Arc::new(snapshot));
         }
         self.history
             .iter()
@@ -743,6 +750,23 @@ impl JobRuntimeShared {
             }
             _ => {}
         }
+    }
+
+    /// Сообщения задания: живая запись отдаёт (и при `remove` забирает)
+    /// свой FIFO; terminal — сообщения снимка истории (неизменяемы).
+    pub(crate) fn take_messages(&self, id: JobId, remove: bool) -> Vec<String> {
+        let mut registry = self.registry.lock().expect("реестр без отравления");
+        if let Some(record) = registry.record_mut(id) {
+            return if remove {
+                std::mem::take(&mut record.messages)
+            } else {
+                record.messages.clone()
+            };
+        }
+        registry
+            .snapshot(id)
+            .map(|snapshot| snapshot.messages.clone())
+            .unwrap_or_default()
     }
 
     /// Блокирующее ожидание terminal-состояния всех `ids` — путь
@@ -1253,6 +1277,35 @@ fn build_worker_engine(recipe: &WorkerRecipe) -> Result<crate::Engine, String> {
         .map_err(|e| e.to_string())
 }
 
+/// Перехват `Сообщить` задания: строки stdout уходят в FIFO-историю
+/// записи реестра. Под локом — только push готовой строки; форматирование
+/// уже сделано VM (`bsl_format::format_value`). Неблокирующий sink
+/// host-представления (план, этап 8) подключится к этому же месту.
+struct JobMessageWriter {
+    shared: Arc<JobRuntimeShared>,
+    id: JobId,
+    buffer: Vec<u8>,
+}
+
+impl std::io::Write for JobMessageWriter {
+    fn write(&mut self, chunk: &[u8]) -> std::io::Result<usize> {
+        self.buffer.extend_from_slice(chunk);
+        while let Some(newline) = self.buffer.iter().position(|byte| *byte == b'\n') {
+            let line: Vec<u8> = self.buffer.drain(..=newline).collect();
+            let text = String::from_utf8_lossy(&line[..line.len() - 1]).into_owned();
+            let mut registry = self.shared.registry.lock().expect("реестр без отравления");
+            if let Some(record) = registry.record_mut(self.id) {
+                record.messages.push(text);
+            }
+        }
+        Ok(chunk.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 /// Резидент worker: изолированный сеанс одного задания с pollable
 /// VM-прогоном. Начатый резидент закреплён за своим worker — `Rc`-графы
 /// его сеанса поток не покидают.
@@ -1288,7 +1341,7 @@ fn start_job(
         )
     };
     Some(
-        prepare_job(shared, engine, target, &params, caller_token).map(
+        prepare_job(shared, engine, id, target, &params, caller_token).map(
             |(state, module, mut vm)| {
                 vm.set_cancel_flag(cancel_requested);
                 RunningJob {
@@ -1377,6 +1430,7 @@ fn finish_job(
 fn prepare_job(
     shared: &Arc<JobRuntimeShared>,
     engine: &crate::Engine,
+    id: JobId,
     target: (u32, u16),
     params: &SerializedValueGraph,
     caller_token: Option<[u8; 16]>,
@@ -1496,6 +1550,13 @@ fn prepare_job(
         .map_err(|error| JobErrorDto::from_text(error.to_string()))?;
 
     let mut state = engine.new_state();
+    // `Сообщить` задания пишет в FIFO-историю записи, а не в stdout
+    // процесса: историю читает `ПолучитьСообщенияПользователю`.
+    state.host.stdout = Box::new(JobMessageWriter {
+        shared: Arc::clone(shared),
+        id,
+        buffer: Vec::new(),
+    });
     // Сеанс задания получает СВОЁ временное хранилище со ссылкой на
     // вызывателя: запись по его адресу — staging до terminal.
     let session_token = random_uuid();
@@ -1863,6 +1924,10 @@ impl bsl_rt::BackgroundJobService for WorkerJobService {
         self.shared.cancel(id, end);
         Ok(())
     }
+
+    fn take_messages(&self, id: JobId, remove: bool) -> Vec<String> {
+        self.shared.take_messages(id, remove)
+    }
 }
 
 /// Доводит одно задание до terminal в текущем потоке — мини-драйвер
@@ -1969,5 +2034,9 @@ impl bsl_rt::BackgroundJobService for EngineJobService {
     fn cancel(&self, id: JobId) -> Result<(), String> {
         self.runtime.cancel(id);
         Ok(())
+    }
+
+    fn take_messages(&self, id: JobId, remove: bool) -> Vec<String> {
+        self.runtime.shared.take_messages(id, remove)
     }
 }

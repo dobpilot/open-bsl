@@ -595,3 +595,55 @@ fn temp_storage_local_round_trip_and_delete() {
     let bytes = capture.0.lock().unwrap().clone();
     assert_eq!(String::from_utf8(bytes).unwrap(), "Да\n42\nДа\nДа\n");
 }
+
+/// Сообщения пользователю: Сообщить внутри задания попадает в FIFO-историю,
+/// читается через ПолучитьСообщенияПользователю (свойство Текст), а не в
+/// stdout родителя; режим удаления забирает префикс.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn job_messages_are_recorded_and_drained() {
+    let engine = Engine::builder()
+        .common_module(
+            "Служебный",
+            "Процедура Говорит() Экспорт\n\
+                 Сообщить(\"первое\");\n\
+                 Сообщить(\"второе\");\n\
+             КонецПроцедуры",
+        )
+        .build()
+        .expect("движок собирается");
+    let module = engine
+        .compile_entry(
+            "Задание = ФоновыеЗадания.Выполнить(\"Служебный.Говорит\");\n\
+             Задание.ОжидатьЗавершенияВыполнения(30);\n\
+             Сообщения = Задание.ПолучитьСообщенияПользователю();\n\
+             Сообщить(Сообщения.Количество());\n\
+             Для Каждого Сообщение Из Сообщения Цикл\n\
+                 Сообщить(Сообщение.Текст);\n\
+             КонецЦикла;",
+        )
+        .expect("entry компилируется");
+    use std::io::Write;
+    use std::rc::Rc;
+    use std::sync::Mutex;
+    #[derive(Clone, Default)]
+    struct Capture(Rc<Mutex<Vec<u8>>>);
+    impl Write for Capture {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let capture = Capture::default();
+    let mut state = engine.state_builder().stdout(capture.clone()).build();
+    state.run(&module).expect("прогон завершается");
+    let bytes = capture.0.lock().unwrap().clone();
+    assert_eq!(
+        String::from_utf8(bytes).unwrap(),
+        "2\nпервое\nвторое\n",
+        "сообщения задания не должны утекать в stdout родителя"
+    );
+}

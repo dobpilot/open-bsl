@@ -59,6 +59,10 @@ pub struct JobSnapshotDto {
     pub begin: Option<BslDate>,
     pub end: Option<BslDate>,
     pub error: Option<Arc<JobErrorDto>>,
+    /// Сообщения пользователю задания в порядке FIFO. У живой записи
+    /// снимок несёт срез на момент создания; полная модель сообщения —
+    /// за замером `JOB.MESSAGES`.
+    pub messages: Vec<String>,
 }
 
 /// Ключ фонового задания: снимок значения ключа. Равенство — полная

@@ -38,7 +38,64 @@ pub trait BackgroundJobService {
     /// Отмена задания — приходит вместе с кооперативными safe points
     /// (этап 6 плана).
     fn cancel(&self, id: JobId) -> Result<(), String>;
+    /// Сообщения задания в порядке FIFO; `remove` атомарно забирает
+    /// возвращаемый префикс у живой записи (у terminal-снимка история
+    /// неизменяема — точная модель за `JOB.MESSAGES`).
+    fn take_messages(&self, id: JobId, remove: bool) -> Vec<String>;
 }
+
+pub(crate) static USER_MESSAGE_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "СообщениеПользователю",
+    type_display: "User message",
+    type_names: &["UserMessage"],
+};
+
+/// Сообщение пользователю в истории задания. Минимальная модель — текст;
+/// поля назначения и ключа данных — за замером `JOB.MESSAGES`.
+struct UserMessageObject {
+    text: String,
+}
+
+impl std::fmt::Debug for UserMessageObject {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "СообщениеПользователю {:?}", self.text)
+    }
+}
+
+impl ObjectProtocol for UserMessageObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &USER_MESSAGE_TYPE
+    }
+
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        USER_MESSAGE_PROPERTIES
+    }
+
+    fn get_property(&self, name: &str, ctx: &mut CallContext<'_>) -> RtResult<BslValue> {
+        crate::get_property_from_table(
+            USER_MESSAGE_PROPERTIES,
+            "СообщениеПользователю",
+            self,
+            name,
+            ctx,
+        )
+    }
+}
+
+fn user_message_text(
+    receiver: &dyn ObjectProtocol,
+    _ctx: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let message = receiver_of::<UserMessageObject>(receiver, "Текст")?;
+    Ok(BslValue::Str(crate::BslString::from_str(&message.text)))
+}
+
+static USER_MESSAGE_PROPERTIES: &[PropertyDescriptor] = &[PropertyDescriptor {
+    names: &["Текст", "Text"],
+    get: user_message_text,
+    set: None,
+}];
 
 pub(crate) static BACKGROUND_JOBS_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
@@ -354,12 +411,18 @@ fn job_wait(
 
 fn job_messages(
     receiver: &dyn ObjectProtocol,
-    _args: &[BslValue],
+    args: &[BslValue],
     _ctx: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
-    receiver_of::<BackgroundJobObject>(receiver, "ПолучитьСообщенияПользователю")?;
-    // Сообщения пользователю приходят этапом 8 плана; до них история пуста.
-    Ok(BslValue::new_array(Vec::new()))
+    let job = receiver_of::<BackgroundJobObject>(receiver, "ПолучитьСообщенияПользователю")?;
+    let remove = matches!(args.first(), Some(BslValue::Boolean(true)));
+    let messages = job.service.take_messages(job.snapshot.id, remove);
+    Ok(BslValue::new_array(
+        messages
+            .into_iter()
+            .map(|text| BslValue::new_object(UserMessageObject { text }))
+            .collect(),
+    ))
 }
 
 fn job_uuid(receiver: &dyn ObjectProtocol, _ctx: &mut CallContext<'_>) -> RtResult<BslValue> {
