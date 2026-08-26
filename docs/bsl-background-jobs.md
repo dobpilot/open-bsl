@@ -1,0 +1,802 @@
+# План механизма фоновых заданий
+
+Этот документ продолжает [`bsl-http-client.md`](bsl-http-client.md) и опирается
+на отдельный план [`bsl-use-modules.md`](bsl-use-modules.md). HTTP-план вводит
+кооперативные BSL-задачи, `Await`, обещания и доставку host-completion. План
+модулей задаёт CLI-директиву `//@используй`, загрузку файлового графа и
+квалифицированные обращения к экспортам. Фоновое задание — следующий уровень:
+экспортный метод выполняется в отдельном сеансе (`State`), может пережить
+породивший `run` и наблюдается через общий `JobRuntime`.
+
+Источники контракта:
+
+- глава 18 официальной документации 1С 8.3.27, приведённая в задаче;
+- [«Фоновые задания для новичков»](https://infostart.ru/1c/articles/2528413/)
+  как набор прикладных примеров, но не оракул семантики;
+- [официальное описание заданий](https://1c-dn.com/1c_enterprise/jobs/);
+- [документация временного хранилища](https://kb.1ci.com/1C_Enterprise_Platform/Guides/Developer_Guides/1C_Enterprise_8.3.23_Developer_Guide/Chapter_21._Temporary_storage_functionality__handling_files_and_pictures/21.3._File_and_temporary_storage_operation_methods/21.3.2._Migrating_file_data_to_the_temporary_storage/?language=en).
+
+Архитектурный референс для физической кодировки —
+[narrow/wide bytecode JavaScriptCore](https://webkit.org/blog/9329/a-new-bytecode-format-for-javascriptcore/);
+он не является источником BSL-семантики.
+
+Документация задаёт поверхность, но наблюдаемое BSL-поведение измеряется на
+реальной платформе. Неизмеренное решение получает `НЕ ИЗМЕРЕНО` по правилам
+репозитория, а намеренное расхождение явно помечается как расширение open-bsl.
+
+## Границы версии 0.4.0
+
+В первую версию входят:
+
+- `ФоновыеЗадания`, `ФоновоеЗадание` и `СостояниеФоновогоЗадания`;
+- запуск экспортного метода неглобального серверного общего модуля;
+- отдельный `State` на job, фиксированный пул OS-потоков и FIFO-admission;
+- поиск, отбор, ожидание, отмена, снимки состояния, ошибки и история;
+- сериализация параметров и ключей между изолированными сеансами;
+- вложенные фоновые задания;
+- `СообщениеПользователю` и неблокирующий host-enqueue;
+- адреса и однонаправленная передача через временное хранилище;
+- полная статическая линковка вызовов между общими модулями.
+
+Отложены регламентные задания, расписания, планировщик и
+`УведомленияКлиента`. Пользователи, права, информационные базы и журнал
+регистрации пока не моделируются. Файловая особенность 1С, при которой запись
+job может быть видна родителю до terminal transition, намеренно не повторяется:
+open-bsl следует клиент-серверному контракту.
+
+В первом коммите с реализацией версия пакета `open-bsl` повышается до
+`0.4.0`; версии остальных workspace-crate без необходимости не меняются.
+Промежуточные коммиты не считаются готовым релизом: версия 0.4.0 выпускается
+только после завершения всех этапов этого плана.
+
+## Связь с планом подключения модулей
+
+Оба плана используют одну систему модулей, а не две параллельные реализации.
+Из [`bsl-use-modules.md`](bsl-use-modules.md) переиспользуются синтаксис
+`//@use`/`//@используй`, файловый препроцессор `bsl-cli`, канонизация путей,
+поиск циклов, локальные псевдонимы и квалифицированная проверка экспортов.
+Директива остаётся возможностью CLI: `Engine` её текст не разбирает.
+
+Предложенный там плоский `Program` несовместим с принятой для фоновых заданий
+изоляцией модулей. Для общего нижнего ABI авторитетен этот документ:
+`ConfigurationProgram` содержит отдельный `Program` на модуль и отдельный
+`ModuleInstance` на каждый `State`. `bsl-use-modules.md` остаётся отдельным
+планом CLI-загрузчика; его ещё не реализованный плоский ABI считается
+заменённым, но сам файл этим планом не переписывается.
+
+`bsl-cli` сначала превращает файловый граф в не зависящий от файловой системы
+`ModuleGraphRecipe`, затем передаёт его в `EngineBuilder::configuration`.
+После `build` `Engine::compile_entry` компилирует main с корневыми импортами;
+обычный `Engine::compile` остаётся сокращением для entry без импортов.
+Post-build `compile_linked` не вводится.
+
+Из этого следуют ещё три правила согласования:
+
+- файловый путь и псевдоним принадлежат импортёру; корневой псевдоним становится
+  стабильным именем общего модуля и регистрируется до `Engine::build`. Поэтому
+  `ФоновыеЗадания.Выполнить("Псевдоним.Метод")` работает. Вложенные псевдонимы
+  локальны и не являются job-target, пока тот же canonical file не подключён в
+  корне. Два корневых имени одного файла и case-insensitive конфликты — ошибки;
+- import/export tables описывают и функции, и экспортные переменные; чтение,
+  запись и передача такой переменной по ссылке разрешаются в
+  `ModuleId + module_slot` без слияния таблиц переменных;
+- eager post-order инициализация `//@используй` остаётся семантикой расширения
+  CLI, а момент инициализации серверного общего модуля в job определяется
+  замером `JOB.MODULE.INIT`; обе политики используют одну `ModuleInitState`;
+- утверждения плана модулей «нового opcode и версии формата нет» перестают быть
+  применимы к общему ABI: import/export slots меняют bytecode и требуют полного
+  обновления `text.rs`, `OPCODES`, bundle-классификации, round-trip corpus и
+  `FORMAT_VERSION`, перечисленного ниже.
+
+Директива внутри строки `Выполнить`/`Вычислить` по-прежнему является обычным
+комментарием и не загружает файлы. При этом динамический код job может получать
+уже собранную read-only таблицу импортов текущего модуля — это контекст
+компиляции, а не повторный запуск CLI-препроцессора.
+
+## Архитектурные инварианты
+
+```text
+EngineInner (сильный внешний владелец)
+├── ConfigurationProgram: неизменяемый каталог модулей
+├── SchedulerConfig
+├── TemporaryStorageRuntime + SessionTokenSource
+└── Arc<JobRuntime>
+    ├── Mutex<JobRegistry>: записи, ключи, waiters, лимиты, история
+    ├── VecDeque<JobId>: глобальная FIFO-очередь
+    ├── BackgroundStateFactory + HostProfileId + JobTimeSource
+    └── N OS workers
+        ├── current-thread Tokio runtime + LocalSet
+        ├── локальные Rc<Program>, разобранные один раз
+        └── FIFO готовых OwnedExecution + карта ожидающих
+```
+
+Стандартный нативный `Engine` автоматически создаёт отдельный `JobRuntime`, но
+OS-потоки поднимаются лениво при первом успешном admission. Engine без вызовов
+jobs не создаёт потоков. Клоны одного `Engine` разделяют runtime; независимо
+собранный `Engine`, даже с идентичной конфигурацией, имеет другой process-local
+`ConfigurationId` и не видит его заданий.
+
+`StateBuilder` не подменяет job-сервис: он выбирает только непрозрачный
+`HostProfileId`, заранее зарегистрированный в `EngineBuilder`. Его foreground
+`files`, `network`, `clock` и вывод в worker не копируются. Неизвестный ID
+делает `StateBuilder::build() -> Result<State, Error>` ошибкой без fallback на
+process-profile; `Engine::new_state` остаётся инфаллибельным за счёт системного
+профиля. Дочерний job наследует профиль родителя и не может повысить
+возможности.
+
+`JobRuntime` владеет `BackgroundStateFactory: Send + Sync`. В стандартном
+режиме фабрика использует process-профиль, sandbox регистрирует ограниченный
+профиль. `Rc`, секреты и живые host-объекты родительского `State` между потоками
+не передаются. Worker получает `Send`-рецепт: статические
+`LibraryDescriptor`, символы препроцессора и текстовый bytecode. Он один раз
+разбирает тот же публичный `BytecodeImage::Configuration` в локальные
+`Rc<Program>` и разделяет их только между своими сеансами; скрытого второго
+recipe-формата нет, `ModuleState` создаётся заново для каждого job.
+
+`JobRegistry` никогда не хранит `BslValue`, `Rc`, `RefCell`, `RtError` или
+`RuntimeShapes`. Через межпоточные границы проходят только владеющие `Send` DTO.
+Мьютекс не удерживается во время сериализации, BSL-исполнения, материализации,
+host-эффекта, enqueue или потенциально блокирующей отправки.
+
+Worker-`State` получает слабый façade runtime, чтобы не образовать цикл. Явное
+завершение имеет контракт
+`shutdown(Cancel, deadline) -> ShutdownReport`: queued jobs отменяются сразу,
+running jobs — кооперативно; потоки join'ятся до deadline, неответившие
+отсоединяются и перечисляются в отчёте. Последний внешний владелец инициирует
+такое завершение; `Drop` сигнализирует отмену, но никогда не блокируется
+бесконечно. Shutdown отзывает runtime epoch: detached-worker физически может
+закончить уже начатый внешний эффект, но его поздние completion, сообщения и
+temporary-storage commits отвергаются. Отмену внешнего эффекта после deadline
+API не обещает.
+
+## Пул, Tokio и планирование
+
+Пул состоит из фиксированного числа OS-потоков: явного `workers` либо
+`std::thread::available_parallelism()`, минимум один. Отсутствие свободного
+worker всегда означает постановку в глобальную FIFO-очередь, а не ошибку.
+Отказать до admission можно только из-за неверного вызова, дублирующего ключа,
+закрытого/сломанного runtime или явного ресурсного лимита.
+Пул не использует `tokio::task::spawn_blocking` и не разделяет `ModuleState`
+между заданиями.
+
+Каждый worker поднимает
+`tokio::runtime::Builder::new_current_thread()` и `LocalSet`. В `open-bsl`
+добавляется прямая target-specific зависимость на Tokio с `rt`, `time`, `sync`;
+native-adapter включён всегда, без feature flag. Это не заменяет process-wide
+multi-thread runtime из HTTP-плана: async `reqwest` остаётся там. Worker runtime
+обслуживает таймеры job и локальные host-операции; `reqwest::Future` между
+runtime не переносится.
+
+На worker действует собственный детерминированный driver, а не
+`spawn_local(OwnedExecution)`:
+
+1. локальная FIFO хранит runnable-сеансы, карта — ожидающие;
+2. `OwnedExecution` получает один квант и возвращается в хвост либо паркуется;
+3. после каждого кванта выполняется tick `LocalSet`;
+4. глобальный job извлекается только когда локально нет runnable-сеансов;
+5. terminal transition фиксируется один раз и будит waiters.
+
+Начатый `OwnedExecution` всегда pinned к своему worker: `Rc<Program>`, `State`
+и `LocalSet` не становятся `Send`. Work stealing в 0.4.0 нет; общая FIFO
+балансирует только ещё не начатые jobs. Дисбаланс после массового HTTP
+completion измеряется отдельным fan-out benchmark. Все futures внутри
+`LocalSet` обязаны быть кооперативными, не выполнять блокирующий I/O и
+ограничивать работу одного `poll`; вытеснять произвольную Rust future runtime
+не пытается.
+
+Квант переиспользует `SchedulerConfig::safe_points_per_quantum` из HTTP-плана,
+по умолчанию 1024, и те же safe points. JIT уменьшает тот же счётчик и выходит в
+интерпретатор на границе кванта. Для фонового `OwnedExecution` однозадачный
+unlimited fast path выключен; обычный `State` сохраняет его и не платит за
+лишнюю проверку. FIFO гарантирует порядок dequeue, а при одном worker — порядок
+начала. При нескольких worker порядок первой BSL-инструкции и завершения не
+обещается. `Начало` записывается атомарно при `Queued -> Running`.
+
+Runtime проходит состояния `Cold -> Starting -> Running` либо `Broken`.
+Первый `Выполнить` принимает job, инициирует запуск пула и сразу возвращает
+снимок `Queued`; последующие submissions во время `Starting` входят в тот же
+FIFO. Они не ждут создания N потоков.
+
+Если job-паника поймана на границе выполнения, падает только job. Паника worker
+вне job завершает как `Failed` все закреплённые за ним runnable/waiting jobs,
+отменяет их host-handles, удаляет waiters, откатывает staging и создаёт замену,
+если runtime не закрывается. Три последовательные паники запуска worker или
+ошибка каталога переводят весь runtime в `Broken`: queued/running/waiting jobs
+становятся `Failed(RuntimeBroken)`, новые submissions получают ловимую ошибку,
+автоматического recovery нет. Ошибка `BackgroundStateFactory` без panic
+завершает только соответствующий job как `Failed(HostProfileUnavailable)`.
+
+Completion использует coalesced wakeup: у execution есть атомарный
+`wake_pending`; только переход `false -> true` делает `try_send` в bounded
+worker-channel. Перед сном driver повторно проверяет registry и флаги, поэтому
+заполненный канал не теряет пробуждение и wake storm не растит память.
+
+## Переносимый host-контракт
+
+В `bsl-rt` живут DTO, BSL-объекты и объектобезопасный
+`BackgroundJobService` без supertrait `Send + Sync`. Native-binding требует
+`Arc<dyn BackgroundJobService + Send + Sync>`, WASM-host может внедрить локальный
+`Rc<dyn BackgroundJobService>`. Типы и API регистрируются на всех target. Если
+сервис не внедрён, `Выполнить` возвращает ловимую ошибку host-возможности.
+
+Все ошибки возможности представлены одним BSL-классом и обычной
+`ИнформацияОбОшибке`; Rust различает исчерпывающий `HostErrorCode`, включая
+`RuntimeClosed`, `RuntimeBroken`, `ResourceLimit`, `HostBackpressure`,
+`InvalidTemporaryStorageAddress`, `JobExpired` и
+`HostProfileUnavailable`. Новый платформенно-несовместимый enum в BSL не
+публикуется.
+
+На `wasm32-unknown-unknown` собираются общая state machine, bytecode и BSL API,
+но нативный пул отсутствует. Стандартный WASM-adapter — отдельный вертикальный
+этап; host может предоставить локальный сервис. Это сохраняет переносимость
+семантической модели без протаскивания `Future`, `JoinHandle`, Tokio или
+платформенных ошибок в `bsl-rt`, bytecode и публичные BSL-значения.
+
+## BSL-поверхность и снимки
+
+Менеджер должен реализовать измеренные сигнатуры:
+
+- `Выполнить(ИмяМетода, Параметры, Ключ, Наименование)`;
+- `ПолучитьФоновыеЗадания(Отбор)`;
+- `НайтиПоУникальномуИдентификатору(Идентификатор)`;
+- `ОжидатьЗавершенияВыполнения(Задания, Таймаут)`.
+
+`ФоновоеЗадание` предоставляет свойства как минимум
+`УникальныйИдентификатор`, `ИмяМетода`, `Параметры`, `Ключ`, `Наименование`,
+`Состояние`, `Начало`, `Конец`, `ИнформацияОбОшибке` и методы `Отменить()`,
+`ОжидатьЗавершенияВыполнения(Таймаут)`,
+`ПолучитьСообщенияПользователю(УдалятьПолученные = Ложь)`. Полные имена,
+арности, английские aliases и коллекции фиксирует `JOB.API.SURFACE`.
+
+Объект — неизменяемый снимок, а не live handle. Старые свойства не обновляются;
+поиск и ожидание создают новый `JobSnapshotDto`. При этом методы отмены,
+ожидания и чтения сообщений обращаются к runtime по `JobId`. После закрытия
+runtime уже материализованные свойства доступны, а live-методы возвращают
+ловимую `RuntimeClosed`. После вытеснения job из истории свойства старого
+снимка также читаются, но отмена, ожидание и сообщения возвращают ловимую
+`JobExpired`, а не притворяются успешными и не скрывают потерю истории пустым
+массивом.
+
+Тяжёлое свойство `Параметры` хранит `Arc<SerializedValueGraph>` и лениво
+декодирует граф при первом чтении в `RuntimeShapes` вызывающего `State`, затем
+кэширует локальный `BslValue` в `RefCell`. Поэтому список из 10 000 записей не
+декодирует параметры. Возвращаемое значение функции-цели игнорируется.
+
+## Каталог общих модулей и bytecode
+
+`EngineBuilder::common_module` разрешён только до `build`; сборка атомарно
+компилирует и линкует неизменяемый каталог. Поздний `Engine::compile` создаёт
+transient entry без импортов и не делает его целью job.
+
+Переносимый `ConfigurationProgram` принадлежит `bsl-bytecode`, чтобы его могли
+видеть и фасад, и `bsl-vm`, не создавая обратной зависимости VM от `open-bsl`.
+Каталог не сводит модули в один `Program`:
+
+- `ConfigurationId` — process-local идентичность Engine;
+- детерминированный `ModuleId(u32)` — позиция в каталоге и часть manifest;
+- `EntryId(u64)` отличает transient main-модули;
+- каждый `Program` хранит export table и типизированную link table функций и
+  переменных; локальный `LinkSlot(u16)` ограничивает модуль 65 535 импортами;
+- сборка один раз разрешает символы в `ModuleId + FunctionId` либо
+  `ModuleId + module_slot`; worker парсит и валидирует готовый числовой manifest,
+  но не повторяет case-insensitive resolution;
+- frame несёт `ModuleId + FunctionId`, а `SessionModules` сопоставляет
+  `ModuleId -> ModuleInstance`.
+
+Текущий `Instr` уже занимает ровно 8 байт. Поэтому межмодульный вызов содержит
+один `link_slot: u16`, а не пару `import_slot + export_slot`:
+
+```rust
+CallImported { link_slot: u16, base: u8, arg_modes: u16, ret: u8 }
+GetImportedVar { dst: u8, link_slot: u16 }
+SetImportedVar { link_slot: u16, src: u8 }
+ArgMode::ByRefImportedVar(u16)
+```
+
+Link entry заранее проверяет вид символа. Логический opcode остаётся один:
+`CallNarrow`/`CallWide` не вводятся.
+[Подход JavaScriptCore narrow/wide](https://webkit.org/blog/9329/a-new-bytecode-format-for-javascriptcore/)
+имеет смысл для будущего исполняемого бинарного потока и mmap, но не уменьшает
+`Vec<Instr>` Rust enum и только дублировал бы VM/JIT/bundle-ветви. К нему можно
+вернуться отдельным планом после профиля памяти и чередующегося A/B.
+
+Признак `Экспорт` проходит из AST через sema в bytecode вместе с
+`is_procedure`/`is_async`. Новые opcodes синхронно обновляют `write_instr`,
+parser, `OPCODES`, image validation, effects-классификацию, bundle verifier,
+round-trip corpus и `FORMAT_VERSION`.
+
+Текстовый формат 0.4 представляет:
+
+```rust
+enum BytecodeImage {
+    Program(Program),
+    Configuration {
+        catalog: ConfigurationProgram,
+        entry: Option<EntryProgram>,
+    },
+}
+```
+
+Worker принимает каталог без entry; `--run-bytecode` требует entry.
+`--emit-bytecode` пишет весь граф, а не набор несвязанных файлов. Формат 0.4 не
+читает bytecode других версий. `Engine::load_bytecode` остаётся post-build путём
+только для одиночного `Program`; configuration image передаётся через
+`EngineBuilder::configuration_image` до создания runtime.
+
+`ModuleInstance` содержит существующие слоты `ModuleState` и
+`ModuleInitState::{NotStarted, Initializing, Ready, Failed}`. Инициализация
+ленивая на сеанс, пока `JOB.MODULE.INIT` не покажет eager-поведение; цикл,
+ошибка и повторная попытка тоже измеряются. `Выполнить`/`Вычислить` внутри job
+видят read-only сигнатуры/imports общих модулей и переменные текущего модуля,
+но не получают прямой доступ к чужому `ModuleState`.
+
+Динамический compiler получает import environment вызывающего модуля, но не
+обрабатывает новые CLI-директивы. Его cache уже принадлежит одному `State` и
+одному неизменяемому Engine, поэтому ключ минимален:
+`(ModuleId/EntryId, DynamicScope, DynamicKind, caller_is_async, source)`;
+configuration fingerprint и symbols являются инвариантами владельца cache, а
+не дублируются в каждой записи.
+
+Цель — экспортный метод неглобального серверного общего модуля. Хвостовые
+параметры с умолчаниями, async-цель и детали validation реализуются только по
+замеру. Межмодульные вызовы входят в этот план, а не откладываются после пула.
+
+## Владеющий execution и приостановка VM
+
+Добавляется несамоссылочный, привязанный к worker `OwnedExecution`, владеющий
+`State`, `Rc<Program>` и состоянием VM. Существующий заимствующий `Execution`
+использует то же ядро. `State::run` остаётся run-to-completion; poll owned-сеанса
+возвращает `Runnable`, `Waiting` или `Complete`.
+
+Меняется только ABI методов объектов:
+
+```rust
+enum CallOutcome {
+    Ready(BslValue),
+    Pending(PendingHostCall),
+}
+
+enum PendingHostCall {
+    BackgroundJobWait(/* typed fields */),
+    HttpSync(/* typed fields */),
+}
+```
+
+Обычные handlers оборачивают результат в `Ready`. Глобальные функции и
+конструкторы ABI не меняют. Закрытый enum не использует `Any` или type erasure.
+Pending синхронного метода замораживает весь `Execution`, в отличие от `Await`,
+который уступает другую BSL-задачу того же execution. Worker в это время
+запускает другой job-сеанс.
+
+JIT делает fallback только у descriptor с `may_suspend`; такой вызов — барьер
+VLIW-бандла. Waiter регистрируется с `waiter_id` одной операцией под lock вместе
+с повторной проверкой terminal state. Любой потенциально блокирующий host-метод
+обязан иметь `may_suspend` и типизированный `PendingHostCall`; синхронное
+ожидание внутри worker запрещено. Первый из terminal/timeout/cancel атомарно
+выигрывает; поздний completion проверяет
+`execution_token + pending_call_id`, а отмена execution удаляет waiter.
+
+Время приходит через закрытый host-интерфейс `JobTimeSource`:
+`wall_now` формирует DTO для `Начало`/`Конец`, а `monotonic_now` и
+`register_timer(deadline, ExecutionWaker)` обслуживают timeout, TTL и shutdown.
+Native-реализация использует Tokio, тестовая — ручные ticks, WASM — часы host.
+`tokio::time::Instant` не входит в `bsl-rt`. Wall clock не clamp'ится при скачке
+назад; внутренние длительности всегда монотонны.
+
+`ExecutionWaker` ставит готовый DTO в очередь исходного worker/сеанса. В
+частности, синхронные HTTP-методы переводятся на `PendingHostCall::HttpSync`:
+process-wide reqwest runtime выполняет запрос и держит отменяемый handle,
+execution припаркован, worker свободен, DTO материализуется в VM-потоке.
+Асинхронные HTTP-методы остаются promise/`Await`; Tokio-типы не входят в ABI.
+
+## Параметры, ключ и ошибки
+
+Из `vstr` выделяется общий обход графа и кодеки примитивов, но публичный
+`ЗначениеВСтрокуВнутр` буквально не вызывается. Закрытый владеющий
+`SerializedValueGraph` является `Send`, сериализует весь массив параметров
+одним графом и сохраняет alias/cycles, если это подтвердит платформа.
+Ограниченный writer считает размер во время записи и останавливается до
+аллокации 1 ГиБ.
+
+При admission строится `JobKeyDto`. Для индекса runtime создаёт process-local
+keyed hasher из OS random; digest не сериализуется и не является BSL-контрактом,
+а полное структурное равенство остаётся авторитетным. Тесты внедряют
+фиксированный seed. Канонизация типов и семантика циклов вводятся после
+`JOB.KEY.*`. Резервируется пара
+`(ConfigurationId, ModuleId, FunctionId, ключ)` до terminal transition.
+
+`JobErrorDto` владеет кратким и полным текстом, модулем/методом, line/span и
+рекурсивным cause DTO. В вызывающем `State` строится новая
+`ИнформацияОбОшибке`; идентичность исходного объекта не сохраняется. Oversized
+diagnostic заменяется bounded-ошибкой `DiagnosticResourceLimit` с коротким
+prefix и внутренним `diagnostic_truncated = true`, поэтому ошибка не обходит
+hard memory limit. Если BSL-выполнение уже завершилось ошибкой, а commit
+temporary write-set тоже не удался, исходная BSL-ошибка остаётся основной, а
+ошибка commit добавляется как secondary cause.
+
+Отмена — не BSL-исключение. Отдельный `ExecutionAbort::Canceled` обходит
+`Попытка/Исключение`, проверяется на safe points и отменяет активный host-handle.
+Это закреплено замером `JOB.CANCEL.CATCH` ниже. Поведение отмены дочерних jobs
+родителем не выводится логически, а остаётся отдельным замером. Shutdown
+отменяет и родительские, и дочерние jobs.
+
+## Admission, лимиты и история
+
+`BackgroundJobConfig` — одна публичная структура:
+
+- `workers`;
+- `max_inflight_jobs`;
+- `max_live_payload_bytes`;
+- `max_history_jobs` (по умолчанию 10 000);
+- `max_history_bytes`;
+- `max_single_job_record_bytes`;
+- `max_error_bytes_per_job`;
+- `max_message_bytes_per_job`;
+- `max_staged_temp_bytes_per_job`;
+- `max_live_staged_temp_bytes`;
+- `shutdown_timeout`.
+
+Scheduler-настройки здесь не дублируются. `EngineBuilder::build` отвергает
+нулевое число workers, per-job staging больше global staging, недостаточный
+`max_single_job_record_bytes` и
+`max_history_bytes < max_single_job_record_bytes`; скрытых clamp нет.
+
+Admission атомарно резервирует слот inflight и байты сериализованного payload
+до terminal transition. Staging получает отдельные per-job и global credits;
+если `ПоместитьВоВременноеХранилище` не может их получить, оно возвращает
+ловимую `ResourceLimit`, не уничтожая уже собранный write-set. Превышение
+явного лимита даёт ловимую ошибку; занятость всех worker сама по себе ошибкой
+не является.
+
+Terminal transition переносит фактический размер параметров из live-budget в
+history-budget без двойного учёта. Сначала вытесняются старейшие terminal jobs;
+admission заранее отвергает job, чья максимально возможная запись не помещается
+в `max_single_job_record_bytes`. Активные/queued записи не вытесняются.
+
+Завершённые записи хранятся 24 часа, не более 10 000 и не более
+`max_history_bytes`; удаляются старейшие terminal-записи. Лимит 10 000 —
+намеренное расширение open-bsl относительно документированных 1 000 у 1С.
+Отбор сначала линейный: для 10 000 снимков этого достаточно, индекс добавляется
+только по профилю.
+
+Внутренняя state machine закрыта и допускает только переходы:
+
+```text
+Queued -> Running -> Completed
+                  -> Failed
+                  -> Canceled
+Queued ----------------> Canceled
+```
+
+Первый terminal transition выигрывает, освобождает admission-reservations и
+ключ, после чего будит waiters. `Queued` и `Running` отображаются в BSL как
+`Активно` только после подтверждения `JOB.STATE.SNAPSHOT`.
+
+`JobId` выдаёт принадлежащий runtime
+`Arc<dyn JobIdSource + Send + Sync>`. Стандартная реализация использует OS
+random и существующий UUID v4-код, тесты — детерминированный источник.
+Уже материализованный BSL-снимок может удерживать `Arc` после eviction; это
+память вызывающего `State`, а не `JobRuntime`.
+
+## Временное хранилище
+
+В план входят глобальные BSL-функции помещения, получения и удаления значения
+из временного хранилища; точные русские/английские имена и арности измеряются.
+Адрес — обычная BSL-строка вида
+`e1cib/tempstorage/<uuid-v4>?seanceId=<opaque-state-token>`. Один session token
+создаётся на `State`, каждый адрес получает новый UUID, ключом служит полный
+URI. Повторная запись с переданным URI перезаписывает значение и возвращает тот
+же адрес. Переданный UUID формы/владельца создаёт новый связанный адрес, но не
+копируется в UUID адреса. Capability-token и UUID адреса выдаёт отдельный
+`SessionTokenSource` конкретного Engine: стандартный источник использует OS
+random, тестовый внедряется через builder, а пользовательский BSL
+`RandomSource` на адреса не влияет.
+
+Архитектура двухуровневая:
+
+```text
+State
+├── HashMap<TempId, BslValue>       # локальный граф, без сериализации
+└── Arc<SessionMailbox>
+    └── committed SerializedValueGraph от job-сеансов
+
+TemporaryStorageRuntime одного Engine:
+SessionToken -> Weak<SessionMailbox>
+```
+
+Обычные операции внутри одного `State` сохраняют `Rc`-граф и alias. Job не
+читает локальную карту родителя: адрес передаётся строкой, а записи job
+накапливаются в сериализованном write-set. При обращении родителя mailbox
+материализует committed graph в его `RuntimeShapes`. `State`, а не `Execution`,
+является сеансом; drop `State` закрывает token.
+
+Обычный чужой `State` того же или другого Engine не получает доступ по одной
+строке URI. При submit job фиксирует `CallerSessionToken`: job может stage-write
+только в mailbox непосредственного caller, но читает его как `Неопределено`.
+Дочерний job получает token родительского job-сеанса, а не исходного
+foreground-сеанса; транзитивного повышения доступа нет. Точное поведение этой
+цепочки подтверждается отдельным замером до реализации этапа.
+
+Для чужого, закрытого или уже удалённого адреса измеренный клиент-серверный
+контракт одинаков: чтение возвращает `Неопределено`, удаление — успешная no-op,
+запись бросает исключение и не изменяет данные владельца. open-bsl возвращает
+ловимую `InvalidTemporaryStorageAddress`; точный пустой текст платформенной
+ошибки не копируется.
+
+Весь write-set публикуется атомарно, для одного адреса действует last-write-wins.
+Если затронуто несколько mailboxes, locks берутся в детерминированном порядке.
+Если родительский `State` закрылся до commit, частичной публикации нет: успешно
+завершившийся BSL job становится `Failed` с `JobErrorDto` закрытого хранилища;
+уже ошибочный job сохраняет BSL-ошибку основной и добавляет commit failure как
+secondary cause, уже отменённый остаётся `Canceled`.
+
+Правило terminal-публикации по измеренному клиент-серверному контракту:
+
+| Исход job | Write-set |
+|---|---|
+| `Completed` | commit |
+| неперехваченная BSL-ошибка / `RtError` | commit |
+| `Canceled` | rollback |
+| Rust panic | rollback |
+| `RuntimeBroken`, shutdown, factory failure | rollback |
+
+До terminal transition родитель видит прежнее значение, job по родительскому
+адресу читает `Неопределено`, после commit родитель видит новое. Удаление,
+повторное использование адреса и lifetime UUID-владельца ещё измеряются.
+
+## Сообщения пользователю
+
+`СообщениеПользователю.Сообщить()` формирует `UserMessageDto`. В job-сессии
+runtime сначала добавляет DTO к записи, освобождает registry lock и только затем
+вызывает неблокирующий `UserMessageSink::enqueue`. Host выбирает представление;
+стандартный `bsl-cli` выводит сообщения через свою очередь в stdout. Enqueue не
+может подавить совместимую историю сообщения.
+
+`ПолучитьСообщенияПользователю()` читает live-историю по `JobId`; режим удаления
+атомарно забирает возвращаемый FIFO-префикс. Enqueue к этому моменту уже
+выполнен. Backpressure оставляет сообщение в истории и возвращает из
+`Сообщить()` ловимую `HostBackpressure`; скрытых retries нет, повторный вызов
+создаёт новое сообщение. Фактическая ошибка последующего отображения в BSL не
+возвращается. Ни enqueue, ни форматирование не выполняются под registry lock.
+Порядок внутри job — FIFO; порядок сообщений разных jobs не обещается.
+
+Глобальный `Сообщить` становится семантическим методом поверх того же механизма:
+он напрямую формирует DTO, используя `bsl_format::format_value`, без
+промежуточного BSL-объекта. В обычном `State` DTO идёт прямо в sink; в job
+дополнительно содержит `JobId`. `BslValue::Display` для видимого текста не
+используется. Сообщения имеют отдельный `max_message_bytes_per_job` и не могут
+обойти history budget. Уже принятое DTO host может показать после shutdown;
+отзыв epoch запрещает только новые enqueue и не ждёт опустошения UI/stdout-
+очереди.
+
+## Зафиксированные замеры 1С 8.3.27
+
+Замеры выполнены на реальной 1С 8.3.27; временное хранилище дополнительно
+проверено на клиент-серверной базе `Srvr="localhost";Ref="test";` платформы
+8.3.27.2342. Результаты, определяющие архитектуру:
+
+| ID | Наблюдение | Решение open-bsl |
+|---|---|---|
+| `JOB.CANCEL.CATCH` | Running job вошёл в `Попытка`; после отмены состояние «Задание отменено пользователем», ветка `Исключение` и код после неё не выполнялись. | `ExecutionAbort::Canceled`, не `RtError`. |
+| `JOB.TEMP.ADDRESS` | Тип — строка; адрес имеет форму `e1cib/tempstorage/<uuid-v4>?seanceId=<token>`, длина в измеренной сессии 139. Два адреса имеют разные UUID и один `seanceId`; повторная запись сохраняет адрес. UUID формы/владельца не становится UUID адреса. | Гарантировать форму и opaque token, но не фиксировать длину 139 как ABI. |
+| `JOB.TEMP.CLIENT_SERVER` | Job читает родительский адрес как `Неопределено`; адрес не меняется. Пока job активно, родитель видит старое значение; после завершения — запись job. | Однонаправленный staging и commit на terminal transition. |
+| `JOB.TEMP.FAILURE` | После аварийного завершения состояние «Задание завершено с ошибкой», но родитель видит `from-failed-job`. | Неперехваченная BSL-ошибка делает commit. |
+| `JOB.TEMP.CANCEL` | После отмены состояние «Задание отменено», родитель сохраняет `parent-cancel`. | Отмена делает rollback. |
+| `JOB.TEMP.FOREIGN` | Для адреса активного чужого job-сеанса, того же адреса после завершения и удалённого адреса текущего сеанса чтение дало `Неопределено`, удаление завершилось без ошибки, запись бросила исключение с пустым `ОписаниеОшибки()`. Чужие значения не изменились. | Read = `Неопределено`, delete = no-op, write = `InvalidTemporaryStorageAddress`. |
+
+Сырой результат контрольного замера отмены:
+
+```text
+JOB.CANCEL.STARTED=Yes
+STATE=Job cancelled by user
+CAUGHT=No
+AFTER=No
+```
+
+Сырой результат клиент-серверной пробы чужого адреса:
+
+```text
+Q78.FOREIGN.ACTIVE.READ=Undefined:
+Q78.FOREIGN.ACTIVE.DELETE=OK
+Q78.FOREIGN.ACTIVE.WRITE.ERROR=
+Q78.FOREIGN.JOB.READ=String:job-read
+Q78.FOREIGN.JOB.DELETE=String:job-delete
+Q78.FOREIGN.JOB.WRITE=String:job-write
+Q78.FOREIGN.CLOSED.READ=Undefined:
+Q78.FOREIGN.CLOSED.DELETE=OK
+Q78.FOREIGN.CLOSED.WRITE.ERROR=
+Q78.OWN.DELETED.READ=Undefined:
+Q78.OWN.DELETED.DELETE=OK
+Q78.OWN.DELETED.WRITE.ERROR=
+```
+
+Контрольный замер в файловой базе показал раннюю видимость `from-job` ещё при
+активном job. Это осознанно отклонено в пользу клиент-серверной семантики,
+поскольку open-bsl не моделирует файловый вариант платформы.
+
+До поддержки API open-bsl новые platform-only probes запускаются отдельно и их
+результат заносится в этот раздел. После минимальной реализации они переносятся
+в общий `tests/conformance/measure/measure-background-jobs.bsl`, который обязан
+работать на обеих сторонах; только после совпадения удаляются
+`НЕ ИЗМЕРЕНО`-маркеры. Нельзя заранее коммитить «двусторонний» скрипт, который
+open-bsl ещё не способен скомпилировать или выполнить.
+
+Оставшийся реестр замеров:
+
+| ID | Что измерить |
+|---|---|
+| `JOB.API.SURFACE` | Типы, aliases, свойства, арности, defaults и возвраты. |
+| `JOB.EXECUTE.VALIDATION` | Ошибки цели/аргументов, экспорт, global/server, лишние параметры. |
+| `JOB.EXECUTE.DEFAULTS` | Пропуск хвостовых параметров с умолчаниями. |
+| `JOB.PARAMS.SNAPSHOT` | Момент копирования, alias, cycles, unsupported и limit. |
+| `JOB.KEY.EQUALITY` | Типы, структурное равенство, регистр метода и canonicalization. |
+| `JOB.KEY.QUEUED` | Участвует ли queued job в уникальности. |
+| `JOB.STATE.SNAPSHOT` | Начальное состояние, `Начало`/`Конец`, старый снимок. |
+| `JOB.STATE.ERROR` | Точный статус и поля `ИнформацияОбОшибке`. |
+| `JOB.WAIT.TIMEOUT` | Ноль, отрицательное/дробное значение, единицы и races. |
+| `JOB.WAIT.MANY` | Any/all, тип и порядок возврата. |
+| `JOB.CANCEL.RACES` | Queued/terminal/repeated/race и parent-child. |
+| `JOB.FIND.MISSING` | Неизвестный и вытесненный UUID. |
+| `JOB.LIST.FILTER_ORDER` | Поля отбора, сравнение и порядок. |
+| `JOB.MODULE.INIT` | Lazy/eager, циклы, ошибка и retry. |
+| `JOB.NESTED.WAIT` | Порождение и ожидание ребёнка внутри job. |
+| `JOB.ASYNC.TARGET` | Допустимость async-цели и критерий завершения. |
+| `JOB.MESSAGES` | Свойства, коллекция, статус, live-read и drain. |
+| `JOB.TEMP.LIFETIME` | Delete, reuse, lifetime UUID-владельца и новый адрес job после закрытия его сеанса. |
+| `JOB.TEMP.READ_YOUR_WRITES` | Что job читает по caller-адресу после собственной staging-записи. |
+| `JOB.TEMP.STAGED_DELETE` | Публикуется ли удаление caller-адреса и по каким terminal-правилам. |
+| `JOB.TEMP.NESTED_CAPABILITY` | Может ли дочерний job писать адрес исходного foreground-сеанса. |
+| `JOB.TEMP.CALLER_CLOSE_RACE` | Гонка закрытия caller с terminal commit и отсутствие частичной публикации. |
+
+## Порядок реализации
+
+### Этап 0. Измерительный каркас
+
+Добавить в 1С-runner неглобальный серверный общий модуль и deterministic
+barriers без хрупких пауз. Сначала закрыть admission/API/module-init; уже снятые
+замеры выше считать утверждёнными anchors для соответствующих решений.
+
+Проверка: platform-only probes завершаются без modal timeout; после появления
+API один и тот же скрипт даёт сопоставимый построчный вывод на 1С и open-bsl.
+
+### Этап 1. Каталог и межмодульный bytecode
+
+Пронести `Экспорт`, добавить в `bsl-bytecode` `ConfigurationProgram`,
+`BytecodeImage`, типизированные link tables, `ModuleId` и межмодульные opcodes с
+одним `LinkSlot`. Реализовать `ModuleGraphRecipe`, builder-first API,
+`compile_entry`, `SessionModules` и измеренную политику инициализации.
+
+Проверка: round-trip одиночного и конфигурационного формата 0.4, отказ читать
+другую версию, `--emit-bytecode`/`--run-bytecode`, `Instr == 8`, bundle
+invariants, imported variable by-ref, init isolation,
+`cargo tree -p bsl-vm -e normal` без front-end crates и interpreter/JIT parity.
+
+### Этап 2. Межсеансовый граф и лимиты
+
+Выделить общий traversal из `vstr`, реализовать `SerializedValueGraph`, bounded
+writer, lazy materialization параметров, `JobKeyDto` и `JobErrorDto`.
+
+Проверка: round-trip между двумя `State`, alias/cycle fixtures по замеру,
+unsupported type, остановка до аллокации лимита. После рефакторинга выполнить
+чередующийся A/B с baseline на `table_save_load.bsl`, `table_compare2` и
+`bmp_rotate`; gated-набор `table_compare2` считать проверенным только при
+заданном `OPEN_BSL_TABLE_COMPARE2_CASES`.
+
+### Этап 3. JobRuntime и worker driver
+
+Добавить проверяемый config, registry, FIFO, JobIdSource, keyed hasher,
+`JobTimeSource`, coalesced wakeup, ленивый OS-пул, current-thread Tokio,
+LocalSet, lifecycle/Broken и фабрику профилей. Сначала worker исполняет тестовый
+`Send`-рецепт, затем worker-local `Rc<Program>` и отдельный `State`.
+
+Проверка: FIFO с одним worker, admission order и ограниченная параллельность с
+двумя, `Cold -> Starting`, очередь при занятости, resource limits, потеря всех
+resident jobs при worker panic, replacement, глобальный Broken, shutdown epoch,
+deadline и отсутствие lock во внешних вызовах.
+
+### Этап 4. BSL API, снимки и история
+
+Зарегистрировать portable API, реализовать `Выполнить`, поиск, отбор,
+immutable snapshots, lazy `Параметры`, history eviction и capability errors.
+
+Проверка: end-to-end на одном/двух worker, 10 000 terminal jobs, листинг без
+декодирования параметров, атомарный перенос live/history budget, key
+reservation, stale snapshot, `JobExpired`, WASM-host без сервиса и runtime
+closed.
+
+### Этап 5. OwnedExecution и pending calls
+
+Вынести execution core, добавить pollable owning API, `CallOutcome`, закрытые
+pending variants, waker, waiter races и JIT/VLIW barriers. Перевести синхронный
+HTTP на `HttpSync`, не меняя async promise API.
+
+Проверка: при ожидающем HTTP worker выполняет другой job; timeout/cancel не
+возобновляют stale execution; два родителя при полностью занятом пуле порождают
+и ожидают детей без deadlock; JIT совпадает с interpreter.
+
+### Этап 6. Отмена, ошибки и terminal lifecycle
+
+Добавить `ExecutionAbort::Canceled`, cooperative safe points, exact-once
+terminal transition, bounded error DTO, secondary cause, panic rules,
+ключи/waiters и shutdown.
+
+Проверка: queued/running/waiting/terminal cancellation, measured non-catchable
+behavior, completion race, host-handle cancellation, rollback каждого
+infrastructure abort, parent-child probe и ручные monotonic/wall clocks.
+
+### Этап 7. Временное хранилище
+
+Сначала закрыть `JOB.TEMP.*` из реестра. Затем реализовать Engine-local map,
+secure `SessionTokenSource`, weak mailbox registry, immediate-caller capability,
+URI, bounded job write-set, commit/rollback matrix, parent-close failure и
+глобальные BSL-функции.
+
+Проверка: адресная форма, foreign/closed/deleted contract, alias внутри `State`,
+immediate и nested caller, read-your-writes, staged delete, старая видимость до
+terminal, commit после success/BSL error, rollback после всех infrastructure
+abort, atomic multi-address write и closed parent race.
+
+### Этап 8. Сообщения и CLI enqueue
+
+Реализовать `СообщениеПользователю`, историю DTO, drain и неблокирующий enqueue;
+перевести глобальный `Сообщить` на общий sink, закрепив stdout-queue adapter в
+`bsl-cli`.
+
+Проверка: FIFO одного job, live/terminal reads, два читателя, atomic drain,
+backpressure без retry, enqueue после epoch revoke, принятый DTO после shutdown,
+byte limit и форматирование через `bsl-format`.
+
+### Этап 9. Переносимость и стабилизация
+
+Собрать state machine на WASM без native-adapter, проверить локальную
+инъекцию сервиса и все profile/lifecycle границы. Удалять `НЕ ИЗМЕРЕНО` только
+после двустороннего conformance результата.
+
+Проверка: `cargo check-wasm`, `cargo fmt --all -- --check`,
+`cargo clippy --workspace --all-targets -- -D warnings`,
+`RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps`, workspace tests,
+bytecode round-trip и `the_jit_agrees_with_the_interpreter_on_every_script`.
+
+## Нагрузочные и регрессионные проверки
+
+Перед выбором production defaults, кроме `max_history_jobs = 10_000`, снять:
+
+- submit → start → terminal при 1 worker и при числе worker = vCPU;
+- FIFO-backlog до 10 000 jobs и listing 10 000 snapshots без чтения параметров;
+- лимиты inflight/payload/history/messages и освобождение reservations;
+- per-job/global temporary staging и перенос payload из live в history;
+- nested parent/child wait при полностью занятом пуле;
+- sync HTTP из job: пока request pending, тот же worker продвигает другой job;
+- HTTP fan-out с массовым completion для оценки pinned-worker дисбаланса;
+- создание и уничтожение Engine без jobs: ленивый runtime не поднимает потоков;
+- обычные VM-сценарии с одним BSL-task, чтобы safe points не ухудшили fast path.
+
+Любое утверждение об ускорении или отсутствии регрессии подтверждается
+чередующимся A/B против baseline-бинарника. Обязательные сценарии после
+графового/VM-рефакторинга: `table_save_load`, `table_compare2`, `bmp_rotate`;
+для VM-hot path — релевантные in-process сценарии. Среднее без чередования не
+считается доказательством.
+
+## Критерии готовности
+
+Механизм готов, когда:
+
+- каждый job имеет изолированный `State`, но все `State` одного `Engine` видят
+  общий runtime;
+- Engine без jobs не создаёт OS-потоков, а первый admission не ждёт запуска
+  всего пула;
+- занятый пул ставит jobs в FIFO, явные лимиты работают до admission, а
+  worker-count не превышается;
+- вложенное ожидание и pending HTTP не блокируют OS worker;
+- дочерний job наследует host-profile без повышения возможностей;
+- отмена не ловится BSL-обработчиком, а terminal transition/commit выполняются
+  ровно один раз;
+- временное хранилище и сообщения соответствуют зафиксированным контрактам;
+- `ConfigurationProgram`, `BytecodeImage` и импортированные функции/переменные
+  используют один ABI с восьмибайтовым `Instr`;
+- API компилируется на WASM и без сервиса даёт ловимую capability error;
+- история удерживает до 10 000 jobs в заданном byte budget;
+- оставшиеся платформенные решения имеют замеры либо полный комплект
+  `НЕ ИЗМЕРЕНО`;
+- conformance, interpreter/JIT, bytecode, docs, format, Clippy, workspace tests,
+  WASM-check и обязательные A/B benchmarks зелёны.
