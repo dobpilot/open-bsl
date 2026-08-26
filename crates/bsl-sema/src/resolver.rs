@@ -59,6 +59,8 @@ pub enum SemaError {
     /// `ЗаполнитьЗначенияСвойств`) в позиции выражения: платформа отвечает
     /// «Обращение к процедуре как к функции».
     ProcedureAsFunction(String),
+    /// `Ждать` допустим только внутри метода с модификатором `Асинх`.
+    AwaitOutsideAsync,
     /// `'20240230'` — литерал прошёл лексер (цифры, верная длина), но
     /// такой календарной даты не существует.
     BadDateLiteral(String),
@@ -121,6 +123,10 @@ impl std::fmt::Display for SemaError {
             SemaError::ProcedureAsFunction(name) => {
                 write!(f, "процедура «{name}» не возвращает значения")
             }
+            SemaError::AwaitOutsideAsync => write!(
+                f,
+                "оператор «Ждать» можно использовать только в асинхронной процедуре или функции"
+            ),
             SemaError::BadDateLiteral(text) => write!(f, "некорректный литерал даты «{text}»"),
             SemaError::BadNumericLiteral(text) => {
                 // Литерал может быть в сотню тысяч цифр — печатаем начало,
@@ -187,9 +193,9 @@ pub struct SnippetSignature {
 /// уровня.
 /// `Перем` на уровне модуля образует ОБЛАСТЬ МОДУЛЯ: процедуры и функции
 /// видят такие переменные и пишут в них, и запись видна снаружи —
-/// ИЗМЕРЕНО на 8.3.27. Хранилище — первые слоты кадра верхнего уровня: он
-/// стоит в самом низу стека значений и живёт всё исполнение, поэтому
-/// доступ из любого кадра — это прямая индексация (`Instr::GetModuleVar`).
+/// ИЗМЕРЕНО на 8.3.27. Хранилище отделено от стеков задач: и верхний
+/// уровень, и функции обращаются к нему через `Instr::GetModuleVar` и
+/// `Instr::SetModuleVar`.
 ///
 /// # Errors
 ///
@@ -256,7 +262,9 @@ fn resolve_program_impl(
                         module_vars.push(name.clone());
                     }
                 }
-                top_stmts.push(AStmt::VarDecl(vd.clone()));
+                // Само объявление не заводит локальный слот верхнего
+                // уровня: модульные переменные принадлежат `ModuleState`
+                // одного запуска и не должны копироваться в стек задачи.
             }
             Item::Stmt(s) => top_stmts.push(s.clone()),
         }
@@ -269,7 +277,6 @@ fn resolve_program_impl(
         .enumerate()
         .map(|(i, name)| (name.to_uppercase(), i as u32))
         .collect();
-    let empty_module_index: HashMap<String, u32> = HashMap::new();
 
     // Статически доказанные ядровые приёмники — пре-проход по AST до
     // резолвинга тел: его вердикты решают, остаётся ли вызов метода
@@ -277,14 +284,14 @@ fn resolve_program_impl(
     let by_val_modes: HashMap<String, Vec<bool>> = func_items
         .iter()
         .map(|item| match item {
-            Item::Function(f) => (&f.name, &f.params),
-            Item::Procedure(p) => (&p.name, &p.params),
+            Item::Function(f) => (&f.name, &f.params, f.is_async),
+            Item::Procedure(p) => (&p.name, &p.params, p.is_async),
             _ => unreachable!(),
         })
-        .map(|(name, params)| {
+        .map(|(name, params, is_async)| {
             (
                 name.to_uppercase(),
-                params.iter().map(|p| p.by_val).collect(),
+                params.iter().map(|p| is_async || p.by_val).collect(),
             )
         })
         .collect();
@@ -307,9 +314,9 @@ fn resolve_program_impl(
     let mut functions = Vec::with_capacity(func_items.len());
     let mut used_libraries = HashSet::new();
     for (func_index, item) in func_items.iter().enumerate() {
-        let (name, params, body, is_procedure) = match item {
-            Item::Function(f) => (&f.name, &f.params, &f.body, false),
-            Item::Procedure(p) => (&p.name, &p.params, &p.body, true),
+        let (name, params, body, is_procedure, is_async) = match item {
+            Item::Function(f) => (&f.name, &f.params, &f.body, false, f.is_async),
+            Item::Procedure(p) => (&p.name, &p.params, &p.body, true, p.is_async),
             _ => unreachable!(),
         };
         let labels = resolve_labels(body)?;
@@ -321,6 +328,7 @@ fn resolve_program_impl(
             registry,
             used_libraries: HashSet::new(),
             strict_stmt_calls: true,
+            allow_await: is_async,
             core_locals: Some(&core_maps.functions[func_index]),
             core_module: Some(&core_maps.module_slots),
             labels: &labels,
@@ -341,13 +349,14 @@ fn resolve_program_impl(
                 None => None,
             };
             resolved_params.push(ResolvedParam {
-                by_val: p.by_val,
+                by_val: is_async || p.by_val,
                 default,
             });
         }
         used_libraries.extend(r.used_libraries.iter().cloned());
         functions.push(ResolvedFunction {
             name: name.clone(),
+            is_async,
             is_procedure,
             // По телу И по умолчаниям параметров: последние компилируются в
             // тот же чанк прологом, и `Ф(а = Вычислить("..."))` обязан
@@ -360,25 +369,23 @@ fn resolve_program_impl(
         });
     }
 
-    // Тело модуля видит те же переменные как ОБЫЧНЫЕ локальные: его кадр и
-    // есть их хранилище, и номер слота совпадает с номером в `module_index`
-    // — на этом совпадении держится доступ из функций.
+    // Тело модуля обращается к тем же внешним слотам, что и функции. Это
+    // необходимо для нескольких задач с отдельными стеками внутри одного
+    // запуска: копия в корневом кадре расходилась бы после первого `Await`.
     let top_labels = resolve_labels(&top_stmts)?;
     let mut r = Resolver {
         locals: Vec::new(),
         index: HashMap::new(),
         funcs: &sigs,
-        module_index: &empty_module_index,
+        module_index: &module_index,
         registry,
         used_libraries: HashSet::new(),
         strict_stmt_calls: true,
+        allow_await: false,
         core_locals: Some(&core_maps.top),
-        core_module: None,
+        core_module: Some(&core_maps.module_slots),
         labels: &top_labels,
     };
-    for name in &module_vars {
-        r.declare(name);
-    }
     let top_body = r.resolve_block(&top_stmts)?;
     used_libraries.extend(r.used_libraries.iter().cloned());
     let top_level = Resolved {
@@ -439,6 +446,7 @@ pub fn resolve_script(stmts: &[AStmt]) -> Result<Resolved, SemaError> {
         registry: None,
         used_libraries: HashSet::new(),
         strict_stmt_calls: true,
+        allow_await: false,
         core_locals: None,
         core_module: None,
         labels: &labels,
@@ -478,7 +486,18 @@ pub fn resolve_snippet_stmts(
     stmts: &[AStmt],
     signatures: &[SnippetSignature],
 ) -> Result<(Vec<String>, Vec<RStmt>), SemaError> {
-    resolve_snippet_stmts_mode(existing_locals, module_vars, stmts, signatures, true)
+    resolve_snippet_stmts_mode(existing_locals, module_vars, stmts, signatures, true, false)
+}
+
+/// Вариант [`resolve_snippet_stmts`] для фрагмента, вызванного из
+/// async-метода: внутри него разрешён `Ждать`.
+pub fn resolve_async_snippet_stmts(
+    existing_locals: &[String],
+    module_vars: &[String],
+    stmts: &[AStmt],
+    signatures: &[SnippetSignature],
+) -> Result<(Vec<String>, Vec<RStmt>), SemaError> {
+    resolve_snippet_stmts_mode(existing_locals, module_vars, stmts, signatures, true, true)
 }
 
 /// То же, что [`resolve_snippet_stmts`], но для строки REPL: голый вызов
@@ -498,7 +517,14 @@ pub fn resolve_repl_stmts(
     stmts: &[AStmt],
     signatures: &[SnippetSignature],
 ) -> Result<(Vec<String>, Vec<RStmt>), SemaError> {
-    resolve_snippet_stmts_mode(existing_locals, module_vars, stmts, signatures, false)
+    resolve_snippet_stmts_mode(
+        existing_locals,
+        module_vars,
+        stmts,
+        signatures,
+        false,
+        false,
+    )
 }
 
 /// Разрешает динамический фрагмент с тем же каталогом компонентов, что и
@@ -520,6 +546,26 @@ pub fn resolve_snippet_stmts_with_registry(
         module_vars,
         stmts,
         signatures,
+        true,
+        false,
+        Some(registry),
+    )
+}
+
+/// Вариант [`resolve_snippet_stmts_with_registry`] для async-кадра.
+pub fn resolve_async_snippet_stmts_with_registry(
+    existing_locals: &[String],
+    module_vars: &[String],
+    stmts: &[AStmt],
+    signatures: &[SnippetSignature],
+    registry: &bsl_rt::RuntimeRegistry,
+) -> Result<ResolvedSnippetWithRequirements, SemaError> {
+    resolve_snippet_stmts_mode_registry(
+        existing_locals,
+        module_vars,
+        stmts,
+        signatures,
+        true,
         true,
         Some(registry),
     )
@@ -545,6 +591,7 @@ pub fn resolve_repl_stmts_with_registry(
         stmts,
         signatures,
         false,
+        false,
         Some(registry),
     )
 }
@@ -555,6 +602,7 @@ fn resolve_snippet_stmts_mode(
     stmts: &[AStmt],
     signatures: &[SnippetSignature],
     strict_stmt_calls: bool,
+    allow_await: bool,
 ) -> Result<(Vec<String>, Vec<RStmt>), SemaError> {
     let (locals, body, _) = resolve_snippet_stmts_mode_registry(
         existing_locals,
@@ -562,6 +610,7 @@ fn resolve_snippet_stmts_mode(
         stmts,
         signatures,
         strict_stmt_calls,
+        allow_await,
         None,
     )?;
     Ok((locals, body))
@@ -573,6 +622,7 @@ fn resolve_snippet_stmts_mode_registry(
     stmts: &[AStmt],
     signatures: &[SnippetSignature],
     strict_stmt_calls: bool,
+    allow_await: bool,
     registry: Option<&bsl_rt::RuntimeRegistry>,
 ) -> Result<ResolvedSnippetWithRequirements, SemaError> {
     let empty_funcs: HashMap<String, FuncSig> = signatures
@@ -621,6 +671,7 @@ fn resolve_snippet_stmts_mode_registry(
         registry,
         used_libraries: HashSet::new(),
         strict_stmt_calls,
+        allow_await,
         core_locals: None,
         core_module: None,
         labels: &labels,
@@ -797,6 +848,8 @@ struct Resolver<'a> {
     /// месте этого поля не убрало бы ни ветвления, ни комментария —
     /// значит, добавило бы только тип.
     strict_stmt_calls: bool,
+    /// Разрешён ли `Ждать` в текущем теле.
+    allow_await: bool,
     /// Статически доказанные ядровые приёмники этой области (см.
     /// `core_receivers`): локальные — по имени в верхнем регистре. `None`
     /// у REPL и фрагментов `Выполнить` — их слоты живут дольше одного
@@ -1059,6 +1112,12 @@ impl<'a> Resolver<'a> {
             AExpr::Bool(b) => Ok(RExpr::Bool(*b)),
             AExpr::Undefined => Ok(RExpr::Undefined),
             AExpr::Null => Ok(RExpr::Null),
+            AExpr::Await(expr) => {
+                if !self.allow_await {
+                    return Err(SemaError::AwaitOutsideAsync);
+                }
+                Ok(RExpr::Await(Box::new(self.resolve_expr(expr)?)))
+            }
             AExpr::Ident(name) => match self.lookup(name) {
                 Some(slot) => Ok(RExpr::Local(slot)),
                 None => match self.module_index.get(&name.to_uppercase()) {
@@ -1072,6 +1131,16 @@ impl<'a> Resolver<'a> {
                     {
                         Ok(RExpr::CallBuiltinFn {
                             builtin: bsl_rt::BuiltinFn::CommandLineArguments,
+                            args: Vec::new(),
+                        })
+                    }
+                    // В standalone-среде глобальное свойство `Метаданные`
+                    // существует, но описывает пустую конфигурацию.
+                    None if bsl_rt::BuiltinFn::lookup(name)
+                        == Some(bsl_rt::BuiltinFn::Metadata) =>
+                    {
+                        Ok(RExpr::CallBuiltinFn {
+                            builtin: bsl_rt::BuiltinFn::Metadata,
                             args: Vec::new(),
                         })
                     }
@@ -1184,6 +1253,26 @@ impl<'a> Resolver<'a> {
                 index: Box::new(self.resolve_expr(index)?),
             }),
             AExpr::Field { obj, name } => {
+                // `Символы.ПС`/`Chars.LF` и `Символы.ВК`/`Chars.CR` —
+                // константы глобального контекста. Значения измерены на
+                // 8.3.27 пробами `CHARS.*`; отдельный runtime-объект ради
+                // двух строковых литералов не нужен. Локальная или
+                // модульная переменная с тем же именем сохраняет обычный
+                // доступ к полю.
+                if let AExpr::Ident(base) = obj.as_ref()
+                    && self.lookup(base).is_none()
+                    && !self.module_index.contains_key(&base.to_uppercase())
+                {
+                    let member = match (base.to_uppercase().as_str(), name.to_uppercase().as_str())
+                    {
+                        ("СИМВОЛЫ", "ПС") | ("CHARS", "LF") => Some("\n"),
+                        ("СИМВОЛЫ", "ВК") | ("CHARS", "CR") => Some("\r"),
+                        _ => None,
+                    };
+                    if let Some(member) = member {
+                        return Ok(RExpr::Str(member.to_string()));
+                    }
+                }
                 // `ТипЗначенияJSON.ИмяСвойства` — не чтение поля объекта, а
                 // КОНСТАНТА: у платформы перечисление тоже не объект, и
                 // несуществующий член она ловит на компиляции, а не в
@@ -1231,6 +1320,18 @@ impl<'a> Resolver<'a> {
     /// Разбирает известные платформенные типы из [`NEW_TYPES`]. Общие
     /// пользовательские типы пока не поддержаны.
     fn resolve_new(&mut self, type_name: &str, args: &[AExpr]) -> Result<RExpr, SemaError> {
+        // Одноаргументная форма остаётся дешёвым опкодом. Форма
+        // с четырьмя аргументами идёт ниже через конструктор ядра:
+        // он вычисляет все квалификаторы, не раздувая байт-код редкой формой.
+        if matches!(
+            type_name.to_uppercase().as_str(),
+            "ОПИСАНИЕТИПОВ" | "TYPEDESCRIPTION"
+        ) && args.len() == 1
+        {
+            return Ok(RExpr::NewTypeDescription(Box::new(
+                self.resolve_expr(&args[0])?,
+            )));
+        }
         let registered = self
             .registry
             .and_then(|registry| {
@@ -1692,8 +1793,10 @@ impl<'a> Resolver<'a> {
                     // трактует (`Сред` — до конца строки, `КодСимвола` —
                     // позиция 1, `СтрШаблон` — пустая подстановка).
                     let mut rargs = self.resolve_builtin_args(args)?;
-                    while rargs.len() < max {
-                        rargs.push(RExpr::Undefined);
+                    if !builtin.is_variadic() {
+                        while rargs.len() < max {
+                            rargs.push(RExpr::Undefined);
+                        }
                     }
                     return Ok(RExpr::CallBuiltinFn {
                         builtin,
@@ -1935,12 +2038,32 @@ mod tests {
 
     #[test]
     fn a_type_outside_the_list_is_not_constructible() {
-        let prog = parse("x = Новый СписокЗначений();").unwrap();
+        // `СписокЗначений` теперь законно приходит из реестра
+        // конструкторов ядра, хотя в legacy-`матче` и `NEW_TYPES` его нет.
+        let prog = parse("x = Новый НесуществующийТип();").unwrap();
         let stmts = items_to_stmts(prog.items);
         assert!(matches!(
             resolve_script(&stmts),
             Err(SemaError::Unsupported(_))
         ));
+    }
+
+    #[test]
+    fn chars_line_feed_and_carriage_return_are_compile_time_strings() {
+        let resolved = resolve_src("пс = Символы.ПС; вк = Chars.CR;");
+        assert_eq!(
+            resolved.body,
+            vec![
+                RStmt::AssignLocal {
+                    slot: 0,
+                    value: RExpr::Str("\n".to_string()),
+                },
+                RStmt::AssignLocal {
+                    slot: 1,
+                    value: RExpr::Str("\r".to_string()),
+                },
+            ]
+        );
     }
 
     #[test]
@@ -2165,6 +2288,31 @@ mod tests {
         assert_eq!(f.locals[1], "б");
         assert!(f.params[0].by_val);
         assert!(!f.params[1].by_val);
+    }
+
+    #[test]
+    fn async_parameters_are_always_passed_by_value() {
+        let rp = resolve_program_src("Асинх Процедура П(а, Знач б)\nКонецПроцедуры");
+        let function = &rp.functions[0];
+        assert!(function.is_async);
+        assert!(function.params.iter().all(|parameter| parameter.by_val));
+    }
+
+    #[test]
+    fn await_is_only_allowed_inside_an_async_method() {
+        let async_program =
+            resolve_program_src("Асинх Функция Ф(Обещание)\nВозврат Ждать Обещание;\nКонецФункции");
+        assert!(matches!(
+            async_program.functions[0].body[0],
+            RStmt::Return(Some(RExpr::Await(_)))
+        ));
+
+        let parsed = parse("Функция Ф(Обещание)\nВозврат Ждать Обещание;\nКонецФункции")
+            .expect("синтаксис Ждать допустим до семантической проверки");
+        assert_eq!(
+            resolve_program(&parsed.items).unwrap_err(),
+            SemaError::AwaitOutsideAsync
+        );
     }
 
     #[test]

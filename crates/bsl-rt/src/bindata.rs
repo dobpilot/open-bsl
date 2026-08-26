@@ -1145,7 +1145,7 @@ pub fn string_from_binary_data(args: &[BslValue]) -> RtResult<BslValue> {
     };
     let encoding = encoding_arg(args.get(1).unwrap_or(&BslValue::Undefined), OP)?;
     Ok(BslValue::Str(crate::BslString::from_str(
-        &encoding.decode(&bytes),
+        &encoding.decode(&bytes)?,
     )))
 }
 
@@ -1164,7 +1164,7 @@ pub fn string_from_binary_buffer(args: &[BslValue]) -> RtResult<BslValue> {
     const OP: &str = "ПолучитьСтрокуИзБуфераДвоичныхДанных";
     let d = data(args.first().unwrap_or(&BslValue::Undefined), OP)?;
     let encoding = encoding_arg(args.get(1).unwrap_or(&BslValue::Undefined), OP)?;
-    let text = encoding.decode(&d.borrow().to_vec());
+    let text = encoding.decode(&d.borrow().to_vec())?;
     Ok(BslValue::Str(crate::BslString::from_str(&text)))
 }
 

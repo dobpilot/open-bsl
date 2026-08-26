@@ -120,6 +120,10 @@ impl EngineBuilder {
         runtime.register(bsl_json::library());
         #[cfg(feature = "stream")]
         runtime.register(bsl_stream::library());
+        #[cfg(feature = "http")]
+        runtime.register(bsl_http::library());
+        #[cfg(feature = "crypto")]
+        runtime.register(bsl_crypto::library());
         #[cfg(feature = "zip")]
         runtime.register(bsl_zip::library());
         #[cfg(feature = "pdf")]

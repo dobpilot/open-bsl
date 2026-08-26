@@ -154,7 +154,7 @@ python3 tests/conformance/measure/1c/gen-form-module.py \
 onec DESIGNER /F"$IB" /LoadConfigFromFiles "$WORK/cfg" /UpdateDBCfg \
     /DisableStartupDialogs /Out "$WORK/build.log" >/dev/null 2>&1
 BUILD_RC=$?
-if [ "$BUILD_RC" -ne 0 ] || ! grep -q "успешно завершено" "$WORK/build.log"; then
+if [ "$BUILD_RC" -ne 0 ] || ! grep -Eqi "успешно завершено|successfully updated" "$WORK/build.log"; then
     echo "не удалось обновить конфигурацию базы:" >&2
     cat "$WORK/build.log" >&2
     exit 1

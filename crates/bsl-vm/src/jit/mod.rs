@@ -60,6 +60,7 @@ use x64::{Assembler, Cond, Reg};
 /// ошибка лежит в `JitCtx::error`. Обычный выход возвращает `pc`, а он
 /// всегда меньше длины чанка, так что путаницы быть не может.
 const JIT_ERROR: u64 = u64::MAX;
+const JIT_YIELD_BIT: u64 = 1 << 63;
 
 /// Есть ли JIT на этой сборке. На x86-64 Linux — да; проверка нужна
 /// вызывающему, чтобы не заводить пустых структур там, где её нет.
@@ -99,6 +100,12 @@ pub struct JitCtx {
     /// «таблица типа, номер имени → обработчик» — единственный быстрый
     /// путь.
     component_properties: *const ComponentPropertyMap,
+    quantum_remaining: *mut usize,
+}
+
+pub(crate) enum NativeOutcome {
+    Continue { pc: usize },
+    Yield { pc: usize },
 }
 
 /// Скомпилированный чанк: машинный код и карта входов.
@@ -115,6 +122,7 @@ impl CompiledChunk {
     ///
     /// Возвращает `None`, если на `pc` входа нет. Иначе — `pc`, на
     /// котором интерпретатор должен продолжить, либо ошибку.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn run(
         &self,
         pc: usize,
@@ -123,7 +131,8 @@ impl CompiledChunk {
         program: &Program,
         runtime_shapes: &mut bsl_rt::RuntimeShapes,
         linked: &LinkedComponents<'_>,
-    ) -> Option<Result<usize, RtError>> {
+        quantum_remaining: &mut usize,
+    ) -> Option<Result<NativeOutcome, RtError>> {
         let offset = (*self.entries.get(pc)?)?;
         let mut error: Option<RtError> = None;
         let mut ctx = JitCtx {
@@ -136,6 +145,7 @@ impl CompiledChunk {
             builtin_methods_len: linked.builtin_methods.len(),
             component_methods: &linked.component_methods,
             component_properties: &linked.component_properties,
+            quantum_remaining,
         };
         // Переход в отображённую страницу. Безопасность держится на том,
         // что код туда положил `compile` из этого же файла, а указатели в
@@ -148,13 +158,25 @@ impl CompiledChunk {
                 "JIT сообщил об ошибке, но не оставил её",
             ))));
         }
-        Some(Ok(result as usize))
+        if result & JIT_YIELD_BIT != 0 {
+            Some(Ok(NativeOutcome::Yield {
+                pc: (result & !JIT_YIELD_BIT) as usize,
+            }))
+        } else {
+            Some(Ok(NativeOutcome::Continue {
+                pc: result as usize,
+            }))
+        }
     }
 }
 
 /// Компилирует чанк целиком. `None` — если в нём не нашлось ни одной
 /// инструкции, которую мы умеем, либо ядро не дало исполняемую страницу.
-pub fn compile(chunk: &Chunk) -> Option<CompiledChunk> {
+pub fn compile(
+    chunk: &Chunk,
+    builtin_methods: &[Option<bsl_rt::BuiltinMethod>],
+    scheduled: bool,
+) -> Option<CompiledChunk> {
     let mut asm = Assembler::new();
     let mut entries: Vec<Option<usize>> = vec![None; chunk.instrs.len()];
     // Смещения ТЕЛА всех скомпилированных инструкций (за прологом, если
@@ -165,6 +187,7 @@ pub fn compile(chunk: &Chunk) -> Option<CompiledChunk> {
     // после того, как известны смещения всех инструкций.
     let mut jumps: Vec<(x64::Patch, usize)> = Vec::new();
     let mut error_patches: Vec<x64::Patch> = Vec::new();
+    let mut yield_patches: Vec<(x64::Patch, usize)> = Vec::new();
     let mut compiled_any = false;
 
     // Длина непрерывной цепочки скомпилированных инструкций, начиная с
@@ -172,7 +195,7 @@ pub fn compile(chunk: &Chunk) -> Option<CompiledChunk> {
     // входа — см. MIN_RUN.
     let mut run_len = vec![0usize; chunk.instrs.len() + 1];
     for pc in (0..chunk.instrs.len()).rev() {
-        run_len[pc] = if compile_instr(&chunk.instrs[pc]).is_some() {
+        run_len[pc] = if compile_instr(&chunk.instrs[pc], builtin_methods).is_some() {
             run_len[pc + 1] + 1
         } else {
             0
@@ -185,7 +208,7 @@ pub fn compile(chunk: &Chunk) -> Option<CompiledChunk> {
     let is_bundle_start = |pc: usize| chunk.bundle_len.get(pc).is_none_or(|&w| w >= 1);
 
     for (pc, instr) in chunk.instrs.iter().enumerate() {
-        let Some(op) = compile_instr(instr) else {
+        let Some(op) = compile_instr(instr, builtin_methods) else {
             continue;
         };
         compiled_any = true;
@@ -208,7 +231,7 @@ pub fn compile(chunk: &Chunk) -> Option<CompiledChunk> {
         // бандла код течёт линейно, без `jmp` между членами.
         let next_is_inline = pc + 1 < chunk.instrs.len()
             && !is_bundle_start(pc + 1)
-            && compile_instr(&chunk.instrs[pc + 1]).is_some();
+            && compile_instr(&chunk.instrs[pc + 1], builtin_methods).is_some();
         match op {
             Compiled::Call { func, args } => {
                 emit_call(&mut asm, func, pc as u32, args);
@@ -226,8 +249,17 @@ pub fn compile(chunk: &Chunk) -> Option<CompiledChunk> {
                 asm.cmp_rax_imm8(FAILED as i8);
                 error_patches.push(asm.jcc(Cond::Zero));
                 asm.cmp_rax_imm8(JUMPED as i8);
-                let taken = asm.jcc(Cond::Zero);
-                jumps.push((taken, target));
+                if scheduled && target <= pc {
+                    let not_taken = asm.jcc(Cond::NotZero);
+                    emit_quantum_check(&mut asm, target, &mut yield_patches);
+                    let taken = asm.jmp();
+                    jumps.push((taken, target));
+                    let fallthrough = asm.here();
+                    asm.patch(not_taken, fallthrough);
+                } else {
+                    let taken = asm.jcc(Cond::Zero);
+                    jumps.push((taken, target));
+                }
                 if !next_is_inline {
                     let fallthrough = asm.jmp();
                     jumps.push((fallthrough, pc + 1));
@@ -237,6 +269,9 @@ pub fn compile(chunk: &Chunk) -> Option<CompiledChunk> {
                 // Безусловный переход — без единого вызова: ради этого
                 // JIT и затевался. Тело цикла крутится внутри одной
                 // нативной функции, не возвращаясь в `drive`.
+                if scheduled && target <= pc {
+                    emit_quantum_check(&mut asm, target, &mut yield_patches);
+                }
                 let always = asm.jmp();
                 jumps.push((always, target));
             }
@@ -275,9 +310,27 @@ pub fn compile(chunk: &Chunk) -> Option<CompiledChunk> {
     for patch in error_patches {
         asm.patch(patch, error_target);
     }
+    for (patch, target) in yield_patches {
+        let yield_target = asm.here();
+        asm.mov_r_imm64(Reg::Rax, JIT_YIELD_BIT | target as u64);
+        epilogue(&mut asm);
+        asm.patch(patch, yield_target);
+    }
 
     let code = ExecutableBuffer::new(&asm.finish())?;
     Some(CompiledChunk { code, entries })
+}
+
+fn emit_quantum_check(
+    asm: &mut Assembler,
+    target: usize,
+    yield_patches: &mut Vec<(x64::Patch, usize)>,
+) {
+    let displacement = i32::try_from(std::mem::offset_of!(JitCtx, quantum_remaining))
+        .expect("JitCtx помещается в disp32");
+    asm.mov_r_membase_disp32(Reg::Rax, Reg::Rbx, displacement);
+    asm.sub_mem_imm8(Reg::Rax, 1);
+    yield_patches.push((asm.jcc(Cond::Zero), target));
 }
 
 /// Сколько инструкций подряд должно быть скомпилировано, чтобы на первую
@@ -348,7 +401,10 @@ enum Compiled {
 /// Цели переходов у нас АБСОЛЮТНЫЕ (`pc = target`), а не относительные —
 /// как и в интерпретаторе; перепутать было бы легко, поэтому здесь без
 /// арифметики.
-fn compile_instr(instr: &Instr) -> Option<Compiled> {
+fn compile_instr(
+    instr: &Instr,
+    builtin_methods: &[Option<bsl_rt::BuiltinMethod>],
+) -> Option<Compiled> {
     let s = |func: ShimFn, args: [u32; 3]| Some(Compiled::Call { func, args });
     match *instr {
         Instr::Jump { target } => Some(Compiled::Goto(target as usize)),
@@ -425,13 +481,18 @@ fn compile_instr(instr: &Instr) -> Option<Compiled> {
         // выбирает узкий вход и сам интерпретатор
         // (`bsl_rt::BuiltinFn::host_effect`), — второго списка, который
         // «обязан совпадать», здесь больше нет.
-        Instr::CallBuiltin { builtin, .. } if builtin.host_effect().is_some() => None,
+        Instr::CallBuiltin { builtin, .. }
+            if builtin.host_effect().is_some() || builtin == bsl_rt::BuiltinFn::ErrorInfo =>
+        {
+            None
+        }
         Instr::CallBuiltin { .. } => s(shim_call_builtin, [0, 0, 0]),
         // У этих троих операндов тоже больше трёх либо среди них есть не
         // число (`NameId`, номер метода), поэтому они, как и CallBuiltin,
         // читают свою инструкцию сами.
         Instr::GetProp { .. } => s(shim_get_prop, [0, 0, 0]),
         Instr::SetProp { .. } => s(shim_set_prop, [0, 0, 0]),
+        Instr::CallMethod { method, .. } if method.host_effect().is_some() => None,
         Instr::CallMethod { .. } => s(shim_call_method, [0, 0, 0]),
         // Открытые двойники троих закрытых выше: нативный получатель идёт
         // тем же инлайн-кэшем и таблицей связывания, что и в интерпретаторе,
@@ -447,6 +508,15 @@ fn compile_instr(instr: &Instr) -> Option<Compiled> {
         // отладочную сборку. С реестром в эти опкоды компилируется каждое
         // обращение программы, и выход в интерпретатор на каждом из них
         // съедал целые чанки.
+        Instr::CallObjectMethod { method, .. }
+            if builtin_methods
+                .get(method as usize)
+                .copied()
+                .flatten()
+                .is_some_and(|method| method.host_effect().is_some()) =>
+        {
+            None
+        }
         Instr::GetObjectProp { .. }
         | Instr::SetObjectProp { .. }
         | Instr::CallObjectMethod { .. } => {
@@ -1248,3 +1318,52 @@ shim!(shim_jump_if_true, |frames,
         OK
     })
 });
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Файловый `Записать` образует одну точку возврата интерпретатору, а
+    /// не отключает соседние методы или весь чанк. Для открытого вызова
+    /// решение принимается по таблице имён, построенной при связывании.
+    #[test]
+    fn a_host_method_alone_falls_back_after_linking() {
+        let methods = [
+            Some(bsl_rt::BuiltinMethod::Write),
+            Some(bsl_rt::BuiltinMethod::Add),
+        ];
+        let closed_write = Instr::CallMethod {
+            dst: 0,
+            obj: 1,
+            method: bsl_rt::BuiltinMethod::Write,
+            base: 2,
+            count: 1,
+        };
+        let closed_add = Instr::CallMethod {
+            dst: 0,
+            obj: 1,
+            method: bsl_rt::BuiltinMethod::Add,
+            base: 2,
+            count: 1,
+        };
+        let open_write = Instr::CallObjectMethod {
+            dst: 0,
+            obj: 1,
+            method: 0,
+            base: 2,
+            count: 1,
+        };
+        let open_add = Instr::CallObjectMethod {
+            dst: 0,
+            obj: 1,
+            method: 1,
+            base: 2,
+            count: 1,
+        };
+
+        assert!(compile_instr(&closed_write, &methods).is_none());
+        assert!(compile_instr(&open_write, &methods).is_none());
+        assert!(compile_instr(&closed_add, &methods).is_some());
+        assert!(compile_instr(&open_add, &methods).is_some());
+    }
+}

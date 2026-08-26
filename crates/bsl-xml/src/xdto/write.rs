@@ -658,11 +658,7 @@ pub(crate) fn list_item_of(model: &XdtoModel, index: usize) -> Option<usize> {
 
 /// `hexBinary`: заглавные шестнадцатеричные цифры без переносов.
 pub(crate) fn encode_hex(bytes: &[u8]) -> String {
-    let mut out = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        out.push_str(&format!("{byte:02X}"));
-    }
-    out
+    bsl_rt::encoding::encode_hex(bytes)
 }
 
 /// Ширина строки base64 при записи — измерено на 48 и 49 байтах.
@@ -671,28 +667,7 @@ pub(crate) const BASE64_LINE: usize = 64;
 /// `base64Binary`: стандартный алфавит с дополнением, строками по
 /// [`BASE64_LINE`] символов через CR LF.
 pub(crate) fn encode_base64(bytes: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut chars = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    for chunk in bytes.chunks(3) {
-        let (b0, b1, b2) = (
-            u32::from(chunk[0]),
-            chunk.get(1).map_or(0, |b| u32::from(*b)),
-            chunk.get(2).map_or(0, |b| u32::from(*b)),
-        );
-        let bits = (b0 << 16) | (b1 << 8) | b2;
-        chars.push(ALPHABET[(bits >> 18) as usize & 63] as char);
-        chars.push(ALPHABET[(bits >> 12) as usize & 63] as char);
-        chars.push(if chunk.len() > 1 {
-            ALPHABET[(bits >> 6) as usize & 63] as char
-        } else {
-            '='
-        });
-        chars.push(if chunk.len() > 2 {
-            ALPHABET[bits as usize & 63] as char
-        } else {
-            '='
-        });
-    }
+    let chars = bsl_rt::encoding::encode_base64(bytes);
     let mut out = String::with_capacity(chars.len() + chars.len() / BASE64_LINE * 2);
     for (i, chunk) in chars
         .as_bytes()

@@ -8,6 +8,9 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
+#[path = "../../../tests/support/http_system.rs"]
+mod http_system_support;
+
 fn bsl_cli() -> &'static str {
     env!("CARGO_BIN_EXE_bsl-cli")
 }
@@ -144,6 +147,23 @@ fn a_script_path_still_runs_the_script() {
         actual.trim_end_matches('\n'),
         expected.trim_end_matches('\n')
     );
+}
+
+#[test]
+fn cli_runs_sync_and_async_http_through_the_system_adapter() {
+    let (port, observed, server) = http_system_support::start_server();
+    let path = std::env::temp_dir().join(format!(
+        "bsl-cli-test-http-system-{}.bsl",
+        std::process::id()
+    ));
+    std::fs::write(&path, http_system_support::source(port))
+        .expect("не удалось записать HTTP-скрипт");
+
+    let out = run(&[path.to_str().unwrap()]);
+    let _ = std::fs::remove_file(&path);
+    assert_eq!(stdout_of(&out), "");
+    server.join().unwrap();
+    http_system_support::assert_requests(&observed);
 }
 
 #[test]

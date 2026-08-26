@@ -22,8 +22,14 @@ pub(crate) mod jit;
 #[cfg(not(all(target_arch = "x86_64", target_os = "linux")))]
 pub(crate) mod jit {
     pub const AVAILABLE: bool = false;
+    #[allow(dead_code)]
+    pub(crate) enum NativeOutcome {
+        Continue { pc: usize },
+        Yield { pc: usize },
+    }
     pub struct CompiledChunk;
     impl CompiledChunk {
+        #[allow(clippy::too_many_arguments)]
         pub(crate) fn run(
             &self,
             _pc: usize,
@@ -31,18 +37,286 @@ pub(crate) mod jit {
             _stack: &mut Vec<bsl_rt::BslValue>,
             _program: &bsl_bytecode::Program,
             _runtime_shapes: &mut bsl_rt::RuntimeShapes,
-        ) -> Option<Result<usize, bsl_rt::RtError>> {
+            _linked: &crate::LinkedComponents<'_>,
+            _quantum_remaining: &mut usize,
+        ) -> Option<Result<NativeOutcome, bsl_rt::RtError>> {
             None
         }
     }
-    pub fn compile(_chunk: &bsl_bytecode::Chunk) -> Option<CompiledChunk> {
+    pub fn compile(
+        _chunk: &bsl_bytecode::Chunk,
+        _builtin_methods: &[Option<bsl_rt::BuiltinMethod>],
+        _scheduled: bool,
+    ) -> Option<CompiledChunk> {
         None
     }
 }
 
 use bsl_bytecode::{ArgMode, DynamicCompiler, Instr, Program};
-use bsl_rt::{BslValue, RtError};
+use bsl_rt::{BslValue, ExecutionToken, PromiseId, RtError};
+use std::collections::VecDeque;
 use std::io::Write;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, mpsc};
+
+static NEXT_EXECUTION_TOKEN: AtomicU64 = AtomicU64::new(1);
+
+type TaskId = usize;
+
+/// Настройка кооперативного планировщика одного запуска VM.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SchedulerConfig {
+    /// Сколько scheduler safe points исполняет задача до перехода в конец
+    /// FIFO-очереди. При единственной живой задаче счётчик отключён.
+    pub safe_points_per_quantum: usize,
+}
+
+impl Default for SchedulerConfig {
+    fn default() -> Self {
+        Self {
+            safe_points_per_quantum: 1_024,
+        }
+    }
+}
+
+struct Task {
+    frames: Vec<Frame>,
+    stack: Vec<BslValue>,
+    current_exception: Option<BslValue>,
+    completion: TaskCompletion,
+    quantum_remaining: usize,
+}
+
+struct ModuleState {
+    slots: Vec<BslValue>,
+}
+
+impl ModuleState {
+    fn new(program: &Program) -> Self {
+        Self {
+            slots: vec![BslValue::Undefined; program.module_vars.len()],
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum TaskCompletion {
+    Root,
+    Promise(PromiseId),
+    Detached,
+}
+
+enum PromiseState {
+    Pending { waiters: VecDeque<TaskId> },
+    Ready(Result<BslValue, RtError>),
+}
+
+struct HostCompletion {
+    token: ExecutionToken,
+    promise_id: PromiseId,
+    result: Result<bsl_rt::HttpWireResponse, bsl_rt::NetworkError>,
+}
+
+struct VmHttpSink {
+    token: ExecutionToken,
+    promise_id: PromiseId,
+    sender: mpsc::Sender<HostCompletion>,
+}
+
+impl bsl_rt::HttpCompletionSink for VmHttpSink {
+    fn complete(self: Box<Self>, result: Result<bsl_rt::HttpWireResponse, bsl_rt::NetworkError>) {
+        let _ = self.sender.send(HostCompletion {
+            token: self.token,
+            promise_id: self.promise_id,
+            result,
+        });
+    }
+}
+
+struct HostPromise {
+    handle: Box<dyn bsl_rt::RequestHandle>,
+    mapper: bsl_rt::HttpResponseMapper,
+}
+
+struct AsyncState {
+    token: ExecutionToken,
+    scheduler_quantum: usize,
+    tasks: Vec<Option<Task>>,
+    ready: VecDeque<TaskId>,
+    promises: Vec<PromiseState>,
+    host_promises: Vec<Option<HostPromise>>,
+    completion_sender: mpsc::Sender<HostCompletion>,
+    completion_receiver: mpsc::Receiver<HostCompletion>,
+}
+
+impl AsyncState {
+    fn new(root: Task, scheduler_quantum: usize) -> Self {
+        let token = ExecutionToken::new(NEXT_EXECUTION_TOKEN.fetch_add(1, Ordering::Relaxed));
+        let (completion_sender, completion_receiver) = mpsc::channel();
+        Self {
+            token,
+            scheduler_quantum,
+            tasks: vec![Some(root)],
+            ready: VecDeque::from([0]),
+            promises: Vec::new(),
+            host_promises: Vec::new(),
+            completion_sender,
+            completion_receiver,
+        }
+    }
+
+    fn scheduler_quantum(&self) -> usize {
+        self.scheduler_quantum
+    }
+
+    fn new_promise(&mut self) -> Result<(PromiseId, BslValue), RtError> {
+        let raw = u64::try_from(self.promises.len())
+            .map_err(|_| RtError::DynamicError("слишком много обещаний в одном запуске".into()))?;
+        let id = PromiseId::new(raw);
+        self.promises.push(PromiseState::Pending {
+            waiters: VecDeque::new(),
+        });
+        Ok((id, BslValue::new_promise(self.token, id)))
+    }
+
+    fn insert_task(&mut self, task: Task) -> TaskId {
+        let id = self.tasks.len();
+        self.tasks.push(Some(task));
+        id
+    }
+
+    fn resolve_promise(
+        &mut self,
+        promise_id: PromiseId,
+        result: Result<BslValue, RtError>,
+    ) -> Result<(), RtError> {
+        let index = usize::try_from(promise_id.get()).map_err(|_| {
+            RtError::InvalidBytecode("номер обещания не помещается в индекс таблицы")
+        })?;
+        let state = self
+            .promises
+            .get_mut(index)
+            .ok_or(RtError::InvalidBytecode(
+                "номер обещания вне таблицы запуска",
+            ))?;
+        let waiters = match std::mem::replace(state, PromiseState::Ready(result)) {
+            PromiseState::Pending { waiters } => waiters,
+            PromiseState::Ready(_) => {
+                return Err(RtError::InvalidBytecode("обещание завершено повторно"));
+            }
+        };
+        self.ready.extend(waiters);
+        Ok(())
+    }
+
+    fn has_live_tasks(&self) -> bool {
+        self.tasks.iter().any(Option::is_some)
+    }
+
+    fn has_other_live_task(&self) -> bool {
+        // Текущая задача вынута из `tasks` на время исполнения, поэтому
+        // любой оставшийся `Some` означает настоящего конкурента за FIFO.
+        self.tasks.iter().any(Option::is_some)
+    }
+
+    fn has_pending_host_promises(&self) -> bool {
+        self.host_promises.iter().any(Option::is_some)
+    }
+
+    fn accept_completion(
+        &mut self,
+        completion: HostCompletion,
+        runtime_shapes: &mut bsl_rt::RuntimeShapes,
+    ) -> Result<(), RtError> {
+        if completion.token != self.token {
+            return Ok(());
+        }
+        let index = usize::try_from(completion.promise_id.get()).map_err(|_| {
+            RtError::InvalidBytecode("номер обещания не помещается в индекс таблицы")
+        })?;
+        let pending = self
+            .host_promises
+            .get_mut(index)
+            .and_then(Option::take)
+            .ok_or(RtError::InvalidBytecode(
+                "завершение ссылается на отсутствующую host-операцию",
+            ))?;
+        let result = (pending.mapper)(completion.result, runtime_shapes);
+        self.resolve_promise(completion.promise_id, result)
+    }
+
+    fn drain_completions(
+        &mut self,
+        limit: usize,
+        block_for_first: bool,
+        runtime_shapes: &mut bsl_rt::RuntimeShapes,
+    ) -> Result<usize, RtError> {
+        if limit == 0 || !self.has_pending_host_promises() {
+            return Ok(0);
+        }
+        let mut accepted = 0;
+        if block_for_first {
+            let completion = self.completion_receiver.recv().map_err(|_| {
+                RtError::DynamicError("канал завершений host-операций закрыт".into())
+            })?;
+            self.accept_completion(completion, runtime_shapes)?;
+            accepted += 1;
+        }
+        while accepted < limit {
+            match self.completion_receiver.try_recv() {
+                Ok(completion) => {
+                    self.accept_completion(completion, runtime_shapes)?;
+                    accepted += 1;
+                }
+                Err(mpsc::TryRecvError::Empty) => break,
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    return Err(RtError::DynamicError(
+                        "канал завершений host-операций закрыт".into(),
+                    ));
+                }
+            }
+        }
+        Ok(accepted)
+    }
+}
+
+impl bsl_rt::HttpPromiseSpawner for AsyncState {
+    fn spawn_http(
+        &mut self,
+        client: Arc<dyn bsl_rt::HttpClient>,
+        request: bsl_rt::HttpWireRequest,
+        mapper: bsl_rt::HttpResponseMapper,
+        error_mapper: bsl_rt::HttpErrorMapper,
+    ) -> Result<BslValue, RtError> {
+        let (promise_id, promise) = self.new_promise()?;
+        let sink = Box::new(VmHttpSink {
+            token: self.token,
+            promise_id,
+            sender: self.completion_sender.clone(),
+        });
+        let handle = match client.submit(request, sink) {
+            Ok(handle) => handle,
+            Err(error) => {
+                self.promises.pop();
+                return Err(error_mapper(error));
+            }
+        };
+        let index = usize::try_from(promise_id.get()).map_err(|_| {
+            RtError::InvalidBytecode("номер обещания не помещается в индекс таблицы")
+        })?;
+        self.host_promises.resize_with(index + 1, || None);
+        self.host_promises[index] = Some(HostPromise { handle, mapper });
+        Ok(promise)
+    }
+}
+
+impl Drop for AsyncState {
+    fn drop(&mut self) {
+        for pending in self.host_promises.iter_mut().filter_map(Option::as_mut) {
+            pending.handle.cancel();
+        }
+    }
+}
 
 /// Один активный вызов. Регистры кадра не хранятся отдельным `Vec` — все
 /// кадры делят один сквозной стек значений (`Vm::stack`), кадр — это лишь
@@ -67,6 +341,10 @@ struct Frame {
     /// Регистр РОДИТЕЛЬСКОГО кадра, куда положить результат при возврате
     /// (не используется для самого нижнего/верхнего кадра).
     return_reg: u8,
+    /// Временные слоты параметров, созданные для передачи модульной
+    /// переменной по ссылке. При возврате их значения записываются обратно
+    /// в общий `ModuleState` запуска.
+    module_copybacks: Vec<(usize, usize)>,
     /// Активен только внутри доказанно пустого числового цикла. Его тело не
     /// может наблюдать счётчик, поэтому обычный `BslValue` материализуется
     /// лишь при выходе из цикла.
@@ -272,6 +550,7 @@ fn run_program_with_host<'a>(
         host_env.zone(),
         host_env.files(),
         host_env.random(),
+        host_env.network(),
         bsl_bytecode::DynamicScope::ROOT,
     )?;
     let dynamic_depth = std::cell::Cell::new(0);
@@ -282,7 +561,16 @@ fn run_program_with_host<'a>(
         dynamic,
         dynamic_depth: &dynamic_depth,
     };
-    let (value, _) = drive_linked(program, 0, stack, jit_mode, &linked, &mut host)?;
+    let mut module_state = ModuleState::new(program);
+    let (value, _) = drive_linked(
+        program,
+        0,
+        stack,
+        jit_mode,
+        &linked,
+        &mut host,
+        &mut module_state,
+    )?;
     Ok(value)
 }
 
@@ -329,6 +617,7 @@ pub fn run_repl_chunk_with_registry<'a>(
         host_env.zone(),
         host_env.files(),
         host_env.random(),
+        host_env.network(),
         bsl_bytecode::DynamicScope::ROOT,
     )?;
     let dynamic_depth = std::cell::Cell::new(0);
@@ -339,7 +628,16 @@ pub fn run_repl_chunk_with_registry<'a>(
         dynamic: Some(dynamic),
         dynamic_depth: &dynamic_depth,
     };
-    drive_linked(&program, 0, stack, jit, &linked, &mut host)
+    let mut module_state = ModuleState::new(&program);
+    drive_linked(
+        &program,
+        0,
+        stack,
+        jit,
+        &linked,
+        &mut host,
+        &mut module_state,
+    )
 }
 
 /// Прогон без реестра — остался входом для собственных тестов VM:
@@ -347,9 +645,8 @@ pub fn run_repl_chunk_with_registry<'a>(
 #[cfg(test)]
 /// Выполняет `program.chunks[func_id]` с нуля, используя `stack` как
 /// начальное содержимое регистров (уже дополненное/подготовленное
-/// вызывающим), и возвращает и значение, и финальный стек — нужен
-/// `run_isolated` для `Выполнить`/`Вычислить`, которому важно прочитать
-/// состояние регистров ПОСЛЕ завершения, а не только значение `Возврат`.
+/// вызывающим), и возвращает значение и финальные модульные слоты. Этот
+/// вход нужен тестам обратных вызовов по имени.
 fn drive(
     program: &Program,
     func_id: usize,
@@ -476,6 +773,7 @@ struct LinkedComponents<'a> {
     zone: std::rc::Rc<dyn bsl_rt::TimeZone>,
     files: std::rc::Rc<dyn bsl_rt::FileSystem>,
     random: bsl_rt::RandomHandle,
+    network: Option<std::rc::Rc<dyn bsl_rt::HttpClientFactory>>,
 }
 
 impl LinkedComponents<'_> {
@@ -633,6 +931,7 @@ fn link_components<'a>(
     zone: std::rc::Rc<dyn bsl_rt::TimeZone>,
     files: std::rc::Rc<dyn bsl_rt::FileSystem>,
     random: bsl_rt::RandomHandle,
+    network: Option<std::rc::Rc<dyn bsl_rt::HttpClientFactory>>,
     scope: u64,
 ) -> Result<LinkedComponents<'a>, RtError> {
     bsl_bytecode::image::verify(program)?;
@@ -792,6 +1091,7 @@ fn link_components<'a>(
         zone,
         files,
         random,
+        network,
         functions,
         constructors,
         builtin_methods,
@@ -873,6 +1173,7 @@ fn drive_with(
         env.zone(),
         env.files(),
         env.random(),
+        env.network(),
         bsl_bytecode::DynamicScope::ROOT,
     )?;
     let mut stdout = std::io::stdout().lock();
@@ -886,7 +1187,17 @@ fn drive_with(
         dynamic: Some(&mut dynamic),
         dynamic_depth: &dynamic_depth,
     };
-    drive_linked(program, func_id, stack, jit_mode, &linked, &mut host)
+    let mut module_state = ModuleState::new(program);
+    let (value, _) = drive_linked(
+        program,
+        func_id,
+        stack,
+        jit_mode,
+        &linked,
+        &mut host,
+        &mut module_state,
+    )?;
+    Ok((value, module_state.slots))
 }
 
 /// Одноразовая подготовка прогона: таблица имён и форм плюс место под
@@ -939,156 +1250,529 @@ fn drive_prologue(
     (runtime_shapes, native)
 }
 
-fn drive_linked(
-    program: &Program,
-    func_id: usize,
-    mut stack: Vec<BslValue>,
-    jit_mode: JitMode,
-    linked: &LinkedComponents,
-    host: &mut HostIo<'_, '_>,
-) -> Result<(BslValue, Vec<BslValue>), RtError> {
-    let mut frames = vec![Frame {
-        func_id,
-        pc: 0,
-        param_aliases: Vec::new(),
-        own_base: 0,
-        call_start: 0,
-        return_reg: 0,
-        numeric_for_state: None,
-    }];
-    let mut current_exception: Option<BslValue> = None;
-    let (mut runtime_shapes, mut native) = drive_prologue(program, jit_mode, linked);
-    // Без JIT `step` может сцеплять линейные цепочки бандлов, не
-    // возвращаясь сюда: единственная оставшаяся проба — fast numeric-for,
-    // а её `pc` достижим только взятым back-edge, на котором цепочка и так
-    // рвётся. С JIT-ом же возврат нужен после каждого бандла — иначе
-    // интерпретатор пробежит мимо позиции, где мог бы стартовать натив.
-    let merge_linear = native.is_empty();
+/// Результат продвижения сохраняемого запуска VM.
+#[derive(Debug)]
+pub enum ProgramPoll {
+    Complete(BslValue, Vec<BslValue>),
+    Runnable,
+    Waiting,
+}
 
-    loop {
-        // После инициализации пустой numeric-for не обращается к
-        // регистрам. Обслуживаем его back-edge в компактном внешнем цикле,
-        // не входя на каждой итерации в большой универсальный `step`.
-        // Логических итераций по-прежнему столько же: цикл не сворачивается
-        // в вычисление финального значения.
-        let fast_numeric_for = {
-            let frame = frames
-                .last_mut()
-                .expect("инвариант VM: drive всегда держит хотя бы один кадр");
-            match frame.numeric_for_state.as_mut() {
-                Some(state) if state.pc == frame.pc => match state.current.checked_add(1) {
-                    Some(next) if next <= state.bound => {
-                        state.current = next;
-                        true
-                    }
-                    _ => false,
-                },
-                _ => false,
-            }
+/// Состояние одного запуска программы, сохраняемое между вызовами `poll`.
+/// Не содержит ссылок на host-сервисы и после завершения освобождает их для
+/// следующего запуска того же `State`.
+pub struct ProgramExecution {
+    async_state: AsyncState,
+    runtime_shapes: bsl_rt::RuntimeShapes,
+    native: Vec<Option<Option<jit::CompiledChunk>>>,
+    native_scheduled: Vec<Option<Option<jit::CompiledChunk>>>,
+    merge_linear: bool,
+    root_result: Option<(BslValue, Vec<BslValue>)>,
+    module_state: ModuleState,
+    finished: bool,
+}
+
+impl ProgramExecution {
+    fn new_linked(
+        program: &Program,
+        func_id: usize,
+        stack: Vec<BslValue>,
+        jit_mode: JitMode,
+        linked: &LinkedComponents<'_>,
+        module_state: ModuleState,
+        scheduler: SchedulerConfig,
+    ) -> Self {
+        let root = Task {
+            frames: vec![Frame {
+                func_id,
+                pc: 0,
+                param_aliases: Vec::new(),
+                own_base: 0,
+                call_start: 0,
+                return_reg: 0,
+                module_copybacks: Vec::new(),
+                numeric_for_state: None,
+            }],
+            stack,
+            current_exception: None,
+            completion: TaskCompletion::Root,
+            quantum_remaining: scheduler.safe_points_per_quantum,
         };
-        if fast_numeric_for {
-            continue;
+        let async_state = AsyncState::new(root, scheduler.safe_points_per_quantum);
+        let (runtime_shapes, native) = drive_prologue(program, jit_mode, linked);
+        let native_scheduled = (0..native.len()).map(|_| None).collect();
+        // Без JIT `step` может сцеплять линейные цепочки бандлов, не
+        // возвращаясь сюда; JIT требует возврата после каждого бандла.
+        let merge_linear = native.is_empty();
+        Self {
+            async_state,
+            runtime_shapes,
+            native,
+            native_scheduled,
+            merge_linear,
+            root_result: None,
+            module_state,
+            finished: false,
         }
+    }
 
-        // Нативный путь. Он не обязан ничего исполнить: если на текущей
-        // позиции входа нет, управление просто идёт в `step`, и это же
-        // происходит при любом отказе JIT-а.
-        if !native.is_empty() {
-            let (fid, pc) = {
-                let frame = frames
-                    .last()
-                    .expect("инвариант VM: drive всегда держит хотя бы один кадр");
-                (frame.func_id, frame.pc)
-            };
-            if let Some(slot) = native.get_mut(fid) {
-                if slot.is_none() {
-                    // Чанк, ТРОГАЮЩИЙ объекты, нативному пути не отдаётся,
-                    // если реестр несёт библиотеку «только интерпретатор»:
-                    // её обработчикам нужен полный контекст, а у шимов он
-                    // сокращённый. Решение принимается один раз на чанк —
-                    // сам `jit` при этом не меняется ни на строку, и это
-                    // не педантизм: любая правка его кода сдвигает укладку
-                    // и бьёт по горячему циклу интерпретатора (`empty_for`
-                    // платил 58 -> 83 млн тактов при неизменном числе
-                    // инструкций).
-                    *slot = Some(
-                        program
-                            .chunks
-                            .get(fid)
-                            .filter(|chunk| {
-                                !chunk.touches_objects || !linked.interpreter_only_objects
-                            })
-                            .and_then(jit::compile),
-                    );
+    /// Создаёт отдельный запуск верхнего уровня и связывает его компоненты.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку связывания до исполнения первой инструкции.
+    pub fn start_with_registry(
+        program: &Program,
+        registry: &bsl_rt::RuntimeRegistry,
+        jit_mode: JitMode,
+        host_env: &bsl_rt::HostEnv,
+    ) -> Result<Self, RtError> {
+        Self::start_with_registry_and_scheduler(
+            program,
+            registry,
+            jit_mode,
+            host_env,
+            SchedulerConfig::default(),
+        )
+    }
+
+    /// Создаёт запуск с явным квантом кооперативного планировщика.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку связывания либо нулевого кванта.
+    pub fn start_with_registry_and_scheduler(
+        program: &Program,
+        registry: &bsl_rt::RuntimeRegistry,
+        jit_mode: JitMode,
+        host_env: &bsl_rt::HostEnv,
+        scheduler: SchedulerConfig,
+    ) -> Result<Self, RtError> {
+        if scheduler.safe_points_per_quantum == 0 {
+            return Err(RtError::DynamicError(
+                "квант планировщика должен содержать хотя бы одну безопасную точку".into(),
+            ));
+        }
+        let mut stack = Vec::new();
+        push_own_registers(
+            &mut stack,
+            at(&program.chunks, 0, "в программе нет чанка верхнего уровня")?,
+        );
+        let linked = link_components(
+            program,
+            Some(registry),
+            host_env.zone(),
+            host_env.files(),
+            host_env.random(),
+            host_env.network(),
+            bsl_bytecode::DynamicScope::ROOT,
+        )?;
+        Ok(Self::new_linked(
+            program,
+            0,
+            stack,
+            jit_mode,
+            &linked,
+            ModuleState::new(program),
+            scheduler,
+        ))
+    }
+
+    /// Продвигает ранее созданный запуск, не сохраняя ссылок на host между
+    /// вызовами. Конечный `host_slice` не блокирует ожидание completion;
+    /// `usize::MAX` используется run-to-completion драйвером и ждёт первый.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку связывания или исполнения.
+    #[allow(clippy::too_many_arguments)]
+    pub fn poll_with_registry_and_io<'a>(
+        &mut self,
+        program: &Program,
+        registry: &bsl_rt::RuntimeRegistry,
+        stdout: &'a mut dyn Write,
+        stderr: &'a mut dyn Write,
+        dynamic: &'a mut dyn DynamicCompiler,
+        host_env: &'a mut bsl_rt::HostEnv,
+        host_slice: usize,
+    ) -> Result<ProgramPoll, RtError> {
+        let linked = link_components(
+            program,
+            Some(registry),
+            host_env.zone(),
+            host_env.files(),
+            host_env.random(),
+            host_env.network(),
+            bsl_bytecode::DynamicScope::ROOT,
+        )?;
+        let dynamic_depth = std::cell::Cell::new(0);
+        let mut host = HostIo {
+            stdout,
+            stderr,
+            env: Some(host_env),
+            dynamic: Some(dynamic),
+            dynamic_depth: &dynamic_depth,
+        };
+        self.poll_linked(program, &linked, &mut host, host_slice)
+    }
+
+    fn poll_linked(
+        &mut self,
+        program: &Program,
+        linked: &LinkedComponents<'_>,
+        host: &mut HostIo<'_, '_>,
+        host_slice: usize,
+    ) -> Result<ProgramPoll, RtError> {
+        if self.finished {
+            return Err(RtError::DynamicError(
+                "завершённый Execution нельзя опрашивать повторно".into(),
+            ));
+        }
+        if host_slice == 0 {
+            return Ok(ProgramPoll::Runnable);
+        }
+        let Self {
+            async_state,
+            runtime_shapes,
+            native,
+            native_scheduled,
+            merge_linear,
+            root_result,
+            module_state,
+            finished,
+            ..
+        } = self;
+        let mut host_remaining = host_slice;
+
+        loop {
+            let Some(task_id) = async_state.ready.pop_front() else {
+                if async_state.has_pending_host_promises() {
+                    let block = host_slice == usize::MAX;
+                    let accepted =
+                        async_state.drain_completions(host_remaining, block, runtime_shapes)?;
+                    host_remaining = host_remaining.saturating_sub(accepted);
+                    if accepted != 0 {
+                        continue;
+                    }
+                    return Ok(ProgramPoll::Waiting);
                 }
-                // Два слоя внутри уже найденной ячейки: пробовали ли этот
-                // чанк и вышло ли. Повторно искать его в таблице незачем.
-                if let Some(Some(code)) = slot.as_ref()
-                    && let Some(outcome) = code.run(
-                        pc,
-                        &mut frames,
-                        &mut stack,
-                        program,
-                        &mut runtime_shapes,
-                        linked,
-                    )
-                {
-                    match outcome {
-                        Ok(next_pc) => {
-                            if let Some(frame) = frames.last_mut() {
-                                frame.pc = next_pc;
+                if let Some(result) = root_result.take() {
+                    if async_state.has_live_tasks() {
+                        return Err(RtError::DynamicError(
+                            "выполнение остановлено: нет готовых задач".into(),
+                        ));
+                    }
+                    *finished = true;
+                    return Ok(ProgramPoll::Complete(result.0, result.1));
+                }
+                return Err(RtError::DynamicError(
+                    "выполнение остановлено до завершения корневой задачи".into(),
+                ));
+            };
+            let mut task = async_state
+                .tasks
+                .get_mut(task_id)
+                .and_then(Option::take)
+                .ok_or(RtError::InvalidBytecode(
+                    "готовая очередь ссылается на отсутствующую задачу",
+                ))?;
+            let scheduled = async_state.has_other_live_task();
+            if task.quantum_remaining == 0 || !scheduled {
+                task.quantum_remaining = async_state.scheduler_quantum();
+            }
+
+            loop {
+                // После инициализации пустой numeric-for не обращается к
+                // регистрам. Обслуживаем его back-edge в компактном внешнем цикле,
+                // не входя на каждой итерации в большой универсальный `step`.
+                // Логических итераций по-прежнему столько же: цикл не сворачивается
+                // в вычисление финального значения.
+                let fast_numeric_for = {
+                    let frame = task
+                        .frames
+                        .last_mut()
+                        .expect("инвариант VM: drive всегда держит хотя бы один кадр");
+                    match frame.numeric_for_state.as_mut() {
+                        Some(state) if state.pc == frame.pc => match state.current.checked_add(1) {
+                            Some(next) if next <= state.bound => {
+                                state.current = next;
+                                true
                             }
-                            continue;
+                            _ => false,
+                        },
+                        _ => false,
+                    }
+                };
+                if fast_numeric_for {
+                    if consume_scheduler_safe_point(
+                        &mut task,
+                        scheduled,
+                        async_state.scheduler_quantum(),
+                    ) {
+                        async_state.tasks[task_id] = Some(task);
+                        async_state.ready.push_back(task_id);
+                        break;
+                    }
+                    continue;
+                }
+
+                // Нативный путь. Он не обязан ничего исполнить: если на текущей
+                // позиции входа нет, управление просто идёт в `step`, и это же
+                // происходит при любом отказе JIT-а.
+                if !native.is_empty() {
+                    let native_slots = if scheduled {
+                        &mut *native_scheduled
+                    } else {
+                        &mut *native
+                    };
+                    let (fid, pc) = {
+                        let frame = task
+                            .frames
+                            .last()
+                            .expect("инвариант VM: drive всегда держит хотя бы один кадр");
+                        (frame.func_id, frame.pc)
+                    };
+                    if let Some(slot) = native_slots.get_mut(fid) {
+                        if slot.is_none() {
+                            // Чанк, ТРОГАЮЩИЙ объекты, нативному пути не отдаётся,
+                            // если реестр несёт библиотеку «только интерпретатор»:
+                            // её обработчикам нужен полный контекст, а у шимов он
+                            // сокращённый. Решение принимается один раз на чанк —
+                            // сам `jit` при этом не меняется ни на строку, и это
+                            // не педантизм: любая правка его кода сдвигает укладку
+                            // и бьёт по горячему циклу интерпретатора (`empty_for`
+                            // платил 58 -> 83 млн тактов при неизменном числе
+                            // инструкций).
+                            *slot = Some(
+                                program
+                                    .chunks
+                                    .get(fid)
+                                    .filter(|chunk| {
+                                        !chunk.touches_objects || !linked.interpreter_only_objects
+                                    })
+                                    .and_then(|chunk| {
+                                        jit::compile(chunk, &linked.builtin_methods, scheduled)
+                                    }),
+                            );
                         }
-                        Err(e) => {
-                            if !unwind_to_handler(
-                                &mut frames,
-                                &mut stack,
+                        // Два слоя внутри уже найденной ячейки: пробовали ли этот
+                        // чанк и вышло ли. Повторно искать его в таблице незачем.
+                        if let Some(Some(code)) = slot.as_ref()
+                            && let Some(outcome) = code.run(
+                                pc,
+                                &mut task.frames,
+                                &mut task.stack,
                                 program,
-                                &e,
-                                &mut current_exception,
-                            ) {
-                                return Err(e);
+                                runtime_shapes,
+                                linked,
+                                &mut task.quantum_remaining,
+                            )
+                        {
+                            match outcome {
+                                Ok(jit::NativeOutcome::Continue { pc: next_pc }) => {
+                                    if let Some(frame) = task.frames.last_mut() {
+                                        frame.pc = next_pc;
+                                    }
+                                    continue;
+                                }
+                                Ok(jit::NativeOutcome::Yield { pc: next_pc }) => {
+                                    if let Some(frame) = task.frames.last_mut() {
+                                        frame.pc = next_pc;
+                                    }
+                                    async_state.tasks[task_id] = Some(task);
+                                    async_state.ready.push_back(task_id);
+                                    break;
+                                }
+                                Err(e) => {
+                                    if !unwind_to_handler(
+                                        &mut task.frames,
+                                        &mut task.stack,
+                                        program,
+                                        &e,
+                                        &mut task.current_exception,
+                                    ) {
+                                        match task.completion {
+                                            TaskCompletion::Root | TaskCompletion::Detached => {
+                                                return Err(e);
+                                            }
+                                            TaskCompletion::Promise(promise_id) => {
+                                                async_state.resolve_promise(promise_id, Err(e))?;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    continue;
+                                }
                             }
-                            continue;
                         }
                     }
                 }
-            }
-        }
 
-        // `step` исполняет целый VLIW-бандл (см. `bsl_bytecode::bundle`),
-        // так что проверки fast numeric-for и JIT-входа выше происходят на
-        // границах бандлов, а не на каждой инструкции. При ошибке члена
-        // `pc` стоит на нём самом, и `unwind_to_handler` находит обработчик
-        // как при поинструкционном исполнении; обработчик по построению
-        // разметки — начало бандла.
-        match step(
-            &mut frames,
-            &mut stack,
-            program,
-            &mut current_exception,
-            &mut runtime_shapes,
-            linked,
-            host,
-            merge_linear,
-        ) {
-            Ok(Step::Continue) => continue,
-            Ok(Step::Done(v)) => return Ok((v, stack)),
-            Err(e) => {
-                if !unwind_to_handler(&mut frames, &mut stack, program, &e, &mut current_exception)
-                {
-                    return Err(e);
+                // `step` исполняет целый VLIW-бандл (см. `bsl_bytecode::bundle`),
+                // так что проверки fast numeric-for и JIT-входа выше происходят на
+                // границах бандлов, а не на каждой инструкции. При ошибке члена
+                // `pc` стоит на нём самом, и `unwind_to_handler` находит обработчик
+                // как при поинструкционном исполнении; обработчик по построению
+                // разметки — начало бандла.
+                let before = task_position(&task);
+                match step(
+                    &mut task.frames,
+                    &mut task.stack,
+                    program,
+                    module_state,
+                    &mut task.current_exception,
+                    runtime_shapes,
+                    linked,
+                    host,
+                    *merge_linear && !scheduled,
+                    async_state,
+                    task_id,
+                ) {
+                    Ok(Step::Continue) => {
+                        if crossed_scheduler_safe_point(before, &task)
+                            && consume_scheduler_safe_point(
+                                &mut task,
+                                scheduled,
+                                async_state.scheduler_quantum(),
+                            )
+                        {
+                            async_state.tasks[task_id] = Some(task);
+                            async_state.ready.push_back(task_id);
+                            break;
+                        }
+                        continue;
+                    }
+                    Ok(Step::Yield) => {
+                        async_state.tasks[task_id] = Some(task);
+                        async_state.ready.push_back(task_id);
+                        break;
+                    }
+                    Ok(Step::StartAsync(child_id)) => {
+                        async_state.tasks[task_id] = Some(task);
+                        // Async-callee исполняется немедленно до первого `Await`.
+                        // Вызывающий продолжает сразу после него; задачи, уже
+                        // стоявшие в FIFO, остаются за этой парой.
+                        async_state.ready.push_front(task_id);
+                        async_state.ready.push_front(child_id);
+                        break;
+                    }
+                    Ok(Step::Suspend) => {
+                        async_state.tasks[task_id] = Some(task);
+                        break;
+                    }
+                    Ok(Step::Done(value)) => {
+                        match task.completion {
+                            TaskCompletion::Root => *root_result = Some((value, task.stack)),
+                            TaskCompletion::Promise(promise_id) => {
+                                async_state.resolve_promise(promise_id, Ok(value))?;
+                            }
+                            TaskCompletion::Detached => {}
+                        }
+                        break;
+                    }
+                    Err(e) => {
+                        if !unwind_to_handler(
+                            &mut task.frames,
+                            &mut task.stack,
+                            program,
+                            &e,
+                            &mut task.current_exception,
+                        ) {
+                            match task.completion {
+                                TaskCompletion::Root | TaskCompletion::Detached => return Err(e),
+                                TaskCompletion::Promise(promise_id) => {
+                                    async_state.resolve_promise(promise_id, Err(e))?;
+                                    break;
+                                }
+                            }
+                        }
+                        // Иначе кадры/pc уже поправлены внутри unwind_to_handler —
+                        // просто продолжаем цикл со следующей итерации.
+                    }
                 }
-                // Иначе кадры/pc уже поправлены внутри unwind_to_handler —
-                // просто продолжаем цикл со следующей итерации.
+            }
+
+            if root_result.is_some() && !async_state.has_live_tasks() {
+                let result = root_result.take().expect("результат проверен выше");
+                *finished = true;
+                return Ok(ProgramPoll::Complete(result.0, result.1));
             }
         }
     }
 }
 
+fn drive_linked(
+    program: &Program,
+    func_id: usize,
+    stack: Vec<BslValue>,
+    jit_mode: JitMode,
+    linked: &LinkedComponents,
+    host: &mut HostIo<'_, '_>,
+    module_state: &mut ModuleState,
+) -> Result<(BslValue, Vec<BslValue>), RtError> {
+    let owned_module_state = ModuleState {
+        slots: std::mem::take(&mut module_state.slots),
+    };
+    let mut execution = ProgramExecution::new_linked(
+        program,
+        func_id,
+        stack,
+        jit_mode,
+        linked,
+        owned_module_state,
+        SchedulerConfig::default(),
+    );
+    let result = loop {
+        match execution.poll_linked(program, linked, host, usize::MAX) {
+            Ok(ProgramPoll::Complete(value, stack)) => break Ok((value, stack)),
+            Ok(ProgramPoll::Runnable | ProgramPoll::Waiting) => continue,
+            Err(error) => break Err(error),
+        }
+    };
+    module_state.slots = execution.module_state.slots;
+    result
+}
+
+#[derive(Clone, Copy)]
+struct TaskPosition {
+    frame_depth: usize,
+    func_id: usize,
+    pc: usize,
+}
+
+fn task_position(task: &Task) -> TaskPosition {
+    let frame = task
+        .frames
+        .last()
+        .expect("инвариант VM: готовая задача всегда имеет кадр");
+    TaskPosition {
+        frame_depth: task.frames.len(),
+        func_id: frame.func_id,
+        pc: frame.pc,
+    }
+}
+
+fn crossed_scheduler_safe_point(before: TaskPosition, task: &Task) -> bool {
+    let after = task_position(task);
+    before.frame_depth != after.frame_depth
+        || before.func_id != after.func_id
+        || after.pc <= before.pc
+}
+
+fn consume_scheduler_safe_point(task: &mut Task, scheduled: bool, quantum: usize) -> bool {
+    if !scheduled {
+        task.quantum_remaining = quantum;
+        return false;
+    }
+    task.quantum_remaining -= 1;
+    task.quantum_remaining == 0
+}
+
 enum Step {
     Continue,
+    Yield,
+    StartAsync(TaskId),
+    Suspend,
     Done(BslValue),
 }
 
@@ -1334,11 +2018,14 @@ fn step(
     frames: &mut Vec<Frame>,
     stack: &mut Vec<BslValue>,
     program: &Program,
+    module_state: &mut ModuleState,
     current_exception: &mut Option<BslValue>,
     runtime_shapes: &mut bsl_rt::RuntimeShapes,
     linked: &LinkedComponents,
     host: &mut HostIo<'_, '_>,
     merge_linear: bool,
+    async_state: &mut AsyncState,
+    task_id: TaskId,
 ) -> Result<Step, RtError> {
     let frame_idx = frames.len() - 1;
     let func_id = frames[frame_idx].func_id;
@@ -1349,7 +2036,7 @@ fn step(
         // Неявный возврат: тело кончилось без `Возврат` — результат
         // Неопределено, как и `Возврат;` без выражения.
         return Ok(
-            match do_return_with_value(frames, stack, BslValue::Undefined)? {
+            match do_return_with_value(frames, stack, module_state, BslValue::Undefined)? {
                 Done(v) => Step::Done(v),
                 Continuing => Step::Continue,
             },
@@ -1393,7 +2080,7 @@ fn step(
                         "номер переменной модуля вне таблицы",
                     ));
                 }
-                let v = reg_load(stack, program.module_base as usize + slot as usize)?;
+                let v = reg_load(&module_state.slots, slot as usize)?;
                 let d = frames[frame_idx].reg_index(dst);
                 reg_store(stack, d, v)?;
                 frames[frame_idx].pc += 1;
@@ -1405,7 +2092,7 @@ fn step(
                     ));
                 }
                 let v = reg_load(stack, frames[frame_idx].reg_index(src))?;
-                reg_store(stack, program.module_base as usize + slot as usize, v)?;
+                reg_store(&mut module_state.slots, slot as usize, v)?;
                 frames[frame_idx].pc += 1;
             }
             Instr::Move { dst, src } => {
@@ -1662,6 +2349,68 @@ fn step(
                 arg_modes,
                 ret,
             } => {
+                let modes = at(
+                    &chunk.call_arg_modes,
+                    arg_modes as usize,
+                    "номер набора режимов аргументов вне таблицы чанка",
+                )?;
+                let callee_chunk = at(
+                    &program.chunks,
+                    func as usize,
+                    "номер вызываемого чанка вне таблицы функций",
+                )?;
+
+                if callee_chunk.is_async {
+                    let mut child_stack = Vec::with_capacity(callee_chunk.n_regs as usize);
+                    let mut param_aliases = Vec::with_capacity(modes.len());
+                    for (i, mode) in modes.iter().enumerate() {
+                        let (value, provided) = match mode {
+                            ArgMode::Value => (
+                                reg_load(stack, frames[frame_idx].reg_index(base + i as u8))?,
+                                true,
+                            ),
+                            ArgMode::ByRefLocal(slot) => {
+                                (reg_load(stack, frames[frame_idx].reg_index(*slot))?, true)
+                            }
+                            ArgMode::ByRefModuleVar(slot) => {
+                                (reg_load(&module_state.slots, *slot as usize)?, true)
+                            }
+                            ArgMode::Default => (BslValue::Undefined, false),
+                        };
+                        let idx = child_stack.len();
+                        child_stack.push(value);
+                        param_aliases.push(ParamSlot { idx, provided });
+                    }
+                    push_own_registers(&mut child_stack, callee_chunk);
+
+                    let (completion, call_result) = if callee_chunk.is_procedure {
+                        (TaskCompletion::Detached, BslValue::Undefined)
+                    } else {
+                        let (promise_id, promise) = async_state.new_promise()?;
+                        (TaskCompletion::Promise(promise_id), promise)
+                    };
+                    let dst = frames[frame_idx].reg_index(ret);
+                    reg_store(stack, dst, call_result)?;
+                    frames[frame_idx].pc += 1;
+                    let child_id = async_state.insert_task(Task {
+                        frames: vec![Frame {
+                            func_id: func as usize,
+                            pc: 0,
+                            param_aliases,
+                            own_base: callee_chunk.n_params as usize,
+                            call_start: 0,
+                            return_reg: 0,
+                            module_copybacks: Vec::new(),
+                            numeric_for_state: None,
+                        }],
+                        stack: child_stack,
+                        current_exception: None,
+                        completion,
+                        quantum_remaining: async_state.scheduler_quantum(),
+                    });
+                    return Ok(Step::StartAsync(child_id));
+                }
+
                 // Проверка глубины — ДО продвижения `pc` и до любых записей
                 // в стек: в момент ошибки `pc` обязан стоять на сбойнувшей
                 // инструкции, иначе `Попытка`, у которой этот `Call` —
@@ -1676,17 +2425,13 @@ fn step(
                 // callee вернётся, мы продолжим ровно со следующей.
                 frames[frame_idx].pc += 1;
 
-                let modes = at(
-                    &chunk.call_arg_modes,
-                    arg_modes as usize,
-                    "номер набора режимов аргументов вне таблицы чанка",
-                )?;
                 // `base + i` считается в `u8` без проверки: связывание уже
                 // удостоверилось, что `base + modes.len() <= n_regs <= 255`
                 // (`check_call_geometry`). Без той проверки номер
                 // заворачивался, и аргумент становился алиасом чужого
                 // регистра вызывающего.
                 let mut param_aliases = Vec::with_capacity(modes.len());
+                let mut module_copybacks = Vec::new();
                 for (i, mode) in modes.iter().enumerate() {
                     let slot = match mode {
                         ArgMode::Value => ParamSlot {
@@ -1702,10 +2447,17 @@ fn step(
                         // уровня), а не в кадре вызывающего: алиас указывает
                         // прямо туда, поэтому запись из вызванной функции
                         // видна и телу модуля, и другим функциям.
-                        ArgMode::ByRefModuleVar(slot) => ParamSlot {
-                            idx: program.module_base as usize + *slot as usize,
-                            provided: true,
-                        },
+                        ArgMode::ByRefModuleVar(slot) => {
+                            let module_slot = *slot as usize;
+                            let value = reg_load(&module_state.slots, module_slot)?;
+                            let idx = stack.len();
+                            stack.push(value);
+                            module_copybacks.push((idx, module_slot));
+                            ParamSlot {
+                                idx,
+                                provided: true,
+                            }
+                        }
                         // Вызывающий в этот регистр ничего не вычислял, там
                         // лежит мусор от прошлого использования временного
                         // слота. Пролог умолчаний вызванной функции обязан
@@ -1726,11 +2478,6 @@ fn step(
                     param_aliases.push(slot);
                 }
 
-                let callee_chunk = at(
-                    &program.chunks,
-                    func as usize,
-                    "номер вызываемого чанка вне таблицы функций",
-                )?;
                 let call_start = stack.len();
                 let own_base = stack.len();
                 push_own_registers(stack, callee_chunk);
@@ -1742,8 +2489,48 @@ fn step(
                     own_base,
                     call_start,
                     return_reg: ret,
+                    module_copybacks,
                     numeric_for_state: None,
                 });
+            }
+            Instr::Await { dst, promise } => {
+                let value = reg_load(stack, frames[frame_idx].reg_index(promise))?;
+                let Some((token, promise_id)) = value.promise_identity() else {
+                    let dst = frames[frame_idx].reg_index(dst);
+                    reg_store(stack, dst, value)?;
+                    frames[frame_idx].pc += 1;
+                    return Ok(Step::Yield);
+                };
+                if token != async_state.token {
+                    return Err(RtError::DynamicError(
+                        "обещание принадлежит другому запуску".into(),
+                    ));
+                }
+                let promise_index = usize::try_from(promise_id.get()).map_err(|_| {
+                    RtError::InvalidBytecode("номер обещания не помещается в индекс таблицы")
+                })?;
+                let state =
+                    async_state
+                        .promises
+                        .get_mut(promise_index)
+                        .ok_or(RtError::InvalidBytecode(
+                            "номер обещания вне таблицы запуска",
+                        ))?;
+                match state {
+                    PromiseState::Pending { waiters } => {
+                        if !waiters.contains(&task_id) {
+                            waiters.push_back(task_id);
+                        }
+                        return Ok(Step::Suspend);
+                    }
+                    PromiseState::Ready(result) => {
+                        let value = result.clone()?;
+                        let dst = frames[frame_idx].reg_index(dst);
+                        reg_store(stack, dst, value)?;
+                        frames[frame_idx].pc += 1;
+                        return Ok(Step::Yield);
+                    }
+                }
             }
             Instr::Return { src } => {
                 let value = match src {
@@ -1753,10 +2540,12 @@ fn step(
                     }
                     None => BslValue::Undefined,
                 };
-                return Ok(match do_return_with_value(frames, stack, value)? {
-                    Done(v) => Step::Done(v),
-                    Continuing => Step::Continue,
-                });
+                return Ok(
+                    match do_return_with_value(frames, stack, module_state, value)? {
+                        Done(v) => Step::Done(v),
+                        Continuing => Step::Continue,
+                    },
+                );
             }
             Instr::GetIndex { dst, obj, idx } => {
                 let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
@@ -1793,6 +2582,8 @@ fn step(
                             zone: &linked.zone,
                             files: &linked.files,
                             random: &linked.random,
+                            network: linked.network.as_ref(),
+                            host_promises: None,
                             function_caller: None,
                         });
                     component_prop_get(
@@ -1827,6 +2618,8 @@ fn step(
                             zone: &linked.zone,
                             files: &linked.files,
                             random: &linked.random,
+                            network: linked.network.as_ref(),
+                            host_promises: None,
                             function_caller: None,
                         });
                     component_prop_set(
@@ -1853,7 +2646,11 @@ fn step(
                 count,
             } => {
                 let args = CallArgs::load(stack, &frames[frame_idx], base, count)?;
-                let v = call_builtin_with_format(builtin, args.as_slice(), runtime_shapes, host)?;
+                let v = if builtin == bsl_rt::BuiltinFn::ErrorInfo {
+                    current_error_info(current_exception.as_ref())?
+                } else {
+                    call_builtin_with_format(builtin, args.as_slice(), runtime_shapes, host)?
+                };
                 let d = frames[frame_idx].reg_index(dst);
                 reg_store(stack, d, v)?;
                 frames[frame_idx].pc += 1;
@@ -1877,11 +2674,19 @@ fn step(
                             zone: &linked.zone,
                             files: &linked.files,
                             random: &linked.random,
+                            network: linked.network.as_ref(),
+                            host_promises: Some(async_state),
                             function_caller: None,
                         });
                     object.call_method(method.primary_name(), args.as_slice(), &mut context)?
                 } else {
-                    bsl_rt::call_builtin_method_ctx(method, &ov, args.as_slice(), runtime_shapes)?
+                    bsl_rt::call_builtin_method_files(
+                        method,
+                        &ov,
+                        args.as_slice(),
+                        runtime_shapes,
+                        linked.files.as_ref(),
+                    )?
                 };
                 let d = frames[frame_idx].reg_index(dst);
                 reg_store(stack, d, v)?;
@@ -1927,6 +2732,8 @@ fn step(
                     linked,
                     host,
                     runtime_shapes,
+                    module_state,
+                    async_state,
                     frame_idx,
                     func_id,
                     chunk,
@@ -2005,6 +2812,8 @@ fn step_cold(
     linked: &LinkedComponents<'_>,
     host: &mut HostIo<'_, '_>,
     runtime_shapes: &mut bsl_rt::RuntimeShapes,
+    module_state: &mut ModuleState,
+    async_state: &mut AsyncState,
     frame_idx: usize,
     func_id: usize,
     chunk: &bsl_bytecode::Chunk,
@@ -2094,6 +2903,8 @@ fn step_cold(
                     zone: &linked.zone,
                     files: &linked.files,
                     random: &linked.random,
+                    network: linked.network.as_ref(),
+                    host_promises: None,
                     function_caller: None,
                 });
                 component_prop_get(
@@ -2128,6 +2939,8 @@ fn step_cold(
                     zone: &linked.zone,
                     files: &linked.files,
                     random: &linked.random,
+                    network: linked.network.as_ref(),
+                    host_promises: None,
                     function_caller: None,
                 });
                 component_prop_set(
@@ -2192,9 +3005,8 @@ fn step_cold(
                         // вызов продолжает ту же сессию, а не открывает свою.
                         dynamic_depth: host_dynamic_depth,
                     };
-                    call_module_function_with_host(
+                    call_module_function_in_execution(
                         program,
-                        stack,
                         name,
                         call_args,
                         // Обратный вызов функции модуля из компонента всегда
@@ -2203,6 +3015,7 @@ fn step_cold(
                         JitMode::Off,
                         linked,
                         &mut nested_host,
+                        module_state,
                     )
                 };
             let mut context = bsl_rt::CallContext::interpreter(bsl_rt::InterpreterServices {
@@ -2213,6 +3026,8 @@ fn step_cold(
                 zone: &linked.zone,
                 files: &linked.files,
                 random: &linked.random,
+                network: linked.network.as_ref(),
+                host_promises: None,
                 function_caller: Some(&mut function_caller),
             });
             let value = call(&mut context, args.as_slice())?;
@@ -2233,6 +3048,8 @@ fn step_cold(
                 zone: &linked.zone,
                 files: &linked.files,
                 random: &linked.random,
+                network: linked.network.as_ref(),
+                host_promises: None,
                 function_caller: None,
             });
             let value = call(&mut context, args.as_slice())?;
@@ -2287,6 +3104,8 @@ fn step_cold(
                     zone: &linked.zone,
                     files: &linked.files,
                     random: &linked.random,
+                    network: linked.network.as_ref(),
+                    host_promises: Some(async_state),
                     function_caller: None,
                 });
                 // Тип со статической таблицей методов идёт кэшем ячейки
@@ -2321,7 +3140,13 @@ fn step_cold(
                             method: field_name(program, name_id).unwrap_or("?").to_string(),
                             receiver: ov.type_name(),
                         })?;
-                bsl_rt::call_builtin_method_ctx(builtin, ov, args, runtime_shapes)?
+                bsl_rt::call_builtin_method_files(
+                    builtin,
+                    ov,
+                    args,
+                    runtime_shapes,
+                    linked.files.as_ref(),
+                )?
             };
             let destination = frames[frame_idx].reg_index(dst);
             reg_store(stack, destination, value)?;
@@ -2359,6 +3184,7 @@ fn step_cold(
                 &frames[frame_idx],
                 linked,
                 host,
+                module_state,
             )?;
             let d = frames[frame_idx].reg_index(dst);
             reg_store(stack, d, value)?;
@@ -2402,6 +3228,7 @@ fn run_dynamic_snippet(
     frame: &Frame,
     linked: &LinkedComponents<'_>,
     host: &mut HostIo<'_, '_>,
+    module_state: &mut ModuleState,
 ) -> Result<BslValue, RtError> {
     // Предел вложенности — на входе, до обращения к хосту: компиляция
     // фрагмента рекурсивна так же, как его исполнение, и тоже расходует
@@ -2422,6 +3249,7 @@ fn run_dynamic_snippet(
                 name,
                 arity: chunk.map_or(0, |c| c.n_params as usize),
                 is_procedure: chunk.is_some_and(|c| c.is_procedure),
+                is_async: chunk.is_some_and(|c| c.is_async),
                 param_by_val: chunk.map_or(&[][..], |c| &c.param_by_val),
                 param_has_default: chunk.map_or(&[][..], |c| &c.param_has_default),
             }
@@ -2447,6 +3275,12 @@ fn run_dynamic_snippet(
             },
             chunk: scope_id as u32,
         },
+        caller_is_async: at(
+            &program.chunks,
+            scope_id,
+            "номер чанка динамического вызова вне таблицы функций",
+        )?
+        .is_async,
         locals: scope_locals,
         module_vars: &program.module_vars,
         functions: &functions,
@@ -2474,33 +3308,6 @@ fn run_dynamic_snippet(
         .map(|i| reg_load(stack, frame.reg_index(i as u8)))
         .collect::<Result<_, _>>()?;
     snippet_stack.resize(compiled.chunk.n_regs as usize, BslValue::Undefined);
-
-    let n_module = program.module_vars.len();
-    // Где во фрагменте живут модульные переменные — зависит от области.
-    //
-    // Верхний уровень: они И ЕСТЬ первые локальные кадра (резолвер
-    // объявляет их раньше прочих, слоты совпадают), и фрагмент видит их
-    // через локальные слоты. Модульный блок фрагмента НАКЛАДЫВАЕТСЯ на те
-    // же слоты (`module_base = 0`), а не копируется отдельно: две копии
-    // одного значения — это рассинхрон. Стоило процедуре, вызванной из
-    // фрагмента, записать в блок-копию, и обратный перенос локальных
-    // затирал её изменение устаревшим значением слота.
-    //
-    // Кадр функции: модульные переменные в его локальные не входят и едут
-    // отдельным блоком ЗА регистрами фрагмента. Источник — модульный блок
-    // ТЕКУЩЕЙ программы по её `module_base`, а не абсолютный ноль: у
-    // главной программы база нулевая, но у фрагмента, из которого нас
-    // вызвали вложенным `Выполнить`, блок лежит за его собственными
-    // регистрами, и чтение с нуля копировало бы чужие слоты. Вызовы внутри
-    // фрагмента кладут свои кадры за блоком и обратно усекают стек только
-    // до своей базы, так что блок стоит неподвижно.
-    let aliased = scope_id == 0 && program.module_base == 0;
-    let module_base = if aliased { 0 } else { snippet_stack.len() };
-    if !aliased {
-        for i in 0..n_module {
-            snippet_stack.push(reg_load(stack, program.module_base as usize + i)?);
-        }
-    }
 
     // Чанки функций едут во фрагмент КАК ЕСТЬ, только нулевой заменён на
     // сам фрагмент: измерено, что `Вычислить("Удвоить(21)")` на платформе
@@ -2542,7 +3349,7 @@ fn run_dynamic_snippet(
         top_level_locals: Vec::new(),
         function_names: program.function_names.clone(),
         module_vars: program.module_vars.clone(),
-        module_base: module_base as u32,
+        module_base: 0,
     };
 
     let snippet_linked = link_components(
@@ -2551,6 +3358,7 @@ fn run_dynamic_snippet(
         std::rc::Rc::clone(&linked.zone),
         std::rc::Rc::clone(&linked.files),
         linked.random.clone(),
+        linked.network.as_ref().map(std::rc::Rc::clone),
         compiled.scope.get(),
     )?;
     let (value, final_stack) = drive_linked(
@@ -2560,6 +3368,7 @@ fn run_dynamic_snippet(
         JitMode::Off,
         &snippet_linked,
         host,
+        module_state,
     )?;
 
     // Обратно переносятся ТОЛЬКО уже существовавшие слоты: их номера
@@ -2571,18 +3380,6 @@ fn run_dynamic_snippet(
     // созданное внутри `Выполнить`, вызов не переживает. Выбор оказался
     // верным, кадр с именной таблицей не нужен.
     //
-    // Отдельный модульный блок возвращается только там, где он был
-    // отдельным (область — кадр функции); на верхнем уровне модульные
-    // значения лежат в локальных слотах и едут назад вместе с ними.
-    if !aliased {
-        for i in 0..n_module {
-            reg_store(
-                stack,
-                program.module_base as usize + i,
-                reg_load(&final_stack, module_base + i)?,
-            )?;
-        }
-    }
     for i in 0..old_count {
         let d = frame.reg_index(i as u8);
         reg_store(stack, d, reg_load(&final_stack, i)?)?;
@@ -2649,6 +3446,7 @@ pub fn call_module_function(
         env.zone(),
         env.files(),
         env.random(),
+        env.network(),
         bsl_bytecode::DynamicScope::ROOT,
     )?;
     let mut stdout = std::io::stdout().lock();
@@ -2695,6 +3493,7 @@ pub fn call_module_function_with_registry_and_io<'a>(
         host_env.zone(),
         host_env.files(),
         host_env.random(),
+        host_env.network(),
         bsl_bytecode::DynamicScope::ROOT,
     )?;
     let dynamic_depth = std::cell::Cell::new(0);
@@ -2716,6 +3515,36 @@ fn call_module_function_with_host(
     jit: JitMode,
     linked: &LinkedComponents<'_>,
     host: &mut HostIo<'_, '_>,
+) -> Result<(BslValue, Vec<BslValue>), RtError> {
+    let mut module_state = ModuleState {
+        slots: (0..program.module_vars.len())
+            .map(|i| reg_load(stack, program.module_base as usize + i))
+            .collect::<Result<_, _>>()?,
+    };
+    let result = call_module_function_in_execution(
+        program,
+        name,
+        args,
+        jit,
+        linked,
+        host,
+        &mut module_state,
+    );
+    for (i, value) in module_state.slots.into_iter().enumerate() {
+        reg_store(stack, program.module_base as usize + i, value)?;
+    }
+    result
+}
+
+#[allow(clippy::too_many_arguments)]
+fn call_module_function_in_execution(
+    program: &Program,
+    name: &str,
+    args: Vec<BslValue>,
+    jit: JitMode,
+    linked: &LinkedComponents<'_>,
+    host: &mut HostIo<'_, '_>,
+    module_state: &mut ModuleState,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
     let _depth = DynamicDepthGuard::enter(host.dynamic_depth)?;
 
@@ -2748,42 +3577,15 @@ fn call_module_function_with_host(
     // значениями в начале стека.
     let mut call_stack = args;
     push_own_registers(&mut call_stack, chunk);
-
-    // Модульный блок кладётся ЗА регистрами кадра — как у фрагмента
-    // `Выполнить` в области функции: в локальные слоты функции модульные
-    // переменные не входят, наложить их, как на верхнем уровне, не на что.
-    // Источник — блок ТЕКУЩЕЙ программы по её `module_base`, а не
-    // абсолютный ноль: у главной программы база нулевая, но нас могли
-    // позвать изнутри фрагмента, где блок лежит за его собственными
-    // регистрами. Вызовы внутри функции кладут свои кадры за блоком и
-    // усекают стек только до своей базы, так что блок стоит неподвижно.
-    let n_module = program.module_vars.len();
-    let module_base = call_stack.len();
-    for i in 0..n_module {
-        call_stack.push(reg_load(stack, program.module_base as usize + i)?);
-    }
-
-    // Та же программа, но с базой модульного блока на новом стеке. Чанки,
-    // имена и формы едут КАК ЕСТЬ: `Call func=N` индексирует ровно
-    // `chunks[N]`, а вызванная функция может звать соседей по модулю, так
-    // что нумерация обязана совпасть с исходной.
-    let callee_program = Program {
-        module_base: module_base as u32,
-        ..program.clone()
-    };
-
-    let (value, final_stack) =
-        drive_linked(&callee_program, func_id, call_stack, jit, linked, host)?;
-
-    // Мутации модульных переменных обязаны пережить вызов — та же
-    // дисциплина, что в `run_dynamic_snippet`.
-    for i in 0..n_module {
-        reg_store(
-            stack,
-            program.module_base as usize + i,
-            reg_load(&final_stack, module_base + i)?,
-        )?;
-    }
+    let (value, final_stack) = drive_linked(
+        program,
+        func_id,
+        call_stack,
+        jit,
+        linked,
+        host,
+        module_state,
+    )?;
 
     // Финальные значения слотов параметров: верхний кадр при возврате стек
     // не усекает (см. `do_return_with_value`), поэтому они всё ещё на
@@ -2885,11 +3687,16 @@ use ReturnOutcome::{Continuing, Done};
 fn do_return_with_value(
     frames: &mut Vec<Frame>,
     stack: &mut Vec<BslValue>,
+    module_state: &mut ModuleState,
     value: BslValue,
 ) -> Result<ReturnOutcome, RtError> {
     let frame = frames
         .pop()
         .expect("инвариант VM: возврат исполняется только при непустом стеке кадров");
+    for (stack_slot, module_slot) in &frame.module_copybacks {
+        let value = reg_load(stack, *stack_slot)?;
+        reg_store(&mut module_state.slots, *module_slot, value)?;
+    }
     match frames.last() {
         None => {
             // Самый верхний кадр завершился: НЕ усекаем стек — `drive`
@@ -2993,6 +3800,22 @@ fn err_to_value(err: &RtError) -> BslValue {
     }
 }
 
+/// Снимает текущую ошибку задачи до выхода из обработчика. Платформенное
+/// подробное представление содержит координаты модулей и стек вызовов;
+/// open-bsl пока не хранит эквивалентную модель диагностики, поэтому это
+/// СОЗНАТЕЛЬНОЕ ОТКЛОНЕНИЕ: снимок содержит только безопасный текст ошибки.
+/// Этого достаточно для повторного броска и журналирования Connector.
+fn current_error_info(current_exception: Option<&BslValue>) -> Result<BslValue, RtError> {
+    let detail = match current_exception {
+        Some(value) => bsl_format::format_value(value, None)?,
+        // ИЗМЕРЕНО на 1С 8.3.27: вне обработчика функция возвращает объект,
+        // а не `Неопределено`, и его подробное представление равно этой
+        // строке (oracle `measure-error-info.bsl`).
+        None => "Unexpected error".to_string(),
+    };
+    Ok(bsl_rt::new_error_info(bsl_rt::BslString::from_str(&detail)))
+}
+
 /// `Строка`/`Формат`/`Число`/`Message` перехватываются здесь, а не в
 /// `bsl_rt::call_builtin_fn`: форматирование живёт в `bsl-format`, которое
 /// зависит от `bsl-rt` (не наоборот) — `bsl-rt` физически не может
@@ -3017,12 +3840,16 @@ fn call_builtin_with_format(
     host: &mut HostIo<'_, '_>,
 ) -> Result<BslValue, RtError> {
     use bsl_rt::BuiltinFn;
-    // Проверка по МАКСИМУМУ, а не по минимуму: резолвер добивает
-    // необязательные позиции `Неопределено` (см.
-    // `BuiltinFn::arity_range`), так что корректный байт-код всегда
-    // приносит полный набор — и `call_builtin_fn` может индексировать
-    // `args[1]`/`args[2]` без проверок на каждой ветке.
-    if args.len() < builtin.arity_range().1 {
+    // Обычно проверка идёт по МАКСИМУМУ: резолвер добивает необязательные
+    // позиции `Неопределено`. Вариадические `Мин`/`Макс`, напротив,
+    // сохраняют фактическое число аргументов, поэтому им достаточно
+    // измеренного минимума.
+    let required = if builtin.is_variadic() {
+        builtin.arity_range().0
+    } else {
+        builtin.arity_range().1
+    };
+    if args.len() < required {
         return Err(RtError::InvalidBytecode(
             "встроенной функции передано меньше аргументов, чем требует её арность",
         ));
@@ -3078,6 +3905,13 @@ fn call_builtin_with_format(
             Some(bsl_rt::HostEffect::Files) => {
                 let files = host.env()?.files();
                 bsl_rt::call_builtin_files(other, args, runtime_shapes, files.as_ref())
+            }
+            Some(bsl_rt::HostEffect::TempFiles) => {
+                let env = host.env()?;
+                let mut entropy = [0u8; 16];
+                env.fill_random(&mut entropy);
+                let files = env.files();
+                bsl_rt::call_builtin_temp_file(other, args, files.as_ref(), &entropy)
             }
             // `Сообщить` перехвачен веткой выше — до сюда доходит только
             // то, что считает ответ по одним аргументам.

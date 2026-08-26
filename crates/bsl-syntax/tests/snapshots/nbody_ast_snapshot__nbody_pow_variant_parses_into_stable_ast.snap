@@ -8,6 +8,7 @@ Program {
         Function(
             FuncDecl {
                 name: "getConst",
+                is_async: false,
                 params: [],
                 export: false,
                 body: [
@@ -74,6 +75,7 @@ Program {
         Function(
             FuncDecl {
                 name: "getBodies",
+                is_async: false,
                 params: [
                     Param {
                         name: "const",
@@ -607,6 +609,7 @@ Program {
         Function(
             FuncDecl {
                 name: "OffsetMomentum",
+                is_async: false,
                 params: [
                     Param {
                         name: "bodies",
@@ -821,6 +824,7 @@ Program {
         Function(
             FuncDecl {
                 name: "Energie",
+                is_async: false,
                 params: [
                     Param {
                         name: "bodies",
@@ -1145,6 +1149,7 @@ Program {
         Function(
             FuncDecl {
                 name: "Advance",
+                is_async: false,
                 params: [
                     Param {
                         name: "bodies",
@@ -1735,6 +1740,7 @@ Program {
         Function(
             FuncDecl {
                 name: "Main",
+                is_async: false,
                 params: [],
                 export: false,
                 body: [

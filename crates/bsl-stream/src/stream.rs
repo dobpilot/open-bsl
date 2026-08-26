@@ -181,6 +181,10 @@ enum Backing {
 #[derive(Debug)]
 pub struct StreamData {
     backing: Option<Backing>,
+    /// Снимок памяти после закрытия. Нужен повторяемому
+    /// `ЗакрытьИПолучитьДвоичныеДанные`: платформа возвращает те же байты и
+    /// при втором вызове (измерено контрактом Connector).
+    closed_data: Option<Vec<u8>>,
     pos: u64,
     can_read: bool,
     can_write: bool,
@@ -358,6 +362,9 @@ impl StreamData {
 enum StreamKind {
     Memory,
     File,
+    /// Универсальный поток чтения, который возвращают нативные
+    /// `ДвоичныеДанные`.
+    Generic,
 }
 
 pub(crate) static MEMORY_STREAM_TYPE: TypeDescriptor = TypeDescriptor {
@@ -389,10 +396,15 @@ impl ByteStreamProtocol for StreamObject {
     }
 
     fn set_position(&self, position: u64, op: &'static str) -> RtResult<()> {
-        self.data
+        let mut data = self
+            .data
             .try_borrow_mut()
-            .map_err(|_| RtError::IoError(format!("{op}: поток уже занят другой операцией")))?
-            .set_position(position);
+            .map_err(|_| RtError::IoError(format!("{op}: поток уже занят другой операцией")))?;
+        // `ТекущаяПозиция()` у закрытого потока доступна, но менять её уже
+        // нельзя (измерено). Поэтому чтение позиции не проверяет носитель, а
+        // этот вход проверяет.
+        data.open(op)?;
+        data.set_position(position);
         Ok(())
     }
 
@@ -471,7 +483,24 @@ fn stream_seek(
     seek(receiver, arguments)
 }
 
-const STREAM_METHODS: &[MethodDescriptor] = &[
+fn stream_copy_to(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    copy_to(receiver, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+fn stream_close_and_get_binary_data(
+    receiver: &dyn ObjectProtocol,
+    _arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    close_and_get_binary_data(receiver)
+}
+
+pub(crate) const STREAM_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor::new(&["Записать", "Write"], Arity::exact(3), stream_write),
     MethodDescriptor::new(&["Прочитать", "Read"], Arity::exact(3), stream_read),
     MethodDescriptor::new(&["Закрыть", "Close"], Arity::exact(0), stream_close),
@@ -482,6 +511,16 @@ const STREAM_METHODS: &[MethodDescriptor] = &[
         stream_current_position,
     ),
     MethodDescriptor::new(&["Перейти", "Seek"], Arity::exact(2), stream_seek),
+    MethodDescriptor::new(
+        &["КопироватьВ", "CopyTo"],
+        Arity::range(1, 2),
+        stream_copy_to,
+    ),
+    MethodDescriptor::new(
+        &["ЗакрытьИПолучитьДвоичныеДанные", "CloseAndGetBinaryData"],
+        Arity::exact(0),
+        stream_close_and_get_binary_data,
+    ),
 ];
 
 impl ObjectProtocol for StreamObject {
@@ -489,6 +528,7 @@ impl ObjectProtocol for StreamObject {
         match self.kind {
             StreamKind::Memory => &MEMORY_STREAM_TYPE,
             StreamKind::File => &FILE_STREAM_TYPE,
+            StreamKind::Generic => &crate::datarw::SOURCE_STREAM_TYPE,
         }
     }
 
@@ -513,6 +553,18 @@ fn data<'a>(v: &'a dyn ObjectProtocol, op: &'static str) -> RtResult<&'a Rc<RefC
             method: op,
             receiver: v.type_descriptor().name,
         })
+}
+
+/// Потоковая возможность объекта. Этим путём обслуживается и обычный
+/// `ПотокВПамяти`, и прокси `ЧтениеДанных.ИсходныйПоток()`.
+fn protocol<'a>(
+    v: &'a dyn ObjectProtocol,
+    op: &'static str,
+) -> RtResult<&'a dyn ByteStreamProtocol> {
+    v.byte_stream().ok_or(RtError::MethodNotApplicable {
+        method: op,
+        receiver: v.type_descriptor().name,
+    })
 }
 
 // --- преобразование чисел --------------------------------------------------------
@@ -645,6 +697,7 @@ pub fn new_memory_stream(arg: &BslValue) -> RtResult<BslValue> {
         StreamKind::Memory,
         Rc::new(RefCell::new(StreamData {
             backing: Some(backing),
+            closed_data: None,
             pos: 0,
             can_read: true,
             can_write: true,
@@ -711,9 +764,26 @@ pub(crate) fn data_over_bytes(bytes: Vec<u8>) -> BslValue {
         StreamKind::Memory,
         Rc::new(RefCell::new(StreamData {
             backing: Some(Backing::Owned(bytes)),
+            closed_data: None,
             pos: 0,
             can_read: true,
             can_write: true,
+            can_seek: true,
+        })),
+    )
+}
+
+/// Поток только для чтения над нативными `ДвоичныеДанные`. Вызывается через
+/// `ByteStreamFactory`, поэтому базовый runtime не зависит от этого crate.
+pub fn open_binary_data_stream(bytes: Rc<[u8]>) -> BslValue {
+    stream_value(
+        StreamKind::Generic,
+        Rc::new(RefCell::new(StreamData {
+            backing: Some(Backing::Owned(bytes.to_vec())),
+            closed_data: None,
+            pos: 0,
+            can_read: true,
+            can_write: false,
             can_seek: true,
         })),
     )
@@ -809,6 +879,7 @@ fn open_file_data(
     };
     Ok(Rc::new(RefCell::new(StreamData {
         backing: Some(Backing::File(handle)),
+        closed_data: None,
         pos,
         can_read: access.can_read(),
         can_write: access.can_write(),
@@ -1106,8 +1177,7 @@ fn flag(v: &dyn ObjectProtocol, which: StreamFlag) -> RtResult<BslValue> {
 /// [`RtError::IoError`], если поток закрыт (измерено) либо файл не отдал
 /// свои метаданные.
 pub fn size(v: &dyn ObjectProtocol) -> RtResult<BslValue> {
-    let d = data(v, "Размер")?;
-    let len = d.borrow().len("Размер")?;
+    let len = protocol(v, "Размер")?.len("Размер")?;
     Ok(from_u64(len))
 }
 
@@ -1119,8 +1189,7 @@ pub fn size(v: &dyn ObjectProtocol) -> RtResult<BslValue> {
 ///
 /// «Метод не применим», если получатель не поток.
 pub fn current_position(v: &dyn ObjectProtocol) -> RtResult<BslValue> {
-    let d = data(v, "ТекущаяПозиция")?;
-    let pos = d.borrow().pos;
+    let pos = protocol(v, "ТекущаяПозиция")?.position("ТекущаяПозиция")?;
     Ok(from_u64(pos))
 }
 
@@ -1160,16 +1229,12 @@ pub fn seek(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
         expected: "ПозицияВПотоке",
         op: OP,
     })?;
-    let d = data(v, OP)?;
-    let mut d = d.borrow_mut();
+    let stream = protocol(v, OP)?;
     let base = match origin {
         StreamOrigin::Begin => 0,
-        StreamOrigin::Current => d.pos,
-        StreamOrigin::End => d.len(OP)?,
+        StreamOrigin::Current => stream.position(OP)?,
+        StreamOrigin::End => stream.len(OP)?,
     };
-    // Закрытый поток `Перейти` не обслуживает — а `Конец` уже спросил бы
-    // длину и упал бы сам; для двух других точек проверяем явно.
-    d.open(OP)?;
     // Уход за начало ОБРЕЗАЕТСЯ нулём от всех трёх точек отсчёта
     // (измерено), уход за конец разрешён и размера не меняет.
     let pos = i128::from(base) + i128::from(offset);
@@ -1177,7 +1242,7 @@ pub fn seek(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
         expected: "Позиция, умещающаяся в потоке",
         op: OP,
     })?;
-    d.pos = pos;
+    stream.set_position(pos, OP)?;
     Ok(from_u64(pos))
 }
 
@@ -1211,13 +1276,12 @@ pub fn write(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     let bytes = src.binary_buffer_bytes().expect("тип проверен `buffer_of`");
     let (offset, count) = slice_in_buffer(offset, count, bytes.len(), OP)?;
     let chunk = bytes[offset..offset + count].to_vec();
-    let d = data(v, OP)?;
     // `Перейти` разрешает уход за конец, поэтому позиция может стоять у самого
     // края `u64` (два перехода по `9223372036854775807` дают `2^64 - 2` — и у
     // нас, и у платформы, измерено контрактом `measure-stream.bsl`). Проверку
     // на это, как и всю работу с носителем, делает `write_bytes`: край
     // отвергается ловимой ошибкой, ничего не записав и не сдвинув позицию.
-    d.borrow_mut().write_bytes(&chunk, OP)
+    protocol(v, OP)?.write_bytes(&chunk, OP)
 }
 
 /// `Поток.Прочитать(Буфер, СмещениеВБуфере, Количество)` -> сколько байтов
@@ -1240,12 +1304,11 @@ pub fn read(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue> {
     let dst = buffer_of(buf, OP)?;
     let len = dst.binary_buffer_len().expect("тип проверен `buffer_of`");
     let (offset, count) = slice_in_buffer(offset, count, len, OP)?;
-    let d = data(v, OP)?;
     // Байты сначала снимаются, и только потом берётся изменяемое
     // заимствование приёмника: у потока НАД БУФЕРОМ источник и приёмник могут
     // оказаться одним и тем же `RefCell`, и два заимствования разом уронили бы
     // процесс.
-    let chunk = d.borrow_mut().read_bytes(count, OP)?;
+    let chunk = protocol(v, OP)?.read_bytes(count, OP)?;
     dst.binary_buffer_write(offset, &chunk)?;
     Ok(from_u64(chunk.len() as u64))
 }
@@ -1276,6 +1339,17 @@ pub fn close(v: &dyn ObjectProtocol) -> RtResult<()> {
     // полузакрыт (`Размер()` ещё работает, позиция и признаки целы), и
     // повторный `Закрыть()` пробует снова. Носитель снимается только после
     // успеха. У памяти закрывать нечего.
+    if state.closed_data.is_none() {
+        state.closed_data = match state.backing.as_ref() {
+            Some(Backing::Owned(bytes)) => Some(bytes.clone()),
+            Some(Backing::Buffer(buffer)) => Some(
+                buffer
+                    .binary_buffer_bytes()
+                    .expect("в носитель попадает только буфер"),
+            ),
+            Some(Backing::File(_)) | None => None,
+        };
+    }
     if let Some(Backing::File(handle)) = state.backing.as_mut() {
         handle
             .close()
@@ -1283,6 +1357,85 @@ pub fn close(v: &dyn ObjectProtocol) -> RtResult<()> {
     }
     state.backing = None;
     Ok(())
+}
+
+/// `Поток.КопироватьВ(Приёмник[, Количество])`.
+///
+/// Пропущенное количество копирует остаток, ноль — ничего, значение больше
+/// остатка — только остаток. Обе позиции сдвигаются на фактическое число
+/// байтов (измерено на 8.3.27).
+pub fn copy_to(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
+    const OP: &str = "КопироватьВ";
+    let ([target] | [target, _]) = args else {
+        return Err(RtError::MethodNotApplicable {
+            method: OP,
+            receiver: v.type_descriptor().name,
+        });
+    };
+    let source = protocol(v, OP)?;
+    let target = target.byte_stream().ok_or(RtError::TypeError {
+        expected: "Поток",
+        op: OP,
+    })?;
+    let mut left = match args.get(1) {
+        None | Some(BslValue::Undefined) => source.len(OP)?.saturating_sub(source.position(OP)?),
+        Some(BslValue::Number(n)) => to_u64(n).ok_or(RtError::TypeError {
+            expected: "Целое неотрицательное число",
+            op: OP,
+        })?,
+        Some(_) => {
+            return Err(RtError::TypeError {
+                expected: "Целое неотрицательное число",
+                op: OP,
+            });
+        }
+    };
+    while left > 0 {
+        let count = usize::try_from(left.min(64 * 1024)).expect("размер блока ограничен");
+        let bytes = source.read_bytes(count, OP)?;
+        if bytes.is_empty() {
+            break;
+        }
+        target.write_bytes(&bytes, OP)?;
+        left -= bytes.len() as u64;
+    }
+    Ok(())
+}
+
+/// `ПотокВПамяти.ЗакрытьИПолучитьДвоичныеДанные()`.
+///
+/// Возвращает весь носитель независимо от позиции и закрывает поток.
+/// Повторный вызов возвращает тот же снимок (измерено).
+pub fn close_and_get_binary_data(v: &dyn ObjectProtocol) -> RtResult<BslValue> {
+    const OP: &str = "ЗакрытьИПолучитьДвоичныеДанные";
+    let object = v
+        .downcast_ref::<StreamObject>()
+        .filter(|object| object.kind == StreamKind::Memory)
+        .ok_or(RtError::MethodNotApplicable {
+            method: OP,
+            receiver: v.type_descriptor().name,
+        })?;
+    let bytes = {
+        let mut state = object
+            .data
+            .try_borrow_mut()
+            .map_err(|_| RtError::IoError(format!("{OP}: поток уже занят другой операцией")))?;
+        if let Some(bytes) = state.closed_data.as_ref() {
+            bytes.clone()
+        } else {
+            let bytes = match state.open(OP)? {
+                Backing::Owned(bytes) => bytes.clone(),
+                Backing::Buffer(buffer) => buffer
+                    .binary_buffer_bytes()
+                    .expect("в носитель попадает только буфер"),
+                Backing::File(_) => unreachable!("вид потока проверен"),
+            };
+            state.closed_data = Some(bytes.clone());
+            state.backing = None;
+            bytes
+        }
+    };
+    Ok(BslValue::binary_data_of(bytes))
 }
 
 #[cfg(test)]
@@ -1672,6 +1825,59 @@ mod tests {
     }
 
     #[test]
+    fn copy_to_moves_both_positions_and_zero_copies_nothing() {
+        let source = new_memory_stream(&BslValue::Undefined).unwrap();
+        write(st(&source), &[buffer(b"ABCDE"), num(0), num(5)]).unwrap();
+        seek(
+            st(&source),
+            &[num(2), enum_val(EnumValue::StreamPositionBegin)],
+        )
+        .unwrap();
+        let target = new_memory_stream(&BslValue::Undefined).unwrap();
+        copy_to(st(&source), &[target.clone(), num(2)]).unwrap();
+        assert_eq!(current_position(st(&source)).unwrap(), num(4));
+        assert_eq!(current_position(st(&target)).unwrap(), num(2));
+        assert_eq!(
+            close_and_get_binary_data(st(&target))
+                .unwrap()
+                .binary_data_bytes()
+                .unwrap(),
+            b"CD"
+        );
+
+        let empty = new_memory_stream(&BslValue::Undefined).unwrap();
+        seek(
+            st(&source),
+            &[num(0), enum_val(EnumValue::StreamPositionBegin)],
+        )
+        .unwrap();
+        copy_to(st(&source), &[empty.clone(), num(0)]).unwrap();
+        assert_eq!(current_position(st(&source)).unwrap(), num(0));
+        assert_eq!(size(st(&empty)).unwrap(), num(0));
+    }
+
+    #[test]
+    fn close_and_get_binary_data_is_repeatable_and_returns_the_whole_stream() {
+        let stream = new_memory_stream(&BslValue::Undefined).unwrap();
+        write(st(&stream), &[buffer(b"ABC"), num(0), num(3)]).unwrap();
+        seek(
+            st(&stream),
+            &[num(1), enum_val(EnumValue::StreamPositionBegin)],
+        )
+        .unwrap();
+        for _ in 0..2 {
+            assert_eq!(
+                close_and_get_binary_data(st(&stream))
+                    .unwrap()
+                    .binary_data_bytes()
+                    .unwrap(),
+                b"ABC"
+            );
+        }
+        assert!(size(st(&stream)).is_err());
+    }
+
+    #[test]
     fn stream_methods_reject_a_receiver_that_is_not_a_stream() {
         // Не-поток здесь — объект другого типа: значение-не-объект ABI
         // метода уже не пропускает (получатель — `&dyn ObjectProtocol`).
@@ -2036,6 +2242,7 @@ mod tests {
             backing: Some(Backing::File(Box::new(FlakyHandle {
                 closes: closes.clone(),
             }))),
+            closed_data: None,
             pos: 7,
             can_read: true,
             can_write: false,

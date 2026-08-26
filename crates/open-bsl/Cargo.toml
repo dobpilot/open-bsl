@@ -1,13 +1,15 @@
 [package]
 name = "open-bsl"
-version = "0.2.0"
+version = "0.3.0"
 edition.workspace = true
 license.workspace = true
 
 [features]
-default = ["binbuf", "regexp", "textdoc", "json", "stream", "zip", "pdf", "xml", "spreadsheet"]
+default = ["binbuf", "regexp", "textdoc", "json", "stream", "http", "crypto", "zip", "pdf", "xml", "spreadsheet"]
 binbuf = ["dep:bsl-binbuf"]
 stream = ["dep:bsl-stream", "binbuf"]
+http = ["dep:bsl-http", "stream"]
+crypto = ["dep:bsl-crypto"]
 json = ["dep:bsl-json"]
 xml = ["dep:bsl-xml"]
 pdf = ["dep:bsl-pdf"]
@@ -29,6 +31,8 @@ bsl-regexp = { path = "../bsl-regexp", optional = true }
 bsl-textdoc = { path = "../bsl-textdoc", optional = true }
 bsl-json = { path = "../bsl-json", optional = true }
 bsl-stream = { path = "../bsl-stream", optional = true }
+bsl-http = { path = "../bsl-http", optional = true }
+bsl-crypto = { path = "../bsl-crypto", optional = true }
 bsl-zip = { path = "../bsl-zip", optional = true }
 bsl-pdf = { path = "../bsl-pdf", optional = true }
 bsl-xml = { path = "../bsl-xml", optional = true }

@@ -39,7 +39,7 @@ fn a_local_is_still_copied_before_an_effectful_neighbour() {
     assert!(
         instrs
             .iter()
-            .any(|instr| matches!(instr, Instr::Move { src: 0, .. }))
+            .any(|instr| matches!(instr, Instr::GetModuleVar { slot: 0, .. }))
     );
 }
 

@@ -95,6 +95,7 @@ pub fn compile_program(resolved: &ResolvedProgram) -> Result<Program, CompileErr
         &resolved.requirements,
         resolved.top_level.uses_dynamic,
         false,
+        false,
         &mut names,
         &mut shapes,
     )?);
@@ -108,6 +109,7 @@ pub fn compile_program(resolved: &ResolvedProgram) -> Result<Program, CompileErr
             &resolved.requirements,
             f.uses_dynamic,
             f.is_procedure,
+            f.is_async,
             &mut names,
             &mut shapes,
         )?);
@@ -206,6 +208,7 @@ pub fn compile_snippet_with_requirements(
         requirements,
         true,
         false,
+        false,
         &mut names,
         &mut shapes,
     )?;
@@ -235,6 +238,7 @@ fn compile_chunk(
     requirements: &[LibraryRequirement],
     materialize_locals: bool,
     is_procedure: bool,
+    is_async: bool,
     names: &mut NameInterner,
     shapes: &mut ShapeTable,
 ) -> Result<Chunk, CompileError> {
@@ -280,6 +284,7 @@ fn compile_chunk(
         param_by_val: params.iter().map(|p| p.by_val).collect(),
         param_has_default: params.iter().map(|p| p.default.is_some()).collect(),
         is_procedure,
+        is_async,
         instrs: c.instrs,
         consts: c.consts,
         call_arg_modes: c.call_arg_modes,
@@ -524,6 +529,12 @@ impl<'a> Compiler<'a> {
             }
             RExpr::Null => {
                 self.emit(Instr::LoadNull { dst });
+            }
+            RExpr::Await(expr) => {
+                let promise = self.alloc_temp()?;
+                self.compile_expr(expr, promise)?;
+                self.emit(Instr::Await { dst, promise });
+                self.free_temp(1);
             }
             RExpr::Local(slot) => {
                 let src = *slot as u8;

@@ -34,6 +34,7 @@ pub fn chunk(instrs: Vec<Instr>) -> Chunk {
         param_by_val: Vec::new(),
         param_has_default: Vec::new(),
         is_procedure: false,
+        is_async: false,
         n_locals: 0,
         n_regs: 1,
         prop_cache: (0..n).map(|_| PropCacheSlot::default()).collect(),

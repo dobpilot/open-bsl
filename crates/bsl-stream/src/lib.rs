@@ -2,6 +2,7 @@
 
 mod datarw;
 mod stream;
+mod textreader;
 
 use bsl_rt::{
     Arity, BslValue, CallContext, ConstructorCode, ConstructorDescriptor, LibraryDependency,
@@ -10,6 +11,11 @@ use bsl_rt::{
 
 pub use datarw::{new_data_reader, new_data_writer};
 pub use stream::{new_file_stream, new_file_streams_manager, new_memory_stream};
+pub use textreader::new_text_reader;
+
+fn binary_data_stream_factory(bytes: std::rc::Rc<[u8]>) -> BslValue {
+    stream::open_binary_data_stream(bytes)
+}
 
 /// Идентификатор компонента в заголовке байткода.
 pub const PACKAGE_NAME: &str = env!("CARGO_PKG_NAME");
@@ -56,11 +62,13 @@ fn construct_data_writer(
     context: &mut CallContext<'_>,
     arguments: &[BslValue],
 ) -> RtResult<BslValue> {
-    new_data_writer(
+    datarw::new_data_writer_extended(
         &arguments[0],
         argument(arguments, 1),
         argument(arguments, 2),
         argument(arguments, 3),
+        argument(arguments, 4),
+        argument(arguments, 5),
         context.files()?,
     )
 }
@@ -70,6 +78,13 @@ fn construct_file_streams_manager(
     _arguments: &[BslValue],
 ) -> RtResult<BslValue> {
     Ok(new_file_streams_manager(context.files_rc()?))
+}
+
+fn construct_text_reader(
+    _context: &mut CallContext<'_>,
+    arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    new_text_reader(&arguments[0], &arguments[1])
 }
 
 const CONSTRUCTORS: &[ConstructorDescriptor] = &[
@@ -94,7 +109,7 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[
     ConstructorDescriptor {
         code: ConstructorCode::new(4),
         names: &["ЗаписьДанных", "DataWriter"],
-        arity: Arity::range(1, 4),
+        arity: Arity::range(1, 6),
         call: construct_data_writer,
     },
     ConstructorDescriptor {
@@ -103,6 +118,12 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[
         arity: Arity::exact(0),
         call: construct_file_streams_manager,
     },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(6),
+        names: &["ЧтениеТекста", "TextReader"],
+        arity: Arity::exact(2),
+        call: construct_text_reader,
+    },
 ];
 
 /// Типы, которые компонент вводит в язык: по ним работает `Тип("Имя")`.
@@ -110,9 +131,11 @@ const TYPES: &[&TypeDescriptor] = &[
     &crate::datarw::DATA_READER_TYPE,
     &crate::datarw::DATA_READ_RESULT_TYPE,
     &crate::datarw::DATA_WRITER_TYPE,
+    &crate::datarw::SOURCE_STREAM_TYPE,
     &crate::stream::FILE_STREAMS_MANAGER_TYPE,
     &crate::stream::FILE_STREAM_TYPE,
     &crate::stream::MEMORY_STREAM_TYPE,
+    &crate::textreader::TEXT_READER_TYPE,
 ];
 
 /// Дескриптор статически подключаемого компонента потоков.
@@ -126,6 +149,7 @@ pub const fn library() -> LibraryDescriptor {
         package: bsl_binbuf::PACKAGE_NAME,
         version: bsl_binbuf::PACKAGE_VERSION,
     }])
+    .with_byte_stream_factory(binary_data_stream_factory)
     .with_constructors(CONSTRUCTORS)
     .with_types(TYPES)
     .with_type_aliases(TYPE_ALIASES)
@@ -149,6 +173,6 @@ mod tests {
             .iter()
             .map(|constructor| constructor.code.get())
             .collect::<Vec<_>>();
-        assert_eq!(codes, (1..=5).collect::<Vec<_>>());
+        assert_eq!(codes, (1..=6).collect::<Vec<_>>());
     }
 }

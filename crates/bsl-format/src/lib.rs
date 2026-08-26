@@ -299,7 +299,9 @@ pub fn parse_number_format(spec: &str) -> RtResult<NumberFormat> {
     for (key, val) in parts.iter() {
         let val = val.as_str();
         match key.as_str() {
-            "ЧГ" => fmt.group = val != "0",
+            // ИЗМЕРЕНО(CRYPTO.DIGEST.NONCE_COUNT): пустое
+            // `ЧГ=` так же отключает разбивку групп, как `ЧГ=0`.
+            "ЧГ" => fmt.group = !val.is_empty() && val != "0",
             "ЧРД" => {
                 if let Some(c) = val.chars().next() {
                     fmt.decimal_sep = c;
@@ -696,6 +698,11 @@ mod tests {
         assert_eq!(f("42", "ЧГ=0; ЧВН=1"), "42");
         // `ЧВН=0` — выключение.
         assert_eq!(f("42", "ЧГ=0; ЧЦ=5; ЧВН=0"), "42");
+    }
+
+    #[test]
+    fn empty_grouping_parameter_disables_grouping() {
+        assert_eq!(f("1", "ЧЦ=8; ЧВН=; ЧГ="), "00000001");
     }
 
     #[test]

@@ -4,6 +4,10 @@ BMP 400x600, байтов: 960054, контрольная сумма: 633613994
 #call_overhead
 сумма: 500000500000
 1697
+#cbr_rates
+XML: USD=84.4635; EUR=98.5182; CNY=12.5659
+JSON: USD=84.4635; EUR=98.5182; CNY=12.5659
+386
 #csv_write
 4658
 #csv_write_batched

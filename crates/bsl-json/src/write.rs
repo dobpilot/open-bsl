@@ -16,6 +16,14 @@ pub enum JsonLineBreak {
     Unix,
 }
 
+/// `ЭкранированиеСимволовJSON` — общий режим экранирования Unicode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JsonEscapeMode {
+    None,
+    NonAscii,
+    NonBmp,
+}
+
 impl JsonLineBreak {
     fn text(self) -> &'static str {
         match self {
@@ -26,13 +34,18 @@ impl JsonLineBreak {
     }
 }
 
-/// `ПараметрыЗаписиJSON`. Полная сигнатура платформы длиннее (ключи
-/// экранирования, кавычки), здесь — та часть, что измерена и наблюдаема в
-/// выводе.
+/// Полная измеренная форма `ПараметрыЗаписиJSON`.
 #[derive(Debug, Clone)]
 pub struct JsonWriterSettings {
     pub line_break: JsonLineBreak,
     pub indent: String,
+    pub use_double_quotes: bool,
+    pub escape_mode: JsonEscapeMode,
+    pub escape_angle_brackets: bool,
+    pub escape_line_separators: bool,
+    pub escape_ampersand: bool,
+    pub escape_single_quotes: bool,
+    pub escape_slash: bool,
 }
 
 /// `ФорматДатыJSON` в терминах СЕРИАЛИЗАЦИИ, а не события разбора (тот —
@@ -131,6 +144,13 @@ impl Default for JsonWriterSettings {
         JsonWriterSettings {
             line_break: JsonLineBreak::Auto,
             indent: String::new(),
+            use_double_quotes: true,
+            escape_mode: JsonEscapeMode::None,
+            escape_angle_brackets: false,
+            escape_line_separators: true,
+            escape_ampersand: false,
+            escape_single_quotes: false,
+            escape_slash: false,
         }
     }
 }
@@ -370,14 +390,14 @@ impl JsonWriter {
             return Err(RtError::Json("ЗаписатьИмяСвойства вне объекта".to_string()));
         }
         self.before_member();
-        self.out.push('"');
+        self.out.push(self.quote());
         Ok(())
     }
 
     /// Закрывает имя свойства и переводит автомат в режим ожидания
     /// значения.
     fn finish_property_name(&mut self) {
-        self.out.push('"');
+        self.out.push(self.quote());
         self.out.push(':');
         // Пробел после двоеточия ставится ТОЛЬКО в форматированном режиме:
         // измерено, что `ПереносСтрокJSON.Нет` даёт `{"а":1}` без пробела,
@@ -393,7 +413,7 @@ impl JsonWriter {
     /// [`RtError::Json`], если мы не внутри объекта.
     pub fn property_name(&mut self, name: &str) -> RtResult<()> {
         self.begin_property_name()?;
-        escape_into(&mut self.out, name);
+        escape_into(&mut self.out, name, &self.settings);
         self.finish_property_name();
         Ok(())
     }
@@ -401,7 +421,7 @@ impl JsonWriter {
     /// То же имя свойства, но прямо из внутреннего UTF-16 `BslString`.
     pub(crate) fn property_name_bsl(&mut self, name: &bsl_rt::BslString) -> RtResult<()> {
         self.begin_property_name()?;
-        escape_bsl_string_into(&mut self.out, name);
+        escape_bsl_string_into(&mut self.out, name, &self.settings);
         self.finish_property_name();
         Ok(())
     }
@@ -454,9 +474,9 @@ impl JsonWriter {
         match v {
             BslValue::Undefined => self.out.push_str("null"),
             BslValue::Str(s) => {
-                self.out.push('"');
-                escape_bsl_string_into(&mut self.out, s);
-                self.out.push('"');
+                self.out.push(self.quote());
+                escape_bsl_string_into(&mut self.out, s, &self.settings);
+                self.out.push(self.quote());
             }
             BslValue::Number(n) => self.out.push_str(&n.to_canonical()),
             BslValue::Boolean(true) => self.out.push_str("true"),
@@ -471,6 +491,14 @@ impl JsonWriter {
     /// `Неопределено`/`Null` и дата строкой.
     pub fn literal(&mut self, text: &str) {
         self.raw_value(text);
+    }
+
+    fn quote(&self) -> char {
+        if self.settings.use_double_quotes {
+            '"'
+        } else {
+            '\''
+        }
     }
 
     pub fn is_string_target(&self) -> bool {
@@ -516,20 +544,37 @@ impl JsonWriter {
 }
 
 /// Экранирование по измеренному набору правил (см. обзор модуля).
-fn escape_into(out: &mut String, s: &str) {
-    for ch in s.chars() {
-        escape_char_into(out, ch);
-    }
+fn escape_into(out: &mut String, s: &str, settings: &JsonWriterSettings) {
+    let units = s.encode_utf16().collect::<Vec<_>>();
+    escape_utf16_into(out, &units, settings);
 }
 
 /// Экранирует `BslString` без промежуточного UTF-8 `String`.
-fn escape_bsl_string_into(out: &mut String, s: &bsl_rt::BslString) {
-    let units = s.units();
+fn escape_bsl_string_into(out: &mut String, s: &bsl_rt::BslString, settings: &JsonWriterSettings) {
+    escape_utf16_into(out, s.units(), settings);
+}
+
+fn escape_utf16_into(out: &mut String, units: &[u16], settings: &JsonWriterSettings) {
     let mut pos = 0;
     while let Some(&unit) = units.get(pos) {
+        let should_escape = match settings.escape_mode {
+            JsonEscapeMode::None => false,
+            JsonEscapeMode::NonAscii => unit > 0x7f,
+            JsonEscapeMode::NonBmp => matches!(unit, 0xd800..=0xdfff),
+        } || settings.escape_angle_brackets && matches!(unit, 0x3c | 0x3e)
+            || settings.escape_line_separators && matches!(unit, 0x2028 | 0x2029)
+            || settings.escape_ampersand && unit == 0x26
+            || settings.escape_single_quotes && unit == 0x27;
+        if should_escape {
+            escape_unit_into(out, unit);
+            pos += 1;
+            continue;
+        }
         match unit {
-            0x22 => out.push_str("\\\""),
+            0x22 if settings.use_double_quotes => out.push_str("\\\""),
+            0x27 if !settings.use_double_quotes => out.push_str("\\'"),
             0x5c => out.push_str("\\\\"),
+            0x2f if settings.escape_slash => out.push_str("\\/"),
             0x0a => out.push_str("\\n"),
             0x0d => out.push_str("\\r"),
             0x00..=0x1f => escape_control_into(out, unit as u8),
@@ -554,14 +599,11 @@ fn escape_bsl_string_into(out: &mut String, s: &bsl_rt::BslString) {
 }
 
 #[inline(always)]
-fn escape_char_into(out: &mut String, ch: char) {
-    match ch {
-        '"' => out.push_str("\\\""),
-        '\\' => out.push_str("\\\\"),
-        '\n' => out.push_str("\\n"),
-        '\r' => out.push_str("\\r"),
-        c if (c as u32) < 0x20 => escape_control_into(out, c as u8),
-        c => out.push(c),
+fn escape_unit_into(out: &mut String, unit: u16) {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    out.push_str("\\u");
+    for shift in [12, 8, 4, 0] {
+        out.push(HEX[usize::from((unit >> shift) & 0x0f)] as char);
     }
 }
 
@@ -588,6 +630,7 @@ mod tests {
         let mut w = JsonWriter::to_string_target(JsonWriterSettings {
             line_break: JsonLineBreak::None,
             indent: String::new(),
+            ..JsonWriterSettings::default()
         });
         f(&mut w).expect("запись");
         w.finish().expect("закрытие")
@@ -603,6 +646,43 @@ mod tests {
             w.end_object()
         });
         assert_eq!(s, r#"{"а":1}"#);
+    }
+
+    #[test]
+    fn full_writer_settings_apply_every_measured_escape_flag() {
+        let mut settings = JsonWriterSettings {
+            line_break: JsonLineBreak::None,
+            escape_angle_brackets: true,
+            escape_line_separators: true,
+            escape_ampersand: true,
+            escape_single_quotes: true,
+            escape_slash: true,
+            ..JsonWriterSettings::default()
+        };
+        let mut writer = JsonWriter::to_string_target(settings.clone());
+        writer.begin_object().unwrap();
+        writer.property_name("name").unwrap();
+        writer
+            .value(&BslValue::Str(bsl_rt::BslString::from_str(
+                "<&'/\u{2028}\u{2029}",
+            )))
+            .unwrap();
+        writer.end_object().unwrap();
+        assert_eq!(
+            writer.finish().unwrap(),
+            r#"{"name":"\u003C\u0026\u0027\/\u2028\u2029"}"#
+        );
+
+        settings.use_double_quotes = false;
+        settings.escape_single_quotes = true;
+        let mut writer = JsonWriter::to_string_target(settings);
+        writer.begin_object().unwrap();
+        writer.property_name("name").unwrap();
+        writer
+            .value(&BslValue::Str(bsl_rt::BslString::from_str("value")))
+            .unwrap();
+        writer.end_object().unwrap();
+        assert_eq!(writer.finish().unwrap(), "{'name':'value'}");
     }
 
     #[test]
@@ -625,6 +705,7 @@ mod tests {
         let mut w = JsonWriter::to_string_target(JsonWriterSettings {
             line_break: JsonLineBreak::Auto,
             indent: "__".to_string(),
+            ..JsonWriterSettings::default()
         });
         w.begin_object().unwrap();
         w.property_name("а").unwrap();

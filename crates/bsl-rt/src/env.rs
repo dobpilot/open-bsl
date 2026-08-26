@@ -519,6 +519,50 @@ pub trait FileSystem: fmt::Debug {
     /// Ошибку открытия — файла нет при `Never`, файл есть при `CreateNew`,
     /// нет прав.
     fn open(&self, path: &str, options: FileOpenOptions) -> io::Result<Box<dyn FileHandle>>;
+
+    /// Выдаёт отсутствующий временный путь с дословным суффиксом.
+    ///
+    /// `entropy` принадлежит окружению прогона, но проверка коллизии и
+    /// краткое резервирование имени принадлежат файловой системе: только
+    /// она знает своё пространство путей. Реализация по умолчанию нужна
+    /// существующим in-memory и sandbox-хостам — новая возможность не
+    /// должна внезапно выпускать их в файловую систему процесса.
+    ///
+    /// # Errors
+    ///
+    /// Ошибку выбора либо резервирования пути; по умолчанию операция не
+    /// поддерживается.
+    fn temporary_path(&self, _suffix: &str, _entropy: &[u8; 16]) -> io::Result<String> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "временные пути не поддерживаются файловой системой",
+        ))
+    }
+
+    /// Разделитель путей этой файловой системы.
+    ///
+    /// # Errors
+    ///
+    /// По умолчанию операция не поддерживается.
+    fn path_separator(&self) -> io::Result<String> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "разделитель пути не предоставлен файловой системой",
+        ))
+    }
+
+    /// Удаляет файл либо дерево; отсутствующий путь считается уже удалённым.
+    ///
+    /// # Errors
+    ///
+    /// Ошибку определения вида пути или удаления; по умолчанию операция
+    /// не поддерживается.
+    fn remove_path(&self, _path: &str) -> io::Result<()> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "удаление путей не поддерживается файловой системой",
+        ))
+    }
 }
 
 /// Файловая система процесса — обычный `std::fs`.
@@ -583,6 +627,42 @@ impl FileSystem for SystemFileSystem {
             open.truncate(true);
         }
         Ok(Box::new(open.open(path)?))
+    }
+
+    fn temporary_path(&self, suffix: &str, entropy: &[u8; 16]) -> io::Result<String> {
+        let name = format!(
+            "open-bsl-{}{}",
+            crate::encoding::encode_hex(entropy),
+            suffix
+        );
+        let path = std::env::temp_dir().join(name);
+        // ИЗМЕРЕНО: платформа возвращает ещё не существующий путь. Короткое
+        // `create_new` закрывает проверку коллизии без гонки, после чего
+        // файл удаляется до возврата имени.
+        let reservation = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)?;
+        drop(reservation);
+        std::fs::remove_file(&path)?;
+        Ok(path.to_string_lossy().into_owned())
+    }
+
+    fn path_separator(&self) -> io::Result<String> {
+        Ok(std::path::MAIN_SEPARATOR.to_string())
+    }
+
+    fn remove_path(&self, path: &str) -> io::Result<()> {
+        // Граница host-возможности сознательно не следует по симлинку:
+        // `УдалитьФайлы` удаляет сам указанный путь, а не выпускает
+        // sandbox-скрипт рекурсивно в чужое дерево.
+        match std::fs::symlink_metadata(path) {
+            Ok(metadata) if metadata.file_type().is_symlink() => std::fs::remove_file(path),
+            Ok(metadata) if metadata.is_dir() => std::fs::remove_dir_all(path),
+            Ok(_) => std::fs::remove_file(path),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error),
+        }
     }
 }
 
@@ -658,6 +738,7 @@ pub struct HostEnv {
     random: RandomHandle,
     zone: std::rc::Rc<dyn TimeZone>,
     files: std::rc::Rc<dyn FileSystem>,
+    network: Option<std::rc::Rc<dyn crate::HttpClientFactory>>,
 }
 
 impl HostEnv {
@@ -671,6 +752,9 @@ impl HostEnv {
             random: RandomHandle::new(SystemRandom::default()),
             zone: std::rc::Rc::new(crate::tz::SystemTimeZone::new()),
             files: std::rc::Rc::new(SystemFileSystem),
+            // Базовый runtime не знает системного HTTP-адаптера: его
+            // устанавливает верхний слой, подключивший `bsl-http`.
+            network: None,
         }
     }
 
@@ -717,6 +801,26 @@ impl HostEnv {
     #[must_use]
     pub fn files(&self) -> std::rc::Rc<dyn FileSystem> {
         std::rc::Rc::clone(&self.files)
+    }
+
+    /// Устанавливает HTTP-фабрику одной сессии.
+    #[must_use]
+    pub fn with_network(mut self, factory: impl crate::HttpClientFactory + 'static) -> Self {
+        self.network = Some(std::rc::Rc::new(factory));
+        self
+    }
+
+    /// Явно запрещает сетевые операции в этой сессии.
+    #[must_use]
+    pub fn without_network(mut self) -> Self {
+        self.network = None;
+        self
+    }
+
+    /// HTTP-фабрика отдельной ссылкой для `CallContext` компонента.
+    #[must_use]
+    pub fn network(&self) -> Option<std::rc::Rc<dyn crate::HttpClientFactory>> {
+        self.network.as_ref().map(std::rc::Rc::clone)
     }
 
     #[must_use]

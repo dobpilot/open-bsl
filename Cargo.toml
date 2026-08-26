@@ -11,6 +11,8 @@ members = [
     "crates/bsl-json",
     "crates/bsl-spreadsheet",
     "crates/bsl-stream",
+    "crates/bsl-http",
+    "crates/bsl-crypto",
     "crates/bsl-pdf",
     "crates/bsl-xml",
     "crates/bsl-zip",

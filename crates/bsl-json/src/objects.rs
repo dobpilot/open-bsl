@@ -16,8 +16,8 @@ use bsl_rt::RuntimeShapes;
 use crate::{parse::*, write::*};
 
 use bsl_rt::{
-    Arity, BslValue, CallContext, EnumValue, MethodDescriptor, ObjectProtocol, PropertyDescriptor,
-    RtError, RtResult, TypeDescriptor,
+    Arity, BslString, BslValue, CallContext, EnumValue, MethodDescriptor, ObjectProtocol,
+    PropertyDescriptor, RtError, RtResult, TypeDescriptor, encoding::Encoding,
 };
 
 #[derive(Debug, Default)]
@@ -306,6 +306,52 @@ pub fn open_file(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     Ok(())
 }
 
+/// `ЧтениеJSON.ОткрытьПоток(Поток[, Кодировка])`. Разборщик материализует
+/// поток целиком, как и файловый вход, но восстанавливает исходную позицию.
+///
+/// # Errors
+///
+/// Возвращает ошибку для чужого получателя, непотокового источника,
+/// неподдержанной кодировки или ошибки чтения.
+pub fn open_stream(obj: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
+    if args.is_empty() || args.len() > 2 {
+        return Err(RtError::MethodNotApplicable {
+            method: "ОткрытьПоток",
+            receiver: obj.type_descriptor().name,
+        });
+    }
+    let reader = as_reader(obj)?;
+    let stream = args[0].byte_stream().ok_or(RtError::TypeError {
+        expected: "Поток",
+        op: "ЧтениеJSON.ОткрытьПоток",
+    })?;
+    // ИЗМЕРЕНО на 8.3.27: `Неопределено` у JSON-потока означает UTF-8,
+    // в отличие от однобайтового умолчания `ЧтениеТекста`.
+    let encoding = Encoding::from_bsl_value(
+        args.get(1).unwrap_or(&BslValue::Undefined),
+        Some(Encoding::Utf8),
+        "ЧтениеJSON.ОткрытьПоток",
+    )?;
+    let bytes = stream.read_all("ЧтениеJSON.ОткрытьПоток")?;
+    let text = encoding.decode(&bytes)?;
+    *reader.borrow_mut() = JsonReaderState {
+        parser: Some(JsonParser::from_string(text)),
+        current: None,
+    };
+    Ok(())
+}
+
+/// Закрывает источник `ЧтениеJSON`. Повторное закрытие допустимо; чтение
+/// после него видит тот же неназначенный источник, что свежий объект.
+///
+/// # Errors
+///
+/// Возвращает ошибку, если получатель не является `ЧтениеJSON`.
+pub fn close_reader(obj: &dyn ObjectProtocol) -> RtResult<()> {
+    *as_reader(obj)?.borrow_mut() = JsonReaderState::default();
+    Ok(())
+}
+
 /// `ЧтениеJSON.Прочитать()` -> `Булево`: удалось ли перейти к следующему
 /// элементу.
 ///
@@ -577,14 +623,14 @@ pub fn new_json_writer(files: Rc<dyn bsl_rt::FileSystem>) -> BslValue {
     })
 }
 
-/// Создаёт `ПараметрыЗаписиJSON` из нуля, одного или двух аргументов.
+/// Создаёт полную девятиместную форму `ПараметрыЗаписиJSON`.
 ///
 /// # Errors
 ///
-/// Ошибка арности или [`RtError::TypeError`], если перенос строк
-/// или строка отступа имеют неверный тип.
+/// Ошибка арности или [`RtError::TypeError`], если аргумент имеет неверный
+/// тип.
 pub fn new_json_writer_settings(arguments: &[BslValue]) -> RtResult<BslValue> {
-    if arguments.len() > 2 {
+    if arguments.len() > 9 {
         return Err(RtError::MethodNotApplicable {
             method: "Новый ПараметрыЗаписиJSON",
             receiver: WRITER_SETTINGS_TYPE.name,
@@ -615,8 +661,47 @@ pub fn new_json_writer_settings(arguments: &[BslValue]) -> RtResult<BslValue> {
             });
         }
     };
+    let boolean = |index: usize, default: bool| -> RtResult<bool> {
+        match arguments.get(index).unwrap_or(&BslValue::Undefined) {
+            BslValue::Undefined => Ok(default),
+            BslValue::Boolean(value) => Ok(*value),
+            _ => Err(RtError::TypeError {
+                expected: "Булево",
+                op: "Новый ПараметрыЗаписиJSON",
+            }),
+        }
+    };
+    let use_double_quotes = boolean(2, true)?;
+    let escape_mode = match arguments.get(3).unwrap_or(&BslValue::Undefined) {
+        BslValue::Undefined | BslValue::Enum(EnumValue::JsonEscapeNone) => JsonEscapeMode::None,
+        BslValue::Enum(EnumValue::JsonEscapeNonAscii) => JsonEscapeMode::NonAscii,
+        BslValue::Enum(EnumValue::JsonEscapeNonBmp) => JsonEscapeMode::NonBmp,
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "ЭкранированиеСимволовJSON",
+                op: "Новый ПараметрыЗаписиJSON",
+            });
+        }
+    };
+    let escape_angle_brackets = boolean(4, false)?;
+    let escape_line_separators = boolean(5, true)?;
+    let escape_ampersand = boolean(6, false)?;
+    // При одинарных кавычках платформа принудительно экранирует апостроф,
+    // даже если восьмой аргумент равен `Ложь`.
+    let escape_single_quotes = boolean(7, false)? || !use_double_quotes;
+    let escape_slash = boolean(8, false)?;
     Ok(BslValue::new_object(JsonWriterSettingsObject(
-        JsonWriterSettings { line_break, indent },
+        JsonWriterSettings {
+            line_break,
+            indent,
+            use_double_quotes,
+            escape_mode,
+            escape_angle_brackets,
+            escape_line_separators,
+            escape_ampersand,
+            escape_single_quotes,
+            escape_slash,
+        },
     )))
 }
 
@@ -695,6 +780,23 @@ fn reader_open_file(
     open_file(receiver, arguments).map(|()| BslValue::Undefined)
 }
 
+fn reader_open_stream(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    open_stream(receiver, arguments).map(|()| BslValue::Undefined)
+}
+
+fn reader_close(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    exact_method_arity("Закрыть", arguments, 0)?;
+    close_reader(receiver).map(|()| BslValue::Undefined)
+}
+
 fn reader_read(
     receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
@@ -724,6 +826,12 @@ const READER_METHODS: &[MethodDescriptor] = &[
         Arity::range(1, 2),
         reader_open_file,
     ),
+    MethodDescriptor::new(
+        &["ОткрытьПоток", "OpenStream"],
+        Arity::range(1, 2),
+        reader_open_stream,
+    ),
+    MethodDescriptor::new(&["Закрыть", "Close"], Arity::exact(0), reader_close),
     MethodDescriptor::new(&["Прочитать", "Read"], Arity::exact(0), reader_read),
     MethodDescriptor::new(&["Пропустить", "Skip"], Arity::exact(0), reader_skip),
 ];
@@ -1009,9 +1117,123 @@ static SERIALIZER_SETTINGS_PROPERTIES: &[PropertyDescriptor] = &[
     },
 ];
 
+fn writer_settings(receiver: &dyn ObjectProtocol) -> RtResult<&JsonWriterSettings> {
+    receiver
+        .downcast_ref::<JsonWriterSettingsObject>()
+        .map(|settings| &settings.0)
+        .ok_or(RtError::MethodNotApplicable {
+            method: "свойство ПараметрыЗаписиJSON",
+            receiver: receiver.type_descriptor().name,
+        })
+}
+
+macro_rules! writer_setting_getter {
+    ($name:ident, $field:ident) => {
+        fn $name(
+            receiver: &dyn ObjectProtocol,
+            _context: &mut CallContext<'_>,
+        ) -> RtResult<BslValue> {
+            Ok(BslValue::Boolean(writer_settings(receiver)?.$field))
+        }
+    };
+}
+
+fn writer_settings_line_break(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let value = match writer_settings(receiver)?.line_break {
+        JsonLineBreak::None => EnumValue::LineBreakNone,
+        JsonLineBreak::Auto => EnumValue::LineBreakAuto,
+        JsonLineBreak::Windows => EnumValue::LineBreakWindows,
+        JsonLineBreak::Unix => EnumValue::LineBreakUnix,
+    };
+    Ok(BslValue::Enum(value))
+}
+
+fn writer_settings_indent(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    Ok(BslValue::Str(BslString::from_str(
+        &writer_settings(receiver)?.indent,
+    )))
+}
+
+fn writer_settings_escape_mode(
+    receiver: &dyn ObjectProtocol,
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let value = match writer_settings(receiver)?.escape_mode {
+        JsonEscapeMode::None => EnumValue::JsonEscapeNone,
+        JsonEscapeMode::NonAscii => EnumValue::JsonEscapeNonAscii,
+        JsonEscapeMode::NonBmp => EnumValue::JsonEscapeNonBmp,
+    };
+    Ok(BslValue::Enum(value))
+}
+
+writer_setting_getter!(writer_settings_double_quotes, use_double_quotes);
+writer_setting_getter!(writer_settings_angles, escape_angle_brackets);
+writer_setting_getter!(writer_settings_line_separators, escape_line_separators);
+writer_setting_getter!(writer_settings_ampersand, escape_ampersand);
+writer_setting_getter!(writer_settings_single_quotes, escape_single_quotes);
+writer_setting_getter!(writer_settings_slash, escape_slash);
+
+static WRITER_SETTINGS_PROPERTIES: &[PropertyDescriptor] = &[
+    PropertyDescriptor {
+        names: &["ПереносСтрок", "LineBreak"],
+        get: writer_settings_line_break,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["СимволыОтступа", "IndentChars"],
+        get: writer_settings_indent,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["ИспользоватьДвойныеКавычки", "UseDoubleQuotes"],
+        get: writer_settings_double_quotes,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["ЭкранированиеСимволов", "EscapeCharacters"],
+        get: writer_settings_escape_mode,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["ЭкранироватьУгловыеСкобки", "EscapeAngleBrackets"],
+        get: writer_settings_angles,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["ЭкранироватьРазделителиСтрок", "EscapeLineSeparators"],
+        get: writer_settings_line_separators,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["ЭкранироватьАмперсанд", "EscapeAmpersand"],
+        get: writer_settings_ampersand,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["ЭкранироватьОдинарныеКавычки", "EscapeSingleQuotes"],
+        get: writer_settings_single_quotes,
+        set: None,
+    },
+    PropertyDescriptor {
+        names: &["ЭкранироватьСлеш", "EscapeSlash"],
+        get: writer_settings_slash,
+        set: None,
+    },
+];
+
 impl ObjectProtocol for JsonWriterSettingsObject {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         &WRITER_SETTINGS_TYPE
+    }
+
+    fn property_table(&self) -> &'static [PropertyDescriptor] {
+        WRITER_SETTINGS_PROPERTIES
     }
 
     fn is_filled(&self) -> RtResult<bool> {
@@ -1083,6 +1305,32 @@ pub(crate) fn name_list_arg(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nine_argument_writer_settings_reach_the_writer_without_loss() {
+        let value = new_json_writer_settings(&[
+            BslValue::Enum(EnumValue::LineBreakNone),
+            BslValue::Str(BslString::from_str("_")),
+            BslValue::Boolean(false),
+            BslValue::Enum(EnumValue::JsonEscapeNonBmp),
+            BslValue::Boolean(true),
+            BslValue::Boolean(false),
+            BslValue::Boolean(true),
+            BslValue::Boolean(false),
+            BslValue::Boolean(true),
+        ])
+        .unwrap();
+        let settings = settings_from(Some(&value)).unwrap();
+        assert_eq!(settings.line_break, JsonLineBreak::None);
+        assert_eq!(settings.indent, "_");
+        assert!(!settings.use_double_quotes);
+        assert_eq!(settings.escape_mode, JsonEscapeMode::NonBmp);
+        assert!(settings.escape_angle_brackets);
+        assert!(!settings.escape_line_separators);
+        assert!(settings.escape_ampersand);
+        assert!(settings.escape_single_quotes);
+        assert!(settings.escape_slash);
+    }
 
     #[test]
     fn serializer_settings_default_is_iso_local_and_arrays_stay_arrays() {

@@ -38,6 +38,11 @@ pub enum EnumValue {
     LineBreakWindows,
     LineBreakUnix,
 
+    // --- ЭкранированиеСимволовJSON -----------------------------------
+    JsonEscapeNone,
+    JsonEscapeNonAscii,
+    JsonEscapeNonBmp,
+
     // --- ФорматДатыJSON -----------------------------------------------
     DateFormatIso,
     DateFormatJavaScript,
@@ -113,6 +118,21 @@ pub enum EnumValue {
     TextEncodingUtf16,
     TextEncodingUtf8,
     TextEncodingSystem,
+
+    // --- СпособКодированияСтроки ----------------------------------------
+    StringEncodingUrl,
+    StringEncodingUrlInUrl,
+
+    // --- НаправлениеСортировки ------------------------------------------
+    SortDirectionAscending,
+
+    // --- ЧастиДаты -------------------------------------------------------
+    DateFractionsDateTime,
+
+    // --- ХешФункция -----------------------------------------------------
+    HashMd5,
+    HashSha1,
+    HashSha256,
 
     // --- ПорядокБайтов --------------------------------------------------
     // Ровно два члена, и оба пишутся ОДИНАКОВО на обоих языках: русских
@@ -315,6 +335,10 @@ pub enum EnumValue {
     // Два члена: `КодировкаОС`, `OEM` и `ANSI` платформа не знает.
     ZipNamesAuto,
     ZipNamesUtf8,
+
+    // --- ИспользованиеByteOrderMark ------------------------------------
+    ByteOrderMarkUse,
+    ByteOrderMarkDoNotUse,
 }
 
 /// К какому перечислению принадлежит член — это же имя стоит слева от
@@ -326,6 +350,8 @@ pub enum EnumValue {
 pub enum EnumKind {
     JsonValueType,
     JsonLineBreak,
+    /// Способ перевода Unicode-символов в `\uXXXX` при записи JSON.
+    JsonEscapeCharacters,
     JsonDateFormat,
     /// `ВариантЗаписиДатыJSON` — англ. написание `JSONDateWritingVariant`
     /// взято по аналогии с остальными именами перечислений JSON (`JSON` +
@@ -342,6 +368,14 @@ pub enum EnumKind {
     /// и пара с идентификатором 1 в параметрах страницы MXL.
     PageOrientation,
     TextEncoding,
+    /// Два режима percent-кодирования строки для query и полного URL.
+    StringEncodingMethod,
+    /// Направление сортировки коллекций; Connector использует возрастание.
+    SortDirection,
+    /// Какие части даты сохраняет `КвалификаторыДаты`.
+    DateFractions,
+    /// Алгоритм объекта `ХешированиеДанных`.
+    HashFunction,
     /// `ПорядокБайтов` — порядок байтов многобайтового целого в
     /// `БуферДвоичныхДанных`. Английское написание `ByteOrder` ИЗМЕРЕНО
     /// (`ByteOrder.LittleEndian` платформа принимает и считает равным
@@ -439,6 +473,8 @@ pub enum EnumKind {
     ZipEncryptionMethod,
     /// `КодировкаИменФайловВZipФайле` — седьмой аргумент конструктора.
     ZipFileNamesEncoding,
+    /// Управляет сигнатурой при записи строкового HTTP-тела.
+    ByteOrderMarkUse,
 }
 
 impl EnumKind {
@@ -447,6 +483,9 @@ impl EnumKind {
         match self {
             EnumKind::JsonValueType => ("ТипЗначенияJSON", "JSONValueType"),
             EnumKind::JsonLineBreak => ("ПереносСтрокJSON", "JSONLineBreak"),
+            EnumKind::JsonEscapeCharacters => {
+                ("ЭкранированиеСимволовJSON", "JSONCharactersEscapeMode")
+            }
             EnumKind::JsonDateFormat => ("ФорматДатыJSON", "JSONDateFormat"),
             EnumKind::JsonDateWritingVariant => ("ВариантЗаписиДатыJSON", "JSONDateWritingVariant"),
             EnumKind::XmlNodeType => ("ТипУзлаXML", "XMLNodeType"),
@@ -460,6 +499,12 @@ impl EnumKind {
             ),
             EnumKind::PageOrientation => ("ОриентацияСтраницы", "PageOrientation"),
             EnumKind::TextEncoding => ("КодировкаТекста", "TextEncoding"),
+            EnumKind::StringEncodingMethod => {
+                ("СпособКодированияСтроки", "СпособКодированияСтроки")
+            }
+            EnumKind::SortDirection => ("НаправлениеСортировки", "SortDirection"),
+            EnumKind::DateFractions => ("ЧастиДаты", "DateFractions"),
+            EnumKind::HashFunction => ("ХешФункция", "HashFunction"),
             EnumKind::ByteOrder => ("ПорядокБайтов", "ByteOrder"),
             EnumKind::FileOpenMode => ("РежимОткрытияФайла", "FileOpenMode"),
             EnumKind::FileAccess => ("ДоступКФайлу", "FileAccess"),
@@ -497,6 +542,7 @@ impl EnumKind {
             EnumKind::ZipFileNamesEncoding => {
                 ("КодировкаИменФайловВZipФайле", "FileNamesEncodingInZipFile")
             }
+            EnumKind::ByteOrderMarkUse => ("ИспользованиеByteOrderMark", "ByteOrderMarkUse"),
         }
     }
 
@@ -511,6 +557,7 @@ impl EnumKind {
         match self {
             EnumKind::JsonValueType => "ПеречислениеТипЗначенияJSON",
             EnumKind::JsonLineBreak => "ПеречислениеПереносСтрокJSON",
+            EnumKind::JsonEscapeCharacters => "ПеречислениеЭкранированиеСимволовJSON",
             EnumKind::JsonDateFormat => "ПеречислениеФорматДатыJSON",
             EnumKind::JsonDateWritingVariant => "ПеречислениеВариантЗаписиДатыJSON",
             EnumKind::XmlNodeType => "ПеречислениеТипУзлаXML",
@@ -521,6 +568,10 @@ impl EnumKind {
             // ОриентацияСтраницы))` на 8.3.27 даёт «ПеречислениеОриентацияСтраницы».
             EnumKind::PageOrientation => "ПеречислениеОриентацияСтраницы",
             EnumKind::TextEncoding => "ПеречислениеКодировкаТекста",
+            EnumKind::StringEncodingMethod => "ПеречислениеСпособКодированияСтроки",
+            EnumKind::SortDirection => "ПеречислениеНаправлениеСортировки",
+            EnumKind::DateFractions => "ПеречислениеЧастиДаты",
+            EnumKind::HashFunction => "ПеречислениеХешФункция",
             // Здесь префикс не предположение по образцу, а ИЗМЕРЕНО:
             // `Строка(ПорядокБайтов)` и `Строка(ТипЗнч(ПорядокБайтов))`
             // оба дают «ПеречислениеПорядокБайтов».
@@ -562,6 +613,7 @@ impl EnumKind {
             EnumKind::ZipSubDirProcessingMode => "ПеречислениеРежимОбработкиПодкаталоговZIP",
             EnumKind::ZipEncryptionMethod => "ПеречислениеМетодШифрованияZIP",
             EnumKind::ZipFileNamesEncoding => "ПеречислениеКодировкаИменФайловВZipФайле",
+            EnumKind::ByteOrderMarkUse => "ПеречислениеИспользованиеByteOrderMark",
         }
     }
 
@@ -688,6 +740,27 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "Unix",
         "Unix",
         "Unix",
+    ),
+    (
+        EnumKind::JsonEscapeCharacters,
+        EnumValue::JsonEscapeNone,
+        "Нет",
+        "None",
+        "Нет",
+    ),
+    (
+        EnumKind::JsonEscapeCharacters,
+        EnumValue::JsonEscapeNonAscii,
+        "СимволыВнеASCII",
+        "CharactersOutsideASCII",
+        "Символы вне ASCII",
+    ),
+    (
+        EnumKind::JsonEscapeCharacters,
+        EnumValue::JsonEscapeNonBmp,
+        "СимволыВнеBMP",
+        "CharactersOutsideBMP",
+        "Символы вне BMP",
     ),
     (
         EnumKind::JsonDateFormat,
@@ -971,6 +1044,55 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "Системная",
         "System",
         "Системная",
+    ),
+    (
+        EnumKind::StringEncodingMethod,
+        EnumValue::StringEncodingUrl,
+        "КодировкаURL",
+        "КодировкаURL",
+        "String URL-encoding",
+    ),
+    (
+        EnumKind::StringEncodingMethod,
+        EnumValue::StringEncodingUrlInUrl,
+        "URLВКодировкеURL",
+        "URLВКодировкеURL",
+        "URL URL-encoding",
+    ),
+    (
+        EnumKind::SortDirection,
+        EnumValue::SortDirectionAscending,
+        "Возр",
+        "Возр",
+        "Ascending",
+    ),
+    (
+        EnumKind::DateFractions,
+        EnumValue::DateFractionsDateTime,
+        "ДатаВремя",
+        "DateTime",
+        "Date and time",
+    ),
+    (
+        EnumKind::HashFunction,
+        EnumValue::HashMd5,
+        "MD5",
+        "MD5",
+        "MD5 hash function",
+    ),
+    (
+        EnumKind::HashFunction,
+        EnumValue::HashSha1,
+        "SHA1",
+        "SHA1",
+        "SHA-1 hash function",
+    ),
+    (
+        EnumKind::HashFunction,
+        EnumValue::HashSha256,
+        "SHA256",
+        "SHA256",
+        "SHA-256 hash function",
     ),
     (
         EnumKind::JsonDateFormat,
@@ -1891,6 +2013,20 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "Utf8",
         "UTF8",
     ),
+    (
+        EnumKind::ByteOrderMarkUse,
+        EnumValue::ByteOrderMarkUse,
+        "Использовать",
+        "Use",
+        "Использовать",
+    ),
+    (
+        EnumKind::ByteOrderMarkUse,
+        EnumValue::ByteOrderMarkDoNotUse,
+        "НеИспользовать",
+        "DoNotUse",
+        "Не использовать",
+    ),
 ];
 
 /// Имена всех перечислений — для автодополнения REPL и для резолвера,
@@ -1900,6 +2036,8 @@ pub const ENUM_NAMES: &[(&str, EnumKind)] = &[
     ("JSONValueType", EnumKind::JsonValueType),
     ("ПереносСтрокJSON", EnumKind::JsonLineBreak),
     ("JSONLineBreak", EnumKind::JsonLineBreak),
+    ("ЭкранированиеСимволовJSON", EnumKind::JsonEscapeCharacters),
+    ("JSONCharactersEscapeMode", EnumKind::JsonEscapeCharacters),
     ("ФорматДатыJSON", EnumKind::JsonDateFormat),
     ("JSONDateFormat", EnumKind::JsonDateFormat),
     ("ВариантЗаписиДатыJSON", EnumKind::JsonDateWritingVariant),
@@ -1910,6 +2048,13 @@ pub const ENUM_NAMES: &[(&str, EnumKind)] = &[
     ("DOMNodeType", EnumKind::DomNodeType),
     ("КодировкаТекста", EnumKind::TextEncoding),
     ("TextEncoding", EnumKind::TextEncoding),
+    ("СпособКодированияСтроки", EnumKind::StringEncodingMethod),
+    ("НаправлениеСортировки", EnumKind::SortDirection),
+    ("SortDirection", EnumKind::SortDirection),
+    ("ЧастиДаты", EnumKind::DateFractions),
+    ("DateFractions", EnumKind::DateFractions),
+    ("ХешФункция", EnumKind::HashFunction),
+    ("HashFunction", EnumKind::HashFunction),
     ("ТипФайлаТабличногоДокумента", EnumKind::SpreadFileType),
     ("SpreadsheetDocumentFileType", EnumKind::SpreadFileType),
     ("ТипРисункаТабличногоДокумента", EnumKind::DrawingKind),
@@ -1973,6 +2118,8 @@ pub const ENUM_NAMES: &[(&str, EnumKind)] = &[
         EnumKind::ZipFileNamesEncoding,
     ),
     ("FileNamesEncodingInZipFile", EnumKind::ZipFileNamesEncoding),
+    ("ИспользованиеByteOrderMark", EnumKind::ByteOrderMarkUse),
+    ("ByteOrderMarkUse", EnumKind::ByteOrderMarkUse),
 ];
 
 /// Перечисление по имени слева от точки. Регистронезависимо и на обоих

@@ -49,6 +49,11 @@ DECL = re.compile(
     r"^(Процедура|Функция)\s+([A-Za-zА-Яа-яЁё_][\w]*)", re.MULTILINE
 )
 END = re.compile(r"^(КонецПроцедуры|КонецФункции)\s*$", re.MULTILINE)
+PREPEND = re.compile(r"^// @prepend-bsl ([^\r\n]+)\s*$", re.MULTILINE)
+TOKEN = re.compile(
+    r'"(?:""|[^"])*"|//[^\n]*|[A-Za-zА-Яа-яЁё_][\w]*|\s+|.', re.DOTALL
+)
+IDENTIFIER = re.compile(r"^[A-Za-zА-Яа-яЁё_][\w]*$")
 
 
 def split_declarations(text):
@@ -71,6 +76,40 @@ def split_declarations(text):
     return "\n".join(decls), "\n".join(body), names
 
 
+def read_scenario(path):
+    """Читает сценарий и подключает объявления из общего BSL-модуля."""
+    text = path.read_text(encoding="utf-8-sig")
+    match = PREPEND.search(text)
+    if not match:
+        return text
+    source = (ROOT / match.group(1)).resolve()
+    if not source.is_relative_to(ROOT) or not source.is_file():
+        raise ValueError(f"недопустимый @prepend-bsl в {path}: {match.group(1)}")
+    shared = source.read_text(encoding="utf-8-sig")
+    declarations, _, _ = split_declarations(shared)
+    # Сторонний модуль хранит пробелы на пустых строках. В генерируемый
+    # файл они не несут смысла и мешают обычной проверке `git diff`.
+    declarations = "\n".join(line.rstrip() for line in declarations.splitlines())
+    return declarations + "\n" + PREPEND.sub("", text)
+
+
+def suffix_identifiers(text, names, suffix):
+    """Уникализирует идентификаторы, не затрагивая строки и члены объектов."""
+    replacements = {name.casefold(): name + suffix for name in names}
+    result = []
+    previous = None
+    for token in TOKEN.findall(text):
+        replacement = replacements.get(token.casefold()) if IDENTIFIER.match(token) else None
+        if replacement and previous != "." and (
+            previous is None or previous.casefold() != "новый"
+        ):
+            token = replacement
+        result.append(token)
+        if not token.isspace() and not token.startswith("//"):
+            previous = token
+    return "".join(result)
+
+
 def main():
     only = set(sys.argv[2].split(",")) if len(sys.argv) > 2 else None
     out = []
@@ -80,7 +119,7 @@ def main():
         if only and name not in only:
             continue
         text = (
-            path.read_text(encoding="utf-8")
+            read_scenario(path)
             .replace(RELATIVE_OUTPUT, SCRATCH_OUTPUT)
             .replace(RELATIVE_EDATA_OUTPUT, SCRATCH_EDATA_OUTPUT)
             .replace(RELATIVE_INVOICE_OUTPUT, SCRATCH_INVOICE_OUTPUT)
@@ -90,10 +129,12 @@ def main():
         # Уникализируем имена бенчмарка: два сценария объявляют
         # `CalcНаСервере`, и на уровне модуля они бы столкнулись.
         suffix = "_" + re.sub(r"\W", "_", name)
-        for n in names:
-            pattern = re.compile(rf"\b{re.escape(n)}\b")
-            decls = pattern.sub(n + suffix, decls)
-            body = pattern.sub(n + suffix, body)
+        # В Connector имена функций совпадают с именами типов, методов и
+        # строковых ключей (`ХешированиеДанных`, `ВызватьHTTPМетод`,
+        # `Таймаут`). Текстовый regex менял бы и их, поэтому здесь нужен
+        # хотя бы минимальный лексический проход по BSL.
+        decls = suffix_identifiers(decls, names, suffix)
+        body = suffix_identifiers(body, names, suffix)
         if decls.strip():
             out.append(decls)
         proc = "Сценарий" + suffix

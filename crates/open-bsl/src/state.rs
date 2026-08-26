@@ -2,7 +2,7 @@
 
 use std::io::Write;
 
-use bsl_rt::{Clock, FileSystem, HostEnv, RandomSource, TimeZone};
+use bsl_rt::{Clock, FileSystem, HostEnv, HttpClientFactory, RandomSource, TimeZone};
 
 use crate::Value;
 use crate::dynamic::DynamicCode;
@@ -14,6 +14,7 @@ pub struct StateBuilder {
     engine: Engine,
     host: HostServices,
     jit: bool,
+    scheduler: bsl_vm::SchedulerConfig,
 }
 
 impl StateBuilder {
@@ -22,6 +23,7 @@ impl StateBuilder {
             engine,
             host: HostServices::process(),
             jit: false,
+            scheduler: bsl_vm::SchedulerConfig::default(),
         }
     }
 
@@ -37,6 +39,14 @@ impl StateBuilder {
 
     pub fn jit(mut self, enabled: bool) -> Self {
         self.jit = enabled;
+        self
+    }
+
+    /// Задаёт число безопасных точек на квант кооперативной BSL-задачи.
+    /// Значение применяется только когда в запуске живы несколько задач.
+    #[must_use]
+    pub fn safe_points_per_quantum(mut self, value: usize) -> Self {
+        self.scheduler.safe_points_per_quantum = value;
         self
     }
 
@@ -94,12 +104,29 @@ impl StateBuilder {
         self
     }
 
+    /// HTTP-транспорт сессии. Фабрика получает чистую конфигурацию
+    /// `HTTPСоединение`; Tokio и конкретный клиент в этот интерфейс не входят.
+    #[must_use]
+    pub fn network(mut self, factory: impl HttpClientFactory + 'static) -> Self {
+        self.host.env = self.host.env.with_network(factory);
+        self
+    }
+
+    /// Явно запрещает сеть, даже если feature `http` подключил системный
+    /// адаптер по умолчанию.
+    #[must_use]
+    pub fn deny_network(mut self) -> Self {
+        self.host.env = self.host.env.without_network();
+        self
+    }
+
     pub fn build(self) -> State {
         State {
             dynamic: self.engine.dynamic_code(),
             engine: self.engine,
             host: self.host,
             jit: self.jit,
+            scheduler: self.scheduler,
         }
     }
 }
@@ -121,10 +148,13 @@ pub(crate) struct HostServices {
 
 impl HostServices {
     fn process() -> Self {
+        let env = HostEnv::process();
+        #[cfg(all(feature = "http", not(target_arch = "wasm32")))]
+        let env = env.with_network(bsl_http::system_factory());
         Self {
             stdout: Box::new(std::io::stdout()),
             stderr: Box::new(std::io::stderr()),
-            env: HostEnv::process(),
+            env,
         }
     }
 }
@@ -139,6 +169,61 @@ pub struct State {
     /// каждой сессии, поэтому и кэш фрагментов у сессий раздельный.
     dynamic: DynamicCode,
     jit: bool,
+    scheduler: bsl_vm::SchedulerConfig,
+}
+
+/// Результат одного шага pollable-исполнения.
+#[derive(Debug, PartialEq)]
+pub enum ExecutionPoll {
+    /// Корневой BSL-код и все порождённые им async-задачи завершились.
+    Complete(Value),
+    /// Есть готовая BSL-задача; host вправе вызвать [`Execution::poll`]
+    /// снова сразу же.
+    Runnable,
+    /// Готовых BSL-задач нет; продолжение зависит от host-completion.
+    Waiting,
+}
+
+/// Один запуск модуля, заимствующий изменяемые сервисы [`State`].
+///
+/// Объект намеренно нельзя перенести в другой `State`: обещания и
+/// completion-сообщения принадлежат ровно одному запуску.
+pub struct Execution<'state, 'module> {
+    state: &'state mut State,
+    module: &'module Module,
+    vm: bsl_vm::ProgramExecution,
+}
+
+impl Execution<'_, '_> {
+    /// Продвигает запуск, разрешая обработать не более `host_slice`
+    /// завершений внешних операций.
+    ///
+    /// Нулевой слайс не делает работы и возвращает
+    /// [`ExecutionPoll::Runnable`]. До появления внешних операций чистый
+    /// BSL завершается за первый ненулевой вызов; это тот же драйвер, что
+    /// использует [`State::run`].
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку связывания или исполнения. Повторный `poll` после
+    /// завершения также является ошибкой контракта host-приложения.
+    pub fn poll(&mut self, host_slice: usize) -> Result<ExecutionPoll, Error> {
+        let registry = self.state.engine.registry();
+        let result = self.vm.poll_with_registry_and_io(
+            &self.module.program,
+            registry,
+            &mut self.state.host.stdout,
+            &mut self.state.host.stderr,
+            &mut self.state.dynamic,
+            &mut self.state.host.env,
+            host_slice,
+        )?;
+        Ok(match result {
+            bsl_vm::ProgramPoll::Complete(value, _) => ExecutionPoll::Complete(value),
+            bsl_vm::ProgramPoll::Runnable => ExecutionPoll::Runnable,
+            bsl_vm::ProgramPoll::Waiting => ExecutionPoll::Waiting,
+        })
+    }
 }
 
 impl State {
@@ -170,41 +255,103 @@ impl State {
         self.exec(&format!("Возврат ({expression});"))
     }
 
+    /// Создаёт отдельный запуск с собственным token, задачами, обещаниями
+    /// и модульным состоянием.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку связывания компонентов до первой инструкции.
+    pub fn start<'state, 'module>(
+        &'state mut self,
+        module: &'module Module,
+    ) -> Result<Execution<'state, 'module>, Error> {
+        self.dynamic.bind_module(module.id);
+        let jit = if self.jit {
+            bsl_vm::JitMode::On
+        } else {
+            bsl_vm::JitMode::Off
+        };
+        let vm = bsl_vm::ProgramExecution::start_with_registry_and_scheduler(
+            &module.program,
+            self.engine.registry(),
+            jit,
+            &self.host.env,
+            self.scheduler,
+        )?;
+        Ok(Execution {
+            state: self,
+            module,
+            vm,
+        })
+    }
+
     /// Исполняет заранее скомпилированный модуль.
     ///
     /// # Errors
     ///
     /// Возвращает ошибку связывания компонентов или исполнения.
     pub fn run(&mut self, module: &Module) -> Result<Value, Error> {
-        let registry = self.engine.registry();
-        // Компилятор фрагментов едет в VM отдельным сервисом прогона:
-        // реестр и символы условной компиляции нужны ЕМУ, а не VM. Перед
-        // прогоном он узнаёт, чей модуль пойдёт, — иначе нулевой чанк
-        // одного модуля столкнулся бы в его кэше с нулевым чанком другого.
-        self.dynamic.bind_module(module.id);
-        // JIT — параметр, а не отдельная функция: булев флаг сессии
-        // превращается в ось возможностей полной формы запуска.
-        let jit = if self.jit {
-            bsl_vm::JitMode::On
-        } else {
-            bsl_vm::JitMode::Off
-        };
-        let result = bsl_vm::run_program_with_registry_and_io(
-            &module.program,
-            registry,
-            jit,
-            &mut self.host.stdout,
-            &mut self.host.stderr,
-            &mut self.dynamic,
-            &mut self.host.env,
-        )?;
-        Ok(result)
+        let mut execution = self.start(module)?;
+        loop {
+            match execution.poll(usize::MAX)? {
+                ExecutionPoll::Complete(value) => return Ok(value),
+                ExecutionPoll::Runnable | ExecutionPoll::Waiting => continue,
+            }
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pollable_execution_matches_run_for_pure_bsl() {
+        let engine = Engine::builder().build().expect("сборка движка");
+        let module = engine
+            .compile(
+                "Асинх Функция Ф() Возврат 42; КонецФункции\n\
+                 Асинх Процедура П() Если Ждать Ф() <> 42 Тогда ВызватьИсключение; КонецЕсли; КонецПроцедуры\n\
+                 П(); Возврат 7;",
+            )
+            .expect("компиляция");
+        let mut state = engine.new_state();
+        let mut execution = state.start(&module).unwrap();
+
+        assert_eq!(execution.poll(0).unwrap(), ExecutionPoll::Runnable);
+        assert_eq!(
+            execution.poll(1).unwrap(),
+            ExecutionPoll::Complete(Value::Number(bsl_rt::BslNumber::from_i64(7)))
+        );
+        assert!(execution.poll(1).is_err());
+
+        let mut state = engine.new_state();
+        assert_eq!(
+            state.run(&module).unwrap(),
+            Value::Number(bsl_rt::BslNumber::from_i64(7))
+        );
+    }
+
+    #[test]
+    fn standalone_metadata_has_no_configuration_common_modules() {
+        let engine = Engine::builder().build().expect("сборка движка");
+        let module = engine
+            .compile(
+                "Возврат Метаданные.ОбщиеМодули.Найти(\"ПолучениеФайловИзИнтернета\") = Неопределено;",
+            )
+            .expect("компиляция");
+        for jit in [false, true] {
+            assert_eq!(
+                engine
+                    .state_builder()
+                    .jit(jit)
+                    .build()
+                    .run(&module)
+                    .unwrap(),
+                Value::Boolean(true)
+            );
+        }
+    }
 
     /// Кэш фрагментов переживает запуск, поэтому обязан быть УСТОЙЧИВЫМ:
     /// повторный `run` того же модуля не компилирует ничего заново и не

@@ -36,7 +36,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 26;
+pub const FORMAT_VERSION: u32 = 27;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -69,7 +69,7 @@ opcodes! {
     Add, AddConst, Sub, Mul, Div, Mod, Neg, Not,
     Eq, NotEq, Lt, Gt, Le, Ge, Jump,
     JumpIfFalse, JumpIfTrue, JumpIfNotEqConst, JumpIfNotLtConst, JumpIfNotSkipped, NumericForNext,
-    NumericForNextI64, Call, Return,
+    NumericForNextI64, Call, Await, Return,
     GetIndex, SetIndex, GetProp, SetProp, CreateObject, NewArray, NewStructure,
     NewTable, NewTypeDescription, NewValueComparison, NewMap, NewTextWriter,
     CollectionLen, Raise, CallBuiltin, CallComponent, CallMethod,
@@ -235,9 +235,14 @@ fn write_chunk(out: &mut String, index: usize, chunk: &Chunk, program: &Program)
     } else {
         ""
     };
+    let async_modifier = if index != 0 && chunk.is_async {
+        " async=true"
+    } else {
+        ""
+    };
     writeln!(
         out,
-        "\n.chunk {index} params={} locals={} regs={} argmodes=[{}] defaults=[{}]{kind}  ; {what}",
+        "\n.chunk {index} params={} locals={} regs={} argmodes=[{}] defaults=[{}]{kind}{async_modifier}  ; {what}",
         chunk.n_params,
         chunk.n_locals,
         chunk.n_regs,
@@ -468,6 +473,7 @@ fn write_instr(instr: &Instr) -> String {
             arg_modes,
             ret,
         } => format!("{op} func={func} base={base} arg_modes={arg_modes} ret={ret}"),
+        Instr::Await { dst, promise } => format!("{op} dst={dst} promise={promise}"),
         Instr::Return { src } => match src {
             Some(src) => format!("{op} src={src}"),
             None => op.to_string(),
@@ -1055,6 +1061,25 @@ fn parse_chunk(r: &mut Reader, expected_index: usize) -> Result<Chunk> {
         Ok(other) => return Err(TextError::At(no, format!("вид объявления «{other}»"))),
         Err(_) => false,
     };
+    let is_async = match field(&fields, no, "async") {
+        Ok(_) if expected_index == 0 => {
+            return Err(TextError::At(
+                no,
+                "верхний уровень не может быть асинхронным методом".to_string(),
+            ));
+        }
+        Ok(value) => match value {
+            "true" => true,
+            "false" => false,
+            other => {
+                return Err(TextError::At(
+                    no,
+                    format!("признак асинхронного метода «{other}»"),
+                ));
+            }
+        },
+        Err(_) => false,
+    };
 
     let n = r.directive(".consts")?;
     let mut consts = Vec::with_capacity(n);
@@ -1157,6 +1182,7 @@ fn parse_chunk(r: &mut Reader, expected_index: usize) -> Result<Chunk> {
         touches_objects: instrs.iter().any(Instr::touches_objects),
         param_has_default,
         is_procedure,
+        is_async,
         param_by_val,
         prop_cache: (0..instrs.len()).map(|_| RefCell::new(None)).collect(),
         method_cache: (0..instrs.len()).map(|_| RefCell::new(None)).collect(),
@@ -1428,6 +1454,10 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
             base: base(&f)?,
             arg_modes: field_u16(&f, no, "arg_modes")?,
             ret: field_u8(&f, no, "ret")?,
+        },
+        "Await" => Instr::Await {
+            dst: dst(&f)?,
+            promise: field_u8(&f, no, "promise")?,
         },
         "Return" => Instr::Return {
             src: match field(&f, no, "src") {

@@ -16,3 +16,7 @@
 # профилировать с `-C force-frame-pointers` по-прежнему можно.
 [build]
 rustflags = ["-C", "llvm-args=-align-all-functions=5"]
+
+[alias]
+# Переносимая VM и HTTP state machine без браузерного fetch-адаптера.
+check-wasm = "check --target wasm32-unknown-unknown -p open-bsl --no-default-features --features http"

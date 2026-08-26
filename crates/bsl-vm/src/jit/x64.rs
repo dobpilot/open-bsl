@@ -84,6 +84,20 @@ impl Assembler {
         self.code.extend_from_slice(&value.to_le_bytes());
     }
 
+    /// `mov r64, [base + disp32]` — REX.W 0x8B /r, `mod = 10`.
+    pub fn mov_r_membase_disp32(&mut self, dst: Reg, base: Reg, displacement: i32) {
+        self.code
+            .extend_from_slice(&[0x48, 0x8b, 0x80 | ((dst as u8) << 3) | base as u8]);
+        self.code.extend_from_slice(&displacement.to_le_bytes());
+    }
+
+    /// `sub qword ptr [base], imm8` — REX.W 0x83 /5, `mod = 00`.
+    pub fn sub_mem_imm8(&mut self, base: Reg, value: i8) {
+        debug_assert!(base != Reg::Rbp, "[rbp] требует отдельного disp8=0");
+        self.code
+            .extend_from_slice(&[0x48, 0x83, (5 << 3) | base as u8, value as u8]);
+    }
+
     /// `add rsp, imm8` / `sub rsp, imm8` — REX.W 0x83 /0 и /5.
     pub fn add_rsp(&mut self, value: i8) {
         self.code
@@ -236,5 +250,30 @@ mod tests {
         let f: extern "C" fn(u64) -> u64 = unsafe { std::mem::transmute(buf.entry_at(0)) };
         assert_eq!(f(0), 1);
         assert_eq!(f(5), 2);
+    }
+
+    #[test]
+    fn generated_code_decrements_a_counter_through_context() {
+        #[repr(C)]
+        struct Context {
+            padding: u64,
+            counter: *mut usize,
+        }
+
+        let mut a = Assembler::new();
+        a.mov_rr(Reg::Rbx, Reg::Rdi);
+        a.mov_r_membase_disp32(Reg::Rax, Reg::Rbx, 8);
+        a.sub_mem_imm8(Reg::Rax, 1);
+        a.mov_r_imm32(Reg::Rax, 0);
+        a.ret();
+        let buf = ExecutableBuffer::new(&a.finish()).unwrap();
+        let f: extern "C" fn(*mut Context) -> u64 = unsafe { std::mem::transmute(buf.entry_at(0)) };
+        let mut counter = 3usize;
+        let mut context = Context {
+            padding: 0,
+            counter: &mut counter,
+        };
+        assert_eq!(f(&mut context), 0);
+        assert_eq!(counter, 2);
     }
 }

@@ -15,6 +15,8 @@ pub enum RExpr {
     Bool(bool),
     Undefined,
     Null,
+    /// Ожидание обещания внутри асинхронного метода.
+    Await(Box<RExpr>),
     /// Слот в кадре текущей функции/скрипта.
     Local(u32),
     /// Переменная уровня модуля (`Перем` в начале файла). Отдельный вариант,
@@ -262,6 +264,8 @@ pub struct ResolvedParam {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ResolvedFunction {
     pub name: String,
+    /// Объявлена ли функция или процедура с модификатором `Асинх`.
+    pub is_async: bool,
     pub params: Vec<ResolvedParam>,
     /// Слоты `0..params.len()` — параметры (в порядке объявления), дальше —
     /// остальные локальные переменные в порядке первого появления.
@@ -375,6 +379,7 @@ fn stmt_uses_dynamic(s: &RStmt) -> bool {
 fn expr_uses_dynamic(e: &RExpr) -> bool {
     match e {
         RExpr::DynEval(_) => true,
+        RExpr::Await(expr) => expr_uses_dynamic(expr),
         RExpr::ModuleVar(_) => false,
         RExpr::Unary { expr, .. } => expr_uses_dynamic(expr),
         RExpr::Binary { lhs, rhs, .. } => expr_uses_dynamic(lhs) || expr_uses_dynamic(rhs),
