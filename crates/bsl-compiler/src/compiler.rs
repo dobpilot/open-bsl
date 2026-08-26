@@ -129,6 +129,7 @@ pub fn compile_program(resolved: &ResolvedProgram) -> Result<Program, CompileErr
         module_vars: resolved.module_vars.clone(),
         exported_module_vars: resolved.module_var_exports.clone(),
         module_base: 0,
+        links: Vec::new(),
     })
 }
 

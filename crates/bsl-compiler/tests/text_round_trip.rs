@@ -6,7 +6,10 @@
 
 use std::cell::RefCell;
 
-use bsl_bytecode::{Instr, LibraryRequirement, OPCODES, Program, parse_program, write_program};
+use bsl_bytecode::{
+    ArgMode, Instr, LibraryRequirement, LinkEntry, ModuleId, OPCODES, Program, parse_program,
+    write_program,
+};
 
 /// Корпус, на котором проверяется round-trip. Он же — покрытие
 /// опкодов: тест ниже требует, чтобы КАЖДЫЙ опкод из `OPCODES`
@@ -146,6 +149,51 @@ fn call_component_program() -> Program {
     program
 }
 
+/// Межмодульные опкоды компилятор пока не эмитит: они появляются при
+/// связывании каталога конфигурации. Для покрытия печати и разбора
+/// программа собирается руками — как `call_component_program`.
+fn imported_ops_program() -> Program {
+    let mut program = compile("Возврат 1;");
+    program.links = vec![
+        LinkEntry::Function {
+            module: ModuleId::new(0),
+            func: 1,
+        },
+        LinkEntry::Variable {
+            module: ModuleId::new(0),
+            slot: 2,
+        },
+    ];
+    program.chunks[0].instrs[0] = Instr::CallImported {
+        link_slot: 0,
+        base: 0,
+        arg_modes: 0,
+        ret: 0,
+    };
+    program.chunks[0].instrs.extend([
+        Instr::GetImportedVar {
+            dst: 0,
+            link_slot: 1,
+        },
+        Instr::SetImportedVar {
+            link_slot: 1,
+            src: 0,
+        },
+    ]);
+    // Режим `byimport` печатается в секции `.argmodes` — токен обязан
+    // пережить разбор вместе с самими опкодами.
+    program.chunks[0].call_arg_modes = vec![vec![ArgMode::ByRefImportedVar(1)]];
+    let instruction_count = program.chunks[0].instrs.len();
+    program.chunks[0]
+        .prop_cache
+        .resize_with(instruction_count, || RefCell::new(None));
+    program.chunks[0].bundle_len = bsl_bytecode::bundle::compute(
+        &program.chunks[0],
+        bsl_bytecode::bundle::module_overlap(0, program.module_vars.len()),
+    );
+    program
+}
+
 /// ГЛАВНЫЙ инвариант формата: печать -> разбор -> печать даёт ту же
 /// строку. Побайтово, а не «эквивалентно»: любое расхождение здесь
 /// значит, что часть программы потерялась при одном из переходов.
@@ -163,6 +211,10 @@ fn round_trip_through_text_is_byte_identical() {
     let first = write_program(&program, None).unwrap();
     let second = write_program(&parse_program(&first).unwrap(), None).unwrap();
     assert_eq!(first, second, "round-trip CallComponent разошёлся");
+    let program = imported_ops_program();
+    let first = write_program(&program, None).unwrap();
+    let second = write_program(&parse_program(&first).unwrap(), None).unwrap();
+    assert_eq!(first, second, "round-trip импортных опкодов разошёлся");
 }
 
 /// Разобранная программа совпадает с исходной по СУЩЕСТВУ, а не только
@@ -304,15 +356,17 @@ fn the_corpus_covers_every_opcode() {
             }
         }
     }
-    let text = write_program(&call_component_program(), None).unwrap();
-    for op in OPCODES {
-        if text
-            .lines()
-            .filter_map(|line| line.split_whitespace().nth(1))
-            .any(|word| word == *op)
-            && !seen.contains(op)
-        {
-            seen.push(op);
+    for extra in [call_component_program(), imported_ops_program()] {
+        let text = write_program(&extra, None).unwrap();
+        for op in OPCODES {
+            if text
+                .lines()
+                .filter_map(|line| line.split_whitespace().nth(1))
+                .any(|word| word == *op)
+                && !seen.contains(op)
+            {
+                seen.push(op);
+            }
         }
     }
     let missing: Vec<&&str> = OPCODES.iter().filter(|op| !seen.contains(op)).collect();

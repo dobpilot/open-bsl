@@ -12,6 +12,7 @@
 
 pub mod bundle;
 mod chunk;
+mod configuration;
 pub mod dynamic;
 pub mod image;
 mod instr;
@@ -19,8 +20,14 @@ mod text;
 
 pub use bsl_rt::LibraryRequirement;
 pub use chunk::{Chunk, ExceptionRange, MethodCacheSlot, Program, PropCacheSlot, SnippetUnit};
+pub use configuration::{
+    BytecodeImage, ConfigurationProgram, EntryId, EntryProgram, LinkEntry, LinkSlot, ModuleId,
+    ModuleProgram,
+};
 pub use dynamic::{
     DynamicCompiler, DynamicKind, DynamicRequest, DynamicScope, DynamicSignature, DynamicUnit,
 };
 pub use instr::{ArgMode, Instr};
-pub use text::{FORMAT_VERSION, OPCODES, TextError, parse_program, write_program};
+pub use text::{
+    FORMAT_VERSION, OPCODES, TextError, parse_image, parse_program, write_image, write_program,
+};

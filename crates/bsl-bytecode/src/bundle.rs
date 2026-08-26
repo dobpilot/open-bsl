@@ -398,6 +398,10 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
                             // нужно — `mod_all` ниже помечает ВСЕ модульные
                             // слоты консервативно (вызов и так их барьер).
                             ArgMode::ByRefModuleVar(_) => {}
+                            // Импортированная переменная по ссылке: чужое
+                            // состояние — куча, heap-флаги вызова ниже
+                            // упорядочивают его сами.
+                            ArgMode::ByRefImportedVar(_) => {}
                             // Пропущенная позиция: вызывающий в этот
                             // регистр ничего не клал и вызванный оттуда
                             // ничего не читает — но пролог умолчаний
@@ -422,6 +426,64 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
             if e.ctl == Ctl::None {
                 e.ctl = Ctl::Trailing;
             }
+        }
+        Instr::CallImported {
+            base,
+            arg_modes,
+            ret,
+            ..
+        } => {
+            // Классификация повторяет `Call` консервативно: вызванный чужой
+            // модуль наших слотов не видит, но `ByRefModuleVar`-аргументы
+            // дают запись при возврате, а точечный учёт нескольких слотов
+            // `ModSet::One` не выразит — `mod_all` дешевле и всегда верен.
+            match chunk.call_arg_modes.get(arg_modes as usize) {
+                Some(modes) => {
+                    for (i, m) in modes.iter().enumerate() {
+                        match m {
+                            ArgMode::Value => {
+                                let r = (base as usize + i).min(255) as u8;
+                                read!(r);
+                            }
+                            ArgMode::ByRefLocal(slot) => {
+                                read!(*slot);
+                                write!(*slot);
+                            }
+                            ArgMode::ByRefModuleVar(_) => {}
+                            // Чужое состояние модулей — куча: heap-флаги
+                            // ниже уже упорядочивают такие обращения.
+                            ArgMode::ByRefImportedVar(_) => {}
+                            ArgMode::Default => {
+                                let r = (base as usize + i).min(255) as u8;
+                                write!(r);
+                            }
+                        }
+                    }
+                }
+                None => {
+                    e.ctl = Ctl::Barrier;
+                }
+            }
+            write!(ret);
+            mod_all(&mut e);
+            e.heap_read = true;
+            e.heap_write = true;
+            e.io = true;
+            if e.ctl == Ctl::None {
+                e.ctl = Ctl::Trailing;
+            }
+        }
+        // Слоты чужого модуля живут вне регистров и вне `ModSet` текущего:
+        // для порядка обращений достаточно кучи — два доступа к одному
+        // импортированному слоту не попадут в один бандл, если хотя бы один
+        // из них запись.
+        Instr::GetImportedVar { dst, .. } => {
+            write!(dst);
+            e.heap_read = true;
+        }
+        Instr::SetImportedVar { src, .. } => {
+            read!(src);
+            e.heap_write = true;
         }
         Instr::Await { dst, promise } => {
             read!(promise);

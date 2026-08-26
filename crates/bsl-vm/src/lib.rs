@@ -612,6 +612,7 @@ pub fn run_repl_chunk_with_registry<'a>(
         module_vars: Vec::new(),
         exported_module_vars: Vec::new(),
         module_base: 0,
+        links: Vec::new(),
     };
     let linked = link_components(
         &program,
@@ -2377,6 +2378,11 @@ fn step(
                             ArgMode::ByRefModuleVar(slot) => {
                                 (reg_load(&module_state.slots, *slot as usize)?, true)
                             }
+                            ArgMode::ByRefImportedVar(_) => {
+                                return Err(RtError::InvalidBytecode(
+                                    "режим byimport вне каталога конфигурации",
+                                ));
+                            }
                             ArgMode::Default => (BslValue::Undefined, false),
                         };
                         let idx = child_stack.len();
@@ -2459,6 +2465,13 @@ fn step(
                                 idx,
                                 provided: true,
                             }
+                        }
+                        // Импортированная переменная по ссылке появляется
+                        // только внутри каталога конфигурации.
+                        ArgMode::ByRefImportedVar(_) => {
+                            return Err(RtError::InvalidBytecode(
+                                "режим byimport вне каталога конфигурации",
+                            ));
                         }
                         // Вызывающий в этот регистр ничего не вычислял, там
                         // лежит мусор от прошлого использования временного
@@ -2724,6 +2737,9 @@ fn step(
             | Instr::SetObjectProp { .. }
             | Instr::CallComponent { .. }
             | Instr::CreateObject { .. }
+            | Instr::CallImported { .. }
+            | Instr::GetImportedVar { .. }
+            | Instr::SetImportedVar { .. }
             | Instr::RunDynamic { .. } => {
                 step_cold(
                     instr,
@@ -3192,6 +3208,17 @@ fn step_cold(
             reg_store(stack, d, value)?;
             frames[frame_idx].pc += 1;
         }
+        // Межмодульные опкоды исполняются только внутри конфигурации:
+        // сессионные модули появляются вместе с каталогом (план фоновых
+        // заданий, этап 1), а одиночная программа таких инструкций не
+        // содержит — компилятор эмитит их только при связывании модулей.
+        Instr::CallImported { .. }
+        | Instr::GetImportedVar { .. }
+        | Instr::SetImportedVar { .. } => {
+            return Err(RtError::InvalidBytecode(
+                "межмодульный опкод вне каталога конфигурации",
+            ));
+        }
         _ => {
             return Err(RtError::InvalidBytecode(
                 "горячий опкод попал в холодную половину диспетчера",
@@ -3354,6 +3381,7 @@ fn run_dynamic_snippet(
         module_vars: program.module_vars.clone(),
         exported_module_vars: program.exported_module_vars.clone(),
         module_base: 0,
+        links: Vec::new(),
     };
 
     let snippet_linked = link_components(

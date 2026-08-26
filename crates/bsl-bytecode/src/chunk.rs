@@ -182,6 +182,11 @@ pub struct Program {
     /// Параллельно `module_vars`: переменная объявлена с модификатором
     /// `Экспорт` и адресуема из других модулей конфигурации.
     pub exported_module_vars: Vec<bool>,
+    /// Типизированная таблица связей: символы чужих модулей, разрешённые
+    /// при сборке конфигурации. На неё ссылаются `CallImported`,
+    /// `GetImportedVar`/`SetImportedVar` и `ArgMode::ByRefImportedVar`
+    /// своим `LinkSlot`. У одиночной программы пуста.
+    pub links: Vec<crate::configuration::LinkEntry>,
 }
 
 #[cfg(test)]

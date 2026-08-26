@@ -32,6 +32,7 @@ use bsl_number::BslNumber;
 use bsl_rt::{BslDate, BslString, BslValue, LibraryRequirement, NameId, Shape, ShapeTable};
 
 use crate::chunk::{Chunk, ExceptionRange, Program};
+use crate::configuration::{LinkEntry, ModuleId};
 use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
@@ -69,7 +70,8 @@ opcodes! {
     Add, AddConst, Sub, Mul, Div, Mod, Neg, Not,
     Eq, NotEq, Lt, Gt, Le, Ge, Jump,
     JumpIfFalse, JumpIfTrue, JumpIfNotEqConst, JumpIfNotLtConst, JumpIfNotSkipped, NumericForNext,
-    NumericForNextI64, Call, Await, Return,
+    NumericForNextI64, Call, CallImported, Await, Return,
+    GetImportedVar, SetImportedVar,
     GetIndex, SetIndex, GetProp, SetProp, CreateObject, NewArray, NewStructure,
     NewTable, NewTypeDescription, NewValueComparison, NewMap, NewTextWriter,
     CollectionLen, Raise, CallBuiltin, CallComponent, CallMethod,
@@ -100,6 +102,13 @@ pub enum TextError {
     /// `function_names[i]` — это `chunks[i+1]`, а нулевой чанк (верхний
     /// уровень) не вызывает никто.
     BadCallTarget { chunk: usize, pc: usize, func: u16 },
+    /// Импортный опкод ссылается мимо таблицы связей либо на запись
+    /// чужого вида (функция вместо переменной или наоборот).
+    BadLinkTarget {
+        chunk: usize,
+        pc: usize,
+        link_slot: u16,
+    },
 }
 
 impl std::fmt::Display for TextError {
@@ -120,6 +129,14 @@ impl std::fmt::Display for TextError {
             TextError::BadCallTarget { chunk, pc, func } => write!(
                 f,
                 "чанк {chunk}, инструкция {pc}: вызов {func} не ссылается на функцию"
+            ),
+            TextError::BadLinkTarget {
+                chunk,
+                pc,
+                link_slot,
+            } => write!(
+                f,
+                "чанк {chunk}, инструкция {pc}: связь {link_slot} отсутствует или чужого вида"
             ),
             TextError::Unrepresentable(what) => {
                 write!(f, "значение не представимо в текстовом байт-коде: {what}")
@@ -145,12 +162,56 @@ type Result<T> = std::result::Result<T, TextError>;
 ///   текстового представления в формате байт-кода.
 /// - [`TextError::BadCallTarget`] — `Call` ссылается не на функцию.
 pub fn write_program(program: &Program, source: Option<&str>) -> Result<String> {
-    validate_requirements(&program.requirements).map_err(TextError::InvalidRequirements)?;
     let mut out = String::with_capacity(4096);
     writeln!(out, "bslc {FORMAT_VERSION}").unwrap();
     if let Some(src) = source {
         writeln!(out, "; исходник: {src}").unwrap();
     }
+    write_program_body(&mut out, program)?;
+    Ok(out)
+}
+
+/// Полный конфигурационный либо одиночный образ. Одиночная программа
+/// печатается ровно как [`write_program`]; конфигурация — заголовком
+/// `.configuration`, за которым идут модули каталога (`.module N "имя"`) и,
+/// если есть, transient entry (`.entry id=N`). Тело каждого модуля — те же
+/// секции, что у одиночной программы.
+///
+/// # Errors
+///
+/// Те же, что у [`write_program`], для каждого модуля образа.
+pub fn write_image(image: &crate::BytecodeImage, source: Option<&str>) -> Result<String> {
+    match image {
+        crate::BytecodeImage::Program(program) => write_program(program, source),
+        crate::BytecodeImage::Configuration { catalog, entry } => {
+            let mut out = String::with_capacity(4096 * (catalog.modules.len() + 1));
+            writeln!(out, "bslc {FORMAT_VERSION}").unwrap();
+            if let Some(src) = source {
+                writeln!(out, "; исходник: {src}").unwrap();
+            }
+            writeln!(
+                out,
+                "\n.configuration modules={} entry={}",
+                catalog.modules.len(),
+                if entry.is_some() { "yes" } else { "no" }
+            )
+            .unwrap();
+            for (i, module) in catalog.modules.iter().enumerate() {
+                writeln!(out, "\n.module {i} {}", quote(&module.name)).unwrap();
+                write_program_body(&mut out, &module.program)?;
+            }
+            if let Some(entry) = entry {
+                writeln!(out, "\n.entry id={}", entry.id.get()).unwrap();
+                write_program_body(&mut out, &entry.program)?;
+            }
+            Ok(out)
+        }
+    }
+}
+
+fn write_program_body(out: &mut String, program: &Program) -> Result<()> {
+    validate_requirements(&program.requirements).map_err(TextError::InvalidRequirements)?;
+    let out = &mut *out;
 
     writeln!(out, "\n.requires {}", program.requirements.len()).unwrap();
     for (i, requirement) in program.requirements.iter().enumerate() {
@@ -199,10 +260,22 @@ pub fn write_program(program: &Program, source: Option<&str>) -> Result<String> 
         writeln!(out, "  {i} {}{export}  ; .chunk {}", quote(name), i + 1).unwrap();
     }
 
-    for (i, chunk) in program.chunks.iter().enumerate() {
-        write_chunk(&mut out, i, chunk, program)?;
+    writeln!(out, "\n.links {}", program.links.len()).unwrap();
+    for (i, link) in program.links.iter().enumerate() {
+        match link {
+            LinkEntry::Function { module, func } => {
+                writeln!(out, "  {i} fn module={} func={func}", module.index()).unwrap();
+            }
+            LinkEntry::Variable { module, slot } => {
+                writeln!(out, "  {i} var module={} slot={slot}", module.index()).unwrap();
+            }
+        }
     }
-    Ok(out)
+
+    for (i, chunk) in program.chunks.iter().enumerate() {
+        write_chunk(out, i, chunk, program)?;
+    }
+    Ok(())
 }
 
 fn write_chunk(out: &mut String, index: usize, chunk: &Chunk, program: &Program) -> Result<()> {
@@ -266,6 +339,7 @@ fn write_chunk(out: &mut String, index: usize, chunk: &Chunk, program: &Program)
                 ArgMode::Value => "value".to_string(),
                 ArgMode::ByRefLocal(slot) => format!("byref:{slot}"),
                 ArgMode::ByRefModuleVar(slot) => format!("bymodvar:{slot}"),
+                ArgMode::ByRefImportedVar(slot) => format!("byimport:{slot}"),
                 ArgMode::Default => "default".to_string(),
             })
             .collect();
@@ -308,6 +382,33 @@ fn write_chunk(out: &mut String, index: usize, chunk: &Chunk, program: &Program)
         // напечатанный листинг разобрался бы в программу, которую VM
         // отвергает уже на исполнении. Ноль — ссылка на верхний уровень,
         // которого не вызывает никто.
+        // Той же строгости заслуживает и таблица связей: печатать инструкцию,
+        // ссылающуюся мимо `links` или на запись чужого вида, значит выпустить
+        // листинг, который разбор примет, а проверка образа отвергнет.
+        let link_kind_ok = |slot: u16, want_function: bool| match program.links.get(slot as usize) {
+            Some(LinkEntry::Function { .. }) => want_function,
+            Some(LinkEntry::Variable { .. }) => !want_function,
+            None => false,
+        };
+        match instr {
+            Instr::CallImported { link_slot, .. } if !link_kind_ok(*link_slot, true) => {
+                return Err(TextError::BadLinkTarget {
+                    chunk: index,
+                    pc,
+                    link_slot: *link_slot,
+                });
+            }
+            Instr::GetImportedVar { link_slot, .. } | Instr::SetImportedVar { link_slot, .. }
+                if !link_kind_ok(*link_slot, false) =>
+            {
+                return Err(TextError::BadLinkTarget {
+                    chunk: index,
+                    pc,
+                    link_slot: *link_slot,
+                });
+            }
+            _ => {}
+        }
         if let Instr::Call { func, .. } = instr
             && (*func == 0
                 || *func as usize > program.function_names.len()
@@ -475,6 +576,14 @@ fn write_instr(instr: &Instr) -> String {
             arg_modes,
             ret,
         } => format!("{op} func={func} base={base} arg_modes={arg_modes} ret={ret}"),
+        Instr::CallImported {
+            link_slot,
+            base,
+            arg_modes,
+            ret,
+        } => format!("{op} link={link_slot} base={base} arg_modes={arg_modes} ret={ret}"),
+        Instr::GetImportedVar { dst, link_slot } => format!("{op} dst={dst} link={link_slot}"),
+        Instr::SetImportedVar { link_slot, src } => format!("{op} link={link_slot} src={src}"),
         Instr::Await { dst, promise } => format!("{op} dst={dst} promise={promise}"),
         Instr::Return { src } => match src {
             Some(src) => format!("{op} src={src}"),
@@ -749,9 +858,108 @@ fn unquote(no: usize, text: &str) -> Result<(String, String)> {
 /// Возвращает [`TextError`], если заголовок, секция, опкод, операнд или индекс не соответствует
 /// текстовому формату.
 pub fn parse_program(src: &str) -> Result<Program> {
+    let mut r = reader_after_header(src)?;
+    if peek_directive(&r).is_some_and(|d| d == ".configuration") {
+        return Err(TextError::BadHeader(
+            "это конфигурационный образ: его читает parse_image".to_string(),
+        ));
+    }
+    parse_program_body(&mut r)
+}
+
+/// Разбирает одиночный либо конфигурационный образ — обратная сторона
+/// [`write_image`]. Гарантия побайтового round-trip относится к паре
+/// `write_image`/`parse_image` так же, как к `write_program`/`parse_program`.
+///
+/// # Errors
+///
+/// Те же, что у [`parse_program`], плюс ошибки структуры конфигурации
+/// (`.module` вне `.configuration`, число модулей, отсутствующий entry).
+pub fn parse_image(src: &str) -> Result<crate::BytecodeImage> {
+    let mut r = reader_after_header(src)?;
+    if !peek_directive(&r).is_some_and(|d| d == ".configuration") {
+        return parse_program_body(&mut r).map(crate::BytecodeImage::Program);
+    }
+    let (no, text) = r.expect(".configuration")?;
+    let mut parts = text.split_whitespace();
+    let _ = parts.next();
+    let field = |token: Option<&str>, name: &str| -> Result<String> {
+        token
+            .and_then(|t| t.strip_prefix(name))
+            .and_then(|t| t.strip_prefix('='))
+            .map(str::to_string)
+            .ok_or_else(|| TextError::At(no, format!("ожидалось {name}= в .configuration")))
+    };
+    let module_count: usize = field(parts.next(), "modules")?
+        .parse()
+        .map_err(|_| TextError::At(no, "modules= не число".to_string()))?;
+    let has_entry = match field(parts.next(), "entry")?.as_str() {
+        "yes" => true,
+        "no" => false,
+        other => {
+            return Err(TextError::At(
+                no,
+                format!("entry= ожидает yes или no, получено «{other}»"),
+            ));
+        }
+    };
+
+    let mut modules = Vec::with_capacity(module_count.min(r.lines.len()));
+    for i in 0..module_count {
+        let (no, text) = r.expect(".module")?;
+        let rest = text
+            .strip_prefix(".module")
+            .ok_or_else(|| TextError::At(no, format!("ожидался .module, получено «{text}»")))?;
+        let (idx, rest) = rest
+            .trim()
+            .split_once(char::is_whitespace)
+            .ok_or_else(|| TextError::At(no, "ожидалось «.module N \"имя\"»".to_string()))?;
+        parse_index(no, idx, i)?;
+        let (name, tail) = unquote(no, rest.trim())?;
+        if !tail.trim().is_empty() {
+            return Err(TextError::At(
+                no,
+                format!("лишнее после имени модуля: «{tail}»"),
+            ));
+        }
+        let program = parse_program_body(&mut r)?;
+        modules.push(crate::ModuleProgram { name, program });
+    }
+    let catalog = crate::ConfigurationProgram { modules };
+
+    let entry = if has_entry {
+        let (no, text) = r.expect(".entry")?;
+        let rest = text
+            .strip_prefix(".entry")
+            .ok_or_else(|| TextError::At(no, format!("ожидался .entry, получено «{text}»")))?;
+        let id: u64 = rest
+            .trim()
+            .strip_prefix("id=")
+            .ok_or_else(|| TextError::At(no, "ожидалось «.entry id=N»".to_string()))?
+            .parse()
+            .map_err(|_| TextError::At(no, "id entry не число".to_string()))?;
+        let program = parse_program_body(&mut r)?;
+        Some(crate::EntryProgram {
+            id: crate::EntryId::new(id),
+            program,
+        })
+    } else {
+        None
+    };
+    if r.pos < r.lines.len() {
+        let line = &r.lines[r.pos];
+        return Err(TextError::At(
+            line.no,
+            format!("лишнее после конца образа: «{}»", line.text),
+        ));
+    }
+    Ok(crate::BytecodeImage::Configuration { catalog, entry })
+}
+
+/// Общий заголовок обеих форм: `bslc N` с точной сверкой версии.
+fn reader_after_header(src: &str) -> Result<Reader> {
     let lines = significant_lines(src);
     let mut r = Reader { lines, pos: 0 };
-
     let (no, header) = r
         .expect("заголовок")
         .map_err(|_| TextError::BadHeader("файл пуст".to_string()))?;
@@ -769,7 +977,23 @@ pub fn parse_program(src: &str) -> Result<Program> {
             )));
         }
     }
+    Ok(r)
+}
 
+/// Первая директива впереди, если она есть, — без продвижения позиции.
+fn peek_directive(r: &Reader) -> Option<&str> {
+    r.lines
+        .get(r.pos)
+        .map(|line| line.text.split_whitespace().next().unwrap_or(""))
+}
+
+/// Начинается ли строка с граничной директивы конфигурации: тело модуля
+/// заканчивается там, где начинается следующий модуль либо entry.
+fn at_image_boundary(r: &Reader) -> bool {
+    matches!(peek_directive(r), Some(".module") | Some(".entry"))
+}
+
+fn parse_program_body(r: &mut Reader) -> Result<Program> {
     // Точные версии runtime-компонентов. Индекс строки используется
     // инструкциями как локальный номер библиотеки, поэтому порядок
     // проверяется так же строго, как индексы имён и форм.
@@ -872,10 +1096,54 @@ pub fn parse_program(src: &str) -> Result<Program> {
         exported_functions.push(parse_export_flag(no, &tail)?);
     }
 
-    // Чанки — до конца файла.
+    let n = r.directive(".links")?;
+    let mut links = Vec::with_capacity(n);
+    for i in 0..n {
+        let (no, text) = r.expect("запись таблицы связей")?;
+        let mut parts = text.split_whitespace();
+        let idx = parts
+            .next()
+            .ok_or_else(|| TextError::At(no, "ожидалось «N fn|var ...»".to_string()))?;
+        parse_index(no, idx, i)?;
+        let kind = parts
+            .next()
+            .ok_or_else(|| TextError::At(no, "ожидался вид связи fn|var".to_string()))?;
+        let fields: Vec<&str> = parts.collect();
+        let field = |name: &str| -> Result<u32> {
+            fields
+                .iter()
+                .find_map(|f| f.strip_prefix(name).and_then(|f| f.strip_prefix('=')))
+                .ok_or_else(|| TextError::At(no, format!("нет поля {name}=")))?
+                .parse::<u32>()
+                .map_err(|_| TextError::At(no, format!("поле {name} не число")))
+        };
+        let module = ModuleId::new(field("module")?);
+        let narrow = |value: u32, what: &str| -> Result<u16> {
+            u16::try_from(value).map_err(|_| TextError::At(no, format!("{what} шире u16")))
+        };
+        links.push(match kind {
+            "fn" => LinkEntry::Function {
+                module,
+                func: narrow(field("func")?, "func")?,
+            },
+            "var" => LinkEntry::Variable {
+                module,
+                slot: narrow(field("slot")?, "slot")?,
+            },
+            other => {
+                return Err(TextError::At(
+                    no,
+                    format!("неизвестный вид связи «{other}»"),
+                ));
+            }
+        });
+    }
+
+    // Чанки — до конца тела: конец файла либо граница следующего модуля
+    // конфигурации.
     let mut chunks = Vec::new();
-    while r.pos < r.lines.len() {
-        chunks.push(parse_chunk(&mut r, chunks.len())?);
+    while r.pos < r.lines.len() && !at_image_boundary(r) {
+        chunks.push(parse_chunk(r, chunks.len())?);
     }
     if chunks.is_empty() {
         return Err(TextError::At(0, "нет ни одного .chunk".to_string()));
@@ -943,6 +1211,7 @@ pub fn parse_program(src: &str) -> Result<Program> {
         module_vars,
         exported_module_vars,
         module_base: 0,
+        links,
     })
 }
 
@@ -1153,6 +1422,11 @@ fn parse_chunk(r: &mut Reader, expected_index: usize) -> Result<Chunk> {
                     t["bymodvar:".len()..]
                         .parse()
                         .map_err(|_| TextError::At(no, format!("«{t}» не слот модуля")))?,
+                ),
+                t if t.starts_with("byimport:") => ArgMode::ByRefImportedVar(
+                    t["byimport:".len()..]
+                        .parse()
+                        .map_err(|_| TextError::At(no, format!("«{t}» не номер связи")))?,
                 ),
                 t => match t.strip_prefix("byref:") {
                     Some(slot) => ArgMode::ByRefLocal(
@@ -1493,6 +1767,20 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
             base: base(&f)?,
             arg_modes: field_u16(&f, no, "arg_modes")?,
             ret: field_u8(&f, no, "ret")?,
+        },
+        "CallImported" => Instr::CallImported {
+            link_slot: field_u16(&f, no, "link")?,
+            base: base(&f)?,
+            arg_modes: field_u16(&f, no, "arg_modes")?,
+            ret: field_u8(&f, no, "ret")?,
+        },
+        "GetImportedVar" => Instr::GetImportedVar {
+            dst: dst(&f)?,
+            link_slot: field_u16(&f, no, "link")?,
+        },
+        "SetImportedVar" => Instr::SetImportedVar {
+            link_slot: field_u16(&f, no, "link")?,
+            src: src(&f)?,
         },
         "Await" => Instr::Await {
             dst: dst(&f)?,

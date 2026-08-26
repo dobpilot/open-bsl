@@ -348,7 +348,12 @@ fn check_call_geometry(program: &Program, chunk: &Chunk, instr: &Instr) -> Resul
                 // до вызываемого. Короткий массив здесь просто не срабатывает,
                 // а образ всё равно будет отвергнут этой проверкой.
                 if callee.param_by_val.get(i) == Some(&true)
-                    && matches!(mode, ArgMode::ByRefLocal(_) | ArgMode::ByRefModuleVar(_))
+                    && matches!(
+                        mode,
+                        ArgMode::ByRefLocal(_)
+                            | ArgMode::ByRefModuleVar(_)
+                            | ArgMode::ByRefImportedVar(_)
+                    )
                 {
                     return Err(RtError::InvalidBytecode(
                         "вызов передаёт по ссылке параметр, объявленный «Знач»",
@@ -370,8 +375,90 @@ fn check_call_geometry(program: &Program, chunk: &Chunk, instr: &Instr) -> Resul
                             "параметр по ссылке указывает за переменные модуля",
                         ));
                     }
+                    // Импортированная переменная по ссылке обязана вести на
+                    // запись-переменную СВОЕЙ таблицы связей; чужой модуль и
+                    // его слот проверяет `verify_configuration`.
+                    ArgMode::ByRefImportedVar(slot)
+                        if !matches!(
+                            program.links.get(*slot as usize),
+                            Some(crate::configuration::LinkEntry::Variable { .. })
+                        ) =>
+                    {
+                        return Err(RtError::InvalidBytecode(
+                            "byimport ведёт мимо таблицы связей или на функцию",
+                        ));
+                    }
                     _ => {}
                 }
+            }
+            Ok(())
+        }
+        Instr::CallImported {
+            link_slot,
+            base,
+            arg_modes,
+            ..
+        } => {
+            // Вид записи связи закреплён заранее: исполнить переменную
+            // нельзя уже на периметре образа, а не в рантайме. Арность и
+            // согласование «Знач» проверяет `verify_configuration` — целевой
+            // чанк лежит в другом модуле каталога.
+            if !matches!(
+                program.links.get(*link_slot as usize),
+                Some(crate::configuration::LinkEntry::Function { .. })
+            ) {
+                return Err(RtError::InvalidBytecode(
+                    "CallImported ведёт мимо таблицы связей или на переменную",
+                ));
+            }
+            let Some(modes) = chunk.call_arg_modes.get(*arg_modes as usize) else {
+                return Err(RtError::InvalidBytecode(
+                    "номер набора режимов аргументов вне таблицы чанка",
+                ));
+            };
+            if *base as usize + modes.len() > chunk.n_regs as usize {
+                return Err(RtError::InvalidBytecode(
+                    "регистры аргументов вызова выходят за кадр",
+                ));
+            }
+            for mode in modes {
+                match mode {
+                    ArgMode::ByRefLocal(slot) if *slot as usize >= chunk.n_locals as usize => {
+                        return Err(RtError::InvalidBytecode(
+                            "параметр по ссылке указывает за локали кадра",
+                        ));
+                    }
+                    ArgMode::ByRefModuleVar(slot)
+                        if *slot as usize >= program.module_vars.len() =>
+                    {
+                        return Err(RtError::InvalidBytecode(
+                            "параметр по ссылке указывает за переменные модуля",
+                        ));
+                    }
+                    ArgMode::ByRefImportedVar(slot)
+                        if !matches!(
+                            program.links.get(*slot as usize),
+                            Some(crate::configuration::LinkEntry::Variable { .. })
+                        ) =>
+                    {
+                        return Err(RtError::InvalidBytecode(
+                            "byimport ведёт мимо таблицы связей или на функцию",
+                        ));
+                    }
+                    _ => {}
+                }
+            }
+            Ok(())
+        }
+        // Импортные обращения к переменным: вид записи связи — Variable.
+        Instr::GetImportedVar { link_slot, .. } | Instr::SetImportedVar { link_slot, .. } => {
+            if !matches!(
+                program.links.get(*link_slot as usize),
+                Some(crate::configuration::LinkEntry::Variable { .. })
+            ) {
+                return Err(RtError::InvalidBytecode(
+                    "импортная переменная ведёт мимо таблицы связей или на функцию",
+                ));
             }
             Ok(())
         }
@@ -453,4 +540,191 @@ fn check_call_geometry(program: &Program, chunk: &Chunk, instr: &Instr) -> Resul
         }
         _ => Ok(()),
     }
+}
+
+/// Периметр конфигурационного образа: то, что нельзя проверить на одном
+/// модуле, потому что цель связи лежит в другом.
+///
+/// Порядок обязанностей: сначала каждый модуль (и entry, если он есть)
+/// проходит одиночный [`verify`], затем сверяются межмодульные свойства —
+/// уникальность имён каталога, разрешимость и экспортность целей связей,
+/// ацикличность графа импортов, арность и согласование «Знач» у
+/// `CallImported`. Worker принимает каталог ровно через эту проверку и не
+/// повторяет case-insensitive resolution имён: manifest уже числовой.
+///
+/// # Errors
+///
+/// `RtError::InvalidBytecode` с описанием первого найденного нарушения.
+pub fn verify_configuration(
+    catalog: &crate::ConfigurationProgram,
+    entry: Option<&crate::EntryProgram>,
+) -> Result<(), RtError> {
+    use crate::configuration::LinkEntry;
+
+    let names: Vec<&String> = catalog.modules.iter().map(|m| &m.name).collect();
+    for name in &names {
+        if name.is_empty() {
+            return Err(RtError::InvalidBytecode("имя общего модуля пусто"));
+        }
+    }
+    let owned: Vec<String> = names.iter().map(|n| n.as_str().to_owned()).collect();
+    if bsl_rt::first_folded_duplicate(&owned).is_some() {
+        return Err(RtError::InvalidBytecode(
+            "имена общих модулей совпадают без учёта регистра",
+        ));
+    }
+    if catalog.modules.len() > u32::MAX as usize {
+        return Err(RtError::InvalidBytecode("каталог шире адресации ModuleId"));
+    }
+
+    for module in &catalog.modules {
+        verify(&module.program)?;
+    }
+    if let Some(entry) = entry {
+        verify(&entry.program)?;
+    }
+
+    // Разрешимость и экспортность целей. `own` — номер модуля-владельца
+    // таблицы; у entry владельца в каталоге нет.
+    let check_links = |program: &Program, own: Option<usize>| -> Result<(), RtError> {
+        for link in &program.links {
+            let (module, target_is_function) = match link {
+                LinkEntry::Function { module, .. } => (*module, true),
+                LinkEntry::Variable { module, .. } => (*module, false),
+            };
+            if own == Some(module.index()) {
+                return Err(RtError::InvalidBytecode(
+                    "связь указывает на собственный модуль",
+                ));
+            }
+            let Some(target) = catalog.module(module) else {
+                return Err(RtError::InvalidBytecode("связь ведёт мимо каталога"));
+            };
+            match link {
+                LinkEntry::Function { func, .. } => {
+                    debug_assert!(target_is_function);
+                    let index = *func as usize;
+                    if index == 0
+                        || index >= target.program.chunks.len()
+                        || index > target.program.function_names.len()
+                    {
+                        return Err(RtError::InvalidBytecode(
+                            "связь ведёт на несуществующую функцию модуля",
+                        ));
+                    }
+                    if !target.program.exported_functions[index - 1] {
+                        return Err(RtError::InvalidBytecode(
+                            "связь ведёт на неэкспортный метод модуля",
+                        ));
+                    }
+                }
+                LinkEntry::Variable { slot, .. } => {
+                    let index = *slot as usize;
+                    if index >= target.program.module_vars.len() {
+                        return Err(RtError::InvalidBytecode(
+                            "связь ведёт на несуществующую переменную модуля",
+                        ));
+                    }
+                    if !target.program.exported_module_vars[index] {
+                        return Err(RtError::InvalidBytecode(
+                            "связь ведёт на неэкспортную переменную модуля",
+                        ));
+                    }
+                }
+            }
+        }
+        Ok(())
+    };
+    for (i, module) in catalog.modules.iter().enumerate() {
+        check_links(&module.program, Some(i))?;
+    }
+    if let Some(entry) = entry {
+        check_links(&entry.program, None)?;
+    }
+
+    // Граф импортов обязан быть ациклическим: цикл превратил бы ленивую
+    // инициализацию модулей в бесконечную рекурсию, а CLI-проверка циклов
+    // файлового графа образу, пришедшему извне, ничем не помогает.
+    let mut state = vec![0u8; catalog.modules.len()]; // 0 — белый, 1 — серый, 2 — чёрный
+    fn visit(
+        catalog: &crate::ConfigurationProgram,
+        state: &mut [u8],
+        index: usize,
+    ) -> Result<(), RtError> {
+        match state[index] {
+            1 => {
+                return Err(RtError::InvalidBytecode(
+                    "граф импортов модулей содержит цикл",
+                ));
+            }
+            2 => return Ok(()),
+            _ => {}
+        }
+        state[index] = 1;
+        for link in &catalog.modules[index].program.links {
+            let target = match link {
+                LinkEntry::Function { module, .. } | LinkEntry::Variable { module, .. } => {
+                    module.index()
+                }
+            };
+            visit(catalog, state, target)?;
+        }
+        state[index] = 2;
+        Ok(())
+    }
+    for index in 0..catalog.modules.len() {
+        visit(catalog, &mut state, index)?;
+    }
+
+    // Арность и «Знач» у CallImported: целевой чанк известен только на
+    // уровне каталога. Локальная геометрия (`base`, границы режимов) уже
+    // проверена одиночным verify.
+    let check_calls = |program: &Program| -> Result<(), RtError> {
+        for chunk in &program.chunks {
+            for instr in &chunk.instrs {
+                let Instr::CallImported {
+                    link_slot,
+                    arg_modes,
+                    ..
+                } = instr
+                else {
+                    continue;
+                };
+                let Some(LinkEntry::Function { module, func }) =
+                    program.links.get(*link_slot as usize)
+                else {
+                    unreachable!("одиночный verify уже проверил вид связи");
+                };
+                let callee = &catalog.modules[module.index()].program.chunks[*func as usize];
+                let modes = &chunk.call_arg_modes[*arg_modes as usize];
+                if modes.len() != callee.n_params as usize {
+                    return Err(RtError::InvalidBytecode(
+                        "режимов аргументов не столько, сколько параметров у импортированной функции",
+                    ));
+                }
+                for (i, mode) in modes.iter().enumerate() {
+                    if callee.param_by_val.get(i) == Some(&true)
+                        && matches!(
+                            mode,
+                            ArgMode::ByRefLocal(_)
+                                | ArgMode::ByRefModuleVar(_)
+                                | ArgMode::ByRefImportedVar(_)
+                        )
+                    {
+                        return Err(RtError::InvalidBytecode(
+                            "вызов передаёт по ссылке параметр, объявленный «Знач»",
+                        ));
+                    }
+                }
+            }
+        }
+        Ok(())
+    };
+    for module in &catalog.modules {
+        check_calls(&module.program)?;
+    }
+    if let Some(entry) = entry {
+        check_calls(&entry.program)?;
+    }
+    Ok(())
 }
