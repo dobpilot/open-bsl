@@ -122,6 +122,21 @@ impl StateBuilder {
 
     pub fn build(self) -> State {
         let mut host = self.host;
+        // Каждый сеанс получает своё временное хранилище; его mailbox
+        // регистрируется в реестре движка — задания публикуют write-set'ы
+        // по token'у вызывателя.
+        #[cfg(not(target_arch = "wasm32"))]
+        let session_token = {
+            let token = crate::jobs::random_uuid();
+            let session = std::rc::Rc::new(std::cell::RefCell::new(
+                bsl_rt::TempStorageSession::new(token, host.env.random()),
+            ));
+            self.engine
+                .temp_hub()
+                .register(token, session.borrow().mailbox());
+            host.env.set_temp_storage(session);
+            token
+        };
         // Движок с каталогом внедряет сервис фоновых заданий в каждый
         // сеанс: клоны движка разделяют один runtime. Ошибка сборки
         // runtime не валит сеанс — без сервиса `ФоновыеЗадания` отвечает
@@ -131,7 +146,10 @@ impl StateBuilder {
             && let Ok(runtime) = self.engine.job_runtime()
         {
             host.env
-                .set_background_jobs(std::rc::Rc::new(crate::jobs::EngineJobService { runtime }));
+                .set_background_jobs(std::rc::Rc::new(crate::jobs::EngineJobService {
+                    runtime,
+                    caller_token: session_token,
+                }));
         }
         State {
             dynamic: self.engine.dynamic_code(),

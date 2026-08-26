@@ -740,6 +740,7 @@ pub struct HostEnv {
     files: std::rc::Rc<dyn FileSystem>,
     network: Option<std::rc::Rc<dyn crate::HttpClientFactory>>,
     background_jobs: Option<std::rc::Rc<dyn crate::BackgroundJobService>>,
+    temp_storage: Option<std::rc::Rc<std::cell::RefCell<crate::TempStorageSession>>>,
 }
 
 impl HostEnv {
@@ -757,6 +758,7 @@ impl HostEnv {
             // устанавливает верхний слой, подключивший `bsl-http`.
             network: None,
             background_jobs: None,
+            temp_storage: None,
         }
     }
 
@@ -828,6 +830,21 @@ impl HostEnv {
 
     pub fn background_jobs(&self) -> Option<std::rc::Rc<dyn crate::BackgroundJobService>> {
         self.background_jobs.as_ref().map(std::rc::Rc::clone)
+    }
+
+    /// Внедряет сеансовое временное хранилище. Без него глобальные
+    /// функции хранилища отвечают ловимой ошибкой возможности.
+    pub fn set_temp_storage(
+        &mut self,
+        session: std::rc::Rc<std::cell::RefCell<crate::TempStorageSession>>,
+    ) {
+        self.temp_storage = Some(session);
+    }
+
+    pub fn temp_storage(
+        &self,
+    ) -> Option<std::rc::Rc<std::cell::RefCell<crate::TempStorageSession>>> {
+        self.temp_storage.as_ref().map(std::rc::Rc::clone)
     }
 
     /// HTTP-фабрика отдельной ссылкой для `CallContext` компонента.

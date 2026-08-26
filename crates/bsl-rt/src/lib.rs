@@ -29,6 +29,7 @@ mod runtime_shapes;
 mod shape;
 mod string;
 mod table;
+mod temp_storage;
 mod type_description;
 mod types;
 mod tz;
@@ -43,6 +44,7 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::rc::Rc;
+pub use temp_storage::{StagedWrite, TempMailbox, TempStorageHub, TempStorageSession};
 pub use value_graph::{GraphLimits, SerializedValueGraph};
 
 pub use bsl_number::BslNumber;
@@ -492,6 +494,7 @@ impl fmt::Display for RtError {
                     crate::component::Capability::Network => "сеть",
                     crate::component::Capability::HostPromises => "host-обещания",
                     crate::component::Capability::BackgroundJobs => "фоновые задания",
+                    crate::component::Capability::TempStorage => "временное хранилище",
                 };
                 let path = match path {
                     crate::component::ContextKind::Full => "полного контекста",

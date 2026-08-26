@@ -133,6 +133,7 @@ pub type FunctionCaller<'a> = dyn FnMut(
 #[non_exhaustive]
 pub enum Capability {
     BackgroundJobs,
+    TempStorage,
     Stdout,
     Stderr,
     Zone,
@@ -169,6 +170,7 @@ pub struct InterpreterServices<'a> {
     pub host_promises: Option<&'a mut dyn crate::HttpPromiseSpawner>,
     pub function_caller: Option<&'a mut FunctionCaller<'a>>,
     pub background_jobs: Option<&'a Rc<dyn crate::BackgroundJobService>>,
+    pub temp_storage: Option<&'a Rc<std::cell::RefCell<crate::TempStorageSession>>>,
 }
 
 /// Сервисы конкретного состояния исполнения, доступные компоненту.
@@ -211,6 +213,7 @@ pub struct CallContext<'a> {
     host_promises: Option<&'a mut dyn crate::HttpPromiseSpawner>,
     function_caller: Option<&'a mut FunctionCaller<'a>>,
     background_jobs: Option<&'a Rc<dyn crate::BackgroundJobService>>,
+    temp_storage: Option<&'a Rc<std::cell::RefCell<crate::TempStorageSession>>>,
 }
 
 impl<'a> CallContext<'a> {
@@ -229,6 +232,7 @@ impl<'a> CallContext<'a> {
             host_promises: services.host_promises,
             function_caller: services.function_caller,
             background_jobs: services.background_jobs,
+            temp_storage: services.temp_storage,
         }
     }
 
@@ -250,6 +254,7 @@ impl<'a> CallContext<'a> {
             host_promises: None,
             function_caller: None,
             background_jobs: None,
+            temp_storage: None,
         }
     }
 
@@ -263,6 +268,18 @@ impl<'a> CallContext<'a> {
     pub fn background_jobs(&self) -> RtResult<&Rc<dyn crate::BackgroundJobService>> {
         self.background_jobs.ok_or(RtError::CapabilityMissing {
             capability: Capability::BackgroundJobs,
+            path: self.path,
+        })
+    }
+
+    /// Сеансовое временное хранилище.
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::CapabilityMissing`] с путём вызова.
+    pub fn temp_storage(&self) -> RtResult<&Rc<std::cell::RefCell<crate::TempStorageSession>>> {
+        self.temp_storage.ok_or(RtError::CapabilityMissing {
+            capability: Capability::TempStorage,
             path: self.path,
         })
     }
@@ -1035,9 +1052,37 @@ pub const fn core_library() -> LibraryDescriptor {
         crate::PACKAGE_VERSION,
         ObjectContextNeed::Reduced,
     )
+    .with_functions(CORE_FUNCTION_TABLE)
     .with_constructors(CORE_CONSTRUCTORS)
     .with_types(CORE_TYPES)
 }
+
+/// Глобальные функции ядра, которым нужен контекст прогона: временное
+/// хранилище живёт в сеансе, и путь через компонентную границу даёт ему
+/// `CallContext` — в отличие от таблицы `BuiltinFn`.
+const CORE_FUNCTION_TABLE: &[FunctionDescriptor] = &[
+    FunctionDescriptor {
+        code: FunctionCode::new(1),
+        names: &["ПоместитьВоВременноеХранилище", "PutToTempStorage"],
+        arity: Arity::range(1, 2),
+        kind: FunctionKind::Function,
+        call: crate::temp_storage::put_to_temp_storage,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(2),
+        names: &["ПолучитьИзВременногоХранилища", "GetFromTempStorage"],
+        arity: Arity::exact(1),
+        kind: FunctionKind::Function,
+        call: crate::temp_storage::get_from_temp_storage,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(3),
+        names: &["УдалитьИзВременногоХранилища", "DeleteFromTempStorage"],
+        arity: Arity::exact(1),
+        kind: FunctionKind::Procedure,
+        call: crate::temp_storage::delete_from_temp_storage,
+    },
+];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RegistryError {

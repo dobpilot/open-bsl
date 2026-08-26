@@ -149,6 +149,8 @@ pub(crate) struct JobRecord {
     pub target: (u32, u16),
     /// Кооперативная отмена: worker проверяет флаг на границах квантов.
     pub cancel_requested: Arc<std::sync::atomic::AtomicBool>,
+    /// Token временного хранилища сеанса-вызывателя — приёмник staging.
+    pub caller_token: Option<[u8; 16]>,
 }
 
 /// Ключ уникальности: пара «цель + снимок ключа» резервируется до
@@ -197,6 +199,7 @@ impl JobRegistry {
 
     /// Admission: атомарно резервирует слот, байты payload и ключ до
     /// terminal transition; ставит задание в глобальную FIFO.
+    #[allow(clippy::too_many_arguments)]
     pub fn admit(
         &mut self,
         id: JobId,
@@ -205,6 +208,7 @@ impl JobRegistry {
         params: Arc<SerializedValueGraph>,
         key: Option<Arc<JobKeyDto>>,
         description: Option<String>,
+        caller_token: Option<[u8; 16]>,
     ) -> Result<JobSnapshotDto, AdmissionError> {
         match self.state {
             RuntimeState::Broken | RuntimeState::Closed => {
@@ -260,6 +264,7 @@ impl JobRegistry {
                 payload_bytes,
                 target,
                 cancel_requested: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                caller_token,
             },
         );
         self.queue.push_back(id);
@@ -607,6 +612,9 @@ pub(crate) struct JobRuntimeShared {
     pub id_source: Arc<dyn JobIdSource>,
     pub time_source: Arc<dyn JobTimeSource>,
     pub targets: TargetTable,
+    /// Реестр mailbox'ов временного хранилища родительского движка —
+    /// публикации write-set'ов заданий идут сюда.
+    pub temp_hub: Arc<bsl_rt::TempStorageHub>,
 }
 
 impl JobRuntimeShared {
@@ -623,6 +631,7 @@ impl JobRuntimeShared {
     /// Admission нового задания в общий реестр. Пул не поднимает: это
     /// обязанность внешнего `JobRuntime::submit`; вложенный submit из
     /// worker приходит, когда потоки уже работают.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn submit_shared(
         &self,
         method_name: &str,
@@ -630,6 +639,7 @@ impl JobRuntimeShared {
         params: Arc<SerializedValueGraph>,
         key: Option<Arc<JobKeyDto>>,
         description: Option<String>,
+        caller_token: Option<[u8; 16]>,
     ) -> Result<JobSnapshotDto, SubmitError> {
         let id = self.id_source.next_id();
         let mut registry = self.registry.lock().expect("реестр без отравления");
@@ -641,6 +651,7 @@ impl JobRuntimeShared {
                 params,
                 key,
                 description,
+                caller_token,
             )
             .map_err(|error| match error {
                 AdmissionError::ResourceLimit(text) => SubmitError::Rejected(text),
@@ -662,12 +673,14 @@ impl JobRuntimeShared {
         params: Arc<SerializedValueGraph>,
         key: Option<Arc<JobKeyDto>>,
         description: Option<String>,
+        caller_token: Option<[u8; 16]>,
     ) -> Result<JobSnapshotDto, SubmitError> {
         let target = self
             .targets
             .resolve(method_name)
             .map_err(SubmitError::BadTarget)?;
-        let snapshot = self.submit_shared(method_name, target, params, key, description)?;
+        let snapshot =
+            self.submit_shared(method_name, target, params, key, description, caller_token)?;
         self.work_available.notify_one();
         Ok(snapshot)
     }
@@ -744,22 +757,24 @@ pub struct JobRuntime {
     threads: Mutex<Vec<std::thread::JoinHandle<()>>>,
 }
 
+/// UUID v4 из ключей ОС — общий генератор идентификаторов и токенов.
+pub(crate) fn random_uuid() -> [u8; 16] {
+    use std::hash::{BuildHasher, Hasher};
+    let mut bytes = [0u8; 16];
+    for chunk in bytes.chunks_mut(8) {
+        let state = std::collections::hash_map::RandomState::new();
+        let value = state.build_hasher().finish().to_le_bytes();
+        chunk.copy_from_slice(&value[..chunk.len()]);
+    }
+    bsl_rt::uuid::v4_from_bytes(bytes)
+}
+
 /// Стандартный источник идентификаторов: OS random + UUID v4.
 struct SystemJobIds;
 
 impl JobIdSource for SystemJobIds {
     fn next_id(&self) -> JobId {
-        // Тот же источник, что у `Новый УникальныйИдентификатор`: ключи
-        // ОС через RandomState — криптостойкость здесь не требуется,
-        // нужна несоударяемость.
-        use std::hash::{BuildHasher, Hasher};
-        let mut bytes = [0u8; 16];
-        for chunk in bytes.chunks_mut(8) {
-            let state = std::collections::hash_map::RandomState::new();
-            let value = state.build_hasher().finish().to_le_bytes();
-            chunk.copy_from_slice(&value[..chunk.len()]);
-        }
-        JobId(bsl_rt::uuid::v4_from_bytes(bytes))
+        JobId(random_uuid())
     }
 }
 
@@ -781,6 +796,7 @@ impl JobRuntime {
         recipe: WorkerRecipe,
         targets: TargetTable,
         id_source: Arc<dyn JobIdSource>,
+        temp_hub: Arc<bsl_rt::TempStorageHub>,
     ) -> Self {
         let workers = config.effective_workers();
         Self {
@@ -792,6 +808,7 @@ impl JobRuntime {
                 id_source,
                 time_source: Arc::new(SystemJobTime),
                 targets,
+                temp_hub,
             }),
             workers,
             threads: Mutex::new(Vec::new()),
@@ -801,6 +818,7 @@ impl JobRuntime {
     /// Запускает экспортный метод общего модуля в отдельном сеансе.
     /// Возвращает снимок `Queued`; сам запуск пула ленивый и submissions
     /// во время `Starting` не ждут создания всех потоков.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn submit(
         &self,
         method_name: &str,
@@ -808,10 +826,16 @@ impl JobRuntime {
         params: Arc<SerializedValueGraph>,
         key: Option<Arc<JobKeyDto>>,
         description: Option<String>,
+        caller_token: Option<[u8; 16]>,
     ) -> Result<JobSnapshotDto, SubmitError> {
-        let snapshot = self
-            .shared
-            .submit_shared(method_name, target, params, key, description)?;
+        let snapshot = self.shared.submit_shared(
+            method_name,
+            target,
+            params,
+            key,
+            description,
+            caller_token,
+        )?;
         self.ensure_workers();
         self.shared.work_available.notify_one();
         Ok(snapshot)
@@ -858,12 +882,24 @@ impl JobRuntime {
         key: Option<Arc<JobKeyDto>>,
         description: Option<String>,
     ) -> Result<JobSnapshotDto, SubmitError> {
+        self.submit_by_name_with_caller(method_name, params, key, description, None)
+    }
+
+    /// То же с token'ом временного хранилища вызывателя — путь сервисов.
+    pub(crate) fn submit_by_name_with_caller(
+        &self,
+        method_name: &str,
+        params: Arc<SerializedValueGraph>,
+        key: Option<Arc<JobKeyDto>>,
+        description: Option<String>,
+        caller_token: Option<[u8; 16]>,
+    ) -> Result<JobSnapshotDto, SubmitError> {
         let target = self
             .shared
             .targets
             .resolve(method_name)
             .map_err(SubmitError::BadTarget)?;
-        self.submit(method_name, target, params, key, description)
+        self.submit(method_name, target, params, key, description, caller_token)
     }
 
     /// Снимок задания по идентификатору.
@@ -1120,7 +1156,20 @@ fn worker_main(shared: &Arc<JobRuntimeShared>) {
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| job.poll(&engine)));
         match outcome {
             Ok(Ok(bsl_vm::ProgramPoll::Complete(..))) => {
-                finish_job(shared, job.id, JobStateDto::Completed, None);
+                if commit_staged(shared, &job) {
+                    finish_job(shared, job.id, JobStateDto::Completed, None);
+                } else {
+                    // Успешный job при закрытом сеансе вызывателя — Failed:
+                    // частичной публикации нет (план, JOB.TEMP.CALLER_CLOSE_RACE).
+                    finish_job(
+                        shared,
+                        job.id,
+                        JobStateDto::Failed,
+                        Some(JobErrorDto::from_text(
+                            "сеанс-получатель временного хранилища закрыт",
+                        )),
+                    );
+                }
             }
             Ok(Ok(bsl_vm::ProgramPoll::Runnable)) => {
                 job.waiting = false;
@@ -1134,6 +1183,10 @@ fn worker_main(shared: &Arc<JobRuntimeShared>) {
                 finish_job(shared, job.id, JobStateDto::Canceled, None);
             }
             Ok(Err(JobPollError::Failed(error))) => {
+                // Неперехваченная BSL-ошибка ПУБЛИКУЕТ write-set — измерено
+                // JOB.TEMP.FAILURE; неудача публикации остаётся вторичной,
+                // основная ошибка BSL важнее.
+                let _ = commit_staged(shared, &job);
                 finish_job(shared, job.id, JobStateDto::Failed, Some(error));
             }
             Err(_) => {
@@ -1186,7 +1239,7 @@ fn start_job(
     engine: &crate::Engine,
     id: JobId,
 ) -> Option<Result<RunningJob, JobErrorDto>> {
-    let (target, params, cancel_requested) = {
+    let (target, params, cancel_requested, caller_token) = {
         let mut registry = shared.registry.lock().expect("реестр без отравления");
         let begin = shared.time_source.wall_now();
         let record = registry.record_mut(id)?;
@@ -1196,19 +1249,22 @@ fn start_job(
             record.target,
             Arc::clone(&record.snapshot.params),
             Arc::clone(&record.cancel_requested),
+            record.caller_token,
         )
     };
     Some(
-        prepare_job(shared, engine, target, &params).map(|(state, module, mut vm)| {
-            vm.set_cancel_flag(cancel_requested);
-            RunningJob {
-                id,
-                state,
-                module,
-                vm,
-                waiting: false,
-            }
-        }),
+        prepare_job(shared, engine, target, &params, caller_token).map(
+            |(state, module, mut vm)| {
+                vm.set_cancel_flag(cancel_requested);
+                RunningJob {
+                    id,
+                    state,
+                    module,
+                    vm,
+                    waiting: false,
+                }
+            },
+        ),
     )
 }
 
@@ -1245,6 +1301,26 @@ impl RunningJob {
     }
 }
 
+/// Публикация write-set задания по измеренной terminal-матрице: commit
+/// после успеха И неперехваченной BSL-ошибки (`JOB.TEMP.FAILURE`),
+/// rollback — просто дроп staging — после отмены (`JOB.TEMP.CANCEL`),
+/// паники и инфраструктурных сбоев. `false` — сеанс вызывателя уже
+/// закрыт и публикация не состоялась.
+fn commit_staged(shared: &Arc<JobRuntimeShared>, job: &RunningJob) -> bool {
+    let Some(session) = job.state.host.env.temp_storage() else {
+        return true;
+    };
+    let mut session = session.borrow_mut();
+    let Some(caller) = session.caller() else {
+        return true;
+    };
+    let writes = session.take_staged();
+    if writes.is_empty() {
+        return true;
+    }
+    shared.temp_hub.commit(caller, writes)
+}
+
 /// Terminal transition резидента с пробуждением ожидающих.
 fn finish_job(
     shared: &Arc<JobRuntimeShared>,
@@ -1268,6 +1344,7 @@ fn prepare_job(
     engine: &crate::Engine,
     target: (u32, u16),
     params: &SerializedValueGraph,
+    caller_token: Option<[u8; 16]>,
 ) -> Result<(crate::State, crate::Module, bsl_vm::ProgramExecution), JobErrorDto> {
     let catalog = engine
         .catalog()
@@ -1384,6 +1461,18 @@ fn prepare_job(
         .map_err(|error| JobErrorDto::from_text(error.to_string()))?;
 
     let mut state = engine.new_state();
+    // Сеанс задания получает СВОЁ временное хранилище со ссылкой на
+    // вызывателя: запись по его адресу — staging до terminal.
+    let session_token = random_uuid();
+    {
+        let session = std::rc::Rc::new(std::cell::RefCell::new(match caller_token {
+            Some(caller) => {
+                bsl_rt::TempStorageSession::for_job(session_token, caller, state.host.env.random())
+            }
+            None => bsl_rt::TempStorageSession::new(session_token, state.host.env.random()),
+        }));
+        state.host.env.set_temp_storage(session);
+    }
     // Вложенные задания идут в ОБЩИЙ реестр родительского runtime, а не в
     // пул воркерного движка: сервис сеанса подменяется worker-обёрткой с
     // helping-ожиданием.
@@ -1393,6 +1482,7 @@ fn prepare_job(
         .set_background_jobs(std::rc::Rc::new(WorkerJobService {
             shared: Arc::clone(shared),
             engine: engine.clone(),
+            session_token,
         }));
     let mut vm = bsl_vm::ProgramExecution::start_with_registry_and_scheduler(
         &module.program,
@@ -1473,6 +1563,7 @@ pub(crate) fn runtime_for_engine(
         },
         TargetTable::from_catalog(catalog),
         Arc::new(SystemJobIds),
+        Arc::clone(engine.temp_hub()),
     ))
 }
 
@@ -1648,6 +1739,10 @@ pub(crate) struct WorkerJobService {
     pub shared: Arc<JobRuntimeShared>,
     /// Клон worker-движка: живёт только в потоке этого worker.
     pub engine: crate::Engine,
+    /// Token хранилища СВОЕГО job-сеанса: дочерние задания публикуются в
+    /// него, а не в сеанс исходного foreground — транзитивного повышения
+    /// capability нет (план, `JOB.TEMP.NESTED_CAPABILITY`).
+    pub session_token: [u8; 16],
 }
 
 impl bsl_rt::BackgroundJobService for WorkerJobService {
@@ -1659,7 +1754,13 @@ impl bsl_rt::BackgroundJobService for WorkerJobService {
         description: Option<String>,
     ) -> Result<Arc<JobSnapshotDto>, String> {
         self.shared
-            .submit_by_name_shared(method_name, params, key, description)
+            .submit_by_name_shared(
+                method_name,
+                params,
+                key,
+                description,
+                Some(self.session_token),
+            )
             .map(Arc::new)
             .map_err(|error| match error {
                 SubmitError::Rejected(text) | SubmitError::BadTarget(text) => text,
@@ -1741,7 +1842,18 @@ fn drive_to_terminal(shared: &Arc<JobRuntimeShared>, engine: &crate::Engine, id:
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| job.poll(engine)));
         match outcome {
             Ok(Ok(bsl_vm::ProgramPoll::Complete(..))) => {
-                finish_job(shared, job.id, JobStateDto::Completed, None);
+                if commit_staged(shared, &job) {
+                    finish_job(shared, job.id, JobStateDto::Completed, None);
+                } else {
+                    finish_job(
+                        shared,
+                        job.id,
+                        JobStateDto::Failed,
+                        Some(JobErrorDto::from_text(
+                            "сеанс-получатель временного хранилища закрыт",
+                        )),
+                    );
+                }
                 return;
             }
             Ok(Ok(bsl_vm::ProgramPoll::Runnable)) => {}
@@ -1753,6 +1865,7 @@ fn drive_to_terminal(shared: &Arc<JobRuntimeShared>, engine: &crate::Engine, id:
                 return;
             }
             Ok(Err(JobPollError::Failed(error))) => {
+                let _ = commit_staged(shared, &job);
                 finish_job(shared, job.id, JobStateDto::Failed, Some(error));
                 return;
             }
@@ -1775,6 +1888,9 @@ fn drive_to_terminal(shared: &Arc<JobRuntimeShared>, engine: &crate::Engine, id:
 /// внедряет в `HostEnv` каждого сеанса движка с каталогом.
 pub(crate) struct EngineJobService {
     pub runtime: Arc<JobRuntime>,
+    /// Token временного хранилища сеанса-вызывателя: задания публикуют
+    /// write-set'ы в его mailbox.
+    pub caller_token: [u8; 16],
 }
 
 impl bsl_rt::BackgroundJobService for EngineJobService {
@@ -1786,7 +1902,13 @@ impl bsl_rt::BackgroundJobService for EngineJobService {
         description: Option<String>,
     ) -> Result<Arc<JobSnapshotDto>, String> {
         self.runtime
-            .submit_by_name(method_name, params, key, description)
+            .submit_by_name_with_caller(
+                method_name,
+                params,
+                key,
+                description,
+                Some(self.caller_token),
+            )
             .map(Arc::new)
             .map_err(|error| match error {
                 SubmitError::Rejected(text) | SubmitError::BadTarget(text) => text,

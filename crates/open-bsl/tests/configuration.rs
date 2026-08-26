@@ -494,3 +494,104 @@ fn shutdown_cancels_residents_and_rejects_new_submissions() {
         "закрытый runtime не принимает задания"
     );
 }
+
+/// Временное хранилище через границу задания: job читает адрес родителя
+/// как Неопределено, его запись публикуется только на terminal, после
+/// завершения родитель видит новое значение (измерено
+/// JOB.TEMP.CLIENT_SERVER).
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn temp_storage_stages_job_writes_until_terminal() {
+    let engine = Engine::builder()
+        .common_module(
+            "Служебный",
+            "Процедура Записать(Знач Адрес) Экспорт\n\
+                 Чужое = ПолучитьИзВременногоХранилища(Адрес);\n\
+                 Если Чужое <> Неопределено Тогда\n\
+                     ВызватьИсключение \"адрес родителя обязан читаться как Неопределено\";\n\
+                 КонецЕсли;\n\
+                 ПоместитьВоВременноеХранилище(\"из-задания\", Адрес);\n\
+             КонецПроцедуры",
+        )
+        .build()
+        .expect("движок собирается");
+    let module = engine
+        .compile_entry(
+            "Адрес = ПоместитьВоВременноеХранилище(\"из-родителя\");\n\
+             Параметры = Новый Массив;\n\
+             Параметры.Добавить(Адрес);\n\
+             Задание = ФоновыеЗадания.Выполнить(\"Служебный.Записать\", Параметры);\n\
+             Задание.ОжидатьЗавершенияВыполнения(30);\n\
+             Свежее = ФоновыеЗадания.НайтиПоУникальномуИдентификатору(Задание.УникальныйИдентификатор);\n\
+             Если Свежее.Состояние <> СостояниеФоновогоЗадания.Завершено Тогда\n\
+                 Сообщить(\"задание не завершилось\");\n\
+             КонецЕсли;\n\
+             Сообщить(ПолучитьИзВременногоХранилища(Адрес));",
+        )
+        .expect("entry компилируется");
+
+    use std::io::Write;
+    use std::rc::Rc;
+    use std::sync::Mutex;
+    #[derive(Clone, Default)]
+    struct Capture(Rc<Mutex<Vec<u8>>>);
+    impl Write for Capture {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let capture = Capture::default();
+    let mut state = engine.state_builder().stdout(capture.clone()).build();
+    state.run(&module).expect("прогон завершается");
+    let bytes = capture.0.lock().unwrap().clone();
+    assert_eq!(String::from_utf8(bytes).unwrap(), "из-задания\n");
+}
+
+/// Локальная семантика хранилища: адрес возвращается и перечитывается,
+/// повторная запись по адресу сохраняет адрес, удаление делает чтение
+/// Неопределено, кривой адрес читается как Неопределено.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn temp_storage_local_round_trip_and_delete() {
+    let engine = Engine::builder()
+        .common_module(
+            "Служебный",
+            "Функция Пусто() Экспорт\n Возврат 0;\nКонецФункции",
+        )
+        .build()
+        .expect("движок собирается");
+    let module = engine
+        .compile_entry(
+            "Адрес = ПоместитьВоВременноеХранилище(41);\n\
+             Адрес2 = ПоместитьВоВременноеХранилище(42, Адрес);\n\
+             Сообщить(Адрес = Адрес2);\n\
+             Сообщить(ПолучитьИзВременногоХранилища(Адрес));\n\
+             УдалитьИзВременногоХранилища(Адрес);\n\
+             Сообщить(ПолучитьИзВременногоХранилища(Адрес) = Неопределено);\n\
+             Сообщить(ПолучитьИзВременногоХранилища(\"мусор\") = Неопределено);",
+        )
+        .expect("entry компилируется");
+    use std::io::Write;
+    use std::rc::Rc;
+    use std::sync::Mutex;
+    #[derive(Clone, Default)]
+    struct Capture(Rc<Mutex<Vec<u8>>>);
+    impl Write for Capture {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let capture = Capture::default();
+    let mut state = engine.state_builder().stdout(capture.clone()).build();
+    state.run(&module).expect("прогон завершается");
+    let bytes = capture.0.lock().unwrap().clone();
+    assert_eq!(String::from_utf8(bytes).unwrap(), "Да\n42\nДа\nДа\n");
+}

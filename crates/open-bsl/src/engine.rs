@@ -34,6 +34,9 @@ struct EngineConfiguration {
 struct EngineInner {
     registry: bsl_rt::RuntimeRegistry,
     symbols: bsl_syntax::PreprocSymbols,
+    /// Реестр mailbox'ов временного хранилища: общий для клонов движка и
+    /// его фонового runtime — задания публикуют write-set'ы сюда.
+    temp_hub: Arc<bsl_rt::TempStorageHub>,
     /// Разделяемый runtime фоновых заданий: клоны одного `Engine` видят
     /// одни задания. Создаётся лениво при первом обращении; движок без
     /// заданий не платит ни рецептом, ни потоками.
@@ -165,6 +168,11 @@ impl Engine {
             }
             None => Ok(bsl_bytecode::write_program(&entry.program, source)?),
         }
+    }
+
+    /// Реестр mailbox'ов временного хранилища этого движка.
+    pub(crate) fn temp_hub(&self) -> &Arc<bsl_rt::TempStorageHub> {
+        &self.inner.temp_hub
     }
 
     /// Каталог общих модулей движка, если он был собран.
@@ -432,6 +440,7 @@ impl EngineBuilder {
             inner: Arc::new(EngineInner {
                 registry,
                 symbols: self.symbols,
+                temp_hub: Arc::new(bsl_rt::TempStorageHub::default()),
                 modules: AtomicU64::new(0),
                 #[cfg(not(target_arch = "wasm32"))]
                 job_runtime: std::sync::OnceLock::new(),
