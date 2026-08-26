@@ -151,6 +151,18 @@ pub struct CatalogContext<'a> {
     linked: Vec<LinkedComponents<'a>>,
 }
 
+/// Модульный контекст шага: сессия, каталог и корневое состояние одним
+/// указателем. Горячий `step` получает его вместо трёх отдельных
+/// параметров — регистровое давление в цикле диспетчеризации измеримо
+/// (A/B чередованием: +10% `call_overhead` на трёх параметрах).
+struct ModulesCtx<'a, 'b> {
+    session: &'a mut SessionModules,
+    catalog: Option<&'a CatalogContext<'b>>,
+    /// Корневое состояние, когда текущий кадр — модульный (его собственное
+    /// состояние на время шага изъято из сессии); `None` у корневого кадра.
+    root_state: Option<&'a mut ModuleState>,
+}
+
 impl<'a> CatalogContext<'a> {
     fn program(&self, module: u32) -> Result<&'a Program, RtError> {
         self.catalog
@@ -1698,24 +1710,6 @@ impl ProgramExecution {
             }
 
             loop {
-                // Модуль верхнего кадра определяет программу, линковку и
-                // состояние модульных переменных этого шага. У одиночной
-                // программы ветка всегда предсказана: модуль — ROOT_MODULE.
-                let cur_module = task
-                    .frames
-                    .last()
-                    .expect("инвариант VM: drive всегда держит хотя бы один кадр")
-                    .module;
-                let (cur_program, cur_linked) = if cur_module == ROOT_MODULE {
-                    (program, linked)
-                } else {
-                    let Some(ctx) = catalog else {
-                        return Err(RtError::InvalidBytecode(
-                            "кадр модуля конфигурации без каталожного контекста",
-                        ));
-                    };
-                    (ctx.program(cur_module)?, ctx.linked(cur_module)?)
-                };
                 // После инициализации пустой numeric-for не обращается к
                 // регистрам. Обслуживаем его back-edge в компактном внешнем цикле,
                 // не входя на каждой итерации в большой универсальный `step`.
@@ -1750,6 +1744,26 @@ impl ProgramExecution {
                     continue;
                 }
 
+                // Модуль верхнего кадра определяет программу, линковку и
+                // состояние модульных переменных этого шага. Резолв стоит
+                // ПОСЛЕ быстрого numeric-for: пустой цикл не должен платить
+                // за ветку и чтение поля на каждом back-edge. У одиночной
+                // программы ветка всегда предсказана: модуль — ROOT_MODULE.
+                let cur_module = task
+                    .frames
+                    .last()
+                    .expect("инвариант VM: drive всегда держит хотя бы один кадр")
+                    .module;
+                let (cur_program, cur_linked) = if cur_module == ROOT_MODULE {
+                    (program, linked)
+                } else {
+                    let Some(ctx) = catalog else {
+                        return Err(RtError::InvalidBytecode(
+                            "кадр модуля конфигурации без каталожного контекста",
+                        ));
+                    };
+                    (ctx.program(cur_module)?, ctx.linked(cur_module)?)
+                };
                 // Нативный путь. Он не обязан ничего исполнить: если на текущей
                 // позиции входа нет, управление просто идёт в `step`, и это же
                 // происходит при любом отказе JIT-а.
@@ -1872,14 +1886,17 @@ impl ProgramExecution {
                     } else {
                         (&mut scratch_state, Some(&mut *module_state))
                     };
+                let mut modules_ctx = ModulesCtx {
+                    session: session_modules,
+                    catalog,
+                    root_state: step_root,
+                };
                 let step_result = step(
                     &mut task.frames,
                     &mut task.stack,
                     cur_program,
                     step_state,
-                    step_root,
-                    session_modules,
-                    catalog,
+                    &mut modules_ctx,
                     &mut task.current_exception,
                     runtime_shapes,
                     cur_linked,
@@ -2288,9 +2305,7 @@ fn step(
     stack: &mut Vec<BslValue>,
     program: &Program,
     module_state: &mut ModuleState,
-    root_state: Option<&mut ModuleState>,
-    session: &mut SessionModules,
-    catalog: Option<&CatalogContext<'_>>,
+    modules: &mut ModulesCtx<'_, '_>,
     current_exception: &mut Option<BslValue>,
     runtime_shapes: &mut bsl_rt::RuntimeShapes,
     linked: &LinkedComponents,
@@ -2308,14 +2323,7 @@ fn step(
         // Неявный возврат: тело кончилось без `Возврат` — результат
         // Неопределено, как и `Возврат;` без выражения.
         return Ok(
-            match do_return_with_value(
-                frames,
-                stack,
-                module_state,
-                root_state,
-                session,
-                BslValue::Undefined,
-            )? {
+            match do_return_with_value(frames, stack, module_state, modules, BslValue::Undefined)? {
                 Done(v) => Step::Done(v),
                 Continuing => Step::Continue,
             },
@@ -2834,14 +2842,7 @@ fn step(
                     None => BslValue::Undefined,
                 };
                 return Ok(
-                    match do_return_with_value(
-                        frames,
-                        stack,
-                        module_state,
-                        root_state,
-                        session,
-                        value,
-                    )? {
+                    match do_return_with_value(frames, stack, module_state, modules, value)? {
                         Done(v) => Step::Done(v),
                         Continuing => Step::Continue,
                     },
@@ -3036,8 +3037,7 @@ fn step(
                     host,
                     runtime_shapes,
                     module_state,
-                    session,
-                    catalog,
+                    modules,
                     async_state,
                     frame_idx,
                     func_id,
@@ -3118,8 +3118,7 @@ fn step_cold(
     host: &mut HostIo<'_, '_>,
     runtime_shapes: &mut bsl_rt::RuntimeShapes,
     module_state: &mut ModuleState,
-    session: &mut SessionModules,
-    catalog: Option<&CatalogContext<'_>>,
+    modules: &mut ModulesCtx<'_, '_>,
     async_state: &mut AsyncState,
     frame_idx: usize,
     func_id: usize,
@@ -3508,7 +3507,7 @@ fn step_cold(
             arg_modes,
             ret,
         } => {
-            let ctx = catalog.ok_or(RtError::InvalidBytecode(
+            let ctx = modules.catalog.ok_or(RtError::InvalidBytecode(
                 "межмодульный опкод вне каталога конфигурации",
             ))?;
             let Some(&bsl_bytecode::LinkEntry::Function {
@@ -3521,7 +3520,7 @@ fn step_cold(
                 ));
             };
             let target = target.index() as u32;
-            if ensure_module_ready(target, ctx, session, frames, stack)? {
+            if ensure_module_ready(target, ctx, modules.session, frames, stack)? {
                 return Ok(());
             }
             let modes = at(
@@ -3541,7 +3540,13 @@ fn step_cold(
                             "byimport ведёт мимо таблицы связей или на функцию",
                         ));
                     };
-                    if ensure_module_ready(module.index() as u32, ctx, session, frames, stack)? {
+                    if ensure_module_ready(
+                        module.index() as u32,
+                        ctx,
+                        modules.session,
+                        frames,
+                        stack,
+                    )? {
                         return Ok(());
                     }
                 }
@@ -3607,7 +3612,7 @@ fn step_cold(
                         };
                         let owner = module.index() as u32;
                         let value = {
-                            let instance = session.instances.get(owner as usize).ok_or(
+                            let instance = modules.session.instances.get(owner as usize).ok_or(
                                 RtError::InvalidBytecode("связь ведёт мимо сессии модулей"),
                             )?;
                             reg_load(&instance.state.slots, var_slot as usize)?
@@ -3649,7 +3654,7 @@ fn step_cold(
         // Чтение экспортной переменной чужого модуля — с той же ленивой
         // инициализацией владельца.
         Instr::GetImportedVar { dst, link_slot } => {
-            let ctx = catalog.ok_or(RtError::InvalidBytecode(
+            let ctx = modules.catalog.ok_or(RtError::InvalidBytecode(
                 "межмодульный опкод вне каталога конфигурации",
             ))?;
             let Some(&bsl_bytecode::LinkEntry::Variable { module, slot }) =
@@ -3660,11 +3665,12 @@ fn step_cold(
                 ));
             };
             let owner = module.index() as u32;
-            if ensure_module_ready(owner, ctx, session, frames, stack)? {
+            if ensure_module_ready(owner, ctx, modules.session, frames, stack)? {
                 return Ok(());
             }
             let value = {
-                let instance = session
+                let instance = modules
+                    .session
                     .instances
                     .get(owner as usize)
                     .ok_or(RtError::InvalidBytecode("связь ведёт мимо сессии модулей"))?;
@@ -3675,7 +3681,7 @@ fn step_cold(
             frames[frame_idx].pc += 1;
         }
         Instr::SetImportedVar { link_slot, src } => {
-            let ctx = catalog.ok_or(RtError::InvalidBytecode(
+            let ctx = modules.catalog.ok_or(RtError::InvalidBytecode(
                 "межмодульный опкод вне каталога конфигурации",
             ))?;
             let Some(&bsl_bytecode::LinkEntry::Variable { module, slot }) =
@@ -3686,11 +3692,12 @@ fn step_cold(
                 ));
             };
             let owner = module.index() as u32;
-            if ensure_module_ready(owner, ctx, session, frames, stack)? {
+            if ensure_module_ready(owner, ctx, modules.session, frames, stack)? {
                 return Ok(());
             }
             let value = reg_load(stack, frames[frame_idx].reg_index(src))?;
-            let instance = session
+            let instance = modules
+                .session
                 .instances
                 .get_mut(owner as usize)
                 .ok_or(RtError::InvalidBytecode("связь ведёт мимо сессии модулей"))?;
@@ -4254,8 +4261,7 @@ fn do_return_with_value(
     frames: &mut Vec<Frame>,
     stack: &mut Vec<BslValue>,
     module_state: &mut ModuleState,
-    mut root_state: Option<&mut ModuleState>,
-    session: &mut SessionModules,
+    modules: &mut ModulesCtx<'_, '_>,
     value: BslValue,
 ) -> Result<ReturnOutcome, RtError> {
     let frame = frames
@@ -4270,14 +4276,16 @@ fn do_return_with_value(
         let slots = if *target_module == frame.module {
             &mut module_state.slots
         } else if *target_module == ROOT_MODULE {
-            &mut root_state
+            &mut modules
+                .root_state
                 .as_deref_mut()
                 .ok_or(RtError::InvalidBytecode(
                     "копибэк в корневое состояние без ссылки на него",
                 ))?
                 .slots
         } else {
-            &mut session
+            &mut modules
+                .session
                 .instances
                 .get_mut(*target_module as usize)
                 .ok_or(RtError::InvalidBytecode(
@@ -4291,7 +4299,7 @@ fn do_return_with_value(
     // Возврат из кадра инициализации модуля: тело модуля отработало,
     // экземпляр готов; результата у тела нет, и писать его некуда.
     if frame.module != ROOT_MODULE && frame.func_id == 0 {
-        if let Some(instance) = session.instances.get_mut(frame.module as usize) {
+        if let Some(instance) = modules.session.instances.get_mut(frame.module as usize) {
             instance.init = ModuleInitState::Ready;
         }
         stack.truncate(frame.call_start);
