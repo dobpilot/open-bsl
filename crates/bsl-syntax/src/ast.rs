@@ -27,6 +27,8 @@ pub struct Param {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProcDecl {
     pub name: String,
+    /// Метод объявлен с модификатором `Асинх`/`Async`.
+    pub is_async: bool,
     pub params: Vec<Param>,
     pub export: bool,
     pub body: Vec<Stmt>,
@@ -35,6 +37,8 @@ pub struct ProcDecl {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FuncDecl {
     pub name: String,
+    /// Метод объявлен с модификатором `Асинх`/`Async`.
+    pub is_async: bool,
     pub params: Vec<Param>,
     pub export: bool,
     pub body: Vec<Stmt>,
@@ -174,6 +178,9 @@ pub enum Expr {
     Bool(bool),
     Undefined,
     Null,
+    /// `Ждать`/`Await` приостанавливает текущий асинхронный метод до
+    /// завершения обещания.
+    Await(Box<Expr>),
     Ident(String),
     Unary {
         op: UnaryOp,

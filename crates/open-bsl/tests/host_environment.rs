@@ -87,6 +87,8 @@ fn a_fixed_clock_makes_the_time_reproducible() {
 
     let now = "Возврат Строка(ТекущаяДата());";
     assert_eq!(text(&state.exec(now).unwrap()), "02.01.2020 3:04:05");
+    let universal = "Возврат Строка(ТекущаяУниверсальнаяДата());";
+    assert_eq!(text(&state.exec(universal).unwrap()), "02.01.2020 3:04:05");
     // Дважды подряд — то же самое значение: часы неподвижны.
     assert_eq!(text(&state.exec(now).unwrap()), "02.01.2020 3:04:05");
     // Миллисекунды считаются от эпохи дат BSL, а не от Unix-эпохи.
@@ -474,6 +476,22 @@ mod files {
         ) -> std::io::Result<Box<dyn open_bsl::FileHandle>> {
             unsupported(path)
         }
+
+        fn temporary_path(&self, suffix: &str, entropy: &[u8; 16]) -> std::io::Result<String> {
+            Ok(format!("виртуальный-{:02X}{suffix}", entropy[0]))
+        }
+
+        fn path_separator(&self) -> std::io::Result<String> {
+            Ok("/".to_string())
+        }
+
+        fn remove_path(&self, path: &str) -> std::io::Result<()> {
+            let prefix = format!("{path}/");
+            self.0
+                .borrow_mut()
+                .retain(|candidate, _| candidate != path && !candidate.starts_with(&prefix));
+            Ok(())
+        }
     }
 
     fn unsupported<T>(path: &str) -> std::io::Result<T> {
@@ -531,6 +549,57 @@ mod files {
             ),
             "4"
         );
+    }
+
+    /// Временный путь, `ДвоичныеДанные.Записать` и удаление остаются внутри
+    /// файловой системы сессии. Открытый `CallObjectMethod .Записать`
+    /// обязан выйти из JIT только на этой инструкции: нативный шим не имеет
+    /// файловой возможности и иначе дал бы иной результат.
+    #[test]
+    fn temporary_binary_file_agrees_between_interpreter_and_jit() {
+        let engine = Engine::builder().build().unwrap();
+        let module = engine
+            .compile(
+                "п = ПолучитьИмяВременногоФайла(\".bin\");\n\
+                 существовал = Истина;\n\
+                 Попытка\n\
+                     до = Новый ДвоичныеДанные(п);\n\
+                 Исключение\n\
+                     существовал = Ложь;\n\
+                 КонецПопытки;\n\
+                 данные = ПолучитьДвоичныеДанныеИзСтроки(\"A\", КодировкаТекста.UTF8, Ложь);\n\
+                 данные.Записать(п);\n\
+                 данные = ПолучитьДвоичныеДанныеИзСтроки(\"BC\", КодировкаТекста.UTF8, Ложь);\n\
+                 данные.Записать(п);\n\
+                 итог = ПолучитьHexСтрокуИзДвоичныхДанных(Новый ДвоичныеДанные(п));\n\
+                 УдалитьФайлы(п);\n\
+                 УдалитьФайлы(п);\n\
+                 Возврат Строка(Прав(п, 4) = \".bin\") + \"|\"\n\
+                     + ПолучитьРазделительПути() + \"|\" + итог + \"|\"\n\
+                     + Строка(существовал);",
+            )
+            .unwrap();
+
+        let interpreted_files = MemoryFiles::default();
+        let interpreted = engine
+            .state_builder()
+            .files(interpreted_files.clone())
+            .build()
+            .run(&module)
+            .unwrap();
+        let jitted_files = MemoryFiles::default();
+        let jitted = engine
+            .state_builder()
+            .files(jitted_files.clone())
+            .jit(true)
+            .build()
+            .run(&module)
+            .unwrap();
+
+        assert_eq!(text(&interpreted), "Да|/|4243|Нет");
+        assert_eq!(text(&jitted), text(&interpreted));
+        assert!(interpreted_files.0.borrow().is_empty());
+        assert!(jitted_files.0.borrow().is_empty());
     }
 
     /// `ЗаписьJSON.ОткрытьФайл`/`ЧтениеJSON.ОткрытьФайл` идут через файловую

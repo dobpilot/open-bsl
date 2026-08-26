@@ -596,7 +596,7 @@ mod build;
 mod builtins;
 mod facets;
 mod factory;
-mod instance;
+pub(crate) mod instance;
 mod lexical;
 mod model;
 pub(crate) mod objects;

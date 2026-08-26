@@ -456,6 +456,12 @@ pub const OPEN_QUESTIONS: &[OpenQuestion] = &[
         blocks: "этап 7 плана abi-refactor-f: атомарность `close_writer` в \
                  bsl-xml/src/xml.rs",
     },
+    OpenQuestion {
+        id: "HTTP.CONNECTION.DEFAULT_PORT",
+        what: "какой порт реально использует HTTPСоединение без явного порта",
+        chosen: "80 для обычного соединения, как указано в документации 8.3.27",
+        blocks: "bsl-http::new_http_connection; сетевой oracle на локальном сервере порта 80",
+    },
 ];
 
 /// Уже измеренные значения — якоря сеанса. Менять их можно только новым
@@ -2157,7 +2163,7 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
     Anchor {
         id: "EQ.ARRAY.FIND_BOOL_BY_NUMBER",
         expect: "",
-        note: "поиск идёт по строгому отношению: булево единицей не находится (у нас Массив.Найти пока нет)",
+        note: "поиск идёт по строгому отношению: булево единицей не находится",
     },
     Anchor {
         id: "XML.ENUM.NODE_TYPE.NOTHING",
@@ -3447,6 +3453,1370 @@ pub const MEASURED_ANCHORS: &[Anchor] = &[
         id: "DTD.DOM.REF_TYPE_BY_ENGLISH",
         expect: "Ссылка на сущность DOM",
         note: "и по английскому",
+    },
+    // --- Async-язык, клиент 8.3.27 ---------------------------------
+    Anchor {
+        id: "ASYNC.START_ORDER",
+        expect: "Р1Л1Р2ТР3",
+        note: "async-вызов исполняет callee до первого Await; даже готовый Await уступает",
+    },
+    Anchor {
+        id: "ASYNC.PROMISE.TYPE",
+        expect: "Обещание",
+        note: "async-функция возвращает отдельный непрозрачный тип",
+    },
+    Anchor {
+        id: "ASYNC.AWAIT.RESULT",
+        expect: "42",
+        note: "Await возвращает результат async-функции",
+    },
+    Anchor {
+        id: "ASYNC.AWAIT.REPEATED",
+        expect: "42",
+        note: "повторное ожидание готового обещания стабильно",
+    },
+    Anchor {
+        id: "ASYNC.PARAM.BY_VALUE",
+        expect: "1",
+        note: "параметры async-метода всегда передаются по значению",
+    },
+    Anchor {
+        id: "ASYNC.ERROR.AT_AWAIT",
+        expect: "ошибка у Ждать",
+        note: "ошибка async-функции возбуждается в точке Await",
+    },
+    Anchor {
+        id: "ASYNC.AWAIT.NON_PROMISE",
+        expect: "1",
+        note: "Await обычного значения уступает и возвращает само значение",
+    },
+    // --- ХешированиеДанных, клиент 8.3.27 -------------------------
+    Anchor {
+        id: "CRYPTO.HASH.ENUM.MD5",
+        expect: "MD5 hash function",
+        note: "английское представление члена ХешФункция.MD5",
+    },
+    Anchor {
+        id: "CRYPTO.HASH.ENUM.SHA1",
+        expect: "SHA-1 hash function",
+        note: "английское представление члена ХешФункция.SHA1",
+    },
+    Anchor {
+        id: "CRYPTO.HASH.ENUM.SHA256",
+        expect: "SHA-256 hash function",
+        note: "английское представление члена ХешФункция.SHA256",
+    },
+    Anchor {
+        id: "CRYPTO.HASH.ENUM.ENGLISH_ALIAS",
+        expect: "true",
+        note: "HashFunction.MD5 — английский алиас ХешФункция.MD5",
+    },
+    Anchor {
+        id: "CRYPTO.HASH.ENUM.TYPE",
+        expect: "HashFunction",
+        note: "тип члена ХешФункция имеет английское каноническое представление",
+    },
+    Anchor {
+        id: "CRYPTO.HASH.OBJECT.TYPE",
+        expect: "DataHashing",
+        note: "каноническое представление типа ХешированиеДанных",
+    },
+    Anchor {
+        id: "CRYPTO.HASH.SUM.TYPE",
+        expect: "true",
+        note: "свойство ХешСумма возвращает значение типа ДвоичныеДанные",
+    },
+    Anchor {
+        id: "CRYPTO.HASH.CONSTRUCTOR.ENGLISH_ALIAS",
+        expect: "DataHashing",
+        note: "английский конструктор DataHashing доступен вместе с HashFunction",
+    },
+    Anchor {
+        id: "CRYPTO.HASH.MD5.ABC",
+        expect: "900150983CD24FB0D6963F7D28E17F72",
+        note: "MD5 для байтов ASCII `abc`",
+    },
+    Anchor {
+        id: "CRYPTO.HASH.SHA1.ABC",
+        expect: "A9993E364706816ABA3E25717850C26C9CD0D89D",
+        note: "SHA-1 для байтов ASCII `abc`",
+    },
+    Anchor {
+        id: "CRYPTO.HASH.SHA256.ABC",
+        expect: "BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD",
+        note: "SHA-256 для байтов ASCII `abc`",
+    },
+    Anchor {
+        id: "CRYPTO.HASH.SNAPSHOT.REPEATED",
+        expect: "CA978112CA1BBDCAFAC231B39A23DC4DA786EFF8147C4E72B9807785AFEE48BB|CA978112CA1BBDCAFAC231B39A23DC4DA786EFF8147C4E72B9807785AFEE48BB",
+        note: "повторное чтение ХешСумма возвращает один снимок",
+    },
+    Anchor {
+        id: "CRYPTO.HASH.SNAPSHOT.CONTINUE",
+        expect: "BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD",
+        note: "после чтения ХешСумма метод Добавить продолжает прежний поток байтов",
+    },
+    Anchor {
+        id: "CRYPTO.DIGEST.NONCE_COUNT",
+        expect: "true",
+        note: "формат Digest nonce-count с пустым ЧГ содержит восемь цифр без разделителей",
+    },
+    // --- Base64 и hex, сервер 8.3.27 -------------------------------
+    Anchor {
+        id: "BASE64.DECODE",
+        expect: "010203FF",
+        note: "Base64Значение разбирает стандартный алфавит и padding",
+    },
+    Anchor {
+        id: "BASE64.ENCODE",
+        expect: "AQID/w==",
+        note: "глобальная функция пишет стандартный Base64 с padding без переносов",
+    },
+    Anchor {
+        id: "BASE64.EMPTY.SIZE",
+        expect: "0",
+        note: "пустой Base64 даёт пустые ДвоичныеДанные",
+    },
+    Anchor {
+        id: "BASE64.WHITESPACE",
+        expect: "010203FF",
+        note: "перевод строки внутри Base64 игнорируется",
+    },
+    Anchor {
+        id: "BASE64.ALIAS",
+        expect: "010203FF",
+        note: "ПолучитьДвоичныеДанныеИзBase64Строки совпадает на корректном вводе",
+    },
+    Anchor {
+        id: "BASE64.BAD_PADDING",
+        expect: "Не определено",
+        note: "Base64Значение с неполным padding возвращает Неопределено",
+    },
+    Anchor {
+        id: "BASE64.BAD_CHARACTER",
+        expect: "Не определено",
+        note: "Base64Значение с посторонним символом возвращает Неопределено",
+    },
+    Anchor {
+        id: "BASE64.ALIAS.BAD_CHARACTER",
+        expect: "",
+        note: "ПолучитьДвоичныеДанныеИзBase64Строки на постороннем символе даёт пустые данные",
+    },
+    Anchor {
+        id: "BASE64.ALIAS.BAD_PADDING",
+        expect: "",
+        note: "ПолучитьДвоичныеДанныеИзBase64Строки на неполном padding даёт пустые данные",
+    },
+    // --- Локальный контракт HTTP-объектов, клиент 8.3.27 -----------
+    Anchor {
+        id: "HTTP.REQUEST.RESOURCE",
+        expect: "/ресурс?а=1",
+        note: "HTTPЗапрос сохраняет адрес ресурса без преобразований",
+    },
+    Anchor {
+        id: "HTTP.REQUEST.HEADERS.TYPE",
+        expect: "Соответствие",
+        note: "заголовки нового HTTPЗапрос представлены соответствием",
+    },
+    Anchor {
+        id: "HTTP.REQUEST.HEADERS.ALIAS",
+        expect: "2",
+        note: "HTTPЗапрос сохраняет переданное соответствие заголовков по ссылке",
+    },
+    Anchor {
+        id: "HTTP.BODY.STRING.DEFAULT",
+        expect: "D090D0B1",
+        note: "строковое тело по умолчанию кодируется UTF-8 без BOM",
+    },
+    Anchor {
+        id: "HTTP.BODY.STRING.UTF8_BOM",
+        expect: "EFBBBFD090D0B1",
+        note: "ИспользованиеByteOrderMark.Использовать добавляет UTF-8 BOM",
+    },
+    Anchor {
+        id: "HTTP.BODY.STRING.UTF8_NO_BOM",
+        expect: "D090D0B1",
+        note: "НеИспользовать явно подавляет UTF-8 BOM",
+    },
+    Anchor {
+        id: "HTTP.BODY.BINARY",
+        expect: "010203",
+        note: "двоичное тело HTTPЗапрос возвращается без изменений",
+    },
+    Anchor {
+        id: "HTTP.BOM.ENUM",
+        expect: "Использовать|Не использовать",
+        note: "представления двух членов ИспользованиеByteOrderMark измерены на клиенте",
+    },
+    Anchor {
+        id: "HTTP.BOM.TYPE",
+        expect: "ByteOrderMarkUse",
+        note: "каноническое представление типа перечисления — английское имя",
+    },
+    // --- НСтр, сервер 8.3.27 --------------------------------------
+    Anchor {
+        id: "NSTR.RU",
+        expect: "",
+        note: "без явного языка oracle-конфигурация не выбирает русское значение",
+    },
+    Anchor {
+        id: "NSTR.ESCAPED_QUOTE",
+        expect: "Это 'цитата'",
+        note: "две одинарные кавычки внутри ресурсного значения дают одну",
+    },
+    Anchor {
+        id: "NSTR.MULTI_LANGUAGE",
+        expect: "Hello",
+        note: "язык oracle-сеанса — английский",
+    },
+    Anchor {
+        id: "NSTR.EXPLICIT_RU",
+        expect: "Привет",
+        note: "второй аргумент ru явно выбирает русское значение",
+    },
+    Anchor {
+        id: "NSTR.EXPLICIT_EN",
+        expect: "Hello",
+        note: "второй аргумент en явно выбирает английское значение",
+    },
+    Anchor {
+        id: "NSTR.MULTILINE",
+        expect: "Первая<LF>Вторая",
+        note: "перевод строки внутри ресурсного значения сохраняется",
+    },
+    Anchor {
+        id: "NSTR.INVALID",
+        expect: "",
+        note: "некорректная ресурсная строка возвращает пустую строку без исключения",
+    },
+    // --- ЧтениеТекста над потоком, сервер 8.3.27 -----------------
+    Anchor {
+        id: "TEXTREADER.TYPE",
+        expect: "TextReader",
+        note: "представление типа ЧтениеТекста — английское имя",
+    },
+    Anchor {
+        id: "TEXTREADER.READ.UTF8",
+        expect: "Аб",
+        note: "Прочитать без аргументов декодирует весь остаток UTF-8 потока",
+    },
+    Anchor {
+        id: "TEXTREADER.POSITION.AFTER_READ",
+        expect: "4",
+        note: "чтение двух кириллических символов сдвигает поток на четыре байта",
+    },
+    Anchor {
+        id: "TEXTREADER.READ.EOF",
+        expect: "undefined",
+        note: "повторное чтение на конце потока возвращает Неопределено",
+    },
+    Anchor {
+        id: "TEXTREADER.CLOSE.UNDERLYING",
+        expect: "доступен",
+        note: "закрытие читателя не закрывает нижележащий поток",
+    },
+    Anchor {
+        id: "TEXTREADER.READ.AFTER_CLOSE",
+        expect: "ошибка",
+        note: "закрытый читатель отвергает последующее чтение",
+    },
+    Anchor {
+        id: "TEXTREADER.READ.STRING_ENCODING",
+        expect: "Аб",
+        note: "кодировку можно передать строкой windows-1251",
+    },
+    Anchor {
+        id: "TEXTREADER.READ.BOM",
+        expect: "Аб",
+        note: "ведущая сигнатура UTF-8 не входит в результат",
+    },
+    Anchor {
+        id: "TEXTREADER.INVALID_ENCODING",
+        expect: "ошибка",
+        note: "неизвестное имя кодировки отвергается конструктором",
+    },
+    // --- ПустаяСтрока, сервер 8.3.27 ------------------------------
+    Anchor {
+        id: "EMPTYSTRING.EMPTY",
+        expect: "true",
+        note: "пустая строка считается пустой",
+    },
+    Anchor {
+        id: "EMPTYSTRING.SPACES",
+        expect: "true",
+        note: "строка из обычных пробелов считается пустой",
+    },
+    Anchor {
+        id: "EMPTYSTRING.TAB",
+        expect: "true",
+        note: "табуляция считается пробельным символом",
+    },
+    Anchor {
+        id: "EMPTYSTRING.LF",
+        expect: "true",
+        note: "перевод строки считается пробельным символом",
+    },
+    Anchor {
+        id: "EMPTYSTRING.CRLF",
+        expect: "true",
+        note: "пара ВК+ПС считается пробельной строкой",
+    },
+    Anchor {
+        id: "EMPTYSTRING.NBSP",
+        expect: "true",
+        note: "неразрывный пробел U+00A0 считается пробельным символом",
+    },
+    Anchor {
+        id: "EMPTYSTRING.TEXT",
+        expect: "false",
+        note: "непробельный символ делает строку непустой",
+    },
+    Anchor {
+        id: "EMPTYSTRING.UNDEFINED",
+        expect: "true",
+        note: "Неопределено считается пустой строкой",
+    },
+    Anchor {
+        id: "EMPTYSTRING.NUMBER",
+        expect: "false",
+        note: "число ноль не считается пустой строкой",
+    },
+    Anchor {
+        id: "EMPTYSTRING.BOOLEAN",
+        expect: "false",
+        note: "булево Ложь не считается пустой строкой",
+    },
+    Anchor {
+        id: "EMPTYSTRING.ENGLISH_ALIAS",
+        expect: "true",
+        note: "английское имя IsBlankString доступно",
+    },
+    // --- Символы, сервер 8.3.27 ----------------------------------
+    Anchor {
+        id: "CHARS.LF",
+        expect: "10",
+        note: "Символы.ПС содержит перевод строки U+000A",
+    },
+    Anchor {
+        id: "CHARS.CR",
+        expect: "13",
+        note: "Символы.ВК содержит возврат каретки U+000D",
+    },
+    Anchor {
+        id: "CHARS.ENGLISH.LF",
+        expect: "10",
+        note: "английское имя Chars.LF доступно",
+    },
+    Anchor {
+        id: "CHARS.ENGLISH.CR",
+        expect: "13",
+        note: "английское имя Chars.CR доступно",
+    },
+    // --- Полная форма ПараметрыЗаписиJSON, сервер 8.3.27 ---------
+    Anchor {
+        id: "JSON.WRITERSETTINGS.DEFAULT.LINE_BREAK",
+        expect: "auto",
+        note: "перенос строк по умолчанию — Авто",
+    },
+    Anchor {
+        id: "JSON.WRITERSETTINGS.DEFAULT.INDENT",
+        expect: "[]",
+        note: "строка отступа по умолчанию пуста",
+    },
+    Anchor {
+        id: "JSON.WRITERSETTINGS.DEFAULT.DOUBLE_QUOTES",
+        expect: "true",
+        note: "двойные кавычки включены по умолчанию",
+    },
+    Anchor {
+        id: "JSON.WRITERSETTINGS.DEFAULT.ESCAPE_MODE",
+        expect: "none",
+        note: "общее экранирование Unicode по умолчанию выключено",
+    },
+    Anchor {
+        id: "JSON.WRITERSETTINGS.DEFAULT.ANGLES",
+        expect: "false",
+        note: "угловые скобки по умолчанию не экранируются",
+    },
+    Anchor {
+        id: "JSON.WRITERSETTINGS.DEFAULT.LINE_SEPARATORS",
+        expect: "true",
+        note: "U+2028 и U+2029 по умолчанию экранируются",
+    },
+    Anchor {
+        id: "JSON.WRITERSETTINGS.DEFAULT.AMPERSAND",
+        expect: "false",
+        note: "амперсанд по умолчанию не экранируется",
+    },
+    Anchor {
+        id: "JSON.WRITERSETTINGS.DEFAULT.SINGLE_QUOTES",
+        expect: "false",
+        note: "одинарные кавычки по умолчанию не экранируются",
+    },
+    Anchor {
+        id: "JSON.WRITERSETTINGS.DEFAULT.SLASH",
+        expect: "false",
+        note: "слеш по умолчанию не экранируется",
+    },
+    Anchor {
+        id: "JSON.WRITERSETTINGS.CONNECTOR.DEFAULT",
+        expect: "7B22D0BAD0BBD18ED187223A22D090D0B1227D",
+        note: "девять аргументов Connector сохраняют обычный UTF-8 JSON",
+    },
+    Anchor {
+        id: "JSON.WRITERSETTINGS.NO.DOUBLE_QUOTES",
+        expect: "7B276E616D65273A2776616C7565277D",
+        note: "отключение двойных кавычек выбирает одинарные и для имени, и для строки",
+    },
+    Anchor {
+        id: "JSON.WRITERSETTINGS.ESCAPE.NON_ASCII",
+        expect: "7B225C75303433415C75303433425C75303434455C7530343437223A225C75303431305C7530343331227D",
+        note: "СимволыВнеASCII экранирует каждый не-ASCII UTF-16 юнит",
+    },
+    Anchor {
+        id: "JSON.WRITERSETTINGS.ESCAPE.NON_BMP",
+        expect: "7B226E616D65223A22D0905C75443833445C7544453030227D",
+        note: "СимволыВнеBMP сохраняет кириллицу и экранирует суррогатную пару",
+    },
+    Anchor {
+        id: "JSON.WRITERSETTINGS.ESCAPE.FLAGS",
+        expect: "7B226E616D65223A225C75303033435C75303032365C75303032375C2F5C75323032385C7532303239227D",
+        note: "пять отдельных флагов экранируют скобку, амперсанд, апостроф, слеш и разделители",
+    },
+    Anchor {
+        id: "STREAM.COPY.COUNT.SOURCE_POSITION",
+        expect: "4",
+        note: "КопироватьВ сдвигает источник на фактически скопированное",
+    },
+    Anchor {
+        id: "STREAM.COPY.COUNT.TARGET_POSITION",
+        expect: "3",
+        note: "КопироватьВ пишет с текущей позиции приёмника",
+    },
+    Anchor {
+        id: "STREAM.COPY.COUNT.BYTES",
+        expect: "584344",
+        note: "два байта C,D дописаны после X",
+    },
+    Anchor {
+        id: "STREAM.COPY.OMITTED.SOURCE_POSITION",
+        expect: "4",
+        note: "без количества копируется остаток",
+    },
+    Anchor {
+        id: "STREAM.COPY.OMITTED.BYTES",
+        expect: "424344",
+        note: "остаток от позиции 1 — BCD",
+    },
+    Anchor {
+        id: "STREAM.COPY.ZERO.SOURCE_POSITION",
+        expect: "0",
+        note: "нулевое количество не двигает источник",
+    },
+    Anchor {
+        id: "STREAM.COPY.ZERO.BYTES",
+        expect: "",
+        note: "нулевое количество ничего не пишет",
+    },
+    Anchor {
+        id: "STREAM.COPY.OVERSIZED.SOURCE_POSITION",
+        expect: "3",
+        note: "количество больше остатка останавливается на конце",
+    },
+    Anchor {
+        id: "STREAM.COPY.OVERSIZED.BYTES",
+        expect: "4243",
+        note: "количество больше остатка копирует B,C",
+    },
+    Anchor {
+        id: "STREAM.CLOSE_DATA.TYPE",
+        expect: "true",
+        note: "закрытие потока памяти возвращает ДвоичныеДанные",
+    },
+    Anchor {
+        id: "STREAM.CLOSE_DATA.BYTES",
+        expect: "414243",
+        note: "возвращается весь носитель независимо от позиции",
+    },
+    Anchor {
+        id: "STREAM.CLOSE_DATA.REPEATED",
+        expect: "414243",
+        note: "повторный вызов возвращает тот же снимок",
+    },
+    Anchor {
+        id: "DATAREADER.SOURCE_STREAM.TYPE",
+        expect: "true",
+        note: "ИсходныйПоток возвращает тип Поток",
+    },
+    Anchor {
+        id: "DATAREADER.SOURCE_STREAM.POSITION",
+        expect: "1",
+        note: "прокси начинает с позиции читателя",
+    },
+    Anchor {
+        id: "DATAREADER.SOURCE_STREAM.SIZE",
+        expect: "4",
+        note: "прокси видит размер нижележащего потока",
+    },
+    Anchor {
+        id: "DATAREADER.SOURCE_STREAM.ORIGINAL_AFTER_SEEK",
+        expect: "3",
+        note: "переход через прокси двигает тот же носитель",
+    },
+    Anchor {
+        id: "DATAREADER.SOURCE_STREAM.ALIAS",
+        expect: "68",
+        note: "читатель продолжает с синхронизированной позиции и читает D",
+    },
+    Anchor {
+        id: "DATAREADER.SOURCE_STREAM.ORIGINAL_AFTER_READ",
+        expect: "4",
+        note: "чтение через читателя двигает исходный поток",
+    },
+    Anchor {
+        id: "DATAREADER.SOURCE_STREAM.RETURNED_AFTER_READ",
+        expect: "4",
+        note: "прокси наблюдает движение читателя",
+    },
+    Anchor {
+        id: "DATAREADER.COPY.COUNT.SOURCE_POSITION",
+        expect: "3",
+        note: "КопироватьВ читателя сдвигает источник",
+    },
+    Anchor {
+        id: "DATAREADER.COPY.COUNT.TARGET_POSITION",
+        expect: "3",
+        note: "КопироватьВ читателя сдвигает писателя",
+    },
+    Anchor {
+        id: "DATAREADER.COPY.COUNT.BYTES",
+        expect: "584243",
+        note: "читатель дописывает B,C после X",
+    },
+    Anchor {
+        id: "DATAREADER.COPY.ZERO.SOURCE_POSITION",
+        expect: "0",
+        note: "нулевое количество читателя не двигает источник",
+    },
+    Anchor {
+        id: "DATAREADER.COPY.ZERO.BYTES",
+        expect: "",
+        note: "нулевое количество читателя ничего не пишет",
+    },
+    Anchor {
+        id: "DATAWRITER.WRITE_BUFFER.POSITION",
+        expect: "3",
+        note: "запись буфера сдвигает позицию на его размер",
+    },
+    Anchor {
+        id: "DATAWRITER.WRITE_BUFFER.BYTES",
+        expect: "414243",
+        note: "буфер ABC записывается целиком",
+    },
+    Anchor {
+        id: "DATAWRITER.SIX_ARGS.BYTES",
+        expect: "410A42",
+        note: "шестой аргумент Ложь сохраняет LF без преобразования в CRLF",
+    },
+    Anchor {
+        id: "BINARYDATA.OPEN_STREAM.TYPE",
+        expect: "true",
+        note: "ОткрытьПотокДляЧтения возвращает тип Поток",
+    },
+    Anchor {
+        id: "BINARYDATA.OPEN_STREAM.POSITION",
+        expect: "0",
+        note: "поток над ДвоичныеДанные начинается с нулевой позиции",
+    },
+    Anchor {
+        id: "BINARYDATA.OPEN_STREAM.SIZE",
+        expect: "3",
+        note: "размер потока равен размеру исходных данных",
+    },
+    Anchor {
+        id: "BINARYDATA.OPEN_STREAM.FIRST_BYTE",
+        expect: "65",
+        note: "первый байт ABC читается как 65",
+    },
+    Anchor {
+        id: "BINARYDATA.OPEN_STREAM.POSITION_AFTER_READ",
+        expect: "1",
+        note: "чтение сдвигает позицию потока",
+    },
+    Anchor {
+        id: "BINARYDATA.OPEN_STREAM.WRITE",
+        expect: "<ошибка>",
+        note: "поток над ДвоичныеДанные доступен только для чтения",
+    },
+    Anchor {
+        id: "TEMPFILE.SUFFIX",
+        expect: "true",
+        note: "суффикс .bin сохраняется дословно",
+    },
+    Anchor {
+        id: "TEMPFILE.SEPARATOR",
+        expect: "/",
+        note: "Linux-платформа возвращает прямой разделитель пути",
+    },
+    Anchor {
+        id: "TEMPFILE.PRECREATED",
+        expect: "<нет>",
+        note: "ПолучитьИмяВременногоФайла возвращает ещё не существующий путь",
+    },
+    Anchor {
+        id: "BINARYDATA.WRITE.INITIAL",
+        expect: "41",
+        note: "ДвоичныеДанные.Записать создаёт файл с исходными байтами",
+    },
+    Anchor {
+        id: "BINARYDATA.WRITE.OVERWRITE",
+        expect: "4243",
+        note: "повторная запись полностью обрезает прежнее содержимое",
+    },
+    Anchor {
+        id: "DELETEFILES.FILE",
+        expect: "<нет>",
+        note: "УдалитьФайлы удаляет обычный файл",
+    },
+    Anchor {
+        id: "DELETEFILES.MISSING",
+        expect: "true",
+        note: "повторное удаление отсутствующего пути не бросает исключение",
+    },
+    Anchor {
+        id: "DELETEFILES.CALL_KIND",
+        expect: "процедура",
+        note: "УдалитьФайлы нельзя использовать в позиции выражения",
+    },
+    Anchor {
+        id: "DELETEFILES.TREE",
+        expect: "true",
+        note: "УдалитьФайлы рекурсивно удаляет непустой каталог",
+    },
+    Anchor {
+        id: "HTTP.PROXY.DEFAULT.TYPE",
+        expect: "true",
+        note: "пустой конструктор создаёт ИнтернетПрокси",
+    },
+    Anchor {
+        id: "HTTP.PROXY.DEFAULT.EXCLUSIONS",
+        expect: "0",
+        note: "у системного proxy по умолчанию нет явных исключений",
+    },
+    Anchor {
+        id: "HTTP.PROXY.DEFAULT.LOCAL",
+        expect: "false",
+        note: "системный proxy не выставляет исключение локальных адресов",
+    },
+    Anchor {
+        id: "HTTP.PROXY.DEFAULT.USER",
+        expect: "",
+        note: "пользователь системного proxy по умолчанию пуст",
+    },
+    Anchor {
+        id: "HTTP.PROXY.DEFAULT.PASSWORD",
+        expect: "",
+        note: "пароль системного proxy по умолчанию пуст",
+    },
+    Anchor {
+        id: "HTTP.PROXY.DIRECT.TYPE",
+        expect: "true",
+        note: "ИнтернетПрокси(Ложь) сохраняет тот же BSL-тип",
+    },
+    Anchor {
+        id: "HTTP.PROXY.DIRECT.EXCLUSIONS",
+        expect: "0",
+        note: "у прямого режима нет явных адресных исключений",
+    },
+    Anchor {
+        id: "HTTP.PROXY.DIRECT.LOCAL",
+        expect: "true",
+        note: "ИнтернетПрокси(Ложь) исключает локальные адреса",
+    },
+    Anchor {
+        id: "HTTP.PROXY.DIRECT.USER",
+        expect: "",
+        note: "пользователь прямого режима пуст",
+    },
+    Anchor {
+        id: "HTTP.PROXY.DIRECT.PASSWORD",
+        expect: "",
+        note: "пароль прямого режима пуст",
+    },
+    Anchor {
+        id: "HTTP.PROXY.EXPLICIT.SET",
+        expect: "true",
+        note: "метод Установить принимает явный HTTP-прокси",
+    },
+    Anchor {
+        id: "HTTP.PROXY.EXPLICIT.SERVER",
+        expect: "<ошибка>",
+        note: "предполагаемого метода ПолучитьСервер у объекта нет",
+    },
+    Anchor {
+        id: "HTTP.PROXY.EXPLICIT.PORT",
+        expect: "<ошибка>",
+        note: "предполагаемого метода ПолучитьПорт у объекта нет",
+    },
+    Anchor {
+        id: "HTTP.PROXY.EXPLICIT.CREDENTIALS_WRITABLE",
+        expect: "true",
+        note: "пользователь и пароль явного прокси доступны для записи",
+    },
+    Anchor {
+        id: "HTTP.PROXY.EXPLICIT.USER",
+        expect: "user",
+        note: "записанное имя пользователя читается обратно",
+    },
+    Anchor {
+        id: "HTTP.PROXY.EXPLICIT.PASSWORD",
+        expect: "password",
+        note: "записанный пароль читается обратно",
+    },
+    Anchor {
+        id: "HTTP.PROXY.EXPLICIT.EXCLUSIONS",
+        expect: "localhost",
+        note: "массив исключений возвращается по ссылке и остаётся изменяемым",
+    },
+    Anchor {
+        id: "HTTP.PROXY.EXPLICIT.LOCAL",
+        expect: "true",
+        note: "флаг исключения локальных адресов доступен для записи",
+    },
+    Anchor {
+        id: "HTTP.URL.ENUM.URL_DISPLAY",
+        expect: "String URL-encoding",
+        note: "представление члена КодировкаURL измерено на 8.3.27",
+    },
+    Anchor {
+        id: "HTTP.URL.ENUM.URL_IN_URL_DISPLAY",
+        expect: "URL URL-encoding",
+        note: "представление члена URLВКодировкеURL измерено на 8.3.27",
+    },
+    Anchor {
+        id: "HTTP.URL.ENUM.TYPE",
+        expect: "StringEncodingMethod",
+        note: "тип члена перечисления печатается английским именем",
+    },
+    Anchor {
+        id: "HTTP.URL.ENCODE.URL",
+        expect: "AZaz09-._~%20%2F%3F%3A%40%26%3D%2B%24%2C%23%5B%5D%25",
+        note: "КодировкаURL сохраняет только unreserved RFC 3986",
+    },
+    Anchor {
+        id: "HTTP.URL.ENCODE.URL_IN_URL",
+        expect: "AZaz09-._~%20/?:@&=+$,#[]%",
+        note: "URLВКодировкеURL сохраняет reserved и знак процента",
+    },
+    Anchor {
+        id: "HTTP.URL.ENCODE.CYRILLIC",
+        expect: "%D0%9F%D1%80%D0%B8%D0%B2%D0%B5%D1%82%20%D0%BC%D0%B8%D1%80",
+        note: "percent-тройки строятся по UTF-8 и используют верхний регистр",
+    },
+    Anchor {
+        id: "HTTP.URL.DECODE.URL",
+        expect: "a+b c/d%",
+        note: "декодирование КодировкаURL не заменяет плюс пробелом",
+    },
+    Anchor {
+        id: "HTTP.URL.DECODE.URL_IN_URL",
+        expect: "a+b c/d%",
+        note: "оба режима одинаково декодируют percent-тройки",
+    },
+    Anchor {
+        id: "HTTP.URL.DECODE.CYRILLIC",
+        expect: "Привет",
+        note: "percent-байты декодируются как UTF-8",
+    },
+    Anchor {
+        id: "HTTP.URL.DECODE.INCOMPLETE_PERCENT",
+        expect: "x%2",
+        note: "неполная percent-тройка остаётся дословной",
+    },
+    Anchor {
+        id: "HTTP.URL.DECODE.INVALID_UTF8",
+        expect: "�",
+        note: "негодный UTF-8 после percent-decoding заменяется U+FFFD",
+    },
+    Anchor {
+        id: "HTTP.VALUELIST.TYPE",
+        expect: "Value list",
+        note: "тип СписокЗначений имеет английское представление",
+    },
+    Anchor {
+        id: "HTTP.VALUELIST.EMPTY",
+        expect: "0",
+        note: "новый список пуст",
+    },
+    Anchor {
+        id: "HTTP.VALUELIST.ADD.RETURN_ALIAS",
+        expect: "true",
+        note: "Добавить возвращает тот же элемент, который вошёл в список",
+    },
+    Anchor {
+        id: "HTTP.VALUELIST.ITEM.VALUE",
+        expect: "b",
+        note: "первый аргумент Добавить доступен как Значение",
+    },
+    Anchor {
+        id: "HTTP.VALUELIST.ITEM.PRESENTATION",
+        expect: "B-value",
+        note: "второй аргумент Добавить доступен как Представление",
+    },
+    Anchor {
+        id: "HTTP.VALUELIST.FIND.FIRST",
+        expect: "<ошибка>",
+        note: "метода Найти у СписокЗначений нет",
+    },
+    Anchor {
+        id: "HTTP.VALUELIST.FIND.MISSING",
+        expect: "<ошибка>",
+        note: "поиск нельзя имитировать придуманным методом Найти",
+    },
+    Anchor {
+        id: "HTTP.VALUELIST.SORT.ASC",
+        expect: "a:A-first;a:A-second;b:B-value;",
+        note: "СортироватьПоЗначению упорядочивает по Значение",
+    },
+    Anchor {
+        id: "HTTP.VALUELIST.SORT.STABLE",
+        expect: "true",
+        note: "равные значения сохраняют порядок вставки",
+    },
+    Anchor {
+        id: "HTTP.VALUELIST.DIRECTION.DISPLAY",
+        expect: "Ascending",
+        note: "представление НаправлениеСортировки.Возр измерено",
+    },
+    Anchor {
+        id: "HTTP.VALUELIST.DIRECTION.TYPE",
+        expect: "SortDirection",
+        note: "тип направления сортировки измерен",
+    },
+    Anchor {
+        id: "HTTP.TYPECONV.DESCRIPTION.TYPE",
+        expect: "true",
+        note: "тип объекта равен ОписаниеТипов",
+    },
+    Anchor {
+        id: "HTTP.TYPECONV.NUMBER.POSITIVE",
+        expect: "123",
+        note: "десятичная строка приводится к числу",
+    },
+    Anchor {
+        id: "HTTP.TYPECONV.NUMBER.NEGATIVE",
+        expect: "-42",
+        note: "знак минуса при приведении сохраняется",
+    },
+    Anchor {
+        id: "HTTP.TYPECONV.NUMBER.INVALID",
+        expect: "0",
+        note: "негодная числовая строка даёт ноль, а не ошибку",
+    },
+    Anchor {
+        id: "HTTP.TYPECONV.DATEPART.DISPLAY",
+        expect: "Date and time",
+        note: "представление ЧастиДаты.ДатаВремя измерено",
+    },
+    Anchor {
+        id: "HTTP.TYPECONV.DATEPART.TYPE",
+        expect: "true",
+        note: "тип члена равен DateFractions",
+    },
+    Anchor {
+        id: "HTTP.TYPECONV.DATEQUAL.TYPE",
+        expect: "true",
+        note: "тип объекта равен КвалификаторыДаты",
+    },
+    Anchor {
+        id: "HTTP.TYPECONV.DATE.EXACT",
+        expect: "true",
+        note: "14 цифр разбираются как ГГГГММДДЧЧММСС",
+    },
+    Anchor {
+        id: "HTTP.TYPECONV.DATE.TYPE",
+        expect: "true",
+        note: "результат приведения имеет тип Дата",
+    },
+    Anchor {
+        id: "HTTP.TYPECONV.DATE.INVALID",
+        expect: "true",
+        note: "несуществующая дата даёт пустую дату",
+    },
+    Anchor {
+        id: "HTTP.RESPONSE.DUPLICATE_HEADERS",
+        expect: "second, first",
+        note: "повторные HTTP-поля соединяются в обратном порядке",
+    },
+    Anchor {
+        id: "HTTP.TIMEOUT.SCOPE",
+        expect: "ошибка|ошибка|ошибка",
+        note: "единый deadline охватывает заголовки, тело и весь обмен",
+    },
+    Anchor {
+        id: "HTTP.PROXY.LOCAL_MATCHING",
+        expect: "200|200|ошибка|200|200|299|200|ошибка|299",
+        note: "proxy обходят точные loopback-адреса и одночастные имена",
+    },
+    Anchor {
+        id: "HTTP.TLS.SYSTEM_ROOTS.TYPE",
+        expect: "true",
+        note: "системные корни имеют отдельный BSL-тип",
+    },
+    Anchor {
+        id: "HTTP.TLS.SECURE.TYPE",
+        expect: "true",
+        note: "OpenSSL-настройки имеют отдельный BSL-тип",
+    },
+    Anchor {
+        id: "HTTP.TLS.SECURE.CLIENT_UNDEFINED",
+        expect: "true",
+        note: "клиентский сертификат по умолчанию не задан",
+    },
+    Anchor {
+        id: "HTTP.TLS.SECURE.ROOTS_ALIAS",
+        expect: "true",
+        note: "защищённое соединение сохраняет переданный объект корней",
+    },
+    Anchor {
+        id: "HTTP.TLS.INSECURE.CLIENT_UNDEFINED",
+        expect: "true",
+        note: "пустой конструктор не задаёт клиентский сертификат",
+    },
+    Anchor {
+        id: "HTTP.TLS.INSECURE.ROOTS_UNDEFINED",
+        expect: "true",
+        note: "пустой конструктор означает соединение без проверки корней",
+    },
+    Anchor {
+        id: "HTTP.TLS.CLIENT_WINDOWS.TYPE",
+        expect: "WindowsClientCertificate",
+        note: "платформа регистрирует тип СертификатКлиентаWindows",
+    },
+    Anchor {
+        id: "HTTP.TLS.ROOTS_FILE.INVALID_CONTENT",
+        expect: "FileCertificationAuthorityCertificates",
+        note: "объект корней не валидирует содержимое файла в конструкторе",
+    },
+    Anchor {
+        id: "HTTP.TLS.CLIENT_FILE.INVALID_CONTENT",
+        expect: "FileClientCertificate",
+        note: "объект клиентского сертификата не валидирует содержимое в конструкторе",
+    },
+    Anchor {
+        id: "HTTP.TLS.ROOTS_FILE.ALIAS",
+        expect: "true",
+        note: "защищённое соединение сохраняет файловый объект корней",
+    },
+    Anchor {
+        id: "HTTP.TLS.CLIENT_FILE.ALIAS",
+        expect: "true",
+        note: "защищённое соединение сохраняет файловый клиентский сертификат",
+    },
+    Anchor {
+        id: "ENC.ASCII.NAME",
+        expect: "4162",
+        note: "имя ascii кодирует младшую половину без изменений",
+    },
+    Anchor {
+        id: "ENC.US_ASCII.NAME",
+        expect: "4162",
+        note: "US-ASCII — синоним ASCII",
+    },
+    Anchor {
+        id: "ENC.ASCII.UNMAPPABLE",
+        expect: "3F3F",
+        note: "непредставимые символы заменяются вопросительными знаками",
+    },
+    Anchor {
+        id: "ENC.ASCII.DECODE.CODES",
+        expect: "<ошибка>",
+        note: "байт 0x80 не декодируется как ASCII",
+    },
+    Anchor {
+        id: "BINBUF.TO_BINARY.TYPE",
+        expect: "true",
+        note: "буфер преобразуется в ДвоичныеДанные",
+    },
+    Anchor {
+        id: "BINBUF.TO_BINARY.BYTES",
+        expect: "414243",
+        note: "преобразование буфера сохраняет байты",
+    },
+    Anchor {
+        id: "BINBUF.FROM_BINARY.TYPE",
+        expect: "true",
+        note: "ДвоичныеДанные преобразуются в буфер",
+    },
+    Anchor {
+        id: "BINBUF.FROM_BINARY.BYTES",
+        expect: "ABC",
+        note: "обратное преобразование сохраняет текстовые байты",
+    },
+    Anchor {
+        id: "DATE.UNIVERSAL.TYPE",
+        expect: "true",
+        note: "универсальная дата имеет тип Дата",
+    },
+    Anchor {
+        id: "DATE.UNIVERSAL.LOCAL_OFFSET",
+        expect: "10800",
+        note: "oracle-сеанс работает в московской зоне UTC+3",
+    },
+    Anchor {
+        id: "DATE.UNIVERSAL.AS_STATEMENT",
+        expect: "true",
+        note: "функция глобального контекста допустима оператором",
+    },
+    Anchor {
+        id: "DATE.UNIVERSAL.ENGLISH_ALIAS",
+        expect: "true",
+        note: "английский синоним существует",
+    },
+    Anchor {
+        id: "ERROR.INFO.OUTSIDE.TYPE",
+        expect: "Error information",
+        note: "вне исключения возвращается объект информации об ошибке",
+    },
+    Anchor {
+        id: "ERROR.INFO.OUTSIDE.DETAIL",
+        expect: "Unexpected error",
+        note: "подробное представление вне исключения непустое",
+    },
+    Anchor {
+        id: "ERROR.INFO.RAISED.TYPE",
+        expect: "true",
+        note: "в обработчике возвращается тот же BSL-тип",
+    },
+    Anchor {
+        id: "ERROR.INFO.RAISED.DETAIL_CONTAINS_MESSAGE",
+        expect: "true",
+        note: "подробное представление содержит брошенное сообщение",
+    },
+    Anchor {
+        id: "ERROR.INFO.SNAPSHOT.STABLE",
+        expect: "true",
+        note: "снимок не меняется после выхода из обработчика",
+    },
+    Anchor {
+        id: "ERROR.INFO.INTERNAL.DETAIL_NONEMPTY",
+        expect: "true",
+        note: "внутренняя ошибка также даёт диагностический текст",
+    },
+    Anchor {
+        id: "HTTP.RESPONSE.BODY.STRING",
+        expect: "Аб",
+        note: "строковое тело ответа читает UTF-8 и снимает BOM",
+    },
+    Anchor {
+        id: "HTTP.RESPONSE.BODY.STREAM.TYPE",
+        expect: "Stream",
+        note: "потоковая форма ответа имеет тип Поток",
+    },
+    Anchor {
+        id: "HTTP.BODY.AS_STRING.DEFAULT",
+        expect: "Аб",
+        note: "тело запроса по умолчанию читается как UTF-8",
+    },
+    Anchor {
+        id: "HTTP.BODY.AS_STRING.BOM",
+        expect: "Аб",
+        note: "строковая форма тела запроса снимает UTF-8 BOM",
+    },
+    Anchor {
+        id: "HTTP.BODY.AS_STRING.STREAM",
+        expect: "Аб",
+        note: "строковая форма видит запись через поток",
+    },
+    Anchor {
+        id: "COLLECTION.INSERT.STRUCTURE.DEFAULT",
+        expect: "true",
+        note: "Структура.Вставить без значения записывает Неопределено",
+    },
+    Anchor {
+        id: "COLLECTION.INSERT.MAP.DEFAULT",
+        expect: "true",
+        note: "Соответствие.Вставить без значения записывает Неопределено",
+    },
+    Anchor {
+        id: "MIN.NUMBER",
+        expect: "3",
+        note: "числовой минимум",
+    },
+    Anchor {
+        id: "MAX.BOOLEAN",
+        expect: "true",
+        note: "булев максимум",
+    },
+    Anchor {
+        id: "MIN.STRING",
+        expect: "а",
+        note: "строковый минимум",
+    },
+    Anchor {
+        id: "MAX.DATE",
+        expect: "true",
+        note: "даты сравниваются по моменту",
+    },
+    Anchor {
+        id: "MIN.ONE_ARGUMENT",
+        expect: "1",
+        note: "одноместная форма допустима",
+    },
+    Anchor {
+        id: "MIN.THREE_ARGUMENTS",
+        expect: "1",
+        note: "функция вариативна",
+    },
+    Anchor {
+        id: "MAX.MIXED",
+        expect: "2",
+        note: "булево сравнивается с числом как 0 или 1",
+    },
+    Anchor {
+        id: "MIN.TIE.BOOL_FIRST",
+        expect: "true",
+        note: "при равенстве сохраняется первый булев аргумент",
+    },
+    Anchor {
+        id: "MIN.TIE.NUMBER_FIRST",
+        expect: "true",
+        note: "при равенстве сохраняется первый числовой аргумент",
+    },
+    Anchor {
+        id: "MAX.AS_STATEMENT",
+        expect: "false",
+        note: "Макс — intrinsic, а не процедура",
+    },
+    Anchor {
+        id: "MIN.ARITY.10",
+        expect: "1",
+        note: "платформа принимает десять аргументов",
+    },
+    Anchor {
+        id: "MIN.ARITY.100",
+        expect: "1",
+        note: "платформа принимает сто аргументов",
+    },
+    Anchor {
+        id: "MIN.ARITY.255",
+        expect: "1",
+        note: "платформа принимает 255 аргументов",
+    },
+    Anchor {
+        id: "MIN.ARITY.256",
+        expect: "1",
+        note: "платформа принимает 256 аргументов; open-bsl ограничен полем u8",
+    },
+    Anchor {
+        id: "STRING.STARTS.EXACT",
+        expect: "true",
+        note: "префикс сравнивается с учётом регистра",
+    },
+    Anchor {
+        id: "STRING.STARTS.CASE",
+        expect: "false",
+        note: "регистр префикса значим",
+    },
+    Anchor {
+        id: "STRING.STARTS.EMPTY",
+        expect: "<ошибка>",
+        note: "пустой префикс запрещён",
+    },
+    Anchor {
+        id: "STRING.ENDS.EXACT",
+        expect: "true",
+        note: "суффикс сравнивается с учётом регистра",
+    },
+    Anchor {
+        id: "STRING.ENDS.CASE",
+        expect: "false",
+        note: "регистр суффикса значим",
+    },
+    Anchor {
+        id: "STRING.ENDS.EMPTY",
+        expect: "<ошибка>",
+        note: "пустой суффикс запрещён",
+    },
+    Anchor {
+        id: "STRING.FIND.DEFAULT",
+        expect: "1",
+        note: "поиск по умолчанию начинается с начала",
+    },
+    Anchor {
+        id: "STRING.FIND.REVERSE",
+        expect: "5",
+        note: "обратный поиск идёт с конца",
+    },
+    Anchor {
+        id: "STRING.FIND.FORWARD_FROM",
+        expect: "3",
+        note: "начальная позиция прямого поиска",
+    },
+    Anchor {
+        id: "STRING.FIND.REVERSE_FROM",
+        expect: "3",
+        note: "начальная позиция обратного поиска",
+    },
+    Anchor {
+        id: "STRING.FIND.SECOND",
+        expect: "3",
+        note: "номер вхождения отсчитывается от единицы",
+    },
+    Anchor {
+        id: "STRING.SPLIT.DEFAULT",
+        expect: "a||b|",
+        note: "по умолчанию пустые части сохраняются",
+    },
+    Anchor {
+        id: "STRING.SPLIT.INCLUDE_EMPTY",
+        expect: "a||b|",
+        note: "явное Истина сохраняет пустые части",
+    },
+    Anchor {
+        id: "STRING.SPLIT.SKIP_EMPTY",
+        expect: "a|b",
+        note: "Ложь удаляет пустые части",
+    },
+    Anchor {
+        id: "STRING.REPLACE.UUID.TYPE",
+        expect: "true",
+        note: "UUID неявно преобразуется в строку",
+    },
+    Anchor {
+        id: "STRING.REPLACE.UUID.VALUE",
+        expect: "true",
+        note: "СтрЗаменить использует каноническую запись UUID",
+    },
+    Anchor {
+        id: "STRING.LOWER.UUID.VALUE",
+        expect: "true",
+        note: "НРег принимает UUID и приводит его каноническую запись к нижнему регистру",
+    },
+    Anchor {
+        id: "STRING.UPPER.UUID.VALUE",
+        expect: "true",
+        note: "ВРег принимает UUID и приводит его каноническую запись к верхнему регистру",
+    },
+    Anchor {
+        id: "ARRAY.UPPER_BOUND.EMPTY",
+        expect: "-1",
+        note: "верхняя граница пустого массива равна -1",
+    },
+    Anchor {
+        id: "ARRAY.UPPER_BOUND.THREE",
+        expect: "2",
+        note: "верхняя граница равна последнему индексу",
+    },
+    Anchor {
+        id: "ARRAY.UPPER_BOUND.ENGLISH_ALIAS",
+        expect: "2",
+        note: "английский синоним UBound доступен массиву",
+    },
+    Anchor {
+        id: "TEXTREADER.ENCODING.UNDEFINED",
+        expect: "C390C290C390C2B1",
+        note: "Неопределено выбирает однобайтовое системное умолчание",
+    },
+    Anchor {
+        id: "JSON.READER.STREAM.UNDEFINED_ENCODING",
+        expect: "value",
+        note: "JSON-поток с Неопределено читает UTF-8",
+    },
+    Anchor {
+        id: "JSON.READER.CLOSE.TYPE_STABLE",
+        expect: "true",
+        note: "закрытие сохраняет тип ЧтениеJSON",
+    },
+    Anchor {
+        id: "JSON.READER.CLOSE.READ_AFTER",
+        expect: "ошибка",
+        note: "чтение после закрытия отказывает",
+    },
+    Anchor {
+        id: "JSON.READER.CLOSE.REPEATED",
+        expect: "принято",
+        note: "повторное закрытие идемпотентно",
+    },
+    Anchor {
+        id: "XML.STRING.UNDEFINED",
+        expect: "",
+        note: "XMLСтрока представляет Неопределено пустой строкой",
+    },
+    Anchor {
+        id: "XML.STRING.NULL",
+        expect: "",
+        note: "XMLСтрока представляет Null пустой строкой",
+    },
+    Anchor {
+        id: "XML.STRING.STRING",
+        expect: "аб",
+        note: "XMLСтрока сохраняет строку",
+    },
+    Anchor {
+        id: "XML.STRING.BOOLEAN",
+        expect: "true",
+        note: "XMLСтрока использует XML-форму булева",
+    },
+    Anchor {
+        id: "XML.STRING.NUMBER",
+        expect: "12.5",
+        note: "XMLСтрока использует каноническую десятичную форму",
+    },
+    Anchor {
+        id: "XML.STRING.DATE",
+        expect: "2026-08-13T10:20:30",
+        note: "XMLСтрока использует полную форму dateTime",
+    },
+    Anchor {
+        id: "XML.INVALID.EMPTY",
+        expect: "false",
+        note: "пустая строка допустима для XML",
+    },
+    Anchor {
+        id: "XML.INVALID.TEXT",
+        expect: "false",
+        note: "обычный Unicode-текст допустим",
+    },
+    Anchor {
+        id: "XML.INVALID.WHITESPACE",
+        expect: "false",
+        note: "tab, LF и CR допустимы",
+    },
+    Anchor {
+        id: "XML.INVALID.NUL",
+        expect: "true",
+        note: "NUL запрещён XML 1.0",
+    },
+    Anchor {
+        id: "XML.INVALID.CONTROL_1",
+        expect: "true",
+        note: "C0 control запрещён",
+    },
+    Anchor {
+        id: "XML.INVALID.CONTROL_31",
+        expect: "true",
+        note: "C0 control запрещён",
+    },
+    Anchor {
+        id: "XML.INVALID.FFFE",
+        expect: "true",
+        note: "U+FFFE запрещён",
+    },
+    Anchor {
+        id: "XML.INVALID.FFFF",
+        expect: "true",
+        note: "U+FFFF запрещён",
+    },
+    Anchor {
+        id: "XML.INVALID.EMOJI",
+        expect: "false",
+        note: "supplementary Unicode допустим",
+    },
+    Anchor {
+        id: "XML.INVALID.ENGLISH_ALIAS",
+        expect: "false",
+        note: "английский синоним существует и принимает обычный текст",
     },
 ];
 

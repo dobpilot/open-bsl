@@ -49,7 +49,7 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
     FunctionDescriptor {
         code: FunctionCode::new(1),
         names: &["ПрочитатьJSON", "ReadJSON"],
-        arity: Arity::range(1, 8),
+        arity: Arity::range(1, 9),
         kind: FunctionKind::Function,
         call: component_read_json,
     },
@@ -106,7 +106,7 @@ const CONSTRUCTORS: &[ConstructorDescriptor] = &[
     ConstructorDescriptor {
         code: ConstructorCode::new(3),
         names: &["ПараметрыЗаписиJSON", "JSONWriterSettings"],
-        arity: Arity::range(0, 2),
+        arity: Arity::range(0, 9),
         call: construct_writer_settings,
     },
     ConstructorDescriptor {

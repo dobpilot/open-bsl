@@ -481,7 +481,7 @@ impl TextDocument {
             .files
             .read(&path)
             .map_err(|error| RtError::IoError(error.to_string()))?;
-        self.data.borrow_mut().set_text(&encoding.decode(&bytes));
+        self.data.borrow_mut().set_text(&encoding.decode(&bytes)?);
         Ok(BslValue::Undefined)
     }
 

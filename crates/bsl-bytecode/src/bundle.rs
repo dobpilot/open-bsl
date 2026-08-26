@@ -423,6 +423,11 @@ fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> Eff {
                 e.ctl = Ctl::Trailing;
             }
         }
+        Instr::Await { dst, promise } => {
+            read!(promise);
+            write!(dst);
+            e.ctl = Ctl::Barrier;
+        }
         Instr::Return { src } => {
             if let Some(src) = src {
                 read!(src);
@@ -717,6 +722,7 @@ mod tests {
             param_by_val: Vec::new(),
             param_has_default: Vec::new(),
             is_procedure: false,
+            is_async: false,
             touches_objects: false,
             n_locals: 8,
             n_regs: 16,

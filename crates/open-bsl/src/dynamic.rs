@@ -43,7 +43,7 @@ pub struct DynamicCode {
     /// текста мало: один и тот же исходник в разных областях резолвится в
     /// РАЗНЫЕ номера слотов, а `Вычислить` компилируется не так, как
     /// `Выполнить`.
-    cache: HashMap<(u64, DynamicScope, DynamicKind, String), Rc<DynamicUnit>>,
+    cache: HashMap<(u64, DynamicScope, DynamicKind, bool, String), Rc<DynamicUnit>>,
     /// Сколько номеров областей уже роздано. Номер получает КАЖДЫЙ
     /// выпущенный фрагмент, и вместе с ним он ложится в кэш — поэтому
     /// повторное исполнение того же фрагмента возвращает тот же номер, и
@@ -91,6 +91,7 @@ impl DynamicCompiler for DynamicCode {
             self.module,
             request.scope,
             request.kind,
+            request.caller_is_async,
             request.source.to_string(),
         );
         if let Some(hit) = self.cache.get(&key) {
@@ -131,6 +132,7 @@ mod tests {
             source,
             kind: DynamicKind::Eval,
             scope,
+            caller_is_async: false,
             locals: &[],
             module_vars: &[],
             functions: &[],

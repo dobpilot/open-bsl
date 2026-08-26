@@ -50,6 +50,7 @@ pub enum TypeId {
     /// Перечисления платформы. Тип члена — само перечисление.
     JsonValueType,
     JsonLineBreak,
+    JsonEscapeCharacters,
     JsonDateFormat,
     JsonDateWritingVariant,
 
@@ -81,6 +82,14 @@ pub enum TypeId {
     PageOrientation,
 
     TextEncoding,
+    /// Тип члена перечисления `СпособКодированияСтроки`.
+    StringEncodingMethod,
+    /// Тип члена перечисления `НаправлениеСортировки`.
+    SortDirection,
+    /// Тип члена перечисления `ЧастиДаты`.
+    DateFractions,
+    /// Тип члена перечисления `ХешФункция`.
+    HashFunction,
 
     // --- ДвоичныеДанные -------------------------------------------------
     // Та же пара написаний: тип печатается с пробелом («Двоичные данные»,
@@ -127,6 +136,8 @@ pub enum TypeId {
     ZipEncryptionMethod,
     /// Тип ЧЛЕНА перечисления `КодировкаИменФайловВZipФайле`.
     ZipFileNamesEncoding,
+    /// Тип ЧЛЕНА перечисления `ИспользованиеByteOrderMark`.
+    ByteOrderMarkUse,
 }
 
 /// `(русское, английское)`. Русское — каноническое: именно оно уходит в
@@ -174,6 +185,11 @@ const NAMES: &[(TypeId, &str, &str)] = &[
     // («Строка(Новый НастройкиСериализацииJSON)») — без, см. `lib.rs`.
     (TypeId::JsonValueType, "ТипЗначенияJSON", "JSONValueType"),
     (TypeId::JsonLineBreak, "ПереносСтрокJSON", "JSONLineBreak"),
+    (
+        TypeId::JsonEscapeCharacters,
+        "ЭкранированиеСимволовJSON",
+        "JSONCharactersEscapeMode",
+    ),
     (TypeId::JsonDateFormat, "ФорматДатыJSON", "JSONDateFormat"),
     (
         TypeId::JsonDateWritingVariant,
@@ -263,6 +279,14 @@ const NAMES: &[(TypeId, &str, &str)] = &[
         "PageOrientation",
     ),
     (TypeId::TextEncoding, "КодировкаТекста", "TextEncoding"),
+    (
+        TypeId::StringEncodingMethod,
+        "StringEncodingMethod",
+        "StringEncodingMethod",
+    ),
+    (TypeId::SortDirection, "SortDirection", "SortDirection"),
+    (TypeId::DateFractions, "DateFractions", "DateFractions"),
+    (TypeId::HashFunction, "HashFunction", "HashFunction"),
     (TypeId::BinaryData, "Двоичные данные", "BinaryData"),
     (
         TypeId::BinaryDataBuffer,
@@ -331,6 +355,11 @@ const NAMES: &[(TypeId, &str, &str)] = &[
         "КодировкаИменФайловВZipФайле",
         "FileNamesEncodingInZipFile",
     ),
+    (
+        TypeId::ByteOrderMarkUse,
+        "ByteOrderMarkUse",
+        "ByteOrderMarkUse",
+    ),
 ];
 
 /// Типы, чьё ПРЕДСТАВЛЕНИЕ не совпадает с именем, по которому тип ищется.
@@ -357,7 +386,7 @@ const DISPLAY: &[(TypeId, &str)] = &[];
 /// `Тип("РезультатXPath")` печатается «Результат DOM XPath». Печатью эта
 /// таблица не служит: [`NAMES`] остаётся единственным источником
 /// представлений.
-const IDENTIFIERS: &[(TypeId, &str)] = &[];
+const IDENTIFIERS: &[(TypeId, &str)] = &[(TypeId::ByteOrderMarkUse, "ИспользованиеByteOrderMark")];
 
 /// Ключ поиска типа по имени: регистр и ПРОБЕЛЫ внутри имени не значимы.
 /// Печатается «Не определено», а пишут в коде обычно `Тип("Неопределено")`

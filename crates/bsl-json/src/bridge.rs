@@ -67,12 +67,29 @@ pub fn read_json_builtin(
             ));
         }
     };
+    let max_depth = match arguments.get(8) {
+        None | Some(BslValue::Undefined) => MAX_JSON_DEPTH,
+        Some(BslValue::Number(value)) => value
+            .to_i64_exact()
+            .and_then(|value| usize::try_from(value).ok())
+            .ok_or(RtError::TypeError {
+                expected: "Целое неотрицательное число",
+                op: "ПрочитатьJSON(МаксимальнаяВложенность)",
+            })?,
+        Some(_) => {
+            return Err(RtError::TypeError {
+                expected: "Число",
+                op: "ПрочитатьJSON(МаксимальнаяВложенность)",
+            });
+        }
+    };
     read_json(
         &arguments[0],
         as_map,
         &date_names,
         date_format,
         restore,
+        max_depth,
         runtime,
         zone,
     )
@@ -212,6 +229,8 @@ pub(crate) struct BuildCtx<'a, 'c> {
     pub(crate) date_format: Option<JsonDateFormat>,
     /// Функция восстановления или `None`, если она не задана.
     pub(crate) restore: Option<JsonRestoreFn<'c>>,
+    /// Максимальная глубина контейнеров из девятого аргумента.
+    pub(crate) max_depth: usize,
     pub(crate) rt: &'a mut RuntimeShapes,
     /// Часовой пояс прогона: даты `Z` и со смещением переводятся в
     /// местное время, а какое оно — знает окружение, а не машина.
@@ -272,12 +291,17 @@ fn property_arg(property: Option<&str>) -> BslValue {
 /// `ИменаСвойствСоЗначениямиДата`, не разобравшемся в этом формате
 /// (см. `bad_date_representation`, `JSON.READ_DATE.BAD_FORMAT_TEXT`);
 /// ошибку вызова функции восстановления и любое исключение из неё.
+// Параметры здесь соответствуют независимо измеряемым частям публичного
+// `ПрочитатьJSON`; сворачивать их в служебную структуру значило бы лишь
+// перенести сборку структуры в единственного вызывающего.
+#[allow(clippy::too_many_arguments)]
 pub fn read_json(
     reader: &BslValue,
     as_map: bool,
     date_names: &[String],
     date_format: Option<JsonDateFormat>,
     restore: Option<JsonRestoreFn<'_>>,
+    max_depth: usize,
     rt: &mut RuntimeShapes,
     zone: &dyn bsl_rt::TimeZone,
 ) -> RtResult<BslValue> {
@@ -321,6 +345,7 @@ pub fn read_json(
         date_names,
         date_format,
         restore,
+        max_depth,
         rt,
         zone,
         cache: JsonBuildCache::default(),
@@ -430,6 +455,7 @@ pub fn read_json_value(
         date_names: &[],
         date_format: None,
         restore: None,
+        max_depth: MAX_JSON_DEPTH,
         rt,
         zone,
         cache: JsonBuildCache::default(),
@@ -599,7 +625,7 @@ fn build_raw_value(
 ) -> RtResult<BslValue> {
     // Как и в `serialize`: рекурсия возможна только на контейнерах, на
     // скалярных событиях предел не срабатывает никогда.
-    if depth > MAX_JSON_DEPTH && matches!(event, JsonEvent::ObjectStart | JsonEvent::ArrayStart) {
+    if depth > ctx.max_depth && matches!(event, JsonEvent::ObjectStart | JsonEvent::ArrayStart) {
         return Err(RtError::StackOverflow {
             what: "слишком глубокая вложенность документа при чтении JSON",
         });
@@ -1278,6 +1304,7 @@ mod tests {
             date_names: &[],
             date_format: None,
             restore: None,
+            max_depth: MAX_JSON_DEPTH,
             rt,
             zone: &MACHINE_ZONE,
             cache: JsonBuildCache::default(),

@@ -45,6 +45,12 @@ const CORPUS: &[&str] = &[
     "Функция Ф(а, Знач б = 7, в = 9)\n  а = а + б + в;\n  Возврат а;\nКонецФункции\n\
      Процедура П()\n  Возврат;\nКонецПроцедуры\n\
      х = 1;\nу = Ф(х, , 3);\nП();\n",
+    // Асинхронный чанк и барьер Await. Исполнение проверяет VM; здесь
+    // контракт — метаданные и опкод переживают текстовый round-trip.
+    "Асинх Функция Асинхронная(Обещание)\n\
+       Возврат Ждать Обещание;\n\
+     КонецФункции\n\
+     Результат = Асинхронная(Неопределено);\n",
     // Модульная переменная по ссылке из процедуры — ArgMode::ByRefModuleVar
     // (`bymodvar:` в тексте): внутри процедуры `М` — это `RExpr::ModuleVar`,
     // и параметр без `Знач` алиасит её module-слот, а не копирует.
@@ -172,6 +178,10 @@ fn reparsed_program_matches_the_original_structurally() {
             assert_eq!(x.consts, y.consts, "{src}");
             assert_eq!(x.call_arg_modes, y.call_arg_modes, "{src}");
             assert_eq!(x.exception_ranges, y.exception_ranges, "{src}");
+            assert_eq!(x.is_async, y.is_async, "{src}");
+            assert_eq!(x.is_procedure, y.is_procedure, "{src}");
+            assert_eq!(x.param_by_val, y.param_by_val, "{src}");
+            assert_eq!(x.param_has_default, y.param_has_default, "{src}");
             assert_eq!(
                 (x.n_params, x.n_locals, x.n_regs),
                 (y.n_params, y.n_locals, y.n_regs)

@@ -15,11 +15,16 @@ pub use bsl_rt::{
     Clock, ComponentError, ConstructorCode, ConstructorDescriptor, ContextKind, DirEntry, EnumKind,
     EnumValue, FileCreate, FileHandle, FileMetadata, FileOpenOptions, FileSystem, FixedTimeZone,
     FunctionCode, FunctionDescriptor, FunctionKind, HostEnv, LibraryDependency, LibraryDescriptor,
-    LibraryRequirement, MethodCall, MethodDescriptor, ObjectContextNeed, ObjectProtocol, ObjectRef,
-    PropertyDescriptor, PropertyGet, PropertySet, RandomHandle, RandomSource, RegistryError,
-    RtError, RtResult, RuntimeRegistry, RuntimeShapes, SystemClock, SystemRandom, SystemTimeZone,
-    TimeZone, TypeDescriptor, TypeRef, call_method_from_table, folded_eq, get_property_from_table,
-    set_property_from_table,
+    LibraryRequirement, MethodCall, MethodDescriptor, NetworkError, NetworkErrorKind,
+    ObjectContextNeed, ObjectProtocol, ObjectRef, PropertyDescriptor, PropertyGet, PropertySet,
+    ProxyConfig, ProxyMode, RandomHandle, RandomSource, RegistryError, RequestHandle, RtError,
+    RtResult, RuntimeRegistry, RuntimeShapes, SecretString, SystemClock, SystemRandom,
+    SystemTimeZone, TimeZone, TlsConfig, TypeDescriptor, TypeRef, call_method_from_table,
+    folded_eq, get_property_from_table, set_property_from_table,
+};
+pub use bsl_rt::{
+    HttpClient, HttpClientConfig, HttpClientFactory, HttpCompletionSink, HttpErrorMapper,
+    HttpPromiseSpawner, HttpResponseMapper, HttpWireRequest, HttpWireResponse,
 };
 
 // Замыкание поверхности: типы, до которых достаёт публичная сигнатура
@@ -38,4 +43,4 @@ pub use bsl_syntax::{
 pub use dynamic::DynamicCode;
 pub use engine::{Engine, EngineBuilder, Module};
 pub use error::Error;
-pub use state::{State, StateBuilder};
+pub use state::{Execution, ExecutionPoll, State, StateBuilder};

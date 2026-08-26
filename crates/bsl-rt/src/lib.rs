@@ -11,21 +11,27 @@ mod date;
 pub mod encoding;
 mod enums;
 mod env;
+mod error_info;
 mod fill;
 pub mod fold;
+mod http;
 mod interner;
 mod locale;
 mod map;
+mod metadata;
 mod object;
 mod object_protocol;
 pub mod open_questions;
+mod promise;
 mod runtime_shapes;
 mod shape;
 mod string;
 mod table;
+mod type_description;
 mod types;
 mod tz;
 mod uuid;
+mod value_list;
 mod vstr;
 use std::cmp::Ordering;
 use std::fmt;
@@ -45,15 +51,15 @@ pub const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub use builtin::{
     BUILTIN_FN_NAMES, BUILTIN_METHOD_NAMES, BuiltinFn, BuiltinMethod, HostEffect, call_builtin_env,
     call_builtin_files, call_builtin_fn, call_builtin_fn_ctx, call_builtin_method,
-    call_builtin_method_ctx,
+    call_builtin_method_ctx, call_builtin_method_files, call_builtin_temp_file,
 };
 pub use component::{
-    Arity, CallContext, Capability, ComponentCall, ConstructorCode, ConstructorDescriptor,
-    ContextKind, ExecutionParts, FunctionCode, FunctionDescriptor, FunctionKind,
-    InterpreterServices, LibraryDependency, LibraryDescriptor, LibraryKey, LibraryRequirement,
-    MethodCall, MethodDescriptor, ObjectContextNeed, PropertyDescriptor, PropertyGet, PropertySet,
-    RegistryError, RuntimeBuilder, RuntimeRegistry, call_method_from_table, core_library,
-    get_property_from_table, set_property_from_table,
+    Arity, ByteStreamFactory, CallContext, Capability, ComponentCall, ConstructorCode,
+    ConstructorDescriptor, ContextKind, ExecutionParts, FunctionCode, FunctionDescriptor,
+    FunctionKind, InterpreterServices, LibraryDependency, LibraryDescriptor, LibraryKey,
+    LibraryRequirement, MethodCall, MethodDescriptor, ObjectContextNeed, PropertyDescriptor,
+    PropertyGet, PropertySet, RegistryError, RuntimeBuilder, RuntimeRegistry,
+    call_method_from_table, core_library, get_property_from_table, set_property_from_table,
 };
 pub use date::{
     BslDate, DEFAULT_PATTERN as DEFAULT_DATE_PATTERN, UNIX_EPOCH_SECONDS,
@@ -67,7 +73,14 @@ pub use env::{
     FixedTimeZone, HostEnv, MAX_OFFSET_SECONDS, MIN_TRANSITION_GAP_SECONDS, RandomHandle,
     RandomSource, SystemClock, SystemFileSystem, SystemRandom, TimeZone,
 };
+pub use error_info::{detailed_error_description, new_error_info};
 pub use fold::folded_eq;
+pub use http::{
+    ClientIdentity, HttpClient, HttpClientConfig, HttpClientFactory, HttpCompletionSink,
+    HttpErrorMapper, HttpPromiseSpawner, HttpResponseMapper, HttpWireRequest, HttpWireResponse,
+    NetworkError, NetworkErrorKind, ProxyConfig, ProxyMode, RequestHandle, SecretBytes,
+    SecretString, TlsConfig,
+};
 pub use interner::{NameId, NameInterner, first_folded_duplicate};
 pub use locale::{Locale, NBSP};
 use map::MapData;
@@ -75,6 +88,7 @@ pub use object::{BslObject, StructureStorage};
 pub use object_protocol::{
     ByteStreamProtocol, ObjectDowncast, ObjectProtocol, ObjectRef, TypeDescriptor, receiver_of,
 };
+pub use promise::{ExecutionToken, PROMISE_TYPE, PromiseId, PromiseValue};
 pub use runtime_shapes::RuntimeShapes;
 pub use shape::{MAX_SHAPE_TRANSITIONS, Shape, ShapeTable};
 pub use string::BslString;
@@ -456,6 +470,8 @@ impl fmt::Display for RtError {
                     crate::component::Capability::FileSystem => "файловая система",
                     crate::component::Capability::FunctionCaller => "вызов функции модуля",
                     crate::component::Capability::Random => "источник случайности",
+                    crate::component::Capability::Network => "сеть",
+                    crate::component::Capability::HostPromises => "host-обещания",
                 };
                 let path = match path {
                     crate::component::ContextKind::Full => "полного контекста",
@@ -505,6 +521,7 @@ fn enum_kind_type_id(kind: EnumKind) -> TypeId {
     match kind {
         EnumKind::JsonValueType => TypeId::JsonValueType,
         EnumKind::JsonLineBreak => TypeId::JsonLineBreak,
+        EnumKind::JsonEscapeCharacters => TypeId::JsonEscapeCharacters,
         EnumKind::JsonDateFormat => TypeId::JsonDateFormat,
         EnumKind::JsonDateWritingVariant => TypeId::JsonDateWritingVariant,
         EnumKind::XmlNodeType => TypeId::XmlNodeType,
@@ -513,6 +530,10 @@ fn enum_kind_type_id(kind: EnumKind) -> TypeId {
         EnumKind::DrawingKind => TypeId::DrawingKind,
         EnumKind::PageOrientation => TypeId::PageOrientation,
         EnumKind::TextEncoding => TypeId::TextEncoding,
+        EnumKind::StringEncodingMethod => TypeId::StringEncodingMethod,
+        EnumKind::SortDirection => TypeId::SortDirection,
+        EnumKind::DateFractions => TypeId::DateFractions,
+        EnumKind::HashFunction => TypeId::HashFunction,
         EnumKind::ByteOrder => TypeId::ByteOrder,
         EnumKind::FileOpenMode => TypeId::FileOpenMode,
         EnumKind::FileAccess => TypeId::FileAccess,
@@ -537,7 +558,28 @@ fn enum_kind_type_id(kind: EnumKind) -> TypeId {
         EnumKind::ZipSubDirProcessingMode => TypeId::ZipSubDirProcessingMode,
         EnumKind::ZipEncryptionMethod => TypeId::ZipEncryptionMethod,
         EnumKind::ZipFileNamesEncoding => TypeId::ZipFileNamesEncoding,
+        EnumKind::ByteOrderMarkUse => TypeId::ByteOrderMarkUse,
     }
+}
+
+fn optional_positive_usize(value: &BslValue, default: usize, op: &'static str) -> RtResult<usize> {
+    if matches!(value, BslValue::Undefined) {
+        return Ok(default);
+    }
+    let BslValue::Number(number) = value else {
+        return Err(RtError::TypeError {
+            expected: "Положительное целое число",
+            op,
+        });
+    };
+    number
+        .to_i64_exact()
+        .and_then(|number| usize::try_from(number).ok())
+        .filter(|number| *number != 0)
+        .ok_or(RtError::TypeError {
+            expected: "Положительное целое число",
+            op,
+        })
 }
 
 impl BslValue {
@@ -946,12 +988,32 @@ impl BslValue {
         Ok(BslValue::Str(s.substring(start, len)))
     }
 
+    fn string_for_case(&self, op: &'static str) -> RtResult<BslString> {
+        match self {
+            BslValue::Str(value) => Ok(value.clone()),
+            // ИЗМЕРЕНО(STRING.LOWER.UUID.VALUE,
+            // STRING.UPPER.UUID.VALUE): функции регистра принимают UUID и
+            // сначала используют его каноническую строковую форму.
+            BslValue::Object(object) => match &**object {
+                BslObject::Uuid(bytes) => Ok(BslString::from_utf8_string(uuid::format(bytes))),
+                _ => Err(RtError::TypeError {
+                    expected: "Строка или УникальныйИдентификатор",
+                    op,
+                }),
+            },
+            _ => Err(RtError::TypeError {
+                expected: "Строка или УникальныйИдентификатор",
+                op,
+            }),
+        }
+    }
+
     pub fn str_upper(&self) -> RtResult<Self> {
-        Ok(BslValue::Str(self.as_str("ВРег")?.to_uppercase()))
+        Ok(BslValue::Str(self.string_for_case("ВРег")?.to_uppercase()))
     }
 
     pub fn str_lower(&self) -> RtResult<Self> {
-        Ok(BslValue::Str(self.as_str("НРег")?.to_lowercase()))
+        Ok(BslValue::Str(self.string_for_case("НРег")?.to_lowercase()))
     }
 
     pub fn str_trim_all(&self) -> RtResult<Self> {
@@ -969,26 +1031,124 @@ impl BslValue {
     /// `СтрНайти(Строка, Подстрока)` — позиция в КОД-ЮНИТАХ UTF-16, 1-based,
     /// `0` если не найдено. Те же единицы, что считает `СтрДлина`, чтобы
     /// результат можно было передать в `Сред`/`Лев` без пересчёта.
-    pub fn str_find(&self, needle: &Self) -> RtResult<Self> {
-        let pos = self.as_str("СтрНайти")?.find(needle.as_str("СтрНайти")?);
-        Ok(BslValue::Number(BslNumber::from_i64(pos as i64)))
+    pub fn str_find(
+        &self,
+        needle: &Self,
+        direction: &Self,
+        start: &Self,
+        occurrence: &Self,
+    ) -> RtResult<Self> {
+        let text = self.as_str("СтрНайти")?;
+        let needle = needle.as_str("СтрНайти")?;
+        if needle.units().is_empty() || needle.units().len() > text.units().len() {
+            return Ok(BslValue::number_from_i64(0));
+        }
+        let from_end = match direction {
+            BslValue::Undefined | BslValue::Enum(EnumValue::SearchFromBegin) => false,
+            BslValue::Enum(EnumValue::SearchFromEnd) => true,
+            _ => {
+                return Err(RtError::TypeError {
+                    expected: "НаправлениеПоиска",
+                    op: "СтрНайти",
+                });
+            }
+        };
+        let default_start = if from_end { text.units().len() } else { 1 };
+        let start = optional_positive_usize(start, default_start, "СтрНайти")?;
+        let occurrence = optional_positive_usize(occurrence, 1, "СтрНайти")?;
+        if start > text.units().len() {
+            return Ok(BslValue::number_from_i64(0));
+        }
+
+        let last = text.units().len() - needle.units().len();
+        let matches = |position: &usize| {
+            text.units()[*position..*position + needle.units().len()] == *needle.units()
+        };
+        let position = if from_end {
+            (0..=last)
+                .rev()
+                .filter(|position| *position < start)
+                .filter(matches)
+                .nth(occurrence - 1)
+        } else {
+            (start - 1..=last).filter(matches).nth(occurrence - 1)
+        };
+        Ok(BslValue::number_from_i64(
+            position.map_or(0, |position| position as i64 + 1),
+        ))
+    }
+
+    pub fn str_starts_with(&self, prefix: &Self) -> RtResult<Self> {
+        let text = self.as_str("СтрНачинаетсяС")?;
+        let prefix = prefix.as_str("СтрНачинаетсяС")?;
+        if prefix.units().is_empty() {
+            return Err(RtError::TypeError {
+                expected: "Непустая строка",
+                op: "СтрНачинаетсяС",
+            });
+        }
+        Ok(BslValue::Boolean(text.units().starts_with(prefix.units())))
+    }
+
+    pub fn str_ends_with(&self, suffix: &Self) -> RtResult<Self> {
+        let text = self.as_str("СтрЗаканчиваетсяНа")?;
+        let suffix = suffix.as_str("СтрЗаканчиваетсяНа")?;
+        if suffix.units().is_empty() {
+            return Err(RtError::TypeError {
+                expected: "Непустая строка",
+                op: "СтрЗаканчиваетсяНа",
+            });
+        }
+        Ok(BslValue::Boolean(text.units().ends_with(suffix.units())))
     }
 
     pub fn str_replace(&self, from: &Self, to: &Self) -> RtResult<Self> {
-        Ok(BslValue::Str(self.as_str("СтрЗаменить")?.replace(
+        let uuid_text;
+        let text = match self {
+            BslValue::Str(text) => text,
+            BslValue::Object(object) => match &**object {
+                BslObject::Uuid(bytes) => {
+                    uuid_text = BslString::from_utf8_string(uuid::format(bytes));
+                    &uuid_text
+                }
+                _ => {
+                    return Err(RtError::TypeError {
+                        expected: "Строка или УникальныйИдентификатор",
+                        op: "СтрЗаменить",
+                    });
+                }
+            },
+            _ => {
+                return Err(RtError::TypeError {
+                    expected: "Строка или УникальныйИдентификатор",
+                    op: "СтрЗаменить",
+                });
+            }
+        };
+        Ok(BslValue::Str(text.replace(
             from.as_str("СтрЗаменить")?,
             to.as_str("СтрЗаменить")?,
         )))
     }
 
-    /// `СтрРазделить(Строка, Разделитель)` -> `Массив` строк.
-    pub fn str_split(&self, sep: &Self) -> RtResult<Self> {
+    /// `СтрРазделить(Строка, Разделитель[, ВключатьПустые])` -> `Массив`.
+    pub fn str_split(&self, sep: &Self, include_empty: &Self) -> RtResult<Self> {
+        let include_empty = match include_empty {
+            BslValue::Undefined => true,
+            BslValue::Boolean(value) => *value,
+            _ => {
+                return Err(RtError::TypeError {
+                    expected: "Булево",
+                    op: "СтрРазделить",
+                });
+            }
+        };
         let parts = self
             .as_str("СтрРазделить")?
-            .split(sep.as_str("СтрРазделить")?);
-        Ok(BslValue::new_array(
-            parts.into_iter().map(BslValue::Str).collect(),
-        ))
+            .split(sep.as_str("СтрРазделить")?)
+            .into_iter()
+            .filter(|part| include_empty || !part.units().is_empty());
+        Ok(BslValue::new_array(parts.map(BslValue::Str).collect()))
     }
 
     /// `СтрСоединить(Массив, Разделитель)`. Не-строковые элементы массива
@@ -1179,6 +1339,18 @@ impl BslValue {
             .map(BslValue::Date)
             .ok_or(RtError::DateOutOfRange {
                 op: "ТекущаяДата"
+            })
+    }
+
+    /// `ТекущаяУниверсальнаяДата()` — текущий момент UTC как наивная дата
+    /// BSL. Источник времени принадлежит прогону и потому подменяется тем
+    /// же `Clock`, что и две соседние функции времени.
+    pub fn current_universal_date(env: &mut HostEnv) -> RtResult<Self> {
+        let secs = env.unix_millis().div_euclid(1000);
+        BslDate::from_seconds(secs + date::UNIX_EPOCH_SECONDS)
+            .map(BslValue::Date)
+            .ok_or(RtError::DateOutOfRange {
+                op: "ТекущаяУниверсальнаяДата",
             })
     }
 
@@ -1393,6 +1565,19 @@ impl BslValue {
     /// ссылочное значение BSL.
     pub fn new_object(object: impl ObjectProtocol + 'static) -> Self {
         BslValue::Object(Rc::new(BslObject::Extension(ObjectRef::new(object))))
+    }
+
+    /// Создаёт непрозрачное обещание, принадлежащее конкретному запуску.
+    #[must_use]
+    pub fn new_promise(execution_token: ExecutionToken, promise_id: PromiseId) -> Self {
+        Self::new_object(PromiseValue::new(execution_token, promise_id))
+    }
+
+    /// Идентификаторы обещания либо `None` для значения другого типа.
+    #[must_use]
+    pub fn promise_identity(&self) -> Option<(ExecutionToken, PromiseId)> {
+        let promise = self.object_ref()?.downcast_ref::<PromiseValue>()?;
+        Some((promise.execution_token(), promise.promise_id()))
     }
 
     /// Возвращает расширяемый объект, не раскрывая legacy-представление.
@@ -1996,7 +2181,8 @@ impl BslValue {
                         self.get_field_by_name(&name)
                     }
                 },
-                // ПОЗИЦИОННЫЙ, не по ключу: `Для Каждого` компилируется в
+                // Строковый индекс — ключ, как в BSL. Числовой пока остаётся
+                // ПОЗИЦИОННЫМ: `Для Каждого` компилируется в
                 // общий для всех коллекций протокол `CollectionLen` + рост
                 // числового индекса `0..len` через эту же функцию (см.
                 // `bsl-bytecode::compiler::RStmt::ForEach`) — компилятор не
@@ -2007,6 +2193,9 @@ impl BslValue {
                 // тоже читал по ключу, `м[0]` было бы неразрешимо
                 // неоднозначно между "0-я по счёту пара" и "значение по
                 // ключу 0" для карты с целочисленными ключами.
+                BslObject::Map(data) if matches!(idx, BslValue::Str(_)) => {
+                    Ok(data.borrow().get(idx).unwrap_or(BslValue::Undefined))
+                }
                 BslObject::Map(data) => {
                     let i = Self::index_as_usize(idx)?;
                     let data = data.borrow();
@@ -2020,6 +2209,18 @@ impl BslValue {
                 // `Соответствие` (`CollectionLen` + позиционный обход), и та
                 // же пара `Ключ`/`Значение` на выходе. Порядок — вставки, в
                 // обоих режимах хранения (`StructureStorage::entry_at`).
+                BslObject::Structure(s) if matches!(idx, BslValue::Str(_)) => {
+                    let BslValue::Str(name) = idx else {
+                        unreachable!("вариант проверен защитой match")
+                    };
+                    let text = name.to_string();
+                    let field = names
+                        .lookup(&text)
+                        .ok_or_else(|| RtError::UnknownColumn(text.clone()))?;
+                    s.borrow()
+                        .get(field)
+                        .ok_or_else(|| RtError::UnknownColumn(text))
+                }
                 BslObject::Structure(s) => {
                     let i = Self::index_as_usize(idx)?;
                     let s = s.borrow();
@@ -2058,8 +2259,12 @@ impl BslValue {
                     *slot = val;
                     Ok(())
                 }
-                // `Буфер[Позиция] = Значение` — единственный, кроме массива,
-                // изменяемый по индексу объект.
+                BslObject::Map(data) => {
+                    data.borrow_mut().insert(idx.clone(), val);
+                    Ok(())
+                }
+                // Буфер меняется по числовой позиции; соответствие выше —
+                // по значению ключа.
                 BslObject::BinaryBuffer(_) => bindata::set_byte(self, idx, &val),
                 _ => Err(RtError::NotIndexable),
             },
@@ -2179,16 +2384,11 @@ impl BslValue {
     /// `Структура.Свойство(Ключ)` / `Структура.Свойство(Ключ,
     /// ЗначениеПоУмолчанию)`.
     ///
-    /// ОТКЛОНЕНИЕ ОТ РЕАЛЬНОЙ 1С: настоящая сигнатура — `Свойство(Ключ,
-    /// Значение)`, где `Значение` — параметр ПО ССЫЛКЕ (выходной), а
-    /// возвращает функция `Булево` (найдено ли поле). Такой контракт для
-    /// ВСТРОЕННОГО метода потребовал бы протаскивать режим аргумента
-    /// (`ArgMode::ByRefLocal`) через `CallMethod` — сейчас это умеет только
-    /// `Call` для пользовательских процедур/функций (см.
-    /// `bsl-bytecode::instr::Instr::Call`), `CallMethod` вычисляет все
-    /// аргументы как значения. Ради одного метода вводить второй протокол
-    /// аргументов не стали — вместо этого второй аргумент трактуется как
-    /// значение по умолчанию (безопасный geттер: нет поля — нет и ошибки).
+    /// Одноместная форма возвращает `Булево` наличия поля, как платформа.
+    /// ОТКЛОНЕНИЕ остаётся только у двухместной формы: настоящий второй
+    /// параметр — выходной ПО ССЫЛКЕ, но `CallMethod` пока не несёт
+    /// `ArgMode::ByRefLocal`. До появления такого ABI он трактуется как
+    /// значение по умолчанию безопасного геттера.
     pub fn structure_property(
         &self,
         field: NameId,
@@ -2196,10 +2396,13 @@ impl BslValue {
     ) -> RtResult<BslValue> {
         match self {
             BslValue::Object(o) => match &**o {
-                BslObject::Structure(s) => Ok(s
-                    .borrow()
-                    .get(field)
-                    .unwrap_or_else(|| default.unwrap_or(BslValue::Undefined))),
+                BslObject::Structure(s) => {
+                    let value = s.borrow().get(field);
+                    match default {
+                        None => Ok(BslValue::Boolean(value.is_some())),
+                        Some(default) => Ok(value.unwrap_or(default)),
+                    }
+                }
                 _ => Err(RtError::NotAnObject),
             },
             _ => Err(RtError::NotAnObject),
@@ -2246,6 +2449,29 @@ impl BslValue {
                 _ => Err(RtError::NotAnObject),
             },
             _ => Err(RtError::NotAnObject),
+        }
+    }
+
+    /// Снимок пар `Соответствие` в порядке вставки. Нужен компонентам,
+    /// которые переводят коллекцию в нейтральный DTO до внешнего эффекта.
+    pub fn map_entries(&self) -> RtResult<Vec<(BslValue, BslValue)>> {
+        match self {
+            BslValue::Object(object) => match &**object {
+                BslObject::Map(data) => {
+                    let data = data.borrow();
+                    Ok((0..data.len())
+                        .filter_map(|index| data.entry_at(index))
+                        .collect())
+                }
+                _ => Err(RtError::TypeError {
+                    expected: "Соответствие",
+                    op: "получение пар соответствия",
+                }),
+            },
+            _ => Err(RtError::TypeError {
+                expected: "Соответствие",
+                op: "получение пар соответствия",
+            }),
         }
     }
 
@@ -4057,6 +4283,24 @@ mod tests {
         assert_eq!(v, num("3"));
     }
 
+    #[test]
+    fn builtin_method_upper_bound_on_array() {
+        assert_eq!(
+            BuiltinMethod::lookup("UBound"),
+            Some(BuiltinMethod::UpperBound)
+        );
+        let empty = BslValue::new_array(Vec::new());
+        assert_eq!(
+            call_builtin_method(BuiltinMethod::UpperBound, &empty, &[]).unwrap(),
+            num("-1")
+        );
+        let filled = BslValue::new_array(vec![num("1"), num("2"), num("3")]);
+        assert_eq!(
+            call_builtin_method(BuiltinMethod::UpperBound, &filled, &[]).unwrap(),
+            num("2")
+        );
+    }
+
     /// Двоичные данные из байтов — минуя файл: разбиение и склейка сами по
     /// себе к файловой системе отношения не имеют, а фикстура
     /// `binary-data` проверяет их вместе с конструктором.
@@ -4198,5 +4442,21 @@ mod tests {
         let mut map = crate::map::MapData::default();
         map.insert(bin("ключ".as_bytes()), num("1"));
         assert_eq!(map.get(&bin("ключ".as_bytes())), Some(num("1")));
+    }
+
+    #[test]
+    fn uuid_is_accepted_by_case_conversion_functions() {
+        let uuid = BslValue::Object(Rc::new(BslObject::Uuid([
+            0xab, 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef, 0x12, 0x34, 0x56,
+            0x78, 0x90,
+        ])));
+        assert_eq!(
+            uuid.str_lower().unwrap().to_string(),
+            "abcdef12-3456-7890-abcd-ef1234567890"
+        );
+        assert_eq!(
+            uuid.str_upper().unwrap().to_string(),
+            "ABCDEF12-3456-7890-ABCD-EF1234567890"
+        );
     }
 }

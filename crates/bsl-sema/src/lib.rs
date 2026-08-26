@@ -12,7 +12,8 @@ pub use resolved::{
     LabelId, RExpr, RStmt, Resolved, ResolvedArg, ResolvedFunction, ResolvedParam, ResolvedProgram,
 };
 pub use resolver::{
-    NEW_TYPES, ResolvedSnippetWithRequirements, SemaError, SnippetSignature, resolve_program,
+    NEW_TYPES, ResolvedSnippetWithRequirements, SemaError, SnippetSignature,
+    resolve_async_snippet_stmts, resolve_async_snippet_stmts_with_registry, resolve_program,
     resolve_program_with_registry, resolve_repl_stmts, resolve_repl_stmts_with_registry,
     resolve_script, resolve_snippet_stmts, resolve_snippet_stmts_with_registry,
 };

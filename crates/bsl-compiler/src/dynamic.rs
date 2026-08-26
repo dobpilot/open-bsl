@@ -68,22 +68,43 @@ pub fn compile_dynamic_snippet(
         })
         .collect();
     let (all_locals, body, fragment_requirements) = match registry {
-        Some(registry) => bsl_sema::resolve_snippet_stmts_with_registry(
-            request.locals,
-            request.module_vars,
-            &stmts,
-            &signatures,
-            registry,
-        )
-        .map_err(|e| format!("{e}"))?,
+        Some(registry) => {
+            let resolved = if request.caller_is_async {
+                bsl_sema::resolve_async_snippet_stmts_with_registry(
+                    request.locals,
+                    request.module_vars,
+                    &stmts,
+                    &signatures,
+                    registry,
+                )
+            } else {
+                bsl_sema::resolve_snippet_stmts_with_registry(
+                    request.locals,
+                    request.module_vars,
+                    &stmts,
+                    &signatures,
+                    registry,
+                )
+            };
+            resolved.map_err(|e| format!("{e}"))?
+        }
         None => {
-            let (locals, body) = bsl_sema::resolve_snippet_stmts(
-                request.locals,
-                request.module_vars,
-                &stmts,
-                &signatures,
-            )
-            .map_err(|e| format!("{e}"))?;
+            let resolved = if request.caller_is_async {
+                bsl_sema::resolve_async_snippet_stmts(
+                    request.locals,
+                    request.module_vars,
+                    &stmts,
+                    &signatures,
+                )
+            } else {
+                bsl_sema::resolve_snippet_stmts(
+                    request.locals,
+                    request.module_vars,
+                    &stmts,
+                    &signatures,
+                )
+            };
+            let (locals, body) = resolved.map_err(|e| format!("{e}"))?;
             (locals, body, vec![LibraryRequirement::bsl_rt()])
         }
     };
@@ -94,7 +115,7 @@ pub fn compile_dynamic_snippet(
         .map(|f| f.param_by_val.to_vec())
         .collect();
     let crate::SnippetUnit {
-        chunk,
+        mut chunk,
         names,
         shapes,
     } = crate::compile_snippet_with_requirements(
@@ -105,6 +126,7 @@ pub fn compile_dynamic_snippet(
         &requirements,
     )
     .map_err(|e| format!("{e}"))?;
+    chunk.is_async = request.caller_is_async;
 
     Ok(DynamicUnit {
         scope,

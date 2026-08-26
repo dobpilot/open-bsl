@@ -71,6 +71,31 @@ fn state_exec_and_eval_hide_the_internal_pipeline() {
         state.exec("Возврат Истина;").unwrap(),
         Value::Boolean(true)
     ));
+    assert_eq!(state.eval("Мин(3, 1, 2)").unwrap().to_string(), "1");
+    assert_eq!(state.eval("Макс(3, 1, 2)").unwrap().to_string(), "3");
+}
+
+#[cfg(feature = "stream")]
+#[test]
+fn binary_data_open_stream_agrees_between_interpreter_and_jit() {
+    let engine = Engine::builder().build().unwrap();
+    let module = engine
+        .compile(
+            "данные = ПолучитьДвоичныеДанныеИзСтроки(\"ABC\", КодировкаТекста.UTF8, Ложь);\n\
+             поток = данные.ОткрытьПотокДляЧтения();\n\
+             чтение = Новый ЧтениеДанных(поток);\n\
+             Возврат чтение.ПрочитатьБайт();",
+        )
+        .unwrap();
+    let interpreted = engine.new_state().run(&module).unwrap();
+    let jitted = engine
+        .state_builder()
+        .jit(true)
+        .build()
+        .run(&module)
+        .unwrap();
+    assert_eq!(interpreted.to_string(), "65");
+    assert_eq!(jitted.to_string(), interpreted.to_string());
 }
 
 #[test]

@@ -6,6 +6,11 @@ use bsl_number::BslNumber;
 use bsl_sema::resolve_program;
 use bsl_syntax::parse;
 
+#[test]
+fn scheduler_quantum_defaults_to_the_confirmed_value() {
+    assert_eq!(SchedulerConfig::default().safe_points_per_quantum, 1_024);
+}
+
 /// Компилятор фрагментов `Выполнить`/`Вычислить` для тестов VM.
 ///
 /// Настоящий живёт в фасаде (`open_bsl::DynamicCode`) вместе с кэшем; VM о
@@ -97,6 +102,121 @@ fn run_src(src: &str) -> BslValue {
     let resolved = resolve_program(&prog.items).unwrap_or_else(|e| panic!("sema error: {e:?}"));
     let program = compile_program(&resolved).unwrap_or_else(|e| panic!("compile error: {e:?}"));
     run_with_dynamic(&program, JitMode::Off).unwrap_or_else(|e| panic!("runtime error: {e:?}"))
+}
+
+#[test]
+fn await_suspends_an_async_task_and_returns_the_function_result() {
+    let value = run_src(
+        "Асинх Функция ДобавитьОдин(Знач Число)\n\
+             Возврат Число + 1;\n\
+         КонецФункции\n\
+         Асинх Процедура Проверить()\n\
+             Обещание = ДобавитьОдин(41);\n\
+             Результат = Ждать Обещание;\n\
+             Если Результат <> 42 Тогда\n\
+                 ВызватьИсключение \"неверный результат Await\";\n\
+             КонецЕсли;\n\
+         КонецПроцедуры\n\
+         Проверить();\n\
+         Возврат 1;",
+    );
+    assert_eq!(value, BslValue::Number(BslNumber::from_i64(1)));
+}
+
+#[test]
+fn async_tasks_share_module_state_but_not_local_stacks() {
+    let value = run_src(
+        "Перем Общая;\n\
+         Асинх Функция Записать(Знач НовоеЗначение)\n\
+             Общая = НовоеЗначение;\n\
+             Возврат Общая;\n\
+         КонецФункции\n\
+         Асинх Процедура Проверить()\n\
+             Локальная = 7;\n\
+             Результат = Ждать Записать(42);\n\
+             Если Результат <> 42 Или Общая <> 42 Или Локальная <> 7 Тогда\n\
+                 ВызватьИсключение \"состояния задач смешались\";\n\
+             КонецЕсли;\n\
+         КонецПроцедуры\n\
+         Проверить();\n\
+         Возврат 1;",
+    );
+    assert_eq!(value, BslValue::Number(BslNumber::from_i64(1)));
+}
+
+#[test]
+fn async_calls_and_ready_await_follow_the_measured_order() {
+    let value = run_src(
+        "Асинх Функция Лист(Журнал)\n\
+             Журнал.Добавить(\"Л1\");\n\
+             Возврат 41;\n\
+         КонецФункции\n\
+         Асинх Функция Родитель(Журнал)\n\
+             Журнал.Добавить(\"Р1\");\n\
+             ОбещаниеЛиста = Лист(Журнал);\n\
+             Журнал.Добавить(\"Р2\");\n\
+             Результат = Ждать ОбещаниеЛиста;\n\
+             Журнал.Добавить(\"Р3\");\n\
+             Возврат Результат + 1;\n\
+         КонецФункции\n\
+         Асинх Процедура Проверить()\n\
+             Журнал = Новый Массив;\n\
+             Обещание = Родитель(Журнал);\n\
+             Журнал.Добавить(\"Т\");\n\
+             Результат = Ждать Обещание;\n\
+             Если Результат <> 42 Или СтрСоединить(Журнал, \"\") <> \"Р1Л1Р2ТР3\" Тогда\n\
+                 ВызватьИсключение \"нарушен измеренный порядок async\";\n\
+             КонецЕсли;\n\
+         КонецПроцедуры\n\
+         Проверить();\n\
+         Возврат 1;",
+    );
+    assert_eq!(value, BslValue::Number(BslNumber::from_i64(1)));
+}
+
+#[test]
+fn await_of_an_ordinary_value_yields_and_returns_that_value() {
+    let value = run_src(
+        "Асинх Процедура Проверить()\n\
+             Результат = Ждать 42;\n\
+             Если Результат <> 42 Тогда\n\
+                 ВызватьИсключение \"Await изменил обычное значение\";\n\
+             КонецЕсли;\n\
+         КонецПроцедуры\n\
+         Проверить();\n\
+         Возврат 1;",
+    );
+    assert_eq!(value, BslValue::Number(BslNumber::from_i64(1)));
+}
+
+#[test]
+fn jit_and_interpreter_agree_on_async_fallbacks() {
+    let program = compile_src(
+        "Асинх Функция Ф() Возврат 42; КонецФункции\n\
+         Асинх Процедура П()\n\
+             Если Ждать Ф() <> 42 Тогда ВызватьИсключение; КонецЕсли;\n\
+         КонецПроцедуры\n\
+         П(); Возврат 7;",
+    );
+    let interpreted = run_with_dynamic(&program, JitMode::Off).unwrap();
+    let jitted = run_with_dynamic(&program, JitMode::On).unwrap();
+    assert_eq!(jitted, interpreted);
+}
+
+#[test]
+fn dynamic_await_is_allowed_only_from_an_async_frame() {
+    let value = run_src(
+        "Асинх Функция Ответ() Возврат 42; КонецФункции\n\
+         Асинх Процедура Проверить()\n\
+             Результат = Вычислить(\"Ждать Ответ()\");\n\
+             Если Результат <> 42 Тогда ВызватьИсключение; КонецЕсли;\n\
+         КонецПроцедуры\n\
+         Проверить(); Возврат 1;",
+    );
+    assert_eq!(value, BslValue::Number(BslNumber::from_i64(1)));
+
+    let error = run_src_err("Возврат Вычислить(\"Ждать 1\");");
+    assert!(matches!(error, RtError::DynamicError(_)));
 }
 
 /// Как `run_src`, но с подключённым `bsl-json`: JSON строится только
@@ -1354,11 +1474,15 @@ fn structure_delete_missing_field_is_a_no_op() {
 }
 
 #[test]
-fn structure_property_returns_value_or_undefined_or_default() {
+fn structure_property_reports_presence_and_keeps_the_two_argument_fallback() {
     let v = run_src("s = Новый Структура(\"x\", 5);\nВозврат s.Свойство(\"x\");");
-    assert_eq!(v, num("5"));
+    assert_eq!(v, BslValue::Boolean(true));
     let v = run_src("s = Новый Структура(\"x\", 5);\nВозврат s.Свойство(\"y\");");
-    assert_eq!(v, BslValue::Undefined);
+    assert_eq!(v, BslValue::Boolean(false));
+    // Вторая позиция платформы — выходной параметр. Пока `CallMethod` не
+    // несёт by-ref ABI, runtime сохраняет прежний getter-fallback.
+    let v = run_src("s = Новый Структура(\"x\", 5);\nВозврат s.Свойство(\"x\", 42);");
+    assert_eq!(v, num("5"));
     let v = run_src("s = Новый Структура(\"x\", 5);\nВозврат s.Свойство(\"y\", 42);");
     assert_eq!(v, num("42"));
 }
@@ -1415,6 +1539,7 @@ fn corrupt_program(instrs: Vec<Instr>) -> Program {
             param_by_val: Vec::new(),
             param_has_default: Vec::new(),
             is_procedure: false,
+            is_async: false,
             touches_objects: false,
             instrs,
             consts: Vec::new(),
@@ -3260,6 +3385,7 @@ fn a_dynamic_fragment_comes_from_the_host_not_from_the_vm() {
                 source: "2 + 2",
                 kind: request.kind,
                 scope: request.scope,
+                caller_is_async: request.caller_is_async,
                 locals: request.locals,
                 module_vars: request.module_vars,
                 functions: request.functions,
@@ -3687,6 +3813,7 @@ fn call_module_function_with_dynamic_eval_inside() {
         env.zone(),
         env.files(),
         env.random(),
+        env.network(),
         bsl_bytecode::DynamicScope::ROOT,
     )
     .unwrap();

@@ -20,12 +20,174 @@
 //!
 //! Платформа принимает около двух сотен имён кодировок (весь набор ICU).
 //! Здесь поддержаны те, что покрывают обмен в кириллице: UTF-8, UTF-16 в
-//! обоих порядках байт, UTF-32, windows-1251, cp866 и KOI8-R. Остальные
+//! обоих порядках байт, UTF-32, ASCII, windows-1251, cp866 и KOI8-R. Остальные
 //! имена отвергаются ЯВНОЙ ошибкой — молча писать не в той кодировке хуже,
 //! чем сказать, что не умеешь. Таблицы для новых однобайтовых кодировок
 //! добавляются сюда же, к соседям.
 
-use crate::{RtError, RtResult};
+use crate::{BslValue, EnumValue, RtError, RtResult};
+
+const BASE64_ALPHABET: &[u8; 64] =
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/// Кодирует байты в стандартный Base64 с дополнением `=` и без переносов строк.
+#[must_use]
+pub fn encode_base64(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let b0 = u32::from(chunk[0]);
+        let b1 = chunk.get(1).map_or(0, |byte| u32::from(*byte));
+        let b2 = chunk.get(2).map_or(0, |byte| u32::from(*byte));
+        let bits = (b0 << 16) | (b1 << 8) | b2;
+        out.push(BASE64_ALPHABET[((bits >> 18) & 63) as usize] as char);
+        out.push(BASE64_ALPHABET[((bits >> 12) & 63) as usize] as char);
+        out.push(if chunk.len() > 1 {
+            BASE64_ALPHABET[((bits >> 6) & 63) as usize] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            BASE64_ALPHABET[(bits & 63) as usize] as char
+        } else {
+            '='
+        });
+    }
+    out
+}
+
+/// Разбирает стандартный Base64. Пробельные символы между квартетами
+/// игнорируются, чтобы тот же примитив подходил XML Schema.
+#[must_use]
+pub fn decode_base64(text: &str) -> Option<Vec<u8>> {
+    let mut quad = [0u8; 4];
+    let mut filled = 0usize;
+    let mut padding = 0usize;
+    let mut out = Vec::new();
+    for ch in text.chars() {
+        if ch.is_whitespace() {
+            continue;
+        }
+        let value = match ch {
+            'A'..='Z' => ch as u8 - b'A',
+            'a'..='z' => ch as u8 - b'a' + 26,
+            '0'..='9' => ch as u8 - b'0' + 52,
+            '+' => 62,
+            '/' => 63,
+            '=' => {
+                padding += 1;
+                0
+            }
+            _ => return None,
+        };
+        if padding > 0 && ch != '=' {
+            return None;
+        }
+        quad[filled] = value;
+        filled += 1;
+        if filled == 4 {
+            let triple = (u32::from(quad[0]) << 18)
+                | (u32::from(quad[1]) << 12)
+                | (u32::from(quad[2]) << 6)
+                | u32::from(quad[3]);
+            out.push((triple >> 16) as u8);
+            if padding < 2 {
+                out.push((triple >> 8) as u8);
+            }
+            if padding == 0 {
+                out.push(triple as u8);
+            }
+            filled = 0;
+        }
+    }
+    (filled == 0 && padding <= 2).then_some(out)
+}
+
+/// Кодирует байты заглавными шестнадцатеричными цифрами без разделителей.
+#[must_use]
+pub fn encode_hex(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        out.push(HEX[(byte >> 4) as usize] as char);
+        out.push(HEX[(byte & 15) as usize] as char);
+    }
+    out
+}
+
+/// Область, которую оставляет незакодированной `КодироватьСтроку`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UrlEncodingMode {
+    /// Только unreserved-байты RFC 3986.
+    Url,
+    /// Unreserved, reserved и уже записанный `%` внутри полного URL.
+    UrlInUrl,
+}
+
+/// Кодирует UTF-8 байты строки заглавными percent-тройками.
+#[must_use]
+pub fn encode_url(text: &str, mode: UrlEncodingMode) -> String {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    let mut out = String::with_capacity(text.len());
+    for byte in text.bytes() {
+        let unreserved = byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~');
+        let reserved = matches!(
+            byte,
+            b'/' | b'?'
+                | b':'
+                | b'@'
+                | b'&'
+                | b'='
+                | b'+'
+                | b'$'
+                | b','
+                | b'#'
+                | b'['
+                | b']'
+                | b'%'
+        );
+        if unreserved || (mode == UrlEncodingMode::UrlInUrl && reserved) {
+            out.push(char::from(byte));
+        } else {
+            out.push('%');
+            out.push(char::from(HEX[(byte >> 4) as usize]));
+            out.push(char::from(HEX[(byte & 0x0f) as usize]));
+        }
+    }
+    out
+}
+
+/// Декодирует корректные percent-тройки; неполная тройка остаётся текстом,
+/// а негодный UTF-8 заменяется U+FFFD, как на платформе 8.3.27.
+#[must_use]
+pub fn decode_url(text: &str) -> String {
+    fn hex(byte: u8) -> Option<u8> {
+        match byte {
+            b'0'..=b'9' => Some(byte - b'0'),
+            b'a'..=b'f' => Some(byte - b'a' + 10),
+            b'A'..=b'F' => Some(byte - b'A' + 10),
+            _ => None,
+        }
+    }
+
+    let bytes = text.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%'
+            && let (Some(high), Some(low)) = (
+                bytes.get(index + 1).copied().and_then(hex),
+                bytes.get(index + 2).copied().and_then(hex),
+            )
+        {
+            decoded.push((high << 4) | low);
+            index += 3;
+        } else {
+            decoded.push(bytes[index]);
+            index += 1;
+        }
+    }
+    String::from_utf8_lossy(&decoded).into_owned()
+}
 
 /// Таблица однобайтовой кодировки `windows-1251`: старшая половина, 0x80..0xFF.
 /// Порождена из системных таблиц, младшая половина совпадает с ASCII.
@@ -99,6 +261,9 @@ pub enum Encoding {
     Utf16Be,
     Utf32Le,
     Utf32Be,
+    Ascii,
+    /// Однобайтовое тождественное отображение 0x00..0xFF в Unicode.
+    Latin1,
     Windows1251,
     Cp866,
     Koi8R,
@@ -121,6 +286,8 @@ impl Encoding {
             "UTF-16BE" | "UTF16BE" => Encoding::Utf16Be,
             "UTF-32" | "UTF32" | "UTF-32LE" | "UTF32LE" => Encoding::Utf32Le,
             "UTF-32BE" | "UTF32BE" => Encoding::Utf32Be,
+            "ASCII" | "US-ASCII" => Encoding::Ascii,
+            "ISO-8859-1" | "ISO8859-1" | "LATIN1" | "LATIN-1" => Encoding::Latin1,
             "WINDOWS-1251" | "CP1251" | "ANSI" => Encoding::Windows1251,
             "CP866" | "IBM866" | "OEM" => Encoding::Cp866,
             "KOI8-R" => Encoding::Koi8R,
@@ -130,6 +297,40 @@ impl Encoding {
                 )));
             }
         })
+    }
+
+    /// Разбирает платформенное значение кодировки. `default` применяется
+    /// только к `Неопределено`; чужой член перечисления остаётся ошибкой.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку для неподдержанного имени или значения другого типа.
+    pub fn from_bsl_value(
+        value: &BslValue,
+        default: Option<Self>,
+        op: &'static str,
+    ) -> RtResult<Self> {
+        match value {
+            BslValue::Undefined => default.ok_or(RtError::TypeError {
+                expected: "КодировкаТекста либо Строка",
+                op,
+            }),
+            BslValue::Str(value) => Self::by_name(&value.to_string()),
+            BslValue::Enum(value) => match value {
+                EnumValue::TextEncodingAnsi => Ok(Self::Windows1251),
+                EnumValue::TextEncodingOem => Ok(Self::Cp866),
+                EnumValue::TextEncodingUtf16 => Ok(Self::Utf16Le),
+                EnumValue::TextEncodingUtf8 | EnumValue::TextEncodingSystem => Ok(Self::Utf8),
+                _ => Err(RtError::TypeError {
+                    expected: "КодировкаТекста либо Строка",
+                    op,
+                }),
+            },
+            _ => Err(RtError::TypeError {
+                expected: "КодировкаТекста либо Строка",
+                op,
+            }),
+        }
     }
 
     fn single_byte_table(self) -> Option<&'static [char; 128]> {
@@ -144,7 +345,9 @@ impl Encoding {
             | Encoding::Utf16Le
             | Encoding::Utf16Be
             | Encoding::Utf32Le
-            | Encoding::Utf32Be => None,
+            | Encoding::Utf32Be
+            | Encoding::Ascii
+            | Encoding::Latin1 => None,
         }
     }
 
@@ -157,7 +360,11 @@ impl Encoding {
             Encoding::Utf16Le => &[0xFF, 0xFE],
             Encoding::Utf16Be => &[0xFE, 0xFF],
             Encoding::Utf32Le | Encoding::Utf32Be => &[],
-            Encoding::Windows1251 | Encoding::Cp866 | Encoding::Koi8R => &[],
+            Encoding::Ascii
+            | Encoding::Latin1
+            | Encoding::Windows1251
+            | Encoding::Cp866
+            | Encoding::Koi8R => &[],
         }
     }
 
@@ -203,6 +410,19 @@ impl Encoding {
                 }
                 out
             }
+            Encoding::Ascii => text
+                .chars()
+                .map(|ch| {
+                    u8::try_from(ch as u32)
+                        .ok()
+                        .filter(u8::is_ascii)
+                        .unwrap_or(b'?')
+                })
+                .collect(),
+            Encoding::Latin1 => text
+                .chars()
+                .map(|ch| u8::try_from(ch as u32).unwrap_or(b'?'))
+                .collect(),
             Encoding::Windows1251 | Encoding::Cp866 | Encoding::Koi8R => {
                 let table = self.single_byte_table().expect("однобайтовая таблица");
                 text.chars()
@@ -225,20 +445,19 @@ impl Encoding {
         }
     }
 
-    /// Байты в текст. Негодные последовательности становятся U+FFFD, а не
-    /// ошибкой — измерено на чтении файла чужой кодировкой. Ведущая
-    /// сигнатура (BOM) снимается: файл, который платформа сама записала, с
-    /// неё и начинается.
-    pub fn decode(self, bytes: &[u8]) -> String {
-        let s = self.decode_without_bom(bytes);
-        s.strip_prefix('\u{feff}').unwrap_or(&s).to_string()
+    /// Байты в текст. Негодные последовательности Unicode становятся
+    /// U+FFFD; ASCII с байтом `>= 0x80` отказывает, как платформа. Ведущая
+    /// сигнатура (BOM) снимается.
+    pub fn decode(self, bytes: &[u8]) -> RtResult<String> {
+        let s = self.decode_without_bom(bytes)?;
+        Ok(s.strip_prefix('\u{feff}').unwrap_or(&s).to_string())
     }
 
     /// Байты в текст БЕЗ снятия ведущей сигнатуры — чтение куска ПОТОКА
     /// (`ЧтениеДанных`), где начало куска ничем не выделено и U+FEFF в нём
     /// такой же символ, как любой другой.
-    pub fn decode_without_bom(self, bytes: &[u8]) -> String {
-        match self {
+    pub fn decode_without_bom(self, bytes: &[u8]) -> RtResult<String> {
+        Ok(match self {
             Encoding::Utf8 => String::from_utf8_lossy(bytes).into_owned(),
             Encoding::Utf16Le | Encoding::Utf16Be => {
                 let le = self == Encoding::Utf16Le;
@@ -268,6 +487,15 @@ impl Encoding {
                     })
                     .collect()
             }
+            Encoding::Ascii => {
+                if bytes.iter().any(|byte| !byte.is_ascii()) {
+                    return Err(RtError::TextDoc(
+                        "байт вне диапазона кодировки ASCII".to_string(),
+                    ));
+                }
+                bytes.iter().map(|byte| char::from(*byte)).collect()
+            }
+            Encoding::Latin1 => bytes.iter().map(|byte| char::from(*byte)).collect(),
             Encoding::Windows1251 | Encoding::Cp866 | Encoding::Koi8R => {
                 let table = self.single_byte_table().expect("однобайтовая таблица");
                 bytes
@@ -281,7 +509,7 @@ impl Encoding {
                     })
                     .collect()
             }
-        }
+        })
     }
 }
 
@@ -318,7 +546,7 @@ mod tests {
             Encoding::Koi8R,
         ] {
             let text = "Привет, мир! Ёжик.";
-            assert_eq!(enc.decode(&enc.encode(text)), text, "{enc:?}");
+            assert_eq!(enc.decode(&enc.encode(text)).unwrap(), text, "{enc:?}");
         }
     }
 
@@ -326,7 +554,27 @@ mod tests {
     #[test]
     fn wrong_encoding_yields_replacement_characters() {
         let bytes = Encoding::Windows1251.encode("Аб");
-        assert!(Encoding::Utf8.decode(&bytes).contains('\u{fffd}'));
+        assert!(Encoding::Utf8.decode(&bytes).unwrap().contains('\u{fffd}'));
+    }
+
+    #[test]
+    fn ascii_replaces_on_write_and_rejects_high_bytes_on_read() {
+        assert_eq!(Encoding::by_name("US-ASCII").unwrap(), Encoding::Ascii);
+        assert_eq!(Encoding::Ascii.encode("Аб"), b"??");
+        assert!(Encoding::Ascii.decode(&[0x80]).is_err());
+    }
+
+    #[test]
+    fn latin1_maps_every_byte_directly() {
+        assert_eq!(Encoding::by_name("iso-8859-1").unwrap(), Encoding::Latin1);
+        assert_eq!(
+            Encoding::Latin1.decode_without_bom(&[0xd0, 0x90]).unwrap(),
+            "Ð\u{90}"
+        );
+        assert_eq!(
+            Encoding::Latin1.encode_without_signature("Ð±"),
+            [0xd0, 0xb1]
+        );
     }
 
     #[test]
@@ -334,5 +582,56 @@ mod tests {
         assert!(Encoding::by_name("нет-такой").is_err());
         assert!(Encoding::by_name("utf-8").is_ok());
         assert!(Encoding::by_name("WINDOWS-1251").is_ok());
+    }
+
+    #[test]
+    fn base64_vectors_round_trip() {
+        for (plain, encoded) in [
+            (b"".as_slice(), ""),
+            (b"f".as_slice(), "Zg=="),
+            (b"fo".as_slice(), "Zm8="),
+            (b"foo".as_slice(), "Zm9v"),
+        ] {
+            assert_eq!(encode_base64(plain), encoded);
+            assert_eq!(decode_base64(encoded).as_deref(), Some(plain));
+        }
+    }
+
+    #[test]
+    fn base64_rejects_bad_padding_and_ignores_whitespace() {
+        assert_eq!(decode_base64(" Zm9v\r\n"), Some(b"foo".to_vec()));
+        assert_eq!(decode_base64("Zg=="), Some(b"f".to_vec()));
+        assert_eq!(decode_base64("Z=g="), None);
+        assert_eq!(decode_base64("Zg="), None);
+        assert_eq!(decode_base64("===="), None);
+    }
+
+    #[test]
+    fn hex_uses_uppercase() {
+        assert_eq!(encode_hex(&[0, 1, 0xab, 0xff]), "0001ABFF");
+    }
+
+    #[test]
+    fn url_modes_match_the_measured_platform_sets() {
+        let text = "AZaz09-._~ /?:@&=+$,#[]%";
+        assert_eq!(
+            encode_url(text, UrlEncodingMode::Url),
+            "AZaz09-._~%20%2F%3F%3A%40%26%3D%2B%24%2C%23%5B%5D%25"
+        );
+        assert_eq!(
+            encode_url(text, UrlEncodingMode::UrlInUrl),
+            "AZaz09-._~%20/?:@&=+$,#[]%"
+        );
+        assert_eq!(
+            encode_url("Привет мир", UrlEncodingMode::Url),
+            "%D0%9F%D1%80%D0%B8%D0%B2%D0%B5%D1%82%20%D0%BC%D0%B8%D1%80"
+        );
+    }
+
+    #[test]
+    fn url_decode_keeps_plus_and_incomplete_percent_and_replaces_bad_utf8() {
+        assert_eq!(decode_url("a+b%20c%2Fd%25"), "a+b c/d%");
+        assert_eq!(decode_url("x%2"), "x%2");
+        assert_eq!(decode_url("%FF"), "\u{fffd}");
     }
 }

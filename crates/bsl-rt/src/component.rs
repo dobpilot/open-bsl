@@ -6,6 +6,14 @@ use std::sync::Arc;
 
 use crate::{BslValue, RtError, RtResult, RuntimeShapes};
 
+/// Фабрика потока чтения над неизменяемыми `ДвоичныеДанные`.
+///
+/// Указатель на функцию сохраняет реестр `Send + Sync`: замыкание с
+/// состоянием сюда намеренно не допускается. Конкретный объект потока
+/// принадлежит `bsl-stream`, а базовый runtime знает только результат
+/// `BslValue`.
+pub type ByteStreamFactory = fn(std::rc::Rc<[u8]>) -> BslValue;
+
 /// Стабильный ключ библиотеки между семантическим анализом и компилятором.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct LibraryKey(String);
@@ -130,6 +138,8 @@ pub enum Capability {
     FileSystem,
     FunctionCaller,
     Random,
+    Network,
+    HostPromises,
 }
 
 /// Каким контекстом прогона располагал вызов, у которого спросили
@@ -154,6 +164,8 @@ pub struct InterpreterServices<'a> {
     pub zone: &'a Rc<dyn crate::TimeZone>,
     pub files: &'a Rc<dyn crate::FileSystem>,
     pub random: &'a crate::RandomHandle,
+    pub network: Option<&'a Rc<dyn crate::HttpClientFactory>>,
+    pub host_promises: Option<&'a mut dyn crate::HttpPromiseSpawner>,
     pub function_caller: Option<&'a mut FunctionCaller<'a>>,
 }
 
@@ -193,6 +205,8 @@ pub struct CallContext<'a> {
     /// спрашивает контекст на каждом вызове метода.
     files: Option<&'a Rc<dyn crate::FileSystem>>,
     random: Option<&'a crate::RandomHandle>,
+    network: Option<&'a Rc<dyn crate::HttpClientFactory>>,
+    host_promises: Option<&'a mut dyn crate::HttpPromiseSpawner>,
     function_caller: Option<&'a mut FunctionCaller<'a>>,
 }
 
@@ -208,6 +222,8 @@ impl<'a> CallContext<'a> {
             zone: Some(services.zone),
             files: Some(services.files),
             random: Some(services.random),
+            network: services.network,
+            host_promises: services.host_promises,
             function_caller: services.function_caller,
         }
     }
@@ -226,6 +242,8 @@ impl<'a> CallContext<'a> {
             zone: None,
             files: None,
             random: None,
+            network: None,
+            host_promises: None,
             function_caller: None,
         }
     }
@@ -343,6 +361,46 @@ impl<'a> CallContext<'a> {
             capability: Capability::Random,
             path: self.path,
         })
+    }
+
+    /// HTTP-фабрика сессии В СОБСТВЕННОСТЬ — соединение сохраняет её
+    /// результат и не зависит от контекста последующих методов.
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::CapabilityMissing`], если сеть запрещена или контекст
+    /// сокращённый.
+    pub fn network_rc(&self) -> RtResult<Rc<dyn crate::HttpClientFactory>> {
+        self.network
+            .map(Rc::clone)
+            .ok_or(RtError::CapabilityMissing {
+                capability: Capability::Network,
+                path: self.path,
+            })
+    }
+
+    /// Регистрирует внешнюю HTTP-операцию в таблице обещаний текущего
+    /// `Execution`. На сокращённом пути эта возможность отсутствует.
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::CapabilityMissing`], если вызов не принадлежит
+    /// интерпретируемому `Execution`, плюс синхронный отказ транспорта.
+    pub fn spawn_http(
+        &mut self,
+        client: std::sync::Arc<dyn crate::HttpClient>,
+        request: crate::HttpWireRequest,
+        mapper: crate::HttpResponseMapper,
+        error_mapper: crate::HttpErrorMapper,
+    ) -> RtResult<BslValue> {
+        let path = self.path;
+        self.host_promises
+            .as_deref_mut()
+            .ok_or(RtError::CapabilityMissing {
+                capability: Capability::HostPromises,
+                path,
+            })?
+            .spawn_http(client, request, mapper, error_mapper)
     }
 
     /// Таблица форм и зона ОДНОВРЕМЕННО: `runtime_shapes` берёт `self`
@@ -712,6 +770,7 @@ pub struct LibraryDescriptor {
     /// нет; каталог типов реестра разрешает неоднозначность по этому списку,
     /// а не по порядку `types`.
     type_aliases: &'static [(&'static str, &'static crate::TypeDescriptor)],
+    byte_stream_factory: Option<ByteStreamFactory>,
 }
 
 impl LibraryDescriptor {
@@ -733,6 +792,7 @@ impl LibraryDescriptor {
             constructors: &[],
             types: &[],
             type_aliases: &[],
+            byte_stream_factory: None,
         }
     }
 
@@ -767,6 +827,13 @@ impl LibraryDescriptor {
         a: &'static [(&'static str, &'static crate::TypeDescriptor)],
     ) -> Self {
         self.type_aliases = a;
+        self
+    }
+
+    /// Объявляет единственного поставщика потоков над нативными
+    /// `ДвоичныеДанные`.
+    pub const fn with_byte_stream_factory(mut self, factory: ByteStreamFactory) -> Self {
+        self.byte_stream_factory = Some(factory);
         self
     }
 
@@ -809,6 +876,10 @@ impl LibraryDescriptor {
     pub const fn type_aliases(&self) -> &'static [(&'static str, &'static crate::TypeDescriptor)] {
         self.type_aliases
     }
+
+    pub const fn byte_stream_factory(&self) -> Option<ByteStreamFactory> {
+        self.byte_stream_factory
+    }
 }
 
 /// Какой контекст прогона нужен обработчикам объектов этой библиотеки.
@@ -846,6 +917,46 @@ fn construct_uuid(context: &mut CallContext<'_>, arguments: &[BslValue]) -> RtRe
     BslValue::new_uuid(argument, context.random()?)
 }
 
+fn construct_value_list(
+    _context: &mut CallContext<'_>,
+    _arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    Ok(crate::value_list::new_value_list())
+}
+
+fn construct_date_qualifiers(
+    _context: &mut CallContext<'_>,
+    arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    let [fractions] = arguments else {
+        return Err(RtError::InvalidBytecode(
+            "конструктор КвалификаторыДаты вызван не с одним аргументом",
+        ));
+    };
+    crate::type_description::new_date_qualifiers(fractions)
+}
+
+fn construct_qualified_type_description(
+    context: &mut CallContext<'_>,
+    arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    let [names, number_qualifiers, string_qualifiers, date_qualifiers] = arguments else {
+        return Err(RtError::InvalidBytecode(
+            "квалифицированное ОписаниеТипов вызвано не с четырьмя аргументами",
+        ));
+    };
+    if !matches!(number_qualifiers, BslValue::Undefined)
+        || !matches!(string_qualifiers, BslValue::Undefined)
+        || !crate::type_description::is_date_time_qualifier(date_qualifiers)
+    {
+        return Err(RtError::TypeError {
+            expected: "квалификаторы даты и пустые остальные квалификаторы",
+            op: "Новый ОписаниеТипов",
+        });
+    }
+    BslValue::new_type_description(names, context.runtime_shapes())
+}
+
 const CORE_CONSTRUCTORS: &[ConstructorDescriptor] = &[
     ConstructorDescriptor {
         code: ConstructorCode::new(1),
@@ -859,6 +970,31 @@ const CORE_CONSTRUCTORS: &[ConstructorDescriptor] = &[
         arity: Arity::range(0, 1),
         call: construct_uuid,
     },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(3),
+        names: &["СписокЗначений", "ValueList"],
+        arity: Arity::exact(0),
+        call: construct_value_list,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(4),
+        names: &["КвалификаторыДаты"],
+        arity: Arity::exact(1),
+        call: construct_date_qualifiers,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(5),
+        names: &["ОписаниеТипов"],
+        arity: Arity::exact(4),
+        call: construct_qualified_type_description,
+    },
+];
+
+const CORE_TYPES: &[&crate::TypeDescriptor] = &[
+    &crate::error_info::ERROR_INFO_TYPE,
+    &crate::value_list::VALUE_LIST_TYPE,
+    &crate::value_list::VALUE_LIST_ITEM_TYPE,
+    &crate::type_description::DATE_QUALIFIERS_TYPE,
 ];
 
 /// Дескриптор базового компонента. На переходном этапе встроенные функции
@@ -871,6 +1007,7 @@ pub const fn core_library() -> LibraryDescriptor {
         ObjectContextNeed::Reduced,
     )
     .with_constructors(CORE_CONSTRUCTORS)
+    .with_types(CORE_TYPES)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -919,6 +1056,9 @@ pub enum RegistryError {
     },
     DuplicateFunctionName(String),
     DuplicateConstructorName(String),
+    /// Поток над нативными `ДвоичныеДанные` может строить ровно один
+    /// компонент.
+    DuplicateByteStreamFactory,
     EmptyNames {
         package: String,
         code: u16,
@@ -959,6 +1099,12 @@ impl fmt::Display for RegistryError {
             }
             Self::DuplicateConstructorName(name) => {
                 write!(f, "имя конструктора {name} зарегистрировано дважды")
+            }
+            Self::DuplicateByteStreamFactory => {
+                write!(
+                    f,
+                    "фабрика потока над ДвоичныеДанные зарегистрирована дважды"
+                )
             }
             Self::EmptyNames { package, code } => {
                 write!(f, "запись {package}/{code} не содержит ни одного имени")
@@ -1283,12 +1429,21 @@ impl RuntimeBuilder {
         }
 
         let type_catalog = Arc::new(build_type_catalog(&self.libraries)?);
+        let mut byte_stream_factories = self
+            .libraries
+            .iter()
+            .filter_map(LibraryDescriptor::byte_stream_factory);
+        let byte_stream_factory = byte_stream_factories.next();
+        if byte_stream_factories.next().is_some() {
+            return Err(RegistryError::DuplicateByteStreamFactory);
+        }
 
         Ok(RuntimeRegistry {
             libraries: self.libraries,
             function_names,
             constructor_names,
             type_catalog,
+            byte_stream_factory,
         })
     }
 }
@@ -1299,6 +1454,7 @@ pub struct RuntimeRegistry {
     function_names: HashMap<String, (u8, FunctionCode)>,
     constructor_names: HashMap<String, (u8, ConstructorCode)>,
     type_catalog: Arc<TypeCatalog>,
+    byte_stream_factory: Option<ByteStreamFactory>,
 }
 
 impl RuntimeRegistry {
@@ -1345,6 +1501,10 @@ impl RuntimeRegistry {
     /// а каталог нужен [`RuntimeShapes::seeded`] из соседнего модуля.
     pub(crate) fn type_catalog(&self) -> Arc<TypeCatalog> {
         Arc::clone(&self.type_catalog)
+    }
+
+    pub(crate) fn byte_stream_factory(&self) -> Option<ByteStreamFactory> {
+        self.byte_stream_factory
     }
 
     pub fn requirements_for(
@@ -1412,6 +1572,10 @@ mod tests {
         Err(RtError::DynamicError(
             "не вызывается в тесте реестра".to_string(),
         ))
+    }
+
+    fn empty_stream_factory(_bytes: std::rc::Rc<[u8]>) -> BslValue {
+        BslValue::Undefined
     }
 
     const CORE_FUNCTIONS: &[FunctionDescriptor] = &[FunctionDescriptor {
@@ -1501,6 +1665,37 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn two_binary_data_stream_factories_are_rejected() {
+        let mut builder = RuntimeBuilder::new();
+        builder
+            .register(core())
+            .register(
+                LibraryDescriptor::new("stream-a", "1", ObjectContextNeed::Reduced)
+                    .with_byte_stream_factory(empty_stream_factory),
+            )
+            .register(
+                LibraryDescriptor::new("stream-b", "1", ObjectContextNeed::Reduced)
+                    .with_byte_stream_factory(empty_stream_factory),
+            );
+        assert_eq!(
+            builder.build().err(),
+            Some(RegistryError::DuplicateByteStreamFactory)
+        );
+    }
+
+    #[test]
+    fn missing_binary_data_stream_factory_is_a_catchable_component_error() {
+        let mut builder = RuntimeBuilder::new();
+        builder.register(core());
+        let registry = builder.build().unwrap();
+        let shapes = RuntimeShapes::seeded(Vec::new(), Vec::new(), Some(&registry));
+        assert!(matches!(
+            shapes.open_binary_data_stream(std::rc::Rc::from(&b"ABC"[..])),
+            Err(RtError::Component(_))
+        ));
+    }
+
     /// Нативный путь (JIT-шимы) не несёт возможностей: обращение к выводу
     /// или зоне отвечает ОДНОЙ формой отказа `CapabilityMissing` с пометкой
     /// пути — а не молчаливым стоком (прежнее поведение) и не чужим
@@ -1545,15 +1740,14 @@ mod descriptor_sizes {
     use super::{LibraryDescriptor, MethodDescriptor};
 
     /// Размеры дескрипторов зафиксированы намеренно (ABI-E плана
-    /// abi-refactor-f). `LibraryDescriptor` вырос ровно на толстый указатель
-    /// (16 байт на x86-64) — поле `type_aliases`, добавленное под каталог
-    /// типов ABI-D; записи статические, так что рост платится один раз на
-    /// библиотеку, а не на объект. `MethodDescriptor` — 32 байта (написания,
-    /// `arity`, обработчик), закрытие полей его не изменило. Тест ловит
-    /// незамеченный рост дескриптора.
+    /// abi-refactor-f). `LibraryDescriptor` содержит толстый указатель
+    /// `type_aliases` и один обычный указатель `byte_stream_factory` — всего
+    /// 128 байт на x86-64; записи статические, так что рост платится один раз
+    /// на библиотеку, а не на объект. `MethodDescriptor` — 32 байта
+    /// (написания, `arity`, обработчик). Тест ловит незамеченный рост.
     #[test]
     fn descriptors_have_the_expected_size() {
-        assert_eq!(std::mem::size_of::<LibraryDescriptor>(), 120);
+        assert_eq!(std::mem::size_of::<LibraryDescriptor>(), 128);
         assert_eq!(std::mem::size_of::<MethodDescriptor>(), 32);
     }
 }

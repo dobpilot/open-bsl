@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use std::sync::Arc;
 
-use crate::component::{RuntimeRegistry, TypeCatalog};
+use crate::component::{ByteStreamFactory, RuntimeRegistry, TypeCatalog};
 use crate::interner::NameInterner;
 use crate::shape::{Shape, ShapeTable};
 use crate::types::{TypeId, TypeRef};
@@ -39,6 +39,9 @@ pub struct RuntimeShapes {
     /// Каталог создаётся один раз и клонируется раз на прогон, так что
     /// атомарный счётчик здесь ничего не стоит.
     type_catalog: Arc<TypeCatalog>,
+    /// Проверенный единственный поставщик потока над нативными
+    /// `ДвоичныеДанные`.
+    byte_stream_factory: Option<ByteStreamFactory>,
 }
 
 impl RuntimeShapes {
@@ -63,7 +66,21 @@ impl RuntimeShapes {
             type_catalog: registry
                 .map(RuntimeRegistry::type_catalog)
                 .unwrap_or_default(),
+            byte_stream_factory: registry.and_then(RuntimeRegistry::byte_stream_factory),
         }
+    }
+
+    /// Создаёт поток чтения над неизменяемыми байтами через компонент,
+    /// который объявил соответствующую возможность.
+    pub fn open_binary_data_stream(&self, bytes: Rc<[u8]>) -> crate::RtResult<crate::BslValue> {
+        let factory = self.byte_stream_factory.ok_or_else(|| {
+            crate::ComponentError::raise(
+                crate::PACKAGE_NAME,
+                "поставщик",
+                "компонент потока над ДвоичныеДанные не зарегистрирован",
+            )
+        })?;
+        Ok(factory(bytes))
     }
 
     /// Объявленные компонентами типы — для тех, кому нужен список, а не

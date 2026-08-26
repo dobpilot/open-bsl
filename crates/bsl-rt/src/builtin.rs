@@ -13,6 +13,8 @@ pub enum HostEffect {
     Env,
     /// Читает или пишет через файловую систему прогона.
     Files,
+    /// Выбирает временный путь внутри файловой системы из случайности прогона.
+    TempFiles,
 }
 
 /// Встроенные функции, ответ которых берётся не из аргументов, а из
@@ -30,6 +32,7 @@ pub enum HostEffect {
 pub fn call_builtin_env(f: BuiltinFn, env: &mut HostEnv) -> RtResult<BslValue> {
     match f {
         BuiltinFn::CurrentDate => BslValue::current_date(env),
+        BuiltinFn::CurrentUniversalDate => BslValue::current_universal_date(env),
         BuiltinFn::CurrentUniversalDateInMilliseconds => {
             BslValue::current_universal_date_in_milliseconds(env)
         }
@@ -63,6 +66,10 @@ pub enum BuiltinFn {
     Asin,
     Acos,
     Atan,
+    /// Наименьшее из одного или нескольких сравнимых значений.
+    Min,
+    /// Наибольшее из одного или нескольких сравнимых значений.
+    Max,
     /// `Окр(x, ЧислоРазрядов, Режим)` — арность у самой функции в 1С
     /// переменная (второй и третий аргументы необязательны, оба по
     /// умолчанию `0`), но здесь всегда 3:
@@ -108,6 +115,10 @@ pub enum BuiltinFn {
     /// `СтрНайти`/`StrFind(строка, подстрока)` -> позиция 1-based в
     /// код-юнитах UTF-16, `0` если не найдено.
     StrFind,
+    /// Регистрозависимая проверка непустого префикса.
+    StrStartsWith,
+    /// Регистрозависимая проверка непустого суффикса.
+    StrEndsWith,
     /// `СтрЗаменить`/`StrReplace(строка, что, чем)`.
     StrReplace,
     /// `СтрРазделить`/`StrSplit(строка, разделитель)` -> `Массив`.
@@ -121,6 +132,12 @@ pub enum BuiltinFn {
     /// `СтрШаблон`/`StrTemplate(шаблон[, З1..З10])` — единственная
     /// по-настоящему вариативная встроенная функция (см. `arity_range`).
     StrTemplate,
+    /// `НСтр`/`NStr(РесурснаяСтрока[, КодЯзыка])` выбирает одно значение
+    /// из записи `ru = '...'; en = '...'`.
+    LocalizedString,
+    /// `ПустаяСтрока`/`IsBlankString(Значение)` проверяет отсутствие
+    /// непробельных символов; `Неопределено` также считается пустым.
+    IsBlankString,
     /// `Символ`/`Char(код)`.
     Char,
     /// `КодСимвола`/`CharCode(строка[, позиция])`.
@@ -132,6 +149,11 @@ pub enum BuiltinFn {
     TypeOf,
     /// `Тип`/`Type("ИмяТипа")` -> `Тип`.
     TypeByName,
+    /// Снимок текущего исключения BSL-задачи. Значение строит VM, потому
+    /// что базовый runtime не владеет стеком исполнения.
+    ErrorInfo,
+    /// Безопасный текст из неизменяемого снимка `ИнформацияОбОшибке`.
+    DetailedErrorDescription,
 
     /// `Дата(Год, Месяц, День[, Час, Минута, Секунда])` либо
     /// `Дата("ГГГГММДДЧЧММСС")` — одна встроенная функция с перегрузкой по
@@ -140,6 +162,9 @@ pub enum BuiltinFn {
     /// `ТекущаяДата`/`CurrentDate` — см. `BslValue::current_date` про то,
     /// почему момент берётся по UTC, а не по локальной зоне.
     CurrentDate,
+    /// `ТекущаяУниверсальнаяДата`/`CurrentUniversalDate` — текущий момент
+    /// UTC как значение `Дата`.
+    CurrentUniversalDate,
     /// Число миллисекунд с начала Unix-эпохи в UTC. Используется в BSL для
     /// измерения длительности выполнения коротких участков кода.
     CurrentUniversalDateInMilliseconds,
@@ -184,6 +209,18 @@ pub enum BuiltinFn {
     /// `MergeBinaryData` и `JoinBinaryData` платформа не знает), а не
     /// угадано по русскому имени.
     ConcatBinaryData,
+    /// `Base64Значение(Строка)` — двоичные данные из Base64.
+    Base64Value,
+    /// Стандартный Base64 без переносов строк.
+    GetBase64StringFromBinaryData,
+    /// Обратное преобразование Base64 в `ДвоичныеДанные`.
+    GetBinaryDataFromBase64String,
+    /// Заглавное шестнадцатеричное представление байтов.
+    GetHexStringFromBinaryData,
+    /// Percent-кодирование UTF-8 строки в одном из двух режимов платформы.
+    EncodeString,
+    /// Обратное percent-декодирование; `+` не считается пробелом.
+    DecodeString,
 
     /// `ПолучитьДвоичныеДанныеИзСтроки(Строка[, Кодировка][, ДобавлятьBOM])`
     /// (см. `bindata::binary_data_from_string`).
@@ -195,6 +232,10 @@ pub enum BuiltinFn {
     GetStringFromBinaryData,
     /// `ПолучитьСтрокуИзБуфераДвоичныхДанных(Буфер[, Кодировка])`.
     GetStringFromBinaryDataBuffer,
+    /// Снимок байтов буфера как неизменяемые `ДвоичныеДанные`.
+    GetBinaryDataFromBinaryDataBuffer,
+    /// Новый изменяемый буфер из байтов `ДвоичныеДанные`.
+    GetBinaryDataBufferFromBinaryData,
 
     /// `АргументыКоманднойСтроки` — массив строк, переданных скрипту после
     /// его имени в командной строке. В 1С такой глобальной функции нет —
@@ -204,6 +245,17 @@ pub enum BuiltinFn {
     /// обычный `Массив`, построенный заново на каждое чтение, — правки не
     /// переживают следующее обращение.
     CommandLineArguments,
+    /// Глобальное свойство конфигурации. В standalone-среде коллекция
+    /// общих модулей пуста.
+    Metadata,
+
+    /// `ПолучитьИмяВременногоФайла([Расширение])` — отсутствующий путь из
+    /// пространства host-файловой системы.
+    GetTempFileName,
+    /// Разделитель пути host-файловой системы.
+    GetPathSeparator,
+    /// `УдалитьФайлы(Путь)` — файл либо дерево; отсутствующий путь не ошибка.
+    DeleteFiles,
 }
 
 /// Написания встроенных ФУНКЦИЙ: `(имя, вариант)` в каноническом
@@ -228,6 +280,10 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("ASin", BuiltinFn::Asin),
     ("ACos", BuiltinFn::Acos),
     ("ATan", BuiltinFn::Atan),
+    ("Мин", BuiltinFn::Min),
+    ("Min", BuiltinFn::Min),
+    ("Макс", BuiltinFn::Max),
+    ("Max", BuiltinFn::Max),
     ("Окр", BuiltinFn::Round),
     ("Round", BuiltinFn::Round),
     ("Цел", BuiltinFn::Trunc),
@@ -260,6 +316,10 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("TrimR", BuiltinFn::TrimRight),
     ("СтрНайти", BuiltinFn::StrFind),
     ("StrFind", BuiltinFn::StrFind),
+    ("СтрНачинаетсяС", BuiltinFn::StrStartsWith),
+    ("StrStartsWith", BuiltinFn::StrStartsWith),
+    ("СтрЗаканчиваетсяНа", BuiltinFn::StrEndsWith),
+    ("StrEndsWith", BuiltinFn::StrEndsWith),
     ("СтрЗаменить", BuiltinFn::StrReplace),
     ("StrReplace", BuiltinFn::StrReplace),
     ("СтрРазделить", BuiltinFn::StrSplit),
@@ -272,6 +332,10 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("StrGetLine", BuiltinFn::StrGetLine),
     ("СтрШаблон", BuiltinFn::StrTemplate),
     ("StrTemplate", BuiltinFn::StrTemplate),
+    ("НСтр", BuiltinFn::LocalizedString),
+    ("NStr", BuiltinFn::LocalizedString),
+    ("ПустаяСтрока", BuiltinFn::IsBlankString),
+    ("IsBlankString", BuiltinFn::IsBlankString),
     ("Символ", BuiltinFn::Char),
     ("Char", BuiltinFn::Char),
     ("КодСимвола", BuiltinFn::CharCode),
@@ -282,10 +346,22 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("TypeOf", BuiltinFn::TypeOf),
     ("Тип", BuiltinFn::TypeByName),
     ("Type", BuiltinFn::TypeByName),
+    ("ИнформацияОбОшибке", BuiltinFn::ErrorInfo),
+    ("ErrorInfo", BuiltinFn::ErrorInfo),
+    (
+        "ПодробноеПредставлениеОшибки",
+        BuiltinFn::DetailedErrorDescription,
+    ),
+    (
+        "DetailedErrorDescription",
+        BuiltinFn::DetailedErrorDescription,
+    ),
     ("Дата", BuiltinFn::MakeDate),
     ("Date", BuiltinFn::MakeDate),
     ("ТекущаяДата", BuiltinFn::CurrentDate),
     ("CurrentDate", BuiltinFn::CurrentDate),
+    ("ТекущаяУниверсальнаяДата", BuiltinFn::CurrentUniversalDate),
+    ("CurrentUniversalDate", BuiltinFn::CurrentUniversalDate),
     (
         "ТекущаяУниверсальнаяДатаВМиллисекундах",
         BuiltinFn::CurrentUniversalDateInMilliseconds,
@@ -381,6 +457,14 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("ValueFromFile", BuiltinFn::ValueFromFile),
     ("АргументыКоманднойСтроки", BuiltinFn::CommandLineArguments),
     ("CommandLineArguments", BuiltinFn::CommandLineArguments),
+    ("Метаданные", BuiltinFn::Metadata),
+    ("Metadata", BuiltinFn::Metadata),
+    ("ПолучитьИмяВременногоФайла", BuiltinFn::GetTempFileName),
+    ("GetTempFileName", BuiltinFn::GetTempFileName),
+    ("ПолучитьРазделительПути", BuiltinFn::GetPathSeparator),
+    ("GetPathSeparator", BuiltinFn::GetPathSeparator),
+    ("УдалитьФайлы", BuiltinFn::DeleteFiles),
+    ("DeleteFiles", BuiltinFn::DeleteFiles),
     // Оба написания ИЗМЕРЕНЫ на файле схемы: и `СоздатьФабрикуXDTO`, и
     // `CreateXDTOFactory` отдают фабрику.
     // `ФабрикаXDTO` у платформы — СВОЙСТВО глобального контекста, а не
@@ -392,6 +476,36 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     ("SplitBinaryData", BuiltinFn::SplitBinaryData),
     ("СоединитьДвоичныеДанные", BuiltinFn::ConcatBinaryData),
     ("ConcatBinaryData", BuiltinFn::ConcatBinaryData),
+    ("Base64Значение", BuiltinFn::Base64Value),
+    ("Base64Value", BuiltinFn::Base64Value),
+    (
+        "ПолучитьBase64СтрокуИзДвоичныхДанных",
+        BuiltinFn::GetBase64StringFromBinaryData,
+    ),
+    (
+        "GetBase64StringFromBinaryData",
+        BuiltinFn::GetBase64StringFromBinaryData,
+    ),
+    (
+        "ПолучитьДвоичныеДанныеИзBase64Строки",
+        BuiltinFn::GetBinaryDataFromBase64String,
+    ),
+    (
+        "GetBinaryDataFromBase64String",
+        BuiltinFn::GetBinaryDataFromBase64String,
+    ),
+    (
+        "ПолучитьHexСтрокуИзДвоичныхДанных",
+        BuiltinFn::GetHexStringFromBinaryData,
+    ),
+    (
+        "GetHexStringFromBinaryData",
+        BuiltinFn::GetHexStringFromBinaryData,
+    ),
+    ("КодироватьСтроку", BuiltinFn::EncodeString),
+    ("EncodeString", BuiltinFn::EncodeString),
+    ("РаскодироватьСтроку", BuiltinFn::DecodeString),
+    ("DecodeString", BuiltinFn::DecodeString),
     (
         "ПолучитьДвоичныеДанныеИзСтроки",
         BuiltinFn::GetBinaryDataFromString,
@@ -423,6 +537,22 @@ pub const BUILTIN_FN_NAMES: &[(&str, BuiltinFn)] = &[
     (
         "GetStringFromBinaryDataBuffer",
         BuiltinFn::GetStringFromBinaryDataBuffer,
+    ),
+    (
+        "ПолучитьДвоичныеДанныеИзБуфераДвоичныхДанных",
+        BuiltinFn::GetBinaryDataFromBinaryDataBuffer,
+    ),
+    (
+        "GetBinaryDataFromBinaryDataBuffer",
+        BuiltinFn::GetBinaryDataFromBinaryDataBuffer,
+    ),
+    (
+        "ПолучитьБуферДвоичныхДанныхИзДвоичныхДанных",
+        BuiltinFn::GetBinaryDataBufferFromBinaryData,
+    ),
+    (
+        "GetBinaryDataBufferFromBinaryData",
+        BuiltinFn::GetBinaryDataBufferFromBinaryData,
     ),
 ];
 
@@ -475,8 +605,10 @@ impl BuiltinFn {
                 | BuiltinFn::Ln
                 | BuiltinFn::Log10
                 | BuiltinFn::Lower
+                | BuiltinFn::Max
                 | BuiltinFn::MakeDate
                 | BuiltinFn::Mid
+                | BuiltinFn::Min
                 | BuiltinFn::Pow
                 | BuiltinFn::Right
                 | BuiltinFn::Round
@@ -515,9 +647,12 @@ impl BuiltinFn {
         match self {
             BuiltinFn::Message => Some(HostEffect::Output),
             BuiltinFn::CurrentDate
+            | BuiltinFn::CurrentUniversalDate
             | BuiltinFn::CurrentUniversalDateInMilliseconds
             | BuiltinFn::CommandLineArguments => Some(HostEffect::Env),
             BuiltinFn::ValueToFile | BuiltinFn::ValueFromFile => Some(HostEffect::Files),
+            BuiltinFn::GetPathSeparator | BuiltinFn::DeleteFiles => Some(HostEffect::Files),
+            BuiltinFn::GetTempFileName => Some(HostEffect::TempFiles),
             _ => None,
         }
     }
@@ -526,7 +661,17 @@ impl BuiltinFn {
     /// платформа отвечает «Обращение к процедуре как к функции». Замер тот
     /// же, что у [`BuiltinFn::is_intrinsic`].
     pub fn is_procedure(self) -> bool {
-        matches!(self, BuiltinFn::Message | BuiltinFn::FillPropertyValues)
+        matches!(
+            self,
+            BuiltinFn::Message | BuiltinFn::FillPropertyValues | BuiltinFn::DeleteFiles
+        )
+    }
+
+    /// Сохраняет ли байткод фактическое число аргументов вместо
+    /// дополнения необязательных позиций значениями `Неопределено`.
+    #[must_use]
+    pub fn is_variadic(self) -> bool {
+        matches!(self, BuiltinFn::Min | BuiltinFn::Max)
     }
 
     /// `(минимум, максимум)` аргументов. У большинства встроенных они
@@ -545,11 +690,17 @@ impl BuiltinFn {
             | BuiltinFn::Format
             | BuiltinFn::Left
             | BuiltinFn::Right
-            | BuiltinFn::StrFind
-            | BuiltinFn::StrSplit
+            | BuiltinFn::StrStartsWith
+            | BuiltinFn::StrEndsWith
             | BuiltinFn::StrConcat
-            | BuiltinFn::StrGetLine => (2, 2),
+            | BuiltinFn::StrGetLine
+            | BuiltinFn::EncodeString
+            | BuiltinFn::DecodeString => (2, 2),
             BuiltinFn::StrReplace => (3, 3),
+            // Платформа принимает как один аргумент, так и 256
+            // (`measure-min-max.bsl`). Наш формат хранит `count` в `u8`,
+            // поэтому 255 — измеренное техническое ограничение open-bsl.
+            BuiltinFn::Min | BuiltinFn::Max => (1, u8::MAX as usize),
             // Границы ИЗМЕРЕНЫ перебором числа аргументов на 8.3.27: при
             // меньшем платформа отвечает «Недостаточно фактических
             // параметров», при большем — «Слишком много фактических
@@ -557,10 +708,15 @@ impl BuiltinFn {
             BuiltinFn::Round => (3, 3),
             // Длину можно не указывать — до конца строки.
             BuiltinFn::Mid => (2, 3),
+            BuiltinFn::StrFind => (2, 5),
+            // Третий аргумент включает пустые части и по умолчанию равен
+            // `Истина` (oracle `measure-string-split.bsl`).
+            BuiltinFn::StrSplit => (2, 3),
             // Позиция по умолчанию — первая.
             BuiltinFn::CharCode => (1, 2),
             // Шаблон плюс до десяти значений.
             BuiltinFn::StrTemplate => (1, 1 + crate::string::MAX_TEMPLATE_ARGS),
+            BuiltinFn::LocalizedString => (1, 2),
             BuiltinFn::AddMonth => (2, 2),
             // `Дата(Год, Месяц, День[, Час, Минута, Секунда])` —
             // минимум три; строковая форма `Дата("...")` — это один
@@ -569,8 +725,14 @@ impl BuiltinFn {
             // `BslValue::make_date`.
             BuiltinFn::MakeDate => (1, 6),
             BuiltinFn::CurrentDate
+            | BuiltinFn::CurrentUniversalDate
             | BuiltinFn::CurrentUniversalDateInMilliseconds
-            | BuiltinFn::CommandLineArguments => (0, 0),
+            | BuiltinFn::CommandLineArguments
+            | BuiltinFn::Metadata
+            | BuiltinFn::ErrorInfo
+            | BuiltinFn::GetPathSeparator => (0, 0),
+            BuiltinFn::GetTempFileName => (0, 1),
+            BuiltinFn::DeleteFiles => (1, 1),
             // Оба списка свойств необязательны; недостающие позиции
             // резолвер добьёт `Неопределено`, что и значит «не задан».
             BuiltinFn::FillPropertyValues => (2, 4),
@@ -597,6 +759,8 @@ impl BuiltinFn {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BuiltinMethod {
     Count,
+    /// `Массив.ВГраница()` — последний индекс или `-1` для пустого массива.
+    UpperBound,
     Add,
     Delete,
     Clear,
@@ -624,6 +788,11 @@ pub enum BuiltinMethod {
     Close,
     /// `ДвоичныеДанные.Размер()`.
     Size,
+    /// `ДвоичныеДанные.ОткрытьПотокДляЧтения()` — объект строит
+    /// зарегистрированный компонент потоков.
+    OpenStreamForRead,
+    /// `ОписаниеТипов.ПривестиЗначение(Значение)`.
+    AdjustValue,
     BufSet,
     ReadInt16,
     ReadInt32,
@@ -646,6 +815,8 @@ pub enum BuiltinMethod {
 pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
     ("Количество", BuiltinMethod::Count),
     ("Count", BuiltinMethod::Count),
+    ("ВГраница", BuiltinMethod::UpperBound),
+    ("UBound", BuiltinMethod::UpperBound),
     ("Добавить", BuiltinMethod::Add),
     ("Add", BuiltinMethod::Add),
     ("Удалить", BuiltinMethod::Delete),
@@ -688,6 +859,9 @@ pub const BUILTIN_METHOD_NAMES: &[(&str, BuiltinMethod)] = &[
     ("Close", BuiltinMethod::Close),
     ("Размер", BuiltinMethod::Size),
     ("Size", BuiltinMethod::Size),
+    ("ОткрытьПотокДляЧтения", BuiltinMethod::OpenStreamForRead),
+    ("OpenStreamForRead", BuiltinMethod::OpenStreamForRead),
+    ("ПривестиЗначение", BuiltinMethod::AdjustValue),
     ("Установить", BuiltinMethod::BufSet),
     ("Set", BuiltinMethod::BufSet),
     ("ПрочитатьЦелое16", BuiltinMethod::ReadInt16),
@@ -771,25 +945,27 @@ impl BuiltinMethod {
     pub fn static_arity(self) -> Option<usize> {
         match self {
             BuiltinMethod::Count
+            | BuiltinMethod::UpperBound
             | BuiltinMethod::Clear
             | BuiltinMethod::Close
-            | BuiltinMethod::Size => Some(0),
+            | BuiltinMethod::Size
+            | BuiltinMethod::OpenStreamForRead => Some(0),
             BuiltinMethod::Delete
             | BuiltinMethod::FindRows
             | BuiltinMethod::Total
             | BuiltinMethod::UnloadColumn
             | BuiltinMethod::IndexOf
+            | BuiltinMethod::AdjustValue
             | BuiltinMethod::BufSplit
             | BuiltinMethod::BufConcat => Some(1),
-            BuiltinMethod::Insert
-            | BuiltinMethod::LoadColumn
+            BuiltinMethod::LoadColumn
             | BuiltinMethod::Move
-            | BuiltinMethod::BufSet
             | BuiltinMethod::WriteBitwiseAnd
             | BuiltinMethod::WriteBitwiseOr
             | BuiltinMethod::WriteBitwiseXor
             | BuiltinMethod::WriteBitwiseAndNot => Some(2),
             BuiltinMethod::Add
+            | BuiltinMethod::Insert
             | BuiltinMethod::Get
             | BuiltinMethod::Property
             | BuiltinMethod::Find
@@ -806,7 +982,97 @@ impl BuiltinMethod {
             | BuiltinMethod::WriteInt32
             | BuiltinMethod::WriteInt64
             | BuiltinMethod::BufSlice
+            | BuiltinMethod::BufSet
             | BuiltinMethod::Invert => None,
+        }
+    }
+
+    /// Нужна ли методу возможность host-окружения.
+    ///
+    /// Имя `Записать` полиморфно: файловый эффект имеет только получатель
+    /// `ДвоичныеДанные`, однако JIT не всегда знает тип получателя. Поэтому
+    /// одна такая инструкция остаётся интерпретатору, где узкий файловый
+    /// вход отличает двоичные данные, а остальные получатели делегирует
+    /// обычной диспетчеризации. Остальная часть чанка компилируется.
+    #[must_use]
+    pub fn host_effect(self) -> Option<HostEffect> {
+        match self {
+            BuiltinMethod::Write => Some(HostEffect::Files),
+            _ => None,
+        }
+    }
+}
+
+fn localized_string(args: &[BslValue]) -> RtResult<BslValue> {
+    let source = args[0].as_str("НСтр")?.to_string();
+    // ИЗМЕРЕНО(NSTR.MULTI_LANGUAGE): конфигурация oracle-сеанса выбирает
+    // английское значение. Явный второй аргумент позволяет выбрать иной
+    // язык без зависимости от окружения процесса.
+    let language = match args.get(1) {
+        None | Some(BslValue::Undefined) => "en".to_string(),
+        Some(BslValue::Str(value)) => value.to_string(),
+        Some(_) => {
+            return Err(RtError::TypeError {
+                expected: "Строка",
+                op: "НСтр(..., КодЯзыка)",
+            });
+        }
+    };
+    let mut input = source.chars().peekable();
+    loop {
+        while input
+            .peek()
+            .is_some_and(|ch| ch.is_whitespace() || *ch == ';')
+        {
+            input.next();
+        }
+        if input.peek().is_none() {
+            return Ok(BslValue::Str(BslString::from_str("")));
+        }
+
+        let mut code = String::new();
+        while input
+            .peek()
+            .is_some_and(|ch| !ch.is_whitespace() && *ch != '=')
+        {
+            let Some(ch) = input.next() else {
+                break;
+            };
+            code.push(ch);
+        }
+        while input.peek().is_some_and(|ch| ch.is_whitespace()) {
+            input.next();
+        }
+        if input.next() != Some('=') {
+            return Ok(BslValue::Str(BslString::from_str("")));
+        }
+        while input.peek().is_some_and(|ch| ch.is_whitespace()) {
+            input.next();
+        }
+        if input.next() != Some('\'') {
+            return Ok(BslValue::Str(BslString::from_str("")));
+        }
+
+        let mut value = String::new();
+        let mut closed = false;
+        while let Some(ch) = input.next() {
+            if ch != '\'' {
+                value.push(ch);
+                continue;
+            }
+            if input.peek() == Some(&'\'') {
+                input.next();
+                value.push('\'');
+            } else {
+                closed = true;
+                break;
+            }
+        }
+        if !closed {
+            return Ok(BslValue::Str(BslString::from_str("")));
+        }
+        if code.eq_ignore_ascii_case(&language) {
+            return Ok(BslValue::Str(BslString::from_utf8_string(value)));
         }
     }
 }
@@ -832,6 +1098,8 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         BuiltinFn::Asin => args[0].asin(),
         BuiltinFn::Acos => args[0].acos(),
         BuiltinFn::Atan => args[0].atan(),
+        BuiltinFn::Min => min_max(args, true),
+        BuiltinFn::Max => min_max(args, false),
         BuiltinFn::Round => args[0].round(&args[1], &args[2]),
         BuiltinFn::Trunc => args[0].trunc(),
         BuiltinFn::Message => {
@@ -855,13 +1123,21 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         BuiltinFn::TrimAll => args[0].str_trim_all(),
         BuiltinFn::TrimLeft => args[0].str_trim_left(),
         BuiltinFn::TrimRight => args[0].str_trim_right(),
-        BuiltinFn::StrFind => args[0].str_find(&args[1]),
+        BuiltinFn::StrFind => args[0].str_find(&args[1], &args[2], &args[3], &args[4]),
+        BuiltinFn::StrStartsWith => args[0].str_starts_with(&args[1]),
+        BuiltinFn::StrEndsWith => args[0].str_ends_with(&args[1]),
         BuiltinFn::StrReplace => args[0].str_replace(&args[1], &args[2]),
-        BuiltinFn::StrSplit => args[0].str_split(&args[1]),
+        BuiltinFn::StrSplit => args[0].str_split(&args[1], &args[2]),
         BuiltinFn::StrConcat => args[0].str_join(&args[1]),
         BuiltinFn::StrLineCount => args[0].str_line_count(),
         BuiltinFn::StrGetLine => args[0].str_get_line(&args[1]),
         BuiltinFn::StrTemplate => args[0].str_template(&args[1..]),
+        BuiltinFn::LocalizedString => localized_string(args),
+        BuiltinFn::IsBlankString => Ok(BslValue::Boolean(match &args[0] {
+            BslValue::Undefined => true,
+            BslValue::Str(value) => value.to_string().trim().is_empty(),
+            _ => false,
+        })),
         BuiltinFn::Char => args[0].char_from_code(),
         BuiltinFn::CharCode => args[0].char_code(&args[1]),
         BuiltinFn::ValueIsFilled => Ok(BslValue::Boolean(args[0].is_filled()?)),
@@ -869,6 +1145,10 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         // Перехвачена в `call_builtin_fn_ctx`: без списка типов прогона
         // видны только нативные имена.
         BuiltinFn::TypeByName => args[0].type_by_name(),
+        BuiltinFn::ErrorInfo => Err(RtError::InvalidBytecode(
+            "ИнформацияОбОшибке требует контекста текущей BSL-задачи",
+        )),
+        BuiltinFn::DetailedErrorDescription => crate::detailed_error_description(&args[0]),
         BuiltinFn::MakeDate => BslValue::make_date(args),
         // Три функции окружения перехвачены в `call_builtin_fn_ctx`: часы,
         // случайность и аргументы запуска принадлежат ПРОГОНУ, и без него
@@ -876,10 +1156,12 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         // что у соседей ниже: функция публична, и прямой вызов из
         // Rust-кода не должен ронять процесс.
         BuiltinFn::CurrentDate
+        | BuiltinFn::CurrentUniversalDate
         | BuiltinFn::CurrentUniversalDateInMilliseconds
         | BuiltinFn::CommandLineArguments => Err(RtError::InvalidBytecode(
             "функция окружения вызвана без окружения прогона",
         )),
+        BuiltinFn::Metadata => Ok(crate::metadata::new_metadata()),
         BuiltinFn::DatePartOf(part) => args[0].date_component(part),
         BuiltinFn::DateBoundaryOf(which) => args[0].date_boundary(which),
         BuiltinFn::AddMonth => args[0].add_month(&args[1]),
@@ -890,10 +1172,89 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         // `RtError::InvalidBytecode`).
         BuiltinFn::SplitBinaryData => args[0].binary_data_split(&args[1]),
         BuiltinFn::ConcatBinaryData => args[0].binary_data_combine(),
+        BuiltinFn::Base64Value => {
+            let text = args[0].as_str("Base64")?.to_string();
+            Ok(crate::encoding::decode_base64(&text)
+                .map(BslValue::binary_data_of)
+                .unwrap_or(BslValue::Undefined))
+        }
+        BuiltinFn::GetBinaryDataFromBase64String => {
+            let text = args[0]
+                .as_str("ПолучитьДвоичныеДанныеИзBase64Строки")?
+                .to_string();
+            let bytes = crate::encoding::decode_base64(&text).unwrap_or_default();
+            Ok(BslValue::binary_data_of(bytes))
+        }
+        BuiltinFn::GetBase64StringFromBinaryData => {
+            let bytes = args[0].binary_data_bytes().ok_or(RtError::TypeError {
+                expected: "ДвоичныеДанные",
+                op: "ПолучитьBase64СтрокуИзДвоичныхДанных",
+            })?;
+            Ok(BslValue::Str(BslString::from_utf8_string(
+                crate::encoding::encode_base64(bytes),
+            )))
+        }
+        BuiltinFn::GetHexStringFromBinaryData => {
+            let bytes = args[0].binary_data_bytes().ok_or(RtError::TypeError {
+                expected: "ДвоичныеДанные",
+                op: "ПолучитьHexСтрокуИзДвоичныхДанных",
+            })?;
+            Ok(BslValue::Str(BslString::from_utf8_string(
+                crate::encoding::encode_hex(bytes),
+            )))
+        }
+        BuiltinFn::EncodeString => {
+            let text = args[0].as_str("КодироватьСтроку")?.to_string();
+            let mode = match args[1] {
+                BslValue::Enum(crate::EnumValue::StringEncodingUrl) => {
+                    crate::encoding::UrlEncodingMode::Url
+                }
+                BslValue::Enum(crate::EnumValue::StringEncodingUrlInUrl) => {
+                    crate::encoding::UrlEncodingMode::UrlInUrl
+                }
+                _ => {
+                    return Err(RtError::TypeError {
+                        expected: "СпособКодированияСтроки",
+                        op: "КодироватьСтроку",
+                    });
+                }
+            };
+            Ok(BslValue::Str(BslString::from_utf8_string(
+                crate::encoding::encode_url(&text, mode),
+            )))
+        }
+        BuiltinFn::DecodeString => {
+            let text = args[0].as_str("РаскодироватьСтроку")?.to_string();
+            match args[1] {
+                BslValue::Enum(
+                    crate::EnumValue::StringEncodingUrl | crate::EnumValue::StringEncodingUrlInUrl,
+                ) => Ok(BslValue::Str(BslString::from_utf8_string(
+                    crate::encoding::decode_url(&text),
+                ))),
+                _ => Err(RtError::TypeError {
+                    expected: "СпособКодированияСтроки",
+                    op: "РаскодироватьСтроку",
+                }),
+            }
+        }
         BuiltinFn::GetBinaryDataFromString => crate::bindata::binary_data_from_string(args),
         BuiltinFn::GetBinaryDataBufferFromString => crate::bindata::binary_buffer_from_string(args),
         BuiltinFn::GetStringFromBinaryData => crate::bindata::string_from_binary_data(args),
         BuiltinFn::GetStringFromBinaryDataBuffer => crate::bindata::string_from_binary_buffer(args),
+        BuiltinFn::GetBinaryDataFromBinaryDataBuffer => {
+            let bytes = args[0].binary_buffer_bytes().ok_or(RtError::TypeError {
+                expected: "БуферДвоичныхДанных",
+                op: "ПолучитьДвоичныеДанныеИзБуфераДвоичныхДанных",
+            })?;
+            Ok(BslValue::binary_data_of(bytes))
+        }
+        BuiltinFn::GetBinaryDataBufferFromBinaryData => {
+            let bytes = args[0].binary_data_bytes().ok_or(RtError::TypeError {
+                expected: "ДвоичныеДанные",
+                op: "ПолучитьБуферДвоичныхДанныхИзДвоичныхДанных",
+            })?;
+            Ok(BslValue::binary_buffer_of(bytes.to_vec()))
+        }
         BuiltinFn::ValueToStringInternal | BuiltinFn::ValueFromStringInternal => {
             Err(RtError::InvalidBytecode(
                 "функции внутреннего формата требуют контекста имён: вызывайте call_builtin_fn_ctx",
@@ -902,10 +1263,36 @@ pub fn call_builtin_fn(f: BuiltinFn, args: &[BslValue]) -> RtResult<BslValue> {
         BuiltinFn::ValueToFile | BuiltinFn::ValueFromFile => Err(RtError::InvalidBytecode(
             "файловые функции требуют файловой системы прогона: вызывайте call_builtin_files",
         )),
+        BuiltinFn::GetPathSeparator | BuiltinFn::DeleteFiles => Err(RtError::InvalidBytecode(
+            "файловые функции требуют файловой системы прогона: вызывайте call_builtin_files",
+        )),
+        BuiltinFn::GetTempFileName => Err(RtError::InvalidBytecode(
+            "временный путь требует файловой системы и случайности прогона",
+        )),
         BuiltinFn::FillPropertyValues => Err(RtError::InvalidBytecode(
             "ЗаполнитьЗначенияСвойств требует контекста имён: вызывайте call_builtin_fn_ctx",
         )),
     }
+}
+
+fn min_max(args: &[BslValue], minimum: bool) -> RtResult<BslValue> {
+    let mut best = args[0].clone();
+    for candidate in &args[1..] {
+        let order = match (&best, candidate) {
+            (BslValue::Boolean(left), BslValue::Boolean(right)) => left.cmp(right),
+            (BslValue::Boolean(left), BslValue::Number(right)) => {
+                bsl_number::BslNumber::from_i64(i64::from(*left)).cmp(right)
+            }
+            (BslValue::Number(left), BslValue::Boolean(right)) => {
+                left.cmp(&bsl_number::BslNumber::from_i64(i64::from(*right)))
+            }
+            _ => best.compare(candidate, if minimum { "Мин" } else { "Макс" })?,
+        };
+        if (minimum && order.is_gt()) || (!minimum && order.is_lt()) {
+            best = candidate.clone();
+        }
+    }
+    Ok(best)
 }
 
 /// Обёртка над [`call_builtin_fn`] с доступом к рантайм-контексту форм —
@@ -984,7 +1371,10 @@ pub fn call_builtin_fn_ctx(
         };
         return crate::vstr::value_from_string_internal(&text.to_string(), rt);
     }
-    if f.host_effect() == Some(HostEffect::Files) {
+    if matches!(
+        f.host_effect(),
+        Some(HostEffect::Files | HostEffect::TempFiles)
+    ) {
         return Err(RtError::InvalidBytecode(
             "файловые функции требуют файловой системы прогона: вызывайте call_builtin_files",
         ));
@@ -1043,10 +1433,58 @@ pub fn call_builtin_files(
             };
             crate::vstr::value_from_file(&path.to_string(), rt, files)
         }
+        BuiltinFn::GetPathSeparator => {
+            let [] = args else {
+                return Err(bad_arity());
+            };
+            let separator = files
+                .path_separator()
+                .map_err(|error| RtError::IoError(error.to_string()))?;
+            Ok(BslValue::Str(BslString::from_utf8_string(separator)))
+        }
+        BuiltinFn::DeleteFiles => {
+            let [path] = args else {
+                return Err(bad_arity());
+            };
+            let path = path.as_str("УдалитьФайлы")?.to_string();
+            files
+                .remove_path(&path)
+                .map_err(|error| RtError::IoError(format!("{path}: {error}")))?;
+            Ok(BslValue::Undefined)
+        }
         _ => Err(RtError::InvalidBytecode(
             "call_builtin_files вызвана не на файловой функции",
         )),
     }
+}
+
+/// `ПолучитьИмяВременногоФайла` соединяет две возможности одного прогона:
+/// случайные байты уже получены из [`crate::RandomHandle`], а пространство
+/// имён, проверка коллизии и резервирование принадлежат [`crate::FileSystem`].
+///
+/// # Errors
+///
+/// [`RtError::InvalidBytecode`] на чужой функции или неверной арности,
+/// [`RtError::TypeError`] на нестроковом суффиксе и ошибку файловой системы.
+pub fn call_builtin_temp_file(
+    f: BuiltinFn,
+    args: &[BslValue],
+    files: &dyn crate::FileSystem,
+    entropy: &[u8; 16],
+) -> RtResult<BslValue> {
+    if f != BuiltinFn::GetTempFileName || args.len() > 1 {
+        return Err(RtError::InvalidBytecode(
+            "call_builtin_temp_file вызвана не на своей функции или с неверной арностью",
+        ));
+    }
+    let suffix = match args.first() {
+        None | Some(BslValue::Undefined) => String::new(),
+        Some(value) => value.as_str("ПолучитьИмяВременногоФайла")?.to_string(),
+    };
+    let path = files
+        .temporary_path(&suffix, entropy)
+        .map_err(|error| RtError::IoError(error.to_string()))?;
+    Ok(BslValue::Str(BslString::from_utf8_string(path)))
 }
 
 /// Необязательный аргумент метода: отсутствующий читается как
@@ -1114,6 +1552,20 @@ pub fn call_builtin_method(
                 len as i64,
             )))
         }
+        BuiltinMethod::UpperBound => match obj {
+            BslValue::Object(object) if matches!(&**object, BslObject::Array(_)) => {
+                let BslObject::Array(items) = &**object else {
+                    unreachable!();
+                };
+                Ok(BslValue::Number(bsl_number::BslNumber::from_i64(
+                    items.borrow().len() as i64 - 1,
+                )))
+            }
+            _ => Err(RtError::MethodNotApplicable {
+                method: "ВГраница",
+                receiver: obj.type_name(),
+            }),
+        },
         BuiltinMethod::Add => match args {
             [] => obj.table_add_row(),
             [v] => match obj.push_element(v.clone()) {
@@ -1143,7 +1595,14 @@ pub fn call_builtin_method(
         }
         BuiltinMethod::Insert => match obj {
             BslValue::Object(o) if matches!(&**o, BslObject::Map(_)) => {
-                obj.map_insert(args[0].clone(), args[1].clone())?;
+                if args.is_empty() || args.len() > 2 {
+                    return Err(RtError::MethodNotApplicable {
+                        method: "Вставить",
+                        receiver: obj.type_name(),
+                    });
+                }
+                let value = args.get(1).cloned().unwrap_or(BslValue::Undefined);
+                obj.map_insert(args[0].clone(), value)?;
                 Ok(BslValue::Undefined)
             }
             // `Структура.Вставить` доходит сюда, только если `obj` НЕ
@@ -1206,6 +1665,22 @@ pub fn call_builtin_method(
                     method: "Найти",
                     receiver: obj.type_name(),
                 });
+            }
+            if let BslValue::Object(object) = obj
+                && let BslObject::Array(items) = &**object
+            {
+                if args.len() != 1 {
+                    return Err(RtError::MethodNotApplicable {
+                        method: "Найти",
+                        receiver: obj.type_name(),
+                    });
+                }
+                return Ok(items
+                    .borrow()
+                    .iter()
+                    .position(|item| item == value)
+                    .map(|index| BslValue::Number(bsl_number::BslNumber::from_i64(index as i64)))
+                    .unwrap_or(BslValue::Undefined));
             }
             obj.table_find(value, args.get(1).unwrap_or(&BslValue::Undefined))
         }
@@ -1301,6 +1776,14 @@ pub fn call_builtin_method(
         BuiltinMethod::Close => obj.close_object(),
         // У `ДвоичныеДанные` размер — метод; у буфера это свойство.
         BuiltinMethod::Size => obj.binary_data_size(),
+        // Для этого метода нужен поставщик из `RuntimeShapes`; обычный
+        // вход оставляет понятный отказ, а рабочий перехватывается в
+        // `call_builtin_method_ctx` ниже.
+        BuiltinMethod::OpenStreamForRead => Err(RtError::MethodNotApplicable {
+            method: "ОткрытьПотокДляЧтения",
+            receiver: obj.type_name(),
+        }),
+        BuiltinMethod::AdjustValue => crate::type_description::adjust_value(obj, &args[0]),
 
         // --- БуферДвоичныхДанных ------------------------------------------
         BuiltinMethod::BufSet => match args {
@@ -1384,11 +1867,37 @@ pub fn call_builtin_method_ctx(
             "число аргументов метода не совпадает с его арностью",
         ));
     }
+    if m == BuiltinMethod::OpenStreamForRead {
+        let bytes = match obj {
+            BslValue::Object(value) => match &**value {
+                BslObject::BinaryData(bytes) => std::rc::Rc::clone(bytes),
+                _ => {
+                    return Err(RtError::MethodNotApplicable {
+                        method: "ОткрытьПотокДляЧтения",
+                        receiver: obj.type_name(),
+                    });
+                }
+            },
+            _ => {
+                return Err(RtError::MethodNotApplicable {
+                    method: "ОткрытьПотокДляЧтения",
+                    receiver: obj.type_name(),
+                });
+            }
+        };
+        return rt.open_binary_data_stream(bytes);
+    }
     if is_structure(obj) {
         match m {
             BuiltinMethod::Insert => {
+                if args.is_empty() || args.len() > 2 {
+                    return Err(RtError::InvalidBytecode(
+                        "Вставить принимает один или два аргумента",
+                    ));
+                }
                 let field = key_name(&args[0], rt)?;
-                obj.structure_insert(field, args[1].clone(), &mut rt.shapes)?;
+                let value = args.get(1).cloned().unwrap_or(BslValue::Undefined);
+                obj.structure_insert(field, value, &mut rt.shapes)?;
                 return Ok(BslValue::Undefined);
             }
             BuiltinMethod::Delete => {
@@ -1449,9 +1958,113 @@ pub fn call_builtin_method_ctx(
     call_builtin_method(m, obj, args)
 }
 
+/// Исполняет встроенный метод с файловой возможностью прогона.
+///
+/// Сейчас это только `ДвоичныеДанные.Записать(Путь)`: файл создаётся либо
+/// полностью обрезается, что измерено повторной записью `41 -> 4243`.
+/// Полиморфные тёзки `Записать` не получают файловую систему и уходят в
+/// [`call_builtin_method_ctx`].
+///
+/// # Errors
+///
+/// Ошибку арности или типа пути, ошибку записи файла либо ошибку обычного
+/// метода для другого получателя.
+pub fn call_builtin_method_files(
+    m: BuiltinMethod,
+    obj: &BslValue,
+    args: &[BslValue],
+    rt: &mut RuntimeShapes,
+    files: &dyn crate::FileSystem,
+) -> RtResult<BslValue> {
+    if m == BuiltinMethod::Write
+        && let BslValue::Object(object) = obj
+        && let BslObject::BinaryData(bytes) = &**object
+    {
+        let [path] = args else {
+            return Err(RtError::InvalidBytecode(
+                "ДвоичныеДанные.Записать вызвана не с одним аргументом",
+            ));
+        };
+        let path = path.as_str("ДвоичныеДанные.Записать")?.to_string();
+        files
+            .write(&path, bytes)
+            .map_err(|error| RtError::IoError(format!("{path}: {error}")))?;
+        return Ok(BslValue::Undefined);
+    }
+    call_builtin_method_ctx(m, obj, args, rt)
+}
+
 #[cfg(test)]
 mod name_table_tests {
     use super::*;
+
+    #[test]
+    fn base64_builtins_follow_the_measured_invalid_input_contracts() {
+        let bad = BslValue::Str(BslString::from_str("Zm$v"));
+        assert_eq!(
+            call_builtin_fn(BuiltinFn::Base64Value, std::slice::from_ref(&bad))
+                .expect("ошибочная запись даёт значение, а не исключение"),
+            BslValue::Undefined
+        );
+        let alias = call_builtin_fn(BuiltinFn::GetBinaryDataFromBase64String, &[bad])
+            .expect("алиас возвращает пустые двоичные данные");
+        assert_eq!(alias.binary_data_bytes(), Some([].as_slice()));
+    }
+
+    #[test]
+    fn localized_string_selects_language_and_decodes_quotes_and_lines() {
+        let source = BslValue::Str(BslString::from_str(
+            "en = 'Hello'; ru = 'Первая\nВторая и ''цитата'''",
+        ));
+        let ru = BslValue::Str(BslString::from_str("ru"));
+        let en = BslValue::Str(BslString::from_str("en"));
+
+        assert_eq!(
+            call_builtin_fn(BuiltinFn::LocalizedString, &[source.clone(), ru])
+                .unwrap()
+                .to_string(),
+            "Первая\nВторая и 'цитата'"
+        );
+        assert_eq!(
+            call_builtin_fn(BuiltinFn::LocalizedString, &[source, en])
+                .unwrap()
+                .to_string(),
+            "Hello"
+        );
+        assert_eq!(
+            call_builtin_fn(
+                BuiltinFn::LocalizedString,
+                &[BslValue::Str(BslString::from_str("не ресурсная строка"))]
+            )
+            .unwrap()
+            .to_string(),
+            ""
+        );
+    }
+
+    #[test]
+    fn blank_string_follows_the_measured_primitive_contract() {
+        for value in [
+            BslValue::Undefined,
+            BslValue::Str(BslString::from_str("")),
+            BslValue::Str(BslString::from_str(" \t\n\u{a0}")),
+        ] {
+            assert_eq!(
+                call_builtin_fn(BuiltinFn::IsBlankString, &[value]).unwrap(),
+                BslValue::Boolean(true)
+            );
+        }
+        for value in [
+            BslValue::Str(BslString::from_str(" а ")),
+            BslValue::number_from_i64(0),
+            BslValue::Boolean(false),
+        ] {
+            assert_eq!(
+                call_builtin_fn(BuiltinFn::IsBlankString, &[value]).unwrap(),
+                BslValue::Boolean(false)
+            );
+        }
+    }
 
     /// Сторож входа `call_builtin_fn`: недостающий аргумент отвергается
     /// ошибкой образа, а не роняет процесс на `args[0]`. Путь VM защищён
@@ -1616,8 +2229,8 @@ mod name_table_tests {
         assert_eq!(BuiltinMethod::lookup("Опечатка"), None);
     }
 
-    /// Сторож арности стоит ДО быстрого пути структуры. `Вставить` читает
-    /// `args[0]`/`args[1]` сразу, а ОТКРЫТЫЙ опкод `CallObjectMethod`
+    /// Проверка арности стоит ДО быстрого пути структуры. ОТКРЫТЫЙ опкод
+    /// `CallObjectMethod`
     /// выбирает метод по номеру имени уже в рантайме — статическая проверка
     /// на связывании (она закрывает только закрытый `CallMethod`) сюда не
     /// достаёт. До сторожа недостающий аргумент ронял процесс.
@@ -1632,7 +2245,8 @@ mod name_table_tests {
         }
     }
 
-    /// Арность `static_arity` — ТОЧНАЯ (измерено: платформа отвергает и
+    /// Полиморфная арность `Вставить` — один либо два аргумента; лишний
+    /// обязан быть ошибкой, а не молча игнорироваться.
     /// `ЕстьАтрибут()`, и `ЕстьАтрибут("а","б","в")`), поэтому сторож ловит и
     /// ЛИШНИЙ аргумент. Быстрый путь структуры читает первые два и молча
     /// игнорировал третий: образ с завышенным `count` исполнялся успешно.
@@ -1648,7 +2262,9 @@ mod name_table_tests {
         let error = call_builtin_method_ctx(BuiltinMethod::Insert, &structure, &extra, &mut rt)
             .expect_err("лишний аргумент обязан быть ошибкой");
         assert!(matches!(error, RtError::InvalidBytecode(_)), "{error:?}");
-        // Контроль: ровно два аргумента по-прежнему принимаются.
+        // Контроль: обе измеренные формы принимаются.
+        call_builtin_method_ctx(BuiltinMethod::Insert, &structure, &extra[..1], &mut rt)
+            .expect("значение по умолчанию обязано работать");
         call_builtin_method_ctx(BuiltinMethod::Insert, &structure, &extra[..2], &mut rt)
             .expect("верная арность обязана работать");
     }

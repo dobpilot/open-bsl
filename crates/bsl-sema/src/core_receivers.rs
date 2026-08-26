@@ -268,7 +268,7 @@ impl Collector<'_> {
             | Expr::Undefined
             | Expr::Null
             | Expr::Ident(_) => {}
-            Expr::Unary { expr, .. } => self.walk_expr(expr),
+            Expr::Await(expr) | Expr::Unary { expr, .. } => self.walk_expr(expr),
             Expr::Binary { lhs, rhs, .. } => {
                 self.walk_expr(lhs);
                 self.walk_expr(rhs);

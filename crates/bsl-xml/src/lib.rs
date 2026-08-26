@@ -149,6 +149,44 @@ fn call_configuration_factory(
     configuration_factory()
 }
 
+fn call_xml_string(_context: &mut CallContext<'_>, arguments: &[BslValue]) -> RtResult<BslValue> {
+    let lexical = match &arguments[0] {
+        // ИЗМЕРЕНО на 8.3.27: глобальная `XMLСтрока` представляет оба
+        // пустых значения пустой строкой. Приведение XDTO-свойства остаётся
+        // строже и использует `lexical_of_value` напрямую.
+        BslValue::Undefined | BslValue::Null => String::new(),
+        value => {
+            xdto::instance::lexical_of_value(value, None).ok_or_else(|| RtError::TypeError {
+                expected: "Значение с лексическим представлением XML",
+                op: "XMLСтрока",
+            })?
+        }
+    };
+    Ok(BslValue::Str(lexical.as_str().into()))
+}
+
+fn call_find_disallowed_xml_characters(
+    _context: &mut CallContext<'_>,
+    arguments: &[BslValue],
+) -> RtResult<BslValue> {
+    let BslValue::Str(text) = &arguments[0] else {
+        return Err(RtError::TypeError {
+            expected: "Строка",
+            op: "НайтиНедопустимыеСимволыXML",
+        });
+    };
+    Ok(BslValue::Boolean(has_disallowed_xml_characters(text)))
+}
+
+fn has_disallowed_xml_characters(text: &bsl_rt::BslString) -> bool {
+    char::decode_utf16(text.units().iter().copied()).any(|decoded| {
+        let Ok(ch) = decoded else {
+            return true;
+        };
+        !matches!(ch as u32, 0x9 | 0xA | 0xD | 0x20..=0xD7FF | 0xE000..=0xFFFD | 0x10000..=0x10FFFF)
+    })
+}
+
 /// Глобальная `ФабрикаXDTO` — фабрика КОНФИГУРАЦИИ, а конфигурации здесь
 /// нет: скрипт исполняется сам по себе, метаданных с пакетами XDTO у него
 /// нет и взяться им неоткуда. Платформа в этом месте отдаёт живую фабрику
@@ -267,6 +305,20 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
         kind: FunctionKind::Function,
         call: call_configuration_factory,
     },
+    FunctionDescriptor {
+        code: FunctionCode::new(3),
+        names: &["XMLСтрока", "XMLString"],
+        arity: Arity::exact(1),
+        kind: FunctionKind::Function,
+        call: call_xml_string,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(4),
+        names: &["НайтиНедопустимыеСимволыXML", "FindDisallowedXMLCharacters"],
+        arity: Arity::exact(1),
+        kind: FunctionKind::Function,
+        call: call_find_disallowed_xml_characters,
+    },
 ];
 
 /// Типы, которые компонент вводит в язык: по ним работает `Тип("Имя")`.
@@ -363,6 +415,12 @@ mod tests {
             .iter()
             .map(|function| function.code.get())
             .collect::<Vec<_>>();
-        assert_eq!(functions, (1..=2).collect::<Vec<_>>());
+        assert_eq!(functions, (1..=4).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn xml_character_ranges_match_the_platform_contract() {
+        assert!(!has_disallowed_xml_characters(&"\t\n\r😀".into()));
+        assert!(has_disallowed_xml_characters(&"\0".into()));
     }
 }

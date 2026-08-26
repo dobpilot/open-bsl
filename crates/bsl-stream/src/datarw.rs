@@ -235,6 +235,10 @@ pub struct DataRwState {
     order_used: ByteOrder,
     /// `РазделительСтрок`.
     separator: String,
+    /// Нужно ли преобразовывать `\n` в `\r\n`. По умолчанию преобразование
+    /// включено; точная шестипараметрическая форма Connector передаёт
+    /// `Ложь` и сохраняет байт `0A` (измерено на 8.3.27).
+    convert_line_feeds: bool,
     /// Кто получатель. Держится в состоянии, чтобы `check_not_moved` брал
     /// текст стороны отсюда, а не получал его двенадцатью литералами
     /// `Side::X.who()` с мест вызова.
@@ -338,6 +342,13 @@ pub(crate) static DATA_READ_RESULT_TYPE: TypeDescriptor = TypeDescriptor {
     type_names: &["ReadDataResult"],
 };
 
+pub(crate) static SOURCE_STREAM_TYPE: TypeDescriptor = TypeDescriptor {
+    package: crate::PACKAGE_NAME,
+    name: "Поток",
+    type_display: "Поток",
+    type_names: &["Stream"],
+};
+
 #[derive(Debug)]
 struct DataRwObject {
     side: Side,
@@ -347,6 +358,74 @@ struct DataRwObject {
 #[derive(Debug)]
 struct DataReadResult {
     bytes: Rc<[u8]>,
+}
+
+/// Прокси, который отдаёт `ЧтениеДанных.ИсходныйПоток()`. Он работает с
+/// тем же носителем, но каждое изменение позиции синхронизирует с логической
+/// позицией читателя. Прямое изменение исходного `ПотокВПамяти` по-прежнему
+/// обнаруживается как чередование.
+#[derive(Debug)]
+struct SourceStreamObject {
+    state: Rc<RefCell<DataRwState>>,
+}
+
+impl ByteStreamProtocol for SourceStreamObject {
+    fn position(&self, op: &'static str) -> RtResult<u64> {
+        let state = self
+            .state
+            .try_borrow()
+            .map_err(|_| RtError::IoError(format!("{op}: поток уже занят другой операцией")))?;
+        state.stream(op)?.position(op)
+    }
+
+    fn set_position(&self, position: u64, op: &'static str) -> RtResult<()> {
+        let mut state = self
+            .state
+            .try_borrow_mut()
+            .map_err(|_| RtError::IoError(format!("{op}: поток уже занят другой операцией")))?;
+        state.check_not_moved()?;
+        state.move_to(position, op)
+    }
+
+    fn len(&self, op: &'static str) -> RtResult<u64> {
+        let state = self
+            .state
+            .try_borrow()
+            .map_err(|_| RtError::IoError(format!("{op}: поток уже занят другой операцией")))?;
+        state.stream(op)?.len(op)
+    }
+
+    fn read_bytes(&self, count: usize, op: &'static str) -> RtResult<Vec<u8>> {
+        let mut state = self
+            .state
+            .try_borrow_mut()
+            .map_err(|_| RtError::IoError(format!("{op}: поток уже занят другой операцией")))?;
+        state.check_not_moved()?;
+        state.read_bytes(count, op)
+    }
+
+    fn write_bytes(&self, bytes: &[u8], op: &'static str) -> RtResult<()> {
+        let mut state = self
+            .state
+            .try_borrow_mut()
+            .map_err(|_| RtError::IoError(format!("{op}: поток уже занят другой операцией")))?;
+        state.check_not_moved()?;
+        state.write_bytes(bytes, op)
+    }
+}
+
+impl ObjectProtocol for SourceStreamObject {
+    fn type_descriptor(&self) -> &'static TypeDescriptor {
+        &SOURCE_STREAM_TYPE
+    }
+
+    fn method_table(&self) -> &'static [MethodDescriptor] {
+        crate::stream::STREAM_METHODS
+    }
+
+    fn byte_stream(&self) -> Option<&dyn ByteStreamProtocol> {
+        Some(self)
+    }
 }
 
 impl Side {
@@ -524,6 +603,32 @@ fn rw_write_line(
     Ok(BslValue::Undefined)
 }
 
+fn rw_source_stream(
+    receiver: &dyn ObjectProtocol,
+    _arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    source_stream(receiver)
+}
+
+fn rw_copy_to(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    copy_to(receiver, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
+fn rw_write_binary_data_buffer(
+    receiver: &dyn ObjectProtocol,
+    arguments: &[BslValue],
+    _context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    write_binary_data_buffer(receiver, arguments)?;
+    Ok(BslValue::Undefined)
+}
+
 const DATA_RW_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor::new(&["Прочитать", "Read"], Arity::range(0, 1), rw_read),
     MethodDescriptor::new(&["Записать", "Write"], Arity::exact(1), rw_write),
@@ -593,6 +698,17 @@ const DATA_RW_METHODS: &[MethodDescriptor] = &[
         &["ЗаписатьСтроку", "WriteLine"],
         Arity::range(1, 3),
         rw_write_line,
+    ),
+    MethodDescriptor::new(
+        &["ИсходныйПоток", "SourceStream"],
+        Arity::exact(0),
+        rw_source_stream,
+    ),
+    MethodDescriptor::new(&["КопироватьВ", "CopyTo"], Arity::range(1, 2), rw_copy_to),
+    MethodDescriptor::new(
+        &["ЗаписатьБуферДвоичныхДанных", "WriteBinaryDataBuffer"],
+        Arity::exact(1),
+        rw_write_binary_data_buffer,
     ),
 ];
 
@@ -918,6 +1034,13 @@ fn at_most(
 
 // --- конструкторы ------------------------------------------------------------------
 
+#[derive(Clone, Copy)]
+struct NewStateOptions {
+    side: Side,
+    convert_line_feeds: bool,
+    op: &'static str,
+}
+
 /// Разбор источника и общих для обоих типов хвостовых аргументов
 /// `(Кодировка, ПорядокБайтов, РазделительСтрок)`.
 fn new_state(
@@ -925,10 +1048,14 @@ fn new_state(
     encoding: &BslValue,
     order: &BslValue,
     separator: &BslValue,
-    side: Side,
-    op: &'static str,
+    options: NewStateOptions,
     files: &dyn bsl_rt::FileSystem,
 ) -> RtResult<DataRwState> {
+    let NewStateOptions {
+        side,
+        convert_line_feeds,
+        op,
+    } = options;
     // Набор допустимых источников у сторон РАЗНЫЙ, и это измерено:
     // `ДвоичныеДанные` читателю годятся, а писателю платформа отвечает
     // «Несоответствие типов (параметр номер '1')». Общее у них — поток и имя
@@ -984,12 +1111,32 @@ fn new_state(
         .byte_stream()
         .expect("конструктор принимает только поток")
         .position(op)?;
-    let encoding_name = match encoding {
-        BslValue::Undefined => "UTF-8".to_string(),
-        BslValue::Str(s) => s.to_string(),
+    let (encoding_name, encoding_now) = match encoding {
+        BslValue::Undefined => ("UTF-8".to_string(), Encoding::Utf8),
+        BslValue::Str(s) => {
+            let name = s.to_string();
+            // Имя проверяется лениво ниже, поэтому неизвестная строка пока
+            // получает временное UTF-8.
+            let encoding = Encoding::by_name(&name).unwrap_or(Encoding::Utf8);
+            (name, encoding)
+        }
+        BslValue::Enum(value) => match value {
+            EnumValue::TextEncodingUtf8 => ("UTF-8".to_string(), Encoding::Utf8),
+            EnumValue::TextEncodingUtf16 => ("UTF-16".to_string(), Encoding::Utf16Le),
+            EnumValue::TextEncodingAnsi | EnumValue::TextEncodingSystem => {
+                ("windows-1251".to_string(), Encoding::Windows1251)
+            }
+            EnumValue::TextEncodingOem => ("CP866".to_string(), Encoding::Cp866),
+            _ => {
+                return Err(RtError::TypeError {
+                    expected: "КодировкаТекста либо Строка",
+                    op,
+                });
+            }
+        },
         _ => {
             return Err(RtError::TypeError {
-                expected: "Строка с именем кодировки",
+                expected: "КодировкаТекста либо Строка",
                 op,
             });
         }
@@ -998,7 +1145,6 @@ fn new_state(
     // платформа принимает, а падает уже `ПрочитатьСимволы` (измерено).
     // Поэтому здесь неизвестное имя не ошибка, а UTF-8 до первого
     // использования — разбор идёт в `encoding_of`.
-    let encoding_now = Encoding::by_name(&encoding_name).unwrap_or(Encoding::Utf8);
     let order = match order {
         BslValue::Undefined => ByteOrder::Little,
         BslValue::Enum(e) => ByteOrder::from_enum(*e).ok_or(RtError::TypeError {
@@ -1036,6 +1182,7 @@ fn new_state(
         order_shown: order,
         order_used: order,
         separator,
+        convert_line_feeds,
         side,
     })
 }
@@ -1059,8 +1206,11 @@ pub fn new_data_reader(
         encoding,
         order,
         separator,
-        Side::Reader,
-        "Новый ЧтениеДанных",
+        NewStateOptions {
+            side: Side::Reader,
+            convert_line_feeds: true,
+            op: "Новый ЧтениеДанных",
+        },
         files,
     )?;
     Ok(BslValue::new_object(DataRwObject {
@@ -1081,13 +1231,60 @@ pub fn new_data_writer(
     separator: &BslValue,
     files: &dyn bsl_rt::FileSystem,
 ) -> RtResult<BslValue> {
+    new_data_writer_extended(
+        target,
+        encoding,
+        order,
+        separator,
+        &BslValue::Undefined,
+        &BslValue::Undefined,
+        files,
+    )
+}
+
+/// Шестипараметрическая форма `ЗаписьДанных`, которую использует Connector.
+/// Пятый аргумент в измеренном вызове — пустая строка; иные значения пока
+/// не принимаются, чтобы не приписывать платформе неизмеренную семантику.
+pub fn new_data_writer_extended(
+    target: &BslValue,
+    encoding: &BslValue,
+    order: &BslValue,
+    separator: &BslValue,
+    converted_separator: &BslValue,
+    convert_line_feeds: &BslValue,
+    files: &dyn bsl_rt::FileSystem,
+) -> RtResult<BslValue> {
+    const OP: &str = "Новый ЗаписьДанных";
+    match converted_separator {
+        BslValue::Undefined => {}
+        BslValue::Str(value) if value.to_string().is_empty() => {}
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "Пустая строка в пятом параметре измеренной формы",
+                op: OP,
+            });
+        }
+    }
+    let convert_line_feeds = match convert_line_feeds {
+        BslValue::Undefined => true,
+        BslValue::Boolean(value) => *value,
+        _ => {
+            return Err(RtError::TypeError {
+                expected: "Булево",
+                op: OP,
+            });
+        }
+    };
     let state = new_state(
         target,
         encoding,
         order,
         separator,
-        Side::Writer,
-        "Новый ЗаписьДанных",
+        NewStateOptions {
+            side: Side::Writer,
+            convert_line_feeds,
+            op: "Новый ЗаписьДанных",
+        },
         files,
     )?;
     Ok(BslValue::new_object(DataRwObject {
@@ -1387,7 +1584,7 @@ pub fn read_chars(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValu
         Some(chars) => read_exactly_chars(&mut d, enc, chars, OP)?,
     };
     Ok(BslValue::Str(BslString::from_str(
-        &enc.decode_without_bom(&bytes),
+        &enc.decode_without_bom(&bytes)?,
     )))
 }
 
@@ -1425,7 +1622,11 @@ fn read_exactly_chars(
             },
             Encoding::Utf16Le | Encoding::Utf16Be => (1, 1),
             Encoding::Utf32Le | Encoding::Utf32Be => (3, 1),
-            Encoding::Windows1251 | Encoding::Cp866 | Encoding::Koi8R => (0, 1),
+            Encoding::Ascii
+            | Encoding::Latin1
+            | Encoding::Windows1251
+            | Encoding::Cp866
+            | Encoding::Koi8R => (0, 1),
         };
         if more > 0 {
             let rest = d.read_bytes(more, op)?;
@@ -1467,7 +1668,7 @@ pub fn read_line(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue
     if sep.is_empty() {
         let bytes = read_limited(&mut d, None, OP)?;
         return Ok(BslValue::Str(BslString::from_str(
-            &enc.decode_without_bom(&bytes),
+            &enc.decode_without_bom(&bytes)?,
         )));
     }
     let mut out: Vec<u8> = Vec::new();
@@ -1483,7 +1684,7 @@ pub fn read_line(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<BslValue
         }
     }
     Ok(BslValue::Str(BslString::from_str(
-        &enc.decode_without_bom(&out),
+        &enc.decode_without_bom(&out)?,
     )))
 }
 
@@ -1594,7 +1795,12 @@ pub fn write_chars(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     };
     let enc = encoding_of(&d, args.get(1), OP)?;
     d.check_not_moved()?;
-    let bytes = enc.encode_without_signature(&expand_line_feeds(&text));
+    let text = if d.convert_line_feeds {
+        expand_line_feeds(&text)
+    } else {
+        text
+    };
+    let bytes = enc.encode_without_signature(&text);
     d.write_bytes(&bytes, OP)
 }
 
@@ -1624,8 +1830,81 @@ pub fn write_line(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
     // Перевод `\n` -> `\r\n` накрывает и тело, и разделитель: измерено, что
     // разделитель по умолчанию (один `\n`) ложится байтами `13 10`, а явно
     // назначенный `\r\n` — байтами `13 13 10`.
-    let bytes = enc.encode_without_signature(&expand_line_feeds(&(text + &sep)));
+    let text = text + &sep;
+    let text = if d.convert_line_feeds {
+        expand_line_feeds(&text)
+    } else {
+        text
+    };
+    let bytes = enc.encode_without_signature(&text);
     d.write_bytes(&bytes, OP)
+}
+
+/// `ЧтениеДанных.ИсходныйПоток()` — синхронизирующий прокси над тем же
+/// носителем.
+pub fn source_stream(v: &dyn ObjectProtocol) -> RtResult<BslValue> {
+    const OP: &str = "ИсходныйПоток";
+    let state = reader(v, OP)?.clone();
+    Ok(BslValue::new_object(SourceStreamObject { state }))
+}
+
+/// `ЧтениеДанных.КопироватьВ(ЗаписьДанных[, Количество])`.
+pub fn copy_to(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
+    const OP: &str = "КопироватьВ";
+    let ([target] | [target, _]) = args else {
+        return Err(RtError::MethodNotApplicable {
+            method: OP,
+            receiver: v.type_descriptor().name,
+        });
+    };
+    let source = reader(v, OP)?.clone();
+    let target_object = target.object_ref().ok_or(RtError::TypeError {
+        expected: "ЗаписьДанных",
+        op: OP,
+    })?;
+    let target = writer(target_object.as_dyn(), OP)?.clone();
+    if Rc::ptr_eq(&source, &target) {
+        return Err(RtError::IoError(
+            "КопироватьВ: источник и приёмник совпадают".to_string(),
+        ));
+    }
+    let mut source = source.borrow_mut();
+    let mut target = target.borrow_mut();
+    source.check_not_moved()?;
+    target.check_not_moved()?;
+    let mut left = match args.get(1) {
+        None | Some(BslValue::Undefined) => source.stream(OP)?.len(OP)?.saturating_sub(source.pos),
+        value => count_arg(value, OP)?.expect("ветвь Undefined обработана"),
+    };
+    while left > 0 {
+        let count = usize::try_from(left.min(64 * 1024)).expect("размер блока ограничен");
+        let bytes = source.read_bytes(count, OP)?;
+        if bytes.is_empty() {
+            break;
+        }
+        target.write_bytes(&bytes, OP)?;
+        left -= bytes.len() as u64;
+    }
+    Ok(())
+}
+
+/// `ЗаписьДанных.ЗаписатьБуферДвоичныхДанных(Буфер)`.
+pub fn write_binary_data_buffer(v: &dyn ObjectProtocol, args: &[BslValue]) -> RtResult<()> {
+    const OP: &str = "ЗаписатьБуферДвоичныхДанных";
+    let [buffer] = args else {
+        return Err(RtError::MethodNotApplicable {
+            method: OP,
+            receiver: v.type_descriptor().name,
+        });
+    };
+    let bytes = buffer.binary_buffer_bytes().ok_or(RtError::TypeError {
+        expected: "БуферДвоичныхДанных",
+        op: OP,
+    })?;
+    let state = writer(v, OP)?;
+    let mut state = state.borrow_mut();
+    state.check_not_moved()?;
+    state.write_bytes(&bytes, OP)
 }
 
 /// `Закрыть()` у читателя и у писателя.
@@ -1820,6 +2099,68 @@ mod tests {
         assert!(read_line(st(&r), &[]).is_err());
         assert!(read_chars(st(&r), &[num(1)]).is_err());
         assert!(read_into_buffer(st(&r), &[num(1)]).is_err());
+    }
+
+    #[test]
+    fn source_stream_proxy_moves_the_reader_without_triggering_interleaving() {
+        let source = source_stream();
+        let reader = reader_over(&source);
+        let proxy = super::source_stream(st(&reader)).unwrap();
+        assert_eq!(st(&proxy).type_descriptor().name, "Поток");
+        stream::seek(
+            st(&proxy),
+            &[num(3), BslValue::Enum(EnumValue::StreamPositionBegin)],
+        )
+        .unwrap();
+        assert_eq!(as_u64(&read_byte(st(&reader)).unwrap()), 68);
+        assert_eq!(as_u64(&stream::current_position(st(&source)).unwrap()), 4);
+        assert_eq!(as_u64(&stream::current_position(st(&proxy)).unwrap()), 4);
+    }
+
+    #[test]
+    fn reader_copy_and_writer_buffer_follow_the_connector_contract() {
+        let source = source_stream();
+        stream::seek(
+            st(&source),
+            &[num(1), BslValue::Enum(EnumValue::StreamPositionBegin)],
+        )
+        .unwrap();
+        let reader = reader_over(&source);
+        let target = stream::new_memory_stream(&BslValue::Undefined).unwrap();
+        let writer = writer_over(&target);
+        copy_to(st(&reader), &[writer.clone(), num(2)]).unwrap();
+        write_binary_data_buffer(st(&writer), &[buffer(b"XY")]).unwrap();
+        assert_eq!(as_u64(&stream::current_position(st(&source)).unwrap()), 3);
+        assert_eq!(
+            stream::close_and_get_binary_data(st(&target))
+                .unwrap()
+                .binary_data_bytes()
+                .unwrap(),
+            b"BCXY"
+        );
+    }
+
+    #[test]
+    fn six_argument_writer_can_disable_line_feed_conversion() {
+        let target = stream::new_memory_stream(&BslValue::Undefined).unwrap();
+        let writer = super::new_data_writer_extended(
+            &target,
+            &BslValue::Enum(EnumValue::TextEncodingUtf8),
+            &BslValue::Enum(EnumValue::ByteOrderLittle),
+            &text(""),
+            &text(""),
+            &BslValue::Boolean(false),
+            &bsl_rt::SystemFileSystem,
+        )
+        .unwrap();
+        write_chars(st(&writer), &[text("A\nB")]).unwrap();
+        assert_eq!(
+            stream::close_and_get_binary_data(st(&target))
+                .unwrap()
+                .binary_data_bytes()
+                .unwrap(),
+            b"A\nB"
+        );
     }
 
     /// То же у писателя — и отвергнутая запись НИЧЕГО не пишет.

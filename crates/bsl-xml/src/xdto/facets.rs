@@ -556,49 +556,5 @@ pub(crate) fn decode_hex(text: &str) -> Option<Vec<u8>> {
 /// так требует XML Schema и так ведёт себя платформа с многострочным
 /// содержимым элемента.
 pub(crate) fn decode_base64(text: &str) -> Option<Vec<u8>> {
-    let mut quad = [0u8; 4];
-    let mut filled = 0usize;
-    let mut padding = 0usize;
-    let mut out = Vec::new();
-    for ch in text.chars() {
-        if ch.is_whitespace() {
-            continue;
-        }
-        let value = match ch {
-            'A'..='Z' => ch as u8 - b'A',
-            'a'..='z' => ch as u8 - b'a' + 26,
-            '0'..='9' => ch as u8 - b'0' + 52,
-            '+' => 62,
-            '/' => 63,
-            '=' => {
-                padding += 1;
-                0
-            }
-            _ => return None,
-        };
-        // Значащий символ после заполнителя — испорченная запись.
-        if padding > 0 && ch != '=' {
-            return None;
-        }
-        quad[filled] = value;
-        filled += 1;
-        if filled == 4 {
-            let triple = (u32::from(quad[0]) << 18)
-                | (u32::from(quad[1]) << 12)
-                | (u32::from(quad[2]) << 6)
-                | u32::from(quad[3]);
-            out.push((triple >> 16) as u8);
-            if padding < 2 {
-                out.push((triple >> 8) as u8);
-            }
-            if padding < 1 {
-                out.push(triple as u8);
-            }
-            filled = 0;
-        }
-    }
-    if filled != 0 || padding > 2 {
-        return None;
-    }
-    Some(out)
+    bsl_rt::encoding::decode_base64(text)
 }

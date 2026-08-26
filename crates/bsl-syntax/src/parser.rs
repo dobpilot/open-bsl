@@ -261,10 +261,13 @@ impl<'src> Parser<'src> {
     }
 
     fn parse_item(&mut self) -> Result<Item, ParseError> {
+        let is_async = self.eat_keyword(Keyword::Async);
         if self.at_keyword(Keyword::Procedure) {
-            Ok(Item::Procedure(self.parse_procedure()?))
+            Ok(Item::Procedure(self.parse_procedure(is_async)?))
         } else if self.at_keyword(Keyword::Function) {
-            Ok(Item::Function(self.parse_function()?))
+            Ok(Item::Function(self.parse_function(is_async)?))
+        } else if is_async {
+            Err(self.expected(Expectation::Keyword(Keyword::Procedure)))
         } else if self.at_keyword(Keyword::Var) {
             Ok(Item::VarDecl(self.parse_var_decl()?))
         } else {
@@ -298,7 +301,7 @@ impl<'src> Parser<'src> {
         Ok(params)
     }
 
-    fn parse_procedure(&mut self) -> Result<ProcDecl, ParseError> {
+    fn parse_procedure(&mut self, is_async: bool) -> Result<ProcDecl, ParseError> {
         self.expect_keyword(Keyword::Procedure)?;
         let name = self.expect_ident()?;
         let params = self.parse_params()?;
@@ -307,13 +310,14 @@ impl<'src> Parser<'src> {
         self.expect_keyword(Keyword::EndProcedure)?;
         Ok(ProcDecl {
             name,
+            is_async,
             params,
             export,
             body,
         })
     }
 
-    fn parse_function(&mut self) -> Result<FuncDecl, ParseError> {
+    fn parse_function(&mut self, is_async: bool) -> Result<FuncDecl, ParseError> {
         self.expect_keyword(Keyword::Function)?;
         let name = self.expect_ident()?;
         let params = self.parse_params()?;
@@ -322,6 +326,7 @@ impl<'src> Parser<'src> {
         self.expect_keyword(Keyword::EndFunction)?;
         Ok(FuncDecl {
             name,
+            is_async,
             params,
             export,
             body,
@@ -400,6 +405,8 @@ impl<'src> Parser<'src> {
             let expr = self.parse_expr()?;
             self.expect_rparen()?;
             Ok(Stmt::Execute(expr))
+        } else if self.at_keyword(Keyword::Await) {
+            Ok(Stmt::ExprStmt(self.parse_expr()?))
         } else {
             self.parse_simple_stmt()
         }
@@ -641,6 +648,7 @@ impl<'src> Parser<'src> {
     fn parse_unary(&mut self) -> Result<Expr, ParseError> {
         // Циклом по той же причине, что и `parse_not`: самовызов на
         // цепочке `-----x` обходил бы счётчик вложенности.
+        let await_expr = self.eat_keyword(Keyword::Await);
         let mut negs = 0usize;
         while self.eat(&TokenKind::Minus) {
             negs += 1;
@@ -651,6 +659,9 @@ impl<'src> Parser<'src> {
                 op: UnaryOp::Neg,
                 expr: Box::new(expr),
             };
+        }
+        if await_expr {
+            expr = Expr::Await(Box::new(expr));
         }
         Ok(expr)
     }
@@ -933,6 +944,59 @@ mod tests {
                 callee: Box::new(Expr::Ident("Ф".into())),
                 args: vec![],
             }))
+        );
+    }
+
+    #[test]
+    fn async_modifier_is_preserved_on_functions_and_procedures() {
+        let prog = parse_ok(
+            "Асинх Функция Значение()\nВозврат 42;\nКонецФункции\n\
+             Async Procedure Use()\nEndProcedure",
+        );
+        let Item::Function(function) = &prog.items[0] else {
+            panic!("ожидалась асинхронная функция");
+        };
+        assert!(function.is_async);
+        let Item::Procedure(procedure) = &prog.items[1] else {
+            panic!("ожидалась асинхронная процедура");
+        };
+        assert!(procedure.is_async);
+    }
+
+    #[test]
+    fn await_is_an_expression_in_both_spellings() {
+        let prog = parse_ok(
+            "Асинх Функция Значение(Обещание)\n\
+             Результат = Ждать Обещание;\n\
+             Возврат Await Обещание;\n\
+             КонецФункции",
+        );
+        let Item::Function(function) = &prog.items[0] else {
+            panic!("ожидалась функция");
+        };
+        let Stmt::Assign { value, .. } = &function.body[0] else {
+            panic!("ожидалось присваивание");
+        };
+        assert_eq!(
+            *value,
+            Expr::Await(Box::new(Expr::Ident("Обещание".into())))
+        );
+        assert_eq!(
+            function.body[1],
+            Stmt::Return(Some(Expr::Await(Box::new(Expr::Ident("Обещание".into())))))
+        );
+    }
+
+    #[test]
+    fn await_may_be_used_as_a_statement() {
+        let prog = parse_ok("Асинх Процедура П()\nЖдать Ф();\nAwait F();\nКонецПроцедуры");
+        let Item::Procedure(proc) = &prog.items[0] else {
+            panic!("ожидалась процедура");
+        };
+        assert!(
+            proc.body
+                .iter()
+                .all(|stmt| matches!(stmt, Stmt::ExprStmt(Expr::Await(_))))
         );
     }
 
