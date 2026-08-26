@@ -1376,6 +1376,11 @@ pub struct ProgramExecution {
     /// однозадачный fast path для него выключен. Обычный State остаётся
     /// с false и за проверку не платит.
     force_scheduled: bool,
+    /// Кооперативная отмена: взводится другим потоком, проверяется на
+    /// границах квантов. Латентность отмены ограничена квантом
+    /// (`safe_points_per_quantum` safe points), а не одним safe point —
+    /// более частая проверка стоила бы горячему циклу.
+    cancel_flag: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
     finished: bool,
 }
 
@@ -1422,6 +1427,7 @@ impl ProgramExecution {
             module_state,
             session_modules: SessionModules::default(),
             force_scheduled: false,
+            cancel_flag: None,
             finished: false,
         }
     }
@@ -1438,6 +1444,13 @@ impl ProgramExecution {
     /// poll_configuration_with_budget).
     pub fn set_always_scheduled(&mut self, value: bool) {
         self.force_scheduled = value;
+    }
+
+    /// Подключает флаг кооперативной отмены: при взведённом флаге очередной
+    /// квант возвращает неловимую `RtError::Canceled`, и драйвер фиксирует
+    /// terminal-состояние «Отменено».
+    pub fn set_cancel_flag(&mut self, flag: std::sync::Arc<std::sync::atomic::AtomicBool>) {
+        self.cancel_flag = Some(flag);
     }
 
     /// Планирует НЕленивую инициализацию модулей: тела выполняются до
@@ -1726,6 +1739,7 @@ impl ProgramExecution {
             module_state,
             session_modules,
             force_scheduled,
+            cancel_flag,
             finished,
             ..
         } = self;
@@ -1756,6 +1770,14 @@ impl ProgramExecution {
                     "выполнение остановлено до завершения корневой задачи".into(),
                 ));
             };
+            // Кооперативная отмена: граница кванта — единственная точка
+            // проверки; неловимость RtError::Canceled ведёт разматывание
+            // мимо «Попытки» — как измерено на платформе.
+            if let Some(flag) = &cancel_flag
+                && flag.load(std::sync::atomic::Ordering::Relaxed)
+            {
+                return Err(RtError::Canceled);
+            }
             let mut task = async_state
                 .tasks
                 .get_mut(task_id)

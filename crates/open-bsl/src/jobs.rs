@@ -147,6 +147,8 @@ pub(crate) struct JobRecord {
     pub payload_bytes: usize,
     /// Цель вызова числами: модуль каталога и индекс чанка.
     pub target: (u32, u16),
+    /// Кооперативная отмена: worker проверяет флаг на границах квантов.
+    pub cancel_requested: Arc<std::sync::atomic::AtomicBool>,
 }
 
 /// Ключ уникальности: пара «цель + снимок ключа» резервируется до
@@ -257,6 +259,7 @@ impl JobRegistry {
                 snapshot: snapshot.clone(),
                 payload_bytes,
                 target,
+                cancel_requested: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             },
         );
         self.queue.push_back(id);
@@ -265,6 +268,11 @@ impl JobRegistry {
 
     pub fn record(&self, id: JobId) -> Option<&JobRecord> {
         self.records.get(&id)
+    }
+
+    /// Все живые записи — для завершения runtime.
+    pub fn records(&self) -> impl Iterator<Item = &JobRecord> {
+        self.records.values()
     }
 
     pub fn record_mut(&mut self, id: JobId) -> Option<&mut JobRecord> {
@@ -664,6 +672,31 @@ impl JobRuntimeShared {
         Ok(snapshot)
     }
 
+    /// Отмена задания. `Queued` завершается сразу; `Running` получает
+    /// взведённый флаг и завершится на границе кванта; terminal и
+    /// вытесненные — no-op (гонки повторной отмены — за
+    /// `JOB.CANCEL.RACES`). Отмена — не ошибка BSL: снимок получает
+    /// состояние «Отменено» без `ИнформацияОбОшибке`.
+    pub(crate) fn cancel(&self, id: JobId, end: Option<bsl_rt::BslDate>) {
+        let mut registry = self.registry.lock().expect("реестр без отравления");
+        let Some(record) = registry.record(id) else {
+            return;
+        };
+        match record.snapshot.state {
+            JobStateDto::Queued => {
+                registry.finish(id, JobStateDto::Canceled, end, None);
+                drop(registry);
+                self.terminal_watch.notify_all();
+            }
+            JobStateDto::Running => {
+                record
+                    .cancel_requested
+                    .store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+            _ => {}
+        }
+    }
+
     /// Блокирующее ожидание terminal-состояния всех `ids` — путь
     /// foreground-сеанса; worker вместо блокировки помогает пулу (см.
     /// `WorkerJobService`).
@@ -857,6 +890,94 @@ impl JobRuntime {
     pub fn wait_terminal(&self, ids: &[JobId], timeout: Option<Duration>) -> bool {
         self.shared.wait_terminal_blocking(ids, timeout)
     }
+
+    /// Отмена задания: `Queued` — сразу, `Running` — кооперативно на
+    /// границе кванта; повторная отмена и terminal — no-op.
+    pub fn cancel(&self, id: JobId) {
+        let end = self.shared.time_source.wall_now();
+        self.shared.cancel(id, end);
+    }
+
+    /// Явное завершение runtime: queued отменяются сразу, running —
+    /// кооперативно на границах квантов; потоки соединяются до `deadline`,
+    /// неответившие отсоединяются и попадают в отчёт. Новые submissions
+    /// после закрытия получают ловимую ошибку.
+    pub fn shutdown(&self, deadline: Duration) -> ShutdownReport {
+        let end = self.shared.time_source.wall_now();
+        {
+            let mut registry = self.shared.registry.lock().expect("реестр без отравления");
+            registry.state = RuntimeState::Closed;
+            let jobs: Vec<(JobId, JobStateDto)> = registry
+                .records()
+                .map(|record| (record.snapshot.id, record.snapshot.state))
+                .collect();
+            for (id, state) in jobs {
+                match state {
+                    JobStateDto::Queued => {
+                        registry.finish(id, JobStateDto::Canceled, end, None);
+                    }
+                    JobStateDto::Running => {
+                        if let Some(record) = registry.record(id) {
+                            record
+                                .cancel_requested
+                                .store(true, std::sync::atomic::Ordering::Relaxed);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        self.shared.work_available.notify_all();
+        self.shared.terminal_watch.notify_all();
+
+        let handles: Vec<std::thread::JoinHandle<()>> =
+            std::mem::take(&mut *self.threads.lock().expect("список потоков без отравления"));
+        let deadline_at = std::time::Instant::now() + deadline;
+        let mut detached_workers = 0usize;
+        for handle in handles {
+            loop {
+                if handle.is_finished() {
+                    let _ = handle.join();
+                    break;
+                }
+                if std::time::Instant::now() >= deadline_at {
+                    // Отсоединяем: поток физически может дорабатывать уже
+                    // начатый внешний эффект, но реестр закрыт и его
+                    // поздние публикации отвергаются состоянием Closed.
+                    detached_workers += 1;
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        }
+        ShutdownReport { detached_workers }
+    }
+}
+
+/// Отчёт явного завершения: сколько workers не успели выйти до deadline
+/// и были отсоединены.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ShutdownReport {
+    pub detached_workers: usize,
+}
+
+impl Drop for JobRuntime {
+    /// Последний владелец сигнализирует завершение, но НЕ блокируется:
+    /// потоки выйдут сами на ближайшей границе кванта.
+    fn drop(&mut self) {
+        let mut registry = self.shared.registry.lock().expect("реестр без отравления");
+        if registry.state != RuntimeState::Closed {
+            registry.state = RuntimeState::Closed;
+            for record in registry.records() {
+                record
+                    .cancel_requested
+                    .store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
+        drop(registry);
+        self.shared.work_available.notify_all();
+        self.shared.terminal_watch.notify_all();
+    }
 }
 
 /// Все живые задания — в `Failed(RuntimeBroken)`: вызывается при
@@ -940,7 +1061,19 @@ fn worker_main(shared: &Arc<JobRuntimeShared>) {
             let mut registry = shared.registry.lock().expect("реестр без отравления");
             loop {
                 match registry.state {
-                    RuntimeState::Closed | RuntimeState::Broken => return,
+                    RuntimeState::Closed | RuntimeState::Broken => {
+                        // Закрытие на границе кванта — и есть кооперативная
+                        // точка: резиденты завершаются «Отменено».
+                        drop(registry);
+                        let end = shared.time_source.wall_now();
+                        let mut registry = shared.registry.lock().expect("реестр без отравления");
+                        for job in local.drain(..) {
+                            registry.finish(job.id, JobStateDto::Canceled, end, None);
+                        }
+                        drop(registry);
+                        shared.terminal_watch.notify_all();
+                        return;
+                    }
                     _ => {}
                 }
                 if runnable_locally {
@@ -997,7 +1130,10 @@ fn worker_main(shared: &Arc<JobRuntimeShared>) {
                 job.waiting = true;
                 local.push_back(job);
             }
-            Ok(Err(error)) => {
+            Ok(Err(JobPollError::Canceled)) => {
+                finish_job(shared, job.id, JobStateDto::Canceled, None);
+            }
+            Ok(Err(JobPollError::Failed(error))) => {
                 finish_job(shared, job.id, JobStateDto::Failed, Some(error));
             }
             Err(_) => {
@@ -1050,29 +1186,43 @@ fn start_job(
     engine: &crate::Engine,
     id: JobId,
 ) -> Option<Result<RunningJob, JobErrorDto>> {
-    let (target, params) = {
+    let (target, params, cancel_requested) = {
         let mut registry = shared.registry.lock().expect("реестр без отравления");
         let begin = shared.time_source.wall_now();
         let record = registry.record_mut(id)?;
         record.snapshot.state = JobStateDto::Running;
         record.snapshot.begin = begin;
-        (record.target, Arc::clone(&record.snapshot.params))
+        (
+            record.target,
+            Arc::clone(&record.snapshot.params),
+            Arc::clone(&record.cancel_requested),
+        )
     };
     Some(
-        prepare_job(shared, engine, target, &params).map(|(state, module, vm)| RunningJob {
-            id,
-            state,
-            module,
-            vm,
-            waiting: false,
+        prepare_job(shared, engine, target, &params).map(|(state, module, mut vm)| {
+            vm.set_cancel_flag(cancel_requested);
+            RunningJob {
+                id,
+                state,
+                module,
+                vm,
+                waiting: false,
+            }
         }),
     )
+}
+
+/// Исход неудачного кванта: отмена — не ошибка BSL, снимок получает
+/// состояние «Отменено» без `ИнформацияОбОшибке`.
+enum JobPollError {
+    Canceled,
+    Failed(JobErrorDto),
 }
 
 impl RunningJob {
     /// Один бюджетный квант задания. Поток не блокируется: completions
     /// подбираются конечным срезом без ожидания первого.
-    fn poll(&mut self, engine: &crate::Engine) -> Result<bsl_vm::ProgramPoll, JobErrorDto> {
+    fn poll(&mut self, engine: &crate::Engine) -> Result<bsl_vm::ProgramPoll, JobPollError> {
         let catalog = engine
             .catalog()
             .expect("worker строится только с каталогом");
@@ -1088,7 +1238,10 @@ impl RunningJob {
                 1024,
                 Some(1),
             )
-            .map_err(|error| JobErrorDto::from_text(error.to_string()))
+            .map_err(|error| match error {
+                bsl_rt::RtError::Canceled => JobPollError::Canceled,
+                other => JobPollError::Failed(JobErrorDto::from_text(other.to_string())),
+            })
     }
 }
 
@@ -1566,8 +1719,10 @@ impl bsl_rt::BackgroundJobService for WorkerJobService {
         }
     }
 
-    fn cancel(&self, _id: JobId) -> Result<(), String> {
-        Err("отмена фонового задания появится вместе с кооперативными safe points".to_string())
+    fn cancel(&self, id: JobId) -> Result<(), String> {
+        let end = self.shared.time_source.wall_now();
+        self.shared.cancel(id, end);
+        Ok(())
     }
 }
 
@@ -1593,7 +1748,11 @@ fn drive_to_terminal(shared: &Arc<JobRuntimeShared>, engine: &crate::Engine, id:
             Ok(Ok(bsl_vm::ProgramPoll::Waiting)) => {
                 std::thread::sleep(Duration::from_millis(1));
             }
-            Ok(Err(error)) => {
+            Ok(Err(JobPollError::Canceled)) => {
+                finish_job(shared, job.id, JobStateDto::Canceled, None);
+                return;
+            }
+            Ok(Err(JobPollError::Failed(error))) => {
                 finish_job(shared, job.id, JobStateDto::Failed, Some(error));
                 return;
             }
@@ -1647,8 +1806,8 @@ impl bsl_rt::BackgroundJobService for EngineJobService {
         self.runtime.wait_terminal(ids, timeout)
     }
 
-    fn cancel(&self, _id: JobId) -> Result<(), String> {
-        // Кооперативная отмена приходит с safe points этапа 6 плана.
-        Err("отмена фонового задания появится вместе с кооперативными safe points".to_string())
+    fn cancel(&self, id: JobId) -> Result<(), String> {
+        self.runtime.cancel(id);
+        Ok(())
     }
 }

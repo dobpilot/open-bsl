@@ -194,6 +194,11 @@ pub enum RtError {
     /// фонового задания, staging временного хранилища. Ловимая ошибка:
     /// платформенные лимиты BSL-код перехватывает обычной «Попыткой».
     ResourceLimit(String),
+    /// Кооперативная отмена исполнения. НЕ ловится «Попыткой» — ИЗМЕРЕНО
+    /// (`JOB.CANCEL.CATCH`): после отмены фонового задания ветка
+    /// `Исключение` и код после неё не выполнялись. Разматывание проходит
+    /// мимо обработчиков и доводит отмену до драйвера.
+    Canceled,
     /// Обращение к `СтрокаТаблицы`, чья строка уже удалена (`row_id` не
     /// не резолвится обратным индексом) — не тихое чтение чужих данных.
     RowInvalidated,
@@ -375,6 +380,7 @@ impl RtError {
     pub fn is_bsl_exception(&self) -> bool {
         match self {
             RtError::InvalidBytecode(_) => false,
+            RtError::Canceled => false,
             RtError::ResourceLimit(_) => true,
             RtError::Num(_)
             | RtError::TypeError { .. }
@@ -424,6 +430,7 @@ impl fmt::Display for RtError {
         match self {
             RtError::Num(e) => write!(f, "{e}"),
             RtError::ResourceLimit(what) => write!(f, "превышен ресурсный лимит: {what}"),
+            RtError::Canceled => write!(f, "выполнение отменено"),
             RtError::TypeError { expected, op } => {
                 write!(f, "ожидался тип «{expected}» для операции «{op}»")
             }

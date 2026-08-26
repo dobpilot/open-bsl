@@ -356,3 +356,141 @@ fn a_nested_job_completes_on_a_single_worker_pool() {
     let bytes = capture.0.lock().unwrap().clone();
     assert_eq!(String::from_utf8(bytes).unwrap(), "родитель завершён\n");
 }
+
+/// Отмена running-задания: вечный цикл под «Попыткой» завершается
+/// состоянием «Отменено», ветка `Исключение` не исполняется (измерено
+/// JOB.CANCEL.CATCH), ИнформацияОбОшибке пуста; повторная отмена — no-op.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn cancelling_a_running_job_bypasses_the_exception_handler() {
+    let engine = Engine::builder()
+        .common_module(
+            "Служебный",
+            "Процедура Вечная() Экспорт\n\
+                 Попытка\n\
+                     Ч = 0;\n\
+                     Пока Истина Цикл\n\
+                         Ч = Ч + 1;\n\
+                     КонецЦикла;\n\
+                 Исключение\n\
+                     Сообщить(\"перехвачено\");\n\
+                 КонецПопытки;\n\
+             КонецПроцедуры",
+        )
+        .build()
+        .expect("движок собирается");
+    let runtime = engine.job_runtime().expect("runtime");
+    let rt = open_bsl::RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
+    let params = std::sync::Arc::new(
+        open_bsl::SerializedValueGraph::capture(&[], &rt, &open_bsl::GraphLimits::default())
+            .expect("снимок"),
+    );
+    let snapshot = runtime
+        .submit_by_name("Служебный.Вечная", params.clone(), None, None)
+        .expect("задание принято");
+    // Дать заданию стартовать, затем отменить.
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    runtime.cancel(snapshot.id);
+    assert!(
+        runtime.wait_terminal(&[snapshot.id], Some(std::time::Duration::from_secs(30))),
+        "отменённое задание обязано дойти до terminal"
+    );
+    let done = runtime.snapshot(snapshot.id).expect("снимок");
+    assert_eq!(done.state, open_bsl::JobStateDto::Canceled);
+    assert!(done.error.is_none(), "отмена — не ошибка BSL");
+    // Повторная отмена terminal-задания — no-op.
+    runtime.cancel(snapshot.id);
+    assert_eq!(
+        runtime.snapshot(snapshot.id).expect("снимок").state,
+        open_bsl::JobStateDto::Canceled
+    );
+}
+
+/// Отмена queued-задания при отсутствии свободных workers: terminal сразу,
+/// без старта.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn cancelling_a_queued_job_finishes_it_immediately() {
+    let engine = Engine::builder()
+        .common_module(
+            "Служебный",
+            "Процедура Долгая() Экспорт\n\
+                 Ч = 0;\n\
+                 Пока Истина Цикл\n\
+                     Ч = Ч + 1;\n\
+                 КонецЦикла;\n\
+             КонецПроцедуры",
+        )
+        .background_jobs(open_bsl::jobs::BackgroundJobConfig {
+            workers: Some(1),
+            ..open_bsl::jobs::BackgroundJobConfig::default()
+        })
+        .build()
+        .expect("движок собирается");
+    let runtime = engine.job_runtime().expect("runtime");
+    let rt = open_bsl::RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
+    let params = std::sync::Arc::new(
+        open_bsl::SerializedValueGraph::capture(&[], &rt, &open_bsl::GraphLimits::default())
+            .expect("снимок"),
+    );
+    let first = runtime
+        .submit_by_name("Служебный.Долгая", params.clone(), None, None)
+        .expect("первое принято");
+    let second = runtime
+        .submit_by_name("Служебный.Долгая", params, None, None)
+        .expect("второе принято — в очередь");
+    // Второе задание стоит в очереди за вечным первым: отмена завершает
+    // его сразу.
+    runtime.cancel(second.id);
+    assert!(runtime.wait_terminal(&[second.id], Some(std::time::Duration::from_secs(10))));
+    assert_eq!(
+        runtime.snapshot(second.id).expect("снимок").state,
+        open_bsl::JobStateDto::Canceled
+    );
+    runtime.cancel(first.id);
+    assert!(runtime.wait_terminal(&[first.id], Some(std::time::Duration::from_secs(30))));
+}
+
+/// Явное завершение: вечное задание отменяется, потоки выходят до
+/// deadline, повторный submit получает ловимую ошибку.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn shutdown_cancels_residents_and_rejects_new_submissions() {
+    let engine = Engine::builder()
+        .common_module(
+            "Служебный",
+            "Процедура Вечная() Экспорт\n\
+                 Ч = 0;\n\
+                 Пока Истина Цикл\n\
+                     Ч = Ч + 1;\n\
+                 КонецЦикла;\n\
+             КонецПроцедуры",
+        )
+        .build()
+        .expect("движок собирается");
+    let runtime = engine.job_runtime().expect("runtime");
+    let rt = open_bsl::RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
+    let params = std::sync::Arc::new(
+        open_bsl::SerializedValueGraph::capture(&[], &rt, &open_bsl::GraphLimits::default())
+            .expect("снимок"),
+    );
+    let snapshot = runtime
+        .submit_by_name("Служебный.Вечная", params.clone(), None, None)
+        .expect("задание принято");
+    std::thread::sleep(std::time::Duration::from_millis(30));
+    let report = runtime.shutdown(std::time::Duration::from_secs(30));
+    assert_eq!(
+        report.detached_workers, 0,
+        "workers обязаны выйти до deadline"
+    );
+    assert_eq!(
+        runtime.snapshot(snapshot.id).expect("снимок").state,
+        open_bsl::JobStateDto::Canceled
+    );
+    assert!(
+        runtime
+            .submit_by_name("Служебный.Вечная", params, None, None)
+            .is_err(),
+        "закрытый runtime не принимает задания"
+    );
+}
