@@ -339,7 +339,8 @@ impl<'src> Parser<'src> {
         while self.eat(&TokenKind::Comma) {
             names.push(self.expect_ident()?);
         }
-        Ok(VarDecl { names })
+        let export = self.eat_keyword(Keyword::Export);
+        Ok(VarDecl { names, export })
     }
 
     // --- Операторы ----------------------------------------------------------
@@ -805,6 +806,28 @@ mod tests {
 
     fn parse_ok(src: &str) -> Program {
         parse(src).unwrap_or_else(|e| panic!("parse error on {src:?}: {e:?}"))
+    }
+
+    /// `Экспорт` завершает объявление и относится ко всему списку имён;
+    /// объявление без модификатора остаётся неэкспортным.
+    #[test]
+    fn var_decl_export_covers_the_whole_name_list() {
+        let program = parse_ok("Перем А, Б Экспорт;\nПерем В;");
+        let decls: Vec<_> = program
+            .items
+            .iter()
+            .map(|item| match item {
+                Item::VarDecl(vd) => (vd.names.clone(), vd.export),
+                other => panic!("ожидалось объявление переменных, получено {other:?}"),
+            })
+            .collect();
+        assert_eq!(
+            decls,
+            vec![
+                (vec!["А".to_string(), "Б".to_string()], true),
+                (vec!["В".to_string()], false),
+            ]
+        );
     }
 
     /// Глубокие тесты гоняются в потоке со стеком главного потока (8 МиБ):

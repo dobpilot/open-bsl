@@ -36,7 +36,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 27;
+pub const FORMAT_VERSION: u32 = 28;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -187,14 +187,16 @@ pub fn write_program(program: &Program, source: Option<&str>) -> Result<String> 
 
     writeln!(out, "\n.module-vars {}", program.module_vars.len()).unwrap();
     for (i, name) in program.module_vars.iter().enumerate() {
-        writeln!(out, "  {i} {}", quote(name)).unwrap();
+        let export = export_suffix(&program.exported_module_vars, i);
+        writeln!(out, "  {i} {}{export}", quote(name)).unwrap();
     }
 
     writeln!(out, "\n.functions {}", program.function_names.len()).unwrap();
     for (i, name) in program.function_names.iter().enumerate() {
         // `i` -> chunks[i+1]; номер чанка в комментарии, чтобы не считать
         // в уме при чтении `Call func=N`.
-        writeln!(out, "  {i} {}  ; .chunk {}", quote(name), i + 1).unwrap();
+        let export = export_suffix(&program.exported_functions, i);
+        writeln!(out, "  {i} {}{export}  ; .chunk {}", quote(name), i + 1).unwrap();
     }
 
     for (i, chunk) in program.chunks.iter().enumerate() {
@@ -844,26 +846,30 @@ pub fn parse_program(src: &str) -> Result<Program> {
 
     let n = r.directive(".module-vars")?;
     let mut module_vars = Vec::with_capacity(n);
+    let mut exported_module_vars = Vec::with_capacity(n);
     for i in 0..n {
         let (no, text) = r.expect("имя переменной модуля")?;
         let (idx, rest) = text
             .split_once(char::is_whitespace)
             .ok_or_else(|| TextError::At(no, "ожидалось «N \"имя\"»".to_string()))?;
         parse_index(no, idx, i)?;
-        let (name, _) = unquote(no, rest.trim())?;
+        let (name, tail) = unquote(no, rest.trim())?;
         module_vars.push(name);
+        exported_module_vars.push(parse_export_flag(no, &tail)?);
     }
 
     let n = r.directive(".functions")?;
     let mut function_names = Vec::with_capacity(n);
+    let mut exported_functions = Vec::with_capacity(n);
     for i in 0..n {
         let (no, text) = r.expect("имя функции")?;
         let (idx, rest) = text
             .split_once(char::is_whitespace)
             .ok_or_else(|| TextError::At(no, "ожидалось «N \"имя\"»".to_string()))?;
         parse_index(no, idx, i)?;
-        let (name, _) = unquote(no, rest.trim())?;
+        let (name, tail) = unquote(no, rest.trim())?;
         function_names.push(name);
+        exported_functions.push(parse_export_flag(no, &tail)?);
     }
 
     // Чанки — до конца файла.
@@ -933,9 +939,42 @@ pub fn parse_program(src: &str) -> Result<Program> {
         shapes,
         top_level_locals,
         function_names,
+        exported_functions,
         module_vars,
+        exported_module_vars,
         module_base: 0,
     })
+}
+
+/// Хвост строки секции имён: ` export` у экспортного элемента, пусто у
+/// обычного. Печать и разбор договорились об одном написании флага, чтобы
+/// листинг ходил по кругу побайтово.
+fn export_suffix(flags: &[bool], index: usize) -> &'static str {
+    if flags.get(index).copied().unwrap_or(false) {
+        " export"
+    } else {
+        ""
+    }
+}
+
+/// Разбирает необязательный флаг `export` после имени в секциях
+/// `.module-vars` и `.functions`. Комментарий (`; ...`) флагом не
+/// считается; любой другой токен — ошибка формата, а не молчаливый
+/// пропуск.
+fn parse_export_flag(no: usize, tail: &str) -> Result<bool> {
+    let tail = tail.trim();
+    let payload = match tail.split_once(';') {
+        Some((before, _)) => before.trim(),
+        None => tail,
+    };
+    match payload {
+        "" => Ok(false),
+        "export" => Ok(true),
+        other => Err(TextError::At(
+            no,
+            format!("после имени ожидался флаг «export» или комментарий, получено «{other}»"),
+        )),
+    }
 }
 
 fn validate_requirements(requirements: &[LibraryRequirement]) -> std::result::Result<(), String> {

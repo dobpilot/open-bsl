@@ -608,7 +608,9 @@ pub fn run_repl_chunk_with_registry<'a>(
         shapes: unit.shapes.clone(),
         top_level_locals: locals,
         function_names: Vec::new(),
+        exported_functions: Vec::new(),
         module_vars: Vec::new(),
+        exported_module_vars: Vec::new(),
         module_base: 0,
     };
     let linked = link_components(
@@ -3348,7 +3350,9 @@ fn run_dynamic_snippet(
         shapes: compiled.shapes.clone(),
         top_level_locals: Vec::new(),
         function_names: program.function_names.clone(),
+        exported_functions: program.exported_functions.clone(),
         module_vars: program.module_vars.clone(),
+        exported_module_vars: program.exported_module_vars.clone(),
         module_base: 0,
     };
 

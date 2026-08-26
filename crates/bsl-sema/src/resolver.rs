@@ -61,6 +61,9 @@ pub enum SemaError {
     ProcedureAsFunction(String),
     /// `Ждать` допустим только внутри метода с модификатором `Асинх`.
     AwaitOutsideAsync,
+    /// `Перем ... Экспорт` внутри тела метода: модификатор осмыслен только
+    /// на уровне модуля, платформа такой модуль не компилирует.
+    ExportInsideMethod(String),
     /// `'20240230'` — литерал прошёл лексер (цифры, верная длина), но
     /// такой календарной даты не существует.
     BadDateLiteral(String),
@@ -126,6 +129,10 @@ impl std::fmt::Display for SemaError {
             SemaError::AwaitOutsideAsync => write!(
                 f,
                 "оператор «Ждать» можно использовать только в асинхронной процедуре или функции"
+            ),
+            SemaError::ExportInsideMethod(name) => write!(
+                f,
+                "модификатор «Экспорт» у переменной «{name}» допустим только на уровне модуля"
             ),
             SemaError::BadDateLiteral(text) => write!(f, "некорректный литерал даты «{text}»"),
             SemaError::BadNumericLiteral(text) => {
@@ -229,6 +236,7 @@ fn resolve_program_impl(
     // `Перем` на уровне модуля — это ОБЛАСТЬ МОДУЛЯ, а не просто первые
     // локальные тела: измерено, что процедуры их видят.
     let mut module_vars: Vec<String> = Vec::new();
+    let mut module_var_exports: Vec<bool> = Vec::new();
 
     for item in items {
         match item {
@@ -258,8 +266,14 @@ fn resolve_program_impl(
                     // кириллице с ним расходится — разнорегистровый дубль
                     // `Перем` порождал бы второй слот, в который запись из
                     // тела и чтение из процедуры уходят порознь.
-                    if !module_vars.iter().any(|n| bsl_rt::folded_eq(n, name)) {
-                        module_vars.push(name.clone());
+                    match module_vars.iter().position(|n| bsl_rt::folded_eq(n, name)) {
+                        Some(slot) => {
+                            module_var_exports[slot] |= vd.export;
+                        }
+                        None => {
+                            module_vars.push(name.clone());
+                            module_var_exports.push(vd.export);
+                        }
                     }
                 }
                 // Само объявление не заводит локальный слот верхнего
@@ -314,9 +328,9 @@ fn resolve_program_impl(
     let mut functions = Vec::with_capacity(func_items.len());
     let mut used_libraries = HashSet::new();
     for (func_index, item) in func_items.iter().enumerate() {
-        let (name, params, body, is_procedure, is_async) = match item {
-            Item::Function(f) => (&f.name, &f.params, &f.body, false, f.is_async),
-            Item::Procedure(p) => (&p.name, &p.params, &p.body, true, p.is_async),
+        let (name, params, body, is_procedure, is_async, export) = match item {
+            Item::Function(f) => (&f.name, &f.params, &f.body, false, f.is_async, f.export),
+            Item::Procedure(p) => (&p.name, &p.params, &p.body, true, p.is_async, p.export),
             _ => unreachable!(),
         };
         let labels = resolve_labels(body)?;
@@ -366,6 +380,7 @@ fn resolve_program_impl(
             params: resolved_params,
             locals: r.locals,
             body: resolved_body,
+            export,
         });
     }
 
@@ -402,6 +417,7 @@ fn resolve_program_impl(
         functions,
         top_level,
         module_vars,
+        module_var_exports,
     })
 }
 
@@ -1069,6 +1085,13 @@ impl<'a> Resolver<'a> {
                 Ok(Some(RStmt::Raise(r)))
             }
             AStmt::VarDecl(vd) => {
+                // `Экспорт` осмыслен только на уровне модуля; здесь —
+                // ошибка компиляции, как и на платформе.
+                if vd.export {
+                    return Err(SemaError::ExportInsideMethod(
+                        vd.names.first().cloned().unwrap_or_default(),
+                    ));
+                }
                 // Только регистрирует слоты; значение по умолчанию —
                 // Неопределено, для этого не нужна ни одна инструкция VM
                 // (регистры кадра и так инициализируются Неопределено).
@@ -2805,6 +2828,51 @@ mod tests {
              Сообщить(Счётчик);",
         );
         assert_eq!(resolved.module_vars.len(), 1, "разнорегистровый дубль слит");
+        assert_eq!(resolved.module_var_exports, vec![false]);
+    }
+
+    /// Экспорт покрывает весь список одного объявления, разнорегистровый
+    /// дубль наследует признак, а функции несут его в `ResolvedFunction`.
+    #[test]
+    fn export_flags_reach_resolved_program() {
+        let resolved = resolve_program_src(
+            "Перем А, Б Экспорт;\n\
+             Перем В;\n\
+             Перем в Экспорт;\n\
+             Функция Эф() Экспорт\n\
+                 Возврат 1;\n\
+             КонецФункции\n\
+             Процедура Пэ()\n\
+             КонецПроцедуры\n",
+        );
+        assert_eq!(resolved.module_vars, vec!["А", "Б", "В"]);
+        assert_eq!(resolved.module_var_exports, vec![true, true, true]);
+        let flags: Vec<(String, bool)> = resolved
+            .functions
+            .iter()
+            .map(|f| (f.name.clone(), f.export))
+            .collect();
+        assert_eq!(
+            flags,
+            vec![("Эф".to_string(), true), ("Пэ".to_string(), false)]
+        );
+    }
+
+    /// `Перем ... Экспорт` внутри тела метода платформа не компилирует;
+    /// здесь то же решение — ошибка sema, а не молчаливый пропуск флага.
+    #[test]
+    fn export_inside_a_method_body_is_a_compile_error() {
+        let prog = parse(
+            "Процедура Пэ()\n\
+                 Перем Внутренняя Экспорт;\n\
+             КонецПроцедуры\n",
+        )
+        .expect("синтаксис корректен");
+        let error = resolve_program(&prog.items).expect_err("ожидалась ошибка sema");
+        assert!(
+            matches!(&error, SemaError::ExportInsideMethod(name) if name == "Внутренняя"),
+            "получена другая ошибка: {error:?}"
+        );
     }
 
     #[test]

@@ -1533,7 +1533,9 @@ fn corrupt_program(instrs: Vec<Instr>) -> Program {
     Program {
         requirements: vec![bsl_bytecode::LibraryRequirement::bsl_rt()],
         function_names: Vec::new(),
+        exported_functions: Vec::new(),
         module_vars: Vec::new(),
+        exported_module_vars: Vec::new(),
         module_base: 0,
         chunks: vec![bsl_bytecode::Chunk {
             param_by_val: Vec::new(),

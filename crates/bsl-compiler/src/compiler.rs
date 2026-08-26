@@ -125,7 +125,9 @@ pub fn compile_program(resolved: &ResolvedProgram) -> Result<Program, CompileErr
         shapes: shapes.into_shapes(),
         top_level_locals: resolved.top_level.locals.clone(),
         function_names: resolved.functions.iter().map(|f| f.name.clone()).collect(),
+        exported_functions: resolved.functions.iter().map(|f| f.export).collect(),
         module_vars: resolved.module_vars.clone(),
+        exported_module_vars: resolved.module_var_exports.clone(),
         module_base: 0,
     })
 }

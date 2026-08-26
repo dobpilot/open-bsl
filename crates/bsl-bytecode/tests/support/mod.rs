@@ -56,8 +56,10 @@ pub fn program(chunks: Vec<Chunk>) -> Program {
         shapes: Vec::new(),
         top_level_locals: Vec::new(),
         module_vars: Vec::new(),
+        exported_module_vars: Vec::new(),
         module_base: 0,
         function_names: Vec::new(),
+        exported_functions: Vec::new(),
     }
 }
 
@@ -123,7 +125,9 @@ pub fn every_section() -> Program {
     p.shapes = shapes(&[field]);
     p.top_level_locals = vec!["х".to_string()];
     p.module_vars = vec!["Общая".to_string()];
+    p.exported_module_vars = vec![true];
     p.function_names = vec!["Ф".to_string()];
+    p.exported_functions = vec![true];
     // Разметка бандлов производная, но у ОБРАЗЦА она должна быть настоящей:
     // печать помечает ею многочленные бандлы, а разбор считает её заново, и
     // без неё round-trip разошёлся бы на комментарии.
