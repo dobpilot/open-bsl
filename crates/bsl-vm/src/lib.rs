@@ -640,6 +640,7 @@ fn run_program_with_host<'a>(
         host_env.files(),
         host_env.random(),
         host_env.network(),
+        host_env.background_jobs(),
         bsl_bytecode::DynamicScope::ROOT,
     )?;
     let dynamic_depth = std::cell::Cell::new(0);
@@ -710,6 +711,7 @@ pub fn run_repl_chunk_with_registry<'a>(
         host_env.files(),
         host_env.random(),
         host_env.network(),
+        host_env.background_jobs(),
         bsl_bytecode::DynamicScope::ROOT,
     )?;
     let dynamic_depth = std::cell::Cell::new(0);
@@ -866,6 +868,7 @@ struct LinkedComponents<'a> {
     files: std::rc::Rc<dyn bsl_rt::FileSystem>,
     random: bsl_rt::RandomHandle,
     network: Option<std::rc::Rc<dyn bsl_rt::HttpClientFactory>>,
+    background_jobs: Option<std::rc::Rc<dyn bsl_rt::BackgroundJobService>>,
 }
 
 impl LinkedComponents<'_> {
@@ -1017,6 +1020,7 @@ fn resolve_component_method(
     Ok(resolved)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn link_components<'a>(
     program: &Program,
     registry: Option<&'a bsl_rt::RuntimeRegistry>,
@@ -1024,6 +1028,7 @@ fn link_components<'a>(
     files: std::rc::Rc<dyn bsl_rt::FileSystem>,
     random: bsl_rt::RandomHandle,
     network: Option<std::rc::Rc<dyn bsl_rt::HttpClientFactory>>,
+    background_jobs: Option<std::rc::Rc<dyn bsl_rt::BackgroundJobService>>,
     scope: u64,
 ) -> Result<LinkedComponents<'a>, RtError> {
     bsl_bytecode::image::verify(program)?;
@@ -1184,6 +1189,7 @@ fn link_components<'a>(
         files,
         random,
         network,
+        background_jobs,
         functions,
         constructors,
         builtin_methods,
@@ -1266,6 +1272,7 @@ fn drive_with(
         env.files(),
         env.random(),
         env.network(),
+        env.background_jobs(),
         bsl_bytecode::DynamicScope::ROOT,
     )?;
     let mut stdout = std::io::stdout().lock();
@@ -1531,6 +1538,7 @@ impl ProgramExecution {
             host_env.files(),
             host_env.random(),
             host_env.network(),
+            host_env.background_jobs(),
             bsl_bytecode::DynamicScope::ROOT,
         )?;
         Ok(Self::new_linked(
@@ -1569,6 +1577,7 @@ impl ProgramExecution {
             host_env.files(),
             host_env.random(),
             host_env.network(),
+            host_env.background_jobs(),
             bsl_bytecode::DynamicScope::ROOT,
         )?;
         let dynamic_depth = std::cell::Cell::new(0);
@@ -1610,6 +1619,7 @@ impl ProgramExecution {
             host_env.files(),
             host_env.random(),
             host_env.network(),
+            host_env.background_jobs(),
             bsl_bytecode::DynamicScope::ROOT,
         )?;
         // Области динамического кода модулей нумеруются с единицы: ROOT
@@ -1624,6 +1634,7 @@ impl ProgramExecution {
                 host_env.files(),
                 host_env.random(),
                 host_env.network(),
+                host_env.background_jobs(),
                 i as u64 + 1,
             )?);
         }
@@ -2884,6 +2895,7 @@ fn step(
                             files: &linked.files,
                             random: &linked.random,
                             network: linked.network.as_ref(),
+                            background_jobs: linked.background_jobs.as_ref(),
                             host_promises: None,
                             function_caller: None,
                         });
@@ -2920,6 +2932,7 @@ fn step(
                             files: &linked.files,
                             random: &linked.random,
                             network: linked.network.as_ref(),
+                            background_jobs: linked.background_jobs.as_ref(),
                             host_promises: None,
                             function_caller: None,
                         });
@@ -2976,6 +2989,7 @@ fn step(
                             files: &linked.files,
                             random: &linked.random,
                             network: linked.network.as_ref(),
+                            background_jobs: linked.background_jobs.as_ref(),
                             host_promises: Some(async_state),
                             function_caller: None,
                         });
@@ -3210,6 +3224,7 @@ fn step_cold(
                     files: &linked.files,
                     random: &linked.random,
                     network: linked.network.as_ref(),
+                    background_jobs: linked.background_jobs.as_ref(),
                     host_promises: None,
                     function_caller: None,
                 });
@@ -3246,6 +3261,7 @@ fn step_cold(
                     files: &linked.files,
                     random: &linked.random,
                     network: linked.network.as_ref(),
+                    background_jobs: linked.background_jobs.as_ref(),
                     host_promises: None,
                     function_caller: None,
                 });
@@ -3333,6 +3349,7 @@ fn step_cold(
                 files: &linked.files,
                 random: &linked.random,
                 network: linked.network.as_ref(),
+                background_jobs: linked.background_jobs.as_ref(),
                 host_promises: None,
                 function_caller: Some(&mut function_caller),
             });
@@ -3355,6 +3372,7 @@ fn step_cold(
                 files: &linked.files,
                 random: &linked.random,
                 network: linked.network.as_ref(),
+                background_jobs: linked.background_jobs.as_ref(),
                 host_promises: None,
                 function_caller: None,
             });
@@ -3411,6 +3429,7 @@ fn step_cold(
                     files: &linked.files,
                     random: &linked.random,
                     network: linked.network.as_ref(),
+                    background_jobs: linked.background_jobs.as_ref(),
                     host_promises: Some(async_state),
                     function_caller: None,
                 });
@@ -3876,6 +3895,7 @@ fn run_dynamic_snippet(
         std::rc::Rc::clone(&linked.files),
         linked.random.clone(),
         linked.network.as_ref().map(std::rc::Rc::clone),
+        linked.background_jobs.as_ref().map(std::rc::Rc::clone),
         compiled.scope.get(),
     )?;
     let (value, final_stack) = drive_linked(
@@ -3964,6 +3984,7 @@ pub fn call_module_function(
         env.files(),
         env.random(),
         env.network(),
+        env.background_jobs(),
         bsl_bytecode::DynamicScope::ROOT,
     )?;
     let mut stdout = std::io::stdout().lock();
@@ -4011,6 +4032,7 @@ pub fn call_module_function_with_registry_and_io<'a>(
         host_env.files(),
         host_env.random(),
         host_env.network(),
+        host_env.background_jobs(),
         bsl_bytecode::DynamicScope::ROOT,
     )?;
     let dynamic_depth = std::cell::Cell::new(0);

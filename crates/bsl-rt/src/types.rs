@@ -86,6 +86,7 @@ pub enum TypeId {
     StringEncodingMethod,
     /// Тип члена перечисления `НаправлениеСортировки`.
     SortDirection,
+    BackgroundJobState,
     /// Тип члена перечисления `ЧастиДаты`.
     DateFractions,
     /// Тип члена перечисления `ХешФункция`.

@@ -1468,7 +1468,7 @@ impl<'a> Resolver<'a> {
                     // «Нет», значит каждое обращение строит новый объект.
                     None if matches!(
                         name.to_uppercase().as_str(),
-                        "ФАЙЛОВЫЕПОТОКИ" | "FILESTREAMS"
+                        "ФАЙЛОВЫЕПОТОКИ" | "FILESTREAMS" | "ФОНОВЫЕЗАДАНИЯ" | "BACKGROUNDJOBS"
                     ) =>
                     {
                         let Some((library_index, constructor)) = self
@@ -1476,7 +1476,7 @@ impl<'a> Resolver<'a> {
                             .and_then(|registry| registry.lookup_constructor(name))
                         else {
                             return Err(SemaError::Unsupported(
-                                "ФайловыеПотоки требует зарегистрированный компонент bsl-stream",
+                                "менеджер недоступен: компонент не зарегистрирован",
                             ));
                         };
                         let registry = self.registry.expect("lookup выше нашёл конструктор");

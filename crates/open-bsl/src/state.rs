@@ -121,10 +121,22 @@ impl StateBuilder {
     }
 
     pub fn build(self) -> State {
+        let mut host = self.host;
+        // Движок с каталогом внедряет сервис фоновых заданий в каждый
+        // сеанс: клоны движка разделяют один runtime. Ошибка сборки
+        // runtime не валит сеанс — без сервиса `ФоновыеЗадания` отвечает
+        // ловимой ошибкой возможности.
+        #[cfg(not(target_arch = "wasm32"))]
+        if self.engine.catalog().is_some()
+            && let Ok(runtime) = self.engine.job_runtime()
+        {
+            host.env
+                .set_background_jobs(std::rc::Rc::new(crate::jobs::EngineJobService { runtime }));
+        }
         State {
             dynamic: self.engine.dynamic_code(),
             engine: self.engine,
-            host: self.host,
+            host,
             jit: self.jit,
             scheduler: self.scheduler,
         }

@@ -1314,3 +1314,44 @@ mod pool_tests {
         assert!(runtime.wait_terminal(&[JobId([9; 16])], Some(Duration::from_millis(10))));
     }
 }
+
+/// Мост сервиса: `Rc`-обёртка над разделяемым runtime — то, что native
+/// внедряет в `HostEnv` каждого сеанса движка с каталогом.
+pub(crate) struct EngineJobService {
+    pub runtime: Arc<JobRuntime>,
+}
+
+impl bsl_rt::BackgroundJobService for EngineJobService {
+    fn submit(
+        &self,
+        method_name: &str,
+        params: Arc<SerializedValueGraph>,
+        key: Option<Arc<bsl_rt::JobKeyDto>>,
+        description: Option<String>,
+    ) -> Result<Arc<JobSnapshotDto>, String> {
+        self.runtime
+            .submit_by_name(method_name, params, key, description)
+            .map(Arc::new)
+            .map_err(|error| match error {
+                SubmitError::Rejected(text) | SubmitError::BadTarget(text) => text,
+                SubmitError::Unavailable => "фоновый runtime закрыт или сломан".to_string(),
+            })
+    }
+
+    fn snapshot(&self, id: JobId) -> Option<Arc<JobSnapshotDto>> {
+        self.runtime.snapshot(id)
+    }
+
+    fn snapshots(&self) -> Vec<Arc<JobSnapshotDto>> {
+        self.runtime.snapshots()
+    }
+
+    fn wait_terminal(&self, ids: &[JobId], timeout: Option<Duration>) -> bool {
+        self.runtime.wait_terminal(ids, timeout)
+    }
+
+    fn cancel(&self, _id: JobId) -> Result<(), String> {
+        // Кооперативная отмена приходит с safe points этапа 6 плана.
+        Err("отмена фонового задания появится вместе с кооперативными safe points".to_string())
+    }
+}

@@ -123,6 +123,11 @@ pub enum EnumValue {
     StringEncodingUrl,
     StringEncodingUrlInUrl,
 
+    // --- СостояниеФоновогоЗадания ---------------------------------------
+    BackgroundJobActive,
+    BackgroundJobCompleted,
+    BackgroundJobFailed,
+    BackgroundJobCanceled,
     // --- НаправлениеСортировки ------------------------------------------
     SortDirectionAscending,
 
@@ -358,6 +363,11 @@ pub enum EnumKind {
     /// суть без пробелов), само не измерялось отдельно; написания ЧЛЕНОВ
     /// ниже — ИЗМЕРЕНО (`JSON.DATE_VARIANT_EN_NAMES`).
     JsonDateWritingVariant,
+    /// `СостояниеФоновогоЗадания` — состояния фонового задания. Русские
+    /// имена членов взяты из документации главы 18; точные написания,
+    /// английские aliases и представления `Строка()` фиксирует замер
+    /// `JOB.API.SURFACE` реестра плана фоновых заданий.
+    BackgroundJobState,
     XmlNodeType,
     /// `ТипУзлаDOM`. Английское написание `DOMNodeType` ИЗМЕРЕНО:
     /// `Тип("DOMNodeType") = ТипЗнч(ТипУзлаDOM.Элемент)` — «Да».
@@ -503,6 +513,7 @@ impl EnumKind {
                 ("СпособКодированияСтроки", "СпособКодированияСтроки")
             }
             EnumKind::SortDirection => ("НаправлениеСортировки", "SortDirection"),
+            EnumKind::BackgroundJobState => ("СостояниеФоновогоЗадания", "BackgroundJobState"),
             EnumKind::DateFractions => ("ЧастиДаты", "DateFractions"),
             EnumKind::HashFunction => ("ХешФункция", "HashFunction"),
             EnumKind::ByteOrder => ("ПорядокБайтов", "ByteOrder"),
@@ -570,6 +581,7 @@ impl EnumKind {
             EnumKind::TextEncoding => "ПеречислениеКодировкаТекста",
             EnumKind::StringEncodingMethod => "ПеречислениеСпособКодированияСтроки",
             EnumKind::SortDirection => "ПеречислениеНаправлениеСортировки",
+            EnumKind::BackgroundJobState => "ПеречислениеСостояниеФоновогоЗадания",
             EnumKind::DateFractions => "ПеречислениеЧастиДаты",
             EnumKind::HashFunction => "ПеречислениеХешФункция",
             // Здесь префикс не предположение по образцу, а ИЗМЕРЕНО:
@@ -1058,6 +1070,34 @@ const MEMBERS: &[(EnumKind, EnumValue, &str, &str, &str)] = &[
         "URLВКодировкеURL",
         "URLВКодировкеURL",
         "URL URL-encoding",
+    ),
+    (
+        EnumKind::BackgroundJobState,
+        EnumValue::BackgroundJobActive,
+        "Активно",
+        "Active",
+        "Активно",
+    ),
+    (
+        EnumKind::BackgroundJobState,
+        EnumValue::BackgroundJobCompleted,
+        "Завершено",
+        "Completed",
+        "Завершено",
+    ),
+    (
+        EnumKind::BackgroundJobState,
+        EnumValue::BackgroundJobFailed,
+        "ЗавершеноАварийно",
+        "Failed",
+        "ЗавершеноАварийно",
+    ),
+    (
+        EnumKind::BackgroundJobState,
+        EnumValue::BackgroundJobCanceled,
+        "Отменено",
+        "Canceled",
+        "Отменено",
     ),
     (
         EnumKind::SortDirection,
@@ -2050,6 +2090,8 @@ pub const ENUM_NAMES: &[(&str, EnumKind)] = &[
     ("TextEncoding", EnumKind::TextEncoding),
     ("СпособКодированияСтроки", EnumKind::StringEncodingMethod),
     ("НаправлениеСортировки", EnumKind::SortDirection),
+    ("СостояниеФоновогоЗадания", EnumKind::BackgroundJobState),
+    ("BackgroundJobState", EnumKind::BackgroundJobState),
     ("SortDirection", EnumKind::SortDirection),
     ("ЧастиДаты", EnumKind::DateFractions),
     ("DateFractions", EnumKind::DateFractions),

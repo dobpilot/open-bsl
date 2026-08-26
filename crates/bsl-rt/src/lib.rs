@@ -4,6 +4,7 @@
 //! модуль `date`) и типы как значения (`Type`/`TypeId`). `BslValue` растёт
 //! по мере готовности остальных слоёв, а не заранее под все типы из брифа.
 
+pub mod background_jobs;
 mod bindata;
 mod builtin;
 mod component;
@@ -35,6 +36,7 @@ pub mod uuid;
 mod value_graph;
 mod value_list;
 mod vstr;
+pub use background_jobs::BackgroundJobService;
 pub use job_dto::{JobErrorDto, JobId, JobKeyDto, JobSnapshotDto, JobStateDto};
 use std::cmp::Ordering;
 use std::fmt;
@@ -482,6 +484,7 @@ impl fmt::Display for RtError {
                     crate::component::Capability::Random => "источник случайности",
                     crate::component::Capability::Network => "сеть",
                     crate::component::Capability::HostPromises => "host-обещания",
+                    crate::component::Capability::BackgroundJobs => "фоновые задания",
                 };
                 let path = match path {
                     crate::component::ContextKind::Full => "полного контекста",
@@ -542,6 +545,7 @@ fn enum_kind_type_id(kind: EnumKind) -> TypeId {
         EnumKind::TextEncoding => TypeId::TextEncoding,
         EnumKind::StringEncodingMethod => TypeId::StringEncodingMethod,
         EnumKind::SortDirection => TypeId::SortDirection,
+        EnumKind::BackgroundJobState => TypeId::BackgroundJobState,
         EnumKind::DateFractions => TypeId::DateFractions,
         EnumKind::HashFunction => TypeId::HashFunction,
         EnumKind::ByteOrder => TypeId::ByteOrder,

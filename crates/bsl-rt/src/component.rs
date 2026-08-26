@@ -132,6 +132,7 @@ pub type FunctionCaller<'a> = dyn FnMut(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Capability {
+    BackgroundJobs,
     Stdout,
     Stderr,
     Zone,
@@ -167,6 +168,7 @@ pub struct InterpreterServices<'a> {
     pub network: Option<&'a Rc<dyn crate::HttpClientFactory>>,
     pub host_promises: Option<&'a mut dyn crate::HttpPromiseSpawner>,
     pub function_caller: Option<&'a mut FunctionCaller<'a>>,
+    pub background_jobs: Option<&'a Rc<dyn crate::BackgroundJobService>>,
 }
 
 /// Сервисы конкретного состояния исполнения, доступные компоненту.
@@ -208,6 +210,7 @@ pub struct CallContext<'a> {
     network: Option<&'a Rc<dyn crate::HttpClientFactory>>,
     host_promises: Option<&'a mut dyn crate::HttpPromiseSpawner>,
     function_caller: Option<&'a mut FunctionCaller<'a>>,
+    background_jobs: Option<&'a Rc<dyn crate::BackgroundJobService>>,
 }
 
 impl<'a> CallContext<'a> {
@@ -225,6 +228,7 @@ impl<'a> CallContext<'a> {
             network: services.network,
             host_promises: services.host_promises,
             function_caller: services.function_caller,
+            background_jobs: services.background_jobs,
         }
     }
 
@@ -245,7 +249,22 @@ impl<'a> CallContext<'a> {
             network: None,
             host_promises: None,
             function_caller: None,
+            background_jobs: None,
         }
+    }
+
+    /// Сервис фоновых заданий host. Без внедрённого сервиса — ловимая
+    /// ошибка возможности: типы зарегистрированы на всех target, а запуск
+    /// без сервиса невозможен.
+    ///
+    /// # Errors
+    ///
+    /// [`RtError::CapabilityMissing`] с путём вызова.
+    pub fn background_jobs(&self) -> RtResult<&Rc<dyn crate::BackgroundJobService>> {
+        self.background_jobs.ok_or(RtError::CapabilityMissing {
+            capability: Capability::BackgroundJobs,
+            path: self.path,
+        })
     }
 
     pub fn runtime_shapes(&mut self) -> &mut RuntimeShapes {
@@ -988,9 +1007,19 @@ const CORE_CONSTRUCTORS: &[ConstructorDescriptor] = &[
         arity: Arity::exact(4),
         call: construct_qualified_type_description,
     },
+    // Голое имя `ФоновыеЗадания` разрешается конструктором менеджера —
+    // как `ФайловыеПотоки` у bsl-stream.
+    ConstructorDescriptor {
+        code: ConstructorCode::new(6),
+        names: &["ФоновыеЗадания", "BackgroundJobs"],
+        arity: Arity::exact(0),
+        call: crate::background_jobs::construct_manager,
+    },
 ];
 
 const CORE_TYPES: &[&crate::TypeDescriptor] = &[
+    &crate::background_jobs::BACKGROUND_JOBS_TYPE,
+    &crate::background_jobs::BACKGROUND_JOB_TYPE,
     &crate::error_info::ERROR_INFO_TYPE,
     &crate::value_list::VALUE_LIST_TYPE,
     &crate::value_list::VALUE_LIST_ITEM_TYPE,

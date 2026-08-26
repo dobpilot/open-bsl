@@ -215,3 +215,81 @@ fn engine_clones_share_the_job_runtime() {
     let done = runtime.snapshot(snapshot.id).expect("снимок");
     assert!(done.begin.is_some() && done.end.is_some(), "метки времени");
 }
+
+/// BSL-поверхность фоновых заданий: запуск, ожидание, снимок и свойства —
+/// целиком из BSL-кода через голое имя `ФоновыеЗадания`.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn the_bsl_surface_runs_and_inspects_a_background_job() {
+    let engine = Engine::builder()
+        .common_module(
+            "Служебный",
+            "Функция Сложить(Знач а, Знач б) Экспорт\n\
+                 Возврат а + б;\n\
+             КонецФункции",
+        )
+        .build()
+        .expect("движок собирается");
+    let module = engine
+        .compile_entry(
+            "Параметры = Новый Массив;\n\
+             Параметры.Добавить(2);\n\
+             Параметры.Добавить(40);\n\
+             Задание = ФоновыеЗадания.Выполнить(\"Служебный.Сложить\", Параметры, Неопределено, \"проба\");\n\
+             Задание.ОжидатьЗавершенияВыполнения(30);\n\
+             Свежий = ФоновыеЗадания.НайтиПоУникальномуИдентификатору(Задание.УникальныйИдентификатор);\n\
+             Если Свежий.Состояние = СостояниеФоновогоЗадания.Завершено Тогда\n\
+                 Сообщить(\"завершено\");\n\
+             Иначе\n\
+                 Сообщить(Свежий.Состояние);\n\
+             КонецЕсли;\n\
+             Сообщить(Свежий.ИмяМетода);\n\
+             Сообщить(Свежий.Наименование);\n\
+             Сообщить(Свежий.Параметры.Количество());\n\
+             Сообщить(ЗначениеЗаполнено(Свежий.Начало) И ЗначениеЗаполнено(Свежий.Конец));",
+        )
+        .expect("entry компилируется");
+
+    use std::io::Write;
+    use std::rc::Rc;
+    use std::sync::Mutex;
+    #[derive(Clone, Default)]
+    struct Capture(Rc<Mutex<Vec<u8>>>);
+    impl Write for Capture {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let capture = Capture::default();
+    let mut state = engine.state_builder().stdout(capture.clone()).build();
+    state.run(&module).expect("прогон завершается");
+    let bytes = capture.0.lock().unwrap().clone();
+    assert_eq!(
+        String::from_utf8(bytes).unwrap(),
+        "завершено\nСлужебный.Сложить\nпроба\n2\nДа\n"
+    );
+}
+
+/// Без каталога сервис не внедряется: голое имя отвечает ловимой ошибкой
+/// возможности, а не паникой.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn without_a_catalog_the_manager_raises_a_catchable_error() {
+    let engine = Engine::builder().build().expect("движок без каталога");
+    let module = engine
+        .compile(
+            "Попытка\n\
+                 М = ФоновыеЗадания;\n\
+                 Сообщить(\"дожили\");\n\
+             Исключение\n\
+                 Сообщить(\"поймана\");\n\
+             КонецПопытки;",
+        )
+        .expect("компилируется");
+    let mut state = engine.new_state();
+    state.run(&module).expect("ловимая ошибка перехвачена");
+}

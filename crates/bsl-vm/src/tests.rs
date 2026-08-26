@@ -4122,6 +4122,7 @@ fn call_module_function_with_dynamic_eval_inside() {
         env.files(),
         env.random(),
         env.network(),
+        env.background_jobs(),
         bsl_bytecode::DynamicScope::ROOT,
     )
     .unwrap();

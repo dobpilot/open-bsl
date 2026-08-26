@@ -739,6 +739,7 @@ pub struct HostEnv {
     zone: std::rc::Rc<dyn TimeZone>,
     files: std::rc::Rc<dyn FileSystem>,
     network: Option<std::rc::Rc<dyn crate::HttpClientFactory>>,
+    background_jobs: Option<std::rc::Rc<dyn crate::BackgroundJobService>>,
 }
 
 impl HostEnv {
@@ -755,6 +756,7 @@ impl HostEnv {
             // Базовый runtime не знает системного HTTP-адаптера: его
             // устанавливает верхний слой, подключивший `bsl-http`.
             network: None,
+            background_jobs: None,
         }
     }
 
@@ -815,6 +817,17 @@ impl HostEnv {
     pub fn without_network(mut self) -> Self {
         self.network = None;
         self
+    }
+
+    /// Внедряет сервис фоновых заданий: native кладёт обёртку над общим
+    /// runtime движка, WASM-host — локальную реализацию. Без сервиса
+    /// голое имя `ФоновыеЗадания` отвечает ловимой ошибкой возможности.
+    pub fn set_background_jobs(&mut self, service: std::rc::Rc<dyn crate::BackgroundJobService>) {
+        self.background_jobs = Some(service);
+    }
+
+    pub fn background_jobs(&self) -> Option<std::rc::Rc<dyn crate::BackgroundJobService>> {
+        self.background_jobs.as_ref().map(std::rc::Rc::clone)
     }
 
     /// HTTP-фабрика отдельной ссылкой для `CallContext` компонента.
