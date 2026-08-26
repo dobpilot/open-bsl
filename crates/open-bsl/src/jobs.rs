@@ -473,3 +473,685 @@ mod tests {
         assert!(BackgroundJobConfig::default().validate().is_ok());
     }
 }
+
+// --- Пул workers -------------------------------------------------------
+
+use std::sync::{Condvar, Mutex};
+
+/// `Send`-рецепт worker: текстовый образ каталога и ничего больше.
+/// Скрытого второго формата нет — worker разбирает тот же публичный
+/// `BytecodeImage::Configuration`, что пишет `--emit-bytecode`, один раз,
+/// и разделяет разобранные программы между своими сеансами.
+#[derive(Clone)]
+pub(crate) struct WorkerRecipe {
+    pub image_text: Arc<str>,
+}
+
+/// Разделяемое состояние runtime: реестр под синхронным мьютексом и два
+/// условия — «есть работа» для workers и «есть terminal» для ожидающих.
+/// Ни одно внешнее действие под локом не выполняется.
+pub(crate) struct JobRuntimeShared {
+    pub registry: Mutex<JobRegistry>,
+    pub work_available: Condvar,
+    pub terminal_watch: Condvar,
+    pub recipe: WorkerRecipe,
+    pub id_source: Arc<dyn JobIdSource>,
+}
+
+/// Нативный runtime фоновых заданий одного `Engine`. Клоны `Engine`
+/// разделяют runtime; OS-потоки поднимаются лениво при первом успешном
+/// admission — движок без заданий потоков не создаёт.
+pub struct JobRuntime {
+    shared: Arc<JobRuntimeShared>,
+    workers: usize,
+    threads: Mutex<Vec<std::thread::JoinHandle<()>>>,
+}
+
+/// Стандартный источник идентификаторов: OS random + UUID v4.
+struct SystemJobIds;
+
+impl JobIdSource for SystemJobIds {
+    fn next_id(&self) -> JobId {
+        // Тот же источник, что у `Новый УникальныйИдентификатор`: ключи
+        // ОС через RandomState — криптостойкость здесь не требуется,
+        // нужна несоударяемость.
+        use std::hash::{BuildHasher, Hasher};
+        let mut bytes = [0u8; 16];
+        for chunk in bytes.chunks_mut(8) {
+            let state = std::collections::hash_map::RandomState::new();
+            let value = state.build_hasher().finish().to_le_bytes();
+            chunk.copy_from_slice(&value[..chunk.len()]);
+        }
+        JobId(bsl_rt::uuid::v4_from_bytes(bytes))
+    }
+}
+
+/// Ошибка запуска задания — ловимая на стороне BSL.
+#[derive(Debug)]
+pub enum SubmitError {
+    /// Явный ресурсный лимит либо дублирующий ключ.
+    Rejected(String),
+    /// Цель не найдена или не годится (не экспортна, арность).
+    BadTarget(String),
+    /// Runtime закрыт или сломан.
+    Unavailable,
+}
+
+impl JobRuntime {
+    /// Создаёт холодный runtime: потоков нет до первого admission.
+    pub(crate) fn new(
+        config: BackgroundJobConfig,
+        recipe: WorkerRecipe,
+        id_source: Arc<dyn JobIdSource>,
+    ) -> Self {
+        let workers = config.effective_workers();
+        Self {
+            shared: Arc::new(JobRuntimeShared {
+                registry: Mutex::new(JobRegistry::new(config)),
+                work_available: Condvar::new(),
+                terminal_watch: Condvar::new(),
+                recipe,
+                id_source,
+            }),
+            workers,
+            threads: Mutex::new(Vec::new()),
+        }
+    }
+
+    /// Запускает экспортный метод общего модуля в отдельном сеансе.
+    /// Возвращает снимок `Queued`; сам запуск пула ленивый и submissions
+    /// во время `Starting` не ждут создания всех потоков.
+    pub(crate) fn submit(
+        &self,
+        method_name: &str,
+        target: (u32, u16),
+        params: Arc<SerializedValueGraph>,
+        key: Option<Arc<JobKeyDto>>,
+        description: Option<String>,
+    ) -> Result<JobSnapshotDto, SubmitError> {
+        let id = self.shared.id_source.next_id();
+        let snapshot = {
+            let mut registry = self.shared.registry.lock().expect("реестр без отравления");
+            let snapshot = registry
+                .admit(
+                    id,
+                    method_name.to_string(),
+                    target,
+                    params,
+                    key,
+                    description,
+                )
+                .map_err(|error| match error {
+                    AdmissionError::ResourceLimit(text) => SubmitError::Rejected(text),
+                    AdmissionError::DuplicateKey => {
+                        SubmitError::Rejected("задание с таким ключом уже активно".to_string())
+                    }
+                    AdmissionError::Unavailable(_) => SubmitError::Unavailable,
+                })?;
+            if registry.state == RuntimeState::Cold {
+                registry.state = RuntimeState::Starting;
+            }
+            snapshot
+        };
+        self.ensure_workers();
+        self.shared.work_available.notify_one();
+        Ok(snapshot)
+    }
+
+    /// Ленивый запуск пула: потоки создаются один раз, после первого
+    /// admission. Паника создания потока — `Broken` для всего runtime.
+    fn ensure_workers(&self) {
+        let mut threads = self.threads.lock().expect("список потоков без отравления");
+        if !threads.is_empty() {
+            return;
+        }
+        for index in 0..self.workers {
+            let shared = Arc::clone(&self.shared);
+            let builder = std::thread::Builder::new().name(format!("bsl-job-worker-{index}"));
+            match builder.spawn(move || worker_main(&shared)) {
+                Ok(handle) => threads.push(handle),
+                Err(_) => {
+                    let mut registry = self.shared.registry.lock().expect("реестр без отравления");
+                    registry.state = RuntimeState::Broken;
+                    fail_all_resident(&mut registry);
+                    self.shared.terminal_watch.notify_all();
+                    return;
+                }
+            }
+        }
+        let mut registry = self.shared.registry.lock().expect("реестр без отравления");
+        if registry.state == RuntimeState::Starting {
+            registry.state = RuntimeState::Running;
+        }
+    }
+
+    /// Снимок задания по идентификатору.
+    pub(crate) fn snapshot(&self, id: JobId) -> Option<Arc<JobSnapshotDto>> {
+        self.shared
+            .registry
+            .lock()
+            .expect("реестр без отравления")
+            .snapshot(id)
+    }
+
+    /// Все снимки (живые и история) — фильтрация вне лока.
+    pub(crate) fn snapshots(&self) -> Vec<Arc<JobSnapshotDto>> {
+        self.shared
+            .registry
+            .lock()
+            .expect("реестр без отравления")
+            .snapshots()
+    }
+
+    /// Ожидает terminal-состояния ВСЕХ перечисленных заданий (правило
+    /// any/all уточняется замером `JOB.WAIT.MANY`). `None` — без предела.
+    /// Возвращает `true`, если дождались; `false` — таймаут.
+    pub(crate) fn wait_terminal(&self, ids: &[JobId], timeout: Option<Duration>) -> bool {
+        let deadline = timeout.map(|t| std::time::Instant::now() + t);
+        let mut registry = self.shared.registry.lock().expect("реестр без отравления");
+        loop {
+            let all_terminal = ids.iter().all(|id| {
+                registry
+                    .snapshot(*id)
+                    .is_none_or(|snapshot| snapshot.state.is_terminal())
+            });
+            if all_terminal {
+                return true;
+            }
+            match deadline {
+                None => {
+                    registry = self
+                        .shared
+                        .terminal_watch
+                        .wait(registry)
+                        .expect("реестр без отравления");
+                }
+                Some(deadline) => {
+                    let now = std::time::Instant::now();
+                    let Some(left) = deadline.checked_duration_since(now) else {
+                        return false;
+                    };
+                    let (guard, result) = self
+                        .shared
+                        .terminal_watch
+                        .wait_timeout(registry, left)
+                        .expect("реестр без отравления");
+                    registry = guard;
+                    if result.timed_out() {
+                        // Последняя проверка под локом — событие могло
+                        // прийти на границе таймаута.
+                        return ids.iter().all(|id| {
+                            registry
+                                .snapshot(*id)
+                                .is_none_or(|snapshot| snapshot.state.is_terminal())
+                        });
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Все живые задания — в `Failed(RuntimeBroken)`: вызывается при
+/// поломке runtime под уже взятым локом.
+fn fail_all_resident(registry: &mut JobRegistry) {
+    let ids: Vec<JobId> = registry.records.keys().copied().collect();
+    for id in ids {
+        registry.finish(
+            id,
+            JobStateDto::Failed,
+            None,
+            Some(Arc::new(JobErrorDto::from_text(
+                "фоновый runtime сломан и не принимает задания",
+            ))),
+        );
+    }
+}
+
+/// Главный цикл worker: берёт задание из глобальной FIFO, исполняет его
+/// run-to-completion в собственном изолированном сеансе и фиксирует
+/// terminal transition. Квантование сеансов и pending host-calls приходят
+/// вместе с `OwnedExecution` (этап 5 плана); до них worker занят одним
+/// заданием целиком.
+fn worker_main(shared: &Arc<JobRuntimeShared>) {
+    // Каталог разбирается один раз на worker; программы разделяются между
+    // сеансами этого worker и не покидают его поток.
+    let engine = match build_worker_engine(&shared.recipe) {
+        Ok(engine) => engine,
+        Err(error) => {
+            let mut registry = shared.registry.lock().expect("реестр без отравления");
+            registry.state = RuntimeState::Broken;
+            let text = format!("worker не разобрал рецепт каталога: {error}");
+            let ids: Vec<JobId> = registry.records.keys().copied().collect();
+            for id in ids {
+                registry.finish(
+                    id,
+                    JobStateDto::Failed,
+                    None,
+                    Some(Arc::new(JobErrorDto::from_text(text.clone()))),
+                );
+            }
+            shared.terminal_watch.notify_all();
+            return;
+        }
+    };
+    loop {
+        let job = {
+            let mut registry = shared.registry.lock().expect("реестр без отравления");
+            loop {
+                match registry.state {
+                    RuntimeState::Closed | RuntimeState::Broken => return,
+                    _ => {}
+                }
+                if let Some(id) = registry.queue.pop_front() {
+                    break id;
+                }
+                registry = shared
+                    .work_available
+                    .wait(registry)
+                    .expect("реестр без отравления");
+            }
+        };
+        run_one_job(shared, &engine, job);
+        shared.terminal_watch.notify_all();
+    }
+}
+
+/// Движок worker строится из того же публичного образа, которым ходит
+/// `--emit-bytecode`: стандартный состав компонентов. Пользовательские
+/// библиотеки host и профили возможностей приезжают вместе с
+/// `BackgroundStateFactory` на дальнейших этапах плана.
+fn build_worker_engine(recipe: &WorkerRecipe) -> Result<crate::Engine, String> {
+    let image = bsl_bytecode::parse_image(&recipe.image_text).map_err(|e| e.to_string())?;
+    let bsl_bytecode::BytecodeImage::Configuration { catalog, entry: _ } = image else {
+        return Err("рецепт worker обязан быть конфигурацией".to_string());
+    };
+    crate::Engine::builder()
+        .configuration_image(catalog, false)
+        .build()
+        .map_err(|e| e.to_string())
+}
+
+/// Исполняет одно задание: `Queued -> Running`, изолированный сеанс,
+/// terminal transition ровно один раз. Паника BSL-исполнения ловится на
+/// границе задания и роняет только его.
+fn run_one_job(shared: &Arc<JobRuntimeShared>, engine: &crate::Engine, id: JobId) {
+    let Some((target, params)) = ({
+        let mut registry = shared.registry.lock().expect("реестр без отравления");
+        registry.record_mut(id).map(|record| {
+            record.snapshot.state = JobStateDto::Running;
+            (record.target, Arc::clone(&record.snapshot.params))
+        })
+    }) else {
+        return; // задание уже terminal (отменено до старта)
+    };
+
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        execute_target(engine, target, &params)
+    }));
+    let (state, error) = match outcome {
+        Ok(Ok(())) => (JobStateDto::Completed, None),
+        Ok(Err(error)) => (JobStateDto::Failed, Some(Arc::new(error))),
+        Err(_) => (
+            JobStateDto::Failed,
+            Some(Arc::new(JobErrorDto::from_text(
+                "исполнение задания прервано паникой",
+            ))),
+        ),
+    };
+    let mut registry = shared.registry.lock().expect("реестр без отравления");
+    registry.finish(id, state, None, error);
+}
+
+/// Вызов цели без компилятора: entry-программа собирается руками —
+/// аргументы приходят готовыми регистрами кадра 0, вызов идёт обычным
+/// `CallImported` по числовому манифесту.
+fn execute_target(
+    engine: &crate::Engine,
+    target: (u32, u16),
+    params: &SerializedValueGraph,
+) -> Result<(), JobErrorDto> {
+    let catalog = engine
+        .catalog()
+        .expect("worker строится только с каталогом");
+    let callee = catalog
+        .modules
+        .get(target.0 as usize)
+        .and_then(|module| module.program.chunks.get(target.1 as usize))
+        .ok_or_else(|| JobErrorDto::from_text("цель задания вне каталога"))?;
+    let n_params = callee.n_params as usize;
+    let argc = params.root_count();
+    let mut modes = Vec::with_capacity(n_params);
+    for position in 0..n_params {
+        if position < argc {
+            modes.push(bsl_bytecode::ArgMode::Value);
+        } else if callee.param_has_default.get(position) == Some(&true) {
+            // Хвост без аргументов берёт умолчания; точная политика
+            // платформы — за замером JOB.EXECUTE.DEFAULTS.
+            modes.push(bsl_bytecode::ArgMode::Default);
+        } else {
+            return Err(JobErrorDto::from_text(format!(
+                "цели передано {argc} аргументов, а обязательных параметров {n_params}"
+            )));
+        }
+    }
+    if argc > n_params {
+        return Err(JobErrorDto::from_text(format!(
+            "цели передано {argc} аргументов при {n_params} параметрах"
+        )));
+    }
+    let base_program = &catalog.modules[0].program;
+    // Аргументы материализуются ЗАРАНЕЕ интернером, который станет
+    // таблицами entry-программы: `NameId` внутри значений согласованы с
+    // `RuntimeShapes::seeded` прогона. Сами значения едут константами
+    // чанка и раскладываются по регистрам обычными `LoadConst`.
+    let mut shapes = bsl_rt::RuntimeShapes::seeded(
+        base_program.names.clone(),
+        base_program.shapes.clone(),
+        Some(engine.registry()),
+    );
+    let arguments = params
+        .materialize(&mut shapes)
+        .map_err(|error| JobErrorDto::from_text(error.to_string()))?;
+    let names = shapes.names.into_names();
+    let shape_table = shapes.shapes.into_shapes();
+
+    let mut instrs = Vec::with_capacity(argc + 2);
+    for position in 0..argc {
+        instrs.push(bsl_bytecode::Instr::LoadConst {
+            dst: position as u8,
+            k: position as u16,
+        });
+    }
+    instrs.push(bsl_bytecode::Instr::CallImported {
+        link_slot: 0,
+        base: 0,
+        arg_modes: 0,
+        ret: n_params as u8,
+    });
+    instrs.push(bsl_bytecode::Instr::Return { src: None });
+    let regs = (n_params + 1).max(1) as u8;
+    let mut chunk = bsl_bytecode::Chunk {
+        instrs,
+        consts: arguments,
+        call_arg_modes: vec![modes],
+        exception_ranges: Vec::new(),
+        n_params: 0,
+        param_by_val: Vec::new(),
+        param_has_default: Vec::new(),
+        is_procedure: false,
+        is_async: false,
+        n_locals: n_params as u8,
+        n_regs: regs,
+        prop_cache: Vec::new(),
+        method_cache: Vec::new(),
+        local_names: Vec::new(),
+        bundle_len: Vec::new(),
+        touches_objects: false,
+    };
+    let instruction_count = chunk.instrs.len();
+    chunk.prop_cache = (0..instruction_count)
+        .map(|_| bsl_bytecode::PropCacheSlot::default())
+        .collect();
+    chunk.method_cache = (0..instruction_count)
+        .map(|_| std::cell::RefCell::new(None))
+        .collect();
+    let mut entry = bsl_bytecode::Program {
+        requirements: base_program.requirements.clone(),
+        chunks: vec![chunk],
+        names,
+        shapes: shape_table,
+        top_level_locals: (0..n_params).map(|i| format!("Параметр{i}")).collect(),
+        function_names: Vec::new(),
+        exported_functions: Vec::new(),
+        module_vars: Vec::new(),
+        exported_module_vars: Vec::new(),
+        module_base: 0,
+        links: vec![bsl_bytecode::LinkEntry::Function {
+            module: bsl_bytecode::ModuleId::new(target.0),
+            func: target.1,
+        }],
+    };
+    for i in 0..entry.chunks.len() {
+        entry.chunks[i].bundle_len = bsl_bytecode::bundle::compute(
+            &entry.chunks[i],
+            bsl_bytecode::bundle::module_overlap(i, entry.module_vars.len()),
+        );
+    }
+    let module = engine
+        .load_entry(bsl_bytecode::EntryProgram {
+            id: bsl_bytecode::EntryId::new(0),
+            program: entry,
+        })
+        .map_err(|error| JobErrorDto::from_text(error.to_string()))?;
+
+    let mut state = engine.new_state();
+    state
+        .run(&module)
+        .map(|_| ())
+        .map_err(|error| JobErrorDto::from_text(error.to_string()))
+}
+
+/// Разрешает цель `Модуль.Метод` по каталогу: неглобальный общий модуль,
+/// экспортная не-async функция или процедура. Детали validation
+/// уточняются замером `JOB.EXECUTE.VALIDATION`.
+pub(crate) fn resolve_target(
+    catalog: &bsl_bytecode::ConfigurationProgram,
+    method_name: &str,
+) -> Result<(u32, u16), String> {
+    let Some((module_name, function_name)) = method_name.split_once('.') else {
+        return Err(format!("цель «{method_name}» не в форме «Модуль.Метод»"));
+    };
+    let Some((module_id, module)) = catalog.find(module_name.trim()) else {
+        return Err(format!("общий модуль «{module_name}» не найден"));
+    };
+    let program = &module.program;
+    let function_name = function_name.trim();
+    let Some(index) = program
+        .function_names
+        .iter()
+        .position(|name| bsl_rt::folded_eq(name, function_name))
+    else {
+        return Err(format!(
+            "в модуле «{module_name}» нет метода «{function_name}»"
+        ));
+    };
+    if !program.exported_functions[index] {
+        return Err(format!(
+            "метод «{module_name}.{function_name}» не экспортирован"
+        ));
+    }
+    let chunk = (index + 1) as u16;
+    if program.chunks[chunk as usize].is_async {
+        return Err(
+            "асинхронная цель фонового задания не поддержана до замера JOB.ASYNC.TARGET"
+                .to_string(),
+        );
+    }
+    Ok((module_id.index() as u32, chunk))
+}
+
+/// Runtime для движка с каталогом: рецепт — публичный текстовый образ
+/// каталога без entry.
+pub(crate) fn runtime_for_engine(
+    engine: &crate::Engine,
+    config: BackgroundJobConfig,
+) -> Result<JobRuntime, String> {
+    config.validate()?;
+    let catalog = engine
+        .catalog()
+        .ok_or("фоновые задания требуют движка с каталогом общих модулей")?;
+    let image = bsl_bytecode::BytecodeImage::Configuration {
+        catalog: catalog.clone(),
+        entry: None,
+    };
+    let text = bsl_bytecode::write_image(&image, None).map_err(|e| e.to_string())?;
+    Ok(JobRuntime::new(
+        config,
+        WorkerRecipe {
+            image_text: Arc::from(text),
+        },
+        Arc::new(SystemJobIds),
+    ))
+}
+
+#[cfg(test)]
+mod pool_tests {
+    use super::*;
+    use bsl_rt::{GraphLimits, RuntimeShapes};
+
+    fn engine() -> crate::Engine {
+        crate::Engine::builder()
+            .common_module(
+                "Служебный",
+                "Перем Счётчик Экспорт;\n\
+                 Функция Сложить(Знач а, Знач б) Экспорт\n\
+                     Возврат а + б;\n\
+                 КонецФункции\n\
+                 Процедура Упасть() Экспорт\n\
+                     ВызватьИсключение \"задание падает\";\n\
+                 КонецПроцедуры\n\
+                 Счётчик = 0;",
+            )
+            .build()
+            .expect("движок с каталогом")
+    }
+
+    fn params(values: &[bsl_rt::BslValue]) -> Arc<SerializedValueGraph> {
+        let rt = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
+        Arc::new(
+            SerializedValueGraph::capture(values, &rt, &GraphLimits::default())
+                .expect("снимок параметров"),
+        )
+    }
+
+    fn number(value: i64) -> bsl_rt::BslValue {
+        bsl_rt::BslValue::number_from_i64(value)
+    }
+
+    #[test]
+    fn a_job_runs_to_completion_in_a_worker() {
+        let engine = engine();
+        let runtime = runtime_for_engine(&engine, BackgroundJobConfig::default())
+            .expect("runtime собирается");
+        let target = resolve_target(engine.catalog().unwrap(), "Служебный.Сложить")
+            .expect("цель разрешается");
+        let snapshot = runtime
+            .submit(
+                "Служебный.Сложить",
+                target,
+                params(&[number(2), number(3)]),
+                None,
+                None,
+            )
+            .expect("задание принято");
+        assert_eq!(snapshot.state, JobStateDto::Queued);
+        assert!(runtime.wait_terminal(&[snapshot.id], Some(Duration::from_secs(30))));
+        let done = runtime
+            .snapshot(snapshot.id)
+            .expect("снимок после terminal");
+        assert_eq!(
+            done.state,
+            JobStateDto::Completed,
+            "ошибка: {:?}",
+            done.error
+        );
+    }
+
+    #[test]
+    fn a_raising_job_finishes_as_failed_with_the_error_text() {
+        let engine = engine();
+        let runtime = runtime_for_engine(&engine, BackgroundJobConfig::default())
+            .expect("runtime собирается");
+        let target = resolve_target(engine.catalog().unwrap(), "Служебный.Упасть")
+            .expect("цель разрешается");
+        let snapshot = runtime
+            .submit("Служебный.Упасть", target, params(&[]), None, None)
+            .expect("задание принято");
+        assert!(runtime.wait_terminal(&[snapshot.id], Some(Duration::from_secs(30))));
+        let done = runtime.snapshot(snapshot.id).expect("снимок");
+        assert_eq!(done.state, JobStateDto::Failed);
+        let error = done.error.as_ref().expect("ошибка задания");
+        assert!(
+            error.brief.contains("задание падает"),
+            "не тот текст: {}",
+            error.brief
+        );
+    }
+
+    #[test]
+    fn missing_required_arguments_fail_the_job() {
+        let engine = engine();
+        let runtime = runtime_for_engine(&engine, BackgroundJobConfig::default())
+            .expect("runtime собирается");
+        let target = resolve_target(engine.catalog().unwrap(), "Служебный.Сложить")
+            .expect("цель разрешается");
+        let snapshot = runtime
+            .submit(
+                "Служебный.Сложить",
+                target,
+                params(&[number(1)]),
+                None,
+                None,
+            )
+            .expect("задание принято");
+        assert!(runtime.wait_terminal(&[snapshot.id], Some(Duration::from_secs(30))));
+        let done = runtime.snapshot(snapshot.id).expect("снимок");
+        assert_eq!(done.state, JobStateDto::Failed);
+    }
+
+    #[test]
+    fn target_resolution_rejects_unknown_and_non_exported() {
+        let engine = engine();
+        let catalog = engine.catalog().unwrap();
+        assert!(resolve_target(catalog, "Нет.Такого").is_err());
+        assert!(resolve_target(catalog, "Служебный.НетМетода").is_err());
+        assert!(resolve_target(catalog, "БезТочки").is_err());
+        resolve_target(catalog, "Служебный.Сложить").expect("экспортная цель годится");
+    }
+
+    #[test]
+    fn many_jobs_all_reach_terminal_states() {
+        let engine = engine();
+        let runtime = runtime_for_engine(
+            &engine,
+            BackgroundJobConfig {
+                workers: Some(2),
+                ..BackgroundJobConfig::default()
+            },
+        )
+        .expect("runtime собирается");
+        let target = resolve_target(engine.catalog().unwrap(), "Служебный.Сложить")
+            .expect("цель разрешается");
+        let ids: Vec<_> = (0..16)
+            .map(|i| {
+                runtime
+                    .submit(
+                        "Служебный.Сложить",
+                        target,
+                        params(&[number(i), number(i)]),
+                        None,
+                        None,
+                    )
+                    .expect("задание принято")
+                    .id
+            })
+            .collect();
+        assert!(runtime.wait_terminal(&ids, Some(Duration::from_secs(60))));
+        for id in ids {
+            assert_eq!(
+                runtime.snapshot(id).expect("снимок").state,
+                JobStateDto::Completed
+            );
+        }
+    }
+
+    #[test]
+    fn waiting_with_a_timeout_returns_false_for_a_queued_job_without_workers() {
+        let engine = engine();
+        let runtime = runtime_for_engine(&engine, BackgroundJobConfig::default())
+            .expect("runtime собирается");
+        // Ложный идентификатор: задания нет — считается terminal (вытеснен).
+        assert!(runtime.wait_terminal(&[JobId([9; 16])], Some(Duration::from_millis(10))));
+    }
+}

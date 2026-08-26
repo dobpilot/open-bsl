@@ -31,7 +31,7 @@ mod table;
 mod type_description;
 mod types;
 mod tz;
-mod uuid;
+pub mod uuid;
 mod value_graph;
 mod value_list;
 mod vstr;
