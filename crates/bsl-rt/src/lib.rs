@@ -35,7 +35,7 @@ mod uuid;
 mod value_graph;
 mod value_list;
 mod vstr;
-pub use job_dto::{JobErrorDto, JobKeyDto};
+pub use job_dto::{JobErrorDto, JobId, JobKeyDto, JobSnapshotDto, JobStateDto};
 use std::cmp::Ordering;
 use std::fmt;
 use std::hash::{Hash, Hasher};

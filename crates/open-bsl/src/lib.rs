@@ -7,6 +7,8 @@
 mod dynamic;
 mod engine;
 mod error;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod jobs;
 mod state;
 
 pub use bsl_rt::BslValue as Value;
