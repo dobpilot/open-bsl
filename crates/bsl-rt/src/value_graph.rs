@@ -56,6 +56,22 @@ enum GraphNode {
     Array(Vec<NodeId>),
     Structure(Vec<(String, NodeId)>),
     Map(Vec<(NodeId, NodeId)>),
+    /// Таблица значений: колонки с ограничениями типов (имена типов и
+    /// сырые квалификаторы) и ячейки в физическом порядке строк.
+    /// Транзитные атрибуты внутреннего ТЕКСТОВОГО формата
+    /// (`ColumnVstr`, идентификаторы строк) не переносятся: они — свойство
+    /// текстового транзита, а не значения; уточняется `JOB.PARAMS.SNAPSHOT`.
+    ValueTable {
+        columns: Vec<GraphColumn>,
+        rows: Vec<Vec<NodeId>>,
+    },
+}
+
+/// Колонка таблицы в графе: имя и ограничение типов, если оно есть.
+#[derive(Debug, Clone, PartialEq)]
+struct GraphColumn {
+    name: String,
+    types: Option<Vec<(String, Vec<String>)>>,
 }
 
 /// `Send`-снимок набора значений: узлы, корни и учтённый размер.
@@ -80,7 +96,10 @@ const _: fn() = || {
 struct Capture<'a> {
     rt: &'a RuntimeShapes,
     nodes: Vec<GraphNode>,
-    seen: HashMap<*const BslObject, NodeId>,
+    /// Ключ — адрес разделяемой аллокации: у обычных объектов это сам
+    /// `BslObject`, у таблиц — их `ValueTableData` (несколько обёрток
+    /// делят одни данные, и алиас считается по данным).
+    seen: HashMap<usize, NodeId>,
     remaining: usize,
 }
 
@@ -161,6 +180,9 @@ impl SerializedValueGraph {
                 GraphNode::Array(_) => BslValue::new_array(Vec::new()),
                 GraphNode::Structure(_) => BslValue::new_structure(rt.shapes.empty(), Vec::new()),
                 GraphNode::Map(_) => BslValue::new_map(),
+                GraphNode::ValueTable { .. } => BslValue::Object(Rc::new(BslObject::ValueTable(
+                    crate::table::ValueTableData::new(),
+                ))),
             };
             cache[index] = Some(value);
         }
@@ -214,6 +236,53 @@ impl SerializedValueGraph {
                     let mut storage = storage.borrow_mut();
                     for (key, item) in entries {
                         storage.insert(resolve(&cache, *key)?, resolve(&cache, *item)?);
+                    }
+                }
+                GraphNode::ValueTable { columns, rows } => {
+                    let value = cache[index].clone().expect("создан первым проходом");
+                    let BslValue::Object(object) = value else {
+                        unreachable!("таблица материализуется объектом");
+                    };
+                    let BslObject::ValueTable(data) = object.as_ref() else {
+                        unreachable!("узел таблицы материализуется таблицей");
+                    };
+                    let mut data = data.borrow_mut();
+                    for column in columns {
+                        let types = match &column.types {
+                            None => None,
+                            Some(entries) => {
+                                let mut resolved = Vec::with_capacity(entries.len());
+                                for (name, quals) in entries {
+                                    let id = rt.resolve_type(name).ok_or_else(|| {
+                                        RtError::DynamicError(format!(
+                                            "тип колонки «{name}» не зарегистрирован в принимающем сеансе"
+                                        ))
+                                    })?;
+                                    resolved.push(crate::table::ColumnType {
+                                        id,
+                                        quals: quals.clone(),
+                                    });
+                                }
+                                Some(resolved)
+                            }
+                        };
+                        data.add_constrained_column(&column.name, types)
+                            .ok_or_else(|| {
+                                RtError::DynamicError(format!(
+                                    "колонка «{}» повторяется в переносимой таблице",
+                                    column.name
+                                ))
+                            })?;
+                    }
+                    for row in rows {
+                        let row_id = data.add_row()?;
+                        for (col, cell) in row.iter().enumerate() {
+                            let cell = resolve(&cache, *cell)?;
+                            data.set_cell(row_id, col, cell)
+                                .ok_or(RtError::DynamicError(
+                                    "строка переносимой таблицы шире её колонок".to_string(),
+                                ))?;
+                        }
                     }
                 }
                 _ => {}
@@ -293,7 +362,10 @@ impl Capture<'_> {
     }
 
     fn object_node(&mut self, object: &Rc<BslObject>) -> RtResult<NodeId> {
-        let key: *const BslObject = Rc::as_ptr(object);
+        let key = match object.as_ref() {
+            BslObject::ValueTable(data) => Rc::as_ptr(data) as usize,
+            _ => Rc::as_ptr(object) as usize,
+        };
         if let Some(existing) = self.seen.get(&key) {
             return Ok(*existing);
         }
@@ -356,6 +428,61 @@ impl Capture<'_> {
                     children.push((key_node, value_node));
                 }
                 self.nodes[id as usize] = GraphNode::Map(children);
+                Ok(id)
+            }
+            BslObject::ValueTable(data) => {
+                self.charge(NODE_COST)?;
+                let id = self.push(GraphNode::ValueTable {
+                    columns: Vec::new(),
+                    rows: Vec::new(),
+                });
+                self.seen.insert(key, id);
+                let (columns, cells) = {
+                    let data = data.borrow();
+                    let columns: Vec<GraphColumn> = data
+                        .column_names
+                        .iter()
+                        .zip(&data.column_types)
+                        .map(|(name, types)| GraphColumn {
+                            name: name.clone(),
+                            types: types.as_ref().map(|types| {
+                                types
+                                    .iter()
+                                    .map(|t| (t.id.to_string(), t.quals.clone()))
+                                    .collect()
+                            }),
+                        })
+                        .collect();
+                    let mut cells: Vec<Vec<BslValue>> =
+                        vec![Vec::with_capacity(columns.len()); data.row_count()];
+                    for column in &data.columns {
+                        for (row, value) in column.iter().enumerate() {
+                            cells[row].push(value.clone());
+                        }
+                    }
+                    (columns, cells)
+                };
+                for column in &columns {
+                    let types_cost: usize = column
+                        .types
+                        .iter()
+                        .flatten()
+                        .map(|(name, quals)| {
+                            name.len() + quals.iter().map(String::len).sum::<usize>()
+                        })
+                        .sum();
+                    self.charge(column.name.len() + types_cost)?;
+                }
+                let mut rows = Vec::with_capacity(cells.len());
+                for row in &cells {
+                    self.charge(row.len() * std::mem::size_of::<NodeId>())?;
+                    let mut ids = Vec::with_capacity(row.len());
+                    for value in row {
+                        ids.push(self.node(value)?);
+                    }
+                    rows.push(ids);
+                }
+                self.nodes[id as usize] = GraphNode::ValueTable { columns, rows };
                 Ok(id)
             }
             _ => Err(RtError::ResourceLimit(format!(
@@ -509,6 +636,51 @@ mod tests {
         .expect("снимок");
         assert!(graph.byte_size() >= 20_000, "байты строки учтены");
         graph.materialize(&mut receiver).expect("материализация");
+    }
+
+    /// Таблица значений переносит колонки (с ограничениями типов),
+    /// физический порядок строк и ячейки; две обёртки над одними данными
+    /// остаются одним объектом.
+    #[test]
+    fn a_value_table_round_trips_with_columns_and_rows() {
+        let sender = shapes();
+        let mut receiver = shapes();
+        let data = crate::table::ValueTableData::new();
+        {
+            let mut table = data.borrow_mut();
+            table.add_column("Имя").expect("колонка");
+            let number = sender.resolve_type("Число").expect("тип Число");
+            table
+                .add_typed_column("Число", Some(vec![number]))
+                .expect("типизированная колонка");
+            for (name, count) in [("первая", 1i64), ("вторая", 2)] {
+                let row = table.add_row().expect("строка");
+                table.set_cell(row, 0, BslValue::Str(BslString::from_str(name)));
+                table.set_cell(row, 1, BslValue::Number(BslNumber::from_i64(count)));
+            }
+        }
+        let table_value = BslValue::Object(std::rc::Rc::new(BslObject::ValueTable(data)));
+        let graph = capture_one(&table_value, &sender);
+        let restored = graph.materialize(&mut receiver).expect("материализация");
+        let BslValue::Object(object) = &restored[0] else {
+            panic!("ожидалась таблица");
+        };
+        let BslObject::ValueTable(data) = object.as_ref() else {
+            panic!("ожидалась таблица");
+        };
+        let table = data.borrow();
+        assert_eq!(table.column_names, vec!["Имя", "Число"]);
+        assert!(table.column_types[0].is_none());
+        assert_eq!(
+            table.column_types[1].as_ref().map(|types| types.len()),
+            Some(1)
+        );
+        assert_eq!(table.row_count(), 2);
+        let second = table.row_id_at(1).expect("вторая строка");
+        assert_eq!(
+            table.get_cell(second, 1),
+            Some(BslValue::Number(BslNumber::from_i64(2)))
+        );
     }
 
     /// Структура и соответствие переносят пары; принимающий интернер
