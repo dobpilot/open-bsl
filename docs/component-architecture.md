@@ -148,7 +148,7 @@ flowchart TB
 
     subgraph engine["EngineInner — сильный внешний владелец"]
         config["ConfigurationProgram<br/>неизменяемый каталог"]
-        scheduler["SchedulerConfig<br/>safe_points_per_quantum"]
+        scheduler["SchedulerConfig<br/>safe_points_per_quantum<br/>background_safe_points_per_quantum"]
         temp["TemporaryStorageRuntime<br/>SessionTokenSource + mailboxes"]
         ids["ConfigurationId + JobIdSource"]
         jobs["Arc&lt;JobRuntime&gt;"]
@@ -206,7 +206,10 @@ flowchart TB
 Клоны одного `Engine` разделяют каталог и runtime. Независимые Engine, даже с
 одинаковым bytecode, имеют разные process-local `ConfigurationId` и не видят
 задания или временное хранилище друг друга. Каждый job получает новый `State` и
-новые `ModuleInstance`; `ModuleState` с родителем не разделяется.
+новые `ModuleInstance`; `ModuleState` с родителем не разделяется. Стоимость
+разбора worker-рецепта каждым потоком — измеряемая величина; разделяемый
+`Arc` неизменяемого кода с вынесенными inline-кэшами остаётся записанной
+эскалацией по профилю и в 0.4.0 не принимается.
 
 ### ARCH-04 — Native и WASM deployment
 
@@ -453,7 +456,9 @@ flowchart TD
 
 `Await` и каждый descriptor с `may_suspend` являются барьерами VLIW-бандла.
 Фоновый `OwnedExecution` всегда квантуется; обычный foreground `State` при одной
-BSL-задаче сохраняет неограниченный быстрый путь. `State::run` остаётся
+BSL-задаче сохраняет неограниченный быстрый путь. Фоновый квант — отдельная
+ручка `background_safe_points_per_quantum`; отмена проверяется на каждом
+safe point и от длины кванта не зависит. `State::run` остаётся
 run-to-completion, а poolable owned API возвращает `Runnable`, `Waiting` или
 `Complete`.
 
@@ -500,7 +505,10 @@ flowchart TD
 становятся `Send`. Work stealing нет; общая FIFO балансирует только ещё не
 начатые jobs. Локальные futures обязаны быть кооперативными и не выполнять
 блокирующий I/O. Заполненный wake-channel не теряет событие благодаря
-`wake_pending` и повторной проверке перед сном.
+`wake_pending` и повторной проверке перед сном. Сон worker — `block_on` над
+`select` из wake-канала и ближайшего deadline `JobTimeSource` внутри его
+runtime, поэтому таймеры срабатывают и в простое; голый park вне runtime
+запрещён.
 
 ### ARCH-11 — Синхронный и асинхронный HTTP из job
 
@@ -534,7 +542,9 @@ Tokio `Future`, `JoinHandle` и ошибки транспорта не вход�
 `PromiseValue` остаётся непрозрачным `BslObject::Extension`; token закрывается
 при завершении run и запрещает ждать promise другого execution. Отмена
 execution отменяет активный host-handle, а поздний completion проверяет
-`execution_token + pending_call_id`.
+`execution_token + pending_call_id`. HTTP-runtime чисто I/O-bound: число его
+потоков фиксируется малым и не масштабируется числом CPU, чтобы не
+пересподписывать ядра против пула воркеров.
 
 ### ARCH-12 — Вложенное фоновое задание
 
@@ -835,8 +845,12 @@ flowchart TD
 Занятый worker не является admission error. Запись, которая максимально может
 превысить `max_single_job_record_bytes`, отвергается заранее; terminal transfer
 не учитывает payload дважды. История намеренно расширена относительно 1С до
-10 000 jobs, но всегда ограничена также байтами. Отбор первых 10 000 записей
-линейный; индекс добавляется только после профиля.
+10 000 jobs, но всегда ограничена также байтами.
+Terminal-записи неизменяемы и хранятся как `Arc`: листинг клонирует
+указатели под локом и фильтрует вне его; вытеснение амортизировано на
+добавлении, TTL проверяется лениво при добавлении и чтении.
+Отбор первых 10 000 записей линейный; индекс и отдельный лок
+истории добавляются только после профиля.
 
 ### ARCH-20 — Временное хранилище: capability и публикация
 
@@ -996,7 +1010,8 @@ sequenceDiagram
 1. Один job — один изолированный `State`; программы worker-local, каталог
    Engine неизменяем.
 2. `JobRegistry` хранит только владеющие DTO и никогда не вызывает внешний код
-   под своим lock.
+   под своим lock; его мьютекс — синхронный `std::sync::Mutex`, не
+   пересекающий `await`.
 3. Занятый пул означает FIFO, а не ошибку; resource limits применяются до или
    во время явно показанного reservation.
 4. `OwnedExecution` закреплён за worker, но pending host call освобождает worker
