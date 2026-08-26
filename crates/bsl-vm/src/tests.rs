@@ -97,6 +97,258 @@ fn run_with_dynamic_and_registry(
     )
 }
 
+/// Прогон entry-программы поверх каталога общих модулей. Модули
+/// компилируются обычным фронтендом (Экспорт уже проносится в байт-код), а
+/// таблица связей и импортные опкоды entry собираются руками: компилятор
+/// начнёт эмитить их вместе с import environment.
+fn run_configuration(
+    entry: &Program,
+    catalog: &bsl_bytecode::ConfigurationProgram,
+) -> Result<BslValue, RtError> {
+    let mut builder = bsl_rt::RuntimeBuilder::new();
+    builder.register(bsl_rt::core_library());
+    let registry = builder.build().expect("ядро реестра собирается");
+    let mut env = bsl_rt::HostEnv::process();
+    let mut stdout = std::io::stdout().lock();
+    let mut stderr = std::io::stderr().lock();
+    let mut dynamic = TestDynamic::bare();
+    let mut execution =
+        ProgramExecution::start_with_registry(entry, &registry, JitMode::Off, &env)?;
+    execution.attach_catalog(catalog);
+    loop {
+        match execution.poll_configuration_with_registry_and_io(
+            entry,
+            catalog,
+            &registry,
+            &mut stdout,
+            &mut stderr,
+            &mut dynamic,
+            &mut env,
+            usize::MAX,
+        )? {
+            ProgramPoll::Complete(value, _) => return Ok(value),
+            ProgramPoll::Runnable | ProgramPoll::Waiting => continue,
+        }
+    }
+}
+
+fn compile_module(src: &str) -> Program {
+    let prog = parse(src).unwrap_or_else(|e| panic!("parse error: {e:?}"));
+    let resolved = resolve_program(&prog.items).unwrap_or_else(|e| panic!("sema error: {e:?}"));
+    compile_program(&resolved).unwrap_or_else(|e| panic!("compile error: {e:?}"))
+}
+
+/// Каталог из одного служебного модуля: экспортные переменная и функция,
+/// тело инициализации присваивает переменной 100.
+fn service_catalog() -> bsl_bytecode::ConfigurationProgram {
+    let service = compile_module(
+        "Перем Счётчик Экспорт;\n\
+         Функция Удвоить(х) Экспорт\n\
+             Счётчик = Счётчик + 1;\n\
+             Возврат х * 2;\n\
+         КонецФункции\n\
+         Процедура Нарастить(п) Экспорт\n\
+             п = п + 1;\n\
+         КонецПроцедуры\n\
+         Счётчик = 100;",
+    );
+    bsl_bytecode::ConfigurationProgram {
+        modules: vec![bsl_bytecode::ModuleProgram {
+            name: "Служебный".to_string(),
+            program: service,
+        }],
+    }
+}
+
+/// Entry, собранный руками поверх `service_catalog`. Связи: 0 — функция
+/// `Удвоить`, 1 — переменная `Счётчик`, 2 — процедура `Нарастить`.
+fn entry_over_service(instrs: Vec<Instr>, arg_modes: Vec<Vec<ArgMode>>) -> Program {
+    let mut resolved = compile_module("Возврат 0;");
+    let chunk = &mut resolved.chunks[0];
+    chunk.instrs = instrs;
+    chunk.call_arg_modes = arg_modes;
+    chunk.n_regs = 8;
+    let n = chunk.instrs.len();
+    chunk.prop_cache = (0..n)
+        .map(|_| bsl_bytecode::PropCacheSlot::default())
+        .collect();
+    chunk.method_cache = (0..n).map(|_| std::cell::RefCell::new(None)).collect();
+    resolved.links = vec![
+        bsl_bytecode::LinkEntry::Function {
+            module: bsl_bytecode::ModuleId::new(0),
+            func: 1,
+        },
+        bsl_bytecode::LinkEntry::Variable {
+            module: bsl_bytecode::ModuleId::new(0),
+            slot: 0,
+        },
+        bsl_bytecode::LinkEntry::Function {
+            module: bsl_bytecode::ModuleId::new(0),
+            func: 2,
+        },
+    ];
+    for i in 0..resolved.chunks.len() {
+        resolved.chunks[i].bundle_len = bsl_bytecode::bundle::compute(
+            &resolved.chunks[i],
+            bsl_bytecode::bundle::module_overlap(i, resolved.module_vars.len()),
+        );
+    }
+    resolved
+}
+
+/// Ленивая инициализация срабатывает при первом касании; вызов, чтение и
+/// запись импортной переменной видят одно состояние модуля.
+#[test]
+fn a_configuration_call_reads_and_writes_the_service_module() {
+    let catalog = service_catalog();
+    // r0 = Счётчик (init: 100); r1 = Удвоить(r0) = 200 и Счётчик = 101;
+    // Счётчик = r1 (200); r2 = Счётчик; Возврат r2.
+    let entry = entry_over_service(
+        vec![
+            Instr::GetImportedVar {
+                dst: 0,
+                link_slot: 1,
+            },
+            Instr::CallImported {
+                link_slot: 0,
+                base: 0,
+                arg_modes: 0,
+                ret: 1,
+            },
+            Instr::SetImportedVar {
+                link_slot: 1,
+                src: 1,
+            },
+            Instr::GetImportedVar {
+                dst: 2,
+                link_slot: 1,
+            },
+            Instr::Return { src: Some(2) },
+        ],
+        vec![vec![ArgMode::Value]],
+    );
+    let value = run_configuration(&entry, &catalog).unwrap();
+    assert_eq!(value, BslValue::number_from_i64(200));
+}
+
+/// Передача по ссылке через границу модулей: модульная переменная entry и
+/// экспортная переменная модуля получают запись из вызванной процедуры.
+#[test]
+fn by_ref_arguments_cross_the_module_boundary_both_ways() {
+    let catalog = service_catalog();
+    // Модульная переменная entry М = 42; Нарастить(М) по ссылке -> 43.
+    // Нарастить(Счётчик) по byimport -> 101 (после init 100).
+    // Возврат М * 1000 + Счётчик = 43101.
+    let mut entry = entry_over_service(
+        vec![
+            Instr::LoadConst { dst: 0, k: 0 },
+            Instr::SetModuleVar { slot: 0, src: 0 },
+            Instr::CallImported {
+                link_slot: 2,
+                base: 1,
+                arg_modes: 0,
+                ret: 1,
+            },
+            Instr::CallImported {
+                link_slot: 2,
+                base: 1,
+                arg_modes: 1,
+                ret: 1,
+            },
+            Instr::GetModuleVar { dst: 2, slot: 0 },
+            Instr::LoadConst { dst: 3, k: 1 },
+            Instr::Mul { dst: 4, a: 2, b: 3 },
+            Instr::GetImportedVar {
+                dst: 5,
+                link_slot: 1,
+            },
+            Instr::Add { dst: 6, a: 4, b: 5 },
+            Instr::Return { src: Some(6) },
+        ],
+        vec![
+            vec![ArgMode::ByRefModuleVar(0)],
+            vec![ArgMode::ByRefImportedVar(1)],
+        ],
+    );
+    entry.module_vars = vec!["М".to_string()];
+    entry.exported_module_vars = vec![false];
+    entry.chunks[0].consts = vec![
+        BslValue::number_from_i64(42),
+        BslValue::number_from_i64(1000),
+    ];
+    for i in 0..entry.chunks.len() {
+        entry.chunks[i].bundle_len = bsl_bytecode::bundle::compute(
+            &entry.chunks[i],
+            bsl_bytecode::bundle::module_overlap(i, entry.module_vars.len()),
+        );
+    }
+    let value = run_configuration(&entry, &catalog).unwrap();
+    assert_eq!(value, BslValue::number_from_i64(43101));
+}
+
+/// Ошибка тела модуля помечает экземпляр как Failed: повторное касание
+/// отвечает ловимой ошибкой, а не повторным запуском инициализации.
+#[test]
+fn a_failed_module_body_poisons_the_instance_for_the_session() {
+    let broken = compile_module("ВызватьИсключение \"тело модуля упало\";");
+    // Экспортная переменная нужна, чтобы её касание запускало init.
+    let broken = {
+        let mut p = broken;
+        p.module_vars = vec!["П".to_string()];
+        p.exported_module_vars = vec![true];
+        p
+    };
+    let catalog = bsl_bytecode::ConfigurationProgram {
+        modules: vec![bsl_bytecode::ModuleProgram {
+            name: "Сломанный".to_string(),
+            program: broken,
+        }],
+    };
+    let mut entry = compile_module("Возврат 0;");
+    entry.links = vec![bsl_bytecode::LinkEntry::Variable {
+        module: bsl_bytecode::ModuleId::new(0),
+        slot: 0,
+    }];
+    let chunk = &mut entry.chunks[0];
+    chunk.instrs = vec![
+        Instr::GetImportedVar {
+            dst: 0,
+            link_slot: 0,
+        },
+        Instr::GetImportedVar {
+            dst: 1,
+            link_slot: 0,
+        },
+        Instr::Return { src: Some(1) },
+    ];
+    // Первый Get защищён «Попыткой»: ошибка тела ловится, второй Get
+    // упирается в Failed и его ошибка уходит наружу.
+    chunk.exception_ranges = vec![bsl_bytecode::ExceptionRange {
+        start_pc: 0,
+        end_pc: 1,
+        handler_pc: 1,
+    }];
+    chunk.n_regs = 2;
+    let n = chunk.instrs.len();
+    chunk.prop_cache = (0..n)
+        .map(|_| bsl_bytecode::PropCacheSlot::default())
+        .collect();
+    chunk.method_cache = (0..n).map(|_| std::cell::RefCell::new(None)).collect();
+    for i in 0..entry.chunks.len() {
+        entry.chunks[i].bundle_len = bsl_bytecode::bundle::compute(
+            &entry.chunks[i],
+            bsl_bytecode::bundle::module_overlap(i, entry.module_vars.len()),
+        );
+    }
+    let error = run_configuration(&entry, &catalog).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("инициализация общего модуля завершилась ошибкой"),
+        "не та ошибка: {error}"
+    );
+}
+
 fn run_src(src: &str) -> BslValue {
     let prog = parse(src).unwrap_or_else(|e| panic!("parse error: {e:?}"));
     let resolved = resolve_program(&prog.items).unwrap_or_else(|e| panic!("sema error: {e:?}"));

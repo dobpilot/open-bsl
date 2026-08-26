@@ -99,6 +99,78 @@ impl ModuleState {
     }
 }
 
+/// Номер модуля кадра. `ROOT_MODULE` — программа, переданная в poll
+/// (одиночная либо entry конфигурации); остальные номера — позиции в
+/// каталоге. Сравнение с sentinel дешевле `Option<u32>` в горячем цикле.
+const ROOT_MODULE: u32 = u32::MAX;
+
+/// Состояние инициализации общего модуля в ОДНОМ сеансе. Политика ленивая:
+/// тело модуля исполняется при первом обращении к его символу; момент и
+/// повторная попытка после ошибки уточняются замером `JOB.MODULE.INIT`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ModuleInitState {
+    NotStarted,
+    Initializing,
+    Ready,
+    Failed,
+}
+
+/// Экземпляр общего модуля в сеансе: его переменные и стадия
+/// инициализации. Между сеансами и потоками не разделяется.
+struct ModuleInstance {
+    state: ModuleState,
+    init: ModuleInitState,
+}
+
+/// Сессионные экземпляры всех модулей каталога, индекс — `ModuleId`.
+/// У одиночной программы пуст.
+#[derive(Default)]
+pub struct SessionModules {
+    instances: Vec<ModuleInstance>,
+}
+
+impl SessionModules {
+    fn for_catalog(catalog: &bsl_bytecode::ConfigurationProgram) -> Self {
+        Self {
+            instances: catalog
+                .modules
+                .iter()
+                .map(|module| ModuleInstance {
+                    state: ModuleState::new(&module.program),
+                    init: ModuleInitState::NotStarted,
+                })
+                .collect(),
+        }
+    }
+}
+
+/// Каталожный контекст одного poll: программы модулей и их связанные
+/// компонентные таблицы. Живёт не дольше poll, как `LinkedComponents`.
+pub struct CatalogContext<'a> {
+    catalog: &'a bsl_bytecode::ConfigurationProgram,
+    linked: Vec<LinkedComponents<'a>>,
+}
+
+impl<'a> CatalogContext<'a> {
+    fn program(&self, module: u32) -> Result<&'a Program, RtError> {
+        self.catalog
+            .modules
+            .get(module as usize)
+            .map(|m| &m.program)
+            .ok_or(RtError::InvalidBytecode(
+                "номер модуля кадра вне каталога конфигурации",
+            ))
+    }
+
+    fn linked(&self, module: u32) -> Result<&LinkedComponents<'a>, RtError> {
+        self.linked
+            .get(module as usize)
+            .ok_or(RtError::InvalidBytecode(
+                "номер модуля кадра вне таблиц линковки",
+            ))
+    }
+}
+
 #[derive(Clone, Copy)]
 enum TaskCompletion {
     Root,
@@ -322,6 +394,10 @@ impl Drop for AsyncState {
 /// кадры делят один сквозной стек значений (`Vm::stack`), кадр — это лишь
 /// окно в него, как в Lua.
 struct Frame {
+    /// Модуль, которому принадлежит `func_id`: `ROOT_MODULE` либо позиция
+    /// в каталоге конфигурации. Кадры разных модулей чередуются в одном
+    /// стеке кадров, а программа кадра резолвится драйвером по этому полю.
+    module: u32,
     func_id: usize,
     pc: usize,
     /// Слоты параметров вызванной функции (длина — её `n_params`). Пуст у
@@ -341,10 +417,11 @@ struct Frame {
     /// Регистр РОДИТЕЛЬСКОГО кадра, куда положить результат при возврате
     /// (не используется для самого нижнего/верхнего кадра).
     return_reg: u8,
-    /// Временные слоты параметров, созданные для передачи модульной
-    /// переменной по ссылке. При возврате их значения записываются обратно
-    /// в общий `ModuleState` запуска.
-    module_copybacks: Vec<(usize, usize)>,
+    /// Временные слоты параметров, созданные для передачи модульной либо
+    /// импортированной переменной по ссылке: (индекс в стеке, модуль,
+    /// слот). При возврате значения записываются обратно в `ModuleState`
+    /// соответствующего модуля.
+    module_copybacks: Vec<(usize, u32, usize)>,
     /// Активен только внутри доказанно пустого числового цикла. Его тело не
     /// может наблюдать счётчик, поэтому обычный `BslValue` материализуется
     /// лишь при выходе из цикла.
@@ -1272,6 +1349,9 @@ pub struct ProgramExecution {
     merge_linear: bool,
     root_result: Option<(BslValue, Vec<BslValue>)>,
     module_state: ModuleState,
+    /// Экземпляры общих модулей каталога этого сеанса; у одиночной
+    /// программы пуст.
+    session_modules: SessionModules,
     finished: bool,
 }
 
@@ -1287,6 +1367,7 @@ impl ProgramExecution {
     ) -> Self {
         let root = Task {
             frames: vec![Frame {
+                module: ROOT_MODULE,
                 func_id,
                 pc: 0,
                 param_aliases: Vec::new(),
@@ -1315,8 +1396,16 @@ impl ProgramExecution {
             merge_linear,
             root_result: None,
             module_state,
+            session_modules: SessionModules::default(),
             finished: false,
         }
+    }
+
+    /// Подключает сессионные экземпляры модулей каталога: по одному
+    /// `ModuleInstance` на модуль, все в состоянии `NotStarted`. Вызывается
+    /// один раз при создании конфигурационного запуска.
+    pub fn attach_catalog(&mut self, catalog: &bsl_bytecode::ConfigurationProgram) {
+        self.session_modules = SessionModules::for_catalog(catalog);
     }
 
     /// Создаёт отдельный запуск верхнего уровня и связывает его компоненты.
@@ -1416,13 +1505,74 @@ impl ProgramExecution {
             dynamic: Some(dynamic),
             dynamic_depth: &dynamic_depth,
         };
-        self.poll_linked(program, &linked, &mut host, host_slice)
+        self.poll_linked(program, &linked, None, &mut host, host_slice)
+    }
+
+    /// Конфигурационный аналог [`Self::poll_with_registry_and_io`]:
+    /// исполняет entry поверх каталога общих модулей. Entry и каждый модуль
+    /// линкуются на каждый poll — так же, как одиночный путь
+    /// перелинковывает свою программу. Перед первым poll должен быть
+    /// вызван [`Self::attach_catalog`].
+    ///
+    /// # Errors
+    ///
+    /// Ошибки связывания любого модуля каталога и ошибки исполнения.
+    #[allow(clippy::too_many_arguments)]
+    pub fn poll_configuration_with_registry_and_io<'a>(
+        &mut self,
+        entry: &Program,
+        catalog: &bsl_bytecode::ConfigurationProgram,
+        registry: &bsl_rt::RuntimeRegistry,
+        stdout: &'a mut dyn Write,
+        stderr: &'a mut dyn Write,
+        dynamic: &'a mut dyn DynamicCompiler,
+        host_env: &'a mut bsl_rt::HostEnv,
+        host_slice: usize,
+    ) -> Result<ProgramPoll, RtError> {
+        let linked = link_components(
+            entry,
+            Some(registry),
+            host_env.zone(),
+            host_env.files(),
+            host_env.random(),
+            host_env.network(),
+            bsl_bytecode::DynamicScope::ROOT,
+        )?;
+        // Области динамического кода модулей нумеруются с единицы: ROOT
+        // принадлежит entry, и пересечение областей склеило бы кэши
+        // фрагментов разных модулей.
+        let mut linked_modules = Vec::with_capacity(catalog.modules.len());
+        for (i, module) in catalog.modules.iter().enumerate() {
+            linked_modules.push(link_components(
+                &module.program,
+                Some(registry),
+                host_env.zone(),
+                host_env.files(),
+                host_env.random(),
+                host_env.network(),
+                i as u64 + 1,
+            )?);
+        }
+        let ctx = CatalogContext {
+            catalog,
+            linked: linked_modules,
+        };
+        let dynamic_depth = std::cell::Cell::new(0);
+        let mut host = HostIo {
+            stdout,
+            stderr,
+            env: Some(host_env),
+            dynamic: Some(dynamic),
+            dynamic_depth: &dynamic_depth,
+        };
+        self.poll_linked(entry, &linked, Some(&ctx), &mut host, host_slice)
     }
 
     fn poll_linked(
         &mut self,
         program: &Program,
         linked: &LinkedComponents<'_>,
+        catalog: Option<&CatalogContext<'_>>,
         host: &mut HostIo<'_, '_>,
         host_slice: usize,
     ) -> Result<ProgramPoll, RtError> {
@@ -1442,6 +1592,7 @@ impl ProgramExecution {
             merge_linear,
             root_result,
             module_state,
+            session_modules,
             finished,
             ..
         } = self;
@@ -1485,6 +1636,24 @@ impl ProgramExecution {
             }
 
             loop {
+                // Модуль верхнего кадра определяет программу, линковку и
+                // состояние модульных переменных этого шага. У одиночной
+                // программы ветка всегда предсказана: модуль — ROOT_MODULE.
+                let cur_module = task
+                    .frames
+                    .last()
+                    .expect("инвариант VM: drive всегда держит хотя бы один кадр")
+                    .module;
+                let (cur_program, cur_linked) = if cur_module == ROOT_MODULE {
+                    (program, linked)
+                } else {
+                    let Some(ctx) = catalog else {
+                        return Err(RtError::InvalidBytecode(
+                            "кадр модуля конфигурации без каталожного контекста",
+                        ));
+                    };
+                    (ctx.program(cur_module)?, ctx.linked(cur_module)?)
+                };
                 // После инициализации пустой numeric-for не обращается к
                 // регистрам. Обслуживаем его back-edge в компактном внешнем цикле,
                 // не входя на каждой итерации в большой универсальный `step`.
@@ -1522,7 +1691,7 @@ impl ProgramExecution {
                 // Нативный путь. Он не обязан ничего исполнить: если на текущей
                 // позиции входа нет, управление просто идёт в `step`, и это же
                 // происходит при любом отказе JIT-а.
-                if !native.is_empty() {
+                if cur_module == ROOT_MODULE && !native.is_empty() {
                     let native_slots = if scheduled {
                         &mut *native_scheduled
                     } else {
@@ -1591,6 +1760,8 @@ impl ProgramExecution {
                                         &mut task.frames,
                                         &mut task.stack,
                                         program,
+                                        catalog,
+                                        session_modules,
                                         &e,
                                         &mut task.current_exception,
                                     ) {
@@ -1618,19 +1789,50 @@ impl ProgramExecution {
                 // как при поинструкционном исполнении; обработчик по построению
                 // разметки — начало бандла.
                 let before = task_position(&task);
-                match step(
+                // Состояние модульных переменных текущего модуля на время
+                // шага изымается из сессии: `step` видит его обычным
+                // `module_state`, а чужие модули достаёт через сессию, в
+                // которой изъятая ячейка не встречается (self-link запрещён
+                // периметром образа).
+                let mut scratch_state = ModuleState { slots: Vec::new() };
+                if cur_module != ROOT_MODULE {
+                    std::mem::swap(
+                        &mut scratch_state.slots,
+                        &mut session_modules.instances[cur_module as usize].state.slots,
+                    );
+                }
+                // Кадру модуля корневое состояние отдаётся отдельной
+                // ссылкой: копибэк `ByRefModuleVar`, созданный корневым
+                // кадром, пишется при возврате из модульного.
+                let (step_state, step_root): (&mut ModuleState, Option<&mut ModuleState>) =
+                    if cur_module == ROOT_MODULE {
+                        (&mut *module_state, None)
+                    } else {
+                        (&mut scratch_state, Some(&mut *module_state))
+                    };
+                let step_result = step(
                     &mut task.frames,
                     &mut task.stack,
-                    program,
-                    module_state,
+                    cur_program,
+                    step_state,
+                    step_root,
+                    session_modules,
+                    catalog,
                     &mut task.current_exception,
                     runtime_shapes,
-                    linked,
+                    cur_linked,
                     host,
                     *merge_linear && !scheduled,
                     async_state,
                     task_id,
-                ) {
+                );
+                if cur_module != ROOT_MODULE {
+                    std::mem::swap(
+                        &mut scratch_state.slots,
+                        &mut session_modules.instances[cur_module as usize].state.slots,
+                    );
+                }
+                match step_result {
                     Ok(Step::Continue) => {
                         if crossed_scheduler_safe_point(before, &task)
                             && consume_scheduler_safe_point(
@@ -1678,6 +1880,8 @@ impl ProgramExecution {
                             &mut task.frames,
                             &mut task.stack,
                             program,
+                            catalog,
+                            session_modules,
                             &e,
                             &mut task.current_exception,
                         ) {
@@ -1726,7 +1930,7 @@ fn drive_linked(
         SchedulerConfig::default(),
     );
     let result = loop {
-        match execution.poll_linked(program, linked, host, usize::MAX) {
+        match execution.poll_linked(program, linked, None, host, usize::MAX) {
             Ok(ProgramPoll::Complete(value, stack)) => break Ok((value, stack)),
             Ok(ProgramPoll::Runnable | ProgramPoll::Waiting) => continue,
             Err(error) => break Err(error),
@@ -2022,6 +2226,9 @@ fn step(
     stack: &mut Vec<BslValue>,
     program: &Program,
     module_state: &mut ModuleState,
+    root_state: Option<&mut ModuleState>,
+    session: &mut SessionModules,
+    catalog: Option<&CatalogContext<'_>>,
     current_exception: &mut Option<BslValue>,
     runtime_shapes: &mut bsl_rt::RuntimeShapes,
     linked: &LinkedComponents,
@@ -2039,7 +2246,14 @@ fn step(
         // Неявный возврат: тело кончилось без `Возврат` — результат
         // Неопределено, как и `Возврат;` без выражения.
         return Ok(
-            match do_return_with_value(frames, stack, module_state, BslValue::Undefined)? {
+            match do_return_with_value(
+                frames,
+                stack,
+                module_state,
+                root_state,
+                session,
+                BslValue::Undefined,
+            )? {
                 Done(v) => Step::Done(v),
                 Continuing => Step::Continue,
             },
@@ -2402,6 +2616,7 @@ fn step(
                     frames[frame_idx].pc += 1;
                     let child_id = async_state.insert_task(Task {
                         frames: vec![Frame {
+                            module: frames[frame_idx].module,
                             func_id: func as usize,
                             pc: 0,
                             param_aliases,
@@ -2460,7 +2675,7 @@ fn step(
                             let value = reg_load(&module_state.slots, module_slot)?;
                             let idx = stack.len();
                             stack.push(value);
-                            module_copybacks.push((idx, module_slot));
+                            module_copybacks.push((idx, frames[frame_idx].module, module_slot));
                             ParamSlot {
                                 idx,
                                 provided: true,
@@ -2498,6 +2713,7 @@ fn step(
                 push_own_registers(stack, callee_chunk);
 
                 frames.push(Frame {
+                    module: frames[frame_idx].module,
                     func_id: func as usize,
                     pc: 0,
                     param_aliases,
@@ -2556,7 +2772,14 @@ fn step(
                     None => BslValue::Undefined,
                 };
                 return Ok(
-                    match do_return_with_value(frames, stack, module_state, value)? {
+                    match do_return_with_value(
+                        frames,
+                        stack,
+                        module_state,
+                        root_state,
+                        session,
+                        value,
+                    )? {
                         Done(v) => Step::Done(v),
                         Continuing => Step::Continue,
                     },
@@ -2751,6 +2974,8 @@ fn step(
                     host,
                     runtime_shapes,
                     module_state,
+                    session,
+                    catalog,
                     async_state,
                     frame_idx,
                     func_id,
@@ -2823,14 +3048,16 @@ fn step(
 #[allow(clippy::too_many_arguments)]
 fn step_cold(
     instr: Instr,
-    frames: &mut [Frame],
-    stack: &mut [BslValue],
+    frames: &mut Vec<Frame>,
+    stack: &mut Vec<BslValue>,
     program: &Program,
     current_exception: &Option<BslValue>,
     linked: &LinkedComponents<'_>,
     host: &mut HostIo<'_, '_>,
     runtime_shapes: &mut bsl_rt::RuntimeShapes,
     module_state: &mut ModuleState,
+    session: &mut SessionModules,
+    catalog: Option<&CatalogContext<'_>>,
     async_state: &mut AsyncState,
     frame_idx: usize,
     func_id: usize,
@@ -3208,16 +3435,205 @@ fn step_cold(
             reg_store(stack, d, value)?;
             frames[frame_idx].pc += 1;
         }
-        // Межмодульные опкоды исполняются только внутри конфигурации:
-        // сессионные модули появляются вместе с каталогом (план фоновых
-        // заданий, этап 1), а одиночная программа таких инструкций не
-        // содержит — компилятор эмитит их только при связывании модулей.
-        Instr::CallImported { .. }
-        | Instr::GetImportedVar { .. }
-        | Instr::SetImportedVar { .. } => {
-            return Err(RtError::InvalidBytecode(
+        // Вызов экспортного метода чужого модуля. Протокол ленивой
+        // инициализации: если какой-то из затрагиваемых модулей ещё не
+        // инициализирован, `ensure_module_ready` пушит кадр его тела и
+        // возвращает управление БЕЗ продвижения `pc` — после возврата тела
+        // эта же инструкция исполняется повторно, уже с готовым модулем.
+        Instr::CallImported {
+            link_slot,
+            base,
+            arg_modes,
+            ret,
+        } => {
+            let ctx = catalog.ok_or(RtError::InvalidBytecode(
                 "межмодульный опкод вне каталога конфигурации",
-            ));
+            ))?;
+            let Some(&bsl_bytecode::LinkEntry::Function {
+                module: target,
+                func,
+            }) = program.links.get(link_slot as usize)
+            else {
+                return Err(RtError::InvalidBytecode(
+                    "CallImported ведёт мимо таблицы связей или на переменную",
+                ));
+            };
+            let target = target.index() as u32;
+            if ensure_module_ready(target, ctx, session, frames, stack)? {
+                return Ok(());
+            }
+            let modes = at(
+                &chunk.call_arg_modes,
+                arg_modes as usize,
+                "номер набора режимов аргументов вне таблицы чанка",
+            )?;
+            // Все модули, чьи переменные уходят по ссылке, тоже должны быть
+            // готовы до первого побочного действия: построение кадра ниже
+            // уже пушит значения в стек и продвигает `pc`.
+            for mode in modes {
+                if let ArgMode::ByRefImportedVar(slot) = mode {
+                    let Some(&bsl_bytecode::LinkEntry::Variable { module, .. }) =
+                        program.links.get(*slot as usize)
+                    else {
+                        return Err(RtError::InvalidBytecode(
+                            "byimport ведёт мимо таблицы связей или на функцию",
+                        ));
+                    };
+                    if ensure_module_ready(module.index() as u32, ctx, session, frames, stack)? {
+                        return Ok(());
+                    }
+                }
+            }
+            let callee_program = ctx.program(target)?;
+            let callee_chunk = at(
+                &callee_program.chunks,
+                func as usize,
+                "связь ведёт на несуществующий чанк модуля",
+            )?;
+            // Асинхронная цель межмодульного вызова не поддержана до замера
+            // `JOB.ASYNC.TARGET`: семантика завершения не выведена логикой.
+            if callee_chunk.is_async {
+                return Err(RtError::DynamicError(
+                    "асинхронная цель межмодульного вызова ещё не поддержана".into(),
+                ));
+            }
+            if frames.len() >= MAX_CALL_DEPTH {
+                return Err(RtError::StackOverflow {
+                    what: "слишком глубокая рекурсия вызовов",
+                });
+            }
+            frames[frame_idx].pc += 1;
+            let mut param_aliases = Vec::with_capacity(modes.len());
+            let mut module_copybacks = Vec::new();
+            for (i, mode) in modes.iter().enumerate() {
+                let slot = match mode {
+                    ArgMode::Value => ParamSlot {
+                        idx: frames[frame_idx].reg_index(base + i as u8),
+                        provided: true,
+                    },
+                    ArgMode::ByRefLocal(slot) => ParamSlot {
+                        idx: frames[frame_idx].reg_index(*slot),
+                        provided: true,
+                    },
+                    // Модульная переменная ВЫЗЫВАЮЩЕГО модуля: значение
+                    // копируется во временный слот, а при возврате кадра
+                    // уходит обратно в состояние модуля-владельца.
+                    ArgMode::ByRefModuleVar(slot) => {
+                        let module_slot = *slot as usize;
+                        let value = reg_load(&module_state.slots, module_slot)?;
+                        let idx = stack.len();
+                        stack.push(value);
+                        module_copybacks.push((idx, frames[frame_idx].module, module_slot));
+                        ParamSlot {
+                            idx,
+                            provided: true,
+                        }
+                    }
+                    // Экспортная переменная ТРЕТЬЕГО модуля: то же, но
+                    // состояние берётся из сессии (модуль готов — ensure
+                    // выше; собственный модуль в связях запрещён периметром
+                    // образа, так что изъятая ячейка не встретится).
+                    ArgMode::ByRefImportedVar(slot) => {
+                        let Some(&bsl_bytecode::LinkEntry::Variable {
+                            module,
+                            slot: var_slot,
+                        }) = program.links.get(*slot as usize)
+                        else {
+                            return Err(RtError::InvalidBytecode(
+                                "byimport ведёт мимо таблицы связей или на функцию",
+                            ));
+                        };
+                        let owner = module.index() as u32;
+                        let value = {
+                            let instance = session.instances.get(owner as usize).ok_or(
+                                RtError::InvalidBytecode("связь ведёт мимо сессии модулей"),
+                            )?;
+                            reg_load(&instance.state.slots, var_slot as usize)?
+                        };
+                        let idx = stack.len();
+                        stack.push(value);
+                        module_copybacks.push((idx, owner, var_slot as usize));
+                        ParamSlot {
+                            idx,
+                            provided: true,
+                        }
+                    }
+                    ArgMode::Default => {
+                        let idx = frames[frame_idx].reg_index(base + i as u8);
+                        reg_store(stack, idx, BslValue::Undefined)?;
+                        ParamSlot {
+                            idx,
+                            provided: false,
+                        }
+                    }
+                };
+                param_aliases.push(slot);
+            }
+            let call_start = stack.len();
+            let own_base = stack.len();
+            push_own_registers(stack, callee_chunk);
+            frames.push(Frame {
+                module: target,
+                func_id: func as usize,
+                pc: 0,
+                param_aliases,
+                own_base,
+                call_start,
+                return_reg: ret,
+                module_copybacks,
+                numeric_for_state: None,
+            });
+        }
+        // Чтение экспортной переменной чужого модуля — с той же ленивой
+        // инициализацией владельца.
+        Instr::GetImportedVar { dst, link_slot } => {
+            let ctx = catalog.ok_or(RtError::InvalidBytecode(
+                "межмодульный опкод вне каталога конфигурации",
+            ))?;
+            let Some(&bsl_bytecode::LinkEntry::Variable { module, slot }) =
+                program.links.get(link_slot as usize)
+            else {
+                return Err(RtError::InvalidBytecode(
+                    "импортная переменная ведёт мимо таблицы связей или на функцию",
+                ));
+            };
+            let owner = module.index() as u32;
+            if ensure_module_ready(owner, ctx, session, frames, stack)? {
+                return Ok(());
+            }
+            let value = {
+                let instance = session
+                    .instances
+                    .get(owner as usize)
+                    .ok_or(RtError::InvalidBytecode("связь ведёт мимо сессии модулей"))?;
+                reg_load(&instance.state.slots, slot as usize)?
+            };
+            let d = frames[frame_idx].reg_index(dst);
+            reg_store(stack, d, value)?;
+            frames[frame_idx].pc += 1;
+        }
+        Instr::SetImportedVar { link_slot, src } => {
+            let ctx = catalog.ok_or(RtError::InvalidBytecode(
+                "межмодульный опкод вне каталога конфигурации",
+            ))?;
+            let Some(&bsl_bytecode::LinkEntry::Variable { module, slot }) =
+                program.links.get(link_slot as usize)
+            else {
+                return Err(RtError::InvalidBytecode(
+                    "импортная переменная ведёт мимо таблицы связей или на функцию",
+                ));
+            };
+            let owner = module.index() as u32;
+            if ensure_module_ready(owner, ctx, session, frames, stack)? {
+                return Ok(());
+            }
+            let value = reg_load(stack, frames[frame_idx].reg_index(src))?;
+            let instance = session
+                .instances
+                .get_mut(owner as usize)
+                .ok_or(RtError::InvalidBytecode("связь ведёт мимо сессии модулей"))?;
+            reg_store(&mut instance.state.slots, slot as usize, value)?;
+            frames[frame_idx].pc += 1;
         }
         _ => {
             return Err(RtError::InvalidBytecode(
@@ -3716,18 +4132,112 @@ use ReturnOutcome::{Continuing, Done};
 /// функцию только пока `frames` не пуст — сам факт того, что мы исполняем
 /// инструкцию, это гарантирует. Никакой байт-код, корректный или нет, сюда
 /// с пустым стеком кадров не приведёт.
+/// Готовит модуль каталога к обращению. `Ok(true)` означает, что кадр
+/// тела модуля запушен и текущая инструкция должна исполниться повторно
+/// после его возврата; `pc` вызывающего при этом не продвинут.
+///
+/// # Errors
+///
+/// Ловимая ошибка при циклической инициализации и при обращении к модулю,
+/// чьё тело уже завершилось ошибкой; политика повторного запуска — за
+/// замером `JOB.MODULE.INIT`.
+fn ensure_module_ready(
+    target: u32,
+    ctx: &CatalogContext<'_>,
+    session: &mut SessionModules,
+    frames: &mut Vec<Frame>,
+    stack: &mut Vec<BslValue>,
+) -> Result<bool, RtError> {
+    let instance = session
+        .instances
+        .get_mut(target as usize)
+        .ok_or(RtError::InvalidBytecode("связь ведёт мимо сессии модулей"))?;
+    match instance.init {
+        ModuleInitState::Ready => Ok(false),
+        ModuleInitState::NotStarted => {
+            if frames.len() >= MAX_CALL_DEPTH {
+                return Err(RtError::StackOverflow {
+                    what: "слишком глубокая рекурсия вызовов",
+                });
+            }
+            instance.init = ModuleInitState::Initializing;
+            let body = ctx.program(target)?;
+            let chunk0 = at(&body.chunks, 0, "у модуля каталога нет тела")?;
+            let call_start = stack.len();
+            let own_base = stack.len();
+            push_own_registers(stack, chunk0);
+            frames.push(Frame {
+                module: target,
+                func_id: 0,
+                pc: 0,
+                param_aliases: Vec::new(),
+                own_base,
+                call_start,
+                return_reg: 0,
+                module_copybacks: Vec::new(),
+                numeric_for_state: None,
+            });
+            Ok(true)
+        }
+        ModuleInitState::Initializing => Err(RtError::DynamicError(
+            "циклическая инициализация общего модуля".into(),
+        )),
+        ModuleInitState::Failed => Err(RtError::DynamicError(
+            "инициализация общего модуля завершилась ошибкой".into(),
+        )),
+    }
+}
+
 fn do_return_with_value(
     frames: &mut Vec<Frame>,
     stack: &mut Vec<BslValue>,
     module_state: &mut ModuleState,
+    mut root_state: Option<&mut ModuleState>,
+    session: &mut SessionModules,
     value: BslValue,
 ) -> Result<ReturnOutcome, RtError> {
     let frame = frames
         .pop()
         .expect("инвариант VM: возврат исполняется только при непустом стеке кадров");
-    for (stack_slot, module_slot) in &frame.module_copybacks {
+    for (stack_slot, target_module, module_slot) in &frame.module_copybacks {
         let value = reg_load(stack, *stack_slot)?;
-        reg_store(&mut module_state.slots, *module_slot, value)?;
+        // `module_state` — состояние модуля ВОЗВРАЩАЮЩЕГОСЯ кадра (у
+        // модульного кадра оно на время шага изъято из сессии драйвером);
+        // корневое состояние приходит отдельной ссылкой, остальные модули —
+        // через сессию.
+        let slots = if *target_module == frame.module {
+            &mut module_state.slots
+        } else if *target_module == ROOT_MODULE {
+            &mut root_state
+                .as_deref_mut()
+                .ok_or(RtError::InvalidBytecode(
+                    "копибэк в корневое состояние без ссылки на него",
+                ))?
+                .slots
+        } else {
+            &mut session
+                .instances
+                .get_mut(*target_module as usize)
+                .ok_or(RtError::InvalidBytecode(
+                    "копибэк ссылается на модуль вне сессии",
+                ))?
+                .state
+                .slots
+        };
+        reg_store(slots, *module_slot, value)?;
+    }
+    // Возврат из кадра инициализации модуля: тело модуля отработало,
+    // экземпляр готов; результата у тела нет, и писать его некуда.
+    if frame.module != ROOT_MODULE && frame.func_id == 0 {
+        if let Some(instance) = session.instances.get_mut(frame.module as usize) {
+            instance.init = ModuleInitState::Ready;
+        }
+        stack.truncate(frame.call_start);
+        return Ok(if frames.is_empty() {
+            Done(value)
+        } else {
+            Continuing
+        });
     }
     match frames.last() {
         None => {
@@ -3774,6 +4284,8 @@ fn unwind_to_handler(
     frames: &mut Vec<Frame>,
     stack: &mut Vec<BslValue>,
     program: &Program,
+    catalog: Option<&CatalogContext<'_>>,
+    session: &mut SessionModules,
     err: &RtError,
     current_exception: &mut Option<BslValue>,
 ) -> bool {
@@ -3787,7 +4299,17 @@ fn unwind_to_handler(
     let mut first = true;
     loop {
         let frame_idx = frames.len() - 1;
-        let chunk = match program.chunks.get(frames[frame_idx].func_id) {
+        // Чанк кадра лежит в программе ЕГО модуля: кадры конфигурации
+        // разматываются через каталог.
+        let frame_program = if frames[frame_idx].module == ROOT_MODULE {
+            program
+        } else {
+            match catalog.map(|ctx| ctx.program(frames[frame_idx].module)) {
+                Some(Ok(p)) => p,
+                _ => return false,
+            }
+        };
+        let chunk = match frame_program.chunks.get(frames[frame_idx].func_id) {
             Some(c) => c,
             // Кадр с несуществующим чанком — не наше дело здесь: ошибку
             // уже несут наружу, обработчик в нём всё равно не найти.
@@ -3815,6 +4337,15 @@ fn unwind_to_handler(
         let frame = frames
             .pop()
             .expect("инвариант VM: `frames.len() >= 2` проверено строкой выше");
+        // Ошибка вылетела из тела модуля: инициализация не удалась, и
+        // повторное касание модуля отвечает ловимой ошибкой, а не повторным
+        // запуском тела — до замера `JOB.MODULE.INIT`.
+        if frame.module != ROOT_MODULE
+            && frame.func_id == 0
+            && let Some(instance) = session.instances.get_mut(frame.module as usize)
+        {
+            instance.init = ModuleInitState::Failed;
+        }
         stack.truncate(frame.call_start);
     }
 }
