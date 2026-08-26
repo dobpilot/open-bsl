@@ -34,6 +34,14 @@ struct EngineConfiguration {
 struct EngineInner {
     registry: bsl_rt::RuntimeRegistry,
     symbols: bsl_syntax::PreprocSymbols,
+    /// Разделяемый runtime фоновых заданий: клоны одного `Engine` видят
+    /// одни задания. Создаётся лениво при первом обращении; движок без
+    /// заданий не платит ни рецептом, ни потоками.
+    #[cfg(not(target_arch = "wasm32"))]
+    job_runtime: std::sync::OnceLock<Result<Arc<crate::jobs::JobRuntime>, String>>,
+    /// Конфигурация runtime, заданная до `build`.
+    #[cfg(not(target_arch = "wasm32"))]
+    job_config: crate::jobs::BackgroundJobConfig,
     /// Сколько модулей движок уже выдал. Номер модуля устойчив: он
     /// присваивается один раз, при компиляции, и не меняется от запуска к
     /// запуску — на этом стоит кэш динамических фрагментов сессии
@@ -164,6 +172,24 @@ impl Engine {
         self.configuration.as_ref().map(|c| &c.catalog)
     }
 
+    /// Runtime фоновых заданий этого движка. Создаётся при первом
+    /// обращении; клоны движка разделяют его. Ошибка — ловимая на стороне
+    /// BSL: у движка нет каталога либо рецепт не собрался.
+    ///
+    /// # Errors
+    ///
+    /// `Error::Configuration` с причиной.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn job_runtime(&self) -> Result<Arc<crate::jobs::JobRuntime>, Error> {
+        self.inner
+            .job_runtime
+            .get_or_init(|| {
+                crate::jobs::runtime_for_engine(self, self.inner.job_config.clone()).map(Arc::new)
+            })
+            .clone()
+            .map_err(Error::Configuration)
+    }
+
     /// Порядок нележивой инициализации, если она включена рецептом.
     pub(crate) fn eager_init_order(&self) -> Option<&[u32]> {
         self.configuration
@@ -256,6 +282,8 @@ pub struct EngineBuilder {
     symbols: bsl_syntax::PreprocSymbols,
     recipe: ModuleGraphRecipe,
     image: Option<(bsl_bytecode::ConfigurationProgram, bool)>,
+    #[cfg(not(target_arch = "wasm32"))]
+    job_config: crate::jobs::BackgroundJobConfig,
 }
 
 impl EngineBuilder {
@@ -289,7 +317,18 @@ impl EngineBuilder {
             symbols: bsl_syntax::PreprocSymbols::new(),
             recipe: ModuleGraphRecipe::default(),
             image: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            job_config: crate::jobs::BackgroundJobConfig::default(),
         }
+    }
+
+    /// Конфигурация фонового runtime. Валидация — при сборке движка,
+    /// без скрытых clamp.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[must_use]
+    pub fn background_jobs(mut self, config: crate::jobs::BackgroundJobConfig) -> Self {
+        self.job_config = config;
+        self
     }
 
     pub fn register_library(mut self, library: LibraryDescriptor) -> Self {
@@ -387,11 +426,17 @@ impl EngineBuilder {
                 eager_init: self.recipe.eager_init,
             }))
         };
+        #[cfg(not(target_arch = "wasm32"))]
+        self.job_config.validate().map_err(Error::Configuration)?;
         Ok(Engine {
             inner: Arc::new(EngineInner {
                 registry,
                 symbols: self.symbols,
                 modules: AtomicU64::new(0),
+                #[cfg(not(target_arch = "wasm32"))]
+                job_runtime: std::sync::OnceLock::new(),
+                #[cfg(not(target_arch = "wasm32"))]
+                job_config: self.job_config,
             }),
             configuration,
         })

@@ -172,3 +172,46 @@ fn a_non_exported_function_is_invisible_to_the_entry() {
         "не та ошибка: {error}"
     );
 }
+
+/// Runtime фоновых заданий: клоны движка разделяют его, задание доходит
+/// до Completed через публичный путь Engine::job_runtime.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn engine_clones_share_the_job_runtime() {
+    use std::sync::Arc;
+
+    let engine = Engine::builder()
+        .common_module(
+            "Служебный",
+            "Функция Эхо(Знач х) Экспорт\n Возврат х;\nКонецФункции",
+        )
+        .build()
+        .expect("движок собирается");
+    let clone = engine.clone();
+    let runtime = engine.job_runtime().expect("runtime создаётся");
+    let from_clone = clone.job_runtime().expect("у клона тот же runtime");
+    assert!(
+        Arc::ptr_eq(&runtime, &from_clone),
+        "клоны разделяют runtime"
+    );
+
+    let rt = open_bsl::RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
+    let params = Arc::new(
+        open_bsl::SerializedValueGraph::capture(
+            &[open_bsl::Value::number_from_i64(7)],
+            &rt,
+            &open_bsl::GraphLimits::default(),
+        )
+        .expect("снимок"),
+    );
+    let snapshot = runtime
+        .submit_by_name("Служебный.Эхо", params, None, None)
+        .expect("задание принято");
+    assert!(runtime.wait_terminal(&[snapshot.id], Some(std::time::Duration::from_secs(30))));
+    assert_eq!(
+        runtime.snapshot(snapshot.id).expect("снимок").state,
+        open_bsl::JobStateDto::Completed
+    );
+    let done = runtime.snapshot(snapshot.id).expect("снимок");
+    assert!(done.begin.is_some() && done.end.is_some(), "метки времени");
+}

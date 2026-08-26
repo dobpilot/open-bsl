@@ -100,6 +100,29 @@ impl BackgroundJobConfig {
     }
 }
 
+/// Источник времени runtime: wall-часы для `Начало`/`Конец` снимков.
+/// Монотонные deadlines и таймеры приходят вместе с pending host-calls
+/// (этап 5 плана); тестовая реализация подставляет ручные значения.
+pub trait JobTimeSource: Send + Sync {
+    fn wall_now(&self) -> Option<bsl_rt::BslDate>;
+}
+
+/// Системные wall-часы. Снимки получают наивное UTC-время: локальная
+/// зона сеанса и точный формат платформенных `Начало`/`Конец` уточняются
+/// замером `JOB.STATE.SNAPSHOT`. Wall clock не clamp'ится при скачке
+/// назад — монотонные длительности придут отдельным источником.
+struct SystemJobTime;
+
+impl JobTimeSource for SystemJobTime {
+    fn wall_now(&self) -> Option<bsl_rt::BslDate> {
+        let unix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()?
+            .as_secs();
+        bsl_rt::BslDate::from_seconds(unix as i64 + bsl_rt::UNIX_EPOCH_SECONDS)
+    }
+}
+
 /// Источник идентификаторов заданий: стандартный — OS random + UUID v4,
 /// тестовый — детерминированная последовательность.
 pub trait JobIdSource: Send + Sync {
@@ -478,6 +501,84 @@ mod tests {
 
 use std::sync::{Condvar, Mutex};
 
+/// Экспортная поверхность каталога для разрешения целей submit:
+/// снимается один раз при создании runtime, чтобы каждый запуск задания
+/// не разбирал текстовый образ заново.
+pub(crate) struct TargetTable {
+    modules: Vec<(String, Vec<TargetFunction>)>,
+}
+
+struct TargetFunction {
+    name: String,
+    chunk: u16,
+    exported: bool,
+    is_async: bool,
+}
+
+impl TargetTable {
+    fn from_catalog(catalog: &bsl_bytecode::ConfigurationProgram) -> Self {
+        Self {
+            modules: catalog
+                .modules
+                .iter()
+                .map(|module| {
+                    let functions = module
+                        .program
+                        .function_names
+                        .iter()
+                        .enumerate()
+                        .map(|(i, name)| TargetFunction {
+                            name: name.clone(),
+                            chunk: (i + 1) as u16,
+                            exported: module.program.exported_functions[i],
+                            is_async: module.program.chunks[i + 1].is_async,
+                        })
+                        .collect();
+                    (module.name.clone(), functions)
+                })
+                .collect(),
+        }
+    }
+
+    /// Разрешает «Модуль.Метод»: неглобальный общий модуль, экспортная
+    /// не-async цель. Детали validation — за `JOB.EXECUTE.VALIDATION`.
+    fn resolve(&self, method_name: &str) -> Result<(u32, u16), String> {
+        let Some((module_name, function_name)) = method_name.split_once('.') else {
+            return Err(format!("цель «{method_name}» не в форме «Модуль.Метод»"));
+        };
+        let module_name = module_name.trim();
+        let function_name = function_name.trim();
+        let Some((module_index, (_, functions))) = self
+            .modules
+            .iter()
+            .enumerate()
+            .find(|(_, (name, _))| bsl_rt::folded_eq(name, module_name))
+        else {
+            return Err(format!("общий модуль «{module_name}» не найден"));
+        };
+        let Some(function) = functions
+            .iter()
+            .find(|function| bsl_rt::folded_eq(&function.name, function_name))
+        else {
+            return Err(format!(
+                "в модуле «{module_name}» нет метода «{function_name}»"
+            ));
+        };
+        if !function.exported {
+            return Err(format!(
+                "метод «{module_name}.{function_name}» не экспортирован"
+            ));
+        }
+        if function.is_async {
+            return Err(
+                "асинхронная цель фонового задания не поддержана до замера JOB.ASYNC.TARGET"
+                    .to_string(),
+            );
+        }
+        Ok((module_index as u32, function.chunk))
+    }
+}
+
 /// `Send`-рецепт worker: текстовый образ каталога и ничего больше.
 /// Скрытого второго формата нет — worker разбирает тот же публичный
 /// `BytecodeImage::Configuration`, что пишет `--emit-bytecode`, один раз,
@@ -496,6 +597,8 @@ pub(crate) struct JobRuntimeShared {
     pub terminal_watch: Condvar,
     pub recipe: WorkerRecipe,
     pub id_source: Arc<dyn JobIdSource>,
+    pub time_source: Arc<dyn JobTimeSource>,
+    pub targets: TargetTable,
 }
 
 /// Нативный runtime фоновых заданий одного `Engine`. Клоны `Engine`
@@ -542,6 +645,7 @@ impl JobRuntime {
     pub(crate) fn new(
         config: BackgroundJobConfig,
         recipe: WorkerRecipe,
+        targets: TargetTable,
         id_source: Arc<dyn JobIdSource>,
     ) -> Self {
         let workers = config.effective_workers();
@@ -552,6 +656,8 @@ impl JobRuntime {
                 terminal_watch: Condvar::new(),
                 recipe,
                 id_source,
+                time_source: Arc::new(SystemJobTime),
+                targets,
             }),
             workers,
             threads: Mutex::new(Vec::new()),
@@ -608,7 +714,7 @@ impl JobRuntime {
         for index in 0..self.workers {
             let shared = Arc::clone(&self.shared);
             let builder = std::thread::Builder::new().name(format!("bsl-job-worker-{index}"));
-            match builder.spawn(move || worker_main(&shared)) {
+            match builder.spawn(move || worker_supervisor(&shared)) {
                 Ok(handle) => threads.push(handle),
                 Err(_) => {
                     let mut registry = self.shared.registry.lock().expect("реестр без отравления");
@@ -625,8 +731,30 @@ impl JobRuntime {
         }
     }
 
+    /// Запускает цель по имени «Модуль.Метод»: разрешение цели по
+    /// каталогу рецепта worker + admission. Ошибки цели и лимитов —
+    /// ловимые на стороне BSL.
+    ///
+    /// # Errors
+    ///
+    /// [`SubmitError`] с причиной.
+    pub fn submit_by_name(
+        &self,
+        method_name: &str,
+        params: Arc<SerializedValueGraph>,
+        key: Option<Arc<JobKeyDto>>,
+        description: Option<String>,
+    ) -> Result<JobSnapshotDto, SubmitError> {
+        let target = self
+            .shared
+            .targets
+            .resolve(method_name)
+            .map_err(SubmitError::BadTarget)?;
+        self.submit(method_name, target, params, key, description)
+    }
+
     /// Снимок задания по идентификатору.
-    pub(crate) fn snapshot(&self, id: JobId) -> Option<Arc<JobSnapshotDto>> {
+    pub fn snapshot(&self, id: JobId) -> Option<Arc<JobSnapshotDto>> {
         self.shared
             .registry
             .lock()
@@ -635,7 +763,7 @@ impl JobRuntime {
     }
 
     /// Все снимки (живые и история) — фильтрация вне лока.
-    pub(crate) fn snapshots(&self) -> Vec<Arc<JobSnapshotDto>> {
+    pub fn snapshots(&self) -> Vec<Arc<JobSnapshotDto>> {
         self.shared
             .registry
             .lock()
@@ -646,7 +774,7 @@ impl JobRuntime {
     /// Ожидает terminal-состояния ВСЕХ перечисленных заданий (правило
     /// any/all уточняется замером `JOB.WAIT.MANY`). `None` — без предела.
     /// Возвращает `true`, если дождались; `false` — таймаут.
-    pub(crate) fn wait_terminal(&self, ids: &[JobId], timeout: Option<Duration>) -> bool {
+    pub fn wait_terminal(&self, ids: &[JobId], timeout: Option<Duration>) -> bool {
         let deadline = timeout.map(|t| std::time::Instant::now() + t);
         let mut registry = self.shared.registry.lock().expect("реестр без отравления");
         loop {
@@ -705,6 +833,33 @@ fn fail_all_resident(registry: &mut JobRegistry) {
                 "фоновый runtime сломан и не принимает задания",
             ))),
         );
+    }
+}
+
+/// Надзор за worker: паника ВНЕ границы задания перезапускает цикл
+/// заново (паника внутри задания ловится там же и роняет только его).
+/// Три последовательные паники переводят runtime в `Broken`: живые
+/// задания завершаются `Failed`, новые submissions получают ловимую
+/// ошибку, автоматического recovery нет.
+fn worker_supervisor(shared: &Arc<JobRuntimeShared>) {
+    let mut consecutive_panics = 0u32;
+    loop {
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            worker_main(shared);
+        }));
+        match outcome {
+            Ok(()) => return, // нормальный выход: runtime закрыт или сломан
+            Err(_) => {
+                consecutive_panics += 1;
+                if consecutive_panics >= 3 {
+                    let mut registry = shared.registry.lock().expect("реестр без отравления");
+                    registry.state = RuntimeState::Broken;
+                    fail_all_resident(&mut registry);
+                    shared.terminal_watch.notify_all();
+                    return;
+                }
+            }
+        }
     }
 }
 
@@ -778,8 +933,10 @@ fn build_worker_engine(recipe: &WorkerRecipe) -> Result<crate::Engine, String> {
 fn run_one_job(shared: &Arc<JobRuntimeShared>, engine: &crate::Engine, id: JobId) {
     let Some((target, params)) = ({
         let mut registry = shared.registry.lock().expect("реестр без отравления");
+        let begin = shared.time_source.wall_now();
         registry.record_mut(id).map(|record| {
             record.snapshot.state = JobStateDto::Running;
+            record.snapshot.begin = begin;
             (record.target, Arc::clone(&record.snapshot.params))
         })
     }) else {
@@ -799,8 +956,9 @@ fn run_one_job(shared: &Arc<JobRuntimeShared>, engine: &crate::Engine, id: JobId
             ))),
         ),
     };
+    let end = shared.time_source.wall_now();
     let mut registry = shared.registry.lock().expect("реестр без отравления");
-    registry.finish(id, state, None, error);
+    registry.finish(id, state, end, error);
 }
 
 /// Вызов цели без компилятора: entry-программа собирается руками —
@@ -991,6 +1149,7 @@ pub(crate) fn runtime_for_engine(
         WorkerRecipe {
             image_text: Arc::from(text),
         },
+        TargetTable::from_catalog(catalog),
         Arc::new(SystemJobIds),
     ))
 }

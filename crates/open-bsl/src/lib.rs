@@ -16,13 +16,14 @@ pub use bsl_rt::{
     Arity, BslDate, BslNumber, BslObject, BslString, ByteStreamProtocol, CallContext, Capability,
     Clock, ComponentError, ConstructorCode, ConstructorDescriptor, ContextKind, DirEntry, EnumKind,
     EnumValue, FileCreate, FileHandle, FileMetadata, FileOpenOptions, FileSystem, FixedTimeZone,
-    FunctionCode, FunctionDescriptor, FunctionKind, HostEnv, LibraryDependency, LibraryDescriptor,
+    FunctionCode, FunctionDescriptor, FunctionKind, GraphLimits, HostEnv, JobErrorDto, JobId,
+    JobKeyDto, JobSnapshotDto, JobStateDto, LibraryDependency, LibraryDescriptor,
     LibraryRequirement, MethodCall, MethodDescriptor, NetworkError, NetworkErrorKind,
     ObjectContextNeed, ObjectProtocol, ObjectRef, PropertyDescriptor, PropertyGet, PropertySet,
     ProxyConfig, ProxyMode, RandomHandle, RandomSource, RegistryError, RequestHandle, RtError,
-    RtResult, RuntimeRegistry, RuntimeShapes, SecretString, SystemClock, SystemRandom,
-    SystemTimeZone, TimeZone, TlsConfig, TypeDescriptor, TypeRef, call_method_from_table,
-    folded_eq, get_property_from_table, set_property_from_table,
+    RtResult, RuntimeRegistry, RuntimeShapes, SecretString, SerializedValueGraph, SystemClock,
+    SystemRandom, SystemTimeZone, TimeZone, TlsConfig, TypeDescriptor, TypeRef,
+    call_method_from_table, folded_eq, get_property_from_table, set_property_from_table,
 };
 pub use bsl_rt::{
     HttpClient, HttpClientConfig, HttpClientFactory, HttpCompletionSink, HttpErrorMapper,
