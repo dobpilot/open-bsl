@@ -209,7 +209,7 @@ pub struct SnippetSignature {
 /// Возвращает [`SemaError`] при повторном объявлении функции, неизвестном имени, неверном
 /// числе аргументов, недопустимом литерале даты или ещё не поддерживаемой конструкции.
 pub fn resolve_program(items: &[Item]) -> Result<ResolvedProgram, SemaError> {
-    resolve_program_impl(items, None)
+    resolve_program_impl(items, None, &[])
 }
 
 /// Разрешает модуль с каталогом функций и конструкторов собранного
@@ -223,13 +223,123 @@ pub fn resolve_program_with_registry(
     items: &[Item],
     registry: &bsl_rt::RuntimeRegistry,
 ) -> Result<ResolvedProgram, SemaError> {
-    resolve_program_impl(items, Some(registry))
+    resolve_program_impl(items, Some(registry), &[])
+}
+
+/// То же с импортным окружением: модуль видит экспортные символы модулей,
+/// перечисленных в `imports`, по их псевдонимам. Локальная или модульная
+/// переменная с именем псевдонима затеняет его — как у `Символы` и имён
+/// перечислений.
+///
+/// # Errors
+///
+/// Все ошибки [`resolve_program`], плюс ошибки квалифицированных обращений:
+/// неизвестный символ, арность, процедура в выражении.
+pub fn resolve_program_with_imports(
+    items: &[Item],
+    registry: &bsl_rt::RuntimeRegistry,
+    imports: &[ImportedModule],
+) -> Result<ResolvedProgram, SemaError> {
+    resolve_program_impl(items, Some(registry), imports)
+}
+
+/// Экспортная функция чужого модуля, видимая при резолвинге импортёра.
+/// Сигнатура снимается с уже разрешённого модуля: `chunk` — индекс чанка
+/// целевой программы (позиция функции + 1).
+#[derive(Debug, Clone)]
+pub struct ImportedFunction {
+    pub name: String,
+    pub chunk: u16,
+    pub is_procedure: bool,
+    pub is_async: bool,
+    pub param_by_val: Vec<bool>,
+    pub param_has_default: Vec<bool>,
+}
+
+/// Экспортная переменная чужого модуля: `slot` — номер в его `module_vars`.
+#[derive(Debug, Clone)]
+pub struct ImportedVariable {
+    pub name: String,
+    pub slot: u16,
+}
+
+/// Один импортируемый модуль в окружении резолвинга: стабильное имя
+/// (корневой псевдоним) и его экспортная поверхность.
+#[derive(Debug, Clone)]
+pub struct ImportedModule {
+    pub alias: String,
+    pub module: u32,
+    pub functions: Vec<ImportedFunction>,
+    pub variables: Vec<ImportedVariable>,
+}
+
+impl ImportedModule {
+    /// Снимает экспортную поверхность с уже разрешённого модуля. Индексы
+    /// совпадают с теми, что получит его скомпилированная программа:
+    /// функция `i` — чанк `i + 1`, переменная — свой слот.
+    #[must_use]
+    pub fn from_resolved(alias: &str, module: u32, resolved: &ResolvedProgram) -> Self {
+        let functions = resolved
+            .functions
+            .iter()
+            .enumerate()
+            .filter(|(_, f)| f.export)
+            .map(|(i, f)| ImportedFunction {
+                name: f.name.clone(),
+                chunk: (i + 1) as u16,
+                is_procedure: f.is_procedure,
+                is_async: f.is_async,
+                param_by_val: f.params.iter().map(|p| p.by_val).collect(),
+                param_has_default: f.params.iter().map(|p| p.default.is_some()).collect(),
+            })
+            .collect();
+        let variables = resolved
+            .module_vars
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| resolved.module_var_exports[*i])
+            .map(|(i, name)| ImportedVariable {
+                name: name.clone(),
+                slot: i as u16,
+            })
+            .collect();
+        ImportedModule {
+            alias: alias.to_string(),
+            module,
+            functions,
+            variables,
+        }
+    }
+}
+
+/// Аккумулятор связей одной программы: выдаёт номер записи, повторное
+/// обращение к тому же символу возвращает прежний номер.
+#[derive(Default)]
+struct LinkAccumulator {
+    entries: Vec<crate::resolved::ResolvedLink>,
+}
+
+impl LinkAccumulator {
+    fn slot(&mut self, link: crate::resolved::ResolvedLink) -> Result<u32, SemaError> {
+        if let Some(found) = self.entries.iter().position(|e| *e == link) {
+            return Ok(found as u32);
+        }
+        if self.entries.len() >= u16::MAX as usize {
+            return Err(SemaError::Unsupported(
+                "модуль импортирует больше 65535 символов",
+            ));
+        }
+        self.entries.push(link);
+        Ok(self.entries.len() as u32 - 1)
+    }
 }
 
 fn resolve_program_impl(
     items: &[Item],
     registry: Option<&bsl_rt::RuntimeRegistry>,
+    imports: &[ImportedModule],
 ) -> Result<ResolvedProgram, SemaError> {
+    let links = std::cell::RefCell::new(LinkAccumulator::default());
     let mut sigs: HashMap<String, FuncSig> = HashMap::new();
     let mut func_items: Vec<&Item> = Vec::new();
     let mut top_stmts: Vec<AStmt> = Vec::new();
@@ -346,6 +456,8 @@ fn resolve_program_impl(
             core_locals: Some(&core_maps.functions[func_index]),
             core_module: Some(&core_maps.module_slots),
             labels: &labels,
+            imports,
+            links: Some(&links),
         };
         for p in params {
             r.declare(&p.name);
@@ -400,6 +512,8 @@ fn resolve_program_impl(
         core_locals: Some(&core_maps.top),
         core_module: Some(&core_maps.module_slots),
         labels: &top_labels,
+        imports,
+        links: Some(&links),
     };
     let top_body = r.resolve_block(&top_stmts)?;
     used_libraries.extend(r.used_libraries.iter().cloned());
@@ -418,6 +532,7 @@ fn resolve_program_impl(
         top_level,
         module_vars,
         module_var_exports,
+        links: links.into_inner().entries,
     })
 }
 
@@ -466,6 +581,8 @@ pub fn resolve_script(stmts: &[AStmt]) -> Result<Resolved, SemaError> {
         core_locals: None,
         core_module: None,
         labels: &labels,
+        imports: &[],
+        links: None,
     };
     let body = r.resolve_block(stmts)?;
     Ok(Resolved {
@@ -691,6 +808,8 @@ fn resolve_snippet_stmts_mode_registry(
         core_locals: None,
         core_module: None,
         labels: &labels,
+        imports: &[],
+        links: None,
     };
     let body = r.resolve_block(stmts)?;
     let requirements = match registry {
@@ -876,9 +995,125 @@ struct Resolver<'a> {
     core_module: Option<&'a HashMap<u32, CoreReceiver>>,
     /// Метки этого тела, проверенные предварительным обходом.
     labels: &'a HashMap<String, LabelId>,
+    /// Импортное окружение модуля: экспортные поверхности модулей по
+    /// псевдонимам. Пусто у одиночных модулей, REPL и фрагментов.
+    imports: &'a [ImportedModule],
+    /// Аккумулятор связей программы; `None` там, где импортов нет.
+    links: Option<&'a std::cell::RefCell<LinkAccumulator>>,
 }
 
 impl<'a> Resolver<'a> {
+    /// Импортируемый модуль по имени-псевдониму. Псевдоним активен, только
+    /// если имя не занято локальной или модульной переменной: затенение —
+    /// то же правило, что у `Символы` и имён перечислений.
+    fn import_alias(&self, base: &str) -> Option<&'a ImportedModule> {
+        if self.imports.is_empty()
+            || self.lookup(base).is_some()
+            || self.module_index.contains_key(&base.to_uppercase())
+        {
+            return None;
+        }
+        self.imports
+            .iter()
+            .find(|module| bsl_rt::folded_eq(&module.alias, base))
+    }
+
+    /// Номер связи для символа импортируемого модуля.
+    fn link_slot(&self, link: crate::resolved::ResolvedLink) -> Result<u32, SemaError> {
+        self.links
+            .expect("инвариант резолвера: непустые imports приходят вместе с аккумулятором")
+            .borrow_mut()
+            .slot(link)
+    }
+
+    /// Разрешает вызов `Псевдоним.Метод(...)` по экспортной поверхности
+    /// импортируемого модуля — с теми же правилами арности, пропусков и
+    /// формы вызова, что у функций своего модуля.
+    fn resolve_imported_call(
+        &mut self,
+        module: &ImportedModule,
+        name: &str,
+        args: &[Option<AExpr>],
+        position: CallPosition,
+    ) -> Result<RExpr, SemaError> {
+        let Some(function) = module
+            .functions
+            .iter()
+            .find(|f| bsl_rt::folded_eq(&f.name, name))
+        else {
+            return Err(SemaError::UndefinedFunction(format!(
+                "{}.{}",
+                module.alias, name
+            )));
+        };
+        if function.is_procedure && position != CallPosition::Statement {
+            return Err(SemaError::ProcedureAsFunction(format!(
+                "{}.{}",
+                module.alias, name
+            )));
+        }
+        // Асинхронная цель межмодульного вызова закрыта до замера
+        // `JOB.ASYNC.TARGET` — тем же решением, что и в VM.
+        if function.is_async {
+            return Err(SemaError::Unsupported(
+                "асинхронная цель межмодульного вызова ещё не поддержана",
+            ));
+        }
+        let arity = function.param_has_default.len();
+        if args.len() > arity {
+            return Err(SemaError::ArgumentCountMismatch {
+                name: format!("{}.{}", module.alias, name),
+                expected: arity,
+                found: args.len(),
+            });
+        }
+        let mut rargs = Vec::with_capacity(arity);
+        for (i, has_default_i) in function.param_has_default.iter().enumerate() {
+            match args.get(i) {
+                Some(Some(e)) => rargs.push(ResolvedArg::Value(self.resolve_expr(e)?)),
+                Some(None) | None if *has_default_i => rargs.push(ResolvedArg::Default),
+                Some(None) | None => {
+                    return Err(SemaError::MissingRequiredArgument {
+                        name: format!("{}.{}", module.alias, name),
+                        index: i,
+                    });
+                }
+            }
+        }
+        let link = self.link_slot(crate::resolved::ResolvedLink::Function {
+            module: module.module,
+            func: function.chunk,
+        })?;
+        Ok(RExpr::CallImported {
+            link,
+            param_by_val: function.param_by_val.clone(),
+            args: rargs,
+        })
+    }
+
+    /// Номер связи для `Псевдоним.Переменная`, если такая экспортная
+    /// переменная есть.
+    fn resolve_imported_variable(
+        &self,
+        module: &ImportedModule,
+        name: &str,
+    ) -> Result<u32, SemaError> {
+        let Some(variable) = module
+            .variables
+            .iter()
+            .find(|v| bsl_rt::folded_eq(&v.name, name))
+        else {
+            return Err(SemaError::UndefinedVariable(format!(
+                "{}.{}",
+                module.alias, name
+            )));
+        };
+        self.link_slot(crate::resolved::ResolvedLink::Variable {
+            module: module.module,
+            slot: variable.slot,
+        })
+    }
+
     fn declare(&mut self, name: &str) -> u32 {
         let key = name.to_uppercase();
         if let Some(&slot) = self.index.get(&key) {
@@ -956,6 +1191,15 @@ impl<'a> Resolver<'a> {
                     Ok(Some(RStmt::AssignIndex { obj, index, value }))
                 }
                 LValue::Field { obj, name } => {
+                    // `Псевдоним.Переменная = ...` — запись экспортной
+                    // переменной импортируемого модуля.
+                    if let AExpr::Ident(base) = obj
+                        && let Some(module) = self.import_alias(base)
+                    {
+                        let link = self.resolve_imported_variable(module, name)?;
+                        let value = self.resolve_expr(value)?;
+                        return Ok(Some(RStmt::AssignImportedVar { link, value }));
+                    }
                     let obj = self.resolve_expr(obj)?;
                     let value = self.resolve_expr(value)?;
                     // Запись свойства всегда компилируется в закрытый
@@ -1322,6 +1566,15 @@ impl<'a> Resolver<'a> {
                 // (`csv_write`). Открытые `GetObjectProp`/`SetObjectProp`
                 // остаются в формате байт-кода ради уже сериализованных
                 // программ.
+                // `Псевдоним.Переменная`: чтение экспортной переменной
+                // импортируемого модуля. Правило затенения то же, что у
+                // вызова выше.
+                if let AExpr::Ident(base) = obj.as_ref()
+                    && let Some(module) = self.import_alias(base)
+                {
+                    let link = self.resolve_imported_variable(module, name)?;
+                    return Ok(RExpr::ImportedVar(link));
+                }
                 Ok(RExpr::Field {
                     obj: Box::new(self.resolve_expr(obj)?),
                     name: name.clone(),
@@ -1841,6 +2094,14 @@ impl<'a> Resolver<'a> {
                 Err(SemaError::UndefinedFunction(name.clone()))
             }
             AExpr::Field { obj, name } => {
+                // `Псевдоним.Метод(...)`: если базовое имя — незатенённый
+                // псевдоним импортируемого модуля, это межмодульный вызов,
+                // а не метод объекта.
+                if let AExpr::Ident(base) = obj.as_ref()
+                    && let Some(module) = self.import_alias(base)
+                {
+                    return self.resolve_imported_call(module, name, args, position);
+                }
                 let method = bsl_rt::BuiltinMethod::lookup(name);
                 // Фиксированные арности методов вынесены в
                 // `BuiltinMethod::static_arity` (bsl-rt), чтобы их проверял и

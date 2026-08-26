@@ -349,6 +349,59 @@ fn a_failed_module_body_poisons_the_instance_for_the_session() {
     );
 }
 
+/// Полный фронтенд-путь конфигурации: исходники BSL, импортное окружение
+/// sema, общий интернер компилятора, периметр образа и исполнение VM.
+#[test]
+fn the_front_end_compiles_and_runs_a_configuration_end_to_end() {
+    let mut builder = bsl_rt::RuntimeBuilder::new();
+    builder.register(bsl_rt::core_library());
+    let registry = builder.build().expect("ядро реестра собирается");
+
+    let service_items = parse(
+        "Перем Счётчик Экспорт;\n\
+         Функция Удвоить(Знач х) Экспорт\n\
+             Счётчик = Счётчик + 1;\n\
+             Возврат х * 2;\n\
+         КонецФункции\n\
+         Счётчик = 100;",
+    )
+    .expect("синтаксис служебного модуля")
+    .items;
+    let service =
+        bsl_sema::resolve_program_with_registry(&service_items, &registry).expect("sema модуля");
+
+    let imports = vec![bsl_sema::ImportedModule::from_resolved(
+        "Служебный",
+        0,
+        &service,
+    )];
+    let entry_items = parse(
+        "Служебный.Счётчик = Служебный.Удвоить(Служебный.Счётчик) + 1;\n\
+         Возврат Служебный.Счётчик;",
+    )
+    .expect("синтаксис entry")
+    .items;
+    let entry = bsl_sema::resolve_program_with_imports(&entry_items, &registry, &imports)
+        .expect("sema entry");
+
+    let (catalog, entry_program) =
+        bsl_compiler::compile_configuration(&[("Служебный".to_string(), &service)], Some(&entry))
+            .expect("компиляция конфигурации");
+    let entry_program = entry_program.expect("entry скомпилирован");
+
+    let wrapped = bsl_bytecode::EntryProgram {
+        id: bsl_bytecode::EntryId::new(1),
+        program: entry_program.clone(),
+    };
+    bsl_bytecode::image::verify_configuration(&catalog, Some(&wrapped))
+        .expect("периметр конфигурации");
+
+    // init: Счётчик = 100; Удвоить(100) даёт 200 и Счётчик = 101;
+    // присваивание кладёт 201; чтение возвращает 201.
+    let value = run_configuration(&entry_program, &catalog).unwrap();
+    assert_eq!(value, BslValue::number_from_i64(201));
+}
+
 fn run_src(src: &str) -> BslValue {
     let prog = parse(src).unwrap_or_else(|e| panic!("parse error: {e:?}"));
     let resolved = resolve_program(&prog.items).unwrap_or_else(|e| panic!("sema error: {e:?}"));

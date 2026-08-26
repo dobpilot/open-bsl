@@ -41,6 +41,18 @@ pub enum RExpr {
         func: u32,
         args: Vec<ResolvedArg>,
     },
+    /// Вызов экспортного метода чужого модуля: `link` — номер записи в
+    /// `ResolvedProgram::links` вида `Function`. Режимы передачи параметров
+    /// целевой функции копируются сюда при резолвинге: компилятор строит
+    /// `ArgMode` по ним, не видя чужой `ResolvedProgram`.
+    CallImported {
+        link: u32,
+        param_by_val: Vec<bool>,
+        args: Vec<ResolvedArg>,
+    },
+    /// Чтение экспортной переменной чужого модуля: `link` — запись вида
+    /// `Variable` в `ResolvedProgram::links`.
+    ImportedVar(u32),
     /// Вызов встроенной функции по голому имени (`Sqrt(x)`, `Pow(x,y)`,
     /// `Message(x)`, ...). Всегда по значению — ни у одной встроенной
     /// функции параметров без `Знач` нет.
@@ -164,6 +176,17 @@ pub enum ResolvedArg {
     Default,
 }
 
+/// Разрешённая связь с экспортным символом ЧУЖОГО модуля конфигурации.
+/// Номер записи в `ResolvedProgram::links` — будущий `LinkSlot` таблицы
+/// `Program::links`; вид символа фиксируется на этапе резолвинга.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResolvedLink {
+    /// `func` — индекс ЧАНКА целевой программы (позиция функции + 1).
+    Function { module: u32, func: u16 },
+    /// `slot` — номер в `module_vars` целевого модуля.
+    Variable { module: u32, slot: u16 },
+}
+
 /// Номер метки внутри одного тела модуля, процедуры или функции.
 /// Имя свёрнуто в этот номер резолвером, поэтому компилятор
 /// байт-кода больше не сравнивает строки.
@@ -179,6 +202,11 @@ pub enum RStmt {
     /// Запись в переменную модуля — видна всем функциям и телу модуля.
     AssignModuleVar {
         slot: u32,
+        value: RExpr,
+    },
+    /// Запись экспортной переменной чужого модуля конфигурации.
+    AssignImportedVar {
+        link: u32,
         value: RExpr,
     },
     AssignIndex {
@@ -322,6 +350,9 @@ pub struct ResolvedProgram {
     /// Разнорегистровый дубль объявления экспортируется, если экспортным
     /// было хотя бы одно из объявлений.
     pub module_var_exports: Vec<bool>,
+    /// Использованные связи с чужими модулями, в порядке появления и без
+    /// повторов; номер записи — операнд `CallImported`/`ImportedVar`.
+    pub links: Vec<ResolvedLink>,
 }
 
 /// Есть ли в теле `Выполнить`/`Вычислить` — обход по разрешённому дереву,
@@ -352,6 +383,7 @@ fn stmt_uses_dynamic(s: &RStmt) -> bool {
         RStmt::Execute(_) => true,
         RStmt::AssignLocal { value, .. } => expr_uses_dynamic(value),
         RStmt::AssignModuleVar { value, .. } => expr_uses_dynamic(value),
+        RStmt::AssignImportedVar { value, .. } => expr_uses_dynamic(value),
         RStmt::AssignIndex { obj, index, value } => {
             expr_uses_dynamic(obj) || expr_uses_dynamic(index) || expr_uses_dynamic(value)
         }
@@ -390,10 +422,13 @@ fn expr_uses_dynamic(e: &RExpr) -> bool {
         RExpr::ModuleVar(_) => false,
         RExpr::Unary { expr, .. } => expr_uses_dynamic(expr),
         RExpr::Binary { lhs, rhs, .. } => expr_uses_dynamic(lhs) || expr_uses_dynamic(rhs),
-        RExpr::Call { args, .. } => args.iter().any(|a| match a {
-            ResolvedArg::Value(e) => expr_uses_dynamic(e),
-            ResolvedArg::Default => false,
-        }),
+        RExpr::Call { args, .. } | RExpr::CallImported { args, .. } => {
+            args.iter().any(|a| match a {
+                ResolvedArg::Value(e) => expr_uses_dynamic(e),
+                ResolvedArg::Default => false,
+            })
+        }
+        RExpr::ImportedVar(_) => false,
         RExpr::CallBuiltinFn { args, .. } | RExpr::CallComponent { args, .. } => {
             args.iter().any(expr_uses_dynamic)
         }

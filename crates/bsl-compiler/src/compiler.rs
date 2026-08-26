@@ -85,6 +85,66 @@ impl std::error::Error for CompileError {}
 pub fn compile_program(resolved: &ResolvedProgram) -> Result<Program, CompileError> {
     let mut names = NameInterner::new();
     let mut shapes = ShapeTable::new();
+    let chunks = compile_module_chunks(resolved, &mut names, &mut shapes)?;
+    Ok(assemble_program(
+        resolved,
+        chunks,
+        names.into_names(),
+        shapes.into_shapes(),
+    ))
+}
+
+/// Компилирует каталог конфигурации: модули в порядке манифеста и, если
+/// есть, entry. Все программы делят ОДНО пространство имён и форм —
+/// значения пересекают границы модулей вместе со своими `NameId`, и
+/// разные интернеры разнесли бы одно написание по разным номерам. Каждая
+/// программа уносит полную финальную копию общих таблиц.
+///
+/// # Errors
+///
+/// Ошибка компиляции первого сбойного модуля.
+pub fn compile_configuration(
+    modules: &[(String, &ResolvedProgram)],
+    entry: Option<&ResolvedProgram>,
+) -> Result<(bsl_bytecode::ConfigurationProgram, Option<Program>), CompileError> {
+    let mut names = NameInterner::new();
+    let mut shapes = ShapeTable::new();
+    let mut compiled = Vec::with_capacity(modules.len());
+    for (_, resolved) in modules {
+        compiled.push(compile_module_chunks(resolved, &mut names, &mut shapes)?);
+    }
+    let entry_chunks = match entry {
+        Some(resolved) => Some(compile_module_chunks(resolved, &mut names, &mut shapes)?),
+        None => None,
+    };
+    let final_names = names.into_names();
+    let final_shapes = shapes.into_shapes();
+    let catalog = bsl_bytecode::ConfigurationProgram {
+        modules: modules
+            .iter()
+            .zip(compiled)
+            .map(|((name, resolved), chunks)| bsl_bytecode::ModuleProgram {
+                name: name.clone(),
+                program: assemble_program(
+                    resolved,
+                    chunks,
+                    final_names.clone(),
+                    final_shapes.clone(),
+                ),
+            })
+            .collect(),
+    };
+    let entry_program = entry.zip(entry_chunks).map(|(resolved, chunks)| {
+        assemble_program(resolved, chunks, final_names.clone(), final_shapes)
+    });
+    Ok((catalog, entry_program))
+}
+
+fn compile_module_chunks(
+    resolved: &ResolvedProgram,
+    names: &mut NameInterner,
+    shapes: &mut ShapeTable,
+) -> Result<Vec<Chunk>, CompileError> {
     let mut chunks = Vec::with_capacity(resolved.functions.len() + 1);
     chunks.push(compile_chunk(
         &resolved.top_level.locals,
@@ -96,8 +156,8 @@ pub fn compile_program(resolved: &ResolvedProgram) -> Result<Program, CompileErr
         resolved.top_level.uses_dynamic,
         false,
         false,
-        &mut names,
-        &mut shapes,
+        names,
+        shapes,
     )?);
     for f in &resolved.functions {
         chunks.push(compile_chunk(
@@ -110,27 +170,53 @@ pub fn compile_program(resolved: &ResolvedProgram) -> Result<Program, CompileErr
             f.uses_dynamic,
             f.is_procedure,
             f.is_async,
-            &mut names,
-            &mut shapes,
+            names,
+            shapes,
         )?);
     }
     for (i, chunk) in chunks.iter_mut().enumerate() {
         chunk.bundle_len =
             bundle::compute(chunk, bundle::module_overlap(i, resolved.module_vars.len()));
     }
-    Ok(Program {
+    Ok(chunks)
+}
+
+fn assemble_program(
+    resolved: &ResolvedProgram,
+    chunks: Vec<Chunk>,
+    names: Vec<String>,
+    shapes: Vec<std::rc::Rc<bsl_rt::Shape>>,
+) -> Program {
+    Program {
         requirements: resolved.requirements.clone(),
         chunks,
-        names: names.into_names(),
-        shapes: shapes.into_shapes(),
+        names,
+        shapes,
         top_level_locals: resolved.top_level.locals.clone(),
         function_names: resolved.functions.iter().map(|f| f.name.clone()).collect(),
         exported_functions: resolved.functions.iter().map(|f| f.export).collect(),
         module_vars: resolved.module_vars.clone(),
         exported_module_vars: resolved.module_var_exports.clone(),
         module_base: 0,
-        links: Vec::new(),
-    })
+        links: resolved
+            .links
+            .iter()
+            .map(|link| match *link {
+                bsl_sema::ResolvedLink::Function { module, func } => {
+                    bsl_bytecode::LinkEntry::Function {
+                        module: bsl_bytecode::ModuleId::new(module),
+                        func,
+                    }
+                }
+                bsl_sema::ResolvedLink::Variable { module, slot } => {
+                    bsl_bytecode::LinkEntry::Variable {
+                        module: bsl_bytecode::ModuleId::new(module),
+                        slot,
+                    }
+                }
+            })
+            .collect(),
+    }
 }
 
 pub use bsl_bytecode::SnippetUnit;
@@ -691,6 +777,18 @@ impl<'a> Compiler<'a> {
             RExpr::Call { func, args } => {
                 self.compile_call(*func, args, dst)?;
             }
+            RExpr::CallImported {
+                link,
+                param_by_val,
+                args,
+            } => {
+                self.compile_call_imported(*link, param_by_val, args, dst)?;
+            }
+            RExpr::ImportedVar(link) => {
+                let link_slot =
+                    u16::try_from(*link).map_err(|_| CompileError::TooManyModuleVars)?;
+                self.emit(Instr::GetImportedVar { dst, link_slot });
+            }
             RExpr::CallBuiltinFn { builtin, args } => {
                 let base = self.next_reg;
                 for a in args {
@@ -1055,6 +1153,69 @@ impl<'a> Compiler<'a> {
         Ok(())
     }
 
+    /// Межмодульный вызов: режимы аргументов строятся по `param_by_val`
+    /// целевой функции, снятому резолвером с её модуля, — чужой
+    /// `ResolvedProgram` компилятору не виден. Импортированная переменная
+    /// без `Знач` уходит по ссылке своим режимом `byimport`.
+    fn compile_call_imported(
+        &mut self,
+        link: u32,
+        param_by_val: &[bool],
+        args: &[ResolvedArg],
+        dst: u8,
+    ) -> Result<(), CompileError> {
+        let base = self.next_reg;
+        let mut modes = Vec::with_capacity(args.len());
+        for (i, arg) in args.iter().enumerate() {
+            let arg = match arg {
+                ResolvedArg::Value(e) => e,
+                ResolvedArg::Default => {
+                    self.alloc_temp()?;
+                    modes.push(ArgMode::Default);
+                    continue;
+                }
+            };
+            let by_val = *param_by_val.get(i).unwrap_or(&true);
+            if !by_val && let RExpr::Local(slot) = arg {
+                self.alloc_temp()?;
+                modes.push(ArgMode::ByRefLocal(*slot as u8));
+                continue;
+            }
+            if !by_val && let RExpr::ModuleVar(slot) = arg {
+                self.alloc_temp()?;
+                let slot = u16::try_from(*slot).map_err(|_| CompileError::TooManyModuleVars)?;
+                modes.push(ArgMode::ByRefModuleVar(slot));
+                continue;
+            }
+            if !by_val && let RExpr::ImportedVar(var_link) = arg {
+                self.alloc_temp()?;
+                let var_link =
+                    u16::try_from(*var_link).map_err(|_| CompileError::TooManyModuleVars)?;
+                modes.push(ArgMode::ByRefImportedVar(var_link));
+                continue;
+            }
+            let r = self.alloc_temp()?;
+            self.compile_expr(arg, r)?;
+            modes.push(ArgMode::Value);
+        }
+        let argc: u8 = args
+            .len()
+            .try_into()
+            .map_err(|_| CompileError::TooManyRegisters)?;
+        self.free_temp(argc);
+        let arg_modes = self.add_arg_modes(modes)?;
+        let link_slot: u16 = link
+            .try_into()
+            .map_err(|_| CompileError::TooManyModuleVars)?;
+        self.emit(Instr::CallImported {
+            link_slot,
+            base,
+            arg_modes,
+            ret: dst,
+        });
+        Ok(())
+    }
+
     // --- Операторы --------------------------------------------------------
 
     fn compile_block(&mut self, stmts: &[RStmt]) -> Result<(), CompileError> {
@@ -1078,6 +1239,16 @@ impl<'a> Compiler<'a> {
                     slot: *slot as u16,
                     src: v,
                 });
+                self.free_temp(1);
+            }
+            RStmt::AssignImportedVar { link, value } => {
+                // Как модульная, только слот живёт в чужом модуле и
+                // адресуется записью таблицы связей.
+                let v = self.alloc_temp()?;
+                self.compile_expr(value, v)?;
+                let link_slot =
+                    u16::try_from(*link).map_err(|_| CompileError::TooManyModuleVars)?;
+                self.emit(Instr::SetImportedVar { link_slot, src: v });
                 self.free_temp(1);
             }
             RStmt::AssignIndex { obj, index, value } => {
