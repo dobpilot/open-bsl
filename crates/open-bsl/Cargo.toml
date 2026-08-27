@@ -37,10 +37,3 @@ bsl-zip = { path = "../bsl-zip", optional = true }
 bsl-pdf = { path = "../bsl-pdf", optional = true }
 bsl-xml = { path = "../bsl-xml", optional = true }
 bsl-spreadsheet = { path = "../bsl-spreadsheet", optional = true }
-
-# Нативный пул фоновых заданий: current-thread runtime и LocalSet на
-# worker, таймеры и каналы пробуждений. Без feature flag намеренно —
-# native-adapter включён всегда (план фоновых заданий); WASM собирает
-# переносимую модель без пула, поэтому зависимость target-specific.
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-tokio = { version = "1", default-features = false, features = ["rt", "time", "sync"] }

@@ -1,7 +1,11 @@
 # Целевая архитектура open-bsl 0.4.0
 
-> **Статус:** архитектура принята, реализация не завершена. Документ описывает
-> только целевое состояние 0.4.0 и не является снимком текущего кода.
+> **Статус: реализовано 2026-08-27** (ветка `bsl-rt-ver4`, этапы 0–9 плана
+> фоновых заданий). Документ описывает состояние 0.4.0 и совпадает с кодом;
+> четыре места, где реализация сознательно разошлась с принятой архитектурой,
+> отмечены прямо в своих диаграммах и сведены в таблицу «Расхождения
+> реализации» раздела F. Диаграммы без такой пометки нормативны и выполнены
+> буквально.
 
 Документ фиксирует нормативные топологию, владение, состояния и направления
 зависимостей. Подробный BSL-контракт, результаты замеров 1С, лимиты по умолчанию,
@@ -95,8 +99,8 @@ flowchart LR
     number["bsl-number<br/>decimal arithmetic"]
     format["bsl-format<br/>видимый текст"]
     libs["bsl-* библиотеки<br/>LibraryDescriptor"]
-    tokio_worker["Tokio worker adapter<br/>rt + time + sync"]
-    http_adapter["process-wide Tokio + reqwest"]
+    pool["Пул заданий фасада<br/>std::thread + Mutex/Condvar<br/>(Tokio не понадобился, см. ARCH-10)"]
+    http_adapter["process-wide Tokio + reqwest<br/>внутри bsl-http"]
 
     legend["Стрелка A → B:<br/>A имеет normal-зависимость от B"]
     cli --> facade
@@ -111,8 +115,8 @@ flowchart LR
     facade --> bytecode
     facade --> vm
     facade --> rt
-    facade --> tokio_worker
-    facade --> http_adapter
+    facade --> pool
+    libs --> http_adapter
     vm --> bytecode
     vm --> rt
     vm --> format
@@ -136,7 +140,10 @@ flowchart LR
 ```
 
 `bsl-vm` зависит от представления, но не от фронтенда. `bsl-rt` не получает
-новой внешней зависимости; Tokio и `reqwest` скрыты native-адаптерами.
+новой внешней зависимости; Tokio и `reqwest` скрыты внутри `bsl-http` и в
+публичных контрактах не появляются. Планировавшаяся прямая зависимость фасада
+на Tokio (`rt`/`time`/`sync`) не понадобилась и удалена: пул обходится
+`std::thread` и `Mutex`/`Condvar` — см. расхождение `ARCH-10` в разделе F.
 Компонентные методы остаются в `MethodDescriptor`, а общие встроенные функции —
 в единой таблице `bsl-rt`.
 
@@ -277,7 +284,7 @@ flowchart LR
     plain["Engine::compile<br/>transient entry без imports<br/>не является job-target"]
     load["Engine::load_bytecode<br/>только одиночный Program"]
     worker_recipe["Send-рецепт worker<br/>LibraryDescriptor + symbols + text bytecode"]
-    target["Статический job-target<br/>root alias + exported method<br/>неглобальный server module<br/>⚠ НЕ ИЗМЕРЕНО(JOB.EXECUTE.VALIDATION)<br/>⚠ НЕ ИЗМЕРЕНО(JOB.EXECUTE.DEFAULTS)<br/>⚠ НЕ ИЗМЕРЕНО(JOB.ASYNC.TARGET)"]
+    target["Статический job-target<br/>root alias + exported method<br/>неглобальный server module<br/>измерено JOB.EXECUTE.VALIDATION (синхронно)<br/>измерено JOB.EXECUTE.DEFAULTS<br/>⚠ НЕ ИЗМЕРЕНО(JOB.ASYNC.TARGET)"]
 
     files --> scan --> aliases --> alias_validation --> recipe --> builder
     builder --> frontend --> catalog --> engine
@@ -426,19 +433,19 @@ sequenceDiagram
 flowchart TD
     core["Общее execution core<br/>frames + registers + SessionModules"]
     borrowed["Execution<br/>заимствует State и Program"]
-    owned["OwnedExecution<br/>владеет State и Rc&lt;Program&gt;"]
+    owned["RunningJob (роль OwnedExecution)<br/>владеет State, Module и ProgramExecution"]
     runnable["Runnable"]
     quantum["Квант<br/>safe_points_per_quantum"]
     dispatch{"Interpreter или JIT?"}
     jit["JIT bundle<br/>уменьшает тот же счётчик"]
     interpreter["Interpreter bundle"]
-    barrier{"Барьер?<br/>Await / may_suspend / control flow"}
+    barrier{"Барьер?<br/>Await / control flow<br/>may_suspend — НЕ барьер, см. текст"}
     waiting["Waiting(PendingHostCall / PromiseId)"]
     tail["Runnable → хвост локальной FIFO"]
     complete["Complete"]
     fallback["Fallback в interpreter<br/>только на unsupported/barrier"]
     fast["Foreground fast path<br/>одна BSL-задача"]
-    callout["Object MethodDescriptor<br/>may_suspend → CallOutcome<br/>Ready(value) или Pending(typed call)"]
+    callout["MethodDescriptor::suspending<br/>invoke → CallOutcome<br/>Ready(value) или Pending(typed call)"]
 
     core --> borrowed
     core --> owned
@@ -454,61 +461,94 @@ flowchart TD
     barrier -->|"продолжить"| quantum
 ```
 
-`Await` и каждый descriptor с `may_suspend` являются барьерами VLIW-бандла.
-Фоновый `OwnedExecution` всегда квантуется; обычный foreground `State` при одной
-BSL-задаче сохраняет неограниченный быстрый путь. Фоновый квант — отдельная
-ручка `background_safe_points_per_quantum`; отмена проверяется на каждом
-safe point и от длины кванта не зависит. `State::run` остаётся
-run-to-completion, а poolable owned API возвращает `Runnable`, `Waiting` или
-`Complete`.
+`Await` — барьер VLIW-бандла. **Расхождение реализации:** отдельный барьер для
+`may_suspend` не понадобился и не вводился. Парковка оставляет `pc` на
+инструкции вызова, а вход в середину бандла и так легален — это штатный
+механизм возврата отказавшегося JIT (`bundle_len[pc] == 0` исполняется
+одиночно); повторный диспатч хвоста бандла гасит страж в холодном арме
+`CallObjectMethod`. Это не микрооптимизация: проверка приостановки, внесённая
+в горячий `step`, стоила `empty_for` +30% при неизменном числе инструкций
+(DSB 241 → 106 млн uops), поэтому и она, и холодные ветви планировщика
+вынесены в `inline(never)`-помощники.
+
+Фоновое исполнение всегда квантуется (`set_always_scheduled`); обычный
+foreground `State` при одной BSL-задаче сохраняет неограниченный быстрый путь.
+Отдельная ручка `background_safe_points_per_quantum` **не введена**: замер
+CPU-bound задания против того же скрипта в foreground дал 1,017 — цена
+квантования на общем бюджете в 1024 safe points неотличима от дрейфа машины.
+Отмена проверяется на границе кванта, а у припаркованного на host-операции
+исполнения — ещё и перед сном на завершениях, поэтому отмена не ждёт ответа
+транспорта. `State::run` остаётся run-to-completion, а pollable API
+возвращает `Runnable`, `Waiting` или `Complete`. Роль `OwnedExecution`
+исполняет `RunningJob` worker-драйвера (владеет `State`, `Module` и
+`ProgramExecution`); отдельного публичного владеющего типа фасад не завёл —
+у него уже есть заимствующий `Execution`.
 
 ### ARCH-10 — Worker driver и пробуждения
+
+> **Расхождение реализации.** Принятый вариант — current-thread Tokio и
+> `LocalSet` на каждом worker с coalesced wake-каналом. Реализован
+> эквивалентный по семантике, но более простой драйвер: `std::thread` плюс
+> `Mutex`/`Condvar` и счётчик host-событий `wake_epoch`. Причина: HTTP-future
+> исполняет process-wide runtime внутри `bsl-http`, поэтому `LocalSet`
+> worker'а был бы пуст на каждом tick — а «пропускать tick, когда `LocalSet`
+> пуст» этот план записал сам как эскалацию, и пустой планировщик целиком —
+> её предельный случай. Прямая зависимость фасада на Tokio удалена
+> (`ARCH-02`). Пересмотреть, когда host-futures поедут на поток worker.
 
 ```mermaid
 flowchart TD
     global["Глобальная FIFO Queued jobs"]
-    start["Worker custom driver<br/>Tokio current-thread + LocalSet<br/>не spawn_local(OwnedExecution)"]
-    local["Локальная FIFO runnable OwnedExecution"]
-    waiting["Карта waiting executions"]
-    pick{"Есть runnable?"}
-    run["Исполнить один VM-квант"]
+    start["Worker driver<br/>std::thread, свой Engine из рецепта"]
+    local["Локальная FIFO резидентов RunningJob"]
+    pick{"Есть runnable резидент?"}
+    run["Исполнить один VM-квант<br/>poll_configuration_with_budget"]
     outcome{"Poll outcome"}
-    tick["Один tick LocalSet"]
-    terminal["Exact-once terminal transition"]
-    wake["ExecutionWaker<br/>atomic wake_pending"]
-    channel["bounded try_send<br/>coalesced wakeup"]
-    sleepcheck["Повторно проверить registry и flags"]
-    register["Под registry lock:<br/>waiter_id + terminal recheck"]
-    race["Атомарный победитель:<br/>terminal / timeout / cancel<br/>⚠ НЕ ИЗМЕРЕНО(JOB.WAIT.TIMEOUT)<br/>⚠ НЕ ИЗМЕРЕНО(JOB.WAIT.MANY)"]
-    timer["JobTimeSource<br/>register_timer(monotonic deadline)"]
-    cancel["Execution cancel<br/>удалить waiter"]
-    observed_terminal["Terminal ожидаемого job"]
+    terminal["Exact-once terminal transition<br/>+ notify terminal_watch"]
+    waiting["waiting = true<br/>резидент остаётся в локальной FIFO"]
+    sleepcheck{"wake_epoch<br/>изменился?"}
+    sleep["Condvar work_available.wait()<br/>без таймера"]
+    rearm["Сбросить waiting у всех резидентов<br/>и опросить заново"]
+    waker["ExecutionWaker из потока транспорта<br/>wake_epoch += 1 под локом<br/>+ notify_all"]
+    cancelev["cancel(Running)<br/>wake_epoch += 1"]
+    closeev["Closed / Broken<br/>резиденты → Отменено"]
     ordering["Порядок<br/>1 worker: FIFO start<br/>N workers: первая инструкция и finish не гарантированы<br/>work stealing отсутствует"]
 
-    global -->|"только если local пуста"| start
+    global -->|"только если нет runnable резидента"| start
     start --> pick
     start --> ordering
     local --> pick
     pick -->|"да"| run --> outcome
     outcome -->|"Runnable"| local
-    outcome -->|"Waiting"| register --> waiting
+    outcome -->|"Waiting"| waiting --> pick
     outcome -->|"Complete/Abort"| terminal
-    outcome --> tick --> pick
-    waiting --> race --> wake -->|"false → true"| channel --> local
-    timer --> race
-    cancel --> race
-    observed_terminal --> race
-    pick -->|"нет"| sleepcheck --> global
+    pick -->|"нет runnable, есть ждущие"| sleepcheck
+    sleepcheck -->|"нет"| sleep --> sleepcheck
+    sleepcheck -->|"да"| rearm --> pick
+    pick -->|"нет резидентов вовсе"| global
+    waker --> sleepcheck
+    cancelev --> sleepcheck
+    closeev --> sleepcheck
 ```
 
-Начатый execution закреплён за worker: `Rc<Program>`, `State` и `LocalSet` не
-становятся `Send`. Work stealing нет; общая FIFO балансирует только ещё не
-начатые jobs. Локальные futures обязаны быть кооперативными и не выполнять
-блокирующий I/O. Заполненный wake-channel не теряет событие благодаря
-`wake_pending` и повторной проверке перед сном. Сон worker — `block_on` над
-`select` из wake-канала и ближайшего deadline `JobTimeSource` внутри его
-runtime, поэтому таймеры срабатывают и в простое; голый park вне runtime
-запрещён.
+Начатый резидент закреплён за worker: `Rc<Program>` и `State` не становятся
+`Send`. Work stealing нет; общая FIFO балансирует только ещё не начатые jobs.
+Пробуждение не теряется по построению: инкремент `wake_epoch` и снимок,
+с которым его сравнивает засыпающий worker, берутся под одним и тем же
+`registry` lock, поэтому событие, пришедшее между опросом резидентов и сном,
+уже видно в счётчике. Какое именно завершение пришло, драйвер не знает и не
+выясняет — он снимает `waiting` со всех своих резидентов, и доставленные
+завершения подбирает собственный `poll` каждого. Таймерного поллинга нет
+нигде: двухмиллисекундные паузы убраны и из helping-ожидания, и из
+`drive_to_terminal`. Источники пробуждения перечислимы: завершение
+host-операции, новое задание (`submit` будит и `work_available`, и
+`terminal_watch`), отмена `Running`-резидента, перевод runtime в
+`Closed`/`Broken`.
+
+Измерено на этой машине: дренаж 10 000 пустых заданий — 293 мс одним worker
+и 150 мс пулом vCPU; 32 задания, припаркованных на синхронном HTTP через пул
+из 8 worker, после одновременного ответа сервера достигают terminal за ≈1 мс
+— дисбаланс pinned-worker на этом масштабе не наблюдается.
 
 ### ARCH-11 — Синхронный и асинхронный HTTP из job
 
@@ -538,6 +578,18 @@ sequenceDiagram
     end
 ```
 
+Приостановку объявляет дескриптор метода: `MethodDescriptor::suspending`
+против обычного `new`, а `invoke` сам оборачивает результат обычного
+обработчика в `CallOutcome::Ready` — поэтому семь синхронных HTTP-методов
+получили типизированную парковку, а остальные сотни обработчиков компонентов
+не меняли сигнатуру. Парковку умеет только открытый `CallObjectMethod`
+интерпретатора; строковый путь (закрытый `CallMethod`, вызов по имени)
+доводит ту же host-операцию блокирующе, сохраняя прежнюю семантику. Шиму JIT
+`Pending` встретить нельзя структурно: библиотека с приостанавливающими
+методами обязана объявлять `ObjectContextNeed::Full`, а чанк, трогающий
+объекты, при таком реестре нативному пути не отдаётся вовсе; на случай
+нарушения контракта шим несёт защитную ошибку вместо блокировки потока.
+
 Tokio `Future`, `JoinHandle` и ошибки транспорта не входят в VM или BSL.
 `PromiseValue` остаётся непрозрачным `BslObject::Extension`; token закрывается
 при завершении run и запрещает ждать promise другого execution. Отмена
@@ -561,20 +613,32 @@ sequenceDiagram
     Runtime->>Parent: новый State, HostProfileId=S
     Parent->>Runtime: submit Child(profile=S, caller=P)
     Note over Runtime,Child: профиль наследуется без повышения возможностей
-    Parent->>Runtime: wait Child → PendingHostCall
-    Note over Parent,Runtime: ⚠ НЕ ИЗМЕРЕНО(JOB.NESTED.WAIT)<br/>⚠ НЕ ИЗМЕРЕНО(JOB.CANCEL.RACES)
-    Runtime-->>Parent: parked, OS worker свободен
-    Runtime->>Child: запустить из FIFO даже при занятом пуле
+    Parent->>Runtime: wait Child (helping, см. расхождение)
+    Note over Parent,Runtime: JOB.NESTED.WAIT измерено 2026-08-27<br/>связь отмены parent/child не измерена
+    Runtime-->>Parent: OS worker не заблокирован
+    Runtime->>Child: родитель сам доводит ребёнка из FIFO
     Child->>Storage: доступен mailbox P, но не F
     Child-->>Runtime: terminal
     Runtime-->>Parent: ExecutionWaker + новый snapshot
     Parent-->>Foreground: terminal
 ```
 
+> **Расхождение реализации.** Вложенное ожидание обслуживает не
+> типизированный `PendingHostCall::BackgroundJobWait`, а helping-паттерн:
+> поток-родитель, пока его дети не terminal, сам исполняет задания из
+> глобальной FIFO (`WorkerJobService::wait_terminal` →
+> `drive_to_terminal`). Наблюдаемое свойство то же и проверяется тем же
+> тестом — OS worker не заблокирован, два родителя при полностью занятом
+> пуле порождают и дожидаются детей, — но ABI ожидания не расширялся.
+> Типизированная парковка ожидания остаётся кандидатом, если helping станет
+> узким местом.
+
 Ожидание ребёнка не блокирует OS worker, поэтому два родителя при полностью
 занятом пуле могут породить и дождаться детей. Транзитивного повышения
-temporary-storage capability нет. Связывать отмену parent и child до замера
-нельзя: `⚠ НЕ ИЗМЕРЕНО(JOB.CANCEL.RACES)`.
+temporary-storage capability нет: дочернее задание публикует write-set в
+хранилище сеанса своего родителя, а не исходного foreground. Из `JOB.CANCEL.RACES`
+измерены повторная отмена и отмена terminal (успешные no-op); связывать отмену
+parent и child по-прежнему нельзя — эта часть замера не снята.
 
 ## D. Lifecycle
 
@@ -616,16 +680,16 @@ stateDiagram-v2
 
 ```mermaid
 flowchart LR
-    manager["ФоновыеЗадания<br/>Выполнить(метод, параметры, ключ, имя)<br/>ПолучитьФоновыеЗадания(отбор)<br/>НайтиПоУникальномуИдентификатору(id)<br/>ОжидатьЗавершенияВыполнения(jobs, timeout)<br/>⚠ НЕ ИЗМЕРЕНО(JOB.API.SURFACE)<br/>⚠ НЕ ИЗМЕРЕНО(JOB.FIND.MISSING)<br/>⚠ НЕ ИЗМЕРЕНО(JOB.LIST.FILTER_ORDER)"]
+    manager["ФоновыеЗадания<br/>Выполнить(метод, параметры, ключ, имя)<br/>ПолучитьФоновыеЗадания(отбор)<br/>НайтиПоУникальномуИдентификатору(id)<br/>ОжидатьЗавершенияВыполнения(jobs, timeout)<br/>поверхность по синтакс-помощнику 8.3.27<br/>измерено JOB.FIND.MISSING<br/>⚠ НЕ ИЗМЕРЕНО(JOB.LIST.FILTER_ORDER)"]
     registry["JobRecord по JobId"]
-    queued["Queued<br/>BSL: Активно<br/>⚠ НЕ ИЗМЕРЕНО(JOB.STATE.SNAPSHOT)"]
-    running["Running<br/>BSL: Активно<br/>⚠ НЕ ИЗМЕРЕНО(JOB.STATE.SNAPSHOT)"]
+    queued["Queued<br/>BSL: Активно"]
+    running["Running<br/>BSL: Активно<br/>измерено JOB.STATE.SNAPSHOT<br/>Начало при старте, Конец при finish"]
     completed["Completed<br/>возврат функции-цели игнорируется"]
-    failed["Failed<br/>⚠ НЕ ИЗМЕРЕНО(JOB.STATE.ERROR)"]
+    failed["Failed<br/>измерено JOB.STATE.ERROR<br/>ИнформацияОбОшибке с Описанием"]
     canceled["Canceled"]
     snapshot["JobSnapshotDto — immutable<br/>id, method, params, key, name,<br/>state, wall start/end, error"]
     object["ФоновоеЗадание — snapshot + JobId<br/>УникальныйИдентификатор / ИмяМетода / Параметры<br/>Ключ / Наименование / Состояние<br/>Начало / Конец / ИнформацияОбОшибке<br/>Отменить()<br/>ОжидатьЗавершенияВыполнения(timeout)<br/>ПолучитьСообщенияПользователю(remove=false)"]
-    state_enum["СостояниеФоновогоЗадания<br/>BSL-представление terminal states<br/>⚠ НЕ ИЗМЕРЕНО(JOB.API.SURFACE)"]
+    state_enum["СостояниеФоновогоЗадания<br/>Активно/Завершено/ЗавершеноАварийно/Отменено<br/>подтверждено выпиской синтакс-помощника"]
     params["Параметры<br/>lazy materialization в RuntimeShapes caller"]
     live["live-методы<br/>wait / cancel / messages"]
     expired["JobExpired"]
@@ -634,8 +698,8 @@ flowchart LR
     manager --> registry --> queued --> running
     running --> completed
     running --> failed
-    running -->|"⚠ НЕ ИЗМЕРЕНО(JOB.CANCEL.RACES)"| canceled
-    queued -->|"⚠ НЕ ИЗМЕРЕНО(JOB.CANCEL.RACES)"| canceled
+    running -->|"измерено: повтор и terminal — no-op"| canceled
+    queued -->|"отмена до старта"| canceled
     registry --> snapshot --> object
     snapshot --> state_enum
     object --> params
@@ -648,8 +712,11 @@ flowchart LR
 будит waiters. Старый объект не обновляет свойства: поиск и ожидание создают
 новый `JobSnapshotDto`. Уже материализованные свойства читаются после eviction
 или shutdown, а live-методы различают `JobExpired` и `RuntimeClosed`.
-Возвращаемое значение функции-цели игнорируется. Точная BSL-поверхность,
-арности, defaults и английские aliases — `⚠ НЕ ИЗМЕРЕНО(JOB.API.SURFACE)`.
+Возвращаемое значение функции-цели игнорируется. BSL-поверхность, арности и
+английские aliases зафиксированы по выпискам синтакс-помощника 8.3.27 и
+замерам `JOB.API.*`: свойства `Параметры` у задания нет (оно у
+`РегламентноеЗадание`), `Ключ` и `Наименование` незаданными приходят пустыми
+строками, а `ОжидатьЗавершенияВыполнения` — функция, отдающая свежий снимок.
 
 ### ARCH-15 — Worker failure и replacement
 
@@ -768,8 +835,8 @@ flowchart LR
     serializer["Bounded graph serializer<br/>hard platform limit 1 GiB<br/>остановка до превышающей аллокации"]
 
     subgraph boundary["Send boundary"]
-        graph_dto["Arc&lt;SerializedValueGraph&gt;<br/>один граф, alias/cycles<br/>⚠ НЕ ИЗМЕРЕНО(JOB.PARAMS.SNAPSHOT)"]
-        keydto["JobKeyDto<br/>полное структурное значение<br/>⚠ НЕ ИЗМЕРЕНО(JOB.KEY.EQUALITY)<br/>⚠ НЕ ИЗМЕРЕНО(JOB.KEY.QUEUED)"]
+        graph_dto["Arc&lt;SerializedValueGraph&gt;<br/>один граф, alias/cycles<br/>измерено JOB.PARAMS.SNAPSHOT<br/>снимок в момент Выполнить"]
+        keydto["JobKeyDto<br/>полное структурное значение<br/>измерено JOB.KEY.EQUALITY (ключ уникален в пределах метода)<br/>измерено JOB.KEY.QUEUED"]
         profile["HostProfileId"]
         recipe["text BytecodeImage + descriptors + symbols"]
         errordto["JobErrorDto<br/>bounded cause graph"]
@@ -806,8 +873,8 @@ flowchart LR
 
 Параметры сериализуются одним графом и декодируются лениво при первом чтении
 свойства `Параметры`, после чего кэшируются только в вызывающем `State`.
-Сохранение alias/cycles и точный момент snapshot подтверждает
-`⚠ НЕ ИЗМЕРЕНО(JOB.PARAMS.SNAPSHOT)`. Digest ключа не сериализуется и не
+Момент снимка измерен (`JOB.PARAMS.SNAPSHOT`): мутация массива после
+`Выполнить` заданию не видна. Digest ключа не сериализуется и не
 является BSL-контрактом; совпадение hash всегда проверяется полным структурным
 равенством. Тесты внедряют детерминированные источники ID и hash seed.
 
@@ -925,7 +992,7 @@ sequenceDiagram
     participant Host as bsl-cli stdout queue / другой host
     participant Reader as ПолучитьСообщенияПользователю
 
-    Note over BSL: ⚠ НЕ ИЗМЕРЕНО(JOB.MESSAGES)
+    Note over BSL: измерено JOB.MESSAGES: тип «Message to user», drain
     BSL->>Format: format_value, не BslValue::Display
     Format-->>BSL: UserMessageDto
     alt вызов внутри job
@@ -949,10 +1016,28 @@ sequenceDiagram
 история. Форматирование и enqueue никогда не выполняются под registry lock.
 Порядок одного job — FIFO, порядок разных jobs не обещается. Бюджет сообщений
 отделён от diagnostic и staging budgets, но входит в размер history record.
-Точная BSL-модель сообщения, live-read и drain проверяются
-`⚠ НЕ ИЗМЕРЕНО(JOB.MESSAGES)`.
+BSL-модель сообщения измерена (`JOB.MESSAGES`): тип «Message to user» со
+свойством `Текст`, повторное чтение без удаления отдаёт те же записи, а
+`Истина` забирает их насовсем.
 
 ## F. Нормативные расхождения и трассировка
+
+### Расхождения реализации
+
+Реализация 2026-08-27 отошла от принятой архитектуры в четырёх местах. Каждое
+помечено в своей диаграмме; здесь — сводка с причиной и условием пересмотра.
+
+| Принято в архитектуре | Реализовано | Причина | Пересмотр |
+|---|---|---|---|
+| Tokio current-thread + `LocalSet` на worker, coalesced wake-канал (`ARCH-10`) | `std::thread` + `Mutex`/`Condvar`, счётчик `wake_epoch` | `LocalSet` был бы пуст на каждом tick: HTTP-future исполняет process-wide runtime внутри `bsl-http`. Эскалацию «пропускать пустой tick» план записал сам | Когда host-futures поедут на поток worker |
+| `may_suspend` — барьер VLIW-бандла (`ARCH-09`) | Барьера нет; страж повторного диспатча в холодном арме | Вход в середину бандла легален штатно (механизм отказа JIT). Проверка в горячем `step` стоила `empty_for` +30% при равных инструкциях | Не планируется |
+| `PendingHostCall::BackgroundJobWait` для вложенного ожидания (`ARCH-12`) | Helping-паттерн: родитель сам доводит задания из FIFO | Наблюдаемое свойство идентично и закреплено тестом, ABI ожидания не расширяется | Если helping станет узким местом |
+| Отдельная ручка `background_safe_points_per_quantum` (`ARCH-09`) | Общий бюджет `safe_points_per_quantum` | Замер CPU-bound задания против foreground дал 1,017 — цена квантования неотличима от дрейфа машины | При появлении профиля, где расхождение видно |
+
+Публичный владеющий тип `OwnedExecution` не вводился: его роль исполняет
+`RunningJob` драйвера, а у фасада уже есть заимствующий `Execution`. ABI
+приостановки при этом реализован полностью — `CallOutcome`,
+`PendingHostCall::HttpSync` и `MethodDescriptor::suspending`.
 
 ### Намеренные решения open-bsl
 
@@ -991,19 +1076,27 @@ sequenceDiagram
 
 ### Трассировка неизмеренных контрактов
 
+44 замера `JOB.*` сняты на серверной 8.3.27.2342 2026-08-27 и разобраны в
+плане; поверхность менеджера и задания дополнительно сверена с выписками
+синтакс-помощника. Открытыми остаются восемь вопросов.
+
 | Группа замеров | Диаграммы | Что может измениться после замера |
 |---|---|---|
-| `JOB.API.SURFACE`, `JOB.EXECUTE.VALIDATION`, `JOB.EXECUTE.DEFAULTS` | `ARCH-05`, `ARCH-14` | Сигнатуры, defaults и validation цели |
-| `JOB.PARAMS.SNAPSHOT` | `ARCH-18` | Момент копирования, alias/cycles и unsupported values |
-| `JOB.KEY.*` | `ARCH-18`, `ARCH-19` | Канонизация, структурное равенство и участие queued job |
-| `JOB.STATE.SNAPSHOT`, `JOB.STATE.ERROR` | `ARCH-14`, `ARCH-17` | BSL-отображение состояний, timestamps и error fields |
-| `JOB.WAIT.TIMEOUT`, `JOB.WAIT.MANY` | `ARCH-09`, `ARCH-10`, `ARCH-14` | Timeout units/races и any/all для массива |
-| `JOB.CANCEL.RACES` | `ARCH-12`, `ARCH-14`, `ARCH-17` | Parent/child и repeated/terminal race |
-| `JOB.FIND.MISSING`, `JOB.LIST.FILTER_ORDER` | `ARCH-14`, `ARCH-19` | Missing UUID и порядок/семантика отбора |
-| `JOB.MODULE.INIT` | `ARCH-07` | Триггер, цикл, ошибка и retry |
-| `JOB.NESTED.WAIT`, `JOB.ASYNC.TARGET` | `ARCH-11`, `ARCH-12`, `ARCH-14` | Критерий завершения async-цели и nested wait |
-| `JOB.MESSAGES` | `ARCH-21` | Поля DTO, live-read и drain |
-| `JOB.TEMP.*` | `ARCH-12`, `ARCH-20` | Lifetime, read-your-writes, delete, nested capability и close race |
+| `JOB.LIST.FILTER_ORDER` | `ARCH-14`, `ARCH-19` | Только порядок результата: поля отбора и сравнение уже закрыты выпиской |
+| `JOB.MODULE.INIT` | `ARCH-07` | Триггер, цикл, ошибка и retry инициализации общего модуля |
+| `JOB.ASYNC.TARGET` | `ARCH-11`, `ARCH-14` | Допустимость `Асинх`-цели и критерий её завершения (обычная функция-цель измерена) |
+| `JOB.TEMP.LIFETIME` | `ARCH-20` | Delete, reuse и новый адрес job после закрытия его сеанса |
+| `JOB.TEMP.READ_YOUR_WRITES` | `ARCH-12`, `ARCH-20` | Что job читает по caller-адресу после собственной staging-записи |
+| `JOB.TEMP.STAGED_DELETE` | `ARCH-20` | Публикуется ли удаление caller-адреса и по каким terminal-правилам |
+| `JOB.TEMP.NESTED_CAPABILITY` | `ARCH-12`, `ARCH-20` | Может ли дочерний job писать адрес исходного foreground-сеанса |
+| `JOB.TEMP.CALLER_CLOSE_RACE` | `ARCH-17`, `ARCH-20` | Гонка закрытия caller с terminal commit |
+| `JOB.CANCEL.RACES` (частично) | `ARCH-12`, `ARCH-17` | Связь отмены parent и child; повтор и terminal измерены |
+
+Регистровых троек `НЕ ИЗМЕРЕНО` у этих вопросов пока нет намеренно: сканер
+`open_questions_registry_matches_source_markers` требует строку в
+`measure-all.bsl`, а тот исполняется обеими сторонами, тогда как проба
+фоновых заданий работает только на платформе и живёт отдельным
+platform-only скриптом. Тройки заводятся вместе с двусторонним сценарием.
 
 ### Неподвижные архитектурные инварианты
 
@@ -1016,8 +1109,10 @@ sequenceDiagram
    во время явно показанного reservation.
 4. `OwnedExecution` закреплён за worker, но pending host call освобождает worker
    для другого сеанса.
-5. Worker-local Tokio и process-wide HTTP Tokio имеют разные обязанности и не
-   обмениваются Rust futures.
+5. Пул заданий и process-wide HTTP-runtime имеют разные обязанности и не
+   обмениваются Rust futures: пул исполняет BSL-кванты на своих `std::thread`,
+   транспорт живёт внутри `bsl-http`, а связь между ними — только DTO
+   завершения и пробуждение драйвера.
 6. Все поздние результаты проверяют execution/runtime token; shutdown epoch
    запрещает публикацию после отзыва.
 7. Temporary-storage commit, terminal transition, key release и пробуждение
