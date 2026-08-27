@@ -1032,12 +1032,25 @@ const CORE_CONSTRUCTORS: &[ConstructorDescriptor] = &[
         arity: Arity::exact(0),
         call: crate::background_jobs::construct_manager,
     },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(7),
+        names: &["ФиксированныйМассив", "FixedArray"],
+        arity: Arity::exact(1),
+        call: crate::fixed_array::construct_fixed_array,
+    },
+    ConstructorDescriptor {
+        code: ConstructorCode::new(8),
+        names: &["СообщениеПользователю", "UserMessage"],
+        arity: Arity::exact(0),
+        call: crate::user_message::construct_user_message,
+    },
 ];
 
 const CORE_TYPES: &[&crate::TypeDescriptor] = &[
+    &crate::fixed_array::FIXED_ARRAY_TYPE,
     &crate::background_jobs::BACKGROUND_JOBS_TYPE,
     &crate::background_jobs::BACKGROUND_JOB_TYPE,
-    &crate::background_jobs::USER_MESSAGE_TYPE,
+    &crate::user_message::USER_MESSAGE_TYPE,
     &crate::error_info::ERROR_INFO_TYPE,
     &crate::value_list::VALUE_LIST_TYPE,
     &crate::value_list::VALUE_LIST_ITEM_TYPE,
@@ -1082,6 +1095,13 @@ const CORE_FUNCTION_TABLE: &[FunctionDescriptor] = &[
         arity: Arity::exact(1),
         kind: FunctionKind::Procedure,
         call: crate::temp_storage::delete_from_temp_storage,
+    },
+    FunctionDescriptor {
+        code: FunctionCode::new(4),
+        names: &["ПолучитьСообщенияПользователю", "GetUserMessages"],
+        arity: Arity::range(0, 1),
+        kind: FunctionKind::Function,
+        call: crate::user_message::get_user_messages,
     },
 ];
 

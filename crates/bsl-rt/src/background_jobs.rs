@@ -50,59 +50,6 @@ pub trait BackgroundJobService {
     fn wait_first_change(&self, jobs: &[(JobId, JobStateDto)], timeout: Option<Duration>);
 }
 
-pub(crate) static USER_MESSAGE_TYPE: TypeDescriptor = TypeDescriptor {
-    package: crate::PACKAGE_NAME,
-    name: "СообщениеПользователю",
-    type_display: "User message",
-    type_names: &["UserMessage"],
-};
-
-/// Сообщение пользователю в истории задания. Минимальная модель — текст;
-/// поля назначения и ключа данных — за замером `JOB.MESSAGES`.
-struct UserMessageObject {
-    text: String,
-}
-
-impl std::fmt::Debug for UserMessageObject {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "СообщениеПользователю {:?}", self.text)
-    }
-}
-
-impl ObjectProtocol for UserMessageObject {
-    fn type_descriptor(&self) -> &'static TypeDescriptor {
-        &USER_MESSAGE_TYPE
-    }
-
-    fn property_table(&self) -> &'static [PropertyDescriptor] {
-        USER_MESSAGE_PROPERTIES
-    }
-
-    fn get_property(&self, name: &str, ctx: &mut CallContext<'_>) -> RtResult<BslValue> {
-        crate::get_property_from_table(
-            USER_MESSAGE_PROPERTIES,
-            "СообщениеПользователю",
-            self,
-            name,
-            ctx,
-        )
-    }
-}
-
-fn user_message_text(
-    receiver: &dyn ObjectProtocol,
-    _ctx: &mut CallContext<'_>,
-) -> RtResult<BslValue> {
-    let message = receiver_of::<UserMessageObject>(receiver, "Текст")?;
-    Ok(BslValue::Str(crate::BslString::from_str(&message.text)))
-}
-
-static USER_MESSAGE_PROPERTIES: &[PropertyDescriptor] = &[PropertyDescriptor {
-    names: &["Текст", "Text"],
-    get: user_message_text,
-    set: None,
-}];
-
 pub(crate) static BACKGROUND_JOBS_TYPE: TypeDescriptor = TypeDescriptor {
     package: crate::PACKAGE_NAME,
     name: "МенеджерФоновыхЗаданий",
@@ -622,7 +569,9 @@ fn job_messages(
     Ok(BslValue::new_array(
         messages
             .into_iter()
-            .map(|text| BslValue::new_object(UserMessageObject { text }))
+            .map(|text| {
+                BslValue::new_object(crate::user_message::UserMessageObject::with_text(&text))
+            })
             .collect(),
     ))
 }
