@@ -1808,6 +1808,44 @@ mod pool_tests {
         bsl_rt::BslValue::number_from_i64(value)
     }
 
+    /// Критерий готовности плана: Engine без заданий не создаёт
+    /// OS-потоков — пул поднимается лениво, первым admission.
+    #[test]
+    fn the_pool_spawns_no_threads_before_the_first_admission() {
+        let engine = engine();
+        let runtime = runtime_for_engine(&engine, BackgroundJobConfig::default())
+            .expect("runtime собирается");
+        assert!(
+            runtime
+                .threads
+                .lock()
+                .expect("список потоков без отравления")
+                .is_empty(),
+            "до первого admission пул обязан быть пустым"
+        );
+        let target = resolve_target(engine.catalog().unwrap(), "Служебный.Сложить")
+            .expect("цель разрешается");
+        let snapshot = runtime
+            .submit(
+                "Служебный.Сложить",
+                target,
+                params(&[number(1), number(2)]),
+                None,
+                None,
+                None,
+            )
+            .expect("задание принято");
+        assert!(
+            !runtime
+                .threads
+                .lock()
+                .expect("список потоков без отравления")
+                .is_empty(),
+            "первый admission поднимает пул"
+        );
+        assert!(runtime.wait_terminal(&[snapshot.id], Some(Duration::from_secs(30))));
+    }
+
     #[test]
     fn a_job_runs_to_completion_in_a_worker() {
         let engine = engine();
