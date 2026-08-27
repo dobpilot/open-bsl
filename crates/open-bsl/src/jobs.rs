@@ -6,23 +6,20 @@
 //! секциями и не пересекает `await`; занятый пул означает FIFO, а не
 //! ошибку; первый terminal transition выигрывает ровно один раз.
 
-// Пул workers подключается следующим шагом этапа 3; до него часть
-// каркаса (машина состояний runtime, очередь) используется только
-// тестами admission.
-#![allow(dead_code)]
-
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::Duration;
 
-use bsl_rt::{JobErrorDto, JobId, JobKeyDto, JobSnapshotDto, JobStateDto, SerializedValueGraph};
+use bsl_rt::{
+    GlobalStagingBudget, HostError, HostErrorCode, JobErrorDto, JobId, JobKeyDto, JobSnapshotDto,
+    JobStateDto, SerializedValueGraph, UserMessageDto,
+};
 
 /// Конфигурация фонового runtime — одна публичная структура; scheduler
 /// настраивается своей `SchedulerConfig` и здесь не дублируется.
 ///
-/// Значения по умолчанию предварительные: production defaults, кроме
-/// `max_history_jobs = 10_000`, выбираются после нагрузочных прогонов
-/// плана.
+/// Значения по умолчанию подтверждены нагрузочной сессией 2026-08-27
+/// (см. «Нагрузочные и регрессионные проверки» плана фоновых заданий).
 #[derive(Debug, Clone)]
 pub struct BackgroundJobConfig {
     /// Число OS-потоков пула; `None` — `available_parallelism`, минимум 1.
@@ -76,10 +73,16 @@ impl BackgroundJobConfig {
         if self.max_single_job_record_bytes > self.max_history_bytes {
             return Err("одна запись истории больше всего бюджета истории".to_string());
         }
-        if self.max_error_bytes_per_job + self.max_message_bytes_per_job
-            > self.max_single_job_record_bytes
+        // `checked_add`: публичная конфигурация — переполнение суммы
+        // бюджетов отвергается как несогласованность, а не паникует.
+        match self
+            .max_error_bytes_per_job
+            .checked_add(self.max_message_bytes_per_job)
         {
-            return Err("бюджеты ошибки и сообщений не помещаются в запись истории".to_string());
+            Some(sum) if sum <= self.max_single_job_record_bytes => {}
+            _ => {
+                return Err("бюджеты ошибки и сообщений не помещаются в запись истории".to_string());
+            }
         }
         if self.max_inflight_jobs == 0 {
             return Err("max_inflight_jobs не может быть нулевым".to_string());
@@ -101,8 +104,9 @@ impl BackgroundJobConfig {
 }
 
 /// Источник времени runtime: wall-часы для `Начало`/`Конец` снимков.
-/// Монотонные deadlines и таймеры приходят вместе с pending host-calls
-/// (этап 5 плана); тестовая реализация подставляет ручные значения.
+/// Монотонных deadlines и таймеров здесь нет — пул спит на condvar до
+/// события (`wake_epoch`), а не по таймеру; тестовая реализация
+/// подставляет ручные значения.
 pub trait JobTimeSource: Send + Sync {
     fn wall_now(&self) -> Option<bsl_rt::BslDate>;
 }
@@ -143,16 +147,25 @@ pub(crate) enum RuntimeState {
 /// Запись реестра: снимок + резервы admission. Только владеющие DTO.
 pub(crate) struct JobRecord {
     pub snapshot: JobSnapshotDto,
-    /// Байты payload, зарезервированные в live-бюджете до terminal.
-    pub payload_bytes: usize,
+    /// Байты записи, зарезервированные в live-бюджете до terminal:
+    /// payload, ключ и строки снимка (имя метода, наименование).
+    pub base_bytes: usize,
     /// Цель вызова числами: модуль каталога и индекс чанка.
     pub target: (u32, u16),
+    /// Host-профиль сеанса задания: 0 — системный, `i` — профиль `i - 1`
+    /// таблицы движка. Дочернее задание наследует профиль родителя и
+    /// повысить возможности не может — другого значения ему взять негде.
+    pub profile_index: u32,
     /// Кооперативная отмена: worker проверяет флаг на границах квантов.
     pub cancel_requested: Arc<std::sync::atomic::AtomicBool>,
     /// Token временного хранилища сеанса-вызывателя — приёмник staging.
     pub caller_token: Option<[u8; 16]>,
     /// Сообщения пользователю (`Сообщить` внутри задания), FIFO.
-    pub messages: Vec<String>,
+    pub messages: Vec<UserMessageDto>,
+    /// Накопленный (кумулятивный) размер сообщений: dren не возвращает
+    /// бюджет, поэтому суммарная память сообщений одного задания
+    /// ограничена `max_message_bytes_per_job` независимо от чтений.
+    pub message_bytes: usize,
 }
 
 /// Ключ уникальности: пара «цель + снимок ключа» резервируется до
@@ -175,7 +188,14 @@ pub(crate) struct JobRegistry {
     keys: Vec<(KeyReservation, JobId)>,
     live_payload_bytes: usize,
     inflight: usize,
-    history: VecDeque<Arc<JobSnapshotDto>>,
+    /// История terminal-записей: точный размер записи (payload + ключ +
+    /// строки + ошибка + сообщения) хранится рядом со снимком, чтобы
+    /// вытеснение вычитало ровно то, что добавлялось.
+    history: VecDeque<(usize, Arc<JobSnapshotDto>)>,
+    /// Сообщения terminal-заданий: `ПолучитьСообщенияПользователю(Истина)`
+    /// дренирует их атомарно (ИЗМЕРЕНО, `JOB.MESSAGES`), запись
+    /// вытесняется вместе со своей строкой истории.
+    history_messages: HashMap<JobId, Vec<UserMessageDto>>,
     history_bytes: usize,
     config: BackgroundJobConfig,
 }
@@ -201,13 +221,17 @@ impl JobRegistry {
             live_payload_bytes: 0,
             inflight: 0,
             history: VecDeque::new(),
+            history_messages: HashMap::new(),
             history_bytes: 0,
             config,
         }
     }
 
-    /// Admission: атомарно резервирует слот, байты payload и ключ до
-    /// terminal transition; ставит задание в глобальную FIFO.
+    /// Admission: атомарно резервирует слот, байты записи (payload, ключ,
+    /// строки снимка) и ключ до terminal transition; ставит задание в
+    /// глобальную FIFO. Заранее отвергает задание, чья максимально
+    /// возможная запись — вместе с бюджетами ошибки и сообщений — не
+    /// помещается в `max_single_job_record_bytes`.
     #[allow(clippy::too_many_arguments)]
     pub fn admit(
         &mut self,
@@ -218,6 +242,7 @@ impl JobRegistry {
         key: Option<Arc<JobKeyDto>>,
         description: Option<String>,
         caller_token: Option<[u8; 16]>,
+        profile_index: u32,
     ) -> Result<JobSnapshotDto, AdmissionError> {
         match self.state {
             RuntimeState::Broken | RuntimeState::Closed => {
@@ -231,16 +256,37 @@ impl JobRegistry {
                 self.config.max_inflight_jobs
             )));
         }
-        let payload_bytes = params.byte_size();
-        if payload_bytes > self.config.max_single_job_record_bytes {
+        // Суммы размеров считаются `checked_add`: переполнение — тот же
+        // ловимый отказ ресурса, что и выход за предел, а не паника
+        // debug-сборки и не тихий wrap release.
+        let base_bytes = params
+            .byte_size()
+            .checked_add(key.as_ref().map_or(0, |key| key.graph.byte_size()))
+            .and_then(|bytes| bytes.checked_add(method_name.len()))
+            .and_then(|bytes| bytes.checked_add(description.as_deref().map_or(0, str::len)));
+        let worst_case = base_bytes
+            .and_then(|bytes| bytes.checked_add(self.config.max_error_bytes_per_job))
+            .and_then(|bytes| bytes.checked_add(self.config.max_message_bytes_per_job));
+        let (base_bytes, worst_case) = match (base_bytes, worst_case) {
+            (Some(base_bytes), Some(worst_case)) => (base_bytes, worst_case),
+            _ => {
+                return Err(AdmissionError::ResourceLimit(
+                    "параметры задания больше предела одной записи истории".to_string(),
+                ));
+            }
+        };
+        if worst_case > self.config.max_single_job_record_bytes {
             return Err(AdmissionError::ResourceLimit(
-                "параметры задания больше предела одной записи".to_string(),
+                "параметры задания больше предела одной записи истории".to_string(),
             ));
         }
-        if self.live_payload_bytes + payload_bytes > self.config.max_live_payload_bytes {
-            return Err(AdmissionError::ResourceLimit(
-                "исчерпан live-бюджет параметров заданий".to_string(),
-            ));
+        match self.live_payload_bytes.checked_add(base_bytes) {
+            Some(live) if live <= self.config.max_live_payload_bytes => {}
+            _ => {
+                return Err(AdmissionError::ResourceLimit(
+                    "исчерпан live-бюджет параметров заданий".to_string(),
+                ));
+            }
         }
         if let Some(key) = &key {
             let reservation = (target.0, target.1, (**key).clone());
@@ -254,7 +300,7 @@ impl JobRegistry {
             self.keys.push((reservation, id));
         }
         self.inflight += 1;
-        self.live_payload_bytes += payload_bytes;
+        self.live_payload_bytes += base_bytes;
         let snapshot = JobSnapshotDto {
             id,
             method_name,
@@ -265,21 +311,71 @@ impl JobRegistry {
             begin: None,
             end: None,
             error: None,
-            messages: Vec::new(),
         };
         self.records.insert(
             id,
             JobRecord {
                 snapshot: snapshot.clone(),
-                payload_bytes,
+                base_bytes,
                 target,
+                profile_index,
                 cancel_requested: Arc::new(std::sync::atomic::AtomicBool::new(false)),
                 caller_token,
                 messages: Vec::new(),
+                message_bytes: 0,
             },
         );
         self.queue.push_back(id);
         Ok(snapshot)
+    }
+
+    /// Добавляет сообщение живой записи под бюджетом
+    /// `max_message_bytes_per_job`. Бюджет кумулятивный: dren истории не
+    /// возвращает байты, поэтому суммарная память сообщений задания
+    /// ограничена независимо от числа чтений.
+    pub fn push_message(&mut self, id: JobId, message: UserMessageDto) -> Result<(), HostError> {
+        let Some(record) = self.records.get_mut(&id) else {
+            // Запись уже terminal (гонка с отменой/закрытием): поздние
+            // сообщения отвергаются, история неизменяема.
+            return Err(HostError::new(
+                HostErrorCode::JobExpired,
+                "задание уже завершено и не принимает сообщения",
+            ));
+        };
+        let bytes = message.byte_size();
+        if record.message_bytes + bytes > self.config.max_message_bytes_per_job {
+            return Err(HostError::new(
+                HostErrorCode::ResourceLimit,
+                "исчерпан бюджет сообщений задания",
+            ));
+        }
+        record.message_bytes += bytes;
+        record.messages.push(message);
+        Ok(())
+    }
+
+    /// Сообщения задания: живая запись либо история. `remove` атомарно
+    /// забирает FIFO-префикс у обеих (ИЗМЕРЕНО, `JOB.MESSAGES`).
+    /// `None` — задание неизвестно или вытеснено.
+    pub fn take_messages(&mut self, id: JobId, remove: bool) -> Option<Vec<UserMessageDto>> {
+        if let Some(record) = self.records.get_mut(&id) {
+            return Some(if remove {
+                std::mem::take(&mut record.messages)
+            } else {
+                record.messages.clone()
+            });
+        }
+        let messages = self.history_messages.get_mut(&id)?;
+        Some(if remove {
+            std::mem::take(messages)
+        } else {
+            messages.clone()
+        })
+    }
+
+    /// Задание известно реестру: живая запись либо строка истории.
+    pub fn knows(&self, id: JobId) -> bool {
+        self.records.contains_key(&id) || self.history_messages.contains_key(&id)
     }
 
     pub fn record(&self, id: JobId) -> Option<&JobRecord> {
@@ -296,15 +392,16 @@ impl JobRegistry {
     }
 
     /// Terminal transition: ровно один раз — повторный вызов no-op с
-    /// `false`. Освобождает admission-резервы и ключ, переносит payload из
-    /// live-бюджета в history-бюджет без двойного учёта, вытесняет
-    /// старейшие terminal-записи (амортизировано, на добавлении).
+    /// `false`. Освобождает admission-резервы и ключ, переносит байты
+    /// записи из live-бюджета в history-бюджет без двойного учёта,
+    /// ограничивает диагностику бюджетом ошибки и вытесняет старейшие
+    /// terminal-записи (амортизировано, на добавлении).
     pub fn finish(
         &mut self,
         id: JobId,
         state: JobStateDto,
         end: Option<bsl_rt::BslDate>,
-        error: Option<Arc<JobErrorDto>>,
+        error: Option<JobErrorDto>,
     ) -> bool {
         debug_assert!(state.is_terminal());
         let Some(mut record) = self.records.remove(&id) else {
@@ -314,31 +411,34 @@ impl JobRegistry {
             self.records.insert(id, record);
             return false;
         }
+        let error = error.map(|error| error.bounded(self.config.max_error_bytes_per_job));
+        let error_bytes = error.as_ref().map_or(0, JobErrorDto::byte_size);
         record.snapshot.state = state;
         record.snapshot.end = end;
-        record.snapshot.error = error;
-        record.snapshot.messages = std::mem::take(&mut record.messages);
+        record.snapshot.error = error.map(Arc::new);
+        let messages = std::mem::take(&mut record.messages);
+        let message_bytes: usize = messages.iter().map(UserMessageDto::byte_size).sum();
         self.inflight -= 1;
-        self.live_payload_bytes -= record.payload_bytes;
+        self.live_payload_bytes -= record.base_bytes;
         self.keys.retain(|(_, owner)| *owner != id);
         self.queue.retain(|queued| *queued != id);
-        // Запись, которая не помещается в историю целиком, не хранится:
-        // admission уже отверг явно превышающие, здесь — страховка.
-        let record_bytes = record
-            .payload_bytes
-            .min(self.config.max_single_job_record_bytes);
+        // Размер записи истории считает все составляющие: payload, ключ,
+        // строки снимка, ограниченную ошибку и сообщения. Он хранится
+        // рядом со снимком — вытеснение вычитает ровно его.
+        let record_bytes = record.base_bytes + error_bytes + message_bytes;
+        debug_assert!(record_bytes <= self.config.max_single_job_record_bytes);
         self.history_bytes += record_bytes;
-        self.history.push_back(Arc::new(record.snapshot));
+        self.history
+            .push_back((record_bytes, Arc::new(record.snapshot)));
+        self.history_messages.insert(id, messages);
         while self.history.len() > self.config.max_history_jobs
             || self.history_bytes > self.config.max_history_bytes
         {
-            let Some(evicted) = self.history.pop_front() else {
+            let Some((evicted_bytes, evicted)) = self.history.pop_front() else {
                 break;
             };
-            self.history_bytes -= evicted
-                .params
-                .byte_size()
-                .min(self.config.max_single_job_record_bytes);
+            self.history_bytes -= evicted_bytes;
+            self.history_messages.remove(&evicted.id);
         }
         true
     }
@@ -346,14 +446,12 @@ impl JobRegistry {
     /// Снимок задания: живая запись либо история.
     pub fn snapshot(&self, id: JobId) -> Option<Arc<JobSnapshotDto>> {
         if let Some(record) = self.records.get(&id) {
-            let mut snapshot = record.snapshot.clone();
-            snapshot.messages = record.messages.clone();
-            return Some(Arc::new(snapshot));
+            return Some(Arc::new(record.snapshot.clone()));
         }
         self.history
             .iter()
-            .find(|snapshot| snapshot.id == id)
-            .cloned()
+            .find(|(_, snapshot)| snapshot.id == id)
+            .map(|(_, snapshot)| Arc::clone(snapshot))
     }
 
     /// Все снимки: живые + история. Возвращает `Arc`-указатели — фильтр
@@ -364,16 +462,25 @@ impl JobRegistry {
             .values()
             .map(|record| Arc::new(record.snapshot.clone()))
             .collect();
-        all.extend(self.history.iter().cloned());
+        all.extend(
+            self.history
+                .iter()
+                .map(|(_, snapshot)| Arc::clone(snapshot)),
+        );
         all
     }
 
-    pub fn inflight(&self) -> usize {
-        self.inflight
-    }
-
+    /// Тестовая поверхность admission-инвариантов.
+    #[cfg(test)]
     pub fn history_len(&self) -> usize {
         self.history.len()
+    }
+
+    /// Занятые байты live-бюджета — тестовая поверхность освобождения
+    /// резервов.
+    #[cfg(test)]
+    pub fn live_payload_bytes(&self) -> usize {
+        self.live_payload_bytes
     }
 }
 
@@ -410,6 +517,7 @@ mod tests {
                 None,
                 None,
                 None,
+                0,
             )
             .map_err(|_| ())
             .expect("первое задание принято");
@@ -422,6 +530,7 @@ mod tests {
                 None,
                 None,
                 None,
+                0,
             )
             .map_err(|_| ())
             .expect("второе задание принято");
@@ -433,7 +542,8 @@ mod tests {
                 params.clone(),
                 None,
                 None,
-                None
+                None,
+                0,
             ),
             Err(AdmissionError::ResourceLimit(_))
         ));
@@ -443,7 +553,7 @@ mod tests {
             "terminal transition ровно один раз"
         );
         registry
-            .admit(id(3), "М.Ф".into(), (0, 1), params, None, None, None)
+            .admit(id(3), "М.Ф".into(), (0, 1), params, None, None, None, 0)
             .map_err(|_| ())
             .expect("слот освобождён");
         assert_eq!(registry.history_len(), 1);
@@ -480,6 +590,7 @@ mod tests {
                 Some(key.clone()),
                 None,
                 None,
+                0,
             )
             .map_err(|_| ())
             .expect("первое принято");
@@ -492,6 +603,7 @@ mod tests {
                 Some(key.clone()),
                 None,
                 None,
+                0,
             ),
             Err(AdmissionError::DuplicateKey)
         ));
@@ -505,12 +617,22 @@ mod tests {
                 Some(key.clone()),
                 None,
                 None,
+                0,
             )
             .map_err(|_| ())
             .expect("другая цель принята");
         registry.finish(id(1), JobStateDto::Canceled, None, None);
         registry
-            .admit(id(4), "М.Ф".into(), (0, 1), params, Some(key), None, None)
+            .admit(
+                id(4),
+                "М.Ф".into(),
+                (0, 1),
+                params,
+                Some(key),
+                None,
+                None,
+                0,
+            )
             .map_err(|_| ())
             .expect("ключ освобождён terminal transition");
     }
@@ -532,6 +654,7 @@ mod tests {
                     None,
                     None,
                     None,
+                    0,
                 )
                 .map_err(|_| ())
                 .expect("принято");
@@ -540,6 +663,111 @@ mod tests {
         assert_eq!(registry.history_len(), 2);
         assert!(registry.snapshot(id(1)).is_none(), "старейшие вытеснены");
         assert!(registry.snapshot(id(4)).is_some());
+    }
+
+    /// Размер записи истории считает все составляющие: payload, ключ,
+    /// строки снимка, ограниченную ошибку и сообщения; live-бюджет
+    /// резервирует базу и освобождается на terminal.
+    #[test]
+    fn record_bytes_count_key_strings_error_and_messages() {
+        let config = BackgroundJobConfig {
+            max_error_bytes_per_job: 200,
+            max_message_bytes_per_job: 300,
+            ..BackgroundJobConfig::default()
+        };
+        let mut registry = JobRegistry::new(config);
+        let params = graph(64);
+        let key = {
+            let rt = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
+            Arc::new(JobKeyDto {
+                graph: SerializedValueGraph::capture(
+                    &[bsl_rt::BslValue::Str(bsl_rt::BslString::from_str("ключ"))],
+                    &rt,
+                    &GraphLimits::default(),
+                )
+                .expect("снимок ключа"),
+            })
+        };
+        registry
+            .admit(
+                id(1),
+                "Модуль.Метод".into(),
+                (0, 1),
+                params.clone(),
+                Some(key.clone()),
+                Some("наименование".into()),
+                None,
+                0,
+            )
+            .map_err(|_| ())
+            .expect("принято");
+        let base = params.byte_size()
+            + key.graph.byte_size()
+            + "Модуль.Метод".len()
+            + "наименование".len();
+        assert_eq!(registry.live_payload_bytes(), base, "резерв базы записи");
+
+        registry
+            .push_message(id(1), UserMessageDto::from_text("привет"))
+            .expect("сообщение в бюджете");
+        let over = "м".repeat(300);
+        let error = registry
+            .push_message(id(1), UserMessageDto::from_text(over))
+            .expect_err("кумулятивный бюджет сообщений");
+        assert_eq!(error.code, HostErrorCode::ResourceLimit);
+
+        let huge_error = JobErrorDto::from_text("о".repeat(400));
+        assert!(registry.finish(id(1), JobStateDto::Failed, None, Some(huge_error)));
+        assert_eq!(registry.live_payload_bytes(), 0, "live-бюджет освобождён");
+        let snapshot = registry.snapshot(id(1)).expect("снимок истории");
+        let bounded = snapshot.error.as_ref().expect("ошибка снимка");
+        assert!(bounded.diagnostic_truncated, "ошибка ограничена бюджетом");
+        assert!(bounded.byte_size() <= 200);
+        let message_bytes = "привет".len();
+        // history_bytes недоступен снаружи, но вытеснение по нему
+        // проверяемо: добавляем записи, пока не вытеснится первая.
+        assert!(registry.knows(id(1)));
+        let drained = registry
+            .take_messages(id(1), true)
+            .expect("сообщения terminal-записи");
+        assert_eq!(drained.len(), 1);
+        assert_eq!(drained[0].byte_size(), message_bytes);
+        assert!(
+            registry
+                .take_messages(id(1), false)
+                .expect("повторное чтение")
+                .is_empty(),
+            "drain terminal-записи атомарен"
+        );
+    }
+
+    /// Вытеснение по byte-бюджету истории вычитает ровно то, что
+    /// добавлялось, и уносит сообщения вытесненной записи.
+    #[test]
+    fn history_byte_eviction_subtracts_what_was_added() {
+        let params_bytes = graph(64).byte_size();
+        let single = params_bytes + "М.Ф".len() + 200 + 300;
+        let mut registry = JobRegistry::new(BackgroundJobConfig {
+            max_error_bytes_per_job: 200,
+            max_message_bytes_per_job: 300,
+            max_single_job_record_bytes: single,
+            // Помещаются ровно две записи без ошибок и сообщений.
+            max_history_bytes: 2 * (params_bytes + "М.Ф".len()),
+            ..BackgroundJobConfig::default()
+        });
+        for i in 1..=3u8 {
+            registry
+                .admit(id(i), "М.Ф".into(), (0, 1), graph(64), None, None, None, 0)
+                .map_err(|_| ())
+                .expect("принято");
+            registry.finish(id(i), JobStateDto::Completed, None, None);
+        }
+        assert_eq!(registry.history_len(), 2, "третья запись вытеснила первую");
+        assert!(
+            !registry.knows(id(1)),
+            "сообщения вытеснены вместе с записью"
+        );
+        assert!(registry.knows(id(2)) && registry.knows(id(3)));
     }
 
     #[test]
@@ -557,6 +785,79 @@ mod tests {
         assert!(config.validate().is_err());
         assert!(BackgroundJobConfig::default().validate().is_ok());
     }
+
+    /// Переполняющие значения публичной конфигурации отвергаются, а не
+    /// паникуют: сумма бюджетов считается `checked_add`.
+    #[test]
+    fn an_overflowing_config_is_rejected_without_panic() {
+        let config = BackgroundJobConfig {
+            max_error_bytes_per_job: usize::MAX,
+            max_message_bytes_per_job: 2,
+            ..BackgroundJobConfig::default()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    /// Admission с непровалидированной переполняющей конфигурацией
+    /// отвечает ловимым отказом ресурса, а не паникой debug-сборки.
+    #[test]
+    fn an_overflowing_admission_sum_is_a_resource_limit() {
+        // Реестр строится напрямую, минуя validate, — так admission
+        // обязан выдержать даже несогласованные значения.
+        let mut registry = JobRegistry::new(BackgroundJobConfig {
+            max_error_bytes_per_job: usize::MAX,
+            max_message_bytes_per_job: usize::MAX,
+            max_single_job_record_bytes: usize::MAX,
+            max_history_bytes: usize::MAX,
+            ..BackgroundJobConfig::default()
+        });
+        let error = registry
+            .admit(
+                id(1),
+                "Модуль.Метод".to_string(),
+                (0, 1),
+                graph(64),
+                None,
+                None,
+                None,
+                0,
+            )
+            .expect_err("переполнение суммы — отказ, не паника");
+        assert!(matches!(error, AdmissionError::ResourceLimit(_)));
+    }
+}
+
+// --- Host-профили сеансов заданий --------------------------------------
+
+/// Непрозрачный идентификатор host-профиля фоновых заданий, выданный
+/// [`crate::EngineBuilder::register_host_profile`]. Привязан к движку,
+/// зарегистрировавшему профиль: идентификатор чужого движка отвергается
+/// при выборе профиля ошибкой, без fallback на process-профиль.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct HostProfileId {
+    pub(crate) engine: u64,
+    pub(crate) index: u32,
+}
+
+/// Фабрика host-окружений сеансов фоновых заданий. Вызывается в потоке
+/// worker для каждого задания своего профиля; `Send + Sync` — одна
+/// фабрика разделяется всем пулом, а непереносимые сервисы сеанса
+/// (`Rc`-обёртки ФС, часов, сети) строятся внутри вызова и поток worker
+/// не покидают. Foreground-сервисы вызывающего `State` — его `files`,
+/// `network`, часы и вывод — в worker не копируются: профиль и есть их
+/// именованная замена.
+pub trait BackgroundStateFactory: Send + Sync {
+    /// Настраивает сеанс задания. Builder приходит с process-default
+    /// сервисами worker-движка (стандартные компоненты плюс
+    /// пользовательские библиотеки родительского движка); фабрика
+    /// ограничивает или подменяет их — например `deny_network` или
+    /// изолированная файловая система.
+    ///
+    /// # Errors
+    ///
+    /// Текст причины: задание завершается `Failed` с кодом
+    /// `HostProfileUnavailable`, worker остаётся жив.
+    fn configure(&self, builder: crate::StateBuilder) -> Result<crate::StateBuilder, String>;
 }
 
 // --- Пул workers -------------------------------------------------------
@@ -632,6 +933,9 @@ impl TargetTable {
             ));
         }
         if function.is_async {
+            // НЕ ИЗМЕРЕНО(JOB.ASYNC.TARGET): допустимость `Асинх`-цели и
+            // критерий её завершения не замерены; обычная функция-цель
+            // измерена и разрешена, async-цель отвергается синхронно.
             return Err(
                 "асинхронная цель фонового задания не поддержана до замера JOB.ASYNC.TARGET"
                     .to_string(),
@@ -641,13 +945,19 @@ impl TargetTable {
     }
 }
 
-/// `Send`-рецепт worker: текстовый образ каталога и ничего больше.
-/// Скрытого второго формата нет — worker разбирает тот же публичный
-/// `BytecodeImage::Configuration`, что пишет `--emit-bytecode`, один раз,
-/// и разделяет разобранные программы между своими сеансами.
+/// `Send`-рецепт worker: текстовый образ каталога, статические
+/// `LibraryDescriptor` пользовательских библиотек и символы
+/// препроцессора. Скрытого второго формата нет — worker разбирает тот же
+/// публичный `BytecodeImage::Configuration`, что пишет `--emit-bytecode`,
+/// один раз, и разделяет разобранные программы между своими сеансами.
 #[derive(Clone)]
 pub(crate) struct WorkerRecipe {
     pub image_text: Arc<str>,
+    /// Библиотеки, добавленные `register_library` родительского движка:
+    /// без них цель с пользовательским типом не слинкуется в worker.
+    pub libraries: Vec<bsl_rt::LibraryDescriptor>,
+    /// Символы условной компиляции — их видит динамический код задания.
+    pub symbols: bsl_syntax::PreprocSymbols,
 }
 
 /// Разделяемое состояние runtime: реестр под синхронным мьютексом и два
@@ -664,7 +974,31 @@ pub(crate) struct JobRuntimeShared {
     /// Реестр mailbox'ов временного хранилища родительского движка —
     /// публикации write-set'ов заданий идут сюда.
     pub temp_hub: Arc<bsl_rt::TempStorageHub>,
+    /// Копия конфигурации для чтения лимитов без лока реестра.
+    pub config: BackgroundJobConfig,
+    /// Фабрики host-профилей движка: индекс записи + 1 — это
+    /// `JobRecord::profile_index`; 0 — системный профиль без фабрики.
+    pub profiles: Arc<[Arc<dyn BackgroundStateFactory>]>,
+    /// Глобальный staging-бюджет временного хранилища всех живых заданий
+    /// (`max_live_staged_temp_bytes`).
+    pub staging_global: Arc<GlobalStagingBudget>,
+    /// Внешний sink представления сообщений заданий, если host его
+    /// зарегистрировал; история записи пишется до него и не теряется при
+    /// его backpressure.
+    pub message_display: Option<Arc<dyn bsl_rt::UserMessageSink + Send + Sync>>,
+    /// OS-потоки пула. Список живёт в разделяемом состоянии, потому что
+    /// соседей спавнит бутстраппер с потока первого worker; порядок локов
+    /// всюду один — сначала этот список, затем реестр.
+    pub threads: Mutex<Vec<std::thread::JoinHandle<()>>>,
+    /// Тестовый шлюз бутстрапа: пока держится, первый worker не спавнит
+    /// соседей и не берёт работу — тест наблюдает возврат первого
+    /// admission до запуска пула. Продакшен-путь шлюз не выставляет.
+    pub bootstrap_gate: Mutex<Option<Arc<BootstrapGate>>>,
 }
+
+/// Тестовый шлюз бутстрапа пула: флаг «удержан» под мьютексом и condvar
+/// освобождения.
+pub(crate) type BootstrapGate = (Mutex<bool>, Condvar);
 
 impl JobRuntimeShared {
     /// Все перечисленные задания terminal (неизвестные считаются
@@ -689,7 +1023,8 @@ impl JobRuntimeShared {
         key: Option<Arc<JobKeyDto>>,
         description: Option<String>,
         caller_token: Option<[u8; 16]>,
-    ) -> Result<JobSnapshotDto, SubmitError> {
+        profile_index: u32,
+    ) -> Result<JobSnapshotDto, HostError> {
         let id = self.id_source.next_id();
         let mut registry = self.registry.lock().expect("реестр без отравления");
         let snapshot = registry
@@ -701,13 +1036,17 @@ impl JobRuntimeShared {
                 key,
                 description,
                 caller_token,
+                profile_index,
             )
             .map_err(|error| match error {
-                AdmissionError::ResourceLimit(text) => SubmitError::Rejected(text),
-                AdmissionError::DuplicateKey => {
-                    SubmitError::Rejected("задание с таким ключом уже активно".to_string())
+                AdmissionError::ResourceLimit(text) => {
+                    HostError::new(HostErrorCode::ResourceLimit, text)
                 }
-                AdmissionError::Unavailable(_) => SubmitError::Unavailable,
+                AdmissionError::DuplicateKey => HostError::new(
+                    HostErrorCode::InvalidCall,
+                    "задание с таким ключом уже активно",
+                ),
+                AdmissionError::Unavailable(state) => unavailable_error(state),
             })?;
         if registry.state == RuntimeState::Cold {
             registry.state = RuntimeState::Starting;
@@ -723,13 +1062,21 @@ impl JobRuntimeShared {
         key: Option<Arc<JobKeyDto>>,
         description: Option<String>,
         caller_token: Option<[u8; 16]>,
-    ) -> Result<JobSnapshotDto, SubmitError> {
+        profile_index: u32,
+    ) -> Result<JobSnapshotDto, HostError> {
         let target = self
             .targets
             .resolve(method_name)
-            .map_err(SubmitError::BadTarget)?;
-        let snapshot =
-            self.submit_shared(method_name, target, params, key, description, caller_token)?;
+            .map_err(|text| HostError::new(HostErrorCode::InvalidCall, text))?;
+        let snapshot = self.submit_shared(
+            method_name,
+            target,
+            params,
+            key,
+            description,
+            caller_token,
+            profile_index,
+        )?;
         self.work_available.notify_one();
         // Helping-ожидание спит на terminal_watch без таймера: новое
         // задание в очереди — тоже его событие (появился кандидат на
@@ -738,15 +1085,41 @@ impl JobRuntimeShared {
         Ok(snapshot)
     }
 
+    /// Доступность live-методов: закрытый и сломанный runtime отвечают
+    /// типизированной ловимой ошибкой, а не тихим no-op; свойства уже
+    /// материализованных снимков при этом остаются читаемыми.
+    fn live_guard(registry: &JobRegistry) -> Result<(), HostError> {
+        match registry.state {
+            RuntimeState::Closed | RuntimeState::Broken => Err(unavailable_error(registry.state)),
+            _ => Ok(()),
+        }
+    }
+
+    /// Задание известно либо ошибка `JobExpired`: live-методы вытесненного
+    /// снимка не притворяются успешными и не скрывают потерю истории
+    /// пустым результатом.
+    fn known_guard(registry: &JobRegistry, id: JobId) -> Result<(), HostError> {
+        if registry.knows(id) {
+            return Ok(());
+        }
+        Err(HostError::new(
+            HostErrorCode::JobExpired,
+            "задание неизвестно: вытеснено из истории либо никогда не существовало",
+        ))
+    }
+
     /// Отмена задания. `Queued` завершается сразу; `Running` получает
-    /// взведённый флаг и завершится на границе кванта; terminal и
-    /// вытесненные — no-op (гонки повторной отмены — за
-    /// `JOB.CANCEL.RACES`). Отмена — не ошибка BSL: снимок получает
-    /// состояние «Отменено» без `ИнформацияОбОшибке`.
-    pub(crate) fn cancel(&self, id: JobId, end: Option<bsl_rt::BslDate>) {
+    /// взведённый флаг и завершится на границе кванта; повторная отмена и
+    /// отмена terminal — успешный no-op (ИЗМЕРЕНО, `JOB.CANCEL.RACES`).
+    /// Вытесненное из истории задание — ловимая `JobExpired`. Отмена — не
+    /// ошибка BSL: снимок получает «Отменено» без `ИнформацияОбОшибке`.
+    pub(crate) fn cancel(&self, id: JobId, end: Option<bsl_rt::BslDate>) -> Result<(), HostError> {
         let mut registry = self.registry.lock().expect("реестр без отравления");
+        Self::live_guard(&registry)?;
+        Self::known_guard(&registry, id)?;
         let Some(record) = registry.record(id) else {
-            return;
+            // Запись в истории: terminal, no-op.
+            return Ok(());
         };
         match record.snapshot.state {
             JobStateDto::Queued => {
@@ -768,45 +1141,83 @@ impl JobRuntimeShared {
             }
             _ => {}
         }
+        Ok(())
+    }
+
+    /// Свежие снимки всех `ids`, удержанные под текущим локом реестра.
+    /// Задание, известное на входе ожидания, но исчезнувшее к этому
+    /// моменту, вытеснено из истории — ловимая `JobExpired`, устаревший
+    /// снимок за свежий не выдаётся.
+    fn held_snapshots(
+        registry: &JobRegistry,
+        ids: &[JobId],
+    ) -> Result<Vec<Arc<JobSnapshotDto>>, HostError> {
+        ids.iter()
+            .map(|id| {
+                registry.snapshot(*id).ok_or_else(|| {
+                    HostError::new(
+                        HostErrorCode::JobExpired,
+                        "задание вытеснено из истории во время ожидания",
+                    )
+                })
+            })
+            .collect()
+    }
+
+    /// Флаги семантики менеджерного ожидания по снимкам, удержанным под
+    /// одним локом: (есть активные, есть изменившиеся, все terminal,
+    /// есть аварийные).
+    fn first_change_flags(
+        jobs: &[(JobId, bsl_rt::JobStateDto)],
+        held: &[Arc<JobSnapshotDto>],
+    ) -> (bool, bool, bool, bool) {
+        let mut any_active = false;
+        let mut any_changed = false;
+        let mut all_terminal = true;
+        let mut any_failed = false;
+        for ((_, initial), snapshot) in jobs.iter().zip(held) {
+            let state = snapshot.state;
+            if !state.is_terminal() {
+                any_active = true;
+                all_terminal = false;
+            }
+            if state != *initial {
+                any_changed = true;
+            }
+            if state == JobStateDto::Failed {
+                any_failed = true;
+            }
+        }
+        (any_active, any_changed, all_terminal, any_failed)
     }
 
     /// Ожидание по семантике синтакс-помощника: активных нет — сразу;
     /// с таймаутом — до первого изменения статуса; без — до завершения
-    /// всех либо первого аварийного.
+    /// всех либо первого аварийного. Возвращает свежие снимки всех
+    /// `jobs`, удержанные под финальным локом, — размер результата равен
+    /// размеру запроса, вытеснение во время ожидания — `JobExpired`.
     pub(crate) fn wait_first_change(
         &self,
         jobs: &[(JobId, bsl_rt::JobStateDto)],
         timeout: Option<Duration>,
-    ) {
+    ) -> Result<Vec<Arc<JobSnapshotDto>>, HostError> {
         let deadline = timeout.map(|t| std::time::Instant::now() + t);
+        let ids: Vec<JobId> = jobs.iter().map(|(id, _)| *id).collect();
         let mut registry = self.registry.lock().expect("реестр без отравления");
+        Self::live_guard(&registry)?;
+        for id in &ids {
+            Self::known_guard(&registry, *id)?;
+        }
         loop {
-            let mut any_active = false;
-            let mut any_changed = false;
-            let mut all_terminal = true;
-            let mut any_failed = false;
-            for (id, initial) in jobs {
-                let state = registry
-                    .snapshot(*id)
-                    .map(|snapshot| snapshot.state)
-                    .unwrap_or(JobStateDto::Completed);
-                if !state.is_terminal() {
-                    any_active = true;
-                    all_terminal = false;
-                }
-                if state != *initial {
-                    any_changed = true;
-                }
-                if state == JobStateDto::Failed {
-                    any_failed = true;
-                }
-            }
+            let held = Self::held_snapshots(&registry, &ids)?;
+            let (any_active, any_changed, all_terminal, any_failed) =
+                Self::first_change_flags(jobs, &held);
             if !any_active {
-                return;
+                return Ok(held);
             }
             match deadline {
-                Some(_) if any_changed => return,
-                None if all_terminal || any_failed => return,
+                Some(_) if any_changed => return Ok(held),
+                None if all_terminal || any_failed => return Ok(held),
                 _ => {}
             }
             match deadline {
@@ -819,7 +1230,7 @@ impl JobRuntimeShared {
                 Some(deadline) => {
                     let now = std::time::Instant::now();
                     let Some(left) = deadline.checked_duration_since(now) else {
-                        return;
+                        return Ok(held);
                     };
                     let (guard, _) = self
                         .terminal_watch
@@ -831,33 +1242,51 @@ impl JobRuntimeShared {
         }
     }
 
-    /// Сообщения задания: живая запись отдаёт (и при `remove` забирает)
-    /// свой FIFO; terminal — сообщения снимка истории (неизменяемы).
-    pub(crate) fn take_messages(&self, id: JobId, remove: bool) -> Vec<String> {
+    /// Сообщения задания: живая запись и terminal-история отдают (и при
+    /// `remove` атомарно забирают) свой FIFO — ИЗМЕРЕНО (`JOB.MESSAGES`).
+    /// Вытесненное задание — ловимая `JobExpired`.
+    pub(crate) fn take_messages(
+        &self,
+        id: JobId,
+        remove: bool,
+    ) -> Result<Vec<UserMessageDto>, HostError> {
         let mut registry = self.registry.lock().expect("реестр без отравления");
-        if let Some(record) = registry.record_mut(id) {
-            return if remove {
-                std::mem::take(&mut record.messages)
-            } else {
-                record.messages.clone()
-            };
-        }
-        registry
-            .snapshot(id)
-            .map(|snapshot| snapshot.messages.clone())
-            .unwrap_or_default()
+        Self::live_guard(&registry)?;
+        registry.take_messages(id, remove).ok_or_else(|| {
+            HostError::new(
+                HostErrorCode::JobExpired,
+                "задание неизвестно: вытеснено из истории либо никогда не существовало",
+            )
+        })
     }
 
     /// Блокирующее ожидание terminal-состояния всех `ids` — путь
     /// foreground-сеанса; worker вместо блокировки помогает пулу (см.
-    /// `WorkerJobService`).
-    pub(crate) fn wait_terminal_blocking(&self, ids: &[JobId], timeout: Option<Duration>) -> bool {
+    /// `WorkerJobService`). Неизвестное на входе задание — `JobExpired`;
+    /// задание, вытесненное УЖЕ ВО ВРЕМЯ ожидания, terminal, но его
+    /// свежего снимка больше нет — тоже `JobExpired`, а не устаревший
+    /// снимок. Снимки результата удерживаются под финальным локом.
+    pub(crate) fn wait_terminal_blocking(
+        &self,
+        ids: &[JobId],
+        timeout: Option<Duration>,
+    ) -> Result<bsl_rt::JobWaitOutcome, HostError> {
         let deadline = timeout.map(|t| std::time::Instant::now() + t);
         let mut registry = self.registry.lock().expect("реестр без отравления");
+        Self::live_guard(&registry)?;
+        for id in ids {
+            Self::known_guard(&registry, *id)?;
+        }
         loop {
             if Self::all_terminal(&registry, ids) {
-                return true;
+                return Ok(bsl_rt::JobWaitOutcome {
+                    completed: true,
+                    snapshots: Self::held_snapshots(&registry, ids)?,
+                });
             }
+            // Закрытие во время ожидания: ответ уже не придёт штатно —
+            // ловимая ошибка вместо вечного сна на отсоединённом worker.
+            Self::live_guard(&registry)?;
             match deadline {
                 None => {
                     registry = self
@@ -868,7 +1297,10 @@ impl JobRuntimeShared {
                 Some(deadline) => {
                     let now = std::time::Instant::now();
                     let Some(left) = deadline.checked_duration_since(now) else {
-                        return false;
+                        return Ok(bsl_rt::JobWaitOutcome {
+                            completed: false,
+                            snapshots: Self::held_snapshots(&registry, ids)?,
+                        });
                     };
                     let (guard, result) = self
                         .terminal_watch
@@ -878,7 +1310,10 @@ impl JobRuntimeShared {
                     if result.timed_out() {
                         // Последняя проверка под локом — событие могло
                         // прийти на границе таймаута.
-                        return Self::all_terminal(&registry, ids);
+                        return Ok(bsl_rt::JobWaitOutcome {
+                            completed: Self::all_terminal(&registry, ids),
+                            snapshots: Self::held_snapshots(&registry, ids)?,
+                        });
                     }
                 }
             }
@@ -892,7 +1327,6 @@ impl JobRuntimeShared {
 pub struct JobRuntime {
     shared: Arc<JobRuntimeShared>,
     workers: usize,
-    threads: Mutex<Vec<std::thread::JoinHandle<()>>>,
 }
 
 /// UUID v4 из ключей ОС — общий генератор идентификаторов и токенов.
@@ -916,30 +1350,37 @@ impl JobIdSource for SystemJobIds {
     }
 }
 
-/// Ошибка запуска задания — ловимая на стороне BSL.
-#[derive(Debug)]
-pub enum SubmitError {
-    /// Явный ресурсный лимит либо дублирующий ключ.
-    Rejected(String),
-    /// Цель не найдена или не годится (не экспортна, арность).
-    BadTarget(String),
-    /// Runtime закрыт или сломан.
-    Unavailable,
+/// Ошибка недоступного runtime по его состоянию — ловимая на стороне BSL.
+fn unavailable_error(state: RuntimeState) -> HostError {
+    match state {
+        RuntimeState::Broken => HostError::new(
+            HostErrorCode::RuntimeBroken,
+            "фоновый runtime сломан и не принимает задания",
+        ),
+        _ => HostError::new(
+            HostErrorCode::RuntimeClosed,
+            "фоновый runtime закрыт и не принимает задания",
+        ),
+    }
 }
 
 impl JobRuntime {
     /// Создаёт холодный runtime: потоков нет до первого admission.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         config: BackgroundJobConfig,
         recipe: WorkerRecipe,
         targets: TargetTable,
         id_source: Arc<dyn JobIdSource>,
         temp_hub: Arc<bsl_rt::TempStorageHub>,
+        profiles: Arc<[Arc<dyn BackgroundStateFactory>]>,
+        message_display: Option<Arc<dyn bsl_rt::UserMessageSink + Send + Sync>>,
     ) -> Self {
         let workers = config.effective_workers();
+        let staging_global = Arc::new(GlobalStagingBudget::new(config.max_live_staged_temp_bytes));
         Self {
             shared: Arc::new(JobRuntimeShared {
-                registry: Mutex::new(JobRegistry::new(config)),
+                registry: Mutex::new(JobRegistry::new(config.clone())),
                 work_available: Condvar::new(),
                 terminal_watch: Condvar::new(),
                 recipe,
@@ -947,10 +1388,25 @@ impl JobRuntime {
                 time_source: Arc::new(SystemJobTime),
                 targets,
                 temp_hub,
+                config,
+                profiles,
+                staging_global,
+                message_display,
+                threads: Mutex::new(Vec::new()),
+                bootstrap_gate: Mutex::new(None),
             }),
             workers,
-            threads: Mutex::new(Vec::new()),
         }
+    }
+
+    /// Ставит тестовый шлюз бутстрапа — только до первого admission.
+    #[cfg(test)]
+    fn set_bootstrap_gate(&self, gate: Arc<BootstrapGate>) {
+        *self
+            .shared
+            .bootstrap_gate
+            .lock()
+            .expect("шлюз без отравления") = Some(gate);
     }
 
     /// Запускает экспортный метод общего модуля в отдельном сеансе.
@@ -965,7 +1421,8 @@ impl JobRuntime {
         key: Option<Arc<JobKeyDto>>,
         description: Option<String>,
         caller_token: Option<[u8; 16]>,
-    ) -> Result<JobSnapshotDto, SubmitError> {
+        profile_index: u32,
+    ) -> Result<JobSnapshotDto, HostError> {
         let snapshot = self.shared.submit_shared(
             method_name,
             target,
@@ -973,6 +1430,7 @@ impl JobRuntime {
             key,
             description,
             caller_token,
+            profile_index,
         )?;
         self.ensure_workers();
         self.shared.work_available.notify_one();
@@ -981,30 +1439,34 @@ impl JobRuntime {
         Ok(snapshot)
     }
 
-    /// Ленивый запуск пула: потоки создаются один раз, после первого
-    /// admission. Паника создания потока — `Broken` для всего runtime.
+    /// Ленивый запуск пула: первый admission спавнит РОВНО ОДИН поток —
+    /// первого worker, который перед собственным циклом бутстрапит
+    /// соседей (`worker_bootstrap`). Возврат первого admission не ждёт
+    /// создания всего пула; паника создания потока — `Broken` для всего
+    /// runtime.
     fn ensure_workers(&self) {
-        let mut threads = self.threads.lock().expect("список потоков без отравления");
+        let mut threads = self
+            .shared
+            .threads
+            .lock()
+            .expect("список потоков без отравления");
         if !threads.is_empty() {
             return;
         }
-        for index in 0..self.workers {
-            let shared = Arc::clone(&self.shared);
-            let builder = std::thread::Builder::new().name(format!("bsl-job-worker-{index}"));
-            match builder.spawn(move || worker_supervisor(&shared)) {
-                Ok(handle) => threads.push(handle),
-                Err(_) => {
-                    let mut registry = self.shared.registry.lock().expect("реестр без отравления");
-                    registry.state = RuntimeState::Broken;
-                    fail_all_resident(&mut registry);
-                    self.shared.terminal_watch.notify_all();
-                    return;
-                }
+        let shared = Arc::clone(&self.shared);
+        let workers = self.workers;
+        let builder = std::thread::Builder::new().name("bsl-job-worker-0".to_string());
+        match builder.spawn(move || {
+            worker_bootstrap(&shared, workers);
+            worker_supervisor(&shared);
+        }) {
+            Ok(handle) => threads.push(handle),
+            Err(_) => {
+                let mut registry = self.shared.registry.lock().expect("реестр без отравления");
+                registry.state = RuntimeState::Broken;
+                fail_all_resident(&mut registry);
+                self.shared.terminal_watch.notify_all();
             }
-        }
-        let mut registry = self.shared.registry.lock().expect("реестр без отравления");
-        if registry.state == RuntimeState::Starting {
-            registry.state = RuntimeState::Running;
         }
     }
 
@@ -1014,18 +1476,21 @@ impl JobRuntime {
     ///
     /// # Errors
     ///
-    /// [`SubmitError`] с причиной.
+    /// [`HostError`] с причиной: `InvalidCall` для негодной цели и
+    /// дублирующего ключа, `ResourceLimit` для явных лимитов,
+    /// `RuntimeClosed`/`RuntimeBroken` для закрытого runtime.
     pub fn submit_by_name(
         &self,
         method_name: &str,
         params: Arc<SerializedValueGraph>,
         key: Option<Arc<JobKeyDto>>,
         description: Option<String>,
-    ) -> Result<JobSnapshotDto, SubmitError> {
-        self.submit_by_name_with_caller(method_name, params, key, description, None)
+    ) -> Result<JobSnapshotDto, HostError> {
+        self.submit_by_name_with_caller(method_name, params, key, description, None, 0)
     }
 
-    /// То же с token'ом временного хранилища вызывателя — путь сервисов.
+    /// То же с token'ом временного хранилища вызывателя и host-профилем —
+    /// путь сервисов.
     pub(crate) fn submit_by_name_with_caller(
         &self,
         method_name: &str,
@@ -1033,13 +1498,22 @@ impl JobRuntime {
         key: Option<Arc<JobKeyDto>>,
         description: Option<String>,
         caller_token: Option<[u8; 16]>,
-    ) -> Result<JobSnapshotDto, SubmitError> {
+        profile_index: u32,
+    ) -> Result<JobSnapshotDto, HostError> {
         let target = self
             .shared
             .targets
             .resolve(method_name)
-            .map_err(SubmitError::BadTarget)?;
-        self.submit(method_name, target, params, key, description, caller_token)
+            .map_err(|text| HostError::new(HostErrorCode::InvalidCall, text))?;
+        self.submit(
+            method_name,
+            target,
+            params,
+            key,
+            description,
+            caller_token,
+            profile_index,
+        )
     }
 
     /// Снимок задания по идентификатору.
@@ -1060,18 +1534,44 @@ impl JobRuntime {
             .snapshots()
     }
 
-    /// Ожидает terminal-состояния ВСЕХ перечисленных заданий (правило
-    /// any/all уточняется замером `JOB.WAIT.MANY`). `None` — без предела.
-    /// Возвращает `true`, если дождались; `false` — таймаут.
-    pub fn wait_terminal(&self, ids: &[JobId], timeout: Option<Duration>) -> bool {
-        self.shared.wait_terminal_blocking(ids, timeout)
+    /// Ожидает terminal-состояния ВСЕХ перечисленных заданий (ИЗМЕРЕНО,
+    /// `JOB.WAIT.MANY`). `None` — без предела. `Ok(true)` — дождались,
+    /// `Ok(false)` — таймаут.
+    ///
+    /// # Errors
+    ///
+    /// `JobExpired` для неизвестного задания на входе и для задания,
+    /// вытесненного из истории во время ожидания; `RuntimeClosed`/
+    /// `RuntimeBroken` после закрытия runtime.
+    pub fn wait_terminal(
+        &self,
+        ids: &[JobId],
+        timeout: Option<Duration>,
+    ) -> Result<bool, HostError> {
+        self.shared
+            .wait_terminal_blocking(ids, timeout)
+            .map(|outcome| outcome.completed)
     }
 
     /// Отмена задания: `Queued` — сразу, `Running` — кооперативно на
     /// границе кванта; повторная отмена и terminal — no-op.
-    pub fn cancel(&self, id: JobId) {
+    ///
+    /// # Errors
+    ///
+    /// Как у [`JobRuntime::wait_terminal`].
+    pub fn cancel(&self, id: JobId) -> Result<(), HostError> {
         let end = self.shared.time_source.wall_now();
-        self.shared.cancel(id, end);
+        self.shared.cancel(id, end)
+    }
+
+    /// Сообщения задания в порядке FIFO; `remove` атомарно забирает их —
+    /// и у живой записи, и у terminal (ИЗМЕРЕНО, `JOB.MESSAGES`).
+    ///
+    /// # Errors
+    ///
+    /// Как у [`JobRuntime::wait_terminal`].
+    pub fn take_messages(&self, id: JobId, remove: bool) -> Result<Vec<UserMessageDto>, HostError> {
+        self.shared.take_messages(id, remove)
     }
 
     /// Явное завершение runtime: queued отменяются сразу, running —
@@ -1106,8 +1606,13 @@ impl JobRuntime {
         self.shared.work_available.notify_all();
         self.shared.terminal_watch.notify_all();
 
-        let handles: Vec<std::thread::JoinHandle<()>> =
-            std::mem::take(&mut *self.threads.lock().expect("список потоков без отравления"));
+        let handles: Vec<std::thread::JoinHandle<()>> = std::mem::take(
+            &mut *self
+                .shared
+                .threads
+                .lock()
+                .expect("список потоков без отравления"),
+        );
         let deadline_at = std::time::Instant::now() + deadline;
         let mut detached_workers = 0usize;
         for handle in handles {
@@ -1165,32 +1670,113 @@ fn fail_all_resident(registry: &mut JobRegistry) {
             id,
             JobStateDto::Failed,
             None,
-            Some(Arc::new(JobErrorDto::from_text(
+            Some(JobErrorDto::from_text(
                 "фоновый runtime сломан и не принимает задания",
-            ))),
+            )),
         );
     }
 }
 
-/// Надзор за worker: паника ВНЕ границы задания перезапускает цикл
-/// заново (паника внутри задания ловится там же и роняет только его).
-/// Три последовательные паники переводят runtime в `Broken`: живые
-/// задания завершаются `Failed`, новые submissions получают ловимую
-/// ошибку, автоматического recovery нет.
+/// Бутстрап пула на потоке ПЕРВОГО worker: соседи спавнятся отсюда, а не
+/// из admission, поэтому первый submit возвращается после одного spawn,
+/// а не N. Переход `Starting -> Running` делает бутстраппер после
+/// последнего соседа; отказ spawn ломает runtime (`Broken`); закрытие во
+/// время `Starting` останавливает спавн перед следующим соседом, и все
+/// уже созданные handles остаются в разделяемом списке — shutdown их
+/// соединяет. Порядок локов: сначала список потоков, затем реестр —
+/// поэтому поздний spawn не может проскочить мимо взятого shutdown
+/// списка.
+fn worker_bootstrap(shared: &Arc<JobRuntimeShared>, workers: usize) {
+    wait_bootstrap_gate(shared);
+    for index in 1..workers {
+        let mut threads = shared
+            .threads
+            .lock()
+            .expect("список потоков без отравления");
+        {
+            let registry = shared.registry.lock().expect("реестр без отравления");
+            if matches!(registry.state, RuntimeState::Closed | RuntimeState::Broken) {
+                return;
+            }
+        }
+        let sibling = Arc::clone(shared);
+        let builder = std::thread::Builder::new().name(format!("bsl-job-worker-{index}"));
+        match builder.spawn(move || worker_supervisor(&sibling)) {
+            Ok(handle) => threads.push(handle),
+            Err(_) => {
+                drop(threads);
+                let mut registry = shared.registry.lock().expect("реестр без отравления");
+                registry.state = RuntimeState::Broken;
+                fail_all_resident(&mut registry);
+                drop(registry);
+                shared.terminal_watch.notify_all();
+                shared.work_available.notify_all();
+                return;
+            }
+        }
+    }
+    let mut registry = shared.registry.lock().expect("реестр без отравления");
+    if registry.state == RuntimeState::Starting {
+        registry.state = RuntimeState::Running;
+    }
+}
+
+/// Удержание тестового шлюза бутстрапа. Без шлюза — no-op; удержанный
+/// шлюз пережидается с оглядкой на состояние runtime: закрытие или
+/// поломка снимают бутстраппер и с шлюза. Пятидесятимиллисекундный тик
+/// существует только на тестовом пути с выставленным шлюзом.
+fn wait_bootstrap_gate(shared: &Arc<JobRuntimeShared>) {
+    let gate = shared
+        .bootstrap_gate
+        .lock()
+        .expect("шлюз без отравления")
+        .clone();
+    let Some(gate) = gate else {
+        return;
+    };
+    let (held, released) = &*gate;
+    let mut held_guard = held.lock().expect("шлюз без отравления");
+    while *held_guard {
+        {
+            let registry = shared.registry.lock().expect("реестр без отравления");
+            if matches!(registry.state, RuntimeState::Closed | RuntimeState::Broken) {
+                return;
+            }
+        }
+        let (guard, _) = released
+            .wait_timeout(held_guard, Duration::from_millis(50))
+            .expect("шлюз без отравления");
+        held_guard = guard;
+    }
+}
+
+/// Надзор за worker: паника ВНЕ границы задания роняет резидентов этого
+/// worker в `Failed` (их Drop-гарды, см. `RunningJob`) и создаёт замену —
+/// цикл перезапускается. Три ПОСЛЕДОВАТЕЛЬНЫЕ паники запуска — worker ни
+/// разу не довёл задание до terminal между ними — переводят runtime в
+/// `Broken`: живые задания завершаются `Failed`, новые submissions
+/// получают ловимую ошибку, автоматического recovery нет.
 fn worker_supervisor(shared: &Arc<JobRuntimeShared>) {
     let mut consecutive_panics = 0u32;
     loop {
+        let progress = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let progress_flag = Arc::clone(&progress);
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            worker_main(shared);
+            worker_main(shared, &progress_flag);
         }));
         match outcome {
             Ok(()) => return, // нормальный выход: runtime закрыт или сломан
             Err(_) => {
-                consecutive_panics += 1;
+                if progress.load(std::sync::atomic::Ordering::Relaxed) {
+                    consecutive_panics = 1;
+                } else {
+                    consecutive_panics += 1;
+                }
                 if consecutive_panics >= 3 {
                     let mut registry = shared.registry.lock().expect("реестр без отравления");
                     registry.state = RuntimeState::Broken;
                     fail_all_resident(&mut registry);
+                    drop(registry);
                     shared.terminal_watch.notify_all();
                     // Соседние worker'ы спят без таймера — поломку они
                     // обязаны увидеть по state, а не по случайному событию.
@@ -1206,7 +1792,7 @@ fn worker_supervisor(shared: &Arc<JobRuntimeShared>) {
 /// квантами, задание с припаркованным host-вызовом (`Waiting`) не мешает
 /// соседям, а когда все резиденты ждут — worker спит точно, до события
 /// (`wake_epoch`, очередь, отмена, закрытие), без таймерного поллинга.
-fn worker_main(shared: &Arc<JobRuntimeShared>) {
+fn worker_main(shared: &Arc<JobRuntimeShared>, progress: &std::sync::atomic::AtomicBool) {
     // Каталог разбирается один раз на worker; программы разделяются между
     // сеансами этого worker и не покидают его поток.
     let engine = match build_worker_engine(&shared.recipe) {
@@ -1221,24 +1807,50 @@ fn worker_main(shared: &Arc<JobRuntimeShared>) {
                     id,
                     JobStateDto::Failed,
                     None,
-                    Some(Arc::new(JobErrorDto::from_text(text.clone()))),
+                    Some(JobErrorDto::from_text(text.clone())),
                 );
             }
+            drop(registry);
             shared.terminal_watch.notify_all();
             return;
         }
     };
-    // Локальная FIFO резидентов: runnable чередуются бюджетными квантами,
-    // waiting опрашиваются вместе с ними (host-completions подбирает их
-    // собственный poll). Новый глобальный job извлекается только когда
-    // локально нет runnable-резидентов — по плану фоновых заданий.
-    let mut local: VecDeque<RunningJob> = VecDeque::new();
+    // Цикл резидентов общий с helping-драйвером (`drive_to_terminal`):
+    // worker живёт до закрытия runtime и при пустом наборе спит в
+    // ожидании работы.
+    drive_local(shared, &engine, VecDeque::new(), Some(progress), false);
+}
+
+/// Общий цикл резидентов worker и helping-драйвера. Локальная FIFO:
+/// runnable чередуются бюджетными квантами, waiting опрашиваются вместе
+/// с ними (host-completions подбирает их собственный poll), новый
+/// глобальный job извлекается, только когда локально нет
+/// runnable-резидентов, — по плану фоновых заданий. `drain` — режим
+/// helping-ожидания: выход, когда локальный набор пуст; припаркованный
+/// резидент при этом не пересиживается сном — поток подбирает очередные
+/// задания из глобальной FIFO, и pending HTTP не блокирует OS worker
+/// (критерий плана).
+fn drive_local(
+    shared: &Arc<JobRuntimeShared>,
+    engine: &crate::Engine,
+    mut local: VecDeque<RunningJob>,
+    progress: Option<&std::sync::atomic::AtomicBool>,
+    drain: bool,
+) {
+    let mark_progress = || {
+        if let Some(progress) = progress {
+            progress.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+    };
     // Снимок wake_epoch на момент последнего начала опроса ждущих
     // резидентов: спим, только если с тех пор не было ни одного
     // host-события. Событие между опросом и сном поднимает счётчик под
     // локом — пропущенных пробуждений нет.
     let mut seen_epoch = 0u64;
     loop {
+        if drain && local.is_empty() {
+            return;
+        }
         let mut runnable_locally = local.iter().any(|job| !job.waiting);
         let next_global = {
             let mut registry = shared.registry.lock().expect("реестр без отравления");
@@ -1246,14 +1858,20 @@ fn worker_main(shared: &Arc<JobRuntimeShared>) {
                 match registry.state {
                     RuntimeState::Closed | RuntimeState::Broken => {
                         // Закрытие на границе кванта — и есть кооперативная
-                        // точка: резиденты завершаются «Отменено».
+                        // точка: резиденты завершаются «Отменено». Сначала
+                        // terminal transitions под локом, а сами резиденты
+                        // дропаются ПОСЛЕ его отпускания: Drop-гард
+                        // резидента берёт этот же мьютекс.
                         drop(registry);
                         let end = shared.time_source.wall_now();
-                        let mut registry = shared.registry.lock().expect("реестр без отравления");
-                        for job in local.drain(..) {
-                            registry.finish(job.id, JobStateDto::Canceled, end, None);
+                        {
+                            let mut registry =
+                                shared.registry.lock().expect("реестр без отравления");
+                            for job in local.iter() {
+                                registry.finish(job.id, JobStateDto::Canceled, end, None);
+                            }
                         }
-                        drop(registry);
+                        local.clear();
                         shared.terminal_watch.notify_all();
                         return;
                     }
@@ -1298,7 +1916,7 @@ fn worker_main(shared: &Arc<JobRuntimeShared>) {
             }
         };
         if let Some(id) = next_global {
-            match start_job(shared, &engine, id) {
+            match start_job(shared, engine, id) {
                 None => continue,
                 Some(Ok(job)) => local.push_back(job),
                 Some(Err(error)) => {
@@ -1312,7 +1930,7 @@ fn worker_main(shared: &Arc<JobRuntimeShared>) {
         };
         // Паника BSL-исполнения ловится на границе кванта и роняет только
         // это задание; соседи-резиденты продолжают.
-        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| job.poll(&engine)));
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| job.poll(engine)));
         match outcome {
             Ok(Ok(bsl_vm::ProgramPoll::Complete(..))) => {
                 if commit_staged(shared, &job) {
@@ -1329,6 +1947,7 @@ fn worker_main(shared: &Arc<JobRuntimeShared>) {
                         )),
                     );
                 }
+                mark_progress();
             }
             Ok(Ok(bsl_vm::ProgramPoll::Runnable)) => {
                 job.waiting = false;
@@ -1340,13 +1959,19 @@ fn worker_main(shared: &Arc<JobRuntimeShared>) {
             }
             Ok(Err(JobPollError::Canceled)) => {
                 finish_job(shared, job.id, JobStateDto::Canceled, None);
+                mark_progress();
             }
             Ok(Err(JobPollError::Failed(error))) => {
                 // Неперехваченная BSL-ошибка ПУБЛИКУЕТ write-set — измерено
-                // JOB.TEMP.FAILURE; неудача публикации остаётся вторичной,
-                // основная ошибка BSL важнее.
-                let _ = commit_staged(shared, &job);
+                // JOB.TEMP.FAILURE; неудача публикации остаётся вторичной
+                // причиной в cause-цепочке, основная ошибка BSL важнее.
+                let error = if commit_staged(shared, &job) {
+                    error
+                } else {
+                    with_commit_failure_cause(error)
+                };
                 finish_job(shared, job.id, JobStateDto::Failed, Some(error));
+                mark_progress();
             }
             Err(_) => {
                 finish_job(
@@ -1357,66 +1982,153 @@ fn worker_main(shared: &Arc<JobRuntimeShared>) {
                         "исполнение задания прервано паникой",
                     )),
                 );
+                mark_progress();
             }
         }
     }
 }
 
 /// Движок worker строится из того же публичного образа, которым ходит
-/// `--emit-bytecode`: стандартный состав компонентов. Пользовательские
-/// библиотеки host и профили возможностей приезжают вместе с
-/// `BackgroundStateFactory` на дальнейших этапах плана.
+/// `--emit-bytecode`: стандартный состав компонентов плюс
+/// пользовательские библиотеки родительского движка и его символы
+/// препроцессора — цель с пользовательским типом линкуется, а
+/// динамический код задания видит те же `#Если`.
 fn build_worker_engine(recipe: &WorkerRecipe) -> Result<crate::Engine, String> {
     let image = bsl_bytecode::parse_image(&recipe.image_text).map_err(|e| e.to_string())?;
     let bsl_bytecode::BytecodeImage::Configuration { catalog, entry: _ } = image else {
         return Err("рецепт worker обязан быть конфигурацией".to_string());
     };
-    crate::Engine::builder()
+    let mut builder = crate::Engine::builder();
+    for library in &recipe.libraries {
+        builder = builder.register_library(*library);
+    }
+    builder
+        .preproc_symbols_all(recipe.symbols)
         .configuration_image(catalog, false)
         .build()
         .map_err(|e| e.to_string())
 }
 
-/// Перехват `Сообщить` задания: строки stdout уходят в FIFO-историю
-/// записи реестра. Под локом — только push готовой строки; форматирование
-/// уже сделано VM (`bsl_format::format_value`). Неблокирующий sink
-/// host-представления (план, этап 8) подключится к этому же месту.
-struct JobMessageWriter {
+/// Маршрут сообщений задания: неблокирующий sink его сеанса. Сначала DTO
+/// добавляется к записи реестра под коротким локом (бюджет
+/// `max_message_bytes_per_job`), затем — уже без лока — уходит внешнему
+/// sink представления, если host его зарегистрировал. Backpressure
+/// внешнего sink не отменяет уже записанную историю и не повторяется
+/// скрыто: `Сообщить()` возвращает ловимую ошибку, повторный вызов
+/// создаёт новое сообщение.
+struct JobMessageRoute {
     shared: Arc<JobRuntimeShared>,
     id: JobId,
-    buffer: Vec<u8>,
 }
 
-impl std::io::Write for JobMessageWriter {
-    fn write(&mut self, chunk: &[u8]) -> std::io::Result<usize> {
-        self.buffer.extend_from_slice(chunk);
-        while let Some(newline) = self.buffer.iter().position(|byte| *byte == b'\n') {
-            let line: Vec<u8> = self.buffer.drain(..=newline).collect();
-            let text = String::from_utf8_lossy(&line[..line.len() - 1]).into_owned();
+impl bsl_rt::UserMessageSink for JobMessageRoute {
+    fn enqueue(&self, message: &UserMessageDto) -> Result<(), HostError> {
+        {
             let mut registry = self.shared.registry.lock().expect("реестр без отравления");
-            if let Some(record) = registry.record_mut(self.id) {
-                record.messages.push(text);
-            }
+            registry.push_message(self.id, message.clone())?;
         }
-        Ok(chunk.len())
+        if let Some(display) = &self.shared.message_display {
+            display.enqueue(message)?;
+        }
+        Ok(())
     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
+    /// Остаток кумулятивного бюджета `max_message_bytes_per_job` этой
+    /// записи: им ограничивается сериализация `КлючДанных` и
+    /// `ИдентификаторНазначения` ДО крупной аллокации. Для уже
+    /// terminal-записи предела нет — `enqueue` всё равно ответит
+    /// `JobExpired`, и подменять его ошибкой бюджета нельзя.
+    fn message_bytes_left(&self) -> Option<usize> {
+        let registry = self.shared.registry.lock().expect("реестр без отравления");
+        let record = registry.record(self.id)?;
+        Some(
+            self.shared
+                .config
+                .max_message_bytes_per_job
+                .saturating_sub(record.message_bytes),
+        )
     }
 }
 
 /// Резидент worker: изолированный сеанс одного задания с pollable
 /// VM-прогоном. Начатый резидент закреплён за своим worker — `Rc`-графы
 /// его сеанса поток не покидают.
+///
+/// Drop-гард: резидент, дропнутый БЕЗ terminal transition — разматывание
+/// паники worker, замена worker супервизором, — завершает свою запись
+/// `Failed`, будит ожидающих и не оставляет задание вечным `Running`.
+/// Host-handles отменяет дроп VM (`AsyncState::drop`), staging
+/// откатывается дропом сеанса, его кредиты возвращает `StagingBudget`.
+/// Штатные пути уже сделали terminal transition к моменту дропа, и гард
+/// для них — no-op. Ни один дроп резидента не происходит под локом
+/// реестра — гард берёт его сам.
 struct RunningJob {
     id: JobId,
+    shared: Arc<JobRuntimeShared>,
     state: crate::State,
     module: crate::Module,
     vm: bsl_vm::ProgramExecution,
     /// Последний poll вернул `Waiting`: задание ждёт host-completion и
     /// runnable-резидентом не считается.
     waiting: bool,
+}
+
+impl Drop for RunningJob {
+    fn drop(&mut self) {
+        let end = self.shared.time_source.wall_now();
+        // `lock()` без `expect`: гард срабатывает и при разматывании
+        // паники — отравленный мьютекс здесь не повод для двойной паники.
+        let Ok(mut registry) = self.shared.registry.lock() else {
+            return;
+        };
+        let finished = registry.finish(
+            self.id,
+            JobStateDto::Failed,
+            end,
+            Some(JobErrorDto::from_text(
+                "исполнение задания прервано сбоем worker",
+            )),
+        );
+        drop(registry);
+        if finished {
+            self.shared.terminal_watch.notify_all();
+        }
+    }
+}
+
+/// Гард окна запуска: между `Queued -> Running` и передачей записи под
+/// Drop-гард готового резидента задание не должно застрять вечным
+/// `Running`, если подготовка сеанса паникует (паника worker вне границы
+/// задания). Взведённый гард завершает запись `Failed`; штатные выходы
+/// его разряжают.
+struct StartGuard<'a> {
+    shared: &'a Arc<JobRuntimeShared>,
+    id: JobId,
+    armed: bool,
+}
+
+impl Drop for StartGuard<'_> {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        let end = self.shared.time_source.wall_now();
+        let Ok(mut registry) = self.shared.registry.lock() else {
+            return;
+        };
+        let finished = registry.finish(
+            self.id,
+            JobStateDto::Failed,
+            end,
+            Some(JobErrorDto::from_text(
+                "запуск задания прерван сбоем worker",
+            )),
+        );
+        drop(registry);
+        if finished {
+            self.shared.terminal_watch.notify_all();
+        }
+    }
 }
 
 /// Стартует резидента: `Queued -> Running`, entry-программа цели,
@@ -1427,44 +2139,66 @@ fn start_job(
     engine: &crate::Engine,
     id: JobId,
 ) -> Option<Result<RunningJob, JobErrorDto>> {
-    let (target, params, cancel_requested, caller_token) = {
-        let mut registry = shared.registry.lock().expect("реестр без отравления");
-        let begin = shared.time_source.wall_now();
-        let record = registry.record_mut(id)?;
-        record.snapshot.state = JobStateDto::Running;
-        record.snapshot.begin = begin;
-        (
-            record.target,
-            Arc::clone(&record.snapshot.params),
-            Arc::clone(&record.cancel_requested),
-            record.caller_token,
-        )
+    let mut guard = StartGuard {
+        shared,
+        id,
+        armed: true,
     };
-    Some(
-        prepare_job(shared, engine, id, target, &params, caller_token).map(
-            |(state, module, mut vm)| {
-                vm.set_cancel_flag(cancel_requested);
-                // Пробуждение из потока транспорта: поднять wake_epoch под
-                // локом и разбудить пул. Сон worker сверяет счётчик со
-                // своим снимком, поэтому пробуждение не теряется, даже
-                // если пришло между опросом резидентов и засыпанием.
-                let waker_shared = Arc::clone(shared);
-                vm.set_host_waker(std::sync::Arc::new(move || {
-                    let mut registry = waker_shared.registry.lock().expect("реестр без отравления");
-                    registry.wake_epoch += 1;
-                    drop(registry);
-                    waker_shared.work_available.notify_all();
-                }));
-                RunningJob {
-                    id,
-                    state,
-                    module,
-                    vm,
-                    waiting: false,
-                }
-            },
-        ),
-    )
+    let begin = shared.time_source.wall_now();
+    let taken = {
+        let mut registry = shared.registry.lock().expect("реестр без отравления");
+        let record = registry.record_mut(id);
+        match record {
+            None => None,
+            Some(record) => {
+                record.snapshot.state = JobStateDto::Running;
+                record.snapshot.begin = begin;
+                Some((
+                    record.target,
+                    Arc::clone(&record.snapshot.params),
+                    Arc::clone(&record.cancel_requested),
+                    record.caller_token,
+                    record.profile_index,
+                ))
+            }
+        }
+    };
+    let Some((target, params, cancel_requested, caller_token, profile_index)) = taken else {
+        guard.armed = false;
+        return None;
+    };
+    let prepared = prepare_job(
+        shared,
+        engine,
+        id,
+        target,
+        &params,
+        caller_token,
+        profile_index,
+    );
+    guard.armed = false;
+    Some(prepared.map(|(state, module, mut vm)| {
+        vm.set_cancel_flag(cancel_requested);
+        // Пробуждение из потока транспорта: поднять wake_epoch под
+        // локом и разбудить пул. Сон worker сверяет счётчик со
+        // своим снимком, поэтому пробуждение не теряется, даже
+        // если пришло между опросом резидентов и засыпанием.
+        let waker_shared = Arc::clone(shared);
+        vm.set_host_waker(std::sync::Arc::new(move || {
+            let mut registry = waker_shared.registry.lock().expect("реестр без отравления");
+            registry.wake_epoch += 1;
+            drop(registry);
+            waker_shared.work_available.notify_all();
+        }));
+        RunningJob {
+            id,
+            shared: Arc::clone(shared),
+            state,
+            module,
+            vm,
+            waiting: false,
+        }
+    }))
 }
 
 /// Исход неудачного кванта: отмена — не ошибка BSL, снимок получает
@@ -1505,6 +2239,11 @@ impl RunningJob {
 /// rollback — просто дроп staging — после отмены (`JOB.TEMP.CANCEL`),
 /// паники и инфраструктурных сбоев. `false` — сеанс вызывателя уже
 /// закрыт и публикация не состоялась.
+// НЕ ИЗМЕРЕНО(JOB.TEMP.CALLER_CLOSE_RACE): гонка закрытия сеанса
+// вызывателя с terminal commit на платформе не замерена; выбрано «без
+// частичной публикации»: успешный BSL-job при закрытом получателе
+// становится Failed, что закреплено тестом
+// `a_closed_caller_session_fails_the_publishing_job`.
 fn commit_staged(shared: &Arc<JobRuntimeShared>, job: &RunningJob) -> bool {
     let Some(session) = job.state.host.env.temp_storage() else {
         return true;
@@ -1520,6 +2259,22 @@ fn commit_staged(shared: &Arc<JobRuntimeShared>, job: &RunningJob) -> bool {
     shared.temp_hub.commit(caller, writes)
 }
 
+/// Пристраивает отказ terminal commit в конец cause-цепочки ошибки:
+/// при неперехваченной BSL-ошибке и закрытом сеансе-получателе основная
+/// ошибка остаётся BSL-ошибкой, а закрытый mailbox виден вторичной
+/// причиной, не подменяя её (измеренный порядок публикаций —
+/// `JOB.TEMP.FAILURE`, гонка закрытия — `JOB.TEMP.CALLER_CLOSE_RACE`).
+fn with_commit_failure_cause(mut error: JobErrorDto) -> JobErrorDto {
+    let mut tail = &mut error;
+    while tail.cause.is_some() {
+        tail = tail.cause.as_mut().expect("проверено условием цикла");
+    }
+    tail.cause = Some(Box::new(JobErrorDto::from_text(
+        "сеанс-получатель временного хранилища закрыт",
+    )));
+    error
+}
+
 /// Terminal transition резидента с пробуждением ожидающих.
 fn finish_job(
     shared: &Arc<JobRuntimeShared>,
@@ -1529,7 +2284,7 @@ fn finish_job(
 ) {
     let end = shared.time_source.wall_now();
     let mut registry = shared.registry.lock().expect("реестр без отравления");
-    registry.finish(id, state, end, error.map(Arc::new));
+    registry.finish(id, state, end, error);
     drop(registry);
     shared.terminal_watch.notify_all();
 }
@@ -1538,6 +2293,12 @@ fn finish_job(
 /// руками — аргументы приходят константами чанка, вызов идёт обычным
 /// `CallImported` по числовому манифесту. Возвращает изолированный сеанс,
 /// модуль entry и pollable-прогон с постоянным квантованием.
+// НЕ ИЗМЕРЕНО(JOB.MODULE.INIT): момент инициализации тел серверных общих
+// модулей в сеансе задания (lazy при первом касании или eager до цели),
+// поведение цикла, ошибки и повторной попытки не замерены; выбрана
+// ленивая инициализация на сеанс — та же `ModuleInitState`, что у
+// обычного прогона.
+#[allow(clippy::too_many_arguments)]
 fn prepare_job(
     shared: &Arc<JobRuntimeShared>,
     engine: &crate::Engine,
@@ -1545,6 +2306,7 @@ fn prepare_job(
     target: (u32, u16),
     params: &SerializedValueGraph,
     caller_token: Option<[u8; 16]>,
+    profile_index: u32,
 ) -> Result<(crate::State, crate::Module, bsl_vm::ProgramExecution), JobErrorDto> {
     let catalog = engine
         .catalog()
@@ -1660,29 +2422,68 @@ fn prepare_job(
         })
         .map_err(|error| JobErrorDto::from_text(error.to_string()))?;
 
-    let mut state = engine.new_state();
-    // `Сообщить` задания пишет в FIFO-историю записи, а не в stdout
-    // процесса: историю читает `ПолучитьСообщенияПользователю`.
-    state.host.stdout = Box::new(JobMessageWriter {
-        shared: Arc::clone(shared),
-        id,
-        buffer: Vec::new(),
-    });
+    // Сеанс задания строит выбранный host-профиль: системный (0) — это
+    // process-default сервисы worker-движка, зарегистрированный — его
+    // фабрика. Ошибка фабрики без паники завершает ТОЛЬКО этот job как
+    // `Failed` с кодом `HostProfileUnavailable`; worker остаётся жив.
+    let state_builder = match profile_index.checked_sub(1) {
+        None => engine.state_builder(),
+        Some(index) => {
+            let Some(factory) = shared.profiles.get(index as usize) else {
+                // Защитная ветка: выбор профиля валидируется на
+                // `StateBuilder::host_profile`, сюда попадает только
+                // рассинхронизация таблиц.
+                return Err(JobErrorDto::from_text(
+                    "host-профиль недоступен: не зарегистрирован в этом движке",
+                ));
+            };
+            factory.configure(engine.state_builder()).map_err(|text| {
+                JobErrorDto::from_text(format!("host-профиль недоступен: {text}"))
+            })?
+        }
+    };
+    let mut state = state_builder.build();
+    // stdout задания — сток: `Сообщить` идёт через sink сообщений ниже, а
+    // прямых писателей stdout в фоновом сеансе не остаётся.
+    state.host.stdout = Box::new(std::io::sink());
+    // `Сообщить` задания кладёт владеющий DTO в FIFO-историю записи (её
+    // читает `ПолучитьСообщенияПользователю`), затем — внешнему sink
+    // представления, если он зарегистрирован.
+    state
+        .host
+        .env
+        .set_message_sink(std::rc::Rc::new(JobMessageRoute {
+            shared: Arc::clone(shared),
+            id,
+        }));
     // Сеанс задания получает СВОЁ временное хранилище со ссылкой на
-    // вызывателя: запись по его адресу — staging до terminal.
+    // вызывателя: запись по его адресу — staging до terminal, под
+    // per-job и глобальным кредитами. Mailbox сеанса регистрируется в
+    // ОБЩЕМ hub движка: дочернее задание публикует write-set сюда — и
+    // только сюда, транзитивного повышения capability нет.
     let session_token = random_uuid();
     {
         let session = std::rc::Rc::new(std::cell::RefCell::new(match caller_token {
-            Some(caller) => {
-                bsl_rt::TempStorageSession::for_job(session_token, caller, state.host.env.random())
-            }
+            Some(caller) => bsl_rt::TempStorageSession::for_job(
+                session_token,
+                caller,
+                state.host.env.random(),
+                bsl_rt::StagingBudget::new(
+                    shared.config.max_staged_temp_bytes_per_job,
+                    Arc::clone(&shared.staging_global),
+                ),
+            ),
             None => bsl_rt::TempStorageSession::new(session_token, state.host.env.random()),
         }));
+        shared
+            .temp_hub
+            .register(session_token, session.borrow().mailbox());
         state.host.env.set_temp_storage(session);
     }
     // Вложенные задания идут в ОБЩИЙ реестр родительского runtime, а не в
     // пул воркерного движка: сервис сеанса подменяется worker-обёрткой с
-    // helping-ожиданием.
+    // helping-ожиданием. Профиль наследуется как есть — повысить
+    // возможности дочернему заданию негде.
     state
         .host
         .env
@@ -1690,6 +2491,7 @@ fn prepare_job(
             shared: Arc::clone(shared),
             engine: engine.clone(),
             session_token,
+            profile_index,
         }));
     let mut vm = bsl_vm::ProgramExecution::start_with_registry_and_scheduler(
         &module.program,
@@ -1710,8 +2512,10 @@ fn prepare_job(
 }
 
 /// Разрешает цель `Модуль.Метод` по каталогу: неглобальный общий модуль,
-/// экспортная не-async функция или процедура. Детали validation
-/// уточняются замером `JOB.EXECUTE.VALIDATION`.
+/// экспортная не-async функция или процедура — тестовая поверхность;
+/// рабочий путь идёт через `TargetTable::resolve` (ИЗМЕРЕНО,
+/// `JOB.EXECUTE.VALIDATION`: синхронная валидация цели).
+#[cfg(test)]
 pub(crate) fn resolve_target(
     catalog: &bsl_bytecode::ConfigurationProgram,
     method_name: &str,
@@ -1767,10 +2571,14 @@ pub(crate) fn runtime_for_engine(
         config,
         WorkerRecipe {
             image_text: Arc::from(text),
+            libraries: engine.extra_libraries().to_vec(),
+            symbols: engine.preproc_symbols(),
         },
         TargetTable::from_catalog(catalog),
         Arc::new(SystemJobIds),
         Arc::clone(engine.temp_hub()),
+        engine.job_profiles(),
+        engine.job_message_display(),
     ))
 }
 
@@ -1817,6 +2625,7 @@ mod pool_tests {
             .expect("runtime собирается");
         assert!(
             runtime
+                .shared
                 .threads
                 .lock()
                 .expect("список потоков без отравления")
@@ -1833,17 +2642,171 @@ mod pool_tests {
                 None,
                 None,
                 None,
+                0,
             )
             .expect("задание принято");
         assert!(
             !runtime
+                .shared
                 .threads
                 .lock()
                 .expect("список потоков без отравления")
                 .is_empty(),
             "первый admission поднимает пул"
         );
-        assert!(runtime.wait_terminal(&[snapshot.id], Some(Duration::from_secs(30))));
+        assert!(
+            runtime
+                .wait_terminal(&[snapshot.id], Some(Duration::from_secs(30)))
+                .expect("ожидание без ошибок")
+        );
+    }
+
+    /// Первый успешный admission возвращается ДО полного запуска пула:
+    /// удержанный тестовый шлюз не даёт бутстрапу спавнить соседей и
+    /// брать работу, а submit при этом уже вернул снимок `Queued` — ровно
+    /// один поток, состояние `Starting`. После открытия шлюза пул
+    /// достраивается до `workers` и доводит задание.
+    #[test]
+    fn the_first_admission_returns_before_the_pool_is_fully_started() {
+        let engine = engine();
+        let runtime = runtime_for_engine(
+            &engine,
+            BackgroundJobConfig {
+                workers: Some(4),
+                ..BackgroundJobConfig::default()
+            },
+        )
+        .expect("runtime собирается");
+        let gate: Arc<BootstrapGate> = Arc::new((Mutex::new(true), Condvar::new()));
+        runtime.set_bootstrap_gate(Arc::clone(&gate));
+        let target = resolve_target(engine.catalog().unwrap(), "Служебный.Сложить")
+            .expect("цель разрешается");
+        let snapshot = runtime
+            .submit(
+                "Служебный.Сложить",
+                target,
+                params(&[number(1), number(2)]),
+                None,
+                None,
+                None,
+                0,
+            )
+            .expect("задание принято при удержанном бутстрапе");
+        // Submit уже вернулся, а пул стоит на шлюзе: ровно один поток
+        // (бутстраппер), состояние Starting, задание ещё Queued.
+        assert_eq!(
+            runtime
+                .shared
+                .threads
+                .lock()
+                .expect("список потоков без отравления")
+                .len(),
+            1,
+            "admission спавнит ровно одного бутстраппера"
+        );
+        {
+            let registry = runtime
+                .shared
+                .registry
+                .lock()
+                .expect("реестр без отравления");
+            assert_eq!(registry.state, RuntimeState::Starting);
+        }
+        assert_eq!(
+            runtime.snapshot(snapshot.id).expect("снимок").state,
+            JobStateDto::Queued,
+            "до открытия шлюза задание не берётся в работу"
+        );
+        // Открытый шлюз достраивает пул и доводит задание.
+        *gate.0.lock().expect("шлюз без отравления") = false;
+        gate.1.notify_all();
+        assert!(
+            runtime
+                .wait_terminal(&[snapshot.id], Some(Duration::from_secs(30)))
+                .expect("ожидание без ошибок")
+        );
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            let spawned = runtime
+                .shared
+                .threads
+                .lock()
+                .expect("список потоков без отравления")
+                .len();
+            if spawned == 4 {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "пул обязан достроиться до workers, потоков {spawned}"
+            );
+            std::thread::yield_now();
+        }
+        {
+            let registry = runtime
+                .shared
+                .registry
+                .lock()
+                .expect("реестр без отравления");
+            assert_eq!(registry.state, RuntimeState::Running);
+        }
+        assert_eq!(
+            runtime.snapshot(snapshot.id).expect("снимок").state,
+            JobStateDto::Completed
+        );
+    }
+
+    /// Shutdown во время `Starting` безопасен: бутстраппер снимается и со
+    /// шлюза, очередь отменяется, ни один поток не отсоединяется, новые
+    /// submissions получают ловимую ошибку закрытого runtime.
+    #[test]
+    fn a_shutdown_during_starting_is_safe() {
+        let engine = engine();
+        let runtime = runtime_for_engine(
+            &engine,
+            BackgroundJobConfig {
+                workers: Some(4),
+                ..BackgroundJobConfig::default()
+            },
+        )
+        .expect("runtime собирается");
+        let gate: Arc<BootstrapGate> = Arc::new((Mutex::new(true), Condvar::new()));
+        runtime.set_bootstrap_gate(Arc::clone(&gate));
+        let target = resolve_target(engine.catalog().unwrap(), "Служебный.Сложить")
+            .expect("цель разрешается");
+        let snapshot = runtime
+            .submit(
+                "Служебный.Сложить",
+                target,
+                params(&[number(1), number(2)]),
+                None,
+                None,
+                None,
+                0,
+            )
+            .expect("задание принято");
+        let report = runtime.shutdown(Duration::from_secs(10));
+        assert_eq!(
+            report.detached_workers, 0,
+            "удержанный шлюзом бутстраппер обязан выйти по закрытию"
+        );
+        assert_eq!(
+            runtime.snapshot(snapshot.id).expect("снимок").state,
+            JobStateDto::Canceled,
+            "queued-задание отменяется закрытием"
+        );
+        let error = runtime
+            .submit(
+                "Служебный.Сложить",
+                target,
+                params(&[number(1), number(2)]),
+                None,
+                None,
+                None,
+                0,
+            )
+            .expect_err("закрытый runtime отвергает задания");
+        assert_eq!(error.code, bsl_rt::HostErrorCode::RuntimeClosed);
     }
 
     #[test]
@@ -1861,10 +2824,15 @@ mod pool_tests {
                 None,
                 None,
                 None,
+                0,
             )
             .expect("задание принято");
         assert_eq!(snapshot.state, JobStateDto::Queued);
-        assert!(runtime.wait_terminal(&[snapshot.id], Some(Duration::from_secs(30))));
+        assert!(
+            runtime
+                .wait_terminal(&[snapshot.id], Some(Duration::from_secs(30)))
+                .expect("ожидание без ошибок")
+        );
         let done = runtime
             .snapshot(snapshot.id)
             .expect("снимок после terminal");
@@ -1884,9 +2852,13 @@ mod pool_tests {
         let target = resolve_target(engine.catalog().unwrap(), "Служебный.Упасть")
             .expect("цель разрешается");
         let snapshot = runtime
-            .submit("Служебный.Упасть", target, params(&[]), None, None, None)
+            .submit("Служебный.Упасть", target, params(&[]), None, None, None, 0)
             .expect("задание принято");
-        assert!(runtime.wait_terminal(&[snapshot.id], Some(Duration::from_secs(30))));
+        assert!(
+            runtime
+                .wait_terminal(&[snapshot.id], Some(Duration::from_secs(30)))
+                .expect("ожидание без ошибок")
+        );
         let done = runtime.snapshot(snapshot.id).expect("снимок");
         assert_eq!(done.state, JobStateDto::Failed);
         let error = done.error.as_ref().expect("ошибка задания");
@@ -1912,9 +2884,14 @@ mod pool_tests {
                 None,
                 None,
                 None,
+                0,
             )
             .expect("задание принято");
-        assert!(runtime.wait_terminal(&[snapshot.id], Some(Duration::from_secs(30))));
+        assert!(
+            runtime
+                .wait_terminal(&[snapshot.id], Some(Duration::from_secs(30)))
+                .expect("ожидание без ошибок")
+        );
         let done = runtime.snapshot(snapshot.id).expect("снимок");
         assert_eq!(done.state, JobStateDto::Failed);
     }
@@ -1952,12 +2929,17 @@ mod pool_tests {
                         None,
                         None,
                         None,
+                        0,
                     )
                     .expect("задание принято")
                     .id
             })
             .collect();
-        assert!(runtime.wait_terminal(&ids, Some(Duration::from_secs(60))));
+        assert!(
+            runtime
+                .wait_terminal(&ids, Some(Duration::from_secs(60)))
+                .expect("ожидание без ошибок")
+        );
         for id in ids {
             assert_eq!(
                 runtime.snapshot(id).expect("снимок").state,
@@ -1966,13 +2948,329 @@ mod pool_tests {
         }
     }
 
-    #[test]
-    fn waiting_with_a_timeout_returns_false_for_a_queued_job_without_workers() {
+    /// Общая сцена окна helping-ожидания: задание принято без пула,
+    /// очередь вычищена, запись переведена в Running; тестовый шлюз
+    /// держит ожидание МЕЖДУ проверкой предиката и парковкой, задание
+    /// завершается и notify уходит именно в этом окне.
+    fn helping_window_scenario(first_change: bool) {
         let engine = engine();
         let runtime = runtime_for_engine(&engine, BackgroundJobConfig::default())
             .expect("runtime собирается");
-        // Ложный идентификатор: задания нет — считается terminal (вытеснен).
-        assert!(runtime.wait_terminal(&[JobId([9; 16])], Some(Duration::from_millis(10))));
+        let target = resolve_target(engine.catalog().unwrap(), "Служебный.Сложить")
+            .expect("цель разрешается");
+        let snapshot = runtime
+            .shared
+            .submit_shared(
+                "Служебный.Сложить",
+                target,
+                params(&[number(1), number(2)]),
+                None,
+                None,
+                None,
+                0,
+            )
+            .expect("задание принято");
+        let id = snapshot.id;
+        {
+            let mut registry = runtime
+                .shared
+                .registry
+                .lock()
+                .expect("реестр без отравления");
+            registry.queue.clear();
+            registry
+                .record_mut(id)
+                .expect("живая запись")
+                .snapshot
+                .state = JobStateDto::Running;
+        }
+        let gate = Arc::new(HelpingWindowGate {
+            target: id,
+            held: Mutex::new(true),
+            released: Condvar::new(),
+            entered: std::sync::atomic::AtomicBool::new(false),
+        });
+        *HELPING_WINDOW_GATE.lock().expect("шлюз без отравления") = Some(Arc::clone(&gate));
+        let (result_sender, result_receiver) = std::sync::mpsc::channel();
+        let shared = Arc::clone(&runtime.shared);
+        std::thread::spawn(move || {
+            // Сервис не `Send` из-за движка — поток строит свой.
+            let worker_engine = self::engine();
+            let service = WorkerJobService {
+                shared,
+                engine: worker_engine,
+                session_token: [5; 16],
+                profile_index: 0,
+            };
+            let state = if first_change {
+                bsl_rt::BackgroundJobService::wait_first_change(
+                    &service,
+                    &[(id, JobStateDto::Running)],
+                    None,
+                )
+                .map(|held| held[0].state)
+            } else {
+                bsl_rt::BackgroundJobService::wait_terminal(&service, &[id], None)
+                    .map(|outcome| outcome.snapshots[0].state)
+            };
+            let _ = result_sender.send(state);
+        });
+        // Дождаться входа ожидания в окно.
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while !gate.entered.load(std::sync::atomic::Ordering::SeqCst) {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "ожидание не вошло в окно шлюза"
+            );
+            std::thread::yield_now();
+        }
+        // Terminal transition и «теряемое» уведомление — именно в окне,
+        // до начала парковки.
+        {
+            let mut registry = runtime
+                .shared
+                .registry
+                .lock()
+                .expect("реестр без отравления");
+            registry.finish(id, JobStateDto::Completed, None, None);
+        }
+        runtime.shared.terminal_watch.notify_all();
+        // Шлюз открывается: ожидание идёт к парковке и обязано
+        // перечитать предикат под guard, а не уснуть до дедлайна.
+        *gate.held.lock().expect("шлюз без отравления") = false;
+        gate.released.notify_all();
+        let state = result_receiver
+            .recv_timeout(Duration::from_secs(10))
+            .expect("terminal-событие в окне не должно теряться парковкой")
+            .expect("ожидание без ошибок");
+        assert_eq!(state, JobStateDto::Completed);
+        *HELPING_WINDOW_GATE.lock().expect("шлюз без отравления") = None;
+    }
+
+    /// Terminal-событие в окне «предикат проверен, парковка ещё не
+    /// началась» не теряется ни одной из форм helping-ожидания: полный
+    /// предикат перечитывается под guard, уходящим в `wait_timeout`.
+    #[test]
+    fn a_terminal_event_in_the_helping_window_is_not_lost() {
+        helping_window_scenario(false);
+        helping_window_scenario(true);
+    }
+
+    /// Helping-ожидание первого изменения паркуется на `terminal_watch`
+    /// до события: за сотни миллисекунд тихого ожидания счётчик парковок
+    /// растёт на единицы, а не на сотни двухмиллисекундных тиков — тест
+    /// исключает периодические пробуждения без события.
+    #[test]
+    fn wait_first_change_parks_without_periodic_wakeups() {
+        let engine = engine();
+        let runtime = runtime_for_engine(&engine, BackgroundJobConfig::default())
+            .expect("runtime собирается");
+        // Задание принимается в реестр БЕЗ запуска пула (submit_shared не
+        // спавнит потоки), очередь вычищается, а запись переводится в
+        // Running вручную: helping-ожиданию некому помогать и не от кого
+        // дождаться изменения — остаётся только спать.
+        let target = resolve_target(engine.catalog().unwrap(), "Служебный.Сложить")
+            .expect("цель разрешается");
+        let snapshot = runtime
+            .shared
+            .submit_shared(
+                "Служебный.Сложить",
+                target,
+                params(&[number(1), number(2)]),
+                None,
+                None,
+                None,
+                0,
+            )
+            .expect("задание принято");
+        {
+            let mut registry = runtime
+                .shared
+                .registry
+                .lock()
+                .expect("реестр без отравления");
+            registry.queue.clear();
+            registry
+                .record_mut(snapshot.id)
+                .expect("живая запись")
+                .snapshot
+                .state = JobStateDto::Running;
+        }
+        let parks_before = FIRST_CHANGE_PARKS.load(std::sync::atomic::Ordering::Relaxed);
+        let shared = Arc::clone(&runtime.shared);
+        let id = snapshot.id;
+        let waiter = std::thread::spawn(move || {
+            // Сервис не `Send` из-за движка — поток строит свой.
+            let worker_engine = self::engine();
+            let service = WorkerJobService {
+                shared,
+                engine: worker_engine,
+                session_token: [3; 16],
+                profile_index: 0,
+            };
+            bsl_rt::BackgroundJobService::wait_first_change(
+                &service,
+                &[(id, JobStateDto::Running)],
+                None,
+            )
+        });
+        std::thread::sleep(Duration::from_millis(300));
+        // Изменение публикуется штатной парой finish + notify — ожидание
+        // просыпается от события, а не от таймера.
+        {
+            let mut registry = runtime
+                .shared
+                .registry
+                .lock()
+                .expect("реестр без отравления");
+            registry.finish(id, JobStateDto::Completed, None, None);
+        }
+        runtime.shared.terminal_watch.notify_all();
+        let held = waiter
+            .join()
+            .expect("поток ожидания")
+            .expect("ожидание без ошибок");
+        assert_eq!(held.len(), 1);
+        assert_eq!(held[0].state, JobStateDto::Completed);
+        let parks = FIRST_CHANGE_PARKS.load(std::sync::atomic::Ordering::Relaxed) - parks_before;
+        assert!(
+            parks <= 8,
+            "за 300 мс тихого ожидания {parks} парковок — таймерный поллинг вернулся"
+        );
+    }
+
+    /// Неперехваченная BSL-ошибка при закрытом сеансе-получателе: BSL-ошибка
+    /// остаётся основной, отказ terminal commit — вторичной причиной в
+    /// `cause`, а не молча проглоченным результатом `commit_staged`.
+    #[test]
+    fn a_failed_commit_after_a_bsl_error_becomes_a_secondary_cause() {
+        let engine = crate::Engine::builder()
+            .common_module(
+                "Служебный",
+                "Процедура ПишетИПадает(Знач Адрес) Экспорт\n\
+                     ПоместитьВоВременноеХранилище(\"из задания\", Адрес);\n\
+                     ВызватьИсключение \"падение задания\";\n\
+                 КонецПроцедуры",
+            )
+            .build()
+            .expect("движок с каталогом");
+        let runtime = runtime_for_engine(&engine, BackgroundJobConfig::default())
+            .expect("runtime собирается");
+        // Сеанс-вызыватель регистрируется в hub и закрывается ДО запуска
+        // задания: staging пройдёт (он не смотрит в hub), а terminal
+        // commit гарантированно встретит закрытый mailbox — без гонок.
+        let caller_token = [7u8; 16];
+        {
+            let session =
+                bsl_rt::TempStorageSession::new(caller_token, bsl_rt::HostEnv::process().random());
+            engine.temp_hub().register(caller_token, session.mailbox());
+        }
+        let address = format!(
+            "e1cib/tempstorage/{}?seanceId={}",
+            bsl_rt::uuid::format(&[9u8; 16]),
+            bsl_rt::uuid::format(&caller_token)
+        );
+        let target = resolve_target(engine.catalog().unwrap(), "Служебный.ПишетИПадает")
+            .expect("цель разрешается");
+        let snapshot = runtime
+            .submit(
+                "Служебный.ПишетИПадает",
+                target,
+                params(&[bsl_rt::BslValue::Str(bsl_rt::BslString::from_str(&address))]),
+                None,
+                None,
+                Some(caller_token),
+                0,
+            )
+            .expect("задание принято");
+        assert!(
+            runtime
+                .wait_terminal(&[snapshot.id], Some(Duration::from_secs(30)))
+                .expect("ожидание без ошибок")
+        );
+        let done = runtime.snapshot(snapshot.id).expect("снимок");
+        assert_eq!(done.state, JobStateDto::Failed);
+        let error = done.error.as_ref().expect("ошибка задания");
+        assert!(
+            error.brief.contains("падение задания"),
+            "основной обязана остаться BSL-ошибка: {}",
+            error.brief
+        );
+        let mut causes = Vec::new();
+        let mut tail = error.cause.as_deref();
+        while let Some(cause) = tail {
+            causes.push(cause.brief.clone());
+            tail = cause.cause.as_deref();
+        }
+        assert!(
+            causes
+                .iter()
+                .any(|cause| cause.contains("сеанс-получатель временного хранилища закрыт")),
+            "отказ commit обязан быть вторичной причиной: {causes:?}"
+        );
+    }
+
+    #[test]
+    fn waiting_for_an_unknown_job_is_a_job_expired_error() {
+        let engine = engine();
+        let runtime = runtime_for_engine(&engine, BackgroundJobConfig::default())
+            .expect("runtime собирается");
+        // Ложный идентификатор: live-метод не притворяется успешным —
+        // ловимая ошибка с кодом JobExpired.
+        let error = runtime
+            .wait_terminal(&[JobId([9; 16])], Some(Duration::from_millis(10)))
+            .expect_err("неизвестное задание — ошибка");
+        assert_eq!(error.code, bsl_rt::HostErrorCode::JobExpired);
+    }
+}
+
+/// Счётчик парковок helping-ожидания первого изменения — пробник для
+/// теста `wait_first_change_parks_without_periodic_wakeups`: ожидание
+/// спит на `terminal_watch` до события, и за сотни миллисекунд тихого
+/// ожидания счётчик растёт на единицы, а не на сотни таймерных тиков.
+static FIRST_CHANGE_PARKS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Тестовый шлюз окна helping-ожиданий: удерживает поток МЕЖДУ проверкой
+/// предиката и парковкой — ровно там, где terminal-уведомление терялось
+/// бы без повторной проверки под guard. Тест завершает задание в этом
+/// окне и убеждается, что ожидание возвращается сразу, а не спит до
+/// дедлайна (`a_terminal_event_in_the_helping_window_is_not_lost`).
+#[cfg(test)]
+struct HelpingWindowGate {
+    /// Пауза срабатывает только для ожиданий, среди целей которых это
+    /// задание, — параллельные тесты с другими заданиями не задеваются.
+    target: JobId,
+    held: Mutex<bool>,
+    released: Condvar,
+    entered: std::sync::atomic::AtomicBool,
+}
+
+#[cfg(test)]
+static HELPING_WINDOW_GATE: Mutex<Option<Arc<HelpingWindowGate>>> = Mutex::new(None);
+
+/// Пауза в окне «предикат проверен, парковка ещё не началась». Вне
+/// тестов и без выставленного шлюза — пустышка.
+fn helping_window_pause(ids: &[JobId]) {
+    #[cfg(not(test))]
+    let _ = ids;
+    #[cfg(test)]
+    {
+        let gate = HELPING_WINDOW_GATE
+            .lock()
+            .expect("шлюз без отравления")
+            .clone();
+        let Some(gate) = gate else {
+            return;
+        };
+        if !ids.contains(&gate.target) {
+            return;
+        }
+        gate.entered
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        let mut held = gate.held.lock().expect("шлюз без отравления");
+        while *held {
+            held = gate.released.wait(held).expect("шлюз без отравления");
+        }
     }
 }
 
@@ -1980,17 +3278,23 @@ mod pool_tests {
 /// пул — поток-родитель ПОМОГАЕТ: пока свои задания не terminal, он
 /// исполняет чужие из глобальной FIFO. Это разблокирует вложенное
 /// ожидание при полностью занятом пуле (два родителя, ждущие детей,
-/// доводят их сами). Полный pending-механизм плана — `PendingHostCall` с
-/// парковкой execution — приходит вместе с переводом синхронного HTTP;
-/// helping не меняет ABI и наблюдаемой семантики ожидания.
+/// доводят их сами); helping не меняет ABI и наблюдаемой семантики
+/// ожидания.
 pub(crate) struct WorkerJobService {
     pub shared: Arc<JobRuntimeShared>,
     /// Клон worker-движка: живёт только в потоке этого worker.
     pub engine: crate::Engine,
     /// Token хранилища СВОЕГО job-сеанса: дочерние задания публикуются в
     /// него, а не в сеанс исходного foreground — транзитивного повышения
-    /// capability нет (план, `JOB.TEMP.NESTED_CAPABILITY`).
+    /// capability нет.
+    // НЕ ИЗМЕРЕНО(JOB.TEMP.NESTED_CAPABILITY): может ли дочерний job
+    // платформы писать по адресу исходного foreground-сеанса, не замерено;
+    // выбрана capability только непосредственного родителя — теснее
+    // некуда, расширить после замера легче, чем сузить.
     pub session_token: [u8; 16],
+    /// Host-профиль этого job-сеанса: дочерние задания наследуют его —
+    /// другого профиля сервису сеанса не передать.
+    pub profile_index: u32,
 }
 
 impl bsl_rt::BackgroundJobService for WorkerJobService {
@@ -2000,7 +3304,7 @@ impl bsl_rt::BackgroundJobService for WorkerJobService {
         params: Arc<SerializedValueGraph>,
         key: Option<Arc<bsl_rt::JobKeyDto>>,
         description: Option<String>,
-    ) -> Result<Arc<JobSnapshotDto>, String> {
+    ) -> Result<Arc<JobSnapshotDto>, HostError> {
         self.shared
             .submit_by_name_shared(
                 method_name,
@@ -2008,12 +3312,9 @@ impl bsl_rt::BackgroundJobService for WorkerJobService {
                 key,
                 description,
                 Some(self.session_token),
+                self.profile_index,
             )
             .map(Arc::new)
-            .map_err(|error| match error {
-                SubmitError::Rejected(text) | SubmitError::BadTarget(text) => text,
-                SubmitError::Unavailable => "фоновый runtime закрыт или сломан".to_string(),
-            })
     }
 
     fn snapshot(&self, id: JobId) -> Option<Arc<JobSnapshotDto>> {
@@ -2032,22 +3333,37 @@ impl bsl_rt::BackgroundJobService for WorkerJobService {
             .snapshots()
     }
 
-    fn wait_terminal(&self, ids: &[JobId], timeout: Option<Duration>) -> bool {
+    fn wait_terminal(
+        &self,
+        ids: &[JobId],
+        timeout: Option<Duration>,
+    ) -> Result<bsl_rt::JobWaitOutcome, HostError> {
         let deadline = timeout.map(|t| std::time::Instant::now() + t);
+        {
+            let registry = self.shared.registry.lock().expect("реестр без отравления");
+            JobRuntimeShared::live_guard(&registry)?;
+            for id in ids {
+                JobRuntimeShared::known_guard(&registry, *id)?;
+            }
+        }
         loop {
             let next = {
-                let registry = self.shared.registry.lock().expect("реестр без отравления");
-                if JobRuntimeShared::all_terminal(&registry, ids) {
-                    return true;
-                }
-                if matches!(registry.state, RuntimeState::Closed | RuntimeState::Broken) {
-                    return JobRuntimeShared::all_terminal(&registry, ids);
-                }
-                drop(registry);
-                if deadline.is_some_and(|deadline| std::time::Instant::now() >= deadline) {
-                    return false;
-                }
                 let mut registry = self.shared.registry.lock().expect("реестр без отравления");
+                // Снимки результата удерживаются под тем же локом, что и
+                // финальная проверка: вытеснение между ними невозможно.
+                if JobRuntimeShared::all_terminal(&registry, ids) {
+                    return Ok(bsl_rt::JobWaitOutcome {
+                        completed: true,
+                        snapshots: JobRuntimeShared::held_snapshots(&registry, ids)?,
+                    });
+                }
+                JobRuntimeShared::live_guard(&registry)?;
+                if deadline.is_some_and(|deadline| std::time::Instant::now() >= deadline) {
+                    return Ok(bsl_rt::JobWaitOutcome {
+                        completed: false,
+                        snapshots: JobRuntimeShared::held_snapshots(&registry, ids)?,
+                    });
+                }
                 registry.queue.pop_front()
             };
             match next {
@@ -2056,12 +3372,21 @@ impl bsl_rt::BackgroundJobService for WorkerJobService {
                     drive_to_terminal(&self.shared, &self.engine, id);
                 }
                 None => {
-                    // Некому помогать — точное ожидание: terminal-события
-                    // детей, новое задание в очереди (submit будит
-                    // terminal_watch) и дедлайн. Условия перечитываются
-                    // внешним циклом.
+                    helping_window_pause(ids);
+                    // Некому помогать — точное ожидание. Перед парковкой
+                    // ПОЛНЫЙ предикат перечитывается под тем же guard,
+                    // что уходит в `wait_timeout`: terminal-событие,
+                    // случившееся после проверки внешнего цикла (его лок
+                    // уже отпущен), меняет реестр только под этим локом,
+                    // поэтому его notify потеряться не может — либо
+                    // предикат уже истинен и парковки нет, либо notify
+                    // придёт в начатое ожидание.
                     let registry = self.shared.registry.lock().expect("реестр без отравления");
-                    if registry.queue.is_empty() {
+                    let should_park = registry.queue.is_empty()
+                        && !JobRuntimeShared::all_terminal(&registry, ids)
+                        && JobRuntimeShared::live_guard(&registry).is_ok()
+                        && !deadline.is_some_and(|deadline| std::time::Instant::now() >= deadline);
+                    if should_park {
                         let left = deadline
                             .map(|deadline| {
                                 deadline.saturating_duration_since(std::time::Instant::now())
@@ -2078,56 +3403,56 @@ impl bsl_rt::BackgroundJobService for WorkerJobService {
         }
     }
 
-    fn cancel(&self, id: JobId) -> Result<(), String> {
+    fn cancel(&self, id: JobId) -> Result<(), HostError> {
         let end = self.shared.time_source.wall_now();
-        self.shared.cancel(id, end);
-        Ok(())
+        self.shared.cancel(id, end)
     }
 
-    fn take_messages(&self, id: JobId, remove: bool) -> Vec<String> {
+    fn take_messages(&self, id: JobId, remove: bool) -> Result<Vec<UserMessageDto>, HostError> {
         self.shared.take_messages(id, remove)
     }
 
-    fn wait_first_change(&self, jobs: &[(JobId, bsl_rt::JobStateDto)], timeout: Option<Duration>) {
+    fn graph_limits(&self) -> bsl_rt::GraphLimits {
+        graph_limits_for(&self.shared.config)
+    }
+
+    fn wait_first_change(
+        &self,
+        jobs: &[(JobId, bsl_rt::JobStateDto)],
+        timeout: Option<Duration>,
+    ) -> Result<Vec<Arc<JobSnapshotDto>>, HostError> {
         // Worker не блокируется впустую: между проверками помогает пулу.
         let deadline = timeout.map(|t| std::time::Instant::now() + t);
+        let ids: Vec<JobId> = jobs.iter().map(|(id, _)| *id).collect();
+        {
+            let registry = self.shared.registry.lock().expect("реестр без отравления");
+            JobRuntimeShared::live_guard(&registry)?;
+            for id in &ids {
+                JobRuntimeShared::known_guard(&registry, *id)?;
+            }
+        }
         loop {
-            let (any_active, any_changed, all_terminal, any_failed) = {
+            let (held, any_active, any_changed, all_terminal, any_failed) = {
                 let registry = self.shared.registry.lock().expect("реестр без отравления");
-                let mut any_active = false;
-                let mut any_changed = false;
-                let mut all_terminal = true;
-                let mut any_failed = false;
-                for (id, initial) in jobs {
-                    let state = registry
-                        .snapshot(*id)
-                        .map(|snapshot| snapshot.state)
-                        .unwrap_or(JobStateDto::Completed);
-                    if !state.is_terminal() {
-                        any_active = true;
-                        all_terminal = false;
-                    }
-                    if state != *initial {
-                        any_changed = true;
-                    }
-                    if state == JobStateDto::Failed {
-                        any_failed = true;
-                    }
-                }
-                (any_active, any_changed, all_terminal, any_failed)
+                // Снимки удерживаются под тем же локом, что и проверка
+                // условий: результат не устаревает и не сжимается.
+                let held = JobRuntimeShared::held_snapshots(&registry, &ids)?;
+                let (any_active, any_changed, all_terminal, any_failed) =
+                    JobRuntimeShared::first_change_flags(jobs, &held);
+                (held, any_active, any_changed, all_terminal, any_failed)
             };
             if !any_active {
-                return;
+                return Ok(held);
             }
             match deadline {
                 Some(deadline) => {
                     if any_changed || std::time::Instant::now() >= deadline {
-                        return;
+                        return Ok(held);
                     }
                 }
                 None => {
                     if all_terminal || any_failed {
-                        return;
+                        return Ok(held);
                     }
                 }
             }
@@ -2138,93 +3463,64 @@ impl bsl_rt::BackgroundJobService for WorkerJobService {
             match next {
                 Some(id) => drive_to_terminal(&self.shared, &self.engine, id),
                 None => {
+                    helping_window_pause(&ids);
+                    // Некому помогать — точное ожидание, как в helping
+                    // `wait_terminal`: перед парковкой ПОЛНЫЙ предикат
+                    // первого изменения перечитывается под тем же guard,
+                    // что уходит в `wait_timeout`, — изменение статуса
+                    // между проверкой внешнего цикла и парковкой не
+                    // теряется. Ошибка вытеснения здесь гасит парковку:
+                    // внешний виток вернёт ту же `JobExpired`.
                     let registry = self.shared.registry.lock().expect("реестр без отравления");
-                    let _ = self
-                        .shared
-                        .terminal_watch
-                        .wait_timeout(registry, Duration::from_millis(2))
-                        .expect("реестр без отравления");
+                    let should_park = registry.queue.is_empty()
+                        && !deadline.is_some_and(|deadline| std::time::Instant::now() >= deadline)
+                        && match JobRuntimeShared::held_snapshots(&registry, &ids) {
+                            Err(_) => false,
+                            Ok(held) => {
+                                let (any_active, any_changed, all_terminal, any_failed) =
+                                    JobRuntimeShared::first_change_flags(jobs, &held);
+                                any_active
+                                    && !(deadline.is_some() && any_changed)
+                                    && !(deadline.is_none() && (all_terminal || any_failed))
+                            }
+                        };
+                    if should_park {
+                        let left = deadline
+                            .map(|deadline| {
+                                deadline.saturating_duration_since(std::time::Instant::now())
+                            })
+                            .unwrap_or(Duration::from_secs(3600));
+                        FIRST_CHANGE_PARKS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        let _ = self
+                            .shared
+                            .terminal_watch
+                            .wait_timeout(registry, left)
+                            .expect("реестр без отравления");
+                    }
                 }
             }
         }
     }
 }
 
-/// Доводит одно задание до terminal в текущем потоке — мини-драйвер
-/// helping-ожидания. `Waiting`-паузы пережидаются коротким сном.
+/// Доводит задание до terminal в текущем потоке — helping-ожидание.
+/// Общий цикл резидентов работает в drain-режиме: пока доводимое задание
+/// припарковано на host-операции, поток подбирает следующие задания из
+/// глобальной очереди, а не пересиживает паузу сном — pending HTTP не
+/// блокирует OS worker (критерий плана фоновых заданий). Возврат — когда
+/// локальный набор пуст: доводимое задание и все подобранные по пути
+/// terminal.
 fn drive_to_terminal(shared: &Arc<JobRuntimeShared>, engine: &crate::Engine, id: JobId) {
-    let mut job = match start_job(shared, engine, id) {
+    let mut local: VecDeque<RunningJob> = VecDeque::new();
+    match start_job(shared, engine, id) {
         None => return,
-        Some(Ok(job)) => job,
+        Some(Ok(job)) => local.push_back(job),
         Some(Err(error)) => {
             finish_job(shared, id, JobStateDto::Failed, Some(error));
             return;
         }
-    };
-    loop {
-        // Снимок счётчика host-событий ДО кванта: завершение, пришедшее
-        // во время кванта, поднимет счётчик, и сон ниже не состоится.
-        let seen_epoch = {
-            shared
-                .registry
-                .lock()
-                .expect("реестр без отравления")
-                .wake_epoch
-        };
-        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| job.poll(engine)));
-        match outcome {
-            Ok(Ok(bsl_vm::ProgramPoll::Complete(..))) => {
-                if commit_staged(shared, &job) {
-                    finish_job(shared, job.id, JobStateDto::Completed, None);
-                } else {
-                    finish_job(
-                        shared,
-                        job.id,
-                        JobStateDto::Failed,
-                        Some(JobErrorDto::from_text(
-                            "сеанс-получатель временного хранилища закрыт",
-                        )),
-                    );
-                }
-                return;
-            }
-            Ok(Ok(bsl_vm::ProgramPoll::Runnable)) => {}
-            Ok(Ok(bsl_vm::ProgramPoll::Waiting)) => {
-                // Доводимое задание ждёт host-завершения: точный сон до
-                // события (host-операция, отмена, закрытие) — как в
-                // worker_main, только для одного резидента.
-                let mut registry = shared.registry.lock().expect("реестр без отравления");
-                while registry.wake_epoch == seen_epoch
-                    && !matches!(registry.state, RuntimeState::Closed | RuntimeState::Broken)
-                {
-                    registry = shared
-                        .work_available
-                        .wait(registry)
-                        .expect("реестр без отравления");
-                }
-            }
-            Ok(Err(JobPollError::Canceled)) => {
-                finish_job(shared, job.id, JobStateDto::Canceled, None);
-                return;
-            }
-            Ok(Err(JobPollError::Failed(error))) => {
-                let _ = commit_staged(shared, &job);
-                finish_job(shared, job.id, JobStateDto::Failed, Some(error));
-                return;
-            }
-            Err(_) => {
-                finish_job(
-                    shared,
-                    job.id,
-                    JobStateDto::Failed,
-                    Some(JobErrorDto::from_text(
-                        "исполнение задания прервано паникой",
-                    )),
-                );
-                return;
-            }
-        }
     }
+    drive_local(shared, engine, local, None, true);
 }
 
 /// Мост сервиса: `Rc`-обёртка над разделяемым runtime — то, что native
@@ -2234,6 +3530,9 @@ pub(crate) struct EngineJobService {
     /// Token временного хранилища сеанса-вызывателя: задания публикуют
     /// write-set'ы в его mailbox.
     pub caller_token: [u8; 16],
+    /// Host-профиль, выбранный `StateBuilder::host_profile`: задания
+    /// этого сеанса и их потомки строят host-окружение по нему.
+    pub profile_index: u32,
 }
 
 impl bsl_rt::BackgroundJobService for EngineJobService {
@@ -2243,7 +3542,7 @@ impl bsl_rt::BackgroundJobService for EngineJobService {
         params: Arc<SerializedValueGraph>,
         key: Option<Arc<bsl_rt::JobKeyDto>>,
         description: Option<String>,
-    ) -> Result<Arc<JobSnapshotDto>, String> {
+    ) -> Result<Arc<JobSnapshotDto>, HostError> {
         self.runtime
             .submit_by_name_with_caller(
                 method_name,
@@ -2251,12 +3550,9 @@ impl bsl_rt::BackgroundJobService for EngineJobService {
                 key,
                 description,
                 Some(self.caller_token),
+                self.profile_index,
             )
             .map(Arc::new)
-            .map_err(|error| match error {
-                SubmitError::Rejected(text) | SubmitError::BadTarget(text) => text,
-                SubmitError::Unavailable => "фоновый runtime закрыт или сломан".to_string(),
-            })
     }
 
     fn snapshot(&self, id: JobId) -> Option<Arc<JobSnapshotDto>> {
@@ -2267,20 +3563,41 @@ impl bsl_rt::BackgroundJobService for EngineJobService {
         self.runtime.snapshots()
     }
 
-    fn wait_terminal(&self, ids: &[JobId], timeout: Option<Duration>) -> bool {
-        self.runtime.wait_terminal(ids, timeout)
+    fn wait_terminal(
+        &self,
+        ids: &[JobId],
+        timeout: Option<Duration>,
+    ) -> Result<bsl_rt::JobWaitOutcome, HostError> {
+        self.runtime.shared.wait_terminal_blocking(ids, timeout)
     }
 
-    fn cancel(&self, id: JobId) -> Result<(), String> {
-        self.runtime.cancel(id);
-        Ok(())
+    fn cancel(&self, id: JobId) -> Result<(), HostError> {
+        self.runtime.cancel(id)
     }
 
-    fn take_messages(&self, id: JobId, remove: bool) -> Vec<String> {
+    fn take_messages(&self, id: JobId, remove: bool) -> Result<Vec<UserMessageDto>, HostError> {
         self.runtime.shared.take_messages(id, remove)
     }
 
-    fn wait_first_change(&self, jobs: &[(JobId, bsl_rt::JobStateDto)], timeout: Option<Duration>) {
-        self.runtime.shared.wait_first_change(jobs, timeout);
+    fn graph_limits(&self) -> bsl_rt::GraphLimits {
+        graph_limits_for(&self.runtime.shared.config)
+    }
+
+    fn wait_first_change(
+        &self,
+        jobs: &[(JobId, bsl_rt::JobStateDto)],
+        timeout: Option<Duration>,
+    ) -> Result<Vec<Arc<JobSnapshotDto>>, HostError> {
+        self.runtime.shared.wait_first_change(jobs, timeout)
+    }
+}
+
+/// Бюджет сериализации графов параметров и ключа: admission всё равно
+/// отвергнет запись больше `max_single_job_record_bytes`, поэтому
+/// сериализатор останавливается на нём до крупной аллокации.
+fn graph_limits_for(config: &BackgroundJobConfig) -> bsl_rt::GraphLimits {
+    let default_limit = bsl_rt::GraphLimits::default().max_bytes;
+    bsl_rt::GraphLimits {
+        max_bytes: config.max_single_job_record_bytes.min(default_limit),
     }
 }

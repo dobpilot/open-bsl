@@ -137,6 +137,12 @@ fi
 cp -r tests/conformance/measure/1c/cfg-src/. "$WORK/cfg/"
 mkdir -p "$WORK/cfg/DataProcessors/Замеры/Forms/Форма/Ext/Form"
 
+# Серверные общие модули замеров (cfg-src-server) накладываются тем же
+# способом: это ТОТ ЖЕ каталог целей, которым двусторонний скрипт
+# measure-background-jobs.bsl исполняется и здесь, и на open-bsl (runner —
+# тест the_background_jobs_measure_script_runs_with_the_platform_catalog).
+cp -r tests/conformance/measure/1c/cfg-src-server/. "$WORK/cfg/"
+
 # Первый прогон на этой базе должен ЗАРЕГИСТРИРОВАТЬ обработку в составе
 # конфигурации; на последующих прогонах DumpConfigToFiles уже возвращает её
 # в ChildObjects, и повторное добавление испортило бы XML.
@@ -144,6 +150,15 @@ if ! grep -q '<DataProcessor>Замеры</DataProcessor>' "$WORK/cfg/Configurat
     sed -i 's|<ChildObjects>|<ChildObjects>\n\t\t\t<DataProcessor>Замеры</DataProcessor>|' \
         "$WORK/cfg/Configuration.xml"
 fi
+
+# Общие модули регистрируются так же — по одному разу на базу.
+for MODULE_XML in tests/conformance/measure/1c/cfg-src-server/CommonModules/*.xml; do
+    MODULE_NAME=$(basename "$MODULE_XML" .xml)
+    if ! grep -q "<CommonModule>$MODULE_NAME</CommonModule>" "$WORK/cfg/Configuration.xml"; then
+        sed -i "s|<ChildObjects>|<ChildObjects>\n\t\t\t<CommonModule>$MODULE_NAME</CommonModule>|" \
+            "$WORK/cfg/Configuration.xml"
+    fi
+done
 
 OUT_ABS="$WORK/platform-output.tsv"
 python3 tests/conformance/measure/1c/gen-form-module.py \

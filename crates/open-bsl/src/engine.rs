@@ -3,6 +3,12 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+/// Процессный счётчик идентичности таблиц host-профилей: каждый
+/// `EngineBuilder` получает свой номер, и `HostProfileId` чужого движка
+/// отличим от своего.
+#[cfg(not(target_arch = "wasm32"))]
+static NEXT_PROFILE_NONCE: AtomicU64 = AtomicU64::new(1);
+
 use bsl_rt::LibraryDescriptor;
 
 use crate::dynamic::DynamicCode;
@@ -36,7 +42,23 @@ struct EngineInner {
     symbols: bsl_syntax::PreprocSymbols,
     /// Реестр mailbox'ов временного хранилища: общий для клонов движка и
     /// его фонового runtime — задания публикуют write-set'ы сюда.
+    /// Используется только нативным путём (сеансы и задания).
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     temp_hub: Arc<bsl_rt::TempStorageHub>,
+    /// Библиотеки, добавленные `register_library`, — worker фонового
+    /// задания регистрирует их заново, чтобы линковать тот же реестр.
+    #[cfg(not(target_arch = "wasm32"))]
+    extra_libraries: Vec<bsl_rt::LibraryDescriptor>,
+    /// Идентичность таблицы host-профилей: `HostProfileId` чужого движка
+    /// отвергается по этому значению.
+    #[cfg(not(target_arch = "wasm32"))]
+    profile_nonce: u64,
+    /// Фабрики host-профилей фоновых заданий в порядке регистрации.
+    #[cfg(not(target_arch = "wasm32"))]
+    job_profiles: Arc<[Arc<dyn crate::jobs::BackgroundStateFactory>]>,
+    /// Внешний sink представления сообщений заданий.
+    #[cfg(not(target_arch = "wasm32"))]
+    job_message_display: Option<Arc<dyn bsl_rt::UserMessageSink + Send + Sync>>,
     /// Разделяемый runtime фоновых заданий: клоны одного `Engine` видят
     /// одни задания. Создаётся лениво при первом обращении; движок без
     /// заданий не платит ни рецептом, ни потоками.
@@ -171,8 +193,49 @@ impl Engine {
     }
 
     /// Реестр mailbox'ов временного хранилища этого движка.
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn temp_hub(&self) -> &Arc<bsl_rt::TempStorageHub> {
         &self.inner.temp_hub
+    }
+
+    /// Библиотеки, добавленные `register_library`, — для рецепта worker.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn extra_libraries(&self) -> &[bsl_rt::LibraryDescriptor] {
+        &self.inner.extra_libraries
+    }
+
+    /// Фабрики host-профилей движка.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn job_profiles(&self) -> Arc<[Arc<dyn crate::jobs::BackgroundStateFactory>]> {
+        Arc::clone(&self.inner.job_profiles)
+    }
+
+    /// Проверка идентификатора host-профиля: он выдан ЭТИМ движком и
+    /// указывает на зарегистрированную фабрику. 0 в качестве индекса
+    /// зарезервирован под системный профиль и снаружи не выдаётся.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn validate_host_profile(
+        &self,
+        id: crate::jobs::HostProfileId,
+    ) -> Result<u32, Error> {
+        let known = id.engine == self.inner.profile_nonce
+            && id.index >= 1
+            && ((id.index - 1) as usize) < self.inner.job_profiles.len();
+        if known {
+            Ok(id.index)
+        } else {
+            Err(Error::Configuration(
+                "host-профиль не зарегистрирован в этом движке".to_string(),
+            ))
+        }
+    }
+
+    /// Внешний sink представления сообщений заданий.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn job_message_display(
+        &self,
+    ) -> Option<Arc<dyn bsl_rt::UserMessageSink + Send + Sync>> {
+        self.inner.job_message_display.clone()
     }
 
     /// Каталог общих модулей движка, если он был собран.
@@ -292,6 +355,14 @@ pub struct EngineBuilder {
     image: Option<(bsl_bytecode::ConfigurationProgram, bool)>,
     #[cfg(not(target_arch = "wasm32"))]
     job_config: crate::jobs::BackgroundJobConfig,
+    #[cfg(not(target_arch = "wasm32"))]
+    extra_libraries: Vec<bsl_rt::LibraryDescriptor>,
+    #[cfg(not(target_arch = "wasm32"))]
+    profile_nonce: u64,
+    #[cfg(not(target_arch = "wasm32"))]
+    job_profiles: Vec<Arc<dyn crate::jobs::BackgroundStateFactory>>,
+    #[cfg(not(target_arch = "wasm32"))]
+    job_message_display: Option<Arc<dyn bsl_rt::UserMessageSink + Send + Sync>>,
 }
 
 impl EngineBuilder {
@@ -327,6 +398,14 @@ impl EngineBuilder {
             image: None,
             #[cfg(not(target_arch = "wasm32"))]
             job_config: crate::jobs::BackgroundJobConfig::default(),
+            #[cfg(not(target_arch = "wasm32"))]
+            extra_libraries: Vec::new(),
+            #[cfg(not(target_arch = "wasm32"))]
+            profile_nonce: NEXT_PROFILE_NONCE.fetch_add(1, Ordering::Relaxed),
+            #[cfg(not(target_arch = "wasm32"))]
+            job_profiles: Vec::new(),
+            #[cfg(not(target_arch = "wasm32"))]
+            job_message_display: None,
         }
     }
 
@@ -340,7 +419,46 @@ impl EngineBuilder {
     }
 
     pub fn register_library(mut self, library: LibraryDescriptor) -> Self {
+        #[cfg(not(target_arch = "wasm32"))]
+        self.extra_libraries.push(library);
         self.runtime.register(library);
+        self
+    }
+
+    /// Регистрирует host-профиль фоновых заданий и возвращает его
+    /// непрозрачный идентификатор — его выбирает
+    /// [`crate::StateBuilder::host_profile`]. `&mut self`, а не
+    /// builder-цепочка: идентификатор нужен вызывающему.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn register_host_profile(
+        &mut self,
+        factory: Arc<dyn crate::jobs::BackgroundStateFactory>,
+    ) -> crate::jobs::HostProfileId {
+        self.job_profiles.push(factory);
+        crate::jobs::HostProfileId {
+            engine: self.profile_nonce,
+            index: self.job_profiles.len() as u32,
+        }
+    }
+
+    /// Внешний sink представления сообщений фоновых заданий: история
+    /// записи реестра пишется до него и при его backpressure не теряется.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[must_use]
+    pub fn job_message_sink(
+        mut self,
+        sink: Arc<dyn bsl_rt::UserMessageSink + Send + Sync>,
+    ) -> Self {
+        self.job_message_display = Some(sink);
+        self
+    }
+
+    /// Полная замена символов условной компиляции — путь рецепта worker,
+    /// который воспроизводит символы родительского движка.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[must_use]
+    pub(crate) fn preproc_symbols_all(mut self, symbols: bsl_syntax::PreprocSymbols) -> Self {
+        self.symbols = symbols;
         self
     }
 
@@ -446,6 +564,14 @@ impl EngineBuilder {
                 job_runtime: std::sync::OnceLock::new(),
                 #[cfg(not(target_arch = "wasm32"))]
                 job_config: self.job_config,
+                #[cfg(not(target_arch = "wasm32"))]
+                extra_libraries: self.extra_libraries,
+                #[cfg(not(target_arch = "wasm32"))]
+                profile_nonce: self.profile_nonce,
+                #[cfg(not(target_arch = "wasm32"))]
+                job_profiles: Arc::from(self.job_profiles),
+                #[cfg(not(target_arch = "wasm32"))]
+                job_message_display: self.job_message_display,
             }),
             configuration,
         })

@@ -4124,6 +4124,7 @@ fn call_module_function_with_dynamic_eval_inside() {
         env.network(),
         env.background_jobs(),
         env.temp_storage(),
+        env.message_sink(),
         bsl_bytecode::DynamicScope::ROOT,
     )
     .unwrap();

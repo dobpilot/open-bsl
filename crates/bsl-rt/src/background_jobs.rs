@@ -11,43 +11,101 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::{
-    Arity, BslValue, CallContext, EnumValue, GraphLimits, JobId, JobKeyDto, JobSnapshotDto,
-    JobStateDto, MethodDescriptor, ObjectProtocol, PropertyDescriptor, RtError, RtResult,
-    SerializedValueGraph, TypeDescriptor, receiver_of,
+    Arity, BslValue, CallContext, EnumValue, GraphLimits, HostError, JobId, JobKeyDto,
+    JobSnapshotDto, JobStateDto, MethodDescriptor, ObjectProtocol, PropertyDescriptor, RtError,
+    RtResult, SerializedValueGraph, TypeDescriptor, UserMessageDto, receiver_of,
 };
 
 /// Объектобезопасный сервис host: все операции на владеющих DTO. Ошибки —
-/// ловимые строки; закрытый `HostErrorCode` появится вместе с полным
-/// набором host-ошибок.
+/// типизированные [`HostError`]: BSL видит один класс ловимого
+/// исключения, Rust-встраивание различает причину по коду. Вытесненное
+/// из истории задание отвечает `JobExpired`, закрытый и сломанный
+/// runtime — `RuntimeClosed`/`RuntimeBroken`; свойства уже
+/// материализованного снимка при этом остаются читаемыми.
 pub trait BackgroundJobService {
     /// Запуск цели `Модуль.Метод`; снимок `Queued` при успехе.
+    ///
+    /// # Errors
+    ///
+    /// [`HostError`] с причиной отказа admission или разрешения цели.
     fn submit(
         &self,
         method_name: &str,
         params: Arc<SerializedValueGraph>,
         key: Option<Arc<JobKeyDto>>,
         description: Option<String>,
-    ) -> Result<Arc<JobSnapshotDto>, String>;
+    ) -> Result<Arc<JobSnapshotDto>, HostError>;
     /// Свежий снимок по идентификатору; `None` — неизвестный/вытесненный.
     fn snapshot(&self, id: JobId) -> Option<Arc<JobSnapshotDto>>;
     /// Все снимки: живые и история.
     fn snapshots(&self) -> Vec<Arc<JobSnapshotDto>>;
-    /// Ожидание terminal-состояния всех `ids`; `false` — таймаут.
-    fn wait_terminal(&self, ids: &[JobId], timeout: Option<Duration>) -> bool;
-    /// Отмена задания — приходит вместе с кооперативными safe points
-    /// (этап 6 плана).
-    fn cancel(&self, id: JobId) -> Result<(), String>;
+    /// Ожидание terminal-состояния всех `ids`. Снимки результата сервис
+    /// удерживает под тем же локом, что и финальную проверку: между
+    /// решением «дождались» и чтением снимков вытеснение невозможно.
+    ///
+    /// # Errors
+    ///
+    /// `JobExpired` для неизвестного/вытесненного задания на входе и для
+    /// задания, вытесненного из истории УЖЕ ВО ВРЕМЯ ожидания, —
+    /// устаревший снимок не выдаётся за свежий;
+    /// `RuntimeClosed`/`RuntimeBroken` после закрытия runtime.
+    fn wait_terminal(
+        &self,
+        ids: &[JobId],
+        timeout: Option<Duration>,
+    ) -> Result<JobWaitOutcome, HostError>;
+    /// Отмена задания; повторная отмена и отмена terminal — успешный
+    /// no-op (ИЗМЕРЕНО, `JOB.CANCEL.RACES`).
+    ///
+    /// # Errors
+    ///
+    /// Как у [`BackgroundJobService::wait_terminal`].
+    fn cancel(&self, id: JobId) -> Result<(), HostError>;
     /// Сообщения задания в порядке FIFO; `remove` атомарно забирает
-    /// возвращаемый префикс у живой записи (у terminal-снимка история
-    /// неизменяема — точная модель за `JOB.MESSAGES`).
-    fn take_messages(&self, id: JobId, remove: bool) -> Vec<String>;
+    /// возвращаемый префикс — и у живой записи, и у terminal
+    /// (ИЗМЕРЕНО, `JOB.MESSAGES`: «Истина забирает всё, после — 0»).
+    ///
+    /// # Errors
+    ///
+    /// Как у [`BackgroundJobService::wait_terminal`].
+    fn take_messages(&self, id: JobId, remove: bool) -> Result<Vec<UserMessageDto>, HostError>;
     /// Семантика менеджерного `ОжидатьЗавершенияВыполнения` по
     /// синтакс-помощнику 8.3.27: если активных нет — возврат сразу; с
     /// таймаутом — до ПЕРВОГО изменения статуса любого из `jobs`
     /// относительно переданного входного состояния либо до истечения
     /// таймаута; без таймаута — до завершения всех или первого
-    /// аварийного.
-    fn wait_first_change(&self, jobs: &[(JobId, JobStateDto)], timeout: Option<Duration>);
+    /// аварийного. Возвращает свежие снимки всех `jobs` в порядке
+    /// запроса, удержанные под финальным локом ожидания, — размер
+    /// результата всегда равен размеру запроса.
+    ///
+    /// # Errors
+    ///
+    /// Как у [`BackgroundJobService::wait_terminal`], включая
+    /// `JobExpired` для задания, вытесненного во время ожидания.
+    fn wait_first_change(
+        &self,
+        jobs: &[(JobId, JobStateDto)],
+        timeout: Option<Duration>,
+    ) -> Result<Vec<Arc<JobSnapshotDto>>, HostError>;
+    /// Бюджет сериализации графа параметров и ключа. Admission всё равно
+    /// отвергнет payload больше своей записи, поэтому сериализатор
+    /// останавливается на этом пределе до крупной аллокации.
+    fn graph_limits(&self) -> GraphLimits {
+        GraphLimits::default()
+    }
+}
+
+/// Результат ожидания terminal-состояния: признак «дождались» и свежие
+/// снимки запрошенных заданий в порядке запроса. Снимки взяты под тем же
+/// локом, что и финальная проверка ожидания, поэтому не бывают ни
+/// устаревшими, ни «пропавшими» из-за вытеснения между проверкой и
+/// чтением.
+#[derive(Debug, Clone)]
+pub struct JobWaitOutcome {
+    /// Все запрошенные задания terminal; `false` — таймаут.
+    pub completed: bool,
+    /// Свежие снимки в порядке запрошенных идентификаторов.
+    pub snapshots: Vec<Arc<JobSnapshotDto>>,
 }
 
 pub(crate) static BACKGROUND_JOBS_TYPE: TypeDescriptor = TypeDescriptor {
@@ -197,8 +255,8 @@ fn manager_execute(
             });
         }
     };
-    let graph =
-        SerializedValueGraph::capture(&params, ctx.runtime_shapes(), &GraphLimits::default())?;
+    let limits = manager.service.graph_limits();
+    let graph = SerializedValueGraph::capture(&params, ctx.runtime_shapes(), &limits)?;
     // Ключ по сигнатуре «Выполнить» — Строка; ИЗМЕРЕНО
     // (JOB.KEY.NON_STRING), что нестроковое значение коэрцируется в
     // строковое представление, поэтому и уникальность строковая.
@@ -214,7 +272,7 @@ fn manager_execute(
                 graph: SerializedValueGraph::capture(
                     std::slice::from_ref(&coerced),
                     ctx.runtime_shapes(),
-                    &GraphLimits::default(),
+                    &limits,
                 )?,
             }))
         }
@@ -226,7 +284,7 @@ fn manager_execute(
     let snapshot = manager
         .service
         .submit(&method_name, Arc::new(graph), key, description)
-        .map_err(RtError::ResourceLimit)?;
+        .map_err(HostError::raise)?;
     Ok(job_value(&manager.service, snapshot))
 }
 
@@ -235,10 +293,12 @@ enum JobFilter {
     Id(JobId),
     Key(String),
     States(Vec<crate::EnumValue>),
-    /// «Запущенные после заданной даты» (документация синтакс-помощника;
-    /// строгость границы не замерена — принято строгое «после»).
+    /// «Запущенные после заданной даты». ИЗМЕРЕНО пробой
+    /// `JOB.LIST.FILTER_ORDER` (сессия 2026-08-27): граница НЕстрогая —
+    /// задание с `Начало`, равным границе, входит в результат.
     BeginAfter(crate::BslDate),
-    /// «Завершённые до заданной даты» — строгое «до», та же оговорка.
+    /// «Завершённые до заданной даты» — строгое «до»; строгость этой
+    /// границы не замерена (остаток `JOB.LIST.FILTER_ORDER`).
     EndBefore(crate::BslDate),
     Description(String),
     MethodName(String),
@@ -255,7 +315,7 @@ impl JobFilter {
             JobFilter::States(states) => states
                 .iter()
                 .any(|state| state_value(snapshot.state) == BslValue::Enum(*state)),
-            JobFilter::BeginAfter(date) => snapshot.begin.is_some_and(|begin| begin > *date),
+            JobFilter::BeginAfter(date) => snapshot.begin.is_some_and(|begin| begin >= *date),
             JobFilter::EndBefore(date) => snapshot.end.is_some_and(|end| end < *date),
             JobFilter::Description(text) => snapshot.description.as_deref().unwrap_or("") == text,
             JobFilter::MethodName(text) => crate::folded_eq(&snapshot.method_name, text),
@@ -416,8 +476,13 @@ fn filter_from_entry(
 }
 
 impl BackgroundJobsManager {
-    /// Снимки в стабильном порядке — по идентификатору; платформенный
-    /// порядок листинга уточняется `JOB.LIST.FILTER_ORDER`.
+    /// Снимки в стабильном порядке — по идентификатору.
+    // НЕ ИЗМЕРЕНО(JOB.LIST.FILTER_ORDER): платформенный порядок листинга
+    // `ПолучитьФоновыеЗадания` и строгость границы отбора `Конец`
+    // («завершённые до») не замерены; выбраны детерминированный порядок
+    // по идентификатору и строгое сравнение `Конец`. Граница `Начало`
+    // уже ИЗМЕРЕНА нестрогой (сессия 2026-08-27) и закреплена в
+    // `JobFilter::matches`.
     fn snapshots_sorted(&self) -> Vec<Arc<JobSnapshotDto>> {
         let mut snapshots = self.service.snapshots();
         snapshots.sort_by_key(|snapshot| snapshot.id.0);
@@ -480,10 +545,15 @@ fn manager_wait(
             (*id, state)
         })
         .collect();
-    manager.service.wait_first_change(&jobs, timeout);
-    let updated: Vec<BslValue> = ids
-        .iter()
-        .filter_map(|id| manager.service.snapshot(*id))
+    let snapshots = manager
+        .service
+        .wait_first_change(&jobs, timeout)
+        .map_err(HostError::raise)?;
+    // Результат строится из снимков, удержанных сервисом под финальным
+    // локом ожидания: вытеснение во время ожидания — ловимая JobExpired
+    // выше, а не молчаливое сжатие массива.
+    let updated: Vec<BslValue> = snapshots
+        .into_iter()
         .map(|snapshot| job_value(&manager.service, snapshot))
         .collect();
     Ok(BslValue::new_array(updated))
@@ -534,7 +604,7 @@ fn job_cancel(
     let job = receiver_of::<BackgroundJobObject>(receiver, "Отменить")?;
     job.service
         .cancel(job.snapshot.id)
-        .map_err(RtError::ResourceLimit)?;
+        .map_err(HostError::raise)?;
     Ok(BslValue::Undefined)
 }
 
@@ -545,12 +615,18 @@ fn job_wait(
 ) -> RtResult<BslValue> {
     let job = receiver_of::<BackgroundJobObject>(receiver, "ОжидатьЗавершенияВыполнения")?;
     let timeout = timeout_from_arg(args.first())?;
-    job.service.wait_terminal(&[job.snapshot.id], timeout);
-    // ИЗМЕРЕНО (JOB.WAIT.RETURN): метод — функция и возвращает ФоновоеЗадание;
-    // отдаём свежий снимок, а при вытеснении из истории — прежний.
-    let snapshot = job
+    let outcome = job
         .service
-        .snapshot(job.snapshot.id)
+        .wait_terminal(&[job.snapshot.id], timeout)
+        .map_err(HostError::raise)?;
+    // ИЗМЕРЕНО (JOB.WAIT.RETURN): метод — функция и возвращает ФоновоеЗадание.
+    // Снимок удержан сервисом под финальным локом ожидания; вытеснение из
+    // истории ВО ВРЕМЯ ожидания — ловимая JobExpired выше, устаревший
+    // снимок «Активно» за свежий не выдаётся.
+    let snapshot = outcome
+        .snapshots
+        .into_iter()
+        .next()
         .unwrap_or_else(|| Arc::clone(&job.snapshot));
     Ok(BslValue::new_object(BackgroundJobObject {
         snapshot,
@@ -561,19 +637,21 @@ fn job_wait(
 fn job_messages(
     receiver: &dyn ObjectProtocol,
     args: &[BslValue],
-    _ctx: &mut CallContext<'_>,
+    ctx: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
     let job = receiver_of::<BackgroundJobObject>(receiver, "ПолучитьСообщенияПользователю")?;
     let remove = matches!(args.first(), Some(BslValue::Boolean(true)));
-    let messages = job.service.take_messages(job.snapshot.id, remove);
-    Ok(BslValue::new_array(
-        messages
-            .into_iter()
-            .map(|text| {
-                BslValue::new_object(crate::user_message::UserMessageObject::with_text(&text))
-            })
-            .collect(),
-    ))
+    let messages = job
+        .service
+        .take_messages(job.snapshot.id, remove)
+        .map_err(HostError::raise)?;
+    let mut values = Vec::with_capacity(messages.len());
+    for message in messages {
+        values.push(BslValue::new_object(
+            crate::user_message::UserMessageObject::from_dto(&message, ctx)?,
+        ));
+    }
+    Ok(BslValue::new_array(values))
 }
 
 fn job_uuid(receiver: &dyn ObjectProtocol, _ctx: &mut CallContext<'_>) -> RtResult<BslValue> {

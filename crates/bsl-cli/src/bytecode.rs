@@ -109,7 +109,11 @@ pub fn run(path: &str, arguments: Vec<String>) -> i32 {
             }
         }
     };
-    let mut state = engine.state_builder().arguments(arguments).build();
+    let mut state = engine
+        .state_builder()
+        .arguments(arguments)
+        .message_sink(std::rc::Rc::new(crate::StdoutMessageSink))
+        .build();
     match state.run(&module) {
         Ok(bsl_rt::BslValue::Undefined) => 0,
         Ok(v) => {

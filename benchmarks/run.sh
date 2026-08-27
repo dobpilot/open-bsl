@@ -55,7 +55,7 @@ HEAVY_SEEN=""
 SCRATCH=${TMPDIR:-/tmp}/onec-bench-scratch
 
 is_heavy() {
-    case $1 in csv_write*|table_compare|table_compare2|table_save_load) return 0 ;; *) return 1 ;; esac
+    case $1 in background_jobs|csv_write*|table_compare|table_compare2|table_save_load) return 0 ;; *) return 1 ;; esac
 }
 
 # Абсолютный: сценарии с файловым выводом гоняются из другого каталога.

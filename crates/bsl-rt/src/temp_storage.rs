@@ -11,9 +11,142 @@
 //! отмены и инфраструктурных сбоев).
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 
-use crate::{BslValue, RtError, RtResult, RuntimeShapes, SerializedValueGraph};
+use crate::{
+    BslValue, HostError, HostErrorCode, RtError, RtResult, RuntimeShapes, SerializedValueGraph,
+};
+
+/// Глобальный бюджет staging всех живых заданий одного runtime
+/// (`max_live_staged_temp_bytes`). Счётчик атомарный: кредиты берут
+/// worker-потоки без общего лока.
+pub struct GlobalStagingBudget {
+    limit: usize,
+    used: AtomicUsize,
+}
+
+impl GlobalStagingBudget {
+    #[must_use]
+    pub fn new(limit: usize) -> Self {
+        Self {
+            limit,
+            used: AtomicUsize::new(0),
+        }
+    }
+
+    /// Атомарно резервирует из остатка как можно больше, но не более
+    /// `cap`; возвращает зарезервированное. Ноль — остатка нет. Резерв,
+    /// а не снимок: параллельные сериализаторы делят предел между собой,
+    /// и сумма одновременных резервов никогда не превышает `limit`.
+    fn take_up_to(&self, cap: usize) -> usize {
+        let mut current = self.used.load(Ordering::Relaxed);
+        loop {
+            let grab = self.limit.saturating_sub(current).min(cap);
+            if grab == 0 {
+                return 0;
+            }
+            match self.used.compare_exchange_weak(
+                current,
+                current + grab,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => return grab,
+                Err(actual) => current = actual,
+            }
+        }
+    }
+
+    fn release(&self, bytes: usize) {
+        self.used.fetch_sub(bytes, Ordering::Relaxed);
+    }
+
+    /// Занятые байты — для граничных тестов освобождения резервов.
+    #[must_use]
+    pub fn used(&self) -> usize {
+        self.used.load(Ordering::Relaxed)
+    }
+}
+
+/// Кредиты staging одного задания: per-job остаток
+/// (`max_staged_temp_bytes_per_job`) плюс доля глобального бюджета.
+/// Освобождение гарантировано на каждом terminal/abort-пути: явно — при
+/// заборе write-set на публикацию, в остальных случаях (rollback, паника
+/// worker, дроп сеанса) — `Drop`.
+pub struct StagingBudget {
+    per_job_left: usize,
+    global: Arc<GlobalStagingBudget>,
+    taken: usize,
+}
+
+impl StagingBudget {
+    #[must_use]
+    pub fn new(per_job: usize, global: Arc<GlobalStagingBudget>) -> Self {
+        Self {
+            per_job_left: per_job,
+            global,
+            taken: 0,
+        }
+    }
+
+    fn release_taken(&mut self) {
+        self.global.release(self.taken);
+        self.taken = 0;
+    }
+
+    /// Резервирует под сериализацию ВЕСЬ доступный остаток кредитов —
+    /// атомарно и ДО аллокации. Параллельные сериализаторы делят
+    /// глобальный бюджет резервами, а не читают один и тот же снимок
+    /// остатка, поэтому суммарная временная память сериализаций не
+    /// превышает `max_live_staged_temp_bytes`. Неиспользованную часть
+    /// возвращает `StagingLease::commit` либо его `Drop`.
+    fn lease(&mut self) -> StagingLease<'_> {
+        let reserved = self.global.take_up_to(self.per_job_left);
+        StagingLease {
+            budget: self,
+            reserved,
+        }
+    }
+}
+
+impl Drop for StagingBudget {
+    fn drop(&mut self) {
+        self.release_taken();
+    }
+}
+
+/// Лизинг кредитов под одну сериализацию: глобальная часть уже
+/// зарезервирована, сериализатор ограничивается `max_bytes`. `commit`
+/// фиксирует фактический размер снимка за бюджетом, `Drop` возвращает
+/// неиспользованный резерв — и после `commit`, и при ошибке сериализации
+/// или панике без него.
+struct StagingLease<'a> {
+    budget: &'a mut StagingBudget,
+    reserved: usize,
+}
+
+impl StagingLease<'_> {
+    /// Предел сериализации: per-job и глобальный остатки уже учтены.
+    fn max_bytes(&self) -> usize {
+        self.reserved
+    }
+
+    /// Фиксирует занятые снимком байты; остаток резерва вернёт `Drop`.
+    fn commit(mut self, bytes: usize) {
+        debug_assert!(bytes <= self.reserved, "снимок больше резерва лизинга");
+        self.budget.per_job_left -= bytes;
+        self.budget.taken += bytes;
+        self.reserved -= bytes;
+    }
+}
+
+impl Drop for StagingLease<'_> {
+    fn drop(&mut self) {
+        self.budget.global.release(self.reserved);
+        self.reserved = 0;
+    }
+}
 
 /// Приёмник публикаций заданий одного сеанса-вызывателя. `Send + Sync`:
 /// задания пишут из workers, сеанс читает у себя.
@@ -46,10 +179,14 @@ pub struct TempStorageHub {
 
 impl TempStorageHub {
     pub fn register(&self, token: [u8; 16], mailbox: &Arc<TempMailbox>) {
-        self.mailboxes
+        let mut mailboxes = self
+            .mailboxes
             .lock()
-            .expect("реестр mailbox без отравления")
-            .insert(token, Arc::downgrade(mailbox));
+            .expect("реестр mailbox без отравления");
+        // Записи закрытых сеансов чистятся попутно: реестр живёт столько
+        // же, сколько движок, и без уборки рос бы с каждым сеансом.
+        mailboxes.retain(|_, mailbox| mailbox.strong_count() > 0);
+        mailboxes.insert(token, Arc::downgrade(mailbox));
     }
 
     /// Живой mailbox сеанса, если тот ещё не закрыт.
@@ -98,6 +235,9 @@ pub struct TempStorageSession {
     caller: Option<[u8; 16]>,
     /// Staging записей по адресам вызывателя — публикуется на terminal.
     staged: Vec<StagedWrite>,
+    /// Кредиты staging (только у сеанса задания): взводятся до записи,
+    /// освобождаются при заборе write-set либо `Drop`.
+    staging_budget: Option<StagingBudget>,
     /// Живые адреса, ВЫДАННЫЕ этим сеансом. По синтакс-помощнику запись
     /// по адресу «должна быть получена ранее с помощью данного метода», а
     /// запись по уже удалённому адресу — исключение (подтверждено замером
@@ -139,15 +279,23 @@ impl TempStorageSession {
             caller: None,
             staged: Vec::new(),
             issued: std::collections::HashSet::new(),
+            staging_budget: None,
             random,
         }
     }
 
-    /// Сеанс задания: свой token плюс token непосредственного вызывателя.
+    /// Сеанс задания: свой token, token непосредственного вызывателя и
+    /// кредиты staging.
     #[must_use]
-    pub fn for_job(token: [u8; 16], caller: [u8; 16], random: crate::RandomHandle) -> Self {
+    pub fn for_job(
+        token: [u8; 16],
+        caller: [u8; 16],
+        random: crate::RandomHandle,
+        staging_budget: StagingBudget,
+    ) -> Self {
         let mut session = Self::new(token, random);
         session.caller = Some(caller);
+        session.staging_budget = Some(staging_budget);
         session
     }
 
@@ -167,8 +315,13 @@ impl TempStorageSession {
         self.caller
     }
 
-    /// Забирает staging для публикации на terminal transition.
+    /// Забирает staging для публикации на terminal transition. Кредиты
+    /// staging освобождаются здесь: write-set покидает сеанс, а публикация
+    /// копирует его в память сеанса-получателя.
     pub fn take_staged(&mut self) -> Vec<([u8; 16], SerializedValueGraph)> {
+        if let Some(budget) = &mut self.staging_budget {
+            budget.release_taken();
+        }
         std::mem::take(&mut self.staged)
             .into_iter()
             .map(|write| (write.id, write.graph))
@@ -195,7 +348,11 @@ impl TempStorageSession {
                 token: self.token,
             },
             Some(text) => parse_address(text).ok_or_else(|| {
-                RtError::ResourceLimit(format!("«{text}» не адрес временного хранилища"))
+                HostError::new(
+                    HostErrorCode::InvalidTemporaryStorageAddress,
+                    format!("«{text}» не адрес временного хранилища"),
+                )
+                .raise()
             })?,
         };
         if target.token == self.token {
@@ -203,9 +360,11 @@ impl TempStorageSession {
                 // ИЗМЕРЕНО (`Q78.OWN.DELETED.WRITE.ERROR`) и подтверждено
                 // синтакс-помощником: запись по удалённому (или никогда не
                 // выдававшемуся) адресу — исключение, значения целы.
-                return Err(RtError::ResourceLimit(
-                    "адрес временного хранилища удалён или не выдавался".to_string(),
-                ));
+                return Err(HostError::new(
+                    HostErrorCode::InvalidTemporaryStorageAddress,
+                    "адрес временного хранилища удалён или не выдавался",
+                )
+                .raise());
             }
             self.issued.insert(target.id);
             let sequence = self.mailbox.next_sequence();
@@ -214,12 +373,39 @@ impl TempStorageSession {
             // Запись по адресу вызывателя публикуется НА TERMINAL, а не
             // сразу; до него вызыватель видит прежнее значение. Сама
             // запись сериализуется сейчас: задание продолжит менять свой
-            // Rc-граф, а снимок уже неизменен.
-            let graph = SerializedValueGraph::capture(
-                std::slice::from_ref(value),
-                rt,
-                &crate::GraphLimits::default(),
-            )?;
+            // Rc-граф, а снимок уже неизменен. Кредиты РЕЗЕРВИРУЮТСЯ
+            // лизингом ДО сериализации: параллельные сериализаторы делят
+            // глобальный бюджет резервами и не собирают графы до одного
+            // и того же остатка; неиспользованная часть возвращается
+            // сразу после снимка, а отказ — ловимая `ResourceLimit`, не
+            // меняющая накопленный write-set.
+            let graph = match &mut self.staging_budget {
+                Some(budget) => {
+                    let lease = budget.lease();
+                    let limits = crate::GraphLimits {
+                        max_bytes: lease.max_bytes(),
+                    };
+                    let graph =
+                        SerializedValueGraph::capture(std::slice::from_ref(value), rt, &limits)
+                            .map_err(|error| {
+                                match error {
+                        RtError::ResourceLimit(_) => HostError::new(
+                            HostErrorCode::ResourceLimit,
+                            "запись не помещается в staging-бюджет временного хранилища задания",
+                        )
+                        .raise(),
+                        other => other,
+                    }
+                            })?;
+                    lease.commit(graph.byte_size());
+                    graph
+                }
+                None => SerializedValueGraph::capture(
+                    std::slice::from_ref(value),
+                    rt,
+                    &crate::GraphLimits::default(),
+                )?,
+            };
             self.staged.push(StagedWrite {
                 id: target.id,
                 graph,
@@ -228,9 +414,11 @@ impl TempStorageSession {
             // ИЗМЕРЕНО (JOB.TEMP.FOREIGN): запись по чужому адресу — ошибка
             // с пустым описанием у платформы; свой текст информативнее, а
             // точный пустой текст намеренно не копируется.
-            return Err(RtError::ResourceLimit(
-                "адрес принадлежит другому сеансу".to_string(),
-            ));
+            return Err(HostError::new(
+                HostErrorCode::InvalidTemporaryStorageAddress,
+                "адрес принадлежит другому сеансу",
+            )
+            .raise());
         }
         Ok(format!(
             "{ADDRESS_PREFIX}{}{ADDRESS_SEANCE}{}",
@@ -242,6 +430,11 @@ impl TempStorageSession {
     /// `ПолучитьИзВременногоХранилища`: чужой, закрытый или удалённый
     /// адрес — `Неопределено` (ИЗМЕРЕНО, `JOB.TEMP.FOREIGN`); staged-запись
     /// по адресу вызывателя тоже `Неопределено` до публикации.
+    // НЕ ИЗМЕРЕНО(JOB.TEMP.READ_YOUR_WRITES): что job платформы читает по
+    // caller-адресу после собственной staging-записи, снято только с
+    // документации («данные... сразу после помещения недоступны в фоновом
+    // сеансе» — синтакс-помощник 8.3.27), платформенный замер не
+    // выполнялся; наша семантика совпадает с документированной.
     pub fn get(&self, address: &str, rt: &mut RuntimeShapes) -> RtResult<BslValue> {
         let Some(target) = parse_address(address) else {
             return Ok(BslValue::Undefined);
@@ -277,6 +470,15 @@ impl TempStorageSession {
 
     /// `УдалитьИзВременногоХранилища`: успешный no-op для любого не
     /// своего адреса (ИЗМЕРЕНО, `JOB.TEMP.FOREIGN`).
+    // НЕ ИЗМЕРЕНО(JOB.TEMP.LIFETIME): повторное использование удалённого
+    // адреса, срок жизни адресов UUID-владельца и новый адрес задания
+    // после закрытия его сеанса не замерены; выбрано «запись по
+    // удалённому адресу — ошибка» (по `Q78.OWN.DELETED.WRITE.ERROR`),
+    // адреса живут до конца сеанса.
+    // НЕ ИЗМЕРЕНО(JOB.TEMP.STAGED_DELETE): публикуется ли удаление
+    // caller-адреса из сеанса задания и по каким terminal-правилам, не
+    // замерено; выбран локальный no-op без staging удаления — данные
+    // вызывателя не меняются.
     pub fn delete(&mut self, address: &str) {
         let Some(target) = parse_address(address) else {
             return;
@@ -347,4 +549,182 @@ pub(crate) fn delete_from_temp_storage(
         .to_string();
     session.borrow_mut().delete(&address);
     Ok(BslValue::Undefined)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Кредиты staging резервируются лизингом ДО сериализации и
+    /// освобождаются на всех путях: `commit` возвращает неиспользованную
+    /// часть, `Drop` лизинга — резерв целиком, `Drop` бюджета — занятое.
+    #[test]
+    fn staging_credits_are_released_on_commit_and_on_drop() {
+        let global = Arc::new(GlobalStagingBudget::new(1_000));
+        {
+            let mut budget = StagingBudget::new(800, Arc::clone(&global));
+            let lease = budget.lease();
+            assert_eq!(lease.max_bytes(), 800, "резерв ограничен per-job");
+            assert_eq!(global.used(), 800, "резерв взят из глобального счётчика");
+            lease.commit(500);
+            assert_eq!(global.used(), 500, "commit вернул неиспользованное");
+            let lease = budget.lease();
+            assert_eq!(lease.max_bytes(), 300, "per-job остаток после commit");
+            drop(lease);
+            assert_eq!(global.used(), 500, "drop без commit вернул резерв");
+            // Drop бюджета без забора — rollback: счётчик чист.
+        }
+        assert_eq!(global.used(), 0);
+
+        // Глобальный предел жёстче per-job: пока первый резерв держится,
+        // второй сериализатор получает ноль, а после commit — остаток.
+        let mut first = StagingBudget::new(1_000, Arc::clone(&global));
+        let mut second = StagingBudget::new(1_000, Arc::clone(&global));
+        let first_lease = first.lease();
+        assert_eq!(first_lease.max_bytes(), 1_000);
+        let second_lease = second.lease();
+        assert_eq!(
+            second_lease.max_bytes(),
+            0,
+            "глобальный остаток занят резервом"
+        );
+        drop(second_lease);
+        first_lease.commit(700);
+        let second_lease = second.lease();
+        assert_eq!(second_lease.max_bytes(), 300);
+        second_lease.commit(300);
+        assert_eq!(global.used(), 1_000);
+    }
+
+    /// Два параллельных сериализатора ДЕЛЯТ глобальный бюджет резервами:
+    /// каждый ограничен своим лизингом, поэтому суммарная временная
+    /// память сериализаций не превышает предел (а не workers × предел),
+    /// и из двух записей, не помещающихся вместе, проходит ровно одна.
+    #[test]
+    fn two_serializers_reserve_the_global_budget_before_capture() {
+        let limit = 64 << 10;
+        let global = Arc::new(GlobalStagingBudget::new(limit));
+        let barrier = Arc::new(std::sync::Barrier::new(2));
+        let caller_token = [2u8; 16];
+        let caller_address = format!(
+            "{ADDRESS_PREFIX}{}{ADDRESS_SEANCE}{}",
+            crate::uuid::format(&[9; 16]),
+            crate::uuid::format(&caller_token)
+        );
+        let mut workers = Vec::new();
+        for index in 0..2u8 {
+            let global = Arc::clone(&global);
+            let barrier = Arc::clone(&barrier);
+            let caller_address = caller_address.clone();
+            workers.push(std::thread::spawn(move || {
+                // Сеанс не `Send` — каждый поток строит свой.
+                let mut session = TempStorageSession::for_job(
+                    [index + 10; 16],
+                    caller_token,
+                    crate::HostEnv::process().random(),
+                    StagingBudget::new(limit, Arc::clone(&global)),
+                );
+                let rt = crate::RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
+                // 48 КиБ на запись: две вместе в 64 КиБ не помещаются.
+                let value = BslValue::Str(crate::BslString::from_str(&"y".repeat(48 << 10)));
+                barrier.wait();
+                let outcome = session.put(&value, Some(&caller_address), &rt);
+                assert!(
+                    global.used() <= limit,
+                    "сумма резервов и кредитов не превышает предел"
+                );
+                if outcome.is_ok() {
+                    assert!(global.used() > 0, "успешный staging держит кредит");
+                }
+                // Сеанс не `Send` — дропается здесь же, возвращая кредит.
+                outcome.is_ok()
+            }));
+        }
+        let successes = workers
+            .into_iter()
+            .map(|worker| worker.join().expect("поток сериализатора"))
+            .filter(|ok| *ok)
+            .count();
+        assert_eq!(
+            successes, 1,
+            "две записи по 48 КиБ не делят 64 КиБ: проходит ровно одна"
+        );
+        assert_eq!(global.used(), 0, "drop сеансов вернул кредиты");
+    }
+
+    /// Сериализация staging-записи ограничена ДОСТУПНЫМ остатком
+    /// кредитов ДО крупной аллокации: большой граф при маленьком лимите
+    /// отвергается ловимой `ResourceLimit`, не меняет накопленный
+    /// write-set и не занимает кредиты.
+    #[test]
+    fn an_over_budget_staged_write_is_refused_before_capture() {
+        let global = Arc::new(GlobalStagingBudget::new(10_000));
+        let mut session = TempStorageSession::for_job(
+            [1; 16],
+            [2; 16],
+            crate::HostEnv::process().random(),
+            StagingBudget::new(1_024, Arc::clone(&global)),
+        );
+        let rt = crate::RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
+        let caller_address = format!(
+            "{ADDRESS_PREFIX}{}{ADDRESS_SEANCE}{}",
+            crate::uuid::format(&[9; 16]),
+            crate::uuid::format(&[2; 16])
+        );
+        // Порядок значений — сам замер: за большой строкой лежит вовсе
+        // не сериализуемое значение. Ограниченный бюджетом обходчик
+        // останавливается на строке и до него не доходит; сериализация
+        // «сначала целиком, потом проверка» дошла бы и ответила ошибкой
+        // непереносимого типа, а не ловимой `ResourceLimit`.
+        let huge = BslValue::new_array(vec![
+            BslValue::Str(crate::BslString::from_str(&"х".repeat(100_000))),
+            BslValue::new_object(crate::user_message::UserMessageObject::with_text("хвост")),
+        ]);
+        let error = session
+            .put(&huge, Some(&caller_address), &rt)
+            .expect_err("граф больше per-job бюджета");
+        match error {
+            RtError::Host(host) => assert_eq!(host.code, HostErrorCode::ResourceLimit),
+            other => panic!("не тот класс ошибки: {other:?}"),
+        }
+        assert_eq!(global.used(), 0, "отказ не занимает кредиты");
+        assert!(
+            session.take_staged().is_empty(),
+            "отказ не меняет накопленный write-set"
+        );
+
+        // Запись в пределах бюджета после отказа проходит как обычно.
+        let small = BslValue::Str(crate::BslString::from_str("помещается"));
+        session
+            .put(&small, Some(&caller_address), &rt)
+            .expect("малый граф в бюджете");
+        assert_eq!(session.take_staged().len(), 1);
+    }
+
+    /// Забор write-set сеансом задания освобождает кредиты сразу: они
+    /// покрывают только период staging.
+    #[test]
+    fn a_job_session_releases_credits_when_staged_writes_are_taken() {
+        let global = Arc::new(GlobalStagingBudget::new(10_000));
+        let mut session = TempStorageSession::for_job(
+            [1; 16],
+            [2; 16],
+            crate::HostEnv::process().random(),
+            StagingBudget::new(10_000, Arc::clone(&global)),
+        );
+        let rt = crate::RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
+        let caller_address = format!(
+            "{ADDRESS_PREFIX}{}{ADDRESS_SEANCE}{}",
+            crate::uuid::format(&[9; 16]),
+            crate::uuid::format(&[2; 16])
+        );
+        let value = BslValue::Str(crate::BslString::from_str("значение"));
+        session
+            .put(&value, Some(&caller_address), &rt)
+            .expect("staging-запись");
+        assert!(global.used() > 0, "кредит взят под staging");
+        let writes = session.take_staged();
+        assert_eq!(writes.len(), 1);
+        assert_eq!(global.used(), 0, "забор write-set вернул кредит");
+    }
 }

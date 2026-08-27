@@ -15,6 +15,9 @@ pub struct StateBuilder {
     host: HostServices,
     jit: bool,
     scheduler: bsl_vm::SchedulerConfig,
+    /// Host-профиль фоновых заданий этого сеанса: 0 — системный.
+    #[cfg(not(target_arch = "wasm32"))]
+    job_profile_index: u32,
 }
 
 impl StateBuilder {
@@ -24,6 +27,8 @@ impl StateBuilder {
             host: HostServices::process(),
             jit: false,
             scheduler: bsl_vm::SchedulerConfig::default(),
+            #[cfg(not(target_arch = "wasm32"))]
+            job_profile_index: 0,
         }
     }
 
@@ -120,7 +125,38 @@ impl StateBuilder {
         self
     }
 
+    /// Выбирает host-профиль фоновых заданий этого сеанса. Foreground
+    /// `files`, `network`, часы и вывод сеанса в worker не копируются —
+    /// профиль и есть их именованная замена, зарегистрированная в
+    /// [`crate::EngineBuilder::register_host_profile`]. Задания сеанса и
+    /// их потомки строят host-окружение по этому профилю; повысить его
+    /// вложенное задание не может.
+    ///
+    /// # Errors
+    ///
+    /// [`crate::Error::Configuration`] для идентификатора, не
+    /// зарегистрированного в этом движке, — без fallback на
+    /// process-профиль. `Engine::new_state` остаётся инфаллибельным за
+    /// счёт системного профиля по умолчанию.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn host_profile(mut self, id: crate::jobs::HostProfileId) -> Result<Self, Error> {
+        self.job_profile_index = self.engine.validate_host_profile(id)?;
+        Ok(self)
+    }
+
+    /// Неблокирующий приёмник сообщений сеанса: `Сообщить` и
+    /// `СообщениеПользователю.Сообщить()` отдают ему владеющий DTO вместо
+    /// строки в stdout.
+    #[must_use]
+    pub fn message_sink(mut self, sink: std::rc::Rc<dyn bsl_rt::UserMessageSink>) -> Self {
+        self.host.env.set_message_sink(sink);
+        self
+    }
+
     pub fn build(self) -> State {
+        // На wasm32 ни хранилище, ни сервис заданий не внедряются — `mut`
+        // нужен только нативным веткам ниже.
+        #[cfg_attr(target_arch = "wasm32", allow(unused_mut))]
         let mut host = self.host;
         // Каждый сеанс получает своё временное хранилище; его mailbox
         // регистрируется в реестре движка — задания публикуют write-set'ы
@@ -149,6 +185,7 @@ impl StateBuilder {
                 .set_background_jobs(std::rc::Rc::new(crate::jobs::EngineJobService {
                     runtime,
                     caller_token: session_token,
+                    profile_index: self.job_profile_index,
                 }));
         }
         State {

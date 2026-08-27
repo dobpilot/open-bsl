@@ -207,7 +207,11 @@ fn engine_clones_share_the_job_runtime() {
     let snapshot = runtime
         .submit_by_name("Служебный.Эхо", params, None, None)
         .expect("задание принято");
-    assert!(runtime.wait_terminal(&[snapshot.id], Some(std::time::Duration::from_secs(30))));
+    assert!(
+        runtime
+            .wait_terminal(&[snapshot.id], Some(std::time::Duration::from_secs(30)))
+            .expect("ожидание без ошибок")
+    );
     assert_eq!(
         runtime.snapshot(snapshot.id).expect("снимок").state,
         open_bsl::JobStateDto::Completed
@@ -390,16 +394,18 @@ fn cancelling_a_running_job_bypasses_the_exception_handler() {
         .expect("задание принято");
     // Дать заданию стартовать, затем отменить.
     std::thread::sleep(std::time::Duration::from_millis(50));
-    runtime.cancel(snapshot.id);
+    runtime.cancel(snapshot.id).expect("отмена без ошибок");
     assert!(
-        runtime.wait_terminal(&[snapshot.id], Some(std::time::Duration::from_secs(30))),
+        runtime
+            .wait_terminal(&[snapshot.id], Some(std::time::Duration::from_secs(30)))
+            .expect("ожидание без ошибок"),
         "отменённое задание обязано дойти до terminal"
     );
     let done = runtime.snapshot(snapshot.id).expect("снимок");
     assert_eq!(done.state, open_bsl::JobStateDto::Canceled);
     assert!(done.error.is_none(), "отмена — не ошибка BSL");
     // Повторная отмена terminal-задания — no-op.
-    runtime.cancel(snapshot.id);
+    runtime.cancel(snapshot.id).expect("отмена без ошибок");
     assert_eq!(
         runtime.snapshot(snapshot.id).expect("снимок").state,
         open_bsl::JobStateDto::Canceled
@@ -441,14 +447,22 @@ fn cancelling_a_queued_job_finishes_it_immediately() {
         .expect("второе принято — в очередь");
     // Второе задание стоит в очереди за вечным первым: отмена завершает
     // его сразу.
-    runtime.cancel(second.id);
-    assert!(runtime.wait_terminal(&[second.id], Some(std::time::Duration::from_secs(10))));
+    runtime.cancel(second.id).expect("отмена без ошибок");
+    assert!(
+        runtime
+            .wait_terminal(&[second.id], Some(std::time::Duration::from_secs(10)))
+            .expect("ожидание без ошибок")
+    );
     assert_eq!(
         runtime.snapshot(second.id).expect("снимок").state,
         open_bsl::JobStateDto::Canceled
     );
-    runtime.cancel(first.id);
-    assert!(runtime.wait_terminal(&[first.id], Some(std::time::Duration::from_secs(30))));
+    runtime.cancel(first.id).expect("отмена без ошибок");
+    assert!(
+        runtime
+            .wait_terminal(&[first.id], Some(std::time::Duration::from_secs(30)))
+            .expect("ожидание без ошибок")
+    );
 }
 
 /// Явное завершение: вечное задание отменяется, потоки выходят до
@@ -670,7 +684,11 @@ fn extra_arguments_fail_the_job_asynchronously() {
     let snapshot = runtime
         .submit_by_name("Служебный.Пустая", params, None, None)
         .expect("submit обязан принять лишние аргументы — отказ асинхронный");
-    assert!(runtime.wait_terminal(&[snapshot.id], Some(std::time::Duration::from_secs(30))));
+    assert!(
+        runtime
+            .wait_terminal(&[snapshot.id], Some(std::time::Duration::from_secs(30)))
+            .expect("ожидание без ошибок")
+    );
     let done = runtime.snapshot(snapshot.id).expect("снимок");
     assert_eq!(done.state, open_bsl::JobStateDto::Failed);
     assert!(done.error.is_some(), "нужен текст об арности");
@@ -742,6 +760,112 @@ fn the_documented_manager_surface_works_end_to_end() {
         String::from_utf8(bytes).unwrap(),
         "Массив\n2\n1\n1\nДа\nзапись отвергнута\n"
     );
+}
+
+/// Дитя, припаркованное на синхронном HTTP и доводимое helping-драйвером
+/// РОДИТЕЛЯ (а не штатным циклом worker), тоже не блокирует OS-поток:
+/// пул из одного worker занят родителем, ждущим ребёнка, ребёнка доводит
+/// helping-ожидание — и пока транспорт держит ответ, соседнее быстрое
+/// задание обязано завершиться, потому что drain-цикл драйвера подбирает
+/// очередь вместо сна на припаркованном резиденте.
+#[cfg(all(not(target_arch = "wasm32"), feature = "http"))]
+#[test]
+fn a_helper_driven_child_parked_on_http_frees_the_worker() {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("порт");
+    let port = listener.local_addr().expect("адрес").port();
+    let (accepted_sender, accepted_receiver) = std::sync::mpsc::channel::<()>();
+    let (release_sender, release_receiver) = std::sync::mpsc::channel::<()>();
+    let server = std::thread::spawn(move || {
+        let (mut socket, _) = listener.accept().expect("accept");
+        let mut buffer = [0u8; 4096];
+        let _ = socket.read(&mut buffer);
+        let _ = accepted_sender.send(());
+        let _ = release_receiver.recv();
+        let _ = socket
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nready");
+    });
+
+    let engine = Engine::builder()
+        .common_module(
+            "Служебный",
+            "Процедура Медленно(Знач Порт) Экспорт\n\
+                 Соединение = Новый HTTPСоединение(\"127.0.0.1\", Порт);\n\
+                 Ответ = Соединение.Получить(Новый HTTPЗапрос(\"/\"));\n\
+                 Сообщить(Ответ.ПолучитьТелоКакСтроку());\n\
+             КонецПроцедуры\n\
+             Процедура Родитель(Знач Порт) Экспорт\n\
+                 Параметры = Новый Массив;\n\
+                 Параметры.Добавить(Порт);\n\
+                 Дитя = ФоновыеЗадания.Выполнить(\"Служебный.Медленно\", Параметры);\n\
+                 Дитя.ОжидатьЗавершенияВыполнения();\n\
+                 Сообщить(\"родитель дождался\");\n\
+             КонецПроцедуры\n\
+             Процедура Быстро() Экспорт\n\
+                 Сообщить(\"быстро\");\n\
+             КонецПроцедуры",
+        )
+        .background_jobs(open_bsl::jobs::BackgroundJobConfig {
+            workers: Some(1),
+            ..Default::default()
+        })
+        .build()
+        .expect("движок собирается");
+    let runtime = engine.job_runtime().expect("runtime");
+    let rt = open_bsl::RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
+    let port_params = [open_bsl::Value::number_from_i64(i64::from(port))];
+    let params = std::sync::Arc::new(
+        open_bsl::SerializedValueGraph::capture(
+            &port_params,
+            &rt,
+            &open_bsl::GraphLimits::default(),
+        )
+        .expect("снимок"),
+    );
+    let parent = runtime
+        .submit_by_name("Служебный.Родитель", params, None, None)
+        .expect("submit родителя");
+    // Запрос ребёнка дошёл до сервера — значит, ребёнка запустил и довёл
+    // до парковки именно helping-драйвер родителя: единственный worker
+    // занят самим родителем.
+    assert!(
+        accepted_receiver
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .is_ok(),
+        "запрос ребёнка обязан дойти до сервера"
+    );
+
+    let empty = std::sync::Arc::new(
+        open_bsl::SerializedValueGraph::capture(&[], &rt, &open_bsl::GraphLimits::default())
+            .expect("снимок"),
+    );
+    let fast = runtime
+        .submit_by_name("Служебный.Быстро", empty, None, None)
+        .expect("submit быстрого");
+    assert!(
+        runtime
+            .wait_terminal(&[fast.id], Some(std::time::Duration::from_secs(10)))
+            .expect("ожидание без ошибок"),
+        "быстрое задание обязано завершиться, пока дитя припарковано в helping-драйвере"
+    );
+    assert_eq!(
+        runtime.snapshot(fast.id).expect("снимок").state,
+        open_bsl::JobStateDto::Completed
+    );
+
+    let _ = release_sender.send(());
+    assert!(
+        runtime
+            .wait_terminal(&[parent.id], Some(std::time::Duration::from_secs(30)))
+            .expect("ожидание без ошибок")
+    );
+    assert_eq!(
+        runtime.snapshot(parent.id).expect("снимок").state,
+        open_bsl::JobStateDto::Completed,
+        "ошибка родителя: {:?}",
+        runtime.snapshot(parent.id).expect("снимок").error
+    );
+    server.join().expect("сервер");
 }
 
 /// Задание, припаркованное на синхронном HTTP, освобождает свой worker:
@@ -816,7 +940,9 @@ fn a_parked_sync_http_job_frees_its_worker() {
     // задание: если бы синхронный HTTP блокировал поток, ожидание ниже
     // истекло бы.
     assert!(
-        runtime.wait_terminal(&[fast.id], Some(std::time::Duration::from_secs(10))),
+        runtime
+            .wait_terminal(&[fast.id], Some(std::time::Duration::from_secs(10)))
+            .expect("ожидание без ошибок"),
         "быстрое задание обязано завершиться, пока медленное припарковано"
     );
     assert_eq!(
@@ -831,12 +957,18 @@ fn a_parked_sync_http_job_frees_its_worker() {
 
     release_sender.send(()).expect("сервер жив");
     assert!(
-        runtime.wait_terminal(&[slow.id], Some(std::time::Duration::from_secs(10))),
+        runtime
+            .wait_terminal(&[slow.id], Some(std::time::Duration::from_secs(10)))
+            .expect("ожидание без ошибок"),
         "после ответа транспорта задание обязано завершиться"
     );
     let done = runtime.snapshot(slow.id).expect("снимок");
     assert_eq!(done.state, open_bsl::JobStateDto::Completed);
-    assert_eq!(done.messages.as_slice(), ["ready".to_string()]);
+    let messages = runtime
+        .take_messages(slow.id, false)
+        .expect("сообщения terminal-задания читаются");
+    let texts: Vec<&str> = messages.iter().map(|m| m.text.as_str()).collect();
+    assert_eq!(texts, ["ready"]);
     server.join().expect("сервер завершился");
 }
 
@@ -896,9 +1028,11 @@ fn cancelling_a_parked_sync_http_job_does_not_wait_for_the_transport() {
         "запрос обязан дойти до сервера"
     );
 
-    runtime.cancel(hung.id);
+    runtime.cancel(hung.id).expect("отмена без ошибок");
     assert!(
-        runtime.wait_terminal(&[hung.id], Some(std::time::Duration::from_secs(10))),
+        runtime
+            .wait_terminal(&[hung.id], Some(std::time::Duration::from_secs(10)))
+            .expect("ожидание без ошибок"),
         "отмена не должна ждать ответа транспорта"
     );
     assert_eq!(

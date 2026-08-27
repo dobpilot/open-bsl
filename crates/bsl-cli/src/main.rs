@@ -288,6 +288,7 @@ fn run_file(path: &str, engine: Engine, arguments: Vec<String>) {
         .state_builder()
         .jit(matches!(engine, Engine::Jit))
         .arguments(arguments)
+        .message_sink(std::rc::Rc::new(StdoutMessageSink))
         .build();
     match state.run(&module) {
         Ok(BslValue::Undefined) => {}
@@ -307,6 +308,24 @@ fn run_file(path: &str, engine: Engine, arguments: Vec<String>) {
 /// байт-кода и REPL.
 pub fn engine() -> Result<open_bsl::Engine, open_bsl::Error> {
     open_bsl::Engine::builder().build()
+}
+
+/// Sink сообщений CLI: очередь перед stdout процесса — короткая, потому
+/// что stdout и есть представление CLI. `enqueue` не блокируется дольше
+/// самой записи в поток; отказ записи отдаётся как backpressure без
+/// скрытых повторов. Байты и порядок совпадают с прежним прямым путём
+/// `Сообщить` -> stdout — conformance-вывод не меняется.
+pub struct StdoutMessageSink;
+
+impl bsl_rt::UserMessageSink for StdoutMessageSink {
+    fn enqueue(&self, message: &bsl_rt::UserMessageDto) -> Result<(), bsl_rt::HostError> {
+        use std::io::Write;
+        let stdout = std::io::stdout();
+        let mut lock = stdout.lock();
+        writeln!(lock, "{}", message.text).map_err(|error| {
+            bsl_rt::HostError::new(bsl_rt::HostErrorCode::HostBackpressure, error.to_string())
+        })
+    }
 }
 
 /// Печать значения, которым завершился скрипт или строка REPL.

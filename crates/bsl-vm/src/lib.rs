@@ -727,6 +727,7 @@ fn run_program_with_host<'a>(
         host_env.network(),
         host_env.background_jobs(),
         host_env.temp_storage(),
+        host_env.message_sink(),
         bsl_bytecode::DynamicScope::ROOT,
     )?;
     let dynamic_depth = std::cell::Cell::new(0);
@@ -799,6 +800,7 @@ pub fn run_repl_chunk_with_registry<'a>(
         host_env.network(),
         host_env.background_jobs(),
         host_env.temp_storage(),
+        host_env.message_sink(),
         bsl_bytecode::DynamicScope::ROOT,
     )?;
     let dynamic_depth = std::cell::Cell::new(0);
@@ -957,6 +959,7 @@ struct LinkedComponents<'a> {
     network: Option<std::rc::Rc<dyn bsl_rt::HttpClientFactory>>,
     background_jobs: Option<std::rc::Rc<dyn bsl_rt::BackgroundJobService>>,
     temp_storage: Option<std::rc::Rc<std::cell::RefCell<bsl_rt::TempStorageSession>>>,
+    message_sink: Option<std::rc::Rc<dyn bsl_rt::UserMessageSink>>,
 }
 
 impl LinkedComponents<'_> {
@@ -1118,6 +1121,7 @@ fn link_components<'a>(
     network: Option<std::rc::Rc<dyn bsl_rt::HttpClientFactory>>,
     background_jobs: Option<std::rc::Rc<dyn bsl_rt::BackgroundJobService>>,
     temp_storage: Option<std::rc::Rc<std::cell::RefCell<bsl_rt::TempStorageSession>>>,
+    message_sink: Option<std::rc::Rc<dyn bsl_rt::UserMessageSink>>,
     scope: u64,
 ) -> Result<LinkedComponents<'a>, RtError> {
     bsl_bytecode::image::verify(program)?;
@@ -1280,6 +1284,7 @@ fn link_components<'a>(
         network,
         background_jobs,
         temp_storage,
+        message_sink,
         functions,
         constructors,
         builtin_methods,
@@ -1364,6 +1369,7 @@ fn drive_with(
         env.network(),
         env.background_jobs(),
         env.temp_storage(),
+        env.message_sink(),
         bsl_bytecode::DynamicScope::ROOT,
     )?;
     let mut stdout = std::io::stdout().lock();
@@ -1665,6 +1671,7 @@ impl ProgramExecution {
             host_env.network(),
             host_env.background_jobs(),
             host_env.temp_storage(),
+            host_env.message_sink(),
             bsl_bytecode::DynamicScope::ROOT,
         )?;
         Ok(Self::new_linked(
@@ -1705,6 +1712,7 @@ impl ProgramExecution {
             host_env.network(),
             host_env.background_jobs(),
             host_env.temp_storage(),
+            host_env.message_sink(),
             bsl_bytecode::DynamicScope::ROOT,
         )?;
         let dynamic_depth = std::cell::Cell::new(0);
@@ -1774,6 +1782,7 @@ impl ProgramExecution {
             host_env.network(),
             host_env.background_jobs(),
             host_env.temp_storage(),
+            host_env.message_sink(),
             bsl_bytecode::DynamicScope::ROOT,
         )?;
         // Области динамического кода модулей нумеруются с единицы: ROOT
@@ -1790,6 +1799,7 @@ impl ProgramExecution {
                 host_env.network(),
                 host_env.background_jobs(),
                 host_env.temp_storage(),
+                host_env.message_sink(),
                 i as u64 + 1,
             )?);
         }
@@ -3241,6 +3251,7 @@ fn step(
                             network: linked.network.as_ref(),
                             background_jobs: linked.background_jobs.as_ref(),
                             temp_storage: linked.temp_storage.as_ref(),
+                            message_sink: linked.message_sink.as_ref(),
                             host_promises: None,
                             function_caller: None,
                         });
@@ -3279,6 +3290,7 @@ fn step(
                             network: linked.network.as_ref(),
                             background_jobs: linked.background_jobs.as_ref(),
                             temp_storage: linked.temp_storage.as_ref(),
+                            message_sink: linked.message_sink.as_ref(),
                             host_promises: None,
                             function_caller: None,
                         });
@@ -3337,6 +3349,7 @@ fn step(
                             network: linked.network.as_ref(),
                             background_jobs: linked.background_jobs.as_ref(),
                             temp_storage: linked.temp_storage.as_ref(),
+                            message_sink: linked.message_sink.as_ref(),
                             host_promises: Some(async_state),
                             function_caller: None,
                         });
@@ -3575,6 +3588,7 @@ fn step_cold(
                     network: linked.network.as_ref(),
                     background_jobs: linked.background_jobs.as_ref(),
                     temp_storage: linked.temp_storage.as_ref(),
+                    message_sink: linked.message_sink.as_ref(),
                     host_promises: None,
                     function_caller: None,
                 });
@@ -3613,6 +3627,7 @@ fn step_cold(
                     network: linked.network.as_ref(),
                     background_jobs: linked.background_jobs.as_ref(),
                     temp_storage: linked.temp_storage.as_ref(),
+                    message_sink: linked.message_sink.as_ref(),
                     host_promises: None,
                     function_caller: None,
                 });
@@ -3702,6 +3717,7 @@ fn step_cold(
                 network: linked.network.as_ref(),
                 background_jobs: linked.background_jobs.as_ref(),
                 temp_storage: linked.temp_storage.as_ref(),
+                message_sink: linked.message_sink.as_ref(),
                 host_promises: None,
                 function_caller: Some(&mut function_caller),
             });
@@ -3726,6 +3742,7 @@ fn step_cold(
                 network: linked.network.as_ref(),
                 background_jobs: linked.background_jobs.as_ref(),
                 temp_storage: linked.temp_storage.as_ref(),
+                message_sink: linked.message_sink.as_ref(),
                 host_promises: None,
                 function_caller: None,
             });
@@ -3793,6 +3810,7 @@ fn step_cold(
                     network: linked.network.as_ref(),
                     background_jobs: linked.background_jobs.as_ref(),
                     temp_storage: linked.temp_storage.as_ref(),
+                    message_sink: linked.message_sink.as_ref(),
                     host_promises: Some(async_state),
                     function_caller: None,
                 });
@@ -4273,6 +4291,7 @@ fn run_dynamic_snippet(
         linked.network.as_ref().map(std::rc::Rc::clone),
         linked.background_jobs.as_ref().map(std::rc::Rc::clone),
         linked.temp_storage.as_ref().map(std::rc::Rc::clone),
+        linked.message_sink.as_ref().map(std::rc::Rc::clone),
         compiled.scope.get(),
     )?;
     let (value, final_stack) = drive_linked(
@@ -4363,6 +4382,7 @@ pub fn call_module_function(
         env.network(),
         env.background_jobs(),
         env.temp_storage(),
+        env.message_sink(),
         bsl_bytecode::DynamicScope::ROOT,
     )?;
     let mut stdout = std::io::stdout().lock();
@@ -4412,6 +4432,7 @@ pub fn call_module_function_with_registry_and_io<'a>(
         host_env.network(),
         host_env.background_jobs(),
         host_env.temp_storage(),
+        host_env.message_sink(),
         bsl_bytecode::DynamicScope::ROOT,
     )?;
     let dynamic_depth = std::cell::Cell::new(0);
@@ -4890,8 +4911,17 @@ fn call_builtin_with_format(
     }
     match builtin {
         BuiltinFn::Message => {
-            writeln!(host.stdout, "{}", bsl_format::format_value(&args[0], None)?)
-                .map_err(|error| RtError::IoError(error.to_string()))?;
+            let text = bsl_format::format_value(&args[0], None)?;
+            // Сеанс с внедрённым sink отдаёт владеющий DTO: историю
+            // сообщений задания пишет runtime, представление выбирает
+            // host. Без sink — прежний путь, строка в stdout сеанса.
+            match host.env().ok().and_then(|env| env.message_sink()) {
+                Some(sink) => sink
+                    .enqueue(&bsl_rt::UserMessageDto::from_text(text))
+                    .map_err(bsl_rt::HostError::raise)?,
+                None => writeln!(host.stdout, "{text}")
+                    .map_err(|error| RtError::IoError(error.to_string()))?,
+            }
             Ok(BslValue::Undefined)
         }
         BuiltinFn::ToString => {

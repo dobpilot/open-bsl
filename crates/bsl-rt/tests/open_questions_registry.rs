@@ -285,3 +285,48 @@ fn measure_script_covers_every_registry_id() {
         );
     }
 }
+
+/// Таблица «Оставшийся реестр замеров» плана фоновых заданий не имеет
+/// права называть решение, которого нет в реестре открытых вопросов:
+/// строка таблицы без полного комплекта `НЕ ИЗМЕРЕНО` — это решение,
+/// принятое молча. Тест ловит и обратный дрейф терминологии: ID в
+/// таблице обязан быть либо вопросом реестра, либо якорем.
+#[test]
+fn the_job_plan_remaining_table_is_registered() {
+    let doc = repo_root().join("docs/bsl-background-jobs.md");
+    let text =
+        fs::read_to_string(&doc).unwrap_or_else(|e| panic!("не читается {}: {e}", doc.display()));
+    let section_start = text
+        .find("Оставшийся реестр замеров")
+        .expect("в плане нет раздела оставшихся замеров");
+    let section = &text[section_start..];
+    let section_end = section.find("\n## ").unwrap_or(section.len());
+    let section = &section[..section_end];
+
+    let known: Vec<&str> = OPEN_QUESTIONS
+        .iter()
+        .map(|q| q.id)
+        .chain(MEASURED_ANCHORS.iter().map(|a| a.id))
+        .collect();
+    let mut unregistered = Vec::new();
+    for line in section.lines() {
+        let Some(rest) = line.strip_prefix("| `") else {
+            continue;
+        };
+        let Some(id) = rest.split('`').next() else {
+            continue;
+        };
+        if id.starts_with("JOB.") && !known.contains(&id) {
+            unregistered.push(id.to_string());
+        }
+    }
+    assert!(
+        !unregistered.is_empty() || section.contains("| `JOB."),
+        "таблица оставшихся замеров не разобралась — формат сменился?"
+    );
+    assert!(
+        unregistered.is_empty(),
+        "решения из таблицы плана без комплекта НЕ ИЗМЕРЕНО:\n  {}",
+        unregistered.join("\n  ")
+    );
+}

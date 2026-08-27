@@ -726,6 +726,32 @@ impl RandomSource for SystemRandom {
     }
 }
 
+/// Неблокирующий приёмник сообщений пользователю: `Сообщить` и
+/// `СообщениеПользователю.Сообщить()` отдают готовый владеющий DTO, а
+/// представление выбирает host. `enqueue` обязан вернуть управление без
+/// ожидания: отказавшая очередь отвечает ошибкой с кодом
+/// `HostBackpressure`, скрытых retry нет — повторный вызов `Сообщить`
+/// создаёт новое сообщение. Супертрейта `Send + Sync` нет намеренно:
+/// сеансовый sink живёт в `Rc`, а межпоточная регистрация (историю
+/// заданий пишет worker) требует `+ Send + Sync` на месте внедрения.
+pub trait UserMessageSink {
+    /// Ставит сообщение в очередь представления.
+    ///
+    /// # Errors
+    ///
+    /// [`crate::HostError`] с кодом `HostBackpressure` (очередь полна)
+    /// либо `ResourceLimit` (бюджет истории сообщений исчерпан).
+    fn enqueue(&self, message: &crate::UserMessageDto) -> Result<(), crate::HostError>;
+
+    /// Остаток бюджета сообщений этого sink в байтах; `None` — явного
+    /// предела нет. Отправитель ограничивает этим остатком сериализацию
+    /// `КлючДанных` и `ИдентификаторНазначения` ДО крупной аллокации —
+    /// граф больше остатка не собирается, а не отвергается пост-фактум.
+    fn message_bytes_left(&self) -> Option<usize> {
+        None
+    }
+}
+
 /// Окружение одного прогона.
 ///
 /// Принадлежит вызывающему (`open_bsl::State`, `bsl-cli`), а не процессу:
@@ -741,6 +767,7 @@ pub struct HostEnv {
     network: Option<std::rc::Rc<dyn crate::HttpClientFactory>>,
     background_jobs: Option<std::rc::Rc<dyn crate::BackgroundJobService>>,
     temp_storage: Option<std::rc::Rc<std::cell::RefCell<crate::TempStorageSession>>>,
+    message_sink: Option<std::rc::Rc<dyn crate::UserMessageSink>>,
 }
 
 impl HostEnv {
@@ -759,6 +786,7 @@ impl HostEnv {
             network: None,
             background_jobs: None,
             temp_storage: None,
+            message_sink: None,
         }
     }
 
@@ -826,6 +854,17 @@ impl HostEnv {
     /// голое имя `ФоновыеЗадания` отвечает ловимой ошибкой возможности.
     pub fn set_background_jobs(&mut self, service: std::rc::Rc<dyn crate::BackgroundJobService>) {
         self.background_jobs = Some(service);
+    }
+
+    /// Внедряет неблокирующий приёмник сообщений пользователю. Без него
+    /// `Сообщить` пишет строку в stdout сеанса — прежний путь.
+    pub fn set_message_sink(&mut self, sink: std::rc::Rc<dyn crate::UserMessageSink>) {
+        self.message_sink = Some(sink);
+    }
+
+    #[must_use]
+    pub fn message_sink(&self) -> Option<std::rc::Rc<dyn crate::UserMessageSink>> {
+        self.message_sink.as_ref().map(std::rc::Rc::clone)
     }
 
     pub fn background_jobs(&self) -> Option<std::rc::Rc<dyn crate::BackgroundJobService>> {

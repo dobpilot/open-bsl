@@ -16,6 +16,7 @@ mod error_info;
 mod fill;
 mod fixed_array;
 pub mod fold;
+mod host_error;
 mod http;
 mod interner;
 mod job_dto;
@@ -39,14 +40,18 @@ pub mod uuid;
 mod value_graph;
 mod value_list;
 mod vstr;
-pub use background_jobs::BackgroundJobService;
-pub use job_dto::{JobErrorDto, JobId, JobKeyDto, JobSnapshotDto, JobStateDto};
+pub use background_jobs::{BackgroundJobService, JobWaitOutcome};
+pub use host_error::{HostError, HostErrorCode};
+pub use job_dto::{JobErrorDto, JobId, JobKeyDto, JobSnapshotDto, JobStateDto, UserMessageDto};
 use std::cmp::Ordering;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::rc::Rc;
-pub use temp_storage::{StagedWrite, TempMailbox, TempStorageHub, TempStorageSession};
+pub use temp_storage::{
+    GlobalStagingBudget, StagedWrite, StagingBudget, TempMailbox, TempStorageHub,
+    TempStorageSession,
+};
 pub use value_graph::{GraphLimits, SerializedValueGraph};
 
 pub use bsl_number::BslNumber;
@@ -82,7 +87,7 @@ pub use enums::{EnumKind, EnumValue, lookup_enum, lookup_member};
 pub use env::{
     Clock, DirEntry, FileCreate, FileHandle, FileMetadata, FileOpenOptions, FileSystem,
     FixedTimeZone, HostEnv, MAX_OFFSET_SECONDS, MIN_TRANSITION_GAP_SECONDS, RandomHandle,
-    RandomSource, SystemClock, SystemFileSystem, SystemRandom, TimeZone,
+    RandomSource, SystemClock, SystemFileSystem, SystemRandom, TimeZone, UserMessageSink,
 };
 pub use error_info::{detailed_error_description, new_error_info};
 pub use fold::folded_eq;
@@ -199,6 +204,10 @@ pub enum RtError {
     /// фонового задания, staging временного хранилища. Ловимая ошибка:
     /// платформенные лимиты BSL-код перехватывает обычной «Попыткой».
     ResourceLimit(String),
+    /// Типизированная ошибка host-границы фоновых заданий: для BSL —
+    /// такое же ловимое исключение одного класса, как `ResourceLimit`,
+    /// Rust-встраивание различает причину по [`HostErrorCode`].
+    Host(Box<HostError>),
     /// Кооперативная отмена исполнения. НЕ ловится «Попыткой» — ИЗМЕРЕНО
     /// (`JOB.CANCEL.CATCH`): после отмены фонового задания ветка
     /// `Исключение` и код после неё не выполнялись. Разматывание проходит
@@ -387,6 +396,9 @@ impl RtError {
             RtError::InvalidBytecode(_) => false,
             RtError::Canceled => false,
             RtError::ResourceLimit(_) => true,
+            // Ошибки host-границы фоновых заданий — один класс ловимого
+            // исключения (план, «Переносимый host-контракт»).
+            RtError::Host(_) => true,
             RtError::Num(_)
             | RtError::TypeError { .. }
             | RtError::NotIndexable
@@ -435,6 +447,7 @@ impl fmt::Display for RtError {
         match self {
             RtError::Num(e) => write!(f, "{e}"),
             RtError::ResourceLimit(what) => write!(f, "превышен ресурсный лимит: {what}"),
+            RtError::Host(error) => write!(f, "{error}"),
             RtError::Canceled => write!(f, "выполнение отменено"),
             RtError::TypeError { expected, op } => {
                 write!(f, "ожидался тип «{expected}» для операции «{op}»")

@@ -171,6 +171,7 @@ pub struct InterpreterServices<'a> {
     pub function_caller: Option<&'a mut FunctionCaller<'a>>,
     pub background_jobs: Option<&'a Rc<dyn crate::BackgroundJobService>>,
     pub temp_storage: Option<&'a Rc<std::cell::RefCell<crate::TempStorageSession>>>,
+    pub message_sink: Option<&'a Rc<dyn crate::UserMessageSink>>,
 }
 
 /// Сервисы конкретного состояния исполнения, доступные компоненту.
@@ -214,6 +215,7 @@ pub struct CallContext<'a> {
     function_caller: Option<&'a mut FunctionCaller<'a>>,
     background_jobs: Option<&'a Rc<dyn crate::BackgroundJobService>>,
     temp_storage: Option<&'a Rc<std::cell::RefCell<crate::TempStorageSession>>>,
+    message_sink: Option<&'a Rc<dyn crate::UserMessageSink>>,
 }
 
 impl<'a> CallContext<'a> {
@@ -233,6 +235,7 @@ impl<'a> CallContext<'a> {
             function_caller: services.function_caller,
             background_jobs: services.background_jobs,
             temp_storage: services.temp_storage,
+            message_sink: services.message_sink,
         }
     }
 
@@ -255,6 +258,7 @@ impl<'a> CallContext<'a> {
             function_caller: None,
             background_jobs: None,
             temp_storage: None,
+            message_sink: None,
         }
     }
 
@@ -282,6 +286,13 @@ impl<'a> CallContext<'a> {
             capability: Capability::TempStorage,
             path: self.path,
         })
+    }
+
+    /// Неблокирующий приёмник сообщений пользователю прогона, если host
+    /// его внедрил. `None` — прежний путь: строка уходит в stdout сеанса.
+    #[must_use]
+    pub fn message_sink(&self) -> Option<&Rc<dyn crate::UserMessageSink>> {
+        self.message_sink
     }
 
     pub fn runtime_shapes(&mut self) -> &mut RuntimeShapes {

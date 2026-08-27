@@ -175,13 +175,13 @@ flowchart TB
         fg_temp["локальные temp values<br/>+ SessionMailbox"]
     end
 
-    state_builder["StateBuilder<br/>выбирает зарегистрированный HostProfileId<br/>unknown ID → Result&lt;State, Error&gt;"]
+    state_builder["StateBuilder<br/>host_profile(HostProfileId)<br/>unknown ID → Result&lt;Self, Error&gt; при выборе"]
     process_profile["Process profile<br/>Engine::new_state инфаллибелен"]
     sandbox_profile["Sandbox profile<br/>ограниченные capabilities"]
     no_copy["files/network/clock/output foreground<br/>в worker не копируются"]
 
     subgraph worker["Каждый worker"]
-        local_runtime["Tokio current-thread + LocalSet"]
+        local_runtime["цикл worker на Condvar<br/>(вместо Tokio + LocalSet, см. ARCH-10)"]
         local_catalog["локальные Rc&lt;Program&gt;<br/>разобраны один раз"]
         executions["OwnedExecution<br/>отдельный State на job"]
     end

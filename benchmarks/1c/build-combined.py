@@ -50,6 +50,9 @@ DECL = re.compile(
 )
 END = re.compile(r"^(КонецПроцедуры|КонецФункции)\s*$", re.MULTILINE)
 PREPEND = re.compile(r"^// @prepend-bsl ([^\r\n]+)\s*$", re.MULTILINE)
+# Цель фонового задания нельзя объявить в модуле формы: такой
+# сценарий явно исключает себя из однофайловой платформенной сборки.
+SKIP = re.compile(r"^// @skip-1c-combined(?::.*)?$", re.MULTILINE)
 TOKEN = re.compile(
     r'"(?:""|[^"])*"|//[^\n]*|[A-Za-zА-Яа-яЁё_][\w]*|\s+|.', re.DOTALL
 )
@@ -117,6 +120,9 @@ def main():
     for path in sorted(BENCH.glob("*.bsl")):
         name = path.stem
         if only and name not in only:
+            continue
+        source_text = path.read_text(encoding="utf-8-sig")
+        if SKIP.search(source_text):
             continue
         text = (
             read_scenario(path)
