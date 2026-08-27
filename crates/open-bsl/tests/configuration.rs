@@ -647,3 +647,31 @@ fn job_messages_are_recorded_and_drained() {
         "сообщения задания не должны утекать в stdout родителя"
     );
 }
+
+/// ИЗМЕРЕНО (JOB.EXECUTE.VALIDATION): лишние аргументы принимаются при
+/// Выполнить, а задание завершается аварийно уже асинхронно.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn extra_arguments_fail_the_job_asynchronously() {
+    let engine = Engine::builder()
+        .common_module("Служебный", "Процедура Пустая() Экспорт\nКонецПроцедуры")
+        .build()
+        .expect("движок собирается");
+    let runtime = engine.job_runtime().expect("runtime");
+    let rt = open_bsl::RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
+    let values = [
+        open_bsl::Value::number_from_i64(1),
+        open_bsl::Value::number_from_i64(2),
+    ];
+    let params = std::sync::Arc::new(
+        open_bsl::SerializedValueGraph::capture(&values, &rt, &open_bsl::GraphLimits::default())
+            .expect("снимок"),
+    );
+    let snapshot = runtime
+        .submit_by_name("Служебный.Пустая", params, None, None)
+        .expect("submit обязан принять лишние аргументы — отказ асинхронный");
+    assert!(runtime.wait_terminal(&[snapshot.id], Some(std::time::Duration::from_secs(30))));
+    let done = runtime.snapshot(snapshot.id).expect("снимок");
+    assert_eq!(done.state, open_bsl::JobStateDto::Failed);
+    assert!(done.error.is_some(), "нужен текст об арности");
+}
