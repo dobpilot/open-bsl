@@ -533,8 +533,15 @@ static MANAGER_METHODS: &[MethodDescriptor] = &[
 
 static JOB_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor::new(&["Отменить", "Cancel"], Arity::exact(0), job_cancel),
+    // «ОжидатьЗавершения» — документированный устаревший синоним
+    // (синтакс-помощник 8.3.27 перечисляет оба имени у задания).
     MethodDescriptor::new(
-        &["ОжидатьЗавершенияВыполнения", "WaitForExecutionCompletion"],
+        &[
+            "ОжидатьЗавершенияВыполнения",
+            "WaitForExecutionCompletion",
+            "ОжидатьЗавершения",
+            "WaitForCompletion",
+        ],
         Arity::range(0, 1),
         job_wait,
     ),
