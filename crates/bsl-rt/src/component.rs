@@ -532,6 +532,43 @@ pub type ComponentCall = for<'a> fn(&mut CallContext<'a>, &[BslValue]) -> RtResu
 pub type MethodCall =
     for<'a> fn(&dyn crate::ObjectProtocol, &[BslValue], &mut CallContext<'a>) -> RtResult<BslValue>;
 
+/// Вызов метода, способного приостановить исполнение: вместо готового
+/// значения обработчик вправе вернуть типизированную host-операцию
+/// [`PendingHostCall`], которую доводит вызывающая сторона (VM паркует
+/// execution, строковый путь доводит блокирующе).
+pub type SuspendingMethodCall = for<'a> fn(
+    &dyn crate::ObjectProtocol,
+    &[BslValue],
+    &mut CallContext<'a>,
+) -> RtResult<CallOutcome>;
+
+/// Исход вызова метода компонента: готовое значение либо host-операция,
+/// на время которой исполнение приостанавливается. Обычные обработчики
+/// значения не оборачивают — это делает сам дескриптор в
+/// [`MethodDescriptor::invoke`], поэтому их сигнатура не менялась.
+pub enum CallOutcome {
+    Ready(BslValue),
+    Pending(PendingHostCall),
+}
+
+/// Закрытый перечень приостанавливающих host-операций. Перечень намеренно
+/// исчерпывающий, без `Any` и стирания типов: новая операция — новый
+/// вариант, и каждый обслуживающий путь обязан разобрать его явно.
+/// Библиотека, чья таблица методов содержит приостанавливающий
+/// дескриптор, обязана объявлять [`ObjectContextNeed::Full`]: тогда чанк,
+/// трогающий объекты, не отдаётся JIT, и парковка остаётся интерпретатору.
+pub enum PendingHostCall {
+    /// Синхронная HTTP-операция: запрос уже снят с BSL-объектов,
+    /// транспорт выполняет его вне VM, `mapper` материализует ответ в
+    /// BSL-потоке после доставки.
+    HttpSync {
+        client: std::sync::Arc<dyn crate::HttpClient>,
+        request: crate::HttpWireRequest,
+        mapper: crate::HttpResponseMapper,
+        error_mapper: crate::HttpErrorMapper,
+    },
+}
+
 /// Статический дескриптор метода объекта компонента — как
 /// [`FunctionDescriptor`] для глобальных функций. Непустая таблица методов
 /// типа (см. `ObjectProtocol::method_table`) включает быстрый путь VM
@@ -548,12 +585,21 @@ pub type MethodCall =
 /// допущение «тексты ошибок о числе аргументов уже живут в самих
 /// обработчиках» опровергнуто (`ТабличныйДокумент.НачатьГруппуСтрок` молча
 /// принимал пять аргументов при двух объявленных).
+/// Обработчик метода: обычный всегда отвечает готовым значением,
+/// приостанавливающий — [`CallOutcome`]. Разница видна только
+/// диспетчеризации ([`MethodDescriptor::invoke`]).
+#[derive(Debug, Clone, Copy)]
+enum MethodImpl {
+    Plain(MethodCall),
+    Suspending(SuspendingMethodCall),
+}
+
 #[derive(Debug, Clone, Copy)]
 #[non_exhaustive]
 pub struct MethodDescriptor {
     names: &'static [&'static str],
     arity: Arity,
-    call: MethodCall,
+    call: MethodImpl,
 }
 
 impl MethodDescriptor {
@@ -561,7 +607,34 @@ impl MethodDescriptor {
     /// ABI-F): связать байт-код по коду метода нельзя, а `arity` проверяется
     /// в рантайме, где получатель уже известен.
     pub const fn new(names: &'static [&'static str], arity: Arity, call: MethodCall) -> Self {
-        Self { names, arity, call }
+        Self {
+            names,
+            arity,
+            call: MethodImpl::Plain(call),
+        }
+    }
+
+    /// Дескриптор приостанавливающего метода — единственный способ вернуть
+    /// [`CallOutcome::Pending`]. Библиотека с таким методом обязана
+    /// требовать полный контекст объектов ([`ObjectContextNeed::Full`]) —
+    /// см. [`PendingHostCall`].
+    pub const fn suspending(
+        names: &'static [&'static str],
+        arity: Arity,
+        call: SuspendingMethodCall,
+    ) -> Self {
+        Self {
+            names,
+            arity,
+            call: MethodImpl::Suspending(call),
+        }
+    }
+
+    /// Может ли метод вернуть [`CallOutcome::Pending`]. Пока выполняется
+    /// контракт полного контекста, шим JIT такой дескриптор не встречает.
+    #[must_use]
+    pub const fn may_suspend(&self) -> bool {
+        matches!(self.call, MethodImpl::Suspending(_))
     }
 
     /// Написания метода — первое каноническое (русское).
@@ -574,11 +647,27 @@ impl MethodDescriptor {
         self.arity
     }
 
-    /// Обработчик вызова. Нужен VM: кэш `CallObjectMethod` держит дескриптор
-    /// и на попадании берёт из него обработчик, не разбирая имя (см.
-    /// `resolve_component_method` в `bsl-vm`).
-    pub const fn call(&self) -> MethodCall {
-        self.call
+    /// Единая точка вызова обработчика — для всех путей диспетчеризации:
+    /// кэш `CallObjectMethod` у VM держит дескриптор и на попадании зовёт
+    /// её, не разбирая имя (см. `resolve_component_method` в `bsl-vm`).
+    /// Результат обычного обработчика оборачивается в
+    /// [`CallOutcome::Ready`] здесь, поэтому сотни готовых обработчиков
+    /// не меняли сигнатуру ради считанных приостанавливающих.
+    ///
+    /// # Errors
+    ///
+    /// Ошибки обработчика — как у прежнего прямого вызова.
+    #[inline]
+    pub fn invoke(
+        &self,
+        receiver: &dyn crate::ObjectProtocol,
+        arguments: &[BslValue],
+        context: &mut CallContext<'_>,
+    ) -> RtResult<CallOutcome> {
+        match self.call {
+            MethodImpl::Plain(call) => call(receiver, arguments, context).map(CallOutcome::Ready),
+            MethodImpl::Suspending(call) => call(receiver, arguments, context),
+        }
     }
 
     /// Рантаймная проверка арности перед вызовом обработчика — единый
@@ -725,13 +814,61 @@ pub fn call_method_from_table(
             // шимах JIT.
             let count = u8::try_from(arguments.len()).unwrap_or(u8::MAX);
             descriptor.check_arity(count, type_name)?;
-            return (descriptor.call)(receiver, arguments, context);
+            return match descriptor.invoke(receiver, arguments, context)? {
+                CallOutcome::Ready(value) => Ok(value),
+                // Строковый путь — закрытый `CallMethod` и вызов по имени
+                // — парковать VM не умеет, поэтому host-операция доводится
+                // блокирующе: ровно так синхронный HTTP работал до
+                // типизированного Pending.
+                CallOutcome::Pending(pending) => drive_pending_blocking(pending, context),
+            };
         }
     }
     Err(crate::RtError::UnknownMethod {
         method: name.to_string(),
         receiver: type_name,
     })
+}
+
+/// Блокирующая доводка host-операции для путей без парковки VM. Семантика
+/// — прежний синхронный вызов: поток ждёт транспорт на канале, ошибки
+/// ловимы, как и раньше.
+fn drive_pending_blocking(
+    pending: PendingHostCall,
+    context: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    match pending {
+        PendingHostCall::HttpSync {
+            client,
+            request,
+            mapper,
+            error_mapper,
+        } => {
+            struct BlockingSink(
+                std::sync::mpsc::Sender<Result<crate::HttpWireResponse, crate::NetworkError>>,
+            );
+            impl crate::HttpCompletionSink for BlockingSink {
+                fn complete(
+                    self: Box<Self>,
+                    result: Result<crate::HttpWireResponse, crate::NetworkError>,
+                ) {
+                    let _ = self.0.send(result);
+                }
+            }
+            let (sender, receiver) = std::sync::mpsc::channel();
+            let mut handle = client
+                .submit(request, Box::new(BlockingSink(sender)))
+                .map_err(error_mapper)?;
+            let result = receiver.recv().map_err(|_| {
+                crate::RtError::DynamicError(
+                    "HTTP-операция завершилась без результата транспорта".into(),
+                )
+            })?;
+            let value = mapper(result, context.runtime_shapes());
+            handle.cancel();
+            value
+        }
+    }
 }
 
 /// Как функцию компонента разрешено звать.
@@ -1663,6 +1800,92 @@ mod tests {
     use super::*;
     use crate::RtError;
 
+    /// Строковый путь диспетчеризации доводит приостанавливающий метод
+    /// блокирующе: транспорт завершается из другого потока, а вызов
+    /// возвращает материализованное значение, как прежний синхронный код.
+    #[test]
+    fn the_string_path_drives_a_pending_call_to_completion() {
+        #[derive(Debug)]
+        struct Probe;
+
+        impl crate::ObjectProtocol for Probe {
+            fn type_descriptor(&self) -> &'static crate::TypeDescriptor {
+                static TYPE: crate::TypeDescriptor =
+                    crate::TypeDescriptor::new("bsl-rt", "ИспытательПауз");
+                &TYPE
+            }
+        }
+
+        #[derive(Debug)]
+        struct SlowClient;
+
+        impl crate::HttpClient for SlowClient {
+            fn submit(
+                &self,
+                request: crate::HttpWireRequest,
+                sink: Box<dyn crate::HttpCompletionSink>,
+            ) -> Result<Box<dyn crate::RequestHandle>, crate::NetworkError> {
+                // Ответ приходит из чужого потока с заметной задержкой —
+                // блокирующая доводка обязана его дождаться.
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                    sink.complete(Ok(crate::HttpWireResponse {
+                        status: 204,
+                        headers: Vec::new(),
+                        body: request.body,
+                    }));
+                });
+                #[derive(Debug)]
+                struct Handle;
+                impl crate::RequestHandle for Handle {
+                    fn cancel(&mut self) {}
+                }
+                Ok(Box::new(Handle))
+            }
+        }
+
+        fn suspending(
+            _receiver: &dyn crate::ObjectProtocol,
+            _arguments: &[BslValue],
+            _context: &mut CallContext<'_>,
+        ) -> RtResult<CallOutcome> {
+            Ok(CallOutcome::Pending(PendingHostCall::HttpSync {
+                client: std::sync::Arc::new(SlowClient),
+                request: crate::HttpWireRequest {
+                    method: "GET".to_string(),
+                    resource: "/".to_string(),
+                    headers: Vec::new(),
+                    body: vec![7],
+                },
+                mapper: |result, _shapes| {
+                    let response =
+                        result.map_err(|error| RtError::DynamicError(error.message.clone()))?;
+                    Ok(BslValue::Number(bsl_number::BslNumber::from_i64(
+                        i64::from(response.status),
+                    )))
+                },
+                error_mapper: |error| RtError::DynamicError(error.message),
+            }))
+        }
+
+        static TABLE: &[MethodDescriptor] = &[MethodDescriptor::suspending(
+            &["Запрос"],
+            Arity::exact(0),
+            suspending,
+        )];
+        assert!(TABLE[0].may_suspend());
+
+        let mut shapes = crate::RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
+        let mut context = CallContext::native(&mut shapes, |value, _| Ok(format!("{value:?}")));
+        let value =
+            call_method_from_table(TABLE, "ИспытательПауз", &Probe, "Запрос", &[], &mut context)
+                .expect("блокирующая доводка возвращает значение");
+        assert_eq!(
+            value,
+            BslValue::Number(bsl_number::BslNumber::from_i64(204))
+        );
+    }
+
     fn no_call(_ctx: &mut CallContext<'_>, _args: &[BslValue]) -> RtResult<BslValue> {
         Err(RtError::DynamicError(
             "не вызывается в тесте реестра".to_string(),
@@ -1838,11 +2061,17 @@ mod descriptor_sizes {
     /// abi-refactor-f). `LibraryDescriptor` содержит толстый указатель
     /// `type_aliases` и один обычный указатель `byte_stream_factory` — всего
     /// 128 байт на x86-64; записи статические, так что рост платится один раз
-    /// на библиотеку, а не на объект. `MethodDescriptor` — 32 байта
-    /// (написания, `arity`, обработчик). Тест ловит незамеченный рост.
+    /// на библиотеку, а не на объект. `MethodDescriptor` — 40 байт:
+    /// написания, `arity` и обработчик-перечисление `MethodImpl`, чей тег
+    /// (обычный или приостанавливающий, план фоновых заданий, этап 5)
+    /// стоит 8 байт выравнивания. Union с тегом в паддинге `arity` вернул
+    /// бы 32, но ценой первого `unsafe` в этом крейте — 8 статических
+    /// байт на дескриптор того не стоят; горячий сайт читает один и тот
+    /// же дескриптор из мономорфного кэша, и рост в A/B не виден. Тест
+    /// ловит незамеченный рост.
     #[test]
     fn descriptors_have_the_expected_size() {
         assert_eq!(std::mem::size_of::<LibraryDescriptor>(), 128);
-        assert_eq!(std::mem::size_of::<MethodDescriptor>(), 32);
+        assert_eq!(std::mem::size_of::<MethodDescriptor>(), 40);
     }
 }

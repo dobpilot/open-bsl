@@ -205,6 +205,10 @@ struct VmHttpSink {
     token: ExecutionToken,
     promise_id: PromiseId,
     sender: mpsc::Sender<HostCompletion>,
+    /// Пробуждение драйвера этого execution: транспорт зовёт его после
+    /// доставки завершения, чтобы спящий без таймера драйвер (worker пула
+    /// заданий) опросил execution немедленно.
+    waker: Option<ExecutionWaker>,
 }
 
 impl bsl_rt::HttpCompletionSink for VmHttpSink {
@@ -214,7 +218,27 @@ impl bsl_rt::HttpCompletionSink for VmHttpSink {
             promise_id: self.promise_id,
             result,
         });
+        if let Some(waker) = &self.waker {
+            waker();
+        }
     }
+}
+
+/// Пробуждение драйвера executions: зовётся из потока транспорта после
+/// доставки каждого host-завершения. Драйвер, спящий в ожидании событий,
+/// просыпается и опрашивает свои executions — таймерного поллинга нет.
+pub type ExecutionWaker = std::sync::Arc<dyn Fn() + Send + Sync>;
+
+/// Парковка синхронного host-вызова: задача `task_id` ждёт обещание
+/// `promise_id`, а его результат при пробуждении ложится в регистр `dst`
+/// инструкции, на которой остановлен `pc` задачи. Пока поле занято,
+/// планировщик не запускает другие задачи: Pending синхронного метода
+/// замораживает весь execution — в отличие от `Await`, уступающего
+/// соседним задачам.
+struct SyncWait {
+    task_id: TaskId,
+    promise_id: PromiseId,
+    dst: u8,
 }
 
 struct HostPromise {
@@ -231,6 +255,8 @@ struct AsyncState {
     host_promises: Vec<Option<HostPromise>>,
     completion_sender: mpsc::Sender<HostCompletion>,
     completion_receiver: mpsc::Receiver<HostCompletion>,
+    host_waker: Option<ExecutionWaker>,
+    sync_wait: Option<SyncWait>,
 }
 
 impl AsyncState {
@@ -246,6 +272,8 @@ impl AsyncState {
             host_promises: Vec::new(),
             completion_sender,
             completion_receiver,
+            host_waker: None,
+            sync_wait: None,
         }
     }
 
@@ -364,19 +392,24 @@ impl AsyncState {
     }
 }
 
-impl bsl_rt::HttpPromiseSpawner for AsyncState {
-    fn spawn_http(
+impl AsyncState {
+    /// Общая регистрация внешней HTTP-операции: обещание, sink с токеном
+    /// исполнения и отменяемый handle. Возвращает и номер, и значение
+    /// обещания: async-путь отдаёт значение BSL-коду, sync-путь паркует
+    /// задачу по номеру.
+    fn spawn_host_operation(
         &mut self,
         client: Arc<dyn bsl_rt::HttpClient>,
         request: bsl_rt::HttpWireRequest,
         mapper: bsl_rt::HttpResponseMapper,
         error_mapper: bsl_rt::HttpErrorMapper,
-    ) -> Result<BslValue, RtError> {
+    ) -> Result<(PromiseId, BslValue), RtError> {
         let (promise_id, promise) = self.new_promise()?;
         let sink = Box::new(VmHttpSink {
             token: self.token,
             promise_id,
             sender: self.completion_sender.clone(),
+            waker: self.host_waker.clone(),
         });
         let handle = match client.submit(request, sink) {
             Ok(handle) => handle,
@@ -390,7 +423,59 @@ impl bsl_rt::HttpPromiseSpawner for AsyncState {
         })?;
         self.host_promises.resize_with(index + 1, || None);
         self.host_promises[index] = Some(HostPromise { handle, mapper });
-        Ok(promise)
+        Ok((promise_id, promise))
+    }
+
+    /// Запускает host-операцию приостанавливающего метода и паркует
+    /// задачу: результат ляжет в регистр `dst` остановленной инструкции,
+    /// а до его прихода execution заморожен целиком (см. [`SyncWait`]).
+    /// Ошибка запуска транспорта возвращается как обычная ловимая ошибка
+    /// вызова — парковки тогда не происходит.
+    fn begin_sync_host_call(
+        &mut self,
+        task_id: TaskId,
+        dst: u8,
+        pending: bsl_rt::PendingHostCall,
+    ) -> Result<(), RtError> {
+        match pending {
+            bsl_rt::PendingHostCall::HttpSync {
+                client,
+                request,
+                mapper,
+                error_mapper,
+            } => {
+                let (promise_id, _promise) =
+                    self.spawn_host_operation(client, request, mapper, error_mapper)?;
+                let index = usize::try_from(promise_id.get()).map_err(|_| {
+                    RtError::InvalidBytecode("номер обещания не помещается в индекс таблицы")
+                })?;
+                let Some(PromiseState::Pending { waiters }) = self.promises.get_mut(index) else {
+                    return Err(RtError::InvalidBytecode(
+                        "свежее обещание синхронного вызова уже завершено",
+                    ));
+                };
+                waiters.push_back(task_id);
+                self.sync_wait = Some(SyncWait {
+                    task_id,
+                    promise_id,
+                    dst,
+                });
+                Ok(())
+            }
+        }
+    }
+}
+
+impl bsl_rt::HttpPromiseSpawner for AsyncState {
+    fn spawn_http(
+        &mut self,
+        client: Arc<dyn bsl_rt::HttpClient>,
+        request: bsl_rt::HttpWireRequest,
+        mapper: bsl_rt::HttpResponseMapper,
+        error_mapper: bsl_rt::HttpErrorMapper,
+    ) -> Result<BslValue, RtError> {
+        self.spawn_host_operation(client, request, mapper, error_mapper)
+            .map(|(_, promise)| promise)
     }
 }
 
@@ -1459,6 +1544,14 @@ impl ProgramExecution {
         self.cancel_flag = Some(flag);
     }
 
+    /// Подключает пробуждение драйвера: sink каждой последующей
+    /// host-операции получает клон и зовёт его после доставки завершения.
+    /// Драйвер подключает waker до первого poll — уже запущенные операции
+    /// пробуждения не получают.
+    pub fn set_host_waker(&mut self, waker: ExecutionWaker) {
+        self.async_state.host_waker = Some(waker);
+    }
+
     /// Планирует НЕленивую инициализацию модулей: тела выполняются до
     /// первой инструкции entry, в порядке `order` (post-order файлового
     /// графа — семантика расширения CLI `//@используй`; политика job
@@ -1756,8 +1849,27 @@ impl ProgramExecution {
         let mut host_remaining = host_slice;
 
         loop {
-            let Some(task_id) = async_state.ready.pop_front() else {
+            // Замороженный синхронный вызов: пока его host-операция не
+            // завершилась, никакая другая задача не исполняется — Pending
+            // синхронного метода останавливает весь execution. Холодная
+            // ветка вынесена: укладка этой функции несёт быстрый путь
+            // пустого цикла, и лишние байты здесь стоили DSB (измерено на
+            // `empty_for`).
+            let next_ready = if async_state.sync_wait.is_none() {
+                async_state.ready.pop_front()
+            } else {
+                take_frozen_ready(async_state)
+            };
+            let Some(task_id) = next_ready else {
                 if async_state.has_pending_host_promises() {
+                    // Отмена, пришедшая во время host-ожидания: без этой
+                    // проверки резидент, ждущий медленный транспорт,
+                    // отменялся бы только после доставки ответа.
+                    if let Some(flag) = &cancel_flag
+                        && flag.load(std::sync::atomic::Ordering::Relaxed)
+                    {
+                        return Err(RtError::Canceled);
+                    }
                     let block = host_slice == usize::MAX;
                     let accepted =
                         async_state.drain_completions(host_remaining, block, runtime_shapes)?;
@@ -1795,6 +1907,21 @@ impl ProgramExecution {
                 .ok_or(RtError::InvalidBytecode(
                     "готовая очередь ссылается на отсутствующую задачу",
                 ))?;
+            // Пробуждение синхронного host-вызова: применение результата
+            // вынесено (см. `resume_parked_task`) — по той же причине
+            // укладки, что и `take_frozen_ready`.
+            if async_state.sync_wait.is_some()
+                && !resume_parked_task(
+                    &mut task,
+                    task_id,
+                    async_state,
+                    program,
+                    catalog,
+                    session_modules,
+                )?
+            {
+                continue;
+            }
             let scheduled = async_state.has_other_live_task() || *force_scheduled;
             if task.quantum_remaining == 0 || !scheduled {
                 task.quantum_remaining = async_state.scheduler_quantum();
@@ -2016,6 +2143,15 @@ impl ProgramExecution {
                 }
                 match step_result {
                     Ok(Step::Continue) => {
+                        // Приостанавливающий метод припарковал задачу:
+                        // `pc` стоит на его инструкции, бандл дорван
+                        // пустыми повторами. Проверка обязана идти первой:
+                        // requeue через safe point вернул бы задачу в
+                        // готовые до завершения host-операции.
+                        if async_state.sync_wait.is_some() {
+                            async_state.tasks[task_id] = Some(task);
+                            break;
+                        }
                         if crossed_scheduler_safe_point(before, &task)
                             && consume_scheduler_safe_point(
                                 &mut task,
@@ -2100,6 +2236,110 @@ impl ProgramExecution {
             }
         }
     }
+}
+
+/// Изъятие пробуждённой замороженной задачи из готовых: при активной
+/// парковке синхронного вызова исполняется только она сама, остальные
+/// готовые ждут в очереди. Вынесено из `poll_linked` ради укладки его
+/// горячего цикла.
+#[inline(never)]
+fn take_frozen_ready(async_state: &mut AsyncState) -> Option<TaskId> {
+    let frozen = async_state.sync_wait.as_ref()?.task_id;
+    let position = async_state
+        .ready
+        .iter()
+        .position(|&candidate| candidate == frozen)?;
+    async_state.ready.remove(position)
+}
+
+/// Возобновление задачи, пробуждённой из парковки синхронного вызова:
+/// результат обещания — в регистр назначения, `pc` — за инструкцию;
+/// ошибка транспорта или материализации разматывается с `pc` на самой
+/// инструкции (ловимость — как у блокирующего пути). `Ok(true)` — задача
+/// продолжает исполнение (обычное или в найденном обработчике), включая
+/// чужую задачу, пробуждённую без парковки; `Ok(false)` — задача
+/// завершилась ошибкой обещания и умерла; `Err` — неперехваченная ошибка
+/// корневой задачи. Вынесено из `poll_linked` ради укладки.
+#[inline(never)]
+fn resume_parked_task(
+    task: &mut Task,
+    task_id: TaskId,
+    async_state: &mut AsyncState,
+    program: &Program,
+    catalog: Option<&CatalogContext<'_>>,
+    session_modules: &mut SessionModules,
+) -> Result<bool, RtError> {
+    if async_state
+        .sync_wait
+        .as_ref()
+        .is_none_or(|wait| wait.task_id != task_id)
+    {
+        return Ok(true);
+    }
+    let wait = async_state
+        .sync_wait
+        .take()
+        .expect("проверено строкой выше");
+    let Err(error) = resume_sync_host_call(task, async_state, &wait) else {
+        return Ok(true);
+    };
+    if unwind_to_handler(
+        &mut task.frames,
+        &mut task.stack,
+        program,
+        catalog,
+        session_modules,
+        &error,
+        &mut task.current_exception,
+    ) {
+        return Ok(true);
+    }
+    match task.completion {
+        TaskCompletion::Root | TaskCompletion::Detached => Err(error),
+        TaskCompletion::Promise(promise_id) => {
+            async_state.resolve_promise(promise_id, Err(error))?;
+            Ok(false)
+        }
+    }
+}
+
+/// Применяет итог завершённого синхронного host-вызова к припаркованной
+/// задаче: значение — в регистр назначения, `pc` — за инструкцию. Ошибка
+/// возвращается вызывающему для обычного разматывания: `pc` задачи стоит
+/// на самой инструкции вызова.
+#[inline(never)]
+fn resume_sync_host_call(
+    task: &mut Task,
+    async_state: &mut AsyncState,
+    wait: &SyncWait,
+) -> Result<(), RtError> {
+    let index = usize::try_from(wait.promise_id.get())
+        .map_err(|_| RtError::InvalidBytecode("номер обещания не помещается в индекс таблицы"))?;
+    let state = async_state
+        .promises
+        .get_mut(index)
+        .ok_or(RtError::InvalidBytecode(
+            "номер обещания вне таблицы запуска",
+        ))?;
+    // Результат забирается насовсем: копия ответа в таблице обещаний
+    // больше никому не нужна — ждала ровно одна задача.
+    let result = match std::mem::replace(state, PromiseState::Ready(Ok(BslValue::Undefined))) {
+        PromiseState::Ready(result) => result,
+        PromiseState::Pending { .. } => {
+            return Err(RtError::InvalidBytecode(
+                "пробуждение синхронного вызова с незавершённым обещанием",
+            ));
+        }
+    };
+    let value = result?;
+    let frame = task
+        .frames
+        .last_mut()
+        .ok_or(RtError::InvalidBytecode("замороженная задача без кадра"))?;
+    let destination = frame.reg_index(wait.dst);
+    reg_store(&mut task.stack, destination, value)?;
+    frame.pc += 1;
+    Ok(())
 }
 
 fn drive_linked(
@@ -3160,6 +3400,7 @@ fn step(
                     module_state,
                     modules,
                     async_state,
+                    task_id,
                     frame_idx,
                     func_id,
                     chunk,
@@ -3241,6 +3482,7 @@ fn step_cold(
     module_state: &mut ModuleState,
     modules: &mut ModulesCtx<'_, '_>,
     async_state: &mut AsyncState,
+    task_id: TaskId,
     frame_idx: usize,
     func_id: usize,
     chunk: &bsl_bytecode::Chunk,
@@ -3499,6 +3741,15 @@ fn step_cold(
             base,
             count,
         } => {
+            // Задача уже припаркована этим самым вызовом: `pc` остался на
+            // инструкции, и внутри бандла `step` диспатчит её повторно,
+            // пока не дойдёт до границы. Повторный вход — пустой: сам
+            // `step` за парковку не платит ни байта (его тело на грани
+            // кеша микроопераций), а паркует задачу арм `Continue`
+            // планировщика.
+            if async_state.sync_wait.is_some() {
+                return Ok(());
+            }
             let ov = at(
                 stack,
                 frames[frame_idx].reg_index(obj),
@@ -3560,7 +3811,20 @@ fn step_cold(
                 )? {
                     Some(descriptor) => {
                         descriptor.check_arity(count, object.type_descriptor().name)?;
-                        (descriptor.call())(object.as_dyn(), args, &mut context)?
+                        match descriptor.invoke(object.as_dyn(), args, &mut context)? {
+                            bsl_rt::CallOutcome::Ready(value) => value,
+                            // Приостанавливающий метод: host-операция
+                            // регистрируется, задача паркуется с `pc` на
+                            // этой инструкции — ранний возврат без сдвига
+                            // `pc`. `step` увидит установленный
+                            // `sync_wait` и вернёт `Step::Suspend`;
+                            // возобновляет планировщик
+                            // (`resume_sync_host_call`), повторного входа
+                            // в обработчик нет.
+                            bsl_rt::CallOutcome::Pending(pending) => {
+                                return async_state.begin_sync_host_call(task_id, dst, pending);
+                            }
+                        }
                     }
                     None => {
                         let method_name = field_name(program, name_id)?;

@@ -1264,7 +1264,20 @@ extern "C" fn shim_call_object_method(
                 )? {
                     Some(descriptor) => {
                         descriptor.check_arity(count, object.type_descriptor().name)?;
-                        (descriptor.call())(object.as_dyn(), args, &mut context)?
+                        match descriptor.invoke(object.as_dyn(), args, &mut context)? {
+                            bsl_rt::CallOutcome::Ready(value) => value,
+                            // Недостижимо, пока выполняется контракт
+                            // `PendingHostCall`: библиотека с
+                            // приостанавливающими методами объявляет
+                            // полный контекст, и чанк с объектами не
+                            // отдаётся JIT. Нарушение контракта должно
+                            // быть видно сразу, а не блокировать поток.
+                            bsl_rt::CallOutcome::Pending(_) => {
+                                return Err(RtError::InvalidBytecode(
+                                    "приостанавливающий метод недостижим в шиме JIT",
+                                ));
+                            }
+                        }
                     }
                     None => {
                         object.call_method(field_name(program, name_id)?, args, &mut context)?

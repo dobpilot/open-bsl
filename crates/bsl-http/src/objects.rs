@@ -2,15 +2,16 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::{Arc, mpsc};
+use std::sync::Arc;
 use std::time::Duration;
 
 use bsl_rt::encoding::Encoding;
 use bsl_rt::{
-    Arity, BslObject, BslString, BslValue, CallContext, ClientIdentity, ComponentError, EnumValue,
-    HttpClient, HttpClientConfig, HttpCompletionSink, HttpWireRequest, HttpWireResponse,
-    MethodDescriptor, NetworkError, ObjectProtocol, PropertyDescriptor, ProxyConfig, ProxyMode,
-    RtError, RtResult, SecretBytes, SecretString, TlsConfig, TypeDescriptor, folded_eq,
+    Arity, BslObject, BslString, BslValue, CallContext, CallOutcome, ClientIdentity,
+    ComponentError, EnumValue, HttpClient, HttpClientConfig, HttpWireRequest, HttpWireResponse,
+    MethodDescriptor, NetworkError, ObjectProtocol, PendingHostCall, PropertyDescriptor,
+    ProxyConfig, ProxyMode, RtError, RtResult, SecretBytes, SecretString, TlsConfig,
+    TypeDescriptor, folded_eq,
 };
 
 pub static HTTP_REQUEST_TYPE: TypeDescriptor = TypeDescriptor {
@@ -909,34 +910,24 @@ fn connection(receiver: &dyn ObjectProtocol) -> RtResult<&HttpConnectionObject> 
         .ok_or(RtError::NotAnObject)
 }
 
-struct ChannelSink(mpsc::Sender<Result<HttpWireResponse, NetworkError>>);
-
-impl HttpCompletionSink for ChannelSink {
-    fn complete(self: Box<Self>, result: Result<HttpWireResponse, NetworkError>) {
-        let _ = self.0.send(result);
-    }
-}
-
+/// Синхронный HTTP-метод не блокирует поток сам: запрос снимается с
+/// BSL-объектов здесь, а транспорт и ожидание достаются вызывающей стороне
+/// типизированной host-операцией. VM паркует execution (worker пула
+/// заданий в это время исполняет другие задания), строковый путь доводит
+/// операцию блокирующе — наблюдаемая семантика прежнего блокирующего
+/// вызова в обоих случаях сохранена, включая ловимость ошибок транспорта.
 fn call_sync(
     receiver: &dyn ObjectProtocol,
     method: &str,
     request_value: &BslValue,
-) -> RtResult<BslValue> {
+) -> RtResult<CallOutcome> {
     let wire = snapshot_request(method, request_value)?;
-    let (sender, receiver_channel) = mpsc::channel();
-    let mut handle = connection(receiver)?
-        .client
-        .submit(wire, Box::new(ChannelSink(sender)))
-        .map_err(network_to_rt)?;
-    let result = receiver_channel.recv().map_err(|_| {
-        http_error(
-            "transport",
-            "HTTP-операция завершилась без результата транспорта",
-        )
-    })?;
-    let response = result.map_err(network_to_rt)?;
-    handle.cancel();
-    HttpResponseObject::from_wire(response)
+    Ok(CallOutcome::Pending(PendingHostCall::HttpSync {
+        client: Arc::clone(&connection(receiver)?.client),
+        request: wire,
+        mapper: materialize_response,
+        error_mapper: network_to_rt,
+    }))
 }
 
 fn snapshot_request(method: &str, request_value: &BslValue) -> RtResult<HttpWireRequest> {
@@ -975,7 +966,7 @@ fn call_http_method(
     receiver: &dyn ObjectProtocol,
     arguments: &[BslValue],
     _context: &mut CallContext<'_>,
-) -> RtResult<BslValue> {
+) -> RtResult<CallOutcome> {
     let method = required_string(arguments, 0, "ВызватьHTTPМетод")?;
     call_sync(receiver, &method, &arguments[1])
 }
@@ -986,7 +977,7 @@ macro_rules! short_method {
             receiver: &dyn ObjectProtocol,
             arguments: &[BslValue],
             _context: &mut CallContext<'_>,
-        ) -> RtResult<BslValue> {
+        ) -> RtResult<CallOutcome> {
             call_sync(receiver, $method, &arguments[0])
         }
     };
@@ -1050,17 +1041,17 @@ short_async_method!(post_async, "POST");
 short_async_method!(put_async, "PUT");
 
 static CONNECTION_METHODS: &[MethodDescriptor] = &[
-    MethodDescriptor::new(
+    MethodDescriptor::suspending(
         &["ВызватьHTTPМетод", "CallHTTPMethod"],
         Arity::exact(2),
         call_http_method,
     ),
-    MethodDescriptor::new(&["Удалить", "Delete"], Arity::exact(1), delete),
-    MethodDescriptor::new(&["Получить", "Get"], Arity::exact(1), get),
-    MethodDescriptor::new(&["ПолучитьЗаголовки", "Head"], Arity::exact(1), head),
-    MethodDescriptor::new(&["Изменить", "Patch"], Arity::exact(1), patch),
-    MethodDescriptor::new(&["ОтправитьДляОбработки", "Post"], Arity::exact(1), post),
-    MethodDescriptor::new(&["Записать", "Put"], Arity::exact(1), put),
+    MethodDescriptor::suspending(&["Удалить", "Delete"], Arity::exact(1), delete),
+    MethodDescriptor::suspending(&["Получить", "Get"], Arity::exact(1), get),
+    MethodDescriptor::suspending(&["ПолучитьЗаголовки", "Head"], Arity::exact(1), head),
+    MethodDescriptor::suspending(&["Изменить", "Patch"], Arity::exact(1), patch),
+    MethodDescriptor::suspending(&["ОтправитьДляОбработки", "Post"], Arity::exact(1), post),
+    MethodDescriptor::suspending(&["Записать", "Put"], Arity::exact(1), put),
     MethodDescriptor::new(
         &["ВызватьHTTPМетодАсинх", "CallHTTPMethodAsync"],
         Arity::exact(2),

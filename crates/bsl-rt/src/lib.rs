@@ -64,12 +64,13 @@ pub use builtin::{
     call_builtin_method_ctx, call_builtin_method_files, call_builtin_temp_file,
 };
 pub use component::{
-    Arity, ByteStreamFactory, CallContext, Capability, ComponentCall, ConstructorCode,
+    Arity, ByteStreamFactory, CallContext, CallOutcome, Capability, ComponentCall, ConstructorCode,
     ConstructorDescriptor, ContextKind, ExecutionParts, FunctionCode, FunctionDescriptor,
     FunctionKind, InterpreterServices, LibraryDependency, LibraryDescriptor, LibraryKey,
-    LibraryRequirement, MethodCall, MethodDescriptor, ObjectContextNeed, PropertyDescriptor,
-    PropertyGet, PropertySet, RegistryError, RuntimeBuilder, RuntimeRegistry,
-    call_method_from_table, core_library, get_property_from_table, set_property_from_table,
+    LibraryRequirement, MethodCall, MethodDescriptor, ObjectContextNeed, PendingHostCall,
+    PropertyDescriptor, PropertyGet, PropertySet, RegistryError, RuntimeBuilder, RuntimeRegistry,
+    SuspendingMethodCall, call_method_from_table, core_library, get_property_from_table,
+    set_property_from_table,
 };
 pub use date::{
     BslDate, DEFAULT_PATTERN as DEFAULT_DATE_PATTERN, UNIX_EPOCH_SECONDS,

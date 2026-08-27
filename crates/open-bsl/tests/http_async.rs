@@ -416,3 +416,127 @@ fn proxy_and_tls_objects_become_transport_configuration() {
         "не сертификат".as_bytes()
     );
 }
+
+/// Синхронный метод паркует execution, а не блокирует поток: пока
+/// транспорт не ответил, poll возвращает `Waiting`, и поток свободен для
+/// другой работы (worker пула заданий в это время исполняет соседние
+/// задания). Ответ, доставленный из чужого потока, ложится в регистр
+/// назначения вызова, и исполнение продолжается за инструкцией.
+#[test]
+fn a_sync_method_parks_the_execution_instead_of_blocking() {
+    let transport = Arc::new(ControlledTransport::default());
+    let engine = Engine::builder().build().unwrap();
+    let module = engine
+        .compile(
+            "Соединение = Новый HTTPСоединение(\"example.test\");\n\
+             Ответ = Соединение.Получить(Новый HTTPЗапрос(\"/parked\"));\n\
+             Если Ответ.КодСостояния <> 200 Тогда ВызватьИсключение \"status\"; КонецЕсли;\n\
+             Если Ответ.ПолучитьТелоКакСтроку() <> \"тело\" Тогда ВызватьИсключение \"body\"; КонецЕсли;",
+        )
+        .unwrap();
+    let mut state = engine
+        .state_builder()
+        .network(ControlledFactory(Arc::clone(&transport)))
+        .build();
+    let mut execution = state.start(&module).unwrap();
+
+    assert_eq!(execution.poll(1).unwrap(), open_bsl::ExecutionPoll::Waiting);
+    let request = transport.request.lock().unwrap().clone().unwrap();
+    assert_eq!(request.method, "GET");
+    assert_eq!(request.resource, "/parked");
+
+    transport
+        .sink
+        .lock()
+        .unwrap()
+        .take()
+        .unwrap()
+        .complete(Ok(HttpWireResponse {
+            status: 200,
+            headers: Vec::new(),
+            body: "тело".as_bytes().to_vec(),
+        }));
+    assert_eq!(
+        execution.poll(1).unwrap(),
+        open_bsl::ExecutionPoll::Complete(open_bsl::Value::Undefined)
+    );
+}
+
+/// Ошибка транспорта припаркованного синхронного вызова разматывается с
+/// `pc` на самой инструкции — «Попытка» вокруг вызова ловит её, как при
+/// прежнем блокирующем пути.
+#[test]
+fn a_sync_transport_error_is_catchable_at_the_call_site() {
+    let transport = Arc::new(ControlledTransport::default());
+    let engine = Engine::builder().build().unwrap();
+    let module = engine
+        .compile(
+            "Соединение = Новый HTTPСоединение(\"example.test\");\n\
+             Ошибка = Ложь;\n\
+             Попытка\n\
+                 Соединение.Получить(Новый HTTPЗапрос(\"/\"));\n\
+             Исключение\n\
+                 Ошибка = Истина;\n\
+             КонецПопытки;\n\
+             Если Не Ошибка Тогда ВызватьИсключение \"ошибка транспорта потеряна\"; КонецЕсли;",
+        )
+        .unwrap();
+    let mut state = engine
+        .state_builder()
+        .network(ControlledFactory(Arc::clone(&transport)))
+        .build();
+    let mut execution = state.start(&module).unwrap();
+
+    assert_eq!(execution.poll(1).unwrap(), open_bsl::ExecutionPoll::Waiting);
+    transport
+        .sink
+        .lock()
+        .unwrap()
+        .take()
+        .unwrap()
+        .complete(Err(NetworkError::new(
+            open_bsl::NetworkErrorKind::Io,
+            "искусственный отказ",
+        )));
+    assert_eq!(
+        execution.poll(1).unwrap(),
+        open_bsl::ExecutionPoll::Complete(open_bsl::Value::Undefined)
+    );
+}
+
+/// Сброс execution, припаркованного на синхронном вызове, отменяет
+/// host-операцию: транспорт получает `cancel`, поздний ответ никому не
+/// доставляется.
+#[test]
+fn dropping_an_execution_parked_on_a_sync_call_cancels_the_request() {
+    let transport = Arc::new(ControlledTransport::default());
+    let engine = Engine::builder().build().unwrap();
+    let module = engine
+        .compile(
+            "Соединение = Новый HTTPСоединение(\"example.test\");\n\
+             Соединение.Получить(Новый HTTPЗапрос(\"/\"));",
+        )
+        .unwrap();
+    let mut state = engine
+        .state_builder()
+        .network(ControlledFactory(Arc::clone(&transport)))
+        .build();
+    let mut execution = state.start(&module).unwrap();
+
+    assert_eq!(execution.poll(1).unwrap(), open_bsl::ExecutionPoll::Waiting);
+    drop(execution);
+    assert!(transport.cancelled.load(Ordering::SeqCst));
+
+    transport
+        .sink
+        .lock()
+        .unwrap()
+        .take()
+        .unwrap()
+        .complete(Ok(HttpWireResponse {
+            status: 200,
+            headers: Vec::new(),
+            body: Vec::new(),
+        }));
+    assert_eq!(state.eval("6 * 7").unwrap().to_string(), "42");
+}
