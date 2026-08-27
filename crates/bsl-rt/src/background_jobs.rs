@@ -207,11 +207,10 @@ fn timeout_from_arg(value: Option<&BslValue>) -> RtResult<Option<Duration>> {
         expected: "целое число секунд",
         op: "ОжидатьЗавершенияВыполнения",
     })?;
+    // ИЗМЕРЕНО (JOB.WAIT.NEGATIVE): отрицательный таймаут — не ошибка,
+    // вызов возвращается немедленно, как и нулевой.
     if seconds < 0 {
-        return Err(RtError::TypeError {
-            expected: "неотрицательный таймаут",
-            op: "ОжидатьЗавершенияВыполнения",
-        });
+        return Ok(Some(Duration::ZERO));
     }
     Ok(Some(Duration::from_secs(seconds as u64)))
 }
