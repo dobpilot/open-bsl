@@ -747,6 +747,12 @@ impl BuiltinFn {
             BuiltinFn::ConcatBinaryData => (1, 1),
             BuiltinFn::GetBinaryDataFromString | BuiltinFn::GetBinaryDataBufferFromString => (1, 3),
             BuiltinFn::GetStringFromBinaryData | BuiltinFn::GetStringFromBinaryDataBuffer => (1, 2),
+            // Сообщить(<ТекстСообщения>, <Статус>) — по синтакс-помощнику
+            // 8.3.27 второй параметр (СтатусСообщения) необязателен и «в
+            // режиме управляемого приложения игнорируется»; open-bsl
+            // моделирует управляемый серверный контекст, поэтому статус
+            // принимается и игнорируется.
+            BuiltinFn::Message => (1, 2),
             _ => (1, 1),
         }
     }
