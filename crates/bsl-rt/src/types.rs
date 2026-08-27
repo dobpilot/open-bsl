@@ -87,6 +87,8 @@ pub enum TypeId {
     /// Тип члена перечисления `НаправлениеСортировки`.
     SortDirection,
     BackgroundJobState,
+    MessageStatus,
+    ErrorCategory,
     /// Тип члена перечисления `ЧастиДаты`.
     DateFractions,
     /// Тип члена перечисления `ХешФункция`.
@@ -286,6 +288,13 @@ const NAMES: &[(TypeId, &str, &str)] = &[
         "StringEncodingMethod",
     ),
     (TypeId::SortDirection, "SortDirection", "SortDirection"),
+    (
+        TypeId::BackgroundJobState,
+        "СостояниеФоновогоЗадания",
+        "BackgroundJobState",
+    ),
+    (TypeId::MessageStatus, "СтатусСообщения", "MessageStatus"),
+    (TypeId::ErrorCategory, "КатегорияОшибки", "ErrorCategory"),
     (TypeId::DateFractions, "DateFractions", "DateFractions"),
     (TypeId::HashFunction, "HashFunction", "HashFunction"),
     (TypeId::BinaryData, "Двоичные данные", "BinaryData"),

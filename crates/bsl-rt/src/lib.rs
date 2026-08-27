@@ -558,6 +558,8 @@ fn enum_kind_type_id(kind: EnumKind) -> TypeId {
         EnumKind::StringEncodingMethod => TypeId::StringEncodingMethod,
         EnumKind::SortDirection => TypeId::SortDirection,
         EnumKind::BackgroundJobState => TypeId::BackgroundJobState,
+        EnumKind::MessageStatus => TypeId::MessageStatus,
+        EnumKind::ErrorCategory => TypeId::ErrorCategory,
         EnumKind::DateFractions => TypeId::DateFractions,
         EnumKind::HashFunction => TypeId::HashFunction,
         EnumKind::ByteOrder => TypeId::ByteOrder,

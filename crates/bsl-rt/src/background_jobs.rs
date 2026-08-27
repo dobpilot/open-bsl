@@ -647,10 +647,25 @@ fn job_error_info(receiver: &dyn ObjectProtocol, _ctx: &mut CallContext<'_>) -> 
     let job = receiver_of::<BackgroundJobObject>(receiver, "ИнформацияОбОшибке")?;
     Ok(match &job.snapshot.error {
         // Новая `ИнформацияОбОшибке` строится в сеансе читающего:
-        // идентичность исходного объекта не сохраняется.
-        Some(error) => crate::error_info::new_error_info(crate::BslString::from_str(&error.full)),
+        // идентичность исходного объекта не сохраняется, cause-цепочка
+        // разворачивается рекурсивно.
+        Some(error) => error_info_from_dto(error),
         None => BslValue::Undefined,
     })
+}
+
+fn error_info_from_dto(error: &crate::JobErrorDto) -> BslValue {
+    let cause = match &error.cause {
+        Some(cause) => error_info_from_dto(cause),
+        None => BslValue::Undefined,
+    };
+    crate::error_info::new_error_info_detailed(
+        &error.brief,
+        &error.full,
+        error.module.as_deref().unwrap_or(""),
+        error.line,
+        cause,
+    )
 }
 
 static MANAGER_METHODS: &[MethodDescriptor] = &[
