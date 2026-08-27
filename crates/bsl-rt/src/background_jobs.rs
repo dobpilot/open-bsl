@@ -6,7 +6,6 @@
 //! реализацию. Без сервиса запуск возвращает ловимую ошибку возможности.
 //! Точные имена, арности и defaults поверхности — за `JOB.API.SURFACE`.
 
-use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
@@ -129,7 +128,6 @@ impl std::fmt::Debug for BackgroundJobsManager {
 struct BackgroundJobObject {
     service: Rc<dyn BackgroundJobService>,
     snapshot: Arc<JobSnapshotDto>,
-    params_cache: RefCell<Option<BslValue>>,
 }
 
 impl std::fmt::Debug for BackgroundJobObject {
@@ -180,7 +178,6 @@ fn job_value(service: &Rc<dyn BackgroundJobService>, snapshot: Arc<JobSnapshotDt
     BslValue::new_object(BackgroundJobObject {
         service: Rc::clone(service),
         snapshot,
-        params_cache: RefCell::new(None),
     })
 }
 
@@ -406,7 +403,16 @@ fn job_wait(
     let job = receiver_of::<BackgroundJobObject>(receiver, "ОжидатьЗавершенияВыполнения")?;
     let timeout = timeout_from_arg(args.first())?;
     job.service.wait_terminal(&[job.snapshot.id], timeout);
-    Ok(BslValue::Undefined)
+    // ИЗМЕРЕНО (JOB.WAIT.RETURN): метод — функция и возвращает ФоновоеЗадание;
+    // отдаём свежий снимок, а при вытеснении из истории — прежний.
+    let snapshot = job
+        .service
+        .snapshot(job.snapshot.id)
+        .unwrap_or_else(|| Arc::clone(&job.snapshot));
+    Ok(BslValue::new_object(BackgroundJobObject {
+        snapshot,
+        service: std::rc::Rc::clone(&job.service),
+    }))
 }
 
 fn job_messages(
@@ -442,26 +448,20 @@ fn job_method_name(
     )))
 }
 
-fn job_params(receiver: &dyn ObjectProtocol, ctx: &mut CallContext<'_>) -> RtResult<BslValue> {
-    let job = receiver_of::<BackgroundJobObject>(receiver, "Параметры")?;
-    if let Some(cached) = job.params_cache.borrow().clone() {
-        return Ok(cached);
-    }
-    // Ленивая материализация в сеансе ЧИТАЮЩЕГО: список заданий не
-    // декодирует параметры, декодирует первое чтение свойства.
-    let values = job.snapshot.params.materialize(ctx.runtime_shapes())?;
-    let value = BslValue::new_array(values);
-    *job.params_cache.borrow_mut() = Some(value.clone());
-    Ok(value)
-}
-
 fn job_key(receiver: &dyn ObjectProtocol, ctx: &mut CallContext<'_>) -> RtResult<BslValue> {
     let job = receiver_of::<BackgroundJobObject>(receiver, "Ключ")?;
+    // ИЗМЕРЕНО (JOB.API.KEY_EMPTY, JOB.KEY.NON_STRING): свойство всегда
+    // строковое — пустая строка без ключа, представление значения с ним.
     match &job.snapshot.key {
-        None => Ok(BslValue::Undefined),
+        None => Ok(BslValue::Str(crate::BslString::from_str(""))),
         Some(key) => {
             let mut values = key.graph.materialize(ctx.runtime_shapes())?;
-            Ok(values.pop().unwrap_or(BslValue::Undefined))
+            let value = values.pop().unwrap_or(BslValue::Undefined);
+            let text = match &value {
+                BslValue::Str(text) => text.to_string(),
+                other => ctx.format_value(other, None)?,
+            };
+            Ok(BslValue::Str(crate::BslString::from_str(&text)))
         }
     }
 }
@@ -556,11 +556,10 @@ static JOB_PROPERTIES: &[PropertyDescriptor] = &[
         get: job_method_name,
         set: None,
     },
-    PropertyDescriptor {
-        names: &["Параметры", "Parameters"],
-        get: job_params,
-        set: None,
-    },
+    // ИЗМЕРЕНО на 8.3.27 (JOB.PARAMS.SNAPSHOT, вторая строка сырого
+    // вывода): свойства «Параметры» у ФоновоеЗадание НЕТ — «Object field
+    // not found». Документация 1c-dn его упоминает; замер главнее.
+    // Ленивая материализация снимка остаётся внутренним Rust-механизмом.
     PropertyDescriptor {
         names: &["Ключ", "Key"],
         get: job_key,

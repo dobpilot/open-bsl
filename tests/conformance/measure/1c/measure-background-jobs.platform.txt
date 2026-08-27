@@ -1,0 +1,45 @@
+
+JOB.API.MANAGER_TYPE	Background job manager
+JOB.API.JOB_TYPE	Background job
+JOB.API.UUID_TYPE	Unique identifier
+JOB.API.METHOD_NAME	ЗамерыФоновыхЗаданий.Пустая
+JOB.API.KEY_EMPTY	String
+JOB.API.DESCRIPTION_EMPTY	String
+JOB.API.STATE_TYPE	BackgroundJobState
+JOB.API.STATE_ACTIVE	Job is running
+JOB.API.STATE_DONE	Job is completed
+JOB.API.STATE_FAILED	Job failed
+JOB.API.STATE_CANCELED	Job cancelled by user
+JOB.STATE.FRESH	Job is running
+JOB.STATE.BEGIN_TYPE	Date
+JOB.STATE.BEGIN_FILLED	Yes
+JOB.STATE.END_EMPTY	No
+JOB.STATE.AFTER	Job is completed
+JOB.STATE.END_FILLED	Yes
+JOB.STATE.OLD_OBJECT	Job is running
+JOB.EXECUTE.NO_MODULE	ошибка: {DataProcessor.Замеры.Form.Форма.Form(125)}: Error calling context method (Execute): Cannot find job method:  НетТакогоМодуля:Метод
+JOB.EXECUTE.NO_METHOD	ошибка: {DataProcessor.Замеры.Form.Форма.Form(133)}: Error calling context method (Execute): Cannot find job method:  ЗамерыФоновыхЗаданий:НетТакогоМетода
+JOB.EXECUTE.NOT_EXPORTED	ошибка: {DataProcessor.Замеры.Form.Форма.Form(141)}: Error calling context method (Execute): Cannot find job method:  ЗамерыФоновыхЗаданий:Скрытая
+JOB.EXECUTE.EXTRA_ARGS	принято, итог Job failed: Too many actual parameters for a background job method 
+JOB.ASYNC.FN_TARGET	принято, итог Job is completed
+JOB.EXECUTE.DEFAULTS	Job is completed, значение=7
+JOB.KEY.DUP_OTHER_METHOD	дубль принят
+JOB.KEY.DUP_SAME_METHOD	дубль отвергнут: {DataProcessor.Замеры.Form.Форма.Form(198)}: Error calling context method (Execute): A job with the same key value is performed already. 
+JOB.KEY.NON_STRING	принят, ключ типа String
+JOB.KEY.AFTER_TERMINAL	после terminal принят
+JOB.WAIT.ZERO	вернулось, состояние Job is running
+JOB.WAIT.NEGATIVE	вернулось
+JOB.WAIT.RETURN	функция, тип Background job
+JOB.WAIT.DONE_STATE	Job is completed
+JOB.WAIT.MANY	вернулось; состояния Job is completed/Job is completed
+JOB.FIND.MISSING	Неопределено
+JOB.MESSAGES.READ	штук 2, тип Message to user, текст первое
+JOB.MESSAGES.REREAD	штук 2
+JOB.MESSAGES.DRAIN	забрано 2, осталось 0
+JOB.PARAMS.SNAPSHOT	задание увидело 1 из 3
+JOB.PARAMS.SNAPSHOT	ошибка: {DataProcessor.Замеры.Form.Форма.Form(324)}: Object field not found (Параметры)
+JOB.NESTED.WAIT	Job is completed, значение=до-ребёнка
+JOB.CANCEL.RUNNING	Job cancelled by user
+JOB.CANCEL.REPEAT	повторная отмена прошла
+JOB.CANCEL.TERMINAL	отмена terminal прошла, состояние Job is completed
+JOB.STATE.ERROR	Job failed; тип инфо Error information; Описание=намеренное падение
