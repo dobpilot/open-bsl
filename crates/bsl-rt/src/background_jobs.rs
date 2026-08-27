@@ -41,6 +41,13 @@ pub trait BackgroundJobService {
     /// возвращаемый префикс у живой записи (у terminal-снимка история
     /// неизменяема — точная модель за `JOB.MESSAGES`).
     fn take_messages(&self, id: JobId, remove: bool) -> Vec<String>;
+    /// Семантика менеджерного `ОжидатьЗавершенияВыполнения` по
+    /// синтакс-помощнику 8.3.27: если активных нет — возврат сразу; с
+    /// таймаутом — до ПЕРВОГО изменения статуса любого из `jobs`
+    /// относительно переданного входного состояния либо до истечения
+    /// таймаута; без таймаута — до завершения всех или первого
+    /// аварийного.
+    fn wait_first_change(&self, jobs: &[(JobId, JobStateDto)], timeout: Option<Duration>);
 }
 
 pub(crate) static USER_MESSAGE_TYPE: TypeDescriptor = TypeDescriptor {
@@ -246,15 +253,25 @@ fn manager_execute(
     };
     let graph =
         SerializedValueGraph::capture(&params, ctx.runtime_shapes(), &GraphLimits::default())?;
+    // Ключ по сигнатуре «Выполнить» — Строка; ИЗМЕРЕНО
+    // (JOB.KEY.NON_STRING), что нестроковое значение коэрцируется в
+    // строковое представление, поэтому и уникальность строковая.
     let key = match args.get(2) {
         None | Some(BslValue::Undefined) => None,
-        Some(value) => Some(Arc::new(JobKeyDto {
-            graph: SerializedValueGraph::capture(
-                std::slice::from_ref(value),
-                ctx.runtime_shapes(),
-                &GraphLimits::default(),
-            )?,
-        })),
+        Some(value) => {
+            let text = match value {
+                BslValue::Str(text) => text.to_string(),
+                other => ctx.format_value(other, None)?,
+            };
+            let coerced = BslValue::Str(crate::BslString::from_str(&text));
+            Some(Arc::new(JobKeyDto {
+                graph: SerializedValueGraph::capture(
+                    std::slice::from_ref(&coerced),
+                    ctx.runtime_shapes(),
+                    &GraphLimits::default(),
+                )?,
+            }))
+        }
     };
     let description = match args.get(3) {
         None | Some(BslValue::Undefined) => None,
@@ -267,27 +284,189 @@ fn manager_execute(
     Ok(job_value(&manager.service, snapshot))
 }
 
+/// Один разобранный критерий отбора `ПолучитьФоновыеЗадания`.
+enum JobFilter {
+    Id(JobId),
+    Key(String),
+    States(Vec<crate::EnumValue>),
+    /// «Запущенные после заданной даты» (документация синтакс-помощника;
+    /// строгость границы не замерена — принято строгое «после»).
+    BeginAfter(crate::BslDate),
+    /// «Завершённые до заданной даты» — строгое «до», та же оговорка.
+    EndBefore(crate::BslDate),
+    Description(String),
+    MethodName(String),
+}
+
+impl JobFilter {
+    fn matches(&self, snapshot: &JobSnapshotDto) -> bool {
+        match self {
+            JobFilter::Id(id) => snapshot.id == *id,
+            JobFilter::Key(text) => snapshot
+                .key
+                .as_ref()
+                .is_some_and(|key| key_display(key).as_deref() == Some(text)),
+            JobFilter::States(states) => states
+                .iter()
+                .any(|state| state_value(snapshot.state) == BslValue::Enum(*state)),
+            JobFilter::BeginAfter(date) => snapshot.begin.is_some_and(|begin| begin > *date),
+            JobFilter::EndBefore(date) => snapshot.end.is_some_and(|end| end < *date),
+            JobFilter::Description(text) => snapshot.description.as_deref().unwrap_or("") == text,
+            JobFilter::MethodName(text) => crate::folded_eq(&snapshot.method_name, text),
+        }
+    }
+}
+
+/// Строковое представление ключа снимка: ключ хранится захваченной
+/// строкой (см. коэрцию в `manager_execute`).
+fn key_display(key: &JobKeyDto) -> Option<String> {
+    let mut shapes = crate::RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
+    key.graph
+        .materialize(&mut shapes)
+        .ok()
+        .and_then(|mut values| values.pop())
+        .and_then(|value| match value {
+            BslValue::Str(text) => Some(text.to_string()),
+            _ => None,
+        })
+}
+
 fn manager_get_jobs(
     receiver: &dyn ObjectProtocol,
     args: &[BslValue],
-    _ctx: &mut CallContext<'_>,
+    ctx: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
     let manager = receiver_of::<BackgroundJobsManager>(receiver, "ПолучитьФоновыеЗадания")?;
-    if args
-        .first()
-        .is_some_and(|v| !matches!(v, BslValue::Undefined))
-    {
-        // Поля и семантика отбора — за `JOB.LIST.FILTER_ORDER`.
-        return Err(RtError::ResourceLimit(
-            "отбор фоновых заданий появится после замера JOB.LIST.FILTER_ORDER".to_string(),
-        ));
+    // Поля отбора — по выписке синтакс-помощника 8.3.27: Структура со
+    // значениями УникальныйИдентификатор, Ключ, Состояние (перечисление
+    // либо массив перечислений), Начало, Конец, Наименование, ИмяМетода,
+    // РегламентноеЗадание. Порядок результата документация не фиксирует
+    // (остаток `JOB.LIST.FILTER_ORDER`) — у нас детерминированный.
+    let mut filters: Vec<JobFilter> = Vec::new();
+    match args.first() {
+        None | Some(BslValue::Undefined) => {}
+        Some(BslValue::Object(object)) => {
+            let crate::BslObject::Structure(storage) = object.as_ref() else {
+                return Err(RtError::TypeError {
+                    expected: "Структура",
+                    op: "ПолучитьФоновыеЗадания",
+                });
+            };
+            let entries: Vec<(String, BslValue)> = {
+                let storage = storage.borrow();
+                (0..storage.len())
+                    .filter_map(|i| storage.entry_at(i))
+                    .filter_map(|(field, item)| {
+                        ctx.runtime_shapes()
+                            .names
+                            .name(field)
+                            .map(|name| (name.to_string(), item))
+                    })
+                    .collect()
+            };
+            for (name, value) in entries {
+                filters.push(filter_from_entry(&name, &value, ctx)?);
+            }
+        }
+        Some(_) => {
+            return Err(RtError::TypeError {
+                expected: "Структура",
+                op: "ПолучитьФоновыеЗадания",
+            });
+        }
     }
     let jobs: Vec<BslValue> = manager
         .snapshots_sorted()
         .into_iter()
+        .filter(|snapshot| filters.iter().all(|filter| filter.matches(snapshot)))
         .map(|snapshot| job_value(&manager.service, snapshot))
         .collect();
     Ok(BslValue::new_array(jobs))
+}
+
+fn filter_from_entry(
+    name: &str,
+    value: &BslValue,
+    ctx: &mut CallContext<'_>,
+) -> RtResult<JobFilter> {
+    const OP: &str = "ПолучитьФоновыеЗадания";
+    if crate::folded_eq(name, "УникальныйИдентификатор") || crate::folded_eq(name, "UUID")
+    {
+        return Ok(JobFilter::Id(job_id_from_value(Some(value), OP)?));
+    }
+    if crate::folded_eq(name, "Ключ") || crate::folded_eq(name, "Key") {
+        let text = match value {
+            BslValue::Str(text) => text.to_string(),
+            other => ctx.format_value(other, None)?,
+        };
+        return Ok(JobFilter::Key(text));
+    }
+    if crate::folded_eq(name, "Состояние") || crate::folded_eq(name, "State") {
+        let mut states = Vec::new();
+        match value {
+            BslValue::Enum(state) => states.push(*state),
+            BslValue::Object(object) => {
+                if let crate::BslObject::Array(items) = object.as_ref() {
+                    for item in items.borrow().iter() {
+                        let BslValue::Enum(state) = item else {
+                            return Err(RtError::TypeError {
+                                expected: "СостояниеФоновогоЗадания",
+                                op: OP,
+                            });
+                        };
+                        states.push(*state);
+                    }
+                } else {
+                    return Err(RtError::TypeError {
+                        expected: "СостояниеФоновогоЗадания",
+                        op: OP,
+                    });
+                }
+            }
+            _ => {
+                return Err(RtError::TypeError {
+                    expected: "СостояниеФоновогоЗадания",
+                    op: OP,
+                });
+            }
+        }
+        return Ok(JobFilter::States(states));
+    }
+    if crate::folded_eq(name, "Начало") || crate::folded_eq(name, "Begin") {
+        if let BslValue::Date(date) = value {
+            return Ok(JobFilter::BeginAfter(*date));
+        }
+        return Err(RtError::TypeError {
+            expected: "Дата",
+            op: OP,
+        });
+    }
+    if crate::folded_eq(name, "Конец") || crate::folded_eq(name, "End") {
+        if let BslValue::Date(date) = value {
+            return Ok(JobFilter::EndBefore(*date));
+        }
+        return Err(RtError::TypeError {
+            expected: "Дата",
+            op: OP,
+        });
+    }
+    if crate::folded_eq(name, "Наименование") || crate::folded_eq(name, "Description") {
+        return Ok(JobFilter::Description(value.as_str(OP)?.to_string()));
+    }
+    if crate::folded_eq(name, "ИмяМетода") || crate::folded_eq(name, "MethodName") {
+        return Ok(JobFilter::MethodName(value.as_str(OP)?.to_string()));
+    }
+    if crate::folded_eq(name, "РегламентноеЗадание") || crate::folded_eq(name, "ScheduledJob")
+    {
+        // Регламентные задания в 0.4.0 не моделируются.
+        return Err(RtError::ResourceLimit(
+            "отбор по регламентному заданию не поддерживается: регламентные задания не моделируются"
+                .to_string(),
+        ));
+    }
+    Err(RtError::ResourceLimit(format!(
+        "неизвестное поле отбора фоновых заданий «{name}»"
+    )))
 }
 
 impl BackgroundJobsManager {
@@ -341,9 +520,27 @@ fn manager_wait(
         }
     }
     let timeout = timeout_from_arg(args.get(1))?;
-    // Правило any/all для массива — за `JOB.WAIT.MANY`; пока — все.
-    manager.service.wait_terminal(&ids, timeout);
-    Ok(BslValue::Undefined)
+    // По выписке синтакс-помощника: ожидание до первого изменения статуса
+    // (с таймаутом) либо до завершения всех/первого аварийного (без), а
+    // возврат — МАССИВ обновлённых заданий.
+    let jobs: Vec<(JobId, JobStateDto)> = ids
+        .iter()
+        .map(|id| {
+            let state = manager
+                .service
+                .snapshot(*id)
+                .map(|snapshot| snapshot.state)
+                .unwrap_or(JobStateDto::Completed);
+            (*id, state)
+        })
+        .collect();
+    manager.service.wait_first_change(&jobs, timeout);
+    let updated: Vec<BslValue> = ids
+        .iter()
+        .filter_map(|id| manager.service.snapshot(*id))
+        .map(|snapshot| job_value(&manager.service, snapshot))
+        .collect();
+    Ok(BslValue::new_array(updated))
 }
 
 fn job_id_from_value(value: Option<&BslValue>, op: &'static str) -> RtResult<JobId> {
@@ -525,7 +722,12 @@ static MANAGER_METHODS: &[MethodDescriptor] = &[
         manager_find,
     ),
     MethodDescriptor::new(
-        &["ОжидатьЗавершенияВыполнения", "WaitForExecutionCompletion"],
+        &[
+            "ОжидатьЗавершенияВыполнения",
+            "WaitForExecutionCompletion",
+            "ОжидатьЗавершения",
+            "WaitForCompletion",
+        ],
         Arity::range(1, 2),
         manager_wait,
     ),

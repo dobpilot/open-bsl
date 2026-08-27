@@ -752,6 +752,67 @@ impl JobRuntimeShared {
         }
     }
 
+    /// Ожидание по семантике синтакс-помощника: активных нет — сразу;
+    /// с таймаутом — до первого изменения статуса; без — до завершения
+    /// всех либо первого аварийного.
+    pub(crate) fn wait_first_change(
+        &self,
+        jobs: &[(JobId, bsl_rt::JobStateDto)],
+        timeout: Option<Duration>,
+    ) {
+        let deadline = timeout.map(|t| std::time::Instant::now() + t);
+        let mut registry = self.registry.lock().expect("реестр без отравления");
+        loop {
+            let mut any_active = false;
+            let mut any_changed = false;
+            let mut all_terminal = true;
+            let mut any_failed = false;
+            for (id, initial) in jobs {
+                let state = registry
+                    .snapshot(*id)
+                    .map(|snapshot| snapshot.state)
+                    .unwrap_or(JobStateDto::Completed);
+                if !state.is_terminal() {
+                    any_active = true;
+                    all_terminal = false;
+                }
+                if state != *initial {
+                    any_changed = true;
+                }
+                if state == JobStateDto::Failed {
+                    any_failed = true;
+                }
+            }
+            if !any_active {
+                return;
+            }
+            match deadline {
+                Some(_) if any_changed => return,
+                None if all_terminal || any_failed => return,
+                _ => {}
+            }
+            match deadline {
+                None => {
+                    registry = self
+                        .terminal_watch
+                        .wait(registry)
+                        .expect("реестр без отравления");
+                }
+                Some(deadline) => {
+                    let now = std::time::Instant::now();
+                    let Some(left) = deadline.checked_duration_since(now) else {
+                        return;
+                    };
+                    let (guard, _) = self
+                        .terminal_watch
+                        .wait_timeout(registry, left)
+                        .expect("реестр без отравления");
+                    registry = guard;
+                }
+            }
+        }
+    }
+
     /// Сообщения задания: живая запись отдаёт (и при `remove` забирает)
     /// свой FIFO; terminal — сообщения снимка истории (неизменяемы).
     pub(crate) fn take_messages(&self, id: JobId, remove: bool) -> Vec<String> {
@@ -1928,6 +1989,67 @@ impl bsl_rt::BackgroundJobService for WorkerJobService {
     fn take_messages(&self, id: JobId, remove: bool) -> Vec<String> {
         self.shared.take_messages(id, remove)
     }
+
+    fn wait_first_change(&self, jobs: &[(JobId, bsl_rt::JobStateDto)], timeout: Option<Duration>) {
+        // Worker не блокируется впустую: между проверками помогает пулу.
+        let deadline = timeout.map(|t| std::time::Instant::now() + t);
+        loop {
+            let (any_active, any_changed, all_terminal, any_failed) = {
+                let registry = self.shared.registry.lock().expect("реестр без отравления");
+                let mut any_active = false;
+                let mut any_changed = false;
+                let mut all_terminal = true;
+                let mut any_failed = false;
+                for (id, initial) in jobs {
+                    let state = registry
+                        .snapshot(*id)
+                        .map(|snapshot| snapshot.state)
+                        .unwrap_or(JobStateDto::Completed);
+                    if !state.is_terminal() {
+                        any_active = true;
+                        all_terminal = false;
+                    }
+                    if state != *initial {
+                        any_changed = true;
+                    }
+                    if state == JobStateDto::Failed {
+                        any_failed = true;
+                    }
+                }
+                (any_active, any_changed, all_terminal, any_failed)
+            };
+            if !any_active {
+                return;
+            }
+            match deadline {
+                Some(deadline) => {
+                    if any_changed || std::time::Instant::now() >= deadline {
+                        return;
+                    }
+                }
+                None => {
+                    if all_terminal || any_failed {
+                        return;
+                    }
+                }
+            }
+            let next = {
+                let mut registry = self.shared.registry.lock().expect("реестр без отравления");
+                registry.queue.pop_front()
+            };
+            match next {
+                Some(id) => drive_to_terminal(&self.shared, &self.engine, id),
+                None => {
+                    let registry = self.shared.registry.lock().expect("реестр без отравления");
+                    let _ = self
+                        .shared
+                        .terminal_watch
+                        .wait_timeout(registry, Duration::from_millis(2))
+                        .expect("реестр без отравления");
+                }
+            }
+        }
+    }
 }
 
 /// Доводит одно задание до terminal в текущем потоке — мини-драйвер
@@ -2038,5 +2160,9 @@ impl bsl_rt::BackgroundJobService for EngineJobService {
 
     fn take_messages(&self, id: JobId, remove: bool) -> Vec<String> {
         self.runtime.shared.take_messages(id, remove)
+    }
+
+    fn wait_first_change(&self, jobs: &[(JobId, bsl_rt::JobStateDto)], timeout: Option<Duration>) {
+        self.runtime.shared.wait_first_change(jobs, timeout);
     }
 }

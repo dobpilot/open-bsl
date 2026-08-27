@@ -98,6 +98,11 @@ pub struct TempStorageSession {
     caller: Option<[u8; 16]>,
     /// Staging записей по адресам вызывателя — публикуется на terminal.
     staged: Vec<StagedWrite>,
+    /// Живые адреса, ВЫДАННЫЕ этим сеансом. По синтакс-помощнику запись
+    /// по адресу «должна быть получена ранее с помощью данного метода», а
+    /// запись по уже удалённому адресу — исключение (подтверждено замером
+    /// `Q78.OWN.DELETED.WRITE.ERROR`).
+    issued: std::collections::HashSet<[u8; 16]>,
     /// Источник UUID адресов.
     random: crate::RandomHandle,
 }
@@ -133,6 +138,7 @@ impl TempStorageSession {
             mailbox: Arc::new(TempMailbox::default()),
             caller: None,
             staged: Vec::new(),
+            issued: std::collections::HashSet::new(),
             random,
         }
     }
@@ -193,6 +199,15 @@ impl TempStorageSession {
             })?,
         };
         if target.token == self.token {
+            if address.is_some() && !self.issued.contains(&target.id) {
+                // ИЗМЕРЕНО (`Q78.OWN.DELETED.WRITE.ERROR`) и подтверждено
+                // синтакс-помощником: запись по удалённому (или никогда не
+                // выдававшемуся) адресу — исключение, значения целы.
+                return Err(RtError::ResourceLimit(
+                    "адрес временного хранилища удалён или не выдавался".to_string(),
+                ));
+            }
+            self.issued.insert(target.id);
             let sequence = self.mailbox.next_sequence();
             self.local.insert(target.id, (sequence, value.clone()));
         } else if self.caller == Some(target.token) {
@@ -270,6 +285,7 @@ impl TempStorageSession {
             return;
         }
         self.local.remove(&target.id);
+        self.issued.remove(&target.id);
         self.mailbox
             .committed
             .lock()
