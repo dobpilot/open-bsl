@@ -166,6 +166,12 @@ pub(crate) struct JobRegistry {
     pub state: RuntimeState,
     records: HashMap<JobId, JobRecord>,
     pub queue: VecDeque<JobId>,
+    /// Счётчик host-событий для точного сна worker: завершение
+    /// host-операции и отмена поднимают его под локом и будят
+    /// `work_available`. Спящий worker сравнивает счётчик со своим
+    /// снимком — пропущенных пробуждений нет по построению, таймерный
+    /// поллинг не нужен.
+    pub wake_epoch: u64,
     keys: Vec<(KeyReservation, JobId)>,
     live_payload_bytes: usize,
     inflight: usize,
@@ -190,6 +196,7 @@ impl JobRegistry {
             state: RuntimeState::Cold,
             records: HashMap::new(),
             queue: VecDeque::new(),
+            wake_epoch: 0,
             keys: Vec::new(),
             live_payload_bytes: 0,
             inflight: 0,
@@ -724,6 +731,10 @@ impl JobRuntimeShared {
         let snapshot =
             self.submit_shared(method_name, target, params, key, description, caller_token)?;
         self.work_available.notify_one();
+        // Helping-ожидание спит на terminal_watch без таймера: новое
+        // задание в очереди — тоже его событие (появился кандидат на
+        // доводку).
+        self.terminal_watch.notify_all();
         Ok(snapshot)
     }
 
@@ -747,6 +758,13 @@ impl JobRuntimeShared {
                 record
                     .cancel_requested
                     .store(true, std::sync::atomic::Ordering::Relaxed);
+                // Точно спящий worker обязан проснуться и опросить
+                // резидента со взведённым флагом: припаркованный на
+                // host-операции poll вернёт Canceled, не дожидаясь
+                // ответа транспорта.
+                registry.wake_epoch += 1;
+                drop(registry);
+                self.work_available.notify_all();
             }
             _ => {}
         }
@@ -958,6 +976,8 @@ impl JobRuntime {
         )?;
         self.ensure_workers();
         self.shared.work_available.notify_one();
+        // См. submit_by_name_shared: помощники ждут на terminal_watch.
+        self.shared.terminal_watch.notify_all();
         Ok(snapshot)
     }
 
@@ -1172,6 +1192,9 @@ fn worker_supervisor(shared: &Arc<JobRuntimeShared>) {
                     registry.state = RuntimeState::Broken;
                     fail_all_resident(&mut registry);
                     shared.terminal_watch.notify_all();
+                    // Соседние worker'ы спят без таймера — поломку они
+                    // обязаны увидеть по state, а не по случайному событию.
+                    shared.work_available.notify_all();
                     return;
                 }
             }
@@ -1179,11 +1202,10 @@ fn worker_supervisor(shared: &Arc<JobRuntimeShared>) {
     }
 }
 
-/// Главный цикл worker: берёт задание из глобальной FIFO, исполняет его
-/// run-to-completion в собственном изолированном сеансе и фиксирует
-/// terminal transition. Квантование сеансов и pending host-calls приходят
-/// вместе с `OwnedExecution` (этап 5 плана); до них worker занят одним
-/// заданием целиком.
+/// Главный цикл worker: резиденты локальной FIFO чередуются бюджетными
+/// квантами, задание с припаркованным host-вызовом (`Waiting`) не мешает
+/// соседям, а когда все резиденты ждут — worker спит точно, до события
+/// (`wake_epoch`, очередь, отмена, закрытие), без таймерного поллинга.
 fn worker_main(shared: &Arc<JobRuntimeShared>) {
     // Каталог разбирается один раз на worker; программы разделяются между
     // сеансами этого worker и не покидают его поток.
@@ -1211,8 +1233,13 @@ fn worker_main(shared: &Arc<JobRuntimeShared>) {
     // собственный poll). Новый глобальный job извлекается только когда
     // локально нет runnable-резидентов — по плану фоновых заданий.
     let mut local: VecDeque<RunningJob> = VecDeque::new();
+    // Снимок wake_epoch на момент последнего начала опроса ждущих
+    // резидентов: спим, только если с тех пор не было ни одного
+    // host-события. Событие между опросом и сном поднимает счётчик под
+    // локом — пропущенных пробуждений нет.
+    let mut seen_epoch = 0u64;
     loop {
-        let runnable_locally = local.iter().any(|job| !job.waiting);
+        let mut runnable_locally = local.iter().any(|job| !job.waiting);
         let next_global = {
             let mut registry = shared.registry.lock().expect("реестр без отравления");
             loop {
@@ -1246,14 +1273,26 @@ fn worker_main(shared: &Arc<JobRuntimeShared>) {
                         .wait(registry)
                         .expect("реестр без отравления");
                 } else {
-                    // Все резиденты ждут host-completion: короткая пауза
-                    // вместо busy-loop; ExecutionWaker с tokio-каналом
-                    // заменит её вместе с pending host-calls.
-                    let (guard, _) = shared
-                        .work_available
-                        .wait_timeout(registry, Duration::from_millis(2))
-                        .expect("реестр без отравления");
-                    registry = guard;
+                    // Все резиденты ждут host-завершений: точный сон до
+                    // события. Каждый источник пробуждения будит condvar
+                    // явно — завершение host-операции и отмена поднимают
+                    // wake_epoch, новое задание видно по очереди,
+                    // закрытие по state; таймерного поллинга нет.
+                    if registry.wake_epoch == seen_epoch {
+                        registry = shared
+                            .work_available
+                            .wait(registry)
+                            .expect("реестр без отравления");
+                        continue;
+                    }
+                    seen_epoch = registry.wake_epoch;
+                    // Неизвестно, чьё завершение пришло: каждый ждущий
+                    // резидент опрашивается заново (его собственный poll
+                    // подберёт доставленные завершения либо снова уснёт).
+                    for job in local.iter_mut() {
+                        job.waiting = false;
+                    }
+                    runnable_locally = true;
                     break None;
                 }
             }
@@ -1405,6 +1444,17 @@ fn start_job(
         prepare_job(shared, engine, id, target, &params, caller_token).map(
             |(state, module, mut vm)| {
                 vm.set_cancel_flag(cancel_requested);
+                // Пробуждение из потока транспорта: поднять wake_epoch под
+                // локом и разбудить пул. Сон worker сверяет счётчик со
+                // своим снимком, поэтому пробуждение не теряется, даже
+                // если пришло между опросом резидентов и засыпанием.
+                let waker_shared = Arc::clone(shared);
+                vm.set_host_waker(std::sync::Arc::new(move || {
+                    let mut registry = waker_shared.registry.lock().expect("реестр без отравления");
+                    registry.wake_epoch += 1;
+                    drop(registry);
+                    waker_shared.work_available.notify_all();
+                }));
                 RunningJob {
                     id,
                     state,
@@ -1968,13 +2018,23 @@ impl bsl_rt::BackgroundJobService for WorkerJobService {
                     drive_to_terminal(&self.shared, &self.engine, id);
                 }
                 None => {
-                    // Некому помогать — короткое ожидание terminal-событий.
+                    // Некому помогать — точное ожидание: terminal-события
+                    // детей, новое задание в очереди (submit будит
+                    // terminal_watch) и дедлайн. Условия перечитываются
+                    // внешним циклом.
                     let registry = self.shared.registry.lock().expect("реестр без отравления");
-                    let _ = self
-                        .shared
-                        .terminal_watch
-                        .wait_timeout(registry, Duration::from_millis(2))
-                        .expect("реестр без отравления");
+                    if registry.queue.is_empty() {
+                        let left = deadline
+                            .map(|deadline| {
+                                deadline.saturating_duration_since(std::time::Instant::now())
+                            })
+                            .unwrap_or(Duration::from_secs(3600));
+                        let _ = self
+                            .shared
+                            .terminal_watch
+                            .wait_timeout(registry, left)
+                            .expect("реестр без отравления");
+                    }
                 }
             }
         }
@@ -2064,6 +2124,15 @@ fn drive_to_terminal(shared: &Arc<JobRuntimeShared>, engine: &crate::Engine, id:
         }
     };
     loop {
+        // Снимок счётчика host-событий ДО кванта: завершение, пришедшее
+        // во время кванта, поднимет счётчик, и сон ниже не состоится.
+        let seen_epoch = {
+            shared
+                .registry
+                .lock()
+                .expect("реестр без отравления")
+                .wake_epoch
+        };
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| job.poll(engine)));
         match outcome {
             Ok(Ok(bsl_vm::ProgramPoll::Complete(..))) => {
@@ -2083,7 +2152,18 @@ fn drive_to_terminal(shared: &Arc<JobRuntimeShared>, engine: &crate::Engine, id:
             }
             Ok(Ok(bsl_vm::ProgramPoll::Runnable)) => {}
             Ok(Ok(bsl_vm::ProgramPoll::Waiting)) => {
-                std::thread::sleep(Duration::from_millis(1));
+                // Доводимое задание ждёт host-завершения: точный сон до
+                // события (host-операция, отмена, закрытие) — как в
+                // worker_main, только для одного резидента.
+                let mut registry = shared.registry.lock().expect("реестр без отравления");
+                while registry.wake_epoch == seen_epoch
+                    && !matches!(registry.state, RuntimeState::Closed | RuntimeState::Broken)
+                {
+                    registry = shared
+                        .work_available
+                        .wait(registry)
+                        .expect("реестр без отравления");
+                }
             }
             Ok(Err(JobPollError::Canceled)) => {
                 finish_job(shared, job.id, JobStateDto::Canceled, None);
