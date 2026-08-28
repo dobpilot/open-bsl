@@ -16,7 +16,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use bsl_bytecode::{
-    ArgMode, Chunk, ExceptionRange, Instr, LibraryRequirement, Program, PropCacheSlot, bundle,
+    ArgMode, Chunk, ExceptionRange, Instr, LibraryRequirement, Program, PropCacheSlot, analysis,
+    bundle,
 };
 use bsl_rt::{BslValue, NameId, Shape, ShapeTable};
 
@@ -133,8 +134,10 @@ pub fn every_section() -> Program {
     // печать помечает ею многочленные бандлы, а разбор считает её заново, и
     // без неё round-trip разошёлся бы на комментарии.
     for i in 0..p.chunks.len() {
-        p.chunks[i].bundle_len =
-            bundle::compute(&p.chunks[i], bundle::module_overlap(i, p.module_vars.len()));
+        p.chunks[i].bundle_len = bundle::compute(
+            &p.chunks[i],
+            analysis::module_overlap(i, p.module_vars.len()),
+        );
     }
     p
 }

@@ -190,7 +190,7 @@ fn entry_over_service(instrs: Vec<Instr>, arg_modes: Vec<Vec<ArgMode>>) -> Progr
     for i in 0..resolved.chunks.len() {
         resolved.chunks[i].bundle_len = bsl_bytecode::bundle::compute(
             &resolved.chunks[i],
-            bsl_bytecode::bundle::module_overlap(i, resolved.module_vars.len()),
+            bsl_bytecode::analysis::module_overlap(i, resolved.module_vars.len()),
         );
     }
     resolved
@@ -279,7 +279,7 @@ fn by_ref_arguments_cross_the_module_boundary_both_ways() {
     for i in 0..entry.chunks.len() {
         entry.chunks[i].bundle_len = bsl_bytecode::bundle::compute(
             &entry.chunks[i],
-            bsl_bytecode::bundle::module_overlap(i, entry.module_vars.len()),
+            bsl_bytecode::analysis::module_overlap(i, entry.module_vars.len()),
         );
     }
     let value = run_configuration(&entry, &catalog).unwrap();
@@ -337,7 +337,7 @@ fn a_failed_module_body_poisons_the_instance_for_the_session() {
     for i in 0..entry.chunks.len() {
         entry.chunks[i].bundle_len = bsl_bytecode::bundle::compute(
             &entry.chunks[i],
-            bsl_bytecode::bundle::module_overlap(i, entry.module_vars.len()),
+            bsl_bytecode::analysis::module_overlap(i, entry.module_vars.len()),
         );
     }
     let error = run_configuration(&entry, &catalog).unwrap_err();

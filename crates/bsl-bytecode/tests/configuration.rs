@@ -6,7 +6,7 @@ mod support;
 use bsl_bytecode::image::{verify, verify_configuration};
 use bsl_bytecode::{
     ArgMode, BytecodeImage, ConfigurationProgram, EntryId, EntryProgram, Instr, LinkEntry,
-    ModuleId, ModuleProgram, Program, bundle, parse_image, parse_program, write_image,
+    ModuleId, ModuleProgram, Program, analysis, bundle, parse_image, parse_program, write_image,
 };
 
 /// Модуль «Служебный»: экспортная функция `Удвоить`, экспортная переменная
@@ -88,8 +88,10 @@ fn entry_program() -> EntryProgram {
 
 fn recompute_bundles(p: &mut Program) {
     for i in 0..p.chunks.len() {
-        p.chunks[i].bundle_len =
-            bundle::compute(&p.chunks[i], bundle::module_overlap(i, p.module_vars.len()));
+        p.chunks[i].bundle_len = bundle::compute(
+            &p.chunks[i],
+            analysis::module_overlap(i, p.module_vars.len()),
+        );
     }
 }
 
@@ -265,7 +267,7 @@ fn duplicate_module_names_differing_only_in_case_are_rejected() {
     catalog.modules[1].program.links.clear();
     catalog.modules[1].program.chunks[0] = {
         let mut chunk = support::chunk(vec![Instr::Return { src: None }]);
-        chunk.bundle_len = bundle::compute(&chunk, bundle::module_overlap(0, 0));
+        chunk.bundle_len = bundle::compute(&chunk, analysis::module_overlap(0, 0));
         chunk
     };
     let error = verify_configuration(&catalog, None).expect_err("дубль имени");

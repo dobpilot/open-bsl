@@ -2685,7 +2685,7 @@ fn prepare_job(
     for i in 0..entry.chunks.len() {
         entry.chunks[i].bundle_len = bsl_bytecode::bundle::compute(
             &entry.chunks[i],
-            bsl_bytecode::bundle::module_overlap(i, entry.module_vars.len()),
+            bsl_bytecode::analysis::module_overlap(i, entry.module_vars.len()),
         );
     }
     let module = engine

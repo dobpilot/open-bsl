@@ -57,7 +57,7 @@ fn bundle_invariants_hold_on_the_whole_corpus() {
                 continue;
             };
             for (i, chunk) in program.chunks.iter().enumerate() {
-                let overlap = bsl_bytecode::bundle::module_overlap(i, program.module_vars.len());
+                let overlap = bsl_bytecode::analysis::module_overlap(i, program.module_vars.len());
                 if let Err(e) = bsl_bytecode::bundle::verify(chunk, overlap) {
                     panic!("{}: чанк {i}: {e}", script.display());
                 }

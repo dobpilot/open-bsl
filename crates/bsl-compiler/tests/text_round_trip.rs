@@ -144,7 +144,7 @@ fn call_component_program() -> Program {
         .resize_with(instruction_count, || RefCell::new(None));
     program.chunks[0].bundle_len = bsl_bytecode::bundle::compute(
         &program.chunks[0],
-        bsl_bytecode::bundle::module_overlap(0, program.module_vars.len()),
+        bsl_bytecode::analysis::module_overlap(0, program.module_vars.len()),
     );
     program
 }
@@ -189,7 +189,7 @@ fn imported_ops_program() -> Program {
         .resize_with(instruction_count, || RefCell::new(None));
     program.chunks[0].bundle_len = bsl_bytecode::bundle::compute(
         &program.chunks[0],
-        bsl_bytecode::bundle::module_overlap(0, program.module_vars.len()),
+        bsl_bytecode::analysis::module_overlap(0, program.module_vars.len()),
     );
     program
 }

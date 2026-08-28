@@ -4,7 +4,9 @@ use bsl_sema::{
 };
 use bsl_syntax::{BinaryOp, UnaryOp};
 
-use bsl_bytecode::{ArgMode, Chunk, ExceptionRange, Instr, LibraryRequirement, Program, bundle};
+use bsl_bytecode::{
+    ArgMode, Chunk, ExceptionRange, Instr, LibraryRequirement, Program, analysis, bundle,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompileError {
@@ -199,8 +201,10 @@ fn compile_module_chunks(
         )?);
     }
     for (i, chunk) in chunks.iter_mut().enumerate() {
-        chunk.bundle_len =
-            bundle::compute(chunk, bundle::module_overlap(i, resolved.module_vars.len()));
+        chunk.bundle_len = bundle::compute(
+            chunk,
+            analysis::module_overlap(i, resolved.module_vars.len()),
+        );
     }
     Ok(chunks)
 }

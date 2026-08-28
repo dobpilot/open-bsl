@@ -10,6 +10,7 @@
 //! [`dynamic`] описывает границу между VM и хостом для
 //! `Выполнить`/`Вычислить`: VM их исполняет, а компилирует хост.
 
+pub mod analysis;
 pub mod bundle;
 mod chunk;
 mod configuration;

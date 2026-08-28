@@ -1154,7 +1154,7 @@ fn parse_program_body(r: &mut Reader) -> Result<Program> {
     // пометками `; бандл N` в листинге.
     for (i, chunk) in chunks.iter_mut().enumerate() {
         chunk.bundle_len =
-            crate::bundle::compute(chunk, crate::bundle::module_overlap(i, module_vars.len()));
+            crate::bundle::compute(chunk, crate::analysis::module_overlap(i, module_vars.len()));
     }
 
     // Цели переходов из файла доверия не заслуживают ровно так же, как
