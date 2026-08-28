@@ -2673,9 +2673,38 @@ pub mod counters {
     use std::collections::HashMap;
     use std::rc::Rc;
 
+    /// Ярус представления операнда, различимый публичным API `BslNumber`.
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum Tier {
+        /// Целое, помещающееся в `i64`: счётчики, индексы, смещения.
+        Int64,
+        /// Число, но не целое в `i64`: масштаб либо ширина мантиссы.
+        Decimal,
+        /// Не число вовсе.
+        Other,
+    }
+
+    fn tier(v: &bsl_rt::BslValue) -> Tier {
+        match v {
+            bsl_rt::BslValue::Number(n) => {
+                if n.to_i64_exact().is_some() {
+                    Tier::Int64
+                } else {
+                    Tier::Decimal
+                }
+            }
+            _ => Tier::Other,
+        }
+    }
+
     struct State {
         by_opcode: Vec<u64>,
         moves_removable: u64,
+        /// Арифметика и сравнения: сколько раз ОБА операнда оказались
+        /// целыми в `i64`, сколько — числами вне этого яруса, сколько —
+        /// не числами. Это и есть ответ на вопрос, окупится ли
+        /// специализация представления, — до того как её писать.
+        arith: Vec<[u64; 3]>,
         /// Таблицы устранимости, по одной на чанк; ключ — его адрес.
         /// Чанки живут в `Program` весь прогон, поэтому адрес стабилен.
         tables: HashMap<usize, Rc<Vec<bool>>>,
@@ -2685,6 +2714,7 @@ pub mod counters {
         static STATE: RefCell<State> = RefCell::new(State {
             by_opcode: vec![0; OPCODE_COUNT],
             moves_removable: 0,
+            arith: vec![[0; 3]; OPCODE_COUNT],
             tables: HashMap::new(),
         });
     }
@@ -2710,6 +2740,19 @@ pub mod counters {
                 st.moves_removable += 1;
             }
         });
+    }
+
+    /// Учесть ярусы операндов арифметической инструкции.
+    pub fn tick_arith(instr: &Instr, a: &bsl_rt::BslValue, b: &bsl_rt::BslValue) {
+        let (ta, tb) = (tier(a), tier(b));
+        let bucket = if ta == Tier::Other || tb == Tier::Other {
+            2
+        } else if ta == Tier::Int64 && tb == Tier::Int64 {
+            0
+        } else {
+            1
+        };
+        STATE.with(|cell| cell.borrow_mut().arith[instr.opcode_index()][bucket] += 1);
     }
 
     /// Отчёт в TSV: строка на опкод, затем итоги по копиям.
@@ -2744,6 +2787,18 @@ pub mod counters {
                 st.moves_removable as f64 * 100.0 / moves as f64
             };
             out.push_str(&format!("# доля устранимых среди Move\t{share:.2}\n"));
+            out.push_str("# арифметика: опкод\tоба Int64\tчисла вне Int64\tне числа\tдоля Int64\n");
+            for (i, b) in st.arith.iter().enumerate() {
+                let total = b[0] + b[1] + b[2];
+                if total == 0 {
+                    continue;
+                }
+                let share = b[0] as f64 * 100.0 / total as f64;
+                out.push_str(&format!(
+                    "{}\t{}\t{}\t{}\t{:.2}\n",
+                    OPCODES[i], b[0], b[1], b[2], share
+                ));
+            }
             out
         })
     }
@@ -2812,12 +2867,35 @@ fn step(
         // может выйти за границы.
         let instr = chunk.instrs[pc];
         #[cfg(feature = "counters")]
-        counters::tick(
-            &instr,
-            chunk,
-            pc,
-            bsl_bytecode::analysis::module_overlap(func_id, program.module_vars.len()),
-        );
+        {
+            counters::tick(
+                &instr,
+                chunk,
+                pc,
+                bsl_bytecode::analysis::module_overlap(func_id, program.module_vars.len()),
+            );
+            // Ярусы операндов снимаются здесь же: специализация
+            // представления по плану следует за динамической
+            // статистикой, а не предшествует ей.
+            if let Instr::Add { a, b, .. }
+            | Instr::Sub { a, b, .. }
+            | Instr::Mul { a, b, .. }
+            | Instr::Div { a, b, .. }
+            | Instr::Mod { a, b, .. }
+            | Instr::Eq { a, b, .. }
+            | Instr::NotEq { a, b, .. }
+            | Instr::Lt { a, b, .. }
+            | Instr::Gt { a, b, .. }
+            | Instr::Le { a, b, .. }
+            | Instr::Ge { a, b, .. } = instr
+            {
+                let ia = frames[frame_idx].reg_index(a);
+                let ib = frames[frame_idx].reg_index(b);
+                if let (Some(va), Some(vb)) = (stack.get(ia), stack.get(ib)) {
+                    counters::tick_arith(&instr, va, vb);
+                }
+            }
+        }
         match instr {
             Instr::GetModuleVar { dst, slot } => {
                 // АБСОЛЮТНЫЙ индекс: модульные переменные лежат подряд,
