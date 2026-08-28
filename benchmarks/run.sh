@@ -146,31 +146,6 @@ median_ms() {
     printf '%s\n' "${values[@]}" | sort -n | awk -v n="$runs" 'NR==int((n+1)/2) { printf "%.0f", $1 }'
 }
 
-# Строка `// @prepend-bsl путь` подключает перед сценарием общий модуль.
-# Это позволяет мерить неизменённый сторонний исходник, не размножая его
-# многотысячную копию в `benchmarks/`. Результат живёт только в scratch.
-materialize_bsl() {
-    local script=$1 prepend source dest
-    prepend=$(sed -n 's|^// @prepend-bsl ||p' "$script")
-    if [ -z "$prepend" ]; then
-        printf '%s\n' "$script"
-        return 0
-    fi
-    case $prepend in
-        /*|*..*) return 1 ;;
-    esac
-    source=$ROOT/$prepend
-    [ -f "$source" ] || return 1
-    mkdir -p "$SCRATCH"
-    dest=$SCRATCH/$(basename "$script")
-    # Исходный модуль Connector хранится с BOM; внутри составного файла
-    # BOM допустим только в самом начале и потому снимается здесь.
-    sed $'1s/^\xEF\xBB\xBF//' "$source" > "$dest" || return 1
-    printf '\n' >> "$dest"
-    sed '/^\/\/ @prepend-bsl /d' "$script" >> "$dest" || return 1
-    printf '%s\n' "$dest"
-}
-
 # Файл, оставленный сценарием, откладывается под именем рантайма — в конце
 # они сверяются между собой. Для файлового сценария это и есть проверка,
 # что все посчитали одно и то же: печатать ему, кроме миллисекунд, нечего.
@@ -218,10 +193,6 @@ printf '%-18s %10s %10s %10s %10s %10s %10s %10s\n' ------------------ ---------
 for bsl in benchmarks/*.bsl; do
     name=$(basename "$bsl" .bsl)
     [ -n "$ONLY" ] && [ "$ONLY" != "$name" ] && continue
-    scenario_bsl=$(materialize_bsl "$bsl") || {
-        echo "$name: не удалось подключить общий BSL-модуль" >&2
-        continue
-    }
     # Тяжёлые сценарии в общий прогон входят, но повторяются меньше раз.
     # Для csv_write* дополнительно нужен рабочий каталог вне дерева проекта.
     workdir=$ROOT
@@ -238,12 +209,12 @@ for bsl in benchmarks/*.bsl; do
         HEAVY_SEEN=yes
     fi
 
-    ours=$(median_ms "$BSL_CLI" "$scenario_bsl" "$workdir") || ours="ошибка"
+    ours=$(median_ms "$BSL_CLI" "$bsl" "$workdir") || ours="ошибка"
     is_heavy "$name" && keep_output "$name" bsl-cli
     # Тот же бинарник с ключом --jit: компиляция байт-кода в машинный код.
     # Отдельной колонкой, а не заменой: JIT включается только ключом, и
     # обычное число обязано остаться на виду.
-    jit_ms=$(median_ms "$BSL_CLI --jit" "$scenario_bsl" "$workdir") || jit_ms="ошибка"
+    jit_ms=$(median_ms "$BSL_CLI --jit" "$bsl" "$workdir") || jit_ms="ошибка"
     is_heavy "$name" && keep_output "$name" bsl-cli-jit
     lua_ms="-"
     luajit_ms="-"
@@ -264,7 +235,7 @@ for bsl in benchmarks/*.bsl; do
         is_heavy "$name" && keep_output "$name" python
     fi
     if [ -n "$OSCRIPT" ]; then
-        os_ms=$(median_ms "$OSCRIPT" "$scenario_bsl" "$workdir") || os_ms="ошибка"
+        os_ms=$(median_ms "$OSCRIPT" "$bsl" "$workdir") || os_ms="ошибка"
         is_heavy "$name" && keep_output "$name" oscript
     fi
 
