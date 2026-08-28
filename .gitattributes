@@ -1,0 +1,6 @@
+# Выгрузка конфигурации измерительной базы 1С хранится ровно так, как её
+# пишет и читает платформа: UTF-8 с сигнатурой и CRLF. Git эти файлы не
+# нормализует и не ищет в них «висящие пробелы» — иначе каждый перевод
+# строки CRLF считается таковым.
+tests/conformance/measure/1c/cfg-src/** -text whitespace=-trailing-space
+tests/conformance/measure/1c/cfg-src-server/** -text whitespace=-trailing-space

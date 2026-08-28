@@ -164,80 +164,155 @@ fn the_background_jobs_measure_script_runs_with_the_platform_catalog() {
 
     let text = String::from_utf8(out.0.borrow().clone()).expect("вывод UTF-8");
 
-    // Золотые ответы open-bsl. Пробы, отмеченные «= платформа», дословно
-    // совпадают со снятым платформенным выводом
-    // `measure-background-jobs.platform.txt` (сессия 2026-08-27,
-    // файловая база); остальные три — задокументированные намеренные
-    // расхождения: тела общих модулей — расширение open-bsl (платформа
-    // отвечает «Ошибка инициализации модуля»), синхронный отказ
-    // async-цели (у платформы «Асинх» ломает инициализацию всего
-    // модуля), клиент-серверная семантика чужого seanceId (файловая
-    // база его игнорирует; авторитет — замеры Q78.FOREIGN.* на
-    // клиент-серверной базе).
-    let expected: &[(&str, &str)] = &[
-        // = платформа
-        ("JOB.LIST.FILTER_ORDER", "равная граница содержит наше: да"),
-        // = платформа
-        ("JOB.MODULE.INIT", "без сообщений"),
-        // расхождение: платформа не исполняет тела общих модулей
+    // Ожидание задаётся ОДНОЙ таблицей на пробу: `Equal` — ответы обеих
+    // сторон совпадают дословно, `Diverges` — расхождение с записанной
+    // причиной. Платформенная половина не переписывается руками, а
+    // читается из снятого вывода `measure-background-jobs.platform.txt`,
+    // поэтому файл, классификация и golden не могут разойтись молча.
+    enum Expected {
+        /// Обе стороны отвечают одинаково; строка — этот общий ответ.
+        Equal(&'static str),
+        /// Намеренное расхождение: ответ платформы, ответ open-bsl.
+        Diverges {
+            platform: &'static str,
+            open_bsl: &'static str,
+        },
+    }
+
+    let expected: &[(&str, Expected)] = &[
+        (
+            "JOB.LIST.FILTER_ORDER",
+            Expected::Equal("равная граница содержит наше: да"),
+        ),
+        ("JOB.MODULE.INIT", Expected::Equal("без сообщений")),
+        // У платформенных общих модулей тел НЕТ вовсе: модуль с телом
+        // грузится молча и падает при первом обращении. Тела модулей
+        // open-bsl — осознанное расширение.
         (
             "JOB.MODULE.INIT.КАСАНИЕ",
-            "Завершено; сосед инициализирован",
+            Expected::Diverges {
+                platform: "Задание завершено с ошибками; без сообщений; ошибка задания: \
+                           Ошибка инициализации модуля: ОбщийМодуль.ЗамерыФоновыйСосед.Модуль",
+                open_bsl: "Завершено; отклик: 42",
+            },
         ),
-        // расхождение механики отказа: цели нет на обеих сторонах
+        // Цели нет на обеих сторонах (объявить `Асинх` в общем модуле
+        // платформы нельзя — он отравляет весь модуль), но тексты отказа
+        // свои у каждой стороны.
         (
             "JOB.ASYNC.TARGET",
-            "ошибка: в модуле «ЗамерыФоновыхЗаданийДвусторонние» нет метода «АсинхЦель»",
+            Expected::Diverges {
+                platform: "ошибка: Ошибка при вызове метода контекста (Выполнить)",
+                open_bsl: "ошибка: в модуле «ЗамерыФоновыхЗаданийДвусторонние» нет метода \
+                           «АсинхЦель»",
+            },
         ),
-        // = платформа
         (
             "JOB.TEMP.LIFETIME",
-            "повторная запись — ошибка; чтение Неопределено",
+            Expected::Equal("повторная запись — ошибка; чтение Неопределено"),
         ),
-        // = платформа
         (
             "JOB.TEMP.READ_YOUR_WRITES",
-            "задание прочитало: Неопределено",
+            Expected::Equal("задание прочитало: Неопределено"),
         ),
-        // = платформа
         (
             "JOB.TEMP.STAGED_DELETE",
-            "после terminal вызыватель видит хранимое",
+            Expected::Equal("после terminal вызыватель видит хранимое"),
         ),
-        // = платформа
         (
             "JOB.TEMP.NESTED_CAPABILITY",
-            "после внука вызыватель видит дедово",
+            Expected::Equal("после внука вызыватель видит дедово"),
         ),
-        // расхождение: файловая база игнорирует чужой seanceId
+        // Файловая база игнорирует чужой `seanceId`; наша семантика —
+        // клиент-серверная, её авторитет — замеры `Q78.FOREIGN.*`.
         (
             "JOB.TEMP.CALLER_CLOSE_RACE",
-            "чтение Неопределено; запись — ошибка",
+            Expected::Diverges {
+                platform: "чтение живое; запись прошла",
+                open_bsl: "чтение Неопределено; запись — ошибка",
+            },
         ),
     ];
+
+    let platform_path = root.join("tests/conformance/measure/measure-background-jobs.platform.txt");
+    let platform_text = std::fs::read_to_string(&platform_path)
+        .unwrap_or_else(|error| panic!("не читается {}: {error}", platform_path.display()));
+
+    // Обе стороны разбираются В ТОЧНУЮ таблицу «ID -> ответ»: строка без
+    // разделителя, дубль ID и лишний ID — отказ, а не молчаливый пропуск.
+    // Сравнение дословное: нормализация пробелов скрыла бы расхождение,
+    // ради поиска которого замер и делается.
+    let parse = |text: &str, side: &str| -> Vec<(String, String)> {
+        let mut rows: Vec<(String, String)> = Vec::new();
+        for line in text.lines() {
+            if line.is_empty() {
+                continue;
+            }
+            let (id, answer) = line
+                .split_once('\t')
+                .unwrap_or_else(|| panic!("{side}: строка без табуляции: {line:?}"));
+            assert!(
+                !id.is_empty() && !id.contains(' '),
+                "{side}: негодный идентификатор пробы: {id:?}"
+            );
+            assert!(
+                !rows.iter().any(|(known, _)| known == id),
+                "{side}: идентификатор {id} встречается дважды"
+            );
+            rows.push((id.to_string(), answer.to_string()));
+        }
+        rows
+    };
+    let ours = parse(&text, "open-bsl");
+    let theirs = parse(&platform_text, "платформа");
+    let answer = |rows: &[(String, String)], id: &str, side: &str| -> String {
+        rows.iter()
+            .find(|(known, _)| known == id)
+            .unwrap_or_else(|| panic!("{side}: нет строки пробы {id}"))
+            .1
+            .clone()
+    };
+
+    // Наборы идентификаторов совпадают у скрипта и обеих сторон: лишняя
+    // или потерянная строка — расхождение, а не мелочь.
+    let expected_ids: Vec<&str> = expected.iter().map(|(id, _)| *id).collect();
     assert_eq!(
-        ids.len(),
-        expected.len(),
-        "золотая таблица разошлась с набором проб скрипта: {ids:?}"
+        ids, expected_ids,
+        "таблица ожиданий разошлась с набором проб скрипта"
     );
-    for (id, want) in expected {
-        assert!(
-            ids.iter().any(|probe| probe == id),
-            "в скрипте нет пробы {id}"
-        );
-        let answers: Vec<&str> = text
-            .lines()
-            .filter(|line| line.starts_with(&format!("{id}\t")))
-            .collect();
+    for (side, rows) in [("open-bsl", &ours), ("платформа", &theirs)] {
+        let seen: Vec<&str> = rows.iter().map(|(id, _)| id.as_str()).collect();
         assert_eq!(
-            answers.len(),
-            1,
-            "проба {id} обязана ответить ровно одной строкой, ответы: {answers:?}\n{text}"
+            seen, expected_ids,
+            "{side}: набор строк вывода не совпадает с набором проб скрипта"
         );
-        assert_eq!(
-            answers[0],
-            format!("{id}\t{want}"),
-            "ответ пробы {id} разошёлся с золотым"
-        );
+    }
+
+    for (id, expectation) in expected {
+        let ours = answer(&ours, id, "open-bsl");
+        let theirs = answer(&theirs, id, "платформа");
+        match expectation {
+            Expected::Equal(both) => {
+                assert_eq!(ours, *both, "ответ open-bsl на {id} разошёлся с ожидаемым");
+                assert_eq!(
+                    theirs, *both,
+                    "проба {id} объявлена совпадающей, но платформенный вывод другой"
+                );
+            }
+            Expected::Diverges { platform, open_bsl } => {
+                assert_eq!(
+                    ours, *open_bsl,
+                    "ответ open-bsl на {id} разошёлся с ожидаемым"
+                );
+                assert_eq!(
+                    theirs, *platform,
+                    "платформенный ответ на {id} разошёлся с записанным в таблице"
+                );
+                assert_ne!(
+                    ours, theirs,
+                    "проба {id} объявлена расхождением, но стороны отвечают одинаково"
+                );
+            }
+        }
     }
 }
