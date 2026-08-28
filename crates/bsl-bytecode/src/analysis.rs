@@ -585,6 +585,11 @@ pub(crate) fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> E
             e.writes.insert_range(0, 256);
             e.reads_alias = true;
             e.writes_alias = true;
+            // И модульные слоты: фрагмент видит переменные модуля так же,
+            // как локали. Без этого таблица неверна для любого будущего
+            // потребителя, даже если нынешний спасён флагом алиасов.
+            e.mod_reads = ModSet::All;
+            e.mod_writes = ModSet::All;
         }
     }
     e
@@ -784,11 +789,24 @@ pub fn removable_copies(chunk: &Chunk, overlap: Option<usize>) -> Vec<bool> {
         !aliased && !overlap.is_some_and(|k| r < k)
     };
 
+    // Внутри `Попытка` исключение может сработать НА ЛЮБОЙ инструкции, а
+    // не только в конце блока. Значит последующая запись в приёмник не
+    // объявляет копию мёртвой: если бросок случится между копией и этой
+    // записью, обработчик увидит именно скопированное значение. Строить
+    // здесь точную живучесть по каждой точке диапазона можно, но это
+    // отдельная работа; до неё копии в защищённых диапазонах не
+    // рассматриваются вовсе.
+    let protected = |pc: usize| {
+        chunk
+            .exception_ranges
+            .iter()
+            .any(|r| pc >= r.start_pc && pc < r.end_pc)
+    };
     for (i, instr) in chunk.instrs.iter().enumerate() {
         let Instr::Move { dst, src } = *instr else {
             continue;
         };
-        if !exact(dst) || !exact(src) {
+        if !exact(dst) || !exact(src) || protected(i) {
             continue;
         }
         if dst == src {
@@ -1145,6 +1163,28 @@ mod tests {
             Instr::Neg { dst: 2, src: 1 },
             Instr::Return { src: Some(2) },
         ]);
+        assert!(!removable_copies(&c, None)[1]);
+    }
+
+    #[test]
+    fn a_copy_inside_a_protected_range_stays() {
+        // Регрессия: исключение может сработать МЕЖДУ копией и записью,
+        // которая якобы делает её мёртвой, и тогда обработчик увидит
+        // именно скопированное значение. Прежняя редакция считала такую
+        // копию устранимой, потому что исключительное ребро моделировала
+        // только с конца блока.
+        let mut c = chunk(vec![
+            Instr::LoadConst { dst: 0, k: 0 },
+            Instr::Move { dst: 1, src: 0 },
+            Instr::Div { dst: 2, a: 0, b: 0 },
+            Instr::LoadConst { dst: 1, k: 1 },
+            Instr::Return { src: Some(1) },
+        ]);
+        c.exception_ranges = vec![crate::chunk::ExceptionRange {
+            start_pc: 0,
+            end_pc: 4,
+            handler_pc: 4,
+        }];
         assert!(!removable_copies(&c, None)[1]);
     }
 }
