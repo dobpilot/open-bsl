@@ -129,6 +129,12 @@ pub(crate) enum Ctl {
 #[derive(Clone, Copy)]
 pub(crate) struct Eff {
     pub(crate) reads: RegSet,
+    /// Чтения ПОЗИЦИОННЫЕ: регистр входит в непрерывное окно
+    /// `base..base+count`, которое вызываемый читает по месту. Такое
+    /// чтение нельзя перенаправить на другой регистр — окно задано
+    /// смещением, а не именем, — поэтому копия, чей приёмник читают так,
+    /// переименованием не снимается.
+    pub(crate) reads_positional: RegSet,
     pub(crate) writes: RegSet,
     pub(crate) reads_alias: bool,
     pub(crate) writes_alias: bool,
@@ -144,6 +150,7 @@ impl Default for Eff {
     fn default() -> Self {
         Eff {
             reads: RegSet::default(),
+            reads_positional: RegSet::default(),
             writes: RegSet::default(),
             reads_alias: false,
             writes_alias: false,
@@ -195,6 +202,7 @@ pub(crate) fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> E
                     e.reads_alias = true;
                 } else {
                     e.reads.insert(r);
+                    e.reads_positional.insert(r);
                 }
             }
         };
@@ -218,6 +226,7 @@ pub(crate) fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> E
         e.mod_writes = ModSet::All;
         if let Some(count) = overlap {
             e.reads.insert_range(0, count);
+            e.reads_positional.insert_range(0, count);
             e.writes.insert_range(0, count);
         }
     };
@@ -771,6 +780,13 @@ pub fn removable_copies(chunk: &Chunk, overlap: Option<usize>) -> Vec<bool> {
                 break;
             }
             if e.writes.contains(src as usize) {
+                removable = Some(false);
+                break;
+            }
+            if e.reads_positional.contains(dst as usize) {
+                // Приёмник читают по месту в окне аргументов: снять копию
+                // можно только заставив её источник писать прямо в это
+                // окно, а это другое преобразование, не переименование.
                 removable = Some(false);
                 break;
             }
