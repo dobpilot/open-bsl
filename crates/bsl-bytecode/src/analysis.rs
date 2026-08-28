@@ -1065,6 +1065,108 @@ pub fn copy_propagate(chunk: &mut Chunk, overlap: Option<usize>) -> usize {
     }
 }
 
+/// Свернуть арифметику над заведомо известными константами.
+///
+/// Возвращает число свёрнутых инструкций. Инструкции НЕ удаляются, а
+/// заменяются на `LoadConst`, поэтому ни адреса, ни диапазоны `Попытка`,
+/// ни инлайн-кэши не сдвигаются — этот проход не требует пересчёта `pc`
+/// и потому проверяется куда проще устранения копий.
+///
+/// Границы намеренно узкие, и каждая имеет причину:
+///
+/// - сворачиваются только `Add`, `Sub`, `Mul`, `Div`, `Mod`, и только
+///   когда ОБА операнда — числа. Арифметика VM приводит строки и булевы
+///   к числу в обёртке над самой операцией (`"5" - 1` измерено на
+///   платформе), а обёртка живёт в `bsl-vm`; повторять её здесь значило
+///   бы завести второй экземпляр правил приведения, который однажды
+///   разойдётся с первым;
+/// - операция, вернувшая ошибку, не сворачивается: `1 / 0` обязано
+///   бросить на исполнении, а не на компиляции. Ровно поэтому замена
+///   безопасна и внутри `Попытка` — сворачивается только то, что и на
+///   исполнении не бросило бы;
+/// - известным считается лишь регистр, чья последняя запись в ЭТОМ блоке
+///   — `LoadConst`. Ни вызова, ни записи через алиас или модульный слот
+///   между записью и использованием быть не должно: такие эффекты
+///   стирают всю таблицу известных.
+pub fn const_propagate(chunk: &mut Chunk, overlap: Option<usize>) -> usize {
+    let mut folded = 0usize;
+    let cfg = build_cfg(chunk);
+    for &(lo, hi) in &cfg.blocks {
+        // Регистр -> номер константы, известной на этой позиции.
+        let mut known: Vec<Option<u16>> = vec![None; 256];
+        for pc in lo..hi {
+            let e = effects(&chunk.instrs[pc], chunk, overlap);
+            if e.writes_alias || e.mod_writes.is_some() || e.heap_write {
+                known.iter_mut().for_each(|k| *k = None);
+            }
+
+            if let Instr::Add { dst, a, b }
+            | Instr::Sub { dst, a, b }
+            | Instr::Mul { dst, a, b }
+            | Instr::Div { dst, a, b }
+            | Instr::Mod { dst, a, b } = chunk.instrs[pc]
+                && let (Some(ka), Some(kb)) = (
+                    known.get(a as usize).copied().flatten(),
+                    known.get(b as usize).copied().flatten(),
+                )
+                && let (Some(va), Some(vb)) =
+                    (chunk.consts.get(ka as usize), chunk.consts.get(kb as usize))
+                && matches!(va, bsl_rt::BslValue::Number(_))
+                && matches!(vb, bsl_rt::BslValue::Number(_))
+            {
+                let out = match chunk.instrs[pc] {
+                    Instr::Add { .. } => va.add(vb),
+                    Instr::Sub { .. } => va.sub(vb),
+                    Instr::Mul { .. } => va.mul(vb),
+                    Instr::Div { .. } => va.div(vb),
+                    _ => va.rem(vb),
+                };
+                if let Ok(v) = out
+                    && let Some(k) = intern_const(chunk, v)
+                {
+                    chunk.instrs[pc] = Instr::LoadConst { dst, k };
+                    folded += 1;
+                }
+            }
+
+            // Учёт записи идёт ПОСЛЕ возможной замены: у свёрнутой
+            // инструкции приёмник теперь тоже известен.
+            match chunk.instrs[pc] {
+                Instr::LoadConst { dst, k } => {
+                    if let Some(slot) = known.get_mut(dst as usize) {
+                        *slot = Some(k);
+                    }
+                }
+                _ => {
+                    for r in 0..=u8::MAX {
+                        if e.writes.contains(r as usize)
+                            && let Some(slot) = known.get_mut(r as usize)
+                        {
+                            *slot = None;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    folded
+}
+
+/// Добавить константу в таблицу чанка и вернуть её номер. `None` — таблица
+/// переполнена (номера шестнадцатибитные), и тогда свёртка не делается.
+///
+/// Дедупликации здесь намеренно нет. Единственное готовое сравнение
+/// значений — `bsl_rt::folded_eq` — реализует РАВЕНСТВО BSL, а оно
+/// приводит типы и складывает регистр строк; склеивать по нему записи
+/// таблицы констант значило бы менять то, что читает `LoadConst`. Рост
+/// ограничен по построению: свёртка добавляет не больше одной константы
+/// на инструкцию и выполняется один раз на компиляции.
+fn intern_const(chunk: &mut Chunk, v: bsl_rt::BslValue) -> Option<u16> {
+    let i = u16::try_from(chunk.consts.len()).ok()?;
+    chunk.consts.push(v);
+    Some(i)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1201,5 +1303,74 @@ mod tests {
             handler_pc: 4,
         }];
         assert!(!removable_copies(&c, None)[1]);
+    }
+
+    fn num(v: i64) -> bsl_rt::BslValue {
+        bsl_rt::BslValue::Number(bsl_number::BslNumber::from_i64(v))
+    }
+
+    #[test]
+    fn arithmetic_over_two_constants_folds() {
+        let mut c = chunk(vec![
+            Instr::LoadConst { dst: 0, k: 0 },
+            Instr::LoadConst { dst: 1, k: 1 },
+            Instr::Add { dst: 2, a: 0, b: 1 },
+            Instr::Return { src: Some(2) },
+        ]);
+        c.consts = vec![num(2), num(3)];
+        assert_eq!(const_propagate(&mut c, None), 1);
+        let Instr::LoadConst { dst: 2, k } = c.instrs[2] else {
+            panic!("сложение не свернулось в константу");
+        };
+        assert_eq!(c.consts[k as usize], num(5));
+    }
+
+    #[test]
+    fn a_failing_operation_is_left_to_run_time() {
+        // `1 / 0` обязано бросить на исполнении, а не исчезнуть на
+        // компиляции: иначе `Попытка` вокруг него перестанет срабатывать.
+        let mut c = chunk(vec![
+            Instr::LoadConst { dst: 0, k: 0 },
+            Instr::LoadConst { dst: 1, k: 1 },
+            Instr::Div { dst: 2, a: 0, b: 1 },
+            Instr::Return { src: Some(2) },
+        ]);
+        c.consts = vec![num(1), num(0)];
+        assert_eq!(const_propagate(&mut c, None), 0);
+        assert!(matches!(c.instrs[2], Instr::Div { .. }));
+    }
+
+    #[test]
+    fn a_call_between_the_constant_and_its_use_stops_folding() {
+        // Вызов может тронуть модульные слоты и чужие кадры, поэтому
+        // таблица известных обнуляется целиком.
+        let mut c = chunk(vec![
+            Instr::LoadConst { dst: 0, k: 0 },
+            Instr::LoadConst { dst: 1, k: 1 },
+            Instr::Call {
+                func: 0,
+                base: 5,
+                arg_modes: 0,
+                ret: 6,
+            },
+            Instr::Add { dst: 2, a: 0, b: 1 },
+            Instr::Return { src: Some(2) },
+        ]);
+        c.consts = vec![num(2), num(3)];
+        assert_eq!(const_propagate(&mut c, None), 0);
+    }
+
+    #[test]
+    fn a_non_numeric_constant_is_not_folded() {
+        // Приведение строк и булевых к числу живёт в обёртке VM; второй
+        // экземпляр этих правил здесь заводить нельзя.
+        let mut c = chunk(vec![
+            Instr::LoadConst { dst: 0, k: 0 },
+            Instr::LoadConst { dst: 1, k: 1 },
+            Instr::Sub { dst: 2, a: 0, b: 1 },
+            Instr::Return { src: Some(2) },
+        ]);
+        c.consts = vec![bsl_rt::BslValue::Str(bsl_rt::BslString::from("5")), num(1)];
+        assert_eq!(const_propagate(&mut c, None), 0);
     }
 }

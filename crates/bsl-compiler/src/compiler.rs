@@ -205,6 +205,8 @@ fn compile_module_chunks(
         // Устранение копий выключено по умолчанию: пока проход не прошёл
         // свои ворота (чередующийся A/B на зафиксированной частоте), он не
         // должен попадать в обычную сборку — иначе не с чем сравнивать.
+        #[cfg(feature = "constprop")]
+        analysis::const_propagate(chunk, overlap);
         #[cfg(feature = "copyprop")]
         analysis::copy_propagate(chunk, overlap);
         chunk.bundle_len = bundle::compute(chunk, overlap);
