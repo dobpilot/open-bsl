@@ -21,4 +21,3 @@ rustyline = { version = "18", default-features = false }
 
 [features]
 counters = ["bsl-vm/counters"]
-copyprop = ["bsl-compiler/copyprop", "open-bsl/copyprop"]

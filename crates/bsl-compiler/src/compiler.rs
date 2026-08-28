@@ -202,10 +202,11 @@ fn compile_module_chunks(
     }
     for (i, chunk) in chunks.iter_mut().enumerate() {
         let overlap = analysis::module_overlap(i, resolved.module_vars.len());
-        // Устранение копий выключено по умолчанию: пока проход не прошёл
-        // свои ворота (чередующийся A/B на зафиксированной частоте), он не
-        // должен попадать в обычную сборку — иначе не с чем сравнивать.
-        #[cfg(feature = "copyprop")]
+        // Устранение копий: проход прошёл свои ворота (чередующийся A/B,
+        // такты и инструкции — см. docs/ssa-hotspot-analysis.md), поэтому
+        // временный переключатель снят. Сравнение с состоянием без него
+        // делается так же, как любое другое в этом проекте, — вторым
+        // бинарником с прежнего коммита.
         analysis::copy_propagate(chunk, overlap);
         chunk.bundle_len = bundle::compute(chunk, overlap);
     }
