@@ -129,11 +129,13 @@ pub(crate) enum Ctl {
 #[derive(Clone, Copy)]
 pub(crate) struct Eff {
     pub(crate) reads: RegSet,
-    /// Чтения ПОЗИЦИОННЫЕ: регистр входит в непрерывное окно
-    /// `base..base+count`, которое вызываемый читает по месту. Такое
-    /// чтение нельзя перенаправить на другой регистр — окно задано
-    /// смещением, а не именем, — поэтому копия, чей приёмник читают так,
-    /// переименованием не снимается.
+    /// Чтения, НЕ адресуемые операндом инструкции. Таких два вида:
+    /// регистр входит в непрерывное окно `base..base+count`, которое
+    /// вызываемый читает по смещению, либо номер регистра записан в
+    /// боковой таблице (`call_arg_modes` для аргумента по ссылке), а не в
+    /// самой инструкции. И то и другое переименованием не меняется,
+    /// поэтому копия, чей приёмник читают так, локальным проходом не
+    /// снимается.
     pub(crate) reads_positional: RegSet,
     pub(crate) writes: RegSet,
     pub(crate) reads_alias: bool,
@@ -195,6 +197,18 @@ pub(crate) fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> E
     // Диапазоны `base..base+count` аллоцируются компилятором только из
     // временных регистров, но чанк может прийти не от кодогена — поэтому
     // диапазон честно проверяется на алиасные номера.
+    // Чтение по фиксированному месту: окно аргументов или слот из
+    // боковой таблицы. Операнда, который можно переписать, у него нет.
+    macro_rules! read_fixed {
+        ($r:expr) => {
+            if is_alias($r) {
+                e.reads_alias = true;
+            } else {
+                e.reads.insert($r as usize);
+                e.reads_positional.insert($r as usize);
+            }
+        };
+    }
     macro_rules! read_range {
         ($base:expr, $count:expr) => {
             for r in ($base as usize)..(($base as usize) + ($count as usize)).min(256) {
@@ -308,12 +322,12 @@ pub(crate) fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> E
                         match m {
                             ArgMode::Value => {
                                 let r = (base as usize + i).min(255) as u8;
-                                read!(r);
+                                read_fixed!(r);
                             }
                             // Вызванный видит слот по ссылке: и читает, и
                             // может записать.
                             ArgMode::ByRefLocal(slot) => {
-                                read!(*slot);
+                                read_fixed!(*slot);
                                 write!(*slot);
                             }
                             // Модульная переменная по ссылке: вызванный читает
@@ -366,10 +380,10 @@ pub(crate) fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> E
                         match m {
                             ArgMode::Value => {
                                 let r = (base as usize + i).min(255) as u8;
-                                read!(r);
+                                read_fixed!(r);
                             }
                             ArgMode::ByRefLocal(slot) => {
-                                read!(*slot);
+                                read_fixed!(*slot);
                                 write!(*slot);
                             }
                             ArgMode::ByRefModuleVar(_) => {}
@@ -861,6 +875,49 @@ pub fn verify(chunk: &Chunk, overlap: Option<usize>) -> Result<(), String> {
             r < chunk.n_params as usize && !chunk.param_by_val.get(r).copied().unwrap_or(false);
         !aliased && !overlap.is_some_and(|k| r < k)
     };
+
+    // Перекрёстная проверка второй поопкодной таблицы против этой:
+    // `Instr::rewrite_read_reg` обязана менять ровно те регистры, которые
+    // здесь названы прочитанными, за вычетом позиционных (окно аргументов
+    // читается по смещению) и записываемых (счётчик цикла читается И
+    // пишется, переименовать половину нельзя). Без этой сверки две
+    // таблицы разъедутся на первом же новом опкоде.
+    for (pc, instr) in chunk.instrs.iter().enumerate() {
+        // Два опкода исключены намеренно, и по разным причинам.
+        // `RunDynamic` видит именованные локали кадра по ИМЕНАМ, поэтому
+        // переименование его операнда запрещено, хотя чтением он и
+        // является. У `NumericForNext*` счётчик читается и пишется ОДНИМ
+        // операндом: переименовать чтение, не тронув запись, нельзя, а
+        // выразить это через множества эффектов — нельзя тем более,
+        // потому что у обычного `Add r1, r1, r2` чтение и запись живут в
+        // разных операндах и переименование законно.
+        if matches!(
+            instr,
+            Instr::RunDynamic { .. }
+                | Instr::NumericForNext { .. }
+                | Instr::NumericForNextI64 { .. }
+        ) {
+            continue;
+        }
+        let e = effects(instr, chunk, overlap);
+        for r in 0..=u8::MAX {
+            if !exact(r) {
+                continue;
+            }
+            let mut probe = *instr;
+            probe.rewrite_read_reg(r, r.wrapping_add(1));
+            let rewritten = probe != *instr;
+            let expected = e.reads.contains(r as usize) && !e.reads_positional.contains(r as usize);
+            if rewritten != expected {
+                return Err(format!(
+                    "инструкция {pc} ({}): перезапись регистра {r} даёт {rewritten}, \
+                     а классификация эффектов ожидает {expected}",
+                    instr.opcode()
+                ));
+            }
+        }
+    }
+
     for (pc, flag) in removable_copies(chunk, overlap).iter().enumerate() {
         if !flag {
             continue;

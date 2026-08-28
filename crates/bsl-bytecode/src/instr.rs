@@ -469,6 +469,129 @@ impl Instr {
     /// поле по прочитанным инструкциям. Ответы обязаны совпадать, иначе
     /// разобранная программа пошла бы мимо того пути исполнения, по
     /// которому шла скомпилированная.
+    /// Переписать ЧТЕНИЯ регистра `from` на `to`.
+    ///
+    /// Таблица нужна проходу устранения копий: чтобы снять `Move`, его
+    /// приёмник надо заменить источником во всех читающих операндах. Три
+    /// класса операндов сюда намеренно НЕ входят, и каждый по своей
+    /// причине:
+    ///
+    /// - `base` вызовов и конструкторов коллекций адресует непрерывное
+    ///   окно `base..base+count`, которое вызываемый читает по смещению.
+    ///   Переименовать такое чтение нельзя — значение обязано лежать
+    ///   именно в этом слоте;
+    /// - `counter` у `NumericForNext*` не только читается, но и
+    ///   пишется: переименовав чтение и не переименовав запись, счётчик
+    ///   разорвали бы пополам;
+    /// - `src` у `RunDynamic`: фрагмент видит именованные локали кадра по
+    ///   ИМЕНАМ, и соответствие имени регистру задано вне инструкции;
+    /// - `src` у `JumpIfNotSkipped` — вообще не чтение: это номер
+    ///   параметра, а пропуск аргумента лежит в метаданных кадра.
+    ///
+    /// Согласованность этой таблицы с [`crate::analysis::effects`]
+    /// проверяется на всём конформанс-корпусе: множество регистров,
+    /// которые здесь меняются, обязано совпасть с прочитанными по
+    /// классификации за вычетом позиционных и записываемых.
+    pub fn rewrite_read_reg(&mut self, from: u8, to: u8) {
+        let r = |x: &mut u8| {
+            if *x == from {
+                *x = to;
+            }
+        };
+        match self {
+            Instr::Move { src, .. }
+            | Instr::SetModuleVar { src, .. }
+            | Instr::SetImportedVar { src, .. }
+            | Instr::AddConst { src, .. }
+            | Instr::Neg { src, .. }
+            | Instr::Not { src, .. }
+            | Instr::JumpIfNotEqConst { src, .. }
+            | Instr::JumpIfNotLtConst { src, .. } => r(src),
+            Instr::Add { a, b, .. }
+            | Instr::Sub { a, b, .. }
+            | Instr::Mul { a, b, .. }
+            | Instr::Div { a, b, .. }
+            | Instr::Mod { a, b, .. }
+            | Instr::Eq { a, b, .. }
+            | Instr::NotEq { a, b, .. }
+            | Instr::Lt { a, b, .. }
+            | Instr::Gt { a, b, .. }
+            | Instr::Le { a, b, .. }
+            | Instr::Ge { a, b, .. } => {
+                r(a);
+                r(b);
+            }
+            Instr::JumpIfFalse { cond, .. } | Instr::JumpIfTrue { cond, .. } => r(cond),
+            Instr::NumericForNext { bound, .. } | Instr::NumericForNextI64 { bound, .. } => r(bound),
+            Instr::Await { promise, .. } => r(promise),
+            Instr::Return { src } | Instr::Raise { src } => {
+                if let Some(src) = src {
+                    r(src);
+                }
+            }
+            Instr::GetIndex { obj, idx, .. } => {
+                r(obj);
+                r(idx);
+            }
+            Instr::SetIndex { obj, idx, src } => {
+                r(obj);
+                r(idx);
+                r(src);
+            }
+            Instr::GetProp { obj, .. }
+            | Instr::CollectionLen { obj, .. }
+            | Instr::CallMethod { obj, .. }
+            | Instr::CallObjectMethod { obj, .. }
+            | Instr::GetObjectProp { obj, .. } => r(obj),
+            Instr::SetProp { obj, src, .. } | Instr::SetObjectProp { obj, src, .. } => {
+                r(obj);
+                r(src);
+            }
+            Instr::NewTypeDescription { names, .. } => r(names),
+            Instr::NewTextWriter { path, .. } => r(path),
+            // Остальные регистровых чтений вне окон не имеют: либо только
+            // пишут, либо читают позиционно, либо не трогают регистры.
+            Instr::GetModuleVar { .. }
+            | Instr::GetImportedVar { .. }
+            | Instr::LoadConst { .. }
+            | Instr::LoadBool { .. }
+            | Instr::LoadUndefined { .. }
+            | Instr::LoadNull { .. }
+            | Instr::Jump { .. }
+            | Instr::Call { .. }
+            | Instr::CallImported { .. }
+            | Instr::CreateObject { .. }
+            | Instr::NewArray { .. }
+            | Instr::NewStructure { .. }
+            | Instr::NewTable { .. }
+            | Instr::NewValueComparison { .. }
+            | Instr::NewMap { .. }
+            | Instr::CallBuiltin { .. }
+            | Instr::CallComponent { .. }
+            // `src` здесь — номер параметра, а не регистр со значением:
+            // пропуск аргумента лежит в метаданных кадра, и переименование
+            // сломало бы саму проверку.
+            | Instr::JumpIfNotSkipped { .. }
+            | Instr::RunDynamic { .. } => {}
+        }
+    }
+
+    /// Переставить цель перехода. Пара к [`Instr::jump_target`]: нужна
+    /// пересчёту `pc` после удаления инструкций.
+    pub fn set_jump_target(&mut self, t: i16) {
+        match self {
+            Instr::Jump { target }
+            | Instr::JumpIfFalse { target, .. }
+            | Instr::JumpIfTrue { target, .. }
+            | Instr::JumpIfNotEqConst { target, .. }
+            | Instr::JumpIfNotLtConst { target, .. }
+            | Instr::JumpIfNotSkipped { target, .. }
+            | Instr::NumericForNext { target, .. }
+            | Instr::NumericForNextI64 { target, .. } => *target = t,
+            _ => {}
+        }
+    }
+
     #[must_use]
     pub fn touches_objects(&self) -> bool {
         matches!(
