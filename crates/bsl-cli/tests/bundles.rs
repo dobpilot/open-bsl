@@ -88,3 +88,64 @@ fn bundle_invariants_hold_on_the_whole_corpus() {
          либо анализ вырожден, либо разметка не заполняется"
     );
 }
+
+/// Инварианты анализа копий на том же корпусе.
+///
+/// Проверяет не сам ответ, а его устойчивость: живучесть, посчитанная
+/// двумя порядками обхода блоков, обязана совпасть, разбиение на блоки —
+/// покрывать чанк целиком, а устранимой не смеет оказаться копия
+/// неточного регистра. Сводка под `--nocapture` показывает, что анализ
+/// вообще что-то находит, а не выродился в сплошные отказы.
+#[test]
+fn copy_analysis_invariants_hold_on_the_whole_corpus() {
+    let mut chunks = 0usize;
+    let mut moves = 0usize;
+    let mut removable = 0usize;
+    let mut skipped = 0usize;
+    for dir in [
+        conformance_dir().join("fixtures"),
+        conformance_dir().join("measure"),
+    ] {
+        for script in scripts_in(&dir) {
+            let src =
+                fs::read_to_string(&script).unwrap_or_else(|e| panic!("{}: {e}", script.display()));
+            let Ok(parsed) = bsl_syntax::parse(&src) else {
+                skipped += 1;
+                continue;
+            };
+            let Ok(resolved) = bsl_sema::resolve_program(&parsed.items) else {
+                skipped += 1;
+                continue;
+            };
+            let Ok(program) = bsl_compiler::compile_program(&resolved) else {
+                skipped += 1;
+                continue;
+            };
+            for (i, chunk) in program.chunks.iter().enumerate() {
+                let overlap = bsl_bytecode::analysis::module_overlap(i, program.module_vars.len());
+                if let Err(e) = bsl_bytecode::analysis::verify(chunk, overlap) {
+                    panic!("{}: чанк {i}: {e}", script.display());
+                }
+                chunks += 1;
+                let flags = bsl_bytecode::analysis::removable_copies(chunk, overlap);
+                for (pc, instr) in chunk.instrs.iter().enumerate() {
+                    if matches!(instr, bsl_bytecode::Instr::Move { .. }) {
+                        moves += 1;
+                        if flags[pc] {
+                            removable += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    println!(
+        "копии: чанков {chunks}, Move {moves}, из них устранимо {removable}, \
+         скриптов пропущено {skipped}"
+    );
+    assert!(
+        removable > 0,
+        "на всём корпусе не нашлось ни одной устранимой копии — \
+         анализ вырожден"
+    );
+}

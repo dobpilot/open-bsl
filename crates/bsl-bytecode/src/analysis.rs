@@ -666,6 +666,18 @@ fn build_cfg(chunk: &Chunk) -> Cfg {
 
 /// Живые на выходе из каждого блока точные регистры.
 fn live_out(chunk: &Chunk, cfg: &Cfg, overlap: Option<usize>) -> Vec<RegSet> {
+    live_out_in_order(chunk, cfg, overlap, true)
+}
+
+/// То же, но с выбором порядка обхода блоков. Порядок влияет только на
+/// число итераций до неподвижной точки; на результат — не должен, и
+/// [`verify`] это проверяет сравнением двух прогонов.
+fn live_out_in_order(
+    chunk: &Chunk,
+    cfg: &Cfg,
+    overlap: Option<usize>,
+    backwards: bool,
+) -> Vec<RegSet> {
     let nb = cfg.blocks.len();
     let mut live_in = vec![RegSet::default(); nb];
     let mut live_out = vec![RegSet::default(); nb];
@@ -674,7 +686,12 @@ fn live_out(chunk: &Chunk, cfg: &Cfg, overlap: Option<usize>) -> Vec<RegSet> {
     let mut changed = true;
     while changed {
         changed = false;
-        for b in (0..nb).rev() {
+        let order: Vec<usize> = if backwards {
+            (0..nb).rev().collect()
+        } else {
+            (0..nb).collect()
+        };
+        for b in order {
             let mut out = RegSet::default();
             for &s in &cfg.succs[b] {
                 out.union(&live_in[s]);
@@ -766,6 +783,84 @@ pub fn removable_copies(chunk: &Chunk, overlap: Option<usize>) -> Vec<bool> {
         out[i] = removable.unwrap_or_else(|| !live[b].contains(dst as usize));
     }
     out
+}
+
+/// Проверка инвариантов анализа — независимая от его построителя.
+///
+/// Проверяются три вещи. Разбиение на блоки обязано покрывать чанк
+/// целиком и ссылаться только на существующие блоки. Живучесть обязана
+/// не зависеть от порядка обхода: она считается дважды, прямым и
+/// обратным порядком блоков, и результаты сравниваются — зависимость от
+/// порядка была одним из дефектов, на которых остановилась предыдущая
+/// попытка анализа в этом проекте. И наконец, ни одна копия, признанная
+/// устранимой, не смеет трогать неточный регистр.
+///
+/// # Errors
+///
+/// Возвращает описание первого нарушенного инварианта.
+pub fn verify(chunk: &Chunk, overlap: Option<usize>) -> Result<(), String> {
+    let n = chunk.instrs.len();
+    if n == 0 {
+        return Ok(());
+    }
+    let cfg = build_cfg(chunk);
+    if cfg.blocks.is_empty() {
+        return Err("чанк не пуст, а блоков нет".to_string());
+    }
+    let mut covered = 0usize;
+    for (b, &(lo, hi)) in cfg.blocks.iter().enumerate() {
+        if lo >= hi || hi > n {
+            return Err(format!("блок {b}: границы {lo}..{hi} вне чанка длиной {n}"));
+        }
+        covered += hi - lo;
+        for pc in lo..hi {
+            if cfg.block_of[pc] != b {
+                return Err(format!(
+                    "инструкция {pc} приписана блоку {}, а лежит в {b}",
+                    cfg.block_of[pc]
+                ));
+            }
+        }
+        for &s in &cfg.succs[b] {
+            if s >= cfg.blocks.len() {
+                return Err(format!("блок {b}: преемник {s} не существует"));
+            }
+        }
+    }
+    if covered != n {
+        return Err(format!("блоки покрывают {covered} инструкций из {n}"));
+    }
+
+    let a = live_out_in_order(chunk, &cfg, overlap, true);
+    let b = live_out_in_order(chunk, &cfg, overlap, false);
+    for (i, (x, y)) in a.iter().zip(b.iter()).enumerate() {
+        if !x.equals(y) {
+            return Err(format!("живучесть блока {i} зависит от порядка обхода"));
+        }
+    }
+
+    let exact = |r: u8| {
+        let r = r as usize;
+        let aliased =
+            r < chunk.n_params as usize && !chunk.param_by_val.get(r).copied().unwrap_or(false);
+        !aliased && !overlap.is_some_and(|k| r < k)
+    };
+    for (pc, flag) in removable_copies(chunk, overlap).iter().enumerate() {
+        if !flag {
+            continue;
+        }
+        match chunk.instrs[pc] {
+            Instr::Move { dst, src } => {
+                if !exact(dst) || !exact(src) {
+                    return Err(format!(
+                        "копия {pc}: устранимой признана копия неточного регистра"
+                    ));
+                }
+            }
+            _ => return Err(format!("инструкция {pc} помечена копией, но это не Move")),
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
