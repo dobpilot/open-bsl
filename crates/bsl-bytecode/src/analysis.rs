@@ -969,84 +969,90 @@ pub fn verify(chunk: &Chunk, overlap: Option<usize>) -> Result<(), String> {
 /// удалить сам `Move`.
 ///
 /// Возвращает число удалённых инструкций. Разметку бандлов НЕ трогает:
-/// она производная и пересчитывается вызывающим через `bundle::compute`
-/// после всех правок.
+/// она производная и пересчитывается вызывающим через `bundle::compute`.
 ///
-/// За один заход снимается ОДНА копия, после чего анализ считается
-/// заново. Так дороже, но безусловно верно: удаление инструкции меняет
-/// живучесть и может отнять у другой копии основание считаться
-/// устранимой — например, когда та опиралась на переопределение
-/// приёмника именно этой инструкцией.
-///
-/// Копии на границах диапазонов `Попытка` пропускаются: удаление
-/// единственной инструкции защищённого участка оставило бы пустой
-/// диапазон, а выигрыш от такой копии не стоит отдельного разбора.
+/// За раунд анализ считается ОДИН раз, а применяется столько копий,
+/// сколько заведомо не мешают друг другу. Мешать они могут одним
+/// способом: удаление `Move` убирает запись в его приёмник, а именно
+/// такая запись могла быть основанием считать мёртвой другую копию.
+/// Поэтому в раунд берутся копии, чьи участки переименования не
+/// пересекаются, — тогда ни одна не опирается на инструкцию, которую
+/// снимает соседняя. Раунды повторяются, пока хоть что-то снимается;
+/// на практике их единицы, и полный пересчёт на каждую снятую копию
+/// (а это квадрат по их числу) не нужен.
 pub fn copy_propagate(chunk: &mut Chunk, overlap: Option<usize>) -> usize {
     let mut removed = 0usize;
     loop {
         let flags = removable_copies(chunk, overlap);
+        let cfg = build_cfg(chunk);
         let boundary = |pc: usize| {
             chunk
                 .exception_ranges
                 .iter()
                 .any(|r| r.start_pc == pc || r.end_pc == pc || r.handler_pc == pc)
         };
-        let Some(i) = flags
-            .iter()
-            .enumerate()
-            .position(|(pc, &f)| f && !boundary(pc))
-        else {
+
+        // Отбор раунда: участок [копия, конец переименования] не должен
+        // пересекаться с уже принятым.
+        let mut picked: Vec<(usize, u8, u8, usize)> = Vec::new();
+        let mut busy_until = 0usize;
+        for (i, &f) in flags.iter().enumerate() {
+            if !f || boundary(i) || i < busy_until {
+                continue;
+            }
+            let Instr::Move { dst, src } = chunk.instrs[i] else {
+                continue;
+            };
+            let (_, hi) = cfg.blocks[cfg.block_of[i]];
+            let mut stop = hi;
+            for pc in (i + 1)..hi {
+                if effects(&chunk.instrs[pc], chunk, overlap)
+                    .writes
+                    .contains(dst as usize)
+                {
+                    stop = pc + 1;
+                    break;
+                }
+            }
+            picked.push((i, dst, src, stop));
+            busy_until = stop;
+        }
+        if picked.is_empty() {
             return removed;
-        };
-        let Instr::Move { dst, src } = chunk.instrs[i] else {
-            return removed;
-        };
-
-        // Переименование идёт до конца блока либо до переопределения
-        // приёмника — ровно тот участок, на котором `removable_copies`
-        // и доказала устранимость.
-        let cfg = build_cfg(chunk);
-        let (_, hi) = cfg.blocks[cfg.block_of[i]];
-        for pc in (i + 1)..hi {
-            let writes_dst = effects(&chunk.instrs[pc], chunk, overlap)
-                .writes
-                .contains(dst as usize);
-            chunk.instrs[pc].rewrite_read_reg(dst, src);
-            if writes_dst {
-                break;
-            }
         }
 
-        chunk.instrs.remove(i);
-        chunk.prop_cache.remove(i);
-        chunk.method_cache.remove(i);
-        if i < chunk.bundle_len.len() {
-            chunk.bundle_len.remove(i);
-        }
-
-        // Адреса абсолютные, поэтому всё, что стояло ЗА удалённой
-        // инструкцией, съезжает на единицу. Цель, указывавшая на неё
-        // саму, теперь указывает на следующую — это тот же адрес.
-        for instr in &mut chunk.instrs {
-            if let Some(t) = instr.jump_target()
-                && let Ok(t) = usize::try_from(t)
-                && t > i
-                && let Ok(nt) = i16::try_from(t - 1)
-            {
-                instr.set_jump_target(nt);
+        // Применяем с конца: удаление сдвигает только то, что за ним.
+        for &(i, dst, src, stop) in picked.iter().rev() {
+            for pc in (i + 1)..stop {
+                chunk.instrs[pc].rewrite_read_reg(dst, src);
             }
-        }
-        let shift = |pc: &mut usize| {
-            if *pc > i {
-                *pc -= 1;
+            chunk.instrs.remove(i);
+            chunk.prop_cache.remove(i);
+            chunk.method_cache.remove(i);
+            if i < chunk.bundle_len.len() {
+                chunk.bundle_len.remove(i);
             }
-        };
-        for r in &mut chunk.exception_ranges {
-            shift(&mut r.start_pc);
-            shift(&mut r.end_pc);
-            shift(&mut r.handler_pc);
+            for instr in &mut chunk.instrs {
+                if let Some(t) = instr.jump_target()
+                    && let Ok(t) = usize::try_from(t)
+                    && t > i
+                    && let Ok(nt) = i16::try_from(t - 1)
+                {
+                    instr.set_jump_target(nt);
+                }
+            }
+            let shift = |pc: &mut usize| {
+                if *pc > i {
+                    *pc -= 1;
+                }
+            };
+            for r in &mut chunk.exception_ranges {
+                shift(&mut r.start_pc);
+                shift(&mut r.end_pc);
+                shift(&mut r.handler_pc);
+            }
+            removed += 1;
         }
-        removed += 1;
     }
 }
 
