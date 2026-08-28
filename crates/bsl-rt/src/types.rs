@@ -443,6 +443,17 @@ impl TypeRef {
             TypeRef::Object(descriptor) => descriptor.type_display.to_string(),
         }
     }
+
+    /// Длина печатного имени В БАЙТАХ без его материализации: обе ветви
+    /// печатают статическую строку, поэтому длина известна заранее. Нужна
+    /// тем, кто списывает бюджет памяти до аллокации.
+    #[must_use]
+    pub fn display_len(self) -> usize {
+        match self {
+            TypeRef::Native(id) => id.name().len(),
+            TypeRef::Object(descriptor) => descriptor.type_display.len(),
+        }
+    }
 }
 
 impl PartialEq for TypeRef {

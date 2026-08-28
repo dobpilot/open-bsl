@@ -328,6 +328,51 @@ impl BslString {
         self.0.len()
     }
 
+    /// UTF-8 представление строки ОДНОЙ аллокацией точной ёмкости.
+    /// Путь через `Display` строит промежуточный `String` и копирует его
+    /// в результат, то есть держит вдвое больше памяти, чем занимает
+    /// строка, — там, где память учтена бюджетом, эта вторая копия и
+    /// есть перерасход.
+    #[must_use]
+    pub fn to_utf8_string(&self) -> String {
+        let mut out = String::with_capacity(self.utf8_len());
+        for decoded in char::decode_utf16(self.0.iter().copied()) {
+            out.push(decoded.unwrap_or(char::REPLACEMENT_CHARACTER));
+        }
+        out
+    }
+
+    /// Точная длина строки в байтах UTF-8, посчитанная БЕЗ материализации.
+    /// Нужна тем, кто обязан списать бюджет памяти до аллокации: строка
+    /// хранится в UTF-16, и оценка «байт не меньше код-юнитов» оставляла
+    /// бы окно, в котором не-ASCII строка сначала выделяется, а потом
+    /// отвергается.
+    #[must_use]
+    pub fn utf8_len(&self) -> usize {
+        // Тот же разбор, что у `write_utf8`: пара суррогатов даёт одну
+        // кодовую точку в четырёх байтах, непарный — U+FFFD в трёх.
+        // Следующий код-юнит потребляется ТОЛЬКО когда он действительно
+        // младший суррогат: иначе он остаётся самостоятельным символом и
+        // его байты не должны пропасть из счёта.
+        let mut len = 0usize;
+        let mut index = 0usize;
+        while index < self.0.len() {
+            let unit = self.0[index];
+            let (bytes, step) = match unit {
+                0x0000..=0x007f => (1, 1),
+                0x0080..=0x07ff => (2, 1),
+                0xd800..=0xdbff => match self.0.get(index + 1) {
+                    Some(0xdc00..=0xdfff) => (4, 2),
+                    _ => (3, 1),
+                },
+                _ => (3, 1),
+            };
+            len += bytes;
+            index += step;
+        }
+        len
+    }
+
     pub fn concat(&self, other: &Self) -> Self {
         let mut v = Vec::with_capacity(self.0.len() + other.0.len());
         v.extend_from_slice(&self.0);
@@ -671,6 +716,34 @@ mod tests {
         bytes.clear();
         malformed.write_utf8(&mut bytes).unwrap();
         assert_eq!(String::from_utf8(bytes).unwrap(), "\u{FFFD}x");
+    }
+
+    /// Длина в байтах UTF-8, посчитанная без материализации, совпадает с
+    /// фактической записью — включая суррогаты во всех сочетаниях:
+    /// правильную пару, непарный старший перед обычным символом, непарный
+    /// в конце и одинокий младший.
+    #[test]
+    fn utf8_len_matches_the_written_bytes() {
+        let cases: Vec<Vec<u16>> = vec![
+            Vec::new(),
+            "ascii".encode_utf16().collect(),
+            "кириллица и ещё".encode_utf16().collect(),
+            "😀смайл".encode_utf16().collect(),
+            vec![0xD800, b'x' as u16],
+            vec![0xD800],
+            vec![0xDC00, b'y' as u16],
+            vec![0xD83D, 0xDE00, 0xD800, 0x0416],
+        ];
+        for units in cases {
+            let string = BslString::from_units(units.clone());
+            let mut bytes = Vec::new();
+            string.write_utf8(&mut bytes).unwrap();
+            assert_eq!(
+                string.utf8_len(),
+                bytes.len(),
+                "расчёт разошёлся с записью на {units:?}"
+            );
+        }
     }
 
     #[test]
