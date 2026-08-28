@@ -30,3 +30,7 @@ bsl-compiler = { path = "../bsl-compiler" }
 bsl-sema = { path = "../bsl-sema" }
 bsl-syntax = { path = "../bsl-syntax" }
 pprof = { version = "0.13", default-features = false, features = ["flamegraph"] }
+
+[features]
+# Счётчики исполненных опкодов: см. модуль `counters` в lib.rs.
+counters = []

@@ -54,11 +54,29 @@ macro_rules! opcodes {
     ($($name:ident),+ $(,)?) => {
         pub const OPCODES: &[&str] = &[$(stringify!($name)),+];
 
+        /// Число опкодов: размер гистограммы счётчиков исполнения.
+        pub const OPCODE_COUNT: usize = OPCODES.len();
+
         impl Instr {
             /// Имя опкода — то же, что печатает формат и принимает разбор.
             pub fn opcode(&self) -> &'static str {
                 match self {
                     $(Instr::$name { .. } => stringify!($name),)+
+                }
+            }
+
+            /// Порядковый номер опкода — позиция в [`OPCODES`].
+            ///
+            /// Нужен гистограмме исполненных опкодов в счётчиках. Индекс
+            /// порождается тем же макросом, что и имена: вспомогательное
+            /// перечисление нумерует варианты в том же порядке, поэтому
+            /// второго рукописного `match` по всем опкодам не появляется,
+            /// а новый опкод получает индекс сам.
+            pub fn opcode_index(&self) -> usize {
+                #[allow(dead_code, non_camel_case_types)]
+                enum Idx { $($name,)+ }
+                match self {
+                    $(Instr::$name { .. } => Idx::$name as usize,)+
                 }
             }
         }

@@ -47,7 +47,7 @@
 //! цикла. Инварианты самой разметки проверяет [`verify`] на конформанс-
 //! корпусе.
 
-use crate::analysis::{Ctl, Eff, ModSet, RegSet, effects};
+use crate::analysis::{Ctl, Eff, ModSet, RegSet, effects, leaders};
 use crate::chunk::Chunk;
 
 /// Ширина бандла ограничена ёмкостью `u8` в [`Chunk::bundle_len`].
@@ -114,33 +114,6 @@ fn conflicts(e: &Eff, acc: &Acc) -> bool {
     }
     // Порядкочувствительный вывод.
     e.io && acc.io
-}
-
-/// Позиции, обязанные начинать бандл: цели переходов и все границы
-/// диапазонов `Попытка` (вход в обработчик — тоже переход, только со
-/// стороны разматывания).
-fn leaders(chunk: &Chunk) -> Vec<bool> {
-    let n = chunk.instrs.len();
-    let mut leader = vec![false; n];
-    let mut mark = |pc: usize| {
-        if pc < n {
-            leader[pc] = true;
-        }
-    };
-    for instr in &chunk.instrs {
-        // Список опкодов с целью — один, у определения `Instr`.
-        if let Some(target) = instr.jump_target()
-            && let Ok(t) = usize::try_from(target)
-        {
-            mark(t);
-        }
-    }
-    for r in &chunk.exception_ranges {
-        mark(r.start_pc);
-        mark(r.end_pc);
-        mark(r.handler_pc);
-    }
-    leader
 }
 
 /// Размечает чанк: `bundle_len[pc]` — ширина бандла, начинающегося на

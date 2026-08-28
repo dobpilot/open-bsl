@@ -76,6 +76,20 @@ impl RegSet {
         }
     }
 
+    pub(crate) fn contains(&self, r: usize) -> bool {
+        r < 256 && self.0[r / 64] & (1 << (r % 64)) != 0
+    }
+
+    pub(crate) fn subtract(&mut self, other: &RegSet) {
+        for (a, b) in self.0.iter_mut().zip(other.0.iter()) {
+            *a &= !*b;
+        }
+    }
+
+    pub(crate) fn equals(&self, other: &RegSet) -> bool {
+        self.0 == other.0
+    }
+
     pub(crate) fn intersects(&self, other: &RegSet) -> bool {
         self.0.iter().zip(other.0.iter()).any(|(a, b)| a & b != 0)
     }
@@ -540,4 +554,333 @@ pub(crate) fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> E
         }
     }
     e
+}
+
+/// Позиции, обязанные начинать бандл: цели переходов и все границы
+/// диапазонов `Попытка` (вход в обработчик — тоже переход, только со
+/// стороны разматывания).
+pub(crate) fn leaders(chunk: &Chunk) -> Vec<bool> {
+    let n = chunk.instrs.len();
+    let mut leader = vec![false; n];
+    let mut mark = |pc: usize| {
+        if pc < n {
+            leader[pc] = true;
+        }
+    };
+    for instr in &chunk.instrs {
+        // Список опкодов с целью — один, у определения `Instr`.
+        if let Some(target) = instr.jump_target()
+            && let Ok(t) = usize::try_from(target)
+        {
+            mark(t);
+        }
+    }
+    for r in &chunk.exception_ranges {
+        mark(r.start_pc);
+        mark(r.end_pc);
+        mark(r.handler_pc);
+    }
+    leader
+}
+
+/// Разбиение чанка на базовые блоки и рёбра между ними.
+///
+/// Минимальный CFG: он нужен анализу живучести, на котором держится
+/// оценка устранимых копий. Обработчик `Попытка` достижим из любой точки
+/// защищённого диапазона, поэтому его блок объявляется преемником каждого
+/// блока диапазона — консервативно и без попытки угадать точку броска.
+struct Cfg {
+    /// Номер блока для каждой инструкции.
+    block_of: Vec<usize>,
+    /// Границы блоков: `[начало, конец)`.
+    blocks: Vec<(usize, usize)>,
+    succs: Vec<Vec<usize>>,
+}
+
+fn build_cfg(chunk: &Chunk) -> Cfg {
+    let n = chunk.instrs.len();
+    let mut is_leader = leaders(chunk);
+    if n > 0 {
+        is_leader[0] = true;
+    }
+    // Инструкция после передачи управления начинает новый блок.
+    for (pc, instr) in chunk.instrs.iter().enumerate() {
+        let ends = instr.jump_target().is_some()
+            || matches!(instr, Instr::Return { .. } | Instr::Raise { .. });
+        if ends && pc + 1 < n {
+            is_leader[pc + 1] = true;
+        }
+    }
+
+    let mut blocks = Vec::new();
+    let mut block_of = vec![0usize; n];
+    let mut start = 0;
+    for pc in 0..n {
+        if pc > 0 && is_leader[pc] {
+            blocks.push((start, pc));
+            start = pc;
+        }
+        block_of[pc] = blocks.len();
+    }
+    if n > 0 {
+        blocks.push((start, n));
+    }
+
+    let mut succs = vec![Vec::new(); blocks.len()];
+    for (b, &(lo, hi)) in blocks.iter().enumerate() {
+        let last = &chunk.instrs[hi - 1];
+        let _ = lo;
+        if let Some(t) = last.jump_target()
+            && let Ok(t) = usize::try_from(t)
+            && t < n
+        {
+            succs[b].push(block_of[t]);
+        }
+        // Проваливается всё, кроме безусловного перехода, возврата и
+        // возбуждения исключения.
+        let falls = !matches!(
+            last,
+            Instr::Jump { .. } | Instr::Return { .. } | Instr::Raise { .. }
+        );
+        if falls && hi < n {
+            succs[b].push(block_of[hi]);
+        }
+    }
+    for r in &chunk.exception_ranges {
+        if r.handler_pc >= n {
+            continue;
+        }
+        let handler = block_of[r.handler_pc];
+        for &b in &block_of[r.start_pc..r.end_pc.min(n)] {
+            if !succs[b].contains(&handler) {
+                succs[b].push(handler);
+            }
+        }
+    }
+    Cfg {
+        block_of,
+        blocks,
+        succs,
+    }
+}
+
+/// Живые на выходе из каждого блока точные регистры.
+fn live_out(chunk: &Chunk, cfg: &Cfg, overlap: Option<usize>) -> Vec<RegSet> {
+    let nb = cfg.blocks.len();
+    let mut live_in = vec![RegSet::default(); nb];
+    let mut live_out = vec![RegSet::default(); nb];
+    // Обратный поток до неподвижной точки. Блоков в чанке немного, а
+    // порядок обхода на результат не влияет — только на число итераций.
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for b in (0..nb).rev() {
+            let mut out = RegSet::default();
+            for &s in &cfg.succs[b] {
+                out.union(&live_in[s]);
+            }
+            let (lo, hi) = cfg.blocks[b];
+            let mut cur = out;
+            for pc in (lo..hi).rev() {
+                let e = effects(&chunk.instrs[pc], chunk, overlap);
+                cur.subtract(&e.writes);
+                cur.union(&e.reads);
+            }
+            if !cur.equals(&live_in[b]) || !out.equals(&live_out[b]) {
+                live_in[b] = cur;
+                live_out[b] = out;
+                changed = true;
+            }
+        }
+    }
+    live_out
+}
+
+/// Копии, которые снял бы проход copy propagation с последующим DCE.
+///
+/// Возвращает по одному флагу на инструкцию; `true` стоит только на
+/// `Move`. Оценка **консервативная**, то есть заведомо нижняя граница:
+/// назначение таблицы — вместе со счётчиками исполнения ответить, какая
+/// доля исполненных копий вообще устранима, и завышенная оценка сделала
+/// бы этот ответ бесполезным.
+///
+/// Копия `Move dst, src` считается устранимой, когда одновременно:
+///
+/// - и приёмник, и источник — точные регистры. Параметр без `Знач`
+///   разрешается в слот чужого кадра, а модульный слот в чанке верхнего
+///   уровня накладывается на регистр кадра — в обоих случаях номер
+///   регистра не называет ячейку однозначно;
+/// - до конца жизни приёмника источник не переписан: иначе чтения
+///   приёмника нельзя направить на источник;
+/// - приёмник умирает внутри блока — переопределяется в нём же либо не
+///   жив на выходе. Значение, живущее дальше по графу, копией и держится,
+///   и такую копию локальный проход снять не может;
+/// - между копией и смертью приёмника нет инструкции, чьи эффекты выходят
+///   за точные регистры: вызова, динамического фрагмента, записи в
+///   алиасный параметр или модульный слот.
+pub fn removable_copies(chunk: &Chunk, overlap: Option<usize>) -> Vec<bool> {
+    let n = chunk.instrs.len();
+    let mut out = vec![false; n];
+    if n == 0 {
+        return out;
+    }
+    let cfg = build_cfg(chunk);
+    let live = live_out(chunk, &cfg, overlap);
+    let exact = |r: u8| {
+        let r = r as usize;
+        let aliased =
+            r < chunk.n_params as usize && !chunk.param_by_val.get(r).copied().unwrap_or(false);
+        !aliased && !overlap.is_some_and(|k| r < k)
+    };
+
+    for (i, instr) in chunk.instrs.iter().enumerate() {
+        let Instr::Move { dst, src } = *instr else {
+            continue;
+        };
+        if !exact(dst) || !exact(src) {
+            continue;
+        }
+        if dst == src {
+            out[i] = true;
+            continue;
+        }
+        let b = cfg.block_of[i];
+        let (_, hi) = cfg.blocks[b];
+        let mut removable = None;
+        for pc in (i + 1)..hi {
+            let e = effects(&chunk.instrs[pc], chunk, overlap);
+            if e.writes_alias || e.mod_writes.is_some() {
+                removable = Some(false);
+                break;
+            }
+            if e.writes.contains(src as usize) {
+                removable = Some(false);
+                break;
+            }
+            if e.writes.contains(dst as usize) {
+                // Приёмник переопределён: старое значение больше не нужно.
+                removable = Some(true);
+                break;
+            }
+        }
+        out[i] = removable.unwrap_or_else(|| !live[b].contains(dst as usize));
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::instr::Instr;
+    use std::cell::RefCell;
+
+    fn chunk(instrs: Vec<Instr>) -> Chunk {
+        let prop_cache = instrs.iter().map(|_| RefCell::new(None)).collect();
+        let method_cache = instrs.iter().map(|_| RefCell::new(None)).collect();
+        let bundle_len = vec![0; instrs.len()];
+        Chunk {
+            instrs,
+            consts: Vec::new(),
+            call_arg_modes: Vec::new(),
+            exception_ranges: Vec::new(),
+            n_params: 0,
+            param_by_val: Vec::new(),
+            param_has_default: Vec::new(),
+            is_procedure: false,
+            is_async: false,
+            touches_objects: false,
+            n_locals: 8,
+            n_regs: 16,
+            prop_cache,
+            method_cache,
+            local_names: Vec::new(),
+            bundle_len,
+        }
+    }
+
+    #[test]
+    fn a_copy_dying_inside_its_block_is_removable() {
+        // r1 читается один раз и дальше не живёт: чтение можно направить
+        // прямо на r0, а копию снять.
+        let c = chunk(vec![
+            Instr::LoadConst { dst: 0, k: 0 },
+            Instr::Move { dst: 1, src: 0 },
+            Instr::Neg { dst: 2, src: 1 },
+            Instr::Return { src: Some(2) },
+        ]);
+        assert!(removable_copies(&c, None)[1]);
+    }
+
+    #[test]
+    fn a_copy_whose_source_is_overwritten_stays() {
+        // Между копией и чтением r1 источник переписан: направить чтение
+        // на r0 значило бы прочитать другое значение.
+        let c = chunk(vec![
+            Instr::LoadConst { dst: 0, k: 0 },
+            Instr::Move { dst: 1, src: 0 },
+            Instr::LoadConst { dst: 0, k: 1 },
+            Instr::Neg { dst: 2, src: 1 },
+            Instr::Return { src: Some(2) },
+        ]);
+        assert!(!removable_copies(&c, None)[1]);
+    }
+
+    #[test]
+    fn a_copy_alive_past_the_block_stays() {
+        // r1 жив на выходе из блока: значение держится копией, и локальный
+        // проход её снять не может.
+        let c = chunk(vec![
+            Instr::LoadConst { dst: 0, k: 0 },
+            Instr::Move { dst: 1, src: 0 },
+            Instr::Jump { target: 3 },
+            Instr::Neg { dst: 2, src: 1 },
+            Instr::Return { src: Some(2) },
+        ]);
+        assert!(!removable_copies(&c, None)[1]);
+    }
+
+    #[test]
+    fn a_copy_of_a_byref_parameter_stays() {
+        // Параметр без `Знач` — не собственная ячейка кадра: номер
+        // регистра не называет её однозначно.
+        let mut c = chunk(vec![
+            Instr::Move { dst: 3, src: 0 },
+            Instr::Neg { dst: 4, src: 3 },
+            Instr::Return { src: Some(4) },
+        ]);
+        c.n_params = 1;
+        c.param_by_val = vec![false];
+        assert!(!removable_copies(&c, None)[0]);
+    }
+
+    #[test]
+    fn a_copy_overlapping_a_module_slot_stays() {
+        // В чанке верхнего уровня слоты модуля накладываются на регистры
+        // кадра, поэтому r0 — ещё и модульная переменная.
+        let c = chunk(vec![
+            Instr::Move { dst: 1, src: 0 },
+            Instr::Neg { dst: 2, src: 1 },
+            Instr::Return { src: Some(2) },
+        ]);
+        assert!(!removable_copies(&c, Some(2))[0]);
+    }
+
+    #[test]
+    fn a_call_between_copy_and_death_stops_the_estimate() {
+        // Вызов может тронуть модульные слоты и чужие кадры: оценка
+        // обязана остаться нижней границей.
+        let c = chunk(vec![
+            Instr::LoadConst { dst: 0, k: 0 },
+            Instr::Move { dst: 1, src: 0 },
+            Instr::Call {
+                func: 0,
+                base: 5,
+                arg_modes: 0,
+                ret: 6,
+            },
+            Instr::Neg { dst: 2, src: 1 },
+            Instr::Return { src: Some(2) },
+        ]);
+        assert!(!removable_copies(&c, None)[1]);
+    }
 }

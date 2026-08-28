@@ -2658,6 +2658,97 @@ fn field_name(program: &Program, name: bsl_rt::NameId) -> Result<&str, RtError> 
     .map(|s| s.as_str())
 }
 
+/// Счётчики исполненных опкодов — только сборка `--features counters`.
+///
+/// Поток исполненных инструкций байт-кода НЕ зависит от кодогенерации:
+/// инлайнинг и раскладка меняют время, но не последовательность
+/// инструкций. Поэтому числа, снятые счётной сборкой, верны и для
+/// release, а горячий цикл release остаётся нетронутым — под обычной
+/// сборкой этого модуля не существует вовсе, вместе с крючком в `step`.
+/// Именно поэтому `cfg` здесь не нарушает измеренный бюджет диспетчера.
+#[cfg(feature = "counters")]
+pub mod counters {
+    use bsl_bytecode::{Chunk, Instr, OPCODE_COUNT, OPCODES};
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+    use std::rc::Rc;
+
+    struct State {
+        by_opcode: Vec<u64>,
+        moves_removable: u64,
+        /// Таблицы устранимости, по одной на чанк; ключ — его адрес.
+        /// Чанки живут в `Program` весь прогон, поэтому адрес стабилен.
+        tables: HashMap<usize, Rc<Vec<bool>>>,
+    }
+
+    thread_local! {
+        static STATE: RefCell<State> = RefCell::new(State {
+            by_opcode: vec![0; OPCODE_COUNT],
+            moves_removable: 0,
+            tables: HashMap::new(),
+        });
+    }
+
+    /// Учесть одну исполненную инструкцию.
+    pub fn tick(instr: &Instr, chunk: &Chunk, pc: usize, overlap: Option<usize>) {
+        STATE.with(|cell| {
+            let mut st = cell.borrow_mut();
+            st.by_opcode[instr.opcode_index()] += 1;
+            if !matches!(instr, Instr::Move { .. }) {
+                return;
+            }
+            let key = std::ptr::from_ref(chunk) as usize;
+            let table = match st.tables.get(&key) {
+                Some(t) => Rc::clone(t),
+                None => {
+                    let t = Rc::new(bsl_bytecode::analysis::removable_copies(chunk, overlap));
+                    st.tables.insert(key, Rc::clone(&t));
+                    t
+                }
+            };
+            if table.get(pc).copied().unwrap_or(false) {
+                st.moves_removable += 1;
+            }
+        });
+    }
+
+    /// Отчёт в TSV: строка на опкод, затем итоги по копиям.
+    pub fn report() -> String {
+        STATE.with(|cell| {
+            let st = cell.borrow();
+            let total: u64 = st.by_opcode.iter().sum();
+            let mut out = String::from("# опкод\tисполнений\tдоля\n");
+            let mut rows: Vec<(usize, u64)> = st
+                .by_opcode
+                .iter()
+                .copied()
+                .enumerate()
+                .filter(|(_, n)| *n > 0)
+                .collect();
+            rows.sort_by_key(|(_, n)| std::cmp::Reverse(*n));
+            for (i, n) in rows {
+                let share = if total == 0 {
+                    0.0
+                } else {
+                    n as f64 * 100.0 / total as f64
+                };
+                out.push_str(&format!("{}\t{}\t{:.2}\n", OPCODES[i], n, share));
+            }
+            let moves = st.by_opcode[Instr::Move { dst: 0, src: 0 }.opcode_index()];
+            out.push_str(&format!("# всего инструкций\t{total}\n"));
+            out.push_str(&format!("# Move исполнено\t{moves}\n"));
+            out.push_str(&format!("# Move устранимых\t{}\n", st.moves_removable));
+            let share = if moves == 0 {
+                0.0
+            } else {
+                st.moves_removable as f64 * 100.0 / moves as f64
+            };
+            out.push_str(&format!("# доля устранимых среди Move\t{share:.2}\n"));
+            out
+        })
+    }
+}
+
 /// Выполняет один VLIW-бандл текущего (верхнего) кадра: от одной
 /// инструкции (одиночный бандл) до `Chunk::bundle_len[pc]` подряд — без
 /// возврата в `drive_with` между членами. При `merge_linear` (чисто
@@ -2720,6 +2811,13 @@ fn step(
         // членов — перед переходом на них) — индексация здесь уже не
         // может выйти за границы.
         let instr = chunk.instrs[pc];
+        #[cfg(feature = "counters")]
+        counters::tick(
+            &instr,
+            chunk,
+            pc,
+            bsl_bytecode::analysis::module_overlap(func_id, program.module_vars.len()),
+        );
         match instr {
             Instr::GetModuleVar { dst, slot } => {
                 // АБСОЛЮТНЫЙ индекс: модульные переменные лежат подряд,

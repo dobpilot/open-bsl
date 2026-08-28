@@ -178,6 +178,11 @@ fn main() {
             0
         }
     };
+    // Сборка `--features counters` печатает гистограмму исполненных
+    // опкодов в stderr: stdout занят выводом самого скрипта, а контракт
+    // бенчмарка требует, чтобы последней строкой там были миллисекунды.
+    #[cfg(feature = "counters")]
+    eprint!("{}", bsl_vm::counters::report());
     std::process::exit(code);
 }
 

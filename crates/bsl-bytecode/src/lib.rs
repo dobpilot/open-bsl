@@ -30,5 +30,6 @@ pub use dynamic::{
 };
 pub use instr::{ArgMode, Instr};
 pub use text::{
-    FORMAT_VERSION, OPCODES, TextError, parse_image, parse_program, write_image, write_program,
+    FORMAT_VERSION, OPCODE_COUNT, OPCODES, TextError, parse_image, parse_program, write_image,
+    write_program,
 };
