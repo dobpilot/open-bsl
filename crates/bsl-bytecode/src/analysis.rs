@@ -574,6 +574,17 @@ pub(crate) fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> E
         // и исполняет произвольный код — всегда одиночный.
         Instr::RunDynamic { .. } => {
             e.ctl = Ctl::Barrier;
+            // Фрагмент видит ИМЕНОВАННЫЕ локали кадра по именам
+            // (`local_names`), а не по номерам регистров, поэтому здесь
+            // читается и пишется всё. Для разметки бандлов это ничего не
+            // меняет — барьер и так одиночный, — но анализу потока данных
+            // без этого локаль казалась бы мёртвой, и устранение копий
+            // сняло бы ЖИВОЕ значение.
+            e.reads.insert_range(0, 256);
+            e.reads_positional.insert_range(0, 256);
+            e.writes.insert_range(0, 256);
+            e.reads_alias = true;
+            e.writes_alias = true;
         }
     }
     e
@@ -934,6 +945,91 @@ pub fn verify(chunk: &Chunk, overlap: Option<usize>) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// Снять устранимые копии: переименовать чтения приёмника на источник и
+/// удалить сам `Move`.
+///
+/// Возвращает число удалённых инструкций. Разметку бандлов НЕ трогает:
+/// она производная и пересчитывается вызывающим через `bundle::compute`
+/// после всех правок.
+///
+/// За один заход снимается ОДНА копия, после чего анализ считается
+/// заново. Так дороже, но безусловно верно: удаление инструкции меняет
+/// живучесть и может отнять у другой копии основание считаться
+/// устранимой — например, когда та опиралась на переопределение
+/// приёмника именно этой инструкцией.
+///
+/// Копии на границах диапазонов `Попытка` пропускаются: удаление
+/// единственной инструкции защищённого участка оставило бы пустой
+/// диапазон, а выигрыш от такой копии не стоит отдельного разбора.
+pub fn copy_propagate(chunk: &mut Chunk, overlap: Option<usize>) -> usize {
+    let mut removed = 0usize;
+    loop {
+        let flags = removable_copies(chunk, overlap);
+        let boundary = |pc: usize| {
+            chunk
+                .exception_ranges
+                .iter()
+                .any(|r| r.start_pc == pc || r.end_pc == pc || r.handler_pc == pc)
+        };
+        let Some(i) = flags
+            .iter()
+            .enumerate()
+            .position(|(pc, &f)| f && !boundary(pc))
+        else {
+            return removed;
+        };
+        let Instr::Move { dst, src } = chunk.instrs[i] else {
+            return removed;
+        };
+
+        // Переименование идёт до конца блока либо до переопределения
+        // приёмника — ровно тот участок, на котором `removable_copies`
+        // и доказала устранимость.
+        let cfg = build_cfg(chunk);
+        let (_, hi) = cfg.blocks[cfg.block_of[i]];
+        for pc in (i + 1)..hi {
+            let writes_dst = effects(&chunk.instrs[pc], chunk, overlap)
+                .writes
+                .contains(dst as usize);
+            chunk.instrs[pc].rewrite_read_reg(dst, src);
+            if writes_dst {
+                break;
+            }
+        }
+
+        chunk.instrs.remove(i);
+        chunk.prop_cache.remove(i);
+        chunk.method_cache.remove(i);
+        if i < chunk.bundle_len.len() {
+            chunk.bundle_len.remove(i);
+        }
+
+        // Адреса абсолютные, поэтому всё, что стояло ЗА удалённой
+        // инструкцией, съезжает на единицу. Цель, указывавшая на неё
+        // саму, теперь указывает на следующую — это тот же адрес.
+        for instr in &mut chunk.instrs {
+            if let Some(t) = instr.jump_target()
+                && let Ok(t) = usize::try_from(t)
+                && t > i
+                && let Ok(nt) = i16::try_from(t - 1)
+            {
+                instr.set_jump_target(nt);
+            }
+        }
+        let shift = |pc: &mut usize| {
+            if *pc > i {
+                *pc -= 1;
+            }
+        };
+        for r in &mut chunk.exception_ranges {
+            shift(&mut r.start_pc);
+            shift(&mut r.end_pc);
+            shift(&mut r.handler_pc);
+        }
+        removed += 1;
+    }
 }
 
 #[cfg(test)]

@@ -201,10 +201,13 @@ fn compile_module_chunks(
         )?);
     }
     for (i, chunk) in chunks.iter_mut().enumerate() {
-        chunk.bundle_len = bundle::compute(
-            chunk,
-            analysis::module_overlap(i, resolved.module_vars.len()),
-        );
+        let overlap = analysis::module_overlap(i, resolved.module_vars.len());
+        // Устранение копий выключено по умолчанию: пока проход не прошёл
+        // свои ворота (чередующийся A/B на зафиксированной частоте), он не
+        // должен попадать в обычную сборку — иначе не с чем сравнивать.
+        #[cfg(feature = "copyprop")]
+        analysis::copy_propagate(chunk, overlap);
+        chunk.bundle_len = bundle::compute(chunk, overlap);
     }
     Ok(chunks)
 }
