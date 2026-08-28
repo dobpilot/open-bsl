@@ -52,7 +52,7 @@ pub use temp_storage::{
     GlobalStagingBudget, StagedWrite, StagingBudget, TempMailbox, TempStorageHub,
     TempStorageSession,
 };
-pub use value_graph::{GraphLimits, SerializedValueGraph};
+pub use value_graph::{GraphBudget, GraphLimits, SerializedValueGraph};
 
 pub use bsl_number::BslNumber;
 use bsl_number::NumError;
