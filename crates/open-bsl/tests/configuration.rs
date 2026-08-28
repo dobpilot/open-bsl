@@ -762,6 +762,129 @@ fn the_documented_manager_surface_works_end_to_end() {
     );
 }
 
+/// Задание, ожидающее СОСЕДА-резидента того же worker-потока, не встаёт
+/// в дедлок. Сосед припаркован на HTTP и закреплён за этим потоком: в
+/// глобальной очереди его нет, и довести его может только сам поток.
+/// Пока набор резидентов жил в кадре worker, вложенное ожидание не имело
+/// к соседу доступа и парковалось навсегда — теперь резиденты живут в
+/// пуле потока, и ожидание двигает соседа само.
+#[cfg(all(not(target_arch = "wasm32"), feature = "http"))]
+#[test]
+fn a_job_waiting_for_a_co_resident_of_its_own_worker_does_not_deadlock() {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("порт");
+    let port = listener.local_addr().expect("адрес").port();
+    let (accepted_sender, accepted_receiver) = std::sync::mpsc::channel::<()>();
+    let (release_sender, release_receiver) = std::sync::mpsc::channel::<()>();
+    let server = std::thread::spawn(move || {
+        let (mut socket, _) = listener.accept().expect("accept");
+        let mut buffer = [0u8; 4096];
+        let _ = socket.read(&mut buffer);
+        let _ = accepted_sender.send(());
+        let _ = release_receiver.recv();
+        let _ = socket
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nready");
+    });
+
+    let engine = Engine::builder()
+        .common_module(
+            "Служебный",
+            "Процедура Медленно(Знач Порт) Экспорт\n\
+                 Соединение = Новый HTTPСоединение(\"127.0.0.1\", Порт);\n\
+                 Ответ = Соединение.Получить(Новый HTTPЗапрос(\"/\"));\n\
+                 Сообщить(Ответ.ПолучитьТелоКакСтроку());\n\
+             КонецПроцедуры\n\
+             Процедура ЖдётСоседа(Знач Идентификатор) Экспорт\n\
+                 Сосед = ФоновыеЗадания.НайтиПоУникальномуИдентификатору(Идентификатор);\n\
+                 Сосед = Сосед.ОжидатьЗавершенияВыполнения();\n\
+                 Сообщить(\"сосед: \" + Сосед.Состояние);\n\
+             КонецПроцедуры",
+        )
+        .background_jobs(open_bsl::jobs::BackgroundJobConfig {
+            workers: Some(1),
+            ..Default::default()
+        })
+        .build()
+        .expect("движок собирается");
+    let runtime = engine.job_runtime().expect("runtime");
+    let rt = open_bsl::RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
+    let capture = |values: &[open_bsl::Value]| {
+        std::sync::Arc::new(
+            open_bsl::SerializedValueGraph::capture(values, &rt, &open_bsl::GraphLimits::default())
+                .expect("снимок"),
+        )
+    };
+    let slow = runtime
+        .submit_by_name(
+            "Служебный.Медленно",
+            capture(&[open_bsl::Value::number_from_i64(i64::from(port))]),
+            None,
+            None,
+        )
+        .expect("submit соседа");
+    // Запрос дошёл до сервера — сосед припаркован на транспорте и стал
+    // Waiting-резидентом единственного worker.
+    assert!(
+        accepted_receiver
+            .recv_timeout(std::time::Duration::from_secs(10))
+            .is_ok(),
+        "запрос соседа обязан дойти до сервера"
+    );
+
+    let waiter = runtime
+        .submit_by_name(
+            "Служебный.ЖдётСоседа",
+            capture(&[open_bsl::Value::Str(open_bsl::BslString::from_str(
+                &slow.id.to_uuid_string(),
+            ))]),
+            None,
+            None,
+        )
+        .expect("submit ожидающего");
+    // Ждём, пока ожидающее задание САМО станет Running: только тогда
+    // сцена дефекта собрана — поток занят им, а сосед припаркован и
+    // виден лишь пулу этого потока. Иначе worker мог бы успеть довести
+    // соседа раньше, и проба ничего бы не проверила.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let state = runtime
+            .snapshot(waiter.id)
+            .expect("снимок ожидающего")
+            .state;
+        if state != open_bsl::JobStateDto::Queued {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "ожидающее задание не было взято в работу"
+        );
+        std::thread::yield_now();
+    }
+    // Теперь сосед может продвинуться только через пул своего потока.
+    let _ = release_sender.send(());
+    assert!(
+        runtime
+            .wait_terminal(
+                &[slow.id, waiter.id],
+                Some(std::time::Duration::from_secs(30))
+            )
+            .expect("ожидание без ошибок"),
+        "ожидание соседа-резидента не должно вставать в дедлок"
+    );
+    for id in [slow.id, waiter.id] {
+        let snapshot = runtime.snapshot(id).expect("снимок");
+        assert_eq!(
+            snapshot.state,
+            open_bsl::JobStateDto::Completed,
+            "задание {} завершилось {:?}: {:?}",
+            id.to_uuid_string(),
+            snapshot.state,
+            snapshot.error
+        );
+    }
+    server.join().expect("сервер");
+}
+
 /// Дитя, припаркованное на синхронном HTTP и доводимое helping-драйвером
 /// РОДИТЕЛЯ (а не штатным циклом worker), тоже не блокирует OS-поток:
 /// пул из одного worker занят родителем, ждущим ребёнка, ребёнка доводит

@@ -6,6 +6,7 @@
 //! секциями и не пересекает `await`; занятый пул означает FIFO, а не
 //! ошибку; первый terminal transition выигрывает ровно один раз.
 
+use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::Duration;
@@ -166,6 +167,12 @@ pub(crate) struct JobRecord {
     /// бюджет, поэтому суммарная память сообщений одного задания
     /// ограничена `max_message_bytes_per_job` независимо от чтений.
     pub message_bytes: usize,
+    /// Право на terminal transition забрано драйвером: он публикует
+    /// write-set и завершит запись сам. Пока флаг взведён, поломка
+    /// runtime эту запись не трогает — иначе публикация состоялась бы у
+    /// задания, которое реестр уже объявил `Failed(RuntimeBroken)`, а
+    /// матрица публикаций требует rollback на инфраструктурном сбое.
+    pub committing: bool,
 }
 
 /// Ключ уникальности: пара «цель + снимок ключа» резервируется до
@@ -323,6 +330,7 @@ impl JobRegistry {
                 caller_token,
                 messages: Vec::new(),
                 message_bytes: 0,
+                committing: false,
             },
         );
         self.queue.push_back(id);
@@ -371,6 +379,29 @@ impl JobRegistry {
         } else {
             messages.clone()
         })
+    }
+
+    /// Забирает право на terminal transition: драйвер, получивший
+    /// `true`, публикует write-set и завершает запись сам, а поломка
+    /// runtime её больше не перехватывает. `false` — публиковать нельзя:
+    /// запись уже terminal, вытеснена, заклеймлена другим либо runtime
+    /// закрыт/сломан. В последнем случае право не выдаётся и запись
+    /// СРАЗУ завершается «Отменено»: закрытие обязано откатывать
+    /// write-set (матрица публикаций плана), а не отдавать его наружу
+    /// вместе с `Completed`.
+    pub fn claim_terminal(&mut self, id: JobId, end: Option<bsl_rt::BslDate>) -> bool {
+        if matches!(self.state, RuntimeState::Closed | RuntimeState::Broken) {
+            self.finish(id, JobStateDto::Canceled, end, None);
+            return false;
+        }
+        let Some(record) = self.records.get_mut(&id) else {
+            return false;
+        };
+        if record.committing || record.snapshot.state.is_terminal() {
+            return false;
+        }
+        record.committing = true;
+        true
     }
 
     /// Задание известно реестру: живая запись либо строка истории.
@@ -786,6 +817,86 @@ mod tests {
         assert!(BackgroundJobConfig::default().validate().is_ok());
     }
 
+    /// Публикация write-set и поломка runtime координируются claim'ом:
+    /// кто забрал terminal transition, тот и определяет исход. Драйвер с
+    /// claim публикует и завершает сам (поломка его запись не трогает);
+    /// проигравший claim драйвер не публикует вовсе — задание остаётся
+    /// `Failed(RuntimeBroken)` без публикации, как требует матрица
+    /// «инфраструктурный сбой — rollback».
+    #[test]
+    fn a_claimed_terminal_transition_is_not_stolen_by_a_broken_runtime() {
+        let mut registry = JobRegistry::new(BackgroundJobConfig::default());
+        let publisher = id(1);
+        let bystander = id(2);
+        for job in [publisher, bystander] {
+            registry
+                .admit(
+                    job,
+                    "Модуль.Метод".to_string(),
+                    (0, 1),
+                    graph(64),
+                    None,
+                    None,
+                    None,
+                    0,
+                )
+                .ok()
+                .expect("задание принято");
+        }
+        // Драйвер забрал право на публикацию первого задания.
+        assert!(registry.claim_terminal(publisher, None));
+        assert!(
+            !registry.claim_terminal(publisher, None),
+            "повторный claim не выдаётся"
+        );
+
+        // Поломка runtime роняет ВСЕ живые записи, кроме заклеймленной.
+        fail_all_resident(&mut registry);
+        assert_eq!(
+            registry.snapshot(bystander).expect("снимок соседа").state,
+            JobStateDto::Failed,
+            "незаклеймленное задание роняет поломка"
+        );
+        assert!(
+            !registry
+                .snapshot(publisher)
+                .expect("снимок публикующего")
+                .state
+                .is_terminal(),
+            "заклеймленное задание поломка не трогает — иначе публикация \
+             состоялась бы у Failed(RuntimeBroken)"
+        );
+
+        // Владелец claim доводит своё задание сам.
+        assert!(registry.finish(publisher, JobStateDto::Completed, None, None));
+        assert_eq!(
+            registry.snapshot(publisher).expect("снимок").state,
+            JobStateDto::Completed
+        );
+
+        // Обратный порядок: поломка выиграла — claim больше не выдаётся,
+        // и драйвер не публикует.
+        let loser = id(3);
+        registry
+            .admit(
+                loser,
+                "Модуль.Метод".to_string(),
+                (0, 1),
+                graph(64),
+                None,
+                None,
+                None,
+                0,
+            )
+            .ok()
+            .expect("задание принято");
+        fail_all_resident(&mut registry);
+        assert!(
+            !registry.claim_terminal(loser, None),
+            "у завершённого поломкой задания claim не берётся"
+        );
+    }
+
     /// Переполняющие значения публичной конфигурации отвергаются, а не
     /// паникуют: сумма бюджетов считается `checked_add`.
     #[test]
@@ -933,9 +1044,13 @@ impl TargetTable {
             ));
         }
         if function.is_async {
-            // НЕ ИЗМЕРЕНО(JOB.ASYNC.TARGET): допустимость `Асинх`-цели и
-            // критерий её завершения не замерены; обычная функция-цель
-            // измерена и разрешена, async-цель отвергается синхронно.
+            // НЕ ИЗМЕРЕНО(JOB.ASYNC.TARGET): ИЗМЕРЕНО на файловой базе
+            // (2026-08-27), что «Асинх» в серверном общем модуле ломает
+            // инициализацию ВСЕГО модуля при первом обращении, то есть
+            // легальной async-цели у платформы нет; клиент-серверное
+            // подтверждение и критерий завершения — за следующей сессией.
+            // Здесь отказ синхронный: у платформы падает не submit, а
+            // любой вызов отравленного модуля — расхождение осознанное.
             return Err(
                 "асинхронная цель фонового задания не поддержана до замера JOB.ASYNC.TARGET"
                     .to_string(),
@@ -1138,6 +1253,7 @@ impl JobRuntimeShared {
                 registry.wake_epoch += 1;
                 drop(registry);
                 self.work_available.notify_all();
+                self.terminal_watch.notify_all();
             }
             _ => {}
         }
@@ -1209,6 +1325,10 @@ impl JobRuntimeShared {
             Self::known_guard(&registry, *id)?;
         }
         loop {
+            // Закрытие во время ожидания: ответ уже не придёт штатно —
+            // ловимая ошибка вместо вечного сна на отсоединённом worker
+            // (симметрично `wait_terminal_blocking`).
+            Self::live_guard(&registry)?;
             let held = Self::held_snapshots(&registry, &ids)?;
             let (any_active, any_changed, all_terminal, any_failed) =
                 Self::first_change_flags(jobs, &held);
@@ -1664,15 +1784,25 @@ impl Drop for JobRuntime {
 /// Все живые задания — в `Failed(RuntimeBroken)`: вызывается при
 /// поломке runtime под уже взятым локом.
 fn fail_all_resident(registry: &mut JobRegistry) {
-    let ids: Vec<JobId> = registry.records.keys().copied().collect();
+    fail_resident_jobs(registry, "фоновый runtime сломан и не принимает задания");
+}
+
+/// Все живые записи — в `Failed(текст)`, КРОМЕ заклеймленных драйвером:
+/// их публикация уже идёт, и исход объявит владелец claim. Иначе задание
+/// оказалось бы `Failed(RuntimeBroken)` с ОПУБЛИКОВАННЫМИ данными —
+/// прямое нарушение матрицы «инфраструктурный сбой — rollback».
+fn fail_resident_jobs(registry: &mut JobRegistry, text: &str) {
+    let ids: Vec<JobId> = registry
+        .records()
+        .filter(|record| !record.committing)
+        .map(|record| record.snapshot.id)
+        .collect();
     for id in ids {
         registry.finish(
             id,
             JobStateDto::Failed,
             None,
-            Some(JobErrorDto::from_text(
-                "фоновый runtime сломан и не принимает задания",
-            )),
+            Some(JobErrorDto::from_text(text)),
         );
     }
 }
@@ -1767,6 +1897,10 @@ fn worker_supervisor(shared: &Arc<JobRuntimeShared>) {
         match outcome {
             Ok(()) => return, // нормальный выход: runtime закрыт или сломан
             Err(_) => {
+                // Резиденты живут в пуле ПОТОКА и разматыванием паники не
+                // дропаются: забираем их здесь — Drop-гарды переводят их
+                // в `Failed`, вечного `Running` не остаётся.
+                drop(take_thread_residents());
                 if progress.load(std::sync::atomic::Ordering::Relaxed) {
                     consecutive_panics = 1;
                 } else {
@@ -1801,46 +1935,72 @@ fn worker_main(shared: &Arc<JobRuntimeShared>, progress: &std::sync::atomic::Ato
             let mut registry = shared.registry.lock().expect("реестр без отравления");
             registry.state = RuntimeState::Broken;
             let text = format!("worker не разобрал рецепт каталога: {error}");
-            let ids: Vec<JobId> = registry.records.keys().copied().collect();
-            for id in ids {
-                registry.finish(
-                    id,
-                    JobStateDto::Failed,
-                    None,
-                    Some(JobErrorDto::from_text(text.clone())),
-                );
-            }
+            fail_resident_jobs(&mut registry, &text);
             drop(registry);
             shared.terminal_watch.notify_all();
             return;
         }
     };
-    // Цикл резидентов общий с helping-драйвером (`drive_to_terminal`):
-    // worker живёт до закрытия runtime и при пустом наборе спит в
-    // ожидании работы.
-    drive_local(shared, &engine, VecDeque::new(), Some(progress), false);
+    // Резиденты живут в пуле ПОТОКА, а не в кадре: вложенное ожидание
+    // внутри кванта резидента обслуживает тот же пул и потому способно
+    // доводить своих соседей (см. `drive_local`).
+    drive_local(shared, &engine, DriveMode::Worker(progress));
 }
 
-/// Общий цикл резидентов worker и helping-драйвера. Локальная FIFO:
-/// runnable чередуются бюджетными квантами, waiting опрашиваются вместе
-/// с ними (host-completions подбирает их собственный poll), новый
-/// глобальный job извлекается, только когда локально нет
-/// runnable-резидентов, — по плану фоновых заданий. `drain` — режим
-/// helping-ожидания: выход, когда локальный набор пуст; припаркованный
-/// резидент при этом не пересиживается сном — поток подбирает очередные
-/// задания из глобальной FIFO, и pending HTTP не блокирует OS worker
-/// (критерий плана).
-fn drive_local(
-    shared: &Arc<JobRuntimeShared>,
-    engine: &crate::Engine,
-    mut local: VecDeque<RunningJob>,
-    progress: Option<&std::sync::atomic::AtomicBool>,
-    drain: bool,
-) {
+thread_local! {
+    /// Резиденты ЭТОГО потока. Пул общий для цикла worker и всех
+    /// вложенных helping-драйверов: задание, припаркованное на
+    /// host-операции, закреплено за своим потоком, и довести его может
+    /// ТОЛЬКО этот поток. Пока набор жил в кадре `worker_main`, вложенное
+    /// ожидание соседа-резидента (родитель ждёт ребёнка, который сам
+    /// припаркован на HTTP этого же worker) не имело к нему доступа и
+    /// парковалось навсегда.
+    static RESIDENTS: RefCell<VecDeque<RunningJob>> = const { RefCell::new(VecDeque::new()) };
+}
+
+/// Забирает резидентов потока — путь очистки после паники worker:
+/// `Drop`-гарды переводят их в `Failed`, вечного `Running` не остаётся.
+fn take_thread_residents() -> VecDeque<RunningJob> {
+    RESIDENTS.with(|residents| std::mem::take(&mut *residents.borrow_mut()))
+}
+
+/// Режим общего цикла резидентов.
+enum DriveMode<'a> {
+    /// Цикл worker: живёт до закрытия runtime, отмечает прогресс для
+    /// супервизора.
+    Worker(&'a std::sync::atomic::AtomicBool),
+    /// Helping-ожидание: выход по собственному предикату либо дедлайну.
+    /// Ожидающий поток не простаивает — он двигает пул своего потока и
+    /// подбирает задания из глобальной очереди.
+    Until {
+        /// Наблюдаемые задания — для тестового шлюза окна парковки.
+        ids: &'a [JobId],
+        /// Предикат завершения, вычисляемый ПОД локом реестра: там же,
+        /// где принимается решение спать, — потерянных пробуждений нет.
+        done: &'a dyn Fn(&JobRegistry) -> bool,
+        deadline: Option<std::time::Instant>,
+    },
+}
+
+/// Общий цикл резидентов worker и helping-ожиданий. Локальная FIFO
+/// потока: runnable чередуются бюджетными квантами, waiting опрашиваются
+/// вместе с ними (host-completions подбирает их собственный poll), новое
+/// глобальное задание извлекается, только когда локально нет
+/// runnable-резидентов, — по плану фоновых заданий.
+///
+/// В режиме `Until` тот же цикл обслуживает вложенное ожидание: пока цель
+/// не достигнута, поток двигает СВОИХ резидентов (включая припаркованных
+/// на host-операциях соседей — иначе их некому довести) и помогает
+/// глобальной очереди, а спит только когда двигать нечего.
+fn drive_local(shared: &Arc<JobRuntimeShared>, engine: &crate::Engine, mode: DriveMode<'_>) {
     let mark_progress = || {
-        if let Some(progress) = progress {
+        if let DriveMode::Worker(progress) = &mode {
             progress.store(true, std::sync::atomic::Ordering::Relaxed);
         }
+    };
+    let deadline = match &mode {
+        DriveMode::Until { deadline, .. } => *deadline,
+        DriveMode::Worker(_) => None,
     };
     // Снимок wake_epoch на момент последнего начала опроса ждущих
     // резидентов: спим, только если с тех пор не было ни одного
@@ -1848,35 +2008,55 @@ fn drive_local(
     // локом — пропущенных пробуждений нет.
     let mut seen_epoch = 0u64;
     loop {
-        if drain && local.is_empty() {
-            return;
-        }
-        let mut runnable_locally = local.iter().any(|job| !job.waiting);
+        // Тестовое окно «предикат ещё не перечитан»: держится БЕЗ лока
+        // реестра, иначе завершающий задание тест встал бы на нём сам.
+        helping_window_pause(&mode);
         let next_global = {
             let mut registry = shared.registry.lock().expect("реестр без отравления");
             loop {
-                match registry.state {
-                    RuntimeState::Closed | RuntimeState::Broken => {
-                        // Закрытие на границе кванта — и есть кооперативная
-                        // точка: резиденты завершаются «Отменено». Сначала
-                        // terminal transitions под локом, а сами резиденты
-                        // дропаются ПОСЛЕ его отпускания: Drop-гард
-                        // резидента берёт этот же мьютекс.
-                        drop(registry);
-                        let end = shared.time_source.wall_now();
-                        {
-                            let mut registry =
-                                shared.registry.lock().expect("реестр без отравления");
-                            for job in local.iter() {
-                                registry.finish(job.id, JobStateDto::Canceled, end, None);
-                            }
+                let closed = matches!(registry.state, RuntimeState::Closed | RuntimeState::Broken);
+                match &mode {
+                    DriveMode::Until { ids, done, .. } => {
+                        // Цель и недоступность runtime проверяются ПОД тем
+                        // же локом, под которым принимается решение спать.
+                        if closed || done(&registry) {
+                            return;
                         }
-                        local.clear();
-                        shared.terminal_watch.notify_all();
-                        return;
+                        let _ = ids;
                     }
-                    _ => {}
+                    DriveMode::Worker(_) => {
+                        if closed {
+                            // Закрытие на границе кванта — и есть
+                            // кооперативная точка: резиденты завершаются
+                            // «Отменено». Сначала terminal transitions под
+                            // локом, а сами резиденты дропаются ПОСЛЕ его
+                            // отпускания: Drop-гард берёт этот же мьютекс.
+                            drop(registry);
+                            let end = shared.time_source.wall_now();
+                            let residents = take_thread_residents();
+                            {
+                                let mut registry =
+                                    shared.registry.lock().expect("реестр без отравления");
+                                for job in residents.iter() {
+                                    registry.finish(job.id, JobStateDto::Canceled, end, None);
+                                }
+                            }
+                            drop(residents);
+                            shared.terminal_watch.notify_all();
+                            return;
+                        }
+                    }
                 }
+                if deadline.is_some_and(|deadline| std::time::Instant::now() >= deadline) {
+                    return;
+                }
+                let (has_residents, runnable_locally) = RESIDENTS.with(|residents| {
+                    let residents = residents.borrow();
+                    (
+                        !residents.is_empty(),
+                        residents.iter().any(|job| !job.waiting),
+                    )
+                });
                 if runnable_locally {
                     // Есть чем заняться — глобальную очередь не трогаем.
                     break None;
@@ -1884,48 +2064,63 @@ fn drive_local(
                 if let Some(id) = registry.queue.pop_front() {
                     break Some(id);
                 }
-                if local.is_empty() {
-                    // Совсем пусто: спим до появления работы.
-                    registry = shared
-                        .work_available
-                        .wait(registry)
-                        .expect("реестр без отравления");
-                } else {
-                    // Все резиденты ждут host-завершений: точный сон до
-                    // события. Каждый источник пробуждения будит condvar
-                    // явно — завершение host-операции и отмена поднимают
-                    // wake_epoch, новое задание видно по очереди,
-                    // закрытие по state; таймерного поллинга нет.
-                    if registry.wake_epoch == seen_epoch {
-                        registry = shared
-                            .work_available
-                            .wait(registry)
-                            .expect("реестр без отравления");
-                        continue;
-                    }
+                // Двигать нечего: сон до события. В режиме worker это
+                // `work_available` (новая работа и host-события), в
+                // helping-ожидании — `terminal_watch`, который будят и
+                // terminal-переходы чужих заданий, и host-completions, и
+                // отмена, и закрытие.
+                if has_residents && registry.wake_epoch != seen_epoch {
                     seen_epoch = registry.wake_epoch;
                     // Неизвестно, чьё завершение пришло: каждый ждущий
                     // резидент опрашивается заново (его собственный poll
                     // подберёт доставленные завершения либо снова уснёт).
-                    for job in local.iter_mut() {
-                        job.waiting = false;
-                    }
-                    runnable_locally = true;
+                    RESIDENTS.with(|residents| {
+                        for job in residents.borrow_mut().iter_mut() {
+                            job.waiting = false;
+                        }
+                    });
                     break None;
+                }
+                let condvar = match &mode {
+                    DriveMode::Worker(_) => &shared.work_available,
+                    DriveMode::Until { .. } => &shared.terminal_watch,
+                };
+                HELPING_PARKS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                match deadline {
+                    None => {
+                        registry = condvar.wait(registry).expect("реестр без отравления");
+                    }
+                    Some(deadline) => {
+                        let left = deadline.saturating_duration_since(std::time::Instant::now());
+                        let (guard, _) = condvar
+                            .wait_timeout(registry, left)
+                            .expect("реестр без отравления");
+                        registry = guard;
+                    }
                 }
             }
         };
         if let Some(id) = next_global {
             match start_job(shared, engine, id) {
                 None => continue,
-                Some(Ok(job)) => local.push_back(job),
+                Some(Ok(job)) => RESIDENTS.with(|residents| residents.borrow_mut().push_back(job)),
                 Some(Err(error)) => {
                     finish_job(shared, id, JobStateDto::Failed, Some(error));
+                    // Отказ подготовки — тоже доведённое до terminal
+                    // задание: супервизор обязан считать это прогрессом.
+                    mark_progress();
                     continue;
                 }
             }
         }
-        let Some(mut job) = local.pop_front() else {
+        // Резидент ИЗВЛЕКАЕТСЯ из пула на время кванта: вложенное
+        // ожидание внутри этого кванта увидит только соседей и не станет
+        // опрашивать задание, чей квант уже на стеке.
+        let Some(mut job) = RESIDENTS.with(|residents| {
+            let mut residents = residents.borrow_mut();
+            let index = residents.iter().position(|job| !job.waiting)?;
+            residents.remove(index)
+        }) else {
             continue;
         };
         // Паника BSL-исполнения ловится на границе кванта и роняет только
@@ -1933,29 +2128,36 @@ fn drive_local(
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| job.poll(engine)));
         match outcome {
             Ok(Ok(bsl_vm::ProgramPoll::Complete(..))) => {
-                if commit_staged(shared, &job) {
-                    finish_job(shared, job.id, JobStateDto::Completed, None);
-                } else {
-                    // Успешный job при закрытом сеансе вызывателя — Failed:
-                    // частичной публикации нет (план, JOB.TEMP.CALLER_CLOSE_RACE).
-                    finish_job(
-                        shared,
-                        job.id,
-                        JobStateDto::Failed,
-                        Some(JobErrorDto::from_text(
-                            "сеанс-получатель временного хранилища закрыт",
-                        )),
-                    );
+                // Право на terminal transition забирается ДО публикации:
+                // поломка runtime, выигравшая гонку, оставляет задание
+                // `Failed` БЕЗ публикации (rollback по матрице), а
+                // выигравший драйвер публикует и завершает сам.
+                commit_window_pause(job.id);
+                if claim_terminal(shared, job.id) {
+                    if commit_staged(shared, &job) {
+                        finish_job(shared, job.id, JobStateDto::Completed, None);
+                    } else {
+                        // Успешный job при закрытом сеансе вызывателя — Failed:
+                        // частичной публикации нет (план, JOB.TEMP.CALLER_CLOSE_RACE).
+                        finish_job(
+                            shared,
+                            job.id,
+                            JobStateDto::Failed,
+                            Some(JobErrorDto::from_text(
+                                "сеанс-получатель временного хранилища закрыт",
+                            )),
+                        );
+                    }
                 }
                 mark_progress();
             }
             Ok(Ok(bsl_vm::ProgramPoll::Runnable)) => {
                 job.waiting = false;
-                local.push_back(job);
+                RESIDENTS.with(|residents| residents.borrow_mut().push_back(job));
             }
             Ok(Ok(bsl_vm::ProgramPoll::Waiting)) => {
                 job.waiting = true;
-                local.push_back(job);
+                RESIDENTS.with(|residents| residents.borrow_mut().push_back(job));
             }
             Ok(Err(JobPollError::Canceled)) => {
                 finish_job(shared, job.id, JobStateDto::Canceled, None);
@@ -1965,12 +2167,15 @@ fn drive_local(
                 // Неперехваченная BSL-ошибка ПУБЛИКУЕТ write-set — измерено
                 // JOB.TEMP.FAILURE; неудача публикации остаётся вторичной
                 // причиной в cause-цепочке, основная ошибка BSL важнее.
-                let error = if commit_staged(shared, &job) {
-                    error
-                } else {
-                    with_commit_failure_cause(error)
-                };
-                finish_job(shared, job.id, JobStateDto::Failed, Some(error));
+                // Публикация — только с забранным claim (см. выше).
+                if claim_terminal(shared, job.id) {
+                    let error = if commit_staged(shared, &job) {
+                        error
+                    } else {
+                        with_commit_failure_cause(error)
+                    };
+                    finish_job(shared, job.id, JobStateDto::Failed, Some(error));
+                }
                 mark_progress();
             }
             Err(_) => {
@@ -2145,6 +2350,9 @@ fn start_job(
         armed: true,
     };
     let begin = shared.time_source.wall_now();
+    // `Queued -> Running` — ПЕРВОЕ изменение статуса по семантике
+    // менеджерного `ОжидатьЗавершенияВыполнения`: ожидающих будим.
+    let mut started = false;
     let taken = {
         let mut registry = shared.registry.lock().expect("реестр без отравления");
         let record = registry.record_mut(id);
@@ -2153,6 +2361,7 @@ fn start_job(
             Some(record) => {
                 record.snapshot.state = JobStateDto::Running;
                 record.snapshot.begin = begin;
+                started = true;
                 Some((
                     record.target,
                     Arc::clone(&record.snapshot.params),
@@ -2163,6 +2372,9 @@ fn start_job(
             }
         }
     };
+    if started {
+        shared.terminal_watch.notify_all();
+    }
     let Some((target, params, cancel_requested, caller_token, profile_index)) = taken else {
         guard.armed = false;
         return None;
@@ -2189,6 +2401,10 @@ fn start_job(
             registry.wake_epoch += 1;
             drop(registry);
             waker_shared.work_available.notify_all();
+            // Helping-ожидание спит на `terminal_watch`: завершение
+            // host-операции — его событие тоже (появился резидент,
+            // которого стало можно двигать).
+            waker_shared.terminal_watch.notify_all();
         }));
         RunningJob {
             id,
@@ -2275,6 +2491,61 @@ fn with_commit_failure_cause(mut error: JobErrorDto) -> JobErrorDto {
     error
 }
 
+/// Тестовый шлюз окна «задание завершилось, право ещё не забрано»:
+/// проба закрывает runtime ровно здесь и проверяет, что публикация не
+/// состоялась (`a_shutdown_during_the_commit_window_rolls_back`).
+#[cfg(test)]
+struct CommitWindowGate {
+    target: JobId,
+    held: Mutex<bool>,
+    released: Condvar,
+    entered: std::sync::atomic::AtomicBool,
+}
+
+#[cfg(test)]
+static COMMIT_WINDOW_GATE: Mutex<Option<Arc<CommitWindowGate>>> = Mutex::new(None);
+
+/// Пауза перед взятием claim. Вне тестов и без шлюза — пустышка.
+fn commit_window_pause(id: JobId) {
+    #[cfg(not(test))]
+    let _ = id;
+    #[cfg(test)]
+    {
+        let gate = COMMIT_WINDOW_GATE
+            .lock()
+            .expect("шлюз без отравления")
+            .clone();
+        let Some(gate) = gate else {
+            return;
+        };
+        if gate.target != id {
+            return;
+        }
+        gate.entered
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        let mut held = gate.held.lock().expect("шлюз без отравления");
+        while *held {
+            held = gate.released.wait(held).expect("шлюз без отравления");
+        }
+    }
+}
+
+/// Забирает право на terminal transition под локом реестра. Отказ при
+/// закрытом runtime завершает запись «Отменено» прямо там же, поэтому
+/// ожидающих будим в любом случае.
+fn claim_terminal(shared: &Arc<JobRuntimeShared>, id: JobId) -> bool {
+    let end = shared.time_source.wall_now();
+    let granted = shared
+        .registry
+        .lock()
+        .expect("реестр без отравления")
+        .claim_terminal(id, end);
+    if !granted {
+        shared.terminal_watch.notify_all();
+    }
+    granted
+}
+
 /// Terminal transition резидента с пробуждением ожидающих.
 fn finish_job(
     shared: &Arc<JobRuntimeShared>,
@@ -2293,11 +2564,13 @@ fn finish_job(
 /// руками — аргументы приходят константами чанка, вызов идёт обычным
 /// `CallImported` по числовому манифесту. Возвращает изолированный сеанс,
 /// модуль entry и pollable-прогон с постоянным квантованием.
-// НЕ ИЗМЕРЕНО(JOB.MODULE.INIT): момент инициализации тел серверных общих
-// модулей в сеансе задания (lazy при первом касании или eager до цели),
-// поведение цикла, ошибки и повторной попытки не замерены; выбрана
-// ленивая инициализация на сеанс — та же `ModuleInitState`, что у
-// обычного прогона.
+// НЕ ИЗМЕРЕНО(JOB.MODULE.INIT): ИЗМЕРЕНО на файловой базе (2026-08-27),
+// что у платформенных серверных общих модулей тел НЕТ вовсе — модуль с
+// телом грузится молча и падает «Ошибка инициализации модуля» при первом
+// обращении (проверено и с `Перем`, и без него, и с наблюдаемым без
+// `Сообщить`); клиент-серверное подтверждение остаётся. Тела модулей
+// open-bsl — осознанное расширение, их инициализация ленивая на сеанс
+// (та же `ModuleInitState`, что у обычного прогона).
 #[allow(clippy::too_many_arguments)]
 fn prepare_job(
     shared: &Arc<JobRuntimeShared>,
@@ -2545,7 +2818,8 @@ pub(crate) fn resolve_target(
     let chunk = (index + 1) as u16;
     if program.chunks[chunk as usize].is_async {
         return Err(
-            "асинхронная цель фонового задания не поддержана до замера JOB.ASYNC.TARGET"
+            "асинхронная цель фонового задания не поддержана: у платформы \
+             «Асинх» в общем модуле ломает инициализацию всего модуля"
                 .to_string(),
         );
     }
@@ -2597,6 +2871,10 @@ mod pool_tests {
                  КонецФункции\n\
                  Процедура Упасть() Экспорт\n\
                      ВызватьИсключение \"задание падает\";\n\
+                 КонецПроцедуры\n\
+                 Процедура Вечно() Экспорт\n\
+                     Пока Истина Цикл\n\
+                     КонецЦикла;\n\
                  КонецПроцедуры\n\
                  Счётчик = 0;",
             )
@@ -2948,6 +3226,150 @@ mod pool_tests {
         }
     }
 
+    /// Закрытие runtime в окне «задание завершилось, право на terminal
+    /// ещё не забрано» ОТКАТЫВАЕТ публикацию: claim не выдаётся, запись
+    /// становится «Отменено», а данные в сеанс-получатель не попадают —
+    /// как требует строка «shutdown — rollback» матрицы публикаций.
+    #[test]
+    fn a_shutdown_during_the_commit_window_rolls_back() {
+        let engine = crate::Engine::builder()
+            .common_module(
+                "Служебный",
+                "Процедура Пишет(Знач Адрес) Экспорт\n\
+                     ПоместитьВоВременноеХранилище(\"из задания\", Адрес);\n\
+                 КонецПроцедуры",
+            )
+            .build()
+            .expect("движок с каталогом");
+        let runtime = runtime_for_engine(&engine, BackgroundJobConfig::default())
+            .expect("runtime собирается");
+        // Живой сеанс-получатель: публикация, если бы она случилась,
+        // была бы видна в его mailbox.
+        let caller_token = [7u8; 16];
+        let caller = std::rc::Rc::new(std::cell::RefCell::new(bsl_rt::TempStorageSession::new(
+            caller_token,
+            bsl_rt::HostEnv::process().random(),
+        )));
+        engine
+            .temp_hub()
+            .register(caller_token, caller.borrow().mailbox());
+        let address = format!(
+            "e1cib/tempstorage/{}?seanceId={}",
+            bsl_rt::uuid::format(&[9u8; 16]),
+            bsl_rt::uuid::format(&caller_token)
+        );
+        let target =
+            resolve_target(engine.catalog().unwrap(), "Служебный.Пишет").expect("цель разрешается");
+        let snapshot = runtime
+            .submit(
+                "Служебный.Пишет",
+                target,
+                params(&[bsl_rt::BslValue::Str(bsl_rt::BslString::from_str(&address))]),
+                None,
+                None,
+                Some(caller_token),
+                0,
+            )
+            .expect("задание принято");
+        let gate = Arc::new(CommitWindowGate {
+            target: snapshot.id,
+            held: Mutex::new(true),
+            released: Condvar::new(),
+            entered: std::sync::atomic::AtomicBool::new(false),
+        });
+        *COMMIT_WINDOW_GATE.lock().expect("шлюз без отравления") = Some(Arc::clone(&gate));
+        // Ждём, пока задание отработает и встанет в окно перед claim.
+        let deadline = std::time::Instant::now() + Duration::from_secs(30);
+        while !gate.entered.load(std::sync::atomic::Ordering::SeqCst) {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "задание не дошло до окна публикации"
+            );
+            std::thread::yield_now();
+        }
+        // Закрытие ИМЕННО в окне: право на terminal больше не выдаётся.
+        // Само закрытие идёт в отдельном потоке — оно соединяет workers,
+        // а наш worker стоит в шлюзе и выйдет только после его снятия.
+        let closing = Arc::clone(&runtime.shared);
+        let shutdown = std::thread::spawn(move || {
+            let mut registry = closing.registry.lock().expect("реестр без отравления");
+            registry.state = RuntimeState::Closed;
+            drop(registry);
+            closing.work_available.notify_all();
+            closing.terminal_watch.notify_all();
+        });
+        shutdown.join().expect("поток закрытия");
+        *gate.held.lock().expect("шлюз без отравления") = false;
+        gate.released.notify_all();
+        let report = runtime.shutdown(Duration::from_secs(30));
+        assert_eq!(report.detached_workers, 0);
+        *COMMIT_WINDOW_GATE.lock().expect("шлюз без отравления") = None;
+
+        let done = runtime.snapshot(snapshot.id).expect("снимок");
+        assert_eq!(
+            done.state,
+            JobStateDto::Canceled,
+            "закрытие обязано откатить задание, а не завершить его успешно"
+        );
+        let mut shapes = bsl_rt::RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
+        let seen = caller
+            .borrow()
+            .get(&address, &mut shapes)
+            .expect("чтение адреса");
+        assert!(
+            matches!(seen, bsl_rt::BslValue::Undefined),
+            "write-set не имеет права попасть к получателю после закрытия: {seen:?}"
+        );
+    }
+
+    /// Переход `Queued -> Running` — первое изменение статуса по семантике
+    /// менеджерного `ОжидатьЗавершенияВыполнения`: ожидание с таймаутом
+    /// обязано проснуться на нём, а не досидеть до дедлайна.
+    #[test]
+    fn a_queued_to_running_transition_wakes_the_manager_wait() {
+        let engine = engine();
+        let runtime = runtime_for_engine(
+            &engine,
+            BackgroundJobConfig {
+                workers: Some(1),
+                ..BackgroundJobConfig::default()
+            },
+        )
+        .expect("runtime собирается");
+        let target =
+            resolve_target(engine.catalog().unwrap(), "Служебный.Вечно").expect("цель разрешается");
+        let snapshot = runtime
+            .submit("Служебный.Вечно", target, params(&[]), None, None, None, 0)
+            .expect("задание принято");
+        // Задание не завершится само: единственное изменение статуса —
+        // старт. Без пробуждения на нём ожидание досидело бы до дедлайна.
+        let started = std::time::Instant::now();
+        let held = runtime
+            .shared
+            .wait_first_change(
+                &[(snapshot.id, JobStateDto::Queued)],
+                Some(Duration::from_secs(20)),
+            )
+            .expect("ожидание без ошибок");
+        let elapsed = started.elapsed();
+        assert_eq!(held.len(), 1);
+        assert_eq!(
+            held[0].state,
+            JobStateDto::Running,
+            "ожидание обязано вернуть свежий снимок «Активно»"
+        );
+        assert!(
+            elapsed < Duration::from_secs(10),
+            "ожидание досидело до дедлайна ({elapsed:?}) — переход в Running не будит"
+        );
+        runtime.cancel(snapshot.id).expect("отмена");
+        assert!(
+            runtime
+                .wait_terminal(&[snapshot.id], Some(Duration::from_secs(30)))
+                .expect("ожидание без ошибок")
+        );
+    }
+
     /// Общая сцена окна helping-ожидания: задание принято без пула,
     /// очередь вычищена, запись переведена в Running; тестовый шлюз
     /// держит ожидание МЕЖДУ проверкой предиката и парковкой, задание
@@ -3096,7 +3518,7 @@ mod pool_tests {
                 .snapshot
                 .state = JobStateDto::Running;
         }
-        let parks_before = FIRST_CHANGE_PARKS.load(std::sync::atomic::Ordering::Relaxed);
+        let parks_before = HELPING_PARKS.load(std::sync::atomic::Ordering::Relaxed);
         let shared = Arc::clone(&runtime.shared);
         let id = snapshot.id;
         let waiter = std::thread::spawn(move || {
@@ -3132,7 +3554,7 @@ mod pool_tests {
             .expect("ожидание без ошибок");
         assert_eq!(held.len(), 1);
         assert_eq!(held[0].state, JobStateDto::Completed);
-        let parks = FIRST_CHANGE_PARKS.load(std::sync::atomic::Ordering::Relaxed) - parks_before;
+        let parks = HELPING_PARKS.load(std::sync::atomic::Ordering::Relaxed) - parks_before;
         assert!(
             parks <= 8,
             "за 300 мс тихого ожидания {parks} парковок — таймерный поллинг вернулся"
@@ -3228,9 +3650,13 @@ mod pool_tests {
 /// теста `wait_first_change_parks_without_periodic_wakeups`: ожидание
 /// спит на `terminal_watch` до события, и за сотни миллисекунд тихого
 /// ожидания счётчик растёт на единицы, а не на сотни таймерных тиков.
-static FIRST_CHANGE_PARKS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// Счётчик парковок helping-ожидания — пробник для теста
+/// `wait_first_change_parks_without_periodic_wakeups`: ожидание спит до
+/// события, и за сотни миллисекунд тихого ожидания счётчик растёт на
+/// единицы, а не на сотни таймерных тиков.
+static HELPING_PARKS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// Тестовый шлюз окна helping-ожиданий: удерживает поток МЕЖДУ проверкой
+/// Тестовый шлюз окна helping-ожидания: удерживает поток МЕЖДУ проверкой
 /// предиката и парковкой — ровно там, где terminal-уведомление терялось
 /// бы без повторной проверки под guard. Тест завершает задание в этом
 /// окне и убеждается, что ожидание возвращается сразу, а не спит до
@@ -3249,12 +3675,16 @@ struct HelpingWindowGate {
 static HELPING_WINDOW_GATE: Mutex<Option<Arc<HelpingWindowGate>>> = Mutex::new(None);
 
 /// Пауза в окне «предикат проверен, парковка ещё не началась». Вне
-/// тестов и без выставленного шлюза — пустышка.
-fn helping_window_pause(ids: &[JobId]) {
+/// тестов и без выставленного шлюза — пустышка. Держится БЕЗ лока
+/// реестра: вызывается перед взятием guard парковки.
+fn helping_window_pause(mode: &DriveMode<'_>) {
     #[cfg(not(test))]
-    let _ = ids;
+    let _ = mode;
     #[cfg(test)]
     {
+        let DriveMode::Until { ids, .. } = mode else {
+            return;
+        };
         let gate = HELPING_WINDOW_GATE
             .lock()
             .expect("шлюз без отравления")
@@ -3346,61 +3776,29 @@ impl bsl_rt::BackgroundJobService for WorkerJobService {
                 JobRuntimeShared::known_guard(&registry, *id)?;
             }
         }
-        loop {
-            let next = {
-                let mut registry = self.shared.registry.lock().expect("реестр без отравления");
-                // Снимки результата удерживаются под тем же локом, что и
-                // финальная проверка: вытеснение между ними невозможно.
-                if JobRuntimeShared::all_terminal(&registry, ids) {
-                    return Ok(bsl_rt::JobWaitOutcome {
-                        completed: true,
-                        snapshots: JobRuntimeShared::held_snapshots(&registry, ids)?,
-                    });
-                }
-                JobRuntimeShared::live_guard(&registry)?;
-                if deadline.is_some_and(|deadline| std::time::Instant::now() >= deadline) {
-                    return Ok(bsl_rt::JobWaitOutcome {
-                        completed: false,
-                        snapshots: JobRuntimeShared::held_snapshots(&registry, ids)?,
-                    });
-                }
-                registry.queue.pop_front()
-            };
-            match next {
-                Some(id) => {
-                    // Помощь пулу: чужое задание доводится этим потоком.
-                    drive_to_terminal(&self.shared, &self.engine, id);
-                }
-                None => {
-                    helping_window_pause(ids);
-                    // Некому помогать — точное ожидание. Перед парковкой
-                    // ПОЛНЫЙ предикат перечитывается под тем же guard,
-                    // что уходит в `wait_timeout`: terminal-событие,
-                    // случившееся после проверки внешнего цикла (его лок
-                    // уже отпущен), меняет реестр только под этим локом,
-                    // поэтому его notify потеряться не может — либо
-                    // предикат уже истинен и парковки нет, либо notify
-                    // придёт в начатое ожидание.
-                    let registry = self.shared.registry.lock().expect("реестр без отравления");
-                    let should_park = registry.queue.is_empty()
-                        && !JobRuntimeShared::all_terminal(&registry, ids)
-                        && JobRuntimeShared::live_guard(&registry).is_ok()
-                        && !deadline.is_some_and(|deadline| std::time::Instant::now() >= deadline);
-                    if should_park {
-                        let left = deadline
-                            .map(|deadline| {
-                                deadline.saturating_duration_since(std::time::Instant::now())
-                            })
-                            .unwrap_or(Duration::from_secs(3600));
-                        let _ = self
-                            .shared
-                            .terminal_watch
-                            .wait_timeout(registry, left)
-                            .expect("реестр без отравления");
-                    }
-                }
-            }
-        }
+        // Ожидание — драйвер пула СВОЕГО потока: он двигает и соседей
+        // (в том числе припаркованных на host-операциях, довести которых
+        // может только этот поток), и глобальную очередь, а спит лишь
+        // когда двигать нечего. Предикат вычисляется под тем же локом,
+        // под которым принимается решение спать.
+        let done = |registry: &JobRegistry| JobRuntimeShared::all_terminal(registry, ids);
+        drive_local(
+            &self.shared,
+            &self.engine,
+            DriveMode::Until {
+                ids,
+                done: &done,
+                deadline,
+            },
+        );
+        let registry = self.shared.registry.lock().expect("реестр без отравления");
+        // Закрытие runtime во время ожидания — ловимая ошибка, а не
+        // молчаливый таймаут.
+        JobRuntimeShared::live_guard(&registry)?;
+        Ok(bsl_rt::JobWaitOutcome {
+            completed: JobRuntimeShared::all_terminal(&registry, ids),
+            snapshots: JobRuntimeShared::held_snapshots(&registry, ids)?,
+        })
     }
 
     fn cancel(&self, id: JobId) -> Result<(), HostError> {
@@ -3421,7 +3819,8 @@ impl bsl_rt::BackgroundJobService for WorkerJobService {
         jobs: &[(JobId, bsl_rt::JobStateDto)],
         timeout: Option<Duration>,
     ) -> Result<Vec<Arc<JobSnapshotDto>>, HostError> {
-        // Worker не блокируется впустую: между проверками помогает пулу.
+        // Worker не блокируется впустую: ожидание двигает пул своего
+        // потока и глобальную очередь (см. `drive_local`).
         let deadline = timeout.map(|t| std::time::Instant::now() + t);
         let ids: Vec<JobId> = jobs.iter().map(|(id, _)| *id).collect();
         {
@@ -3431,96 +3830,35 @@ impl bsl_rt::BackgroundJobService for WorkerJobService {
                 JobRuntimeShared::known_guard(&registry, *id)?;
             }
         }
-        loop {
-            let (held, any_active, any_changed, all_terminal, any_failed) = {
-                let registry = self.shared.registry.lock().expect("реестр без отравления");
-                // Снимки удерживаются под тем же локом, что и проверка
-                // условий: результат не устаревает и не сжимается.
-                let held = JobRuntimeShared::held_snapshots(&registry, &ids)?;
-                let (any_active, any_changed, all_terminal, any_failed) =
-                    JobRuntimeShared::first_change_flags(jobs, &held);
-                (held, any_active, any_changed, all_terminal, any_failed)
+        let done = |registry: &JobRegistry| {
+            // Вытеснение во время ожидания прекращает сон: внешняя
+            // проверка ниже вернёт по нему ловимую `JobExpired`.
+            let Ok(held) = JobRuntimeShared::held_snapshots(registry, &ids) else {
+                return true;
             };
+            let (any_active, any_changed, all_terminal, any_failed) =
+                JobRuntimeShared::first_change_flags(jobs, &held);
             if !any_active {
-                return Ok(held);
+                return true;
             }
             match deadline {
-                Some(deadline) => {
-                    if any_changed || std::time::Instant::now() >= deadline {
-                        return Ok(held);
-                    }
-                }
-                None => {
-                    if all_terminal || any_failed {
-                        return Ok(held);
-                    }
-                }
+                Some(_) => any_changed,
+                None => all_terminal || any_failed,
             }
-            let next = {
-                let mut registry = self.shared.registry.lock().expect("реестр без отравления");
-                registry.queue.pop_front()
-            };
-            match next {
-                Some(id) => drive_to_terminal(&self.shared, &self.engine, id),
-                None => {
-                    helping_window_pause(&ids);
-                    // Некому помогать — точное ожидание, как в helping
-                    // `wait_terminal`: перед парковкой ПОЛНЫЙ предикат
-                    // первого изменения перечитывается под тем же guard,
-                    // что уходит в `wait_timeout`, — изменение статуса
-                    // между проверкой внешнего цикла и парковкой не
-                    // теряется. Ошибка вытеснения здесь гасит парковку:
-                    // внешний виток вернёт ту же `JobExpired`.
-                    let registry = self.shared.registry.lock().expect("реестр без отравления");
-                    let should_park = registry.queue.is_empty()
-                        && !deadline.is_some_and(|deadline| std::time::Instant::now() >= deadline)
-                        && match JobRuntimeShared::held_snapshots(&registry, &ids) {
-                            Err(_) => false,
-                            Ok(held) => {
-                                let (any_active, any_changed, all_terminal, any_failed) =
-                                    JobRuntimeShared::first_change_flags(jobs, &held);
-                                any_active
-                                    && !(deadline.is_some() && any_changed)
-                                    && !(deadline.is_none() && (all_terminal || any_failed))
-                            }
-                        };
-                    if should_park {
-                        let left = deadline
-                            .map(|deadline| {
-                                deadline.saturating_duration_since(std::time::Instant::now())
-                            })
-                            .unwrap_or(Duration::from_secs(3600));
-                        FIRST_CHANGE_PARKS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                        let _ = self
-                            .shared
-                            .terminal_watch
-                            .wait_timeout(registry, left)
-                            .expect("реестр без отравления");
-                    }
-                }
-            }
-        }
+        };
+        drive_local(
+            &self.shared,
+            &self.engine,
+            DriveMode::Until {
+                ids: &ids,
+                done: &done,
+                deadline,
+            },
+        );
+        let registry = self.shared.registry.lock().expect("реестр без отравления");
+        JobRuntimeShared::live_guard(&registry)?;
+        JobRuntimeShared::held_snapshots(&registry, &ids)
     }
-}
-
-/// Доводит задание до terminal в текущем потоке — helping-ожидание.
-/// Общий цикл резидентов работает в drain-режиме: пока доводимое задание
-/// припарковано на host-операции, поток подбирает следующие задания из
-/// глобальной очереди, а не пересиживает паузу сном — pending HTTP не
-/// блокирует OS worker (критерий плана фоновых заданий). Возврат — когда
-/// локальный набор пуст: доводимое задание и все подобранные по пути
-/// terminal.
-fn drive_to_terminal(shared: &Arc<JobRuntimeShared>, engine: &crate::Engine, id: JobId) {
-    let mut local: VecDeque<RunningJob> = VecDeque::new();
-    match start_job(shared, engine, id) {
-        None => return,
-        Some(Ok(job)) => local.push_back(job),
-        Some(Err(error)) => {
-            finish_job(shared, id, JobStateDto::Failed, Some(error));
-            return;
-        }
-    }
-    drive_local(shared, engine, local, None, true);
 }
 
 /// Мост сервиса: `Rc`-обёртка над разделяемым runtime — то, что native
