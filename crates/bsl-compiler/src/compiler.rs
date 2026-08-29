@@ -86,7 +86,7 @@ impl std::error::Error for CompileError {}
 /// или содержит `Прервать`/`Продолжить` вне цикла.
 /// Какие оптимизирующие проходы включены. Все по умолчанию выключены:
 /// ни один из них ещё не проходил ворота допуска, описанные в
-/// `docs/ssa-hotspot-analysis.md`, поэтому включает их только тот, кто
+/// `docs/research/performance/ssa-hotspot-analysis.md`, поэтому включает их только тот, кто
 /// делает это осознанно.
 ///
 /// Свёртка констант разделена на два переключателя не ради
@@ -270,14 +270,26 @@ fn compile_module_chunks(
     // решает, и платить за него на каждом запуске незачем.
     #[cfg(debug_assertions)]
     {
-        let mut bodies: Vec<&[RStmt]> = vec![&resolved.top_level.body];
-        bodies.extend(resolved.functions.iter().map(|f| f.body.as_slice()));
-        for body in bodies {
+        let mut bodies: Vec<(&[RStmt], usize)> =
+            vec![(&resolved.top_level.body, resolved.top_level.locals.len())];
+        bodies.extend(
+            resolved
+                .functions
+                .iter()
+                .map(|f| (f.body.as_slice(), f.locals.len())),
+        );
+        for (body, n_slots) in bodies {
             let graph = crate::cfg::build(body);
             debug_assert!(
                 crate::cfg::verify(&graph).is_ok(),
                 "инвариант графа потока управления: {:?}",
                 crate::cfg::verify(&graph)
+            );
+            let form = crate::ssa::build(&graph, n_slots);
+            debug_assert!(
+                crate::ssa::verify(&graph, &form).is_ok(),
+                "инвариант SSA: {:?}",
+                crate::ssa::verify(&graph, &form)
             );
         }
     }

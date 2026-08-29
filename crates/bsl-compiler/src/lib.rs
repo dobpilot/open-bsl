@@ -13,6 +13,7 @@
 pub mod cfg;
 mod compiler;
 mod dynamic;
+pub mod ssa;
 
 pub use compiler::{
     CompileError, Optimizations, SnippetUnit, compile_configuration, compile_entry_program,
