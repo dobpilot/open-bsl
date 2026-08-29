@@ -484,3 +484,13 @@ impl ObjectProtocol for AttachmentObject {
         Some((state_addr(&self.items), self.index))
     }
 }
+
+pub(crate) const API_MEMBERS: &[bsl_rt::ObjectMembersDescriptor] = &[
+    bsl_rt::ObjectMembersDescriptor::new(&DOCUMENT_TYPE)
+        .with_properties(DOCUMENT_PROPERTIES)
+        .with_methods(DOCUMENT_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&PAGES_TYPE).with_methods(PAGES_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&PAGE_TYPE).with_properties(PAGE_PROPERTIES),
+    bsl_rt::ObjectMembersDescriptor::new(&ATTACHMENTS_TYPE).with_methods(ATTACHMENTS_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&ATTACHMENT_TYPE).with_properties(ATTACHMENT_PROPERTIES),
+];

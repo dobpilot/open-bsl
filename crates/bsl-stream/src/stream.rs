@@ -1090,6 +1090,17 @@ impl ObjectProtocol for FileStreamsManager {
     }
 }
 
+pub(crate) const API_MEMBERS: &[bsl_rt::ObjectMembersDescriptor] = &[
+    bsl_rt::ObjectMembersDescriptor::new(&MEMORY_STREAM_TYPE)
+        .with_properties(STREAM_PROPERTIES)
+        .with_methods(STREAM_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&FILE_STREAM_TYPE)
+        .with_properties(STREAM_PROPERTIES)
+        .with_methods(STREAM_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&FILE_STREAMS_MANAGER_TYPE)
+        .with_methods(FILE_STREAMS_MANAGER_METHODS),
+];
+
 // --- признаки доступности ------------------------------------------------------------
 
 // Три признака доступности — свойства (вызов со скобками платформа

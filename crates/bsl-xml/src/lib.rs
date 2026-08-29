@@ -386,6 +386,14 @@ const TYPES: &[&TypeDescriptor] = &[
     &crate::xml::WRITER_TYPE,
 ];
 
+const OBJECT_MEMBER_GROUPS: &[&[bsl_rt::ObjectMembersDescriptor]] = &[
+    crate::xml::API_MEMBERS,
+    crate::xpath::API_MEMBERS,
+    crate::dom::API_MEMBERS,
+    crate::xsd::API_MEMBERS,
+    crate::xdto::objects::API_MEMBERS,
+];
+
 /// Дескриптор статически подключаемого компонента стека XML.
 pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor::new(
@@ -396,6 +404,7 @@ pub const fn library() -> LibraryDescriptor {
     .with_functions(FUNCTIONS)
     .with_constructors(CONSTRUCTORS)
     .with_types(TYPES)
+    .with_object_member_groups(OBJECT_MEMBER_GROUPS)
 }
 
 #[cfg(test)]

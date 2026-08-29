@@ -736,6 +736,15 @@ static DOCUMENT_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor::new(&["Вывести", "Output"], Arity::exact(1), document_output),
 ];
 
+const API_MEMBERS: &[bsl_rt::ObjectMembersDescriptor] = &[
+    bsl_rt::ObjectMembersDescriptor::new(&DOCUMENT_TYPE)
+        .with_properties(DOCUMENT_PROPERTIES)
+        .with_methods(DOCUMENT_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&PARAMS_TYPE).with_dynamic_properties(),
+];
+
+const OBJECT_MEMBER_GROUPS: &[&[bsl_rt::ObjectMembersDescriptor]] = &[API_MEMBERS];
+
 impl ObjectProtocol for TextDocument {
     fn type_descriptor(&self) -> &'static TypeDescriptor {
         &DOCUMENT_TYPE
@@ -823,6 +832,7 @@ pub const fn library() -> LibraryDescriptor {
     )
     .with_constructors(CONSTRUCTORS)
     .with_types(TYPES)
+    .with_object_member_groups(OBJECT_MEMBER_GROUPS)
 }
 
 #[cfg(test)]

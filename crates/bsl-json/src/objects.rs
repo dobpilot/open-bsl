@@ -1255,6 +1255,19 @@ impl ObjectProtocol for JsonSerializerSettingsObject {
     }
 }
 
+pub(crate) const API_MEMBERS: &[bsl_rt::ObjectMembersDescriptor] = &[
+    bsl_rt::ObjectMembersDescriptor::new(&READER_TYPE)
+        .with_properties(READER_PROPERTIES)
+        .with_methods(READER_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&WRITER_TYPE)
+        .with_properties(WRITER_PROPERTIES)
+        .with_methods(WRITER_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&WRITER_SETTINGS_TYPE)
+        .with_properties(WRITER_SETTINGS_PROPERTIES),
+    bsl_rt::ObjectMembersDescriptor::new(&SERIALIZER_SETTINGS_TYPE)
+        .with_properties(SERIALIZER_SETTINGS_PROPERTIES),
+];
+
 pub(crate) fn callback_name(
     name_arg: Option<&BslValue>,
     module_arg: Option<&BslValue>,

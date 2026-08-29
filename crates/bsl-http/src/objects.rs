@@ -853,6 +853,21 @@ impl ObjectProtocol for HttpConnectionObject {
     }
 }
 
+pub(crate) const API_MEMBERS: &[bsl_rt::ObjectMembersDescriptor] = &[
+    bsl_rt::ObjectMembersDescriptor::new(&INTERNET_PROXY_TYPE)
+        .with_properties(PROXY_PROPERTIES)
+        .with_methods(PROXY_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&SECURE_CONNECTION_TYPE)
+        .with_properties(SECURE_CONNECTION_PROPERTIES),
+    bsl_rt::ObjectMembersDescriptor::new(&HTTP_REQUEST_TYPE)
+        .with_properties(REQUEST_PROPERTIES)
+        .with_methods(REQUEST_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&HTTP_RESPONSE_TYPE)
+        .with_properties(RESPONSE_PROPERTIES)
+        .with_methods(RESPONSE_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&HTTP_CONNECTION_TYPE).with_methods(CONNECTION_METHODS),
+];
+
 pub fn new_http_connection(
     arguments: &[BslValue],
     context: &mut CallContext<'_>,

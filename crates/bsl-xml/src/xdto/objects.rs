@@ -487,6 +487,45 @@ impl ObjectProtocol for XdtoShell {
     }
 }
 
+pub(crate) const API_MEMBERS: &[bsl_rt::ObjectMembersDescriptor] = &[
+    bsl_rt::ObjectMembersDescriptor::new(&VALUE_TYPE_TYPE)
+        .with_methods(XDTO_METHODS)
+        .with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&OBJECT_TYPE_TYPE)
+        .with_methods(XDTO_METHODS)
+        .with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&PROPERTY_TYPE)
+        .with_methods(XDTO_METHODS)
+        .with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&PROPERTIES_TYPE)
+        .with_methods(XDTO_METHODS)
+        .with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&FACETS_TYPE)
+        .with_methods(XDTO_METHODS)
+        .with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&FACET_TYPE)
+        .with_methods(XDTO_METHODS)
+        .with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&VALUE_TYPE)
+        .with_methods(XDTO_METHODS)
+        .with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&FACTORY_TYPE)
+        .with_methods(XDTO_METHODS)
+        .with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&SERIALIZER_TYPE)
+        .with_methods(XDTO_METHODS)
+        .with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&OBJECT_TYPE)
+        .with_methods(XDTO_METHODS)
+        .with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&LIST_TYPE)
+        .with_methods(XDTO_METHODS)
+        .with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&SEQUENCE_TYPE)
+        .with_methods(XDTO_METHODS)
+        .with_dynamic_properties(),
+];
+
 /// Номер элемента из значения-индекса — та же семантика, что у `[]`
 /// встроенных коллекций.
 pub(crate) fn shell_index(index: &BslValue) -> RtResult<usize> {

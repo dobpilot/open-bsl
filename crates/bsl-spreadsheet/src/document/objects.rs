@@ -474,6 +474,18 @@ impl ObjectProtocol for SpreadParamsObject {
     }
 }
 
+pub(crate) const API_MEMBERS: &[bsl_rt::ObjectMembersDescriptor] = &[
+    bsl_rt::ObjectMembersDescriptor::new(&DOCUMENT_TYPE)
+        .with_methods(DOCUMENT_METHODS)
+        .with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&AREA_TYPE)
+        .with_methods(AREA_METHODS)
+        .with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&DRAWINGS_TYPE).with_methods(DRAWINGS_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&DRAWING_TYPE).with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&PARAMS_TYPE).with_dynamic_properties(),
+];
+
 impl SpreadParamsObject {
     pub(crate) fn as_params_value(&self) -> BslValue {
         BslValue::new_object(SpreadParamsObject {

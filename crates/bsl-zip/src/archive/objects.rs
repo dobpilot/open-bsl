@@ -409,3 +409,22 @@ impl ObjectProtocol for WriterObject {
     // мутабельных значений на заполненность не поддерживается»; её отдаёт
     // реализация протокола по умолчанию.
 }
+
+pub(crate) const API_MEMBERS: &[bsl_rt::ObjectMembersDescriptor] = &[
+    bsl_rt::ObjectMembersDescriptor::new(&ZIP_READER_TYPE)
+        .with_properties(READER_PROPERTIES)
+        .with_methods(READER_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&ARCHIVE_READER_TYPE)
+        .with_properties(READER_PROPERTIES)
+        .with_methods(READER_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&ZIP_ENTRIES_TYPE).with_methods(ENTRIES_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&ARCHIVE_ENTRIES_TYPE).with_methods(ENTRIES_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&ZIP_ENTRY_TYPE)
+        .with_methods(ENTRY_METHODS)
+        .with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&ARCHIVE_ENTRY_TYPE)
+        .with_methods(ENTRY_METHODS)
+        .with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&ZIP_WRITER_TYPE).with_methods(WRITER_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&ARCHIVE_WRITER_TYPE).with_methods(WRITER_METHODS),
+];

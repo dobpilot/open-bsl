@@ -37,7 +37,10 @@ pub const fn library() -> bsl_rt::LibraryDescriptor {
     }])
     .with_constructors(CONSTRUCTORS)
     .with_types(TYPES)
+    .with_object_member_groups(OBJECT_MEMBER_GROUPS)
 }
+
+const OBJECT_MEMBER_GROUPS: &[&[bsl_rt::ObjectMembersDescriptor]] = &[objects::API_MEMBERS];
 
 fn construct_request(
     _context: &mut bsl_rt::CallContext<'_>,

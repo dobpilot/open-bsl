@@ -124,6 +124,13 @@ const DATA_HASHING_PROPERTIES: &[PropertyDescriptor] = &[PropertyDescriptor {
     set: None,
 }];
 
+const API_MEMBERS: &[bsl_rt::ObjectMembersDescriptor] =
+    &[bsl_rt::ObjectMembersDescriptor::new(&DATA_HASHING_TYPE)
+        .with_properties(DATA_HASHING_PROPERTIES)
+        .with_methods(DATA_HASHING_METHODS)];
+
+const OBJECT_MEMBER_GROUPS: &[&[bsl_rt::ObjectMembersDescriptor]] = &[API_MEMBERS];
+
 fn construct_data_hashing(
     _context: &mut CallContext<'_>,
     arguments: &[BslValue],
@@ -154,6 +161,7 @@ pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor::new(PACKAGE_NAME, PACKAGE_VERSION, ObjectContextNeed::Reduced)
         .with_constructors(CONSTRUCTORS)
         .with_types(TYPES)
+        .with_object_member_groups(OBJECT_MEMBER_GROUPS)
 }
 
 #[cfg(test)]

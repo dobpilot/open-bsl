@@ -360,6 +360,15 @@ static SPAN_PROPERTIES: &[PropertyDescriptor] = &[
     },
 ];
 
+const API_MEMBERS: &[bsl_rt::ObjectMembersDescriptor] = &[
+    bsl_rt::ObjectMembersDescriptor::new(&MATCH_TYPE)
+        .with_properties(SPAN_PROPERTIES)
+        .with_methods(MATCH_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&GROUP_TYPE).with_properties(SPAN_PROPERTIES),
+];
+
+const OBJECT_MEMBER_GROUPS: &[&[bsl_rt::ObjectMembersDescriptor]] = &[API_MEMBERS];
+
 // --- разбор аргументов ---------------------------------------------------
 
 /// Направление, в котором ищется совпадение.
@@ -821,6 +830,7 @@ pub const fn library() -> LibraryDescriptor {
     )
     .with_functions(FUNCTIONS)
     .with_types(TYPES)
+    .with_object_member_groups(OBJECT_MEMBER_GROUPS)
 }
 
 #[cfg(test)]

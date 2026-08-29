@@ -726,6 +726,20 @@ impl ObjectProtocol for DataReadResult {
     }
 }
 
+pub(crate) const API_MEMBERS: &[bsl_rt::ObjectMembersDescriptor] = &[
+    bsl_rt::ObjectMembersDescriptor::new(&SOURCE_STREAM_TYPE)
+        .with_methods(crate::stream::STREAM_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&DATA_READER_TYPE)
+        .with_properties(DATA_RW_PROPERTIES)
+        .with_methods(DATA_RW_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&DATA_WRITER_TYPE)
+        .with_properties(DATA_RW_PROPERTIES)
+        .with_methods(DATA_RW_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&DATA_READ_RESULT_TYPE)
+        .with_properties(DATA_READ_RESULT_PROPERTIES)
+        .with_methods(DATA_READ_RESULT_METHODS),
+];
+
 // Три свойства читателя и писателя — обе стороны носят один и тот же
 // набор, поэтому таблица общая, как и таблица методов.
 fn rw_get_byte_order(

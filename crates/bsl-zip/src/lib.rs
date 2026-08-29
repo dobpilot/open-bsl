@@ -107,6 +107,9 @@ const TYPES: &[&TypeDescriptor] = &[
     &crate::archive::reader::ZIP_WRITER_TYPE,
 ];
 
+const OBJECT_MEMBER_GROUPS: &[&[bsl_rt::ObjectMembersDescriptor]] =
+    &[archive::objects::API_MEMBERS];
+
 /// Дескриптор статически подключаемого компонента архивов.
 pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor::new(
@@ -116,6 +119,7 @@ pub const fn library() -> LibraryDescriptor {
     )
     .with_constructors(CONSTRUCTORS)
     .with_types(TYPES)
+    .with_object_member_groups(OBJECT_MEMBER_GROUPS)
 }
 
 #[cfg(test)]

@@ -2814,6 +2814,14 @@ impl ObjectProtocol for XPathResultObject {
     }
 }
 
+pub(crate) const API_MEMBERS: &[bsl_rt::ObjectMembersDescriptor] = &[
+    bsl_rt::ObjectMembersDescriptor::new(&RESOLVER_TYPE).with_methods(RESOLVER_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&EXPRESSION_TYPE).with_methods(EXPRESSION_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&RESULT_TYPE)
+        .with_properties(RESULT_PROPERTIES)
+        .with_methods(RESULT_METHODS),
+];
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -50,6 +50,9 @@ const TYPES: &[&TypeDescriptor] = &[
     &crate::document::objects::PARAMS_TYPE,
 ];
 
+const OBJECT_MEMBER_GROUPS: &[&[bsl_rt::ObjectMembersDescriptor]] =
+    &[document::objects::API_MEMBERS];
+
 /// Дескриптор статически подключаемого компонента табличного документа.
 pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor::new(
@@ -59,6 +62,7 @@ pub const fn library() -> LibraryDescriptor {
     )
     .with_constructors(CONSTRUCTORS)
     .with_types(TYPES)
+    .with_object_member_groups(OBJECT_MEMBER_GROUPS)
 }
 
 #[cfg(test)]

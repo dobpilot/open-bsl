@@ -105,6 +105,9 @@ impl ObjectProtocol for TextReaderObject {
     }
 }
 
+pub(crate) const API_MEMBERS: &[bsl_rt::ObjectMembersDescriptor] =
+    &[bsl_rt::ObjectMembersDescriptor::new(&TEXT_READER_TYPE).with_methods(METHODS)];
+
 #[cfg(test)]
 mod tests {
     use super::*;

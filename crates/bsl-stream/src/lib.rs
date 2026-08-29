@@ -138,6 +138,12 @@ const TYPES: &[&TypeDescriptor] = &[
     &crate::textreader::TEXT_READER_TYPE,
 ];
 
+const OBJECT_MEMBER_GROUPS: &[&[bsl_rt::ObjectMembersDescriptor]] = &[
+    datarw::API_MEMBERS,
+    stream::API_MEMBERS,
+    textreader::API_MEMBERS,
+];
+
 /// Дескриптор статически подключаемого компонента потоков.
 pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor::new(
@@ -152,6 +158,7 @@ pub const fn library() -> LibraryDescriptor {
     .with_byte_stream_factory(binary_data_stream_factory)
     .with_constructors(CONSTRUCTORS)
     .with_types(TYPES)
+    .with_object_member_groups(OBJECT_MEMBER_GROUPS)
     .with_type_aliases(TYPE_ALIASES)
 }
 

@@ -917,6 +917,64 @@ pub struct ConstructorDescriptor {
     pub call: ComponentCall,
 }
 
+/// Связь типа компонента с его существующими таблицами методов и свойств.
+///
+/// Дескриптор не дублирует имена или арности: и исполнение, и справочник
+/// читают одни [`MethodDescriptor`] и [`PropertyDescriptor`]. Отдельная связь
+/// нужна потому, что [`crate::ObjectProtocol`] получает таблицы у экземпляра,
+/// а справочник строится до создания объектов.
+#[derive(Debug, Clone, Copy)]
+pub struct ObjectMembersDescriptor {
+    ty: &'static crate::TypeDescriptor,
+    methods: &'static [MethodDescriptor],
+    properties: &'static [PropertyDescriptor],
+    dynamic_properties: bool,
+}
+
+impl ObjectMembersDescriptor {
+    pub const fn new(ty: &'static crate::TypeDescriptor) -> Self {
+        Self {
+            ty,
+            methods: &[],
+            properties: &[],
+            dynamic_properties: false,
+        }
+    }
+
+    pub const fn with_methods(mut self, methods: &'static [MethodDescriptor]) -> Self {
+        self.methods = methods;
+        self
+    }
+
+    pub const fn with_properties(mut self, properties: &'static [PropertyDescriptor]) -> Self {
+        self.properties = properties;
+        self
+    }
+
+    /// У типа есть свойства, имена которых зависят от экземпляра и потому
+    /// не помещаются в статическую таблицу.
+    pub const fn with_dynamic_properties(mut self) -> Self {
+        self.dynamic_properties = true;
+        self
+    }
+
+    pub const fn ty(&self) -> &'static crate::TypeDescriptor {
+        self.ty
+    }
+
+    pub const fn methods(&self) -> &'static [MethodDescriptor] {
+        self.methods
+    }
+
+    pub const fn properties(&self) -> &'static [PropertyDescriptor] {
+        self.properties
+    }
+
+    pub const fn has_dynamic_properties(&self) -> bool {
+        self.dynamic_properties
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LibraryDependency {
     pub package: &'static str,
@@ -949,6 +1007,10 @@ pub struct LibraryDescriptor {
     /// больше не знает. Не объявленный здесь тип остаётся доступен через
     /// `ТипЗнч(объект)`, но по имени не ищется.
     types: &'static [&'static crate::TypeDescriptor],
+    /// Группы связей типов с объектными членами. Группы позволяют большому
+    /// компоненту держать таблицы рядом с реализацией объекта, не собирая
+    /// второй плоский перечень имён в корневом модуле.
+    object_member_groups: &'static [&'static [ObjectMembersDescriptor]],
     /// Написания, на которые откликается больше одного типа: пара
     /// «псевдоним → тип-владелец» (см. ABI-D). Пусто, пока конфликта имён
     /// нет; каталог типов реестра разрешает неоднозначность по этому списку,
@@ -975,6 +1037,7 @@ impl LibraryDescriptor {
             functions: &[],
             constructors: &[],
             types: &[],
+            object_member_groups: &[],
             type_aliases: &[],
             byte_stream_factory: None,
         }
@@ -1002,6 +1065,15 @@ impl LibraryDescriptor {
     /// Типы объектов, которые библиотека вводит в язык.
     pub const fn with_types(mut self, t: &'static [&'static crate::TypeDescriptor]) -> Self {
         self.types = t;
+        self
+    }
+
+    /// Связи объявленных типов с их статическими объектными членами.
+    pub const fn with_object_member_groups(
+        mut self,
+        groups: &'static [&'static [ObjectMembersDescriptor]],
+    ) -> Self {
+        self.object_member_groups = groups;
         self
     }
 
@@ -1054,6 +1126,13 @@ impl LibraryDescriptor {
     /// Типы, которые библиотека вводит в язык.
     pub const fn types(&self) -> &'static [&'static crate::TypeDescriptor] {
         self.types
+    }
+
+    /// Объектные члены типов библиотеки в порядке объявления групп.
+    pub fn object_members(&self) -> impl Iterator<Item = &'static ObjectMembersDescriptor> + '_ {
+        self.object_member_groups
+            .iter()
+            .flat_map(|group| group.iter())
     }
 
     /// Псевдонимы имён типов, владельцев которых объявила библиотека.
@@ -1205,6 +1284,14 @@ const CORE_TYPES: &[&crate::TypeDescriptor] = &[
     &crate::type_description::DATE_QUALIFIERS_TYPE,
 ];
 
+const CORE_OBJECT_MEMBER_GROUPS: &[&[ObjectMembersDescriptor]] = &[
+    crate::fixed_array::API_MEMBERS,
+    crate::background_jobs::API_MEMBERS,
+    crate::user_message::API_MEMBERS,
+    crate::error_info::API_MEMBERS,
+    crate::value_list::API_MEMBERS,
+];
+
 /// Дескриптор базового компонента. На переходном этапе встроенные функции
 /// ещё обслуживаются старой таблицей; конструкторы, которым нужны
 /// возможности прогона, проходят обычную компонентную границу.
@@ -1217,6 +1304,7 @@ pub const fn core_library() -> LibraryDescriptor {
     .with_functions(CORE_FUNCTION_TABLE)
     .with_constructors(CORE_CONSTRUCTORS)
     .with_types(CORE_TYPES)
+    .with_object_member_groups(CORE_OBJECT_MEMBER_GROUPS)
 }
 
 /// Глобальные функции ядра, которым нужен контекст прогона: временное
@@ -1289,6 +1377,18 @@ pub enum RegistryError {
     /// является: таблица — разрешение конфликта, а не второй источник имён
     /// (в том числе для написания, которым владеет тип ядра).
     AliasIsNotAmbiguous(String),
+    /// Таблица объектных членов ссылается на тип, которого библиотека не
+    /// объявила в `types`.
+    ObjectMembersTypeNotDeclared {
+        package: String,
+        type_name: String,
+    },
+    /// Один тип получил две таблицы объектных членов: генератор справочника
+    /// не должен выбирать одну по порядку.
+    DuplicateObjectMembers {
+        package: String,
+        type_name: String,
+    },
     DuplicateFunctionCode {
         package: String,
         code: FunctionCode,
@@ -1392,6 +1492,14 @@ impl fmt::Display for RegistryError {
                     "написание {name} объявлено псевдонимом, но неоднозначным не является"
                 )
             }
+            Self::ObjectMembersTypeNotDeclared { package, type_name } => write!(
+                f,
+                "объектные члены типа {type_name} объявлены вне types компонента {package}"
+            ),
+            Self::DuplicateObjectMembers { package, type_name } => write!(
+                f,
+                "объектные члены типа {type_name} повторены в компоненте {package}"
+            ),
         }
     }
 }
@@ -1668,6 +1776,32 @@ impl RuntimeBuilder {
                         return Err(RegistryError::DuplicateConstructorName(name.to_string()));
                     }
                 }
+            }
+        }
+
+        for library in &self.libraries {
+            let mut member_types: Vec<&'static crate::TypeDescriptor> = Vec::new();
+            for members in library.object_members() {
+                if !library
+                    .types()
+                    .iter()
+                    .any(|ty| std::ptr::eq(*ty, members.ty()))
+                {
+                    return Err(RegistryError::ObjectMembersTypeNotDeclared {
+                        package: library.package().to_string(),
+                        type_name: members.ty().name.to_string(),
+                    });
+                }
+                if member_types
+                    .iter()
+                    .any(|ty| std::ptr::eq(*ty, members.ty()))
+                {
+                    return Err(RegistryError::DuplicateObjectMembers {
+                        package: library.package().to_string(),
+                        type_name: members.ty().name.to_string(),
+                    });
+                }
+                member_types.push(members.ty());
             }
         }
 
@@ -1995,6 +2129,46 @@ mod tests {
     }
 
     #[test]
+    fn object_members_must_belong_to_a_declared_type() {
+        static DECLARED: crate::TypeDescriptor = crate::TypeDescriptor::new("other", "Объявлен");
+        static FOREIGN: crate::TypeDescriptor = crate::TypeDescriptor::new("other", "Чужой");
+        const TYPES: &[&crate::TypeDescriptor] = &[&DECLARED];
+        const MEMBERS: &[ObjectMembersDescriptor] = &[ObjectMembersDescriptor::new(&FOREIGN)];
+        const GROUPS: &[&[ObjectMembersDescriptor]] = &[MEMBERS];
+
+        let mut builder = RuntimeBuilder::new();
+        builder.register(core()).register(
+            LibraryDescriptor::new("other", "1", ObjectContextNeed::Reduced)
+                .with_types(TYPES)
+                .with_object_member_groups(GROUPS),
+        );
+        assert!(matches!(
+            builder.build(),
+            Err(RegistryError::ObjectMembersTypeNotDeclared { .. })
+        ));
+    }
+
+    #[test]
+    fn object_members_are_unique_per_type() {
+        static TYPE: crate::TypeDescriptor = crate::TypeDescriptor::new("other", "Объект");
+        const TYPES: &[&crate::TypeDescriptor] = &[&TYPE];
+        const FIRST: &[ObjectMembersDescriptor] = &[ObjectMembersDescriptor::new(&TYPE)];
+        const SECOND: &[ObjectMembersDescriptor] = &[ObjectMembersDescriptor::new(&TYPE)];
+        const GROUPS: &[&[ObjectMembersDescriptor]] = &[FIRST, SECOND];
+
+        let mut builder = RuntimeBuilder::new();
+        builder.register(core()).register(
+            LibraryDescriptor::new("other", "1", ObjectContextNeed::Reduced)
+                .with_types(TYPES)
+                .with_object_member_groups(GROUPS),
+        );
+        assert!(matches!(
+            builder.build(),
+            Err(RegistryError::DuplicateObjectMembers { .. })
+        ));
+    }
+
+    #[test]
     fn two_binary_data_stream_factories_are_rejected() {
         let mut builder = RuntimeBuilder::new();
         builder
@@ -2069,10 +2243,12 @@ mod descriptor_sizes {
     use super::{LibraryDescriptor, MethodDescriptor};
 
     /// Размеры дескрипторов зафиксированы намеренно (ABI-E плана
-    /// abi-refactor-f). `LibraryDescriptor` содержит толстый указатель
-    /// `type_aliases` и один обычный указатель `byte_stream_factory` — всего
-    /// 128 байт на x86-64; записи статические, так что рост платится один раз
-    /// на библиотеку, а не на объект. `MethodDescriptor` — 40 байт:
+    /// `docs/archive/refactors/component-abi-f.md`). `LibraryDescriptor`
+    /// содержит толстые указатели на `type_aliases` и группы объектных членов
+    /// плюс обычный указатель `byte_stream_factory` — всего 144 байта на
+    /// x86-64. Последние 16 байт дают справочнику статическую поверхность
+    /// объектов; записи статические, так что рост платится один раз на
+    /// библиотеку, а не на объект. `MethodDescriptor` — 40 байт:
     /// написания, `arity` и обработчик-перечисление `MethodImpl`, чей тег
     /// (обычный или приостанавливающий, план фоновых заданий, этап 5)
     /// стоит 8 байт выравнивания. Union с тегом в паддинге `arity` вернул
@@ -2082,7 +2258,7 @@ mod descriptor_sizes {
     /// ловит незамеченный рост.
     #[test]
     fn descriptors_have_the_expected_size() {
-        assert_eq!(std::mem::size_of::<LibraryDescriptor>(), 128);
+        assert_eq!(std::mem::size_of::<LibraryDescriptor>(), 144);
         assert_eq!(std::mem::size_of::<MethodDescriptor>(), 40);
     }
 }

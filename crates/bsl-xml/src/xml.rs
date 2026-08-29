@@ -1201,3 +1201,10 @@ impl ObjectProtocol for XmlWriterSettingsObject {
         &SETTINGS_TYPE
     }
 }
+
+pub(crate) const API_MEMBERS: &[bsl_rt::ObjectMembersDescriptor] = &[
+    bsl_rt::ObjectMembersDescriptor::new(&READER_TYPE)
+        .with_properties(READER_PROPERTIES)
+        .with_methods(READER_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&WRITER_TYPE).with_methods(WRITER_METHODS),
+];

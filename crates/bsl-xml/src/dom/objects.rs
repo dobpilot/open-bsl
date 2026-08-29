@@ -805,6 +805,38 @@ impl ObjectProtocol for DomListObject {
     // дают «Нет» (измерено), поэтому ключа тождества у списка нет.
 }
 
+pub(crate) const API_MEMBERS: &[bsl_rt::ObjectMembersDescriptor] = &[
+    bsl_rt::ObjectMembersDescriptor::new(&DOM_BUILDER_TYPE).with_methods(BUILDER_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&DOM_WRITER_TYPE).with_methods(WRITER_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&DOM_DOCUMENT_TYPE)
+        .with_properties(NODE_PROPERTIES)
+        .with_methods(NODE_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&DOM_ELEMENT_TYPE)
+        .with_properties(NODE_PROPERTIES)
+        .with_methods(NODE_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&DOM_ATTRIBUTE_TYPE)
+        .with_properties(NODE_PROPERTIES)
+        .with_methods(NODE_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&DOM_TEXT_TYPE)
+        .with_properties(NODE_PROPERTIES)
+        .with_methods(NODE_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&DOM_CDATA_TYPE)
+        .with_properties(NODE_PROPERTIES)
+        .with_methods(NODE_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&DOM_COMMENT_TYPE)
+        .with_properties(NODE_PROPERTIES)
+        .with_methods(NODE_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&DOM_PI_TYPE)
+        .with_properties(NODE_PROPERTIES)
+        .with_methods(NODE_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&DOM_ENTITY_REF_TYPE)
+        .with_properties(NODE_PROPERTIES)
+        .with_methods(NODE_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&DOM_NODE_LIST_TYPE).with_methods(LIST_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&DOM_ATTR_MAP_TYPE).with_methods(LIST_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&DOM_ELEMENT_LIST_TYPE).with_methods(LIST_METHODS),
+];
+
 /// Номер элемента из значения-индекса — та же семантика, что у `[]`
 /// встроенных коллекций.
 pub(crate) fn dom_index(index: &BslValue) -> RtResult<usize> {

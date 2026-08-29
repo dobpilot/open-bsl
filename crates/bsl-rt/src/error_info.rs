@@ -9,8 +9,8 @@
 //! не выведена из замеров — истинен только член `ВсеОшибки`.
 
 use crate::{
-    Arity, BslString, BslValue, CallContext, EnumValue, MethodDescriptor, ObjectProtocol,
-    PropertyDescriptor, RtError, RtResult, TypeDescriptor, receiver_of,
+    Arity, BslString, BslValue, CallContext, EnumValue, MethodDescriptor, ObjectMembersDescriptor,
+    ObjectProtocol, PropertyDescriptor, RtError, RtResult, TypeDescriptor, receiver_of,
 };
 
 pub(crate) static ERROR_INFO_TYPE: TypeDescriptor = TypeDescriptor {
@@ -148,6 +148,11 @@ static ERROR_INFO_METHODS: &[MethodDescriptor] = &[MethodDescriptor::new(
     Arity::range(1, 2),
     is_error_of_category,
 )];
+
+pub(crate) const API_MEMBERS: &[ObjectMembersDescriptor] =
+    &[ObjectMembersDescriptor::new(&ERROR_INFO_TYPE)
+        .with_properties(ERROR_INFO_PROPERTIES)
+        .with_methods(ERROR_INFO_METHODS)];
 
 /// Создаёт снимок уже очищенного пользовательского текста ошибки: краткое
 /// и полное представления совпадают, координат нет.

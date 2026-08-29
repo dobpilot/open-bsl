@@ -574,3 +574,37 @@ impl ObjectProtocol for NameListObject {
         Ok(!self.names.is_empty())
     }
 }
+
+pub(crate) const API_MEMBERS: &[bsl_rt::ObjectMembersDescriptor] = &[
+    bsl_rt::ObjectMembersDescriptor::new(&BUILDER_TYPE).with_methods(BUILDER_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&SCHEMA_SET_TYPE).with_methods(SCHEMA_SET_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&EXPANDED_NAME_TYPE)
+        .with_properties(EXPANDED_NAME_PROPERTIES),
+    bsl_rt::ObjectMembersDescriptor::new(&NAME_LIST_TYPE).with_methods(NAME_LIST_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&SCHEMA_TYPE).with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&ELEMENT_TYPE).with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&ATTRIBUTE_TYPE).with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&SIMPLE_TYPE_TYPE).with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&COMPLEX_TYPE_TYPE).with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&PARTICLE_TYPE).with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&MODEL_GROUP_TYPE).with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&ATTRIBUTE_USE_TYPE).with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&ANNOTATION_TYPE).with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&DOCUMENTATION_TYPE).with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&APP_INFO_TYPE).with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&FACET_LENGTH_TYPE).with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&FACET_MIN_LENGTH_TYPE).with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&FACET_MAX_LENGTH_TYPE).with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&FACET_PATTERN_TYPE).with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&FACET_ENUMERATION_TYPE).with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&FACET_WHITE_SPACE_TYPE).with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&FACET_TOTAL_DIGITS_TYPE).with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&FACET_FRACTION_DIGITS_TYPE).with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&FACET_MIN_INCLUSIVE_TYPE).with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&FACET_MAX_INCLUSIVE_TYPE).with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&FACET_MIN_EXCLUSIVE_TYPE).with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&FACET_MAX_EXCLUSIVE_TYPE).with_dynamic_properties(),
+    bsl_rt::ObjectMembersDescriptor::new(&LIST_FIXED_TYPE).with_methods(SCHEMA_LIST_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&LIST_PLAIN_TYPE).with_methods(SCHEMA_LIST_METHODS),
+    bsl_rt::ObjectMembersDescriptor::new(&LIST_NAMED_TYPE).with_methods(SCHEMA_LIST_METHODS),
+];

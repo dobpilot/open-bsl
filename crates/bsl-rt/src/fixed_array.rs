@@ -5,8 +5,8 @@
 //! `ПолучитьСообщенияПользователю`.
 
 use crate::{
-    Arity, BslValue, CallContext, MethodDescriptor, ObjectProtocol, RtError, RtResult,
-    TypeDescriptor, receiver_of,
+    Arity, BslValue, CallContext, MethodDescriptor, ObjectMembersDescriptor, ObjectProtocol,
+    RtError, RtResult, TypeDescriptor, receiver_of,
 };
 
 pub(crate) static FIXED_ARRAY_TYPE: TypeDescriptor = TypeDescriptor {
@@ -112,6 +112,9 @@ static FIXED_ARRAY_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor::new(&["Найти", "Find"], Arity::exact(1), fixed_find),
     MethodDescriptor::new(&["Получить", "Get"], Arity::exact(1), fixed_get),
 ];
+
+pub(crate) const API_MEMBERS: &[ObjectMembersDescriptor] =
+    &[ObjectMembersDescriptor::new(&FIXED_ARRAY_TYPE).with_methods(FIXED_ARRAY_METHODS)];
 
 /// `Новый ФиксированныйМассив(<Массив>)` — конструктор ядра.
 pub(crate) fn construct_fixed_array(

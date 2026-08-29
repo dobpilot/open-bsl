@@ -125,6 +125,8 @@ const TYPES: &[&TypeDescriptor] = &[
     &crate::objects::WRITER_TYPE,
 ];
 
+const OBJECT_MEMBER_GROUPS: &[&[bsl_rt::ObjectMembersDescriptor]] = &[objects::API_MEMBERS];
+
 /// Дескриптор статически подключаемого JSON-компонента.
 pub const fn library() -> LibraryDescriptor {
     LibraryDescriptor::new(
@@ -135,6 +137,7 @@ pub const fn library() -> LibraryDescriptor {
     .with_functions(FUNCTIONS)
     .with_constructors(CONSTRUCTORS)
     .with_types(TYPES)
+    .with_object_member_groups(OBJECT_MEMBER_GROUPS)
 }
 
 #[cfg(test)]

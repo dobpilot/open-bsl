@@ -12,8 +12,9 @@ use std::time::Duration;
 
 use crate::{
     Arity, BslValue, CallContext, EnumValue, GraphLimits, HostError, JobId, JobKeyDto,
-    JobSnapshotDto, JobStateDto, MethodDescriptor, ObjectProtocol, PropertyDescriptor, RtError,
-    RtResult, SerializedValueGraph, TypeDescriptor, UserMessageDto, receiver_of,
+    JobSnapshotDto, JobStateDto, MethodDescriptor, ObjectMembersDescriptor, ObjectProtocol,
+    PropertyDescriptor, RtError, RtResult, SerializedValueGraph, TypeDescriptor, UserMessageDto,
+    receiver_of,
 };
 
 /// Объектобезопасный сервис host: все операции на владеющих DTO. Ошибки —
@@ -840,6 +841,13 @@ static JOB_PROPERTIES: &[PropertyDescriptor] = &[
         get: job_error_info,
         set: None,
     },
+];
+
+pub(crate) const API_MEMBERS: &[ObjectMembersDescriptor] = &[
+    ObjectMembersDescriptor::new(&BACKGROUND_JOBS_TYPE).with_methods(MANAGER_METHODS),
+    ObjectMembersDescriptor::new(&BACKGROUND_JOB_TYPE)
+        .with_properties(JOB_PROPERTIES)
+        .with_methods(JOB_METHODS),
 ];
 
 /// Конструктор менеджера для голого имени `ФоновыеЗадания`. Без

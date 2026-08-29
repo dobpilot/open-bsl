@@ -3,8 +3,8 @@
 use std::cell::RefCell;
 
 use crate::{
-    Arity, BslValue, CallContext, EnumValue, MethodDescriptor, ObjectProtocol, PropertyDescriptor,
-    RtError, RtResult, TypeDescriptor,
+    Arity, BslValue, CallContext, EnumValue, MethodDescriptor, ObjectMembersDescriptor,
+    ObjectProtocol, PropertyDescriptor, RtError, RtResult, TypeDescriptor,
 };
 
 pub(crate) static VALUE_LIST_TYPE: TypeDescriptor = TypeDescriptor {
@@ -178,6 +178,11 @@ static VALUE_LIST_ITEM_PROPERTIES: &[PropertyDescriptor] = &[
         get: item_presentation,
         set: None,
     },
+];
+
+pub(crate) const API_MEMBERS: &[ObjectMembersDescriptor] = &[
+    ObjectMembersDescriptor::new(&VALUE_LIST_TYPE).with_methods(VALUE_LIST_METHODS),
+    ObjectMembersDescriptor::new(&VALUE_LIST_ITEM_TYPE).with_properties(VALUE_LIST_ITEM_PROPERTIES),
 ];
 
 #[must_use]

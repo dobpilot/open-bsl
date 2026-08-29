@@ -9,8 +9,8 @@
 use std::cell::RefCell;
 
 use crate::{
-    Arity, BslValue, CallContext, MethodDescriptor, ObjectProtocol, PropertyDescriptor, RtResult,
-    TypeDescriptor, receiver_of,
+    Arity, BslValue, CallContext, MethodDescriptor, ObjectMembersDescriptor, ObjectProtocol,
+    PropertyDescriptor, RtResult, TypeDescriptor, receiver_of,
 };
 
 pub(crate) static USER_MESSAGE_TYPE: TypeDescriptor = TypeDescriptor {
@@ -295,6 +295,11 @@ static USER_MESSAGE_METHODS: &[MethodDescriptor] = &[
         message_set_data,
     ),
 ];
+
+pub(crate) const API_MEMBERS: &[ObjectMembersDescriptor] =
+    &[ObjectMembersDescriptor::new(&USER_MESSAGE_TYPE)
+        .with_properties(USER_MESSAGE_PROPERTIES)
+        .with_methods(USER_MESSAGE_METHODS)];
 
 /// Глобальная `ПолучитьСообщенияПользователю(УдалятьПолученные = Ложь)`
 /// — по выписке синтакс-помощника возвращает `ФиксированныйМассив`
