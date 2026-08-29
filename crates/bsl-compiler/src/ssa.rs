@@ -838,3 +838,204 @@ pub fn constants_at_nodes(
     }
     out
 }
+
+// ---------------------------------------------------------------------
+// Домен представлений: ярус значения
+// ---------------------------------------------------------------------
+
+/// Доказанное внутреннее представление числа.
+///
+/// Основание шага 8 плана. Программа по-прежнему видит единый тип
+/// `Число`; ярус — это утверждение компилятора о том, каким хранилищем
+/// значение выражается точно.
+///
+/// Диапазон здесь обязателен, а не украшение. `Int64` без него не
+/// доказывает ничего: сумма двух чисел, помещающихся в `i64`, в `i64` уже
+/// может не поместиться, и план прямо запрещает молчаливое заворачивание.
+/// Поэтому ярус несёт границы, а операция сохраняет его только когда
+/// границы доказывают безопасность.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Tier {
+    /// Значение не достигнуто либо путь недостижим.
+    Bottom,
+    /// Целое с масштабом ноль, лежащее в `[lo, hi]` и, значит, в `i64`.
+    Int64 { lo: i64, hi: i64 },
+    /// Доказано, что число, но представление — нет.
+    Number,
+    /// Не доказано даже, что число.
+    Top,
+}
+
+impl Tier {
+    /// Объединение по решётке: `Bottom` — единица, `Top` — поглощающий.
+    #[must_use]
+    pub fn meet(&self, other: &Tier) -> Tier {
+        match (self, other) {
+            (Tier::Bottom, x) | (x, Tier::Bottom) => x.clone(),
+            (Tier::Top, _) | (_, Tier::Top) => Tier::Top,
+            (Tier::Int64 { lo: a, hi: b }, Tier::Int64 { lo: c, hi: d }) => Tier::Int64 {
+                lo: *a.min(c),
+                hi: *b.max(d),
+            },
+            // Число и целое дают число: общего представления у них нет.
+            _ => Tier::Number,
+        }
+    }
+
+    /// Расширение: обязательная операция, без которой решётка НЕ СХОДИТСЯ.
+    ///
+    /// Цепь ярусов конечна только по видам (`Bottom` -> целое -> число ->
+    /// `Top`), но у целого есть ещё и диапазон, и в цикле он растёт на
+    /// каждой итерации: 0..0, 0..1, 0..2 и так до бесконечности. Поэтому
+    /// расширившийся диапазон не уточняется, а поднимается до `Число`:
+    /// доказать ярус целого для счётчика без анализа границ цикла нечем,
+    /// а бесконечно приближаться к ответу — не анализ.
+    #[must_use]
+    pub fn widen(old: &Tier, new: &Tier) -> Tier {
+        match (old, new) {
+            (Tier::Int64 { lo: a, hi: b }, Tier::Int64 { lo: c, hi: d }) if c < a || d > b => {
+                Tier::Number
+            }
+            _ => new.clone(),
+        }
+    }
+
+    /// Ярус готовой константы.
+    #[must_use]
+    pub fn of(c: &Const) -> Tier {
+        match c {
+            Const::Bottom => Tier::Bottom,
+            Const::Top => Tier::Top,
+            Const::Number(n) => match n.to_i64_exact() {
+                Some(v) => Tier::Int64 { lo: v, hi: v },
+                None => Tier::Number,
+            },
+        }
+    }
+}
+
+/// Арифметика над диапазонами. `None` — за пределами `i64`, и тогда ярус
+/// опускается до `Number`: сузить его было бы тем самым молчаливым
+/// заворачиванием, которое план запрещает.
+fn range_op(op: bsl_syntax::BinaryOp, a: (i64, i64), b: (i64, i64)) -> Option<(i64, i64)> {
+    use bsl_syntax::BinaryOp;
+    let (al, ah) = (i128::from(a.0), i128::from(a.1));
+    let (bl, bh) = (i128::from(b.0), i128::from(b.1));
+    let (lo, hi) = match op {
+        BinaryOp::Add => (al + bl, ah + bh),
+        BinaryOp::Sub => (al - bh, ah - bl),
+        BinaryOp::Mul => {
+            let c = [al * bl, al * bh, ah * bl, ah * bh];
+            (*c.iter().min()?, *c.iter().max()?)
+        }
+        // Деление BSL — точное десятичное, и целое от него не гарантировано
+        // даже при целых операндах: `1 / 2` даёт `0,5`. Ярус целого здесь
+        // не доказывается.
+        _ => return None,
+    };
+    let (min, max) = (i128::from(i64::MIN), i128::from(i64::MAX));
+    if lo < min || hi > max {
+        return None;
+    }
+    Some((lo as i64, hi as i64))
+}
+
+/// Ярус выражения при известных ярусах слотов.
+fn tier_of(e: &RExpr, slots: &[Tier]) -> Tier {
+    match e {
+        RExpr::Number(n) => match n.to_i64_exact() {
+            Some(v) => Tier::Int64 { lo: v, hi: v },
+            None => Tier::Number,
+        },
+        RExpr::Local(slot) => slots.get(*slot as usize).cloned().unwrap_or(Tier::Top),
+        RExpr::Unary {
+            op: bsl_syntax::UnaryOp::Neg,
+            expr,
+        } => match tier_of(expr, slots) {
+            Tier::Int64 { lo, hi } => match (lo.checked_neg(), hi.checked_neg()) {
+                (Some(a), Some(b)) => Tier::Int64 {
+                    lo: a.min(b),
+                    hi: a.max(b),
+                },
+                _ => Tier::Number,
+            },
+            Tier::Number => Tier::Number,
+            other => other,
+        },
+        RExpr::Binary { op, lhs, rhs } => {
+            let (a, b) = (tier_of(lhs, slots), tier_of(rhs, slots));
+            match (&a, &b) {
+                (Tier::Int64 { lo: al, hi: ah }, Tier::Int64 { lo: bl, hi: bh }) => {
+                    match range_op(*op, (*al, *ah), (*bl, *bh)) {
+                        Some((lo, hi)) => Tier::Int64 { lo, hi },
+                        // Границы безопасности не доказали — остаётся
+                        // число без доказанного представления.
+                        None => Tier::Number,
+                    }
+                }
+                (Tier::Bottom, _) | (_, Tier::Bottom) => Tier::Bottom,
+                (Tier::Top, _) | (_, Tier::Top) => Tier::Top,
+                _ => Tier::Number,
+            }
+        }
+        _ => Tier::Top,
+    }
+}
+
+/// Распространяет ярусы представлений по значениям SSA.
+///
+/// Устроено как и распространение констант: рабочий список блоков,
+/// объединение в `φ`, без рекурсии по графу. Опкодов эта решётка не
+/// добавляет и байт-кода не меняет — план запрещает вводить
+/// типизированные опкоды раньше, чем появится доказательная база, и это
+/// её статическая половина.
+#[must_use]
+pub fn propagate_tiers(cfg: &Cfg<'_>, ssa: &Ssa, n_slots: usize) -> Vec<Tier> {
+    let mut tier = vec![Tier::Bottom; ssa.values.len()];
+    for (id, v) in ssa.values.iter().enumerate() {
+        if matches!(v, Value::Entry { .. }) {
+            tier[id] = Tier::Top;
+        }
+    }
+    let rpo = cfg.reverse_postorder();
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for &b in &rpo {
+            let Some(entry) = &ssa.entry[b] else { continue };
+            for &phi in &ssa.phis[b] {
+                let Value::Phi { operands, .. } = &ssa.values[phi] else {
+                    continue;
+                };
+                let mut merged = Tier::Bottom;
+                for &op in operands {
+                    merged = merged.meet(&tier[op]);
+                }
+                let merged = Tier::widen(&tier[phi], &merged);
+                if tier[phi] != merged {
+                    tier[phi] = merged;
+                    changed = true;
+                }
+            }
+            let mut slots: Vec<Tier> = (0..n_slots).map(|i| tier[entry[i]].clone()).collect();
+            for &(stmt_index, id) in &ssa.defs[b] {
+                let (slot, t) = match cfg.blocks[b].stmts[stmt_index] {
+                    RStmt::AssignLocal { slot, value } => (slot, tier_of(value, &slots)),
+                    _ => match &ssa.values[id] {
+                        Value::Def { slot, .. } => (slot, Tier::Top),
+                        _ => continue,
+                    },
+                };
+                let t = Tier::widen(&tier[id], &t);
+                if tier[id] != t {
+                    tier[id] = t.clone();
+                    changed = true;
+                }
+                if let Some(cell) = slots.get_mut(*slot as usize) {
+                    *cell = t;
+                }
+            }
+        }
+    }
+    tier
+}

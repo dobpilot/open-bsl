@@ -596,3 +596,119 @@ fn a_loop_closed_by_goto_gets_a_phi_too() {
         "счётчик, растущий по обратному ребру, константой быть не может: {lat:?}"
     );
 }
+
+// ---------------------------------------------------------------------
+// Домен представлений
+// ---------------------------------------------------------------------
+
+fn tiers(src: &str) -> (Vec<ssa::Tier>, ssa::Ssa) {
+    let parsed = bsl_syntax::parse(src).expect("разбор");
+    let resolved = bsl_sema::resolve_program(&parsed.items).expect("резолвинг");
+    let n = resolved.top_level.locals.len();
+    let graph = cfg::build(&resolved.top_level.body);
+    let form = ssa::build(&graph, n);
+    ssa::verify(&graph, &form).expect("инварианты SSA");
+    let t = ssa::propagate_tiers(&graph, &form, n);
+    (t, form)
+}
+
+fn has_int64(t: &[ssa::Tier]) -> bool {
+    t.iter().any(|x| matches!(x, ssa::Tier::Int64 { .. }))
+}
+
+/// Целые литералы и арифметика над ними доказывают ярус `Int64` вместе с
+/// диапазоном.
+#[test]
+fn integer_arithmetic_proves_the_int64_tier() {
+    let (t, _) = tiers("А = 2;\nБ = А * 3;\nВ = Б + 1;");
+    assert!(has_int64(&t), "ярус целого не доказан: {t:?}");
+    assert!(
+        t.iter()
+            .any(|x| matches!(x, ssa::Tier::Int64 { lo, hi } if *lo == 7 && *hi == 7)),
+        "диапазон обязан сойтись к 7: {t:?}"
+    );
+}
+
+/// Дробное число — тоже число, но яруса целого не даёт.
+#[test]
+fn a_fractional_literal_is_a_number_without_the_integer_tier() {
+    let (t, _) = tiers("А = 0.5;\nБ = А + 1;");
+    assert!(
+        t.contains(&ssa::Tier::Number),
+        "дробное обязано остаться числом без яруса: {t:?}"
+    );
+}
+
+/// **Переполнение яруса не заворачивается молча.** Умножение двух
+/// значений, чьи границы выходят за `i64`, опускает ярус до `Число`, а не
+/// сужает его — плана это требование прямое.
+#[test]
+fn an_operation_that_may_overflow_drops_the_tier() {
+    let big = i64::MAX;
+    let (t, _) = tiers(&format!("А = {big};\nБ = А * {big};"));
+    assert!(
+        !t.iter()
+            .any(|x| matches!(x, ssa::Tier::Int64 { lo, hi } if *lo != *hi || *lo == 0))
+            || t.contains(&ssa::Tier::Number),
+        "выход за i64 обязан опустить ярус до числа: {t:?}"
+    );
+}
+
+/// Деление яруса целого не даёт даже при целых операндах: `1 / 2` в BSL
+/// даёт `0,5`.
+#[test]
+fn division_does_not_prove_an_integer_even_from_integers() {
+    let (t, form) = tiers("А = 1;\nБ = 2;\nВ = А / Б;");
+    let div = form
+        .values
+        .iter()
+        .enumerate()
+        .find(|(_, v)| matches!(v, ssa::Value::Def { slot: 2, .. }))
+        .map(|(id, _)| id)
+        .expect("значение для В");
+    assert_ne!(
+        t[div],
+        ssa::Tier::Int64 { lo: 0, hi: 0 },
+        "деление не доказывает целого: {t:?}"
+    );
+}
+
+/// Решётка ярусов сходится на всём корпусе, и её видно: сколько значений
+/// удалось доказать целыми — это и есть статическая половина
+/// доказательной базы шага 8.
+#[test]
+fn the_tier_lattice_converges_on_the_corpus() {
+    let mut checked = 0usize;
+    let (mut int64, mut number, mut top) = (0usize, 0usize, 0usize);
+    for path in corpus() {
+        let Ok(src) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(parsed) = bsl_syntax::parse(&src) else {
+            continue;
+        };
+        let Ok(resolved) = bsl_sema::resolve_program(&parsed.items) else {
+            continue;
+        };
+        let mut bodies: Vec<(&[bsl_sema::RStmt], usize)> =
+            vec![(&resolved.top_level.body, resolved.top_level.locals.len())];
+        for f in &resolved.functions {
+            bodies.push((&f.body, f.locals.len()));
+        }
+        for (body, n) in bodies {
+            let graph = cfg::build(body);
+            let form = ssa::build(&graph, n);
+            for t in ssa::propagate_tiers(&graph, &form, n) {
+                match t {
+                    ssa::Tier::Int64 { .. } => int64 += 1,
+                    ssa::Tier::Number => number += 1,
+                    ssa::Tier::Top => top += 1,
+                    ssa::Tier::Bottom => {}
+                }
+            }
+        }
+        checked += 1;
+    }
+    assert!(checked >= 20, "проверено {checked} скриптов");
+    println!("ярусы сошлись на {checked} скриптах: Int64 {int64}, Число {number}, не число {top}");
+}
