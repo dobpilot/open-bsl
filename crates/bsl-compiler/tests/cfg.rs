@@ -417,3 +417,48 @@ fn constant_propagation_converges_on_the_corpus() {
     assert!(checked >= 20, "проверено {checked} скриптов");
     println!("решётка сошлась на {checked} скриптах, известных значений {known}");
 }
+
+/// `Выполнить` меняет локальные по именам, и SSA обязана считать
+/// изменёнными ВСЕ: иначе константа «переживёт» фрагмент, которого не
+/// видно. Проверка на том же примере, который без этого правила давал бы
+/// неверный ответ.
+#[test]
+fn a_dynamic_fragment_kills_every_slot() {
+    let (lat, form) = constants("А = 1;\nВыполнить(\"А = 2\");\nБ = А;");
+
+    // После фрагмента слот переопределён, и его значение неизвестно.
+    let after: Vec<_> = form
+        .values
+        .iter()
+        .enumerate()
+        .filter(|(_, v)| matches!(v, ssa::Value::Def { slot: 0, .. }))
+        .collect();
+    assert!(
+        after.len() >= 2,
+        "фрагмент обязан дать слоту новое определение: {:?}",
+        form.values
+    );
+    let last = after.last().unwrap().0;
+    assert_eq!(
+        lat[last],
+        ssa::Const::Top,
+        "после `Выполнить` значение слота известным быть не может: {lat:?}"
+    );
+}
+
+/// Использования собираются, и доминирование проверяется по ним.
+#[test]
+fn uses_are_recorded_and_dominated_by_their_definitions() {
+    let parsed = bsl_syntax::parse("А = 1;\nБ = А + 1;\nВ = Б;").expect("разбор");
+    let resolved = bsl_sema::resolve_program(&parsed.items).expect("резолвинг");
+    let n = resolved.top_level.locals.len();
+    let graph = cfg::build(&resolved.top_level.body);
+    let form = ssa::build(&graph, n);
+    ssa::verify(&graph, &form).expect("инварианты SSA");
+
+    assert!(
+        form.uses.len() >= 2,
+        "чтения `А` и `Б` обязаны попасть в использования: {:?}",
+        form.uses
+    );
+}

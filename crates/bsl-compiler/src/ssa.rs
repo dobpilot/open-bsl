@@ -25,7 +25,7 @@
 //! путать эти два состояния нельзя.
 
 use crate::cfg::{BlockId, Cfg};
-use bsl_sema::RStmt;
+use bsl_sema::{RExpr, RStmt, ResolvedArg};
 
 pub type ValueId = usize;
 
@@ -48,6 +48,16 @@ pub enum Value {
     Bottom,
 }
 
+/// Чтение значения: где и какого.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Use {
+    pub block: BlockId,
+    /// Номер оператора в блоке; `None` — условие терминатора.
+    pub stmt: Option<usize>,
+    pub value: ValueId,
+    pub slot: u32,
+}
+
 pub struct Ssa {
     pub values: Vec<Value>,
     /// `φ` каждого блока.
@@ -55,6 +65,8 @@ pub struct Ssa {
     /// Определения внутри блока: номер оператора в `Block::stmts` и
     /// значение, которое он записал. Порядок — порядок операторов.
     pub defs: Vec<Vec<(usize, ValueId)>>,
+    /// Все использования значений.
+    pub uses: Vec<Use>,
     /// Значение каждого слота на ВХОДЕ в блок, уже после его `φ`.
     pub entry: Vec<Option<Vec<ValueId>>>,
     /// То же на выходе; `None` у обоих — блок недостижим, и говорить о
@@ -93,11 +105,121 @@ pub fn dominance_frontiers(cfg: &Cfg<'_>, idom: &[Option<BlockId>]) -> Vec<Vec<B
     df
 }
 
-/// Слот, который оператор записывает.
-fn stmt_write(s: &RStmt) -> Option<u32> {
+/// Слоты, читаемые выражением, в порядке появления.
+///
+/// Разбор исчерпывающий по вариантам, несущим подвыражения: пропущенный
+/// вариант молча потерял бы использование, а на потерянном использовании
+/// строится неверный вывод «значение мертво». Поэтому `match` без
+/// catch-all по узлам с подвыражениями, и явная ветвь-лист для всего
+/// остального.
+fn expr_reads(e: &RExpr, out: &mut Vec<u32>) {
+    match e {
+        RExpr::Local(slot) => out.push(*slot),
+        RExpr::Await(x)
+        | RExpr::Unary { expr: x, .. }
+        | RExpr::NewTypeDescription(x)
+        | RExpr::NewTextWriter { path: x, .. }
+        | RExpr::DynEval(x)
+        | RExpr::Field { obj: x, .. } => expr_reads(x, out),
+        RExpr::Binary { lhs, rhs, .. } => {
+            expr_reads(lhs, out);
+            expr_reads(rhs, out);
+        }
+        RExpr::Index { obj, index } => {
+            expr_reads(obj, out);
+            expr_reads(index, out);
+        }
+        RExpr::Ternary {
+            cond,
+            then_expr,
+            else_expr,
+        } => {
+            expr_reads(cond, out);
+            expr_reads(then_expr, out);
+            expr_reads(else_expr, out);
+        }
+        RExpr::CallMethod { obj, args, .. } => {
+            expr_reads(obj, out);
+            for a in args {
+                expr_reads(a, out);
+            }
+        }
+        RExpr::NewArray { dims: xs }
+        | RExpr::NewStructure { values: xs, .. }
+        | RExpr::CallBuiltinFn { args: xs, .. }
+        | RExpr::CallComponent { args: xs, .. }
+        | RExpr::CreateObject { args: xs, .. } => {
+            for x in xs {
+                expr_reads(x, out);
+            }
+        }
+        RExpr::Call { args, .. } | RExpr::CallImported { args, .. } => {
+            for a in args {
+                match a {
+                    ResolvedArg::Value(v) => expr_reads(v, out),
+                    // Пропуск позиции значения не читает.
+                    ResolvedArg::Default => {}
+                }
+            }
+        }
+        // Листья: ни один слот не читается.
+        RExpr::Number(_)
+        | RExpr::Date(_)
+        | RExpr::Bool(_)
+        | RExpr::Str(_)
+        | RExpr::Undefined
+        | RExpr::Null
+        | RExpr::ModuleVar(_)
+        | RExpr::ImportedVar(_)
+        | RExpr::EnumMember { .. }
+        | RExpr::EnumTypeRef(_)
+        | RExpr::NewTable
+        | RExpr::NewValueComparison
+        | RExpr::NewMap => {}
+    }
+}
+
+/// Слоты, читаемые оператором.
+fn stmt_reads(s: &RStmt, out: &mut Vec<u32>) {
     match s {
-        RStmt::AssignLocal { slot, .. } => Some(*slot),
-        _ => None,
+        RStmt::AssignLocal { value, .. }
+        | RStmt::AssignModuleVar { value, .. }
+        | RStmt::AssignImportedVar { value, .. }
+        | RStmt::ExprStmt(value)
+        | RStmt::Execute(value) => expr_reads(value, out),
+        RStmt::AssignIndex { obj, index, value } => {
+            expr_reads(obj, out);
+            expr_reads(index, out);
+            expr_reads(value, out);
+        }
+        RStmt::AssignField { obj, value, .. } => {
+            expr_reads(obj, out);
+            expr_reads(value, out);
+        }
+        RStmt::Return(e) | RStmt::Raise(e) => {
+            if let Some(e) = e {
+                expr_reads(e, out);
+            }
+        }
+        // Управляющие формы до блоков не доходят: их разобрал построитель
+        // графа, а условия живут в терминаторах.
+        _ => {}
+    }
+}
+
+/// Слоты, которые оператор записывает.
+///
+/// `Выполнить` записывает ВСЕ: фрагмент видит область видимости по
+/// именам и может присвоить любой локальной. Знать, какой именно, здесь
+/// нечем — имена после резолвинга остались только у чанков с
+/// `uses_dynamic`, — поэтому единственно верный ответ консервативный.
+/// План требует того же: динамический фрагмент уничтожает знание обо
+/// всех видимых переменных.
+fn stmt_writes(s: &RStmt, n_slots: usize) -> Vec<u32> {
+    match s {
+        RStmt::AssignLocal { slot, .. } => vec![*slot],
+        RStmt::Execute(_) => (0..n_slots as u32).collect(),
+        _ => Vec::new(),
     }
 }
 
@@ -128,11 +250,10 @@ pub fn build(cfg: &Cfg<'_>, n_slots: usize) -> Ssa {
     let mut defs_of: Vec<Vec<BlockId>> = vec![Vec::new(); n_slots];
     for (b, block) in cfg.blocks.iter().enumerate() {
         for s in &block.stmts {
-            if let Some(slot) = stmt_write(s)
-                && (slot as usize) < n_slots
-                && !defs_of[slot as usize].contains(&b)
-            {
-                defs_of[slot as usize].push(b);
+            for slot in stmt_writes(s, n_slots) {
+                if (slot as usize) < n_slots && !defs_of[slot as usize].contains(&b) {
+                    defs_of[slot as usize].push(b);
+                }
             }
         }
     }
@@ -185,6 +306,7 @@ pub fn build(cfg: &Cfg<'_>, n_slots: usize) -> Ssa {
         .collect();
 
     let mut defs: Vec<Vec<(usize, ValueId)>> = vec![Vec::new(); nb];
+    let mut uses: Vec<Use> = Vec::new();
     let mut entry: Vec<Option<Vec<ValueId>>> = vec![None; nb];
     let mut exit: Vec<Option<Vec<ValueId>>> = vec![None; nb];
     let mut stack: Vec<(BlockId, Vec<ValueId>)> = vec![(cfg.entry, entry_state)];
@@ -195,13 +317,47 @@ pub fn build(cfg: &Cfg<'_>, n_slots: usize) -> Ssa {
         }
         entry[b] = Some(state.clone());
         for (i, s) in cfg.blocks[b].stmts.iter().enumerate() {
-            if let Some(slot) = stmt_write(s)
-                && (slot as usize) < n_slots
-            {
-                let id = values.len();
-                values.push(Value::Def { block: b, slot });
-                state[slot as usize] = id;
-                defs[b].push((i, id));
+            // Чтения собираются ДО записи: правая часть присваивания
+            // видит прежнее значение слота, а не своё собственное.
+            let mut read = Vec::new();
+            stmt_reads(s, &mut read);
+            if matches!(s, RStmt::Execute(_)) {
+                // Фрагмент читает область видимости по именам — считаем
+                // прочитанным всё, иначе значение объявилось бы мёртвым.
+                read.extend(0..n_slots as u32);
+            }
+            for slot in read {
+                if (slot as usize) < n_slots {
+                    uses.push(Use {
+                        block: b,
+                        stmt: Some(i),
+                        value: state[slot as usize],
+                        slot,
+                    });
+                }
+            }
+            for slot in stmt_writes(s, n_slots) {
+                if (slot as usize) < n_slots {
+                    let id = values.len();
+                    values.push(Value::Def { block: b, slot });
+                    state[slot as usize] = id;
+                    defs[b].push((i, id));
+                }
+            }
+        }
+        // Условие терминатора читается после всех операторов блока.
+        if let crate::cfg::Terminator::Branch { cond: Some(c), .. } = &cfg.blocks[b].term {
+            let mut read = Vec::new();
+            expr_reads(c, &mut read);
+            for slot in read {
+                if (slot as usize) < n_slots {
+                    uses.push(Use {
+                        block: b,
+                        stmt: None,
+                        value: state[slot as usize],
+                        slot,
+                    });
+                }
             }
         }
         exit[b] = Some(state.clone());
@@ -235,6 +391,7 @@ pub fn build(cfg: &Cfg<'_>, n_slots: usize) -> Ssa {
         values,
         phis,
         defs,
+        uses,
         entry,
         exit,
         bottom,
@@ -293,10 +450,29 @@ pub fn verify(cfg: &Cfg<'_>, ssa: &Ssa) -> Result<(), String> {
         }
     }
 
-    // ГЛАВНЫЙ инвариант SSA: значение, входящее в блок, определено там,
-    // откуда путь в этот блок проходит обязательно. Без него
-    // представление называлось бы SSA, ничего не гарантируя: значение,
-    // определённое в одной ветви, оказалось бы видно в другой.
+    // ГЛАВНЫЙ инвариант SSA: определение доминирует над КАЖДЫМ своим
+    // использованием. Без него представление называлось бы SSA, ничего
+    // не гарантируя: значение, определённое в одной ветви, оказалось бы
+    // видно в другой.
+    //
+    // Проверяется по настоящим использованиям, а не только по значениям
+    // на входе в блок. Вход — лишь следствие: он говорит, что значение
+    // ДОШЛО, но не что его кто-то читает, и на нём инвариант звучал бы
+    // слабее, чем называется.
+    for u in &ssa.uses {
+        let Some(def) = defining_block(&ssa.values[u.value]) else {
+            continue;
+        };
+        if !dominates(&idom, cfg.entry, def, u.block) {
+            return Err(format!(
+                "использование значения {} в блоке {} (оператор {:?}): определено в {def}, который его не доминирует",
+                u.value, u.block, u.stmt
+            ));
+        }
+    }
+
+    // Вход блока — тем же правилом: дошедшее значение обязано быть
+    // определено доминирующим блоком, даже если здесь его не читают.
     for (b, state) in ssa.entry.iter().enumerate() {
         let Some(state) = state else { continue };
         for (slot, &v) in state.iter().enumerate() {
@@ -468,11 +644,18 @@ pub fn propagate_constants(cfg: &Cfg<'_>, ssa: &Ssa, n_slots: usize) -> Vec<Cons
             // Состояние слотов на входе, затем по операторам блока.
             let mut slots: Vec<Const> = (0..n_slots).map(|i| lat[entry[i]].clone()).collect();
             for &(stmt_index, id) in &ssa.defs[b] {
-                let bsl_sema::RStmt::AssignLocal { slot, value } = cfg.blocks[b].stmts[stmt_index]
-                else {
-                    continue;
+                // Определение, пришедшее НЕ от присваивания, — это
+                // `Выполнить`: он пишет слот по имени, и чем именно,
+                // отсюда не видно. Такое значение обязано быть `Top`, а
+                // не `Bottom`: `Bottom` — единица объединения, и слияние
+                // с ним сохранило бы константу, которой фрагмент уже нет.
+                let (slot, c) = match cfg.blocks[b].stmts[stmt_index] {
+                    bsl_sema::RStmt::AssignLocal { slot, value } => (slot, eval(value, &slots)),
+                    _ => match &ssa.values[id] {
+                        Value::Def { slot, .. } => (slot, Const::Top),
+                        _ => continue,
+                    },
                 };
-                let c = eval(value, &slots);
                 if lat[id] != c {
                     lat[id] = c.clone();
                     changed = true;
