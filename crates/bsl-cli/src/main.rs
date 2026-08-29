@@ -9,6 +9,7 @@
 //! дополнение по Tab), а аргумент, не похожий на флаг, считается путём к
 //! скрипту и исполняется целиком.
 
+mod api_reference;
 mod bytecode;
 mod complete;
 mod highlight;
@@ -24,6 +25,7 @@ use bsl_rt::BslValue;
 enum Kind {
     Help,
     EmitBytecode,
+    EmitApiReference,
     RunBytecode,
     IngestMeasurements,
     Jit,
@@ -43,6 +45,17 @@ struct Command {
 }
 
 const COMMANDS: &[Command] = &[
+    Command {
+        flag: "--emit-api-reference",
+        alias: None,
+        kind: Kind::EmitApiReference,
+        args: "[выход.md]",
+        what: "напечатать справочник доступного BSL API",
+        details: &[
+            "Без файла-выхода печатает Markdown в stdout. Имена, псевдонимы и",
+            "арности берутся из runtime-дескрипторов стандартной сборки open-bsl.",
+        ],
+    },
     Command {
         flag: "--emit-bytecode",
         alias: None,
@@ -239,6 +252,7 @@ fn run_command(cmd: &Command, args: &[String]) -> i32 {
             Some(path) => bytecode::emit(path, args.get(3).map(String::as_str)),
             None => missing_argument(cmd),
         },
+        Kind::EmitApiReference => api_reference::emit(args.get(2).map(String::as_str)),
         Kind::RunBytecode => match args.get(2) {
             Some(path) => bytecode::run(path, args[3..].to_vec()),
             None => missing_argument(cmd),

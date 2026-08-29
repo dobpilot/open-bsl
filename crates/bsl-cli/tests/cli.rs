@@ -54,6 +54,7 @@ fn help_is_printed_to_stdout_with_a_zero_exit_code() {
         // по которой идёт разбор (см. `COMMANDS` в main.rs).
         for expected in [
             "--emit-bytecode",
+            "--emit-api-reference",
             "--run-bytecode",
             "--ingest-measurements",
             "--help",
@@ -66,6 +67,58 @@ fn help_is_printed_to_stdout_with_a_zero_exit_code() {
         // Подсказка — это не ошибка: stderr пуст.
         assert!(out.stderr.is_empty(), "{flag}: {:?}", out.stderr);
     }
+}
+
+#[test]
+fn api_reference_is_printed_to_stdout_or_written_to_a_file() {
+    let stdout = stdout_of(&run(&["--emit-api-reference"]));
+    for expected in [
+        "# BSL API open-bsl",
+        "## Встроенные глобальные функции",
+        "`Сообщить`",
+        "`Message`",
+        "## Встроенные методы",
+        "## Компоненты",
+        "### `bsl-json`",
+        "`ЧтениеJSON`",
+        "##### `ЧтениеJSON`",
+        "`ТипТекущегоЗначения`",
+        "`ОткрытьФайл`, `OpenFile`",
+    ] {
+        assert!(
+            stdout.contains(expected),
+            "в справочнике нет {expected}: {stdout}"
+        );
+    }
+
+    let path =
+        std::env::temp_dir().join(format!("bsl-cli-api-reference-{}.md", std::process::id()));
+    let out = run(&["--emit-api-reference", path.to_str().unwrap()]);
+    assert!(
+        out.status.success(),
+        "запись справочника завершилась ошибкой: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(out.stdout.is_empty(), "при записи в файл заполнен stdout");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), stdout);
+    let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn checked_in_api_reference_matches_the_generator() {
+    let generated = stdout_of(&run(&["--emit-api-reference"]));
+    let checked_in =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/reference/bsl-api/api.md");
+    let expected = std::fs::read_to_string(&checked_in).unwrap_or_else(|error| {
+        panic!(
+            "не удалось прочитать {}: {error}; обновите снимок командой cargo run -p bsl-cli -- --emit-api-reference docs/reference/bsl-api/api.md",
+            checked_in.display()
+        )
+    });
+    assert_eq!(
+        generated, expected,
+        "справочник устарел; обновите его командой cargo run -p bsl-cli -- --emit-api-reference docs/reference/bsl-api/api.md"
+    );
 }
 
 #[test]
@@ -251,7 +304,7 @@ fn the_help_lists_every_selectable_pass() {
 
 /// Свёртка констант не имеет права вычислить на компиляции то, что на
 /// исполнении бросает: `1 / 0` внутри `Попытка` обязано по-прежнему
-/// доходить до обработчика (`docs/ssa-hotspot-analysis.md`, раздел
+/// доходить до обработчика (`docs/research/performance/ssa-hotspot-analysis.md`, раздел
 /// «Константы»). Проверка подпроцессом и через `--optimize`, потому что
 /// вопрос именно в поведении собранного бинарника с включёнными
 /// проходами, а не в форме байт-кода — её проверяет
