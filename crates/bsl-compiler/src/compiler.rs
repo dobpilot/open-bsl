@@ -84,10 +84,45 @@ impl std::error::Error for CompileError {}
 ///
 /// Возвращает [`CompileError`], если программа превышает лимиты формата байт-кода
 /// или содержит `Прервать`/`Продолжить` вне цикла.
+/// Какие оптимизирующие проходы включены. Все по умолчанию выключены:
+/// ни один из них ещё не проходил ворота допуска, описанные в
+/// `docs/ssa-hotspot-analysis.md`, поэтому включает их только тот, кто
+/// делает это осознанно.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Optimizations {
+    /// Локальное распространение и свёртка констант.
+    pub const_fold: bool,
+    /// Устранение доказанно мёртвых копий.
+    pub copy_elim: bool,
+}
+
+impl Optimizations {
+    /// Все проходы включены.
+    #[must_use]
+    pub fn all() -> Self {
+        Self {
+            const_fold: true,
+            copy_elim: true,
+        }
+    }
+}
+
 pub fn compile_program(resolved: &ResolvedProgram) -> Result<Program, CompileError> {
+    compile_program_with(resolved, Optimizations::default())
+}
+
+/// То же, но с явно выбранными проходами.
+///
+/// # Errors
+///
+/// Те же отказы кодогена, что и у [`compile_program`].
+pub fn compile_program_with(
+    resolved: &ResolvedProgram,
+    opts: Optimizations,
+) -> Result<Program, CompileError> {
     let mut names = NameInterner::new();
     let mut shapes = ShapeTable::new();
-    let chunks = compile_module_chunks(resolved, &mut names, &mut shapes)?;
+    let chunks = compile_module_chunks(resolved, &mut names, &mut shapes, opts)?;
     Ok(assemble_program(
         resolved,
         chunks,
@@ -113,10 +148,20 @@ pub fn compile_configuration(
     let mut shapes = ShapeTable::new();
     let mut compiled = Vec::with_capacity(modules.len());
     for (_, resolved) in modules {
-        compiled.push(compile_module_chunks(resolved, &mut names, &mut shapes)?);
+        compiled.push(compile_module_chunks(
+            resolved,
+            &mut names,
+            &mut shapes,
+            Optimizations::default(),
+        )?);
     }
     let entry_chunks = match entry {
-        Some(resolved) => Some(compile_module_chunks(resolved, &mut names, &mut shapes)?),
+        Some(resolved) => Some(compile_module_chunks(
+            resolved,
+            &mut names,
+            &mut shapes,
+            Optimizations::default(),
+        )?),
         None => None,
     };
     let final_names = names.into_names();
@@ -157,7 +202,8 @@ pub fn compile_entry_program(
 ) -> Result<Program, CompileError> {
     let mut names = NameInterner::from_existing(base_names.to_vec());
     let mut shapes = ShapeTable::from_existing(base_shapes.to_vec());
-    let chunks = compile_module_chunks(resolved, &mut names, &mut shapes)?;
+    let chunks =
+        compile_module_chunks(resolved, &mut names, &mut shapes, Optimizations::default())?;
     Ok(assemble_program(
         resolved,
         chunks,
@@ -170,6 +216,7 @@ fn compile_module_chunks(
     resolved: &ResolvedProgram,
     names: &mut NameInterner,
     shapes: &mut ShapeTable,
+    opts: Optimizations,
 ) -> Result<Vec<Chunk>, CompileError> {
     let mut chunks = Vec::with_capacity(resolved.functions.len() + 1);
     chunks.push(compile_chunk(
@@ -205,10 +252,12 @@ fn compile_module_chunks(
         // Устранение копий выключено по умолчанию: пока проход не прошёл
         // свои ворота (чередующийся A/B на зафиксированной частоте), он не
         // должен попадать в обычную сборку — иначе не с чем сравнивать.
-        #[cfg(feature = "constprop")]
-        analysis::const_propagate(chunk, overlap);
-        #[cfg(feature = "copyprop")]
-        analysis::copy_propagate(chunk, overlap);
+        if opts.const_fold {
+            analysis::const_propagate(chunk, overlap);
+        }
+        if opts.copy_elim {
+            analysis::copy_propagate(chunk, overlap);
+        }
         chunk.bundle_len = bundle::compute(chunk, overlap);
     }
     Ok(chunks)

@@ -19,6 +19,9 @@ use crate::state::{State, StateBuilder};
 #[derive(Clone)]
 pub struct Engine {
     inner: Arc<EngineInner>,
+    /// Выбранные оптимизирующие проходы компилятора. Ни один из них не
+    /// прошёл ворота допуска, поэтому по умолчанию все выключены.
+    optimizations: bsl_compiler::Optimizations,
     /// Каталог общих модулей и импортное окружение entry. Отдельное
     /// `Rc`-поле, а не часть `EngineInner`: программы каталога несут
     /// `Rc`-значения и в `Arc` не переносимы; worker фонового задания
@@ -104,7 +107,7 @@ impl Engine {
                     &base.program.shapes,
                 )?
             }
-            None => bsl_compiler::compile_program(&resolved)?,
+            None => bsl_compiler::compile_program_with(&resolved, self.optimizations)?,
         };
         Ok(Module {
             id: self.next_module_id(),
@@ -349,6 +352,7 @@ pub struct ModuleGraphRecipe {
 
 /// Стадия композиции статически связанных runtime-компонентов.
 pub struct EngineBuilder {
+    optimizations: bsl_compiler::Optimizations,
     runtime: bsl_rt::RuntimeBuilder,
     symbols: bsl_syntax::PreprocSymbols,
     recipe: ModuleGraphRecipe,
@@ -392,6 +396,7 @@ impl EngineBuilder {
         #[cfg(feature = "spreadsheet")]
         runtime.register(bsl_spreadsheet::library());
         Self {
+            optimizations: bsl_compiler::Optimizations::default(),
             runtime,
             symbols: bsl_syntax::PreprocSymbols::new(),
             recipe: ModuleGraphRecipe::default(),
@@ -505,6 +510,17 @@ impl EngineBuilder {
     /// движку. Русское и английское написания — один символ, а не два.
     /// Незнакомое имя игнорируется: в условии оно и без того ложно.
     #[must_use]
+    /// Включить оптимизирующие проходы компилятора.
+    ///
+    /// По умолчанию выключены все: ни свёртка констант, ни устранение
+    /// копий ещё не проходили ворота допуска из
+    /// `docs/ssa-hotspot-analysis.md`, поэтому включение — осознанный
+    /// выбор вызывающего, а не поведение по умолчанию.
+    pub fn optimizations(mut self, opts: bsl_compiler::Optimizations) -> Self {
+        self.optimizations = opts;
+        self
+    }
+
     pub fn preproc_symbol(mut self, name: &str, value: bool) -> Self {
         self.symbols.set(name, value);
         self
@@ -555,6 +571,7 @@ impl EngineBuilder {
         #[cfg(not(target_arch = "wasm32"))]
         self.job_config.validate().map_err(Error::Configuration)?;
         Ok(Engine {
+            optimizations: self.optimizations,
             inner: Arc::new(EngineInner {
                 registry,
                 symbols: self.symbols,

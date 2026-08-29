@@ -14,7 +14,7 @@ mod compiler;
 mod dynamic;
 
 pub use compiler::{
-    CompileError, SnippetUnit, compile_configuration, compile_entry_program, compile_program,
-    compile_snippet, compile_snippet_with_requirements,
+    CompileError, Optimizations, SnippetUnit, compile_configuration, compile_entry_program,
+    compile_program, compile_program_with, compile_snippet, compile_snippet_with_requirements,
 };
 pub use dynamic::compile_dynamic_snippet;

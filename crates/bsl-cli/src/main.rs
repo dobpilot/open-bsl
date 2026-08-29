@@ -152,7 +152,14 @@ fn help() -> String {
 }
 
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
+    let mut args: Vec<String> = std::env::args().collect();
+    // `--optimize` — модификатор, а не команда: он снимается из аргументов
+    // до разбора, поэтому одинаково работает и перед именем скрипта, и
+    // рядом с `--jit`. Скрипту он не достаётся.
+    if let Some(i) = args.iter().position(|a| a == "--optimize") {
+        args.remove(i);
+        OPTIMIZE.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
     let code = match args.get(1).map(String::as_str) {
         None => {
             repl::run();
@@ -266,7 +273,11 @@ fn run_file(path: &str, engine: Engine, arguments: Vec<String>) {
                 std::process::exit(1);
             }
         };
-        match open_bsl::Engine::builder().configuration(recipe).build() {
+        match open_bsl::Engine::builder()
+            .optimizations(optimizations())
+            .configuration(recipe)
+            .build()
+        {
             Ok(engine) => engine,
             Err(e) => {
                 eprintln!("ошибка сборки конфигурации: {e}");
@@ -309,10 +320,27 @@ fn run_file(path: &str, engine: Engine, arguments: Vec<String>) {
     }
 }
 
+/// Выбор оптимизаций процесса: ставится один раз в [`main`] по ключу
+/// `--optimize` и читается всеми точками сборки движка. Ключ — модификатор
+/// обычного запуска, а не команда, поэтому в таблицу `COMMANDS` он не
+/// входит: он сочетается и с `--jit`, и с `--emit-bytecode`.
+static OPTIMIZE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Выбранные проходы компилятора.
+pub fn optimizations() -> bsl_compiler::Optimizations {
+    if OPTIMIZE.load(std::sync::atomic::Ordering::Relaxed) {
+        bsl_compiler::Optimizations::all()
+    } else {
+        bsl_compiler::Optimizations::default()
+    }
+}
+
 /// Движок со всеми компонентами по умолчанию — общий для запуска файла,
 /// байт-кода и REPL.
 pub fn engine() -> Result<open_bsl::Engine, open_bsl::Error> {
-    open_bsl::Engine::builder().build()
+    open_bsl::Engine::builder()
+        .optimizations(optimizations())
+        .build()
 }
 
 /// Sink сообщений CLI: очередь перед stdout процесса — короткая, потому
