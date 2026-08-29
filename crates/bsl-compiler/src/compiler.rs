@@ -515,6 +515,45 @@ fn compile_chunk(
         .len()
         .try_into()
         .map_err(|_| CompileError::TooManyLocals)?;
+    // Граф и SSA строятся ОДИН раз на чанк и только если их кто-то
+    // спросил: у `ssa-const` и `ssa-regalloc` потребность одна и та же, и
+    // строить дважды значило бы платить за анализ вдвое, а замер
+    // комбинации мерил бы лишнюю работу.
+    //
+    // Оба потребителя отключаются на чанке с `Попытка`. Граф несёт
+    // исключительное ребро на уровне БЛОКА, а SSA передаёт обработчику
+    // состояние конца блока: состояние в точке броска теряется. Тогда
+    // `А = 1; Попытка Мертвая = 3; 1/0; А = 2; Исключение Сообщить(А)`
+    // печатает 3 вместо 1 — и через раскладку, и через подстановку
+    // констант. Это тот же класс, из-за которого устранение копий уже
+    // запрещено в защищённых диапазонах.
+    let identity = || (0..locals.len()).map(|i| i as u8).collect::<Vec<u8>>();
+    let (ssa_consts, slot_reg) = if opts.ssa_const || opts.ssa_regalloc {
+        let graph = crate::cfg::build(body);
+        let protected = graph.blocks.iter().any(|b| !b.handlers.is_empty());
+        let form = crate::ssa::build(&graph, locals.len());
+        let consts = if opts.ssa_const && !protected {
+            let lat = crate::ssa::propagate_constants(&graph, &form, locals.len());
+            crate::ssa::constants_at_nodes(&graph, &form, &lat, locals.len())
+        } else {
+            std::collections::HashMap::new()
+        };
+        let regs = if opts.ssa_regalloc && !materialize_locals && !protected {
+            crate::regalloc::allocate_slots(
+                &graph,
+                &form,
+                locals.len(),
+                params.len().max(module_vars),
+            )
+            .unwrap_or_else(|_| identity())
+        } else {
+            identity()
+        };
+        (consts, regs)
+    } else {
+        (std::collections::HashMap::new(), identity())
+    };
+
     let mut c = Compiler {
         instrs: Vec::new(),
         consts: Vec::new(),
@@ -531,33 +570,35 @@ fn compile_chunk(
         names,
         shapes,
         opts,
-        // Решётка считается один раз на чанк и только если её попросили:
-        // строить граф и SSA ради выключенного прохода незачем.
-        ssa_consts: if opts.ssa_const {
-            let graph = crate::cfg::build(body);
-            let form = crate::ssa::build(&graph, locals.len());
-            let lat = crate::ssa::propagate_constants(&graph, &form, locals.len());
-            crate::ssa::constants_at_nodes(&graph, &form, &lat, locals.len())
-        } else {
-            std::collections::HashMap::new()
-        },
+        ssa_consts,
         here: Vec::new(),
         // Чанку с `Выполнить` раскладка не достаётся: он несёт таблицу
         // «имя -> слот», по которой фрагмент ищет переменные, и
         // переименование сделало бы её ложью. Закреплённый префикс —
         // параметры (соглашение о вызове сопоставляет их по позиции) и
         // модульные переменные кадра нулевого уровня.
-        slot_reg: if opts.ssa_regalloc && !materialize_locals {
-            let graph = crate::cfg::build(body);
-            let form = crate::ssa::build(&graph, locals.len());
-            let pinned = params.len().max(module_vars);
-            crate::regalloc::allocate_slots(&graph, &form, locals.len(), pinned)
-                .unwrap_or_else(|_| (0..locals.len()).map(|i| i as u8).collect())
-        } else {
-            (0..locals.len()).map(|i| i as u8).collect()
-        },
+        slot_reg,
         unfoldable: std::collections::HashSet::default(),
     };
+    // Граница локалей — ПО РАСКЛАДКЕ, иначе проход менял бы номера
+    // операндов и не уменьшал ничего: временные всё равно начинались бы
+    // за исходным числом слотов, а кадр остался бы прежним. Ровно так и
+    // было, пока эти три строки читали `n_locals`.
+    //
+    // Уплотнять законно потому, что раскладка укладывает слоты в
+    // непрерывный префикс `0..k`: образ проверяет
+    // `n_params <= n_locals <= n_regs`, а границей для `ByRefLocal`
+    // служит `n_locals`, потому что алиас обязан указывать на ЛОКАЛЬ
+    // вызывающего. Параметры остаются в `0..n_params`, локалей выше `k`
+    // нет — оба смысла держатся.
+    let n_locals = c
+        .slot_reg
+        .iter()
+        .copied()
+        .max()
+        .map_or(0, |m| u16::from(m) + 1)
+        .max(u16::from(n_params));
+    let n_locals = u8::try_from(n_locals).unwrap_or(u8::MAX);
     c.next_reg = n_locals;
     c.max_reg = n_locals;
     c.compile_param_defaults(params)?;

@@ -1,12 +1,12 @@
 //! Живые диапазоны значений SSA и раскладка их по регистрам.
 //!
-//! Последняя аналитическая ступень конвейера шага 5
-//! (`docs/research/performance/ssa-hotspot-analysis.md`). Как и граф с
-//! самой SSA, ничего в выпускаемом байт-коде не меняет: раскладка
-//! СЧИТАЕТСЯ и ПРОВЕРЯЕТСЯ, но кодоген по-прежнему раздаёт регистры сам.
-//! Разделение намеренное — план требует от шага 5 работы без изменения
-//! байт-кода, и переключение кодогена остаётся отдельным шагом со своими
-//! воротами.
+//! Последняя ступень конвейера шага 5
+//! (`docs/research/performance/ssa-hotspot-analysis.md`). В отличие от
+//! графа и самой SSA, эта ступень МЕНЯЕТ выпускаемый байт-код: кодоген
+//! применяет раскладку под ключом `--optimize=ssa-regalloc`. Ворот она не
+//! проходила и по умолчанию выключена, в том числе не входит в голый
+//! `--optimize`: проход, меняющий семантику там, где его модель неполна,
+//! не должен попадать во «все».
 //!
 //! # Почему пересечение считается по точкам, а не по блокам
 //!
@@ -315,4 +315,57 @@ pub fn allocate_slots(
         reg[slot] = free;
     }
     Ok(reg)
+}
+
+/// Проверка раскладки СЛОТОВ — той самой, которую применяет кодоген.
+///
+/// Отдельно от [`verify`], проверяющей раскладку значений: применяется
+/// другая, и проверять надо применяемую. Свойство одно и то же — в каждой
+/// точке программы у слотов, живых одновременно, регистры различны, — но
+/// живость слота есть живость любого из его значений, и это разные
+/// множества.
+///
+/// # Errors
+///
+/// Пара слотов, живых одновременно и делящих регистр.
+pub fn verify_slots(cfg: &Cfg<'_>, ssa: &Ssa, n_slots: usize, alloc: &[u8]) -> Result<(), String> {
+    let mut slot_of: Vec<Option<u32>> = vec![None; ssa.values.len()];
+    for (id, v) in ssa.values.iter().enumerate() {
+        slot_of[id] = match v {
+            Value::Def { slot, .. } | Value::Phi { slot, .. } | Value::Entry { slot } => {
+                Some(*slot)
+            }
+            Value::Bottom => None,
+        };
+    }
+    let mut bad: Option<String> = None;
+    for_each_point(cfg, ssa, |live| {
+        if bad.is_some() {
+            return;
+        }
+        let mut seen: HashMap<u8, usize> = HashMap::new();
+        for &id in live {
+            let Some(slot) = slot_of[id] else { continue };
+            let slot = slot as usize;
+            if slot >= n_slots {
+                continue;
+            }
+            let r = alloc[slot];
+            match seen.get(&r) {
+                Some(&other) if other != slot => {
+                    bad = Some(format!(
+                        "слоты {slot} и {other} живы одновременно и делят регистр {r}"
+                    ));
+                    return;
+                }
+                _ => {
+                    seen.insert(r, slot);
+                }
+            }
+        }
+    });
+    match bad {
+        Some(e) => Err(e),
+        None => Ok(()),
+    }
 }

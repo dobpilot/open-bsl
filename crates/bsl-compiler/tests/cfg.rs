@@ -7,6 +7,7 @@
 //! ошибку — потому проверка и написана отдельно.
 
 use bsl_compiler::cfg;
+use bsl_compiler::{Optimizations, compile_program_with};
 use std::path::{Path, PathBuf};
 
 fn corpus() -> Vec<PathBuf> {
@@ -861,4 +862,108 @@ fn a_value_used_only_in_a_return_is_live() {
         alloc[0], alloc[1],
         "`А` и `Б` живы обе в возвращаемом выражении: {alloc:?}"
     );
+}
+
+/// Проверяется ИМЕННО та раскладка, которую применяет кодоген
+/// (`allocate_slots`), а не раскладка значений: применяется одна, а
+/// проверялась другая.
+#[test]
+fn the_applied_slot_layout_holds_on_the_corpus() {
+    let mut checked = 0usize;
+    let mut merged = 0usize;
+    for path in corpus() {
+        let Ok(src) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(parsed) = bsl_syntax::parse(&src) else {
+            continue;
+        };
+        let Ok(resolved) = bsl_sema::resolve_program(&parsed.items) else {
+            continue;
+        };
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let mut bodies: Vec<(&str, &[bsl_sema::RStmt], usize, usize)> = vec![(
+            "<верхний уровень>",
+            &resolved.top_level.body,
+            resolved.top_level.locals.len(),
+            resolved.module_vars.len(),
+        )];
+        for f in &resolved.functions {
+            bodies.push((&f.name, &f.body, f.locals.len(), f.params.len()));
+        }
+        for (what, body, n, pinned) in bodies {
+            if n == 0 {
+                continue;
+            }
+            let graph = cfg::build(body);
+            let form = ssa::build(&graph, n);
+            let Ok(alloc) = regalloc::allocate_slots(&graph, &form, n, pinned) else {
+                continue;
+            };
+            if let Err(e) = regalloc::verify_slots(&graph, &form, n, &alloc) {
+                panic!("{name}, {what}: {e}");
+            }
+            if alloc.iter().collect::<std::collections::HashSet<_>>().len() < n {
+                merged += 1;
+            }
+        }
+        checked += 1;
+    }
+    assert!(checked >= 20, "проверено {checked} скриптов");
+    // Раскладка, нигде не слившая ни одного слота, — это тождественное
+    // отображение, и зелёная проверка над ним ничего не значит.
+    assert!(
+        merged > 0,
+        "раскладка не слила ни одного слота на всём корпусе"
+    );
+    println!("раскладка слотов сверена на {checked} скриптах, слияния в {merged} чанках");
+}
+
+/// Кадр обязан НЕ РАСТИ от раскладки, и хоть где-то обязан уменьшиться —
+/// иначе проход меняет номера операндов, ничего не выигрывая.
+#[test]
+fn the_layout_never_grows_the_frame_and_somewhere_shrinks_it() {
+    let mut shrank = 0usize;
+    for path in corpus() {
+        let Ok(src) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(parsed) = bsl_syntax::parse(&src) else {
+            continue;
+        };
+        let Ok(resolved) = bsl_sema::resolve_program(&parsed.items) else {
+            continue;
+        };
+        let Ok(base) = bsl_compiler::compile_program(&resolved) else {
+            continue;
+        };
+        let Ok(laid) = compile_program_with(
+            &resolved,
+            Optimizations {
+                ssa_regalloc: true,
+                ..Optimizations::default()
+            },
+        ) else {
+            continue;
+        };
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        for (i, (b, l)) in base.chunks.iter().zip(&laid.chunks).enumerate() {
+            assert!(
+                l.n_locals <= b.n_locals && l.n_regs <= b.n_regs,
+                "{name}, чанк {i}: кадр вырос {}/{} -> {}/{}",
+                b.n_locals,
+                b.n_regs,
+                l.n_locals,
+                l.n_regs
+            );
+            if l.n_regs < b.n_regs {
+                shrank += 1;
+            }
+        }
+    }
+    assert!(
+        shrank > 0,
+        "раскладка нигде не уменьшила кадр — заявленной пользы нет"
+    );
+    println!("кадр уменьшен в {shrank} чанках");
 }
