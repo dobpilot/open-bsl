@@ -670,9 +670,16 @@ struct Compiler<'a> {
 impl<'a> Compiler<'a> {
     /// Регистр кадра, отведённый слоту.
     ///
-    /// Единственный путь от слота к регистру: раскладка не имеет права
-    /// подействовать в одном месте и не подействовать в другом, а мест
-    /// этих шесть.
+    /// ЕДИНСТВЕННЫЙ путь от слота к регистру, и это инвариант, а не
+    /// удобство. Мест, где слот превращается в регистр, двенадцать:
+    /// присваивание и чтение локальной, оба режима `ByRefLocal`, обе
+    /// переменные цикла, слитые `JumpIfNotEqConst` и `JumpIfNotLtConst`,
+    /// поглощение литерала в `AddConst` и три быстрых пути выбора
+    /// операндов. Отображение, подействовавшее в одних и не подействовавшее
+    /// в других, выпускает код, где половина мест читает старый номер, а
+    /// половина новый, — и обнаруживается это не сборкой, а расхождением
+    /// вывода. Пока отображение тождественно, разницы нет; смысл в том,
+    /// чтобы её не появилось, когда оно перестанет быть тождественным.
     fn reg_of(&self, slot: u32) -> u8 {
         self.slot_reg
             .get(slot as usize)
@@ -862,11 +869,8 @@ impl<'a> Compiler<'a> {
             };
             if let Some((src, value)) = pair {
                 let k = self.add_const(value)?;
-                return Ok(self.emit(Instr::JumpIfNotEqConst {
-                    src: src as u8,
-                    k,
-                    target: 0,
-                }));
+                let src = self.reg_of(src);
+                return Ok(self.emit(Instr::JumpIfNotEqConst { src, k, target: 0 }));
             }
         }
         if let RExpr::Binary {
@@ -877,11 +881,8 @@ impl<'a> Compiler<'a> {
             && let (RExpr::Local(src), RExpr::Number(number)) = (&**lhs, &**rhs)
         {
             let k = self.add_const(BslValue::Number(number.clone()))?;
-            return Ok(self.emit(Instr::JumpIfNotLtConst {
-                src: *src as u8,
-                k,
-                target: 0,
-            }));
+            let src = self.reg_of(*src);
+            return Ok(self.emit(Instr::JumpIfNotLtConst { src, k, target: 0 }));
         }
 
         let reg = self.alloc_temp()?;
@@ -1091,11 +1092,8 @@ impl<'a> Compiler<'a> {
                     && let (RExpr::Local(src), RExpr::Number(number)) = (&**lhs, &**rhs)
                 {
                     let k = self.add_const(BslValue::Number(number.clone()))?;
-                    self.emit(Instr::AddConst {
-                        dst,
-                        src: *src as u8,
-                        k,
-                    });
+                    let src = self.reg_of(*src);
+                    self.emit(Instr::AddConst { dst, src, k });
                     return Ok(());
                 }
                 // Числовой литерал не имеет побочных эффектов и не может
@@ -1106,14 +1104,16 @@ impl<'a> Compiler<'a> {
                 if let (RExpr::Local(a), RExpr::Number(_)) = (&**lhs, &**rhs) {
                     let b = self.alloc_temp()?;
                     self.compile_expr(rhs, b)?;
-                    self.emit(binop_instr(*op, dst, *a as u8, b));
+                    let a = self.reg_of(*a);
+                    self.emit(binop_instr(*op, dst, a, b));
                     self.free_temp(1);
                     return Ok(());
                 }
                 if let (RExpr::Number(_), RExpr::Local(b)) = (&**lhs, &**rhs) {
                     let a = self.alloc_temp()?;
                     self.compile_expr(lhs, a)?;
-                    self.emit(binop_instr(*op, dst, a, *b as u8));
+                    let b = self.reg_of(*b);
+                    self.emit(binop_instr(*op, dst, a, b));
                     self.free_temp(1);
                     return Ok(());
                 }
@@ -1133,7 +1133,8 @@ impl<'a> Compiler<'a> {
                 // ОДИН регистр, а по этому признаку VM забирает значение
                 // из регистра во владение (см. `Instr::Add`).
                 if let (RExpr::Local(a), RExpr::Local(b)) = (&**lhs, &**rhs) {
-                    self.emit(binop_instr(*op, dst, *a as u8, *b as u8));
+                    let (a, b) = (self.reg_of(*a), self.reg_of(*b));
+                    self.emit(binop_instr(*op, dst, a, b));
                     return Ok(());
                 }
                 let a = self.alloc_temp()?;
