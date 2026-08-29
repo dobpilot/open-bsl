@@ -761,6 +761,26 @@ fn live_out_in_order(
     live_out
 }
 
+/// Точен ли регистр: не псевдоним параметра по ссылке и не перекрыт
+/// модульным слотом.
+///
+/// Запись в НЕточный регистр наблюдаема снаружи кадра — через алиас её
+/// видит вызывающий, через перекрытие она же и есть модульная
+/// переменная, — поэтому снимать такую запись нельзя ни переименованием,
+/// ни перестановкой базы вызова. Живучесть внутри кадра об этом ничего не
+/// знает и знать не должна: значение видно другим путём.
+///
+/// Правило вынесено сюда потому, что потребителей у него три
+/// (`removable_copies`, `copy_propagate`, `verify`), а редакций должна
+/// быть одна: разъехавшись, они разъехались бы молча и в сторону
+/// неверной оптимизации.
+fn exact_reg(chunk: &Chunk, overlap: Option<usize>, r: u8) -> bool {
+    let r = r as usize;
+    let aliased =
+        r < chunk.n_params as usize && !chunk.param_by_val.get(r).copied().unwrap_or(false);
+    !aliased && !overlap.is_some_and(|k| r < k)
+}
+
 /// Копии, которые снял бы проход copy propagation с последующим DCE.
 ///
 /// Возвращает по одному флагу на инструкцию; `true` стоит только на
@@ -791,12 +811,6 @@ pub fn removable_copies(chunk: &Chunk, overlap: Option<usize>) -> Vec<bool> {
     }
     let cfg = build_cfg(chunk);
     let live = live_out(chunk, &cfg, overlap);
-    let exact = |r: u8| {
-        let r = r as usize;
-        let aliased =
-            r < chunk.n_params as usize && !chunk.param_by_val.get(r).copied().unwrap_or(false);
-        !aliased && !overlap.is_some_and(|k| r < k)
-    };
 
     // Внутри `Попытка` исключение может сработать НА ЛЮБОЙ инструкции, а
     // не только в конце блока. Значит последующая запись в приёмник не
@@ -815,7 +829,7 @@ pub fn removable_copies(chunk: &Chunk, overlap: Option<usize>) -> Vec<bool> {
         let Instr::Move { dst, src } = *instr else {
             continue;
         };
-        if !exact(dst) || !exact(src) || protected(i) {
+        if !exact_reg(chunk, overlap, dst) || !exact_reg(chunk, overlap, src) || protected(i) {
             continue;
         }
         if dst == src {
@@ -907,13 +921,6 @@ pub fn verify(chunk: &Chunk, overlap: Option<usize>) -> Result<(), String> {
         }
     }
 
-    let exact = |r: u8| {
-        let r = r as usize;
-        let aliased =
-            r < chunk.n_params as usize && !chunk.param_by_val.get(r).copied().unwrap_or(false);
-        !aliased && !overlap.is_some_and(|k| r < k)
-    };
-
     // Перекрёстная проверка второй поопкодной таблицы против этой:
     // `Instr::rewrite_read_reg` обязана менять ровно те регистры, которые
     // здесь названы прочитанными, за вычетом позиционных (окно аргументов
@@ -939,7 +946,7 @@ pub fn verify(chunk: &Chunk, overlap: Option<usize>) -> Result<(), String> {
         }
         let e = effects(instr, chunk, overlap);
         for r in 0..=u8::MAX {
-            if !exact(r) {
+            if !exact_reg(chunk, overlap, r) {
                 continue;
             }
             let mut probe = *instr;
@@ -962,7 +969,7 @@ pub fn verify(chunk: &Chunk, overlap: Option<usize>) -> Result<(), String> {
         }
         match chunk.instrs[pc] {
             Instr::Move { dst, src } => {
-                if !exact(dst) || !exact(src) {
+                if !exact_reg(chunk, overlap, dst) || !exact_reg(chunk, overlap, src) {
                     return Err(format!(
                         "копия {pc}: устранимой признана копия неточного регистра"
                     ));
@@ -974,21 +981,6 @@ pub fn verify(chunk: &Chunk, overlap: Option<usize>) -> Result<(), String> {
     Ok(())
 }
 
-/// Снять устранимые копии: переименовать чтения приёмника на источник и
-/// удалить сам `Move`.
-///
-/// Возвращает число удалённых инструкций. Разметку бандлов НЕ трогает:
-/// она производная и пересчитывается вызывающим через `bundle::compute`.
-///
-/// За раунд анализ считается ОДИН раз, а применяется столько копий,
-/// сколько заведомо не мешают друг другу. Мешать они могут одним
-/// способом: удаление `Move` убирает запись в его приёмник, а именно
-/// такая запись могла быть основанием считать мёртвой другую копию.
-/// Поэтому в раунд берутся копии, чьи участки переименования не
-/// пересекаются, — тогда ни одна не опирается на инструкцию, которую
-/// снимает соседняя. Раунды повторяются, пока хоть что-то снимается;
-/// на практике их единицы, и полный пересчёт на каждую снятую копию
-/// (а это квадрат по их числу) не нужен.
 /// База и число аргументов вызова, окно которого только ЧИТАЕТСЯ.
 ///
 /// У этих опкодов VM переносит окно в собственное владение (`CallArgs::load`
@@ -1094,6 +1086,16 @@ pub fn copy_propagate(chunk: &mut Chunk, overlap: Option<usize>) -> usize {
         // аргументов лежат где придётся.
         let direct_base_ok = |i: usize, dst: u8| {
             if protected(i) || i + 1 >= chunk.instrs.len() {
+                return false;
+            }
+            // Приёмник обязан быть ТОЧНЫМ, и проверять это здесь надо
+            // отдельно: сюда приходят копии, которые `removable_copies`
+            // отвергла, а отвергнуть она могла и по неточности. У
+            // `Move 0, 1` при параметре по ссылке регистр 0 — алиас
+            // переменной вызывающего, при перекрытии модульных слотов он
+            // же и есть модульная переменная; снять такую запись значит
+            // потерять её наблюдаемый эффект.
+            if !exact_reg(chunk, overlap, dst) {
                 return false;
             }
             let Some((base, count, recv)) = readonly_call_window(&chunk.instrs[i + 1]) else {
@@ -1610,6 +1612,50 @@ mod tests {
 
         assert_eq!(copy_propagate(&mut c, None), 0);
         assert_eq!(c.instrs, before, "копию сняли, оставив получателя ни с чем");
+    }
+
+    /// Приёмник — псевдоним параметра по ссылке, то есть запись в него
+    /// видит вызывающий. Снять такую копию нельзя: живучесть внутри кадра
+    /// объявит регистр мёртвым, а значение при этом наблюдаемо снаружи.
+    #[test]
+    fn a_copy_into_a_byref_parameter_is_not_turned_into_a_direct_base() {
+        let mut c = chunk(vec![
+            Instr::Move { dst: 0, src: 1 },
+            Instr::CallBuiltin {
+                dst: 2,
+                builtin: bsl_rt::BuiltinFn::Sqrt,
+                base: 0,
+                count: 1,
+            },
+            Instr::Return { src: Some(2) },
+        ]);
+        c.n_params = 1;
+        c.param_by_val = vec![false];
+        c.param_has_default = vec![false];
+        let before = c.instrs.clone();
+
+        assert_eq!(copy_propagate(&mut c, None), 0);
+        assert_eq!(c.instrs, before, "снята запись в переменную вызывающего");
+    }
+
+    /// То же самое, но приёмник перекрыт модульным слотом: у кадра
+    /// нулевого уровня первые регистры И ЕСТЬ модульные переменные.
+    #[test]
+    fn a_copy_into_a_module_slot_is_not_turned_into_a_direct_base() {
+        let mut c = chunk(vec![
+            Instr::Move { dst: 0, src: 1 },
+            Instr::CallBuiltin {
+                dst: 2,
+                builtin: bsl_rt::BuiltinFn::Sqrt,
+                base: 0,
+                count: 1,
+            },
+            Instr::Return { src: Some(2) },
+        ]);
+        let before = c.instrs.clone();
+
+        assert_eq!(copy_propagate(&mut c, Some(1)), 0);
+        assert_eq!(c.instrs, before, "снята запись в модульную переменную");
     }
 
     /// А без совпадения с получателем та же копия снимается, и вызов

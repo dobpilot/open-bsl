@@ -24,6 +24,7 @@ CLI = 'target/release/bsl-cli'
 CHUNK = re.compile(r'^\.chunk \d+ params=(\d+) locals=(\d+)')
 INSTR = re.compile(r'^\s+(\d{4}) (\w+)(.*)$')
 ARGMODES = re.compile(r'^\s+(\d+) \[(.*)\]\s*$')
+HANDLER = re.compile(r'^\s+\d+ (\d+) (\d+) (\d+)\s*(;.*)?$')
 MOVE = re.compile(r'dst=(\d+) src=(\d+)')
 # Почти всякая пишущая инструкция называет приёмник полем `dst=`.
 WRITES = re.compile(r'\bdst=(\d+)')
@@ -53,13 +54,24 @@ def window_of(text, modes):
 def chunks_of(listing):
     """Чанки листинга: (число локалей, инструкции, таблица режимов)."""
     out, n_locals, instrs, modes, in_argmodes = [], 0, [], {}, False
+    ranges, in_handlers = [], False
     for line in listing.splitlines():
         m = CHUNK.match(line)
         if m:
             if instrs:
-                out.append((n_locals, instrs, modes))
-            n_locals, instrs, modes, in_argmodes = int(m.group(2)), [], {}, False
+                out.append((n_locals, instrs, modes, ranges))
+            n_locals, instrs, modes = int(m.group(2)), [], {}
+            ranges, in_argmodes, in_handlers = [], False, False
             continue
+        if line.startswith('  .handlers'):
+            in_handlers, in_argmodes = True, False
+            continue
+        if in_handlers:
+            m = HANDLER.match(line)
+            if m:
+                ranges.append((int(m.group(1)), int(m.group(2))))
+                continue
+            in_handlers = False
         if line.startswith('  .argmodes'):
             in_argmodes = True
             continue
@@ -78,12 +90,38 @@ def chunks_of(listing):
         if m:
             instrs.append((m.group(2), m.group(3)))
     if instrs:
-        out.append((n_locals, instrs, modes))
+        out.append((n_locals, instrs, modes, ranges))
     return out
 
 
+# Почему копия осталась. Деления на «из локали» и «из временного» мало:
+# оно отвечает на вопрос «есть ли что перенаправлять», но не на вопрос
+# «чем эту копию снимать». Причин три, и работы за ними разные.
+REASON_SEMANTIC = 'обязательна (Знач)'
+REASON_WIDE = 'широкое окно'
+REASON_NARROW = 'узкое окно нативного'
+
+
+def reason_for(op, width):
+    """Почему копия в окно этого вызова осталась."""
+    if op in ('Call', 'CallImported'):
+        # Слот окна СТАНОВИТСЯ параметром вызванной функции: копия и есть
+        # приватность `Знач`. Снять её нельзя вообще, ни распределением
+        # регистров, ни чем-либо ещё, — она не оптимизационный остаток.
+        return REASON_SEMANTIC
+    if width > 1:
+        # Окно обязано быть непрерывным, а источники соседних аргументов
+        # лежат где придётся: нужно согласованное размещение группы, то
+        # есть распределение регистров.
+        return REASON_WIDE
+    # Однорегистровое окно нативного вызова перестановка базы обязана была
+    # снять. Уцелевшее здесь — не «остаток на потом», а повод посмотреть,
+    # что ей помешало.
+    return REASON_NARROW
+
+
 def classify(path):
-    """Копии в окно аргументов: (из локали, из временного регистра)."""
+    """Копии в окно аргументов по источнику и по причине."""
     p = subprocess.run(
         [CLI, '--optimize=copy-elim', '--emit-bytecode', path],
         capture_output=True, text=True, check=False,
@@ -94,7 +132,9 @@ def classify(path):
         print(f'ОШИБКА компиляции: {path}\n{p.stdout}{p.stderr}', file=sys.stderr)
         return None
     loc = tmp = 0
-    for n_locals, instrs, modes in chunks_of(p.stdout):
+    by_reason = {}
+    for n_locals, instrs, modes, ranges in chunks_of(p.stdout):
+        protected = lambda pc: any(lo <= pc < hi for lo, hi in ranges)
         for i, (op, text) in enumerate(instrs):
             if op != 'Move':
                 continue
@@ -122,32 +162,55 @@ def classify(path):
                             loc += 1
                         else:
                             tmp += 1
+                        key = reason_for(op2, len(w))
+                        # У узкого нативного окна отдельно считается,
+                        # соседняя ли копия: перестановка базы требует
+                        # СОСЕДСТВА, иначе между копией и вызовом успевает
+                        # вклиниться инструкция, и доказывать пришлось бы
+                        # больше.
+                        if key == REASON_NARROW:
+                            if text2 is not instrs[i + 1][1]:
+                                key += ' (не соседняя)'
+                            elif protected(i):
+                                # `Попытка` — заявленное ограничение
+                                # прохода: исключение может сработать на
+                                # любой инструкции диапазона, а точной
+                                # живучести по каждой его точке нет.
+                                key += ' (в Попытка)'
+                            else:
+                                key += ' (соседняя, вне Попытка)'
+                        by_reason[key] = by_reason.get(key, 0) + 1
                         break
                 w2 = WRITES.search(text2)
                 if w2 and int(w2.group(1)) == dst:
                     break
-    return loc, tmp
+    return loc, tmp, by_reason
 
 
 def main():
-    rows, tot_loc, tot_tmp, ok, failed = [], 0, 0, 0, 0
+    tot_loc = tot_tmp = ok = failed = 0
+    reasons = {}
     for path in sorted(glob.glob('benchmarks/*.bsl') + glob.glob('tests/conformance/fixtures/*.bsl')):
         got = classify(path)
         if got is None:
             failed += 1
             continue
         ok += 1
-        loc, tmp = got
+        loc, tmp, by_reason = got
         tot_loc += loc
         tot_tmp += tmp
-        if loc or tmp:
-            rows.append((path.rsplit('/', 1)[-1][:-4], loc, tmp))
-    rows.sort(key=lambda r: -(r[1] + r[2]))
-    print(f"{'скрипт':28} {'из локали':>10} {'из временного':>14}")
-    for name, loc, tmp in rows[:12]:
-        print(f'{name:28} {loc:10} {tmp:14}')
-    print(f'\nскомпилировано {ok}, не скомпилировано {failed}')
-    print(f'ВСЕГО: из локали {tot_loc}, из временного регистра {tot_tmp}')
+        for k, v in by_reason.items():
+            reasons[k] = reasons.get(k, 0) + v
+
+    print(f'скомпилировано {ok}, не скомпилировано {failed}')
+    print(f'\nпо источнику:  из локали {tot_loc}, из временного регистра {tot_tmp}')
+    print('\nпо причине (чем эту копию снимать):')
+    for key in sorted(reasons):
+        print(f'  {key:32} {reasons[key]:6}')
+    print(
+        '\nАбсолютные числа зависят от методики разрешения достигающих\n'
+        'определений и в выводы не берутся: несут их нули и порядки.'
+    )
 
 
 main()

@@ -240,7 +240,7 @@ run_once() {
 # любой из них блокирует. Порог — параметр, по умолчанию пять процентов,
 # как назначено целям первой итерации.
 gate_one() {
-    local script="$1" mode="$2" rounds="${3:-7}" thresh="${4:-5}"
+    local script="$1" mode="$2" rounds="${3:-7}" thresh="${4:-5}" role="${5:-цель}"
     local base_flags="" cand_flags="--optimize=copy-elim"
     if [ "$mode" = jit ]; then
         base_flags="--jit"; cand_flags="--jit --optimize=copy-elim"
@@ -257,7 +257,7 @@ gate_one() {
     for ((i = 0; i < rounds; i++)); do
         echo "r $(run_once "$script" "$base_flags") $(run_once "$script" "$cand_flags") $(run_once "$script" "$base_flags")"
     done | awk -v name="$(basename "$script" .bsl)" -v mode="$mode" -v thresh="$thresh" \
-             -v rounds="$rounds" -v same="$same" '
+             -v rounds="$rounds" -v same="$same" -v role="$role" '
         # Поля тройки: $2,$3 — база A (такты, инстр), $4,$5 — кандидат,
         # $6,$7 — база C.
         {
@@ -287,7 +287,14 @@ gate_one() {
             # печатающий «РЕГРЕССИЯ» и завершающийся нулём, ворот не
             # закрывает: тот, кто зовёт его из другого скрипта, отказа не
             # заметит.
-            exit (verdict ~ /РЕГРЕССИЯ/ ? 1 : 0)
+            #
+            # Успех у роли свой. ЦЕЛИ обязаны взять порог — «ниже порога» и
+            # «в пределах разброса» для них такой же отказ, как регрессия,
+            # и именно на этом первый прогон ворот и споткнулся. КАНАРЕЙКИ
+            # выигрывать не обязаны по построению, с них спрос один:
+            # отсутствие регрессии.
+            ok = (role == "цель") ? (verdict == "выигрыш") : (verdict !~ /РЕГРЕССИЯ/);
+            exit (ok ? 0 : 1)
         }'
 }
 
@@ -301,16 +308,18 @@ section_gate() {
     for group in цели канарейки; do
         echo "  -- $group --"
         if [ "$group" = цели ]; then list=("${GATE_TARGETS[@]}"); else list=("${GATE_CANARIES[@]}"); fi
+        local role=цель
+        [ "$group" = канарейки ] && role=канарейка
         for f in "${list[@]}"; do
-            gate_one "$f" interp "$GATE_ROUNDS" "$GATE_THRESHOLD" || failed=$((failed + 1))
-            gate_one "$f" jit "$GATE_ROUNDS" "$GATE_THRESHOLD" || failed=$((failed + 1))
+            gate_one "$f" interp "$GATE_ROUNDS" "$GATE_THRESHOLD" "$role" || failed=$((failed + 1))
+            gate_one "$f" jit "$GATE_ROUNDS" "$GATE_THRESHOLD" "$role" || failed=$((failed + 1))
         done
     done
     if [ "$failed" -gt 0 ]; then
-        echo "  ВОРОТА НЕ ПРОЙДЕНЫ: регрессий $failed"
+        echo "  ВОРОТА НЕ ПРОЙДЕНЫ: отказавших строк $failed"
         return 1
     fi
-    echo "  регрессий нет"
+    echo "  ВОРОТА ПРОЙДЕНЫ: каждая цель взяла порог, регрессий нет"
 }
 
 GATE_ROUNDS=${GATE_ROUNDS:-7}
