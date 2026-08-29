@@ -338,6 +338,13 @@ fn component_receiver_methods_compile_only_to_the_open_opcode() {
     assert_eq!(open, 5);
 }
 
+// Оптимизирующие проходы убирают из скомпилированного корпуса целые виды
+// инструкций (свёрнутый `AddConst` становится `LoadConst`), поэтому
+// покрытие опкодов проверяется на неоптимизированном кодогене.
+#[cfg_attr(
+    any(feature = "constprop", feature = "copyprop"),
+    ignore = "покрытие опкодов проверяется до оптимизирующих проходов"
+)]
 #[test]
 fn the_corpus_covers_every_opcode() {
     let mut seen: Vec<&str> = Vec::new();

@@ -9,6 +9,13 @@ fn compile(src: &str) -> bsl_bytecode::Program {
     compile_program(&resolved).expect("компиляция")
 }
 
+// Свёртка констант превращает эти выражения в готовые `LoadConst`, и
+// проверять на ней форму операндов бессмысленно: она проверяет выбор
+// инструкций кодогеном, а не результат последующего прохода.
+#[cfg_attr(
+    feature = "constprop",
+    ignore = "проверяет кодоген до свёртки констант"
+)]
 #[test]
 fn a_local_next_to_a_number_is_read_without_a_move_in_both_positions() {
     let program = compile("А = 10; Б = А + 1; В = 20 - А;");
@@ -61,6 +68,10 @@ fn local_number_equality_branches_without_a_boolean_temporary() {
     );
 }
 
+#[cfg_attr(
+    feature = "constprop",
+    ignore = "проверяет кодоген до свёртки констант"
+)]
 #[test]
 fn local_plus_number_uses_the_constant_directly_but_reverse_add_does_not() {
     let program = compile("А = 10; Б = А + 1; В = 20 + А;");

@@ -1100,6 +1100,22 @@ pub fn const_propagate(chunk: &mut Chunk, overlap: Option<usize>) -> usize {
                 known.iter_mut().for_each(|k| *k = None);
             }
 
+            // `AddConst` — самая частая форма сложения в кодогене
+            // (`переменная + литерал`), и без неё свёртка не достаёт до
+            // большинства реальных выражений.
+            if let Instr::AddConst { dst, src, k } = chunk.instrs[pc]
+                && let Some(ks) = known.get(src as usize).copied().flatten()
+                && let (Some(vs), Some(vk)) =
+                    (chunk.consts.get(ks as usize), chunk.consts.get(k as usize))
+                && matches!(vs, bsl_rt::BslValue::Number(_))
+                && matches!(vk, bsl_rt::BslValue::Number(_))
+                && let Ok(v) = vs.add(vk)
+                && let Some(nk) = intern_const(chunk, v)
+            {
+                chunk.instrs[pc] = Instr::LoadConst { dst, k: nk };
+                folded += 1;
+            }
+
             if let Instr::Add { dst, a, b }
             | Instr::Sub { dst, a, b }
             | Instr::Mul { dst, a, b }
@@ -1135,6 +1151,14 @@ pub fn const_propagate(chunk: &mut Chunk, overlap: Option<usize>) -> usize {
                 Instr::LoadConst { dst, k } => {
                     if let Some(slot) = known.get_mut(dst as usize) {
                         *slot = Some(k);
+                    }
+                }
+                // Копия известного значения известна: без этого константа
+                // не переживала бы присваивание через переменную.
+                Instr::Move { dst, src } => {
+                    let v = known.get(src as usize).copied().flatten();
+                    if let Some(slot) = known.get_mut(dst as usize) {
+                        *slot = v;
                     }
                 }
                 _ => {
@@ -1371,6 +1395,70 @@ mod tests {
             Instr::Return { src: Some(2) },
         ]);
         c.consts = vec![bsl_rt::BslValue::Str(bsl_rt::BslString::from("5")), num(1)];
+        assert_eq!(const_propagate(&mut c, None), 0);
+    }
+
+    #[test]
+    fn constants_propagate_through_a_chain_and_through_a_copy() {
+        // `А = 2; Б = А + 3; В = А; Г = В + 4` — обе половины должны
+        // свернуться: цепочка через свёрнутый результат и перенос
+        // известного значения копией.
+        let mut c = chunk(vec![
+            Instr::LoadConst { dst: 0, k: 0 },
+            Instr::AddConst {
+                dst: 1,
+                src: 0,
+                k: 1,
+            },
+            Instr::Move { dst: 2, src: 0 },
+            Instr::AddConst {
+                dst: 3,
+                src: 2,
+                k: 2,
+            },
+            Instr::Add { dst: 4, a: 1, b: 3 },
+            Instr::Return { src: Some(4) },
+        ]);
+        c.consts = vec![num(2), num(3), num(4)];
+        assert_eq!(const_propagate(&mut c, None), 3);
+        let Instr::LoadConst { k, .. } = c.instrs[4] else {
+            panic!("сложение свёрнутых слагаемых не свернулось");
+        };
+        assert_eq!(c.consts[k as usize], num(11));
+    }
+
+    #[test]
+    fn a_redefinition_makes_the_register_unknown() {
+        // После записи не-константы регистр перестаёт быть известным.
+        let mut c = chunk(vec![
+            Instr::LoadConst { dst: 0, k: 0 },
+            Instr::CollectionLen { dst: 0, obj: 5 },
+            Instr::AddConst {
+                dst: 1,
+                src: 0,
+                k: 1,
+            },
+            Instr::Return { src: Some(1) },
+        ]);
+        c.consts = vec![num(2), num(3)];
+        assert_eq!(const_propagate(&mut c, None), 0);
+    }
+
+    #[test]
+    fn knowledge_does_not_cross_a_block_boundary() {
+        // Значение известно только внутри блока: в цель перехода можно
+        // прийти и другим путём.
+        let mut c = chunk(vec![
+            Instr::LoadConst { dst: 0, k: 0 },
+            Instr::Jump { target: 2 },
+            Instr::AddConst {
+                dst: 1,
+                src: 0,
+                k: 1,
+            },
+            Instr::Return { src: Some(1) },
+        ]);
+        c.consts = vec![num(2), num(3)];
         assert_eq!(const_propagate(&mut c, None), 0);
     }
 }
