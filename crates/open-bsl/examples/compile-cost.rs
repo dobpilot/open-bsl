@@ -22,7 +22,9 @@
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let usage = || -> ! {
-        eprintln!("нужно: compile-cost <файл.bsl> <итераций> [const-fold|copy-elim]");
+        eprintln!(
+            "нужно: compile-cost <файл.bsl> <итераций> [const-fold|copy-elim|ssa-const|ssa-regalloc]"
+        );
         std::process::exit(2);
     };
 
@@ -43,6 +45,22 @@ fn main() {
             iters,
             bsl_compiler::Optimizations {
                 copy_elim: true,
+                ..bsl_compiler::Optimizations::default()
+            },
+        ),
+        [_, path, iters, pass] if pass == "ssa-const" => (
+            path,
+            iters,
+            bsl_compiler::Optimizations {
+                ssa_const: true,
+                ..bsl_compiler::Optimizations::default()
+            },
+        ),
+        [_, path, iters, pass] if pass == "ssa-regalloc" => (
+            path,
+            iters,
+            bsl_compiler::Optimizations {
+                ssa_regalloc: true,
                 ..bsl_compiler::Optimizations::default()
             },
         ),
