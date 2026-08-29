@@ -989,6 +989,58 @@ pub fn verify(chunk: &Chunk, overlap: Option<usize>) -> Result<(), String> {
 /// снимает соседняя. Раунды повторяются, пока хоть что-то снимается;
 /// на практике их единицы, и полный пересчёт на каждую снятую копию
 /// (а это квадрат по их числу) не нужен.
+/// База и число аргументов вызова, окно которого только ЧИТАЕТСЯ.
+///
+/// У этих опкодов VM переносит окно в собственное владение (`CallArgs::load`
+/// клонирует значения, у открытого метода — читает срез) ДО того, как
+/// исполнить вызванное. Поэтому базой окна может быть любой регистр, а не
+/// обязательно временный: чтение регистра-источника ничем не отличается от
+/// чтения его копии.
+///
+/// `Call` и `CallImported` сюда НЕ входят, и это не осторожность, а
+/// семантика. У них слот окна СТАНОВИТСЯ параметром вызванной функции
+/// через `ParamSlot`, то есть окно и есть та приватная копия, которой
+/// требует `Знач`. Подставить туда базой переменную вызывающего значило бы
+/// дать вызванной функции писать прямо в неё.
+///
+/// Неизвестный опкод даёт `None` и оптимизацию отключает — направление
+/// отказа безопасное, поэтому catch-all здесь допустим.
+fn readonly_call_window(instr: &Instr) -> Option<(u8, u8)> {
+    match instr {
+        Instr::CallBuiltin { base, count, .. }
+        | Instr::CallMethod { base, count, .. }
+        | Instr::CallObjectMethod { base, count, .. }
+        | Instr::CallComponent { base, count, .. }
+        | Instr::CreateObject { base, count, .. } => Some((*base, *count)),
+        _ => None,
+    }
+}
+
+/// Переставить базу окна у вызова, который его только читает.
+fn set_call_base(instr: &mut Instr, b: u8) {
+    match instr {
+        Instr::CallBuiltin { base, .. }
+        | Instr::CallMethod { base, .. }
+        | Instr::CallObjectMethod { base, .. }
+        | Instr::CallComponent { base, .. }
+        | Instr::CreateObject { base, .. } => *base = b,
+        _ => {}
+    }
+}
+
+/// Что делать с выбранной копией.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CopyFix {
+    /// Переименовать чтения приёмника в источник и удалить копию.
+    Rename,
+    /// Переставить базу следующего за копией вызова на источник.
+    ///
+    /// Копия и вызов СОСЕДНИЕ, поэтому источник между ними изменить нечем —
+    /// вся доказательная работа сводится к тому, что окно только читается,
+    /// а приёмник после вызова мёртв.
+    DirectBase,
+}
+
 pub fn copy_propagate(chunk: &mut Chunk, overlap: Option<usize>) -> usize {
     let mut removed = 0usize;
     loop {
@@ -1001,17 +1053,67 @@ pub fn copy_propagate(chunk: &mut Chunk, overlap: Option<usize>) -> usize {
                 .any(|r| r.start_pc == pc || r.end_pc == pc || r.handler_pc == pc)
         };
 
+        let live = live_out(chunk, &cfg, overlap);
+        let protected = |pc: usize| {
+            chunk
+                .exception_ranges
+                .iter()
+                .any(|r| pc >= r.start_pc && pc < r.end_pc)
+        };
+
+        // Годится ли копия на перестановку базы: за ней сразу вызов,
+        // читающий окно ровно из одного регистра — приёмника, — и после
+        // вызова приёмник мёртв.
+        //
+        // Одним аргументом дело ограничено не из осторожности: окно шире
+        // одного регистра обязано быть непрерывным, а источники соседних
+        // аргументов лежат где придётся.
+        let direct_base_ok = |i: usize, dst: u8| {
+            if protected(i) || i + 1 >= chunk.instrs.len() {
+                return false;
+            }
+            let Some((base, count)) = readonly_call_window(&chunk.instrs[i + 1]) else {
+                return false;
+            };
+            if base != dst || count != 1 {
+                return false;
+            }
+            let b = cfg.block_of[i];
+            let (_, hi) = cfg.blocks[b];
+            for pc in (i + 2)..hi {
+                let e = effects(&chunk.instrs[pc], chunk, overlap);
+                if e.reads.contains(dst as usize) || e.reads_positional.contains(dst as usize) {
+                    return false;
+                }
+                if e.writes.contains(dst as usize) {
+                    return true;
+                }
+            }
+            !live[b].contains(dst as usize)
+        };
+
         // Отбор раунда: участок [копия, конец переименования] не должен
         // пересекаться с уже принятым.
-        let mut picked: Vec<(usize, u8, u8, usize)> = Vec::new();
+        let mut picked: Vec<(usize, u8, u8, usize, CopyFix)> = Vec::new();
         let mut busy_until = 0usize;
-        for (i, &f) in flags.iter().enumerate() {
-            if !f || boundary(i) || i < busy_until {
+        for (i, &removable) in flags.iter().enumerate() {
+            if boundary(i) || i < busy_until {
                 continue;
             }
             let Instr::Move { dst, src } = chunk.instrs[i] else {
                 continue;
             };
+            if !removable {
+                // Переименованием такую копию не снять — её приёмник
+                // читают позиционно. Но если окно ровно однорегистровое и
+                // вызов его только читает, базу можно поставить прямо на
+                // источник.
+                if dst != src && direct_base_ok(i, dst) {
+                    picked.push((i, dst, src, i + 2, CopyFix::DirectBase));
+                    busy_until = i + 2;
+                }
+                continue;
+            }
             let (_, hi) = cfg.blocks[cfg.block_of[i]];
             let mut stop = hi;
             for pc in (i + 1)..hi {
@@ -1023,7 +1125,7 @@ pub fn copy_propagate(chunk: &mut Chunk, overlap: Option<usize>) -> usize {
                     break;
                 }
             }
-            picked.push((i, dst, src, stop));
+            picked.push((i, dst, src, stop, CopyFix::Rename));
             busy_until = stop;
         }
         if picked.is_empty() {
@@ -1031,9 +1133,14 @@ pub fn copy_propagate(chunk: &mut Chunk, overlap: Option<usize>) -> usize {
         }
 
         // Применяем с конца: удаление сдвигает только то, что за ним.
-        for &(i, dst, src, stop) in picked.iter().rev() {
-            for pc in (i + 1)..stop {
-                chunk.instrs[pc].rewrite_read_reg(dst, src);
+        for &(i, dst, src, stop, fix) in picked.iter().rev() {
+            match fix {
+                CopyFix::Rename => {
+                    for pc in (i + 1)..stop {
+                        chunk.instrs[pc].rewrite_read_reg(dst, src);
+                    }
+                }
+                CopyFix::DirectBase => set_call_base(&mut chunk.instrs[i + 1], src),
             }
             chunk.instrs.remove(i);
             chunk.prop_cache.remove(i);

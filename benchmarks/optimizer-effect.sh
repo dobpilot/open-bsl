@@ -124,24 +124,29 @@ section_dynamic() {
 # весь листинг даже в `/dev/null`, и на фикстуре это дороже самой
 # компиляции, так что доля свёртки в такой доле занижена.
 ab_compile() {
-    local script="$1" label="$2" iters="${3:-50}" pairs="${4:-7}" i
+    local script="$1" label="$2" pass="${3:-const-fold}" iters="${4:-50}" pairs="${5:-7}" i
     for ((i = 0; i < pairs; i++)); do
         perf stat -x, -e instructions:u -- $COST "$script" "$iters" 2>&1 |
             awk -F, '/instructions:u/{print "base", $1}'
-        perf stat -x, -e instructions:u -- $COST "$script" "$iters" const-fold 2>&1 |
-            awk -F, '/instructions:u/{print "fold", $1}'
-    done | awk -v l="$label" '{c[$1]++; t[$1]+=$2}
-        END {a=t["base"]/c["base"]; b=t["fold"]/c["fold"];
-             printf "  %-30s база %14.0f  свёртка %14.0f  Δ %+.2f%%\n", l, a, b, (b-a)*100/a}'
+        perf stat -x, -e instructions:u -- $COST "$script" "$iters" "$pass" 2>&1 |
+            awk -F, '/instructions:u/{print "cand", $1}'
+    done | awk -v l="$label" -v p="$pass" '{c[$1]++; t[$1]+=$2}
+        END {a=t["base"]/c["base"]; b=t["cand"]/c["cand"];
+             printf "  %-14s %-30s база %14.0f  проход %14.0f  Δ %+.2f%%\n", p, l, a, b, (b-a)*100/a}'
 }
 
 section_budget() {
     echo "== budget: цена компиляции (без форматирования листинга) =="
+    echo "  $(freq_state)"
     build_cost
     python3 -c "open('$SCRATCH/wide.bsl','w').write('А = 1;\n' + 'Б = А + 1 + 1 + 1 + 1;\n'*4000)"
-    ab_compile "$SCRATCH/wide.bsl" "синтетика 4000 операторов" 5
-    ab_compile benchmarks/csv_write.bsl "csv_write" 200
-    ab_compile tests/conformance/fixtures/binary-streams.bsl "binary-streams (самая большая)" 50
+    local pass
+    for pass in const-fold copy-elim; do
+        ab_compile "$SCRATCH/wide.bsl" "синтетика 4000 операторов" "$pass" 5
+        ab_compile benchmarks/csv_write.bsl "csv_write" "$pass" 200
+        ab_compile benchmarks/table_total.bsl "table_total" "$pass" 200
+        ab_compile tests/conformance/fixtures/binary-streams.bsl "binary-streams (самая большая)" "$pass" 50
+    done
 
     echo "  -- сквозное исполнение: свёртка не должна утяжелять запуск --"
     local i
@@ -151,7 +156,7 @@ section_budget() {
         perf stat -x, -e instructions:u,cycles:u -- $CLI --optimize=const-fold benchmarks/empty_for.bsl 2>&1 >/dev/null |
             awk -F, '/instructions:u/{n=$1} /cycles:u/{c=$1} END{print "fold", n, c}'
     done | awk '{k[$1]++; a[$1]+=$2; b[$1]+=$3}
-        END {printf "  %-30s инструкции %+.2f%%, такты %+.2f%% (частота НЕ зафиксирована)\n",
+        END {printf "  %-30s инструкции %+.2f%%, такты %+.2f%%\n",
              "empty_for", (a["fold"]/k["fold"]-a["base"]/k["base"])*100/(a["base"]/k["base"]),
              (b["fold"]/k["fold"]-b["base"]/k["base"])*100/(b["base"]/k["base"])}'
 }
@@ -187,16 +192,28 @@ section_complexity() {
 # фиксации помечается явно: правило документа прямо запрещает молчать об
 # этом, потому что стенное время под `powersave` меряет governor.
 freq_state() {
-    local gov turbo lo hi
-    gov=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo "?")
+    local turbo lo hi govs n_perf n_all
     turbo=$(cat /sys/devices/system/cpu/intel_pstate/no_turbo 2>/dev/null || echo "?")
     lo=$(cat /sys/devices/system/cpu/intel_pstate/min_perf_pct 2>/dev/null || echo "?")
     hi=$(cat /sys/devices/system/cpu/intel_pstate/max_perf_pct 2>/dev/null || echo "?")
-    if [ "$gov" = performance ] && [ "$turbo" = 1 ] && [ "$lo" = "$hi" ]; then
-        echo "частота ЗАФИКСИРОВАНА (governor $gov, турбо выкл., perf_pct $lo)"
+    # Governor смотрится у ВСЕХ ядер, а не у нулевого: ядро, оставшееся под
+    # `powersave`, сделает замер на нём недействительным, а по cpu0 этого не
+    # видно.
+    govs=$(cat /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor 2>/dev/null || true)
+    n_all=$(printf '%s\n' "$govs" | grep -c . || true)
+    n_perf=$(printf '%s\n' "$govs" | grep -c '^performance$' || true)
+    if [ "$n_all" -gt 0 ] && [ "$n_perf" = "$n_all" ] && [ "$turbo" = 1 ] && [ "$lo" = "$hi" ]; then
+        echo "частота ЗАФИКСИРОВАНА (performance на всех $n_all, турбо выкл., perf_pct $lo)"
     else
-        echo "частота НЕ зафиксирована (governor $gov, no_turbo $turbo, perf_pct $lo-$hi)"
+        echo "частота НЕ зафиксирована (performance на $n_perf из $n_all, no_turbo $turbo, perf_pct $lo-$hi)"
     fi
+}
+
+# Фактические частоты — утверждение о фиксации проверяется измерением, а не
+# только чтением настроек: троттлинг настройки не спрашивает.
+cpu_speeds() {
+    awk '/^cpu MHz/ {v=$4; s+=v; n++; if (v<lo || n==1) lo=v; if (v>hi) hi=v}
+         END {printf "по факту %d ядер, %.0f-%.0f МГц (среднее %.0f)", n, lo, hi, s/n}' /proc/cpuinfo
 }
 
 # Один прогон сценария под perf. Рабочий каталог отдельный: тяжёлые
@@ -211,51 +228,73 @@ run_once() {
 }
 
 # Ворота допуска: обе метрики, чередующиеся тройки «база, кандидат, база».
-# Две базы в раунде дают разброс, измеренный В ТЕХ ЖЕ условиях, что и
-# эффект, — из него и выводится порог, а не из общего представления о шуме.
+#
+# Разброс считается ПО ТРОЙКАМ, а не как разность двух общих средних.
+# Прежняя формула `|mean(A) - mean(C)|` разбросом не была: отклонения
+# разных знаков в ней гасят друг друга, и пятнадцать троек `table_total`
+# с внутритроечным дрейфом 0,42…3,70 % давали в ней 0,27 %. Здесь берётся
+# средний модуль внутритроечной разницы — величина, которая от взаимного
+# гашения не страдает.
+#
+# Вердикт выносится по ОБЕИМ метрикам: регрессия или недобор порога в
+# любой из них блокирует. Порог — параметр, по умолчанию пять процентов,
+# как назначено целям первой итерации.
 gate_one() {
-    local script="$1" mode="$2" rounds="${3:-7}" base_flags="" cand_flags="--optimize=copy-elim"
+    local script="$1" mode="$2" rounds="${3:-7}" thresh="${4:-5}"
+    local base_flags="" cand_flags="--optimize=copy-elim"
     if [ "$mode" = jit ]; then
         base_flags="--jit"; cand_flags="--jit --optimize=copy-elim"
     fi
     local i
     for ((i = 0; i < rounds; i++)); do
-        echo "a $(run_once "$script" "$base_flags")"
-        echo "b $(run_once "$script" "$cand_flags")"
-        echo "c $(run_once "$script" "$base_flags")"
-    done | awk -v name="$(basename "$script" .bsl)" -v mode="$mode" '
-        {n[$1]++; cyc[$1]+=$2; ins[$1]+=$3}
+        echo "r $(run_once "$script" "$base_flags") $(run_once "$script" "$cand_flags") $(run_once "$script" "$base_flags")"
+    done | awk -v name="$(basename "$script" .bsl)" -v mode="$mode" -v thresh="$thresh" -v rounds="$rounds" '
+        # Поля тройки: $2,$3 — база A (такты, инстр), $4,$5 — кандидат,
+        # $6,$7 — база C.
+        {
+            n++;
+            b = ($2 + $6) / 2; ib = ($3 + $7) / 2;
+            spread += ($2 > $6 ? $2 - $6 : $6 - $2) / b;
+            eff += ($4 - b) / b; ieff += ($5 - ib) / ib;
+        }
         END {
-            ba=cyc["a"]/n["a"]; bc=cyc["c"]/n["c"]; base=(ba+bc)/2; cand=cyc["b"]/n["b"];
-            ia=ins["a"]/n["a"]; ic=ins["c"]/n["c"]; ibase=(ia+ic)/2; icand=ins["b"]/n["b"];
-            noise=(ba>bc ? ba-bc : bc-ba)*100/base;
-            dcyc=(cand-base)*100/base; dins=(icand-ibase)*100/ibase;
-            printf "  %-20s %-6s такты %+7.2f%%  инстр %+7.2f%%  шум %5.2f%%  %s\n",
-                   name, mode, dcyc, dins, noise,
-                   (-dcyc < 2*noise ? "НЕРАЗРЕШИМО" : (dcyc < 0 ? "выигрыш" : "РЕГРЕССИЯ"))
+            dcyc = eff * 100 / n; dins = ieff * 100 / n; noise = spread * 100 / n;
+            adins = (dins < 0 ? -dins : dins);
+            # Порядок разбора существен. Неизменное число инструкций
+            # означает, что проход этого кода не касался ВООБЩЕ, и тогда
+            # разница тактов принадлежит машине, а не правке, — сколь бы
+            # велика она ни была. Ровно этот случай канарейка `goto_bench`
+            # однажды предъявила как +12,16 % стенного времени при нуле
+            # инструкций.
+            if (adins < 0.05) verdict = "КОД НЕ ЗАТРОНУТ";
+            else if (dcyc > 0 || dins > 0) verdict = "РЕГРЕССИЯ";
+            else if (-dcyc < 2 * noise) verdict = "НЕРАЗРЕШИМО";
+            else if (-dcyc < thresh || -dins < thresh) verdict = "НИЖЕ ПОРОГА";
+            else verdict = "выигрыш";
+            printf "  %-20s %-6s такты %+7.2f%%  инстр %+7.2f%%  разброс %5.2f%%  n=%-2d %s\n",
+                   name, mode, dcyc, dins, noise, rounds, verdict
         }'
-}
-
-# Что питает копии в окно аргументов — предмет второй половины шага 6.
-section_window() {
-    echo "== window: чем питаются копии в окно аргументов вызова =="
-    python3 benchmarks/window-copies.py
 }
 
 section_gate() {
     echo "== gate: ворота допуска прохода устранения копий =="
     echo "  $(freq_state)"
-    echo "  порог: эффект обязан вдвое превышать разброс, измеренный той же тройкой"
+    echo "  порог ${GATE_THRESHOLD:-5} %, раундов ${GATE_ROUNDS:-7} (GATE_ROUNDS=15 для спорных)"
+    echo "  сверх порога эффект обязан вдвое превышать разброс той же тройки"
+    echo "  $(printf '%s' "$(cpu_speeds)")"
     local group list f
     for group in цели канарейки; do
         echo "  -- $group --"
         if [ "$group" = цели ]; then list=("${GATE_TARGETS[@]}"); else list=("${GATE_CANARIES[@]}"); fi
         for f in "${list[@]}"; do
-            gate_one "$f" interp
-            gate_one "$f" jit
+            gate_one "$f" interp "$GATE_ROUNDS" "$GATE_THRESHOLD"
+            gate_one "$f" jit "$GATE_ROUNDS" "$GATE_THRESHOLD"
         done
     done
 }
+
+GATE_ROUNDS=${GATE_ROUNDS:-7}
+GATE_THRESHOLD=${GATE_THRESHOLD:-5}
 
 GATE_TARGETS=(benchmarks/csv_write.bsl benchmarks/table_total.bsl
     benchmarks/bmp_rotate.bsl benchmarks/csv_write_batched.bsl)

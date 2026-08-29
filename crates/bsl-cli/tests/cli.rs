@@ -94,6 +94,38 @@ fn a_command_without_its_argument_shows_that_commands_usage() {
     }
 }
 
+/// Перестановка базы вызова на источник копии не имеет права сделать
+/// параметр `Знач` общим с переменной вызывающего. Форма байт-кода это
+/// проверяет в `bsl-compiler/tests/copy_elim.rs`, но проверка формы не
+/// заменяет прогона: здесь исполняется присваивание внутри функции, и
+/// снаружи оно обязано быть невидимым.
+#[test]
+fn a_znach_parameter_stays_private_under_copy_elimination() {
+    let path = std::env::temp_dir().join(format!("bsl-cli-test-znach-{}.bsl", std::process::id()));
+    std::fs::write(
+        &path,
+        "Функция Испортить(Знач Х)\n\
+         \tХ = 99;\n\
+         \tВозврат Х;\n\
+         КонецФункции\n\
+         А = 1;\n\
+         Сообщить(Испортить(А));\n\
+         Сообщить(А);\n",
+    )
+    .unwrap();
+    let script = path.to_str().unwrap();
+
+    let plain = stdout_of(&run(&[script]));
+    assert_eq!(plain, "99\n1\n", "без оптимизаций `Знач` уже сломан");
+    assert_eq!(
+        stdout_of(&run(&["--optimize=copy-elim", script])),
+        plain,
+        "устранение копий сделало параметр `Знач` общим с переменной вызывающего"
+    );
+
+    let _ = std::fs::remove_file(&path);
+}
+
 /// `--optimize=список` — интерфейс замера, а не удобство: без него число
 /// ворот принадлежит комбинации проходов. Поэтому его контракт закреплён
 /// тестом целиком — приём списка, отказ на опечатке и то, что имена

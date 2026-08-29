@@ -14,62 +14,124 @@
     python3 benchmarks/window-copies.py
 """
 
-import re, subprocess, sys, glob
+import glob
+import re
+import subprocess
+import sys
 
 CLI = 'target/release/bsl-cli'
-chunk_re = re.compile(r'^\.chunk \d+ params=(\d+) locals=(\d+)')
-ins_re = re.compile(r'^\s+(\d{4}) (\w+)(.*)$')
-call_re = re.compile(r'base=(\d+) count=(\d+)')
 
-tot_local = tot_temp = 0
-rows = []
-for f in sorted(glob.glob('benchmarks/*.bsl') + glob.glob('tests/conformance/fixtures/*.bsl')):
-    p = subprocess.run([CLI, '--optimize=copy-elim', '--emit-bytecode', f],
-                       capture_output=True, text=True)
-    if p.returncode != 0:
-        continue
-    n_locals = 0
-    instrs = []          # (op, text)
-    chunks = []          # (n_locals, instrs)
-    for line in p.stdout.splitlines():
-        m = chunk_re.match(line)
+CHUNK = re.compile(r'^\.chunk \d+ params=(\d+) locals=(\d+)')
+INSTR = re.compile(r'^\s+(\d{4}) (\w+)(.*)$')
+ARGMODES = re.compile(r'^\s+(\d+) \[(.*)\]\s*$')
+MOVE = re.compile(r'dst=(\d+) src=(\d+)')
+WINDOW = re.compile(r'base=(\d+) count=(\d+)')
+# У `Call`/`CallImported` ширина окна задана НЕ полем count, а длиной
+# набора режимов аргументов: `arg_modes=N` отсылает к таблице `.argmodes`
+# чанка. Прежняя редакция скрипта этого не знала и такие вызовы теряла.
+ARGMODES_REF = re.compile(r'base=(\d+) arg_modes=(\d+)')
+
+
+def window_of(text, modes):
+    """Окно вызова как (база, ширина) или None, если это не вызов."""
+    m = WINDOW.search(text)
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    m = ARGMODES_REF.search(text)
+    if m:
+        table = modes.get(int(m.group(2)))
+        if table is None:
+            return None
+        return int(m.group(1)), table
+    return None
+
+
+def chunks_of(listing):
+    """Чанки листинга: (число локалей, инструкции, таблица режимов)."""
+    out, n_locals, instrs, modes, in_argmodes = [], 0, [], {}, False
+    for line in listing.splitlines():
+        m = CHUNK.match(line)
         if m:
             if instrs:
-                chunks.append((n_locals, instrs)); instrs = []
-            n_locals = int(m.group(2))
+                out.append((n_locals, instrs, modes))
+            n_locals, instrs, modes, in_argmodes = int(m.group(2)), [], {}, False
             continue
-        m = ins_re.match(line)
+        if line.startswith('  .argmodes'):
+            in_argmodes = True
+            continue
+        if in_argmodes:
+            m = ARGMODES.match(line)
+            if m:
+                inner = m.group(2).strip()
+                modes[int(m.group(1))] = 0 if not inner else len(inner.split(','))
+                continue
+            in_argmodes = False
+        m = INSTR.match(line)
         if m:
             instrs.append((m.group(2), m.group(3)))
     if instrs:
-        chunks.append((n_locals, instrs))
+        out.append((n_locals, instrs, modes))
+    return out
 
+
+def classify(path):
+    """Копии в окно аргументов: (из локали, из временного регистра)."""
+    p = subprocess.run(
+        [CLI, '--optimize=copy-elim', '--emit-bytecode', path],
+        capture_output=True, text=True, check=False,
+    )
+    if p.returncode != 0:
+        # Молча пропускать нельзя: пропущенный скрипт читается как «копий
+        # нет», а это не то же самое, что «скрипт не скомпилировался».
+        print(f'ОШИБКА компиляции: {path}\n{p.stdout}{p.stderr}', file=sys.stderr)
+        return None
     loc = tmp = 0
-    for n_locals, ins in chunks:
-        for i, (op, txt) in enumerate(ins):
+    for n_locals, instrs, modes in chunks_of(p.stdout):
+        for i, (op, text) in enumerate(instrs):
             if op != 'Move':
                 continue
-            mm = re.search(r'dst=(\d+) src=(\d+)', txt)
-            if not mm:
+            m = MOVE.search(text)
+            if not m:
                 continue
-            dst, src = int(mm.group(1)), int(mm.group(2))
-            # Ищем ближайший следующий вызов и смотрим, лежит ли dst в его окне.
-            for op2, txt2 in ins[i + 1:i + 4]:
-                if not op2.startswith('Call'):
+            dst, src = int(m.group(1)), int(m.group(2))
+            # Окно ищется до ближайшего вызова, а не в трёх следующих
+            # инструкциях: у широкого окна между копией и вызовом стоят
+            # копии остальных аргументов, и их бывает больше трёх.
+            for op2, text2 in instrs[i + 1:]:
+                w = window_of(text2, modes) if op2.startswith('Call') or op2 == 'CreateObject' else None
+                if w is None:
+                    if op2.startswith('Call') or op2 == 'CreateObject':
+                        break
                     continue
-                c = call_re.search(txt2)
-                if c and int(c.group(1)) <= dst < int(c.group(1)) + int(c.group(2)):
+                base, count = w
+                if base <= dst < base + count:
                     if src < n_locals:
                         loc += 1
                     else:
                         tmp += 1
                 break
-    if loc or tmp:
-        rows.append((f.split('/')[-1][:-4], loc, tmp))
-    tot_local += loc; tot_temp += tmp
+    return loc, tmp
 
-rows.sort(key=lambda r: -(r[1] + r[2]))
-print(f"{'скрипт':28} {'из локали':>10} {'из временного':>14}")
-for n, a, b in rows[:12]:
-    print(f"{n:28} {a:10} {b:14}")
-print(f"\nВСЕГО: из локали {tot_local}, из временного регистра {tot_temp}")
+
+def main():
+    rows, tot_loc, tot_tmp, ok, failed = [], 0, 0, 0, 0
+    for path in sorted(glob.glob('benchmarks/*.bsl') + glob.glob('tests/conformance/fixtures/*.bsl')):
+        got = classify(path)
+        if got is None:
+            failed += 1
+            continue
+        ok += 1
+        loc, tmp = got
+        tot_loc += loc
+        tot_tmp += tmp
+        if loc or tmp:
+            rows.append((path.rsplit('/', 1)[-1][:-4], loc, tmp))
+    rows.sort(key=lambda r: -(r[1] + r[2]))
+    print(f"{'скрипт':28} {'из локали':>10} {'из временного':>14}")
+    for name, loc, tmp in rows[:12]:
+        print(f'{name:28} {loc:10} {tmp:14}')
+    print(f'\nскомпилировано {ok}, не скомпилировано {failed}')
+    print(f'ВСЕГО: из локали {tot_loc}, из временного регистра {tot_tmp}')
+
+
+main()
