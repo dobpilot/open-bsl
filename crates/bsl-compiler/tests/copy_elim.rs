@@ -76,17 +76,53 @@ fn a_bsl_call_keeps_the_copy_that_makes_znach_private() {
 
 /// Окно шире одного регистра не трогается: оно обязано быть непрерывным,
 /// а источники соседних аргументов лежат где придётся.
+///
+/// Утверждать «есть вызов с двумя аргументами» бессмысленно — это прошло
+/// бы и после того, как база уехала на локаль, а окно развалилось.
+/// Проверяются два разных исхода на одном исходнике: у однорегистровых
+/// окон `Строка(Х)` и `Строка(У)` база указывает ПРЯМО на локали, а у
+/// двухрегистрового окна `Сообщить` она остаётся во временных регистрах.
 #[test]
-fn a_two_argument_call_keeps_its_window() {
+fn a_wide_window_stays_in_temporaries_while_narrow_ones_reach_the_locals() {
     let program = compile("Х = 1;\nУ = 2;\nСообщить(Строка(Х) + Строка(У));");
     let chunk = &program.chunks[0];
+    let n_locals = chunk.n_locals;
 
+    let windows: Vec<(u8, u8)> = chunk
+        .instrs
+        .iter()
+        .filter_map(|i| match i {
+            Instr::CallBuiltin { base, count, .. } => Some((*base, *count)),
+            _ => None,
+        })
+        .collect();
+
+    let narrow: Vec<u8> = windows
+        .iter()
+        .filter(|(_, c)| *c == 1)
+        .map(|(b, _)| *b)
+        .collect();
+    assert_eq!(
+        narrow.len(),
+        2,
+        "ожидались два вызова `Строка`: {windows:?}"
+    );
+    for base in narrow {
+        assert!(
+            base < n_locals,
+            "однорегистровое окно обязано читать локаль напрямую: база {base}, локалей {n_locals}"
+        );
+    }
+
+    let wide: Vec<(u8, u8)> = windows.into_iter().filter(|(_, c)| *c >= 2).collect();
+    assert_eq!(
+        wide.len(),
+        1,
+        "ожидался один вызов с широким окном: {wide:?}"
+    );
     assert!(
-        chunk.instrs.iter().any(|i| matches!(
-            i,
-            Instr::CallBuiltin { count, .. } if *count >= 2
-        )),
-        "ожидался вызов с окном шире одного регистра: {:?}",
-        chunk.instrs
+        wide[0].0 >= n_locals,
+        "широкое окно обязано остаться во временных регистрах: база {}, локалей {n_locals}",
+        wide[0].0
     );
 }

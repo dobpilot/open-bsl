@@ -25,6 +25,8 @@ CHUNK = re.compile(r'^\.chunk \d+ params=(\d+) locals=(\d+)')
 INSTR = re.compile(r'^\s+(\d{4}) (\w+)(.*)$')
 ARGMODES = re.compile(r'^\s+(\d+) \[(.*)\]\s*$')
 MOVE = re.compile(r'dst=(\d+) src=(\d+)')
+# Почти всякая пишущая инструкция называет приёмник полем `dst=`.
+WRITES = re.compile(r'\bdst=(\d+)')
 WINDOW = re.compile(r'base=(\d+) count=(\d+)')
 # У `Call`/`CallImported` ширина окна задана НЕ полем count, а длиной
 # набора режимов аргументов: `arg_modes=N` отсылает к таблице `.argmodes`
@@ -33,16 +35,18 @@ ARGMODES_REF = re.compile(r'base=(\d+) arg_modes=(\d+)')
 
 
 def window_of(text, modes):
-    """Окно вызова как (база, ширина) или None, если это не вызов."""
+    """Позиции окна, которые вызов ЧИТАЕТ, как множество регистров."""
     m = WINDOW.search(text)
     if m:
-        return int(m.group(1)), int(m.group(2))
+        base, count = int(m.group(1)), int(m.group(2))
+        return set(range(base, base + count))
     m = ARGMODES_REF.search(text)
     if m:
         table = modes.get(int(m.group(2)))
         if table is None:
             return None
-        return int(m.group(1)), table
+        base = int(m.group(1))
+        return {base + i for i, is_value in enumerate(table) if is_value}
     return None
 
 
@@ -62,8 +66,12 @@ def chunks_of(listing):
         if in_argmodes:
             m = ARGMODES.match(line)
             if m:
-                inner = m.group(2).strip()
-                modes[int(m.group(1))] = 0 if not inner else len(inner.split(','))
+                inner = m.group(2).split()
+                # Режимы разделены ПРОБЕЛАМИ (`[byref:1 byref:0]`), и из
+                # окна читаются ТОЛЬКО позиции `value`: у `byref` и
+                # `default` слот занят лишь ради непрерывности диапазона,
+                # а значение берётся из алиаса или из пролога умолчаний.
+                modes[int(m.group(1))] = [x == 'value' for x in inner]
                 continue
             in_argmodes = False
         m = INSTR.match(line)
@@ -97,19 +105,27 @@ def classify(path):
             # Окно ищется до ближайшего вызова, а не в трёх следующих
             # инструкциях: у широкого окна между копией и вызовом стоят
             # копии остальных аргументов, и их бывает больше трёх.
+            #
+            # По дороге проверяется достигающее определение: если слот
+            # переписан ДО вызова, до окна доедет не эта копия, а та, что
+            # её затёрла, и считать надо не её.
+            # Ищем ПЕРВОГО потребителя слота, а не первый попавшийся
+            # вызов: между копией и её вызовом может стоять чужой вызов с
+            # другим окном. Останавливаемся, когда слот прочитан окном
+            # (считаем) или перезаписан кем угодно (не считаем — до окна
+            # доедет не эта копия).
             for op2, text2 in instrs[i + 1:]:
-                w = window_of(text2, modes) if op2.startswith('Call') or op2 == 'CreateObject' else None
-                if w is None:
-                    if op2.startswith('Call') or op2 == 'CreateObject':
+                if op2.startswith('Call') or op2 == 'CreateObject':
+                    w = window_of(text2, modes)
+                    if w is not None and dst in w:
+                        if src < n_locals:
+                            loc += 1
+                        else:
+                            tmp += 1
                         break
-                    continue
-                base, count = w
-                if base <= dst < base + count:
-                    if src < n_locals:
-                        loc += 1
-                    else:
-                        tmp += 1
-                break
+                w2 = WRITES.search(text2)
+                if w2 and int(w2.group(1)) == dst:
+                    break
     return loc, tmp
 
 

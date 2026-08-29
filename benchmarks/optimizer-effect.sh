@@ -245,10 +245,19 @@ gate_one() {
     if [ "$mode" = jit ]; then
         base_flags="--jit"; cand_flags="--jit --optimize=copy-elim"
     fi
+    # Совпал ли байт-код — ФАКТ, который печатается рядом с вердиктом, а
+    # не заменяет его. Сравнивается листинг целиком, а не число
+    # исполненных инструкций: округлённый до сотых ноль идентичности не
+    # доказывает.
+    local same=""
+    if diff -q <(emit_full "" "$script") <(emit_full "--optimize=copy-elim" "$script") >/dev/null 2>&1; then
+        same="  [байт-код тот же]"
+    fi
     local i
     for ((i = 0; i < rounds; i++)); do
         echo "r $(run_once "$script" "$base_flags") $(run_once "$script" "$cand_flags") $(run_once "$script" "$base_flags")"
-    done | awk -v name="$(basename "$script" .bsl)" -v mode="$mode" -v thresh="$thresh" -v rounds="$rounds" '
+    done | awk -v name="$(basename "$script" .bsl)" -v mode="$mode" -v thresh="$thresh" \
+             -v rounds="$rounds" -v same="$same" '
         # Поля тройки: $2,$3 — база A (такты, инстр), $4,$5 — кандидат,
         # $6,$7 — база C.
         {
@@ -259,20 +268,26 @@ gate_one() {
         }
         END {
             dcyc = eff * 100 / n; dins = ieff * 100 / n; noise = spread * 100 / n;
-            adins = (dins < 0 ? -dins : dins);
-            # Порядок разбора существен. Неизменное число инструкций
-            # означает, что проход этого кода не касался ВООБЩЕ, и тогда
-            # разница тактов принадлежит машине, а не правке, — сколь бы
-            # велика она ни была. Ровно этот случай канарейка `goto_bench`
-            # однажды предъявила как +12,16 % стенного времени при нуле
-            # инструкций.
-            if (adins < 0.05) verdict = "КОД НЕ ЗАТРОНУТ";
-            else if (dcyc > 0 || dins > 0) verdict = "РЕГРЕССИЯ";
-            else if (-dcyc < 2 * noise) verdict = "НЕРАЗРЕШИМО";
+            # Регрессия проверяется ПЕРВОЙ и по обеим метрикам. Прежняя
+            # редакция списывала на машину любой рост тактов, если общее
+            # число исполненных инструкций не изменилось, — и тем гасила
+            # ровно то, ради чего канарейки и заведены. Неизменный счётчик
+            # исполнения НЕ означает, что правка ничего не стоила: проход
+            # строит CFG и живучесть на каждом чанке, и эта цена ложится на
+            # сквозное время, не меняя счётчика. Совпадение байт-кода тоже
+            # не оправдание: работа компилятора всё равно проделана.
+            if (dins > 0.05) verdict = "РЕГРЕССИЯ (инстр)";
+            else if (dcyc > 2 * noise) verdict = "РЕГРЕССИЯ (такты)";
+            else if (-dcyc < 2 * noise) verdict = "в пределах разброса";
             else if (-dcyc < thresh || -dins < thresh) verdict = "НИЖЕ ПОРОГА";
             else verdict = "выигрыш";
-            printf "  %-20s %-6s такты %+7.2f%%  инстр %+7.2f%%  разброс %5.2f%%  n=%-2d %s\n",
-                   name, mode, dcyc, dins, noise, rounds, verdict
+            printf "  %-20s %-6s такты %+7.2f%%  инстр %+7.2f%%  разброс %5.2f%%  n=%-2d %s%s\n",
+                   name, mode, dcyc, dins, noise, rounds, verdict, same
+            # Ненулевой код — чтобы вердикт что-то ЗНАЧИЛ. Скрипт,
+            # печатающий «РЕГРЕССИЯ» и завершающийся нулём, ворот не
+            # закрывает: тот, кто зовёт его из другого скрипта, отказа не
+            # заметит.
+            exit (verdict ~ /РЕГРЕССИЯ/ ? 1 : 0)
         }'
 }
 
@@ -282,15 +297,20 @@ section_gate() {
     echo "  порог ${GATE_THRESHOLD:-5} %, раундов ${GATE_ROUNDS:-7} (GATE_ROUNDS=15 для спорных)"
     echo "  сверх порога эффект обязан вдвое превышать разброс той же тройки"
     echo "  $(printf '%s' "$(cpu_speeds)")"
-    local group list f
+    local group list f failed=0
     for group in цели канарейки; do
         echo "  -- $group --"
         if [ "$group" = цели ]; then list=("${GATE_TARGETS[@]}"); else list=("${GATE_CANARIES[@]}"); fi
         for f in "${list[@]}"; do
-            gate_one "$f" interp "$GATE_ROUNDS" "$GATE_THRESHOLD"
-            gate_one "$f" jit "$GATE_ROUNDS" "$GATE_THRESHOLD"
+            gate_one "$f" interp "$GATE_ROUNDS" "$GATE_THRESHOLD" || failed=$((failed + 1))
+            gate_one "$f" jit "$GATE_ROUNDS" "$GATE_THRESHOLD" || failed=$((failed + 1))
         done
     done
+    if [ "$failed" -gt 0 ]; then
+        echo "  ВОРОТА НЕ ПРОЙДЕНЫ: регрессий $failed"
+        return 1
+    fi
+    echo "  регрессий нет"
 }
 
 GATE_ROUNDS=${GATE_ROUNDS:-7}

@@ -1005,13 +1005,21 @@ pub fn verify(chunk: &Chunk, overlap: Option<usize>) -> Result<(), String> {
 ///
 /// Неизвестный опкод даёт `None` и оптимизацию отключает — направление
 /// отказа безопасное, поэтому catch-all здесь допустим.
-fn readonly_call_window(instr: &Instr) -> Option<(u8, u8)> {
+fn readonly_call_window(instr: &Instr) -> Option<(u8, u8, Option<u8>)> {
     match instr {
         Instr::CallBuiltin { base, count, .. }
-        | Instr::CallMethod { base, count, .. }
-        | Instr::CallObjectMethod { base, count, .. }
         | Instr::CallComponent { base, count, .. }
-        | Instr::CreateObject { base, count, .. } => Some((*base, *count)),
+        | Instr::CreateObject { base, count, .. } => Some((*base, *count, None)),
+        // У этих двух есть ещё один регистровый операнд — получатель, и
+        // он возвращается отдельно: если копию читает и он, переставить
+        // одну лишь базу значит оставить получателя смотреть на регистр,
+        // который после удаления копии никто не заполняет.
+        Instr::CallMethod {
+            obj, base, count, ..
+        }
+        | Instr::CallObjectMethod {
+            obj, base, count, ..
+        } => Some((*base, *count, Some(*obj))),
         _ => None,
     }
 }
@@ -1041,6 +1049,22 @@ enum CopyFix {
     DirectBase,
 }
 
+/// Снять устранимые копии: переименовать чтения приёмника на источник и
+/// удалить сам `Move`, либо — если за копией стоит вызов, читающий окно
+/// из одного регистра, — переставить базу этого вызова на источник.
+///
+/// Возвращает число удалённых инструкций. Разметку бандлов НЕ трогает:
+/// она производная и пересчитывается вызывающим через `bundle::compute`.
+///
+/// За раунд анализ считается ОДИН раз, а применяется столько копий,
+/// сколько заведомо не мешают друг другу. Мешать они могут одним
+/// способом: удаление `Move` убирает запись в его приёмник, а именно
+/// такая запись могла быть основанием считать мёртвой другую копию.
+/// Поэтому в раунд берутся копии, чьи участки переименования не
+/// пересекаются, — тогда ни одна не опирается на инструкцию, которую
+/// снимает соседняя. Раунды повторяются, пока хоть что-то снимается;
+/// на практике их единицы, и полный пересчёт на каждую снятую копию
+/// (а это квадрат по их числу) не нужен.
 pub fn copy_propagate(chunk: &mut Chunk, overlap: Option<usize>) -> usize {
     let mut removed = 0usize;
     loop {
@@ -1072,10 +1096,19 @@ pub fn copy_propagate(chunk: &mut Chunk, overlap: Option<usize>) -> usize {
             if protected(i) || i + 1 >= chunk.instrs.len() {
                 return false;
             }
-            let Some((base, count)) = readonly_call_window(&chunk.instrs[i + 1]) else {
+            let Some((base, count, recv)) = readonly_call_window(&chunk.instrs[i + 1]) else {
                 return false;
             };
             if base != dst || count != 1 {
+                return false;
+            }
+            // Получателем тот же регистр быть не смеет. Множествами
+            // эффектов этого не различить: `read_range!` кладёт окно и в
+            // `reads`, и в `reads_positional`, поэтому при `obj == base`
+            // приёмник выглядит прочитанным ровно позиционно. Проверка
+            // структурная. Перенаправить заодно и получателя было бы
+            // законно, но случай редкий, и запрет дешевле правила.
+            if recv == Some(dst) {
                 return false;
             }
             let b = cfg.block_of[i];
@@ -1549,6 +1582,66 @@ mod tests {
         ]);
         c.consts = vec![num(2), num(3)];
         assert_eq!(const_propagate(&mut c, None), 0);
+    }
+
+    /// Перестановка базы законна, пока вызов читает копию ТОЛЬКО как
+    /// окно. Здесь он читает её ещё и получателем, и снять копию нельзя:
+    /// база уехала бы на источник, а получатель остался бы смотреть на
+    /// регистр, который после удаления `Move` никто не заполняет.
+    ///
+    /// Форма собрана руками потому, что кодоген её не выдаёт: получатель
+    /// он кладёт в регистр ниже окна. Проверять надо всё же её, а не то,
+    /// что «вряд ли встретится», — проход работает над байт-кодом, откуда
+    /// бы тот ни пришёл.
+    #[test]
+    fn a_call_reading_the_copy_as_its_receiver_keeps_it() {
+        let mut c = chunk(vec![
+            Instr::Move { dst: 1, src: 0 },
+            Instr::CallMethod {
+                dst: 2,
+                obj: 1,
+                method: bsl_rt::BuiltinMethod::Count,
+                base: 1,
+                count: 1,
+            },
+            Instr::Return { src: Some(2) },
+        ]);
+        let before = c.instrs.clone();
+
+        assert_eq!(copy_propagate(&mut c, None), 0);
+        assert_eq!(c.instrs, before, "копию сняли, оставив получателя ни с чем");
+    }
+
+    /// А без совпадения с получателем та же копия снимается, и вызов
+    /// читает источник напрямую.
+    #[test]
+    fn a_call_reading_the_copy_only_as_its_window_loses_it() {
+        let mut c = chunk(vec![
+            Instr::Move { dst: 2, src: 0 },
+            Instr::CallMethod {
+                dst: 3,
+                obj: 1,
+                method: bsl_rt::BuiltinMethod::Count,
+                base: 2,
+                count: 1,
+            },
+            Instr::Return { src: Some(3) },
+        ]);
+
+        assert_eq!(copy_propagate(&mut c, None), 1);
+        assert!(
+            matches!(
+                c.instrs[0],
+                Instr::CallMethod {
+                    obj: 1,
+                    base: 0,
+                    count: 1,
+                    ..
+                }
+            ),
+            "база обязана указывать на источник копии: {:?}",
+            c.instrs
+        );
     }
 
     #[test]
