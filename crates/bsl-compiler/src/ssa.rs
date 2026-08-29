@@ -52,6 +52,9 @@ pub struct Ssa {
     pub values: Vec<Value>,
     /// `φ` каждого блока.
     pub phis: Vec<Vec<ValueId>>,
+    /// Определения внутри блока: номер оператора в `Block::stmts` и
+    /// значение, которое он записал. Порядок — порядок операторов.
+    pub defs: Vec<Vec<(usize, ValueId)>>,
     /// Значение каждого слота на ВХОДЕ в блок, уже после его `φ`.
     pub entry: Vec<Option<Vec<ValueId>>>,
     /// То же на выходе; `None` у обоих — блок недостижим, и говорить о
@@ -181,6 +184,7 @@ pub fn build(cfg: &Cfg<'_>, n_slots: usize) -> Ssa {
         })
         .collect();
 
+    let mut defs: Vec<Vec<(usize, ValueId)>> = vec![Vec::new(); nb];
     let mut entry: Vec<Option<Vec<ValueId>>> = vec![None; nb];
     let mut exit: Vec<Option<Vec<ValueId>>> = vec![None; nb];
     let mut stack: Vec<(BlockId, Vec<ValueId>)> = vec![(cfg.entry, entry_state)];
@@ -190,13 +194,14 @@ pub fn build(cfg: &Cfg<'_>, n_slots: usize) -> Ssa {
             state[phi_slot[b][i] as usize] = phi;
         }
         entry[b] = Some(state.clone());
-        for s in &cfg.blocks[b].stmts {
+        for (i, s) in cfg.blocks[b].stmts.iter().enumerate() {
             if let Some(slot) = stmt_write(s)
                 && (slot as usize) < n_slots
             {
                 let id = values.len();
                 values.push(Value::Def { block: b, slot });
                 state[slot as usize] = id;
+                defs[b].push((i, id));
             }
         }
         exit[b] = Some(state.clone());
@@ -229,6 +234,7 @@ pub fn build(cfg: &Cfg<'_>, n_slots: usize) -> Ssa {
     Ssa {
         values,
         phis,
+        defs,
         entry,
         exit,
         bottom,
@@ -333,4 +339,149 @@ fn dominates(idom: &[Option<BlockId>], entry: BlockId, a: BlockId, b: BlockId) -
             _ => return false,
         }
     }
+}
+
+// ---------------------------------------------------------------------
+// Распространение констант по φ
+// ---------------------------------------------------------------------
+
+/// Решётка констант: `Bottom` ⊑ число ⊑ `Top`.
+///
+/// Только числа — по той же причине, по которой их одни сворачивает и
+/// кодоген: приведение строк, дат и булевых живёт в обёртках `bsl-vm`, и
+/// вторая редакция правил приведения здесь была бы дефектом, а не
+/// расширением.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Const {
+    /// Значение ещё не достигнуто либо путь до него недостижим. Это НЕ
+    /// «неизвестно»: `Bottom` — единица объединения, `Top` — его
+    /// поглощающий элемент, и слияние с недостижимой ветви обязано
+    /// оставлять константу константой.
+    Bottom,
+    Number(bsl_number::BslNumber),
+    /// Константой не является.
+    Top,
+}
+
+impl Const {
+    /// Объединение по решётке. Монотонно и без цикла: значение движется
+    /// только вверх, `Bottom` -> число -> `Top`, и вернуться не может.
+    #[must_use]
+    pub fn meet(&self, other: &Const) -> Const {
+        match (self, other) {
+            (Const::Bottom, x) | (x, Const::Bottom) => x.clone(),
+            (Const::Top, _) | (_, Const::Top) => Const::Top,
+            (Const::Number(a), Const::Number(b)) => {
+                if a == b {
+                    Const::Number(a.clone())
+                } else {
+                    Const::Top
+                }
+            }
+        }
+    }
+}
+
+/// Вычисляет выражение в решётке при известных значениях слотов.
+fn eval(e: &bsl_sema::RExpr, slots: &[Const]) -> Const {
+    use bsl_rt::BslValue;
+    use bsl_sema::RExpr;
+    let num = |c: &Const| match c {
+        Const::Number(n) => Some(BslValue::Number(n.clone())),
+        _ => None,
+    };
+    let back = |v: bsl_rt::RtResult<BslValue>| match v {
+        Ok(BslValue::Number(n)) => Const::Number(n),
+        // Операция с ошибкой константы не даёт: `1 / 0` обязано бросить на
+        // исполнении, а не превратиться в значение решётки.
+        _ => Const::Top,
+    };
+    match e {
+        RExpr::Number(n) => Const::Number(n.clone()),
+        RExpr::Local(slot) => slots.get(*slot as usize).cloned().unwrap_or(Const::Top),
+        RExpr::Unary {
+            op: bsl_syntax::UnaryOp::Neg,
+            expr,
+        } => match num(&eval(expr, slots)) {
+            Some(v) => back(v.neg()),
+            None => Const::Top,
+        },
+        RExpr::Binary { op, lhs, rhs } => {
+            let (Some(a), Some(b)) = (num(&eval(lhs, slots)), num(&eval(rhs, slots))) else {
+                return Const::Top;
+            };
+            use bsl_syntax::BinaryOp;
+            match op {
+                BinaryOp::Add => back(a.add(&b)),
+                BinaryOp::Sub => back(a.sub(&b)),
+                BinaryOp::Mul => back(a.mul(&b)),
+                BinaryOp::Div => back(a.div(&b)),
+                BinaryOp::Mod => back(a.rem(&b)),
+                _ => Const::Top,
+            }
+        }
+        _ => Const::Top,
+    }
+}
+
+/// Распространяет константы по значениям SSA до неподвижной точки.
+///
+/// Возвращает решётку для каждого значения. Это первый потребитель
+/// представления и первая вещь, которой блочно-локальный проход над
+/// байт-кодом сделать не может: константа переживает слияние ветвей, если
+/// обе дают одно значение, и переживает слияние с НЕДОСТИЖИМОЙ ветвью,
+/// потому что `Bottom` — единица объединения.
+///
+/// Обход по рабочему списку блоков: рекурсии по графу здесь нет, как и
+/// везде в этом модуле.
+#[must_use]
+pub fn propagate_constants(cfg: &Cfg<'_>, ssa: &Ssa, n_slots: usize) -> Vec<Const> {
+    let mut lat = vec![Const::Bottom; ssa.values.len()];
+    // Значение на входе в тело — параметр либо ещё не присвоенная
+    // переменная; ни то, ни другое константой не считается.
+    for (id, v) in ssa.values.iter().enumerate() {
+        if matches!(v, Value::Entry { .. }) {
+            lat[id] = Const::Top;
+        }
+    }
+
+    let rpo = cfg.reverse_postorder();
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for &b in &rpo {
+            let Some(entry) = &ssa.entry[b] else { continue };
+            // φ блока: объединение операндов по предшественникам.
+            for &phi in &ssa.phis[b] {
+                let Value::Phi { operands, .. } = &ssa.values[phi] else {
+                    continue;
+                };
+                let mut merged = Const::Bottom;
+                for &op in operands {
+                    merged = merged.meet(&lat[op]);
+                }
+                if lat[phi] != merged {
+                    lat[phi] = merged;
+                    changed = true;
+                }
+            }
+            // Состояние слотов на входе, затем по операторам блока.
+            let mut slots: Vec<Const> = (0..n_slots).map(|i| lat[entry[i]].clone()).collect();
+            for &(stmt_index, id) in &ssa.defs[b] {
+                let bsl_sema::RStmt::AssignLocal { slot, value } = cfg.blocks[b].stmts[stmt_index]
+                else {
+                    continue;
+                };
+                let c = eval(value, &slots);
+                if lat[id] != c {
+                    lat[id] = c.clone();
+                    changed = true;
+                }
+                if let Some(cell) = slots.get_mut(*slot as usize) {
+                    *cell = c;
+                }
+            }
+        }
+    }
+    lat
 }

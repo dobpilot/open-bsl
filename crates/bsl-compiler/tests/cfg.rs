@@ -278,3 +278,142 @@ fn the_ssa_holds_its_invariants_on_the_corpus() {
     );
     println!("SSA сверена на {checked} скриптах, φ построено {phis}");
 }
+
+// ---------------------------------------------------------------------
+// Распространение констант по φ
+// ---------------------------------------------------------------------
+
+fn constants(src: &str) -> (Vec<ssa::Const>, ssa::Ssa) {
+    let parsed = bsl_syntax::parse(src).expect("разбор");
+    let resolved = bsl_sema::resolve_program(&parsed.items).expect("резолвинг");
+    let n = resolved.top_level.locals.len();
+    let graph = cfg::build(&resolved.top_level.body);
+    let form = ssa::build(&graph, n);
+    ssa::verify(&graph, &form).expect("инварианты SSA");
+    let lat = ssa::propagate_constants(&graph, &form, n);
+    (lat, form)
+}
+
+fn has_number(lat: &[ssa::Const], want: i64) -> bool {
+    lat.iter().any(|c| match c {
+        ssa::Const::Number(n) => n.to_i64_exact() == Some(want),
+        _ => false,
+    })
+}
+
+/// Одно и то же значение в обеих ветвях переживает слияние: `φ`
+/// объединяет два одинаковых числа в него же.
+#[test]
+fn the_same_constant_on_both_branches_survives_the_join() {
+    let (lat, form) = constants("Б = 0;\nЕсли Б = 0 Тогда А = 7; Иначе А = 7; КонецЕсли;\nВ = А;");
+
+    let phi_const = form
+        .values
+        .iter()
+        .enumerate()
+        .filter(|(_, v)| matches!(v, ssa::Value::Phi { .. }))
+        .any(|(id, _)| matches!(&lat[id], ssa::Const::Number(n) if n.to_i64_exact() == Some(7)));
+    assert!(phi_const, "φ обязана остаться числом 7: {lat:?}");
+}
+
+/// Разные значения дают `Top`: константы больше нет.
+#[test]
+fn different_constants_on_the_branches_meet_to_top() {
+    let (lat, form) = constants("Б = 0;\nЕсли Б = 0 Тогда А = 7; Иначе А = 8; КонецЕсли;\nВ = А;");
+
+    let phi_top = form
+        .values
+        .iter()
+        .enumerate()
+        .filter(|(_, v)| matches!(v, ssa::Value::Phi { .. }))
+        .any(|(id, _)| lat[id] == ssa::Const::Top);
+    assert!(phi_top, "слияние 7 и 8 обязано дать Top: {lat:?}");
+}
+
+/// **То, чего блочно-локальный проход не может.** Ветвь заканчивается
+/// `Возврат`, и в точку слияния из неё пути нет; операнд `φ` оттуда —
+/// `Bottom`, а `Bottom` — единица объединения, поэтому константа с
+/// живого ребра слияние переживает.
+#[test]
+fn a_constant_survives_a_merge_with_an_unreachable_branch() {
+    let (lat, _) =
+        constants("Б = 0;\nА = 5;\nЕсли Б = 0 Тогда\n\tА = 9;\n\tВозврат;\nКонецЕсли;\nВ = А;");
+
+    assert!(
+        has_number(&lat, 5),
+        "константа с достижимого ребра обязана пережить слияние с мёртвым: {lat:?}"
+    );
+}
+
+/// Счётчик цикла константой не остаётся: обратное ребро приносит другое
+/// значение, и объединение поднимает решётку до `Top`.
+#[test]
+fn a_loop_carried_counter_is_not_constant() {
+    let (lat, form) = constants("А = 0;\nПока А < 10 Цикл\n\tА = А + 1;\nКонецЦикла;\nБ = А;");
+
+    let phi_top = form
+        .values
+        .iter()
+        .enumerate()
+        .filter(|(_, v)| matches!(v, ssa::Value::Phi { .. }))
+        .any(|(id, _)| lat[id] == ssa::Const::Top);
+    assert!(phi_top, "счётчик цикла константой быть не может: {lat:?}");
+}
+
+/// Арифметика над известными складывается, а деление на ноль — нет:
+/// правило то же, что у свёртки в кодогене, и второй его редакции здесь
+/// не заводится.
+#[test]
+fn arithmetic_folds_but_a_failing_operation_does_not() {
+    // Слоты идут в порядке первого появления: А=0, Б=1, В=2.
+    let (lat, form) = constants("А = 2;\nБ = А * 3;\nВ = 1 / 0;");
+    assert!(has_number(&lat, 6), "2 * 3 обязано свернуться: {lat:?}");
+
+    let div = form
+        .values
+        .iter()
+        .enumerate()
+        .find(|(_, v)| matches!(v, ssa::Value::Def { slot: 2, .. }))
+        .map(|(id, _)| id)
+        .expect("значение для В");
+    assert_eq!(
+        lat[div],
+        ssa::Const::Top,
+        "деление на ноль обязано остаться неизвестным, а не стать значением решётки"
+    );
+}
+
+/// Решётка сходится на всём корпусе и не зацикливается.
+#[test]
+fn constant_propagation_converges_on_the_corpus() {
+    let mut checked = 0usize;
+    let mut known = 0usize;
+    for path in corpus() {
+        let Ok(src) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(parsed) = bsl_syntax::parse(&src) else {
+            continue;
+        };
+        let Ok(resolved) = bsl_sema::resolve_program(&parsed.items) else {
+            continue;
+        };
+        let mut bodies: Vec<(&[bsl_sema::RStmt], usize)> =
+            vec![(&resolved.top_level.body, resolved.top_level.locals.len())];
+        for f in &resolved.functions {
+            bodies.push((&f.body, f.locals.len()));
+        }
+        for (body, n) in bodies {
+            let graph = cfg::build(body);
+            let form = ssa::build(&graph, n);
+            let lat = ssa::propagate_constants(&graph, &form, n);
+            known += lat
+                .iter()
+                .filter(|c| matches!(c, ssa::Const::Number(_)))
+                .count();
+        }
+        checked += 1;
+    }
+    assert!(checked >= 20, "проверено {checked} скриптов");
+    println!("решётка сошлась на {checked} скриптах, известных значений {known}");
+}
