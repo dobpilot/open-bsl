@@ -14,7 +14,8 @@
 # coldness (сколько раз этот остаток исполняется), dynamic (исполненные
 # инструкции), budget (цена компиляции), complexity (рост этой цены по
 # глубине выражения), gate (ворота допуска устранения копий; в набор по
-# умолчанию не входит — он длинный и требует зафиксированной частоты).
+# умолчанию не входит — он длинный и требует зафиксированной частоты),
+# window (чем питаются копии в окно аргументов вызова).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -235,6 +236,12 @@ gate_one() {
         }'
 }
 
+# Что питает копии в окно аргументов — предмет второй половины шага 6.
+section_window() {
+    echo "== window: чем питаются копии в окно аргументов вызова =="
+    python3 benchmarks/window-copies.py
+}
+
 section_gate() {
     echo "== gate: ворота допуска прохода устранения копий =="
     echo "  $(freq_state)"
@@ -267,7 +274,7 @@ DYNAMIC_SCRIPTS=(benchmarks/pi_leibniz.bsl benchmarks/pi_leibniz_15.bsl
 # последнее склеивает список в ОДИН аргумент, и скрипт отказывал на
 # «неизвестном разделе», чьё имя было целой строкой.
 if (($# == 0)); then
-    set -- static residual coldness dynamic budget complexity
+    set -- static residual coldness dynamic budget complexity window
 fi
 
 build_cli
@@ -280,6 +287,7 @@ for section in "$@"; do
         budget) section_budget ;;
         complexity) section_complexity ;;
         gate) section_gate ;;
+        window) section_window ;;
         *) echo "неизвестный раздел «$section»" >&2; exit 2 ;;
     esac
 done
