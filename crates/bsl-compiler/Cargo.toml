@@ -11,7 +11,7 @@ bsl-rt = { path = "../bsl-rt" }
 bsl-number = { path = "../bsl-number" }
 
 [features]
-# Проход устранения копий (docs/ssa-hotspot-analysis.md, шаг 6).
+# Проход устранения копий (docs/research/performance/ssa-hotspot-analysis.md, шаг 6).
 copyprop = []
 # ЛОКАЛЬНОЕ (в пределах базового блока) распространение и свёртка
 # констант. Шаг SSA-конвейера «распространение типов и констант» этим НЕ

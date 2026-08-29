@@ -594,7 +594,7 @@ struct HostServices {
 > **+53 % тактов при НЕИЗМЕННОМ числе инструкций**. Ни одной добавленной
 > инструкции не исполняется: `empty_for` не выполняет ни одного `GetProp`.
 > Это сдвиг укладки кода, та самая лотерея, о которой предупреждают
-> `.cargo/config.toml` и `docs/bsl-vm-split.md`.
+> `.cargo/config.toml` и `docs/archive/refactors/vm-split.md`.
 >
 > Что пробовали и что вышло:
 >

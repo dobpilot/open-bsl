@@ -173,7 +173,9 @@ fn help() -> String {
             .collect::<Vec<_>>()
             .join(", ")
     ));
-    out.push_str("      ни один не проходил ворота допуска, см. docs/ssa-hotspot-analysis.md\n");
+    out.push_str(
+        "      ни один не проходил ворота допуска, см. docs/research/performance/ssa-hotspot-analysis.md\n",
+    );
 
     out.push_str("\nОКРУЖЕНИЕ:\n");
     out.push_str("  NO_COLOR      отключает цвет в REPL (как и TERM=dumb)\n");

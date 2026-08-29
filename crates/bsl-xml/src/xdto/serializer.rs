@@ -136,7 +136,7 @@ pub(crate) fn serialized_of(
 /// через фабрику из нашего XSD 8.3.27 уже отвергает — «Несоответствие
 /// типов (параметр номер '2') (Ошибка отображения типов)». Пакет
 /// `http://v8.1c.ru/8.1/data/core` приходит из метаданных конфигурации,
-/// которых здесь нет и не будет (см. `docs/std-library-plan.md`).
+/// которых здесь нет и не будет (см. `docs/plans/standard-library.md`).
 pub(crate) fn unsupported_value(value: &BslValue) -> RtError {
     let collection = matches!(
         value,

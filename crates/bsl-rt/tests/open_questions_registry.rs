@@ -293,7 +293,7 @@ fn measure_script_covers_every_registry_id() {
 /// таблице обязан быть либо вопросом реестра, либо якорем.
 #[test]
 fn the_job_plan_remaining_table_is_registered() {
-    let doc = repo_root().join("docs/bsl-background-jobs.md");
+    let doc = repo_root().join("docs/archive/plans/background-jobs.md");
     let text =
         fs::read_to_string(&doc).unwrap_or_else(|e| panic!("не читается {}: {e}", doc.display()));
     let section_start = text

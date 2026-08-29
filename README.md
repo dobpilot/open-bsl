@@ -122,6 +122,19 @@ RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
 Цвет можно отключить переменной окружения `NO_COLOR=1`. Если терминал не
 поддерживает сырой режим, REPL переходит к обычному построчному вводу.
 
+## Справочник BSL API
+
+Каталог функций, конструкторов, объектов, методов и свойств стандартной
+сборки генерируется из runtime-дескрипторов:
+
+```bash
+cargo run -p bsl-cli -- --emit-api-reference
+cargo run -p bsl-cli -- --emit-api-reference docs/reference/bsl-api/api.md
+```
+
+Проверяемый снимок и правила для поясняющих страниц находятся в
+[`docs/reference/bsl-api/`](docs/reference/bsl-api/).
+
 ## Байт-код
 
 Скомпилированную программу можно вывести в текстовом виде и затем исполнить:
@@ -249,8 +262,9 @@ let runtime = engine.job_runtime()?;
 
 Регламентные задания, планировщик, права и пользователи в эту версию не
 входят. Устройство механизма описано в
-[`docs/bsl-background-jobs.md`](docs/bsl-background-jobs.md), а топология и
-владение — в [`docs/component-architecture.md`](docs/component-architecture.md).
+[`docs/archive/plans/background-jobs.md`](docs/archive/plans/background-jobs.md),
+а топология и владение — в
+[`docs/architecture/component-architecture.md`](docs/architecture/component-architecture.md).
 
 ## Встраивание
 

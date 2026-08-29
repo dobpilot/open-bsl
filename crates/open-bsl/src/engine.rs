@@ -516,7 +516,7 @@ impl EngineBuilder {
     ///
     /// По умолчанию выключены все: ни свёртка констант, ни устранение
     /// копий ещё не проходили ворота допуска из
-    /// `docs/ssa-hotspot-analysis.md`, поэтому включение — осознанный
+    /// `docs/research/performance/ssa-hotspot-analysis.md`, поэтому включение — осознанный
     /// выбор вызывающего, а не поведение по умолчанию.
     pub fn optimizations(mut self, opts: bsl_compiler::Optimizations) -> Self {
         self.optimizations = opts;
