@@ -10,6 +10,7 @@
 //! фрагмент `Выполнить`/`Вычислить` по описанию, которое VM передаёт хосту
 //! через `bsl_bytecode::DynamicRequest`.
 
+pub mod cfg;
 mod compiler;
 mod dynamic;
 

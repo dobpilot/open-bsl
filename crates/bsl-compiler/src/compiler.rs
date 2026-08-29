@@ -261,6 +261,27 @@ fn compile_module_chunks(
             opts,
         )?);
     }
+    // Инварианты графа проверяются на КАЖДОЙ компиляции в отладочной
+    // сборке. Отдельный тест над корпусом покрывает лишь то, что
+    // резолвится без реестра компонентов (сорок скриптов из восьмидесяти
+    // шести), а здесь через проверку проходит всё, что вообще
+    // компилируется, — включая фикстуры с компонентами и связанные
+    // модули. В release-сборку это не попадает: анализ пока ничего не
+    // решает, и платить за него на каждом запуске незачем.
+    #[cfg(debug_assertions)]
+    {
+        let mut bodies: Vec<&[RStmt]> = vec![&resolved.top_level.body];
+        bodies.extend(resolved.functions.iter().map(|f| f.body.as_slice()));
+        for body in bodies {
+            let graph = crate::cfg::build(body);
+            debug_assert!(
+                crate::cfg::verify(&graph).is_ok(),
+                "инвариант графа потока управления: {:?}",
+                crate::cfg::verify(&graph)
+            );
+        }
+    }
+
     for (i, chunk) in chunks.iter_mut().enumerate() {
         let overlap = analysis::module_overlap(i, resolved.module_vars.len());
         // Оба прохода над ГОТОВЫМ байт-кодом выключены по умолчанию: пока
