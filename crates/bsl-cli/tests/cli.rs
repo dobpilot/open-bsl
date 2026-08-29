@@ -94,6 +94,129 @@ fn a_command_without_its_argument_shows_that_commands_usage() {
     }
 }
 
+/// `--optimize=список` — интерфейс замера, а не удобство: без него число
+/// ворот принадлежит комбинации проходов. Поэтому его контракт закреплён
+/// тестом целиком — приём списка, отказ на опечатке и то, что имена
+/// проходов видны в `--help`.
+#[test]
+fn the_optimize_modifier_takes_a_list_of_passes() {
+    let path = std::env::temp_dir().join(format!(
+        "bsl-cli-test-optimize-list-{}.bsl",
+        std::process::id()
+    ));
+    // `Б + 3` сворачивает только поздний проход, `2 + 3` — только ранняя
+    // свёртка, поэтому по листингу видно, какой именно проход работал.
+    std::fs::write(&path, "Б = 1;\nА = Б + 3;\nВ = 2 + 3;\n").unwrap();
+    let script = path.to_str().unwrap();
+
+    let listing = |flags: &[&str]| {
+        let mut args = flags.to_vec();
+        args.push("--emit-bytecode");
+        args.push(script);
+        stdout_of(&run(&args))
+    };
+
+    // Ранняя свёртка снимает `Add`, но обязана оставить `AddConst`.
+    let fold = listing(&["--optimize=const-fold"]);
+    assert!(fold.contains("AddConst"), "{fold}");
+    assert!(!fold.contains(" Add "), "{fold}");
+    // Поздний проход, наоборот, поглощает и `AddConst`.
+    let prop = listing(&["--optimize=const-prop"]);
+    assert!(!prop.contains("AddConst"), "{prop}");
+    // Список из двух проходов принимается и делает работу обоих.
+    let both = listing(&["--optimize=const-fold,const-prop"]);
+    assert!(
+        !both.contains("AddConst") && !both.contains(" Add "),
+        "{both}"
+    );
+    // Без ключа не работает ни один.
+    let plain = listing(&[]);
+    assert!(
+        plain.contains("AddConst") && plain.contains(" Add "),
+        "{plain}"
+    );
+
+    let _ = std::fs::remove_file(&path);
+}
+
+/// Опечатка в имени прохода обязана быть отказом, а не молчаливым «ни один
+/// не включён»: замер с проглоченной опечаткой прочитался бы как результат
+/// прохода, который не работал.
+#[test]
+fn an_unknown_pass_name_is_refused_rather_than_ignored() {
+    for spec in [
+        "--optimize=fold",
+        "--optimize=",
+        "--optimize=const-fold,typo",
+    ] {
+        let out = run(&[spec, "--emit-bytecode", "benchmarks/empty_for.bsl"]);
+        assert_eq!(
+            out.status.code(),
+            Some(2),
+            "{spec}: ожидался отказ с кодом 2, получено {:?}",
+            out.status.code()
+        );
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            err.contains("неизвестный проход") && err.contains("const-fold"),
+            "{spec}: сообщение не называет ни ошибку, ни допустимые проходы: {err}"
+        );
+    }
+}
+
+/// Имена проходов идут из одной таблицы с разбором ключа, поэтому проход не
+/// может быть выбираемым, но не описанным. Тест держит эту связь.
+#[test]
+fn the_help_lists_every_selectable_pass() {
+    let help = stdout_of(&run(&["--help"]));
+
+    assert!(help.contains("--optimize[=проход,...]"), "{help}");
+    for pass in ["const-fold", "const-prop", "copy-elim"] {
+        assert!(help.contains(pass), "в --help нет прохода «{pass}»: {help}");
+    }
+}
+
+/// Свёртка констант не имеет права вычислить на компиляции то, что на
+/// исполнении бросает: `1 / 0` внутри `Попытка` обязано по-прежнему
+/// доходить до обработчика (`docs/ssa-hotspot-analysis.md`, раздел
+/// «Константы»). Проверка подпроцессом и через `--optimize`, потому что
+/// вопрос именно в поведении собранного бинарника с включёнными
+/// проходами, а не в форме байт-кода — её проверяет
+/// `bsl-compiler/tests/const_fold.rs`.
+#[test]
+fn a_folded_division_by_zero_is_still_caught_under_optimize() {
+    let path = std::env::temp_dir().join(format!(
+        "bsl-cli-test-fold-throw-{}.bsl",
+        std::process::id()
+    ));
+    std::fs::write(
+        &path,
+        "Попытка\n\
+         \tА = 1 / 0;\n\
+         \tСообщить(\"не брошено\");\n\
+         Исключение\n\
+         \tСообщить(\"перехвачено\");\n\
+         КонецПопытки;\n",
+    )
+    .unwrap();
+    let script = path.to_str().unwrap();
+
+    let plain = run(&[script]);
+    let optimized = run(&["--optimize", script]);
+    assert_eq!(
+        stdout_of(&plain),
+        "перехвачено\n",
+        "деление на ноль не дошло до обработчика и без оптимизаций"
+    );
+    assert_eq!(
+        stdout_of(&optimized),
+        stdout_of(&plain),
+        "--optimize изменил наблюдаемое поведение исключения"
+    );
+
+    let _ = std::fs::remove_file(&path);
+}
+
 #[test]
 fn script_arguments_land_in_the_command_line_arguments_array() {
     let path = std::env::temp_dir().join("bsl-cli-test-args.bsl");

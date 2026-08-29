@@ -88,10 +88,20 @@ impl std::error::Error for CompileError {}
 /// ни один из них ещё не проходил ворота допуска, описанные в
 /// `docs/ssa-hotspot-analysis.md`, поэтому включает их только тот, кто
 /// делает это осознанно.
+///
+/// Свёртка констант разделена на два переключателя не ради
+/// настраиваемости, а ради честного замера. Ворота снимают число для
+/// одного прохода; если ранняя свёртка и поздний проход делят флаг,
+/// измеренное ускорение принадлежит паре, а не тому, что уходит в main —
+/// ровно та подмена, из-за которой недействительны числа шага 6. Сверх
+/// того, поздний проход оправдан только константами, возникшими уже
+/// ПОСЛЕ кодогенерации, и увидеть их можно, лишь включив его отдельно.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Optimizations {
-    /// Локальное распространение и свёртка констант.
+    /// Свёртка констант в кодогене, до эмиссии инструкций.
     pub const_fold: bool,
+    /// Позднее распространение и свёртка констант над готовым байт-кодом.
+    pub const_prop: bool,
     /// Устранение доказанно мёртвых копий.
     pub copy_elim: bool,
 }
@@ -102,6 +112,7 @@ impl Optimizations {
     pub fn all() -> Self {
         Self {
             const_fold: true,
+            const_prop: true,
             copy_elim: true,
         }
     }
@@ -231,6 +242,7 @@ fn compile_module_chunks(
         false,
         names,
         shapes,
+        opts,
     )?);
     for f in &resolved.functions {
         chunks.push(compile_chunk(
@@ -245,14 +257,17 @@ fn compile_module_chunks(
             f.is_async,
             names,
             shapes,
+            opts,
         )?);
     }
     for (i, chunk) in chunks.iter_mut().enumerate() {
         let overlap = analysis::module_overlap(i, resolved.module_vars.len());
-        // Устранение копий выключено по умолчанию: пока проход не прошёл
-        // свои ворота (чередующийся A/B на зафиксированной частоте), он не
-        // должен попадать в обычную сборку — иначе не с чем сравнивать.
-        if opts.const_fold {
+        // Оба прохода над ГОТОВЫМ байт-кодом выключены по умолчанию: пока
+        // проход не прошёл свои ворота (чередующийся A/B на зафиксированной
+        // частоте), он не должен попадать в обычную сборку — иначе не с чем
+        // сравнивать. Свёртка в кодогене живёт не здесь, а в `compile_chunk`:
+        // ей нужен литерал, а тут его уже нет.
+        if opts.const_prop {
             analysis::const_propagate(chunk, overlap);
         }
         if opts.copy_elim {
@@ -382,6 +397,24 @@ pub fn compile_snippet_with_requirements(
         false,
         &mut names,
         &mut shapes,
+        // ПРИНЯТОЕ РЕШЕНИЕ, а не следствие: фрагмент компилируется без
+        // оптимизаций, какие бы проходы ни выбрал хост. Отсюда прямая
+        // асимметрия — `--optimize` означает разные вещи для статического
+        // байт-кода и для `Выполнить`/`Вычислить`, — и названа она здесь
+        // именно потому, что сама собой не разумеется.
+        //
+        // Причина в том, что выбор проходов сюда нечем донести: фрагмент
+        // компилируется через нейтральный контракт
+        // `bsl_bytecode::DynamicCompiler`, который об `Optimizations` не
+        // знает и знать не должен — он лежит в крейте представления.
+        // Протащить выбор значило бы либо расширить контракт, либо завести
+        // второй канал мимо него; и то и другое — отдельная работа с
+        // отдельным обоснованием, а не довесок к свёртке констант.
+        //
+        // Заметить стоит и то, что снять асимметрию было бы небесполезно:
+        // `Вычислить("2 + 3")` — предельный случай для свёртки, у него
+        // литералами являются ВСЕ операнды.
+        Optimizations::default(),
     )?;
     // Разметку VLIW-бандлов фрагмента считает НЕ здесь, а
     // `run_dynamic_snippet` в bsl-vm: только там известно, накладывается ли
@@ -398,7 +431,8 @@ pub fn compile_snippet_with_requirements(
     })
 }
 
-// Десять аргументов — это и есть весь входной контекст чанка; структура
+// Одиннадцать аргументов — это и есть весь входной контекст чанка;
+// структура ради их упаковки ничего бы не объяснила.
 #[allow(clippy::too_many_arguments)]
 fn compile_chunk(
     locals: &[String],
@@ -412,6 +446,7 @@ fn compile_chunk(
     is_async: bool,
     names: &mut NameInterner,
     shapes: &mut ShapeTable,
+    opts: Optimizations,
 ) -> Result<Chunk, CompileError> {
     let n_locals: u8 = locals
         .len()
@@ -436,6 +471,8 @@ fn compile_chunk(
         requirements,
         names,
         shapes,
+        opts,
+        unfoldable: std::collections::HashSet::default(),
     };
     c.compile_param_defaults(params)?;
     c.compile_block(body)?;
@@ -486,6 +523,50 @@ struct LoopCtx {
     continue_patches: Vec<usize>,
 }
 
+// Заходы в `Compiler::fold_const` — только для внутрикрейтовых тестов
+// сложности. Обычной сборке счётчик не достаётся.
+//
+// Доказывать линейность порогом времени значило бы завести тест, который
+// краснеет от посторонней нагрузки на машине; заходы же считаются точно и
+// одинаково при любой загрузке.
+#[cfg(test)]
+thread_local! {
+    static FOLD_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Хеш для ключей-адресов в `Compiler::unfoldable`.
+///
+/// Ключи — адреса узлов дерева, а не пользовательские данные, поэтому
+/// защита `SipHash` от подобранных коллизий здесь не нужна, а цена её
+/// заметна: таблица трогается несколько раз на каждый узел выражения.
+/// Умножение на нечётную константу с перемешиванием старших разрядов
+/// (`fxhash`) распределяет выровненные адреса достаточно: на синтетике из
+/// 4000 операторов замена вернула цену компиляции с +1,28 % к +0,51 %.
+#[derive(Default, Clone, Copy)]
+struct PtrHasher(u64);
+
+impl std::hash::Hasher for PtrHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    // Ключ всегда `usize`, и `write_usize` ниже — единственный путь, каким
+    // он сюда попадает. Общий байтовый путь оставлен корректным, но
+    // медленным: им никто не пользуется.
+    fn write(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.0 = (self.0 ^ u64::from(b)).wrapping_mul(0x517c_c1b7_2722_0a95);
+        }
+    }
+
+    fn write_usize(&mut self, n: usize) {
+        let h = (n as u64).wrapping_mul(0x517c_c1b7_2722_0a95);
+        self.0 = h ^ (h >> 32);
+    }
+}
+
+type BuildPtrHasher = std::hash::BuildHasherDefault<PtrHasher>;
+
 struct Compiler<'a> {
     instrs: Vec<Instr>,
     consts: Vec<BslValue>,
@@ -513,6 +594,10 @@ struct Compiler<'a> {
     /// Общие на весь модуль — см. `compile_program`.
     names: &'a mut NameInterner,
     shapes: &'a mut ShapeTable,
+    opts: Optimizations,
+    /// Узлы, о которых уже доказано, что сворачивать в них нечего.
+    /// См. `Compiler::fold_const` — без этой памяти обход квадратичен.
+    unfoldable: std::collections::HashSet<usize, BuildPtrHasher>,
 }
 
 impl<'a> Compiler<'a> {
@@ -544,6 +629,109 @@ impl<'a> Compiler<'a> {
             .map_err(|_| CompileError::TooManyArgModeTables)?;
         self.call_arg_modes.push(modes);
         Ok(id)
+    }
+
+    /// Значение выражения, вычислимое целиком на компиляции, или `None`, если
+    /// вычислить его нечем.
+    ///
+    /// Арифметика берётся та же, что исполняет VM (`BslValue::add` и соседи),
+    /// поэтому свёрнутая константа равна тому, что дал бы прогон; второй
+    /// редакции правил здесь нет. Ограничений ровно два, и оба обязательные:
+    ///
+    /// - **только числа.** Единственный лист свёртки — `RExpr::Number`, так
+    ///   что до операций доходят одни числа. Приведение строк, дат и булевых
+    ///   живёт в обёртках `bsl-vm`, и повторять его тут значило бы завести
+    ///   второй экземпляр правил приведения;
+    /// - **операция с ошибкой не сворачивается.** `1 / 0` обязано бросить на
+    ///   исполнении — в том числе внутри `Попытка`, где исключение
+    ///   перехватывают, — поэтому `Err` даёт `None`, и инструкция остаётся на
+    ///   месте.
+    ///
+    /// Сравнения не сворачиваются: за ними стоит удаление недостижимых
+    /// ветвей, а его в первой версии нет, и половинчатая свёртка условия
+    /// оставила бы переход, читающий заведомо известный регистр.
+    ///
+    /// # Сложность
+    ///
+    /// Обход запоминает ОТКАЗЫ (`Compiler::unfoldable`), и без этого он
+    /// квадратичен — не гипотетически, а измеренно. Рассуждение «глубину
+    /// ограничивает лимит регистров кадра» верно только для бинарного пути:
+    /// там каждый уровень занимает временный регистр, и рекурсия упирается в
+    /// 255. У цепочки унарных минусов `- - - … - А` временный регистр не
+    /// выделяется вовсе — операнд компилируется в тот же `dst`, — поэтому
+    /// ничто её не ограничивает, и без памяти об отказах свёртка обходила бы
+    /// остаток цепочки заново на каждом уровне. Замерено на глубинах 100,
+    /// 200 и 400: накладные 0,13, 0,52 и 2,12 млн инструкций компиляции,
+    /// то есть вчетверо на каждое удвоение.
+    ///
+    /// Успехи не запоминаются, и это не упущение: удачная свёртка немедленно
+    /// выпускает `LoadConst` и обрывает рекурсию, поэтому свёрнутое поддерево
+    /// обходится не более двух раз — один раз отказавшим предком, один раз
+    /// собой. Повторяются только отказы, их и хватает запомнить.
+    fn fold_const(&mut self, e: &RExpr) -> Option<BslValue> {
+        #[cfg(test)]
+        FOLD_VISITS.with(|c| c.set(c.get() + 1));
+        // Адрес узла — его устойчивое имя: разрешённое дерево живёт
+        // неизменным всю компиляцию, узлы не переезжают и не освобождаются.
+        let key = std::ptr::from_ref(e) as usize;
+        if self.unfoldable.contains(&key) {
+            return None;
+        }
+        let folded = self.fold_uncached(e);
+        if folded.is_none() {
+            self.unfoldable.insert(key);
+        }
+        folded
+    }
+
+    /// Собственно свёртка, без обращения к памяти об отказах.
+    ///
+    /// Отдельно от [`Compiler::fold_const`] ради `?`: короткое замыкание
+    /// здесь не стилистическое. Отказ левого операнда делает правый
+    /// ненужным, а вычислить его — значит клонировать `BslNumber` с
+    /// выделением памяти. Редакция, вычислявшая оба операнда всегда, стоила
+    /// на синтетике из 4000 операторов +1,64 % инструкций компиляции против
+    /// +0,18 % у этой.
+    fn fold_uncached(&mut self, e: &RExpr) -> Option<BslValue> {
+        match e {
+            RExpr::Number(n) => Some(BslValue::Number(n.clone())),
+            RExpr::Unary {
+                op: UnaryOp::Neg,
+                expr,
+            } => self.fold_const(expr)?.neg().ok(),
+            RExpr::Binary { op, lhs, rhs } => {
+                let a = self.fold_const(lhs)?;
+                let b = self.fold_const(rhs)?;
+                match op {
+                    BinaryOp::Add => a.add(&b).ok(),
+                    BinaryOp::Sub => a.sub(&b).ok(),
+                    BinaryOp::Mul => a.mul(&b).ok(),
+                    BinaryOp::Div => a.div(&b).ok(),
+                    BinaryOp::Mod => a.rem(&b).ok(),
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// Заменить целиком вычислимое выражение одной готовой константой.
+    /// `true` — инструкция уже выпущена, компилировать поддерево не нужно.
+    ///
+    /// # Errors
+    ///
+    /// [`CompileError::TooManyConstants`], если таблица констант чанка
+    /// переполнена.
+    fn emit_folded(&mut self, e: &RExpr, dst: u8) -> Result<bool, CompileError> {
+        if !self.opts.const_fold {
+            return Ok(false);
+        }
+        let Some(v) = self.fold_const(e) else {
+            return Ok(false);
+        };
+        let k = self.add_const(v)?;
+        self.emit(Instr::LoadConst { dst, k });
+        Ok(true)
     }
 
     fn emit(&mut self, i: Instr) -> usize {
@@ -720,6 +908,9 @@ impl<'a> Compiler<'a> {
                 });
             }
             RExpr::Unary { op, expr } => {
+                if self.emit_folded(e, dst)? {
+                    return Ok(());
+                }
                 self.compile_expr(expr, dst)?;
                 match op {
                     UnaryOp::Neg => {
@@ -796,6 +987,12 @@ impl<'a> Compiler<'a> {
                 self.patch_jump(to_end, end)?;
             }
             RExpr::Binary { op, lhs, rhs } => {
+                // Свёртка идёт ПЕРЕД выбором формы операндов: у
+                // `2 + 3` выбирать нечего, а `AddConst` ниже поглотил бы
+                // литерал в опкод и оставил сложение на исполнение.
+                if self.emit_folded(e, dst)? {
+                    return Ok(());
+                }
                 // Для `локальная + число` константа остаётся в таблице
                 // чанка: отдельный регистр и отдельный dispatch для её
                 // загрузки не нужны. Обратную форму не переставляем —
@@ -1656,5 +1853,98 @@ fn binop_instr(op: BinaryOp, dst: u8, a: u8, b: u8) -> Instr {
         // Перехватываются раньше в `compile_expr` (короткое замыкание) —
         // сюда никогда не доходят.
         BinaryOp::And | BinaryOp::Or => unreachable!("short-circuit ops handled in compile_expr"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Сколько раз свёртка зашла в `fold_const`, компилируя цепочку из
+    /// `depth` унарных минусов над переменной.
+    ///
+    /// Цепочка именно унарная: у неё операнд компилируется в тот же
+    /// регистр, `alloc_temp` не вызывается, и глубину ничто не
+    /// ограничивает. На бинарной цепочке этот тест ничего бы не доказал —
+    /// её обрывает лимит регистров кадра.
+    ///
+    /// Стек берётся с запасом: фронтенд рекурсивен, и двух мегабайт
+    /// обычного тестового потока на такие глубины не хватает — предел
+    /// принадлежит разбору с резолвингом, а не свёртке.
+    fn fold_visits_at(depth: usize) -> usize {
+        let src = format!("А = 1;\nБ = {}А;\n", "- ".repeat(depth));
+        std::thread::Builder::new()
+            .stack_size(64 * 1024 * 1024)
+            .spawn(move || {
+                let parsed = bsl_syntax::parse(&src).expect("разбор");
+                let resolved = bsl_sema::resolve_program(&parsed.items).expect("резолвинг");
+                FOLD_VISITS.with(|c| c.set(0));
+                compile_program_with(
+                    &resolved,
+                    Optimizations {
+                        const_fold: true,
+                        ..Optimizations::default()
+                    },
+                )
+                .expect("компиляция");
+                FOLD_VISITS.with(std::cell::Cell::get)
+            })
+            .expect("поток")
+            .join()
+            .expect("компиляция цепочки")
+    }
+
+    /// Обход свёртки обязан быть линейным по размеру выражения.
+    ///
+    /// До появления памяти об отказах он был квадратичным: `fold_const`
+    /// спускался по остатку цепочки заново на каждом уровне. Порог здесь
+    /// не «около двух», а «меньше трёх» — линейному росту отвечает 2,
+    /// квадратичному 4, и промахнуться между ними невозможно.
+    #[test]
+    fn folding_visits_grow_linearly_with_expression_depth() {
+        let small = fold_visits_at(200);
+        let large = fold_visits_at(400);
+
+        assert!(small > 0, "счётчик заходов не работает");
+        assert!(
+            large < small * 3,
+            "обход не линеен: {small} заходов на 200 уровнях и {large} на 400"
+        );
+    }
+
+    /// Граница бинарной вложенности — та, о которой говорит документ:
+    /// каждый уровень занимает временный регистр, кадр вмещает 255.
+    /// Отказ обязан быть внятной ошибкой, а не молчаливой порчей.
+    #[test]
+    fn a_binary_chain_compiles_to_the_frame_limit_and_refuses_past_it() {
+        let compile_chain = |depth: usize| {
+            let src = format!("Б = 1;\nА = Б{};\n", " + 1".repeat(depth));
+            std::thread::Builder::new()
+                .stack_size(64 * 1024 * 1024)
+                .spawn(move || {
+                    let parsed = bsl_syntax::parse(&src).expect("разбор");
+                    let resolved = bsl_sema::resolve_program(&parsed.items).expect("резолвинг");
+                    compile_program_with(
+                        &resolved,
+                        Optimizations {
+                            const_fold: true,
+                            ..Optimizations::default()
+                        },
+                    )
+                    .map(|_| ())
+                })
+                .expect("поток")
+                .join()
+                .expect("компиляция цепочки")
+        };
+
+        assert!(
+            compile_chain(253).is_ok(),
+            "253 уровня обязаны компилироваться"
+        );
+        assert!(
+            matches!(compile_chain(260), Err(CompileError::TooManyRegisters)),
+            "на 260 уровнях ожидался отказ по регистрам кадра"
+        );
     }
 }

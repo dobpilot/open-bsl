@@ -392,6 +392,45 @@ fn the_jit_agrees_with_the_interpreter_on_every_script() {
     println!("режимы сверены на {checked} скриптах");
 }
 
+/// Оптимизирующие проходы не имеют права менять наблюдаемое поведение:
+/// эталон здесь — тот же интерпретатор без `--optimize`, и вопрос ровно в
+/// их совпадении.
+///
+/// Прогонов два, и второй не избыточен. `--optimize` включает все три
+/// прохода разом, поэтому его зелёный результат — свойство их
+/// КОМБИНАЦИИ: расхождение, внесённое одним, мог бы скрыть другой, а
+/// доказательства для отдельно взятой правки он не даёт вовсе.
+/// `--optimize=const-fold` проверяет ровно свёртку в кодогене. Проверка
+/// не теоретическая: устранение копий уже однажды удаляло копию внутри
+/// `Попытка`, опираясь на запись, которой обработчик не видит.
+#[test]
+fn the_optimizing_passes_agree_with_the_plain_run_on_every_script() {
+    let _corpus = corpus_lock();
+    for spec in ["--optimize", "--optimize=const-fold"] {
+        let mut checked = 0;
+        for dir in [fixtures_dir(), measure_dir()] {
+            for script in scripts_in(&dir) {
+                let name = script.file_name().unwrap().to_string_lossy().to_string();
+                if SLOW_TO_COMPARE.contains(&name.as_str()) {
+                    continue;
+                }
+                let plain = run_script(&script, &[]);
+                let optimized = run_script(&script, &[spec]);
+                assert_eq!(
+                    plain, optimized,
+                    "{name}: вывод под {spec} отличается от вывода без него"
+                );
+                checked += 1;
+            }
+        }
+        assert!(
+            checked > 0,
+            "не нашлось ни одного скрипта для сверки проходов"
+        );
+        println!("{spec} сверен с обычным прогоном на {checked} скриптах");
+    }
+}
+
 /// Фикстуры, которые в этой сверке не участвуют — не потому, что режимы
 /// на них расходятся, а потому, что каждая считается минутами (тест
 /// собирается в debug, где всё в разы медленнее), и гонять их ДВАЖДЫ

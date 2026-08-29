@@ -146,6 +146,22 @@ fn help() -> String {
         }
     }
 
+    // Не через `entry`: замыкание держит `out` заимствованным, а здесь
+    // нужны и строка вызова, и три строки под ней. Отступы те же — два
+    // пробела на форму вызова, шесть на описание.
+    out.push_str("\nМОДИФИКАТОРЫ:\n");
+    out.push_str("  bsl-cli --optimize[=проход,...]\n");
+    out.push_str("      включить оптимизирующие проходы компилятора; без списка — все\n");
+    out.push_str(&format!(
+        "      проходы: {}\n",
+        PASS_NAMES
+            .iter()
+            .map(|(n, _)| *n)
+            .collect::<Vec<_>>()
+            .join(", ")
+    ));
+    out.push_str("      ни один не проходил ворота допуска, см. docs/ssa-hotspot-analysis.md\n");
+
     out.push_str("\nОКРУЖЕНИЕ:\n");
     out.push_str("  NO_COLOR      отключает цвет в REPL (как и TERM=dumb)\n");
     out
@@ -156,9 +172,29 @@ fn main() {
     // `--optimize` — модификатор, а не команда: он снимается из аргументов
     // до разбора, поэтому одинаково работает и перед именем скрипта, и
     // рядом с `--jit`. Скрипту он не достаётся.
-    if let Some(i) = args.iter().position(|a| a == "--optimize") {
-        args.remove(i);
-        OPTIMIZE.store(true, std::sync::atomic::Ordering::Relaxed);
+    if let Some(i) = args
+        .iter()
+        .position(|a| a == "--optimize" || a.starts_with("--optimize="))
+    {
+        let arg = args.remove(i);
+        let mask = match arg.split_once('=') {
+            None => ALL_PASSES,
+            Some((_, spec)) => match parse_passes(spec) {
+                Ok(m) => m,
+                Err(name) => {
+                    eprintln!(
+                        "неизвестный проход «{name}» в --optimize. Допустимы: {}",
+                        PASS_NAMES
+                            .iter()
+                            .map(|(n, _)| *n)
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
+                    std::process::exit(2);
+                }
+            },
+        };
+        OPTIMIZE.store(mask, std::sync::atomic::Ordering::Relaxed);
     }
     let code = match args.get(1).map(String::as_str) {
         None => {
@@ -324,14 +360,39 @@ fn run_file(path: &str, engine: Engine, arguments: Vec<String>) {
 /// `--optimize` и читается всеми точками сборки движка. Ключ — модификатор
 /// обычного запуска, а не команда, поэтому в таблицу `COMMANDS` он не
 /// входит: он сочетается и с `--jit`, и с `--emit-bytecode`.
-static OPTIMIZE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static OPTIMIZE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+/// Имена проходов для `--optimize=список` и их биты. Единый источник:
+/// разбор ключа, сообщение об ошибке и строка `--help` читают эту таблицу,
+/// поэтому проход не может быть выбираемым, но не описанным.
+const PASS_NAMES: &[(&str, u8)] = &[("const-fold", 1), ("const-prop", 2), ("copy-elim", 4)];
+
+/// Маска «все проходы» — та, что даёт голый `--optimize`.
+const ALL_PASSES: u8 = 1 | 2 | 4;
+
+/// Разбирает список проходов через запятую. `Err` несёт нераспознанное имя:
+/// молча игнорировать опечатку нельзя — прогон замера прочитался бы как
+/// «проход включён», а на деле не включался.
+fn parse_passes(spec: &str) -> Result<u8, String> {
+    let mut mask = 0u8;
+    for name in spec.split(',') {
+        let name = name.trim();
+        let (_, bit) = PASS_NAMES
+            .iter()
+            .find(|(n, _)| *n == name)
+            .ok_or_else(|| name.to_string())?;
+        mask |= bit;
+    }
+    Ok(mask)
+}
 
 /// Выбранные проходы компилятора.
 pub fn optimizations() -> bsl_compiler::Optimizations {
-    if OPTIMIZE.load(std::sync::atomic::Ordering::Relaxed) {
-        bsl_compiler::Optimizations::all()
-    } else {
-        bsl_compiler::Optimizations::default()
+    let mask = OPTIMIZE.load(std::sync::atomic::Ordering::Relaxed);
+    bsl_compiler::Optimizations {
+        const_fold: mask & 1 != 0,
+        const_prop: mask & 2 != 0,
+        copy_elim: mask & 4 != 0,
     }
 }
 
