@@ -406,7 +406,11 @@ fn the_jit_agrees_with_the_interpreter_on_every_script() {
 #[test]
 fn the_optimizing_passes_agree_with_the_plain_run_on_every_script() {
     let _corpus = corpus_lock();
-    for spec in ["--optimize", "--optimize=const-fold"] {
+    for spec in [
+        "--optimize",
+        "--optimize=const-fold",
+        "--optimize=ssa-const",
+    ] {
         let mut checked = 0;
         for dir in [fixtures_dir(), measure_dir()] {
             for script in scripts_in(&dir) {

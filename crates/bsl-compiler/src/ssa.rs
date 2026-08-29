@@ -89,13 +89,31 @@ pub fn dominance_frontiers(cfg: &Cfg<'_>, idom: &[Option<BlockId>]) -> Vec<Vec<B
         if cfg.blocks[b].preds.len() < 2 {
             continue;
         }
+        // Подъём идёт ДО доминатора блока и останавливается на нём: сам
+        // доминатор во фронт не входит.
+        let stop = idom[b];
+        if stop.is_none() && b != cfg.entry {
+            // Недостижимый блок фронта не порождает.
+            continue;
+        }
         for &p in &cfg.blocks[b].preds {
+            if idom[p].is_none() && p != cfg.entry {
+                // От недостижимого предшественника подниматься некуда.
+                continue;
+            }
             let mut runner = p;
-            // Недостижимый предшественник цепочки доминаторов не имеет —
-            // подниматься от него некуда.
-            while idom[runner].is_some() && Some(runner) != idom[b] && runner != b {
+            while Some(runner) != stop {
                 if !df[runner].contains(&b) {
                     df[runner].push(b);
+                }
+                // Выше входа цепочки нет: у него собственного доминатора
+                // не бывает, и остановиться надо ЗДЕСЬ, а не оборвать
+                // подъём раньше времени. Прежняя редакция проверяла
+                // `idom[runner].is_some()` в условии цикла и потому не
+                // доходила до заголовка цикла, чей предшественник —
+                // входной блок: `φ` не ставилась вовсе.
+                if runner == cfg.entry {
+                    break;
                 }
                 let Some(next) = idom[runner] else { break };
                 runner = next;
@@ -216,10 +234,113 @@ fn stmt_reads(s: &RStmt, out: &mut Vec<u32>) {
 /// План требует того же: динамический фрагмент уничтожает знание обо
 /// всех видимых переменных.
 fn stmt_writes(s: &RStmt, n_slots: usize) -> Vec<u32> {
-    match s {
+    let mut out = match s {
         RStmt::AssignLocal { slot, .. } => vec![*slot],
         RStmt::Execute(_) => (0..n_slots as u32).collect(),
         _ => Vec::new(),
+    };
+    // Аргумент, переданный функции BSL, может быть параметром БЕЗ `Знач`,
+    // и тогда вызов пишет прямо в переменную вызывающего. План требует
+    // уничтожать знание о таком слоте после вызова, и здесь это сделано
+    // консервативно: убивается всякая локальная, стоящая аргументом, без
+    // разбора режима параметра.
+    //
+    // Точный ответ требует таблицы функций, которой у этого модуля нет:
+    // `RExpr::Call` несёт номер функции, а режимы её параметров живут в
+    // `ResolvedProgram::functions`. Завышение здесь стоит упущенной
+    // оптимизации, занижение стоило бы неверного кода — цена
+    // несопоставима, и до появления таблицы выбор очевиден.
+    //
+    // Встроенных функций и методов это не касается: у них параметров без
+    // `Знач` нет, о чём резолвер и говорит на месте.
+    let mut reads = Vec::new();
+    stmt_reads(s, &mut reads);
+    let _ = reads;
+    let mut killed = Vec::new();
+    collect_byref_args(s, &mut killed);
+    out.extend(killed);
+    out
+}
+
+/// Локальные, стоящие аргументами вызова функции BSL.
+fn collect_byref_args(s: &RStmt, out: &mut Vec<u32>) {
+    let mut exprs = Vec::new();
+    stmt_exprs(s, &mut exprs);
+    while let Some(e) = exprs.pop() {
+        match e {
+            RExpr::Call { args, .. } | RExpr::CallImported { args, .. } => {
+                for a in args {
+                    if let ResolvedArg::Value(RExpr::Local(slot)) = a {
+                        out.push(*slot);
+                    }
+                    if let ResolvedArg::Value(v) = a {
+                        exprs.push(v);
+                    }
+                }
+            }
+            _ => sub_exprs(e, &mut exprs),
+        }
+    }
+}
+
+/// Непосредственные подвыражения узла — для итеративного обхода.
+fn sub_exprs<'a>(e: &'a RExpr, out: &mut Vec<&'a RExpr>) {
+    match e {
+        RExpr::Await(x)
+        | RExpr::Unary { expr: x, .. }
+        | RExpr::NewTypeDescription(x)
+        | RExpr::NewTextWriter { path: x, .. }
+        | RExpr::DynEval(x)
+        | RExpr::Field { obj: x, .. } => out.push(x),
+        RExpr::Binary { lhs, rhs, .. } => {
+            out.push(lhs);
+            out.push(rhs);
+        }
+        RExpr::Index { obj, index } => {
+            out.push(obj);
+            out.push(index);
+        }
+        RExpr::Ternary {
+            cond,
+            then_expr,
+            else_expr,
+        } => {
+            out.push(cond);
+            out.push(then_expr);
+            out.push(else_expr);
+        }
+        RExpr::CallMethod { obj, args, .. } => {
+            out.push(obj);
+            out.extend(args.iter());
+        }
+        RExpr::NewArray { dims: xs }
+        | RExpr::NewStructure { values: xs, .. }
+        | RExpr::CallBuiltinFn { args: xs, .. }
+        | RExpr::CallComponent { args: xs, .. }
+        | RExpr::CreateObject { args: xs, .. } => out.extend(xs.iter()),
+        _ => {}
+    }
+}
+
+/// Выражения верхнего уровня оператора.
+fn stmt_exprs<'a>(s: &'a RStmt, out: &mut Vec<&'a RExpr>) {
+    match s {
+        RStmt::AssignLocal { value, .. }
+        | RStmt::AssignModuleVar { value, .. }
+        | RStmt::AssignImportedVar { value, .. }
+        | RStmt::ExprStmt(value)
+        | RStmt::Execute(value) => out.push(value),
+        RStmt::AssignIndex { obj, index, value } => {
+            out.push(obj);
+            out.push(index);
+            out.push(value);
+        }
+        RStmt::AssignField { obj, value, .. } => {
+            out.push(obj);
+            out.push(value);
+        }
+        RStmt::Return(e) | RStmt::Raise(e) => out.extend(e.iter()),
+        _ => {}
     }
 }
 
@@ -667,4 +788,53 @@ pub fn propagate_constants(cfg: &Cfg<'_>, ssa: &Ssa, n_slots: usize) -> Vec<Cons
         }
     }
     lat
+}
+
+/// Известные значения слотов ПЕРЕД каждым оператором и перед условием
+/// каждого терминатора.
+///
+/// Ключ — адрес узла разрешённого дерева. Приём тот же, что у памяти об
+/// отказах в свёртке: дерево живёт неизменным всю компиляцию, узлы не
+/// переезжают и не освобождаются, поэтому адрес — их устойчивое имя.
+/// Кодогену этого достаточно: он обходит то же самое дерево и спрашивает
+/// про тот же узел.
+#[must_use]
+pub fn constants_at_nodes(
+    cfg: &Cfg<'_>,
+    ssa: &Ssa,
+    lat: &[Const],
+    n_slots: usize,
+) -> std::collections::HashMap<usize, Vec<Const>> {
+    let mut out = std::collections::HashMap::new();
+    for (b, entry) in ssa.entry.iter().enumerate() {
+        let Some(entry) = entry else { continue };
+        let mut slots: Vec<Const> = (0..n_slots).map(|i| lat[entry[i]].clone()).collect();
+        for (i, s) in cfg.blocks[b].stmts.iter().enumerate() {
+            out.insert(std::ptr::from_ref(*s) as usize, slots.clone());
+            // После оператора состояние слотов меняется — ровно так же,
+            // как его считало распространение.
+            for &(stmt_index, id) in &ssa.defs[b] {
+                if stmt_index != i {
+                    continue;
+                }
+                if let Value::Def { slot, .. } = &ssa.values[id]
+                    && let Some(cell) = slots.get_mut(*slot as usize)
+                {
+                    *cell = lat[id].clone();
+                }
+            }
+        }
+        // Выражения терминаторов ключуются по себе: их операторов в
+        // `stmts` нет, а состояние для них — то, что осталось после всех
+        // операторов блока.
+        match &cfg.blocks[b].term {
+            crate::cfg::Terminator::Branch { cond: Some(c), .. }
+            | crate::cfg::Terminator::Return(Some(c))
+            | crate::cfg::Terminator::Raise(Some(c)) => {
+                out.insert(std::ptr::from_ref(*c) as usize, slots);
+            }
+            _ => {}
+        }
+    }
+    out
 }

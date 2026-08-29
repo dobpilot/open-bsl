@@ -365,10 +365,15 @@ static OPTIMIZE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(
 /// Имена проходов для `--optimize=список` и их биты. Единый источник:
 /// разбор ключа, сообщение об ошибке и строка `--help` читают эту таблицу,
 /// поэтому проход не может быть выбираемым, но не описанным.
-const PASS_NAMES: &[(&str, u8)] = &[("const-fold", 1), ("const-prop", 2), ("copy-elim", 4)];
+const PASS_NAMES: &[(&str, u8)] = &[
+    ("const-fold", 1),
+    ("const-prop", 2),
+    ("copy-elim", 4),
+    ("ssa-const", 8),
+];
 
 /// Маска «все проходы» — та, что даёт голый `--optimize`.
-const ALL_PASSES: u8 = 1 | 2 | 4;
+const ALL_PASSES: u8 = 1 | 2 | 4 | 8;
 
 /// Разбирает список проходов через запятую. `Err` несёт нераспознанное имя:
 /// молча игнорировать опечатку нельзя — прогон замера прочитался бы как
@@ -391,6 +396,7 @@ pub fn optimizations() -> bsl_compiler::Optimizations {
     let mask = OPTIMIZE.load(std::sync::atomic::Ordering::Relaxed);
     bsl_compiler::Optimizations {
         const_fold: mask & 1 != 0,
+        ssa_const: mask & 8 != 0,
         const_prop: mask & 2 != 0,
         copy_elim: mask & 4 != 0,
     }

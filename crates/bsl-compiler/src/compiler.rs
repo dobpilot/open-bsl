@@ -100,6 +100,14 @@ impl std::error::Error for CompileError {}
 pub struct Optimizations {
     /// Свёртка констант в кодогене, до эмиссии инструкций.
     pub const_fold: bool,
+    /// Подстановка констант, доказанных решёткой SSA.
+    ///
+    /// От `const_fold` отличается не силой, а видом знания: та сворачивает
+    /// литералы, видимые в одном выражении, а эта подставляет значение
+    /// ПЕРЕМЕННОЙ, доказанное распространением по `φ`, — включая случаи,
+    /// где константа переживает слияние ветвей или слияние с недостижимой
+    /// ветвью. Блочно-локальный проход над байт-кодом такого не может.
+    pub ssa_const: bool,
     /// Позднее распространение и свёртка констант над готовым байт-кодом.
     pub const_prop: bool,
     /// Устранение доказанно мёртвых копий.
@@ -112,6 +120,7 @@ impl Optimizations {
     pub fn all() -> Self {
         Self {
             const_fold: true,
+            ssa_const: true,
             const_prop: true,
             copy_elim: true,
         }
@@ -506,6 +515,17 @@ fn compile_chunk(
         names,
         shapes,
         opts,
+        // Решётка считается один раз на чанк и только если её попросили:
+        // строить граф и SSA ради выключенного прохода незачем.
+        ssa_consts: if opts.ssa_const {
+            let graph = crate::cfg::build(body);
+            let form = crate::ssa::build(&graph, locals.len());
+            let lat = crate::ssa::propagate_constants(&graph, &form, locals.len());
+            crate::ssa::constants_at_nodes(&graph, &form, &lat, locals.len())
+        } else {
+            std::collections::HashMap::new()
+        },
+        here: Vec::new(),
         unfoldable: std::collections::HashSet::default(),
     };
     c.compile_param_defaults(params)?;
@@ -629,6 +649,11 @@ struct Compiler<'a> {
     names: &'a mut NameInterner,
     shapes: &'a mut ShapeTable,
     opts: Optimizations,
+    /// Известные значения слотов перед каждым узлом дерева — из решётки
+    /// SSA. Пусто, когда `ssa_const` выключено.
+    ssa_consts: std::collections::HashMap<usize, Vec<crate::ssa::Const>>,
+    /// Состояние слотов перед текущим оператором.
+    here: Vec<crate::ssa::Const>,
     /// Узлы, о которых уже доказано, что сворачивать в них нечего.
     /// См. `Compiler::fold_const` — без этой памяти обход квадратичен.
     unfoldable: std::collections::HashSet<usize, BuildPtrHasher>,
@@ -930,6 +955,17 @@ impl<'a> Compiler<'a> {
                 self.free_temp(1);
             }
             RExpr::Local(slot) => {
+                // Значение переменной, доказанное решёткой, грузится
+                // константой: копия из слота не нужна, а знание это
+                // приходит через `φ` и потому недоступно ни свёртке в
+                // выражении, ни блочно-локальному проходу.
+                if self.opts.ssa_const
+                    && let Some(crate::ssa::Const::Number(n)) = self.here.get(*slot as usize)
+                {
+                    let k = self.add_const(BslValue::Number(n.clone()))?;
+                    self.emit(Instr::LoadConst { dst, k });
+                    return Ok(());
+                }
                 let src = *slot as u8;
                 if src != dst {
                     self.emit(Instr::Move { dst, src });
@@ -1539,6 +1575,20 @@ impl<'a> Compiler<'a> {
     }
 
     fn compile_stmt(&mut self, s: &RStmt) -> Result<(), CompileError> {
+        // Состояние слотов берётся у ЭТОГО узла дерева: решётка считала
+        // его тем же обходом и тем же ключом-адресом.
+        //
+        // Отсутствие узла в карте ОБЯЗАНО очищать состояние, а не
+        // оставлять прежнее. Иначе оно устаревает: `Возврат` в графе —
+        // терминатор, а не оператор блока, ключа у него нет, и с чужим
+        // состоянием он подставил бы значение, которое до него уже
+        // изменил `Выполнить`. Незнание здесь безопасно, устаревшее
+        // знание — нет.
+        self.here = self
+            .ssa_consts
+            .get(&(std::ptr::from_ref(s) as usize))
+            .cloned()
+            .unwrap_or_default();
         match s {
             RStmt::AssignLocal { slot, value } => {
                 self.compile_expr(value, *slot as u8)?;
