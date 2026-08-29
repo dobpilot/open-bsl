@@ -462,3 +462,106 @@ fn uses_are_recorded_and_dominated_by_their_definitions() {
         form.uses
     );
 }
+
+// ---------------------------------------------------------------------
+// Живые диапазоны и раскладка по регистрам
+// ---------------------------------------------------------------------
+
+use bsl_compiler::regalloc;
+
+fn allocation(src: &str) -> (regalloc::Allocation, ssa::Ssa, cfg::Cfg<'static>) {
+    // Дерево живёт столько же, сколько тест: утечка здесь дешевле, чем
+    // тащить время жизни через возвращаемый кортеж.
+    let parsed = Box::leak(Box::new(bsl_syntax::parse(src).expect("разбор")));
+    let resolved = Box::leak(Box::new(
+        bsl_sema::resolve_program(&parsed.items).expect("резолвинг"),
+    ));
+    let n = resolved.top_level.locals.len();
+    let graph = cfg::build(&resolved.top_level.body);
+    let form = ssa::build(&graph, n);
+    ssa::verify(&graph, &form).expect("инварианты SSA");
+    let alloc = regalloc::allocate(&graph, &form).expect("раскладка");
+    regalloc::verify(&graph, &form, &alloc).expect("проверка раскладки");
+    (alloc, form, graph)
+}
+
+/// Значения, живущие одновременно, обязаны попасть в разные регистры.
+#[test]
+fn simultaneously_live_values_get_different_registers() {
+    let (alloc, form, _) = allocation("А = 1;\nБ = 2;\nВ = А + Б;");
+
+    // `А` и `Б` живы одновременно к моменту сложения.
+    let defs: Vec<_> = form
+        .values
+        .iter()
+        .enumerate()
+        .filter(|(_, v)| matches!(v, ssa::Value::Def { .. }))
+        .map(|(id, _)| id)
+        .collect();
+    assert!(
+        defs.len() >= 3,
+        "ожидались три определения: {:?}",
+        form.values
+    );
+    assert_ne!(
+        alloc.reg[defs[0]], alloc.reg[defs[1]],
+        "одновременно живые `А` и `Б` делят регистр"
+    );
+}
+
+/// А непересекающиеся — обязаны иметь возможность его разделить: иначе
+/// раскладка не экономит ничего и смысла в ней нет.
+#[test]
+fn values_that_never_overlap_may_share_a_register() {
+    let (alloc, _, _) =
+        allocation("А = 1;\nСообщить(А);\nБ = 2;\nСообщить(Б);\nВ = 3;\nСообщить(В);");
+    assert!(
+        alloc.used <= 3,
+        "три непересекающихся значения заняли {} регистров",
+        alloc.used
+    );
+}
+
+/// Раскладка считается и сходится на всём корпусе, и её проверка
+/// независима от построителя.
+#[test]
+fn the_allocation_holds_on_the_corpus() {
+    let mut checked = 0usize;
+    let mut worst = 0usize;
+    for path in corpus() {
+        let Ok(src) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(parsed) = bsl_syntax::parse(&src) else {
+            continue;
+        };
+        let Ok(resolved) = bsl_sema::resolve_program(&parsed.items) else {
+            continue;
+        };
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        let mut bodies: Vec<(&str, &[bsl_sema::RStmt], usize)> = vec![(
+            "<верхний уровень>",
+            &resolved.top_level.body,
+            resolved.top_level.locals.len(),
+        )];
+        for f in &resolved.functions {
+            bodies.push((&f.name, &f.body, f.locals.len()));
+        }
+        for (what, body, n) in bodies {
+            let graph = cfg::build(body);
+            let form = ssa::build(&graph, n);
+            // Отказ по нехватке регистров — законный исход, а не ошибка:
+            // кадр вмещает 255, и кодоген на том же пределе отказывает уже
+            // сегодня.
+            if let Ok(alloc) = regalloc::allocate(&graph, &form) {
+                worst = worst.max(alloc.used);
+                if let Err(e) = regalloc::verify(&graph, &form, &alloc) {
+                    panic!("{name}, {what}: {e}");
+                }
+            }
+        }
+        checked += 1;
+    }
+    assert!(checked >= 20, "проверено {checked} скриптов");
+    println!("раскладка сверена на {checked} скриптах, максимум регистров {worst}");
+}

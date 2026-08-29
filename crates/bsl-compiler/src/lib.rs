@@ -13,6 +13,7 @@
 pub mod cfg;
 mod compiler;
 mod dynamic;
+pub mod regalloc;
 pub mod ssa;
 
 pub use compiler::{
