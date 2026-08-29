@@ -712,3 +712,94 @@ fn the_tier_lattice_converges_on_the_corpus() {
     assert!(checked >= 20, "проверено {checked} скриптов");
     println!("ярусы сошлись на {checked} скриптах: Int64 {int64}, Число {number}, не число {top}");
 }
+
+// ---------------------------------------------------------------------
+// Сверка предсказаний анализа с тем, что выпускает кодоген
+// ---------------------------------------------------------------------
+
+/// Всякий слот, в который кодоген ПИШЕТ, анализ обязан считать
+/// записываемым.
+///
+/// Это и есть тот «исчерпывающий перечень видов записи в локальную,
+/// выведенный, а не угаданный», без которого раскладку по регистрам
+/// включать нельзя. Выводится он не чтением `compile_stmt` глазами, а
+/// сверкой с таблицей эффектов `bsl-bytecode`: та исчерпывающа по
+/// опкодам без ветви-заглушки, то есть уже является источником истины о
+/// записях. Расхождение здесь называет пропущенный вид записи точно —
+/// именно так были найдены `Выполнить` и переменная цикла.
+///
+/// Обратное включение НЕ проверяется: анализ вправе считать слот
+/// записанным там, где кодоген обошёлся без записи. Завышение стоит
+/// регистра, занижение — верности.
+#[test]
+fn every_slot_the_generator_writes_is_predicted_by_the_analysis() {
+    let mut checked = 0usize;
+    let mut missing: Vec<String> = Vec::new();
+    for path in corpus() {
+        let Ok(src) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(parsed) = bsl_syntax::parse(&src) else {
+            continue;
+        };
+        let Ok(resolved) = bsl_sema::resolve_program(&parsed.items) else {
+            continue;
+        };
+        let Ok(program) = bsl_compiler::compile_program(&resolved) else {
+            continue;
+        };
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+
+        let mut bodies: Vec<(&str, &[bsl_sema::RStmt], usize)> = vec![(
+            "<верхний уровень>",
+            &resolved.top_level.body,
+            resolved.top_level.locals.len(),
+        )];
+        for f in &resolved.functions {
+            bodies.push((&f.name, &f.body, f.locals.len()));
+        }
+        for (i, (what, body, n)) in bodies.into_iter().enumerate() {
+            let Some(chunk) = program.chunks.get(i) else {
+                continue;
+            };
+            let limit = u8::try_from(n).unwrap_or(u8::MAX).min(chunk.n_locals);
+            if limit == 0 {
+                continue;
+            }
+            let overlap = bsl_bytecode::analysis::module_overlap(i, resolved.module_vars.len());
+            let emitted = bsl_bytecode::analysis::written_regs(chunk, overlap, limit);
+
+            // Предсказание анализа: слоты, у которых есть хоть одно
+            // определение помимо входного.
+            let graph = cfg::build(body);
+            let form = ssa::build(&graph, n);
+            let mut predicted = vec![false; limit as usize];
+            // Параметры пишет пролог умолчаний, живущий ВНЕ тела: для
+            // анализа они приходят как `Entry`, и это их определение.
+            for slot in 0..chunk.n_params.min(limit) {
+                predicted[slot as usize] = true;
+            }
+            for v in &form.values {
+                if let ssa::Value::Def { slot, .. } | ssa::Value::Phi { slot, .. } = v
+                    && (*slot as usize) < predicted.len()
+                {
+                    predicted[*slot as usize] = true;
+                }
+            }
+            for (slot, &written) in emitted.iter().enumerate() {
+                if written && !predicted[slot] {
+                    missing.push(format!("{name}, {what}: слот {slot}"));
+                }
+            }
+        }
+        checked += 1;
+    }
+    assert!(checked >= 20, "проверено {checked} скриптов");
+    assert!(
+        missing.is_empty(),
+        "кодоген пишет слоты, которых анализ не предсказал ({} шт.): {:?}",
+        missing.len(),
+        &missing[..missing.len().min(8)]
+    );
+    println!("предсказания записи сверены с кодогеном на {checked} скриптах");
+}

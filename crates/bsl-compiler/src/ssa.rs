@@ -242,13 +242,45 @@ fn stmt_reads(s: &RStmt, out: &mut Vec<u32>) {
 /// План требует того же: динамический фрагмент уничтожает знание обо
 /// всех видимых переменных.
 fn stmt_writes(s: &RStmt, n_slots: usize) -> Vec<u32> {
+    // Разбор ИСЧЕРПЫВАЮЩИЙ, без ветви-заглушки, и это единственная защита
+    // перечня от расползания: новый вид оператора обязан быть ошибкой
+    // сборки, а не молча попасть в «ничего не пишет». Пропуск здесь даёт
+    // не худший код, а неверный, — так уже случалось трижды.
     let mut out = match s {
         RStmt::AssignLocal { slot, .. } => vec![*slot],
         // Цикл присваивает свою переменную на каждой итерации.
         RStmt::ForNumeric { slot, .. } | RStmt::ForEach { slot, .. } => vec![*slot],
-        RStmt::Execute(_) => (0..n_slots as u32).collect(),
-        _ => Vec::new(),
+        // Пишут не в локаль: модульный слот, чужой модуль, поле или
+        // элемент уже существующего объекта.
+        RStmt::AssignModuleVar { .. }
+        | RStmt::AssignImportedVar { .. }
+        | RStmt::AssignIndex { .. }
+        | RStmt::AssignField { .. }
+        // Не пишут вовсе; управляющие формы к тому же разобраны графом и
+        // до блоков не доходят.
+        | RStmt::ExprStmt(_)
+        | RStmt::If { .. }
+        | RStmt::While { .. }
+        | RStmt::Break
+        | RStmt::Continue
+        | RStmt::Label(_)
+        | RStmt::Goto(_)
+        | RStmt::Return(_)
+        | RStmt::Try { .. }
+        | RStmt::Raise(_)
+        // `Выполнить` пишет всё, но обеими формами фрагмента ведает
+        // `has_dynamic` ниже — здесь он лишь не пишет ничего сам по себе.
+        | RStmt::Execute(_) => Vec::new(),
     };
+    // Динамический фрагмент пишет ВСЕ слоты, и форм у него две:
+    // `Выполнить` как оператор и `Вычислить` как ВЫРАЖЕНИЕ, которое может
+    // стоять где угодно — хоть внутри `Возврат`. Вторую форму этот
+    // перечень когда-то пропускал, и пропуск нашла не внимательность, а
+    // сверка предсказаний с таблицей эффектов байт-кода
+    // (`every_slot_the_generator_writes_is_predicted_by_the_analysis`).
+    if has_dynamic(s) {
+        out.extend(0..n_slots as u32);
+    }
     // Аргумент, переданный функции BSL, может быть параметром БЕЗ `Знач`,
     // и тогда вызов пишет прямо в переменную вызывающего. План требует
     // уничтожать знание о таком слоте после вызова, и здесь это сделано
@@ -270,6 +302,22 @@ fn stmt_writes(s: &RStmt, n_slots: usize) -> Vec<u32> {
     collect_byref_args(s, &mut killed);
     out.extend(killed);
     out
+}
+
+/// Содержит ли оператор динамический фрагмент в любой из двух форм.
+fn has_dynamic(s: &RStmt) -> bool {
+    if matches!(s, RStmt::Execute(_)) {
+        return true;
+    }
+    let mut exprs = Vec::new();
+    stmt_exprs(s, &mut exprs);
+    while let Some(e) = exprs.pop() {
+        if matches!(e, RExpr::DynEval(_)) {
+            return true;
+        }
+        sub_exprs(e, &mut exprs);
+    }
+    false
 }
 
 /// Локальные, стоящие аргументами вызова функции BSL.
