@@ -524,8 +524,18 @@ pub fn build(cfg: &Cfg<'_>, n_slots: usize) -> Ssa {
                 }
             }
         }
-        // Условие терминатора читается после всех операторов блока.
-        if let crate::cfg::Terminator::Branch { cond: Some(c), .. } = &cfg.blocks[b].term {
+        // Выражение терминатора читается после всех операторов блока.
+        //
+        // Разбор ИСЧЕРПЫВАЮЩИЙ, и это не педантизм: пока сюда попадал один
+        // лишь `Branch`, чтения из `Возврат` были невидимы, и значение,
+        // использованное только в возврате, выглядело мёртвым. Так три
+        // константы `getConst` получили общий регистр.
+        let term_expr = match &cfg.blocks[b].term {
+            crate::cfg::Terminator::Branch { cond, .. } => *cond,
+            crate::cfg::Terminator::Return(e) | crate::cfg::Terminator::Raise(e) => *e,
+            crate::cfg::Terminator::Goto(_) | crate::cfg::Terminator::Exit => None,
+        };
+        if let Some(c) = term_expr {
             let mut read = Vec::new();
             expr_reads(c, &mut read);
             for slot in read {
