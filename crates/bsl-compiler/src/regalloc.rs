@@ -121,7 +121,19 @@ fn for_each_point<F: FnMut(&HashSet<ValueId>)>(cfg: &Cfg<'_>, ssa: &Ssa, mut f: 
         // общий регистр двум одновременно живым значениям.
         for (i, s) in cfg.blocks[b].stmts.iter().enumerate().rev() {
             let _ = s;
-            f(&live);
+            // Определение сообщается ВМЕСТЕ с живыми, даже если само оно
+            // мертво. Мёртвое определение всё равно ПИШЕТ в регистр, и
+            // конфликтует со всем, что в этой точке живо: `Н = Поток.Перейти(0)`,
+            // чьё значение никто не читает, обязано не делить регистр с
+            // `Поток`, иначе запись уничтожит поток. Пока сообщалось одно
+            // лишь живое, такие определения были невидимы.
+            let mut with_defs = live.clone();
+            for &(stmt_index, id) in &ssa.defs[b] {
+                if stmt_index == i {
+                    with_defs.insert(id);
+                }
+            }
+            f(&with_defs);
             for &(stmt_index, id) in &ssa.defs[b] {
                 if stmt_index == i {
                     live.remove(&id);
@@ -134,7 +146,11 @@ fn for_each_point<F: FnMut(&HashSet<ValueId>)>(cfg: &Cfg<'_>, ssa: &Ssa, mut f: 
         }
         // На входе в блок живы его `φ` — и они точно так же обязаны
         // конфликтовать друг с другом и с пришедшим снаружи.
-        f(&live);
+        // То же для `φ`: они пишут на входе в блок и конфликтуют со всем,
+        // что живо, независимо от того, читают ли их.
+        let mut with_phis = live.clone();
+        with_phis.extend(ssa.phis[b].iter().copied());
+        f(&with_phis);
         for &phi in &ssa.phis[b] {
             live.remove(&phi);
         }

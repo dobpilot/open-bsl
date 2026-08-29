@@ -803,3 +803,62 @@ fn every_slot_the_generator_writes_is_predicted_by_the_analysis() {
     );
     println!("предсказания записи сверены с кодогеном на {checked} скриптах");
 }
+
+/// Мёртвое определение всё равно ПИШЕТ в регистр и обязано конфликтовать
+/// со всем живым.
+///
+/// `Н = Поток.Перейти(0)`, чьё значение никто не читает, не смеет делить
+/// регистр с `Поток`: запись уничтожила бы поток. Пока конфликты
+/// собирались только по живым, такие определения были невидимы, и
+/// `binary-streams` падал с «метод не найден у Число».
+#[test]
+fn a_dead_definition_still_interferes_with_what_is_live() {
+    let src = "Поток = Новый Массив;\n\
+               Н = Поток.Количество();\n\
+               Н = Поток.Количество();\n\
+               Сообщить(Поток.Количество());\n";
+    let parsed = bsl_syntax::parse(src).expect("разбор");
+    let resolved = bsl_sema::resolve_program(&parsed.items).expect("резолвинг");
+    let n = resolved.top_level.locals.len();
+    let graph = cfg::build(&resolved.top_level.body);
+    let form = ssa::build(&graph, n);
+    let alloc = regalloc::allocate_slots(&graph, &form, n, 0).expect("раскладка");
+
+    let stream = resolved
+        .top_level
+        .locals
+        .iter()
+        .position(|x| x == "Поток")
+        .expect("слот Поток");
+    let dead = resolved
+        .top_level
+        .locals
+        .iter()
+        .position(|x| x == "Н")
+        .expect("слот Н");
+    assert_ne!(
+        alloc[stream], alloc[dead],
+        "мёртвое определение `Н` делит регистр с живым `Поток`: {alloc:?}"
+    );
+}
+
+/// Значение, использованное только в `Возврат`, живо: терминатор читает
+/// его наравне с оператором.
+#[test]
+fn a_value_used_only_in_a_return_is_live() {
+    let parsed = bsl_syntax::parse(
+        "Функция Ф()\n\tА = 1;\n\tБ = 2;\n\tВозврат Новый Массив(А, Б);\nКонецФункции\nСообщить(Ф());",
+    )
+    .expect("разбор");
+    let resolved = bsl_sema::resolve_program(&parsed.items).expect("резолвинг");
+    let f = &resolved.functions[0];
+    let n = f.locals.len();
+    let graph = cfg::build(&f.body);
+    let form = ssa::build(&graph, n);
+    let alloc = regalloc::allocate_slots(&graph, &form, n, f.params.len()).expect("раскладка");
+
+    assert_ne!(
+        alloc[0], alloc[1],
+        "`А` и `Б` живы обе в возвращаемом выражении: {alloc:?}"
+    );
+}

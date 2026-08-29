@@ -100,6 +100,15 @@ impl std::error::Error for CompileError {}
 pub struct Optimizations {
     /// Свёртка констант в кодогене, до эмиссии инструкций.
     pub const_fold: bool,
+    /// Раскладка локальных слотов по регистрам кадра из живых диапазонов.
+    ///
+    /// Держится на трёх вещах, добытых по одной: перечень видов записи в
+    /// локальную ВЫВЕДЕН и сверяется с таблицей эффектов байт-кода;
+    /// чтения собираются из всех терминаторов, а не только из ветвления;
+    /// мёртвое определение конфликтует наравне с живым, потому что пишет
+    /// в регистр независимо от того, читают ли его. Каждая из трёх, пока
+    /// отсутствовала, давала тихо неверный код.
+    pub ssa_regalloc: bool,
     /// Подстановка констант, доказанных решёткой SSA.
     ///
     /// От `const_fold` отличается не силой, а видом знания: та сворачивает
@@ -121,6 +130,7 @@ impl Optimizations {
         Self {
             const_fold: true,
             ssa_const: true,
+            ssa_regalloc: true,
             const_prop: true,
             copy_elim: true,
         }
@@ -248,6 +258,7 @@ fn compile_module_chunks(
         &[],
         &resolved.requirements,
         resolved.top_level.uses_dynamic,
+        resolved.module_vars.len(),
         false,
         false,
         names,
@@ -263,6 +274,7 @@ fn compile_module_chunks(
             &[],
             &resolved.requirements,
             f.uses_dynamic,
+            0,
             f.is_procedure,
             f.is_async,
             names,
@@ -436,6 +448,7 @@ pub fn compile_snippet_with_requirements(
         callee_params,
         requirements,
         true,
+        0,
         false,
         false,
         &mut names,
@@ -474,7 +487,7 @@ pub fn compile_snippet_with_requirements(
     })
 }
 
-// Одиннадцать аргументов — это и есть весь входной контекст чанка;
+// Двенадцать аргументов — это и есть весь входной контекст чанка;
 // структура ради их упаковки ничего бы не объяснила.
 #[allow(clippy::too_many_arguments)]
 fn compile_chunk(
@@ -485,6 +498,9 @@ fn compile_chunk(
     callee_params: &[Vec<bool>],
     requirements: &[LibraryRequirement],
     materialize_locals: bool,
+    // Модульные переменные кадра нулевого уровня: их номера закреплены,
+    // потому что первые регистры этого кадра И ЕСТЬ модульные переменные.
+    module_vars: usize,
     is_procedure: bool,
     is_async: bool,
     names: &mut NameInterner,
@@ -526,10 +542,20 @@ fn compile_chunk(
             std::collections::HashMap::new()
         },
         here: Vec::new(),
-        // Раскладка посчитана и проверена (`regalloc::allocate_slots`), но
-        // кодоген её НЕ ПРИМЕНЯЕТ: см. «Почему переключение откачено» в
-        // плане. Отображение тождественно — слот и есть свой регистр.
-        slot_reg: (0..locals.len()).map(|i| i as u8).collect(),
+        // Чанку с `Выполнить` раскладка не достаётся: он несёт таблицу
+        // «имя -> слот», по которой фрагмент ищет переменные, и
+        // переименование сделало бы её ложью. Закреплённый префикс —
+        // параметры (соглашение о вызове сопоставляет их по позиции) и
+        // модульные переменные кадра нулевого уровня.
+        slot_reg: if opts.ssa_regalloc && !materialize_locals {
+            let graph = crate::cfg::build(body);
+            let form = crate::ssa::build(&graph, locals.len());
+            let pinned = params.len().max(module_vars);
+            crate::regalloc::allocate_slots(&graph, &form, locals.len(), pinned)
+                .unwrap_or_else(|_| (0..locals.len()).map(|i| i as u8).collect())
+        } else {
+            (0..locals.len()).map(|i| i as u8).collect()
+        },
         unfoldable: std::collections::HashSet::default(),
     };
     c.next_reg = n_locals;

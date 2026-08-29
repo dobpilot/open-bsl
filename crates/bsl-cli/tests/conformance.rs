@@ -410,6 +410,7 @@ fn the_optimizing_passes_agree_with_the_plain_run_on_every_script() {
         "--optimize",
         "--optimize=const-fold",
         "--optimize=ssa-const",
+        "--optimize=ssa-regalloc",
     ] {
         let mut checked = 0;
         for dir in [fixtures_dir(), measure_dir()] {

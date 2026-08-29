@@ -386,10 +386,11 @@ const PASS_NAMES: &[(&str, u8)] = &[
     ("const-prop", 2),
     ("copy-elim", 4),
     ("ssa-const", 8),
+    ("ssa-regalloc", 16),
 ];
 
 /// Маска «все проходы» — та, что даёт голый `--optimize`.
-const ALL_PASSES: u8 = 1 | 2 | 4 | 8;
+const ALL_PASSES: u8 = 1 | 2 | 4 | 8 | 16;
 
 /// Разбирает список проходов через запятую. `Err` несёт нераспознанное имя:
 /// молча игнорировать опечатку нельзя — прогон замера прочитался бы как
@@ -413,6 +414,7 @@ pub fn optimizations() -> bsl_compiler::Optimizations {
     bsl_compiler::Optimizations {
         const_fold: mask & 1 != 0,
         ssa_const: mask & 8 != 0,
+        ssa_regalloc: mask & 16 != 0,
         const_prop: mask & 2 != 0,
         copy_elim: mask & 4 != 0,
     }
