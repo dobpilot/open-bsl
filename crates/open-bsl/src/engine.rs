@@ -105,6 +105,7 @@ impl Engine {
                     &resolved,
                     &base.program.names,
                     &base.program.shapes,
+                    self.optimizations,
                 )?
             }
             None => bsl_compiler::compile_program_with(&resolved, self.optimizations)?,
@@ -145,6 +146,7 @@ impl Engine {
             &resolved,
             &base.program.names,
             &base.program.shapes,
+            self.optimizations,
         )?;
         Ok(Module {
             id: self.next_module_id(),
@@ -560,7 +562,7 @@ impl EngineBuilder {
             None
         } else {
             let (catalog, entry_imports, init_order) =
-                compile_catalog(&self.recipe, &registry, &self.symbols)?;
+                compile_catalog(&self.recipe, &registry, &self.symbols, self.optimizations)?;
             Some(std::rc::Rc::new(EngineConfiguration {
                 catalog,
                 entry_imports,
@@ -644,6 +646,7 @@ fn compile_catalog(
     recipe: &ModuleGraphRecipe,
     registry: &bsl_rt::RuntimeRegistry,
     symbols: &bsl_syntax::PreprocSymbols,
+    optimizations: bsl_compiler::Optimizations,
 ) -> Result<
     (
         bsl_bytecode::ConfigurationProgram,
@@ -750,7 +753,7 @@ fn compile_catalog(
         .zip(&resolved)
         .map(|(module, resolved)| (module.name.clone(), resolved))
         .collect();
-    let (catalog, _) = bsl_compiler::compile_configuration(&pairs, None)?;
+    let (catalog, _) = bsl_compiler::compile_configuration(&pairs, None, optimizations)?;
     bsl_bytecode::image::verify_configuration(&catalog, None).map_err(Error::Runtime)?;
 
     let entry_imports = modules

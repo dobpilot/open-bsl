@@ -384,9 +384,12 @@ fn the_front_end_compiles_and_runs_a_configuration_end_to_end() {
     let entry = bsl_sema::resolve_program_with_imports(&entry_items, &registry, &imports)
         .expect("sema entry");
 
-    let (catalog, entry_program) =
-        bsl_compiler::compile_configuration(&[("Служебный".to_string(), &service)], Some(&entry))
-            .expect("компиляция конфигурации");
+    let (catalog, entry_program) = bsl_compiler::compile_configuration(
+        &[("Служебный".to_string(), &service)],
+        Some(&entry),
+        bsl_compiler::Optimizations::default(),
+    )
+    .expect("компиляция конфигурации");
     let entry_program = entry_program.expect("entry скомпилирован");
 
     let wrapped = bsl_bytecode::EntryProgram {

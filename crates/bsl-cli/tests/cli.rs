@@ -126,6 +126,47 @@ fn a_znach_parameter_stays_private_under_copy_elimination() {
     let _ = std::fs::remove_file(&path);
 }
 
+/// Программа, собранная из модулей через `//@используй`, компилируется
+/// другим путём — через рецепт каталога, — и проходы туда доходить
+/// обязаны. Молчаливая потеря ключа тут хуже отказа: замер на таком
+/// скрипте показывал бы «копий не снято», а на деле проход не запускался.
+#[test]
+fn the_optimize_modifier_reaches_modules_linked_by_a_directive() {
+    let dir = std::env::temp_dir().join(format!("bsl-cli-test-linked-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let module = dir.join("mod.bsl");
+    let main = dir.join("main.bsl");
+    std::fs::write(&module, "Процедура Пусто() Экспорт\nКонецПроцедуры\n").unwrap();
+    std::fs::write(
+        &main,
+        "//@используй(mod.bsl как М)\n\
+         Т = Новый Массив;\n\
+         Х = 5;\n\
+         Т.Добавить(Х);\n\
+         Сообщить(Т.Количество());\n",
+    )
+    .unwrap();
+    let script = main.to_str().unwrap();
+
+    let plain = stdout_of(&run(&["--emit-bytecode", script]));
+    let optimized = stdout_of(&run(&["--optimize=copy-elim", "--emit-bytecode", script]));
+    assert!(
+        plain.contains("Move"),
+        "исходный байт-код обязан содержать копии: {plain}"
+    );
+    assert_ne!(
+        plain, optimized,
+        "--optimize не дошёл до программы, собранной через //@используй"
+    );
+    // И поведение при этом прежнее.
+    assert_eq!(
+        stdout_of(&run(&["--optimize=copy-elim", script])),
+        stdout_of(&run(&[script])),
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// `--optimize=список` — интерфейс замера, а не удобство: без него число
 /// ворот принадлежит комбинации проходов. Поэтому его контракт закреплён
 /// тестом целиком — приём списка, отказ на опечатке и то, что имена

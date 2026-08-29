@@ -154,6 +154,7 @@ pub fn compile_program_with(
 pub fn compile_configuration(
     modules: &[(String, &ResolvedProgram)],
     entry: Option<&ResolvedProgram>,
+    opts: Optimizations,
 ) -> Result<(bsl_bytecode::ConfigurationProgram, Option<Program>), CompileError> {
     let mut names = NameInterner::new();
     let mut shapes = ShapeTable::new();
@@ -163,7 +164,7 @@ pub fn compile_configuration(
             resolved,
             &mut names,
             &mut shapes,
-            Optimizations::default(),
+            opts,
         )?);
     }
     let entry_chunks = match entry {
@@ -171,7 +172,7 @@ pub fn compile_configuration(
             resolved,
             &mut names,
             &mut shapes,
-            Optimizations::default(),
+            opts,
         )?),
         None => None,
     };
@@ -210,11 +211,11 @@ pub fn compile_entry_program(
     resolved: &ResolvedProgram,
     base_names: &[String],
     base_shapes: &[std::rc::Rc<bsl_rt::Shape>],
+    opts: Optimizations,
 ) -> Result<Program, CompileError> {
     let mut names = NameInterner::from_existing(base_names.to_vec());
     let mut shapes = ShapeTable::from_existing(base_shapes.to_vec());
-    let chunks =
-        compile_module_chunks(resolved, &mut names, &mut shapes, Optimizations::default())?;
+    let chunks = compile_module_chunks(resolved, &mut names, &mut shapes, opts)?;
     Ok(assemble_program(
         resolved,
         chunks,

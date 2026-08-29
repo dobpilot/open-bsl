@@ -148,7 +148,11 @@ fn compile(path: &str) -> Result<(open_bsl::Engine, open_bsl::Module), i32> {
             eprintln!("{e}");
             1
         })?;
+        // Проходы передаются и здесь. Ветка без директив берёт их из
+        // `crate::engine()`, и без этой строки `--optimize` молча ничего
+        // не делал бы ровно для тех программ, которые собраны из модулей.
         open_bsl::Engine::builder()
+            .optimizations(crate::optimizations())
             .configuration(recipe)
             .build()
             .map_err(|e| {
