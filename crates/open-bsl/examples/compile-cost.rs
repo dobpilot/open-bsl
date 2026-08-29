@@ -9,20 +9,20 @@
 //! итераций.
 //!
 //! ```text
-//! cargo run --release -p open-bsl --example compile-cost -- <файл.bsl> <итераций> [const-fold]
+//! cargo run --release -p open-bsl --example compile-cost -- <файл.bsl> <итераций> [const-fold|copy-elim]
 //! ```
 //!
-//! Проход принимается ровно один — `const-fold`, и это не упрощение на
-//! потом. Единственный источник имён проходов — таблица `PASS_NAMES` в
+//! Проходы перечислены поимённо и по одному, а не разобраны общим
+//! списком. Единственный источник имён — таблица `PASS_NAMES` в
 //! `bsl-cli`; второй разбор списка здесь был бы её копией, которая на
-//! первом же новом проходе разъедется с оригиналом. Понадобится мерить
-//! другой проход — расширять придётся осознанно, а не обнаружить, что
-//! пример молча принял имя, которого `bsl-cli` не знает.
+//! первом же новом проходе разъедется с оригиналом. Каждое имя попадает
+//! сюда, когда его действительно нужно померить, — так расширение
+//! остаётся осознанным, а опечатка не проходит молча.
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let usage = || -> ! {
-        eprintln!("нужно: compile-cost <файл.bsl> <итераций> [const-fold]");
+        eprintln!("нужно: compile-cost <файл.bsl> <итераций> [const-fold|copy-elim]");
         std::process::exit(2);
     };
 
@@ -35,6 +35,14 @@ fn main() {
             iters,
             bsl_compiler::Optimizations {
                 const_fold: true,
+                ..bsl_compiler::Optimizations::default()
+            },
+        ),
+        [_, path, iters, pass] if pass == "copy-elim" => (
+            path,
+            iters,
+            bsl_compiler::Optimizations {
+                copy_elim: true,
                 ..bsl_compiler::Optimizations::default()
             },
         ),

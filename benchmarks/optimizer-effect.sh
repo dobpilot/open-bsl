@@ -6,13 +6,15 @@
 # проверить их нельзя. Каждый раздел печатает ровно то, на что документ
 # ссылается, и ничего сверх.
 #
-#   ./benchmarks/optimizer-effect.sh                  все разделы
+#   ./benchmarks/optimizer-effect.sh                  все разделы, кроме ворот
 #   ./benchmarks/optimizer-effect.sh static budget    выборочно
+#   ./benchmarks/optimizer-effect.sh gate             ворота устранения копий
 #
 # Разделы: static (снятые инструкции), residual (остаток позднего прохода),
 # coldness (сколько раз этот остаток исполняется), dynamic (исполненные
 # инструкции), budget (цена компиляции), complexity (рост этой цены по
-# глубине выражения).
+# глубине выражения), gate (ворота допуска устранения копий; в набор по
+# умолчанию не входит — он длинный и требует зафиксированной частоты).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -180,6 +182,79 @@ section_complexity() {
     echo "  линейному обходу отвечает рост около 2x на удвоение, квадратичному — около 4x"
 }
 
+# Состояние частоты — часть отчёта, а не примечание к нему. Прогон без
+# фиксации помечается явно: правило документа прямо запрещает молчать об
+# этом, потому что стенное время под `powersave` меряет governor.
+freq_state() {
+    local gov turbo lo hi
+    gov=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo "?")
+    turbo=$(cat /sys/devices/system/cpu/intel_pstate/no_turbo 2>/dev/null || echo "?")
+    lo=$(cat /sys/devices/system/cpu/intel_pstate/min_perf_pct 2>/dev/null || echo "?")
+    hi=$(cat /sys/devices/system/cpu/intel_pstate/max_perf_pct 2>/dev/null || echo "?")
+    if [ "$gov" = performance ] && [ "$turbo" = 1 ] && [ "$lo" = "$hi" ]; then
+        echo "частота ЗАФИКСИРОВАНА (governor $gov, турбо выкл., perf_pct $lo)"
+    else
+        echo "частота НЕ зафиксирована (governor $gov, no_turbo $turbo, perf_pct $lo-$hi)"
+    fi
+}
+
+# Один прогон сценария под perf. Рабочий каталог отдельный: тяжёлые
+# сценарии пишут файлы рядом с собой, и мерить запись в репозиторий незачем.
+run_once() {
+    local script="$1" flags="$2" workdir="$SCRATCH/run" root
+    root=$(pwd)
+    mkdir -p "$workdir"
+    ( cd "$workdir" && perf stat -x, -e cycles:u,instructions:u -- \
+        "$root/$CLI" $flags "$root/$script" 2>&1 >/dev/null ) |
+        awk -F, '/cycles:u/{c=$1} /instructions:u/{i=$1} END{print c, i}'
+}
+
+# Ворота допуска: обе метрики, чередующиеся тройки «база, кандидат, база».
+# Две базы в раунде дают разброс, измеренный В ТЕХ ЖЕ условиях, что и
+# эффект, — из него и выводится порог, а не из общего представления о шуме.
+gate_one() {
+    local script="$1" mode="$2" rounds="${3:-7}" base_flags="" cand_flags="--optimize=copy-elim"
+    if [ "$mode" = jit ]; then
+        base_flags="--jit"; cand_flags="--jit --optimize=copy-elim"
+    fi
+    local i
+    for ((i = 0; i < rounds; i++)); do
+        echo "a $(run_once "$script" "$base_flags")"
+        echo "b $(run_once "$script" "$cand_flags")"
+        echo "c $(run_once "$script" "$base_flags")"
+    done | awk -v name="$(basename "$script" .bsl)" -v mode="$mode" '
+        {n[$1]++; cyc[$1]+=$2; ins[$1]+=$3}
+        END {
+            ba=cyc["a"]/n["a"]; bc=cyc["c"]/n["c"]; base=(ba+bc)/2; cand=cyc["b"]/n["b"];
+            ia=ins["a"]/n["a"]; ic=ins["c"]/n["c"]; ibase=(ia+ic)/2; icand=ins["b"]/n["b"];
+            noise=(ba>bc ? ba-bc : bc-ba)*100/base;
+            dcyc=(cand-base)*100/base; dins=(icand-ibase)*100/ibase;
+            printf "  %-20s %-6s такты %+7.2f%%  инстр %+7.2f%%  шум %5.2f%%  %s\n",
+                   name, mode, dcyc, dins, noise,
+                   (-dcyc < 2*noise ? "НЕРАЗРЕШИМО" : (dcyc < 0 ? "выигрыш" : "РЕГРЕССИЯ"))
+        }'
+}
+
+section_gate() {
+    echo "== gate: ворота допуска прохода устранения копий =="
+    echo "  $(freq_state)"
+    echo "  порог: эффект обязан вдвое превышать разброс, измеренный той же тройкой"
+    local group list f
+    for group in цели канарейки; do
+        echo "  -- $group --"
+        if [ "$group" = цели ]; then list=("${GATE_TARGETS[@]}"); else list=("${GATE_CANARIES[@]}"); fi
+        for f in "${list[@]}"; do
+            gate_one "$f" interp
+            gate_one "$f" jit
+        done
+    done
+}
+
+GATE_TARGETS=(benchmarks/csv_write.bsl benchmarks/table_total.bsl
+    benchmarks/bmp_rotate.bsl benchmarks/csv_write_batched.bsl)
+GATE_CANARIES=(benchmarks/goto_bench.bsl benchmarks/call_overhead.bsl
+    benchmarks/empty_for.bsl benchmarks/pi_leibniz.bsl)
+
 RESIDUAL_SCRIPTS=(benchmarks/table_compare2.bsl benchmarks/table_save_load.bsl
     tests/conformance/fixtures/n-body-smoke.bsl tests/conformance/fixtures/n-body-precision.bsl
     tests/conformance/fixtures/n-body-perf.bsl)
@@ -204,6 +279,7 @@ for section in "$@"; do
         dynamic) section_dynamic "${DYNAMIC_SCRIPTS[@]}" ;;
         budget) section_budget ;;
         complexity) section_complexity ;;
+        gate) section_gate ;;
         *) echo "неизвестный раздел «$section»" >&2; exit 2 ;;
     esac
 done
