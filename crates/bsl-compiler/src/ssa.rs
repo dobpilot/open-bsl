@@ -1009,6 +1009,38 @@ fn range_op(op: bsl_syntax::BinaryOp, a: (i64, i64), b: (i64, i64)) -> Option<(i
 }
 
 /// Ярус выражения при известных ярусах слотов.
+/// Ярус переменной числового цикла по его границам.
+///
+/// Одно определение SSA здесь описывает ВСЕ значения, которые переменная
+/// принимает за цикл, поэтому диапазон обязан накрыть их разом: `Для н =
+/// А По Б` пробегает `[А, Б]`, а по выходе переменная может нести и `Б +
+/// 1` — какое именно из двух, зависит от платформы и здесь не
+/// предполагается, поэтому верхняя граница поднимается на единицу и
+/// накрывает оба ответа. Нижняя берётся с обеих границ: при `А > Б` тело
+/// не исполняется, но присваивание уже произошло.
+///
+/// Переполнение при подъёме на единицу — законный исход: ярус
+/// опускается до «числа», потому что молчаливое заворачивание план
+/// запрещает.
+fn loop_var_tier(from: &RExpr, to: &RExpr, slots: &[Tier]) -> Tier {
+    match (tier_of(from, slots), tier_of(to, slots)) {
+        (Tier::Int64 { lo: fl, hi: fh }, Tier::Int64 { lo: tl, hi: th }) => {
+            match th.checked_add(1) {
+                Some(top) => Tier::Int64 {
+                    lo: fl.min(tl),
+                    hi: fh.max(top),
+                },
+                None => Tier::Number,
+            }
+        }
+        // Граница, о которой не доказано даже, что она число, ничего не
+        // говорит и о переменной: `Для н = 1 По Массив` — ошибка времени
+        // исполнения, а не целый цикл.
+        (Tier::Top, _) | (_, Tier::Top) | (Tier::Bottom, _) | (_, Tier::Bottom) => Tier::Top,
+        _ => Tier::Number,
+    }
+}
+
 fn tier_of(e: &RExpr, slots: &[Tier]) -> Tier {
     match e {
         RExpr::Number(n) => match n.to_i64_exact() {
@@ -1065,6 +1097,27 @@ pub fn propagate_tiers(cfg: &Cfg<'_>, ssa: &Ssa, n_slots: usize) -> Vec<Tier> {
             tier[id] = Tier::Top;
         }
     }
+    // Сколько определений у слота во ВСЕЙ форме. Нужно правилу границ
+    // цикла: счётчик кодоген ведёт прямо в слоте переменной
+    // (`NumericForNext` инкрементирует его), поэтому присваивание внутри
+    // тела уносит с собой и следующую итерацию — `Для н = 1 По 10 Цикл н
+    // = 100; КонецЦикла` доходит до 101, а не до 11. Правило поэтому
+    // применяется только к слоту, у которого другого определения нет
+    // вовсе. Мера строже необходимого — запись ПОСЛЕ цикла итерациям не
+    // мешает, — зато не заводит второго разбора операторов, который
+    // разошёлся бы с `stmt_writes` на первом же новом виде. `Выполнить`
+    // сюда попадает сам: он пишет все слоты, то есть даёт определение и
+    // этому.
+    let mut defs_per_slot = vec![0usize; n_slots];
+    for defs in &ssa.defs {
+        for &(_, id) in defs {
+            if let Value::Def { slot, .. } = &ssa.values[id]
+                && let Some(cell) = defs_per_slot.get_mut(*slot as usize)
+            {
+                *cell += 1;
+            }
+        }
+    }
     let rpo = cfg.reverse_postorder();
     let mut changed = true;
     while changed {
@@ -1089,6 +1142,13 @@ pub fn propagate_tiers(cfg: &Cfg<'_>, ssa: &Ssa, n_slots: usize) -> Vec<Tier> {
             for &(stmt_index, id) in &ssa.defs[b] {
                 let (slot, t) = match cfg.blocks[b].stmts[stmt_index] {
                     RStmt::AssignLocal { slot, value } => (slot, tier_of(value, &slots)),
+                    RStmt::ForNumeric { slot, from, to, .. } => {
+                        if defs_per_slot.get(*slot as usize) == Some(&1) {
+                            (slot, loop_var_tier(from, to, &slots))
+                        } else {
+                            (slot, Tier::Top)
+                        }
+                    }
                     _ => match &ssa.values[id] {
                         Value::Def { slot, .. } => (slot, Tier::Top),
                         _ => continue,
