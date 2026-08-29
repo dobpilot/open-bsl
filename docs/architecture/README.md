@@ -4,6 +4,8 @@
 
 - [`component-architecture.md`](component-architecture.md) — нормативная
   топология конфигурационного каталога, runtime-компонентов и фоновых заданий.
+- [`vm-code-layout.md`](vm-code-layout.md) — измеренные ограничения на
+  разбиение `bsl-vm` и размещение кэшей исполнения.
 
 Проекты уже завершённых перестроений находятся в
 [`../archive/refactors/`](../archive/refactors/).
