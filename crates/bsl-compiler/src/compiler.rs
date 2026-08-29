@@ -526,8 +526,15 @@ fn compile_chunk(
             std::collections::HashMap::new()
         },
         here: Vec::new(),
+        // Раскладка слотов из живых диапазонов посчитана и проверена
+        // (`regalloc::allocate_slots`), но кодоген её НЕ ПРИМЕНЯЕТ — см.
+        // «Почему переключение кодогена откачено» в плане. Здесь
+        // отображение тождественно: слот и есть свой регистр.
+        slot_reg: (0..locals.len()).map(|i| i as u8).collect(),
         unfoldable: std::collections::HashSet::default(),
     };
+    c.next_reg = n_locals;
+    c.max_reg = n_locals;
     c.compile_param_defaults(params)?;
     c.compile_block(body)?;
     c.patch_gotos()?;
@@ -654,12 +661,26 @@ struct Compiler<'a> {
     ssa_consts: std::collections::HashMap<usize, Vec<crate::ssa::Const>>,
     /// Состояние слотов перед текущим оператором.
     here: Vec<crate::ssa::Const>,
+    /// Слот -> регистр кадра. Тождественно, пока раскладка выключена.
+    slot_reg: Vec<u8>,
     /// Узлы, о которых уже доказано, что сворачивать в них нечего.
     /// См. `Compiler::fold_const` — без этой памяти обход квадратичен.
     unfoldable: std::collections::HashSet<usize, BuildPtrHasher>,
 }
 
 impl<'a> Compiler<'a> {
+    /// Регистр кадра, отведённый слоту.
+    ///
+    /// Единственный путь от слота к регистру: раскладка не имеет права
+    /// подействовать в одном месте и не подействовать в другом, а мест
+    /// этих шесть.
+    fn reg_of(&self, slot: u32) -> u8 {
+        self.slot_reg
+            .get(slot as usize)
+            .copied()
+            .unwrap_or(slot as u8)
+    }
+
     fn alloc_temp(&mut self) -> Result<u8, CompileError> {
         let r = self.next_reg;
         let next = r.checked_add(1).ok_or(CompileError::TooManyRegisters)?;
@@ -966,7 +987,7 @@ impl<'a> Compiler<'a> {
                     self.emit(Instr::LoadConst { dst, k });
                     return Ok(());
                 }
-                let src = *slot as u8;
+                let src = self.reg_of(*slot);
                 if src != dst {
                     self.emit(Instr::Move { dst, src });
                 }
@@ -1462,7 +1483,7 @@ impl<'a> Compiler<'a> {
             let by_val = *by_val.get(i).unwrap_or(&true);
             if !by_val && let RExpr::Local(slot) = arg {
                 self.alloc_temp()?; // держим диапазон [base,base+argc) непрерывным
-                modes.push(ArgMode::ByRefLocal(*slot as u8));
+                modes.push(ArgMode::ByRefLocal(self.reg_of(*slot)));
                 continue;
             }
             // ИЗМЕРЕНО(CALL.BYREF.MODULEVAR): 8.3.27 передаёт модульную
@@ -1527,7 +1548,7 @@ impl<'a> Compiler<'a> {
             let by_val = *param_by_val.get(i).unwrap_or(&true);
             if !by_val && let RExpr::Local(slot) = arg {
                 self.alloc_temp()?;
-                modes.push(ArgMode::ByRefLocal(*slot as u8));
+                modes.push(ArgMode::ByRefLocal(self.reg_of(*slot)));
                 continue;
             }
             if !by_val && let RExpr::ModuleVar(slot) = arg {
@@ -1591,7 +1612,8 @@ impl<'a> Compiler<'a> {
             .unwrap_or_default();
         match s {
             RStmt::AssignLocal { slot, value } => {
-                self.compile_expr(value, *slot as u8)?;
+                let dst = self.reg_of(*slot);
+                self.compile_expr(value, dst)?;
             }
             RStmt::AssignModuleVar { slot, value } => {
                 // Через временный регистр: у модульной переменной нет
@@ -1723,7 +1745,7 @@ impl<'a> Compiler<'a> {
                 to,
                 body,
             } => {
-                let slot = *slot as u8;
+                let slot = self.reg_of(*slot);
                 // Границы вычисляются один раз: `from` кладём прямо в
                 // регистр переменной цикла, `to` — в отдельный регистр,
                 // живущий на протяжении всего цикла.
@@ -1778,7 +1800,7 @@ impl<'a> Compiler<'a> {
                 self.free_temp(1); // bound
             }
             RStmt::ForEach { slot, iter, body } => {
-                let slot = *slot as u8;
+                let slot = self.reg_of(*slot);
                 // Коллекция вычисляется один раз, как и границы `Для`.
                 let iter_reg = self.alloc_temp()?;
                 self.compile_expr(iter, iter_reg)?;

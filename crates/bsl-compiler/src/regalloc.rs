@@ -108,28 +108,33 @@ fn for_each_point<F: FnMut(&HashSet<ValueId>)>(cfg: &Cfg<'_>, ssa: &Ssa, mut f: 
             continue;
         }
         let mut live: HashSet<ValueId> = block_out.clone();
-        // Условие терминатора читается последним — значит живо позже
-        // всех операторов блока.
+        // Условие терминатора читается последним — значит живо позже всех
+        // операторов блока.
         if let Some(vs) = uses_at.get(&(b, None)) {
             live.extend(vs.iter().copied());
         }
         f(&live);
-        // Обратный проход: сначала снимаем определение оператора (до него
-        // значение не жило), затем добавляем то, что он читает.
+        // Обратный проход. Точка сообщается ДО снятия определения:
+        // определённое значение живо начиная отсюда и конфликтует со всем,
+        // что живо вокруг. Снять его раньше, чем сообщить, значит
+        // объявить, что оно ни с чем не пересекается, — и раскладка выдаст
+        // общий регистр двум одновременно живым значениям.
         for (i, s) in cfg.blocks[b].stmts.iter().enumerate().rev() {
             let _ = s;
+            f(&live);
             for &(stmt_index, id) in &ssa.defs[b] {
                 if stmt_index == i {
                     live.remove(&id);
                 }
             }
-            f(&live);
             if let Some(vs) = uses_at.get(&(b, Some(i))) {
                 live.extend(vs.iter().copied());
             }
             f(&live);
         }
-        // На входе в блок живы его `φ` и всё, что дошло снаружи.
+        // На входе в блок живы его `φ` — и они точно так же обязаны
+        // конфликтовать друг с другом и с пришедшим снаружи.
+        f(&live);
         for &phi in &ssa.phis[b] {
             live.remove(&phi);
         }
@@ -220,4 +225,78 @@ pub fn verify(cfg: &Cfg<'_>, ssa: &Ssa, alloc: &Allocation) -> Result<(), String
         Some(e) => Err(e),
         None => Ok(()),
     }
+}
+
+/// Раскладка ЛОКАЛЬНЫХ СЛОТОВ по регистрам кадра.
+///
+/// Отличается от [`allocate`] уровнем: та раздаёт регистры значениям SSA,
+/// а кодоген оперирует слотами, и слот живёт столько, сколько живёт хоть
+/// одно его значение. Поэтому слоты конфликтуют, если конфликтует хоть
+/// одна пара их значений.
+///
+/// `pinned` — сколько первых слотов обязаны сохранить свой номер. Это не
+/// осторожность, а три жёстких инварианта. Параметры вызываемая функция
+/// получает ПО ПОЗИЦИИ: `Frame::param_aliases` сопоставляет `i`-й
+/// параметр `i`-му регистру, и сдвинуть его значило бы отдать вызванному
+/// чужую ячейку. У кадра нулевого уровня первые регистры И ЕСТЬ
+/// модульные переменные — их видят все функции модуля. А чанк с
+/// `Выполнить` несёт таблицу «имя -> слот», по которой фрагмент находит
+/// переменные, и переименование слотов сделало бы её ложью; такие чанки
+/// вызывающий просто не раскладывает.
+///
+/// # Errors
+///
+/// Сообщение, если слотов, живых одновременно, больше, чем регистров.
+pub fn allocate_slots(
+    cfg: &Cfg<'_>,
+    ssa: &Ssa,
+    n_slots: usize,
+    pinned: usize,
+) -> Result<Vec<u8>, String> {
+    // Слот каждого значения; у `Bottom` слота нет.
+    let mut slot_of: Vec<Option<u32>> = vec![None; ssa.values.len()];
+    for (id, v) in ssa.values.iter().enumerate() {
+        slot_of[id] = match v {
+            Value::Def { slot, .. } | Value::Phi { slot, .. } | Value::Entry { slot } => {
+                Some(*slot)
+            }
+            Value::Bottom => None,
+        };
+    }
+
+    let mut interfere: Vec<HashSet<usize>> = vec![HashSet::new(); n_slots];
+    for_each_point(cfg, ssa, |live| {
+        let slots: Vec<usize> = live
+            .iter()
+            .filter_map(|&id| slot_of[id])
+            .map(|s| s as usize)
+            .filter(|s| *s < n_slots)
+            .collect();
+        for (i, &a) in slots.iter().enumerate() {
+            for &b in &slots[i + 1..] {
+                if a != b {
+                    interfere[a].insert(b);
+                    interfere[b].insert(a);
+                }
+            }
+        }
+    });
+
+    let mut reg: Vec<u8> = (0..n_slots)
+        .map(|i| u8::try_from(i).unwrap_or(u8::MAX))
+        .collect();
+    for slot in pinned..n_slots {
+        let taken: HashSet<u8> = interfere[slot]
+            .iter()
+            .filter(|&&o| o < slot)
+            .map(|&o| reg[o])
+            .collect();
+        let Some(free) =
+            (u8::try_from(pinned).unwrap_or(u8::MAX)..=u8::MAX).find(|r| !taken.contains(r))
+        else {
+            return Err(format!("слоту {slot} не нашлось регистра"));
+        };
+        reg[slot] = free;
+    }
+    Ok(reg)
 }

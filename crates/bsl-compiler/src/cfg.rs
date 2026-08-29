@@ -329,6 +329,12 @@ impl<'a> Builder<'a> {
             RStmt::ForNumeric { body, .. } | RStmt::ForEach { body, .. } => {
                 let header = self.new_block();
                 self.blocks[cur].term = Terminator::Goto(header);
+                // Сам оператор цикла кладётся в ЗАГОЛОВОК, и это не
+                // формальность: он ПИШЕТ переменную цикла на каждой
+                // итерации. Без него анализ не видит этого определения
+                // вовсе, считает переменную никогда не присваиваемой и
+                // разрешает ей делить регистр с живым соседом.
+                self.blocks[header].stmts.push(s);
                 let body_b = self.new_block();
                 let exit = self.new_block();
                 self.blocks[header].term = Terminator::Branch {

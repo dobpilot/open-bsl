@@ -219,6 +219,14 @@ fn stmt_reads(s: &RStmt, out: &mut Vec<u32>) {
                 expr_reads(e, out);
             }
         }
+        // Границы и коллекция вычисляются один раз до цикла, но приписать
+        // их чтение заголовку безопасно: завышение живости стоит регистра,
+        // занижение стоило бы неверного кода.
+        RStmt::ForNumeric { from, to, .. } => {
+            expr_reads(from, out);
+            expr_reads(to, out);
+        }
+        RStmt::ForEach { iter, .. } => expr_reads(iter, out),
         // Управляющие формы до блоков не доходят: их разобрал построитель
         // графа, а условия живут в терминаторах.
         _ => {}
@@ -236,6 +244,8 @@ fn stmt_reads(s: &RStmt, out: &mut Vec<u32>) {
 fn stmt_writes(s: &RStmt, n_slots: usize) -> Vec<u32> {
     let mut out = match s {
         RStmt::AssignLocal { slot, .. } => vec![*slot],
+        // Цикл присваивает свою переменную на каждой итерации.
+        RStmt::ForNumeric { slot, .. } | RStmt::ForEach { slot, .. } => vec![*slot],
         RStmt::Execute(_) => (0..n_slots as u32).collect(),
         _ => Vec::new(),
     };
