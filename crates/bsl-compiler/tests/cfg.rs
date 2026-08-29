@@ -897,9 +897,12 @@ fn the_applied_slot_layout_holds_on_the_corpus() {
             }
             let graph = cfg::build(body);
             let form = ssa::build(&graph, n);
-            let Ok(alloc) = regalloc::allocate_slots(&graph, &form, n, pinned) else {
-                continue;
-            };
+            // Отказ распределителя — провал теста с именем файла и чанка,
+            // а не пропуск. Пропущенный чанк не проверяется ничем, и
+            // зелёный прогон означал бы «проверено» там, где не
+            // проверялось.
+            let alloc = regalloc::allocate_slots(&graph, &form, n, pinned)
+                .unwrap_or_else(|e| panic!("{name}, {what}: раскладка отказала: {e}"));
             if let Err(e) = regalloc::verify_slots(&graph, &form, n, &alloc) {
                 panic!("{name}, {what}: {e}");
             }
@@ -937,16 +940,18 @@ fn the_layout_never_grows_the_frame_and_somewhere_shrinks_it() {
         let Ok(base) = bsl_compiler::compile_program(&resolved) else {
             continue;
         };
-        let Ok(laid) = compile_program_with(
+        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        // То же и здесь: компиляция с раскладкой обязана удаться там, где
+        // удалась без неё. Молча пропустить — значит не заметить, что
+        // проход выключился сам.
+        let laid = compile_program_with(
             &resolved,
             Optimizations {
                 ssa_regalloc: true,
                 ..Optimizations::default()
             },
-        ) else {
-            continue;
-        };
-        let name = path.file_name().unwrap().to_string_lossy().to_string();
+        )
+        .unwrap_or_else(|e| panic!("{name}: компиляция с раскладкой отказала: {e}"));
         for (i, (b, l)) in base.chunks.iter().zip(&laid.chunks).enumerate() {
             assert!(
                 l.n_locals <= b.n_locals && l.n_regs <= b.n_regs,

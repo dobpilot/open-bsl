@@ -530,26 +530,40 @@ fn compile_chunk(
     let identity = || (0..locals.len()).map(|i| i as u8).collect::<Vec<u8>>();
     let (ssa_consts, slot_reg) = if opts.ssa_const || opts.ssa_regalloc {
         let graph = crate::cfg::build(body);
-        let protected = graph.blocks.iter().any(|b| !b.handlers.is_empty());
-        let form = crate::ssa::build(&graph, locals.len());
-        let consts = if opts.ssa_const && !protected {
-            let lat = crate::ssa::propagate_constants(&graph, &form, locals.len());
-            crate::ssa::constants_at_nodes(&graph, &form, &lat, locals.len())
+        if graph.blocks.iter().any(|b| !b.handlers.is_empty()) {
+            // Чанк с `Попытка` не обслуживается ни одним потребителем, и
+            // SSA для него не строится вовсе: платить за анализ, которым
+            // никто не воспользуется, незачем, а заведомо неполную модель
+            // лучше не заводить и вовсе.
+            (std::collections::HashMap::new(), identity())
         } else {
-            std::collections::HashMap::new()
-        };
-        let regs = if opts.ssa_regalloc && !materialize_locals && !protected {
-            crate::regalloc::allocate_slots(
-                &graph,
-                &form,
-                locals.len(),
-                params.len().max(module_vars),
-            )
-            .unwrap_or_else(|_| identity())
-        } else {
-            identity()
-        };
-        (consts, regs)
+            let form = crate::ssa::build(&graph, locals.len());
+            let consts = if opts.ssa_const {
+                let lat = crate::ssa::propagate_constants(&graph, &form, locals.len());
+                crate::ssa::constants_at_nodes(&graph, &form, &lat, locals.len())
+            } else {
+                std::collections::HashMap::new()
+            };
+            let regs = if opts.ssa_regalloc && !materialize_locals {
+                // Отказ распределителя — ОШИБКА КОМПИЛЯЦИИ, а не тихий
+                // возврат к тождественному отображению. Проглоченный
+                // отказ означал бы, что замер считает проход включённым
+                // там, где он выключился сам, и кампания доказала бы не
+                // то, что мерила. Пропуск чанка с `Выполнить` или с
+                // `Попытка` — другое дело: это объявленное правило, а не
+                // сбой.
+                crate::regalloc::allocate_slots(
+                    &graph,
+                    &form,
+                    locals.len(),
+                    params.len().max(module_vars),
+                )
+                .map_err(|_| CompileError::TooManyRegisters)?
+            } else {
+                identity()
+            };
+            (consts, regs)
+        }
     } else {
         (std::collections::HashMap::new(), identity())
     };
