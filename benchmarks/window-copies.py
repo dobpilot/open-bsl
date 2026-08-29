@@ -21,7 +21,9 @@ import sys
 
 CLI = 'target/release/bsl-cli'
 
-CHUNK = re.compile(r'^\.chunk \d+ params=(\d+) locals=(\d+)')
+CHUNK = re.compile(r'^\.chunk (\d+) params=(\d+) locals=(\d+) regs=\d+ argmodes=\[([^\]]*)\]')
+MODULE_VARS = re.compile(r'^\.module-vars (\d+)')
+OBJ = re.compile(r'\bobj=(\d+)')
 INSTR = re.compile(r'^\s+(\d{4}) (\w+)(.*)$')
 ARGMODES = re.compile(r'^\s+(\d+) \[(.*)\]\s*$')
 HANDLER = re.compile(r'^\s+\d+ (\d+) (\d+) (\d+)\s*(;.*)?$')
@@ -52,16 +54,22 @@ def window_of(text, modes):
 
 
 def chunks_of(listing):
-    """Чанки листинга: (число локалей, инструкции, таблица режимов)."""
-    out, n_locals, instrs, modes, in_argmodes = [], 0, [], {}, False
-    ranges, in_handlers = [], False
+    """Чанки листинга со всем, что нужно классификатору."""
+    out, cur, instrs, modes, in_argmodes = [], None, [], {}, False
+    ranges, in_handlers, module_vars = [], False, 0
     for line in listing.splitlines():
+        m = MODULE_VARS.match(line)
+        if m:
+            module_vars = int(m.group(1))
+            continue
         m = CHUNK.match(line)
         if m:
-            if instrs:
-                out.append((n_locals, instrs, modes, ranges))
-            n_locals, instrs, modes = int(m.group(2)), [], {}
-            ranges, in_argmodes, in_handlers = [], False, False
+            if cur is not None:
+                out.append((*cur, instrs, modes, ranges))
+            by_val = [x.strip() == 'value' for x in m.group(4).split(',') if x.strip()]
+            cur = (int(m.group(1)), int(m.group(2)), int(m.group(3)), by_val, module_vars)
+            instrs, modes, ranges = [], {}, []
+            in_argmodes = in_handlers = False
             continue
         if line.startswith('  .handlers'):
             in_handlers, in_argmodes = True, False
@@ -69,7 +77,7 @@ def chunks_of(listing):
         if in_handlers:
             m = HANDLER.match(line)
             if m:
-                ranges.append((int(m.group(1)), int(m.group(2))))
+                ranges.append((int(m.group(1)), int(m.group(2)), int(m.group(3))))
                 continue
             in_handlers = False
         if line.startswith('  .argmodes'):
@@ -89,35 +97,40 @@ def chunks_of(listing):
         m = INSTR.match(line)
         if m:
             instrs.append((m.group(2), m.group(3)))
-    if instrs:
-        out.append((n_locals, instrs, modes, ranges))
+    if cur is not None:
+        out.append((*cur, instrs, modes, ranges))
     return out
 
 
 # Почему копия осталась. Деления на «из локали» и «из временного» мало:
 # оно отвечает на вопрос «есть ли что перенаправлять», но не на вопрос
 # «чем эту копию снимать». Причин три, и работы за ними разные.
-REASON_SEMANTIC = 'обязательна (Знач)'
-REASON_WIDE = 'широкое окно'
-REASON_NARROW = 'узкое окно нативного'
+REASON_SEMANTIC = 'обязательна: окно Call (Знач)'
+REASON_WIDE = 'широкое окно: нужна раскладка регистров'
+NARROW = 'узкое окно нативного, '
 
 
-def reason_for(op, width):
-    """Почему копия в окно этого вызова осталась."""
-    if op in ('Call', 'CallImported'):
-        # Слот окна СТАНОВИТСЯ параметром вызванной функции: копия и есть
-        # приватность `Знач`. Снять её нельзя вообще, ни распределением
-        # регистров, ни чем-либо ещё, — она не оптимизационный остаток.
-        return REASON_SEMANTIC
-    if width > 1:
-        # Окно обязано быть непрерывным, а источники соседних аргументов
-        # лежат где придётся: нужно согласованное размещение группы, то
-        # есть распределение регистров.
-        return REASON_WIDE
-    # Однорегистровое окно нативного вызова перестановка базы обязана была
-    # снять. Уцелевшее здесь — не «остаток на потом», а повод посмотреть,
-    # что ей помешало.
-    return REASON_NARROW
+def narrow_reason(i, dst, recv, ctx):
+    """Почему перестановка базы НЕ сработала на узком окне.
+
+    Проверяется всё, что видно в листинге: соседство, границы и тело
+    защищённого диапазона, точность приёмника и совпадение его с
+    получателем. Не видна отсюда только живучесть приёмника после
+    вызова — она и остаётся единственным необъяснённым остатком, и
+    называть его «должен был сняться» нельзя: у копии есть ещё одно
+    условие, которого этот разбор не проверяет.
+    """
+    if not ctx['adjacent']:
+        return NARROW + 'копия не соседняя вызову'
+    if ctx['boundary'](i):
+        return NARROW + 'граница защищённого диапазона'
+    if ctx['protected'](i):
+        return NARROW + 'внутри Попытка'
+    if not ctx['exact'](dst):
+        return NARROW + 'приёмник неточен'
+    if recv == dst:
+        return NARROW + 'приёмник он же получатель'
+    return NARROW + 'остаётся живучесть (не видна в листинге)'
 
 
 def classify(path):
@@ -133,8 +146,16 @@ def classify(path):
         return None
     loc = tmp = 0
     by_reason = {}
-    for n_locals, instrs, modes, ranges in chunks_of(p.stdout):
-        protected = lambda pc: any(lo <= pc < hi for lo, hi in ranges)
+    for idx, n_params, n_locals, by_val, module_vars, instrs, modes, ranges in chunks_of(p.stdout):
+        ctx = {
+            'protected': lambda pc: any(lo <= pc < hi for lo, hi, _ in ranges),
+            'boundary': lambda pc: any(pc in (lo, hi, h) for lo, hi, h in ranges),
+            # Точность — то же правило, что у `analysis::exact_reg`:
+            # псевдоним параметра по ссылке или перекрытие модульным
+            # слотом (перекрывается только кадр нулевого уровня).
+            'exact': lambda r: not (r < n_params and not by_val[r])
+            and not (idx == 0 and r < module_vars),
+        }
         for i, (op, text) in enumerate(instrs):
             if op != 'Move':
                 continue
@@ -142,19 +163,8 @@ def classify(path):
             if not m:
                 continue
             dst, src = int(m.group(1)), int(m.group(2))
-            # Окно ищется до ближайшего вызова, а не в трёх следующих
-            # инструкциях: у широкого окна между копией и вызовом стоят
-            # копии остальных аргументов, и их бывает больше трёх.
-            #
-            # По дороге проверяется достигающее определение: если слот
-            # переписан ДО вызова, до окна доедет не эта копия, а та, что
-            # её затёрла, и считать надо не её.
-            # Ищем ПЕРВОГО потребителя слота, а не первый попавшийся
-            # вызов: между копией и её вызовом может стоять чужой вызов с
-            # другим окном. Останавливаемся, когда слот прочитан окном
-            # (считаем) или перезаписан кем угодно (не считаем — до окна
-            # доедет не эта копия).
-            for op2, text2 in instrs[i + 1:]:
+            for j in range(i + 1, len(instrs)):
+                op2, text2 = instrs[j]
                 if op2.startswith('Call') or op2 == 'CreateObject':
                     w = window_of(text2, modes)
                     if w is not None and dst in w:
@@ -162,23 +172,16 @@ def classify(path):
                             loc += 1
                         else:
                             tmp += 1
-                        key = reason_for(op2, len(w))
-                        # У узкого нативного окна отдельно считается,
-                        # соседняя ли копия: перестановка базы требует
-                        # СОСЕДСТВА, иначе между копией и вызовом успевает
-                        # вклиниться инструкция, и доказывать пришлось бы
-                        # больше.
-                        if key == REASON_NARROW:
-                            if text2 is not instrs[i + 1][1]:
-                                key += ' (не соседняя)'
-                            elif protected(i):
-                                # `Попытка` — заявленное ограничение
-                                # прохода: исключение может сработать на
-                                # любой инструкции диапазона, а точной
-                                # живучести по каждой его точке нет.
-                                key += ' (в Попытка)'
-                            else:
-                                key += ' (соседняя, вне Попытка)'
+                        if op2 in ('Call', 'CallImported'):
+                            key = REASON_SEMANTIC
+                        elif len(w) > 1:
+                            key = REASON_WIDE
+                        else:
+                            recv = OBJ.search(text2)
+                            ctx['adjacent'] = j == i + 1
+                            key = narrow_reason(
+                                i, dst, int(recv.group(1)) if recv else None, ctx
+                            )
                         by_reason[key] = by_reason.get(key, 0) + 1
                         break
                 w2 = WRITES.search(text2)
@@ -211,6 +214,11 @@ def main():
         '\nАбсолютные числа зависят от методики разрешения достигающих\n'
         'определений и в выводы не берутся: несут их нули и порядки.'
     )
+    if failed:
+        # Несобравшийся скрипт — это отказ, а не «копий не нашлось».
+        # Замер, сообщающий о пропуске и завершающийся нулём, читается как
+        # успешный.
+        sys.exit(1)
 
 
 main()

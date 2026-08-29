@@ -298,6 +298,13 @@ gate_one() {
         }'
 }
 
+# Что питает копии в окно аргументов и почему они уцелели — предмет
+# второй половины шага 6.
+section_window() {
+    echo "== window: чем питаются копии в окно аргументов вызова =="
+    python3 benchmarks/window-copies.py
+}
+
 section_gate() {
     echo "== gate: ворота допуска прохода устранения копий =="
     echo "  $(freq_state)"
