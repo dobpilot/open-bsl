@@ -341,7 +341,26 @@ fn check_program_tables(program: &Program) -> Result<(), RtError> {
     }
     // Модульные переменные принадлежат отдельному `ModuleState`, поэтому их
     // число не связано с `n_regs` верхнего кадра. Границы конкретных
-    // `GetModuleVar`/`SetModuleVar` проверяются ниже по `module_vars`.
+    // `GetModuleVar`/`SetModuleVar` проверяются здесь же.
+    //
+    // VM проверяет их и сама, но на КАЖДОМ исполнении инструкции, а
+    // свойство статическое: отказ приходил на той инструкции, до которой
+    // дошли, то есть после того, как программа уже что-то напечатала и
+    // что-то изменила. Проверка VM остаётся — она сторожит и путь, куда
+    // образ мог прийти иначе, — но первым теперь отвечает периметр.
+    for chunk in &program.chunks {
+        for instr in &chunk.instrs {
+            let slot = match instr {
+                Instr::GetModuleVar { slot, .. } | Instr::SetModuleVar { slot, .. } => *slot,
+                _ => continue,
+            };
+            if slot as usize >= program.module_vars.len() {
+                return Err(RtError::InvalidBytecode(
+                    "номер переменной модуля вне таблицы",
+                ));
+            }
+        }
+    }
 
     // Подписи и тела связаны ПОЗИЦИОННО: `function_names[i]` — это
     // `chunks[i+1]`, а `chunks[0]` — тело модуля. Одной проверки каждого
@@ -951,6 +970,29 @@ mod tests {
             c.bundle_len.clear();
         }
         verify(&p).expect("пустая разметка обязана оставаться законной");
+    }
+
+    /// Модульный слот за границей таблицы отвергается ДО первой
+    /// инструкции.
+    ///
+    /// VM проверяет его и сама, но на каждом исполнении инструкции — то
+    /// есть отказ приходил после того, как программа уже что-то
+    /// напечатала. Свойство статическое.
+    #[test]
+    fn a_module_slot_out_of_range_is_rejected_before_the_first_instruction() {
+        for setter in [false, true] {
+            let mut p = valid_program();
+            p.chunks[0].instrs[1] = if setter {
+                Instr::SetModuleVar { slot: 7, src: 0 }
+            } else {
+                Instr::GetModuleVar { dst: 1, slot: 7 }
+            };
+            finalize(&mut p);
+            assert!(
+                verify(&p).is_err(),
+                "модульный слот вне таблицы (запись: {setter}) прошёл проверку"
+            );
+        }
     }
 
     /// Короткий инлайн-кэш отвергается ДО первой инструкции.
