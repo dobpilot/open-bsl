@@ -1166,15 +1166,6 @@ fn parse_program_body(r: &mut Reader) -> Result<Program> {
     if chunks.is_empty() {
         return Err(TextError::At(0, "нет ни одного .chunk".to_string()));
     }
-    // Разметка бандлов — производная таблица (как `prop_cache`): из файла
-    // не читается, а пересчитывается из уже разобранного. Обязана дать то
-    // же, что у компилятора — это держит побайтовый round-trip вместе с
-    // пометками `; бандл N` в листинге.
-    for (i, chunk) in chunks.iter_mut().enumerate() {
-        chunk.bundle_len =
-            crate::bundle::compute(chunk, crate::analysis::module_overlap(i, module_vars.len()));
-    }
-
     // Цели переходов из файла доверия не заслуживают ровно так же, как
     // разметка бандлов. `pc` за концом чанка VM принимает за нормальное
     // завершение, поэтому битая цель дала бы не диагностику, а МОЛЧА
@@ -1218,7 +1209,7 @@ fn parse_program_body(r: &mut Reader) -> Result<Program> {
         }
     }
 
-    Ok(Program {
+    let mut program = Program {
         requirements,
         chunks,
         names,
@@ -1230,7 +1221,13 @@ fn parse_program_body(r: &mut Reader) -> Result<Program> {
         exported_module_vars,
         module_base: 0,
         links,
-    })
+    };
+    // Разметка бандлов — производная таблица (как `prop_cache`): из файла
+    // не читается, а пересчитывается из уже разобранного. Обязана дать то
+    // же, что у компилятора — это держит побайтовый round-trip вместе с
+    // пометками `; бандл N` в листинге.
+    crate::image::finalize(&mut program);
+    Ok(program)
 }
 
 /// Хвост строки секции имён: ` export` у экспортного элемента, пусто у

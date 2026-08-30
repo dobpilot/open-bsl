@@ -168,11 +168,6 @@ fn entry_over_service(instrs: Vec<Instr>, arg_modes: Vec<Vec<ArgMode>>) -> Progr
     chunk.instrs = instrs;
     chunk.call_arg_modes = arg_modes;
     chunk.n_regs = 8;
-    let n = chunk.instrs.len();
-    chunk.prop_cache = (0..n)
-        .map(|_| bsl_bytecode::PropCacheSlot::default())
-        .collect();
-    chunk.method_cache = (0..n).map(|_| std::cell::RefCell::new(None)).collect();
     resolved.links = vec![
         bsl_bytecode::LinkEntry::Function {
             module: bsl_bytecode::ModuleId::new(0),
@@ -187,12 +182,7 @@ fn entry_over_service(instrs: Vec<Instr>, arg_modes: Vec<Vec<ArgMode>>) -> Progr
             func: 2,
         },
     ];
-    for i in 0..resolved.chunks.len() {
-        resolved.chunks[i].bundle_len = bsl_bytecode::bundle::compute(
-            &resolved.chunks[i],
-            bsl_bytecode::analysis::module_overlap(i, resolved.module_vars.len()),
-        );
-    }
+    bsl_bytecode::image::finalize(&mut resolved);
     resolved
 }
 
@@ -276,12 +266,7 @@ fn by_ref_arguments_cross_the_module_boundary_both_ways() {
         BslValue::number_from_i64(42),
         BslValue::number_from_i64(1000),
     ];
-    for i in 0..entry.chunks.len() {
-        entry.chunks[i].bundle_len = bsl_bytecode::bundle::compute(
-            &entry.chunks[i],
-            bsl_bytecode::analysis::module_overlap(i, entry.module_vars.len()),
-        );
-    }
+    bsl_bytecode::image::finalize(&mut entry);
     let value = run_configuration(&entry, &catalog).unwrap();
     assert_eq!(value, BslValue::number_from_i64(43101));
 }
@@ -329,17 +314,7 @@ fn a_failed_module_body_poisons_the_instance_for_the_session() {
         handler_pc: 1,
     }];
     chunk.n_regs = 2;
-    let n = chunk.instrs.len();
-    chunk.prop_cache = (0..n)
-        .map(|_| bsl_bytecode::PropCacheSlot::default())
-        .collect();
-    chunk.method_cache = (0..n).map(|_| std::cell::RefCell::new(None)).collect();
-    for i in 0..entry.chunks.len() {
-        entry.chunks[i].bundle_len = bsl_bytecode::bundle::compute(
-            &entry.chunks[i],
-            bsl_bytecode::analysis::module_overlap(i, entry.module_vars.len()),
-        );
-    }
+    bsl_bytecode::image::finalize(&mut entry);
     let error = run_configuration(&entry, &catalog).unwrap_err();
     assert!(
         error

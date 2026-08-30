@@ -3,10 +3,10 @@
 
 mod support;
 
-use bsl_bytecode::image::{verify, verify_configuration};
+use bsl_bytecode::image::{self, verify, verify_configuration};
 use bsl_bytecode::{
     ArgMode, BytecodeImage, ConfigurationProgram, EntryId, EntryProgram, Instr, LinkEntry,
-    ModuleId, ModuleProgram, Program, analysis, bundle, parse_image, parse_program, write_image,
+    ModuleId, ModuleProgram, Program, parse_image, parse_program, write_image,
 };
 
 /// Модуль «Служебный»: экспортная функция `Удвоить`, экспортная переменная
@@ -87,12 +87,7 @@ fn entry_program() -> EntryProgram {
 }
 
 fn recompute_bundles(p: &mut Program) {
-    for i in 0..p.chunks.len() {
-        p.chunks[i].bundle_len = bundle::compute(
-            &p.chunks[i],
-            analysis::module_overlap(i, p.module_vars.len()),
-        );
-    }
+    image::finalize(p);
 }
 
 fn catalog() -> ConfigurationProgram {
@@ -266,9 +261,14 @@ fn duplicate_module_names_differing_only_in_case_are_rejected() {
     catalog.modules[1].name = "СЛУЖЕБНЫЙ".to_string();
     catalog.modules[1].program.links.clear();
     catalog.modules[1].program.chunks[0] = {
-        let mut chunk = support::chunk(vec![Instr::Return { src: None }]);
-        chunk.bundle_len = bundle::compute(&chunk, analysis::module_overlap(0, 0));
-        chunk
+        // Один чанк без модульных переменных: разметку ему ставит та же
+        // единая точка, что и всем остальным.
+        let mut one = Program {
+            chunks: vec![support::chunk(vec![Instr::Return { src: None }])],
+            ..support::program(Vec::new())
+        };
+        image::finalize(&mut one);
+        one.chunks.remove(0)
     };
     let error = verify_configuration(&catalog, None).expect_err("дубль имени");
     assert!(error.to_string().contains("регистра"), "{error}");

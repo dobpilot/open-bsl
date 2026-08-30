@@ -2642,7 +2642,7 @@ fn prepare_job(
     });
     instrs.push(bsl_bytecode::Instr::Return { src: None });
     let regs = (n_params + 1).max(1) as u8;
-    let mut chunk = bsl_bytecode::Chunk {
+    let chunk = bsl_bytecode::Chunk {
         instrs,
         consts: arguments,
         call_arg_modes: vec![modes],
@@ -2660,13 +2660,6 @@ fn prepare_job(
         bundle_len: Vec::new(),
         touches_objects: false,
     };
-    let instruction_count = chunk.instrs.len();
-    chunk.prop_cache = (0..instruction_count)
-        .map(|_| bsl_bytecode::PropCacheSlot::default())
-        .collect();
-    chunk.method_cache = (0..instruction_count)
-        .map(|_| std::cell::RefCell::new(None))
-        .collect();
     let mut entry = bsl_bytecode::Program {
         requirements: base_program.requirements.clone(),
         chunks: vec![chunk],
@@ -2683,12 +2676,7 @@ fn prepare_job(
             func: target.1,
         }],
     };
-    for i in 0..entry.chunks.len() {
-        entry.chunks[i].bundle_len = bsl_bytecode::bundle::compute(
-            &entry.chunks[i],
-            bsl_bytecode::analysis::module_overlap(i, entry.module_vars.len()),
-        );
-    }
+    bsl_bytecode::image::finalize(&mut entry);
     let module = engine
         .load_entry(bsl_bytecode::EntryProgram {
             id: bsl_bytecode::EntryId::new(0),

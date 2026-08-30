@@ -4,9 +4,7 @@ use bsl_sema::{
 };
 use bsl_syntax::{BinaryOp, UnaryOp};
 
-use bsl_bytecode::{
-    ArgMode, Chunk, ExceptionRange, Instr, LibraryRequirement, Program, analysis, bundle,
-};
+use bsl_bytecode::{ArgMode, Chunk, ExceptionRange, Instr, LibraryRequirement, Program, analysis};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompileError {
@@ -328,12 +326,24 @@ fn compile_module_chunks(
         if opts.copy_elim {
             analysis::copy_propagate(chunk, overlap);
         }
-        chunk.bundle_len = bundle::compute(chunk, overlap);
     }
     Ok(chunks)
 }
 
 fn assemble_program(
+    resolved: &ResolvedProgram,
+    chunks: Vec<Chunk>,
+    names: Vec<String>,
+    shapes: Vec<std::rc::Rc<bsl_rt::Shape>>,
+) -> Program {
+    let mut program = assemble_raw(resolved, chunks, names, shapes);
+    // Производные таблицы считает ОДНА точка на весь проект: правило
+    // пересчёта и оба его аргумента принадлежат образу, а не сборщику.
+    bsl_bytecode::image::finalize(&mut program);
+    program
+}
+
+fn assemble_raw(
     resolved: &ResolvedProgram,
     chunks: Vec<Chunk>,
     names: Vec<String>,

@@ -16,8 +16,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use bsl_bytecode::{
-    ArgMode, Chunk, ExceptionRange, Instr, LibraryRequirement, Program, PropCacheSlot, analysis,
-    bundle,
+    ArgMode, Chunk, ExceptionRange, Instr, LibraryRequirement, Program, PropCacheSlot, image,
 };
 use bsl_rt::{BslValue, NameId, Shape, ShapeTable};
 
@@ -113,7 +112,6 @@ pub fn every_section() -> Program {
     top.local_names = vec!["х".to_string()];
     top.n_locals = 1;
     top.n_regs = 4;
-    top.touches_objects = true;
 
     let mut callee = chunk(vec![Instr::Return { src: None }]);
     callee.n_params = 1;
@@ -133,11 +131,6 @@ pub fn every_section() -> Program {
     // Разметка бандлов производная, но у ОБРАЗЦА она должна быть настоящей:
     // печать помечает ею многочленные бандлы, а разбор считает её заново, и
     // без неё round-trip разошёлся бы на комментарии.
-    for i in 0..p.chunks.len() {
-        p.chunks[i].bundle_len = bundle::compute(
-            &p.chunks[i],
-            analysis::module_overlap(i, p.module_vars.len()),
-        );
-    }
+    image::finalize(&mut p);
     p
 }
