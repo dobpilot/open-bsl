@@ -2644,7 +2644,15 @@ fn prepare_job(
     let regs = (n_params + 1).max(1) as u8;
     let chunk = bsl_bytecode::Chunk {
         instrs,
-        consts: arguments,
+        // Таблица констант здесь — ТРАНСПОРТ аргументов, а не
+        // литеральный пул: значения задания материализуются в объекты и
+        // типы, которых текстовый формат не представляет. Программа
+        // собирается в памяти и не печатается — сериализуется каталог с
+        // `entry: None`, — поэтому непредставимость ей ничем не грозит.
+        consts: arguments
+            .into_iter()
+            .map(bsl_bytecode::BytecodeConst::transient)
+            .collect(),
         call_arg_modes: vec![modes],
         exception_ranges: Vec::new(),
         n_params: 0,

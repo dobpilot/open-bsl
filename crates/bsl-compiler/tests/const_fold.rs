@@ -43,7 +43,7 @@ fn the_only_loaded_number(chunk: &Chunk) -> i64 {
         "ожидалась одна загрузка константы, получено {:?}",
         chunk.instrs
     );
-    match &chunk.consts[loads[0] as usize] {
+    match chunk.consts[loads[0] as usize].value() {
         bsl_rt::BslValue::Number(n) => n.to_i64_exact().expect("константа не целая"),
         v => panic!("константа не число: {v:?}"),
     }

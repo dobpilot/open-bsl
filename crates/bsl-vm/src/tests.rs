@@ -262,10 +262,13 @@ fn by_ref_arguments_cross_the_module_boundary_both_ways() {
     );
     entry.module_vars = vec!["М".to_string()];
     entry.exported_module_vars = vec![false];
-    entry.chunks[0].consts = vec![
+    entry.chunks[0].consts = [
         BslValue::number_from_i64(42),
         BslValue::number_from_i64(1000),
-    ];
+    ]
+    .into_iter()
+    .map(|v| bsl_bytecode::BytecodeConst::new(v).expect("число — константа"))
+    .collect();
     bsl_bytecode::image::finalize(&mut entry);
     let value = run_configuration(&entry, &catalog).unwrap();
     assert_eq!(value, BslValue::number_from_i64(43101));

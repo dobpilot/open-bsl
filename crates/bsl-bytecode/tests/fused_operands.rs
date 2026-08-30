@@ -15,7 +15,7 @@ fn number() -> BslValue {
 fn add_const_rejects_invalid_registers_and_constant() {
     let make = |dst, src, k| {
         let mut c = chunk(vec![Instr::AddConst { dst, src, k }]);
-        c.consts.push(number());
+        c.consts.push(support::konst(number()));
         program(vec![c])
     };
 
@@ -51,7 +51,7 @@ fn both_fused_jumps_reject_invalid_operands() {
     ];
     for instr in bad_registers {
         let mut c = chunk(vec![instr]);
-        c.consts.push(number());
+        c.consts.push(support::konst(number()));
         assert!(matches!(
             image::verify(&program(vec![c])),
             Err(RtError::InvalidBytecode(
@@ -74,7 +74,7 @@ fn both_fused_jumps_reject_invalid_operands() {
     ];
     for instr in bad_constants {
         let mut c = chunk(vec![instr]);
-        c.consts.push(number());
+        c.consts.push(support::konst(number()));
         assert!(matches!(
             image::verify(&program(vec![c])),
             Err(RtError::InvalidBytecode(

@@ -11,6 +11,11 @@ pub enum CompileError {
     TooManyLocals,
     TooManyRegisters,
     TooManyConstants,
+    /// Значение, которое текстовый формат байт-кода не представляет
+    /// (объект или тип), попало в таблицу констант. Кодоген такого не
+    /// порождает — вариант держит границу, а не описывает известный
+    /// случай.
+    UnrepresentableConst,
     TooManyArgModeTables,
     TooManyShapes,
     TooManyNames,
@@ -49,6 +54,7 @@ impl std::fmt::Display for CompileError {
             CompileError::TooManyLocals => "слишком много локальных переменных в кадре",
             CompileError::TooManyRegisters => "слишком много регистров в кадре",
             CompileError::TooManyConstants => "слишком много констант в чанке",
+            CompileError::UnrepresentableConst => "константа непредставима в байт-коде",
             CompileError::TooManyArgModeTables => "слишком много наборов режимов аргументов",
             CompileError::TooManyShapes => "слишком много форм структур",
             CompileError::TooManyNames => "слишком много имён",
@@ -720,7 +726,7 @@ type BuildPtrHasher = std::hash::BuildHasherDefault<PtrHasher>;
 
 struct Compiler<'a> {
     instrs: Vec<Instr>,
-    consts: Vec<BslValue>,
+    consts: Vec<bsl_bytecode::BytecodeConst>,
     call_arg_modes: Vec<Vec<ArgMode>>,
     exception_ranges: Vec<ExceptionRange>,
     /// Вершина свободных регистров: параметры+локалы занимают
@@ -793,6 +799,13 @@ impl<'a> Compiler<'a> {
     }
 
     fn add_const(&mut self, v: BslValue) -> Result<u16, CompileError> {
+        // Единственный вход в таблицу констант чанка. Кодоген кладёт сюда
+        // только литералы, то есть непредставимого прийти не может, — но
+        // проверяемое преобразование обходить нельзя и там, где отказ
+        // недостижим: обход и есть тот способ, которым непредставимое
+        // однажды окажется в таблице.
+        let v =
+            bsl_bytecode::BytecodeConst::new(v).map_err(|_| CompileError::UnrepresentableConst)?;
         let k = self.consts.len();
         let k: u16 = k.try_into().map_err(|_| CompileError::TooManyConstants)?;
         self.consts.push(v);

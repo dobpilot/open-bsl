@@ -676,6 +676,7 @@ shim!(shim_load_const, |frames,
         k as usize,
         "номер константы вне таблицы констант чанка",
     )?
+    .value()
     .clone();
     let d = frames[idx].reg_index(dst as u8);
     reg_store(stack, d, v)?;

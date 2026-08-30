@@ -1272,8 +1272,8 @@ pub fn const_propagate(chunk: &mut Chunk, overlap: Option<usize>) -> usize {
                 && let Some(ks) = known.get(src as usize).copied().flatten()
                 && let (Some(vs), Some(vk)) =
                     (chunk.consts.get(ks as usize), chunk.consts.get(k as usize))
-                && matches!(vs, bsl_rt::BslValue::Number(_))
-                && matches!(vk, bsl_rt::BslValue::Number(_))
+                && matches!(**vs, bsl_rt::BslValue::Number(_))
+                && matches!(**vk, bsl_rt::BslValue::Number(_))
                 && let Ok(v) = vs.add(vk)
                 && let Some(nk) = intern_const(chunk, v)
             {
@@ -1292,8 +1292,8 @@ pub fn const_propagate(chunk: &mut Chunk, overlap: Option<usize>) -> usize {
                 )
                 && let (Some(va), Some(vb)) =
                     (chunk.consts.get(ka as usize), chunk.consts.get(kb as usize))
-                && matches!(va, bsl_rt::BslValue::Number(_))
-                && matches!(vb, bsl_rt::BslValue::Number(_))
+                && matches!(**va, bsl_rt::BslValue::Number(_))
+                && matches!(**vb, bsl_rt::BslValue::Number(_))
             {
                 let out = match chunk.instrs[pc] {
                     Instr::Add { .. } => va.add(vb),
@@ -1351,6 +1351,10 @@ pub fn const_propagate(chunk: &mut Chunk, overlap: Option<usize>) -> usize {
 /// ограничен по построению: свёртка добавляет не больше одной константы
 /// на инструкцию и выполняется один раз на компиляции.
 fn intern_const(chunk: &mut Chunk, v: bsl_rt::BslValue) -> Option<u16> {
+    // Непредставимое значение сюда прийти не может: свёртка складывает
+    // числа. Но проверяемое преобразование — единственный вход в таблицу
+    // констант, и обходить его нельзя даже там, где отказ невозможен.
+    let v = crate::BytecodeConst::new(v).ok()?;
     let i = u16::try_from(chunk.consts.len()).ok()?;
     chunk.consts.push(v);
     Some(i)
@@ -1494,8 +1498,9 @@ mod tests {
         assert!(!removable_copies(&c, None)[1]);
     }
 
-    fn num(v: i64) -> bsl_rt::BslValue {
-        bsl_rt::BslValue::Number(bsl_number::BslNumber::from_i64(v))
+    fn num(v: i64) -> crate::BytecodeConst {
+        crate::BytecodeConst::new(bsl_rt::BslValue::Number(bsl_number::BslNumber::from_i64(v)))
+            .expect("число — константа")
     }
 
     #[test]
@@ -1559,7 +1564,11 @@ mod tests {
             Instr::Sub { dst: 2, a: 0, b: 1 },
             Instr::Return { src: Some(2) },
         ]);
-        c.consts = vec![bsl_rt::BslValue::Str(bsl_rt::BslString::from("5")), num(1)];
+        c.consts = vec![
+            crate::BytecodeConst::new(bsl_rt::BslValue::Str(bsl_rt::BslString::from("5")))
+                .expect("строка — константа"),
+            num(1),
+        ];
         assert_eq!(const_propagate(&mut c, None), 0);
     }
 

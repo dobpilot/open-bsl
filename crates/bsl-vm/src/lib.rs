@@ -2936,6 +2936,7 @@ fn step(
                     k as usize,
                     "номер константы вне таблицы констант чанка",
                 )?
+                .value()
                 .clone();
                 let d = frames[frame_idx].reg_index(dst);
                 reg_store(stack, d, v)?;

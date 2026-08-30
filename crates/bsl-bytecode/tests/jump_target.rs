@@ -74,7 +74,8 @@ fn jumps() -> bsl_bytecode::Program {
             .collect(),
     );
     c.n_regs = 2;
-    c.consts.push(BslValue::Number(BslNumber::from_i64(1)));
+    c.consts
+        .push(support::konst(BslValue::Number(BslNumber::from_i64(1))));
     program(vec![c])
 }
 
@@ -139,7 +140,8 @@ fn tampering_is_rejected_for_each_of_the_eight_target_carrying_opcodes() {
 fn fused_equality_jump_rejects_an_invalid_register_and_constant() {
     let make = |src, k| {
         let mut c = chunk(vec![Instr::JumpIfNotEqConst { src, k, target: 1 }]);
-        c.consts.push(BslValue::Number(BslNumber::from_i64(1)));
+        c.consts
+            .push(support::konst(BslValue::Number(BslNumber::from_i64(1))));
         program(vec![c])
     };
 

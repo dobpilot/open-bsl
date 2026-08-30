@@ -8,7 +8,7 @@
 
 mod support;
 
-use bsl_bytecode::{Instr, TextError, parse_program, write_program};
+use bsl_bytecode::{BytecodeConst, Instr, TextError, parse_program, write_program};
 use bsl_rt::{BslValue, NameId};
 use support::{chunk, every_section, program, shapes};
 
@@ -19,7 +19,7 @@ fn one_const() -> bsl_bytecode::Program {
         Instr::LoadConst { dst: 0, k: 0 },
         Instr::Return { src: None },
     ]);
-    c.consts = vec![BslValue::number_from_i64(1)];
+    c.consts = vec![support::konst(BslValue::number_from_i64(1))];
     program(vec![c])
 }
 
@@ -44,7 +44,9 @@ fn a_semicolon_inside_a_string_constant_is_not_a_comment() {
         Instr::LoadConst { dst: 0, k: 0 },
         Instr::Return { src: None },
     ]);
-    c.consts = vec![BslValue::Str(bsl_rt::BslString::from_str("а;б"))];
+    c.consts = vec![support::konst(BslValue::Str(bsl_rt::BslString::from_str(
+        "а;б",
+    )))];
     let program = program(vec![c]);
     let text = write_program(&program, None).unwrap();
     let reparsed = parse_program(&text).unwrap();
@@ -138,12 +140,20 @@ fn a_corrupted_body_names_the_line() {
     assert!(parse_program(&broken).is_err());
 }
 
+/// Объект в таблице констант печатью отвергается, а не печатается
+/// неверно.
+///
+/// Положить его туда можно ровно одним входом — `BytecodeConst::transient`,
+/// и существует тот вход ради фоновых заданий, где таблица констант
+/// служит транспортом аргументов, а программа не печатается никогда.
+/// Этот тест — вторая половина той же договорённости: если такая
+/// программа всё же дойдёт до печати, печать откажет.
 #[test]
 fn objects_in_constants_are_refused_rather_than_printed_wrong() {
     let mut program = one_const();
     program.chunks[0]
         .consts
-        .push(BslValue::new_array(Vec::new()));
+        .push(BytecodeConst::transient(BslValue::new_array(Vec::new())));
     assert!(matches!(
         write_program(&program, None),
         Err(TextError::Unrepresentable(_))

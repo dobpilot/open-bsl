@@ -16,13 +16,20 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use bsl_bytecode::{
-    ArgMode, Chunk, ExceptionRange, Instr, LibraryRequirement, Program, PropCacheSlot, image,
+    ArgMode, BytecodeConst, Chunk, ExceptionRange, Instr, LibraryRequirement, Program,
+    PropCacheSlot, image,
 };
 use bsl_rt::{BslValue, NameId, Shape, ShapeTable};
 
 /// Чанк с этими инструкциями и пустыми таблицами. Кэши создаются длиной с
 /// код: VM индексирует их номером инструкции.
 #[must_use]
+/// Константа обвязки. Тесты кладут только представимое, поэтому отказ
+/// проверяемого преобразования здесь — ошибка самого теста.
+pub fn konst(value: bsl_rt::BslValue) -> BytecodeConst {
+    BytecodeConst::new(value).expect("тест положил непредставимую константу")
+}
+
 pub fn chunk(instrs: Vec<Instr>) -> Chunk {
     let n = instrs.len();
     Chunk {
@@ -102,7 +109,7 @@ pub fn every_section() -> Program {
         },
         Instr::Return { src: None },
     ]);
-    top.consts = vec![BslValue::number_from_i64(1)];
+    top.consts = vec![BytecodeConst::new(BslValue::number_from_i64(1)).expect("число — константа")];
     top.call_arg_modes = vec![vec![ArgMode::Value]];
     top.exception_ranges = vec![ExceptionRange {
         start_pc: 0,

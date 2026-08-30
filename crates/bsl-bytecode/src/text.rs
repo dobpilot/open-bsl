@@ -1412,7 +1412,15 @@ fn parse_chunk(r: &mut Reader, expected_index: usize) -> Result<Chunk> {
             .split_once(char::is_whitespace)
             .ok_or_else(|| TextError::At(no, "ожидалось «N значение»".to_string()))?;
         parse_index(no, idx, i)?;
-        consts.push(parse_const(no, rest.trim())?);
+        // Разбор строит константы из ТЕКСТА, то есть по построению
+        // получает только представимые: непредставимого тега в формате
+        // просто нет. Проверяемое преобразование здесь — тавтология, и
+        // отказ его недостижим; но второго входа в таблицу констát быть
+        // не должно.
+        let value = parse_const(no, rest.trim())?;
+        let value = crate::BytecodeConst::new(value)
+            .map_err(|_| TextError::At(no, "константа непредставима".to_string()))?;
+        consts.push(value);
     }
 
     let n = r.directive(".argmodes")?;

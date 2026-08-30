@@ -20,7 +20,9 @@ mod instr;
 mod text;
 
 pub use bsl_rt::LibraryRequirement;
-pub use chunk::{Chunk, ExceptionRange, MethodCacheSlot, Program, PropCacheSlot, SnippetUnit};
+pub use chunk::{
+    BytecodeConst, Chunk, ExceptionRange, MethodCacheSlot, Program, PropCacheSlot, SnippetUnit,
+};
 pub use configuration::{
     BytecodeImage, ConfigurationProgram, EntryId, EntryProgram, LinkEntry, LinkSlot, ModuleId,
     ModuleProgram,

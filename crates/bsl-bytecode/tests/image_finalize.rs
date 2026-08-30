@@ -26,7 +26,7 @@ fn valid_program() -> Program {
         ]),
         chunk(vec![Instr::Return { src: None }]),
     ]);
-    p.chunks[0].consts = vec![bsl_rt::BslValue::number_from_i64(1)];
+    p.chunks[0].consts = vec![support::konst(bsl_rt::BslValue::number_from_i64(1))];
     p.chunks[0].n_regs = 2;
     p.module_vars = vec!["Общая".to_string()];
     p.exported_module_vars = vec![true];
@@ -55,7 +55,7 @@ fn a_stale_bundle_table_is_rejected() {
         Instr::LoadConst { dst: 1, k: 0 },
         Instr::Return { src: None },
     ];
-    p.chunks[1].consts = vec![bsl_rt::BslValue::number_from_i64(1)];
+    p.chunks[1].consts = vec![support::konst(bsl_rt::BslValue::number_from_i64(1))];
     p.chunks[1].n_regs = 2;
     assert!(
         image::verify(&p).is_err(),
@@ -78,7 +78,7 @@ fn a_bundle_table_computed_with_the_wrong_overlap_is_rejected() {
         Instr::GetModuleVar { dst: 1, slot: 0 },
         Instr::Return { src: None },
     ];
-    p.chunks[0].consts = vec![bsl_rt::BslValue::number_from_i64(1)];
+    p.chunks[0].consts = vec![support::konst(bsl_rt::BslValue::number_from_i64(1))];
     p.chunks[0].n_regs = 2;
     image::finalize(&mut p);
 
