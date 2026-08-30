@@ -60,6 +60,55 @@ impl bsl_bytecode::DynamicCompiler for TestDynamic<'_> {
 /// Прогон без реестра, но с компилятором фрагментов: `run_program` его не
 /// даёт намеренно (см. её doc comment), а большинству тестов здесь
 /// `Выполнить`/`Вычислить` нужны.
+/// Исполнить программу, МИНУЯ периметр.
+///
+/// Существует ради одного теста — того, что проверяет размотку ошибки из
+/// вложенного кадра. Классы порчи, на которых он держался, периметр
+/// теперь отвергает до исполнения, и это правильно: держать ради теста
+/// дыру в проверке образа нельзя. Но и проверять размотку надо, потому
+/// что рантайм-стражи (`at`) остаются вторым рубежом и обязаны возвращать
+/// ошибку, а не паниковать.
+fn run_unverified(program: &Program) -> Result<BslValue, RtError> {
+    let mut env = bsl_rt::HostEnv::process();
+    let mut stdout = std::io::stdout().lock();
+    let mut stderr = std::io::stderr().lock();
+    let mut dynamic = TestDynamic::bare();
+
+    let mut stack = Vec::new();
+    crate::push_own_registers(&mut stack, &program.chunks[0]);
+    let linked = crate::link_verified(
+        program,
+        None,
+        env.zone(),
+        env.files(),
+        env.random(),
+        env.network(),
+        env.background_jobs(),
+        env.temp_storage(),
+        env.message_sink(),
+        bsl_bytecode::DynamicScope::ROOT,
+    )?;
+    let dynamic_depth = std::cell::Cell::new(0);
+    let mut host = crate::HostIo {
+        stdout: &mut stdout,
+        stderr: &mut stderr,
+        env: Some(&mut env),
+        dynamic: Some(&mut dynamic),
+        dynamic_depth: &dynamic_depth,
+    };
+    let mut module_state = crate::ModuleState::new(program);
+    let (value, _) = crate::drive_linked(
+        program,
+        0,
+        stack,
+        JitMode::Off,
+        &linked,
+        &mut host,
+        &mut module_state,
+    )?;
+    Ok(value)
+}
+
 fn run_with_dynamic(program: &Program, jit_mode: JitMode) -> Result<BslValue, RtError> {
     let mut env = bsl_rt::HostEnv::process();
     let mut stdout = std::io::stdout().lock();
@@ -1936,11 +1985,17 @@ fn corrupt_bytecode_inside_a_call_unwinds_to_an_error_not_a_panic() {
     bsl_bytecode::image::finalize(&mut program);
     // Явная предпосылка: образ обязан быть ПРИНЯТ периметром, иначе
     // проверяемый отказ придёт не оттуда, откуда проверяется.
-    bsl_bytecode::image::verify(&program)
-        .expect("предпосылка теста: образ проходит периметр, отказ даёт исполнение");
+    // Периметр этот образ ОТВЕРГАЕТ, и так и должно быть: номер константы
+    // вне таблицы он теперь проверяет. Тест про другое — про то, что
+    // рантайм-страж во вложенном кадре возвращает ошибку, а не паникует, —
+    // поэтому исполнение идёт мимо периметра.
+    assert!(
+        bsl_bytecode::image::verify(&program).is_err(),
+        "предпосылка теста: эту порчу периметр обязан ловить"
+    );
 
     assert!(matches!(
-        run_with_dynamic(&program, JitMode::Off),
+        run_unverified(&program),
         Err(RtError::InvalidBytecode(_))
     ));
 }

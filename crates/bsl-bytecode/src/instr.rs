@@ -452,6 +452,81 @@ impl Instr {
         }
     }
 
+    /// Номер константы в таблице чанка, если инструкция его несёт.
+    ///
+    /// Узкий наблюдатель по образцу [`Self::jump_target`], и заведён он
+    /// ровно затем, чтобы проверка образа спрашивала ОДНО место, а не
+    /// заводила второй разбор по опкодам: таблица эффектов моделирует
+    /// регистры, модульные слоты, кучу и вывод, но не таблицу констант,
+    /// а перечислять опкоды в `image` значило бы развести две
+    /// классификации, которые разойдутся на первом новом опкоде.
+    ///
+    /// Разбор ИСЧЕРПЫВАЮЩИЙ, без ветви-заглушки: новый опкод с
+    /// константным операндом обязан быть ошибкой сборки здесь, а не молча
+    /// пройти мимо проверки. Цена этому — перечисление всех прочих
+    /// вариантов, и она сознательная.
+    #[must_use]
+    pub fn const_index(&self) -> Option<u16> {
+        match self {
+            Instr::LoadConst { k, .. }
+            | Instr::AddConst { k, .. }
+            | Instr::JumpIfNotEqConst { k, .. }
+            | Instr::JumpIfNotLtConst { k, .. } => Some(*k),
+            Instr::Move { .. }
+            | Instr::GetModuleVar { .. }
+            | Instr::SetModuleVar { .. }
+            | Instr::GetImportedVar { .. }
+            | Instr::SetImportedVar { .. }
+            | Instr::LoadBool { .. }
+            | Instr::LoadUndefined { .. }
+            | Instr::LoadNull { .. }
+            | Instr::Add { .. }
+            | Instr::Sub { .. }
+            | Instr::Mul { .. }
+            | Instr::Div { .. }
+            | Instr::Mod { .. }
+            | Instr::Neg { .. }
+            | Instr::Not { .. }
+            | Instr::Eq { .. }
+            | Instr::NotEq { .. }
+            | Instr::Lt { .. }
+            | Instr::Gt { .. }
+            | Instr::Le { .. }
+            | Instr::Ge { .. }
+            | Instr::Jump { .. }
+            | Instr::JumpIfFalse { .. }
+            | Instr::JumpIfTrue { .. }
+            | Instr::JumpIfNotSkipped { .. }
+            | Instr::NumericForNext { .. }
+            | Instr::NumericForNextI64 { .. }
+            | Instr::Call { .. }
+            | Instr::CallImported { .. }
+            | Instr::Await { .. }
+            | Instr::Return { .. }
+            | Instr::GetIndex { .. }
+            | Instr::SetIndex { .. }
+            | Instr::GetProp { .. }
+            | Instr::SetProp { .. }
+            | Instr::CreateObject { .. }
+            | Instr::NewArray { .. }
+            | Instr::NewStructure { .. }
+            | Instr::NewTable { .. }
+            | Instr::NewTypeDescription { .. }
+            | Instr::NewValueComparison { .. }
+            | Instr::NewMap { .. }
+            | Instr::NewTextWriter { .. }
+            | Instr::CollectionLen { .. }
+            | Instr::Raise { .. }
+            | Instr::CallBuiltin { .. }
+            | Instr::CallComponent { .. }
+            | Instr::CallMethod { .. }
+            | Instr::RunDynamic { .. }
+            | Instr::CallObjectMethod { .. }
+            | Instr::GetObjectProp { .. }
+            | Instr::SetObjectProp { .. } => None,
+        }
+    }
+
     /// Обращается ли инструкция к ОБЪЕКТУ: шесть опкодов, у которых
     /// обработчик компонента получает `CallContext`.
     ///

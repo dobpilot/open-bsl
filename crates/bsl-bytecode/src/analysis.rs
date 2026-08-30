@@ -171,16 +171,22 @@ pub(crate) struct Eff {
     pub(crate) writes_alias: bool,
     pub(crate) mod_reads: ModSet,
     pub(crate) mod_writes: ModSet,
-    /// Регистровые наборы НАСЫЩЕНЫ: инструкция объявляет обращение ко
-    /// всем регистрам разом, а не адресует их операндами.
+    /// Регистры, которые инструкция АДРЕСУЕТ своими операндами.
     ///
-    /// Различие нужно тому, кто спрашивает у таблицы «лежит ли всякий
-    /// регистр инструкции в кадре». Без флага такой вопрос неотвечаем:
-    /// `RunDynamic` объявляет чтение всех 256 регистров, и его максимум
-    /// равен 255 при кадре в три. У модульных слотов то же различие
-    /// выражено вариантами (`ModSet::One` против `ModSet::All`); здесь —
-    /// флагом, потому что `RegSet` — набор, а не перечисление.
-    pub(crate) regs_saturated: bool,
+    /// Отдельный набор нужен потому, что `reads`/`writes` несут не одну
+    /// только адресацию, а три разные вещи разом, и лишь первая
+    /// утверждает, что регистр существует:
+    ///
+    /// 1. адресованные операнды — вот они;
+    /// 2. насыщение: `RunDynamic` объявляет обращение ко всем 256
+    ///    регистрам, потому что видит именованные локали по именам;
+    /// 3. проекция модульных слотов на регистры `0..overlap` —
+    ///    преднамеренно ложное пересечение (см. доклад модуля).
+    ///
+    /// Спрашивающему «лежит ли регистр инструкции в кадре» нужна ровно
+    /// первая, и она здесь одна. Алиасность номер не отменяет: параметр
+    /// по ссылке адресуется тем же операндом и обязан быть в кадре.
+    pub(crate) addressed_regs: RegSet,
     pub(crate) heap_read: bool,
     pub(crate) heap_write: bool,
     pub(crate) io: bool,
@@ -195,7 +201,7 @@ impl Default for Eff {
             writes: RegSet::default(),
             reads_alias: false,
             writes_alias: false,
-            regs_saturated: false,
+            addressed_regs: RegSet::default(),
             mod_reads: ModSet::None,
             mod_writes: ModSet::None,
             heap_read: false,
@@ -218,6 +224,7 @@ pub(crate) fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> E
     };
     macro_rules! read {
         ($r:expr) => {
+            e.addressed_regs.insert($r as usize);
             if is_alias($r) {
                 e.reads_alias = true;
             } else {
@@ -227,6 +234,7 @@ pub(crate) fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> E
     }
     macro_rules! write {
         ($r:expr) => {
+            e.addressed_regs.insert($r as usize);
             if is_alias($r) {
                 e.writes_alias = true;
             } else {
@@ -241,6 +249,7 @@ pub(crate) fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> E
     // боковой таблицы. Операнда, который можно переписать, у него нет.
     macro_rules! read_fixed {
         ($r:expr) => {
+            e.addressed_regs.insert($r as usize);
             if is_alias($r) {
                 e.reads_alias = true;
             } else {
@@ -252,6 +261,7 @@ pub(crate) fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> E
     macro_rules! read_range {
         ($base:expr, $count:expr) => {
             for r in ($base as usize)..(($base as usize) + ($count as usize)).min(256) {
+                e.addressed_regs.insert(r);
                 if is_alias(r as u8) {
                     e.reads_alias = true;
                 } else {
@@ -612,8 +622,15 @@ pub(crate) fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> E
         }
         // Фрагмент читает и пишет все именованные локали кадра по именам
         // и исполняет произвольный код — всегда одиночный.
-        Instr::RunDynamic { .. } => {
+        Instr::RunDynamic { src, dst, .. } => {
             e.ctl = Ctl::Barrier;
+            // Свои операнды у фрагмента ЕСТЬ — исходный текст и приёмник
+            // результата, — и VM их читает и пишет. Насыщение ниже про
+            // другое: про локали, которые фрагмент видит по именам.
+            // Смешать их нельзя, иначе `RunDynamic { src: 250 }` при кадре
+            // в один регистр прошёл бы периметр.
+            e.addressed_regs.insert(src as usize);
+            e.addressed_regs.insert(dst as usize);
             // Фрагмент видит ИМЕНОВАННЫЕ локали кадра по именам
             // (`local_names`), а не по номерам регистров, поэтому здесь
             // читается и пишется всё. Для разметки бандлов это ничего не
@@ -623,9 +640,6 @@ pub(crate) fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> E
             e.reads.insert_range(0, 256);
             e.reads_positional.insert_range(0, 256);
             e.writes.insert_range(0, 256);
-            // Наборы насыщены, а не адресованы: это объявление «трогаю
-            // всё», и спрашивать у него границы кадра бессмысленно.
-            e.regs_saturated = true;
             e.reads_alias = true;
             e.writes_alias = true;
             // И модульные слоты: фрагмент видит переменные модуля так же,

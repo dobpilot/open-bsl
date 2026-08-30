@@ -1112,7 +1112,7 @@ fn resolve_component_method(
 
 #[allow(clippy::too_many_arguments)]
 fn link_components<'a>(
-    program: &Program,
+    program: &'a Program,
     registry: Option<&'a bsl_rt::RuntimeRegistry>,
     zone: std::rc::Rc<dyn bsl_rt::TimeZone>,
     files: std::rc::Rc<dyn bsl_rt::FileSystem>,
@@ -1123,7 +1123,41 @@ fn link_components<'a>(
     message_sink: Option<std::rc::Rc<dyn bsl_rt::UserMessageSink>>,
     scope: u64,
 ) -> Result<LinkedComponents<'a>, RtError> {
+    // Периметр стоит ПЕРВОЙ строкой и отделён от самого связывания
+    // (`link_verified` ниже) ради одного-единственного теста — того, что
+    // проверяет РАЗМОТКУ ошибки из вложенного кадра. Классы порчи,
+    // которыми он раньше пользовался, периметр теперь отвергает до
+    // исполнения, и это правильно; но проверять размотку всё равно надо,
+    // а сохранять ради неё дыру в периметре — нельзя. Шов приватный и
+    // из рабочего пути недостижим.
     bsl_bytecode::image::verify(program)?;
+    link_verified(
+        program,
+        registry,
+        zone,
+        files,
+        random,
+        network,
+        background_jobs,
+        temp_storage,
+        message_sink,
+        scope,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn link_verified<'a>(
+    program: &'a Program,
+    registry: Option<&'a bsl_rt::RuntimeRegistry>,
+    zone: std::rc::Rc<dyn bsl_rt::TimeZone>,
+    files: std::rc::Rc<dyn bsl_rt::FileSystem>,
+    random: bsl_rt::RandomHandle,
+    network: Option<std::rc::Rc<dyn bsl_rt::HttpClientFactory>>,
+    background_jobs: Option<std::rc::Rc<dyn bsl_rt::BackgroundJobService>>,
+    temp_storage: Option<std::rc::Rc<std::cell::RefCell<bsl_rt::TempStorageSession>>>,
+    message_sink: Option<std::rc::Rc<dyn bsl_rt::UserMessageSink>>,
+    scope: u64,
+) -> Result<LinkedComponents<'a>, RtError> {
     // Список собирается ОДИН РАЗ на программу: у обычного движка он пуст,
     // и нативный путь остаётся ровно таким, каким был.
     let interpreter_only_objects =
