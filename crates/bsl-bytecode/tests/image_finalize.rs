@@ -107,6 +107,29 @@ fn an_empty_bundle_table_is_a_legitimate_opt_out() {
     image::verify(&p).expect("пустая разметка обязана оставаться законной");
 }
 
+/// Короткий инлайн-кэш отвергается ДО первой инструкции.
+///
+/// VM ловит его и сегодня, но посреди исполнения: доступ идёт через
+/// проверяемый `at`, и отказ приходит на той инструкции, до которой
+/// дошли, — после того как программа уже что-то напечатала. Свойство
+/// статическое, и место ему в проверке образа.
+#[test]
+fn a_short_inline_cache_is_rejected_before_the_first_instruction() {
+    for short_props in [true, false] {
+        let mut p = valid_program();
+        image::finalize(&mut p);
+        if short_props {
+            p.chunks[0].prop_cache.pop();
+        } else {
+            p.chunks[0].method_cache.pop();
+        }
+        assert!(
+            image::verify(&p).is_err(),
+            "короткий инлайн-кэш (свойств: {short_props}) прошёл проверку"
+        );
+    }
+}
+
 /// Финализация вычисляет пересечение модульных слотов ИЗНУТРИ образа: у
 /// вызывающего не остаётся способа передать чужое.
 #[test]
