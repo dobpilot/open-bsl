@@ -1916,7 +1916,13 @@ fn corrupt_bytecode_inside_a_call_unwinds_to_an_error_not_a_panic() {
     ]);
     program.chunks[0].call_arg_modes = vec![Vec::new()];
     let mut callee = program.chunks[0].clone();
-    callee.instrs = vec![Instr::Move { dst: 250, src: 0 }];
+    // Порча ВНУТРИ вызываемого обязана быть такой, которую периметр
+    // пропускает, иначе тест снова проверял бы не размотку: регистр за
+    // кадром теперь отвергается статически. Номер константы вне таблицы
+    // периметр не проверяет — его ловит `at` на исполнении, а это ровно
+    // тот путь, ради которого тест написан.
+    callee.instrs = vec![Instr::LoadConst { dst: 0, k: 42 }];
+    callee.consts = Vec::new();
     program.chunks.push(callee);
     // Имя вызываемой функции обязательно: `func` адресует и таблицу имён, и
     // таблицу чанков, и без записи периметр отверг бы образ ещё при

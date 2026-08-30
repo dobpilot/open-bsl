@@ -92,6 +92,19 @@ impl RegSet {
         }
     }
 
+    /// Наибольший номер в наборе, если набор непуст.
+    ///
+    /// Спрашивать его осмысленно только у НЕнасыщенного набора — см.
+    /// `Eff::regs_saturated`.
+    pub(crate) fn max(&self) -> Option<usize> {
+        self.0
+            .iter()
+            .enumerate()
+            .rev()
+            .find(|(_, w)| **w != 0)
+            .map(|(i, w)| i * 64 + (63 - w.leading_zeros() as usize))
+    }
+
     pub(crate) fn contains(&self, r: usize) -> bool {
         r < 256 && self.0[r / 64] & (1 << (r % 64)) != 0
     }
@@ -158,6 +171,16 @@ pub(crate) struct Eff {
     pub(crate) writes_alias: bool,
     pub(crate) mod_reads: ModSet,
     pub(crate) mod_writes: ModSet,
+    /// Регистровые наборы НАСЫЩЕНЫ: инструкция объявляет обращение ко
+    /// всем регистрам разом, а не адресует их операндами.
+    ///
+    /// Различие нужно тому, кто спрашивает у таблицы «лежит ли всякий
+    /// регистр инструкции в кадре». Без флага такой вопрос неотвечаем:
+    /// `RunDynamic` объявляет чтение всех 256 регистров, и его максимум
+    /// равен 255 при кадре в три. У модульных слотов то же различие
+    /// выражено вариантами (`ModSet::One` против `ModSet::All`); здесь —
+    /// флагом, потому что `RegSet` — набор, а не перечисление.
+    pub(crate) regs_saturated: bool,
     pub(crate) heap_read: bool,
     pub(crate) heap_write: bool,
     pub(crate) io: bool,
@@ -172,6 +195,7 @@ impl Default for Eff {
             writes: RegSet::default(),
             reads_alias: false,
             writes_alias: false,
+            regs_saturated: false,
             mod_reads: ModSet::None,
             mod_writes: ModSet::None,
             heap_read: false,
@@ -599,6 +623,9 @@ pub(crate) fn effects(instr: &Instr, chunk: &Chunk, overlap: Option<usize>) -> E
             e.reads.insert_range(0, 256);
             e.reads_positional.insert_range(0, 256);
             e.writes.insert_range(0, 256);
+            // Наборы насыщены, а не адресованы: это объявление «трогаю
+            // всё», и спрашивать у него границы кадра бессмысленно.
+            e.regs_saturated = true;
             e.reads_alias = true;
             e.writes_alias = true;
             // И модульные слоты: фрагмент видит переменные модуля так же,
