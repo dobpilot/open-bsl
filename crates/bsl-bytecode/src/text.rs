@@ -25,7 +25,6 @@
 //! `round_trip_*`: печать -> разбор -> печать даёт ПОБАЙТОВО ту же строку, а
 //! исполнение разобранной программы — тот же результат, что и исходной.
 
-use std::cell::RefCell;
 use std::fmt::Write as _;
 
 use bsl_number::BslNumber;
@@ -1554,14 +1553,17 @@ fn parse_chunk(r: &mut Reader, expected_index: usize) -> Result<Chunk> {
         instrs.push(parse_instr(no, rest.trim())?);
     }
 
+    // Производные таблицы — `touches_objects`, оба инлайн-кэша и
+    // разметка — здесь не заполняются: их ставит `image::finalize` в
+    // конце `parse_program`. Единственный писатель на весь крейт.
     Ok(Chunk {
-        touches_objects: instrs.iter().any(Instr::touches_objects),
+        touches_objects: false,
         param_has_default,
         is_procedure,
         is_async,
         param_by_val,
-        prop_cache: (0..instrs.len()).map(|_| RefCell::new(None)).collect(),
-        method_cache: (0..instrs.len()).map(|_| RefCell::new(None)).collect(),
+        prop_cache: Vec::new(),
+        method_cache: Vec::new(),
         instrs,
         consts,
         call_arg_modes,

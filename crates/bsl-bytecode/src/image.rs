@@ -1019,10 +1019,18 @@ mod tests {
         let mut p = valid_program();
         let shape = bsl_rt::ShapeTable::new().empty();
         *p.chunks[0].prop_cache[0].borrow_mut() = Some((shape, 0));
+        // Второй кэш проверяется отдельно, а не «заодно»: сегодня оба
+        // сбрасывает один помощник, но требование их два, и разойтись они
+        // могут раньше, чем это заметят.
+        *p.chunks[0].method_cache[0].borrow_mut() = Some((0, None));
         finalize(&mut p);
         assert!(
             p.chunks[0].prop_cache[0].borrow().is_none(),
-            "прогретая ячейка пережила финализацию"
+            "прогретая ячейка кэша свойств пережила финализацию"
+        );
+        assert!(
+            p.chunks[0].method_cache[0].borrow().is_none(),
+            "прогретая ячейка кэша методов пережила финализацию"
         );
     }
 
