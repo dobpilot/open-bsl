@@ -14,8 +14,8 @@
 # ЧТО ЭТОТ СКРИПТ ДОКАЗЫВАЕТ И ЧЕГО НЕ ДОКАЗЫВАЕТ.
 #
 # Сравниваются размер функции и полная последовательность инструкций
-# ВМЕСТЕ С ОПЕРАНДАМИ. Снимается только то, что уникально для конкретной
-# сборки и о коде ничего не говорит:
+# ВМЕСТЕ С ОПЕРАНДАМИ И ДЛИНАМИ КОДИРОВОК. Снимается только то, что
+# уникально для конкретной сборки и о коде ничего не говорит:
 #
 #   * адрес в начале строки и байтовая кодировка (несут абсолютные
 #     адреса; сама функция встаёт по разным адресам, потому что
@@ -47,17 +47,42 @@ set -euo pipefail
 
 BASE="${1:-HEAD}"
 ROOT="$(git rev-parse --show-toplevel)"
-OUT="${TMPDIR:-/tmp}/open-bsl-hot-code"
-mkdir -p "$OUT"
 cd "$ROOT"
 
+# Всё своё — в каталоге этого прогона, включая ОБА каталога сборки.
+# Общий `target/` не годится: в том же чекауте может работать другой
+# агент, и его бинарник оказался бы в `target/release/bsl-cli` ровно
+# между нашей сборкой и копированием — сравнивался бы чужой код.
+# Общий фиксированный каталог не годится по той же причине во втором
+# лице: два прогона этого скрипта смешали бы базу одного с кандидатом
+# другого и снесли бы друг другу worktree.
+#
+# Платой идут две полные release-сборки на прогон: кэш между прогонами
+# не переиспользуется. Для ворот, которые запускают перед изменением
+# горячего пути, а не в цикле, это верный размен.
+OUT="$(mktemp -d "${TMPDIR:-/tmp}/open-bsl-hot-code.XXXXXXXX")"
+cleanup() {
+    git worktree remove --force "$OUT/base-worktree" 2>/dev/null || true
+    rm -rf "$OUT"
+}
+trap cleanup EXIT
+
 # `.cargo/config.toml` задаёт `-align-all-functions=5` — это гигиена
-# измерения, и обе сборки обязаны идти с ней. Поэтому `RUSTFLAGS` здесь
-# не выставляется: он бы её перекрыл, и сравнивались бы две разные
-# раскладки.
+# измерения, и обе сборки обязаны идти с ней. `RUSTFLAGS` её перекрывает
+# целиком, поэтому он снимается для обеих сборок, а не игнорируется
+# молча: с ним сравнивались бы две раскладки, ни одна из которых не та,
+# по которой живёт проект. `CARGO_ENCODED_RUSTFLAGS` — второй вход к
+# тому же, и снимается тоже.
+if [ -n "${RUSTFLAGS:-}${CARGO_ENCODED_RUSTFLAGS:-}" ]; then
+    echo "  RUSTFLAGS задан и снимается для обеих сборок:" >&2
+    echo "  он перекрывает -align-all-functions=5 из .cargo/config.toml," >&2
+    echo "  без которого сравнение раскладки недействительно." >&2
+fi
+unset RUSTFLAGS CARGO_ENCODED_RUSTFLAGS
+
 build_here() {
-    cargo build --release -q -p bsl-cli
-    cp target/release/bsl-cli "$OUT/cli-candidate"
+    CARGO_TARGET_DIR="$OUT/cand-target" cargo build --release -q -p bsl-cli
+    cp "$OUT/cand-target/release/bsl-cli" "$OUT/cli-candidate"
 }
 
 # Нормализованный текст функции: мнемоники И операнды, без уникального
@@ -71,8 +96,14 @@ dump() {
         return 1
     fi
     objdump -t "$bin" | grep -E "$sym\$" | awk '{print $5}' > "$out.size"
+    # Длина кодировки каждой инструкции идёт в строку первым полем.
+    # Без неё одинаковые дизассемблированные команды при одинаковом
+    # общем размере ещё не значат одинаковую внутреннюю раскладку:
+    # переход к той же цели кодируется и коротко, и длинно, и от этого
+    # сдвигается всё, что за ним. Длины в том же порядке при том же
+    # размере функции — это уже утверждение о раскладке.
     objdump -d --disassemble="$sym" "$bin" |
-        awk -F'\t' 'NF>=3{print $3}' |
+        awk -F'\t' 'NF>=3{n=split($2,b," "); printf "%d\t%s\n", n, $3}' |
         sed -E 's/\b[0-9a-f]{4,16} </</g
                 s/-?0x[0-9a-f]+\(%rip\)/RIP/g
                 s/<anon\.[0-9a-f]+\.[0-9]+\.llvm\.[0-9]+\+0x[0-9a-f]+>/<anon>/g
@@ -92,10 +123,7 @@ build_here
 # рабочее дерево, а в нём может идти чужая работа — и, оборвись скрипт
 # посередине, вернуть его было бы некому. Worktree не трогает ничего.
 WT="$OUT/base-worktree"
-rm -rf "$WT"
-git worktree remove --force "$WT" 2>/dev/null || true
 git worktree add -q --detach "$WT" "$BASE"
-trap 'git worktree remove --force "$WT" 2>/dev/null || true' EXIT
 (
     cd "$WT"
     CARGO_TARGET_DIR="$OUT/base-target" cargo build --release -q -p bsl-cli
@@ -114,7 +142,8 @@ for fn in 4step 9step_cold; do
     size_b=$(cat "$OUT/cand-$fn.size")
     n=$(wc -l < "$OUT/base-$fn.code")
     if [ "$size_a" = "$size_b" ] && cmp -s "$OUT/base-$fn.code" "$OUT/cand-$fn.code"; then
-        printf '  %-12s размер 0x%s, %s инструкций с операндами — СОВПАДАЕТ\n' "$fn" "$size_a" "$n"
+        printf '  %-12s размер 0x%s, %s инструкций с операндами и длинами — СОВПАДАЕТ\n' \
+            "$fn" "$size_a" "$n"
     else
         printf '  %-12s размер 0x%s -> 0x%s, расхождений строк %s — ИЗМЕНИЛСЯ\n' \
             "$fn" "$size_a" "$size_b" \
