@@ -1833,6 +1833,12 @@ fn corrupt_program(instrs: Vec<Instr>) -> Program {
             c.instrs = instrs;
             c.n_locals = 1;
             c.n_regs = 1;
+            // Образ ФИНАЛИЗИРУЕТСЯ, иначе периметр отказывал бы на
+            // длине инлайн-кэша — то есть раньше проверяемого дефекта, и
+            // тесты проходили бы по посторонней причине. Разметка при
+            // этом остаётся пустой: поинструкционное исполнение — ровно
+            // тот путь, на котором и проверяется `InvalidBytecode`.
+            bsl_bytecode::image::finalize_lone_chunk_unbundled(&mut c);
             c
         }],
         names: Vec::new(),

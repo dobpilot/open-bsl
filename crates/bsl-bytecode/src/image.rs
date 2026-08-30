@@ -63,12 +63,7 @@ pub fn finalize(program: &mut Program) {
         // повторяли дословно кодоген и разбор листинга — с припиской
         // «ответы обязаны совпадать». Теперь ответ один.
         chunk.touches_objects = chunk.instrs.iter().any(Instr::touches_objects);
-        // Встроенные кэши растут по числу инструкций. `resize_with`
-        // сохраняет уже прогретые записи, поэтому повторная финализация
-        // ничего не портит.
-        let count = chunk.instrs.len();
-        chunk.prop_cache.resize_with(count, || RefCell::new(None));
-        chunk.method_cache.resize_with(count, || RefCell::new(None));
+        reset_inline_caches(chunk);
         program.chunks[index].bundle_len = crate::bundle::compute(&program.chunks[index], overlap);
     }
 }
@@ -104,8 +99,28 @@ pub fn finalize_lone_chunk(chunk: &mut Chunk) {
 /// незначима.
 pub fn finalize_lone_chunk_unbundled(chunk: &mut Chunk) {
     chunk.touches_objects = chunk.instrs.iter().any(Instr::touches_objects);
+    // Разметка ОЧИЩАЕТСЯ, а не оставляется как есть. Чанк мог быть
+    // финализирован раньше, и тогда «без бандлов» вопреки имени
+    // означало бы «с прежними бандлами» — то есть с утверждением о
+    // независимости, посчитанным для другой редакции инструкций.
+    chunk.bundle_len.clear();
+    reset_inline_caches(chunk);
+}
+
+/// Завести по ячейке инлайн-кэша на инструкцию, СБРОСИВ прежние.
+///
+/// Сброс здесь обязателен, а не гигиеничен. Ячейка помнит форму и слот,
+/// но НЕ помнит имя поля, поэтому кэш, прогретый на прежней редакции
+/// инструкций, соврал бы после их правки: `ПолучитьСвойство А`,
+/// заменённое на `ПолучитьСвойство Б` на той же позиции, вернуло бы слот
+/// `А` при совпавшей форме. Сохранять прогретые записи можно было бы
+/// только при доказанной неизменности инструкции, а такого
+/// доказательства у финализации нет — её и зовут после правок.
+fn reset_inline_caches(chunk: &mut Chunk) {
     let count = chunk.instrs.len();
+    chunk.prop_cache.clear();
     chunk.prop_cache.resize_with(count, || RefCell::new(None));
+    chunk.method_cache.clear();
     chunk.method_cache.resize_with(count, || RefCell::new(None));
 }
 
@@ -286,6 +301,41 @@ pub fn verify(program: &Program) -> Result<(), RtError> {
             }
         }
     }
+    // Общие проверки идут ПОСЛЕ точных, и порядок здесь значим так же,
+    // как у свежести разметки: широкий диагноз, стоя первым, перехватывал
+    // бы точные — «регистр сложения с константой выходит за кадр»
+    // превращалось бы в «регистр за пределами кадра».
+    //
+    // Проверки «всякий регистр инструкции лежит в кадре» здесь НЕТ, и это
+    // не пропуск. Спросить о ней можно только таблицу эффектов — второй
+    // разбор по опкодам недопустим, — а `RegSet` не различает «обращается
+    // к регистру N» и «трогает всё»: `RunDynamic` насыщает набор целиком,
+    // и его максимум равен 255 при кадре в три регистра. У модульных
+    // слотов такое различие есть (`ModSet::One` против `ModSet::All`),
+    // поэтому их границы ниже проверяются, а регистровые — нет. Чтобы
+    // проверялись и они, различие нужно завести и в `RegSet`; это правка
+    // самой таблицы эффектов, у которой на насыщенный набор опирается
+    // разметка бандлов, и потому — отдельная работа.
+    // Какие инструкции обращаются к модульному слоту — знает ЕДИНСТВЕННАЯ
+    // таблица эффектов, и второй разбор по опкодам здесь недопустим: он
+    // разошёлся бы с нею на первом же новом опкоде, потому что
+    // исчерпывающей проверкой сборки прикрыта она, а не он.
+    for (index, chunk) in program.chunks.iter().enumerate() {
+        let overlap = crate::analysis::module_overlap(index, program.module_vars.len());
+        for instr in &chunk.instrs {
+            let e = crate::analysis::effects(instr, chunk, overlap);
+            for set in [e.mod_reads, e.mod_writes] {
+                if let crate::analysis::ModSet::One(slot) = set
+                    && slot as usize >= program.module_vars.len()
+                {
+                    return Err(RtError::InvalidBytecode(
+                        "номер переменной модуля вне таблицы",
+                    ));
+                }
+            }
+        }
+    }
+
     // Свежесть разметки проверяется ПОСЛЕДНЕЙ, и порядок здесь имеет
     // значение. Это самый общий признак порчи образа: любая правка
     // инструкции задним числом делает разметку устаревшей, и, стой
@@ -348,20 +398,6 @@ fn check_program_tables(program: &Program) -> Result<(), RtError> {
     // дошли, то есть после того, как программа уже что-то напечатала и
     // что-то изменила. Проверка VM остаётся — она сторожит и путь, куда
     // образ мог прийти иначе, — но первым теперь отвечает периметр.
-    for chunk in &program.chunks {
-        for instr in &chunk.instrs {
-            let slot = match instr {
-                Instr::GetModuleVar { slot, .. } | Instr::SetModuleVar { slot, .. } => *slot,
-                _ => continue,
-            };
-            if slot as usize >= program.module_vars.len() {
-                return Err(RtError::InvalidBytecode(
-                    "номер переменной модуля вне таблицы",
-                ));
-            }
-        }
-    }
-
     // Подписи и тела связаны ПОЗИЦИОННО: `function_names[i]` — это
     // `chunks[i+1]`, а `chunks[0]` — тело модуля. Одной проверки каждого
     // `Call` мало: пары «имя без тела» и «лишний безымянный чанк» ломают
@@ -970,6 +1006,51 @@ mod tests {
             c.bundle_len.clear();
         }
         verify(&p).expect("пустая разметка обязана оставаться законной");
+    }
+
+    /// Финализация не сохраняет прогретые ячейки инлайн-кэша.
+    ///
+    /// Ячейка помнит форму и слот, но не имя поля, поэтому пережившая
+    /// правку инструкций запись вернула бы слот ПРЕЖНЕГО свойства при
+    /// совпавшей форме. Проверяется наблюдаемо: ячейка, заполненная
+    /// вручную, после финализации обязана быть пустой.
+    #[test]
+    fn finalization_does_not_keep_warm_inline_caches() {
+        let mut p = valid_program();
+        let shape = bsl_rt::ShapeTable::new().empty();
+        *p.chunks[0].prop_cache[0].borrow_mut() = Some((shape, 0));
+        finalize(&mut p);
+        assert!(
+            p.chunks[0].prop_cache[0].borrow().is_none(),
+            "прогретая ячейка пережила финализацию"
+        );
+    }
+
+    /// «Без бандлов» означает пустую разметку и на чанке, который уже
+    /// финализировали с ними: иначе имя обещало бы одно, а таблица несла
+    /// бы утверждение о независимости от прежней редакции инструкций.
+    #[test]
+    fn unbundled_finalization_clears_a_previously_built_table() {
+        let mut c = Chunk::new();
+        c.instrs = vec![
+            Instr::LoadConst { dst: 0, k: 0 },
+            Instr::LoadConst { dst: 1, k: 0 },
+            Instr::Return { src: None },
+        ];
+        c.consts = vec![
+            crate::BytecodeConst::new(bsl_rt::BslValue::number_from_i64(1))
+                .expect("число — константа"),
+        ];
+        c.n_regs = 2;
+
+        finalize_lone_chunk(&mut c);
+        assert!(!c.bundle_len.is_empty(), "предпосылка теста: бандлы есть");
+
+        finalize_lone_chunk_unbundled(&mut c);
+        assert!(
+            c.bundle_len.is_empty(),
+            "разметка пережила финализацию без бандлов"
+        );
     }
 
     /// Модульный слот за границей таблицы отвергается ДО первой
