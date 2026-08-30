@@ -67,22 +67,66 @@ for side in with without; do
 done
 
 SCENARIOS=(empty_for goto_bench call_overhead cbr_rates simple_parquet_reader)
-SCRATCH="${TMPDIR:-/tmp}/onec-bench-scratch"
-mkdir -p "$SCRATCH"
-printf '  %-24s %14s %14s %8s\n' "сценарий" "без проверок" "с проверками" "Δ%"
+
+# Сценарии берутся ИЗ ТОГО ЖЕ worktree и оттуда же запускаются. Причин
+# две. Первая: замер обязан описывать выбранный коммит, а не то, что
+# оказалось в рабочем дереве. Вторая обнаружилась дороже — часть
+# сценариев читает данные по ОТНОСИТЕЛЬНОМУ пути от корня дерева, и,
+# запущенный из чужого каталога, `simple_parquet_reader` печатал «не
+# открылся» и завершался успешно. Мерился при этом ранний выход, а не
+# сценарий.
+BENCH="$OUT/with/benchmarks"
+
+# Каждый сценарий сперва прогоняется НАСУХО и его вывод проверяется на
+# признак раннего выхода. Молча измерить не то — главный способ получить
+# красивое число ни о чём.
+check_runs() {
+    local out
+    out=$( cd "$OUT/with" && "$OUT/cli-with" "benchmarks/$1.bsl" 2>&1 ) || {
+        echo "  $1: прогон завершился ошибкой" >&2
+        return 1
+    }
+    if printf '%s' "$out" | grep -qiE "не открыл|не найден|гоняется из корня"; then
+        echo "  $1: сценарий не выполнился — $(printf '%s' "$out" | head -1)" >&2
+        return 1
+    fi
+}
+
+# Парные дельты, а не два средних. На этих сценариях прогонный разброс
+# сопоставим с самим эффектом, и одно среднее читалось бы точнее, чем
+# оно есть. Печатается медиана пар и их диапазон.
+#
+# Порядок внутри пары ЧЕРЕДУЕТСЯ (AB, BA, AB, ...): при одном и том же
+# порядке систематическая разница «первый запуск дороже второго» целиком
+# легла бы на одну сторону.
+printf '  %-24s %10s %10s %10s   %s\n' "сценарий" "медиана" "минимум" "максимум" "пар"
+status=0
 for b in "${SCENARIOS[@]}"; do
-    f="$ROOT/benchmarks/$b.bsl"
-    [ -f "$f" ] || { echo "  $b: сценарий не найден" >&2; continue; }
+    [ -f "$BENCH/$b.bsl" ] || { echo "  $b: сценарий не найден" >&2; status=1; continue; }
+    check_runs "$b" || { status=1; continue; }
     (
-        cd "$SCRATCH"
+        cd "$OUT/with"
         for ((i = 0; i < PAIRS; i++)); do
-            perf stat -x, -e instructions:u -- "$OUT/cli-without" "$f" 2>&1 >/dev/null |
-                awk -F, '/instructions:u/{print "a", $1}'
-            perf stat -x, -e instructions:u -- "$OUT/cli-with" "$f" 2>&1 >/dev/null |
-                awk -F, '/instructions:u/{print "b", $1}'
+            one() {
+                perf stat -x, -e instructions:u -- "$OUT/cli-$1" "benchmarks/$b.bsl" 2>&1 >/dev/null |
+                    awk -F, '/instructions:u/{print $1}'
+            }
+            if ((i % 2 == 0)); then
+                a=$(one without); c=$(one with)
+            else
+                c=$(one with); a=$(one without)
+            fi
+            echo "$a $c"
         done
-    ) | awk -v n="$b" '{t[$1] += $2; c[$1]++}
-        END {a = t["a"] / c["a"]; b = t["b"] / c["b"];
-             printf "  %-24s %14.0f %14.0f %+7.3f\n", n, a, b, (b - a) * 100 / a}'
+    ) | awk -v n="$b" '
+        {d[NR] = ($2 - $1) * 100 / $1}
+        END {
+            asort(d)
+            m = (NR % 2) ? d[(NR + 1) / 2] : (d[NR / 2] + d[NR / 2 + 1]) / 2
+            printf "  %-24s %+9.3f%% %+9.3f%% %+9.3f%%   %d\n", n, m, d[1], d[NR], NR
+        }'
 done
 echo "  метрика instructions:u; такты на рабочей машине вердикта не выдерживают"
+echo "  разброс печатается рядом со сдвигом: где диапазон перекрывает медиану,"
+echo "  утверждать можно лишь порядок величины"
+exit "$status"
