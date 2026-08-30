@@ -488,14 +488,21 @@ pub fn compile_snippet_with_requirements(
         // литералами являются ВСЕ операнды.
         Optimizations::default(),
     )?;
-    // Разметку VLIW-бандлов фрагмента считает НЕ здесь, а
-    // `run_dynamic_snippet` в bsl-vm: только там известно, накладывается ли
-    // модульный блок фрагмента на регистры кадра — у верхнего уровня
-    // `module_base == 0` и накладывается, у вложенного `Выполнить` нет, — а
-    // от этого зависит пересечение модульных слотов. Прежний расчёт с
-    // `None` опирался на неверную посылку «у фрагмента `module_base != 0`».
-    // Пустой `bundle_len` равнозначен поинструкционному исполнению и
-    // безопасен до пересчёта.
+    // Фрагмент — одиночный чанк, программы вокруг него нет, поэтому
+    // таблицы на инструкцию ставит финализация ОДИНОЧНОГО чанка. Без неё
+    // ячеек инлайн-кэша у фрагмента не будет вовсе, и проверка образа
+    // отвергнет его ещё до исполнения.
+    //
+    // Именно `_unbundled`: разметку VLIW-бандлов фрагмента считает не
+    // здесь, а `run_dynamic_snippet` в bsl-vm — только там известно,
+    // накладывается ли модульный блок фрагмента на регистры кадра (у
+    // верхнего уровня `module_base == 0` и накладывается, у вложенного
+    // `Выполнить` нет), а от этого зависит пересечение модульных слотов.
+    // Прежний расчёт с `None` опирался на неверную посылку «у фрагмента
+    // `module_base != 0`». Пустой `bundle_len` равнозначен
+    // поинструкционному исполнению и безопасен до пересчёта.
+    let mut chunk = chunk;
+    bsl_bytecode::image::finalize_lone_chunk_unbundled(&mut chunk);
     Ok(SnippetUnit {
         chunk,
         names: names.into_names(),
@@ -634,42 +641,28 @@ fn compile_chunk(
     c.compile_param_defaults(params)?;
     c.compile_block(body)?;
     c.patch_gotos()?;
-    let prop_cache = c
-        .instrs
-        .iter()
-        .map(|_| std::cell::RefCell::new(None))
-        .collect();
-    let method_cache = c
-        .instrs
-        .iter()
-        .map(|_| std::cell::RefCell::new(None))
-        .collect();
-    Ok(Chunk {
-        touches_objects: c.instrs.iter().any(Instr::touches_objects),
-        param_by_val: params.iter().map(|p| p.by_val).collect(),
-        param_has_default: params.iter().map(|p| p.default.is_some()).collect(),
-        is_procedure,
-        is_async,
-        instrs: c.instrs,
-        consts: c.consts,
-        call_arg_modes: c.call_arg_modes,
-        exception_ranges: c.exception_ranges,
-        n_params,
-        n_locals,
-        n_regs: c.max_reg,
-        local_names: if materialize_locals {
-            locals.to_vec()
-        } else {
-            Vec::new()
-        },
-        prop_cache,
-        method_cache,
-        // Заполняется вызывающим: ширина бандлов зависит от места чанка в
-        // программе (перекрытие модульных слотов с регистрами кадра 0),
-        // которого здесь не видно. Пустой вектор — легальное состояние
-        // «все бандлы одиночные».
-        bundle_len: Vec::new(),
-    })
+    // Производные таблицы — разметка бандлов, пометка «трогает объекты»
+    // и оба инлайн-кэша — здесь не заполняются вовсе: их ставит
+    // `image::finalize` при сборке программы, и с закрытыми полями иначе
+    // и не выйдет.
+    let mut chunk = Chunk::new();
+    chunk.param_by_val = params.iter().map(|p| p.by_val).collect();
+    chunk.param_has_default = params.iter().map(|p| p.default.is_some()).collect();
+    chunk.is_procedure = is_procedure;
+    chunk.is_async = is_async;
+    chunk.instrs = c.instrs;
+    chunk.consts = c.consts;
+    chunk.call_arg_modes = c.call_arg_modes;
+    chunk.exception_ranges = c.exception_ranges;
+    chunk.n_params = n_params;
+    chunk.n_locals = n_locals;
+    chunk.n_regs = c.max_reg;
+    chunk.local_names = if materialize_locals {
+        locals.to_vec()
+    } else {
+        Vec::new()
+    };
+    Ok(chunk)
 }
 
 /// Список прыжков `Прервать`/`Продолжить`, которые патчатся, когда становится

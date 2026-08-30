@@ -12,11 +12,6 @@ use bsl_bytecode::{Instr, Program, analysis, bundle, image};
 use support::{chunk, program};
 
 /// Образ, который `verify` проходит целиком.
-///
-/// Образец `every_section` для этого не годится: он собран для печати и
-/// кругового разбора и `verify` не проходит по посторонней причине —
-/// поэтому проверка «отвергнуто» на нём была бы пустой, что здесь уже и
-/// случилось однажды.
 fn valid_program() -> Program {
     let mut p = program(vec![
         chunk(vec![
@@ -35,21 +30,16 @@ fn valid_program() -> Program {
     p
 }
 
-/// Прежде всего: образец обязан проходить проверку. Без этого любой тест
-/// «отвергнуто» ниже доказывал бы не то.
-#[test]
-fn the_sample_image_is_valid_to_begin_with() {
-    let mut p = valid_program();
-    image::finalize(&mut p);
-    image::verify(&p).expect("повторная проверка согласованного образа");
-}
-
 /// Разметка от прежней редакции инструкций отвергается.
+///
+/// Проверки, которым нужно ИСПОРТИТЬ производную таблицу, живут теперь
+/// внутри крейта (`image::tests`): снаружи такой записи больше нет.
+/// Здесь остаётся то, что портит образ законными средствами — правкой
+/// инструкций после финализации.
 #[test]
 fn a_stale_bundle_table_is_rejected() {
     let mut p = valid_program();
     image::finalize(&mut p);
-    // Инструкции чанка 1 меняются ПОСЛЕ того, как разметка посчитана.
     p.chunks[1].instrs = vec![
         Instr::LoadConst { dst: 0, k: 0 },
         Instr::LoadConst { dst: 1, k: 0 },
@@ -63,87 +53,40 @@ fn a_stale_bundle_table_is_rejected() {
     );
 }
 
-/// Разметка, посчитанная с чужим пересечением модульных слотов, тоже
-/// отвергается: пересечение меняет вывод об алиасинге, и бандл собрался бы
-/// из зависимых инструкций.
-#[test]
-fn a_bundle_table_computed_with_the_wrong_overlap_is_rejected() {
-    let mut p = valid_program();
-    // Смысл пересечения — в том, что модульный слот чанка 0 И ЕСТЬ
-    // регистр кадра с тем же номером. Поэтому запись в регистр 0 и чтение
-    // модульного слота 0 зависимы с пересечением и независимы без него:
-    // ровно на этом ответы `compute` и расходятся.
-    p.chunks[0].instrs = vec![
-        Instr::LoadConst { dst: 0, k: 0 },
-        Instr::GetModuleVar { dst: 1, slot: 0 },
-        Instr::Return { src: None },
-    ];
-    p.chunks[0].consts = vec![support::konst(bsl_rt::BslValue::number_from_i64(1))];
-    p.chunks[0].n_regs = 2;
-    image::finalize(&mut p);
-
-    let wrong = bundle::compute(&p.chunks[0], None);
-    assert_ne!(
-        wrong, p.chunks[0].bundle_len,
-        "образец не различает пересечение модульных слотов — тест ничего не проверяет"
-    );
-    p.chunks[0].bundle_len = wrong;
-    assert!(
-        image::verify(&p).is_err(),
-        "разметка с чужим пересечением модульных слотов прошла проверку"
-    );
-}
-
-/// Пустая разметка — законный отказ от бандлов, а не устаревшая таблица:
-/// VM исполняет такой чанк поинструкционно. Фрагмент `Вычислить` идёт
-/// именно так, и проверка не смеет его отвергать.
-#[test]
-fn an_empty_bundle_table_is_a_legitimate_opt_out() {
-    let mut p = valid_program();
-    image::finalize(&mut p);
-    for c in &mut p.chunks {
-        c.bundle_len.clear();
-    }
-    image::verify(&p).expect("пустая разметка обязана оставаться законной");
-}
-
-/// Короткий инлайн-кэш отвергается ДО первой инструкции.
-///
-/// VM ловит его и сегодня, но посреди исполнения: доступ идёт через
-/// проверяемый `at`, и отказ приходит на той инструкции, до которой
-/// дошли, — после того как программа уже что-то напечатала. Свойство
-/// статическое, и место ему в проверке образа.
-#[test]
-fn a_short_inline_cache_is_rejected_before_the_first_instruction() {
-    for short_props in [true, false] {
-        let mut p = valid_program();
-        image::finalize(&mut p);
-        if short_props {
-            p.chunks[0].prop_cache.pop();
-        } else {
-            p.chunks[0].method_cache.pop();
-        }
-        assert!(
-            image::verify(&p).is_err(),
-            "короткий инлайн-кэш (свойств: {short_props}) прошёл проверку"
-        );
-    }
-}
-
 /// Финализация вычисляет пересечение модульных слотов ИЗНУТРИ образа: у
 /// вызывающего не остаётся способа передать чужое.
 #[test]
 fn finalize_computes_the_overlap_from_the_image_itself() {
     let mut p = valid_program();
-    assert!(p.chunks.iter().all(|c| c.bundle_len.is_empty()));
+    assert!(p.chunks.iter().all(|c| c.bundle_len().is_empty()));
 
     image::finalize(&mut p);
 
     for (i, c) in p.chunks.iter().enumerate() {
         assert_eq!(
-            c.bundle_len,
+            c.bundle_len(),
             bundle::compute(c, analysis::module_overlap(i, p.module_vars.len())),
             "чанк {i}: финализация посчитала разметку иначе"
         );
     }
+}
+
+/// Одиночный чанк финализируется своей операцией — той, что не знает о
+/// пересечении модульных слотов и знать не должна.
+#[test]
+fn a_lone_chunk_has_its_own_finalization() {
+    let mut c = chunk(vec![
+        Instr::LoadConst { dst: 0, k: 0 },
+        Instr::LoadConst { dst: 1, k: 0 },
+        Instr::Return { src: None },
+    ]);
+    c.consts = vec![support::konst(bsl_rt::BslValue::number_from_i64(1))];
+    c.n_regs = 2;
+    assert!(c.bundle_len().is_empty());
+
+    image::finalize_lone_chunk(&mut c);
+
+    assert_eq!(c.bundle_len(), bundle::compute(&c, None));
+    assert_eq!(c.prop_cache().len(), c.instrs.len());
+    assert_eq!(c.method_cache().len(), c.instrs.len());
 }

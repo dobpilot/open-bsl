@@ -205,7 +205,7 @@ pub fn compile(
     // Начало бандла на этой позиции? Пустая таблица (чанк, собранный
     // мимо кодогена) читается как «все бандлы одиночные» — прологи
     // повсюду, прежнее поведение.
-    let is_bundle_start = |pc: usize| chunk.bundle_len.get(pc).is_none_or(|&w| w >= 1);
+    let is_bundle_start = |pc: usize| chunk.bundle_len().get(pc).is_none_or(|&w| w >= 1);
 
     for (pc, instr) in chunk.instrs.iter().enumerate() {
         let Some(op) = compile_instr(instr, builtin_methods) else {

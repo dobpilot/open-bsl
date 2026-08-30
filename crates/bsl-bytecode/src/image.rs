@@ -73,6 +73,42 @@ pub fn finalize(program: &mut Program) {
     }
 }
 
+/// Обновить производные таблицы ОДИНОЧНОГО чанка, взятого вне программы.
+///
+/// Нужна ровно одному случаю: библиотечные индексы подставляются в чанки
+/// динамического фрагмента по одному, и программы вокруг них в этот
+/// момент нет. Пересечения с модульными слотами у такого чанка не может
+/// быть по определению `module_overlap` — оно есть только у нулевого
+/// чанка программы, а нулевой у фрагмента всё равно заменяется самим
+/// фрагментом, — поэтому аргумента здесь нет и передать чужой нечем.
+///
+/// Для программы целиком есть [`finalize`], и пользоваться надо ею: она
+/// знает и номер чанка, и число модульных переменных.
+pub fn finalize_lone_chunk(chunk: &mut Chunk) {
+    finalize_lone_chunk_unbundled(chunk);
+    chunk.bundle_len = crate::bundle::compute(chunk, None);
+}
+
+/// То же для чанка, о независимости членов которого утверждать НЕЧЕГО:
+/// таблицы на инструкцию заполняются, разметка бандлов остаётся пустой.
+///
+/// Пустая разметка означает поинструкционное исполнение и никакого
+/// утверждения не делает, поэтому она всегда сонадёжна. Существует эта
+/// операция ради динамического фрагмента, и решение там измеренное:
+/// верный `overlap` фрагмента известен только в рантайме (`aliased`,
+/// `n_module`), а пересчитывать его на КАЖДОМ `Выполнить` стоило
+/// измеренные +9,6 % на eval-в-цикле. Считать же с `overlap = None`
+/// нельзя вовсе — у верхнего уровня модульные слоты накладываются на
+/// первые регистры кадра, и такая разметка утверждала бы независимость
+/// ЛОЖНО. Фрагмент одноразовый, потеря пакетной диспетчеризации на нём
+/// незначима.
+pub fn finalize_lone_chunk_unbundled(chunk: &mut Chunk) {
+    chunk.touches_objects = chunk.instrs.iter().any(Instr::touches_objects);
+    let count = chunk.instrs.len();
+    chunk.prop_cache.resize_with(count, || RefCell::new(None));
+    chunk.method_cache.resize_with(count, || RefCell::new(None));
+}
+
 /// Производные таблицы обязаны отвечать инструкциям своего чанка.
 ///
 /// Пустая таблица — законный отказ от бандлов: она и ноль в ней
@@ -837,4 +873,101 @@ pub fn verify_configuration(
         check_calls(&entry.program)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::instr::Instr;
+
+    /// Отрицательные проверки живут ЗДЕСЬ, а не в интеграционном тесте,
+    /// именно потому, что портят производные таблицы: снаружи крейта
+    /// такой записи больше нет и быть не должно. Проверка «отвергается»
+    /// обязана уметь испортить состояние — и уметь это должен только
+    /// тот, кто состоянием владеет.
+    fn valid_program() -> Program {
+        let mut top = Chunk::new();
+        top.instrs = vec![
+            Instr::LoadConst { dst: 0, k: 0 },
+            Instr::GetModuleVar { dst: 1, slot: 0 },
+            Instr::Return { src: None },
+        ];
+        top.consts = vec![
+            crate::BytecodeConst::new(bsl_rt::BslValue::number_from_i64(1))
+                .expect("число — константа"),
+        ];
+        top.n_regs = 2;
+
+        let mut callee = Chunk::new();
+        callee.instrs = vec![Instr::Return { src: None }];
+        callee.n_regs = 1;
+
+        let mut p = Program {
+            requirements: vec![bsl_rt::LibraryRequirement::new("bsl-rt", "0.2.0")],
+            chunks: vec![top, callee],
+            names: Vec::new(),
+            shapes: Vec::new(),
+            top_level_locals: Vec::new(),
+            module_vars: vec!["Общая".to_string()],
+            exported_module_vars: vec![true],
+            function_names: vec!["Ф".to_string()],
+            exported_functions: vec![true],
+            module_base: 0,
+            links: Vec::new(),
+        };
+        finalize(&mut p);
+        p
+    }
+
+    #[test]
+    fn the_sample_image_is_valid_to_begin_with() {
+        verify(&valid_program()).expect("образец обязан быть согласованным");
+    }
+
+    /// Разметка, посчитанная с чужим пересечением модульных слотов,
+    /// отвергается: пересечение меняет вывод об алиасинге, и бандл
+    /// собрался бы из зависимых инструкций.
+    #[test]
+    fn a_bundle_table_computed_with_the_wrong_overlap_is_rejected() {
+        let mut p = valid_program();
+        let wrong = crate::bundle::compute(&p.chunks[0], None);
+        assert_ne!(
+            wrong, p.chunks[0].bundle_len,
+            "образец не различает пересечение модульных слотов — тест ничего не проверяет"
+        );
+        p.chunks[0].bundle_len = wrong;
+        assert!(
+            verify(&p).is_err(),
+            "разметка с чужим пересечением модульных слотов прошла проверку"
+        );
+    }
+
+    /// Пустая разметка — законный отказ от бандлов, а не устаревшая
+    /// таблица: VM исполняет такой чанк поинструкционно, и фрагмент
+    /// `Вычислить` идёт именно так.
+    #[test]
+    fn an_empty_bundle_table_is_a_legitimate_opt_out() {
+        let mut p = valid_program();
+        for c in &mut p.chunks {
+            c.bundle_len.clear();
+        }
+        verify(&p).expect("пустая разметка обязана оставаться законной");
+    }
+
+    /// Короткий инлайн-кэш отвергается ДО первой инструкции.
+    #[test]
+    fn a_short_inline_cache_is_rejected_before_the_first_instruction() {
+        for short_props in [true, false] {
+            let mut p = valid_program();
+            if short_props {
+                p.chunks[0].prop_cache.pop();
+            } else {
+                p.chunks[0].method_cache.pop();
+            }
+            assert!(
+                verify(&p).is_err(),
+                "короткий инлайн-кэш (свойств: {short_props}) прошёл проверку"
+            );
+        }
+    }
 }

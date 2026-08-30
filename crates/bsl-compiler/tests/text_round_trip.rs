@@ -4,8 +4,6 @@
 //! что действительно выпускает кодоген, — а он тут. Сам `bsl-bytecode`
 //! фронтенда не видит и проверяется на программах, собранных руками.
 
-use std::cell::RefCell;
-
 use bsl_bytecode::{
     ArgMode, Instr, LibraryRequirement, LinkEntry, ModuleId, OPCODES, Program, parse_program,
     write_program,
@@ -138,10 +136,6 @@ fn call_component_program() -> Program {
             src: 0,
         },
     ]);
-    let instruction_count = program.chunks[0].instrs.len();
-    program.chunks[0]
-        .prop_cache
-        .resize_with(instruction_count, || RefCell::new(None));
     bsl_bytecode::image::finalize(&mut program);
     program
 }
@@ -180,10 +174,6 @@ fn imported_ops_program() -> Program {
     // Режим `byimport` печатается в секции `.argmodes` — токен обязан
     // пережить разбор вместе с самими опкодами.
     program.chunks[0].call_arg_modes = vec![vec![ArgMode::ByRefImportedVar(1)]];
-    let instruction_count = program.chunks[0].instrs.len();
-    program.chunks[0]
-        .prop_cache
-        .resize_with(instruction_count, || RefCell::new(None));
     bsl_bytecode::image::finalize(&mut program);
     program
 }
@@ -242,18 +232,18 @@ fn reparsed_program_matches_the_original_structurally() {
             assert_eq!(x.local_names, y.local_names, "{src}");
             // Кэш инлайн-кэширования не сохраняется, но обязан быть
             // размером с код — иначе VM промахнётся по индексу.
-            assert_eq!(y.prop_cache.len(), y.instrs.len(), "{src}");
+            assert_eq!(y.prop_cache().len(), y.instrs.len(), "{src}");
             // Разметка бандлов тоже не сохраняется, но пересчёт при
             // разборе обязан дать в точности таблицу компилятора —
             // иначе скомпилированный и загруженный байт-код разойдутся
             // по диспетчеризации.
-            assert_eq!(x.bundle_len, y.bundle_len, "{src}");
+            assert_eq!(x.bundle_len(), y.bundle_len(), "{src}");
             // Признак обращения к объектам — тоже производный и тоже
             // пересчитывается разбором. От него зависит, возьмётся ли
             // за чанк нативный путь (см. `LinkedComponents` в
             // `bsl-vm`), и потеря его на разборе вернула бы внешний
             // листинг под JIT молча.
-            assert_eq!(x.touches_objects, y.touches_objects, "{src}");
+            assert_eq!(x.touches_objects(), y.touches_objects(), "{src}");
         }
     }
 }

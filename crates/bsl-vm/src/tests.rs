@@ -1155,7 +1155,8 @@ fn exception_on_a_non_first_bundle_member_lands_in_the_right_handler() {
         .position(|i| matches!(i, Instr::Div { .. }))
         .expect("в скрипте есть деление");
     assert_eq!(
-        chunk.bundle_len[div_pc], 0,
+        chunk.bundle_len()[div_pc],
+        0,
         "предпосылка теста: деление — внутри бандла (`г = 7` перед ним \
          независимо); если компилятор стал раскладывать иначе — \
          подберите скрипту новую пару"
@@ -1824,25 +1825,16 @@ fn corrupt_program(instrs: Vec<Instr>) -> Program {
         exported_module_vars: Vec::new(),
         module_base: 0,
         links: Vec::new(),
-        chunks: vec![bsl_bytecode::Chunk {
-            param_by_val: Vec::new(),
-            param_has_default: Vec::new(),
-            is_procedure: false,
-            is_async: false,
-            touches_objects: false,
-            instrs,
-            consts: Vec::new(),
-            call_arg_modes: Vec::new(),
-            exception_ranges: Vec::new(),
-            n_params: 0,
-            n_locals: 1,
-            n_regs: 1,
-            local_names: Vec::new(),
-            prop_cache: vec![std::cell::RefCell::new(None)],
-            method_cache: vec![std::cell::RefCell::new(None)],
-            // Пустая разметка = поинструкционное исполнение — ровно
-            // тот путь, на котором и проверяется `InvalidBytecode`.
-            bundle_len: Vec::new(),
+        chunks: vec![{
+            // Производные таблицы ставит финализация; здесь чанк
+            // намеренно остаётся с пустой разметкой — поинструкционное
+            // исполнение, ровно тот путь, на котором и проверяется
+            // `InvalidBytecode`.
+            let mut c = bsl_bytecode::Chunk::new();
+            c.instrs = instrs;
+            c.n_locals = 1;
+            c.n_regs = 1;
+            c
         }],
         names: Vec::new(),
         shapes: Vec::new(),
@@ -1918,7 +1910,6 @@ fn corrupt_bytecode_inside_a_call_unwinds_to_an_error_not_a_panic() {
         Instr::Return { src: Some(0) },
     ]);
     program.chunks[0].call_arg_modes = vec![Vec::new()];
-    program.chunks[0].prop_cache = vec![std::cell::RefCell::new(None); 2];
     let mut callee = program.chunks[0].clone();
     callee.instrs = vec![Instr::Move { dst: 250, src: 0 }];
     program.chunks.push(callee);

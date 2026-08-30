@@ -2030,7 +2030,7 @@ impl ProgramExecution {
                                     .chunks
                                     .get(fid)
                                     .filter(|chunk| {
-                                        !chunk.touches_objects || !linked.interpreter_only_objects
+                                        !chunk.touches_objects() || !linked.interpreter_only_objects
                                     })
                                     .and_then(|chunk| {
                                         jit::compile(chunk, &linked.builtin_methods, scheduled)
@@ -2600,7 +2600,7 @@ fn prop_cache(
     pc: usize,
 ) -> Result<&bsl_bytecode::PropCacheSlot, RtError> {
     at(
-        &chunk.prop_cache,
+        chunk.prop_cache(),
         pc,
         "нет ячейки инлайн-кэша для инструкции",
     )
@@ -2614,7 +2614,7 @@ fn method_cache(
     pc: usize,
 ) -> Result<&bsl_bytecode::MethodCacheSlot, RtError> {
     at(
-        &chunk.method_cache,
+        chunk.method_cache(),
         pc,
         "нет ячейки кэша метода для инструкции",
     )
@@ -2856,7 +2856,7 @@ fn step(
     // ноль — путь обычной инструкции оплачивает ровно одну загрузку `u8`
     // и вычитание, вся петлевая бухгалтерия лежит после исполнения члена.
     let mut extra = chunk
-        .bundle_len
+        .bundle_len()
         .get(pc)
         .copied()
         .unwrap_or(1)
@@ -3627,7 +3627,7 @@ fn step(
                 break;
             }
             extra = chunk
-                .bundle_len
+                .bundle_len()
                 .get(pc)
                 .copied()
                 .unwrap_or(1)
@@ -4736,15 +4736,12 @@ fn remap_chunk_libraries(
             RtError::InvalidBytecode("индекс библиотеки не помещается в операнд u8")
         })?;
     }
-    // Единственное место вне `bsl-bytecode`, где разметка считается не
-    // через `image::finalize`, и это объявленное исключение, а не
-    // недосмотр. Финализация ставит разметку ВСЕЙ программе, а здесь
-    // чанки едут во фрагмент по одному: нулевой будет заменён самим
-    // фрагментом (его разметка остаётся пустой — поинструкционное
-    // исполнение), а у остальных пересечения с модульными слотами нет по
-    // определению `module_overlap`, поэтому `None` для них и есть верный
-    // ответ.
-    chunk.bundle_len = bsl_bytecode::bundle::compute(chunk, None);
+    // Чанки едут во фрагмент ПО ОДНОМУ, программы вокруг них здесь нет,
+    // поэтому финализация не программы, а одиночного чанка: нулевой
+    // будет заменён самим фрагментом (его разметка остаётся пустой —
+    // поинструкционное исполнение), а у остальных пересечения с
+    // модульными слотами нет по определению `module_overlap`.
+    bsl_bytecode::image::finalize_lone_chunk(chunk);
     Ok(())
 }
 

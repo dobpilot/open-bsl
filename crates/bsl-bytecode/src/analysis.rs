@@ -1201,8 +1201,16 @@ pub fn copy_propagate(chunk: &mut Chunk, overlap: Option<usize>) -> usize {
                 CopyFix::DirectBase => set_call_base(&mut chunk.instrs[i + 1], src),
             }
             chunk.instrs.remove(i);
-            chunk.prop_cache.remove(i);
-            chunk.method_cache.remove(i);
+            // Производные таблицы на этот момент могут быть ещё не
+            // заполнены: проходы над готовым байт-кодом идут ДО
+            // финализации, а она и заводит ячейки. Раньше их заводил
+            // литерал компилятора, и удаление вслепую сходило с рук.
+            if i < chunk.prop_cache.len() {
+                chunk.prop_cache.remove(i);
+            }
+            if i < chunk.method_cache.len() {
+                chunk.method_cache.remove(i);
+            }
             if i < chunk.bundle_len.len() {
                 chunk.bundle_len.remove(i);
             }

@@ -2642,32 +2642,20 @@ fn prepare_job(
     });
     instrs.push(bsl_bytecode::Instr::Return { src: None });
     let regs = (n_params + 1).max(1) as u8;
-    let chunk = bsl_bytecode::Chunk {
-        instrs,
-        // Таблица констант здесь — ТРАНСПОРТ аргументов, а не
-        // литеральный пул: значения задания материализуются в объекты и
-        // типы, которых текстовый формат не представляет. Программа
-        // собирается в памяти и не печатается — сериализуется каталог с
-        // `entry: None`, — поэтому непредставимость ей ничем не грозит.
-        consts: arguments
-            .into_iter()
-            .map(bsl_bytecode::BytecodeConst::transient)
-            .collect(),
-        call_arg_modes: vec![modes],
-        exception_ranges: Vec::new(),
-        n_params: 0,
-        param_by_val: Vec::new(),
-        param_has_default: Vec::new(),
-        is_procedure: false,
-        is_async: false,
-        n_locals: n_params as u8,
-        n_regs: regs,
-        prop_cache: Vec::new(),
-        method_cache: Vec::new(),
-        local_names: Vec::new(),
-        bundle_len: Vec::new(),
-        touches_objects: false,
-    };
+    let mut chunk = bsl_bytecode::Chunk::new();
+    chunk.instrs = instrs;
+    // Таблица констант здесь — ТРАНСПОРТ аргументов, а не литеральный
+    // пул: значения задания материализуются в объекты и типы, которых
+    // текстовый формат не представляет. Программа собирается в памяти и
+    // не печатается — сериализуется каталог с `entry: None`, — поэтому
+    // непредставимость ей ничем не грозит.
+    chunk.consts = arguments
+        .into_iter()
+        .map(bsl_bytecode::BytecodeConst::transient)
+        .collect();
+    chunk.call_arg_modes = vec![modes];
+    chunk.n_locals = n_params as u8;
+    chunk.n_regs = regs;
     let mut entry = bsl_bytecode::Program {
         requirements: base_program.requirements.clone(),
         chunks: vec![chunk],

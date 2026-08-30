@@ -12,12 +12,10 @@
 // был бы предупреждением там, где он совершенно уместен.
 #![allow(dead_code)]
 
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use bsl_bytecode::{
-    ArgMode, BytecodeConst, Chunk, ExceptionRange, Instr, LibraryRequirement, Program,
-    PropCacheSlot, image,
+    ArgMode, BytecodeConst, Chunk, ExceptionRange, Instr, LibraryRequirement, Program, image,
 };
 use bsl_rt::{BslValue, NameId, Shape, ShapeTable};
 
@@ -31,25 +29,12 @@ pub fn konst(value: bsl_rt::BslValue) -> BytecodeConst {
 }
 
 pub fn chunk(instrs: Vec<Instr>) -> Chunk {
-    let n = instrs.len();
-    Chunk {
-        instrs,
-        consts: Vec::new(),
-        call_arg_modes: Vec::new(),
-        exception_ranges: Vec::new(),
-        n_params: 0,
-        param_by_val: Vec::new(),
-        param_has_default: Vec::new(),
-        is_procedure: false,
-        is_async: false,
-        n_locals: 0,
-        n_regs: 1,
-        prop_cache: (0..n).map(|_| PropCacheSlot::default()).collect(),
-        method_cache: (0..n).map(|_| RefCell::new(None)).collect(),
-        local_names: Vec::new(),
-        bundle_len: Vec::new(),
-        touches_objects: false,
-    }
+    // Производные таблицы здесь не заполняются: их ставит
+    // `image::finalize`, и снаружи крейта они закрыты.
+    let mut c = Chunk::new();
+    c.instrs = instrs;
+    c.n_regs = 1;
+    c
 }
 
 /// Программа из этих чанков: нулевой — верхний уровень, остальные должны

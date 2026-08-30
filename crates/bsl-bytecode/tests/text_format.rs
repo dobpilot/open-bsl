@@ -188,9 +188,9 @@ fn a_hand_built_program_survives_print_and_parse() {
         program.chunks[0].local_names
     );
     // Производные поля разбор пересчитывает, а не читает.
-    assert!(reparsed.chunks[0].touches_objects);
+    assert!(reparsed.chunks[0].touches_objects());
     assert_eq!(
-        reparsed.chunks[0].prop_cache.len(),
+        reparsed.chunks[0].prop_cache().len(),
         reparsed.chunks[0].instrs.len()
     );
     assert_eq!(reparsed.shapes.len(), 1);

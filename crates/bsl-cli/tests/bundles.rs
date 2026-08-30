@@ -63,7 +63,7 @@ fn bundle_invariants_hold_on_the_whole_corpus() {
                 }
                 chunks_total += 1;
                 instrs_total += chunk.instrs.len();
-                for &w in &chunk.bundle_len {
+                for &w in chunk.bundle_len() {
                     if w >= 1 {
                         bundles_total += 1;
                     }
