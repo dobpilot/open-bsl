@@ -513,32 +513,73 @@ fn short_value(v: &BslValue) -> String {
     }
 }
 
-fn write_const(v: &BslValue) -> Result<String> {
-    Ok(match v {
-        BslValue::Undefined => "Неопределено".to_string(),
-        BslValue::Null => "Null".to_string(),
-        BslValue::Boolean(b) => format!("Булево {}", if *b { "Истина" } else { "Ложь" }),
-        // Каноническая форма числа — та же, что у оракула замеров: точка
-        // как разделитель, без группировки, без потери разрядов.
-        BslValue::Number(n) => format!("Число {}", n.to_canonical()),
-        BslValue::Str(s) => format!("Строка {}", quote(&s.to_string())),
-        // Секундами от эпохи, а не `дд.ММ.гггг`: представление даты по
-        // умолчанию — само по себе открытый вопрос (FMT.DATE.DEFAULT), и
-        // байт-код не должен от него зависеть.
-        BslValue::Date(d) => format!("Дата {}", d.seconds()),
-        BslValue::Type(_) => return Err(TextError::Unrepresentable("Тип")),
+/// Представимая в текстовом формате константа.
+///
+/// Существует ради того, чтобы классификация вариантов `BslValue` была
+/// в проекте ОДНА. Прежде их было две: печать разбирала `BslValue`
+/// исчерпывающе, а проверяемое преобразование константы отвергало два
+/// варианта и принимало остальные ветвью-заглушкой. Новый вариант
+/// `BslValue` заставил бы обновить печать и НЕ заставил бы обновить
+/// преобразование — и, объяви печать его непредставимым, преобразование
+/// молча приняло бы его, вернув ровно тот дефект, ради которого
+/// проверяемое преобразование и заводилось.
+pub(crate) enum ConstKind<'a> {
+    Undefined,
+    Null,
+    Boolean(bool),
+    Number(&'a BslNumber),
+    Str(&'a BslString),
+    Date(&'a BslDate),
+    Enum(&'a bsl_rt::EnumValue),
+    EnumType(&'a bsl_rt::EnumKind),
+}
+
+/// Единственная классификация представимости значения как константы
+/// байт-кода.
+///
+/// Разбор ИСЧЕРПЫВАЮЩИЙ, без ветви-заглушки: новый вариант `BslValue`
+/// обязан быть ошибкой сборки здесь, а не молча попасть в
+/// «представимо». Ошибка несёт то же слово, которое видит пользователь в
+/// `TextError::Unrepresentable`.
+pub(crate) fn classify_const(v: &BslValue) -> std::result::Result<ConstKind<'_>, &'static str> {
+    match v {
+        BslValue::Undefined => Ok(ConstKind::Undefined),
+        BslValue::Null => Ok(ConstKind::Null),
+        BslValue::Boolean(b) => Ok(ConstKind::Boolean(*b)),
+        BslValue::Number(n) => Ok(ConstKind::Number(n)),
+        BslValue::Str(s) => Ok(ConstKind::Str(s)),
+        BslValue::Date(d) => Ok(ConstKind::Date(d)),
         // Член перечисления — константа времени компиляции
         // (`ТипЗначенияJSON.ИмяСвойства` резолвится в `LoadConst`), значит
         // и в текстовом формате он обязан быть представим, иначе
         // напечатанный байт-код перестал бы исполняться.
-        BslValue::Enum(e) => format!("Перечисление {}.{}", e.enum_name(), e.member_name()),
+        BslValue::Enum(e) => Ok(ConstKind::Enum(e)),
         // Голое имя перечисления — та же логика, что у члена: константа
-        // времени компиляции (`RExpr::EnumTypeRef`), обязана быть
-        // представима в тексте. Отдельный тег, а не «Перечисление» без
-        // точки: `Перечисление X.Y` уже занят членом, и без точки текст
-        // разбирался бы неоднозначно.
-        BslValue::EnumType(k) => format!("ТипПеречисления {}", k.ru_name()),
-        BslValue::Object(_) => return Err(TextError::Unrepresentable("объект")),
+        // времени компиляции (`RExpr::EnumTypeRef`).
+        BslValue::EnumType(k) => Ok(ConstKind::EnumType(k)),
+        BslValue::Type(_) => Err("Тип"),
+        BslValue::Object(_) => Err("объект"),
+    }
+}
+
+fn write_const(v: &BslValue) -> Result<String> {
+    let kind = classify_const(v).map_err(TextError::Unrepresentable)?;
+    Ok(match kind {
+        ConstKind::Undefined => "Неопределено".to_string(),
+        ConstKind::Null => "Null".to_string(),
+        ConstKind::Boolean(b) => format!("Булево {}", if b { "Истина" } else { "Ложь" }),
+        // Каноническая форма числа — та же, что у оракула замеров: точка
+        // как разделитель, без группировки, без потери разрядов.
+        ConstKind::Number(n) => format!("Число {}", n.to_canonical()),
+        ConstKind::Str(s) => format!("Строка {}", quote(&s.to_string())),
+        // Секундами от эпохи, а не `дд.ММ.гггг`: представление даты по
+        // умолчанию — само по себе открытый вопрос (FMT.DATE.DEFAULT), и
+        // байт-код не должен от него зависеть.
+        ConstKind::Date(d) => format!("Дата {}", d.seconds()),
+        ConstKind::Enum(e) => format!("Перечисление {}.{}", e.enum_name(), e.member_name()),
+        // Отдельный тег, а не «Перечисление» без точки: `Перечисление X.Y`
+        // уже занят членом, и без точки текст разбирался бы неоднозначно.
+        ConstKind::EnumType(k) => format!("ТипПеречисления {}", k.ru_name()),
     })
 }
 
