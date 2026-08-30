@@ -788,7 +788,6 @@ pub fn run_repl_chunk_with_registry<'a>(
         exported_functions: Vec::new(),
         module_vars: Vec::new(),
         exported_module_vars: Vec::new(),
-        module_base: 0,
         links: Vec::new(),
     };
     let linked = link_components(
@@ -2899,8 +2898,8 @@ fn step(
         match instr {
             Instr::GetModuleVar { dst, slot } => {
                 // АБСОЛЮТНЫЙ индекс: модульные переменные лежат подряд,
-                // начиная с `module_base`. У обычной программы база нулевая
-                // — это первые слоты кадра верхнего уровня, а он стоит в
+                // начиная с нуля стека. У обычной программы это первые
+                // слоты кадра верхнего уровня, а он стоит в
                 // самом низу стека и живёт всё исполнение. Проверка границы
                 // обязательна — байт-код может прийти и не от кодогена.
                 if (slot as usize) >= program.module_vars.len() {
@@ -3278,8 +3277,8 @@ fn step(
                             provided: true,
                         },
                         // Модульная переменная лежит по АБСОЛЮТНОМУ индексу
-                        // `module_base + slot` (первые слоты кадра нулевого
-                        // уровня), а не в кадре вызывающего: алиас указывает
+                        // (первые слоты кадра нулевого уровня), а не в
+                        // кадре вызывающего: алиас указывает
                         // прямо туда, поэтому запись из вызванной функции
                         // видна и телу модуля, и другим функциям.
                         ArgMode::ByRefModuleVar(slot) => {
@@ -4428,11 +4427,11 @@ fn run_dynamic_snippet(
     }
     // Разметка бандлов фрагмента остаётся ПУСТОЙ (поинструкционное
     // исполнение). Прежний расчёт в `compile_snippet` звал `compute` с
-    // `overlap = None` по ложной посылке «у фрагмента `module_base != 0`»:
-    // у верхнего уровня он нулевой, модульные слоты накладываются на первые
-    // `n_module` регистров, и разметка делала ЛОЖНОЕ утверждение о
-    // независимости членов. Верный `overlap` известен только здесь
-    // (`aliased`, `n_module`), но пересчитывать его на КАЖДОМ `Выполнить` —
+    // `overlap = None` по ложной посылке «модульный блок фрагмента лежит
+    // за его регистрами»: у верхнего уровня он с ними накладывается, и
+    // разметка делала ЛОЖНОЕ утверждение о независимости членов. Верный
+    // `overlap` известен только здесь, но пересчитывать его на КАЖДОМ
+    // `Выполнить` —
     // измеренные +9.6 % на eval-в-цикле ради соундности доказательства,
     // которое над фрагментами ни в рантайме, ни в тестах не проверяется
     // (`bundle::verify` идёт по статическому корпусу). Пустой вектор не
@@ -4455,7 +4454,6 @@ fn run_dynamic_snippet(
         exported_functions: program.exported_functions.clone(),
         module_vars: program.module_vars.clone(),
         exported_module_vars: program.exported_module_vars.clone(),
-        module_base: 0,
         links: Vec::new(),
     };
 
@@ -4510,9 +4508,8 @@ fn run_dynamic_snippet(
 /// идентификаторы `bsl-sema`) по [`Program::function_names`], куда входят и
 /// процедуры, и функции.
 ///
-/// `stack` — стек значений вызывающего: из него по [`Program::module_base`]
-/// читается блок модульных переменных и в него же он возвращается после
-/// вызова, поэтому запись в модульную переменную из вызванной процедуры
+/// `stack` — стек значений вызывающего: из его первых слотов читается
+/// блок модульных переменных и в них же он возвращается после вызова, поэтому запись в модульную переменную из вызванной процедуры
 /// переживает вызов ровно так же, как при обычном `Call`.
 ///
 /// Аргументы передаются ПО ЗНАЧЕНИЮ, даже для параметров без `Знач`:
@@ -4632,9 +4629,13 @@ fn call_module_function_with_host(
     linked: &LinkedComponents<'_>,
     host: &mut HostIo<'_, '_>,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
+    // Блок модульных переменных начинается с нуля стека вызывающего.
+    // Смещения здесь нет и быть не может: у фрагмента `Выполнить` стек
+    // СВОЙ, и его блок начинается с нуля так же, как у верхнего уровня
+    // в своём.
     let mut module_state = ModuleState {
         slots: (0..program.module_vars.len())
-            .map(|i| reg_load(stack, program.module_base as usize + i))
+            .map(|i| reg_load(stack, i))
             .collect::<Result<_, _>>()?,
     };
     let result = call_module_function_in_execution(
@@ -4647,7 +4648,7 @@ fn call_module_function_with_host(
         &mut module_state,
     );
     for (i, value) in module_state.slots.into_iter().enumerate() {
-        reg_store(stack, program.module_base as usize + i, value)?;
+        reg_store(stack, i, value)?;
     }
     result
 }

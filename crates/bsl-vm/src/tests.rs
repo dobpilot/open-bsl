@@ -1263,8 +1263,8 @@ fn recursion_through_execute_is_a_catchable_error_not_a_crash() {
 
 #[test]
 fn nested_execute_sees_and_updates_module_vars() {
-    // Регрессия: модульный блок копировался во фрагмент с абсолютного
-    // нуля, а не с `module_base` текущей программы, поэтому на ВТОРОМ
+    // Регрессия: модульный блок копировался во фрагмент из стека по
+    // смещению, а не переносился явным `ModuleState`, поэтому на ВТОРОМ
     // уровне `Выполнить` модульная переменная приезжала мусором
     // (Неопределено), а изменения не возвращались наружу.
     let v = run_src(
@@ -1823,7 +1823,6 @@ fn corrupt_program(instrs: Vec<Instr>) -> Program {
         exported_functions: Vec::new(),
         module_vars: Vec::new(),
         exported_module_vars: Vec::new(),
-        module_base: 0,
         links: Vec::new(),
         chunks: vec![{
             // Производные таблицы ставит финализация; здесь чанк

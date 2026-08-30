@@ -1260,7 +1260,6 @@ fn parse_program_body(r: &mut Reader) -> Result<Program> {
         exported_functions,
         module_vars,
         exported_module_vars,
-        module_base: 0,
         links,
     };
     // Разметка бандлов — производная таблица (как `prop_cache`): из файла

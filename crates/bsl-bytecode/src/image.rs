@@ -912,7 +912,6 @@ mod tests {
             exported_module_vars: vec![true],
             function_names: vec!["Ф".to_string()],
             exported_functions: vec![true],
-            module_base: 0,
             links: Vec::new(),
         };
         finalize(&mut p);

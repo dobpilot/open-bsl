@@ -365,7 +365,6 @@ fn assemble_raw(
         exported_functions: resolved.functions.iter().map(|f| f.export).collect(),
         module_vars: resolved.module_vars.clone(),
         exported_module_vars: resolved.module_var_exports.clone(),
-        module_base: 0,
         links: resolved
             .links
             .iter()
@@ -496,10 +495,10 @@ pub fn compile_snippet_with_requirements(
     // Именно `_unbundled`: разметку VLIW-бандлов фрагмента считает не
     // здесь, а `run_dynamic_snippet` в bsl-vm — только там известно,
     // накладывается ли модульный блок фрагмента на регистры кадра (у
-    // верхнего уровня `module_base == 0` и накладывается, у вложенного
-    // `Выполнить` нет), а от этого зависит пересечение модульных слотов.
-    // Прежний расчёт с `None` опирался на неверную посылку «у фрагмента
-    // `module_base != 0`». Пустой `bundle_len` равнозначен
+    // верхнего уровня накладывается, у вложенного `Выполнить` нет), а от
+    // этого зависит пересечение модульных слотов. Прежний расчёт с
+    // `None` опирался на обратную посылку. Пустой `bundle_len`
+    // равнозначен
     // поинструкционному исполнению и безопасен до пересчёта.
     let mut chunk = chunk;
     bsl_bytecode::image::finalize_lone_chunk_unbundled(&mut chunk);
