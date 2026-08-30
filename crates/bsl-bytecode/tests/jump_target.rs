@@ -148,13 +148,13 @@ fn fused_equality_jump_rejects_an_invalid_register_and_constant() {
     assert!(matches!(
         image::verify(&make(1, 0)),
         Err(RtError::InvalidBytecode(
-            "регистр условного перехода выходит за кадр"
+            "инструкция обращается к регистру за пределами кадра"
         ))
     ));
     assert!(matches!(
         image::verify(&make(0, 1)),
         Err(RtError::InvalidBytecode(
-            "номер константы условного перехода вне таблицы чанка"
+            "номер константы вне таблицы констант чанка"
         ))
     ));
 }
