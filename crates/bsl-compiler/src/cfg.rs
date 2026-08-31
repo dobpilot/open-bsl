@@ -29,7 +29,7 @@
 //! обходит дерево рекурсивно, повторяя форму `compile_stmt`, а все
 //! алгоритмы НА ГРАФЕ — обход, доминаторы — итеративные и разреженные.
 
-use bsl_sema::{LabelId, RExpr, RStmt};
+use bsl_sema::{LabelId, RExpr, RStmt, RStmtKind};
 use std::collections::HashMap;
 
 pub type BlockId = usize;
@@ -272,8 +272,8 @@ impl<'a> Builder<'a> {
     }
 
     fn stmt(&mut self, s: &'a RStmt, cur: BlockId) -> BlockId {
-        match s {
-            RStmt::If {
+        match &s.kind {
+            RStmtKind::If {
                 cond,
                 then_branch,
                 elsif_branches,
@@ -304,7 +304,7 @@ impl<'a> Builder<'a> {
                 self.blocks[end].term = Terminator::Goto(join);
                 join
             }
-            RStmt::While { cond, body } => {
+            RStmtKind::While { cond, body } => {
                 let header = self.new_block();
                 self.blocks[cur].term = Terminator::Goto(header);
                 let body_b = self.new_block();
@@ -326,7 +326,7 @@ impl<'a> Builder<'a> {
             // Оба цикла по счётчику устроены одинаково с точки зрения
             // потока управления: заголовок с проверкой, тело, выход.
             // Различие — в том, что проверяется, и графа оно не касается.
-            RStmt::ForNumeric { body, .. } | RStmt::ForEach { body, .. } => {
+            RStmtKind::ForNumeric { body, .. } | RStmtKind::ForEach { body, .. } => {
                 let header = self.new_block();
                 self.blocks[cur].term = Terminator::Goto(header);
                 // Сам оператор цикла кладётся в ЗАГОЛОВОК, и это не
@@ -351,7 +351,7 @@ impl<'a> Builder<'a> {
                 self.blocks[end].term = Terminator::Goto(header);
                 exit
             }
-            RStmt::Try { body, except_body } => {
+            RStmtKind::Try { body, except_body } => {
                 let handler = self.new_block();
                 let join = self.new_block();
                 let protected = self.new_block();
@@ -368,9 +368,9 @@ impl<'a> Builder<'a> {
                 self.blocks[hend].term = Terminator::Goto(join);
                 join
             }
-            RStmt::Break | RStmt::Continue => {
-                let target = self.loops.last().map(|l| match s {
-                    RStmt::Break => l.brk,
+            RStmtKind::Break | RStmtKind::Continue => {
+                let target = self.loops.last().map(|l| match &s.kind {
+                    RStmtKind::Break => l.brk,
                     _ => l.cont,
                 });
                 // Вне цикла это ошибка резолвинга, до графа она не
@@ -382,21 +382,21 @@ impl<'a> Builder<'a> {
                 }
                 self.new_block()
             }
-            RStmt::Label(id) => {
+            RStmtKind::Label(id) => {
                 let b = self.new_block();
                 self.labels.insert(*id, b);
                 self.blocks[cur].term = Terminator::Goto(b);
                 b
             }
-            RStmt::Goto(id) => {
+            RStmtKind::Goto(id) => {
                 self.gotos.push((cur, *id));
                 self.new_block()
             }
-            RStmt::Return(e) => {
+            RStmtKind::Return(e) => {
                 self.blocks[cur].term = Terminator::Return(e.as_ref());
                 self.new_block()
             }
-            RStmt::Raise(e) => {
+            RStmtKind::Raise(e) => {
                 self.blocks[cur].term = Terminator::Raise(e.as_ref());
                 self.new_block()
             }

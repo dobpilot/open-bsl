@@ -9,8 +9,8 @@ mod resolved;
 mod resolver;
 
 pub use resolved::{
-    LabelId, RExpr, RStmt, Resolved, ResolvedArg, ResolvedFunction, ResolvedLink, ResolvedParam,
-    ResolvedProgram,
+    LabelId, RExpr, RStmt, RStmtKind, Resolved, ResolvedArg, ResolvedFunction, ResolvedLink,
+    ResolvedParam, ResolvedProgram,
 };
 pub use resolver::{
     ImportedFunction, ImportedModule, ImportedVariable, NEW_TYPES, ResolvedSnippetWithRequirements,

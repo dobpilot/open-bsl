@@ -25,7 +25,7 @@
 //! путать эти два состояния нельзя.
 
 use crate::cfg::{BlockId, Cfg};
-use bsl_sema::{RExpr, RStmt, ResolvedArg};
+use bsl_sema::{RExpr, RStmt, RStmtKind, ResolvedArg};
 
 pub type ValueId = usize;
 
@@ -199,22 +199,22 @@ fn expr_reads(e: &RExpr, out: &mut Vec<u32>) {
 
 /// Слоты, читаемые оператором.
 fn stmt_reads(s: &RStmt, out: &mut Vec<u32>) {
-    match s {
-        RStmt::AssignLocal { value, .. }
-        | RStmt::AssignModuleVar { value, .. }
-        | RStmt::AssignImportedVar { value, .. }
-        | RStmt::ExprStmt(value)
-        | RStmt::Execute(value) => expr_reads(value, out),
-        RStmt::AssignIndex { obj, index, value } => {
+    match &s.kind {
+        RStmtKind::AssignLocal { value, .. }
+        | RStmtKind::AssignModuleVar { value, .. }
+        | RStmtKind::AssignImportedVar { value, .. }
+        | RStmtKind::ExprStmt(value)
+        | RStmtKind::Execute(value) => expr_reads(value, out),
+        RStmtKind::AssignIndex { obj, index, value } => {
             expr_reads(obj, out);
             expr_reads(index, out);
             expr_reads(value, out);
         }
-        RStmt::AssignField { obj, value, .. } => {
+        RStmtKind::AssignField { obj, value, .. } => {
             expr_reads(obj, out);
             expr_reads(value, out);
         }
-        RStmt::Return(e) | RStmt::Raise(e) => {
+        RStmtKind::Return(e) | RStmtKind::Raise(e) => {
             if let Some(e) = e {
                 expr_reads(e, out);
             }
@@ -222,11 +222,11 @@ fn stmt_reads(s: &RStmt, out: &mut Vec<u32>) {
         // Границы и коллекция вычисляются один раз до цикла, но приписать
         // их чтение заголовку безопасно: завышение живости стоит регистра,
         // занижение стоило бы неверного кода.
-        RStmt::ForNumeric { from, to, .. } => {
+        RStmtKind::ForNumeric { from, to, .. } => {
             expr_reads(from, out);
             expr_reads(to, out);
         }
-        RStmt::ForEach { iter, .. } => expr_reads(iter, out),
+        RStmtKind::ForEach { iter, .. } => expr_reads(iter, out),
         // Управляющие формы до блоков не доходят: их разобрал построитель
         // графа, а условия живут в терминаторах.
         _ => {}
@@ -246,31 +246,31 @@ fn stmt_writes(s: &RStmt, n_slots: usize) -> Vec<u32> {
     // перечня от расползания: новый вид оператора обязан быть ошибкой
     // сборки, а не молча попасть в «ничего не пишет». Пропуск здесь даёт
     // не худший код, а неверный, — так уже случалось трижды.
-    let mut out = match s {
-        RStmt::AssignLocal { slot, .. } => vec![*slot],
+    let mut out = match &s.kind {
+        RStmtKind::AssignLocal { slot, .. } => vec![*slot],
         // Цикл присваивает свою переменную на каждой итерации.
-        RStmt::ForNumeric { slot, .. } | RStmt::ForEach { slot, .. } => vec![*slot],
+        RStmtKind::ForNumeric { slot, .. } | RStmtKind::ForEach { slot, .. } => vec![*slot],
         // Пишут не в локаль: модульный слот, чужой модуль, поле или
         // элемент уже существующего объекта.
-        RStmt::AssignModuleVar { .. }
-        | RStmt::AssignImportedVar { .. }
-        | RStmt::AssignIndex { .. }
-        | RStmt::AssignField { .. }
+        RStmtKind::AssignModuleVar { .. }
+        | RStmtKind::AssignImportedVar { .. }
+        | RStmtKind::AssignIndex { .. }
+        | RStmtKind::AssignField { .. }
         // Не пишут вовсе; управляющие формы к тому же разобраны графом и
         // до блоков не доходят.
-        | RStmt::ExprStmt(_)
-        | RStmt::If { .. }
-        | RStmt::While { .. }
-        | RStmt::Break
-        | RStmt::Continue
-        | RStmt::Label(_)
-        | RStmt::Goto(_)
-        | RStmt::Return(_)
-        | RStmt::Try { .. }
-        | RStmt::Raise(_)
+        | RStmtKind::ExprStmt(_)
+        | RStmtKind::If { .. }
+        | RStmtKind::While { .. }
+        | RStmtKind::Break
+        | RStmtKind::Continue
+        | RStmtKind::Label(_)
+        | RStmtKind::Goto(_)
+        | RStmtKind::Return(_)
+        | RStmtKind::Try { .. }
+        | RStmtKind::Raise(_)
         // `Выполнить` пишет всё, но обеими формами фрагмента ведает
         // `has_dynamic` ниже — здесь он лишь не пишет ничего сам по себе.
-        | RStmt::Execute(_) => Vec::new(),
+        | RStmtKind::Execute(_) => Vec::new(),
     };
     // Динамический фрагмент пишет ВСЕ слоты, и форм у него две:
     // `Выполнить` как оператор и `Вычислить` как ВЫРАЖЕНИЕ, которое может
@@ -306,7 +306,7 @@ fn stmt_writes(s: &RStmt, n_slots: usize) -> Vec<u32> {
 
 /// Содержит ли оператор динамический фрагмент в любой из двух форм.
 fn has_dynamic(s: &RStmt) -> bool {
-    if matches!(s, RStmt::Execute(_)) {
+    if matches!(s.kind, RStmtKind::Execute(_)) {
         return true;
     }
     let mut exprs = Vec::new();
@@ -382,22 +382,22 @@ fn sub_exprs<'a>(e: &'a RExpr, out: &mut Vec<&'a RExpr>) {
 
 /// Выражения верхнего уровня оператора.
 fn stmt_exprs<'a>(s: &'a RStmt, out: &mut Vec<&'a RExpr>) {
-    match s {
-        RStmt::AssignLocal { value, .. }
-        | RStmt::AssignModuleVar { value, .. }
-        | RStmt::AssignImportedVar { value, .. }
-        | RStmt::ExprStmt(value)
-        | RStmt::Execute(value) => out.push(value),
-        RStmt::AssignIndex { obj, index, value } => {
+    match &s.kind {
+        RStmtKind::AssignLocal { value, .. }
+        | RStmtKind::AssignModuleVar { value, .. }
+        | RStmtKind::AssignImportedVar { value, .. }
+        | RStmtKind::ExprStmt(value)
+        | RStmtKind::Execute(value) => out.push(value),
+        RStmtKind::AssignIndex { obj, index, value } => {
             out.push(obj);
             out.push(index);
             out.push(value);
         }
-        RStmt::AssignField { obj, value, .. } => {
+        RStmtKind::AssignField { obj, value, .. } => {
             out.push(obj);
             out.push(value);
         }
-        RStmt::Return(e) | RStmt::Raise(e) => out.extend(e.iter()),
+        RStmtKind::Return(e) | RStmtKind::Raise(e) => out.extend(e.iter()),
         _ => {}
     }
 }
@@ -500,7 +500,7 @@ pub fn build(cfg: &Cfg<'_>, n_slots: usize) -> Ssa {
             // видит прежнее значение слота, а не своё собственное.
             let mut read = Vec::new();
             stmt_reads(s, &mut read);
-            if matches!(s, RStmt::Execute(_)) {
+            if matches!(s.kind, RStmtKind::Execute(_)) {
                 // Фрагмент читает область видимости по именам — считаем
                 // прочитанным всё, иначе значение объявилось бы мёртвым.
                 read.extend(0..n_slots as u32);
@@ -838,8 +838,8 @@ pub fn propagate_constants(cfg: &Cfg<'_>, ssa: &Ssa, n_slots: usize) -> Vec<Cons
                 // отсюда не видно. Такое значение обязано быть `Top`, а
                 // не `Bottom`: `Bottom` — единица объединения, и слияние
                 // с ним сохранило бы константу, которой фрагмент уже нет.
-                let (slot, c) = match cfg.blocks[b].stmts[stmt_index] {
-                    bsl_sema::RStmt::AssignLocal { slot, value } => (slot, eval(value, &slots)),
+                let (slot, c) = match &cfg.blocks[b].stmts[stmt_index].kind {
+                    bsl_sema::RStmtKind::AssignLocal { slot, value } => (slot, eval(value, &slots)),
                     _ => match &ssa.values[id] {
                         Value::Def { slot, .. } => (slot, Const::Top),
                         _ => continue,
@@ -1140,9 +1140,9 @@ pub fn propagate_tiers(cfg: &Cfg<'_>, ssa: &Ssa, n_slots: usize) -> Vec<Tier> {
             }
             let mut slots: Vec<Tier> = (0..n_slots).map(|i| tier[entry[i]].clone()).collect();
             for &(stmt_index, id) in &ssa.defs[b] {
-                let (slot, t) = match cfg.blocks[b].stmts[stmt_index] {
-                    RStmt::AssignLocal { slot, value } => (slot, tier_of(value, &slots)),
-                    RStmt::ForNumeric { slot, from, to, .. } => {
+                let (slot, t) = match &cfg.blocks[b].stmts[stmt_index].kind {
+                    RStmtKind::AssignLocal { slot, value } => (slot, tier_of(value, &slots)),
+                    RStmtKind::ForNumeric { slot, from, to, .. } => {
                         if defs_per_slot.get(*slot as usize) == Some(&1) {
                             (slot, loop_var_tier(from, to, &slots))
                         } else {

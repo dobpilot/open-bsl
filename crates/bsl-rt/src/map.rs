@@ -57,7 +57,7 @@ impl MapData {
     /// i-я по порядку вставки пара (ключ, значение) — протокол `Для
     /// Каждого`: компилятор всегда обходит коллекции числовой позицией
     /// `0..CollectionLen`, независимо от типа (см. `bsl-bytecode::compiler`
-    /// `RStmt::ForEach`), а не по ключу — `GetIndex` на `Соответствие`
+    /// `RStmtKind::ForEach`), а не по ключу — `GetIndex` на `Соответствие`
     /// поэтому позиционный, а не по ключу (см. doc comment на
     /// `BslValue::get_index`).
     pub fn entry_at(&self, i: usize) -> Option<(BslValue, BslValue)> {

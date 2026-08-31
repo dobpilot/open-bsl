@@ -1,6 +1,6 @@
 use bsl_rt::{BslValue, NameInterner, ShapeTable};
 use bsl_sema::{
-    LabelId, RExpr, RStmt, ResolvedArg, ResolvedFunction, ResolvedParam, ResolvedProgram,
+    LabelId, RExpr, RStmt, RStmtKind, ResolvedArg, ResolvedFunction, ResolvedParam, ResolvedProgram,
 };
 use bsl_syntax::{BinaryOp, UnaryOp};
 
@@ -1706,12 +1706,12 @@ impl<'a> Compiler<'a> {
             .get(&(std::ptr::from_ref(s) as usize))
             .cloned()
             .unwrap_or_default();
-        match s {
-            RStmt::AssignLocal { slot, value } => {
+        match &s.kind {
+            RStmtKind::AssignLocal { slot, value } => {
                 let dst = self.reg_of(*slot);
                 self.compile_expr(value, dst)?;
             }
-            RStmt::AssignModuleVar { slot, value } => {
+            RStmtKind::AssignModuleVar { slot, value } => {
                 // Через временный регистр: у модульной переменной нет
                 // регистра в этом кадре, писать прямо некуда.
                 let v = self.alloc_temp()?;
@@ -1722,7 +1722,7 @@ impl<'a> Compiler<'a> {
                 });
                 self.free_temp(1);
             }
-            RStmt::AssignImportedVar { link, value } => {
+            RStmtKind::AssignImportedVar { link, value } => {
                 // Как модульная, только слот живёт в чужом модуле и
                 // адресуется записью таблицы связей.
                 let v = self.alloc_temp()?;
@@ -1732,7 +1732,7 @@ impl<'a> Compiler<'a> {
                 self.emit(Instr::SetImportedVar { link_slot, src: v });
                 self.free_temp(1);
             }
-            RStmt::AssignIndex { obj, index, value } => {
+            RStmtKind::AssignIndex { obj, index, value } => {
                 let o = self.alloc_temp()?;
                 self.compile_expr(obj, o)?;
                 let i = self.alloc_temp()?;
@@ -1746,7 +1746,7 @@ impl<'a> Compiler<'a> {
                 });
                 self.free_temp(3);
             }
-            RStmt::AssignField { obj, name, value } => {
+            RStmtKind::AssignField { obj, name, value } => {
                 let o = self.alloc_temp()?;
                 self.compile_expr(obj, o)?;
                 let v = self.alloc_temp()?;
@@ -1759,14 +1759,14 @@ impl<'a> Compiler<'a> {
                 });
                 self.free_temp(2);
             }
-            RStmt::ExprStmt(e) => {
+            RStmtKind::ExprStmt(e) => {
                 // Результат вызова-как-оператора отбрасывается, но регистр
                 // под него всё равно нужен на время компиляции выражения.
                 let r = self.alloc_temp()?;
                 self.compile_expr(e, r)?;
                 self.free_temp(1);
             }
-            RStmt::Return(opt) => match opt {
+            RStmtKind::Return(opt) => match opt {
                 Some(e) => {
                     let r = self.alloc_temp()?;
                     self.compile_expr(e, r)?;
@@ -1777,12 +1777,12 @@ impl<'a> Compiler<'a> {
                     self.emit(Instr::Return { src: None });
                 }
             },
-            RStmt::Label(id) => self.define_label(*id),
-            RStmt::Goto(id) => {
+            RStmtKind::Label(id) => self.define_label(*id),
+            RStmtKind::Goto(id) => {
                 let jump = self.emit(Instr::Jump { target: 0 });
                 self.goto_patches.push((jump, *id));
             }
-            RStmt::If {
+            RStmtKind::If {
                 cond,
                 then_branch,
                 elsif_branches,
@@ -1811,7 +1811,7 @@ impl<'a> Compiler<'a> {
                     self.patch_jump(p, end)?;
                 }
             }
-            RStmt::While { cond, body } => {
+            RStmtKind::While { cond, body } => {
                 let cond_pc = self.here();
                 let jf = self.compile_jump_if_false(cond)?;
 
@@ -1835,7 +1835,7 @@ impl<'a> Compiler<'a> {
                     self.patch_jump(p, cond_pc)?;
                 }
             }
-            RStmt::ForNumeric {
+            RStmtKind::ForNumeric {
                 slot,
                 from,
                 to,
@@ -1895,7 +1895,7 @@ impl<'a> Compiler<'a> {
 
                 self.free_temp(1); // bound
             }
-            RStmt::ForEach { slot, iter, body } => {
+            RStmtKind::ForEach { slot, iter, body } => {
                 let slot = self.reg_of(*slot);
                 // Коллекция вычисляется один раз, как и границы `Для`.
                 let iter_reg = self.alloc_temp()?;
@@ -1964,7 +1964,7 @@ impl<'a> Compiler<'a> {
 
                 self.free_temp(3); // iter_reg, len_reg, idx_reg
             }
-            RStmt::Try { body, except_body } => {
+            RStmtKind::Try { body, except_body } => {
                 let start = self.here();
                 self.compile_block(body)?;
                 let end = self.here();
@@ -1982,7 +1982,7 @@ impl<'a> Compiler<'a> {
                     handler_pc,
                 });
             }
-            RStmt::Raise(opt) => match opt {
+            RStmtKind::Raise(opt) => match opt {
                 Some(e) => {
                     let r = self.alloc_temp()?;
                     self.compile_expr(e, r)?;
@@ -1993,7 +1993,7 @@ impl<'a> Compiler<'a> {
                     self.emit(Instr::Raise { src: None });
                 }
             },
-            RStmt::Execute(e) => {
+            RStmtKind::Execute(e) => {
                 let s = self.alloc_temp()?;
                 self.compile_expr(e, s)?;
                 let d = self.alloc_temp()?; // результат отбрасывается, но регистр нужен
@@ -2004,7 +2004,7 @@ impl<'a> Compiler<'a> {
                 });
                 self.free_temp(2);
             }
-            RStmt::Break => {
+            RStmtKind::Break => {
                 let idx = self.emit(Instr::Jump { target: 0 });
                 self.loop_stack
                     .last_mut()
@@ -2012,7 +2012,7 @@ impl<'a> Compiler<'a> {
                     .break_patches
                     .push(idx);
             }
-            RStmt::Continue => {
+            RStmtKind::Continue => {
                 let idx = self.emit(Instr::Jump { target: 0 });
                 self.loop_stack
                     .last_mut()

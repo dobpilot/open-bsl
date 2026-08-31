@@ -5,7 +5,8 @@ use bsl_syntax::{Expr as AExpr, Item, LValue, Stmt as AStmt, StmtKind as AStmtKi
 
 use crate::core_receivers::{self, CoreReceiver};
 use crate::resolved::{
-    LabelId, RExpr, RStmt, Resolved, ResolvedArg, ResolvedFunction, ResolvedParam, ResolvedProgram,
+    LabelId, RExpr, RStmt, RStmtKind, Resolved, ResolvedArg, ResolvedFunction, ResolvedParam,
+    ResolvedProgram,
 };
 
 /// Позиция, в которой разрешается вызов.
@@ -1156,14 +1157,17 @@ impl<'a> Resolver<'a> {
     fn resolve_block(&mut self, stmts: &[AStmt]) -> Result<Vec<RStmt>, SemaError> {
         let mut out = Vec::new();
         for s in stmts {
-            if let Some(rs) = self.resolve_stmt(s)? {
-                out.push(rs);
+            // Единственное место, где строка переходит из дерева парсера в
+            // разрешённое: `resolve_stmt` отдаёт только ВИД оператора и о
+            // позиции не знает, как и `parse_stmt_inner` этажом выше.
+            if let Some(kind) = self.resolve_stmt(s)? {
+                out.push(RStmt { kind, line: s.line });
             }
         }
         Ok(out)
     }
 
-    fn resolve_stmt(&mut self, s: &AStmt) -> Result<Option<RStmt>, SemaError> {
+    fn resolve_stmt(&mut self, s: &AStmt) -> Result<Option<RStmtKind>, SemaError> {
         match &s.kind {
             AStmtKind::Assign { target, value } => match target {
                 LValue::Name(name) => {
@@ -1174,21 +1178,21 @@ impl<'a> Resolver<'a> {
                     // функция.
                     if let Some(slot) = self.lookup(name) {
                         let value = self.resolve_expr(value)?;
-                        return Ok(Some(RStmt::AssignLocal { slot, value }));
+                        return Ok(Some(RStmtKind::AssignLocal { slot, value }));
                     }
                     if let Some(&slot) = self.module_index.get(&name.to_uppercase()) {
                         let value = self.resolve_expr(value)?;
-                        return Ok(Some(RStmt::AssignModuleVar { slot, value }));
+                        return Ok(Some(RStmtKind::AssignModuleVar { slot, value }));
                     }
                     let slot = self.declare(name);
                     let value = self.resolve_expr(value)?;
-                    Ok(Some(RStmt::AssignLocal { slot, value }))
+                    Ok(Some(RStmtKind::AssignLocal { slot, value }))
                 }
                 LValue::Index { obj, index } => {
                     let obj = self.resolve_expr(obj)?;
                     let index = self.resolve_expr(index)?;
                     let value = self.resolve_expr(value)?;
-                    Ok(Some(RStmt::AssignIndex { obj, index, value }))
+                    Ok(Some(RStmtKind::AssignIndex { obj, index, value }))
                 }
                 LValue::Field { obj, name } => {
                     // `Псевдоним.Переменная = ...` — запись экспортной
@@ -1198,14 +1202,14 @@ impl<'a> Resolver<'a> {
                     {
                         let link = self.resolve_imported_variable(module, name)?;
                         let value = self.resolve_expr(value)?;
-                        return Ok(Some(RStmt::AssignImportedVar { link, value }));
+                        return Ok(Some(RStmtKind::AssignImportedVar { link, value }));
                     }
                     let obj = self.resolve_expr(obj)?;
                     let value = self.resolve_expr(value)?;
                     // Запись свойства всегда компилируется в закрытый
                     // `SetProp` — обоснование у чтения поля в
                     // `resolve_expr`.
-                    Ok(Some(RStmt::AssignField {
+                    Ok(Some(RStmtKind::AssignField {
                         obj,
                         name: name.clone(),
                         value,
@@ -1238,7 +1242,7 @@ impl<'a> Resolver<'a> {
                     };
                     return Err(SemaError::BuiltinFunctionAsStatement(shown));
                 }
-                Ok(Some(RStmt::ExprStmt(r)))
+                Ok(Some(RStmtKind::ExprStmt(r)))
             }
             AStmtKind::If {
                 cond,
@@ -1256,7 +1260,7 @@ impl<'a> Resolver<'a> {
                     Some(b) => Some(self.resolve_block(b)?),
                     None => None,
                 };
-                Ok(Some(RStmt::If {
+                Ok(Some(RStmtKind::If {
                     cond,
                     then_branch,
                     elsif_branches: elsifs,
@@ -1266,7 +1270,7 @@ impl<'a> Resolver<'a> {
             AStmtKind::While { cond, body } => {
                 let cond = self.resolve_expr(cond)?;
                 let body = self.resolve_block(body)?;
-                Ok(Some(RStmt::While { cond, body }))
+                Ok(Some(RStmtKind::While { cond, body }))
             }
             AStmtKind::ForNumeric {
                 var,
@@ -1280,7 +1284,7 @@ impl<'a> Resolver<'a> {
                 // на неё, а сама она остаётся живой и после `КонецЦикла`.
                 let slot = self.declare(var);
                 let body = self.resolve_block(body)?;
-                Ok(Some(RStmt::ForNumeric {
+                Ok(Some(RStmtKind::ForNumeric {
                     slot,
                     from,
                     to,
@@ -1293,17 +1297,17 @@ impl<'a> Resolver<'a> {
                 // и после КонецЦикла.
                 let slot = self.declare(var);
                 let body = self.resolve_block(body)?;
-                Ok(Some(RStmt::ForEach { slot, iter, body }))
+                Ok(Some(RStmtKind::ForEach { slot, iter, body }))
             }
-            AStmtKind::Break => Ok(Some(RStmt::Break)),
-            AStmtKind::Continue => Ok(Some(RStmt::Continue)),
-            AStmtKind::Label(name) => Ok(Some(RStmt::Label(
+            AStmtKind::Break => Ok(Some(RStmtKind::Break)),
+            AStmtKind::Continue => Ok(Some(RStmtKind::Continue)),
+            AStmtKind::Label(name) => Ok(Some(RStmtKind::Label(
                 *self
                     .labels
                     .get(&name.to_uppercase())
                     .expect("предварительный обход видел метку"),
             ))),
-            AStmtKind::Goto(name) => Ok(Some(RStmt::Goto(
+            AStmtKind::Goto(name) => Ok(Some(RStmtKind::Goto(
                 *self
                     .labels
                     .get(&name.to_uppercase())
@@ -1314,19 +1318,19 @@ impl<'a> Resolver<'a> {
                     Some(e) => Some(self.resolve_expr(e)?),
                     None => None,
                 };
-                Ok(Some(RStmt::Return(r)))
+                Ok(Some(RStmtKind::Return(r)))
             }
             AStmtKind::Try { body, except_body } => {
                 let body = self.resolve_block(body)?;
                 let except_body = self.resolve_block(except_body)?;
-                Ok(Some(RStmt::Try { body, except_body }))
+                Ok(Some(RStmtKind::Try { body, except_body }))
             }
             AStmtKind::Raise(opt) => {
                 let r = match opt {
                     Some(e) => Some(self.resolve_expr(e)?),
                     None => None,
                 };
-                Ok(Some(RStmt::Raise(r)))
+                Ok(Some(RStmtKind::Raise(r)))
             }
             AStmtKind::VarDecl(vd) => {
                 // `Экспорт` осмыслен только на уровне модуля; здесь —
@@ -1344,7 +1348,7 @@ impl<'a> Resolver<'a> {
                 }
                 Ok(None)
             }
-            AStmtKind::Execute(e) => Ok(Some(RStmt::Execute(self.resolve_expr(e)?))),
+            AStmtKind::Execute(e) => Ok(Some(RStmtKind::Execute(self.resolve_expr(e)?))),
         }
     }
 
@@ -2204,6 +2208,42 @@ mod tests {
     /// В тестовых скриптах верхнего уровня допускаем только `Перем` и
     /// обычные операторы — объявления процедур/функций сюда не проверяем
     /// (для них нужны кадры, это M4).
+    #[test]
+    fn a_statement_keeps_its_source_line_through_resolution() {
+        // Строка обязана пережить разрешение имён: без этого таблица строк
+        // образа взялась бы неоткуда. Пустые строки и комментарий между
+        // операторами стоят намеренно — они сдвигают нумерацию, и ошибка
+        // «считаем операторы, а не строки» здесь бы вылезла.
+        let resolved = resolve_src("а = 1;\n\n// комментарий\nб = 2;\n\n\nв = 3;");
+        assert_eq!(
+            resolved.body.iter().map(|s| s.line).collect::<Vec<_>>(),
+            vec![1, 4, 7]
+        );
+    }
+
+    #[test]
+    fn a_multiline_statement_reports_where_it_starts() {
+        // У многострочного `Если` строка — та, где стоит сам `Если`, а не
+        // та, где разбор остановился.
+        let resolved = resolve_src("а = 1;\nЕсли а = 1 Тогда\n  б = 2;\nКонецЕсли;");
+        assert_eq!(
+            resolved.body.iter().map(|s| s.line).collect::<Vec<_>>(),
+            vec![1, 2]
+        );
+        let RStmtKind::If { then_branch, .. } = &resolved.body[1].kind else {
+            panic!("ожидалось Если");
+        };
+        // А у вложенного — своя, третья.
+        assert_eq!(then_branch[0].line, 3);
+    }
+
+    /// Виды операторов тела. Тесты резолвера утверждают про разрешение
+    /// имён, а не про позиции, поэтому строку они не сравнивают — на неё
+    /// есть свои проверки в парсере и в таблице строк.
+    fn kinds(body: &[RStmt]) -> Vec<RStmtKind> {
+        body.iter().map(|s| s.kind.clone()).collect()
+    }
+
     fn items_to_stmts(items: Vec<bsl_syntax::Item>) -> Vec<AStmt> {
         items
             .into_iter()
@@ -2233,12 +2273,12 @@ mod tests {
     fn goto_resolves_forward_case_insensitive_and_keyword_labels() {
         let resolved = resolve_src("Goto ~метка; ~МЕТКА:; Перейти ~Если; ~Если:;");
         assert_eq!(
-            resolved.body,
+            kinds(&resolved.body),
             vec![
-                RStmt::Goto(LabelId(0)),
-                RStmt::Label(LabelId(0)),
-                RStmt::Goto(LabelId(1)),
-                RStmt::Label(LabelId(1)),
+                RStmtKind::Goto(LabelId(0)),
+                RStmtKind::Label(LabelId(0)),
+                RStmtKind::Goto(LabelId(1)),
+                RStmtKind::Label(LabelId(1)),
             ]
         );
     }
@@ -2249,12 +2289,12 @@ mod tests {
             "Функция Ф()\nGoto ~0; ~0:; Возврат 1;\nКонецФункции\nGoto ~0; ~0:;",
         );
         assert!(matches!(
-            resolved.functions[0].body[0],
-            RStmt::Goto(LabelId(0))
+            resolved.functions[0].body[0].kind,
+            RStmtKind::Goto(LabelId(0))
         ));
         assert!(matches!(
-            resolved.top_level.body[0],
-            RStmt::Goto(LabelId(0))
+            resolved.top_level.body[0].kind,
+            RStmtKind::Goto(LabelId(0))
         ));
     }
 
@@ -2339,13 +2379,13 @@ mod tests {
     fn chars_line_feed_and_carriage_return_are_compile_time_strings() {
         let resolved = resolve_src("пс = Символы.ПС; вк = Chars.CR;");
         assert_eq!(
-            resolved.body,
+            kinds(&resolved.body),
             vec![
-                RStmt::AssignLocal {
+                RStmtKind::AssignLocal {
                     slot: 0,
                     value: RExpr::Str("\n".to_string()),
                 },
-                RStmt::AssignLocal {
+                RStmtKind::AssignLocal {
                     slot: 1,
                     value: RExpr::Str("\r".to_string()),
                 },
@@ -2358,8 +2398,8 @@ mod tests {
         let r = resolve_src("PI = 3.14;");
         assert_eq!(r.locals, vec!["PI".to_string()]);
         assert_eq!(
-            r.body,
-            vec![RStmt::AssignLocal {
+            kinds(&r.body),
+            vec![RStmtKind::AssignLocal {
                 slot: 0,
                 value: RExpr::Number(BslNumber::parse_canonical("3.14").unwrap()),
             }]
@@ -2379,8 +2419,8 @@ mod tests {
         let r = resolve_src("x = 1;\nX = x + 1;");
         assert_eq!(r.locals, vec!["x".to_string()]);
         assert_eq!(
-            r.body[1],
-            RStmt::AssignLocal {
+            r.body[1].kind,
+            RStmtKind::AssignLocal {
                 slot: 0,
                 value: RExpr::Binary {
                     op: bsl_syntax::BinaryOp::Add,
@@ -2417,8 +2457,8 @@ mod tests {
     fn builtin_function_call_resolves_without_user_declaration() {
         let r = resolve_src("x = sqrt(4);");
         assert_eq!(
-            r.body[0],
-            RStmt::AssignLocal {
+            r.body[0].kind,
+            RStmtKind::AssignLocal {
                 slot: 0,
                 value: RExpr::CallBuiltinFn {
                     builtin: bsl_rt::BuiltinFn::Sqrt,
@@ -2522,8 +2562,8 @@ mod tests {
     fn count_method_call_resolves_on_array() {
         let r = resolve_src("a = Новый Массив(3);\nn = a.Count();");
         assert_eq!(
-            r.body[1],
-            RStmt::AssignLocal {
+            r.body[1].kind,
+            RStmtKind::AssignLocal {
                 slot: 1,
                 value: RExpr::CallMethod {
                     obj: Box::new(RExpr::Local(0)),
@@ -2541,8 +2581,8 @@ mod tests {
         let stmts = items_to_stmts(prog.items);
         let resolved = resolve_script(&stmts).unwrap();
         assert!(matches!(
-            &resolved.body[1],
-            RStmt::AssignLocal {
+            &resolved.body[1].kind,
+            RStmtKind::AssignLocal {
                 value: RExpr::CallMethod { method, .. },
                 ..
             } if method == "НетТакогоМетода"
@@ -2559,8 +2599,8 @@ mod tests {
         assert_eq!(rp.functions.len(), 2);
         assert_eq!(rp.functions[0].name, "Main");
         assert_eq!(
-            rp.functions[0].body,
-            vec![RStmt::Return(Some(RExpr::Call {
+            kinds(&rp.functions[0].body),
+            vec![RStmtKind::Return(Some(RExpr::Call {
                 func: 1,
                 args: vec![],
             }))]
@@ -2590,8 +2630,8 @@ mod tests {
         let async_program =
             resolve_program_src("Асинх Функция Ф(Обещание)\nВозврат Ждать Обещание;\nКонецФункции");
         assert!(matches!(
-            async_program.functions[0].body[0],
-            RStmt::Return(Some(RExpr::Await(_)))
+            async_program.functions[0].body[0].kind,
+            RStmtKind::Return(Some(RExpr::Await(_)))
         ));
 
         let parsed = parse("Функция Ф(Обещание)\nВозврат Ждать Обещание;\nКонецФункции")
@@ -2655,8 +2695,8 @@ mod tests {
     fn skipping_a_defaulted_parameter_resolves_to_skipped_marker() {
         let prog = parse("Функция Ф(а, б = 100)\nВозврат а;\nКонецФункции\nx = Ф(1, );").unwrap();
         let resolved = resolve_program(&prog.items).unwrap();
-        match &resolved.top_level.body[0] {
-            RStmt::AssignLocal {
+        match &resolved.top_level.body[0].kind {
+            RStmtKind::AssignLocal {
                 value: RExpr::Call { args, .. },
                 ..
             } => {
@@ -2674,8 +2714,8 @@ mod tests {
     fn an_omitted_trailing_optional_argument_takes_its_default() {
         let prog = parse("Функция Ф(а, б = 100)\nВозврат а;\nКонецФункции\nx = Ф(1);").unwrap();
         let resolved = resolve_program(&prog.items).unwrap();
-        match &resolved.top_level.body[0] {
-            RStmt::AssignLocal {
+        match &resolved.top_level.body[0].kind {
+            RStmtKind::AssignLocal {
                 value: RExpr::Call { args, .. },
                 ..
             } => {
@@ -2735,7 +2775,8 @@ mod tests {
     fn skipping_a_builtin_argument_resolves_to_undefined() {
         let resolved =
             resolve_src("П = Новый Структура(\"А\", 1);\nЗаполнитьЗначенияСвойств(П, П, , \"Б\");");
-        let RStmt::ExprStmt(RExpr::CallBuiltinFn { builtin, args }) = &resolved.body[1] else {
+        let RStmtKind::ExprStmt(RExpr::CallBuiltinFn { builtin, args }) = &resolved.body[1].kind
+        else {
             panic!(
                 "ожидался вызов встроенной функции, получено {:?}",
                 resolved.body[1]
@@ -2918,8 +2959,8 @@ mod tests {
     fn top_level_can_call_functions_declared_anywhere_in_module() {
         let rp = resolve_program_src("Процедура П(x)\nКонецПроцедуры\nП(1);");
         assert_eq!(
-            rp.top_level.body,
-            vec![RStmt::ExprStmt(RExpr::Call {
+            kinds(&rp.top_level.body),
+            vec![RStmtKind::ExprStmt(RExpr::Call {
                 func: 0,
                 args: vec![ResolvedArg::Value(RExpr::Number(BslNumber::from_i64(1)))],
             })]
@@ -2930,8 +2971,8 @@ mod tests {
     fn new_array_resolves_dimensions() {
         let r = resolve_src("a = Новый Массив(3, 4);");
         assert_eq!(
-            r.body[0],
-            RStmt::AssignLocal {
+            r.body[0].kind,
+            RStmtKind::AssignLocal {
                 slot: 0,
                 value: RExpr::NewArray {
                     dims: vec![
@@ -2947,8 +2988,8 @@ mod tests {
     fn new_structure_with_literal_keys_and_values() {
         let r = resolve_src(r#"s = Новый Структура("x,y", 1, 2);"#);
         assert_eq!(
-            r.body[0],
-            RStmt::AssignLocal {
+            r.body[0].kind,
+            RStmtKind::AssignLocal {
                 slot: 0,
                 value: RExpr::NewStructure {
                     keys: vec!["x".to_string(), "y".to_string()],
@@ -2965,8 +3006,8 @@ mod tests {
     fn new_structure_keys_only_defaults_values_to_undefined() {
         let r = resolve_src(r#"s = Новый Структура("x,y");"#);
         assert_eq!(
-            r.body[0],
-            RStmt::AssignLocal {
+            r.body[0].kind,
+            RStmtKind::AssignLocal {
                 slot: 0,
                 value: RExpr::NewStructure {
                     keys: vec!["x".to_string(), "y".to_string()],
@@ -2993,21 +3034,21 @@ mod tests {
     fn index_and_field_assignment_targets() {
         let r =
             resolve_src("a = Новый Массив(1);\ns = Новый Структура(\"x\");\na[0] = 1;\ns.x = 2;");
-        assert!(matches!(r.body[2], RStmt::AssignIndex { .. }));
-        assert!(matches!(r.body[3], RStmt::AssignField { .. }));
+        assert!(matches!(r.body[2].kind, RStmtKind::AssignIndex { .. }));
+        assert!(matches!(r.body[3].kind, RStmtKind::AssignField { .. }));
     }
 
     #[test]
     fn for_each_declares_loop_variable() {
         let r = resolve_src("a = Новый Массив();\nДля Каждого x Из a Цикл\ny = x;\nКонецЦикла");
         assert_eq!(r.locals[0], "a".to_string());
-        assert!(matches!(r.body[1], RStmt::ForEach { .. }));
+        assert!(matches!(r.body[1].kind, RStmtKind::ForEach { .. }));
     }
 
     #[test]
     fn try_except_resolves_both_bodies() {
         let r = resolve_src("Попытка\nx = 1;\nИсключение\ny = 2;\nКонецПопытки");
-        assert!(matches!(r.body[0], RStmt::Try { .. }));
+        assert!(matches!(r.body[0].kind, RStmtKind::Try { .. }));
     }
 
     #[test]
@@ -3015,13 +3056,13 @@ mod tests {
         let r = resolve_src(
             "Попытка\nВызватьИсключение \"ошибка\";\nИсключение\nВызватьИсключение;\nКонецПопытки",
         );
-        match &r.body[0] {
-            RStmt::Try { body, except_body } => {
+        match &r.body[0].kind {
+            RStmtKind::Try { body, except_body } => {
                 assert_eq!(
-                    body[0],
-                    RStmt::Raise(Some(RExpr::Str("ошибка".to_string())))
+                    body[0].kind,
+                    RStmtKind::Raise(Some(RExpr::Str("ошибка".to_string())))
                 );
-                assert_eq!(except_body[0], RStmt::Raise(None));
+                assert_eq!(except_body[0].kind, RStmtKind::Raise(None));
             }
             other => panic!("expected Try, got {other:?}"),
         }
@@ -3030,15 +3071,18 @@ mod tests {
     #[test]
     fn execute_resolves_to_rstmt_execute() {
         let r = resolve_src(r#"Выполнить("x = 1");"#);
-        assert_eq!(r.body[0], RStmt::Execute(RExpr::Str("x = 1".to_string())));
+        assert_eq!(
+            r.body[0].kind,
+            RStmtKind::Execute(RExpr::Str("x = 1".to_string()))
+        );
     }
 
     #[test]
     fn vychislit_resolves_to_dyn_eval() {
         let r = resolve_src(r#"y = Вычислить("2+2");"#);
         assert_eq!(
-            r.body[0],
-            RStmt::AssignLocal {
+            r.body[0].kind,
+            RStmtKind::AssignLocal {
                 slot: 0,
                 value: RExpr::DynEval(Box::new(RExpr::Str("2+2".to_string()))),
             }
@@ -3052,8 +3096,8 @@ mod tests {
     #[test]
     fn a_lowercase_okr_resolves_like_its_canonical_form() {
         let r = resolve_src("х = окр(1.5);");
-        match &r.body[0] {
-            RStmt::AssignLocal {
+        match &r.body[0].kind {
+            RStmtKind::AssignLocal {
                 value: RExpr::CallBuiltinFn { builtin, .. },
                 ..
             } => assert_eq!(*builtin, bsl_rt::BuiltinFn::Round),
@@ -3067,8 +3111,8 @@ mod tests {
     fn a_lowercase_vychislit_resolves_to_dyn_eval() {
         let r = resolve_src(r#"y = вычислить("2+2");"#);
         assert_eq!(
-            r.body[0],
-            RStmt::AssignLocal {
+            r.body[0].kind,
+            RStmtKind::AssignLocal {
                 slot: 0,
                 value: RExpr::DynEval(Box::new(RExpr::Str("2+2".to_string()))),
             }
@@ -3147,8 +3191,8 @@ mod tests {
         let (locals, body) = resolve_snippet_stmts(&existing, &[], &stmts, &[]).unwrap();
         assert_eq!(locals, vec!["x".to_string(), "y".to_string()]);
         assert_eq!(
-            body[0],
-            RStmt::AssignLocal {
+            body[0].kind,
+            RStmtKind::AssignLocal {
                 slot: 0,
                 value: RExpr::Binary {
                     op: bsl_syntax::BinaryOp::Add,
@@ -3158,8 +3202,8 @@ mod tests {
             }
         );
         assert_eq!(
-            body[1],
-            RStmt::AssignLocal {
+            body[1].kind,
+            RStmtKind::AssignLocal {
                 slot: 1,
                 value: RExpr::Number(BslNumber::from_i64(2))
             }
@@ -3177,8 +3221,8 @@ mod tests {
         ] {
             let r = resolve_src(&format!("А = {name};"));
             assert_eq!(
-                r.body[0],
-                RStmt::AssignLocal {
+                r.body[0].kind,
+                RStmtKind::AssignLocal {
                     slot: 0,
                     value: RExpr::CallBuiltinFn {
                         builtin: bsl_rt::BuiltinFn::CommandLineArguments,
@@ -3193,8 +3237,8 @@ mod tests {
         // имя читается из неё, а не из встроенной функции.
         let r = resolve_src("АргументыКоманднойСтроки = 1;\nБ = АргументыКоманднойСтроки;");
         assert_eq!(
-            r.body[1],
-            RStmt::AssignLocal {
+            r.body[1].kind,
+            RStmtKind::AssignLocal {
                 slot: 1,
                 value: RExpr::Local(0),
             }
@@ -3248,25 +3292,25 @@ mod tests {
         }
         fn from_block(body: &[RStmt], into: &mut Vec<(String, bool)>) {
             for stmt in body {
-                match stmt {
-                    RStmt::AssignLocal { value, .. }
-                    | RStmt::AssignModuleVar { value, .. }
-                    | RStmt::ExprStmt(value)
-                    | RStmt::Execute(value) => from_expr(value, into),
-                    RStmt::ForNumeric { from, to, body, .. } => {
+                match &stmt.kind {
+                    RStmtKind::AssignLocal { value, .. }
+                    | RStmtKind::AssignModuleVar { value, .. }
+                    | RStmtKind::ExprStmt(value)
+                    | RStmtKind::Execute(value) => from_expr(value, into),
+                    RStmtKind::ForNumeric { from, to, body, .. } => {
                         from_expr(from, into);
                         from_expr(to, into);
                         from_block(body, into);
                     }
-                    RStmt::ForEach { iter, body, .. } => {
+                    RStmtKind::ForEach { iter, body, .. } => {
                         from_expr(iter, into);
                         from_block(body, into);
                     }
-                    RStmt::While { cond, body } => {
+                    RStmtKind::While { cond, body } => {
                         from_expr(cond, into);
                         from_block(body, into);
                     }
-                    RStmt::If {
+                    RStmtKind::If {
                         cond,
                         then_branch,
                         elsif_branches,

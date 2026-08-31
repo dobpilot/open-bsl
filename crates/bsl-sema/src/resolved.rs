@@ -193,8 +193,24 @@ pub enum ResolvedLink {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct LabelId(pub u32);
 
+/// Разрешённый оператор вместе со строкой исходника, с которой он
+/// начинается.
+///
+/// Строка приходит из [`bsl_syntax::Stmt::line`] и дальше становится
+/// таблицей строк образа. Ноль означает оператор, не пришедший из
+/// текста, — строки у него нет вовсе.
+///
+/// У фрагмента `Выполнить`/`Вычислить` строки отсчитываются от начала
+/// его СОБСТВЕННОГО текста, а не файла с вызовом: текст фрагмента —
+/// значение времени исполнения и может не лежать ни в одном файле.
 #[derive(Debug, Clone, PartialEq)]
-pub enum RStmt {
+pub struct RStmt {
+    pub kind: RStmtKind,
+    pub line: u32,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum RStmtKind {
     AssignLocal {
         slot: u32,
         value: RExpr,
@@ -357,7 +373,7 @@ pub struct ResolvedProgram {
 
 /// Есть ли в теле `Выполнить`/`Вычислить` — обход по разрешённому дереву,
 /// а не по AST: `Вычислить` к этому моменту уже стал `RExpr::DynEval`, а
-/// `Выполнить` — `RStmt::Execute`, и различать их по имени функции больше
+/// `Выполнить` — `RStmtKind::Execute`, и различать их по имени функции больше
 /// не нужно.
 ///
 /// Ищет на ЛЮБОЙ глубине вложенности: `Выполнить` внутри `Если` внутри
@@ -379,17 +395,19 @@ pub fn params_use_dynamic(params: &[ResolvedParam]) -> bool {
 }
 
 fn stmt_uses_dynamic(s: &RStmt) -> bool {
-    match s {
-        RStmt::Execute(_) => true,
-        RStmt::AssignLocal { value, .. } => expr_uses_dynamic(value),
-        RStmt::AssignModuleVar { value, .. } => expr_uses_dynamic(value),
-        RStmt::AssignImportedVar { value, .. } => expr_uses_dynamic(value),
-        RStmt::AssignIndex { obj, index, value } => {
+    match &s.kind {
+        RStmtKind::Execute(_) => true,
+        RStmtKind::AssignLocal { value, .. } => expr_uses_dynamic(value),
+        RStmtKind::AssignModuleVar { value, .. } => expr_uses_dynamic(value),
+        RStmtKind::AssignImportedVar { value, .. } => expr_uses_dynamic(value),
+        RStmtKind::AssignIndex { obj, index, value } => {
             expr_uses_dynamic(obj) || expr_uses_dynamic(index) || expr_uses_dynamic(value)
         }
-        RStmt::AssignField { obj, value, .. } => expr_uses_dynamic(obj) || expr_uses_dynamic(value),
-        RStmt::ExprStmt(e) => expr_uses_dynamic(e),
-        RStmt::If {
+        RStmtKind::AssignField { obj, value, .. } => {
+            expr_uses_dynamic(obj) || expr_uses_dynamic(value)
+        }
+        RStmtKind::ExprStmt(e) => expr_uses_dynamic(e),
+        RStmtKind::If {
             cond,
             then_branch,
             elsif_branches,
@@ -402,16 +420,18 @@ fn stmt_uses_dynamic(s: &RStmt) -> bool {
                     .any(|(c, b)| expr_uses_dynamic(c) || block_uses_dynamic(b))
                 || else_branch.as_deref().is_some_and(block_uses_dynamic)
         }
-        RStmt::While { cond, body } => expr_uses_dynamic(cond) || block_uses_dynamic(body),
-        RStmt::ForNumeric { from, to, body, .. } => {
+        RStmtKind::While { cond, body } => expr_uses_dynamic(cond) || block_uses_dynamic(body),
+        RStmtKind::ForNumeric { from, to, body, .. } => {
             expr_uses_dynamic(from) || expr_uses_dynamic(to) || block_uses_dynamic(body)
         }
-        RStmt::ForEach { iter, body, .. } => expr_uses_dynamic(iter) || block_uses_dynamic(body),
-        RStmt::Return(e) | RStmt::Raise(e) => e.as_ref().is_some_and(expr_uses_dynamic),
-        RStmt::Try { body, except_body } => {
+        RStmtKind::ForEach { iter, body, .. } => {
+            expr_uses_dynamic(iter) || block_uses_dynamic(body)
+        }
+        RStmtKind::Return(e) | RStmtKind::Raise(e) => e.as_ref().is_some_and(expr_uses_dynamic),
+        RStmtKind::Try { body, except_body } => {
             block_uses_dynamic(body) || block_uses_dynamic(except_body)
         }
-        RStmt::Break | RStmt::Continue | RStmt::Label(_) | RStmt::Goto(_) => false,
+        RStmtKind::Break | RStmtKind::Continue | RStmtKind::Label(_) | RStmtKind::Goto(_) => false,
     }
 }
 
