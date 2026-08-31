@@ -490,6 +490,43 @@ impl Drop for AsyncState {
 /// Один активный вызов. Регистры кадра не хранятся отдельным `Vec` — все
 /// кадры делят один сквозной стек значений (`Vm::stack`), кадр — это лишь
 /// окно в него, как в Lua.
+/// Что делать прогону после того, как крючок отладчика вернул управление.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DebugAction {
+    /// Исполнять дальше.
+    Continue,
+    /// Прекратить прогон: редактор попросил остановиться совсем.
+    Terminate,
+}
+
+/// Где стоит прогон в момент вызова крючка.
+///
+/// Кадры отдаются как `(модуль, чанк, pc)` и только на чтение: `Frame` —
+/// внутреннее устройство VM, и открывать его наружу ради отладчика
+/// значило бы сделать публичным то, что меняется от версии к версии.
+pub struct DebugPosition<'a> {
+    /// Кадры от внешнего к внутреннему; последний — текущий.
+    pub frames: &'a [(u32, usize, usize)],
+}
+
+/// Крючок отладчика.
+///
+/// Зовётся ПЕРЕД каждой инструкцией — но из ВНЕШНЕГО цикла, никогда из
+/// `step`. Диспетчер здесь живёт на грани uop-кэша, и проверка «а не пора
+/// ли остановиться» внутри него обошлась бы дороже всего, что отладчик
+/// даёт; что кода `step` это не коснулось, проверяется
+/// `benchmarks/hot-code-diff.sh`, а не обещанием.
+///
+/// Крючок вправе БЛОКИРОВАТЬ сколько угодно: пока он не вернул
+/// управление, прогон стоит — это и есть остановка на точке останова.
+///
+/// Принадлежит ПРОГОНУ, а не программе, — по той же причине, что и
+/// компилятор фрагментов рядом: VM его зовёт, но не реализует.
+pub trait DebugHook {
+    /// Вызывается перед исполнением очередной инструкции.
+    fn before_instruction(&mut self, at: &DebugPosition<'_>) -> DebugAction;
+}
+
 struct Frame {
     /// Модуль, которому принадлежит `func_id`: `ROOT_MODULE` либо позиция
     /// в каталоге конфигурации. Кадры разных модулей чередуются в одном
@@ -747,6 +784,7 @@ fn run_program_with_host<'a>(
         &linked,
         &mut host,
         &mut module_state,
+        None,
     )?;
     Ok(value)
 }
@@ -826,6 +864,7 @@ pub fn run_repl_chunk_with_registry<'a>(
         &linked,
         &mut host,
         &mut module_state,
+        None,
     )
 }
 
@@ -1432,6 +1471,7 @@ fn drive_with(
         &linked,
         &mut host,
         &mut module_state,
+        None,
     )?;
     Ok((value, module_state.slots))
 }
@@ -1503,6 +1543,11 @@ pub struct ProgramExecution {
     native: Vec<Option<Option<jit::CompiledChunk>>>,
     native_scheduled: Vec<Option<Option<jit::CompiledChunk>>>,
     merge_linear: bool,
+    /// Крючок отладчика, если прогон отлаживают.
+    ///
+    /// `None` — обычный прогон, и тогда единственная его цена на шаг —
+    /// проверка `Option` во ВНЕШНЕМ цикле, вне `step`.
+    debug: Option<Box<dyn DebugHook>>,
     root_result: Option<(BslValue, Vec<BslValue>)>,
     module_state: ModuleState,
     /// Экземпляры общих модулей каталога этого сеанса; у одиночной
@@ -1560,6 +1605,7 @@ impl ProgramExecution {
             native,
             native_scheduled,
             merge_linear,
+            debug: None,
             root_result: None,
             module_state,
             session_modules: SessionModules::default(),
@@ -1733,6 +1779,21 @@ impl ProgramExecution {
     ///
     /// Возвращает ошибку связывания или исполнения.
     #[allow(clippy::too_many_arguments)]
+    /// Ставит крючок отладчика на этот прогон.
+    ///
+    /// Заодно выключает сцепление линейных цепочек бандлов: при
+    /// `merge_linear` `step` не возвращается во внешний цикл между
+    /// бандлами, а крючок зовётся именно оттуда — иначе остановка
+    /// приходила бы не на той инструкции, о которой просили.
+    ///
+    /// Разметку бандлов это НЕ отменяет: её снимает сборка образа со
+    /// сведениями об отладке (`image::finalize_unbundled`), потому что
+    /// пучкованность — свойство образа, а не прогона.
+    pub fn set_debug_hook(&mut self, hook: Box<dyn DebugHook>) {
+        self.debug = Some(hook);
+        self.merge_linear = false;
+    }
+
     pub fn poll_with_registry_and_io<'a>(
         &mut self,
         program: &Program,
@@ -1888,6 +1949,7 @@ impl ProgramExecution {
             native,
             native_scheduled,
             merge_linear,
+            debug,
             root_result,
             module_state,
             session_modules,
@@ -2144,6 +2206,22 @@ impl ProgramExecution {
                 // `pc` стоит на нём самом, и `unwind_to_handler` находит обработчик
                 // как при поинструкционном исполнении; обработчик по построению
                 // разметки — начало бандла.
+                // Крючок отладчика — ВО ВНЕШНЕМ цикле, перед шагом.
+                // Внутри `step` ему делать нечего: диспетчер живёт на
+                // грани uop-кэша, и лишняя проверка там стоила бы больше,
+                // чем отладчик даёт.
+                if let Some(hook) = debug.as_mut() {
+                    let frames: Vec<(u32, usize, usize)> = task
+                        .frames
+                        .iter()
+                        .map(|f| (f.module, f.func_id, f.pc))
+                        .collect();
+                    let at = DebugPosition { frames: &frames };
+                    if hook.before_instruction(&at) == DebugAction::Terminate {
+                        async_state.tasks[task_id] = Some(task);
+                        return Err(RtError::DynamicError("прогон прекращён отладчиком".into()));
+                    }
+                }
                 let before = task_position(&task);
                 // Состояние модульных переменных текущего модуля на время
                 // шага изымается из сессии: `step` видит его обычным
@@ -2400,6 +2478,7 @@ fn drive_linked(
     linked: &LinkedComponents,
     host: &mut HostIo<'_, '_>,
     module_state: &mut ModuleState,
+    debug: Option<Box<dyn DebugHook>>,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
     let owned_module_state = ModuleState {
         slots: std::mem::take(&mut module_state.slots),
@@ -2413,6 +2492,9 @@ fn drive_linked(
         owned_module_state,
         SchedulerConfig::default(),
     );
+    if let Some(hook) = debug {
+        execution.set_debug_hook(hook);
+    }
     let result = loop {
         match execution.poll_linked(program, linked, None, host, usize::MAX, None) {
             Ok(ProgramPoll::Complete(value, stack)) => break Ok((value, stack)),
@@ -4542,6 +4624,7 @@ fn run_dynamic_snippet(
         &snippet_linked,
         host,
         module_state,
+        None,
     )?;
 
     // Обратно переносятся ТОЛЬКО уже существовавшие слоты: их номера
@@ -4767,6 +4850,7 @@ fn call_module_function_in_execution(
         linked,
         host,
         module_state,
+        None,
     )?;
 
     // Финальные значения слотов параметров: верхний кадр при возврате стек

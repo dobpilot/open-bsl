@@ -105,8 +105,71 @@ fn run_unverified(program: &Program) -> Result<BslValue, RtError> {
         &linked,
         &mut host,
         &mut module_state,
+        None,
     )?;
     Ok(value)
+}
+
+/// Прогон под крючком отладчика.
+///
+/// Идёт тем же путём, что обычный: отличается ровно наличием крючка,
+/// поэтому расхождение поведения было бы расхождением из-за него, а не
+/// из-за другой обвязки.
+fn run_source_with_hook(src: &str, hook: Box<dyn crate::DebugHook>) -> Result<BslValue, RtError> {
+    let prog = parse(src).unwrap_or_else(|e| panic!("parse error: {e:?}"));
+    let resolved = resolve_program(&prog.items).unwrap_or_else(|e| panic!("sema error: {e:?}"));
+    let program = bsl_compiler::compile_program_with(
+        &resolved,
+        bsl_compiler::BuildOptions {
+            debug_info: true,
+            ..bsl_compiler::BuildOptions::default()
+        },
+    )
+    .unwrap_or_else(|e| panic!("compile error: {e:?}"));
+    // Регистры кадра верхнего уровня выделяются заранее — тем же
+    // способом, что и на обычном пути; пустой стек дал бы «запись
+    // регистра за границей стека значений» на первой же инструкции.
+    let mut stack = Vec::new();
+    crate::push_own_registers(
+        &mut stack,
+        crate::at(&program.chunks, 0, "в программе нет чанка верхнего уровня")?,
+    );
+    let mut env = bsl_rt::HostEnv::process();
+    let mut stdout = std::io::stdout().lock();
+    let mut stderr = std::io::stderr().lock();
+    let mut dynamic = TestDynamic::bare();
+    let linked = crate::link_components(
+        &program,
+        None,
+        env.zone(),
+        env.files(),
+        env.random(),
+        env.network(),
+        env.background_jobs(),
+        env.temp_storage(),
+        env.message_sink(),
+        bsl_bytecode::DynamicScope::ROOT,
+    )?;
+    let dynamic_depth = std::cell::Cell::new(0);
+    let mut host = crate::HostIo {
+        stdout: &mut stdout,
+        stderr: &mut stderr,
+        env: Some(&mut env),
+        dynamic: Some(&mut dynamic),
+        dynamic_depth: &dynamic_depth,
+    };
+    let mut module_state = crate::ModuleState::new(&program);
+    crate::drive_linked(
+        &program,
+        0,
+        stack,
+        JitMode::Off,
+        &linked,
+        &mut host,
+        &mut module_state,
+        Some(hook),
+    )
+    .map(|(v, _)| v)
 }
 
 fn run_with_dynamic(program: &Program, jit_mode: JitMode) -> Result<BslValue, RtError> {
@@ -4402,4 +4465,60 @@ fn two_sessions_do_not_share_dynamic_nesting_depth() {
     assert!(DynamicDepthGuard::enter(&first).is_err());
     // Вторая сессия того же потока не затронута.
     assert!(DynamicDepthGuard::enter(&second).is_ok());
+}
+
+/// Крючок отладчика: зовётся на каждой инструкции, видит стек кадров и
+/// умеет прекратить прогон.
+mod debug_hook {
+    use super::*;
+
+    struct Counting {
+        seen: std::rc::Rc<std::cell::RefCell<Vec<(usize, usize)>>>,
+        stop_after: Option<usize>,
+    }
+
+    impl crate::DebugHook for Counting {
+        fn before_instruction(&mut self, at: &crate::DebugPosition<'_>) -> crate::DebugAction {
+            let (_, func, pc) = *at.frames.last().expect("кадр есть всегда");
+            self.seen.borrow_mut().push((func, pc));
+            match self.stop_after {
+                Some(n) if self.seen.borrow().len() >= n => crate::DebugAction::Terminate,
+                _ => crate::DebugAction::Continue,
+            }
+        }
+    }
+
+    #[test]
+    fn the_hook_sees_every_instruction_in_order() {
+        let seen = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let out = run_source_with_hook(
+            "а = 1;\nб = а + 1;\n",
+            Box::new(Counting {
+                seen: seen.clone(),
+                stop_after: None,
+            }),
+        );
+        assert!(out.is_ok(), "{out:?}");
+        let seen = seen.borrow();
+        assert!(!seen.is_empty(), "крючок не позвали ни разу");
+        // Первый шаг — нулевая инструкция нулевого чанка, и дальше pc
+        // растёт: крючок стоит ПЕРЕД инструкцией, а не после.
+        assert_eq!(seen[0], (0, 0));
+        let pcs: Vec<usize> = seen.iter().map(|(_, pc)| *pc).collect();
+        assert!(pcs.windows(2).all(|w| w[1] > w[0]), "{pcs:?}");
+    }
+
+    #[test]
+    fn the_hook_can_stop_the_run() {
+        let seen = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let out = run_source_with_hook(
+            "а = 1;\nб = а + 1;\nв = б + 1;\n",
+            Box::new(Counting {
+                seen: seen.clone(),
+                stop_after: Some(2),
+            }),
+        );
+        assert!(out.is_err(), "прогон обязан был прекратиться");
+        assert_eq!(seen.borrow().len(), 2, "остановились не там, где просили");
+    }
 }
