@@ -36,7 +36,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 28;
+pub const FORMAT_VERSION: u32 = 29;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -376,6 +376,18 @@ fn write_chunk(out: &mut String, index: usize, chunk: &Chunk, program: &Program)
     writeln!(out, "  .localnames {}", chunk.local_names.len()).unwrap();
     for (i, name) in chunk.local_names.iter().enumerate() {
         writeln!(out, "    {i} {}", quote(name)).unwrap();
+    }
+
+    // Таблица строк печатается, только если она есть: у образа без
+    // сведений об отладке секции не будет вовсе, и его листинг отличается
+    // от прежнего ровно номером версии формата.
+    if let Some(lines) = program.lines.get(index)
+        && !lines.is_empty()
+    {
+        writeln!(out, "  .lines {}", lines.len()).unwrap();
+        for (pc, line) in lines.iter().enumerate() {
+            writeln!(out, "    {pc} {line}").unwrap();
+        }
     }
 
     writeln!(out, "  .code {}", chunk.instrs.len()).unwrap();
@@ -1200,8 +1212,12 @@ fn parse_program_body(r: &mut Reader) -> Result<Program> {
     // Чанки — до конца тела: конец файла либо граница следующего модуля
     // конфигурации.
     let mut chunks = Vec::new();
+    // Таблица строк собирается ПАРАЛЛЕЛЬНО чанкам, как и у компилятора.
+    let mut lines: Vec<Vec<u32>> = Vec::new();
     while r.pos < r.lines.len() && !at_image_boundary(r) {
-        chunks.push(parse_chunk(r, chunks.len())?);
+        let (chunk, chunk_lines) = parse_chunk(r, chunks.len())?;
+        chunks.push(chunk);
+        lines.push(chunk_lines);
     }
     if chunks.is_empty() {
         return Err(TextError::At(0, "нет ни одного .chunk".to_string()));
@@ -1260,10 +1276,14 @@ fn parse_program_body(r: &mut Reader) -> Result<Program> {
         module_vars,
         exported_module_vars,
         links,
-        // Таблица строк в текстовом формате пока не печатается и не
-        // читается — это следующий пункт изменения. До тех пор разбор
-        // даёт образ без сведений об отладке, что законно.
-        lines: Vec::new(),
+        // Пустые записи у ВСЕХ чанков означают образ без сведений об
+        // отладке, и таблица тогда пуста целиком — как её и собирает
+        // компилятор. Иначе таблица едет как есть.
+        lines: if lines.iter().all(Vec::is_empty) {
+            Vec::new()
+        } else {
+            lines
+        },
     };
     // Разметка бандлов — производная таблица (как `prop_cache`): из файла
     // не читается, а пересчитывается из уже разобранного. Обязана дать то
@@ -1355,7 +1375,7 @@ fn parse_id_list(no: usize, text: &str) -> Result<Vec<u32>> {
         .collect()
 }
 
-fn parse_chunk(r: &mut Reader, expected_index: usize) -> Result<Chunk> {
+fn parse_chunk(r: &mut Reader, expected_index: usize) -> Result<(Chunk, Vec<u32>)> {
     let (no, text) = r.expect(".chunk")?;
     let mut parts = text.split_whitespace();
     if parts.next() != Some(".chunk") {
@@ -1541,6 +1561,25 @@ fn parse_chunk(r: &mut Reader, expected_index: usize) -> Result<Chunk> {
         local_names.push(name);
     }
 
+    // Секция необязательна: её нет у образа без сведений об отладке.
+    // Отсутствие и пустота значат одно — строк у чанка нет.
+    let mut lines: Vec<u32> = Vec::new();
+    if peek_directive(r) == Some(".lines") {
+        let n = r.directive(".lines")?;
+        lines.reserve(n);
+        for i in 0..n {
+            let (no, text) = r.expect("строку исходника")?;
+            let (pc, rest) = text
+                .split_once(char::is_whitespace)
+                .ok_or_else(|| TextError::At(no, "ожидалось «N строка»".to_string()))?;
+            parse_index(no, pc, i)?;
+            let line = rest.trim().parse::<u32>().map_err(|_| {
+                TextError::At(no, format!("номер строки: «{}» не число", rest.trim()))
+            })?;
+            lines.push(line);
+        }
+    }
+
     let n = r.directive(".code")?;
     let mut instrs = Vec::with_capacity(n);
     for i in 0..n {
@@ -1560,7 +1599,7 @@ fn parse_chunk(r: &mut Reader, expected_index: usize) -> Result<Chunk> {
     // Производные таблицы — `touches_objects`, оба инлайн-кэша и
     // разметка — здесь не заполняются: их ставит `image::finalize` в
     // конце `parse_program`. Единственный писатель на весь крейт.
-    Ok(Chunk {
+    let chunk = Chunk {
         touches_objects: false,
         param_has_default,
         is_procedure,
@@ -1579,7 +1618,8 @@ fn parse_chunk(r: &mut Reader, expected_index: usize) -> Result<Chunk> {
         // Пересчитывается в `parse_program`: разметке из файла VM не
         // верит, единственный производитель — `bundle::compute`.
         bundle_len: Vec::new(),
-    })
+    };
+    Ok((chunk, lines))
 }
 
 fn parse_const(no: usize, text: &str) -> Result<BslValue> {

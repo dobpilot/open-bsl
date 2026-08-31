@@ -201,6 +201,43 @@ fn round_trip_through_text_is_byte_identical() {
     assert_eq!(first, second, "round-trip импортных опкодов разошёлся");
 }
 
+/// Тот же инвариант — на образе СО СВЕДЕНИЯМИ ОБ ОТЛАДКЕ.
+///
+/// Отдельным тестом, потому что круг проходит другая часть формата:
+/// секция `.lines` необязательна, и корпус выше её не печатает вовсе,
+/// то есть её печать и разбор им не проверялись бы ни разу.
+#[test]
+fn round_trip_with_debug_info_is_byte_identical_and_keeps_the_lines() {
+    for src in CORPUS {
+        let parsed = bsl_syntax::parse(src).expect("разбор");
+        let resolved = bsl_sema::resolve_program(&parsed.items).expect("резолвинг");
+        let program = bsl_compiler::compile_program_with(
+            &resolved,
+            bsl_compiler::BuildOptions {
+                debug_info: true,
+                ..bsl_compiler::BuildOptions::default()
+            },
+        )
+        .expect("компиляция со сведениями об отладке");
+        assert!(
+            !program.lines.is_empty(),
+            "корпусный фрагмент без единой строки:\n{src}"
+        );
+
+        let first = write_program(&program, None).unwrap();
+        let reparsed = parse_program(&first)
+            .unwrap_or_else(|e| panic!("исходник:\n{src}\nбайт-код:\n{first}\nошибка: {e}"));
+        // Таблица обязана пережить круг ЦЕЛИКОМ, а не «примерно»: строку
+        // из байт-кода не вывести, потерянную не восстановить.
+        assert_eq!(
+            program.lines, reparsed.lines,
+            "таблица строк потерялась на:\n{src}"
+        );
+        let second = write_program(&reparsed, None).unwrap();
+        assert_eq!(first, second, "round-trip со строками разошёлся на:\n{src}");
+    }
+}
+
 /// Разобранная программа совпадает с исходной по СУЩЕСТВУ, а не только
 /// по печати: инструкции, константы, режимы аргументов, обработчики и
 /// размеры кадров.
