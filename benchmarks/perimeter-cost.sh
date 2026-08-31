@@ -60,7 +60,20 @@ esac
 [ "$PAIRS" -ge 1 ] || { echo "число пар должно быть не меньше одного" >&2; exit 2; }
 
 OUT="$(mktemp -d "${TMPDIR:-/tmp}/open-bsl-perimeter.XXXXXXXX")"
+# Каталог остаётся жить, а путь восстановления печатается целиком.
+cleanup_failed() {
+    {
+        echo "уборка не удалась: $1"
+        echo "каталог НАМЕРЕННО не удалён, чтобы запись не осталась без него: $OUT"
+        echo "снять вручную:"
+        echo "  git worktree remove -f -f $OUT/with"
+        echo "  git worktree remove -f -f $OUT/without"
+        echo "  rm -rf $OUT"
+    } >&2
+}
+
 cleanup() {
+    local registered
     # `-f -f`, а не `--force`: `git worktree add` держит новый worktree
     # ЗАБЛОКИРОВАННЫМ, пока инициализирует его, и одинарного не хватает —
     # «cannot remove a locked working tree, lock reason: initializing».
@@ -69,18 +82,25 @@ cleanup() {
     git worktree remove -f -f "$OUT/with" 2>/dev/null || true
     git worktree remove -f -f "$OUT/without" 2>/dev/null || true
     # Каталог сносится, ТОЛЬКО если git отпустил обе записи. Проверяется
-    # состояние, а не код возврата: причина отказа может быть любой, а
-    # опасен один исход — снести каталог, оставив запись. Это ровно то,
-    # от чего заведена вся уборка, и молча так уже случалось.
-    if git worktree list --porcelain | grep -qF "$OUT"; then
-        {
-            echo "уборка не удалась: git не отпустил worktree под $OUT"
-            echo "каталог НАМЕРЕННО не удалён, чтобы запись не осталась без него"
-            echo "снять вручную:"
-            echo "  git worktree remove -f -f $OUT/with"
-            echo "  git worktree remove -f -f $OUT/without"
-            echo "  rm -rf $OUT"
-        } >&2
+    # состояние, а не код возврата снятия: причина отказа может быть
+    # любой, а опасен один исход — снести каталог, оставив запись. Это
+    # ровно то, от чего заведена вся уборка, и молча так уже случалось.
+    #
+    # Список берётся ОТДЕЛЬНОЙ командой, а не конвейером прямо в условии.
+    # `git worktree list | grep -q` под `pipefail` врёт ровно в опасную
+    # сторону: `grep -q` закрывает канал на ПЕРВОМ совпадении, git
+    # получает SIGPIPE, конвейер отдаёт 141 — и найденная живая запись
+    # читается как «не найдено», после чего каталог сносится. Проверено:
+    # grep — 0, конвейер — 141. Отказ самого `list` уходил туда же, хотя
+    # состояние регистраций после него попросту неизвестно.
+    #
+    # И здесь `grep` без `-q`, с выводом в `/dev/null`: раз опасность в
+    # раннем закрытии канала, дешевле дочитать вход до конца, чем
+    # рассуждать, чем bash подаёт строку — файлом или каналом.
+    if ! registered=$(git worktree list --porcelain 2>/dev/null); then
+        cleanup_failed "не удалось получить список worktree, состояние неизвестно"
+    elif grep -F "$OUT" > /dev/null <<< "$registered"; then
+        cleanup_failed "git не отпустил worktree под $OUT"
     else
         rm -rf "$OUT"
     fi
@@ -303,6 +323,53 @@ STUB
         printf '  ЗУБЫ НЕ ВЗЯЛИ: агрегатор дал «%s»\n' "$got" >&2
         failed=1
     fi
+
+    # Зубы уборки. `cleanup` гоняется как есть, но со своим каталогом и
+    # подставным `git`. Два случая обязаны каталог СОХРАНИТЬ: большой
+    # вывод `worktree list` с совпадением в первой строке (прежняя форма
+    # `list | grep -q` получала там SIGPIPE и сносила каталог при живой
+    # записи) и отказ самого `list` (состояние регистраций неизвестно).
+    # Третий, без совпадения, обязан каталог снести — иначе проверка
+    # доказывала бы только то, что уборка ничего не делает.
+    mkdir -p "$OUT/gitstub"
+    cat > "$OUT/gitstub/git" <<GITSTUB
+#!/bin/sh
+[ "\$1" = worktree ] || exec $(command -v git) "\$@"
+case "\$2" in
+    remove) exit 0 ;;
+    list)
+        case "\$(cat "\$(dirname "\$0")/case")" in
+            # Совпадение ПЕРВОЙ строкой, дальше много вывода: потребитель,
+            # закрывающий канал на первом совпадении, оставит producer с
+            # SIGPIPE.
+            big)  echo "worktree \$OUT/with"
+                  awk 'BEGIN{for(i=0;i<200000;i++) print "worktree /tmp/чужой-" i}' ;;
+            fail) echo "fatal: подставной отказ list" >&2; exit 128 ;;
+            none) echo "worktree /tmp/чужой" ;;
+        esac ;;
+    *) exec $(command -v git) "\$@" ;;
+esac
+GITSTUB
+    chmod +x "$OUT/gitstub/git"
+    check_cleanup() {                    # check_cleanup <случай> <keep|drop> <описание>
+        local dir stubpath
+        dir="$OUT/cleanup-$1"
+        stubpath="$OUT/gitstub"
+        mkdir -p "$dir"
+        printf '%s\n' "$1" > "$stubpath/case"
+        ( PATH="$stubpath:$PATH"; export OUT="$dir"; cleanup ) > /dev/null 2>&1
+        if { [ "$2" = keep ] && [ -d "$dir" ]; } || { [ "$2" = drop ] && [ ! -d "$dir" ]; }; then
+            printf '  зубы: %s — %s\n' "$3" "$2"
+        else
+            printf '  ЗУБЫ НЕ ВЗЯЛИ: %s — каталог %s\n' "$3" \
+                "$( [ -d "$dir" ] && echo "остался" || echo "снесён" )" >&2
+            failed=1
+            rm -rf "$dir"
+        fi
+    }
+    check_cleanup big  keep "живая запись в большом выводе list"
+    check_cleanup fail keep "worktree list отказал"
+    check_cleanup none drop "записей не осталось"
 
     # Недостача пар обязана быть отказом, а не таблицей по тому, что дошло.
     printf '100 101\n100 103\n' > "$OUT/pairs-short"
