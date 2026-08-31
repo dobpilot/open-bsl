@@ -130,6 +130,7 @@ mod tests {
     ) -> DynamicRequest<'a> {
         DynamicRequest {
             source,
+            debug_info: false,
             kind: DynamicKind::Eval,
             scope,
             caller_is_async: false,

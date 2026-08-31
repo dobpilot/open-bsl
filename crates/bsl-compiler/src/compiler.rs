@@ -539,6 +539,7 @@ pub fn compile_snippet(
         program_names,
         callee_params,
         &[LibraryRequirement::bsl_rt()],
+        false,
     )
 }
 
@@ -556,6 +557,7 @@ pub fn compile_snippet_with_requirements(
     program_names: &[String],
     callee_params: &[Vec<bool>],
     requirements: &[LibraryRequirement],
+    debug_info: bool,
 ) -> Result<SnippetUnit, CompileError> {
     let mut names = NameInterner::new();
     for n in program_names {
@@ -594,10 +596,13 @@ pub fn compile_snippet_with_requirements(
         // Заметить стоит и то, что снять асимметрию было бы небесполезно:
         // `Вычислить("2 + 3")` — предельный случай для свёртки, у него
         // литералами являются ВСЕ операнды.
-        // Фрагмент собирается в рантайме и отдельно от программы не
-        // отлаживается, поэтому и сведений об отладке не просит: его
-        // таблица строк никуда бы не поехала.
-        BuildOptions::default(),
+        // Сведения об отладке фрагмент берёт у объемлющей программы:
+        // отлаживают либо всё, либо ничего. Проходы при этом всегда
+        // выключены — см. длинное объяснение выше.
+        BuildOptions {
+            debug_info,
+            ..BuildOptions::default()
+        },
     )?;
     // Фрагмент — одиночный чанк, программы вокруг него нет, поэтому
     // таблицы на инструкцию ставит финализация ОДИНОЧНОГО чанка. Без неё
@@ -612,12 +617,13 @@ pub fn compile_snippet_with_requirements(
     // `None` опирался на обратную посылку. Пустой `bundle_len`
     // равнозначен
     // поинструкционному исполнению и безопасен до пересчёта.
-    let (mut chunk, _lines) = chunk;
+    let (mut chunk, lines) = chunk;
     bsl_bytecode::image::finalize_lone_chunk_unbundled(&mut chunk);
     Ok(SnippetUnit {
         chunk,
         names: names.into_names(),
         shapes: shapes.into_shapes(),
+        lines,
     })
 }
 

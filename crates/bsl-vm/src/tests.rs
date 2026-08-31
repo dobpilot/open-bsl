@@ -3754,6 +3754,7 @@ fn a_dynamic_fragment_comes_from_the_host_not_from_the_vm() {
         ) -> Result<std::rc::Rc<bsl_bytecode::DynamicUnit>, String> {
             self.calls += 1;
             let substitute = bsl_bytecode::DynamicRequest {
+                debug_info: false,
                 source: "2 + 2",
                 kind: request.kind,
                 scope: request.scope,

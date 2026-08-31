@@ -789,9 +789,13 @@ pub fn run_repl_chunk_with_registry<'a>(
         module_vars: Vec::new(),
         exported_module_vars: Vec::new(),
         links: Vec::new(),
-        // Фрагмент собирается в рантайме и не отлаживается
-        // отдельно от программы, в которой стоит.
-        lines: Vec::new(),
+        // Чанк REPL собирается без сведений об отладке, поэтому строк у
+        // него нет; форма таблицы всё равно соблюдается — запись на чанк.
+        lines: if unit.lines.is_empty() {
+            Vec::new()
+        } else {
+            vec![unit.lines.clone()]
+        },
     };
     let linked = link_components(
         &program,
@@ -4397,6 +4401,10 @@ fn run_dynamic_snippet(
         .collect();
     let request = bsl_bytecode::DynamicRequest {
         source: code,
+        // Отладочность — свойство ОБЪЕМЛЮЩЕЙ программы, и признак её —
+        // непустая таблица строк. Отдельного ключа у фрагмента нет:
+        // отлаживают либо всё, либо ничего.
+        debug_info: !program.lines.is_empty(),
         kind: if is_eval {
             bsl_bytecode::DynamicKind::Eval
         } else {
@@ -4461,6 +4469,21 @@ fn run_dynamic_snippet(
         chunks.push(compiled.chunk.clone());
     } else {
         chunks[0] = compiled.chunk.clone();
+    }
+    // Таблица строк собирается так же, как чанки: чужие записи переезжают
+    // как есть — они описывают те же инструкции тех же функций и остаются
+    // в координатах файла, — а нулевая заменяется строками фрагмента, то
+    // есть переходит в координаты его СОБСТВЕННОГО текста.
+    //
+    // Различить эти две системы по самой таблице нельзя: у чанка нет
+    // отметки, какому источнику он принадлежит. Здесь это и не нужно —
+    // нулевой чанк программы фрагмента И ЕСТЬ фрагмент, — но отладчику
+    // нужно, и там это отдельная работа (`dap-debugger`, показ кадра со
+    // своим источником).
+    let mut lines = program.lines.clone();
+    if !lines.is_empty() || !compiled.lines.is_empty() {
+        lines.resize(chunks.len(), Vec::new());
+        lines[0] = compiled.lines.clone();
     }
     // Разметка бандлов фрагмента остаётся ПУСТОЙ (поинструкционное
     // исполнение). Прежний расчёт в `compile_snippet` звал `compute` с

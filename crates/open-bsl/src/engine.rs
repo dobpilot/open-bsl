@@ -22,6 +22,8 @@ pub struct Engine {
     /// Выбранные оптимизирующие проходы компилятора. Ни один из них не
     /// прошёл ворота допуска, поэтому по умолчанию все выключены.
     optimizations: bsl_compiler::Optimizations,
+    /// Собирать ли со сведениями об отладке.
+    debug_info: bool,
     /// Каталог общих модулей и импортное окружение entry. Отдельное
     /// `Rc`-поле, а не часть `EngineInner`: программы каталога несут
     /// `Rc`-значения и в `Arc` не переносимы; worker фонового задания
@@ -105,10 +107,10 @@ impl Engine {
                     &resolved,
                     &base.program.names,
                     &base.program.shapes,
-                    self.optimizations,
+                    self.build_options(),
                 )?
             }
-            None => bsl_compiler::compile_program_with(&resolved, self.optimizations)?,
+            None => bsl_compiler::compile_program_with(&resolved, self.build_options())?,
         };
         Ok(Module {
             id: self.next_module_id(),
@@ -146,7 +148,7 @@ impl Engine {
             &resolved,
             &base.program.names,
             &base.program.shapes,
-            self.optimizations,
+            self.build_options(),
         )?;
         Ok(Module {
             id: self.next_module_id(),
@@ -295,6 +297,15 @@ impl Engine {
 
     /// Каталог компонентов движка — для клиентов, собирающих фрагменты
     /// самостоятельно (REPL с накоплением локалей).
+    /// Опции сборки этого движка. Собираются В ОДНОМ месте, чтобы три
+    /// точки компиляции не разошлись в том, что именно запрошено.
+    fn build_options(&self) -> bsl_compiler::BuildOptions {
+        bsl_compiler::BuildOptions {
+            optimizations: self.optimizations,
+            debug_info: self.debug_info,
+        }
+    }
+
     pub fn registry(&self) -> &bsl_rt::RuntimeRegistry {
         &self.inner.registry
     }
@@ -355,6 +366,7 @@ pub struct ModuleGraphRecipe {
 /// Стадия композиции статически связанных runtime-компонентов.
 pub struct EngineBuilder {
     optimizations: bsl_compiler::Optimizations,
+    debug_info: bool,
     runtime: bsl_rt::RuntimeBuilder,
     symbols: bsl_syntax::PreprocSymbols,
     recipe: ModuleGraphRecipe,
@@ -399,6 +411,7 @@ impl EngineBuilder {
         runtime.register(bsl_spreadsheet::library());
         Self {
             optimizations: bsl_compiler::Optimizations::default(),
+            debug_info: false,
             runtime,
             symbols: bsl_syntax::PreprocSymbols::new(),
             recipe: ModuleGraphRecipe::default(),
@@ -523,6 +536,19 @@ impl EngineBuilder {
         self
     }
 
+    /// Собирать со сведениями об отладке: таблица строк исходника и имена
+    /// локальных переменных у всех чанков.
+    ///
+    /// Образ от этого заметно растёт, поэтому по умолчанию выключено.
+    /// Несовместимо с оптимизацией, УДАЛЯЮЩЕЙ инструкции: строку из
+    /// байт-кода не вывести, её можно только донести, поэтому сочетание
+    /// отвергается на компиляции, а не выбирает молча одно из двух.
+    #[must_use]
+    pub fn debug_info(mut self, enabled: bool) -> Self {
+        self.debug_info = enabled;
+        self
+    }
+
     pub fn preproc_symbol(mut self, name: &str, value: bool) -> Self {
         self.symbols.set(name, value);
         self
@@ -561,8 +587,15 @@ impl EngineBuilder {
         } else if self.recipe.modules.is_empty() {
             None
         } else {
-            let (catalog, entry_imports, init_order) =
-                compile_catalog(&self.recipe, &registry, &self.symbols, self.optimizations)?;
+            let (catalog, entry_imports, init_order) = compile_catalog(
+                &self.recipe,
+                &registry,
+                &self.symbols,
+                bsl_compiler::BuildOptions {
+                    optimizations: self.optimizations,
+                    debug_info: self.debug_info,
+                },
+            )?;
             Some(std::rc::Rc::new(EngineConfiguration {
                 catalog,
                 entry_imports,
@@ -574,6 +607,7 @@ impl EngineBuilder {
         self.job_config.validate().map_err(Error::Configuration)?;
         Ok(Engine {
             optimizations: self.optimizations,
+            debug_info: self.debug_info,
             inner: Arc::new(EngineInner {
                 registry,
                 symbols: self.symbols,
@@ -646,7 +680,7 @@ fn compile_catalog(
     recipe: &ModuleGraphRecipe,
     registry: &bsl_rt::RuntimeRegistry,
     symbols: &bsl_syntax::PreprocSymbols,
-    optimizations: bsl_compiler::Optimizations,
+    build: bsl_compiler::BuildOptions,
 ) -> Result<
     (
         bsl_bytecode::ConfigurationProgram,
@@ -753,7 +787,7 @@ fn compile_catalog(
         .zip(&resolved)
         .map(|(module, resolved)| (module.name.clone(), resolved))
         .collect();
-    let (catalog, _) = bsl_compiler::compile_configuration(&pairs, None, optimizations)?;
+    let (catalog, _) = bsl_compiler::compile_configuration(&pairs, None, build)?;
     bsl_bytecode::image::verify_configuration(&catalog, None).map_err(Error::Runtime)?;
 
     let entry_imports = modules
@@ -843,4 +877,52 @@ fn image_init_order(catalog: &bsl_bytecode::ConfigurationProgram) -> Vec<u32> {
         visit(catalog, &mut state, &mut order, i);
     }
     order
+}
+
+#[cfg(test)]
+mod debug_info_tests {
+    //! Сведения об отладке через фасад. Тесты внутренние, потому что
+    //! `Module::program` наружу не показывается намеренно: образ не часть
+    //! публичного договора встраивания, и открывать его ради проверки
+    //! значило бы менять договор ради теста.
+
+    #[test]
+    fn the_builder_can_ask_for_debug_info() {
+        let engine = crate::Engine::builder()
+            .debug_info(true)
+            .build()
+            .expect("движок");
+        let module = engine
+            .compile("а = 1;\nб = 2;\n")
+            .expect("компиляция со сведениями об отладке");
+        let program = &module.program;
+        assert_eq!(program.lines.len(), program.chunks.len());
+        let mut seen: Vec<u32> = program.lines[0].clone();
+        seen.dedup();
+        assert_eq!(seen, vec![1, 2]);
+    }
+
+    #[test]
+    fn without_asking_the_image_carries_no_lines() {
+        let engine = crate::Engine::builder().build().expect("движок");
+        let module = engine.compile("а = 1;\n").expect("компиляция");
+        assert!(module.program.lines.is_empty());
+    }
+
+    #[test]
+    fn debug_info_with_a_removing_pass_is_refused_through_the_facade() {
+        let engine = crate::Engine::builder()
+            .debug_info(true)
+            .optimizations(bsl_compiler::Optimizations {
+                copy_elim: true,
+                ..bsl_compiler::Optimizations::default()
+            })
+            .build()
+            .expect("движок");
+        // `Module` не `Debug`, поэтому разбор случая, а не `expect_err`.
+        let Err(err) = engine.compile("а = 1;\n") else {
+            panic!("сочетание обязано отвергаться и через фасад");
+        };
+        assert!(format!("{err}").contains("удаляющей инструкции"), "{err}");
+    }
 }

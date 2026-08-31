@@ -324,6 +324,9 @@ fn eval_repl_line(line: &str, session: &mut Session) -> Result<BslValue, String>
         &session.names,
         &[],
         &requirements,
+        // REPL не отлаживается: строки его ввода ни к какому файлу не
+        // относятся.
+        false,
     )
     .map_err(|e| format!("{e}"))?;
 

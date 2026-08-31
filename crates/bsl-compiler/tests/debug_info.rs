@@ -129,3 +129,67 @@ fn debug_info_with_a_non_removing_pass_is_allowed() {
         assert_eq!(lines.len(), chunk.instrs.len());
     }
 }
+
+/// Фрагмент `Выполнить`/`Вычислить` считает строки от начала СВОЕГО текста.
+///
+/// Это решение изменения `bytecode-line-table`, а не следствие реализации:
+/// текст фрагмента — значение времени исполнения и может не лежать ни в
+/// одном файле, поэтому наложить его строки на файл с вызовом нельзя.
+#[test]
+fn a_fragment_counts_lines_from_its_own_text() {
+    let request = bsl_bytecode::DynamicRequest {
+        source: "б = 1;\nв = 2;",
+        debug_info: true,
+        kind: bsl_bytecode::DynamicKind::Execute,
+        scope: bsl_bytecode::DynamicScope {
+            program: bsl_bytecode::DynamicScope::ROOT,
+            chunk: 0,
+        },
+        caller_is_async: false,
+        locals: &[],
+        module_vars: &[],
+        functions: &[],
+        names: &[],
+        requirements: &[bsl_bytecode::LibraryRequirement::bsl_rt()],
+    };
+    let unit = bsl_compiler::compile_dynamic_snippet(
+        &request,
+        None,
+        &bsl_syntax::PreprocSymbols::new(),
+        std::num::NonZeroU64::new(1).expect("не ноль"),
+    )
+    .expect("компиляция фрагмента");
+    assert_eq!(unit.lines.len(), unit.chunk.instrs.len());
+    // Обе строки — собственные строки фрагмента, 1 и 2, а не строка
+    // вызова в файле.
+    let mut seen = unit.lines.clone();
+    seen.dedup();
+    assert_eq!(seen, vec![1, 2]);
+}
+
+#[test]
+fn a_fragment_without_debug_info_carries_no_lines() {
+    let request = bsl_bytecode::DynamicRequest {
+        source: "б = 1;",
+        debug_info: false,
+        kind: bsl_bytecode::DynamicKind::Execute,
+        scope: bsl_bytecode::DynamicScope {
+            program: bsl_bytecode::DynamicScope::ROOT,
+            chunk: 0,
+        },
+        caller_is_async: false,
+        locals: &[],
+        module_vars: &[],
+        functions: &[],
+        names: &[],
+        requirements: &[bsl_bytecode::LibraryRequirement::bsl_rt()],
+    };
+    let unit = bsl_compiler::compile_dynamic_snippet(
+        &request,
+        None,
+        &bsl_syntax::PreprocSymbols::new(),
+        std::num::NonZeroU64::new(1).expect("не ноль"),
+    )
+    .expect("компиляция фрагмента");
+    assert!(unit.lines.is_empty());
+}

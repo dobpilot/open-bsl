@@ -123,12 +123,14 @@ pub fn compile_dynamic_snippet(
         mut chunk,
         names,
         shapes,
+        lines,
     } = crate::compile_snippet_with_requirements(
         &all_locals,
         &body,
         request.names,
         &callee_params,
         &requirements,
+        request.debug_info,
     )
     .map_err(|e| format!("{e}"))?;
     chunk.is_async = request.caller_is_async;
@@ -139,6 +141,7 @@ pub fn compile_dynamic_snippet(
         names,
         shapes,
         requirements,
+        lines,
     })
 }
 
