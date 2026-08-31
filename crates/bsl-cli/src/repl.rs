@@ -296,7 +296,11 @@ fn eval_repl_line(line: &str, session: &mut Session) -> Result<BslValue, String>
     for item in parsed.items {
         match item {
             bsl_syntax::Item::Stmt(s) => stmts.push(s),
-            bsl_syntax::Item::VarDecl(vd) => stmts.push(bsl_syntax::Stmt::VarDecl(vd)),
+            // Без позиции: у `Item` её нет, а строки ввода REPL к какому-либо
+            // файлу и не относятся.
+            bsl_syntax::Item::VarDecl(vd) => stmts.push(bsl_syntax::Stmt::synthetic(
+                bsl_syntax::StmtKind::VarDecl(vd),
+            )),
             _ => return Err("объявление процедур/функций в REPL пока не поддержано".to_string()),
         }
     }

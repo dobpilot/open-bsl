@@ -12,63 +12,75 @@ Program {
                 params: [],
                 export: false,
                 body: [
-                    Assign {
-                        target: Name(
-                            "PI",
-                        ),
-                        value: Number(
-                            "3.141592653589793",
-                        ),
+                    Stmt {
+                        kind: Assign {
+                            target: Name(
+                                "PI",
+                            ),
+                            value: Number(
+                                "3.141592653589793",
+                            ),
+                        },
+                        line: 2,
                     },
-                    Assign {
-                        target: Name(
-                            "SOLAR_MASS",
-                        ),
-                        value: Binary {
-                            op: Mul,
-                            lhs: Binary {
+                    Stmt {
+                        kind: Assign {
+                            target: Name(
+                                "SOLAR_MASS",
+                            ),
+                            value: Binary {
                                 op: Mul,
-                                lhs: Number(
-                                    "4",
-                                ),
+                                lhs: Binary {
+                                    op: Mul,
+                                    lhs: Number(
+                                        "4",
+                                    ),
+                                    rhs: Ident(
+                                        "PI",
+                                    ),
+                                },
                                 rhs: Ident(
                                     "PI",
                                 ),
                             },
-                            rhs: Ident(
-                                "PI",
+                        },
+                        line: 3,
+                    },
+                    Stmt {
+                        kind: Assign {
+                            target: Name(
+                                "DAYS_PER_YEAR",
+                            ),
+                            value: Number(
+                                "365.24",
                             ),
                         },
+                        line: 4,
                     },
-                    Assign {
-                        target: Name(
-                            "DAYS_PER_YEAR",
+                    Stmt {
+                        kind: Return(
+                            Some(
+                                New {
+                                    type_name: "Structure",
+                                    args: [
+                                        Str(
+                                            "PI,SOLAR_MASS,DAYS_PER_YEAR",
+                                        ),
+                                        Ident(
+                                            "PI",
+                                        ),
+                                        Ident(
+                                            "SOLAR_MASS",
+                                        ),
+                                        Ident(
+                                            "DAYS_PER_YEAR",
+                                        ),
+                                    ],
+                                },
+                            ),
                         ),
-                        value: Number(
-                            "365.24",
-                        ),
+                        line: 6,
                     },
-                    Return(
-                        Some(
-                            New {
-                                type_name: "Structure",
-                                args: [
-                                    Str(
-                                        "PI,SOLAR_MASS,DAYS_PER_YEAR",
-                                    ),
-                                    Ident(
-                                        "PI",
-                                    ),
-                                    Ident(
-                                        "SOLAR_MASS",
-                                    ),
-                                    Ident(
-                                        "DAYS_PER_YEAR",
-                                    ),
-                                ],
-                            },
-                        ),
-                    ),
                 ],
             },
         ),
@@ -85,524 +97,554 @@ Program {
                 ],
                 export: false,
                 body: [
-                    Assign {
-                        target: Name(
-                            "PI",
-                        ),
-                        value: Field {
-                            obj: Ident(
-                                "const",
+                    Stmt {
+                        kind: Assign {
+                            target: Name(
+                                "PI",
                             ),
-                            name: "PI",
-                        },
-                    },
-                    Assign {
-                        target: Name(
-                            "SOLAR_MASS",
-                        ),
-                        value: Field {
-                            obj: Ident(
-                                "const",
-                            ),
-                            name: "SOLAR_MASS",
-                        },
-                    },
-                    Assign {
-                        target: Name(
-                            "DAYS_PER_YEAR",
-                        ),
-                        value: Field {
-                            obj: Ident(
-                                "const",
-                            ),
-                            name: "DAYS_PER_YEAR",
-                        },
-                    },
-                    Assign {
-                        target: Name(
-                            "bodies",
-                        ),
-                        value: New {
-                            type_name: "Array",
-                            args: [
-                                Number(
-                                    "5",
+                            value: Field {
+                                obj: Ident(
+                                    "const",
                                 ),
-                            ],
+                                name: "PI",
+                            },
                         },
+                        line: 11,
                     },
-                    Assign {
-                        target: Index {
-                            obj: Ident(
+                    Stmt {
+                        kind: Assign {
+                            target: Name(
+                                "SOLAR_MASS",
+                            ),
+                            value: Field {
+                                obj: Ident(
+                                    "const",
+                                ),
+                                name: "SOLAR_MASS",
+                            },
+                        },
+                        line: 12,
+                    },
+                    Stmt {
+                        kind: Assign {
+                            target: Name(
+                                "DAYS_PER_YEAR",
+                            ),
+                            value: Field {
+                                obj: Ident(
+                                    "const",
+                                ),
+                                name: "DAYS_PER_YEAR",
+                            },
+                        },
+                        line: 13,
+                    },
+                    Stmt {
+                        kind: Assign {
+                            target: Name(
                                 "bodies",
                             ),
-                            index: Number(
-                                "0",
-                            ),
+                            value: New {
+                                type_name: "Array",
+                                args: [
+                                    Number(
+                                        "5",
+                                    ),
+                                ],
+                            },
                         },
-                        value: New {
-                            type_name: "Structure",
-                            args: [
-                                Str(
-                                    "x,y,z,vx,vy,vz,mass",
+                        line: 15,
+                    },
+                    Stmt {
+                        kind: Assign {
+                            target: Index {
+                                obj: Ident(
+                                    "bodies",
                                 ),
-                                Number(
+                                index: Number(
                                     "0",
                                 ),
-                                Number(
-                                    "0",
+                            },
+                            value: New {
+                                type_name: "Structure",
+                                args: [
+                                    Str(
+                                        "x,y,z,vx,vy,vz,mass",
+                                    ),
+                                    Number(
+                                        "0",
+                                    ),
+                                    Number(
+                                        "0",
+                                    ),
+                                    Number(
+                                        "0",
+                                    ),
+                                    Number(
+                                        "0",
+                                    ),
+                                    Number(
+                                        "0",
+                                    ),
+                                    Number(
+                                        "0",
+                                    ),
+                                    Ident(
+                                        "SOLAR_MASS",
+                                    ),
+                                ],
+                            },
+                        },
+                        line: 18,
+                    },
+                    Stmt {
+                        kind: Assign {
+                            target: Index {
+                                obj: Ident(
+                                    "bodies",
                                 ),
-                                Number(
-                                    "0",
+                                index: Number(
+                                    "1",
                                 ),
-                                Number(
-                                    "0",
+                            },
+                            value: New {
+                                type_name: "Structure",
+                                args: [
+                                    Str(
+                                        "x,y,z,vx,vy,vz,mass",
+                                    ),
+                                    Number(
+                                        "4.84143144246472090",
+                                    ),
+                                    Unary {
+                                        op: Neg,
+                                        expr: Number(
+                                            "1.16032004402742839",
+                                        ),
+                                    },
+                                    Binary {
+                                        op: Div,
+                                        lhs: Unary {
+                                            op: Neg,
+                                            expr: Number(
+                                                "103622044471123109",
+                                            ),
+                                        },
+                                        rhs: Number(
+                                            "1000000000000000000",
+                                        ),
+                                    },
+                                    Binary {
+                                        op: Mul,
+                                        lhs: Binary {
+                                            op: Div,
+                                            lhs: Number(
+                                                "83003832137201847",
+                                            ),
+                                            rhs: Number(
+                                                "50000000000000000000",
+                                            ),
+                                        },
+                                        rhs: Ident(
+                                            "DAYS_PER_YEAR",
+                                        ),
+                                    },
+                                    Binary {
+                                        op: Mul,
+                                        lhs: Binary {
+                                            op: Div,
+                                            lhs: Number(
+                                                "30796044736789617",
+                                            ),
+                                            rhs: Number(
+                                                "4000000000000000000",
+                                            ),
+                                        },
+                                        rhs: Ident(
+                                            "DAYS_PER_YEAR",
+                                        ),
+                                    },
+                                    Binary {
+                                        op: Mul,
+                                        lhs: Binary {
+                                            op: Div,
+                                            lhs: Unary {
+                                                op: Neg,
+                                                expr: Number(
+                                                    "690460016972063023",
+                                                ),
+                                            },
+                                            rhs: Number(
+                                                "10000000000000000000000",
+                                            ),
+                                        },
+                                        rhs: Ident(
+                                            "DAYS_PER_YEAR",
+                                        ),
+                                    },
+                                    Binary {
+                                        op: Mul,
+                                        lhs: Binary {
+                                            op: Div,
+                                            lhs: Number(
+                                                "954791938424326609",
+                                            ),
+                                            rhs: Number(
+                                                "1000000000000000000000",
+                                            ),
+                                        },
+                                        rhs: Ident(
+                                            "SOLAR_MASS",
+                                        ),
+                                    },
+                                ],
+                            },
+                        },
+                        line: 20,
+                    },
+                    Stmt {
+                        kind: Assign {
+                            target: Index {
+                                obj: Ident(
+                                    "bodies",
                                 ),
-                                Number(
-                                    "0",
+                                index: Number(
+                                    "2",
                                 ),
-                                Number(
-                                    "0",
+                            },
+                            value: New {
+                                type_name: "Structure",
+                                args: [
+                                    Str(
+                                        "x,y,z,vx,vy,vz,mass",
+                                    ),
+                                    Number(
+                                        "8.34336671824457987",
+                                    ),
+                                    Number(
+                                        "4.12479856412430479",
+                                    ),
+                                    Binary {
+                                        op: Div,
+                                        lhs: Unary {
+                                            op: Neg,
+                                            expr: Number(
+                                                "403523417114321381",
+                                            ),
+                                        },
+                                        rhs: Number(
+                                            "1000000000000000000",
+                                        ),
+                                    },
+                                    Binary {
+                                        op: Mul,
+                                        lhs: Binary {
+                                            op: Div,
+                                            lhs: Unary {
+                                                op: Neg,
+                                                expr: Number(
+                                                    "276742510726862411",
+                                                ),
+                                            },
+                                            rhs: Number(
+                                                "100000000000000000000",
+                                            ),
+                                        },
+                                        rhs: Ident(
+                                            "DAYS_PER_YEAR",
+                                        ),
+                                    },
+                                    Binary {
+                                        op: Mul,
+                                        lhs: Binary {
+                                            op: Div,
+                                            lhs: Number(
+                                                "249926400617458619",
+                                            ),
+                                            rhs: Number(
+                                                "50000000000000000000",
+                                            ),
+                                        },
+                                        rhs: Ident(
+                                            "DAYS_PER_YEAR",
+                                        ),
+                                    },
+                                    Binary {
+                                        op: Mul,
+                                        lhs: Binary {
+                                            op: Div,
+                                            lhs: Number(
+                                                "230417297573763929",
+                                            ),
+                                            rhs: Number(
+                                                "10000000000000000000000",
+                                            ),
+                                        },
+                                        rhs: Ident(
+                                            "DAYS_PER_YEAR",
+                                        ),
+                                    },
+                                    Binary {
+                                        op: Mul,
+                                        lhs: Binary {
+                                            op: Div,
+                                            lhs: Number(
+                                                "71471495166532703",
+                                            ),
+                                            rhs: Number(
+                                                "250000000000000000000",
+                                            ),
+                                        },
+                                        rhs: Ident(
+                                            "SOLAR_MASS",
+                                        ),
+                                    },
+                                ],
+                            },
+                        },
+                        line: 30,
+                    },
+                    Stmt {
+                        kind: Assign {
+                            target: Index {
+                                obj: Ident(
+                                    "bodies",
                                 ),
+                                index: Number(
+                                    "3",
+                                ),
+                            },
+                            value: New {
+                                type_name: "Structure",
+                                args: [
+                                    Str(
+                                        "x,y,z,vx,vy,vz,mass",
+                                    ),
+                                    Binary {
+                                        op: Div,
+                                        lhs: Number(
+                                            "12894369562139131",
+                                        ),
+                                        rhs: Number(
+                                            "1000000000000000",
+                                        ),
+                                    },
+                                    Binary {
+                                        op: Div,
+                                        lhs: Unary {
+                                            op: Neg,
+                                            expr: Number(
+                                                "18888939252123289",
+                                            ),
+                                        },
+                                        rhs: Number(
+                                            "1250000000000000",
+                                        ),
+                                    },
+                                    Binary {
+                                        op: Div,
+                                        lhs: Unary {
+                                            op: Neg,
+                                            expr: Number(
+                                                "111653789446327867",
+                                            ),
+                                        },
+                                        rhs: Number(
+                                            "500000000000000000",
+                                        ),
+                                    },
+                                    Binary {
+                                        op: Mul,
+                                        lhs: Binary {
+                                            op: Div,
+                                            lhs: Number(
+                                                "148230068782380809",
+                                            ),
+                                            rhs: Number(
+                                                "50000000000000000000",
+                                            ),
+                                        },
+                                        rhs: Ident(
+                                            "DAYS_PER_YEAR",
+                                        ),
+                                    },
+                                    Binary {
+                                        op: Mul,
+                                        lhs: Binary {
+                                            op: Div,
+                                            lhs: Number(
+                                                "4756943479189619",
+                                            ),
+                                            rhs: Number(
+                                                "2000000000000000000",
+                                            ),
+                                        },
+                                        rhs: Ident(
+                                            "DAYS_PER_YEAR",
+                                        ),
+                                    },
+                                    Binary {
+                                        op: Mul,
+                                        lhs: Binary {
+                                            op: Div,
+                                            lhs: Unary {
+                                                op: Neg,
+                                                expr: Number(
+                                                    "74147392135059389",
+                                                ),
+                                            },
+                                            rhs: Number(
+                                                "2500000000000000000000",
+                                            ),
+                                        },
+                                        rhs: Ident(
+                                            "DAYS_PER_YEAR",
+                                        ),
+                                    },
+                                    Binary {
+                                        op: Mul,
+                                        lhs: Binary {
+                                            op: Div,
+                                            lhs: Number(
+                                                "218312202167578149",
+                                            ),
+                                            rhs: Number(
+                                                "5000000000000000000000",
+                                            ),
+                                        },
+                                        rhs: Ident(
+                                            "SOLAR_MASS",
+                                        ),
+                                    },
+                                ],
+                            },
+                        },
+                        line: 40,
+                    },
+                    Stmt {
+                        kind: Assign {
+                            target: Index {
+                                obj: Ident(
+                                    "bodies",
+                                ),
+                                index: Number(
+                                    "4",
+                                ),
+                            },
+                            value: New {
+                                type_name: "Structure",
+                                args: [
+                                    Str(
+                                        "x,y,z,vx,vy,vz,mass",
+                                    ),
+                                    Binary {
+                                        op: Div,
+                                        lhs: Number(
+                                            "30759394229701833",
+                                        ),
+                                        rhs: Number(
+                                            "2000000000000000",
+                                        ),
+                                    },
+                                    Binary {
+                                        op: Div,
+                                        lhs: Unary {
+                                            op: Neg,
+                                            expr: Number(
+                                                "259193146099879641",
+                                            ),
+                                        },
+                                        rhs: Number(
+                                            "10000000000000000",
+                                        ),
+                                    },
+                                    Binary {
+                                        op: Div,
+                                        lhs: Number(
+                                            "179258772950371181",
+                                        ),
+                                        rhs: Number(
+                                            "1000000000000000000",
+                                        ),
+                                    },
+                                    Binary {
+                                        op: Mul,
+                                        lhs: Binary {
+                                            op: Div,
+                                            lhs: Number(
+                                                "134033886245194661",
+                                            ),
+                                            rhs: Number(
+                                                "50000000000000000000",
+                                            ),
+                                        },
+                                        rhs: Ident(
+                                            "DAYS_PER_YEAR",
+                                        ),
+                                    },
+                                    Binary {
+                                        op: Mul,
+                                        lhs: Binary {
+                                            op: Div,
+                                            lhs: Number(
+                                                "32564834007648459",
+                                            ),
+                                            rhs: Number(
+                                                "20000000000000000000",
+                                            ),
+                                        },
+                                        rhs: Ident(
+                                            "DAYS_PER_YEAR",
+                                        ),
+                                    },
+                                    Binary {
+                                        op: Mul,
+                                        lhs: Binary {
+                                            op: Div,
+                                            lhs: Unary {
+                                                op: Neg,
+                                                expr: Number(
+                                                    "95159225451971587",
+                                                ),
+                                            },
+                                            rhs: Number(
+                                                "1000000000000000000000",
+                                            ),
+                                        },
+                                        rhs: Ident(
+                                            "DAYS_PER_YEAR",
+                                        ),
+                                    },
+                                    Binary {
+                                        op: Mul,
+                                        lhs: Binary {
+                                            op: Div,
+                                            lhs: Number(
+                                                "515138902046611451",
+                                            ),
+                                            rhs: Number(
+                                                "10000000000000000000000",
+                                            ),
+                                        },
+                                        rhs: Ident(
+                                            "SOLAR_MASS",
+                                        ),
+                                    },
+                                ],
+                            },
+                        },
+                        line: 50,
+                    },
+                    Stmt {
+                        kind: Return(
+                            Some(
                                 Ident(
-                                    "SOLAR_MASS",
+                                    "bodies",
                                 ),
-                            ],
-                        },
-                    },
-                    Assign {
-                        target: Index {
-                            obj: Ident(
-                                "bodies",
-                            ),
-                            index: Number(
-                                "1",
-                            ),
-                        },
-                        value: New {
-                            type_name: "Structure",
-                            args: [
-                                Str(
-                                    "x,y,z,vx,vy,vz,mass",
-                                ),
-                                Number(
-                                    "4.84143144246472090",
-                                ),
-                                Unary {
-                                    op: Neg,
-                                    expr: Number(
-                                        "1.16032004402742839",
-                                    ),
-                                },
-                                Binary {
-                                    op: Div,
-                                    lhs: Unary {
-                                        op: Neg,
-                                        expr: Number(
-                                            "103622044471123109",
-                                        ),
-                                    },
-                                    rhs: Number(
-                                        "1000000000000000000",
-                                    ),
-                                },
-                                Binary {
-                                    op: Mul,
-                                    lhs: Binary {
-                                        op: Div,
-                                        lhs: Number(
-                                            "83003832137201847",
-                                        ),
-                                        rhs: Number(
-                                            "50000000000000000000",
-                                        ),
-                                    },
-                                    rhs: Ident(
-                                        "DAYS_PER_YEAR",
-                                    ),
-                                },
-                                Binary {
-                                    op: Mul,
-                                    lhs: Binary {
-                                        op: Div,
-                                        lhs: Number(
-                                            "30796044736789617",
-                                        ),
-                                        rhs: Number(
-                                            "4000000000000000000",
-                                        ),
-                                    },
-                                    rhs: Ident(
-                                        "DAYS_PER_YEAR",
-                                    ),
-                                },
-                                Binary {
-                                    op: Mul,
-                                    lhs: Binary {
-                                        op: Div,
-                                        lhs: Unary {
-                                            op: Neg,
-                                            expr: Number(
-                                                "690460016972063023",
-                                            ),
-                                        },
-                                        rhs: Number(
-                                            "10000000000000000000000",
-                                        ),
-                                    },
-                                    rhs: Ident(
-                                        "DAYS_PER_YEAR",
-                                    ),
-                                },
-                                Binary {
-                                    op: Mul,
-                                    lhs: Binary {
-                                        op: Div,
-                                        lhs: Number(
-                                            "954791938424326609",
-                                        ),
-                                        rhs: Number(
-                                            "1000000000000000000000",
-                                        ),
-                                    },
-                                    rhs: Ident(
-                                        "SOLAR_MASS",
-                                    ),
-                                },
-                            ],
-                        },
-                    },
-                    Assign {
-                        target: Index {
-                            obj: Ident(
-                                "bodies",
-                            ),
-                            index: Number(
-                                "2",
-                            ),
-                        },
-                        value: New {
-                            type_name: "Structure",
-                            args: [
-                                Str(
-                                    "x,y,z,vx,vy,vz,mass",
-                                ),
-                                Number(
-                                    "8.34336671824457987",
-                                ),
-                                Number(
-                                    "4.12479856412430479",
-                                ),
-                                Binary {
-                                    op: Div,
-                                    lhs: Unary {
-                                        op: Neg,
-                                        expr: Number(
-                                            "403523417114321381",
-                                        ),
-                                    },
-                                    rhs: Number(
-                                        "1000000000000000000",
-                                    ),
-                                },
-                                Binary {
-                                    op: Mul,
-                                    lhs: Binary {
-                                        op: Div,
-                                        lhs: Unary {
-                                            op: Neg,
-                                            expr: Number(
-                                                "276742510726862411",
-                                            ),
-                                        },
-                                        rhs: Number(
-                                            "100000000000000000000",
-                                        ),
-                                    },
-                                    rhs: Ident(
-                                        "DAYS_PER_YEAR",
-                                    ),
-                                },
-                                Binary {
-                                    op: Mul,
-                                    lhs: Binary {
-                                        op: Div,
-                                        lhs: Number(
-                                            "249926400617458619",
-                                        ),
-                                        rhs: Number(
-                                            "50000000000000000000",
-                                        ),
-                                    },
-                                    rhs: Ident(
-                                        "DAYS_PER_YEAR",
-                                    ),
-                                },
-                                Binary {
-                                    op: Mul,
-                                    lhs: Binary {
-                                        op: Div,
-                                        lhs: Number(
-                                            "230417297573763929",
-                                        ),
-                                        rhs: Number(
-                                            "10000000000000000000000",
-                                        ),
-                                    },
-                                    rhs: Ident(
-                                        "DAYS_PER_YEAR",
-                                    ),
-                                },
-                                Binary {
-                                    op: Mul,
-                                    lhs: Binary {
-                                        op: Div,
-                                        lhs: Number(
-                                            "71471495166532703",
-                                        ),
-                                        rhs: Number(
-                                            "250000000000000000000",
-                                        ),
-                                    },
-                                    rhs: Ident(
-                                        "SOLAR_MASS",
-                                    ),
-                                },
-                            ],
-                        },
-                    },
-                    Assign {
-                        target: Index {
-                            obj: Ident(
-                                "bodies",
-                            ),
-                            index: Number(
-                                "3",
-                            ),
-                        },
-                        value: New {
-                            type_name: "Structure",
-                            args: [
-                                Str(
-                                    "x,y,z,vx,vy,vz,mass",
-                                ),
-                                Binary {
-                                    op: Div,
-                                    lhs: Number(
-                                        "12894369562139131",
-                                    ),
-                                    rhs: Number(
-                                        "1000000000000000",
-                                    ),
-                                },
-                                Binary {
-                                    op: Div,
-                                    lhs: Unary {
-                                        op: Neg,
-                                        expr: Number(
-                                            "18888939252123289",
-                                        ),
-                                    },
-                                    rhs: Number(
-                                        "1250000000000000",
-                                    ),
-                                },
-                                Binary {
-                                    op: Div,
-                                    lhs: Unary {
-                                        op: Neg,
-                                        expr: Number(
-                                            "111653789446327867",
-                                        ),
-                                    },
-                                    rhs: Number(
-                                        "500000000000000000",
-                                    ),
-                                },
-                                Binary {
-                                    op: Mul,
-                                    lhs: Binary {
-                                        op: Div,
-                                        lhs: Number(
-                                            "148230068782380809",
-                                        ),
-                                        rhs: Number(
-                                            "50000000000000000000",
-                                        ),
-                                    },
-                                    rhs: Ident(
-                                        "DAYS_PER_YEAR",
-                                    ),
-                                },
-                                Binary {
-                                    op: Mul,
-                                    lhs: Binary {
-                                        op: Div,
-                                        lhs: Number(
-                                            "4756943479189619",
-                                        ),
-                                        rhs: Number(
-                                            "2000000000000000000",
-                                        ),
-                                    },
-                                    rhs: Ident(
-                                        "DAYS_PER_YEAR",
-                                    ),
-                                },
-                                Binary {
-                                    op: Mul,
-                                    lhs: Binary {
-                                        op: Div,
-                                        lhs: Unary {
-                                            op: Neg,
-                                            expr: Number(
-                                                "74147392135059389",
-                                            ),
-                                        },
-                                        rhs: Number(
-                                            "2500000000000000000000",
-                                        ),
-                                    },
-                                    rhs: Ident(
-                                        "DAYS_PER_YEAR",
-                                    ),
-                                },
-                                Binary {
-                                    op: Mul,
-                                    lhs: Binary {
-                                        op: Div,
-                                        lhs: Number(
-                                            "218312202167578149",
-                                        ),
-                                        rhs: Number(
-                                            "5000000000000000000000",
-                                        ),
-                                    },
-                                    rhs: Ident(
-                                        "SOLAR_MASS",
-                                    ),
-                                },
-                            ],
-                        },
-                    },
-                    Assign {
-                        target: Index {
-                            obj: Ident(
-                                "bodies",
-                            ),
-                            index: Number(
-                                "4",
-                            ),
-                        },
-                        value: New {
-                            type_name: "Structure",
-                            args: [
-                                Str(
-                                    "x,y,z,vx,vy,vz,mass",
-                                ),
-                                Binary {
-                                    op: Div,
-                                    lhs: Number(
-                                        "30759394229701833",
-                                    ),
-                                    rhs: Number(
-                                        "2000000000000000",
-                                    ),
-                                },
-                                Binary {
-                                    op: Div,
-                                    lhs: Unary {
-                                        op: Neg,
-                                        expr: Number(
-                                            "259193146099879641",
-                                        ),
-                                    },
-                                    rhs: Number(
-                                        "10000000000000000",
-                                    ),
-                                },
-                                Binary {
-                                    op: Div,
-                                    lhs: Number(
-                                        "179258772950371181",
-                                    ),
-                                    rhs: Number(
-                                        "1000000000000000000",
-                                    ),
-                                },
-                                Binary {
-                                    op: Mul,
-                                    lhs: Binary {
-                                        op: Div,
-                                        lhs: Number(
-                                            "134033886245194661",
-                                        ),
-                                        rhs: Number(
-                                            "50000000000000000000",
-                                        ),
-                                    },
-                                    rhs: Ident(
-                                        "DAYS_PER_YEAR",
-                                    ),
-                                },
-                                Binary {
-                                    op: Mul,
-                                    lhs: Binary {
-                                        op: Div,
-                                        lhs: Number(
-                                            "32564834007648459",
-                                        ),
-                                        rhs: Number(
-                                            "20000000000000000000",
-                                        ),
-                                    },
-                                    rhs: Ident(
-                                        "DAYS_PER_YEAR",
-                                    ),
-                                },
-                                Binary {
-                                    op: Mul,
-                                    lhs: Binary {
-                                        op: Div,
-                                        lhs: Unary {
-                                            op: Neg,
-                                            expr: Number(
-                                                "95159225451971587",
-                                            ),
-                                        },
-                                        rhs: Number(
-                                            "1000000000000000000000",
-                                        ),
-                                    },
-                                    rhs: Ident(
-                                        "DAYS_PER_YEAR",
-                                    ),
-                                },
-                                Binary {
-                                    op: Mul,
-                                    lhs: Binary {
-                                        op: Div,
-                                        lhs: Number(
-                                            "515138902046611451",
-                                        ),
-                                        rhs: Number(
-                                            "10000000000000000000000",
-                                        ),
-                                    },
-                                    rhs: Ident(
-                                        "SOLAR_MASS",
-                                    ),
-                                },
-                            ],
-                        },
-                    },
-                    Return(
-                        Some(
-                            Ident(
-                                "bodies",
                             ),
                         ),
-                    ),
+                        line: 60,
+                    },
                 ],
             },
         ),
@@ -624,199 +666,229 @@ Program {
                 ],
                 export: false,
                 body: [
-                    Assign {
-                        target: Name(
-                            "px",
-                        ),
-                        value: Number(
-                            "0.0",
-                        ),
+                    Stmt {
+                        kind: Assign {
+                            target: Name(
+                                "px",
+                            ),
+                            value: Number(
+                                "0.0",
+                            ),
+                        },
+                        line: 65,
                     },
-                    Assign {
-                        target: Name(
-                            "py",
-                        ),
-                        value: Number(
-                            "0.0",
-                        ),
+                    Stmt {
+                        kind: Assign {
+                            target: Name(
+                                "py",
+                            ),
+                            value: Number(
+                                "0.0",
+                            ),
+                        },
+                        line: 66,
                     },
-                    Assign {
-                        target: Name(
-                            "pz",
-                        ),
-                        value: Number(
-                            "0.0",
-                        ),
+                    Stmt {
+                        kind: Assign {
+                            target: Name(
+                                "pz",
+                            ),
+                            value: Number(
+                                "0.0",
+                            ),
+                        },
+                        line: 67,
                     },
-                    ForEach {
-                        var: "body",
-                        iter: Ident(
-                            "bodies",
-                        ),
-                        body: [
-                            Assign {
-                                target: Name(
-                                    "px",
-                                ),
-                                value: Binary {
-                                    op: Add,
-                                    lhs: Ident(
+                    Stmt {
+                        kind: ForEach {
+                            var: "body",
+                            iter: Ident(
+                                "bodies",
+                            ),
+                            body: [
+                                Stmt {
+                                    kind: Assign {
+                                        target: Name(
+                                            "px",
+                                        ),
+                                        value: Binary {
+                                            op: Add,
+                                            lhs: Ident(
+                                                "px",
+                                            ),
+                                            rhs: Binary {
+                                                op: Mul,
+                                                lhs: Field {
+                                                    obj: Ident(
+                                                        "body",
+                                                    ),
+                                                    name: "vx",
+                                                },
+                                                rhs: Field {
+                                                    obj: Ident(
+                                                        "body",
+                                                    ),
+                                                    name: "mass",
+                                                },
+                                            },
+                                        },
+                                    },
+                                    line: 69,
+                                },
+                                Stmt {
+                                    kind: Assign {
+                                        target: Name(
+                                            "py",
+                                        ),
+                                        value: Binary {
+                                            op: Add,
+                                            lhs: Ident(
+                                                "py",
+                                            ),
+                                            rhs: Binary {
+                                                op: Mul,
+                                                lhs: Field {
+                                                    obj: Ident(
+                                                        "body",
+                                                    ),
+                                                    name: "vy",
+                                                },
+                                                rhs: Field {
+                                                    obj: Ident(
+                                                        "body",
+                                                    ),
+                                                    name: "mass",
+                                                },
+                                            },
+                                        },
+                                    },
+                                    line: 70,
+                                },
+                                Stmt {
+                                    kind: Assign {
+                                        target: Name(
+                                            "pz",
+                                        ),
+                                        value: Binary {
+                                            op: Add,
+                                            lhs: Ident(
+                                                "pz",
+                                            ),
+                                            rhs: Binary {
+                                                op: Mul,
+                                                lhs: Field {
+                                                    obj: Ident(
+                                                        "body",
+                                                    ),
+                                                    name: "vz",
+                                                },
+                                                rhs: Field {
+                                                    obj: Ident(
+                                                        "body",
+                                                    ),
+                                                    name: "mass",
+                                                },
+                                            },
+                                        },
+                                    },
+                                    line: 71,
+                                },
+                            ],
+                        },
+                        line: 68,
+                    },
+                    Stmt {
+                        kind: Assign {
+                            target: Field {
+                                obj: Index {
+                                    obj: Ident(
+                                        "bodies",
+                                    ),
+                                    index: Number(
+                                        "0",
+                                    ),
+                                },
+                                name: "vx",
+                            },
+                            value: Binary {
+                                op: Div,
+                                lhs: Unary {
+                                    op: Neg,
+                                    expr: Ident(
                                         "px",
                                     ),
-                                    rhs: Binary {
-                                        op: Mul,
-                                        lhs: Field {
-                                            obj: Ident(
-                                                "body",
-                                            ),
-                                            name: "vx",
-                                        },
-                                        rhs: Field {
-                                            obj: Ident(
-                                                "body",
-                                            ),
-                                            name: "mass",
-                                        },
-                                    },
+                                },
+                                rhs: Field {
+                                    obj: Ident(
+                                        "const",
+                                    ),
+                                    name: "SOLAR_MASS",
                                 },
                             },
-                            Assign {
-                                target: Name(
-                                    "py",
-                                ),
-                                value: Binary {
-                                    op: Add,
-                                    lhs: Ident(
+                        },
+                        line: 73,
+                    },
+                    Stmt {
+                        kind: Assign {
+                            target: Field {
+                                obj: Index {
+                                    obj: Ident(
+                                        "bodies",
+                                    ),
+                                    index: Number(
+                                        "0",
+                                    ),
+                                },
+                                name: "vy",
+                            },
+                            value: Binary {
+                                op: Div,
+                                lhs: Unary {
+                                    op: Neg,
+                                    expr: Ident(
                                         "py",
                                     ),
-                                    rhs: Binary {
-                                        op: Mul,
-                                        lhs: Field {
-                                            obj: Ident(
-                                                "body",
-                                            ),
-                                            name: "vy",
-                                        },
-                                        rhs: Field {
-                                            obj: Ident(
-                                                "body",
-                                            ),
-                                            name: "mass",
-                                        },
-                                    },
+                                },
+                                rhs: Field {
+                                    obj: Ident(
+                                        "const",
+                                    ),
+                                    name: "SOLAR_MASS",
                                 },
                             },
-                            Assign {
-                                target: Name(
-                                    "pz",
-                                ),
-                                value: Binary {
-                                    op: Add,
-                                    lhs: Ident(
+                        },
+                        line: 74,
+                    },
+                    Stmt {
+                        kind: Assign {
+                            target: Field {
+                                obj: Index {
+                                    obj: Ident(
+                                        "bodies",
+                                    ),
+                                    index: Number(
+                                        "0",
+                                    ),
+                                },
+                                name: "vz",
+                            },
+                            value: Binary {
+                                op: Div,
+                                lhs: Unary {
+                                    op: Neg,
+                                    expr: Ident(
                                         "pz",
                                     ),
-                                    rhs: Binary {
-                                        op: Mul,
-                                        lhs: Field {
-                                            obj: Ident(
-                                                "body",
-                                            ),
-                                            name: "vz",
-                                        },
-                                        rhs: Field {
-                                            obj: Ident(
-                                                "body",
-                                            ),
-                                            name: "mass",
-                                        },
-                                    },
+                                },
+                                rhs: Field {
+                                    obj: Ident(
+                                        "const",
+                                    ),
+                                    name: "SOLAR_MASS",
                                 },
                             },
-                        ],
-                    },
-                    Assign {
-                        target: Field {
-                            obj: Index {
-                                obj: Ident(
-                                    "bodies",
-                                ),
-                                index: Number(
-                                    "0",
-                                ),
-                            },
-                            name: "vx",
                         },
-                        value: Binary {
-                            op: Div,
-                            lhs: Unary {
-                                op: Neg,
-                                expr: Ident(
-                                    "px",
-                                ),
-                            },
-                            rhs: Field {
-                                obj: Ident(
-                                    "const",
-                                ),
-                                name: "SOLAR_MASS",
-                            },
-                        },
-                    },
-                    Assign {
-                        target: Field {
-                            obj: Index {
-                                obj: Ident(
-                                    "bodies",
-                                ),
-                                index: Number(
-                                    "0",
-                                ),
-                            },
-                            name: "vy",
-                        },
-                        value: Binary {
-                            op: Div,
-                            lhs: Unary {
-                                op: Neg,
-                                expr: Ident(
-                                    "py",
-                                ),
-                            },
-                            rhs: Field {
-                                obj: Ident(
-                                    "const",
-                                ),
-                                name: "SOLAR_MASS",
-                            },
-                        },
-                    },
-                    Assign {
-                        target: Field {
-                            obj: Index {
-                                obj: Ident(
-                                    "bodies",
-                                ),
-                                index: Number(
-                                    "0",
-                                ),
-                            },
-                            name: "vz",
-                        },
-                        value: Binary {
-                            op: Div,
-                            lhs: Unary {
-                                op: Neg,
-                                expr: Ident(
-                                    "pz",
-                                ),
-                            },
-                            rhs: Field {
-                                obj: Ident(
-                                    "const",
-                                ),
-                                name: "SOLAR_MASS",
-                            },
-                        },
+                        line: 75,
                     },
                 ],
             },
@@ -834,315 +906,351 @@ Program {
                 ],
                 export: false,
                 body: [
-                    Assign {
-                        target: Name(
-                            "e",
-                        ),
-                        value: Number(
-                            "0.0",
-                        ),
-                    },
-                    ForNumeric {
-                        var: "i",
-                        from: Number(
-                            "0",
-                        ),
-                        to: Binary {
-                            op: Sub,
-                            lhs: Call {
-                                callee: Field {
-                                    obj: Ident(
-                                        "bodies",
-                                    ),
-                                    name: "Count",
-                                },
-                                args: [],
-                            },
-                            rhs: Number(
-                                "1",
+                    Stmt {
+                        kind: Assign {
+                            target: Name(
+                                "e",
+                            ),
+                            value: Number(
+                                "0.0",
                             ),
                         },
-                        body: [
-                            Assign {
-                                target: Name(
-                                    "b",
-                                ),
-                                value: Index {
-                                    obj: Ident(
-                                        "bodies",
-                                    ),
-                                    index: Ident(
-                                        "i",
-                                    ),
-                                },
-                            },
-                            Assign {
-                                target: Name(
-                                    "e",
-                                ),
-                                value: Binary {
-                                    op: Add,
-                                    lhs: Ident(
-                                        "e",
-                                    ),
-                                    rhs: Binary {
-                                        op: Mul,
-                                        lhs: Binary {
-                                            op: Mul,
-                                            lhs: Number(
-                                                "0.5",
-                                            ),
-                                            rhs: Field {
-                                                obj: Ident(
-                                                    "b",
-                                                ),
-                                                name: "mass",
-                                            },
-                                        },
-                                        rhs: Binary {
-                                            op: Add,
-                                            lhs: Binary {
-                                                op: Add,
-                                                lhs: Binary {
-                                                    op: Mul,
-                                                    lhs: Field {
-                                                        obj: Ident(
-                                                            "b",
-                                                        ),
-                                                        name: "vx",
-                                                    },
-                                                    rhs: Field {
-                                                        obj: Ident(
-                                                            "b",
-                                                        ),
-                                                        name: "vx",
-                                                    },
-                                                },
-                                                rhs: Binary {
-                                                    op: Mul,
-                                                    lhs: Field {
-                                                        obj: Ident(
-                                                            "b",
-                                                        ),
-                                                        name: "vy",
-                                                    },
-                                                    rhs: Field {
-                                                        obj: Ident(
-                                                            "b",
-                                                        ),
-                                                        name: "vy",
-                                                    },
-                                                },
-                                            },
-                                            rhs: Binary {
-                                                op: Mul,
-                                                lhs: Field {
-                                                    obj: Ident(
-                                                        "b",
-                                                    ),
-                                                    name: "vz",
-                                                },
-                                                rhs: Field {
-                                                    obj: Ident(
-                                                        "b",
-                                                    ),
-                                                    name: "vz",
-                                                },
-                                            },
-                                        },
+                        line: 79,
+                    },
+                    Stmt {
+                        kind: ForNumeric {
+                            var: "i",
+                            from: Number(
+                                "0",
+                            ),
+                            to: Binary {
+                                op: Sub,
+                                lhs: Call {
+                                    callee: Field {
+                                        obj: Ident(
+                                            "bodies",
+                                        ),
+                                        name: "Count",
                                     },
+                                    args: [],
                                 },
+                                rhs: Number(
+                                    "1",
+                                ),
                             },
-                            ForNumeric {
-                                var: "j",
-                                from: Binary {
-                                    op: Add,
-                                    lhs: Ident(
-                                        "i",
-                                    ),
-                                    rhs: Number(
-                                        "1",
-                                    ),
-                                },
-                                to: Binary {
-                                    op: Sub,
-                                    lhs: Call {
-                                        callee: Field {
-                                            obj: Ident(
-                                                "bodies",
-                                            ),
-                                            name: "Count",
-                                        },
-                                        args: [],
-                                    },
-                                    rhs: Number(
-                                        "1",
-                                    ),
-                                },
-                                body: [
-                                    Assign {
+                            body: [
+                                Stmt {
+                                    kind: Assign {
                                         target: Name(
-                                            "b2",
+                                            "b",
                                         ),
                                         value: Index {
                                             obj: Ident(
                                                 "bodies",
                                             ),
                                             index: Ident(
-                                                "j",
+                                                "i",
                                             ),
                                         },
                                     },
-                                    Assign {
-                                        target: Name(
-                                            "dx",
-                                        ),
-                                        value: Binary {
-                                            op: Sub,
-                                            lhs: Field {
-                                                obj: Ident(
-                                                    "b",
-                                                ),
-                                                name: "x",
-                                            },
-                                            rhs: Field {
-                                                obj: Ident(
-                                                    "b2",
-                                                ),
-                                                name: "x",
-                                            },
-                                        },
-                                    },
-                                    Assign {
-                                        target: Name(
-                                            "dy",
-                                        ),
-                                        value: Binary {
-                                            op: Sub,
-                                            lhs: Field {
-                                                obj: Ident(
-                                                    "b",
-                                                ),
-                                                name: "y",
-                                            },
-                                            rhs: Field {
-                                                obj: Ident(
-                                                    "b2",
-                                                ),
-                                                name: "y",
-                                            },
-                                        },
-                                    },
-                                    Assign {
-                                        target: Name(
-                                            "dz",
-                                        ),
-                                        value: Binary {
-                                            op: Sub,
-                                            lhs: Field {
-                                                obj: Ident(
-                                                    "b",
-                                                ),
-                                                name: "z",
-                                            },
-                                            rhs: Field {
-                                                obj: Ident(
-                                                    "b2",
-                                                ),
-                                                name: "z",
-                                            },
-                                        },
-                                    },
-                                    Assign {
-                                        target: Name(
-                                            "distance",
-                                        ),
-                                        value: Call {
-                                            callee: Ident(
-                                                "sqrt",
-                                            ),
-                                            args: [
-                                                Some(
-                                                    Binary {
-                                                        op: Add,
-                                                        lhs: Binary {
-                                                            op: Add,
-                                                            lhs: Binary {
-                                                                op: Mul,
-                                                                lhs: Ident(
-                                                                    "dx",
-                                                                ),
-                                                                rhs: Ident(
-                                                                    "dx",
-                                                                ),
-                                                            },
-                                                            rhs: Binary {
-                                                                op: Mul,
-                                                                lhs: Ident(
-                                                                    "dy",
-                                                                ),
-                                                                rhs: Ident(
-                                                                    "dy",
-                                                                ),
-                                                            },
-                                                        },
-                                                        rhs: Binary {
-                                                            op: Mul,
-                                                            lhs: Ident(
-                                                                "dz",
-                                                            ),
-                                                            rhs: Ident(
-                                                                "dz",
-                                                            ),
-                                                        },
-                                                    },
-                                                ),
-                                            ],
-                                        },
-                                    },
-                                    Assign {
+                                    line: 82,
+                                },
+                                Stmt {
+                                    kind: Assign {
                                         target: Name(
                                             "e",
                                         ),
                                         value: Binary {
-                                            op: Sub,
+                                            op: Add,
                                             lhs: Ident(
                                                 "e",
                                             ),
                                             rhs: Binary {
-                                                op: Div,
+                                                op: Mul,
                                                 lhs: Binary {
                                                     op: Mul,
-                                                    lhs: Field {
+                                                    lhs: Number(
+                                                        "0.5",
+                                                    ),
+                                                    rhs: Field {
                                                         obj: Ident(
                                                             "b",
                                                         ),
                                                         name: "mass",
                                                     },
-                                                    rhs: Field {
-                                                        obj: Ident(
-                                                            "b2",
-                                                        ),
-                                                        name: "mass",
+                                                },
+                                                rhs: Binary {
+                                                    op: Add,
+                                                    lhs: Binary {
+                                                        op: Add,
+                                                        lhs: Binary {
+                                                            op: Mul,
+                                                            lhs: Field {
+                                                                obj: Ident(
+                                                                    "b",
+                                                                ),
+                                                                name: "vx",
+                                                            },
+                                                            rhs: Field {
+                                                                obj: Ident(
+                                                                    "b",
+                                                                ),
+                                                                name: "vx",
+                                                            },
+                                                        },
+                                                        rhs: Binary {
+                                                            op: Mul,
+                                                            lhs: Field {
+                                                                obj: Ident(
+                                                                    "b",
+                                                                ),
+                                                                name: "vy",
+                                                            },
+                                                            rhs: Field {
+                                                                obj: Ident(
+                                                                    "b",
+                                                                ),
+                                                                name: "vy",
+                                                            },
+                                                        },
+                                                    },
+                                                    rhs: Binary {
+                                                        op: Mul,
+                                                        lhs: Field {
+                                                            obj: Ident(
+                                                                "b",
+                                                            ),
+                                                            name: "vz",
+                                                        },
+                                                        rhs: Field {
+                                                            obj: Ident(
+                                                                "b",
+                                                            ),
+                                                            name: "vz",
+                                                        },
                                                     },
                                                 },
-                                                rhs: Ident(
-                                                    "distance",
-                                                ),
                                             },
                                         },
                                     },
-                                ],
-                            },
-                        ],
+                                    line: 83,
+                                },
+                                Stmt {
+                                    kind: ForNumeric {
+                                        var: "j",
+                                        from: Binary {
+                                            op: Add,
+                                            lhs: Ident(
+                                                "i",
+                                            ),
+                                            rhs: Number(
+                                                "1",
+                                            ),
+                                        },
+                                        to: Binary {
+                                            op: Sub,
+                                            lhs: Call {
+                                                callee: Field {
+                                                    obj: Ident(
+                                                        "bodies",
+                                                    ),
+                                                    name: "Count",
+                                                },
+                                                args: [],
+                                            },
+                                            rhs: Number(
+                                                "1",
+                                            ),
+                                        },
+                                        body: [
+                                            Stmt {
+                                                kind: Assign {
+                                                    target: Name(
+                                                        "b2",
+                                                    ),
+                                                    value: Index {
+                                                        obj: Ident(
+                                                            "bodies",
+                                                        ),
+                                                        index: Ident(
+                                                            "j",
+                                                        ),
+                                                    },
+                                                },
+                                                line: 86,
+                                            },
+                                            Stmt {
+                                                kind: Assign {
+                                                    target: Name(
+                                                        "dx",
+                                                    ),
+                                                    value: Binary {
+                                                        op: Sub,
+                                                        lhs: Field {
+                                                            obj: Ident(
+                                                                "b",
+                                                            ),
+                                                            name: "x",
+                                                        },
+                                                        rhs: Field {
+                                                            obj: Ident(
+                                                                "b2",
+                                                            ),
+                                                            name: "x",
+                                                        },
+                                                    },
+                                                },
+                                                line: 87,
+                                            },
+                                            Stmt {
+                                                kind: Assign {
+                                                    target: Name(
+                                                        "dy",
+                                                    ),
+                                                    value: Binary {
+                                                        op: Sub,
+                                                        lhs: Field {
+                                                            obj: Ident(
+                                                                "b",
+                                                            ),
+                                                            name: "y",
+                                                        },
+                                                        rhs: Field {
+                                                            obj: Ident(
+                                                                "b2",
+                                                            ),
+                                                            name: "y",
+                                                        },
+                                                    },
+                                                },
+                                                line: 88,
+                                            },
+                                            Stmt {
+                                                kind: Assign {
+                                                    target: Name(
+                                                        "dz",
+                                                    ),
+                                                    value: Binary {
+                                                        op: Sub,
+                                                        lhs: Field {
+                                                            obj: Ident(
+                                                                "b",
+                                                            ),
+                                                            name: "z",
+                                                        },
+                                                        rhs: Field {
+                                                            obj: Ident(
+                                                                "b2",
+                                                            ),
+                                                            name: "z",
+                                                        },
+                                                    },
+                                                },
+                                                line: 89,
+                                            },
+                                            Stmt {
+                                                kind: Assign {
+                                                    target: Name(
+                                                        "distance",
+                                                    ),
+                                                    value: Call {
+                                                        callee: Ident(
+                                                            "sqrt",
+                                                        ),
+                                                        args: [
+                                                            Some(
+                                                                Binary {
+                                                                    op: Add,
+                                                                    lhs: Binary {
+                                                                        op: Add,
+                                                                        lhs: Binary {
+                                                                            op: Mul,
+                                                                            lhs: Ident(
+                                                                                "dx",
+                                                                            ),
+                                                                            rhs: Ident(
+                                                                                "dx",
+                                                                            ),
+                                                                        },
+                                                                        rhs: Binary {
+                                                                            op: Mul,
+                                                                            lhs: Ident(
+                                                                                "dy",
+                                                                            ),
+                                                                            rhs: Ident(
+                                                                                "dy",
+                                                                            ),
+                                                                        },
+                                                                    },
+                                                                    rhs: Binary {
+                                                                        op: Mul,
+                                                                        lhs: Ident(
+                                                                            "dz",
+                                                                        ),
+                                                                        rhs: Ident(
+                                                                            "dz",
+                                                                        ),
+                                                                    },
+                                                                },
+                                                            ),
+                                                        ],
+                                                    },
+                                                },
+                                                line: 90,
+                                            },
+                                            Stmt {
+                                                kind: Assign {
+                                                    target: Name(
+                                                        "e",
+                                                    ),
+                                                    value: Binary {
+                                                        op: Sub,
+                                                        lhs: Ident(
+                                                            "e",
+                                                        ),
+                                                        rhs: Binary {
+                                                            op: Div,
+                                                            lhs: Binary {
+                                                                op: Mul,
+                                                                lhs: Field {
+                                                                    obj: Ident(
+                                                                        "b",
+                                                                    ),
+                                                                    name: "mass",
+                                                                },
+                                                                rhs: Field {
+                                                                    obj: Ident(
+                                                                        "b2",
+                                                                    ),
+                                                                    name: "mass",
+                                                                },
+                                                            },
+                                                            rhs: Ident(
+                                                                "distance",
+                                                            ),
+                                                        },
+                                                    },
+                                                },
+                                                line: 91,
+                                            },
+                                        ],
+                                    },
+                                    line: 84,
+                                },
+                            ],
+                        },
+                        line: 81,
                     },
-                    Return(
-                        Some(
-                            Ident(
-                                "e",
+                    Stmt {
+                        kind: Return(
+                            Some(
+                                Ident(
+                                    "e",
+                                ),
                             ),
                         ),
-                    ),
+                        line: 95,
+                    },
                 ],
             },
         ),
@@ -1164,575 +1272,638 @@ Program {
                 ],
                 export: false,
                 body: [
-                    ForNumeric {
-                        var: "i",
-                        from: Number(
-                            "0",
-                        ),
-                        to: Binary {
-                            op: Sub,
-                            lhs: Call {
-                                callee: Field {
-                                    obj: Ident(
-                                        "bodies",
-                                    ),
-                                    name: "Count",
-                                },
-                                args: [],
-                            },
-                            rhs: Number(
-                                "1",
+                    Stmt {
+                        kind: ForNumeric {
+                            var: "i",
+                            from: Number(
+                                "0",
                             ),
-                        },
-                        body: [
-                            Assign {
-                                target: Name(
-                                    "b",
-                                ),
-                                value: Index {
-                                    obj: Ident(
-                                        "bodies",
-                                    ),
-                                    index: Ident(
-                                        "i",
-                                    ),
-                                },
-                            },
-                            ForNumeric {
-                                var: "j",
-                                from: Binary {
-                                    op: Add,
-                                    lhs: Ident(
-                                        "i",
-                                    ),
-                                    rhs: Number(
-                                        "1",
-                                    ),
-                                },
-                                to: Binary {
-                                    op: Sub,
-                                    lhs: Call {
-                                        callee: Field {
-                                            obj: Ident(
-                                                "bodies",
-                                            ),
-                                            name: "Count",
-                                        },
-                                        args: [],
+                            to: Binary {
+                                op: Sub,
+                                lhs: Call {
+                                    callee: Field {
+                                        obj: Ident(
+                                            "bodies",
+                                        ),
+                                        name: "Count",
                                     },
-                                    rhs: Number(
-                                        "1",
-                                    ),
+                                    args: [],
                                 },
-                                body: [
-                                    Assign {
+                                rhs: Number(
+                                    "1",
+                                ),
+                            },
+                            body: [
+                                Stmt {
+                                    kind: Assign {
                                         target: Name(
-                                            "b2",
+                                            "b",
                                         ),
                                         value: Index {
                                             obj: Ident(
                                                 "bodies",
                                             ),
                                             index: Ident(
-                                                "j",
+                                                "i",
                                             ),
                                         },
                                     },
-                                    Assign {
-                                        target: Name(
-                                            "dx",
-                                        ),
-                                        value: Binary {
-                                            op: Sub,
-                                            lhs: Field {
-                                                obj: Ident(
-                                                    "b",
-                                                ),
-                                                name: "x",
-                                            },
-                                            rhs: Field {
-                                                obj: Ident(
-                                                    "b2",
-                                                ),
-                                                name: "x",
-                                            },
-                                        },
-                                    },
-                                    Assign {
-                                        target: Name(
-                                            "dy",
-                                        ),
-                                        value: Binary {
-                                            op: Sub,
-                                            lhs: Field {
-                                                obj: Ident(
-                                                    "b",
-                                                ),
-                                                name: "y",
-                                            },
-                                            rhs: Field {
-                                                obj: Ident(
-                                                    "b2",
-                                                ),
-                                                name: "y",
-                                            },
-                                        },
-                                    },
-                                    Assign {
-                                        target: Name(
-                                            "dz",
-                                        ),
-                                        value: Binary {
-                                            op: Sub,
-                                            lhs: Field {
-                                                obj: Ident(
-                                                    "b",
-                                                ),
-                                                name: "z",
-                                            },
-                                            rhs: Field {
-                                                obj: Ident(
-                                                    "b2",
-                                                ),
-                                                name: "z",
-                                            },
-                                        },
-                                    },
-                                    Assign {
-                                        target: Name(
-                                            "distanced",
-                                        ),
-                                        value: Binary {
+                                    line: 100,
+                                },
+                                Stmt {
+                                    kind: ForNumeric {
+                                        var: "j",
+                                        from: Binary {
                                             op: Add,
-                                            lhs: Binary {
-                                                op: Add,
-                                                lhs: Call {
-                                                    callee: Ident(
-                                                        "Pow",
-                                                    ),
-                                                    args: [
-                                                        Some(
-                                                            Ident(
-                                                                "dx",
-                                                            ),
-                                                        ),
-                                                        Some(
-                                                            Number(
-                                                                "2",
-                                                            ),
-                                                        ),
-                                                    ],
-                                                },
-                                                rhs: Call {
-                                                    callee: Ident(
-                                                        "Pow",
-                                                    ),
-                                                    args: [
-                                                        Some(
-                                                            Ident(
-                                                                "dy",
-                                                            ),
-                                                        ),
-                                                        Some(
-                                                            Number(
-                                                                "2",
-                                                            ),
-                                                        ),
-                                                    ],
-                                                },
-                                            },
-                                            rhs: Call {
-                                                callee: Ident(
-                                                    "Pow",
-                                                ),
-                                                args: [
-                                                    Some(
-                                                        Ident(
-                                                            "dz",
-                                                        ),
-                                                    ),
-                                                    Some(
-                                                        Number(
-                                                            "2",
-                                                        ),
-                                                    ),
-                                                ],
-                                            },
-                                        },
-                                    },
-                                    Assign {
-                                        target: Name(
-                                            "distance",
-                                        ),
-                                        value: Call {
-                                            callee: Ident(
-                                                "sqrt",
+                                            lhs: Ident(
+                                                "i",
                                             ),
-                                            args: [
-                                                Some(
-                                                    Ident(
+                                            rhs: Number(
+                                                "1",
+                                            ),
+                                        },
+                                        to: Binary {
+                                            op: Sub,
+                                            lhs: Call {
+                                                callee: Field {
+                                                    obj: Ident(
+                                                        "bodies",
+                                                    ),
+                                                    name: "Count",
+                                                },
+                                                args: [],
+                                            },
+                                            rhs: Number(
+                                                "1",
+                                            ),
+                                        },
+                                        body: [
+                                            Stmt {
+                                                kind: Assign {
+                                                    target: Name(
+                                                        "b2",
+                                                    ),
+                                                    value: Index {
+                                                        obj: Ident(
+                                                            "bodies",
+                                                        ),
+                                                        index: Ident(
+                                                            "j",
+                                                        ),
+                                                    },
+                                                },
+                                                line: 102,
+                                            },
+                                            Stmt {
+                                                kind: Assign {
+                                                    target: Name(
+                                                        "dx",
+                                                    ),
+                                                    value: Binary {
+                                                        op: Sub,
+                                                        lhs: Field {
+                                                            obj: Ident(
+                                                                "b",
+                                                            ),
+                                                            name: "x",
+                                                        },
+                                                        rhs: Field {
+                                                            obj: Ident(
+                                                                "b2",
+                                                            ),
+                                                            name: "x",
+                                                        },
+                                                    },
+                                                },
+                                                line: 103,
+                                            },
+                                            Stmt {
+                                                kind: Assign {
+                                                    target: Name(
+                                                        "dy",
+                                                    ),
+                                                    value: Binary {
+                                                        op: Sub,
+                                                        lhs: Field {
+                                                            obj: Ident(
+                                                                "b",
+                                                            ),
+                                                            name: "y",
+                                                        },
+                                                        rhs: Field {
+                                                            obj: Ident(
+                                                                "b2",
+                                                            ),
+                                                            name: "y",
+                                                        },
+                                                    },
+                                                },
+                                                line: 104,
+                                            },
+                                            Stmt {
+                                                kind: Assign {
+                                                    target: Name(
+                                                        "dz",
+                                                    ),
+                                                    value: Binary {
+                                                        op: Sub,
+                                                        lhs: Field {
+                                                            obj: Ident(
+                                                                "b",
+                                                            ),
+                                                            name: "z",
+                                                        },
+                                                        rhs: Field {
+                                                            obj: Ident(
+                                                                "b2",
+                                                            ),
+                                                            name: "z",
+                                                        },
+                                                    },
+                                                },
+                                                line: 105,
+                                            },
+                                            Stmt {
+                                                kind: Assign {
+                                                    target: Name(
                                                         "distanced",
                                                     ),
-                                                ),
-                                            ],
+                                                    value: Binary {
+                                                        op: Add,
+                                                        lhs: Binary {
+                                                            op: Add,
+                                                            lhs: Call {
+                                                                callee: Ident(
+                                                                    "Pow",
+                                                                ),
+                                                                args: [
+                                                                    Some(
+                                                                        Ident(
+                                                                            "dx",
+                                                                        ),
+                                                                    ),
+                                                                    Some(
+                                                                        Number(
+                                                                            "2",
+                                                                        ),
+                                                                    ),
+                                                                ],
+                                                            },
+                                                            rhs: Call {
+                                                                callee: Ident(
+                                                                    "Pow",
+                                                                ),
+                                                                args: [
+                                                                    Some(
+                                                                        Ident(
+                                                                            "dy",
+                                                                        ),
+                                                                    ),
+                                                                    Some(
+                                                                        Number(
+                                                                            "2",
+                                                                        ),
+                                                                    ),
+                                                                ],
+                                                            },
+                                                        },
+                                                        rhs: Call {
+                                                            callee: Ident(
+                                                                "Pow",
+                                                            ),
+                                                            args: [
+                                                                Some(
+                                                                    Ident(
+                                                                        "dz",
+                                                                    ),
+                                                                ),
+                                                                Some(
+                                                                    Number(
+                                                                        "2",
+                                                                    ),
+                                                                ),
+                                                            ],
+                                                        },
+                                                    },
+                                                },
+                                                line: 106,
+                                            },
+                                            Stmt {
+                                                kind: Assign {
+                                                    target: Name(
+                                                        "distance",
+                                                    ),
+                                                    value: Call {
+                                                        callee: Ident(
+                                                            "sqrt",
+                                                        ),
+                                                        args: [
+                                                            Some(
+                                                                Ident(
+                                                                    "distanced",
+                                                                ),
+                                                            ),
+                                                        ],
+                                                    },
+                                                },
+                                                line: 107,
+                                            },
+                                            Stmt {
+                                                kind: Assign {
+                                                    target: Name(
+                                                        "mag",
+                                                    ),
+                                                    value: Binary {
+                                                        op: Div,
+                                                        lhs: Ident(
+                                                            "dt",
+                                                        ),
+                                                        rhs: Binary {
+                                                            op: Mul,
+                                                            lhs: Ident(
+                                                                "distanced",
+                                                            ),
+                                                            rhs: Ident(
+                                                                "distance",
+                                                            ),
+                                                        },
+                                                    },
+                                                },
+                                                line: 108,
+                                            },
+                                            Stmt {
+                                                kind: Assign {
+                                                    target: Field {
+                                                        obj: Ident(
+                                                            "b",
+                                                        ),
+                                                        name: "vx",
+                                                    },
+                                                    value: Binary {
+                                                        op: Sub,
+                                                        lhs: Field {
+                                                            obj: Ident(
+                                                                "b",
+                                                            ),
+                                                            name: "vx",
+                                                        },
+                                                        rhs: Binary {
+                                                            op: Mul,
+                                                            lhs: Binary {
+                                                                op: Mul,
+                                                                lhs: Ident(
+                                                                    "dx",
+                                                                ),
+                                                                rhs: Field {
+                                                                    obj: Ident(
+                                                                        "b2",
+                                                                    ),
+                                                                    name: "mass",
+                                                                },
+                                                            },
+                                                            rhs: Ident(
+                                                                "mag",
+                                                            ),
+                                                        },
+                                                    },
+                                                },
+                                                line: 110,
+                                            },
+                                            Stmt {
+                                                kind: Assign {
+                                                    target: Field {
+                                                        obj: Ident(
+                                                            "b",
+                                                        ),
+                                                        name: "vy",
+                                                    },
+                                                    value: Binary {
+                                                        op: Sub,
+                                                        lhs: Field {
+                                                            obj: Ident(
+                                                                "b",
+                                                            ),
+                                                            name: "vy",
+                                                        },
+                                                        rhs: Binary {
+                                                            op: Mul,
+                                                            lhs: Binary {
+                                                                op: Mul,
+                                                                lhs: Ident(
+                                                                    "dy",
+                                                                ),
+                                                                rhs: Field {
+                                                                    obj: Ident(
+                                                                        "b2",
+                                                                    ),
+                                                                    name: "mass",
+                                                                },
+                                                            },
+                                                            rhs: Ident(
+                                                                "mag",
+                                                            ),
+                                                        },
+                                                    },
+                                                },
+                                                line: 111,
+                                            },
+                                            Stmt {
+                                                kind: Assign {
+                                                    target: Field {
+                                                        obj: Ident(
+                                                            "b",
+                                                        ),
+                                                        name: "vz",
+                                                    },
+                                                    value: Binary {
+                                                        op: Sub,
+                                                        lhs: Field {
+                                                            obj: Ident(
+                                                                "b",
+                                                            ),
+                                                            name: "vz",
+                                                        },
+                                                        rhs: Binary {
+                                                            op: Mul,
+                                                            lhs: Binary {
+                                                                op: Mul,
+                                                                lhs: Ident(
+                                                                    "dz",
+                                                                ),
+                                                                rhs: Field {
+                                                                    obj: Ident(
+                                                                        "b2",
+                                                                    ),
+                                                                    name: "mass",
+                                                                },
+                                                            },
+                                                            rhs: Ident(
+                                                                "mag",
+                                                            ),
+                                                        },
+                                                    },
+                                                },
+                                                line: 112,
+                                            },
+                                            Stmt {
+                                                kind: Assign {
+                                                    target: Field {
+                                                        obj: Ident(
+                                                            "b2",
+                                                        ),
+                                                        name: "vx",
+                                                    },
+                                                    value: Binary {
+                                                        op: Add,
+                                                        lhs: Field {
+                                                            obj: Ident(
+                                                                "b2",
+                                                            ),
+                                                            name: "vx",
+                                                        },
+                                                        rhs: Binary {
+                                                            op: Mul,
+                                                            lhs: Binary {
+                                                                op: Mul,
+                                                                lhs: Ident(
+                                                                    "dx",
+                                                                ),
+                                                                rhs: Field {
+                                                                    obj: Ident(
+                                                                        "b",
+                                                                    ),
+                                                                    name: "mass",
+                                                                },
+                                                            },
+                                                            rhs: Ident(
+                                                                "mag",
+                                                            ),
+                                                        },
+                                                    },
+                                                },
+                                                line: 113,
+                                            },
+                                            Stmt {
+                                                kind: Assign {
+                                                    target: Field {
+                                                        obj: Ident(
+                                                            "b2",
+                                                        ),
+                                                        name: "vy",
+                                                    },
+                                                    value: Binary {
+                                                        op: Add,
+                                                        lhs: Field {
+                                                            obj: Ident(
+                                                                "b2",
+                                                            ),
+                                                            name: "vy",
+                                                        },
+                                                        rhs: Binary {
+                                                            op: Mul,
+                                                            lhs: Binary {
+                                                                op: Mul,
+                                                                lhs: Ident(
+                                                                    "dy",
+                                                                ),
+                                                                rhs: Field {
+                                                                    obj: Ident(
+                                                                        "b",
+                                                                    ),
+                                                                    name: "mass",
+                                                                },
+                                                            },
+                                                            rhs: Ident(
+                                                                "mag",
+                                                            ),
+                                                        },
+                                                    },
+                                                },
+                                                line: 114,
+                                            },
+                                            Stmt {
+                                                kind: Assign {
+                                                    target: Field {
+                                                        obj: Ident(
+                                                            "b2",
+                                                        ),
+                                                        name: "vz",
+                                                    },
+                                                    value: Binary {
+                                                        op: Add,
+                                                        lhs: Field {
+                                                            obj: Ident(
+                                                                "b2",
+                                                            ),
+                                                            name: "vz",
+                                                        },
+                                                        rhs: Binary {
+                                                            op: Mul,
+                                                            lhs: Binary {
+                                                                op: Mul,
+                                                                lhs: Ident(
+                                                                    "dz",
+                                                                ),
+                                                                rhs: Field {
+                                                                    obj: Ident(
+                                                                        "b",
+                                                                    ),
+                                                                    name: "mass",
+                                                                },
+                                                            },
+                                                            rhs: Ident(
+                                                                "mag",
+                                                            ),
+                                                        },
+                                                    },
+                                                },
+                                                line: 115,
+                                            },
+                                        ],
+                                    },
+                                    line: 101,
+                                },
+                            ],
+                        },
+                        line: 99,
+                    },
+                    Stmt {
+                        kind: ForNumeric {
+                            var: "i",
+                            from: Number(
+                                "0",
+                            ),
+                            to: Binary {
+                                op: Sub,
+                                lhs: Call {
+                                    callee: Field {
+                                        obj: Ident(
+                                            "bodies",
+                                        ),
+                                        name: "Count",
+                                    },
+                                    args: [],
+                                },
+                                rhs: Number(
+                                    "1",
+                                ),
+                            },
+                            body: [
+                                Stmt {
+                                    kind: Assign {
+                                        target: Name(
+                                            "b",
+                                        ),
+                                        value: Index {
+                                            obj: Ident(
+                                                "bodies",
+                                            ),
+                                            index: Ident(
+                                                "i",
+                                            ),
                                         },
                                     },
-                                    Assign {
-                                        target: Name(
-                                            "mag",
-                                        ),
-                                        value: Binary {
-                                            op: Div,
-                                            lhs: Ident(
-                                                "dt",
+                                    line: 119,
+                                },
+                                Stmt {
+                                    kind: Assign {
+                                        target: Field {
+                                            obj: Ident(
+                                                "b",
                                             ),
+                                            name: "x",
+                                        },
+                                        value: Binary {
+                                            op: Add,
+                                            lhs: Field {
+                                                obj: Ident(
+                                                    "b",
+                                                ),
+                                                name: "x",
+                                            },
                                             rhs: Binary {
                                                 op: Mul,
                                                 lhs: Ident(
-                                                    "distanced",
+                                                    "dt",
                                                 ),
-                                                rhs: Ident(
-                                                    "distance",
-                                                ),
-                                            },
-                                        },
-                                    },
-                                    Assign {
-                                        target: Field {
-                                            obj: Ident(
-                                                "b",
-                                            ),
-                                            name: "vx",
-                                        },
-                                        value: Binary {
-                                            op: Sub,
-                                            lhs: Field {
-                                                obj: Ident(
-                                                    "b",
-                                                ),
-                                                name: "vx",
-                                            },
-                                            rhs: Binary {
-                                                op: Mul,
-                                                lhs: Binary {
-                                                    op: Mul,
-                                                    lhs: Ident(
-                                                        "dx",
+                                                rhs: Field {
+                                                    obj: Ident(
+                                                        "b",
                                                     ),
-                                                    rhs: Field {
-                                                        obj: Ident(
-                                                            "b2",
-                                                        ),
-                                                        name: "mass",
-                                                    },
+                                                    name: "vx",
                                                 },
-                                                rhs: Ident(
-                                                    "mag",
-                                                ),
                                             },
                                         },
                                     },
-                                    Assign {
-                                        target: Field {
-                                            obj: Ident(
-                                                "b",
-                                            ),
-                                            name: "vy",
-                                        },
-                                        value: Binary {
-                                            op: Sub,
-                                            lhs: Field {
-                                                obj: Ident(
-                                                    "b",
-                                                ),
-                                                name: "vy",
-                                            },
-                                            rhs: Binary {
-                                                op: Mul,
-                                                lhs: Binary {
-                                                    op: Mul,
-                                                    lhs: Ident(
-                                                        "dy",
-                                                    ),
-                                                    rhs: Field {
-                                                        obj: Ident(
-                                                            "b2",
-                                                        ),
-                                                        name: "mass",
-                                                    },
-                                                },
-                                                rhs: Ident(
-                                                    "mag",
-                                                ),
-                                            },
-                                        },
-                                    },
-                                    Assign {
-                                        target: Field {
-                                            obj: Ident(
-                                                "b",
-                                            ),
-                                            name: "vz",
-                                        },
-                                        value: Binary {
-                                            op: Sub,
-                                            lhs: Field {
-                                                obj: Ident(
-                                                    "b",
-                                                ),
-                                                name: "vz",
-                                            },
-                                            rhs: Binary {
-                                                op: Mul,
-                                                lhs: Binary {
-                                                    op: Mul,
-                                                    lhs: Ident(
-                                                        "dz",
-                                                    ),
-                                                    rhs: Field {
-                                                        obj: Ident(
-                                                            "b2",
-                                                        ),
-                                                        name: "mass",
-                                                    },
-                                                },
-                                                rhs: Ident(
-                                                    "mag",
-                                                ),
-                                            },
-                                        },
-                                    },
-                                    Assign {
-                                        target: Field {
-                                            obj: Ident(
-                                                "b2",
-                                            ),
-                                            name: "vx",
-                                        },
-                                        value: Binary {
-                                            op: Add,
-                                            lhs: Field {
-                                                obj: Ident(
-                                                    "b2",
-                                                ),
-                                                name: "vx",
-                                            },
-                                            rhs: Binary {
-                                                op: Mul,
-                                                lhs: Binary {
-                                                    op: Mul,
-                                                    lhs: Ident(
-                                                        "dx",
-                                                    ),
-                                                    rhs: Field {
-                                                        obj: Ident(
-                                                            "b",
-                                                        ),
-                                                        name: "mass",
-                                                    },
-                                                },
-                                                rhs: Ident(
-                                                    "mag",
-                                                ),
-                                            },
-                                        },
-                                    },
-                                    Assign {
-                                        target: Field {
-                                            obj: Ident(
-                                                "b2",
-                                            ),
-                                            name: "vy",
-                                        },
-                                        value: Binary {
-                                            op: Add,
-                                            lhs: Field {
-                                                obj: Ident(
-                                                    "b2",
-                                                ),
-                                                name: "vy",
-                                            },
-                                            rhs: Binary {
-                                                op: Mul,
-                                                lhs: Binary {
-                                                    op: Mul,
-                                                    lhs: Ident(
-                                                        "dy",
-                                                    ),
-                                                    rhs: Field {
-                                                        obj: Ident(
-                                                            "b",
-                                                        ),
-                                                        name: "mass",
-                                                    },
-                                                },
-                                                rhs: Ident(
-                                                    "mag",
-                                                ),
-                                            },
-                                        },
-                                    },
-                                    Assign {
-                                        target: Field {
-                                            obj: Ident(
-                                                "b2",
-                                            ),
-                                            name: "vz",
-                                        },
-                                        value: Binary {
-                                            op: Add,
-                                            lhs: Field {
-                                                obj: Ident(
-                                                    "b2",
-                                                ),
-                                                name: "vz",
-                                            },
-                                            rhs: Binary {
-                                                op: Mul,
-                                                lhs: Binary {
-                                                    op: Mul,
-                                                    lhs: Ident(
-                                                        "dz",
-                                                    ),
-                                                    rhs: Field {
-                                                        obj: Ident(
-                                                            "b",
-                                                        ),
-                                                        name: "mass",
-                                                    },
-                                                },
-                                                rhs: Ident(
-                                                    "mag",
-                                                ),
-                                            },
-                                        },
-                                    },
-                                ],
-                            },
-                        ],
-                    },
-                    ForNumeric {
-                        var: "i",
-                        from: Number(
-                            "0",
-                        ),
-                        to: Binary {
-                            op: Sub,
-                            lhs: Call {
-                                callee: Field {
-                                    obj: Ident(
-                                        "bodies",
-                                    ),
-                                    name: "Count",
+                                    line: 120,
                                 },
-                                args: [],
-                            },
-                            rhs: Number(
-                                "1",
-                            ),
+                                Stmt {
+                                    kind: Assign {
+                                        target: Field {
+                                            obj: Ident(
+                                                "b",
+                                            ),
+                                            name: "y",
+                                        },
+                                        value: Binary {
+                                            op: Add,
+                                            lhs: Field {
+                                                obj: Ident(
+                                                    "b",
+                                                ),
+                                                name: "y",
+                                            },
+                                            rhs: Binary {
+                                                op: Mul,
+                                                lhs: Ident(
+                                                    "dt",
+                                                ),
+                                                rhs: Field {
+                                                    obj: Ident(
+                                                        "b",
+                                                    ),
+                                                    name: "vy",
+                                                },
+                                            },
+                                        },
+                                    },
+                                    line: 121,
+                                },
+                                Stmt {
+                                    kind: Assign {
+                                        target: Field {
+                                            obj: Ident(
+                                                "b",
+                                            ),
+                                            name: "z",
+                                        },
+                                        value: Binary {
+                                            op: Add,
+                                            lhs: Field {
+                                                obj: Ident(
+                                                    "b",
+                                                ),
+                                                name: "z",
+                                            },
+                                            rhs: Binary {
+                                                op: Mul,
+                                                lhs: Ident(
+                                                    "dt",
+                                                ),
+                                                rhs: Field {
+                                                    obj: Ident(
+                                                        "b",
+                                                    ),
+                                                    name: "vz",
+                                                },
+                                            },
+                                        },
+                                    },
+                                    line: 122,
+                                },
+                            ],
                         },
-                        body: [
-                            Assign {
-                                target: Name(
-                                    "b",
-                                ),
-                                value: Index {
-                                    obj: Ident(
-                                        "bodies",
-                                    ),
-                                    index: Ident(
-                                        "i",
-                                    ),
-                                },
-                            },
-                            Assign {
-                                target: Field {
-                                    obj: Ident(
-                                        "b",
-                                    ),
-                                    name: "x",
-                                },
-                                value: Binary {
-                                    op: Add,
-                                    lhs: Field {
-                                        obj: Ident(
-                                            "b",
-                                        ),
-                                        name: "x",
-                                    },
-                                    rhs: Binary {
-                                        op: Mul,
-                                        lhs: Ident(
-                                            "dt",
-                                        ),
-                                        rhs: Field {
-                                            obj: Ident(
-                                                "b",
-                                            ),
-                                            name: "vx",
-                                        },
-                                    },
-                                },
-                            },
-                            Assign {
-                                target: Field {
-                                    obj: Ident(
-                                        "b",
-                                    ),
-                                    name: "y",
-                                },
-                                value: Binary {
-                                    op: Add,
-                                    lhs: Field {
-                                        obj: Ident(
-                                            "b",
-                                        ),
-                                        name: "y",
-                                    },
-                                    rhs: Binary {
-                                        op: Mul,
-                                        lhs: Ident(
-                                            "dt",
-                                        ),
-                                        rhs: Field {
-                                            obj: Ident(
-                                                "b",
-                                            ),
-                                            name: "vy",
-                                        },
-                                    },
-                                },
-                            },
-                            Assign {
-                                target: Field {
-                                    obj: Ident(
-                                        "b",
-                                    ),
-                                    name: "z",
-                                },
-                                value: Binary {
-                                    op: Add,
-                                    lhs: Field {
-                                        obj: Ident(
-                                            "b",
-                                        ),
-                                        name: "z",
-                                    },
-                                    rhs: Binary {
-                                        op: Mul,
-                                        lhs: Ident(
-                                            "dt",
-                                        ),
-                                        rhs: Field {
-                                            obj: Ident(
-                                                "b",
-                                            ),
-                                            name: "vz",
-                                        },
-                                    },
-                                },
-                            },
-                        ],
+                        line: 118,
                     },
                 ],
             },
@@ -1744,141 +1915,165 @@ Program {
                 params: [],
                 export: false,
                 body: [
-                    Assign {
-                        target: Name(
-                            "const",
-                        ),
-                        value: Call {
-                            callee: Ident(
-                                "getConst",
+                    Stmt {
+                        kind: Assign {
+                            target: Name(
+                                "const",
                             ),
-                            args: [],
+                            value: Call {
+                                callee: Ident(
+                                    "getConst",
+                                ),
+                                args: [],
+                            },
                         },
+                        line: 127,
                     },
-                    Assign {
-                        target: Name(
-                            "bodies",
-                        ),
-                        value: Call {
-                            callee: Ident(
-                                "getBodies",
+                    Stmt {
+                        kind: Assign {
+                            target: Name(
+                                "bodies",
                             ),
-                            args: [
-                                Some(
-                                    Ident(
-                                        "const",
-                                    ),
+                            value: Call {
+                                callee: Ident(
+                                    "getBodies",
                                 ),
-                            ],
-                        },
-                    },
-                    ExprStmt(
-                        Call {
-                            callee: Ident(
-                                "OffsetMomentum",
-                            ),
-                            args: [
-                                Some(
-                                    Ident(
-                                        "bodies",
-                                    ),
-                                ),
-                                Some(
-                                    Ident(
-                                        "const",
-                                    ),
-                                ),
-                            ],
-                        },
-                    ),
-                    ExprStmt(
-                        Call {
-                            callee: Ident(
-                                "Message",
-                            ),
-                            args: [
-                                Some(
-                                    Call {
-                                        callee: Ident(
-                                            "Energie",
+                                args: [
+                                    Some(
+                                        Ident(
+                                            "const",
                                         ),
-                                        args: [
-                                            Some(
-                                                Ident(
-                                                    "bodies",
+                                    ),
+                                ],
+                            },
+                        },
+                        line: 128,
+                    },
+                    Stmt {
+                        kind: ExprStmt(
+                            Call {
+                                callee: Ident(
+                                    "OffsetMomentum",
+                                ),
+                                args: [
+                                    Some(
+                                        Ident(
+                                            "bodies",
+                                        ),
+                                    ),
+                                    Some(
+                                        Ident(
+                                            "const",
+                                        ),
+                                    ),
+                                ],
+                            },
+                        ),
+                        line: 129,
+                    },
+                    Stmt {
+                        kind: ExprStmt(
+                            Call {
+                                callee: Ident(
+                                    "Message",
+                                ),
+                                args: [
+                                    Some(
+                                        Call {
+                                            callee: Ident(
+                                                "Energie",
+                                            ),
+                                            args: [
+                                                Some(
+                                                    Ident(
+                                                        "bodies",
+                                                    ),
                                                 ),
-                                            ),
-                                        ],
-                                    },
-                                ),
-                            ],
-                        },
-                    ),
-                    ForNumeric {
-                        var: "i",
-                        from: Number(
-                            "1",
-                        ),
-                        to: Number(
-                            "50000000",
-                        ),
-                        body: [
-                            ExprStmt(
-                                Call {
-                                    callee: Ident(
-                                        "Advance",
+                                            ],
+                                        },
                                     ),
-                                    args: [
-                                        Some(
-                                            Ident(
-                                                "bodies",
+                                ],
+                            },
+                        ),
+                        line: 130,
+                    },
+                    Stmt {
+                        kind: ForNumeric {
+                            var: "i",
+                            from: Number(
+                                "1",
+                            ),
+                            to: Number(
+                                "50000000",
+                            ),
+                            body: [
+                                Stmt {
+                                    kind: ExprStmt(
+                                        Call {
+                                            callee: Ident(
+                                                "Advance",
                                             ),
-                                        ),
-                                        Some(
-                                            Number(
-                                                "0.01",
-                                            ),
-                                        ),
-                                    ],
+                                            args: [
+                                                Some(
+                                                    Ident(
+                                                        "bodies",
+                                                    ),
+                                                ),
+                                                Some(
+                                                    Number(
+                                                        "0.01",
+                                                    ),
+                                                ),
+                                            ],
+                                        },
+                                    ),
+                                    line: 133,
                                 },
-                            ),
-                        ],
-                    },
-                    ExprStmt(
-                        Call {
-                            callee: Ident(
-                                "Message",
-                            ),
-                            args: [
-                                Some(
-                                    Call {
-                                        callee: Ident(
-                                            "Energie",
-                                        ),
-                                        args: [
-                                            Some(
-                                                Ident(
-                                                    "bodies",
-                                                ),
-                                            ),
-                                        ],
-                                    },
-                                ),
                             ],
                         },
-                    ),
+                        line: 132,
+                    },
+                    Stmt {
+                        kind: ExprStmt(
+                            Call {
+                                callee: Ident(
+                                    "Message",
+                                ),
+                                args: [
+                                    Some(
+                                        Call {
+                                            callee: Ident(
+                                                "Energie",
+                                            ),
+                                            args: [
+                                                Some(
+                                                    Ident(
+                                                        "bodies",
+                                                    ),
+                                                ),
+                                            ],
+                                        },
+                                    ),
+                                ],
+                            },
+                        ),
+                        line: 136,
+                    },
                 ],
             },
         ),
         Stmt(
-            ExprStmt(
-                Call {
-                    callee: Ident(
-                        "Main",
-                    ),
-                    args: [],
-                },
-            ),
+            Stmt {
+                kind: ExprStmt(
+                    Call {
+                        callee: Ident(
+                            "Main",
+                        ),
+                        args: [],
+                    },
+                ),
+                line: 140,
+            },
         ),
     ],
 }

@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use bsl_number::BslNumber;
-use bsl_syntax::{Expr as AExpr, Item, LValue, Stmt as AStmt};
+use bsl_syntax::{Expr as AExpr, Item, LValue, Stmt as AStmt, StmtKind as AStmtKind};
 
 use crate::core_receivers::{self, CoreReceiver};
 use crate::resolved::{
@@ -880,8 +880,8 @@ impl LabelCollector {
 
     fn walk_block(&mut self, stmts: &[AStmt], path: &[u32]) -> Result<(), SemaError> {
         for stmt in stmts {
-            match stmt {
-                AStmt::Label(name) => {
+            match &stmt.kind {
+                AStmtKind::Label(name) => {
                     let upper = name.to_uppercase();
                     let id = LabelId(self.defs.len() as u32);
                     if self
@@ -898,11 +898,11 @@ impl LabelCollector {
                         return Err(SemaError::DuplicateLabel(name.clone()));
                     }
                 }
-                AStmt::Goto(name) => self.gotos.push(GotoRef {
+                AStmtKind::Goto(name) => self.gotos.push(GotoRef {
                     name: name.clone(),
                     blocks: path.to_vec(),
                 }),
-                AStmt::If {
+                AStmtKind::If {
                     then_branch,
                     elsif_branches,
                     else_branch,
@@ -916,21 +916,21 @@ impl LabelCollector {
                         self.child_block(body, path)?;
                     }
                 }
-                AStmt::While { body, .. }
-                | AStmt::ForNumeric { body, .. }
-                | AStmt::ForEach { body, .. } => self.child_block(body, path)?,
-                AStmt::Try { body, except_body } => {
+                AStmtKind::While { body, .. }
+                | AStmtKind::ForNumeric { body, .. }
+                | AStmtKind::ForEach { body, .. } => self.child_block(body, path)?,
+                AStmtKind::Try { body, except_body } => {
                     self.child_block(body, path)?;
                     self.child_block(except_body, path)?;
                 }
-                AStmt::Assign { .. }
-                | AStmt::ExprStmt(_)
-                | AStmt::Return(_)
-                | AStmt::Break
-                | AStmt::Continue
-                | AStmt::Raise(_)
-                | AStmt::VarDecl(_)
-                | AStmt::Execute(_) => {}
+                AStmtKind::Assign { .. }
+                | AStmtKind::ExprStmt(_)
+                | AStmtKind::Return(_)
+                | AStmtKind::Break
+                | AStmtKind::Continue
+                | AStmtKind::Raise(_)
+                | AStmtKind::VarDecl(_)
+                | AStmtKind::Execute(_) => {}
             }
         }
         Ok(())
@@ -1164,8 +1164,8 @@ impl<'a> Resolver<'a> {
     }
 
     fn resolve_stmt(&mut self, s: &AStmt) -> Result<Option<RStmt>, SemaError> {
-        match s {
-            AStmt::Assign { target, value } => match target {
+        match &s.kind {
+            AStmtKind::Assign { target, value } => match target {
                 LValue::Name(name) => {
                     // Уже известное локальное имя — обычная запись. Иначе
                     // ищем модульное: присваивание модульной переменной
@@ -1212,7 +1212,7 @@ impl<'a> Resolver<'a> {
                     }))
                 }
             },
-            AStmt::ExprStmt(e) => {
+            AStmtKind::ExprStmt(e) => {
                 // Позиция оператора: единственное место, где легальна
                 // глобальная процедура, — и запретное для функций
                 // встроенного языка. Проверка второго — по РЕЗУЛЬТАТУ
@@ -1240,7 +1240,7 @@ impl<'a> Resolver<'a> {
                 }
                 Ok(Some(RStmt::ExprStmt(r)))
             }
-            AStmt::If {
+            AStmtKind::If {
                 cond,
                 then_branch,
                 elsif_branches,
@@ -1263,12 +1263,12 @@ impl<'a> Resolver<'a> {
                     else_branch,
                 }))
             }
-            AStmt::While { cond, body } => {
+            AStmtKind::While { cond, body } => {
                 let cond = self.resolve_expr(cond)?;
                 let body = self.resolve_block(body)?;
                 Ok(Some(RStmt::While { cond, body }))
             }
-            AStmt::ForNumeric {
+            AStmtKind::ForNumeric {
                 var,
                 from,
                 to,
@@ -1287,7 +1287,7 @@ impl<'a> Resolver<'a> {
                     body,
                 }))
             }
-            AStmt::ForEach { var, iter, body } => {
+            AStmtKind::ForEach { var, iter, body } => {
                 let iter = self.resolve_expr(iter)?;
                 // Как и в ForNumeric: переменная объявляется до тела, живёт
                 // и после КонецЦикла.
@@ -1295,40 +1295,40 @@ impl<'a> Resolver<'a> {
                 let body = self.resolve_block(body)?;
                 Ok(Some(RStmt::ForEach { slot, iter, body }))
             }
-            AStmt::Break => Ok(Some(RStmt::Break)),
-            AStmt::Continue => Ok(Some(RStmt::Continue)),
-            AStmt::Label(name) => Ok(Some(RStmt::Label(
+            AStmtKind::Break => Ok(Some(RStmt::Break)),
+            AStmtKind::Continue => Ok(Some(RStmt::Continue)),
+            AStmtKind::Label(name) => Ok(Some(RStmt::Label(
                 *self
                     .labels
                     .get(&name.to_uppercase())
                     .expect("предварительный обход видел метку"),
             ))),
-            AStmt::Goto(name) => Ok(Some(RStmt::Goto(
+            AStmtKind::Goto(name) => Ok(Some(RStmt::Goto(
                 *self
                     .labels
                     .get(&name.to_uppercase())
                     .expect("предварительный обход разрешил цель"),
             ))),
-            AStmt::Return(opt) => {
+            AStmtKind::Return(opt) => {
                 let r = match opt {
                     Some(e) => Some(self.resolve_expr(e)?),
                     None => None,
                 };
                 Ok(Some(RStmt::Return(r)))
             }
-            AStmt::Try { body, except_body } => {
+            AStmtKind::Try { body, except_body } => {
                 let body = self.resolve_block(body)?;
                 let except_body = self.resolve_block(except_body)?;
                 Ok(Some(RStmt::Try { body, except_body }))
             }
-            AStmt::Raise(opt) => {
+            AStmtKind::Raise(opt) => {
                 let r = match opt {
                     Some(e) => Some(self.resolve_expr(e)?),
                     None => None,
                 };
                 Ok(Some(RStmt::Raise(r)))
             }
-            AStmt::VarDecl(vd) => {
+            AStmtKind::VarDecl(vd) => {
                 // `Экспорт` осмыслен только на уровне модуля; здесь —
                 // ошибка компиляции, как и на платформе.
                 if vd.export {
@@ -1344,7 +1344,7 @@ impl<'a> Resolver<'a> {
                 }
                 Ok(None)
             }
-            AStmt::Execute(e) => Ok(Some(RStmt::Execute(self.resolve_expr(e)?))),
+            AStmtKind::Execute(e) => Ok(Some(RStmt::Execute(self.resolve_expr(e)?))),
         }
     }
 
@@ -2209,7 +2209,10 @@ mod tests {
             .into_iter()
             .map(|item| match item {
                 bsl_syntax::Item::Stmt(s) => s,
-                bsl_syntax::Item::VarDecl(vd) => AStmt::VarDecl(vd),
+                // Позиции у `Item` нет: в продакшене `Перем` уровня модуля
+                // оператором не становится вовсе (см. `resolve_program`), так
+                // что приписывать строку было бы нечему и незачем.
+                bsl_syntax::Item::VarDecl(vd) => AStmt::synthetic(AStmtKind::VarDecl(vd)),
                 other => panic!("expected only statements/Перем in test script, got {other:?}"),
             })
             .collect()

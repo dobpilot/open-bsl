@@ -45,7 +45,11 @@ pub fn compile_dynamic_snippet(
     for item in parsed.items {
         match item {
             bsl_syntax::Item::Stmt(s) => stmts.push(s),
-            bsl_syntax::Item::VarDecl(vd) => stmts.push(bsl_syntax::Stmt::VarDecl(vd)),
+            // Без позиции: у `Item` её нет, а строки ФРАГМЕНТА и так
+            // считаются от начала его собственного текста, не от файла.
+            bsl_syntax::Item::VarDecl(vd) => stmts.push(bsl_syntax::Stmt::synthetic(
+                bsl_syntax::StmtKind::VarDecl(vd),
+            )),
             // НЕ ИЗМЕРЕНО(EXEC.PROC_DECLARATION): может ли фрагмент вообще
             // объявлять процедуры и функции. Взято «нет» — объявленную
             // процедуру было бы некуда деть: таблица чанков программы уже

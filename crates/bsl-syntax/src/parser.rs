@@ -47,6 +47,7 @@ pub fn parse_with_symbols(
         tokens,
         pos: 0,
         src,
+        lines: crate::LineIndex::new(src),
         depth: 0,
     };
     parser.parse_program().map_err(Diagnostic::Parse)
@@ -82,6 +83,9 @@ struct Parser<'src> {
     tokens: Vec<Token>,
     pos: usize,
     src: &'src str,
+    /// Указатель строк ТОГО ЖЕ текста, что и `src`: смещения токенов
+    /// живут в его координатах, поэтому второй текст сюда попасть не может.
+    lines: crate::LineIndex,
     /// Текущая глубина вложенности (выражения и операторы одним счётчиком);
     /// сверяется с [`MAX_NESTING`] в `enter_nesting`.
     depth: u32,
@@ -359,17 +363,22 @@ impl<'src> Parser<'src> {
         // Вложенные операторы (`Если` в `Если`, …) разбираются рекурсией,
         // поэтому и они учитываются в общем счётчике глубины.
         self.enter_nesting()?;
-        let stmt = self.parse_stmt_inner();
+        // Строка снимается с ПЕРВОГО токена оператора, до разбора: у
+        // многострочного `Если` нужна строка самого `Если`, а не та, где
+        // разбор остановился. Это единственное место, где строка попадает
+        // в дерево, — внутренние сборщики отдают только вид оператора.
+        let line = self.lines.line_of(self.peek().span.start);
+        let kind = self.parse_stmt_inner();
         self.depth -= 1;
-        stmt
+        kind.map(|kind| Stmt { kind, line })
     }
 
-    fn parse_stmt_inner(&mut self) -> Result<Stmt, ParseError> {
+    fn parse_stmt_inner(&mut self) -> Result<StmtKind, ParseError> {
         if self.at(&TokenKind::Tilde) {
             self.expect(&TokenKind::Tilde)?;
             let name = self.expect_label_name()?;
             self.expect(&TokenKind::Colon)?;
-            Ok(Stmt::Label(name))
+            Ok(StmtKind::Label(name))
         } else if self.at_keyword(Keyword::If) {
             self.parse_if()
         } else if self.at_keyword(Keyword::While) {
@@ -384,36 +393,36 @@ impl<'src> Parser<'src> {
             } else {
                 Some(self.parse_expr()?)
             };
-            Ok(Stmt::Return(value))
+            Ok(StmtKind::Return(value))
         } else if self.eat_keyword(Keyword::Break) {
-            Ok(Stmt::Break)
+            Ok(StmtKind::Break)
         } else if self.eat_keyword(Keyword::Continue) {
-            Ok(Stmt::Continue)
+            Ok(StmtKind::Continue)
         } else if self.eat_keyword(Keyword::Goto) {
             self.expect(&TokenKind::Tilde)?;
-            Ok(Stmt::Goto(self.expect_label_name()?))
+            Ok(StmtKind::Goto(self.expect_label_name()?))
         } else if self.eat_keyword(Keyword::Raise) {
             let value = if self.at_stmt_boundary() {
                 None
             } else {
                 Some(self.parse_expr()?)
             };
-            Ok(Stmt::Raise(value))
+            Ok(StmtKind::Raise(value))
         } else if self.at_keyword(Keyword::Var) {
-            Ok(Stmt::VarDecl(self.parse_var_decl()?))
+            Ok(StmtKind::VarDecl(self.parse_var_decl()?))
         } else if self.eat_keyword(Keyword::Execute) {
             self.expect_lparen()?;
             let expr = self.parse_expr()?;
             self.expect_rparen()?;
-            Ok(Stmt::Execute(expr))
+            Ok(StmtKind::Execute(expr))
         } else if self.at_keyword(Keyword::Await) {
-            Ok(Stmt::ExprStmt(self.parse_expr()?))
+            Ok(StmtKind::ExprStmt(self.parse_expr()?))
         } else {
             self.parse_simple_stmt()
         }
     }
 
-    fn parse_if(&mut self) -> Result<Stmt, ParseError> {
+    fn parse_if(&mut self) -> Result<StmtKind, ParseError> {
         self.expect_keyword(Keyword::If)?;
         let cond = self.parse_expr()?;
         self.expect_keyword(Keyword::Then)?;
@@ -434,7 +443,7 @@ impl<'src> Parser<'src> {
         };
 
         self.expect_keyword(Keyword::EndIf)?;
-        Ok(Stmt::If {
+        Ok(StmtKind::If {
             cond,
             then_branch,
             elsif_branches,
@@ -442,16 +451,16 @@ impl<'src> Parser<'src> {
         })
     }
 
-    fn parse_while(&mut self) -> Result<Stmt, ParseError> {
+    fn parse_while(&mut self) -> Result<StmtKind, ParseError> {
         self.expect_keyword(Keyword::While)?;
         let cond = self.parse_expr()?;
         self.expect_keyword(Keyword::Do)?;
         let body = self.parse_block(&[Keyword::EndDo])?;
         self.expect_keyword(Keyword::EndDo)?;
-        Ok(Stmt::While { cond, body })
+        Ok(StmtKind::While { cond, body })
     }
 
-    fn parse_for(&mut self) -> Result<Stmt, ParseError> {
+    fn parse_for(&mut self) -> Result<StmtKind, ParseError> {
         self.expect_keyword(Keyword::For)?;
         if self.eat_keyword(Keyword::Each) {
             let var = self.expect_ident()?;
@@ -460,7 +469,7 @@ impl<'src> Parser<'src> {
             self.expect_keyword(Keyword::Do)?;
             let body = self.parse_block(&[Keyword::EndDo])?;
             self.expect_keyword(Keyword::EndDo)?;
-            Ok(Stmt::ForEach { var, iter, body })
+            Ok(StmtKind::ForEach { var, iter, body })
         } else {
             let var = self.expect_ident()?;
             self.expect(&TokenKind::Eq)?;
@@ -470,7 +479,7 @@ impl<'src> Parser<'src> {
             self.expect_keyword(Keyword::Do)?;
             let body = self.parse_block(&[Keyword::EndDo])?;
             self.expect_keyword(Keyword::EndDo)?;
-            Ok(Stmt::ForNumeric {
+            Ok(StmtKind::ForNumeric {
                 var,
                 from,
                 to,
@@ -479,13 +488,13 @@ impl<'src> Parser<'src> {
         }
     }
 
-    fn parse_try(&mut self) -> Result<Stmt, ParseError> {
+    fn parse_try(&mut self) -> Result<StmtKind, ParseError> {
         self.expect_keyword(Keyword::Try)?;
         let body = self.parse_block(&[Keyword::Except])?;
         self.expect_keyword(Keyword::Except)?;
         let except_body = self.parse_block(&[Keyword::EndTry])?;
         self.expect_keyword(Keyword::EndTry)?;
-        Ok(Stmt::Try { body, except_body })
+        Ok(StmtKind::Try { body, except_body })
     }
 
     /// Присваивание либо вызов-как-оператор. Левая часть разбирается только
@@ -493,7 +502,7 @@ impl<'src> Parser<'src> {
     /// `x = 5` разобрался бы как выражение сравнения `x = 5`, а не как
     /// присваивание: `=` в BSL один и тот же токен для обоих случаев,
     /// разница только в позиции.
-    fn parse_simple_stmt(&mut self) -> Result<Stmt, ParseError> {
+    fn parse_simple_stmt(&mut self) -> Result<StmtKind, ParseError> {
         let first = self.pos;
         let expr = self.parse_postfix()?;
         if self.at(&TokenKind::Eq) {
@@ -518,9 +527,9 @@ impl<'src> Parser<'src> {
                 .ok_or_else(|| self.error_at(target_span, ParseErrorKind::BadAssignTarget))?;
             self.bump();
             let value = self.parse_expr()?;
-            Ok(Stmt::Assign { target, value })
+            Ok(StmtKind::Assign { target, value })
         } else {
-            Ok(Stmt::ExprStmt(expr))
+            Ok(StmtKind::ExprStmt(expr))
         }
     }
 
@@ -930,7 +939,11 @@ mod tests {
         // Дерево от цикла обязано совпадать с тем, что давала рекурсия:
         // `- - 1` — это Neg(Neg(1)), `Не Не Истина` — Not(Not(Истина)).
         let prog = parse_ok("А = - - 1;");
-        let Item::Stmt(Stmt::Assign { value, .. }) = &prog.items[0] else {
+        let Item::Stmt(Stmt {
+            kind: StmtKind::Assign { value, .. },
+            ..
+        }) = &prog.items[0]
+        else {
             panic!("ожидалось присваивание");
         };
         assert_eq!(
@@ -950,9 +963,12 @@ mod tests {
         let prog = parse_ok("PI = 3.14;");
         assert_eq!(
             prog.items,
-            vec![Item::Stmt(Stmt::Assign {
-                target: LValue::Name("PI".into()),
-                value: Expr::Number("3.14".into()),
+            vec![Item::Stmt(Stmt {
+                kind: StmtKind::Assign {
+                    target: LValue::Name("PI".into()),
+                    value: Expr::Number("3.14".into()),
+                },
+                line: 1,
             })]
         );
     }
@@ -963,10 +979,15 @@ mod tests {
         assert!(matches!(prog.items[0], Item::Function(_)));
         assert_eq!(
             prog.items[1],
-            Item::Stmt(Stmt::ExprStmt(Expr::Call {
-                callee: Box::new(Expr::Ident("Ф".into())),
-                args: vec![],
-            }))
+            Item::Stmt(Stmt {
+                kind: StmtKind::ExprStmt(Expr::Call {
+                    callee: Box::new(Expr::Ident("Ф".into())),
+                    args: vec![],
+                }),
+                // `Ф();` стоит третьей строкой — это заодно проверка того,
+                // что строка снимается с оператора, а не с начала файла.
+                line: 3,
+            })
         );
     }
 
@@ -997,7 +1018,11 @@ mod tests {
         let Item::Function(function) = &prog.items[0] else {
             panic!("ожидалась функция");
         };
-        let Stmt::Assign { value, .. } = &function.body[0] else {
+        let Stmt {
+            kind: StmtKind::Assign { value, .. },
+            ..
+        } = &function.body[0]
+        else {
             panic!("ожидалось присваивание");
         };
         assert_eq!(
@@ -1005,8 +1030,8 @@ mod tests {
             Expr::Await(Box::new(Expr::Ident("Обещание".into())))
         );
         assert_eq!(
-            function.body[1],
-            Stmt::Return(Some(Expr::Await(Box::new(Expr::Ident("Обещание".into())))))
+            function.body[1].kind,
+            StmtKind::Return(Some(Expr::Await(Box::new(Expr::Ident("Обещание".into())))))
         );
     }
 
@@ -1019,7 +1044,7 @@ mod tests {
         assert!(
             proc.body
                 .iter()
-                .all(|stmt| matches!(stmt, Stmt::ExprStmt(Expr::Await(_))))
+                .all(|stmt| matches!(stmt.kind, StmtKind::ExprStmt(Expr::Await(_))))
         );
     }
 
@@ -1029,13 +1054,19 @@ mod tests {
         let prog = parse_ok("x = 5;\nЕсли x = 5 Тогда\ny = 1;\nКонецЕсли;");
         assert_eq!(
             prog.items[0],
-            Item::Stmt(Stmt::Assign {
-                target: LValue::Name("x".into()),
-                value: Expr::Number("5".into()),
+            Item::Stmt(Stmt {
+                kind: StmtKind::Assign {
+                    target: LValue::Name("x".into()),
+                    value: Expr::Number("5".into()),
+                },
+                line: 1,
             })
         );
         match &prog.items[1] {
-            Item::Stmt(Stmt::If { cond, .. }) => {
+            Item::Stmt(Stmt {
+                kind: StmtKind::If { cond, .. },
+                ..
+            }) => {
                 assert_eq!(
                     *cond,
                     Expr::Binary {
@@ -1053,7 +1084,10 @@ mod tests {
     fn lvalue_is_a_path_not_a_name() {
         let prog = parse_ok("bodies[0].vx = 1;");
         let target = match &prog.items[0] {
-            Item::Stmt(Stmt::Assign { target, .. }) => target.clone(),
+            Item::Stmt(Stmt {
+                kind: StmtKind::Assign { target, .. },
+                ..
+            }) => target.clone(),
             other => panic!("expected Assign, got {other:?}"),
         };
         assert_eq!(
@@ -1135,7 +1169,10 @@ mod tests {
         // `- px / SOLAR_MASS` == `(-px) / SOLAR_MASS`, не `-(px / SOLAR_MASS)`.
         let prog = parse_ok("y = - px / SOLAR_MASS;");
         match &prog.items[0] {
-            Item::Stmt(Stmt::Assign { value, .. }) => {
+            Item::Stmt(Stmt {
+                kind: StmtKind::Assign { value, .. },
+                ..
+            }) => {
                 assert_eq!(
                     *value,
                     Expr::Binary {
@@ -1157,14 +1194,17 @@ mod tests {
         let prog = parse_ok("Ф(1, , 3);");
         assert_eq!(
             prog.items[0],
-            Item::Stmt(Stmt::ExprStmt(Expr::Call {
-                callee: Box::new(Expr::Ident("Ф".into())),
-                args: vec![
-                    Some(Expr::Number("1".into())),
-                    None,
-                    Some(Expr::Number("3".into())),
-                ],
-            }))
+            Item::Stmt(Stmt {
+                kind: StmtKind::ExprStmt(Expr::Call {
+                    callee: Box::new(Expr::Ident("Ф".into())),
+                    args: vec![
+                        Some(Expr::Number("1".into())),
+                        None,
+                        Some(Expr::Number("3".into())),
+                    ],
+                }),
+                line: 1,
+            })
         );
     }
 
@@ -1184,17 +1224,32 @@ mod tests {
     #[test]
     fn for_each_and_numeric_for() {
         let prog = parse_ok("Для Каждого b Из bodies Цикл\nКонецЦикла;");
-        assert!(matches!(prog.items[0], Item::Stmt(Stmt::ForEach { .. })));
+        assert!(matches!(
+            prog.items[0],
+            Item::Stmt(Stmt {
+                kind: StmtKind::ForEach { .. },
+                ..
+            })
+        ));
 
         let prog = parse_ok("Для i = 0 По 10 Цикл\nКонецЦикла");
-        assert!(matches!(prog.items[0], Item::Stmt(Stmt::ForNumeric { .. })));
+        assert!(matches!(
+            prog.items[0],
+            Item::Stmt(Stmt {
+                kind: StmtKind::ForNumeric { .. },
+                ..
+            })
+        ));
     }
 
     #[test]
     fn new_expression_with_and_without_args() {
         let prog = parse_ok("a = Новый Массив(3, 4);");
         match &prog.items[0] {
-            Item::Stmt(Stmt::Assign { value, .. }) => assert_eq!(
+            Item::Stmt(Stmt {
+                kind: StmtKind::Assign { value, .. },
+                ..
+            }) => assert_eq!(
                 *value,
                 Expr::New {
                     type_name: "Массив".into(),
@@ -1206,7 +1261,10 @@ mod tests {
 
         let prog = parse_ok("a = Новый Массив;");
         match &prog.items[0] {
-            Item::Stmt(Stmt::Assign { value, .. }) => assert_eq!(
+            Item::Stmt(Stmt {
+                kind: StmtKind::Assign { value, .. },
+                ..
+            }) => assert_eq!(
                 *value,
                 Expr::New {
                     type_name: "Массив".into(),
@@ -1221,7 +1279,10 @@ mod tests {
     fn ternary_operator() {
         let prog = parse_ok("a = ?(x > 0, 1, -1);");
         match &prog.items[0] {
-            Item::Stmt(Stmt::Assign { value, .. }) => {
+            Item::Stmt(Stmt {
+                kind: StmtKind::Assign { value, .. },
+                ..
+            }) => {
                 assert!(matches!(value, Expr::Ternary { .. }))
             }
             other => panic!("expected Assign, got {other:?}"),
@@ -1232,14 +1293,20 @@ mod tests {
     fn optional_semicolons_before_block_enders() {
         // Точка с запятой перед КонецЦикла/КонецЕсли не обязательна.
         let prog = parse_ok("Пока Истина Цикл\nx = 1\nКонецЦикла");
-        assert!(matches!(prog.items[0], Item::Stmt(Stmt::While { .. })));
+        assert!(matches!(
+            prog.items[0],
+            Item::Stmt(Stmt {
+                kind: StmtKind::While { .. },
+                ..
+            })
+        ));
     }
 
     #[test]
     fn return_without_expression_is_undefined() {
         let prog = parse_ok("Процедура П()\nВозврат;\nКонецПроцедуры");
         match &prog.items[0] {
-            Item::Procedure(p) => assert_eq!(p.body, vec![Stmt::Return(None)]),
+            Item::Procedure(p) => assert_eq!(p.body[0].kind, StmtKind::Return(None)),
             other => panic!("expected Procedure, got {other:?}"),
         }
     }
@@ -1247,7 +1314,13 @@ mod tests {
     #[test]
     fn try_except() {
         let prog = parse_ok("Попытка\nx = 1;\nИсключение\ny = 2;\nКонецПопытки");
-        assert!(matches!(prog.items[0], Item::Stmt(Stmt::Try { .. })));
+        assert!(matches!(
+            prog.items[0],
+            Item::Stmt(Stmt {
+                kind: StmtKind::Try { .. },
+                ..
+            })
+        ));
     }
 
     #[test]
@@ -1256,13 +1329,30 @@ mod tests {
         assert_eq!(
             prog.items,
             vec![
-                Item::Stmt(Stmt::Goto("0".into())),
-                Item::Stmt(Stmt::Label("0".into())),
-                Item::Stmt(Stmt::Goto("Если".into())),
-                Item::Stmt(Stmt::Label("Если".into())),
-                Item::Stmt(Stmt::Assign {
-                    target: LValue::Name("x".into()),
-                    value: Expr::Number("1".into()),
+                // Все пять операторов записаны в одну строку — значит, и
+                // строка у всех одна.
+                Item::Stmt(Stmt {
+                    kind: StmtKind::Goto("0".into()),
+                    line: 1
+                }),
+                Item::Stmt(Stmt {
+                    kind: StmtKind::Label("0".into()),
+                    line: 1
+                }),
+                Item::Stmt(Stmt {
+                    kind: StmtKind::Goto("Если".into()),
+                    line: 1
+                }),
+                Item::Stmt(Stmt {
+                    kind: StmtKind::Label("Если".into()),
+                    line: 1
+                }),
+                Item::Stmt(Stmt {
+                    kind: StmtKind::Assign {
+                        target: LValue::Name("x".into()),
+                        value: Expr::Number("1".into()),
+                    },
+                    line: 1,
                 }),
             ]
         );

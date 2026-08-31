@@ -31,7 +31,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use bsl_syntax::{Expr, LValue, Param, Stmt};
+use bsl_syntax::{Expr, LValue, Param, Stmt, StmtKind};
 
 use crate::resolver::NEW_TYPES;
 
@@ -171,8 +171,8 @@ impl Collector<'_> {
     }
 
     fn walk_stmt(&mut self, stmt: &Stmt) {
-        match stmt {
-            Stmt::Assign { target, value } => {
+        match &stmt.kind {
+            StmtKind::Assign { target, value } => {
                 match target {
                     LValue::Name(name) => {
                         let ctor = self.classify_ctor(value);
@@ -188,8 +188,8 @@ impl Collector<'_> {
                 }
                 self.walk_expr(value);
             }
-            Stmt::ExprStmt(expr) => self.walk_expr(expr),
-            Stmt::If {
+            StmtKind::ExprStmt(expr) => self.walk_expr(expr),
+            StmtKind::If {
                 cond,
                 then_branch,
                 elsif_branches,
@@ -205,11 +205,11 @@ impl Collector<'_> {
                     self.walk_block(else_body);
                 }
             }
-            Stmt::While { cond, body } => {
+            StmtKind::While { cond, body } => {
                 self.walk_expr(cond);
                 self.walk_block(body);
             }
-            Stmt::ForNumeric {
+            StmtKind::ForNumeric {
                 var,
                 from,
                 to,
@@ -225,34 +225,34 @@ impl Collector<'_> {
                 self.kill_loop_var(var);
                 self.walk_block(body);
             }
-            Stmt::ForEach { var, iter, body } => {
+            StmtKind::ForEach { var, iter, body } => {
                 self.walk_expr(iter);
                 self.kill_loop_var(var);
                 self.walk_block(body);
             }
-            Stmt::Return(value) => {
+            StmtKind::Return(value) => {
                 if let Some(expr) = value {
                     self.walk_expr(expr);
                 }
             }
-            Stmt::Break | Stmt::Continue | Stmt::Label(_) | Stmt::Goto(_) => {}
-            Stmt::VarDecl(decl) => {
+            StmtKind::Break | StmtKind::Continue | StmtKind::Label(_) | StmtKind::Goto(_) => {}
+            StmtKind::VarDecl(decl) => {
                 // `Перем` объявляет локальные; с этого места одноимённая
                 // модульная в области не видна — ровно как у резолвера.
                 for name in &decl.names {
                     self.declared.insert(name.to_uppercase());
                 }
             }
-            Stmt::Try { body, except_body } => {
+            StmtKind::Try { body, except_body } => {
                 self.walk_block(body);
                 self.walk_block(except_body);
             }
-            Stmt::Raise(value) => {
+            StmtKind::Raise(value) => {
                 if let Some(expr) = value {
                     self.walk_expr(expr);
                 }
             }
-            Stmt::Execute(expr) => {
+            StmtKind::Execute(expr) => {
                 self.has_dynamic = true;
                 self.walk_expr(expr);
             }
