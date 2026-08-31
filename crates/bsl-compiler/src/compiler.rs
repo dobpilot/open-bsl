@@ -8,6 +8,16 @@ use bsl_bytecode::{ArgMode, Chunk, ExceptionRange, Instr, LibraryRequirement, Pr
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompileError {
+    /// Запрошены и сведения об отладке, и оптимизация, УДАЛЯЮЩАЯ
+    /// инструкции.
+    ///
+    /// Совместить нельзя: строку из байт-кода не вывести, её можно только
+    /// донести, а удаление инструкции рассогласовало бы таблицу строк с
+    /// телом чанка. Отказ явный, потому что тихо выбрать одно из двух —
+    /// отдать отладку без строк или оптимизацию без предупреждения —
+    /// значит выдать пользователю не то, что он просил, и не сказать об
+    /// этом.
+    DebugInfoWithRemovingPass,
     TooManyLocals,
     TooManyRegisters,
     TooManyConstants,
@@ -51,6 +61,9 @@ impl std::fmt::Display for CompileError {
         // есть в ширине полей `Instr`; менять её нельзя без отдельного
         // измерения (см. `size_of::<Instr>()`).
         let what = match self {
+            CompileError::DebugInfoWithRemovingPass => {
+                "сведения об отладке несовместимы с оптимизацией, удаляющей инструкции"
+            }
             CompileError::TooManyLocals => "слишком много локальных переменных в кадре",
             CompileError::TooManyRegisters => "слишком много регистров в кадре",
             CompileError::TooManyConstants => "слишком много констант в чанке",
@@ -128,6 +141,28 @@ pub struct Optimizations {
 }
 
 impl Optimizations {
+    /// Удаляет ли выбранный набор инструкции.
+    ///
+    /// Разбор ИСЧЕРПЫВАЮЩИЙ намеренно: поля перечислены поимённо, поэтому
+    /// новый проход — ошибка сборки здесь, а не молчаливое «совместим с
+    /// отладкой». Второго перечня проходов рядом с `PASS_NAMES` заводить
+    /// нельзя, он разошёлся бы с этим на первом же добавлении.
+    #[must_use]
+    pub fn removes_instructions(self) -> bool {
+        let Self {
+            const_fold,
+            ssa_regalloc,
+            ssa_const,
+            const_prop,
+            copy_elim,
+        } = self;
+        // Свёртка в кодогене и оба SSA-прохода работают ДО эмиссии, а
+        // позднее распространение констант заменяет инструкции, не убирая
+        // их. Убирает одна `copy_propagate` — `chunk.instrs.remove`.
+        let _ = (const_fold, ssa_regalloc, ssa_const, const_prop);
+        copy_elim
+    }
+
     /// Все проходы включены.
     #[must_use]
     pub fn all() -> Self {
@@ -138,6 +173,43 @@ impl Optimizations {
             const_prop: true,
             copy_elim: true,
         }
+    }
+}
+
+/// Что запрошено у сборки сверх самого кодогена.
+///
+/// Отдельно от [`Optimizations`], потому что сведения об отладке
+/// оптимизацией не являются: `Optimizations::all()` включил бы их заодно,
+/// а это разные вопросы — «быстрее» и «отлаживаемо».
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct BuildOptions {
+    pub optimizations: Optimizations,
+    /// Собрать таблицу строк и материализовать имена локальных у всех
+    /// чанков. Без запроса образ обязан совпасть с прежним побайтово.
+    pub debug_info: bool,
+}
+
+impl From<Optimizations> for BuildOptions {
+    fn from(optimizations: Optimizations) -> Self {
+        Self {
+            optimizations,
+            debug_info: false,
+        }
+    }
+}
+
+impl BuildOptions {
+    /// Отвергает несовместимое сочетание запросов.
+    ///
+    /// # Errors
+    ///
+    /// [`CompileError::DebugInfoWithRemovingPass`], если запрошены и
+    /// сведения об отладке, и проход, удаляющий инструкции.
+    fn check(self) -> Result<(), CompileError> {
+        if self.debug_info && self.optimizations.removes_instructions() {
+            return Err(CompileError::DebugInfoWithRemovingPass);
+        }
+        Ok(())
     }
 }
 
@@ -152,14 +224,17 @@ pub fn compile_program(resolved: &ResolvedProgram) -> Result<Program, CompileErr
 /// Те же отказы кодогена, что и у [`compile_program`].
 pub fn compile_program_with(
     resolved: &ResolvedProgram,
-    opts: Optimizations,
+    opts: impl Into<BuildOptions>,
 ) -> Result<Program, CompileError> {
+    let opts = opts.into();
+    opts.check()?;
     let mut names = NameInterner::new();
     let mut shapes = ShapeTable::new();
-    let chunks = compile_module_chunks(resolved, &mut names, &mut shapes, opts)?;
+    let (chunks, lines) = compile_module_chunks(resolved, &mut names, &mut shapes, opts)?;
     Ok(assemble_program(
         resolved,
         chunks,
+        lines,
         names.into_names(),
         shapes.into_shapes(),
     ))
@@ -177,8 +252,10 @@ pub fn compile_program_with(
 pub fn compile_configuration(
     modules: &[(String, &ResolvedProgram)],
     entry: Option<&ResolvedProgram>,
-    opts: Optimizations,
+    opts: impl Into<BuildOptions>,
 ) -> Result<(bsl_bytecode::ConfigurationProgram, Option<Program>), CompileError> {
+    let opts = opts.into();
+    opts.check()?;
     let mut names = NameInterner::new();
     let mut shapes = ShapeTable::new();
     let mut compiled = Vec::with_capacity(modules.len());
@@ -205,19 +282,22 @@ pub fn compile_configuration(
         modules: modules
             .iter()
             .zip(compiled)
-            .map(|((name, resolved), chunks)| bsl_bytecode::ModuleProgram {
-                name: name.clone(),
-                program: assemble_program(
-                    resolved,
-                    chunks,
-                    final_names.clone(),
-                    final_shapes.clone(),
-                ),
-            })
+            .map(
+                |((name, resolved), (chunks, lines))| bsl_bytecode::ModuleProgram {
+                    name: name.clone(),
+                    program: assemble_program(
+                        resolved,
+                        chunks,
+                        lines,
+                        final_names.clone(),
+                        final_shapes.clone(),
+                    ),
+                },
+            )
             .collect(),
     };
-    let entry_program = entry.zip(entry_chunks).map(|(resolved, chunks)| {
-        assemble_program(resolved, chunks, final_names.clone(), final_shapes)
+    let entry_program = entry.zip(entry_chunks).map(|(resolved, (chunks, lines))| {
+        assemble_program(resolved, chunks, lines, final_names.clone(), final_shapes)
     });
     Ok((catalog, entry_program))
 }
@@ -234,14 +314,17 @@ pub fn compile_entry_program(
     resolved: &ResolvedProgram,
     base_names: &[String],
     base_shapes: &[std::rc::Rc<bsl_rt::Shape>],
-    opts: Optimizations,
+    opts: impl Into<BuildOptions>,
 ) -> Result<Program, CompileError> {
+    let opts = opts.into();
+    opts.check()?;
     let mut names = NameInterner::from_existing(base_names.to_vec());
     let mut shapes = ShapeTable::from_existing(base_shapes.to_vec());
-    let chunks = compile_module_chunks(resolved, &mut names, &mut shapes, opts)?;
+    let (chunks, lines) = compile_module_chunks(resolved, &mut names, &mut shapes, opts)?;
     Ok(assemble_program(
         resolved,
         chunks,
+        lines,
         names.into_names(),
         shapes.into_shapes(),
     ))
@@ -251,40 +334,51 @@ fn compile_module_chunks(
     resolved: &ResolvedProgram,
     names: &mut NameInterner,
     shapes: &mut ShapeTable,
-    opts: Optimizations,
-) -> Result<Vec<Chunk>, CompileError> {
+    opts: BuildOptions,
+) -> Result<(Vec<Chunk>, Vec<Vec<u32>>), CompileError> {
     let mut chunks = Vec::with_capacity(resolved.functions.len() + 1);
-    chunks.push(compile_chunk(
-        &resolved.top_level.locals,
-        &[],
-        &resolved.top_level.body,
-        &resolved.functions,
-        &[],
-        &resolved.requirements,
-        resolved.top_level.uses_dynamic,
-        resolved.module_vars.len(),
-        false,
-        false,
-        names,
-        shapes,
-        opts,
-    )?);
-    for f in &resolved.functions {
-        chunks.push(compile_chunk(
-            &f.locals,
-            &f.params,
-            &f.body,
+    // Таблица строк собирается ПАРАЛЛЕЛЬНО чанкам, запись к записи: у
+    // каждого чанка своя, и порядок тот же, потому что источник один.
+    let mut lines = Vec::with_capacity(resolved.functions.len() + 1);
+    push_chunk(
+        &mut chunks,
+        &mut lines,
+        compile_chunk(
+            &resolved.top_level.locals,
+            &[],
+            &resolved.top_level.body,
             &resolved.functions,
             &[],
             &resolved.requirements,
-            f.uses_dynamic,
-            0,
-            f.is_procedure,
-            f.is_async,
+            resolved.top_level.uses_dynamic,
+            resolved.module_vars.len(),
+            false,
+            false,
             names,
             shapes,
             opts,
-        )?);
+        )?,
+    );
+    for f in &resolved.functions {
+        push_chunk(
+            &mut chunks,
+            &mut lines,
+            compile_chunk(
+                &f.locals,
+                &f.params,
+                &f.body,
+                &resolved.functions,
+                &[],
+                &resolved.requirements,
+                f.uses_dynamic,
+                0,
+                f.is_procedure,
+                f.is_async,
+                names,
+                shapes,
+                opts,
+            )?,
+        );
     }
     // Инварианты графа проверяются на КАЖДОЙ компиляции в отладочной
     // сборке. Отдельный тест над корпусом покрывает лишь то, что
@@ -326,23 +420,36 @@ fn compile_module_chunks(
         // частоте), он не должен попадать в обычную сборку — иначе не с чем
         // сравнивать. Свёртка в кодогене живёт не здесь, а в `compile_chunk`:
         // ей нужен литерал, а тут его уже нет.
-        if opts.const_prop {
+        if opts.optimizations.const_prop {
             analysis::const_propagate(chunk, overlap);
         }
-        if opts.copy_elim {
+        if opts.optimizations.copy_elim {
             analysis::copy_propagate(chunk, overlap);
         }
     }
-    Ok(chunks)
+    // Без сведений об отладке таблица пуста ЦЕЛИКОМ, а не вектором пустых
+    // записей: пустой внешний вектор — это и есть «образ без сведений об
+    // отладке», и вектор из пустых записей утверждал бы другое — что
+    // сведения запрошены, но ни у одного чанка строк не нашлось.
+    let lines = if opts.debug_info { lines } else { Vec::new() };
+    Ok((chunks, lines))
+}
+
+/// Разносит результат `compile_chunk` по двум параллельным таблицам.
+fn push_chunk(chunks: &mut Vec<Chunk>, lines: &mut Vec<Vec<u32>>, produced: (Chunk, Vec<u32>)) {
+    let (chunk, chunk_lines) = produced;
+    chunks.push(chunk);
+    lines.push(chunk_lines);
 }
 
 fn assemble_program(
     resolved: &ResolvedProgram,
     chunks: Vec<Chunk>,
+    lines: Vec<Vec<u32>>,
     names: Vec<String>,
     shapes: Vec<std::rc::Rc<bsl_rt::Shape>>,
 ) -> Program {
-    let mut program = assemble_raw(resolved, chunks, names, shapes);
+    let mut program = assemble_raw(resolved, chunks, lines, names, shapes);
     // Производные таблицы считает ОДНА точка на весь проект: правило
     // пересчёта и оба его аргумента принадлежат образу, а не сборщику.
     bsl_bytecode::image::finalize(&mut program);
@@ -352,6 +459,7 @@ fn assemble_program(
 fn assemble_raw(
     resolved: &ResolvedProgram,
     chunks: Vec<Chunk>,
+    lines: Vec<Vec<u32>>,
     names: Vec<String>,
     shapes: Vec<std::rc::Rc<bsl_rt::Shape>>,
 ) -> Program {
@@ -383,9 +491,7 @@ fn assemble_raw(
                 }
             })
             .collect(),
-        // Заполняется при сборке со сведениями об отладке — следующий
-        // пункт изменения; пока образ собирается без них.
-        lines: Vec::new(),
+        lines,
     }
 }
 
@@ -488,7 +594,10 @@ pub fn compile_snippet_with_requirements(
         // Заметить стоит и то, что снять асимметрию было бы небесполезно:
         // `Вычислить("2 + 3")` — предельный случай для свёртки, у него
         // литералами являются ВСЕ операнды.
-        Optimizations::default(),
+        // Фрагмент собирается в рантайме и отдельно от программы не
+        // отлаживается, поэтому и сведений об отладке не просит: его
+        // таблица строк никуда бы не поехала.
+        BuildOptions::default(),
     )?;
     // Фрагмент — одиночный чанк, программы вокруг него нет, поэтому
     // таблицы на инструкцию ставит финализация ОДИНОЧНОГО чанка. Без неё
@@ -503,7 +612,7 @@ pub fn compile_snippet_with_requirements(
     // `None` опирался на обратную посылку. Пустой `bundle_len`
     // равнозначен
     // поинструкционному исполнению и безопасен до пересчёта.
-    let mut chunk = chunk;
+    let (mut chunk, _lines) = chunk;
     bsl_bytecode::image::finalize_lone_chunk_unbundled(&mut chunk);
     Ok(SnippetUnit {
         chunk,
@@ -530,8 +639,8 @@ fn compile_chunk(
     is_async: bool,
     names: &mut NameInterner,
     shapes: &mut ShapeTable,
-    opts: Optimizations,
-) -> Result<Chunk, CompileError> {
+    opts: BuildOptions,
+) -> Result<(Chunk, Vec<u32>), CompileError> {
     let n_locals: u8 = locals
         .len()
         .try_into()
@@ -553,7 +662,8 @@ fn compile_chunk(
     // констант. Это тот же класс, из-за которого устранение копий уже
     // запрещено в защищённых диапазонах.
     let identity = || (0..locals.len()).map(|i| i as u8).collect::<Vec<u8>>();
-    let (ssa_consts, slot_reg) = if opts.ssa_const || opts.ssa_regalloc {
+    let (ssa_consts, slot_reg) = if opts.optimizations.ssa_const || opts.optimizations.ssa_regalloc
+    {
         let graph = crate::cfg::build(body);
         if graph.blocks.iter().any(|b| !b.handlers.is_empty()) {
             // Чанк с `Попытка` не обслуживается ни одним потребителем, и
@@ -563,13 +673,13 @@ fn compile_chunk(
             (std::collections::HashMap::new(), identity())
         } else {
             let form = crate::ssa::build(&graph, locals.len());
-            let consts = if opts.ssa_const {
+            let consts = if opts.optimizations.ssa_const {
                 let lat = crate::ssa::propagate_constants(&graph, &form, locals.len());
                 crate::ssa::constants_at_nodes(&graph, &form, &lat, locals.len())
             } else {
                 std::collections::HashMap::new()
             };
-            let regs = if opts.ssa_regalloc && !materialize_locals {
+            let regs = if opts.optimizations.ssa_regalloc && !materialize_locals {
                 // Отказ распределителя — ОШИБКА КОМПИЛЯЦИИ, а не тихий
                 // возврат к тождественному отображению. Проглоченный
                 // отказ означал бы, что замер считает проход включённым
@@ -595,6 +705,8 @@ fn compile_chunk(
 
     let mut c = Compiler {
         instrs: Vec::new(),
+        lines: Vec::new(),
+        cur_line: 0,
         consts: Vec::new(),
         call_arg_modes: Vec::new(),
         exception_ranges: Vec::new(),
@@ -659,12 +771,15 @@ fn compile_chunk(
     chunk.n_params = n_params;
     chunk.n_locals = n_locals;
     chunk.n_regs = c.max_reg;
-    chunk.local_names = if materialize_locals {
+    // При сведениях об отладке имена материализуются у ВСЕХ чанков, а не
+    // только у тех, где есть `Выполнить`: иначе отладчик показал бы пустой
+    // кадр почти везде. Без сведений — прежнее правило, и образ не растёт.
+    chunk.local_names = if materialize_locals || opts.debug_info {
         locals.to_vec()
     } else {
         Vec::new()
     };
-    Ok(chunk)
+    Ok((chunk, c.lines))
 }
 
 /// Список прыжков `Прервать`/`Продолжить`, которые патчатся, когда становится
@@ -721,6 +836,13 @@ type BuildPtrHasher = std::hash::BuildHasherDefault<PtrHasher>;
 
 struct Compiler<'a> {
     instrs: Vec<Instr>,
+    /// Строка исходника на каждую выпущенную инструкцию. Пуста, если
+    /// сведения об отладке не запрошены, — тогда и не заполняется.
+    lines: Vec<u32>,
+    /// Строка, которой помечаются инструкции, выпускаемые СЕЙЧАС. Ставится
+    /// на каждом операторе и на каждом параметре с умолчанием, то есть в
+    /// тех двух местах, откуда вообще берутся инструкции чанка.
+    cur_line: u32,
     consts: Vec<bsl_bytecode::BytecodeConst>,
     call_arg_modes: Vec<Vec<ArgMode>>,
     exception_ranges: Vec<ExceptionRange>,
@@ -746,7 +868,8 @@ struct Compiler<'a> {
     /// Общие на весь модуль — см. `compile_program`.
     names: &'a mut NameInterner,
     shapes: &'a mut ShapeTable,
-    opts: Optimizations,
+    /// Что запрошено у сборки: проходы и сведения об отладке.
+    opts: BuildOptions,
     /// Известные значения слотов перед каждым узлом дерева — из решётки
     /// SSA. Пусто, когда `ssa_const` выключено.
     ssa_consts: std::collections::HashMap<usize, Vec<crate::ssa::Const>>,
@@ -908,7 +1031,7 @@ impl<'a> Compiler<'a> {
     /// [`CompileError::TooManyConstants`], если таблица констант чанка
     /// переполнена.
     fn emit_folded(&mut self, e: &RExpr, dst: u8) -> Result<bool, CompileError> {
-        if !self.opts.const_fold {
+        if !self.opts.optimizations.const_fold {
             return Ok(false);
         }
         let Some(v) = self.fold_const(e) else {
@@ -921,6 +1044,11 @@ impl<'a> Compiler<'a> {
 
     fn emit(&mut self, i: Instr) -> usize {
         self.instrs.push(i);
+        // Единственная воронка эмиссии, поэтому таблица строк не может
+        // разойтись с кодом ни на одну инструкцию: они растут вместе.
+        if self.opts.debug_info {
+            self.lines.push(self.cur_line);
+        }
         self.instrs.len() - 1
     }
 
@@ -1034,6 +1162,10 @@ impl<'a> Compiler<'a> {
     fn compile_param_defaults(&mut self, params: &[ResolvedParam]) -> Result<(), CompileError> {
         for (i, p) in params.iter().enumerate() {
             if let Some(default) = &p.default {
+                // Пролог умолчания оператором не является, но приходит из
+                // пользовательского текста: его строка — строка объявления
+                // параметра.
+                self.cur_line = p.line;
                 let slot = i as u8;
                 let j = self.emit(Instr::JumpIfNotSkipped {
                     src: slot,
@@ -1079,7 +1211,7 @@ impl<'a> Compiler<'a> {
                 // константой: копия из слота не нужна, а знание это
                 // приходит через `φ` и потому недоступно ни свёртке в
                 // выражении, ни блочно-локальному проходу.
-                if self.opts.ssa_const
+                if self.opts.optimizations.ssa_const
                     && let Some(crate::ssa::Const::Number(n)) = self.here.get(*slot as usize)
                 {
                     let k = self.add_const(BslValue::Number(n.clone()))?;
@@ -1689,6 +1821,11 @@ impl<'a> Compiler<'a> {
 
     fn compile_block(&mut self, stmts: &[RStmt]) -> Result<(), CompileError> {
         for s in stmts {
+            // Строка ставится ПЕРЕД компиляцией оператора и держится до
+            // следующего: вложенный блок перебьёт её своими и вернёт
+            // обратно, когда внешний оператор продолжит выпускать
+            // инструкции (переходы, склейки ветвлений).
+            self.cur_line = s.line;
             self.compile_stmt(s)?;
         }
         Ok(())

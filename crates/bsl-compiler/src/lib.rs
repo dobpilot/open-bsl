@@ -17,7 +17,8 @@ pub mod regalloc;
 pub mod ssa;
 
 pub use compiler::{
-    CompileError, Optimizations, SnippetUnit, compile_configuration, compile_entry_program,
-    compile_program, compile_program_with, compile_snippet, compile_snippet_with_requirements,
+    BuildOptions, CompileError, Optimizations, SnippetUnit, compile_configuration,
+    compile_entry_program, compile_program, compile_program_with, compile_snippet,
+    compile_snippet_with_requirements,
 };
 pub use dynamic::compile_dynamic_snippet;
