@@ -193,3 +193,28 @@ fn a_fragment_without_debug_info_carries_no_lines() {
     .expect("компиляция фрагмента");
     assert!(unit.lines.is_empty());
 }
+
+/// Образ со сведениями об отладке собирается НЕПУЧКОВАННЫМ.
+///
+/// Бандл исполняется одним заходом диспетчера, и остановиться внутри него
+/// негде: точка останова на втором члене сработала бы только вместе с
+/// первым и всеми остальными.
+#[test]
+fn a_debug_image_carries_no_bundle_markup() {
+    let src = "а = 1;\nб = 2;\nв = а + б;\nСообщить(в);\n";
+    let plain = build(src, BuildOptions::default()).expect("без отладки");
+    // Предусловие: без отладки разметка ЕСТЬ — иначе тест ниже проходил
+    // бы и на программе, которую нечем пучковать.
+    assert!(
+        plain.chunks.iter().any(|c| !c.bundle_len().is_empty()),
+        "предусловие: обычный образ размечен бандлами"
+    );
+
+    let dbg = with_debug(src);
+    for chunk in &dbg.chunks {
+        assert!(
+            chunk.bundle_len().is_empty(),
+            "у отладочного образа осталась разметка бандлов"
+        );
+    }
+}

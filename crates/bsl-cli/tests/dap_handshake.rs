@@ -7,11 +7,31 @@
 use std::io::{Read, Write};
 use std::net::TcpStream;
 
-/// Порт берётся у ОС: фиксированный сталкивался бы с параллельным
-/// прогоном тестов и с чем угодно чужим на машине.
-fn free_port() -> u16 {
-    let l = std::net::TcpListener::bind("127.0.0.1:0").expect("свободный порт");
-    l.local_addr().expect("адрес").port()
+/// Порт выбирает САМ отлаживаемый процесс (`--debug-port 0`), а тест
+/// узнаёт его из stderr.
+///
+/// Прежде тест занимал порт сам, отпускал и передавал номер потомку — и
+/// в окне между «отпустил» и «потомок занял» тот же порт успевал взять
+/// сосед по параллельному прогону. Тогда потомок падал, а подключение
+/// уходило к чужому слушателю и обрывалось. Ловилось только под полной
+/// нагрузкой набора; в одиночку тест проходил всегда.
+fn port_from_stderr(err: &mut impl Read) -> u16 {
+    let mut acc = String::new();
+    let mut chunk = [0u8; 256];
+    loop {
+        let n = err.read(&mut chunk).expect("stderr отлаживаемого процесса");
+        assert!(n > 0, "процесс закончился, не назвав порт: {acc}");
+        acc.push_str(&String::from_utf8_lossy(&chunk[..n]));
+        if let Some(rest) = acc.split_once("ждёт подключения на ") {
+            let tail = rest.1;
+            if let Some(line) = tail.split('\n').next()
+                && let Some((_, port)) = line.trim().rsplit_once(':')
+                && let Ok(port) = port.parse::<u16>()
+            {
+                return port;
+            }
+        }
+    }
 }
 
 fn frame(body: &str) -> Vec<u8> {
@@ -66,27 +86,21 @@ fn a_session_handshakes_runs_the_script_and_reports_the_end() {
     let script = dir.join("привет.bsl");
     std::fs::write(&script, "Сообщить(\"привет\");\n").expect("скрипт");
 
-    let port = free_port();
-    let child = std::process::Command::new(env!("CARGO_BIN_EXE_bsl-cli"))
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_bsl-cli"))
         .arg("--debug")
+        // Ноль — «выбери сам»: гонки за номер тогда нет вовсе.
         .arg("--debug-port")
-        .arg(port.to_string())
+        .arg("0")
         .arg(&script)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
         .expect("запуск bsl-cli");
 
-    // Слушатель поднимается не мгновенно; пробуем, пока не свяжемся.
-    let mut sock = None;
-    for _ in 0..200 {
-        if let Ok(s) = TcpStream::connect(("127.0.0.1", port)) {
-            sock = Some(s);
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(25));
-    }
-    let mut sock = sock.expect("отладчик не начал слушать");
+    // Порт известен ПОСЛЕ того, как процесс уже слушает: он печатает его,
+    // связавшись, поэтому опрашивать соединением ничего не нужно.
+    let port = port_from_stderr(child.stderr.as_mut().expect("stderr"));
+    let mut sock = TcpStream::connect(("127.0.0.1", port)).expect("подключение к отладчику");
 
     for req in [
         r#"{"seq":1,"type":"request","command":"initialize"}"#,

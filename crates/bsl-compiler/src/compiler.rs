@@ -237,6 +237,7 @@ pub fn compile_program_with(
         lines,
         names.into_names(),
         shapes.into_shapes(),
+        opts.debug_info,
     ))
 }
 
@@ -291,13 +292,21 @@ pub fn compile_configuration(
                         lines,
                         final_names.clone(),
                         final_shapes.clone(),
+                        opts.debug_info,
                     ),
                 },
             )
             .collect(),
     };
     let entry_program = entry.zip(entry_chunks).map(|(resolved, (chunks, lines))| {
-        assemble_program(resolved, chunks, lines, final_names.clone(), final_shapes)
+        assemble_program(
+            resolved,
+            chunks,
+            lines,
+            final_names.clone(),
+            final_shapes,
+            opts.debug_info,
+        )
     });
     Ok((catalog, entry_program))
 }
@@ -327,6 +336,7 @@ pub fn compile_entry_program(
         lines,
         names.into_names(),
         shapes.into_shapes(),
+        opts.debug_info,
     ))
 }
 
@@ -448,11 +458,19 @@ fn assemble_program(
     lines: Vec<Vec<u32>>,
     names: Vec<String>,
     shapes: Vec<std::rc::Rc<bsl_rt::Shape>>,
+    debug_info: bool,
 ) -> Program {
     let mut program = assemble_raw(resolved, chunks, lines, names, shapes);
     // Производные таблицы считает ОДНА точка на весь проект: правило
     // пересчёта и оба его аргумента принадлежат образу, а не сборщику.
-    bsl_bytecode::image::finalize(&mut program);
+    //
+    // Образ со сведениями об отладке собирается НЕПУЧКОВАННЫМ: внутри
+    // бандла остановиться негде, а отлаживают не ради скорости.
+    if debug_info {
+        bsl_bytecode::image::finalize_unbundled(&mut program);
+    } else {
+        bsl_bytecode::image::finalize(&mut program);
+    }
     program
 }
 

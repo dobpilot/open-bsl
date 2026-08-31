@@ -56,6 +56,24 @@ use crate::{Chunk, Program};
 /// этого не сделал и оставил устаревшую таблицу, получит отказ до первой
 /// инструкции.
 pub fn finalize(program: &mut Program) {
+    finalize_with_bundles(program, true);
+}
+
+/// Финализация БЕЗ разметки бандлов — для образа, который будут отлаживать.
+///
+/// Бандл исполняется одним заходом диспетчера, поэтому остановиться внутри
+/// него негде: точка останова на второй инструкции бандла сработала бы
+/// только после первой, третьей и всех остальных его членов. Пустая
+/// разметка означает поинструкционное исполнение, законна для периметра
+/// (см. требование «Отказ устаревшей разметке») и снимает вопрос целиком.
+///
+/// Прогон от этого замедляется — и это правильный размен: отлаживают не
+/// ради скорости.
+pub fn finalize_unbundled(program: &mut Program) {
+    finalize_with_bundles(program, false);
+}
+
+fn finalize_with_bundles(program: &mut Program, bundles: bool) {
     for index in 0..program.chunks.len() {
         let overlap = crate::analysis::module_overlap(index, program.module_vars.len());
         let chunk = &mut program.chunks[index];
@@ -64,7 +82,11 @@ pub fn finalize(program: &mut Program) {
         // «ответы обязаны совпадать». Теперь ответ один.
         chunk.touches_objects = chunk.instrs.iter().any(Instr::touches_objects);
         reset_inline_caches(chunk);
-        program.chunks[index].bundle_len = crate::bundle::compute(&program.chunks[index], overlap);
+        program.chunks[index].bundle_len = if bundles {
+            crate::bundle::compute(&program.chunks[index], overlap)
+        } else {
+            Vec::new()
+        };
     }
 }
 
