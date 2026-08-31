@@ -2670,6 +2670,9 @@ fn prepare_job(
             module: bsl_bytecode::ModuleId::new(target.0),
             func: target.1,
         }],
+        // Entry-программа воркера собирается в рантайме, отлаживать её
+        // отдельно от вызывающей программы нечем и незачем.
+        lines: Vec::new(),
     };
     bsl_bytecode::image::finalize(&mut entry);
     let module = engine

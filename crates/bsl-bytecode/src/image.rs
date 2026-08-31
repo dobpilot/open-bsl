@@ -183,8 +183,39 @@ fn check_inline_caches(chunk: &Chunk) -> Result<(), RtError> {
     Ok(())
 }
 
+/// Таблица строк: непустая обязана иметь запись на каждый чанк, а
+/// непустая запись — на каждую его инструкцию.
+///
+/// Пустая таблица законна и означает образ без сведений об отладке — как
+/// пустая разметка бандлов означает поинструкционное исполнение. Пустая
+/// запись у отдельного чанка тоже законна: так помечается чанк, строк у
+/// которого нет, когда у остальных они есть.
+///
+/// Строку из байт-кода не вывести — её можно только донести, поэтому
+/// пересчитать таблицу, в отличие от разметки, нельзя, и рассогласование
+/// ловится только здесь.
+fn check_line_table(program: &Program) -> Result<(), RtError> {
+    if program.lines.is_empty() {
+        return Ok(());
+    }
+    if program.lines.len() != program.chunks.len() {
+        return Err(RtError::InvalidBytecode(
+            "таблица строк не по записи на чанк",
+        ));
+    }
+    for (chunk, lines) in program.chunks.iter().zip(&program.lines) {
+        if !lines.is_empty() && lines.len() != chunk.instrs.len() {
+            return Err(RtError::InvalidBytecode(
+                "таблица строк чанка не по строке на инструкцию",
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub fn verify(program: &Program) -> Result<(), RtError> {
     check_program_tables(program)?;
+    check_line_table(program)?;
     for chunk in &program.chunks {
         // Геометрия кадра упорядочена: параметры занимают первые слоты
         // локалей, локали — первые регистры (см. `bsl-sema`/`bsl-compiler`).
@@ -942,6 +973,81 @@ mod tests {
     use super::*;
     use crate::instr::Instr;
 
+    #[test]
+    fn a_line_table_with_a_row_per_chunk_and_a_line_per_instruction_is_accepted() {
+        let mut p = valid_program();
+        p.lines = p
+            .chunks
+            .iter()
+            .map(|c| (0..c.instrs.len() as u32 + 1).skip(1).collect())
+            .collect();
+        finalize(&mut p);
+        verify(&p).expect("согласованная таблица строк принимается");
+    }
+
+    #[test]
+    fn an_empty_line_table_means_no_debug_info_and_is_accepted() {
+        let mut p = valid_program();
+        p.lines = Vec::new();
+        finalize(&mut p);
+        verify(&p).expect("образ без сведений об отладке законен");
+    }
+
+    #[test]
+    fn a_chunk_may_have_no_lines_while_others_have_them() {
+        let mut p = valid_program();
+        // Первому чанку строки есть, второму — нет.
+        p.lines = vec![(1..=p.chunks[0].instrs.len() as u32).collect(), Vec::new()];
+        finalize(&mut p);
+        verify(&p).expect("пустая запись отдельного чанка законна");
+    }
+
+    #[test]
+    fn a_line_table_short_of_a_chunk_is_refused() {
+        let mut p = valid_program();
+        finalize(&mut p);
+        verify(&p).expect("предусловие: образ до порчи согласован");
+        // Записей на чанк меньше, чем чанков.
+        p.lines = vec![(1..=p.chunks[0].instrs.len() as u32).collect()];
+        assert!(matches!(
+            verify(&p),
+            Err(RtError::InvalidBytecode(
+                "таблица строк не по записи на чанк"
+            ))
+        ));
+    }
+
+    #[test]
+    fn a_chunk_line_row_shorter_than_its_code_is_refused() {
+        let mut p = valid_program();
+        finalize(&mut p);
+        verify(&p).expect("предусловие: образ до порчи согласован");
+        p.lines = vec![vec![1, 2], (1..=p.chunks[1].instrs.len() as u32).collect()];
+        assert!(matches!(
+            verify(&p),
+            Err(RtError::InvalidBytecode(
+                "таблица строк чанка не по строке на инструкцию"
+            ))
+        ));
+    }
+
+    #[test]
+    fn a_chunk_line_row_longer_than_its_code_is_refused() {
+        let mut p = valid_program();
+        finalize(&mut p);
+        verify(&p).expect("предусловие: образ до порчи согласован");
+        p.lines = vec![
+            (1..=p.chunks[0].instrs.len() as u32 + 1).collect(),
+            (1..=p.chunks[1].instrs.len() as u32).collect(),
+        ];
+        assert!(matches!(
+            verify(&p),
+            Err(RtError::InvalidBytecode(
+                "таблица строк чанка не по строке на инструкцию"
+            ))
+        ));
+    }
+
     /// Отрицательные проверки живут ЗДЕСЬ, а не в интеграционном тесте,
     /// именно потому, что портят производные таблицы: снаружи крейта
     /// такой записи больше нет и быть не должно. Проверка «отвергается»
@@ -975,6 +1081,7 @@ mod tests {
             function_names: vec!["Ф".to_string()],
             exported_functions: vec![true],
             links: Vec::new(),
+            lines: Vec::new(),
         };
         finalize(&mut p);
         p

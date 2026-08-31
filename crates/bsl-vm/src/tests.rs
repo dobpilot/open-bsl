@@ -1873,6 +1873,7 @@ fn corrupt_program(instrs: Vec<Instr>) -> Program {
         module_vars: Vec::new(),
         exported_module_vars: Vec::new(),
         links: Vec::new(),
+        lines: Vec::new(),
         chunks: vec![{
             // Производные таблицы ставит финализация; здесь чанк
             // намеренно остаётся с пустой разметкой — поинструкционное

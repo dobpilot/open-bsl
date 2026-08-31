@@ -789,6 +789,9 @@ pub fn run_repl_chunk_with_registry<'a>(
         module_vars: Vec::new(),
         exported_module_vars: Vec::new(),
         links: Vec::new(),
+        // Фрагмент собирается в рантайме и не отлаживается
+        // отдельно от программы, в которой стоит.
+        lines: Vec::new(),
     };
     let linked = link_components(
         &program,
@@ -4491,6 +4494,9 @@ fn run_dynamic_snippet(
         module_vars: program.module_vars.clone(),
         exported_module_vars: program.exported_module_vars.clone(),
         links: Vec::new(),
+        // Фрагмент собирается в рантайме и не отлаживается
+        // отдельно от программы, в которой стоит.
+        lines: Vec::new(),
     };
 
     let snippet_linked = link_components(
