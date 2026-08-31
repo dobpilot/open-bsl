@@ -118,9 +118,15 @@
 
 - [x] 4.1 `CompileError::DebugInfoWithRemovingPass`, проверяется в
   `BuildOptions::check` на всех публичных входах.
-- [ ] 4.2 Тест на сочетание ключей: `--debug --optimize` и
-  `--debug --optimize=copy-elim` отказывают с ненулевым кодом;
-  `--debug --optimize=const-fold` (проход не удаляет) работает.
+- [x] 4.2 Отказ проверен на ОБОИХ уровнях, где он вообще достижим
+  сегодня: в `bsl-compiler`
+  (`debug_info_with_a_removing_pass_is_refused` плюс парный тест на
+  неудаляющем проходе) и в фасаде
+  (`debug_info_with_a_removing_pass_is_refused_through_the_facade`).
+
+  Проверка на сочетании КЛЮЧЕЙ CLI перенесена в `dap-debugger`: ключа
+  `--debug` в `bsl-cli` пока нет, его вводит то изменение, и писать тест
+  на несуществующий ключ здесь было бы нечем.
 - [x] 4.3 `Optimizations::removes_instructions` разбирает структуру
   ИСЧЕРПЫВАЮЩЕ, поэтому новое поле — ошибка сборки, а не молчаливое
   «совместим». Проверено добавлением выдуманного прохода: «pattern does
