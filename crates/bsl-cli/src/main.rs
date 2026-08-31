@@ -12,6 +12,7 @@
 mod api_reference;
 mod bytecode;
 mod complete;
+mod dap;
 mod highlight;
 mod ingest;
 mod repl;
@@ -176,6 +177,19 @@ fn help() -> String {
     out.push_str(
         "      ни один не проходил ворота допуска, см. docs/research/performance/ssa-hotspot-analysis.md\n",
     );
+    // Умолчания печатаются ИЗ ТЕХ ЖЕ констант, что читает разбор ключей:
+    // подсказка, называющая другой порт, хуже отсутствующей.
+    out.push_str("  bsl-cli --debug [--debug-host АДРЕС] [--debug-port ПОРТ]\n");
+    out.push_str("      отлаживать по протоколу DAP: слушать и ждать редактор\n");
+    out.push_str(&format!(
+        "      по умолчанию {DEBUG_HOST_DEFAULT}:{DEBUG_PORT_DEFAULT}; адрес и порт без --debug — ошибка\n"
+    ));
+    out.push_str("      петля по умолчанию не случайно: отладчик вычисляет произвольный BSL,\n");
+    out.push_str("      то есть открытый наружу порт равен удалённому запуску кода\n");
+    out.push_str(
+        "      несовместимо с --optimize=copy-elim: проход удаляет инструкции, а строку\n",
+    );
+    out.push_str("      из байт-кода не вывести — её можно только донести\n");
 
     out.push_str("\nОКРУЖЕНИЕ:\n");
     out.push_str("  NO_COLOR      отключает цвет в REPL (как и TERM=dumb)\n");
@@ -210,6 +224,15 @@ fn main() {
             },
         };
         OPTIMIZE.store(mask, std::sync::atomic::Ordering::Relaxed);
+    }
+    match parse_debug_flags(&mut args) {
+        Ok(endpoint) => {
+            let _ = DEBUG_ENDPOINT.set(endpoint);
+        }
+        Err(message) => {
+            eprintln!("{message}");
+            std::process::exit(2);
+        }
     }
     let code = match args.get(1).map(String::as_str) {
         None => {
@@ -292,6 +315,35 @@ enum Engine {
 }
 
 fn run_file(path: &str, engine: Engine, arguments: Vec<String>) {
+    // Отладчик ждёт редактор ДО первой инструкции: подключившийся к уже
+    // доигравшей программе бесполезен.
+    let mut debug = match debug_endpoint() {
+        None => None,
+        Some(addr) => match dap::session::listen(addr) {
+            Ok(conn) => Some(conn),
+            Err(message) => {
+                eprintln!("{message}");
+                std::process::exit(1);
+            }
+        },
+    };
+    if let Some(conn) = debug.as_mut() {
+        loop {
+            let Some(request) = conn.wait_request() else {
+                // Редактор ушёл, не досказав: исполнять нечего.
+                eprintln!("отладчик: редактор отключился до запуска");
+                std::process::exit(1);
+            };
+            match dap::session::handle_setup(conn, &request) {
+                dap::session::After::KeepWaiting => {}
+                dap::session::After::Run => break,
+                dap::session::After::Stop => {
+                    conn.flush();
+                    std::process::exit(0);
+                }
+            }
+        }
+    }
     let src = match std::fs::read_to_string(path) {
         Ok(s) => s,
         Err(e) => {
@@ -358,7 +410,21 @@ fn run_file(path: &str, engine: Engine, arguments: Vec<String>) {
         .arguments(arguments)
         .message_sink(std::rc::Rc::new(StdoutMessageSink))
         .build();
-    match state.run(&module) {
+    let outcome = state.run(&module);
+    // Редактору обязательно сказать, что программа кончилась: без
+    // `terminated` он ждёт вечно, а без `exited` не покажет код возврата.
+    // Отправляется и на успехе, и на ошибке — «доиграла» и «упала» для
+    // протокола одинаково конец.
+    let code = match &outcome {
+        Ok(_) => 0,
+        Err(_) => 1,
+    };
+    if let Some(conn) = debug.as_mut() {
+        conn.event("exited", serde_json::json!({ "exitCode": code }));
+        conn.event("terminated", serde_json::json!({}));
+        conn.flush();
+    }
+    match outcome {
         Ok(BslValue::Undefined) => {}
         Ok(v) => print_value(&v),
         Err(open_bsl::Error::Runtime(e)) => {
@@ -371,6 +437,28 @@ fn run_file(path: &str, engine: Engine, arguments: Vec<String>) {
         }
     }
 }
+
+/// Адрес и порт отладчика, если он запрошен: ставятся один раз в [`main`]
+/// по ключам `--debug*` и читаются точками сборки движка.
+///
+/// `None` — отладка не запрошена. Ключ, как и `--optimize`, модификатор
+/// обычного запуска, а не команда: он сочетается и с `--jit`, и с прямым
+/// запуском файла, поэтому в таблицу `COMMANDS` не входит.
+static DEBUG_ENDPOINT: std::sync::OnceLock<Option<std::net::SocketAddr>> =
+    std::sync::OnceLock::new();
+
+/// Умолчания отладчика.
+///
+/// Петля, а не все интерфейсы: отладчик вычисляет произвольный BSL, то
+/// есть открытый наружу порт равен удалённому исполнению кода без
+/// аутентификации. Сервер отладки платформы (`dbgs` из 8.3.27) слушает
+/// `0.0.0.0` — это измеренное расхождение, принятое сознательно.
+///
+/// Порт 1550 занят: измерено, что именно его берёт `dbgs`, а
+/// совместимость с платформой — цель проекта, а не повод с ней
+/// столкнуться.
+const DEBUG_HOST_DEFAULT: &str = "127.0.0.1";
+const DEBUG_PORT_DEFAULT: u16 = 4711;
 
 /// Выбор оптимизаций процесса: ставится один раз в [`main`] по ключу
 /// `--optimize` и читается всеми точками сборки движка. Ключ — модификатор
@@ -413,6 +501,186 @@ fn parse_passes(spec: &str) -> Result<u8, String> {
     Ok(mask)
 }
 
+/// Снимает `--debug`, `--debug-host` и `--debug-port` из аргументов.
+///
+/// Возвращает адрес, на котором слушать, либо `None`, если отладка не
+/// запрошена.
+///
+/// # Errors
+///
+/// Адрес или порт БЕЗ `--debug`; отсутствующее значение у ключа; порт не
+/// число; адрес, который не разбирается. Ключ, который приняли и не
+/// исполнили, — дефект, а не удобство, поэтому `--debug-port` в одиночку
+/// это отказ, а не молчаливый обычный запуск.
+fn parse_debug_flags(args: &mut Vec<String>) -> Result<Option<std::net::SocketAddr>, String> {
+    let mut on = false;
+    let mut host = DEBUG_HOST_DEFAULT.to_string();
+    let mut port = DEBUG_PORT_DEFAULT;
+    let mut host_given = false;
+    let mut port_given = false;
+    let mut i = 1;
+    while i < args.len() {
+        let value_of = |args: &Vec<String>, i: usize, name: &str| -> Result<String, String> {
+            match args[i].split_once('=') {
+                Some((_, v)) if !v.is_empty() => Ok(v.to_string()),
+                Some(_) => Err(format!("{name} без значения")),
+                None => args
+                    .get(i + 1)
+                    .filter(|v| !v.starts_with('-'))
+                    .cloned()
+                    .ok_or_else(|| format!("{name} без значения")),
+            }
+        };
+        let head = args[i].split('=').next().unwrap_or("").to_string();
+        let taken = match head.as_str() {
+            "--debug" => {
+                on = true;
+                1
+            }
+            "--debug-host" => {
+                host = value_of(args, i, "--debug-host")?;
+                host_given = true;
+                if args[i].contains('=') { 1 } else { 2 }
+            }
+            "--debug-port" => {
+                let raw = value_of(args, i, "--debug-port")?;
+                port = raw
+                    .parse::<u16>()
+                    .map_err(|_| format!("--debug-port: «{raw}» не номер порта"))?;
+                port_given = true;
+                if args[i].contains('=') { 1 } else { 2 }
+            }
+            _ => {
+                i += 1;
+                continue;
+            }
+        };
+        args.drain(i..i + taken);
+    }
+    if !on {
+        if host_given || port_given {
+            return Err(
+                "--debug-host и --debug-port задают, ГДЕ слушать, но саму отладку включает \
+                 --debug: без него ключ приняли бы и не исполнили"
+                    .to_string(),
+            );
+        }
+        return Ok(None);
+    }
+    let addr = format!("{host}:{port}");
+    use std::net::ToSocketAddrs;
+    addr.to_socket_addrs()
+        .map_err(|e| format!("--debug-host/--debug-port: «{addr}» не разбирается как адрес: {e}"))?
+        .next()
+        .ok_or_else(|| format!("--debug-host: «{host}» не дал ни одного адреса"))
+        .map(Some)
+}
+
+#[cfg(test)]
+mod debug_flag_tests {
+    use super::{DEBUG_PORT_DEFAULT, parse_debug_flags};
+
+    fn args(rest: &[&str]) -> Vec<String> {
+        std::iter::once("bsl-cli")
+            .chain(rest.iter().copied())
+            .map(str::to_string)
+            .collect()
+    }
+
+    #[test]
+    fn without_any_flag_debugging_is_off() {
+        let mut a = args(&["скрипт.bsl"]);
+        assert_eq!(parse_debug_flags(&mut a).unwrap(), None);
+        assert_eq!(a, args(&["скрипт.bsl"]));
+    }
+
+    #[test]
+    fn bare_debug_listens_on_the_loopback_default() {
+        let mut a = args(&["--debug", "скрипт.bsl"]);
+        let addr = parse_debug_flags(&mut a).unwrap().expect("адрес");
+        assert_eq!(addr.ip().to_string(), "127.0.0.1");
+        assert_eq!(addr.port(), DEBUG_PORT_DEFAULT);
+        assert_eq!(addr.port(), 4711);
+        // Ключ — модификатор: скрипту он не достаётся.
+        assert_eq!(a, args(&["скрипт.bsl"]));
+    }
+
+    #[test]
+    fn host_and_port_are_taken_in_both_spellings() {
+        for spelling in [
+            vec!["--debug", "--debug-host", "0.0.0.0", "--debug-port", "5005"],
+            vec!["--debug", "--debug-host=0.0.0.0", "--debug-port=5005"],
+        ] {
+            let mut a = args(&spelling);
+            let addr = parse_debug_flags(&mut a).unwrap().expect("адрес");
+            assert_eq!(addr.to_string(), "0.0.0.0:5005", "{spelling:?}");
+            assert_eq!(a, args(&[]), "{spelling:?}");
+        }
+    }
+
+    #[test]
+    fn an_address_without_debug_is_refused() {
+        // Ключ, который приняли и не исполнили, — дефект: без `--debug`
+        // отладки не будет, и молча запустить скрипт как обычно нельзя.
+        for lone in [
+            vec!["--debug-port", "5005", "скрипт.bsl"],
+            vec!["--debug-host", "0.0.0.0", "скрипт.bsl"],
+        ] {
+            let mut a = args(&lone);
+            assert!(parse_debug_flags(&mut a).is_err(), "{lone:?}");
+        }
+    }
+
+    #[test]
+    fn a_non_numeric_port_is_refused() {
+        let mut a = args(&["--debug", "--debug-port", "много"]);
+        assert!(parse_debug_flags(&mut a).is_err());
+    }
+
+    #[test]
+    fn a_port_out_of_range_is_refused() {
+        let mut a = args(&["--debug", "--debug-port", "70000"]);
+        assert!(parse_debug_flags(&mut a).is_err());
+    }
+
+    #[test]
+    fn a_flag_without_its_value_is_refused() {
+        for lone in [
+            vec!["--debug", "--debug-port"],
+            vec!["--debug", "--debug-host"],
+            vec!["--debug", "--debug-port="],
+        ] {
+            let mut a = args(&lone);
+            assert!(parse_debug_flags(&mut a).is_err(), "{lone:?}");
+        }
+    }
+
+    #[test]
+    fn the_help_names_the_flags_and_their_actual_defaults() {
+        // Подсказка, называющая не тот порт, хуже отсутствующей, поэтому
+        // умолчания в ней берутся из тех же констант, что и в разборе, а
+        // тест сверяет, что они туда действительно попали.
+        let help = super::help();
+        for flag in ["--debug", "--debug-host", "--debug-port"] {
+            assert!(help.contains(flag), "в --help нет {flag}");
+        }
+        assert!(
+            help.contains(&format!(
+                "{}:{}",
+                super::DEBUG_HOST_DEFAULT,
+                super::DEBUG_PORT_DEFAULT
+            )),
+            "в --help нет умолчаний"
+        );
+    }
+
+    #[test]
+    fn an_unresolvable_host_is_refused() {
+        let mut a = args(&["--debug", "--debug-host", "хост.которого.нет.invalid"]);
+        assert!(parse_debug_flags(&mut a).is_err());
+    }
+}
+
 /// Выбранные проходы компилятора.
 pub fn optimizations() -> bsl_compiler::Optimizations {
     let mask = OPTIMIZE.load(std::sync::atomic::Ordering::Relaxed);
@@ -430,7 +698,17 @@ pub fn optimizations() -> bsl_compiler::Optimizations {
 pub fn engine() -> Result<open_bsl::Engine, open_bsl::Error> {
     open_bsl::Engine::builder()
         .optimizations(optimizations())
+        // Со сведениями об отладке — только когда отладка запрошена: без
+        // таблицы строк отладчику нечего сказать редактору, а платить за
+        // неё размером образа при обычном запуске незачем.
+        .debug_info(debug_endpoint().is_some())
         .build()
+}
+
+/// Адрес отладчика, если он запрошен ключами.
+#[must_use]
+pub fn debug_endpoint() -> Option<std::net::SocketAddr> {
+    DEBUG_ENDPOINT.get().copied().flatten()
 }
 
 /// Sink сообщений CLI: очередь перед stdout процесса — короткая, потому
