@@ -284,6 +284,9 @@ impl<'src> Parser<'src> {
         let mut params = Vec::new();
         if !self.at(&TokenKind::RParen) {
             loop {
+                // До `Знач`: строка нужна ОБЪЯВЛЕНИЯ параметра целиком, а
+                // не его имени.
+                let line = self.lines.line_of(self.peek().span.start);
                 let by_val = self.eat_keyword(Keyword::Val);
                 let name = self.expect_ident()?;
                 let default = if self.eat(&TokenKind::Eq) {
@@ -295,6 +298,7 @@ impl<'src> Parser<'src> {
                     name,
                     by_val,
                     default,
+                    line,
                 });
                 if !self.eat(&TokenKind::Comma) {
                     break;

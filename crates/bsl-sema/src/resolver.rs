@@ -478,6 +478,7 @@ fn resolve_program_impl(
             resolved_params.push(ResolvedParam {
                 by_val: is_async || p.by_val,
                 default,
+                line: p.line,
             });
         }
         used_libraries.extend(r.used_libraries.iter().cloned());
@@ -2208,6 +2209,27 @@ mod tests {
     /// В тестовых скриптах верхнего уровня допускаем только `Перем` и
     /// обычные операторы — объявления процедур/функций сюда не проверяем
     /// (для них нужны кадры, это M4).
+    #[test]
+    fn a_parameter_keeps_the_line_it_was_declared_on() {
+        // Пролог умолчаний выпускается ДО тела и ни из какого оператора не
+        // приходит — строку его инструкциям даёт только объявление
+        // параметра. Список намеренно многострочный: у каждого параметра
+        // своя строка, а не строка заголовка функции.
+        let resolved = resolve_program_src(
+            "Функция Ф(\n  а,\n  Знач б = 1,\n  в = 2)\n  Возврат а;\nКонецФункции\nФ(1);",
+        );
+        assert_eq!(
+            resolved.functions[0]
+                .params
+                .iter()
+                .map(|p| p.line)
+                .collect::<Vec<_>>(),
+            vec![2, 3, 4]
+        );
+        // Строка берётся до `Знач`, то есть у объявления целиком.
+        assert!(resolved.functions[0].params[1].by_val);
+    }
+
     #[test]
     fn a_statement_keeps_its_source_line_through_resolution() {
         // Строка обязана пережить разрешение имён: без этого таблица строк
