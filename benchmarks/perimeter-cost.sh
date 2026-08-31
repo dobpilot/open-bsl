@@ -61,9 +61,29 @@ esac
 
 OUT="$(mktemp -d "${TMPDIR:-/tmp}/open-bsl-perimeter.XXXXXXXX")"
 cleanup() {
-    git worktree remove --force "$OUT/with" 2>/dev/null || true
-    git worktree remove --force "$OUT/without" 2>/dev/null || true
-    rm -rf "$OUT"
+    # `-f -f`, а не `--force`: `git worktree add` держит новый worktree
+    # ЗАБЛОКИРОВАННЫМ, пока инициализирует его, и одинарного не хватает —
+    # «cannot remove a locked working tree, lock reason: initializing».
+    # Двойной снимает и блокировку; это документированный способ, а не
+    # обход.
+    git worktree remove -f -f "$OUT/with" 2>/dev/null || true
+    git worktree remove -f -f "$OUT/without" 2>/dev/null || true
+    # Каталог сносится, ТОЛЬКО если git отпустил обе записи. Проверяется
+    # состояние, а не код возврата: причина отказа может быть любой, а
+    # опасен один исход — снести каталог, оставив запись. Это ровно то,
+    # от чего заведена вся уборка, и молча так уже случалось.
+    if git worktree list --porcelain | grep -qF "$OUT"; then
+        {
+            echo "уборка не удалась: git не отпустил worktree под $OUT"
+            echo "каталог НАМЕРЕННО не удалён, чтобы запись не осталась без него"
+            echo "снять вручную:"
+            echo "  git worktree remove -f -f $OUT/with"
+            echo "  git worktree remove -f -f $OUT/without"
+            echo "  rm -rf $OUT"
+        } >&2
+    else
+        rm -rf "$OUT"
+    fi
 }
 
 # EXIT — общий путь уборки; ловушки сигналов сводятся к нему, а не
@@ -82,8 +102,14 @@ cleanup() {
 # потомка, `git worktree add` успевает снять блокировку, и уборка
 # проходит — шесть прогонов из шести чисто. Сигнал, посланный ГРУППЕ
 # (Ctrl-C, обрыв терминала), утечки не давал и раньше: он приходит и
-# потомку тоже. Каждая ловушка снимает EXIT, чтобы уборка не отработала
-# вторым заходом, и выходит с кодом 128 + номер сигнала.
+# потомку тоже. Сами ловушки только выходят с кодом 128 + номер сигнала:
+# уборку запускает всё та же EXIT, ровно один раз, — второго пути к ней
+# нет.
+#
+# Оговорка про SIGINT: пока работает потомок, bash его отбрасывает — и с
+# ловушкой, и без неё, измерено. Ctrl-C в терминале этим не задет, он
+# приходит всей группе; а `kill -INT <pid>` в одиночку такой прогон
+# просто не остановит, и код будет не 130. Свойство оболочки, не скрипта.
 #
 # SIGKILL не перехватывается ничем — ловушки для него нет в ядре, — так
 # что `kill -9` по-прежнему оставит и worktree, и каталог. Убирать тогда
@@ -91,9 +117,9 @@ cleanup() {
 #
 #   git worktree remove -f -f <каталог> && rm -rf <каталог>
 trap cleanup EXIT
-trap 'trap - EXIT; cleanup; exit 130' INT
-trap 'trap - EXIT; cleanup; exit 143' TERM
-trap 'trap - EXIT; cleanup; exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
 
 # Каждый сценарий сперва прогоняется НАСУХО и его вывод проверяется на
 # признак раннего выхода. Молча измерить не то — главный способ получить
