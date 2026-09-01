@@ -317,25 +317,28 @@ enum Engine {
 fn run_file(path: &str, engine: Engine, arguments: Vec<String>) {
     // Отладчик ждёт редактор ДО первой инструкции: подключившийся к уже
     // доигравшей программе бесполезен.
-    let mut debug = match debug_endpoint() {
+    let debug = match debug_endpoint() {
         None => None,
         Some(addr) => match dap::session::listen(addr) {
-            Ok(conn) => Some(conn),
+            Ok(conn) => Some(std::rc::Rc::new(std::cell::RefCell::new(conn))),
             Err(message) => {
                 eprintln!("{message}");
                 std::process::exit(1);
             }
         },
     };
-    if let Some(conn) = debug.as_mut() {
+    let mut breakpoints = std::collections::HashSet::new();
+    if let Some(shared) = debug.as_ref() {
+        let mut conn = shared.borrow_mut();
         loop {
             let Some(request) = conn.wait_request() else {
                 // Редактор ушёл, не досказав: исполнять нечего.
                 eprintln!("отладчик: редактор отключился до запуска");
                 std::process::exit(1);
             };
-            match dap::session::handle_setup(conn, &request) {
+            match dap::session::handle_setup(&mut conn, &request) {
                 dap::session::After::KeepWaiting => {}
+                dap::session::After::Breakpoints(lines) => breakpoints = lines,
                 dap::session::After::Run => break,
                 dap::session::After::Stop => {
                     conn.flush();
@@ -410,7 +413,28 @@ fn run_file(path: &str, engine: Engine, arguments: Vec<String>) {
         .arguments(arguments)
         .message_sink(std::rc::Rc::new(StdoutMessageSink))
         .build();
-    let outcome = state.run(&module);
+    // Отладочный прогон идёт через `start` + собственный цикл: крючок
+    // ставится на ЗАПУСК, а `run` его не принимает и принимать не должен —
+    // отладка свойство запуска, а не встраивания.
+    let outcome = match debug.as_ref() {
+        None => state.run(&module),
+        Some(shared) => {
+            let hook = dap::hook::Hook::new(shared.clone(), breakpoints.clone(), false);
+            match state.start(&module) {
+                Err(e) => Err(e),
+                Ok(mut execution) => {
+                    execution.set_debug_hook(Box::new(hook));
+                    loop {
+                        match execution.poll(usize::MAX) {
+                            Ok(open_bsl::ExecutionPoll::Complete(v)) => break Ok(v),
+                            Ok(_) => continue,
+                            Err(e) => break Err(e),
+                        }
+                    }
+                }
+            }
+        }
+    };
     // Редактору обязательно сказать, что программа кончилась: без
     // `terminated` он ждёт вечно, а без `exited` не покажет код возврата.
     // Отправляется и на успехе, и на ошибке — «доиграла» и «упала» для
@@ -419,7 +443,8 @@ fn run_file(path: &str, engine: Engine, arguments: Vec<String>) {
         Ok(_) => 0,
         Err(_) => 1,
     };
-    if let Some(conn) = debug.as_mut() {
+    if let Some(shared) = debug.as_ref() {
+        let mut conn = shared.borrow_mut();
         conn.event("exited", serde_json::json!({ "exitCode": code }));
         conn.event("terminated", serde_json::json!({}));
         conn.flush();

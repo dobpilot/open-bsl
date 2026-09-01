@@ -188,3 +188,89 @@ fn a_busy_port_is_refused_clearly_and_does_not_panic() {
     assert!(err.contains(&port.to_string()), "stderr: {err}");
     assert!(!err.contains("panicked"), "паника вместо отказа: {err}");
 }
+
+/// Точка останова обязана сработать ДО инструкций своей строки.
+///
+/// Проверяется не событием, а выводом: в момент `stopped` первая строка
+/// уже напечатана, а вторая — ещё нет. Отладчик, останавливающийся после,
+/// показывал бы состояние, которого пользователь не просил.
+#[test]
+fn a_breakpoint_stops_before_its_line_runs() {
+    let dir = std::env::temp_dir().join(format!("bsl-dap-bp-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("каталог");
+    let script = dir.join("три.bsl");
+    std::fs::write(
+        &script,
+        "Сообщить(\"раз\");\nСообщить(\"два\");\nСообщить(\"три\");\n",
+    )
+    .expect("скрипт");
+
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_bsl-cli"))
+        .arg("--debug")
+        .arg("--debug-port")
+        .arg("0")
+        .arg(&script)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("запуск bsl-cli");
+    let port = port_from_stderr(child.stderr.as_mut().expect("stderr"));
+    let mut sock = TcpStream::connect(("127.0.0.1", port)).expect("подключение");
+
+    sock.write_all(&frame(
+        r#"{"seq":1,"type":"request","command":"initialize"}"#,
+    ))
+    .expect("initialize");
+    sock.write_all(&frame(
+        r#"{"seq":2,"type":"request","command":"setBreakpoints","arguments":{"breakpoints":[{"line":2}]}}"#,
+    ))
+    .expect("setBreakpoints");
+    sock.write_all(&frame(
+        r#"{"seq":3,"type":"request","command":"configurationDone"}"#,
+    ))
+    .expect("configurationDone");
+
+    // Ждём остановку.
+    let mut got = Vec::new();
+    let mut chunk = [0u8; 4096];
+    loop {
+        let n = sock.read(&mut chunk).expect("чтение");
+        assert!(n > 0, "соединение закрылось до остановки");
+        got.extend_from_slice(&chunk[..n]);
+        if decode(&got).iter().any(|(_, n)| n == "stopped") {
+            break;
+        }
+    }
+
+    // Пока стоим — читаем то, что успело напечататься. `Сообщить` пишет в
+    // stdout сразу, без буферизации до конца программы.
+    let mut out = child.stdout.take().expect("stdout");
+    // Копятся БАЙТЫ: кириллица многобайтная, и складывать прочитанное
+    // как `char` значило бы рвать её посередине.
+    let mut raw: Vec<u8> = Vec::new();
+    let mut byte = [0u8; 1];
+    while !raw.contains(&b'\n') {
+        let n = out.read(&mut byte).expect("stdout");
+        assert!(n > 0, "программа кончилась, не напечатав ни строки");
+        raw.push(byte[0]);
+    }
+    let printed = String::from_utf8_lossy(&raw).to_string();
+    assert!(printed.contains("раз"), "напечатано: {printed:?}");
+    assert!(
+        !printed.contains("два"),
+        "остановка пришла ПОСЛЕ строки 2: {printed:?}"
+    );
+
+    sock.write_all(&frame(
+        r#"{"seq":4,"type":"request","command":"continue","arguments":{"threadId":1}}"#,
+    ))
+    .expect("continue");
+    let mut tail = String::new();
+    out.read_to_string(&mut tail).expect("остаток stdout");
+    assert!(
+        tail.contains("два") && tail.contains("три"),
+        "хвост: {tail:?}"
+    );
+    let _ = child.wait();
+    let _ = std::fs::remove_dir_all(&dir);
+}

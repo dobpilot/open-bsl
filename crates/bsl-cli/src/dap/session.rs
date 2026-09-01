@@ -143,10 +143,12 @@ impl Connection {
 }
 
 /// Что делать прогону после обработки очередного запроса.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum After {
     /// Редактор ещё настраивается — ждать дальше.
     KeepWaiting,
+    /// Пришли точки останова: запомнить и ждать дальше.
+    Breakpoints(std::collections::HashSet<u32>),
     /// `configurationDone`: пора исполнять.
     Run,
     /// Редактор ушёл или попросил закончить.
@@ -179,6 +181,14 @@ pub fn handle_setup(conn: &mut Connection, request: &serde_json::Value) -> After
         "configurationDone" => {
             conn.respond(request, serde_json::json!({}));
             After::Run
+        }
+        "setBreakpoints" => {
+            // Точки останова приходят ДО `configurationDone`: редактор
+            // ставит их сразу после `initialized`, пока программа ещё не
+            // пошла. Собираются здесь, применяются крючком.
+            let lines = super::hook::collect_lines(request);
+            conn.respond(request, super::hook::verified(request));
+            After::Breakpoints(lines)
         }
         "disconnect" | "terminate" => {
             conn.respond(request, serde_json::json!({}));

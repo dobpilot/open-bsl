@@ -507,6 +507,18 @@ pub enum DebugAction {
 pub struct DebugPosition<'a> {
     /// Кадры от внешнего к внутреннему; последний — текущий.
     pub frames: &'a [(u32, usize, usize)],
+    /// Строка исходника инструкции, которая сейчас исполнится.
+    ///
+    /// `None` — у образа нет таблицы строк, то есть он собран без сведений
+    /// об отладке. Считает её VM, а не хост: таблица лежит в `Program`, а
+    /// программу текущего кадра резолвит драйвер — хост про каталог
+    /// модулей ничего не знает.
+    ///
+    /// Только для ТЕКУЩЕГО кадра. Строки остальных кадров — вопрос стека
+    /// вызовов, и отвечать на него здесь значило бы резолвить программу
+    /// каждого кадра на КАЖДОЙ инструкции; это отдельная операция и
+    /// отдельная её цена.
+    pub line: Option<u32>,
 }
 
 /// Крючок отладчика.
@@ -1771,14 +1783,6 @@ impl ProgramExecution {
         ))
     }
 
-    /// Продвигает ранее созданный запуск, не сохраняя ссылок на host между
-    /// вызовами. Конечный `host_slice` не блокирует ожидание completion;
-    /// `usize::MAX` используется run-to-completion драйвером и ждёт первый.
-    ///
-    /// # Errors
-    ///
-    /// Возвращает ошибку связывания или исполнения.
-    #[allow(clippy::too_many_arguments)]
     /// Ставит крючок отладчика на этот прогон.
     ///
     /// Заодно выключает сцепление линейных цепочек бандлов: при
@@ -1794,6 +1798,14 @@ impl ProgramExecution {
         self.merge_linear = false;
     }
 
+    /// Продвигает ранее созданный запуск, не сохраняя ссылок на host между
+    /// вызовами. Конечный `host_slice` не блокирует ожидание completion;
+    /// `usize::MAX` используется run-to-completion драйвером и ждёт первый.
+    ///
+    /// # Errors
+    ///
+    /// Возвращает ошибку связывания или исполнения.
+    #[allow(clippy::too_many_arguments)]
     pub fn poll_with_registry_and_io<'a>(
         &mut self,
         program: &Program,
@@ -2216,7 +2228,17 @@ impl ProgramExecution {
                         .iter()
                         .map(|f| (f.module, f.func_id, f.pc))
                         .collect();
-                    let at = DebugPosition { frames: &frames };
+                    let line = task.frames.last().and_then(|f| {
+                        cur_program
+                            .lines
+                            .get(f.func_id)
+                            .and_then(|rows| rows.get(f.pc))
+                            .copied()
+                    });
+                    let at = DebugPosition {
+                        frames: &frames,
+                        line,
+                    };
                     if hook.before_instruction(&at) == DebugAction::Terminate {
                         async_state.tasks[task_id] = Some(task);
                         return Err(RtError::DynamicError("прогон прекращён отладчиком".into()));
@@ -2470,6 +2492,7 @@ fn resume_sync_host_call(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn drive_linked(
     program: &Program,
     func_id: usize,

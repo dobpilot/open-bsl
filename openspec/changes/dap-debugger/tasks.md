@@ -67,12 +67,17 @@
 
 ## 4. Сеанс
 
-- [ ] 4.1 Запросы: `initialize`, `attach`, `setBreakpoints`,
-  `configurationDone`, `threads`, `stackTrace`, `scopes`, `variables`,
-  `continue`, `next`, `stepIn`, `stepOut`, `pause`, `evaluate`,
-  `disconnect`, `terminate`.
-- [ ] 4.2 События: `initialized`, `stopped`, `terminated`, `exited`,
-  `output`.
+- [ ] 4.1 Сделаны: `initialize`, `launch`/`attach`, `setBreakpoints`,
+  `configurationDone`, `threads`, `stackTrace`, `continue`, `next`,
+  `stepIn`, `stepOut`, `disconnect`, `terminate`.
+
+  Остались `scopes`, `variables`, `evaluate`, `pause`. Оговорка, которую
+  нельзя опустить: `next`, `stepIn` и `stepOut` СЕЙЧАС ОДИНАКОВЫ — все
+  три останавливаются на следующей строке. Различать их — вопрос глубины
+  кадра; делать вид, что они уже различаются, хуже, чем сказать, что
+  нет.
+- [ ] 4.2 Сделаны `initialized`, `stopped`, `terminated`, `exited`.
+  `output` остался.
 - [ ] 4.3 Компиляция выражения идёт через существующий
   `DynamicCompiler`, второй семантики выражений не заводится.
 - [ ] 4.7 Операция VM, вычисляющая фрагмент в ВЫБРАННОМ кадре.
