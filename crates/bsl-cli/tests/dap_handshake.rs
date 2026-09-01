@@ -153,6 +153,16 @@ fn a_session_handshakes_runs_the_script_and_reports_the_end() {
         "stdout: {}",
         String::from_utf8_lossy(&out.stdout)
     );
+    // И редактор увидел тот же вывод у себя: `Сообщить` дублируется
+    // событием `output`, не переставая писать в stdout.
+    assert!(
+        seen.contains(&("event".into(), "output".into())),
+        "нет события output: {seen:?}"
+    );
+    assert!(
+        String::from_utf8_lossy(&got).contains("привет"),
+        "в событии output нет текста"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -383,5 +393,81 @@ fn step_over_skips_a_call_while_step_in_enters_it() {
     // вторые остановки совпали бы.
     assert_eq!(over.get(1), Some(&7), "next обязан пройти вызов: {over:?}");
     assert_eq!(into.get(1), Some(&2), "stepIn обязан войти: {into:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// На остановке редактор видит локальные переменные кадра с их
+/// значениями.
+#[test]
+fn a_stopped_frame_shows_its_locals() {
+    let dir = std::env::temp_dir().join(format!("bsl-dap-vars-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("каталог");
+    let script = dir.join("переменные.bsl");
+    std::fs::write(&script, "а = 41;\nб = а + 1;\nСообщить(б);\n").expect("скрипт");
+
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_bsl-cli"))
+        .arg("--debug")
+        .arg("--debug-port")
+        .arg("0")
+        .arg(&script)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("запуск");
+    let port = port_from_stderr(child.stderr.as_mut().expect("stderr"));
+    let mut sock = TcpStream::connect(("127.0.0.1", port)).expect("подключение");
+
+    for req in [
+        r#"{"seq":1,"type":"request","command":"initialize"}"#,
+        r#"{"seq":2,"type":"request","command":"setBreakpoints","arguments":{"breakpoints":[{"line":3}]}}"#,
+        r#"{"seq":3,"type":"request","command":"configurationDone"}"#,
+    ] {
+        sock.write_all(&frame(req)).expect("запрос");
+    }
+
+    let mut buf = Vec::new();
+    let mut chunk = [0u8; 4096];
+    let mut asked_scopes = false;
+    let mut asked_vars = false;
+    loop {
+        let n = sock.read(&mut chunk).expect("чтение");
+        assert!(n > 0, "соединение закрылось раньше времени");
+        buf.extend_from_slice(&chunk[..n]);
+        let seen = decode(&buf);
+        if !asked_scopes && seen.iter().any(|(_, n)| n == "stopped") {
+            asked_scopes = true;
+            sock.write_all(&frame(
+                r#"{"seq":4,"type":"request","command":"scopes","arguments":{"frameId":0}}"#,
+            ))
+            .expect("scopes");
+        }
+        if asked_scopes && !asked_vars && seen.iter().any(|(_, n)| n == "scopes") {
+            asked_vars = true;
+            sock.write_all(&frame(
+                r#"{"seq":5,"type":"request","command":"variables","arguments":{"variablesReference":1}}"#,
+            ))
+            .expect("variables");
+        }
+        if asked_vars && seen.iter().filter(|(_, n)| n == "variables").count() > 0 {
+            break;
+        }
+    }
+
+    let text = String::from_utf8_lossy(&buf);
+    // Именно МАССИВ, а не поле `command` того же ответа: ключи
+    // сериализуются по алфавиту, и `"command":"variables"` идёт позже.
+    let body = &text[text.find("\"variables\":[").expect("тело ответа variables")..];
+    // Имена из `local_names`, материализованных сборкой со сведениями об
+    // отладке; значения — через `format_value`, а не `Display`.
+    assert!(body.contains("\"а\""), "нет переменной а: {body}");
+    assert!(body.contains("\"41\""), "у а не то значение: {body}");
+    assert!(body.contains("\"б\""), "нет переменной б: {body}");
+    assert!(body.contains("\"42\""), "у б не то значение: {body}");
+
+    sock.write_all(&frame(
+        r#"{"seq":6,"type":"request","command":"continue","arguments":{"threadId":1}}"#,
+    ))
+    .expect("continue");
+    let _ = child.wait();
     let _ = std::fs::remove_dir_all(&dir);
 }

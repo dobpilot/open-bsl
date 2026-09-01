@@ -30,7 +30,7 @@ pub use bsl_rt::{
     HttpClient, HttpClientConfig, HttpClientFactory, HttpCompletionSink, HttpErrorMapper,
     HttpPromiseSpawner, HttpResponseMapper, HttpWireRequest, HttpWireResponse,
 };
-pub use bsl_vm::{DebugAction, DebugHook, DebugPosition};
+pub use bsl_vm::{DebugAction, DebugHook, DebugPosition, DebugValues};
 
 // Замыкание поверхности: типы, до которых достаёт публичная сигнатура
 // фасада, обязаны быть достижимы через него, а не только упомянуты.

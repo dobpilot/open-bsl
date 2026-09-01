@@ -411,7 +411,10 @@ fn run_file(path: &str, engine: Engine, arguments: Vec<String>) {
         .state_builder()
         .jit(matches!(engine, Engine::Jit))
         .arguments(arguments)
-        .message_sink(std::rc::Rc::new(StdoutMessageSink))
+        .message_sink(match debug.as_ref() {
+            None => std::rc::Rc::new(StdoutMessageSink) as std::rc::Rc<dyn bsl_rt::UserMessageSink>,
+            Some(shared) => std::rc::Rc::new(DebugMessageSink::new(shared.clone())),
+        })
         .build();
     // Отладочный прогон идёт через `start` + собственный цикл: крючок
     // ставится на ЗАПУСК, а `run` его не принимает и принимать не должен —
@@ -751,6 +754,39 @@ impl bsl_rt::UserMessageSink for StdoutMessageSink {
         writeln!(lock, "{}", message.text).map_err(|error| {
             bsl_rt::HostError::new(bsl_rt::HostErrorCode::HostBackpressure, error.to_string())
         })
+    }
+}
+
+/// Тот же вывод, но с дублированием в редактор событием `output`.
+///
+/// Дублирование, а не перенаправление: `Сообщить` по-прежнему пишет в
+/// stdout байт в байт, и конформанс-вывод отладочного прогона совпадает с
+/// обычным. Редактор при этом видит вывод у себя, не заглядывая в
+/// терминал.
+pub struct DebugMessageSink {
+    conn: std::rc::Rc<std::cell::RefCell<dap::session::Connection>>,
+}
+
+impl DebugMessageSink {
+    #[must_use]
+    pub fn new(conn: std::rc::Rc<std::cell::RefCell<dap::session::Connection>>) -> Self {
+        Self { conn }
+    }
+}
+
+impl bsl_rt::UserMessageSink for DebugMessageSink {
+    fn enqueue(&self, message: &bsl_rt::UserMessageDto) -> Result<(), bsl_rt::HostError> {
+        StdoutMessageSink.enqueue(message)?;
+        // Перевод строки добавляется здесь же: DAP не разбивает вывод на
+        // строки сам, а `Сообщить` печатает именно строку.
+        self.conn.borrow_mut().event(
+            "output",
+            serde_json::json!({
+                "category": "stdout",
+                "output": format!("{}\n", message.text),
+            }),
+        );
+        Ok(())
     }
 }
 

@@ -519,6 +519,58 @@ pub struct DebugPosition<'a> {
     /// каждого кадра на КАЖДОЙ инструкции; это отдельная операция и
     /// отдельная её цена.
     pub line: Option<u32>,
+    /// Доступ к локальным переменным кадров — ЛЕНИВЫЙ.
+    ///
+    /// Собирать имена и значения на каждой инструкции значило бы копировать
+    /// весь кадр там, где отладчик почти всегда просто идёт дальше. Здесь
+    /// лежит только ссылка; работа делается, когда спросят, то есть на
+    /// остановке.
+    pub values: &'a dyn DebugValues,
+}
+
+/// Чтение локальных переменных остановленного прогона.
+pub trait DebugValues {
+    /// Имена и значения локальных кадра `index` (нумерация — как в
+    /// [`DebugPosition::frames`]).
+    ///
+    /// Пусто, если у чанка нет имён локальных: их материализует сборка со
+    /// сведениями об отладке, и без неё показывать нечего — номер слота
+    /// без имени отладчику бесполезен.
+    fn locals(&self, index: usize) -> Vec<(String, BslValue)>;
+}
+
+/// Чтение локальных по кадрам остановленного прогона.
+///
+/// Живёт ровно на время вызова крючка: держит ссылки на кадры и стек,
+/// поэтому ничего не копирует, пока не спросят.
+struct FrameValues<'a> {
+    frames: &'a [Frame],
+    stack: &'a [BslValue],
+    program: &'a Program,
+}
+
+impl DebugValues for FrameValues<'_> {
+    fn locals(&self, index: usize) -> Vec<(String, BslValue)> {
+        let Some(frame) = self.frames.get(index) else {
+            return Vec::new();
+        };
+        // Программа берётся ТЕКУЩАЯ: кадры чужих модулей каталога сюда
+        // попадут с чужими именами, и это честнее решать отдельной
+        // операцией, чем угадывать здесь.
+        let Some(chunk) = self.program.chunks.get(frame.func_id) else {
+            return Vec::new();
+        };
+        chunk
+            .local_names
+            .iter()
+            .enumerate()
+            .filter_map(|(slot, name)| {
+                self.stack
+                    .get(frame.own_base + slot)
+                    .map(|v| (name.clone(), v.clone()))
+            })
+            .collect()
+    }
 }
 
 /// Крючок отладчика.
@@ -2235,9 +2287,15 @@ impl ProgramExecution {
                             .and_then(|rows| rows.get(f.pc))
                             .copied()
                     });
+                    let values = FrameValues {
+                        frames: &task.frames,
+                        stack: &task.stack,
+                        program: cur_program,
+                    };
                     let at = DebugPosition {
                         frames: &frames,
                         line,
+                        values: &values,
                     };
                     if hook.before_instruction(&at) == DebugAction::Terminate {
                         async_state.tasks[task_id] = Some(task);

@@ -127,6 +127,50 @@ impl Hook {
                         serde_json::json!({"stackFrames": frames, "totalFrames": total}),
                     );
                 }
+                "scopes" => {
+                    // Область ровно одна — локальные кадра. Модульные
+                    // переменные и глобальные — отдельная работа: их
+                    // значения лежат не в кадре.
+                    let id = request["arguments"]["frameId"].as_i64().unwrap_or(0);
+                    self.conn.borrow_mut().respond(
+                        &request,
+                        serde_json::json!({"scopes": [{
+                            "name": "Локальные",
+                            // Ссылка на переменные — номер кадра плюс
+                            // единица: ноль в DAP означает «переменных нет».
+                            "variablesReference": id + 1,
+                            "expensive": false,
+                        }]}),
+                    );
+                }
+                "variables" => {
+                    let reference = request["arguments"]["variablesReference"]
+                        .as_i64()
+                        .unwrap_or(0);
+                    // Кадры отдаются снаружи внутрь, а `frames` идут
+                    // изнутри наружу: номер надо развернуть.
+                    let from_top = usize::try_from(reference.max(1) - 1).unwrap_or(0);
+                    let index = at.frames.len().saturating_sub(1).saturating_sub(from_top);
+                    let vars: Vec<serde_json::Value> = at
+                        .values
+                        .locals(index)
+                        .into_iter()
+                        .map(|(name, value)| {
+                            serde_json::json!({
+                                "name": name,
+                                // Через `format_value`: `Display` у
+                                // `BslValue` отладочный и форматирования
+                                // 1С не воспроизводит.
+                                "value": bsl_format::format_value(&value, None)
+                                    .unwrap_or_else(|_| String::from("<не отформатировано>")),
+                                "variablesReference": 0,
+                            })
+                        })
+                        .collect();
+                    self.conn
+                        .borrow_mut()
+                        .respond(&request, serde_json::json!({"variables": vars}));
+                }
                 "threads" => {
                     self.conn.borrow_mut().respond(
                         &request,
