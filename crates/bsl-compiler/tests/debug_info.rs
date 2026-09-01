@@ -97,6 +97,26 @@ fn without_debug_info_the_table_is_empty() {
 }
 
 #[test]
+fn debug_info_with_a_slot_remapping_pass_is_refused() {
+    // `ssa-regalloc` переставляет локальные слоты по регистрам кадра, а
+    // `local_names` остаются в исходном порядке: отладчик читает имя по
+    // позиции и показал бы чужое значение. Потеря невосстановима — карты
+    // «имя -> физический слот» в образе нет.
+    let err = build(
+        "а = 1;\n",
+        BuildOptions {
+            debug_info: true,
+            optimizations: Optimizations {
+                ssa_regalloc: true,
+                ..Optimizations::default()
+            },
+        },
+    )
+    .expect_err("сочетание обязано отвергаться");
+    assert!(matches!(err, CompileError::DebugInfoWithRemovingPass));
+}
+
+#[test]
 fn debug_info_with_a_removing_pass_is_refused() {
     let err = build(
         "а = 1;\n",

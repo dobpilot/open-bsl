@@ -32,6 +32,9 @@ enum Mode {
 }
 
 pub struct Hook {
+    /// Строки, на которых есть код: по ним подтверждаются точки останова,
+    /// пришедшие уже на остановке.
+    executable: HashSet<u32>,
     /// Соединение РАЗДЕЛЯЕТСЯ с прогоном: крючок живёт внутри `Execution`,
     /// а события завершения шлёт вызывающий, когда `Execution` уже
     /// уронен. Разделять безопасно — здесь один поток; сокет читает
@@ -44,6 +47,11 @@ pub struct Hook {
     /// останавливается, когда она сменилась, а не на каждой инструкции.
     last_line: Option<u32>,
     stopped_once: bool,
+    /// Считает ли редактор строки с единицы. DAP по умолчанию ДА, но
+    /// клиент вправе попросить с нуля через `initialize`; ответить не в
+    /// той базе — значит показать не ту строку или получить отказ открыть
+    /// кадр.
+    lines_start_at_one: bool,
 }
 
 impl Hook {
@@ -51,18 +59,20 @@ impl Hook {
     pub fn new(
         conn: std::rc::Rc<std::cell::RefCell<Connection>>,
         breakpoints: HashSet<u32>,
-        stop_at_entry: bool,
+        executable: HashSet<u32>,
+        lines_start_at_one: bool,
     ) -> Self {
         Self {
+            executable,
             conn,
             breakpoints,
-            mode: if stop_at_entry {
-                Mode::StepIn
-            } else {
-                Mode::Run
-            },
+            // Остановка на входе редактором пока не просится: она
+            // приходит отдельным `stopOnEntry`, и заводить её раньше,
+            // чем клиент попросит, незачем.
+            mode: Mode::Run,
             last_line: None,
             stopped_once: false,
+            lines_start_at_one,
         }
     }
 
@@ -103,25 +113,28 @@ impl Hook {
                     return true;
                 }
                 "stackTrace" => {
-                    let frames: Vec<serde_json::Value> = at
-                        .frames
-                        .iter()
-                        .rev()
-                        .enumerate()
-                        .map(|(i, (_, chunk, pc))| {
-                            serde_json::json!({
-                                "id": i,
-                                "name": format!("чанк {chunk}"),
-                                // Строка известна только у ТЕКУЩЕГО кадра;
-                                // у остальных её пока негде взять, и ноль
-                                // здесь означает «неизвестна», а не первую.
-                                "line": if i == 0 { at.line.unwrap_or(0) } else { 0 },
-                                "column": 0,
-                                "instructionPointerReference": format!("{pc}"),
-                            })
-                        })
-                        .collect();
-                    let total = frames.len();
+                    let total = at.frames.len();
+                    let base = self.lines_start_at_one;
+                    let mut frames: Vec<serde_json::Value> = Vec::with_capacity(total);
+                    for i in 0..total {
+                        // Кадры отдаются изнутри наружу, как ждёт редактор,
+                        // а `at.frames` идут снаружи внутрь.
+                        let index = total - 1 - i;
+                        let (_, chunk, pc) = at.frames[index];
+                        // Строка КАЖДОГО кадра, а не только текущего:
+                        // спрашивается лениво, на остановке.
+                        let line = at.values.line_of(index).unwrap_or(0);
+                        frames.push(serde_json::json!({
+                            "id": i,
+                            "name": format!("чанк {chunk}"),
+                            "line": adjust_line(line, base),
+                            // Колонок в таблице нет — в образ уходит строка,
+                            // и первая колонка в выбранной базе честнее
+                            // выдуманного смещения.
+                            "column": u32::from(base),
+                            "instructionPointerReference": format!("{pc}"),
+                        }));
+                    }
                     self.conn.borrow_mut().respond(
                         &request,
                         serde_json::json!({"stackFrames": frames, "totalFrames": total}),
@@ -206,7 +219,8 @@ impl Hook {
                 }
                 "setBreakpoints" => {
                     self.breakpoints = collect_lines(&request);
-                    self.conn.borrow_mut().respond(&request, verified(&request));
+                    let answer = verified(&request, &self.executable);
+                    self.conn.borrow_mut().respond(&request, answer);
                 }
                 "disconnect" | "terminate" => {
                     self.conn
@@ -224,6 +238,20 @@ impl Hook {
     }
 }
 
+/// Переводит строку из внутренней нумерации (с единицы) в базу редактора.
+///
+/// DAP по умолчанию считает с единицы, но клиент вправе попросить с нуля
+/// в `initialize`. Ответ не в той базе — это либо чужая строка, либо
+/// отказ редактора открыть кадр.
+#[must_use]
+pub fn adjust_line(line: u32, start_at_one: bool) -> u32 {
+    if start_at_one {
+        line
+    } else {
+        line.saturating_sub(1)
+    }
+}
+
 /// Строки из запроса `setBreakpoints`.
 pub fn collect_lines(request: &serde_json::Value) -> HashSet<u32> {
     request["arguments"]["breakpoints"]
@@ -237,18 +265,51 @@ pub fn collect_lines(request: &serde_json::Value) -> HashSet<u32> {
         .unwrap_or_default()
 }
 
-/// Подтверждение точек останова: отвечаем той же строкой, которую
-/// попросили.
-pub fn verified(request: &serde_json::Value) -> serde_json::Value {
+/// Подтверждение точек останова по ФАКТИЧЕСКИМ строкам образа.
+///
+/// Строка, на которой нет ни одной инструкции — пустая, комментарий,
+/// `КонецЕсли`, — недостижима, и подтверждать её нельзя: редактор
+/// нарисовал бы жирную точку там, где остановки не будет никогда.
+/// Правило DAP то же — вернуть фактическую строку либо неподтверждённую
+/// точку.
+///
+/// `executable` — множество строк, у которых в таблице есть хотя бы одна
+/// инструкция. Пусто (образ без сведений об отладке) — подтвердить
+/// нечего, и все точки уходят неподтверждёнными.
+pub fn verified(request: &serde_json::Value, executable: &HashSet<u32>) -> serde_json::Value {
     let list: Vec<serde_json::Value> = request["arguments"]["breakpoints"]
         .as_array()
         .map(|bps| {
             bps.iter()
-                .map(|b| serde_json::json!({"verified": true, "line": b["line"].clone()}))
+                .map(|b| {
+                    let asked = b["line"].as_u64().unwrap_or(0) as u32;
+                    match nearest_executable(asked, executable) {
+                        Some(actual) => serde_json::json!({
+                            "verified": true,
+                            "line": actual,
+                        }),
+                        None => serde_json::json!({
+                            "verified": false,
+                            "line": asked,
+                            "message": "на этой строке нет исполняемого кода",
+                        }),
+                    }
+                })
                 .collect()
         })
         .unwrap_or_default();
     serde_json::json!({ "breakpoints": list })
+}
+
+/// Ближайшая исполняемая строка НЕ ВЫШЕ запрошенной по тексту: редакторы
+/// ставят точку на объявление или на комментарий перед кодом, и сдвиг
+/// вниз — то, чего пользователь ждёт. Вверх не сдвигаем: это увело бы
+/// остановку в уже выполненный код.
+fn nearest_executable(asked: u32, executable: &HashSet<u32>) -> Option<u32> {
+    if executable.is_empty() {
+        return None;
+    }
+    executable.iter().copied().filter(|&l| l >= asked).min()
 }
 
 impl open_bsl::DebugHook for Hook {

@@ -649,6 +649,25 @@ pub struct Module {
 }
 
 impl Module {
+    /// Строки исходника, на которых есть хотя бы одна инструкция.
+    ///
+    /// Пусто, если модуль собран без сведений об отладке. Нужна отладчику,
+    /// чтобы не подтверждать точку останова на строке, где остановки не
+    /// будет никогда: пустой, комментарии, `КонецЕсли`.
+    ///
+    /// Отдаётся именно множество строк, а не образ: образ — не часть
+    /// публичного договора встраивания, а это отладочные сведения о
+    /// собственном исходнике хоста.
+    #[must_use]
+    pub fn executable_lines(&self) -> std::collections::HashSet<u32> {
+        self.program
+            .lines
+            .iter()
+            .flat_map(|rows| rows.iter().copied())
+            .filter(|&l| l > 0)
+            .collect()
+    }
+
     pub fn requirements(&self) -> &[bsl_rt::LibraryRequirement] {
         &self.program.requirements
     }
@@ -910,19 +929,34 @@ mod debug_info_tests {
     }
 
     #[test]
-    fn debug_info_with_a_removing_pass_is_refused_through_the_facade() {
-        let engine = crate::Engine::builder()
-            .debug_info(true)
-            .optimizations(bsl_compiler::Optimizations {
+    fn debug_info_with_a_pass_that_breaks_it_is_refused_through_the_facade() {
+        // Обе оптимизации теряют невосстановимое: `copy-elim` удаляет
+        // инструкции и рассогласовывает таблицу строк, `ssa-regalloc`
+        // переставляет слоты, а имена остаются в исходном порядке — и
+        // отладчик показал бы чужое значение молча и правдоподобно.
+        for opts in [
+            bsl_compiler::Optimizations {
                 copy_elim: true,
                 ..bsl_compiler::Optimizations::default()
-            })
-            .build()
-            .expect("движок");
-        // `Module` не `Debug`, поэтому разбор случая, а не `expect_err`.
-        let Err(err) = engine.compile("а = 1;\n") else {
-            panic!("сочетание обязано отвергаться и через фасад");
-        };
-        assert!(format!("{err}").contains("удаляющей инструкции"), "{err}");
+            },
+            bsl_compiler::Optimizations {
+                ssa_regalloc: true,
+                ..bsl_compiler::Optimizations::default()
+            },
+        ] {
+            let engine = crate::Engine::builder()
+                .debug_info(true)
+                .optimizations(opts)
+                .build()
+                .expect("движок");
+            // `Module` не `Debug`, поэтому разбор случая, а не `expect_err`.
+            let Err(err) = engine.compile("а = 1;\n") else {
+                panic!("сочетание обязано отвергаться и через фасад: {opts:?}");
+            };
+            assert!(
+                format!("{err}").contains("несовместимы с этой оптимизацией"),
+                "{opts:?}: {err}"
+            );
+        }
     }
 }

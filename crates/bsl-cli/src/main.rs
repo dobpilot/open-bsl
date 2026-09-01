@@ -319,44 +319,13 @@ fn run_file(path: &str, engine: Engine, arguments: Vec<String>) {
     // слушать. Иначе редактор подключался бы к прогону, который всё равно
     // откажет на компиляции, — а ждал бы этого подключения тот, кто уже
     // ошибся в ключах. Обнаружилось тестом: он просто повис.
-    if debug_endpoint().is_some() && optimizations().removes_instructions() {
+    if debug_endpoint().is_some() && optimizations().breaks_debug_info() {
         eprintln!(
-            "--debug несовместим с оптимизацией, удаляющей инструкции: \
-             строку из байт-кода не вывести, её можно только донести"
+            "--debug несовместим с этой оптимизацией: copy-elim удаляет \
+             инструкции, ssa-regalloc переставляет слоты, и ни строку, ни имя \
+             слота из байт-кода потом не вывести"
         );
         std::process::exit(2);
-    }
-    // Отладчик ждёт редактор ДО первой инструкции: подключившийся к уже
-    // доигравшей программе бесполезен.
-    let debug = match debug_endpoint() {
-        None => None,
-        Some(addr) => match dap::session::listen(addr) {
-            Ok(conn) => Some(std::rc::Rc::new(std::cell::RefCell::new(conn))),
-            Err(message) => {
-                eprintln!("{message}");
-                std::process::exit(1);
-            }
-        },
-    };
-    let mut breakpoints = std::collections::HashSet::new();
-    if let Some(shared) = debug.as_ref() {
-        let mut conn = shared.borrow_mut();
-        loop {
-            let Some(request) = conn.wait_request() else {
-                // Редактор ушёл, не досказав: исполнять нечего.
-                eprintln!("отладчик: редактор отключился до запуска");
-                std::process::exit(1);
-            };
-            match dap::session::handle_setup(&mut conn, &request) {
-                dap::session::After::KeepWaiting => {}
-                dap::session::After::Breakpoints(lines) => breakpoints = lines,
-                dap::session::After::Run => break,
-                dap::session::After::Stop => {
-                    conn.flush();
-                    std::process::exit(0);
-                }
-            }
-        }
     }
     let src = match std::fs::read_to_string(path) {
         Ok(s) => s,
@@ -418,6 +387,48 @@ fn run_file(path: &str, engine: Engine, arguments: Vec<String>) {
             std::process::exit(1);
         }
     };
+
+    // Отладчик ждёт редактор ДО первой инструкции, но ПОСЛЕ компиляции.
+    // Порядок значим дважды: ошибка компиляции приходит раньше, чем
+    // редактор успел подключиться, и к моменту `setBreakpoints` уже
+    // известно, на каких строках вообще есть код, — иначе подтверждать
+    // точки было бы нечем.
+    let debug = match debug_endpoint() {
+        None => None,
+        Some(addr) => match dap::session::listen(addr) {
+            Ok(conn) => Some(std::rc::Rc::new(std::cell::RefCell::new(conn))),
+            Err(message) => {
+                eprintln!("{message}");
+                std::process::exit(1);
+            }
+        },
+    };
+    let executable = module.executable_lines();
+    let mut breakpoints = std::collections::HashSet::new();
+    let mut lines_start_at_one = true;
+    if let Some(shared) = debug.as_ref() {
+        let mut conn = shared.borrow_mut();
+        loop {
+            let Some(request) = conn.wait_request() else {
+                // Редактор ушёл, не досказав: исполнять нечего.
+                eprintln!("отладчик: редактор отключился до запуска");
+                std::process::exit(1);
+            };
+            match dap::session::handle_setup(&mut conn, &request, &executable) {
+                dap::session::After::KeepWaiting => {}
+                dap::session::After::Breakpoints(lines) => breakpoints = lines,
+                dap::session::After::Initialized {
+                    lines_start_at_one: base,
+                } => lines_start_at_one = base,
+                dap::session::After::Run => break,
+                dap::session::After::Stop => {
+                    conn.flush();
+                    std::process::exit(0);
+                }
+            }
+        }
+    }
+
     let mut state = host
         .state_builder()
         .jit(matches!(engine, Engine::Jit))
@@ -433,7 +444,12 @@ fn run_file(path: &str, engine: Engine, arguments: Vec<String>) {
     let outcome = match debug.as_ref() {
         None => state.run(&module),
         Some(shared) => {
-            let hook = dap::hook::Hook::new(shared.clone(), breakpoints.clone(), false);
+            let hook = dap::hook::Hook::new(
+                shared.clone(),
+                breakpoints.clone(),
+                executable.clone(),
+                lines_start_at_one,
+            );
             match state.start(&module) {
                 Err(e) => Err(e),
                 Ok(mut execution) => {

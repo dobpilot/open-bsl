@@ -164,6 +164,8 @@ pub enum After {
     KeepWaiting,
     /// Пришли точки останова: запомнить и ждать дальше.
     Breakpoints(std::collections::HashSet<u32>),
+    /// Редактор представился и сказал, с какой цифры считает строки.
+    Initialized { lines_start_at_one: bool },
     /// `configurationDone`: пора исполнять.
     Run,
     /// Редактор ушёл или попросил закончить.
@@ -174,7 +176,11 @@ pub enum After {
 ///
 /// Выделено из цикла, чтобы разбор запроса можно было проверить без
 /// сокета.
-pub fn handle_setup(conn: &mut Connection, request: &serde_json::Value) -> After {
+pub fn handle_setup(
+    conn: &mut Connection,
+    request: &serde_json::Value,
+    executable: &std::collections::HashSet<u32>,
+) -> After {
     match request["command"].as_str().unwrap_or("") {
         "initialize" => {
             conn.respond(
@@ -187,7 +193,15 @@ pub fn handle_setup(conn: &mut Connection, request: &serde_json::Value) -> After
                 }),
             );
             conn.event("initialized", serde_json::json!({}));
-            After::KeepWaiting
+            // База координат — выбор КЛИЕНТА. По умолчанию DAP считает с
+            // единицы, но редактор вправе попросить с нуля, и ответ не в
+            // той базе покажет чужую строку либо получит отказ открыть
+            // кадр.
+            After::Initialized {
+                lines_start_at_one: request["arguments"]["linesStartAt1"]
+                    .as_bool()
+                    .unwrap_or(true),
+            }
         }
         "launch" | "attach" => {
             conn.respond(request, serde_json::json!({}));
@@ -202,7 +216,7 @@ pub fn handle_setup(conn: &mut Connection, request: &serde_json::Value) -> After
             // ставит их сразу после `initialized`, пока программа ещё не
             // пошла. Собираются здесь, применяются крючком.
             let lines = super::hook::collect_lines(request);
-            conn.respond(request, super::hook::verified(request));
+            conn.respond(request, super::hook::verified(request, executable));
             After::Breakpoints(lines)
         }
         "disconnect" | "terminate" => {

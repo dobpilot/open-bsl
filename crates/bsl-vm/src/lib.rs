@@ -514,10 +514,8 @@ pub struct DebugPosition<'a> {
     /// программу текущего кадра резолвит драйвер — хост про каталог
     /// модулей ничего не знает.
     ///
-    /// Только для ТЕКУЩЕГО кадра. Строки остальных кадров — вопрос стека
-    /// вызовов, и отвечать на него здесь значило бы резолвить программу
-    /// каждого кадра на КАЖДОЙ инструкции; это отдельная операция и
-    /// отдельная её цена.
+    /// Только для ТЕКУЩЕГО кадра; строки остальных даёт
+    /// [`DebugValues::line_of`], и по той же причине — лениво.
     pub line: Option<u32>,
     /// Доступ к локальным переменным кадров — ЛЕНИВЫЙ.
     ///
@@ -554,6 +552,13 @@ pub trait DebugValues {
     /// Текст ошибки компиляции или исполнения фрагмента; а также отказ,
     /// если кадра с таким номером нет.
     fn evaluate(&mut self, index: usize, source: &str) -> Result<BslValue, String>;
+
+    /// Строка исходника кадра `index`.
+    ///
+    /// `None` — у образа нет таблицы строк либо у кадра нет записи.
+    /// Спрашивается на остановке, а не на каждой инструкции: стек кадров
+    /// нужен редактору только когда он остановился.
+    fn line_of(&mut self, index: usize) -> Option<u32>;
 }
 
 /// Доступ к остановленному прогону: чтение локальных и вычисление
@@ -591,6 +596,15 @@ impl DebugValues for FrameValues<'_, '_, '_> {
                     .map(|v| (name.clone(), v.clone()))
             })
             .collect()
+    }
+
+    fn line_of(&mut self, index: usize) -> Option<u32> {
+        let frame = self.task.frames.get(index)?;
+        self.program
+            .lines
+            .get(frame.func_id)
+            .and_then(|rows| rows.get(frame.pc))
+            .copied()
     }
 
     fn evaluate(&mut self, index: usize, source: &str) -> Result<BslValue, String> {
@@ -4760,9 +4774,10 @@ fn run_dynamic_snippet(
         module_vars: program.module_vars.clone(),
         exported_module_vars: program.exported_module_vars.clone(),
         links: Vec::new(),
-        // Фрагмент собирается в рантайме и не отлаживается
-        // отдельно от программы, в которой стоит.
-        lines: Vec::new(),
+        // Таблица, собранная выше: чужие записи в координатах файла,
+        // нулевая — в координатах собственного текста фрагмента. Раньше
+        // здесь стоял пустой вектор, и вся работа выше пропадала.
+        lines,
     };
 
     let snippet_linked = link_components(

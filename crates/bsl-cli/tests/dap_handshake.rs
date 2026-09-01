@@ -184,19 +184,26 @@ fn an_address_flag_without_debug_is_refused() {
 
 #[test]
 fn a_busy_port_is_refused_clearly_and_does_not_panic() {
+    // Скрипт настоящий: компиляция идёт ДО прослушивания, и на
+    // несуществующем файле до попытки занять порт дело бы не дошло.
+    let dir = std::env::temp_dir().join(format!("bsl-dap-busy-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("каталог");
+    let script = dir.join("занято.bsl");
+    std::fs::write(&script, "а = 1;\n").expect("скрипт");
     let held = std::net::TcpListener::bind("127.0.0.1:0").expect("занятый порт");
     let port = held.local_addr().expect("адрес").port();
     let out = std::process::Command::new(env!("CARGO_BIN_EXE_bsl-cli"))
         .arg("--debug")
         .arg("--debug-port")
         .arg(port.to_string())
-        .arg("нет-такого-файла.bsl")
+        .arg(&script)
         .output()
         .expect("запуск");
     assert!(!out.status.success());
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(err.contains(&port.to_string()), "stderr: {err}");
     assert!(!err.contains("panicked"), "паника вместо отказа: {err}");
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// Точка останова обязана сработать ДО инструкций своей строки.
@@ -485,6 +492,7 @@ fn debug_with_a_removing_pass_is_refused_from_the_command_line() {
     for flags in [
         vec!["--debug", "--optimize"],
         vec!["--debug", "--optimize=copy-elim"],
+        vec!["--debug", "--optimize=ssa-regalloc"],
     ] {
         let out = std::process::Command::new(env!("CARGO_BIN_EXE_bsl-cli"))
             .args(&flags)
@@ -496,7 +504,7 @@ fn debug_with_a_removing_pass_is_refused_from_the_command_line() {
         assert!(!out.status.success(), "{flags:?} обязано отказывать");
         let err = String::from_utf8_lossy(&out.stderr);
         assert!(
-            err.contains("удаляющей инструкции"),
+            err.contains("несовместим с этой оптимизацией"),
             "{flags:?}: непонятное сообщение: {err}"
         );
     }
