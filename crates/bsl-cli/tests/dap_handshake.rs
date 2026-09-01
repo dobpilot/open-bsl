@@ -471,3 +471,34 @@ fn a_stopped_frame_shows_its_locals() {
     let _ = child.wait();
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Отладка и оптимизация, УДАЛЯЮЩАЯ инструкции, несовместимы, и отказ
+/// обязан дойти до пользователя через ключи, а не только через API.
+#[test]
+fn debug_with_a_removing_pass_is_refused_from_the_command_line() {
+    let dir = std::env::temp_dir().join(format!("bsl-dap-opt-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("каталог");
+    let script = dir.join("простой.bsl");
+    std::fs::write(&script, "а = 1;\n").expect("скрипт");
+
+    // Голый `--optimize` включает и `copy-elim` — значит, отказ.
+    for flags in [
+        vec!["--debug", "--optimize"],
+        vec!["--debug", "--optimize=copy-elim"],
+    ] {
+        let out = std::process::Command::new(env!("CARGO_BIN_EXE_bsl-cli"))
+            .args(&flags)
+            .arg("--debug-port")
+            .arg("0")
+            .arg(&script)
+            .output()
+            .expect("запуск");
+        assert!(!out.status.success(), "{flags:?} обязано отказывать");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            err.contains("удаляющей инструкции"),
+            "{flags:?}: непонятное сообщение: {err}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
