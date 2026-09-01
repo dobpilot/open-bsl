@@ -502,3 +502,91 @@ fn debug_with_a_removing_pass_is_refused_from_the_command_line() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// `evaluate` считает В ВЫБРАННОМ кадре, а не только в текущем.
+///
+/// Проверяется одноимённой переменной: `х` во вложенном вызове и `х`
+/// снаружи — разные переменные с разными значениями. Отладчик,
+/// вычисляющий всегда в верхнем кадре, дал бы на оба запроса одно и то
+/// же.
+#[test]
+fn evaluate_answers_in_the_frame_the_editor_chose() {
+    let dir = std::env::temp_dir().join(format!("bsl-dap-eval-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("каталог");
+    let script = dir.join("кадры.bsl");
+    std::fs::write(
+        &script,
+        "Процедура Внутри()\n    х = 7;\n    Сообщить(х);\nКонецПроцедуры\n\nх = 100;\nВнутри();\n",
+    )
+    .expect("скрипт");
+
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_bsl-cli"))
+        .arg("--debug")
+        .arg("--debug-port")
+        .arg("0")
+        .arg(&script)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("запуск");
+    let port = port_from_stderr(child.stderr.as_mut().expect("stderr"));
+    let mut sock = TcpStream::connect(("127.0.0.1", port)).expect("подключение");
+
+    for req in [
+        r#"{"seq":1,"type":"request","command":"initialize"}"#,
+        r#"{"seq":2,"type":"request","command":"setBreakpoints","arguments":{"breakpoints":[{"line":3}]}}"#,
+        r#"{"seq":3,"type":"request","command":"configurationDone"}"#,
+    ] {
+        sock.write_all(&frame(req)).expect("запрос");
+    }
+
+    let mut buf = Vec::new();
+    let mut chunk = [0u8; 4096];
+    let mut asked = 0;
+    loop {
+        let n = sock.read(&mut chunk).expect("чтение");
+        assert!(n > 0, "соединение закрылось раньше времени");
+        buf.extend_from_slice(&chunk[..n]);
+        let seen = decode(&buf);
+        if asked == 0 && seen.iter().any(|(_, n)| n == "stopped") {
+            asked = 1;
+            sock.write_all(&frame(
+                r#"{"seq":4,"type":"request","command":"evaluate","arguments":{"expression":"х","frameId":0}}"#,
+            ))
+            .expect("evaluate текущего");
+        }
+        let answers = seen.iter().filter(|(_, n)| n == "evaluate").count();
+        if asked == 1 && answers >= 1 {
+            asked = 2;
+            sock.write_all(&frame(
+                r#"{"seq":5,"type":"request","command":"evaluate","arguments":{"expression":"х","frameId":1}}"#,
+            ))
+            .expect("evaluate родительского");
+        }
+        if answers >= 2 {
+            break;
+        }
+    }
+
+    let text = String::from_utf8_lossy(&buf);
+    let results: Vec<&str> = text
+        .match_indices("\"result\":\"")
+        .map(|(i, _)| {
+            let rest = &text[i + "\"result\":\"".len()..];
+            &rest[..rest.find('"').expect("конец значения")]
+        })
+        .collect();
+    assert_eq!(results.len(), 2, "два ответа evaluate: {results:?}");
+    assert_eq!(results[0], "7", "в текущем кадре х = 7: {results:?}");
+    assert_eq!(
+        results[1], "100",
+        "в родительском кадре х = 100: {results:?}"
+    );
+
+    sock.write_all(&frame(
+        r#"{"seq":6,"type":"request","command":"continue","arguments":{"threadId":1}}"#,
+    ))
+    .expect("continue");
+    let _ = child.wait();
+    let _ = std::fs::remove_dir_all(&dir);
+}

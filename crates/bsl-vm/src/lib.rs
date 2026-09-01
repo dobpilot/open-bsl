@@ -525,10 +525,10 @@ pub struct DebugPosition<'a> {
     /// весь кадр там, где отладчик почти всегда просто идёт дальше. Здесь
     /// лежит только ссылка; работа делается, когда спросят, то есть на
     /// остановке.
-    pub values: &'a dyn DebugValues,
+    pub values: &'a mut dyn DebugValues,
 }
 
-/// Чтение локальных переменных остановленного прогона.
+/// Чтение локальных и вычисление выражений в остановленном прогоне.
 pub trait DebugValues {
     /// Имена и значения локальных кадра `index` (нумерация — как в
     /// [`DebugPosition::frames`]).
@@ -536,22 +536,42 @@ pub trait DebugValues {
     /// Пусто, если у чанка нет имён локальных: их материализует сборка со
     /// сведениями об отладке, и без неё показывать нечего — номер слота
     /// без имени отладчику бесполезен.
-    fn locals(&self, index: usize) -> Vec<(String, BslValue)>;
+    fn locals(&mut self, index: usize) -> Vec<(String, BslValue)>;
+
+    /// Вычисляет выражение В ВЫБРАННОМ кадре.
+    ///
+    /// Кадр — любой из стека, не обязательно верхний: смотреть переменную
+    /// вызывающего, стоя во вложенном вызове, — обычное дело отладки.
+    /// Обычный `Вычислить` так не умеет: он исполняется в кадре, где сам
+    /// написан.
+    ///
+    /// Семантика выражений при этом ОДНА — тот же фронтенд, что у
+    /// `Вычислить`, через тот же компилятор фрагментов. Второго
+    /// вычислителя не заводится.
+    ///
+    /// # Errors
+    ///
+    /// Текст ошибки компиляции или исполнения фрагмента; а также отказ,
+    /// если кадра с таким номером нет.
+    fn evaluate(&mut self, index: usize, source: &str) -> Result<BslValue, String>;
 }
 
-/// Чтение локальных по кадрам остановленного прогона.
+/// Доступ к остановленному прогону: чтение локальных и вычисление
+/// выражения в выбранном кадре.
 ///
-/// Живёт ровно на время вызова крючка: держит ссылки на кадры и стек,
-/// поэтому ничего не копирует, пока не спросят.
-struct FrameValues<'a> {
-    frames: &'a [Frame],
-    stack: &'a [BslValue],
+/// Живёт ровно на время вызова крючка и ничего не копирует, пока не
+/// спросят: в обычном прогоне отладчик почти всегда просто идёт дальше.
+struct FrameValues<'a, 'h, 'd> {
+    task: &'a mut Task,
     program: &'a Program,
+    linked: &'a LinkedComponents<'a>,
+    host: &'a mut HostIo<'h, 'd>,
+    module_state: &'a mut ModuleState,
 }
 
-impl DebugValues for FrameValues<'_> {
-    fn locals(&self, index: usize) -> Vec<(String, BslValue)> {
-        let Some(frame) = self.frames.get(index) else {
+impl DebugValues for FrameValues<'_, '_, '_> {
+    fn locals(&mut self, index: usize) -> Vec<(String, BslValue)> {
+        let Some(frame) = self.task.frames.get(index) else {
             return Vec::new();
         };
         // Программа берётся ТЕКУЩАЯ: кадры чужих модулей каталога сюда
@@ -565,11 +585,50 @@ impl DebugValues for FrameValues<'_> {
             .iter()
             .enumerate()
             .filter_map(|(slot, name)| {
-                self.stack
+                self.task
+                    .stack
                     .get(frame.own_base + slot)
                     .map(|v| (name.clone(), v.clone()))
             })
             .collect()
+    }
+
+    fn evaluate(&mut self, index: usize, source: &str) -> Result<BslValue, String> {
+        let Some(frame) = self.task.frames.get(index) else {
+            return Err(format!("кадра {index} нет в стеке"));
+        };
+        let func_id = frame.func_id;
+        let chunk = self
+            .program
+            .chunks
+            .get(func_id)
+            .ok_or_else(|| format!("чанка {func_id} нет в программе"))?;
+        // Область видимости — имена ЭТОГО кадра. Со сведениями об отладке
+        // они материализованы у всех чанков; без них таблица пуста, и
+        // фрагмент не увидит локальных — тогда честнее сказать, чем
+        // молча вычислить не то.
+        if chunk.local_names.is_empty() && !chunk.instrs.is_empty() {
+            return Err(
+                "у кадра нет таблицы имён: образ собран без сведений об отладке".to_string(),
+            );
+        }
+        let scope_locals = chunk.local_names.clone();
+        // Кадр копируется: `run_dynamic_snippet` берёт стек изменяемым, а
+        // кадр — по ссылке, и одолжить из `task` оба сразу нельзя.
+        let frame = frame.clone();
+        run_dynamic_snippet(
+            source,
+            true,
+            self.program,
+            &scope_locals,
+            func_id,
+            &mut self.task.stack,
+            &frame,
+            self.linked,
+            self.host,
+            self.module_state,
+        )
+        .map_err(|e| format!("{e}"))
     }
 }
 
@@ -588,7 +647,7 @@ impl DebugValues for FrameValues<'_> {
 /// компилятор фрагментов рядом: VM его зовёт, но не реализует.
 pub trait DebugHook {
     /// Вызывается перед исполнением очередной инструкции.
-    fn before_instruction(&mut self, at: &DebugPosition<'_>) -> DebugAction;
+    fn before_instruction(&mut self, at: &mut DebugPosition<'_>) -> DebugAction;
 }
 
 struct Frame {
@@ -2287,17 +2346,25 @@ impl ProgramExecution {
                             .and_then(|rows| rows.get(f.pc))
                             .copied()
                     });
-                    let values = FrameValues {
-                        frames: &task.frames,
-                        stack: &task.stack,
+                    // Модульное состояние здесь КОРНЕВОЕ: изъятие в
+                    // `scratch_state` для чужого модуля идёт ниже, уже
+                    // после крючка. Вычисление в кадре чужого модуля
+                    // каталога поэтому увидит корневые переменные — это
+                    // ограничение, а не случайность, и снимать его надо
+                    // отдельной работой.
+                    let mut values = FrameValues {
+                        task: &mut task,
                         program: cur_program,
+                        linked: cur_linked,
+                        host,
+                        module_state,
                     };
-                    let at = DebugPosition {
+                    let mut at = DebugPosition {
                         frames: &frames,
                         line,
-                        values: &values,
+                        values: &mut values,
                     };
-                    if hook.before_instruction(&at) == DebugAction::Terminate {
+                    if hook.before_instruction(&mut at) == DebugAction::Terminate {
                         async_state.tasks[task_id] = Some(task);
                         return Err(RtError::DynamicError("прогон прекращён отладчиком".into()));
                     }

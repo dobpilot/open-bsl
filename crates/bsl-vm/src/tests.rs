@@ -4478,7 +4478,7 @@ mod debug_hook {
     }
 
     impl crate::DebugHook for Counting {
-        fn before_instruction(&mut self, at: &crate::DebugPosition<'_>) -> crate::DebugAction {
+        fn before_instruction(&mut self, at: &mut crate::DebugPosition<'_>) -> crate::DebugAction {
             let (_, func, pc) = *at.frames.last().expect("кадр есть всегда");
             self.seen.borrow_mut().push((func, pc));
             match self.stop_after {

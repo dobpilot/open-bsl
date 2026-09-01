@@ -69,7 +69,7 @@ impl Hook {
     /// Стоим, пока редактор не скажет продолжать.
     ///
     /// Возвращает `false`, если он ушёл или попросил прекратить.
-    fn stop_and_wait(&mut self, at: &DebugPosition<'_>, reason: &str) -> bool {
+    fn stop_and_wait(&mut self, at: &mut DebugPosition<'_>, reason: &str) -> bool {
         self.conn.borrow_mut().event(
             "stopped",
             serde_json::json!({
@@ -126,6 +126,33 @@ impl Hook {
                         &request,
                         serde_json::json!({"stackFrames": frames, "totalFrames": total}),
                     );
+                }
+                "evaluate" => {
+                    // Кадр выбирает редактор: смотреть переменную
+                    // вызывающего, стоя во вложенном вызове, — обычное
+                    // дело, и обычный `Вычислить` так не умеет.
+                    let from_top = usize::try_from(
+                        request["arguments"]["frameId"].as_i64().unwrap_or(0).max(0),
+                    )
+                    .unwrap_or(0);
+                    let index = at.frames.len().saturating_sub(1).saturating_sub(from_top);
+                    let source = request["arguments"]["expression"]
+                        .as_str()
+                        .unwrap_or("")
+                        .to_string();
+                    match at.values.evaluate(index, &source) {
+                        Ok(value) => {
+                            let text = bsl_format::format_value(&value, None)
+                                .unwrap_or_else(|_| String::from("<не отформатировано>"));
+                            self.conn.borrow_mut().respond(
+                                &request,
+                                serde_json::json!({"result": text, "variablesReference": 0}),
+                            );
+                        }
+                        Err(message) => {
+                            self.conn.borrow_mut().refuse(&request, &message);
+                        }
+                    }
                 }
                 "scopes" => {
                     // Область ровно одна — локальные кадра. Модульные
@@ -225,7 +252,7 @@ pub fn verified(request: &serde_json::Value) -> serde_json::Value {
 }
 
 impl open_bsl::DebugHook for Hook {
-    fn before_instruction(&mut self, at: &DebugPosition<'_>) -> DebugAction {
+    fn before_instruction(&mut self, at: &mut DebugPosition<'_>) -> DebugAction {
         let Some(line) = at.line else {
             // Образ без таблицы строк: останавливаться не на чем.
             return DebugAction::Continue;
@@ -281,7 +308,7 @@ impl Hook {
         false
     }
 
-    fn wait(&mut self, at: &DebugPosition<'_>, reason: &str) -> DebugAction {
+    fn wait(&mut self, at: &mut DebugPosition<'_>, reason: &str) -> DebugAction {
         if self.stop_and_wait(at, reason) {
             DebugAction::Continue
         } else {
