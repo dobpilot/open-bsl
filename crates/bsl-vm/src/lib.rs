@@ -613,17 +613,21 @@ impl DebugValues for FrameValues<'_, '_, '_> {
             );
         }
         let scope_locals = chunk.local_names.clone();
-        // Кадр копируется: `run_dynamic_snippet` берёт стек изменяемым, а
-        // кадр — по ссылке, и одолжить из `task` оба сразу нельзя.
-        let frame = frame.clone();
+        // Кадры и стек одалживаются РАЗДЕЛЬНО: `run_dynamic_snippet` берёт
+        // стек изменяемым, а кадр — по ссылке, и через один `&mut task`
+        // такого не выразить. Поля непересекающиеся, поэтому разбор
+        // структуры это и решает — копировать кадр не нужно, тем более что
+        // `Frame` и не `Clone`.
+        let Task { frames, stack, .. } = &mut *self.task;
+        let frame = &frames[index];
         run_dynamic_snippet(
             source,
             true,
             self.program,
             &scope_locals,
             func_id,
-            &mut self.task.stack,
-            &frame,
+            stack,
+            frame,
             self.linked,
             self.host,
             self.module_state,
@@ -2168,7 +2172,12 @@ impl ProgramExecution {
                 // не входя на каждой итерации в большой универсальный `step`.
                 // Логических итераций по-прежнему столько же: цикл не сворачивается
                 // в вычисление финального значения.
-                let fast_numeric_for = {
+                // Под отладчиком быстрый back-edge выключен: он завершает
+                // итерацию, не доходя до крючка, и точки останова в теле
+                // цикла срабатывали бы один раз вместо каждой итерации.
+                // Измерено: цикл в три миллиона витков давал ОДНУ
+                // остановку. Отладка медленнее — это её цена, а не изъян.
+                let fast_numeric_for = debug.is_none() && {
                     let frame = task
                         .frames
                         .last_mut()
@@ -2226,7 +2235,11 @@ impl ProgramExecution {
                 // Нативный путь. Он не обязан ничего исполнить: если на текущей
                 // позиции входа нет, управление просто идёт в `step`, и это же
                 // происходит при любом отказе JIT-а.
-                if cur_module == ROOT_MODULE && !native.is_empty() {
+                // Нативный код исполняет целые куски чанка, не возвращаясь
+                // во внешний цикл, где стоит крючок, — под отладчиком в
+                // него не входим вовсе. Измерено: с `--jit` точка останова
+                // не срабатывала НИ РАЗУ.
+                if cur_module == ROOT_MODULE && !native.is_empty() && debug.is_none() {
                     let native_slots = if scheduled {
                         &mut *native_scheduled
                     } else {

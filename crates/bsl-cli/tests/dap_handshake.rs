@@ -661,3 +661,81 @@ fn pause_reaches_a_run_that_never_stops_on_its_own() {
     let _ = child.wait();
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Считает остановки на точке останова, при желании — под `--jit`.
+fn count_stops(script: &std::path::Path, line: u32, jit: bool) -> usize {
+    let mut cmd = std::process::Command::new(env!("CARGO_BIN_EXE_bsl-cli"));
+    cmd.arg("--debug");
+    if jit {
+        cmd.arg("--jit");
+    }
+    let mut child = cmd
+        .arg("--debug-port")
+        .arg("0")
+        .arg(script)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("запуск");
+    let port = port_from_stderr(child.stderr.as_mut().expect("stderr"));
+    let mut sock = TcpStream::connect(("127.0.0.1", port)).expect("подключение");
+    let mut seq = 3;
+    for req in [
+        r#"{"seq":1,"type":"request","command":"initialize"}"#.to_string(),
+        format!(
+            r#"{{"seq":2,"type":"request","command":"setBreakpoints","arguments":{{"breakpoints":[{{"line":{line}}}]}}}}"#
+        ),
+        r#"{"seq":3,"type":"request","command":"configurationDone"}"#.to_string(),
+    ] {
+        sock.write_all(&frame(&req)).expect("запрос");
+    }
+    let mut buf = Vec::new();
+    let mut chunk = [0u8; 4096];
+    let mut answered = 0;
+    loop {
+        let n = match sock.read(&mut chunk) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => n,
+        };
+        buf.extend_from_slice(&chunk[..n]);
+        let seen = decode(&buf);
+        let stops = seen.iter().filter(|(_, n)| n == "stopped").count();
+        while answered < stops {
+            answered += 1;
+            seq += 1;
+            sock.write_all(&frame(&format!(
+                r#"{{"seq":{seq},"type":"request","command":"continue","arguments":{{"threadId":1}}}}"#
+            )))
+            .expect("continue");
+        }
+        if seen.iter().any(|(_, n)| n == "terminated") {
+            break;
+        }
+    }
+    let _ = child.wait();
+    decode(&buf).iter().filter(|(_, n)| n == "stopped").count()
+}
+
+/// Точка останова в теле цикла срабатывает на КАЖДОЙ итерации.
+///
+/// Ловит сразу две поломки, обе найденные ревью: быстрый back-edge
+/// numeric-for завершал итерацию, не доходя до крючка, и строка внешнего
+/// оператора не восстанавливалась после вложенного блока — из-за чего
+/// тело и back-edge несли одну строку, она не менялась, и остановка
+/// случалась ровно одна.
+#[test]
+fn a_breakpoint_in_a_loop_body_fires_every_iteration() {
+    let dir = std::env::temp_dir().join(format!("bsl-dap-loop-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("каталог");
+    let script = dir.join("витки.bsl");
+    std::fs::write(
+        &script,
+        "с = 0;\nДля ш = 1 По 5 Цикл\n    с = с + 1;\nКонецЦикла;\nСообщить(с);\n",
+    )
+    .expect("скрипт");
+    assert_eq!(count_stops(&script, 3, false), 5, "витков пять");
+    // И то же самое с JIT: нативный путь исполнял целые куски чанка, не
+    // возвращаясь во внешний цикл, и точка не срабатывала НИ РАЗУ.
+    assert_eq!(count_stops(&script, 3, true), 5, "с --jit тоже пять");
+    let _ = std::fs::remove_dir_all(&dir);
+}
