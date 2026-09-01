@@ -590,3 +590,74 @@ fn evaluate_answers_in_the_frame_the_editor_chose() {
     let _ = child.wait();
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// `pause` доходит до прогона, который крутится БЕЗ точек останова.
+///
+/// Опрос сокета только на остановках этого бы не дал: остановок здесь нет
+/// ни одной, и редактор ждал бы конца цикла.
+#[test]
+fn pause_reaches_a_run_that_never_stops_on_its_own() {
+    let dir = std::env::temp_dir().join(format!("bsl-dap-pause-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("каталог");
+    let script = dir.join("цикл.bsl");
+    // Цикл длинный намеренно: пауза обязана прийти в середину, а не после.
+    std::fs::write(
+        &script,
+        // Переменная НЕ `и`: это ключевое слово `И`, и скрипт с таким
+        // именем не компилируется — грабля записана в `AGENTS.md`.
+        "с = 0;\nДля ш = 1 По 20000000 Цикл\n    с = с + 1;\nКонецЦикла;\nСообщить(с);\n",
+    )
+    .expect("скрипт");
+
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_bsl-cli"))
+        .arg("--debug")
+        .arg("--debug-port")
+        .arg("0")
+        .arg(&script)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("запуск");
+    let port = port_from_stderr(child.stderr.as_mut().expect("stderr"));
+    let mut sock = TcpStream::connect(("127.0.0.1", port)).expect("подключение");
+
+    for req in [
+        r#"{"seq":1,"type":"request","command":"initialize"}"#,
+        // Точек останова НЕТ — прогон сам не остановится ни разу.
+        r#"{"seq":2,"type":"request","command":"configurationDone"}"#,
+        r#"{"seq":3,"type":"request","command":"pause","arguments":{"threadId":1}}"#,
+    ] {
+        sock.write_all(&frame(req)).expect("запрос");
+    }
+
+    let mut buf = Vec::new();
+    let mut chunk = [0u8; 4096];
+    loop {
+        let n = sock.read(&mut chunk).expect("чтение");
+        assert!(n > 0, "прогон кончился, не остановившись по просьбе");
+        buf.extend_from_slice(&chunk[..n]);
+        let seen = decode(&buf);
+        if seen.iter().any(|(_, n)| n == "stopped") {
+            break;
+        }
+        // Программа не должна успеть доиграть: если пришло `terminated`,
+        // значит пауза не дошла.
+        assert!(
+            !seen.iter().any(|(_, n)| n == "terminated"),
+            "программа доиграла, не заметив pause: {seen:?}"
+        );
+    }
+    let text = String::from_utf8_lossy(&buf);
+    assert!(
+        text.contains("\"reason\":\"pause\""),
+        "остановка не по просьбе: {text}"
+    );
+
+    // Прекращаем: досчитывать двадцать миллионов итераций тесту незачем.
+    sock.write_all(&frame(
+        r#"{"seq":4,"type":"request","command":"terminate"}"#,
+    ))
+    .expect("terminate");
+    let _ = child.wait();
+    let _ = std::fs::remove_dir_all(&dir);
+}
