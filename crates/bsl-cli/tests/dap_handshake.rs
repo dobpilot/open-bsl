@@ -274,3 +274,114 @@ fn a_breakpoint_stops_before_its_line_runs() {
     let _ = child.wait();
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Сеанс со скриптом: ставит точку останова, на первой остановке шлёт
+/// `step`, дальше продолжает. Возвращает строки всех остановок.
+fn stop_lines(script: &std::path::Path, breakpoint: u32, step: &str) -> Vec<i64> {
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_bsl-cli"))
+        .arg("--debug")
+        .arg("--debug-port")
+        .arg("0")
+        .arg(script)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("запуск");
+    let port = port_from_stderr(child.stderr.as_mut().expect("stderr"));
+    let mut sock = TcpStream::connect(("127.0.0.1", port)).expect("подключение");
+    let mut seq = 0;
+    let mut send = |sock: &mut TcpStream, body: String| {
+        seq += 1;
+        let body = body.replace("SEQ", &seq.to_string());
+        sock.write_all(&frame(&body)).expect("запрос");
+    };
+    send(
+        &mut sock,
+        r#"{"seq":SEQ,"type":"request","command":"initialize"}"#.into(),
+    );
+    send(
+        &mut sock,
+        format!(
+            r#"{{"seq":SEQ,"type":"request","command":"setBreakpoints","arguments":{{"breakpoints":[{{"line":{breakpoint}}}]}}}}"#
+        ),
+    );
+    send(
+        &mut sock,
+        r#"{"seq":SEQ,"type":"request","command":"configurationDone"}"#.into(),
+    );
+
+    let mut lines = Vec::new();
+    let mut buf = Vec::new();
+    let mut chunk = [0u8; 4096];
+    let mut stops = 0;
+    let mut done = 0;
+    loop {
+        let n = match sock.read(&mut chunk) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => n,
+        };
+        buf.extend_from_slice(&chunk[..n]);
+        let seen = decode(&buf);
+        while done < seen.len() {
+            let (kind, name) = &seen[done];
+            done += 1;
+            if kind == "event" && name == "stopped" {
+                stops += 1;
+                send(
+                    &mut sock,
+                    r#"{"seq":SEQ,"type":"request","command":"stackTrace","arguments":{"threadId":1}}"#.into(),
+                );
+            } else if kind == "response" && name == "stackTrace" {
+                lines.push(line_of_top_frame(&buf));
+                let next = if stops == 1 { step } else { "continue" };
+                send(
+                    &mut sock,
+                    format!(
+                        r#"{{"seq":SEQ,"type":"request","command":"{next}","arguments":{{"threadId":1}}}}"#
+                    ),
+                );
+            } else if kind == "event" && name == "terminated" {
+                let _ = child.wait();
+                return lines;
+            }
+        }
+    }
+    let _ = child.wait();
+    lines
+}
+
+/// Строка верхнего кадра из ПОСЛЕДНЕГО ответа `stackTrace` в потоке.
+fn line_of_top_frame(buf: &[u8]) -> i64 {
+    let text = String::from_utf8_lossy(buf);
+    let last = text.rfind("\"stackFrames\"").expect("ответ stackTrace");
+    text[last..]
+        .split_once("\"line\":")
+        .and_then(|(_, r)| r.split(|c: char| !c.is_ascii_digit()).next())
+        .and_then(|d| d.parse().ok())
+        .expect("строка кадра")
+}
+
+/// Три шага различаются глубиной кадра, а не строкой.
+#[test]
+fn step_over_skips_a_call_while_step_in_enters_it() {
+    let dir = std::env::temp_dir().join(format!("bsl-dap-step-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("каталог");
+    let script = dir.join("шаги.bsl");
+    std::fs::write(
+        &script,
+        "Процедура Внутри()\n    а = 1;\n    б = 2;\nКонецПроцедуры\n\nВнутри();\nСообщить(\"после\");\n",
+    )
+    .expect("скрипт");
+
+    // Точка останова на вызове (строка 6).
+    let over = stop_lines(&script, 6, "next");
+    let into = stop_lines(&script, 6, "stepIn");
+    assert_eq!(over.first(), Some(&6), "обе остановки первой — на вызове");
+    assert_eq!(into.first(), Some(&6));
+    // `next` проходит вызов насквозь и встаёт на следующей строке файла;
+    // `stepIn` заходит внутрь процедуры. Если бы они не различались,
+    // вторые остановки совпали бы.
+    assert_eq!(over.get(1), Some(&7), "next обязан пройти вызов: {over:?}");
+    assert_eq!(into.get(1), Some(&2), "stepIn обязан войти: {into:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

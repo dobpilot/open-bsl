@@ -84,6 +84,21 @@ pub fn listen(addr: SocketAddr) -> Result<Connection, String> {
 }
 
 impl Connection {
+    /// Следующий запрос, если он УЖЕ пришёл. `None` — редактор молчит.
+    ///
+    /// Не блокирует: прогон обязан двигаться, пока никто ничего не
+    /// просит. Через это доходит `pause`, посланный на ходу.
+    pub fn poll_request(&mut self) -> Option<serde_json::Value> {
+        let frame = self.incoming.try_recv().ok()?;
+        match serde_json::from_str(&frame) {
+            Ok(v) => Some(v),
+            Err(e) => {
+                eprintln!("отладчик: кадр не разобрался как JSON — {e}");
+                None
+            }
+        }
+    }
+
     /// Ждёт следующий запрос. `None` — редактор отключился.
     pub fn wait_request(&mut self) -> Option<serde_json::Value> {
         let frame = self.incoming.recv().ok()?;

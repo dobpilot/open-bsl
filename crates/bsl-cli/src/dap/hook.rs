@@ -14,12 +14,21 @@ use open_bsl::{DebugAction, DebugPosition};
 use super::session::Connection;
 
 /// Что делать на следующей инструкции.
+///
+/// Три шага различаются ГЛУБИНОЙ КАДРА, а не строкой: `stepIn` идёт куда
+/// угодно, `next` не заходит внутрь вызова, `stepOut` не останавливается,
+/// пока не вышли. Строка при этом обязана смениться у первых двух —
+/// иначе шаг вставал бы на каждой инструкции своей же строки.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Mode {
     /// Идти до точки останова.
     Run,
-    /// Остановиться, как только сменится строка.
-    StepLine,
+    /// Следующая строка ЛЮБОЙ глубины — `stepIn`.
+    StepIn,
+    /// Следующая строка не глубже, чем были, — `next`.
+    StepOver { depth: usize },
+    /// Только выйдя из кадра — `stepOut`.
+    StepOut { depth: usize },
 }
 
 pub struct Hook {
@@ -48,7 +57,7 @@ impl Hook {
             conn,
             breakpoints,
             mode: if stop_at_entry {
-                Mode::StepLine
+                Mode::StepIn
             } else {
                 Mode::Run
             },
@@ -81,12 +90,13 @@ impl Hook {
                         .respond(&request, serde_json::json!({"allThreadsContinued": true}));
                     return true;
                 }
-                // Шаг с обходом, шаг внутрь и шаг до выхода пока
-                // одинаковы: все три останавливаются на следующей СТРОКЕ.
-                // Различать их — вопрос глубины кадра, и делать вид, что
-                // они уже различаются, хуже, чем сказать, что нет.
-                "next" | "stepIn" | "stepOut" => {
-                    self.mode = Mode::StepLine;
+                step @ ("next" | "stepIn" | "stepOut") => {
+                    let depth = at.frames.len();
+                    self.mode = match step {
+                        "next" => Mode::StepOver { depth },
+                        "stepOut" => Mode::StepOut { depth },
+                        _ => Mode::StepIn,
+                    };
                     self.conn
                         .borrow_mut()
                         .respond(&request, serde_json::json!({}));
@@ -177,20 +187,57 @@ impl open_bsl::DebugHook for Hook {
             return DebugAction::Continue;
         };
         let changed = self.last_line != Some(line);
+        let depth = at.frames.len();
+        let stepping = !matches!(self.mode, Mode::Run);
         let stop = match self.mode {
-            Mode::StepLine => changed || !self.stopped_once,
+            Mode::StepIn => changed || !self.stopped_once,
+            // Не глубже, чем были: вызов из этой строки проходится
+            // насквозь, а возврат наружу останавливает.
+            Mode::StepOver { depth: from } => changed && depth <= from,
+            // Только выйдя: пока глубина та же или больше, идём дальше.
+            Mode::StepOut { depth: from } => depth < from,
             Mode::Run => changed && self.breakpoints.contains(&line),
         };
         self.last_line = Some(line);
         if !stop {
+            // На ходу редактор всё равно может попросить остановиться, и
+            // просьба обязана дойти, даже если скрипт крутится в цикле,
+            // не порождая ни одной остановки.
+            if self.paused_by_request() {
+                return self.wait(at, "pause");
+            }
             return DebugAction::Continue;
         }
         self.stopped_once = true;
-        let reason = if self.mode == Mode::StepLine {
-            "step"
-        } else {
-            "breakpoint"
+        let reason = if stepping { "step" } else { "breakpoint" };
+        self.wait(at, reason)
+    }
+}
+
+impl Hook {
+    /// Просил ли редактор паузу, пока прогон шёл.
+    ///
+    /// Читается НЕ блокируя: пока никто не просит, шаг стоит одну попытку
+    /// чтения канала.
+    fn paused_by_request(&mut self) -> bool {
+        let Some(request) = self.conn.borrow_mut().poll_request() else {
+            return false;
         };
+        if request["command"].as_str() == Some("pause") {
+            self.conn
+                .borrow_mut()
+                .respond(&request, serde_json::json!({}));
+            return true;
+        }
+        // Прочее на ходу отвечать нечем: кадр не остановлен.
+        let other = request["command"].as_str().unwrap_or("").to_string();
+        self.conn
+            .borrow_mut()
+            .refuse(&request, &format!("«{other}» доступен только на остановке"));
+        false
+    }
+
+    fn wait(&mut self, at: &DebugPosition<'_>, reason: &str) -> DebugAction {
         if self.stop_and_wait(at, reason) {
             DebugAction::Continue
         } else {
