@@ -113,7 +113,7 @@ fn debug_info_with_a_slot_remapping_pass_is_refused() {
         },
     )
     .expect_err("сочетание обязано отвергаться");
-    assert!(matches!(err, CompileError::DebugInfoWithRemovingPass));
+    assert!(matches!(err, CompileError::DebugInfoWithBreakingPass));
 }
 
 #[test]
@@ -129,7 +129,7 @@ fn debug_info_with_a_removing_pass_is_refused() {
         },
     )
     .expect_err("сочетание обязано отвергаться");
-    assert!(matches!(err, CompileError::DebugInfoWithRemovingPass));
+    assert!(matches!(err, CompileError::DebugInfoWithBreakingPass));
 }
 
 #[test]

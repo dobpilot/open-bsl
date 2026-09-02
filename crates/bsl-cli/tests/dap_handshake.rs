@@ -747,3 +747,178 @@ fn a_breakpoint_in_a_loop_body_fires_every_iteration() {
     assert_eq!(count_stops(&script, 3, true), 5, "с --jit тоже пять");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Подтверждённая перенесённая точка ДЕЙСТВИТЕЛЬНО срабатывает.
+///
+/// Раньше ответ строился одной функцией, а строки для крючка — другой:
+/// точка на комментарии подтверждалась как строка 4, а хранилась как 2,
+/// и редактор рисовал подтверждённую точку, на которой прогон не
+/// останавливался никогда.
+#[test]
+fn a_breakpoint_moved_to_the_next_line_actually_fires_there() {
+    let dir = std::env::temp_dir().join(format!("bsl-dap-moved-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("каталог");
+    let script = dir.join("перенос.bsl");
+    // Точка просится на строку 2 (пустую); код — на строке 4.
+    std::fs::write(&script, "а = 1;\n\n// комментарий\nб = 2;\n").expect("скрипт");
+    assert_eq!(
+        count_stops(&script, 2, false),
+        1,
+        "перенесённая точка обязана сработать"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// При `linesStartAt1: false` точки и стек живут в нумерации клиента.
+#[test]
+fn zero_based_clients_get_zero_based_lines_and_working_breakpoints() {
+    let dir = std::env::temp_dir().join(format!("bsl-dap-zero-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("каталог");
+    let script = dir.join("нуль.bsl");
+    std::fs::write(&script, "а = 1;\nб = 2;\nСообщить(б);\n").expect("скрипт");
+
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_bsl-cli"))
+        .arg("--debug")
+        .arg("--debug-port")
+        .arg("0")
+        .arg(&script)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("запуск");
+    let port = port_from_stderr(child.stderr.as_mut().expect("stderr"));
+    let mut sock = TcpStream::connect(("127.0.0.1", port)).expect("подключение");
+    for req in [
+        r#"{"seq":1,"type":"request","command":"initialize","arguments":{"linesStartAt1":false}}"#,
+        // Строка 1 у клиента с нулём — это вторая строка файла, `б = 2;`.
+        r#"{"seq":2,"type":"request","command":"setBreakpoints","arguments":{"breakpoints":[{"line":1}]}}"#,
+        r#"{"seq":3,"type":"request","command":"configurationDone"}"#,
+    ] {
+        sock.write_all(&frame(req)).expect("запрос");
+    }
+    let mut buf = Vec::new();
+    let mut chunk = [0u8; 4096];
+    let mut asked = false;
+    loop {
+        let n = sock.read(&mut chunk).expect("чтение");
+        assert!(n > 0, "остановки не случилось");
+        buf.extend_from_slice(&chunk[..n]);
+        let seen = decode(&buf);
+        if !asked && seen.iter().any(|(_, n)| n == "stopped") {
+            asked = true;
+            sock.write_all(&frame(
+                r#"{"seq":4,"type":"request","command":"stackTrace","arguments":{"threadId":1}}"#,
+            ))
+            .expect("stackTrace");
+        }
+        if asked
+            && seen
+                .iter()
+                .any(|(k, n)| k == "response" && n == "stackTrace")
+        {
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&buf);
+    // Подтверждение вернулось в нумерации клиента: строка 1, не 2.
+    let confirm = &text[text
+        .find("\"breakpoints\":[")
+        .expect("ответ setBreakpoints")..];
+    assert!(
+        confirm.starts_with("\"breakpoints\":[{\"line\":1,\"verified\":true}"),
+        "подтверждение не в нумерации клиента: {confirm}"
+    );
+    // И кадр тоже: `б = 2;` — вторая строка файла, у клиента с нулём это 1.
+    let frames = &text[text.find("\"stackFrames\":[").expect("ответ stackTrace")..];
+    let first_line = frames
+        .split_once("\"line\":")
+        .map(|(_, r)| r[..r.find(|c: char| !c.is_ascii_digit()).unwrap_or(r.len())].to_string())
+        .expect("строка кадра");
+    assert_eq!(first_line, "1", "кадр не в нумерации клиента: {frames}");
+    sock.write_all(&frame(
+        r#"{"seq":5,"type":"request","command":"continue","arguments":{"threadId":1}}"#,
+    ))
+    .expect("continue");
+    let _ = child.wait();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Строка приостановленного кадра — это строка ВЫЗОВА, а не следующая.
+///
+/// Вызов стоит последней инструкцией тела: раньше `pc` вызывающего был уже
+/// продвинут за `Call`, индекс равнялся длине таблицы, и редактор получал
+/// ноль.
+#[test]
+fn a_suspended_frame_reports_the_call_line_not_the_next_one() {
+    let dir = std::env::temp_dir().join(format!("bsl-dap-nested-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("каталог");
+    let script = dir.join("вложенный.bsl");
+    std::fs::write(
+        &script,
+        "Процедура Внутри()\n    а = 1;\nКонецПроцедуры\n\nПроцедура Снаружи()\n    б = 2;\n    Внутри();\nКонецПроцедуры\n\nСнаружи();\n",
+    )
+    .expect("скрипт");
+
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_bsl-cli"))
+        .arg("--debug")
+        .arg("--debug-port")
+        .arg("0")
+        .arg(&script)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("запуск");
+    let port = port_from_stderr(child.stderr.as_mut().expect("stderr"));
+    let mut sock = TcpStream::connect(("127.0.0.1", port)).expect("подключение");
+    for req in [
+        r#"{"seq":1,"type":"request","command":"initialize"}"#,
+        r#"{"seq":2,"type":"request","command":"setBreakpoints","arguments":{"breakpoints":[{"line":2}]}}"#,
+        r#"{"seq":3,"type":"request","command":"configurationDone"}"#,
+    ] {
+        sock.write_all(&frame(req)).expect("запрос");
+    }
+    let mut buf = Vec::new();
+    let mut chunk = [0u8; 4096];
+    let mut asked = false;
+    loop {
+        let n = sock.read(&mut chunk).expect("чтение");
+        assert!(n > 0, "остановки не случилось");
+        buf.extend_from_slice(&chunk[..n]);
+        let seen = decode(&buf);
+        if !asked && seen.iter().any(|(_, n)| n == "stopped") {
+            asked = true;
+            sock.write_all(&frame(
+                r#"{"seq":4,"type":"request","command":"stackTrace","arguments":{"threadId":1}}"#,
+            ))
+            .expect("stackTrace");
+        }
+        if asked
+            && seen
+                .iter()
+                .any(|(k, n)| k == "response" && n == "stackTrace")
+        {
+            break;
+        }
+    }
+    let text = String::from_utf8_lossy(&buf);
+    let body = &text[text.find("\"stackFrames\"").expect("ответ stackTrace")..];
+    let lines: Vec<&str> = body
+        .match_indices("\"line\":")
+        .map(|(i, _)| {
+            let rest = &body[i + "\"line\":".len()..];
+            &rest[..rest
+                .find(|c: char| !c.is_ascii_digit())
+                .unwrap_or(rest.len())]
+        })
+        .collect();
+    // Изнутри наружу: тело `Внутри` (2), вызов `Внутри()` (7), вызов
+    // `Снаружи()` (10). Ни одного нуля.
+    assert_eq!(lines, vec!["2", "7", "10"], "строки кадров: {lines:?}");
+
+    sock.write_all(&frame(
+        r#"{"seq":5,"type":"request","command":"continue","arguments":{"threadId":1}}"#,
+    ))
+    .expect("continue");
+    let _ = child.wait();
+    let _ = std::fs::remove_dir_all(&dir);
+}

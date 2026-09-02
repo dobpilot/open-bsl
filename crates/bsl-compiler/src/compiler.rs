@@ -19,7 +19,7 @@ pub enum CompileError {
     /// Отказ явный, потому что тихо выбрать одно из двух — отдать отладку
     /// без строк или оптимизацию без предупреждения — значит выдать
     /// пользователю не то, что он просил, и не сказать об этом.
-    DebugInfoWithRemovingPass,
+    DebugInfoWithBreakingPass,
     TooManyLocals,
     TooManyRegisters,
     TooManyConstants,
@@ -63,7 +63,7 @@ impl std::fmt::Display for CompileError {
         // есть в ширине полей `Instr`; менять её нельзя без отдельного
         // измерения (см. `size_of::<Instr>()`).
         let what = match self {
-            CompileError::DebugInfoWithRemovingPass => {
+            CompileError::DebugInfoWithBreakingPass => {
                 "сведения об отладке несовместимы с этой оптимизацией: она удаляет \
                  инструкции либо переставляет слоты"
             }
@@ -214,11 +214,11 @@ impl BuildOptions {
     ///
     /// # Errors
     ///
-    /// [`CompileError::DebugInfoWithRemovingPass`], если запрошены и
+    /// [`CompileError::DebugInfoWithBreakingPass`], если запрошены и
     /// сведения об отладке, и проход, удаляющий инструкции.
     fn check(self) -> Result<(), CompileError> {
         if self.debug_info && self.optimizations.breaks_debug_info() {
-            return Err(CompileError::DebugInfoWithRemovingPass);
+            return Err(CompileError::DebugInfoWithBreakingPass);
         }
         Ok(())
     }

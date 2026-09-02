@@ -218,9 +218,9 @@ impl Hook {
                     );
                 }
                 "setBreakpoints" => {
-                    self.breakpoints = collect_lines(&request);
-                    let answer = verified(&request, &self.executable);
-                    self.conn.borrow_mut().respond(&request, answer);
+                    let resolved = resolve(&request, &self.executable, self.lines_start_at_one);
+                    self.breakpoints = resolved.internal;
+                    self.conn.borrow_mut().respond(&request, resolved.answer);
                 }
                 "disconnect" | "terminate" => {
                     self.conn
@@ -252,63 +252,85 @@ pub fn adjust_line(line: u32, start_at_one: bool) -> u32 {
     }
 }
 
-/// Строки из запроса `setBreakpoints`.
-pub fn collect_lines(request: &serde_json::Value) -> HashSet<u32> {
-    request["arguments"]["breakpoints"]
-        .as_array()
-        .map(|bps| {
-            bps.iter()
-                .filter_map(|b| b["line"].as_u64())
-                .map(|l| u32::try_from(l).unwrap_or(u32::MAX))
-                .collect()
-        })
-        .unwrap_or_default()
+/// Разрешение точек останова: ОДИН ответ на оба вопроса.
+///
+/// Раньше строки для крючка собирались одной функцией, а ответ редактору
+/// строился другой, и они расходились: точка на комментарии
+/// подтверждалась как строка 4, а хранилась как 2 — редактор рисовал
+/// подтверждённую точку, на которой прогон не останавливался никогда.
+/// Поэтому здесь одна функция и один результат.
+pub struct Resolved {
+    /// Строки во ВНУТРЕННЕЙ нумерации (с единицы) — по ним крючок и
+    /// сравнивает.
+    pub internal: HashSet<u32>,
+    /// Ответ редактору, уже в ЕГО системе координат.
+    pub answer: serde_json::Value,
 }
 
-/// Подтверждение точек останова по ФАКТИЧЕСКИМ строкам образа.
+/// Переводит строку из системы координат редактора во внутреннюю.
+///
+/// Внутри всё считается с единицы: так строит таблицу компилятор. DAP по
+/// умолчанию тоже, но клиент вправе попросить с нуля в `initialize`.
+#[must_use]
+pub fn to_internal(line: i64, start_at_one: bool) -> u32 {
+    let shifted = if start_at_one { line } else { line + 1 };
+    u32::try_from(shifted.max(0)).unwrap_or(u32::MAX)
+}
+
+/// Обратный перевод — во внутренней нумерации наружу.
+#[must_use]
+pub fn to_client(line: u32, start_at_one: bool) -> u32 {
+    if start_at_one {
+        line
+    } else {
+        line.saturating_sub(1)
+    }
+}
+
+/// Разрешает точки останова запроса по фактическим строкам образа.
 ///
 /// Строка, на которой нет ни одной инструкции — пустая, комментарий,
-/// `КонецЕсли`, — недостижима, и подтверждать её нельзя: редактор
-/// нарисовал бы жирную точку там, где остановки не будет никогда.
-/// Правило DAP то же — вернуть фактическую строку либо неподтверждённую
-/// точку.
-///
-/// `executable` — множество строк, у которых в таблице есть хотя бы одна
-/// инструкция. Пусто (образ без сведений об отладке) — подтвердить
-/// нечего, и все точки уходят неподтверждёнными.
-pub fn verified(request: &serde_json::Value, executable: &HashSet<u32>) -> serde_json::Value {
-    let list: Vec<serde_json::Value> = request["arguments"]["breakpoints"]
-        .as_array()
-        .map(|bps| {
-            bps.iter()
-                .map(|b| {
-                    let asked = b["line"].as_u64().unwrap_or(0) as u32;
-                    match nearest_executable(asked, executable) {
-                        Some(actual) => serde_json::json!({
-                            "verified": true,
-                            "line": actual,
-                        }),
-                        None => serde_json::json!({
-                            "verified": false,
-                            "line": asked,
-                            "message": "на этой строке нет исполняемого кода",
-                        }),
-                    }
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    serde_json::json!({ "breakpoints": list })
+/// `КонецЕсли`, — недостижима. Запрос сдвигается ВНИЗ к ближайшей
+/// исполняемой: редактор ставит точку на объявление или на комментарий
+/// над кодом, а сдвиг вверх увёл бы остановку в уже выполненное. Если
+/// ниже кода нет — точка возвращается неподтверждённой с причиной, как и
+/// требует DAP.
+#[must_use]
+pub fn resolve(
+    request: &serde_json::Value,
+    executable: &HashSet<u32>,
+    start_at_one: bool,
+) -> Resolved {
+    let mut internal = HashSet::new();
+    let mut list = Vec::new();
+    if let Some(bps) = request["arguments"]["breakpoints"].as_array() {
+        for b in bps {
+            let asked_client = b["line"].as_i64().unwrap_or(0);
+            let asked = to_internal(asked_client, start_at_one);
+            match nearest_executable(asked, executable) {
+                Some(actual) => {
+                    internal.insert(actual);
+                    list.push(serde_json::json!({
+                        "verified": true,
+                        "line": to_client(actual, start_at_one),
+                    }));
+                }
+                None => list.push(serde_json::json!({
+                    "verified": false,
+                    "line": asked_client,
+                    "message": "на этой строке нет исполняемого кода",
+                })),
+            }
+        }
+    }
+    Resolved {
+        internal,
+        answer: serde_json::json!({ "breakpoints": list }),
+    }
 }
 
-/// Ближайшая исполняемая строка НЕ ВЫШЕ запрошенной по тексту: редакторы
-/// ставят точку на объявление или на комментарий перед кодом, и сдвиг
-/// вниз — то, чего пользователь ждёт. Вверх не сдвигаем: это увело бы
-/// остановку в уже выполненный код.
+/// Ближайшая исполняемая строка НЕ ВЫШЕ запрошенной.
 fn nearest_executable(asked: u32, executable: &HashSet<u32>) -> Option<u32> {
-    if executable.is_empty() {
-        return None;
-    }
     executable.iter().copied().filter(|&l| l >= asked).min()
 }
 

@@ -414,7 +414,7 @@ fn run_file(path: &str, engine: Engine, arguments: Vec<String>) {
                 eprintln!("отладчик: редактор отключился до запуска");
                 std::process::exit(1);
             };
-            match dap::session::handle_setup(&mut conn, &request, &executable) {
+            match dap::session::handle_setup(&mut conn, &request, &executable, lines_start_at_one) {
                 dap::session::After::KeepWaiting => {}
                 dap::session::After::Breakpoints(lines) => breakpoints = lines,
                 dap::session::After::Initialized {

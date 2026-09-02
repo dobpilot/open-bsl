@@ -180,6 +180,7 @@ pub fn handle_setup(
     conn: &mut Connection,
     request: &serde_json::Value,
     executable: &std::collections::HashSet<u32>,
+    lines_start_at_one: bool,
 ) -> After {
     match request["command"].as_str().unwrap_or("") {
         "initialize" => {
@@ -214,10 +215,11 @@ pub fn handle_setup(
         "setBreakpoints" => {
             // Точки останова приходят ДО `configurationDone`: редактор
             // ставит их сразу после `initialized`, пока программа ещё не
-            // пошла. Собираются здесь, применяются крючком.
-            let lines = super::hook::collect_lines(request);
-            conn.respond(request, super::hook::verified(request, executable));
-            After::Breakpoints(lines)
+            // пошла. Разрешение ОДНО: те же строки уходят и в ответ, и
+            // крючку — иначе подтверждённая точка не сработала бы.
+            let resolved = super::hook::resolve(request, executable, lines_start_at_one);
+            conn.respond(request, resolved.answer);
+            After::Breakpoints(resolved.internal)
         }
         "disconnect" | "terminate" => {
             conn.respond(request, serde_json::json!({}));
