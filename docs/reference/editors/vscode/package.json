@@ -1,0 +1,38 @@
+{
+  "name": "open-bsl-debug",
+  "displayName": "open-bsl: отладка",
+  "description": "Подключение VS Code к отладчику open-bsl по протоколу DAP",
+  "publisher": "local",
+  "version": "0.1.0",
+  "engines": { "vscode": "^1.66.0" },
+  "categories": ["Debuggers"],
+  "contributes": {
+    "breakpoints": [{ "language": "bsl" }],
+    "debuggers": [
+      {
+        "type": "open-bsl",
+        "label": "open-bsl (DAP)",
+        "languages": ["bsl"],
+        "configurationAttributes": {
+          "attach": {
+            "properties": {
+              "debugServer": {
+                "type": "number",
+                "description": "Порт, на котором слушает bsl-cli --debug",
+                "default": 4711
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "open-bsl",
+            "request": "attach",
+            "name": "open-bsl: подключиться",
+            "debugServer": 4711
+          }
+        ]
+      }
+    ]
+  }
+}
