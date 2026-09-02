@@ -61,6 +61,31 @@ fn scale_up_i64(m: i64, delta: i32) -> Option<i64> {
     m.checked_mul(POW10_I64[delta as usize])
 }
 
+#[cfg(test)]
+mod fast64_trace {
+    std::thread_local! {
+        static ADD_SUB_RETURNS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+        static MUL_RETURNS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    }
+
+    pub fn reset() {
+        ADD_SUB_RETURNS.set(0);
+        MUL_RETURNS.set(0);
+    }
+
+    pub fn add_sub_returned() {
+        ADD_SUB_RETURNS.set(ADD_SUB_RETURNS.get() + 1);
+    }
+
+    pub fn mul_returned() {
+        MUL_RETURNS.set(MUL_RETURNS.get() + 1);
+    }
+
+    pub fn counts() -> (u32, u32) {
+        (ADD_SUB_RETURNS.get(), MUL_RETURNS.get())
+    }
+}
+
 #[inline]
 fn scale_up_i128(m: i128, delta: i32) -> Option<i128> {
     // Ранний выход на РАВНЫХ масштабах. Профилирование флейм-графом
@@ -297,6 +322,8 @@ impl BslNumber {
                 a.checked_add(b)
             };
             if let Some(result) = result {
+                #[cfg(test)]
+                fast64_trace::add_sub_returned();
                 return Ok(BslNumber::small(result as i128, s));
             }
         }
@@ -365,6 +392,8 @@ impl BslNumber {
         if let (Some((a, _)), Some((b, _))) = (self.fast64_parts(), other.fast64_parts())
             && let Some(result) = a.checked_mul(b)
         {
+            #[cfg(test)]
+            fast64_trace::mul_returned();
             return checked_result(BslNumber::small(result as i128, s));
         }
 
@@ -1103,11 +1132,10 @@ impl std::fmt::Debug for BslNumber {
 
 #[cfg(test)]
 mod tests {
-    use super::Repr;
     use num_bigint::BigInt;
     use num_traits::Zero;
 
-    use super::{BslNumber, bigint_is_divisible_by_10, i128_is_divisible_by_10};
+    use super::{BslNumber, bigint_is_divisible_by_10, fast64_trace, i128_is_divisible_by_10};
 
     /// Знак остатка — по ДЕЛИМОМУ, дробные операнды допустимы. Всё
     /// перечисленное измерено на 8.3.27, замеры `MOD.*`.
@@ -1187,17 +1215,31 @@ mod tests {
     }
 
     #[test]
-    fn fast_i64_paths_promote_without_losing_decimal_exactness() {
+    fn fast_i64_overflow_promotes_without_losing_decimal_exactness() {
         let max = BslNumber::from_i64(i64::MAX);
         let promoted = max.add(&BslNumber::from_i64(1)).unwrap();
-        assert!(matches!(promoted.0, Repr::Small { .. }));
+        assert!(matches!(promoted.0, super::Repr::Small { .. }));
         assert_eq!(promoted.to_canonical(), "9223372036854775808");
+    }
 
-        let sum = BslNumber::from_parts(1, 1)
+    #[test]
+    fn fast_i64_paths_are_used_without_losing_decimal_exactness() {
+        fast64_trace::reset();
+
+        let one = BslNumber::from_i64(1);
+        let two = one.add(&one).unwrap();
+        assert_eq!(two.to_canonical(), "2");
+        assert_eq!(fast64_trace::counts(), (1, 0));
+
+        let hundred = BslNumber::from_i64(100);
+        let fraction = hundred
+            .mul(&BslNumber::from_i64(22))
             .unwrap()
-            .add(&BslNumber::from_parts(2, 1).unwrap())
+            .div(&BslNumber::from_i64(122))
             .unwrap();
-        assert_eq!(sum.to_canonical(), "0.3");
+        let total = hundred.add(&fraction).unwrap();
+        assert_eq!(total.to_canonical(), "118.032786885245901639344262295");
+        assert_eq!(fast64_trace::counts(), (1, 1));
     }
 
     #[test]
