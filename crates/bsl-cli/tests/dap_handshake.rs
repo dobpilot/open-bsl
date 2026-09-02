@@ -923,6 +923,26 @@ fn a_suspended_frame_reports_the_call_line_not_the_next_one() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// Переход ВПЕРЁД внутри строки не считается новым заходом.
+///
+/// Парный к тесту ниже: у обоих строка и глубина кадра не меняются, и
+/// различить их можно только направлением перехода. Короткое замыкание
+/// `Ложь И Истина` прыгает вперёд — это продолжение прохода, остановка
+/// одна. Признак «любой нелинейный переход» давал здесь вторую.
+#[test]
+fn a_forward_jump_inside_one_line_is_not_a_re_entry() {
+    let dir = std::env::temp_dir().join(format!("bsl-dap-fwd-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("каталог");
+    let script = dir.join("вперёд.bsl");
+    std::fs::write(&script, "а = Ложь И Истина;\nСообщить(а);\n").expect("скрипт");
+    assert_eq!(
+        count_stops(&script, 1, false),
+        1,
+        "переход вперёд — не виток"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// Точка срабатывает на каждом витке цикла, целиком записанного в ОДНУ
 /// строку.
 ///

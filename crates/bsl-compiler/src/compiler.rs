@@ -215,7 +215,8 @@ impl BuildOptions {
     /// # Errors
     ///
     /// [`CompileError::DebugInfoWithBreakingPass`], если запрошены и
-    /// сведения об отладке, и проход, удаляющий инструкции.
+    /// сведения об отладке, и проход, эти сведения обесценивающий:
+    /// удаляющий инструкции либо переставляющий локальные слоты.
     fn check(self) -> Result<(), CompileError> {
         if self.debug_info && self.optimizations.breaks_debug_info() {
             return Err(CompileError::DebugInfoWithBreakingPass);
