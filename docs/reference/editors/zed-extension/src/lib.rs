@@ -18,9 +18,9 @@
 //! забыл отдельно запустить процесс, — это не отладчик, а загадка.
 
 use zed_extension_api::{
-    self as zed, DebugAdapterBinary, DebugConfig, DebugRequest, DebugScenario,
-    DebugTaskDefinition, StartDebuggingRequestArguments,
-    StartDebuggingRequestArgumentsRequest, TcpArgumentsTemplate, resolve_tcp_template,
+    self as zed, DebugAdapterBinary, DebugConfig, DebugRequest, DebugScenario, DebugTaskDefinition,
+    StartDebuggingRequestArguments, StartDebuggingRequestArgumentsRequest, TcpArgumentsTemplate,
+    resolve_tcp_template,
 };
 
 /// Умолчания те же, что у `bsl-cli`: петля и 4711.
@@ -114,11 +114,41 @@ impl zed::Extension for OpenBslDebug {
                  либо положите его в PATH"
                     .to_string()
             })?;
-        // Относительный путь считается от корня проекта: именно оттуда
-        // Zed запускает процесс, и именно так его пишет человек.
+        // Найденный `bsl-cli` может не уметь отлаживать: отладка
+        // появилась недавно, и ссылка на сборку из другой копии
+        // репозитория — обычное дело. Такой отвечает «неизвестная
+        // команда «--debug»» и выходит до открытия порта, то есть даёт
+        // ровно то же «process exited before debugger attached». Один
+        // `--help` отделяет одно от другого. Если сам запуск не удался,
+        // молчим и идём дальше: проверка вправе добавить знание, но не
+        // отнять возможность запуска.
+        if let Ok(out) = zed::process::Command::new(&cli).arg("--help").output() {
+            let mut help = String::from_utf8_lossy(&out.stdout).into_owned();
+            help.push_str(&String::from_utf8_lossy(&out.stderr));
+            if !help.contains("--debug") {
+                return Err(format!(
+                    "«{cli}» не знает ключа --debug — это сборка без отладчика. \
+                     Соберите bsl-cli из этого репозитория либо укажите нужный \
+                     полем «bsl_cli»."
+                ));
+            }
+        }
+        // Относительный путь считается от корня проекта, открытого в
+        // Zed, — не от каталога, где лежит `.zed/debug.json`. Разница
+        // заметна не сразу, а ошибка от неё молчалива: файла нет,
+        // процесс умирает до открытия порта. Поэтому читаем файл и, если
+        // не вышло, называем корень, от которого считали.
         let program = if program.starts_with('/') {
             program
         } else {
+            if worktree.read_text_file(&program).is_err() {
+                return Err(format!(
+                    "от корня проекта «{}» файл «{program}» не читается. Путь в \
+                     поле «program» считается от корня, открытого в Zed, а не от \
+                     каталога с .zed/debug.json.",
+                    worktree.root_path()
+                ));
+            }
             format!("{}/{}", worktree.root_path(), program)
         };
         Ok(DebugAdapterBinary {
