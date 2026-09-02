@@ -2,12 +2,14 @@
   {
     "label": "open-bsl: table_compare",
     "adapter": "open-bsl",
-    "program": "table_compare.bsl"
+    "program": "table_compare.bsl",
+    "bsl_cli": "../target/release/bsl-cli"
   },
   {
     "label": "open-bsl: call_overhead",
     "adapter": "open-bsl",
-    "program": "call_overhead.bsl"
+    "program": "call_overhead.bsl",
+    "bsl_cli": "../target/release/bsl-cli"
   },
   {
     "label": "open-bsl: присоединиться к запущенному",
