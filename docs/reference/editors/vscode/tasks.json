@@ -1,0 +1,27 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "open-bsl: поднять отладчик",
+      "type": "shell",
+      "command": "${workspaceFolder}/../target/release/bsl-cli",
+      "args": ["--debug", "--debug-port", "4711", "${file}"],
+      "isBackground": true,
+      "presentation": { "reveal": "silent", "panel": "dedicated" },
+      "problemMatcher": {
+        "owner": "open-bsl",
+        "fileLocation": "absolute",
+        "pattern": {
+          "regexp": "^(.*)$",
+          "file": 1,
+          "message": 1
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^отладчик",
+          "endsPattern": "ждёт подключения"
+        }
+      }
+    }
+  ]
+}

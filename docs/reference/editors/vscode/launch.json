@@ -4,7 +4,14 @@
     {
       "type": "open-bsl",
       "request": "attach",
-      "name": "open-bsl: подключиться",
+      "name": "open-bsl: текущий файл",
+      "debugServer": 4711,
+      "preLaunchTask": "open-bsl: поднять отладчик"
+    },
+    {
+      "type": "open-bsl",
+      "request": "attach",
+      "name": "open-bsl: подключиться к запущенному",
       "debugServer": 4711
     }
   ]

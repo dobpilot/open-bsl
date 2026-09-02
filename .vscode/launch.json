@@ -1,0 +1,11 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "open-bsl",
+      "request": "attach",
+      "name": "open-bsl: подключиться",
+      "debugServer": 4711
+    }
+  ]
+}
