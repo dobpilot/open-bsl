@@ -76,6 +76,21 @@ impl zed::Extension for OpenBslDebug {
             request: StartDebuggingRequestArgumentsRequest::Attach,
         };
 
+        // Переменные вида `$ZED_FILE` Zed подставляет в `configuration`,
+        // которую отдаёт адаптеру при старте сеанса, — но не в поля,
+        // которые расширение читает ЗДЕСЬ. Неподставленное имя ушло бы в
+        // командную строку, `bsl-cli` не нашёл бы такого файла и вышел с
+        // ошибкой ДО открытия порта, а редактор показал бы «process
+        // exited before debugger attached» — сообщение, по которому
+        // причину не найти. Поэтому отказ здесь, с названным значением.
+        if let Some(raw) = field(&parsed, "program")
+            && raw.contains('$')
+        {
+            return Err(format!(
+                "в поле «program» осталась неподставленная переменная: «{raw}». \
+                 Укажите путь к скрипту — абсолютный либо от корня проекта."
+            ));
+        }
         let Some(program) = field(&parsed, "program") else {
             // Присоединение к уже запущенному процессу.
             return Ok(DebugAdapterBinary {
@@ -99,6 +114,13 @@ impl zed::Extension for OpenBslDebug {
                  либо положите его в PATH"
                     .to_string()
             })?;
+        // Относительный путь считается от корня проекта: именно оттуда
+        // Zed запускает процесс, и именно так его пишет человек.
+        let program = if program.starts_with('/') {
+            program
+        } else {
+            format!("{}/{}", worktree.root_path(), program)
+        };
         Ok(DebugAdapterBinary {
             command: Some(cli),
             arguments: vec![

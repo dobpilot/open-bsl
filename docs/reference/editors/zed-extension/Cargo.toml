@@ -5,7 +5,7 @@
 [package]
 name = "open-bsl-zed-debug"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 publish = false
 
 # Собственное рабочее пространство: иначе cargo втягивает крейт в

@@ -1,8 +1,15 @@
 [
   {
-    "label": "open-bsl: текущий файл",
+    "label": "open-bsl: запустить скрипт",
     "adapter": "open-bsl",
-    "program": "$ZED_FILE"
+    "program": "путь/к/скрипту.bsl",
+    "bsl_cli": "/путь/к/open-bsl/target/release/bsl-cli"
+  },
+  {
+    "label": "open-bsl: другой скрипт",
+    "adapter": "open-bsl",
+    "program": "другой/скрипт.bsl",
+    "bsl_cli": "/путь/к/open-bsl/target/release/bsl-cli"
   },
   {
     "label": "open-bsl: присоединиться к запущенному",
