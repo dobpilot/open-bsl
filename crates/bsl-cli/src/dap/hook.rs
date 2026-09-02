@@ -35,6 +35,14 @@ pub struct Hook {
     /// Строки, на которых есть код: по ним подтверждаются точки останова,
     /// пришедшие уже на остановке.
     executable: HashSet<u32>,
+    /// Путь к отлаживаемому файлу — АБСОЛЮТНЫЙ.
+    ///
+    /// Без него редактор получает кадры со строками, но не знает, какой
+    /// файл открыть: подсветки строки не будет, и отладчик выглядит
+    /// сломанным при работающих точках останова. Относительный путь
+    /// редактор разрешает от своей рабочей папки, а она не обязана
+    /// совпадать с той, откуда запущен процесс.
+    source: std::path::PathBuf,
     /// Соединение РАЗДЕЛЯЕТСЯ с прогоном: крючок живёт внутри `Execution`,
     /// а события завершения шлёт вызывающий, когда `Execution` уже
     /// уронен. Разделять безопасно — здесь один поток; сокет читает
@@ -71,11 +79,13 @@ impl Hook {
         conn: std::rc::Rc<std::cell::RefCell<Connection>>,
         breakpoints: HashSet<u32>,
         executable: HashSet<u32>,
+        source: std::path::PathBuf,
         lines_start_at_one: bool,
         columns_start_at_one: bool,
     ) -> Self {
         Self {
             executable,
+            source,
             conn,
             breakpoints,
             // Остановка на входе редактором пока не просится: она
@@ -134,13 +144,29 @@ impl Hook {
                         // Кадры отдаются изнутри наружу, как ждёт редактор,
                         // а `at.frames` идут снаружи внутрь.
                         let index = total - 1 - i;
-                        let (_, chunk, pc) = at.frames[index];
+                        let (module, chunk, pc) = at.frames[index];
                         // Строка КАЖДОГО кадра, а не только текущего:
                         // спрашивается лениво, на остановке.
                         let line = at.values.line_of(index).unwrap_or(0);
+                        // Источник — только у кадров КОРНЕВОГО модуля:
+                        // чанки чужих модулей каталога лежат в других
+                        // файлах, и подсунуть им этот значило бы отправить
+                        // редактор не туда.
+                        let source = if module == open_bsl::ROOT_MODULE {
+                            serde_json::json!({
+                                "name": self
+                                    .source
+                                    .file_name()
+                                    .map_or_else(String::new, |n| n.to_string_lossy().into_owned()),
+                                "path": self.source.display().to_string(),
+                            })
+                        } else {
+                            serde_json::Value::Null
+                        };
                         frames.push(serde_json::json!({
                             "id": i,
                             "name": format!("чанк {chunk}"),
+                            "source": source,
                             "line": adjust_line(line, base),
                             // Колонок в таблице нет — в образ уходит строка,
                             // и первая колонка в выбранной базе честнее

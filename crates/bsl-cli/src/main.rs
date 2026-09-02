@@ -453,6 +453,9 @@ fn run_file(path: &str, engine: Engine, arguments: Vec<String>) {
                 shared.clone(),
                 breakpoints.clone(),
                 executable.clone(),
+                // Абсолютный: редактор разрешает относительный от СВОЕЙ
+                // рабочей папки, а она не обязана совпадать с нашей.
+                std::fs::canonicalize(path).unwrap_or_else(|_| std::path::PathBuf::from(path)),
                 lines_start_at_one,
                 columns_start_at_one,
             );

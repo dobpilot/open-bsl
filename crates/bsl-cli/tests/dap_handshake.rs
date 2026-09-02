@@ -914,6 +914,18 @@ fn a_suspended_frame_reports_the_call_line_not_the_next_one() {
     // Изнутри наружу: тело `Внутри` (2), вызов `Внутри()` (7), вызов
     // `Снаружи()` (10). Ни одного нуля.
     assert_eq!(lines, vec!["2", "7", "10"], "строки кадров: {lines:?}");
+    // И у каждого кадра есть источник с АБСОЛЮТНЫМ путём: без него
+    // редактор знает строку, но не знает, какой файл открыть, — стек есть,
+    // подсветки нет, и отладчик выглядит сломанным.
+    assert_eq!(
+        body.matches("\"path\":").count(),
+        3,
+        "у кадров нет источника: {body}"
+    );
+    assert!(
+        body.contains(&script.canonicalize().expect("путь").display().to_string()),
+        "путь не абсолютный: {body}"
+    );
 
     sock.write_all(&frame(
         r#"{"seq":5,"type":"request","command":"continue","arguments":{"threadId":1}}"#,
