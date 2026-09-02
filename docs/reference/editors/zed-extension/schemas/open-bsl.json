@@ -1,0 +1,8 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Конфигурация отладки open-bsl",
+  "description": "Подключение к уже запущенному bsl-cli --debug. Адрес и порт берутся из tcp_connection сценария; здесь задавать нечего.",
+  "type": "object",
+  "properties": {},
+  "additionalProperties": true
+}

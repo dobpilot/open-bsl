@@ -1,0 +1,15 @@
+id = "open-bsl-debug"
+name = "open-bsl: отладка"
+description = "Подключение Zed к отладчику open-bsl по протоколу DAP"
+version = "0.1.0"
+schema_version = 1
+authors = ["open-bsl"]
+
+[lib]
+kind = "Rust"
+version = "0.7.0"
+
+# Имя адаптера, на которое ссылается `adapter` в `.zed/debug.json`.
+# Схема конфигурации нужна Zed, чтобы подсказывать поля в редакторе.
+[debug_adapters.open-bsl]
+schema_path = "schemas/open-bsl.json"
