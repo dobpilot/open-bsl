@@ -1,13 +1,13 @@
 [
   {
+    "label": "open-bsl: текущий файл",
+    "adapter": "open-bsl",
+    "program": "$ZED_FILE"
+  },
+  {
     "label": "open-bsl: запустить скрипт",
     "adapter": "open-bsl",
     "program": "путь/к/скрипту.bsl"
-  },
-  {
-    "label": "open-bsl: другой скрипт",
-    "adapter": "open-bsl",
-    "program": "другой/скрипт.bsl"
   },
   {
     "label": "open-bsl: присоединиться к запущенному",

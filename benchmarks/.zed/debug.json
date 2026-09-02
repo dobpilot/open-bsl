@@ -1,5 +1,11 @@
 [
   {
+    "label": "open-bsl: текущий файл",
+    "adapter": "open-bsl",
+    "program": "$ZED_FILE",
+    "bsl_cli": "../target/release/bsl-cli"
+  },
+  {
     "label": "open-bsl: table_compare",
     "adapter": "open-bsl",
     "program": "table_compare.bsl",
