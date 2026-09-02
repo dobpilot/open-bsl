@@ -21,3 +21,4 @@ __pycache__/
 /benchmarks/invoice_doc.pdf
 # Файл выгрузки, который создаёт сценарий edata_writer.
 /benchmarks/edata_writer.xml
+*.vsix

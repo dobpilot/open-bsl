@@ -47,12 +47,13 @@ python3 docs/reference/editors/check.py
 `.vsix` — это zip с манифестом, так что ни `vsce`, ни Node.js не нужны:
 
 ```bash
-python3 docs/reference/editors/vscode/pack.py
-code-oss --install-extension open-bsl-debug-0.1.0.vsix
+code-oss --install-extension "$(python3 docs/reference/editors/vscode/pack.py)"
 ```
 
-Для обычного VS Code — та же команда через `code`. Проверить, что
-установилось:
+Скрипт кладёт пакет рядом с собой и печатает абсолютный путь, который тут
+же уходит редактору, — поэтому команда работает из любого каталога, лишь
+бы путь до `pack.py` был верным. Для обычного VS Code — то же через
+`code`. Проверить, что установилось:
 
 ```bash
 code-oss --list-extensions | grep open-bsl

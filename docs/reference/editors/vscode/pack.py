@@ -10,8 +10,10 @@
 `.vsix` — это zip с манифестом, поэтому здесь не нужно ни `vsce`, ни
 Node.js, ни единой внешней зависимости.
 
-    python3 docs/reference/editors/vscode/pack.py [выходной-файл]
-    code-oss --install-extension open-bsl-debug.vsix
+Пакет кладётся рядом со скриптом, а его путь печатается абсолютным —
+чтобы обе команды не зависели от текущего каталога:
+
+    code-oss --install-extension "$(python3 .../vscode/pack.py)"
 """
 
 import json
@@ -20,7 +22,7 @@ import zipfile
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-HERE = Path(__file__).parent
+HERE = Path(__file__).parent.resolve()
 MANIFEST = json.loads((HERE / "package.json").read_text(encoding="utf-8"))
 
 CONTENT_TYPES = """<?xml version="1.0" encoding="utf-8"?>
@@ -50,8 +52,10 @@ VSIX_MANIFEST = """<?xml version="1.0" encoding="utf-8"?>
 
 
 def main() -> None:
-    out = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(
-        f"{MANIFEST['name']}-{MANIFEST['version']}.vsix"
+    out = (
+        Path(sys.argv[1]).resolve()
+        if len(sys.argv) > 1
+        else HERE / f"{MANIFEST['name']}-{MANIFEST['version']}.vsix"
     )
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as vsix:
         vsix.writestr("[Content_Types].xml", CONTENT_TYPES)
