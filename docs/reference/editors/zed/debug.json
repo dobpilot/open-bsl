@@ -2,14 +2,12 @@
   {
     "label": "open-bsl: запустить скрипт",
     "adapter": "open-bsl",
-    "program": "путь/к/скрипту.bsl",
-    "bsl_cli": "/путь/к/open-bsl/target/release/bsl-cli"
+    "program": "путь/к/скрипту.bsl"
   },
   {
     "label": "open-bsl: другой скрипт",
     "adapter": "open-bsl",
-    "program": "другой/скрипт.bsl",
-    "bsl_cli": "/путь/к/open-bsl/target/release/bsl-cli"
+    "program": "другой/скрипт.bsl"
   },
   {
     "label": "open-bsl: присоединиться к запущенному",
