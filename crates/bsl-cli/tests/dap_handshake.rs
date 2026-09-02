@@ -922,3 +922,113 @@ fn a_suspended_frame_reports_the_call_line_not_the_next_one() {
     let _ = child.wait();
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Точка срабатывает на каждом витке цикла, целиком записанного в ОДНУ
+/// строку.
+///
+/// Прежнее правило требовало смены строки — а она не менялась, и точка
+/// срабатывала однажды. Признаком «пришли заново» теперь служит позиция:
+/// переход назад, вызов или возврат отличаются от линейного хода внутри
+/// одной строки.
+#[test]
+fn a_breakpoint_on_a_single_line_loop_fires_every_iteration() {
+    let dir = std::env::temp_dir().join(format!("bsl-dap-oneline-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("каталог");
+    let script = dir.join("однострочный.bsl");
+    std::fs::write(
+        &script,
+        "с = 0;\nДля ш = 1 По 4 Цикл с = с + 1; КонецЦикла;\nСообщить(с);\n",
+    )
+    .expect("скрипт");
+    assert_eq!(count_stops(&script, 2, false), 4, "витков четыре");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Базы строк и колонок независимы, как их и передаёт DAP.
+#[test]
+fn line_and_column_bases_are_independent() {
+    let dir = std::env::temp_dir().join(format!("bsl-dap-bases-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("каталог");
+    let script = dir.join("базы.bsl");
+    std::fs::write(&script, "а = 1;\nб = 2;\nСообщить(б);\n").expect("скрипт");
+
+    // Четыре сочетания: строка второго оператора и колонка в каждой базе.
+    for (lines_one, columns_one, want_line, want_column) in [
+        (true, true, "2", "1"),
+        (true, false, "2", "0"),
+        (false, true, "1", "1"),
+        (false, false, "1", "0"),
+    ] {
+        let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_bsl-cli"))
+            .arg("--debug")
+            .arg("--debug-port")
+            .arg("0")
+            .arg(&script)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .expect("запуск");
+        let port = port_from_stderr(child.stderr.as_mut().expect("stderr"));
+        let mut sock = TcpStream::connect(("127.0.0.1", port)).expect("подключение");
+        let bp = if lines_one { 2 } else { 1 };
+        for req in [
+            format!(
+                r#"{{"seq":1,"type":"request","command":"initialize","arguments":{{"linesStartAt1":{lines_one},"columnsStartAt1":{columns_one}}}}}"#
+            ),
+            format!(
+                r#"{{"seq":2,"type":"request","command":"setBreakpoints","arguments":{{"breakpoints":[{{"line":{bp}}}]}}}}"#
+            ),
+            r#"{"seq":3,"type":"request","command":"configurationDone"}"#.to_string(),
+        ] {
+            sock.write_all(&frame(&req)).expect("запрос");
+        }
+        let mut buf = Vec::new();
+        let mut chunk = [0u8; 4096];
+        let mut asked = false;
+        loop {
+            let n = sock.read(&mut chunk).expect("чтение");
+            assert!(n > 0, "остановки не случилось: {lines_one}/{columns_one}");
+            buf.extend_from_slice(&chunk[..n]);
+            let seen = decode(&buf);
+            if !asked && seen.iter().any(|(_, n)| n == "stopped") {
+                asked = true;
+                sock.write_all(&frame(
+                    r#"{"seq":4,"type":"request","command":"stackTrace","arguments":{"threadId":1}}"#,
+                ))
+                .expect("stackTrace");
+            }
+            if asked
+                && seen
+                    .iter()
+                    .any(|(k, n)| k == "response" && n == "stackTrace")
+            {
+                break;
+            }
+        }
+        let text = String::from_utf8_lossy(&buf);
+        let frames = &text[text.find("\"stackFrames\":[").expect("ответ stackTrace")..];
+        let num = |key: &str| -> String {
+            let rest = &frames[frames.find(key).expect("поле") + key.len()..];
+            rest[..rest
+                .find(|c: char| !c.is_ascii_digit())
+                .unwrap_or(rest.len())]
+                .to_string()
+        };
+        assert_eq!(
+            num("\"line\":"),
+            want_line,
+            "строка при базах {lines_one}/{columns_one}"
+        );
+        assert_eq!(
+            num("\"column\":"),
+            want_column,
+            "колонка при базах {lines_one}/{columns_one}"
+        );
+        sock.write_all(&frame(
+            r#"{"seq":5,"type":"request","command":"continue","arguments":{"threadId":1}}"#,
+        ))
+        .expect("continue");
+        let _ = child.wait();
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

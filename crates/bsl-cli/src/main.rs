@@ -406,6 +406,7 @@ fn run_file(path: &str, engine: Engine, arguments: Vec<String>) {
     let executable = module.executable_lines();
     let mut breakpoints = std::collections::HashSet::new();
     let mut lines_start_at_one = true;
+    let mut columns_start_at_one = true;
     if let Some(shared) = debug.as_ref() {
         let mut conn = shared.borrow_mut();
         loop {
@@ -418,8 +419,12 @@ fn run_file(path: &str, engine: Engine, arguments: Vec<String>) {
                 dap::session::After::KeepWaiting => {}
                 dap::session::After::Breakpoints(lines) => breakpoints = lines,
                 dap::session::After::Initialized {
-                    lines_start_at_one: base,
-                } => lines_start_at_one = base,
+                    lines_start_at_one: lines,
+                    columns_start_at_one: columns,
+                } => {
+                    lines_start_at_one = lines;
+                    columns_start_at_one = columns;
+                }
                 dap::session::After::Run => break,
                 dap::session::After::Stop => {
                     conn.flush();
@@ -449,6 +454,7 @@ fn run_file(path: &str, engine: Engine, arguments: Vec<String>) {
                 breakpoints.clone(),
                 executable.clone(),
                 lines_start_at_one,
+                columns_start_at_one,
             );
             match state.start(&module) {
                 Err(e) => Err(e),

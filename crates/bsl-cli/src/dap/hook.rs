@@ -43,15 +43,26 @@ pub struct Hook {
     /// Строки, на которых останавливаться.
     breakpoints: HashSet<u32>,
     mode: Mode,
-    /// Строка, на которой стояли в прошлый раз: шаг по строке
-    /// останавливается, когда она сменилась, а не на каждой инструкции.
-    last_line: Option<u32>,
+    /// Где стояли в прошлый раз: строка, глубина кадра и `pc`.
+    ///
+    /// Строки одной мало. Цикл, целиком записанный в одну строку, её не
+    /// меняет — и точка останова в нём сработала бы РАЗ, а не на каждом
+    /// витке. Признак «пришли сюда заново» это `pc`, не равный
+    /// предыдущему плюс один, либо смена глубины кадра: и переход назад, и
+    /// вызов, и возврат так отличаются от линейного хода внутри одной
+    /// строки.
+    last: Option<Position>,
     stopped_once: bool,
     /// Считает ли редактор строки с единицы. DAP по умолчанию ДА, но
     /// клиент вправе попросить с нуля через `initialize`; ответить не в
     /// той базе — значит показать не ту строку или получить отказ открыть
     /// кадр.
     lines_start_at_one: bool,
+    /// То же про КОЛОНКИ, и это отдельный флаг: DAP передаёт
+    /// `linesStartAt1` и `columnsStartAt1` независимо, и связывать их —
+    /// значит отвечать не в той базе всякий раз, когда клиент выбрал
+    /// разные.
+    columns_start_at_one: bool,
 }
 
 impl Hook {
@@ -61,6 +72,7 @@ impl Hook {
         breakpoints: HashSet<u32>,
         executable: HashSet<u32>,
         lines_start_at_one: bool,
+        columns_start_at_one: bool,
     ) -> Self {
         Self {
             executable,
@@ -70,9 +82,10 @@ impl Hook {
             // приходит отдельным `stopOnEntry`, и заводить её раньше,
             // чем клиент попросит, незачем.
             mode: Mode::Run,
-            last_line: None,
+            last: None,
             stopped_once: false,
             lines_start_at_one,
+            columns_start_at_one,
         }
     }
 
@@ -115,6 +128,7 @@ impl Hook {
                 "stackTrace" => {
                     let total = at.frames.len();
                     let base = self.lines_start_at_one;
+                    let col_base = self.columns_start_at_one;
                     let mut frames: Vec<serde_json::Value> = Vec::with_capacity(total);
                     for i in 0..total {
                         // Кадры отдаются изнутри наружу, как ждёт редактор,
@@ -131,7 +145,7 @@ impl Hook {
                             // Колонок в таблице нет — в образ уходит строка,
                             // и первая колонка в выбранной базе честнее
                             // выдуманного смещения.
-                            "column": u32::from(base),
+                            "column": u32::from(col_base),
                             "instructionPointerReference": format!("{pc}"),
                         }));
                     }
@@ -252,6 +266,14 @@ pub fn adjust_line(line: u32, start_at_one: bool) -> u32 {
     }
 }
 
+/// Где стоял прогон на прошлом вызове крючка.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Position {
+    line: u32,
+    depth: usize,
+    pc: usize,
+}
+
 /// Разрешение точек останова: ОДИН ответ на оба вопроса.
 ///
 /// Раньше строки для крючка собирались одной функцией, а ответ редактору
@@ -340,8 +362,17 @@ impl open_bsl::DebugHook for Hook {
             // Образ без таблицы строк: останавливаться не на чем.
             return DebugAction::Continue;
         };
-        let changed = self.last_line != Some(line);
         let depth = at.frames.len();
+        let pc = at.frames.last().map_or(0, |&(_, _, pc)| pc);
+        let here = Position { line, depth, pc };
+        let changed = self.last.map(|p| p.line) != Some(line);
+        // «Пришли заново» — это НЕ линейный ход внутри той же строки того
+        // же кадра. Переход назад, вызов, возврат и смена строки — всё
+        // сюда; продолжение подряд идущих инструкций одной строки — нет.
+        let re_entered = match self.last {
+            None => true,
+            Some(prev) => prev.line != line || prev.depth != depth || pc != prev.pc + 1,
+        };
         let stepping = !matches!(self.mode, Mode::Run);
         let stop = match self.mode {
             Mode::StepIn => changed || !self.stopped_once,
@@ -350,9 +381,11 @@ impl open_bsl::DebugHook for Hook {
             Mode::StepOver { depth: from } => changed && depth <= from,
             // Только выйдя: пока глубина та же или больше, идём дальше.
             Mode::StepOut { depth: from } => depth < from,
-            Mode::Run => changed && self.breakpoints.contains(&line),
+            // Не `changed`, а `re_entered`: цикл в одну строку иначе
+            // останавливался бы однажды вместо каждого витка.
+            Mode::Run => re_entered && self.breakpoints.contains(&line),
         };
-        self.last_line = Some(line);
+        self.last = Some(here);
         if !stop {
             // На ходу редактор всё равно может попросить остановиться, и
             // просьба обязана дойти, даже если скрипт крутится в цикле,

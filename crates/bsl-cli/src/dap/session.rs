@@ -164,8 +164,12 @@ pub enum After {
     KeepWaiting,
     /// Пришли точки останова: запомнить и ждать дальше.
     Breakpoints(std::collections::HashSet<u32>),
-    /// Редактор представился и сказал, с какой цифры считает строки.
-    Initialized { lines_start_at_one: bool },
+    /// Редактор представился и сказал, с какой цифры считает строки и
+    /// колонки. Флаги НЕЗАВИСИМЫ — так их и передаёт DAP.
+    Initialized {
+        lines_start_at_one: bool,
+        columns_start_at_one: bool,
+    },
     /// `configurationDone`: пора исполнять.
     Run,
     /// Редактор ушёл или попросил закончить.
@@ -200,6 +204,9 @@ pub fn handle_setup(
             // кадр.
             After::Initialized {
                 lines_start_at_one: request["arguments"]["linesStartAt1"]
+                    .as_bool()
+                    .unwrap_or(true),
+                columns_start_at_one: request["arguments"]["columnsStartAt1"]
                     .as_bool()
                     .unwrap_or(true),
             }
