@@ -1,13 +1,21 @@
-//! Расширение Zed: подключение к отладчику open-bsl.
+//! Расширение Zed: отладка open-bsl.
 //!
-//! Оно НЕ запускает адаптер. `bsl-cli --debug` — сервер, который слушает
-//! и ждёт, поэтому расширению остаётся сказать Zed, куда подключаться:
-//! в `DebugAdapterBinary` команда пустая, а заполнен `connection`. Так
-//! прямо и написано в описании интерфейса: «Zed will use TCP transport if
-//! `connection` is specified».
+//! Два режима, и выбирает их наличие поля `program` в конфигурации.
 //!
-//! Порядок работы от этого один и тот же и менять его нельзя: сначала
-//! процесс, потом редактор.
+//! **Запуск.** Есть `program` — Zed сам поднимает `bsl-cli --debug` на
+//! свободном порту и подключается к нему. Так работает кнопка «начать
+//! отладку»: пользователю не нужно ничего заводить в терминале заранее.
+//! Интерфейс это позволяет прямо: в `DebugAdapterBinary` можно задать и
+//! команду, и `connection`, и тогда Zed запускает процесс, а транспортом
+//! берёт TCP.
+//!
+//! **Присоединение.** `program` нет — значит, процесс уже запущен руками
+//! (`bsl-cli --debug скрипт.bsl`), и расширение только говорит, куда
+//! подключаться: команда пустая, заполнен `connection`.
+//!
+//! Первый режим появился потому, что без него редактор показывал
+//! «Connection to TCP DAP timeout»: нажать кнопку и получить отказ, если
+//! забыл отдельно запустить процесс, — это не отладчик, а загадка.
 
 use zed_extension_api::{
     self as zed, DebugAdapterBinary, DebugConfig, DebugRequest, DebugScenario,
@@ -24,6 +32,15 @@ const DEFAULT_PORT: u16 = 4711;
 
 struct OpenBslDebug;
 
+/// Строковое поле конфигурации, если оно задано и непусто.
+fn field(config: &zed::serde_json::Value, name: &str) -> Option<String> {
+    config
+        .get(name)
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+}
+
 impl zed::Extension for OpenBslDebug {
     fn new() -> Self {
         Self
@@ -33,36 +50,67 @@ impl zed::Extension for OpenBslDebug {
         &mut self,
         _adapter_name: String,
         config: DebugTaskDefinition,
-        _user_installed_path: Option<String>,
-        _worktree: &zed::Worktree,
+        user_installed_path: Option<String>,
+        worktree: &zed::Worktree,
     ) -> Result<DebugAdapterBinary, String> {
-        // Что задал пользователь в `tcp_connection`, то и берём; чего не
-        // задал — умолчания `bsl-cli`, чтобы конфигурация из двух строк
-        // работала без подробностей.
+        let parsed: zed::serde_json::Value =
+            zed::serde_json::from_str(&config.config).unwrap_or(zed::serde_json::Value::Null);
+
+        // Порт: что просили — то и берём; иначе умолчание `bsl-cli`.
         let template = config.tcp_connection.unwrap_or(TcpArgumentsTemplate {
             host: None,
             port: None,
             timeout: None,
         });
+        let port = template.port.unwrap_or(DEFAULT_PORT);
         let connection = resolve_tcp_template(TcpArgumentsTemplate {
             host: Some(template.host.unwrap_or(DEFAULT_HOST)),
-            port: Some(template.port.unwrap_or(DEFAULT_PORT)),
+            port: Some(port),
             timeout: template.timeout,
         })?;
+
+        let request_args = StartDebuggingRequestArguments {
+            configuration: config.config.clone(),
+            // Всегда присоединение: какую программу исполнять, решает
+            // командная строка `bsl-cli`, а не редактор.
+            request: StartDebuggingRequestArgumentsRequest::Attach,
+        };
+
+        let Some(program) = field(&parsed, "program") else {
+            // Присоединение к уже запущенному процессу.
+            return Ok(DebugAdapterBinary {
+                command: None,
+                arguments: Vec::new(),
+                envs: Vec::new(),
+                cwd: None,
+                connection: Some(connection),
+                request_args,
+            });
+        };
+
+        // Запуск. Путь к `bsl-cli` берётся из настройки расширения, из
+        // поля конфигурации либо из PATH — в таком порядке: явное
+        // указание важнее найденного.
+        let cli = user_installed_path
+            .or_else(|| field(&parsed, "bsl_cli"))
+            .or_else(|| worktree.which("bsl-cli"))
+            .ok_or_else(|| {
+                "не найден bsl-cli: укажите путь полем «bsl_cli» в конфигурации \
+                 либо положите его в PATH"
+                    .to_string()
+            })?;
         Ok(DebugAdapterBinary {
-            // Пусто намеренно: процесс уже запущен пользователем, и
-            // запускать второй значило бы отлаживать не ту программу.
-            command: None,
-            arguments: Vec::new(),
+            command: Some(cli),
+            arguments: vec![
+                "--debug".to_string(),
+                "--debug-port".to_string(),
+                port.to_string(),
+                program,
+            ],
             envs: Vec::new(),
-            cwd: None,
+            cwd: field(&parsed, "cwd").or_else(|| Some(worktree.root_path())),
             connection: Some(connection),
-            request_args: StartDebuggingRequestArguments {
-                configuration: config.config,
-                // Только присоединение: программу выбирает командная
-                // строка `bsl-cli`, а не редактор.
-                request: StartDebuggingRequestArgumentsRequest::Attach,
-            },
+            request_args,
         })
     }
 
@@ -75,20 +123,20 @@ impl zed::Extension for OpenBslDebug {
     }
 
     fn dap_config_to_scenario(&mut self, config: DebugConfig) -> Result<DebugScenario, String> {
-        // Из окна «новый сеанс» приходит запрос запуска или присоединения.
-        // Запускать мы не умеем — и говорим об этом, а не делаем вид.
-        if matches!(config.request, DebugRequest::Launch(_)) {
-            return Err(
-                "open-bsl не запускает программу из редактора: сначала запустите \
-                 `bsl-cli --debug скрипт.bsl`, потом присоединяйтесь"
-                    .to_string(),
-            );
-        }
+        // Из окна «новый сеанс» приходит либо запуск с программой, либо
+        // присоединение. Оба ложатся в один сценарий; разницу делает
+        // наличие `program`.
+        let body = match &config.request {
+            DebugRequest::Launch(launch) => {
+                zed::serde_json::json!({ "program": launch.program, "cwd": launch.cwd })
+            }
+            DebugRequest::Attach(_) => zed::serde_json::json!({}),
+        };
         Ok(DebugScenario {
             label: config.label,
             adapter: config.adapter,
             build: None,
-            config: "{}".to_string(),
+            config: body.to_string(),
             tcp_connection: Some(TcpArgumentsTemplate {
                 host: Some(DEFAULT_HOST),
                 port: Some(DEFAULT_PORT),

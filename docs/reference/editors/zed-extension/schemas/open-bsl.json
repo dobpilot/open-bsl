@@ -1,8 +1,21 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Конфигурация отладки open-bsl",
-  "description": "Подключение к уже запущенному bsl-cli --debug. Адрес и порт берутся из tcp_connection сценария; здесь задавать нечего.",
+  "description": "С полем «program» Zed сам запускает bsl-cli --debug и подключается. Без него — присоединяется к уже запущенному процессу; тогда его надо стартовать самому.",
   "type": "object",
-  "properties": {},
+  "properties": {
+    "program": {
+      "type": "string",
+      "description": "Путь к скрипту BSL. Поддерживаются подстановки Zed, например $ZED_FILE."
+    },
+    "bsl_cli": {
+      "type": "string",
+      "description": "Путь к bsl-cli. По умолчанию ищется в PATH."
+    },
+    "cwd": {
+      "type": "string",
+      "description": "Рабочая папка процесса. По умолчанию корень проекта."
+    }
+  },
   "additionalProperties": true
 }

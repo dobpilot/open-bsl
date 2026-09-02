@@ -1,6 +1,11 @@
 [
   {
-    "label": "open-bsl: подключиться",
+    "label": "open-bsl: текущий файл",
+    "adapter": "open-bsl",
+    "program": "$ZED_FILE"
+  },
+  {
+    "label": "open-bsl: присоединиться к запущенному",
     "adapter": "open-bsl"
   }
 ]
