@@ -82,10 +82,11 @@
 «ячейка на инструкцию» переезжает в конструктор `RunCaches`).
 
 - **Затрагивает публичный API `bsl-bytecode`** (удаляются `Chunk::prop_cache()`
-  и `Chunk::method_cache()`, поля, проверки образа) — **нужна отдельная
-  заявка OpenSpec** до реализации: `openspec/changes/bsl-vm-cache-run-state/`
-  (delta по `bsl-bytecode` и границе образа + сценарии). Регенерация
-  `docs/reference/bsl-api/api.md`, если задета публичная поверхность.
+  и `Chunk::method_cache()`, поля, проверки образа) — заявка OpenSpec
+  **создана**: [`openspec/changes/bsl-vm-cache-run-state/`](../../openspec/changes/bsl-vm-cache-run-state/proposal.md)
+  (delta по `bytecode-image`: кэши уходят из образа, отказ неполному кэшу
+  снимается как непредставимый). Поверхность BSL API не задета —
+  регенерация `api.md` не нужна, дифф проверяется как страховка.
 - Протянуть `&RunCaches` через `step`/`step_cold` и четыре шима JIT
   (`JitCtx += caches`), кэши каталожных модулей — в `attach_catalog`.
 - Измеренная цена (перепроверка 4 сентября, коммит `46d36b4`): ~1 %
