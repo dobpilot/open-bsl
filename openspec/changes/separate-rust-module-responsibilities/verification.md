@@ -80,3 +80,17 @@ bytecode text round-trip (6), DAP handshake (16), JIT-корпус (1) и
 Сверка JIT использует существующее исключение `SLOW_TO_COMPARE`:
 `n-body-perf.bsl`, `n-body-precision.bsl`, `n-body-pow-variant.bsl`.
 Это ограничения исходного раннера, не новые пропуски рефакторинга.
+
+## 2.1. Модуль ошибок runtime
+
+`RtError`, `ComponentError`, `RtResult` и их реализации перенесены в
+приватный `bsl-rt/src/error.rs`; прежние имена реэкспортированы из корня.
+Сравнение перенесённого блока с исходником подтверждает единственное
+отличие внутри блока: rustdoc-ссылка на `HostErrorCode` получила явный
+путь `crate::HostErrorCode`, чтобы не держать неиспользуемый импорт.
+Тексты ошибок, варианты и классификация исключений не изменены.
+
+Целевые smoke-тесты прошли. Полные ворота `step-2.1-*.log` прошли:
+fmt, Clippy, build, workspace test (1737 passed, 0 failed, 1 ignored,
+включая тесты `bsl-rt`), строгий rustdoc, отдельный JIT-корпус.
+`Cargo.lock`, профили сборки и `.cargo/config.toml` не менялись.
