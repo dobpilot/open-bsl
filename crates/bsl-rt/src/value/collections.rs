@@ -709,3 +709,303 @@ impl BslValue {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tests::num;
+    use crate::{MAX_SHAPE_TRANSITIONS, RuntimeShapes};
+
+    /// Имена членов в языке регистронезависимы, и кириллица здесь не
+    /// исключение: `eq_ignore_ascii_case` сворачивала только ASCII, из-за
+    /// чего `КЗ.значение` строчными не находило `Значение`. Корпус
+    /// фикстур этого не ловил: имя приходит сюда в написании ПЕРВОГО
+    /// вхождения в программе, а фикстуры пишут его канонично.
+    #[test]
+    fn native_property_names_fold_cyrillic_in_both_directions() {
+        let pair = BslValue::Object(Rc::new(BslObject::KeyValuePair(
+            BslValue::Str(BslString::from_str("к")),
+            BslValue::Str(BslString::from_str("з")),
+        )));
+        for name in ["Значение", "значение", "ЗНАЧЕНИЕ", "Value", "value"] {
+            assert_eq!(
+                pair.get_field_by_name(name).expect(name),
+                BslValue::Str(BslString::from_str("з")),
+                "член «{name}»"
+            );
+        }
+        for name in ["Ключ", "ключ", "КЛЮЧ"] {
+            assert_eq!(
+                pair.get_field_by_name(name).expect(name),
+                BslValue::Str(BslString::from_str("к")),
+                "член «{name}»"
+            );
+        }
+        assert!(pair.get_field_by_name("НетТакого").is_err());
+    }
+
+    #[test]
+    fn array_index_get_set_roundtrip() {
+        let arr = BslValue::new_array(vec![num("1"), num("2"), num("3")]);
+        assert_eq!(
+            arr.get_index(&num("1"), &NameInterner::new()).unwrap(),
+            num("2")
+        );
+        arr.set_index(&num("1"), num("99")).unwrap();
+        assert_eq!(
+            arr.get_index(&num("1"), &NameInterner::new()).unwrap(),
+            num("99")
+        );
+        assert_eq!(arr.collection_len().unwrap(), 3);
+    }
+
+    #[test]
+    fn array_out_of_bounds_is_an_error() {
+        let arr = BslValue::new_array(vec![num("1")]);
+        assert!(matches!(
+            arr.get_index(&num("5"), &NameInterner::new()).unwrap_err(),
+            RtError::IndexOutOfBounds { .. }
+        ));
+    }
+
+    #[test]
+    fn arrays_and_structures_are_reference_types() {
+        // b = a делает b тем же объектом, что и a: мутация через одну
+        // переменную видна через другую (Rc, не глубокое копирование).
+        let a = BslValue::new_array(vec![num("1")]);
+        let b = a.clone();
+        b.set_index(&num("0"), num("42")).unwrap();
+        assert_eq!(
+            a.get_index(&num("0"), &NameInterner::new()).unwrap(),
+            num("42")
+        );
+        assert!(a.eq_value(&b));
+
+        let c = BslValue::new_array(vec![num("42")]);
+        assert!(
+            !a.eq_value(&c),
+            "структурно равные, но разные объекты — не равны"
+        );
+    }
+
+    #[test]
+    fn structure_field_get_set_by_interned_name() {
+        let mut names = NameInterner::new();
+        let x = names.intern("x");
+        let y = names.intern("y");
+        let mut shapes = ShapeTable::new();
+        let shape_id = shapes.intern(&[x, y]);
+        let shapes = shapes.into_shapes();
+        let shape = shapes[shape_id as usize].clone();
+
+        let s = BslValue::new_structure(shape, vec![num("1"), num("2")]);
+        assert_eq!(s.get_field(x).unwrap(), num("1"));
+        s.set_field(y, num("99")).unwrap();
+        assert_eq!(s.get_field(y).unwrap(), num("99"));
+    }
+
+    #[test]
+    fn unknown_field_is_an_error() {
+        let mut names = NameInterner::new();
+        let x = names.intern("x");
+        let z = names.intern("z");
+        let mut shapes = ShapeTable::new();
+        let shape_id = shapes.intern(&[x]);
+        let shapes = shapes.into_shapes();
+        let shape = shapes[shape_id as usize].clone();
+
+        let s = BslValue::new_structure(shape, vec![num("1")]);
+        assert!(matches!(
+            s.get_field(z).unwrap_err(),
+            RtError::UnknownField(_)
+        ));
+    }
+
+    // --- Словарный режим структуры ------------------------------------
+    //
+    // Порог `MAX_SHAPE_TRANSITIONS` — единственная защита от того, что
+    // `Вставить` с динамическим именем в цикле навсегда интернирует форму
+    // на каждой итерации (см. doc comment на константе). Тесты ниже
+    // фиксируют и сам переход, и то, ради чего он затеян: таблица форм
+    // после него перестаёт расти.
+
+    /// Пустая структура плюс рантайм-контекст форм — общая затравка для
+    /// тестов деградации.
+    fn fresh_structure() -> (BslValue, RuntimeShapes) {
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
+        let empty = rt.shapes.empty();
+        (BslValue::new_structure(empty, Vec::new()), rt)
+    }
+
+    fn is_dictionary(v: &BslValue) -> bool {
+        match v {
+            BslValue::Object(o) => match &**o {
+                BslObject::Structure(s) => {
+                    matches!(&*s.borrow(), StructureStorage::Dictionary { .. })
+                }
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
+    /// `Вставить("Поле<i>", i)` — ровно тот путь, на котором форма уходит
+    /// вглубь: каждый ключ новый, так что каждый переход заводил бы форму.
+    fn insert_generated_fields(s: &BslValue, rt: &mut RuntimeShapes, count: u32) {
+        for i in 0..count {
+            let f = rt.names.intern(&format!("Поле{i}"));
+            s.structure_insert(f, num(&i.to_string()), &mut rt.shapes)
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn structure_degrades_to_dictionary_after_threshold_inserts() {
+        let (s, mut rt) = fresh_structure();
+
+        insert_generated_fields(&s, &mut rt, MAX_SHAPE_TRANSITIONS);
+        assert!(
+            !is_dictionary(&s),
+            "ровно {MAX_SHAPE_TRANSITIONS} переходов должны укладываться в порог"
+        );
+
+        insert_generated_fields(&s, &mut rt, MAX_SHAPE_TRANSITIONS + 1);
+        assert!(
+            is_dictionary(&s),
+            "переход за порог обязан деградировать объект"
+        );
+    }
+
+    #[test]
+    fn dictionary_structure_field_get_set_roundtrip() {
+        let (s, mut rt) = fresh_structure();
+        insert_generated_fields(&s, &mut rt, MAX_SHAPE_TRANSITIONS + 5);
+        assert!(is_dictionary(&s));
+
+        // Поля, заведённые ДО деградации (перенесённые из слотов), и после
+        // неё — читаются и пишутся одинаково.
+        let first = rt.names.intern("Поле0");
+        let last = rt
+            .names
+            .intern(&format!("Поле{}", MAX_SHAPE_TRANSITIONS + 4));
+        assert_eq!(s.get_field(first).unwrap(), num("0"));
+        assert_eq!(
+            s.get_field(last).unwrap(),
+            num(&(MAX_SHAPE_TRANSITIONS + 4).to_string())
+        );
+
+        s.set_field(first, num("777")).unwrap();
+        s.set_field(last, num("888")).unwrap();
+        assert_eq!(s.get_field(first).unwrap(), num("777"));
+        assert_eq!(s.get_field(last).unwrap(), num("888"));
+
+        let missing = rt.names.intern("НетТакогоПоля");
+        assert!(matches!(
+            s.get_field(missing).unwrap_err(),
+            RtError::UnknownField(_)
+        ));
+        assert!(matches!(
+            s.set_field(missing, num("1")).unwrap_err(),
+            RtError::UnknownField(_)
+        ));
+    }
+
+    #[test]
+    fn dictionary_structure_delete_keeps_order_of_the_rest() {
+        let total = MAX_SHAPE_TRANSITIONS + 3;
+        let (s, mut rt) = fresh_structure();
+        insert_generated_fields(&s, &mut rt, total);
+        assert!(is_dictionary(&s));
+
+        let victim = rt.names.intern("Поле1");
+        s.structure_delete(victim, &mut rt.shapes).unwrap();
+        assert_eq!(s.collection_len().unwrap(), total as usize - 1);
+
+        // Ожидаемый порядок — исходный без удалённого: `order` теряет ровно
+        // один элемент, остальные не переставляются.
+        let expected: Vec<String> = (0..total)
+            .filter(|i| *i != 1)
+            .map(|i| format!("Поле{i}"))
+            .collect();
+        let actual: Vec<String> = (0..expected.len())
+            .map(
+                |i| match s.get_index(&num(&i.to_string()), &rt.names).unwrap() {
+                    BslValue::Object(o) => match &*o {
+                        BslObject::KeyValuePair(k, _) => k.to_string(),
+                        other => panic!("ожидался КлючИЗначение, получено {other:?}"),
+                    },
+                    other => panic!("ожидался объект, получено {other:?}"),
+                },
+            )
+            .collect();
+        assert_eq!(actual, expected);
+
+        // Удаление отсутствующего — no-op и в словарном режиме тоже.
+        let missing = rt.names.intern("НетТакогоПоля");
+        s.structure_delete(missing, &mut rt.shapes).unwrap();
+        assert_eq!(s.collection_len().unwrap(), total as usize - 1);
+    }
+
+    #[test]
+    fn shape_table_stops_growing_after_degradation() {
+        // Суть всей задачи: без порога здесь было бы 10_000 бессмертных
+        // форм со списками имён нарастающей длины — квадратичная память.
+        let (s, mut rt) = fresh_structure();
+        insert_generated_fields(&s, &mut rt, 10_000);
+
+        assert!(is_dictionary(&s));
+        assert_eq!(s.collection_len().unwrap(), 10_000);
+        // Пустая форма + по одной на каждый разрешённый переход, и ни одной
+        // сверх того.
+        assert_eq!(rt.shapes.len(), MAX_SHAPE_TRANSITIONS as usize + 1);
+    }
+
+    #[test]
+    fn dictionary_structure_does_not_poison_inline_cache_for_shaped_objects() {
+        let mut rt = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
+        // `Поле0` — первое имя и у `shaped`, и у сгенерированной серии, так
+        // что оба объекта проходят через одну и ту же форму `[Поле0]`.
+        let x = rt.names.intern("Поле0");
+
+        let shaped = BslValue::new_structure(rt.shapes.empty(), Vec::new());
+        shaped
+            .structure_insert(x, num("1"), &mut rt.shapes)
+            .unwrap();
+
+        let dict = BslValue::new_structure(rt.shapes.empty(), Vec::new());
+        insert_generated_fields(&dict, &mut rt, MAX_SHAPE_TRANSITIONS + 2);
+        assert!(is_dictionary(&dict));
+        assert!(!is_dictionary(&shaped));
+        assert_eq!(dict.get_field(x).unwrap(), num("0"));
+
+        // Один и тот же сайт вызова (одна ячейка кэша) видит оба объекта.
+        let cache: std::cell::RefCell<Option<(Rc<Shape>, u32)>> = std::cell::RefCell::new(None);
+
+        assert_eq!(shaped.get_field_cached(x, &cache).unwrap(), num("1"));
+        let filled = cache.borrow().clone();
+        assert!(filled.is_some(), "шейповый объект обязан заполнить кэш");
+
+        assert_eq!(dict.get_field_cached(x, &cache).unwrap(), num("0"));
+        let after_dict = cache.borrow().clone();
+        match (&filled, &after_dict) {
+            (Some((a, ai)), Some((b, bi))) => {
+                assert!(Rc::ptr_eq(a, b), "словарный объект затёр форму в кэше");
+                assert_eq!(ai, bi, "словарный объект затёр слот в кэше");
+            }
+            _ => panic!("словарный объект обнулил ячейку кэша"),
+        }
+
+        // И быстрый путь для шейпового объекта по-прежнему работает.
+        shaped.set_field_cached(x, num("42"), &cache).unwrap();
+        assert_eq!(shaped.get_field_cached(x, &cache).unwrap(), num("42"));
+        // Запись через тот же сайт в словарный объект тоже не портит кэш.
+        dict.set_field_cached(x, num("43"), &cache).unwrap();
+        assert_eq!(dict.get_field_cached(x, &cache).unwrap(), num("43"));
+        let after_dict_set = cache.borrow().clone();
+        match (&filled, &after_dict_set) {
+            (Some((a, _)), Some((b, _))) => assert!(Rc::ptr_eq(a, b)),
+            _ => panic!("словарный объект обнулил ячейку кэша при записи"),
+        }
+        assert_eq!(shaped.get_field_cached(x, &cache).unwrap(), num("42"));
+    }
+}

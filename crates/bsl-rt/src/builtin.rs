@@ -2003,6 +2003,7 @@ pub fn call_builtin_method_files(
 #[cfg(test)]
 mod name_table_tests {
     use super::*;
+    use crate::tests::num;
 
     #[test]
     fn base64_builtins_follow_the_measured_invalid_input_contracts() {
@@ -2273,5 +2274,55 @@ mod name_table_tests {
             .expect("значение по умолчанию обязано работать");
         call_builtin_method_ctx(BuiltinMethod::Insert, &structure, &extra[..2], &mut rt)
             .expect("верная арность обязана работать");
+    }
+
+    #[test]
+    fn builtin_math_functions_lookup_and_call() {
+        assert_eq!(BuiltinFn::lookup("sqrt"), Some(BuiltinFn::Sqrt));
+        assert_eq!(BuiltinFn::lookup("Sqrt"), Some(BuiltinFn::Sqrt));
+        assert_eq!(BuiltinFn::lookup("СООБЩИТЬ"), Some(BuiltinFn::Message));
+        assert_eq!(
+            BuiltinFn::lookup("ТекущаяУниверсальнаяДатаВМиллисекундах"),
+            Some(BuiltinFn::CurrentUniversalDateInMilliseconds)
+        );
+        assert_eq!(
+            BuiltinFn::CurrentUniversalDateInMilliseconds.arity_range(),
+            (0, 0)
+        );
+        assert_eq!(BuiltinFn::lookup("НетТакойФункции"), None);
+        assert_eq!(BuiltinFn::Pow.arity_range(), (2, 2));
+        assert_eq!(BuiltinFn::Sqrt.arity_range(), (1, 1));
+        // Необязательный аргумент — диапазон, а не одно число.
+        assert_eq!(BuiltinFn::Mid.arity_range(), (2, 3));
+        assert_eq!(BuiltinFn::StrTemplate.arity_range(), (1, 11));
+
+        let v = call_builtin_fn(BuiltinFn::Sqrt, &[num("2")]).unwrap();
+        assert_eq!(v, num("1.4142135623731"));
+    }
+
+    #[test]
+    fn builtin_method_count_on_array() {
+        assert_eq!(BuiltinMethod::lookup("count"), Some(BuiltinMethod::Count));
+        let arr = BslValue::new_array(vec![num("1"), num("2"), num("3")]);
+        let v = call_builtin_method(BuiltinMethod::Count, &arr, &[]).unwrap();
+        assert_eq!(v, num("3"));
+    }
+
+    #[test]
+    fn builtin_method_upper_bound_on_array() {
+        assert_eq!(
+            BuiltinMethod::lookup("UBound"),
+            Some(BuiltinMethod::UpperBound)
+        );
+        let empty = BslValue::new_array(Vec::new());
+        assert_eq!(
+            call_builtin_method(BuiltinMethod::UpperBound, &empty, &[]).unwrap(),
+            num("-1")
+        );
+        let filled = BslValue::new_array(vec![num("1"), num("2"), num("3")]);
+        assert_eq!(
+            call_builtin_method(BuiltinMethod::UpperBound, &filled, &[]).unwrap(),
+            num("2")
+        );
     }
 }

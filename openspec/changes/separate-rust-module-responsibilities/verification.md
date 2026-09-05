@@ -199,3 +199,33 @@ workspace test (1737 passed, 0 failed, 1 ignored), строгий rustdoc,
 `binary_data_reads_through_the_sessions_file_system`,
 `a_failing_close_from_the_session_file_system_is_catchable`,
 `two_states_write_into_their_own_file_systems` и файловые JIT-проверки.
+
+## 2.8. Тесты у владельцев
+
+34 исходных корневых теста распределены по проверяемой обязанности:
+9 — ядро значения, 11 — коллекции, 9 — ввод-вывод, 1 — строки,
+3 — таблица имён и диспетчеризация builtin. Проверка `reserve_hint`
+остаётся в корне. Тесты, уже находившиеся у `date.rs`, `table.rs` и
+других владельцев, не переставлялись.
+
+Все 40 исходных блоков (34 теста и 6 помощников) совпадают текстово,
+кроме `pub(super)` у двух общих тестовых помощников. `num` остаётся
+в корневом тестовом модуле для builtin и value; `bin` принадлежит
+тестам ядра и используется также I/O-тестами. Помощники не копировались.
+Все assertions, комментарии и атрибуты тестов сохранены.
+
+Повторная инвентаризация трёх крейтов сохранена в `runtime-tests.txt`.
+Сравнение по прежним именам с явной заменой модульных префиксов:
+672 исходных теста сохранены, пропавших нет; текущие 679 отличаются
+только семью smoke-тестами шага 1.3. Проверены не только количества,
+но и каждый элемент списка. В полном логе все 34 распределённых теста
+найдены с результатом `ok`.
+
+Явный `cargo test -p bsl-rt --test open_questions_registry` прошёл:
+`the_job_plan_remaining_table_is_registered`,
+`measure_script_covers_every_registry_id`,
+`open_questions_registry_matches_source_markers` действительно исполнены.
+Реестр и измерительные скрипты не менялись.
+Последовательные полные ворота `step-2.8-*.log` прошли: fmt, Clippy,
+build, workspace test (1737 passed, 0 failed, 1 ignored), строгий
+rustdoc, отдельный JIT-корпус.

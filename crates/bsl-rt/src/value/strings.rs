@@ -320,3 +320,25 @@ impl BslValue {
         Ok(BslValue::Number(BslNumber::from_i64(code)))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::rc::Rc;
+
+    #[test]
+    fn uuid_is_accepted_by_case_conversion_functions() {
+        let uuid = BslValue::Object(Rc::new(BslObject::Uuid([
+            0xab, 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef, 0x12, 0x34, 0x56,
+            0x78, 0x90,
+        ])));
+        assert_eq!(
+            uuid.str_lower().unwrap().to_string(),
+            "abcdef12-3456-7890-abcd-ef1234567890"
+        );
+        assert_eq!(
+            uuid.str_upper().unwrap().to_string(),
+            "ABCDEF12-3456-7890-ABCD-EF1234567890"
+        );
+    }
+}

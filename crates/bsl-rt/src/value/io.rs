@@ -436,3 +436,161 @@ impl BslValue {
 fn binary_split_max_part() -> BslNumber {
     BslNumber::from_i128(u64::MAX as i128)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::tests::bin;
+    use super::*;
+    use crate::tests::num;
+    use crate::{BslString, FileHandle};
+
+    /// `ЗаписьТекста.Закрыть()` не теряет буфер при отказе сброса. Файл,
+    /// открытый ТОЛЬКО НА ЧТЕНИЕ, заворачивается в `BufWriter`: маленькая
+    /// запись остаётся в памяти, а `flush` на закрытии падает. Прежде
+    /// `take()` снимал писатель ДО `flush`, и второй `Закрыть()` находил
+    /// `None` и врал успехом при незаписанном тексте.
+    #[test]
+    fn text_writer_close_keeps_the_buffer_when_flush_fails() {
+        use std::io::Write as _;
+        let path = std::env::temp_dir().join("open-bsl-text-writer-close-fail.txt");
+        std::fs::File::create(&path).expect("создать файл");
+        let read_only = std::fs::OpenOptions::new()
+            .read(true)
+            .open(&path)
+            .expect("открыть на чтение");
+        let mut buffered = std::io::BufWriter::new(Box::new(read_only) as Box<dyn FileHandle>);
+        buffered
+            .write_all("незаписанный текст".as_bytes())
+            .expect("в буфер");
+        let writer = BslValue::Object(Rc::new(BslObject::TextWriter(std::cell::RefCell::new(
+            Some(buffered),
+        ))));
+        assert!(
+            matches!(writer.text_writer_close(), Err(RtError::IoError(_))),
+            "сброс в файл только на чтение обязан упасть"
+        );
+        assert!(
+            matches!(writer.text_writer_close(), Err(RtError::IoError(_))),
+            "повторный Закрыть() снова падает — буфер не потерян"
+        );
+
+        let ok_path = std::env::temp_dir().join("open-bsl-text-writer-close-ok.txt");
+        let ok_file = std::fs::File::create(&ok_path).expect("создать файл");
+        let writer_ok = BslValue::Object(Rc::new(BslObject::TextWriter(std::cell::RefCell::new(
+            Some(std::io::BufWriter::new(
+                Box::new(ok_file) as Box<dyn FileHandle>
+            )),
+        ))));
+        assert!(writer_ok.text_writer_close().is_ok(), "исправный закрылся");
+        assert!(
+            writer_ok.text_writer_close().is_ok(),
+            "повторный Закрыть() идемпотентен"
+        );
+    }
+
+    /// Размеры частей разбиения — то, что видно из BSL через `Размер()`.
+    fn part_sizes(parts: &BslValue) -> Vec<usize> {
+        let BslValue::Object(o) = parts else {
+            panic!("разбиение обязано отдать массив, отдало {parts:?}");
+        };
+        let BslObject::Array(items) = &**o else {
+            panic!("разбиение обязано отдать массив, отдало {parts:?}");
+        };
+        items
+            .borrow()
+            .iter()
+            .map(
+                |part| match part.binary_data_size().expect("у части есть размер") {
+                    BslValue::Number(n) => n.to_i64_exact().expect("размер целый") as usize,
+                    other => panic!("Размер() вернул не число: {other:?}"),
+                },
+            )
+            .collect()
+    }
+
+    #[test]
+    fn binary_data_split_exact_multiple() {
+        let parts = bin(b"0123456789ab").binary_data_split(&num("4")).unwrap();
+        assert_eq!(part_sizes(&parts), vec![4, 4, 4]);
+    }
+
+    #[test]
+    fn binary_data_split_short_tail() {
+        let parts = bin(b"0123456789").binary_data_split(&num("4")).unwrap();
+        assert_eq!(part_sizes(&parts), vec![4, 4, 2]);
+    }
+
+    #[test]
+    fn binary_data_split_part_larger_than_whole() {
+        let parts = bin(b"012").binary_data_split(&num("100")).unwrap();
+        assert_eq!(part_sizes(&parts), vec![3]);
+        // Размер части шире `usize`, но в пределах `2^64-1`, — не ошибка:
+        // та же одна часть (измерено, см. `binary_split_max_part`).
+        let parts = bin(b"012")
+            .binary_data_split(&num("18446744073709551615"))
+            .unwrap();
+        assert_eq!(part_sizes(&parts), vec![3]);
+        // На единицу больше — уже ошибка, ровно как у платформы.
+        assert!(
+            bin(b"012")
+                .binary_data_split(&num("18446744073709551616"))
+                .is_err()
+        );
+    }
+
+    /// Пустые данные дают массив из ОДНОЙ пустой части, а не пустой массив
+    /// (измерено фикстурой `binary-data`).
+    #[test]
+    fn binary_data_split_empty_yields_one_empty_part() {
+        let parts = bin(b"").binary_data_split(&num("5")).unwrap();
+        assert_eq!(part_sizes(&parts), vec![0]);
+    }
+
+    #[test]
+    fn binary_data_split_rejects_non_positive_and_fractional_sizes() {
+        for bad in ["0", "-1", "2.5"] {
+            assert!(
+                bin(b"0123").binary_data_split(&num(bad)).is_err(),
+                "размер части {bad} обязан быть ошибкой"
+            );
+        }
+        // Числовая строка тоже отвергается — платформа её не приводит.
+        assert!(
+            bin(b"0123")
+                .binary_data_split(&BslValue::Str(BslString::from_str("5")))
+                .is_err()
+        );
+        // Разбивать не двоичные данные нечего.
+        assert!(
+            BslValue::Str(BslString::from_str("абв"))
+                .binary_data_split(&num("2"))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn binary_data_combine_empty_array() {
+        let joined = BslValue::new_array(vec![]).binary_data_combine().unwrap();
+        assert_eq!(joined, bin(b""));
+        assert!(!joined.is_filled().expect("пустые данные не заполнены"));
+        assert_eq!(joined.to_string(), "");
+    }
+
+    #[test]
+    fn binary_data_combine_concatenates_in_array_order() {
+        let joined = BslValue::new_array(vec![bin(b"ab"), bin(b""), bin(b"cd")])
+            .binary_data_combine()
+            .unwrap();
+        assert_eq!(joined, bin(b"abcd"));
+    }
+
+    #[test]
+    fn binary_data_combine_rejects_a_non_binary_element() {
+        let bad = BslValue::new_array(vec![bin(b"ab"), BslValue::Str(BslString::from_str("вг"))]);
+        assert!(bad.binary_data_combine().is_err());
+        let bad = BslValue::new_array(vec![bin(b"ab"), BslValue::Undefined]);
+        assert!(bad.binary_data_combine().is_err());
+        // Аргумент вообще не массив.
+        assert!(bin(b"ab").binary_data_combine().is_err());
+    }
+}
