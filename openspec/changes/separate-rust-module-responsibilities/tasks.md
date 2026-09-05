@@ -10,7 +10,7 @@
 - [x] 1.1 Перед реализацией повторно проверить актуальные OpenSpec changes и HEAD; записать baseline и перекрывающиеся работы, не менять чужой diff.
 - [x] 1.2 На baseline выполнить fmt, clippy, build, workspace tests и rustdoc из design; записать результаты, пропуски и список тестов затронутых крейтов через `cargo test -p <crate> -- --list`.
 - [x] 1.3 Добавить и запустить интеграционные compile-smoke тесты прежних Rust-путей и сигнатур переносимых элементов; отдельно сохранить проверку размера/выравнивания `BslValue` и `RtError` относительно baseline, не объявляя стабильный Rust ABI.
-- [ ] 1.4 Проверить на baseline API-reference, open-questions registry, bytecode round-trip, JIT-корпус и DAP handshake; сохранить список реально исполненных тестов.
+- [x] 1.4 Проверить на baseline API-reference, open-questions registry, bytecode round-trip, JIT-корпус и DAP handshake; сохранить список реально исполненных тестов.
 
 ## 2. Разделить `bsl-rt`
 

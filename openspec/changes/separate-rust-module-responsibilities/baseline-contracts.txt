@@ -1,0 +1,36 @@
+step-1.4-corpus.log:test the_jit_agrees_with_the_interpreter_on_every_script ... ok
+step-1.4-corpus.log:test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 54.29s
+step-1.4-corpus.log:conformance: 48 проверено, 76 пропущено (нет .expected)
+step-1.4-corpus.log:  пропущены: dates, dynamic-execute, n-body-perf, n-body-pow-variant, n-body-precision, n-body-smoke, strings-and-types, table-wave2, table-wave3, measure-all, measure-array-boundaries, measure-ascii-encoding, measure-async, measure-background-jobs, measure-base64, measure-binary, measure-binbuf, measure-builtin-call, measure-chars, measure-concat, measure-connector-stream, measure-current-universal-date, measure-data-hashing, measure-dom-write, measure-dom, measure-empty-string, measure-equality, measure-error-info, measure-goto, measure-http-network, measure-http-objects, measure-http-security-objects, measure-insert-default, measure-json-reader-close, measure-json-writer-settings, measure-json, measure-lvalue, measure-min-max, measure-nstr, measure-pdf-attachments, measure-pdf-read, measure-pdf-write, measure-pdf, measure-regex, measure-regex2, measure-stmtcall, measure-stream-encoding-defaults, measure-stream, measure-string-boundaries, measure-string-find, measure-string-split, measure-temp-files, measure-ternary, measure-text-reader, measure-textdoc, measure-type-description-convert, measure-unsupported, measure-url-codec, measure-uuid-string-functions, measure-value-list, measure-vfile, measure-vstr, measure-xdto-io, measure-xdto-order, measure-xdto-serializer, measure-xdto-validation, measure-xdto, measure-xml-dtd, measure-xml-invalid-chars, measure-xml-string-primitives, measure-xml, measure-xpath, measure-xsd, measure-zip-write, measure-zip, measure-zone
+step-1.4-corpus.log:test conformance_fixtures_match_oracle_output ... ok
+step-1.4-corpus.log:test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 6.87s
+step-1.4-dap.log:test a_busy_port_is_refused_clearly_and_does_not_panic ... ok
+step-1.4-dap.log:test a_breakpoint_stops_before_its_line_runs ... ok
+step-1.4-dap.log:test a_breakpoint_moved_to_the_next_line_actually_fires_there ... ok
+step-1.4-dap.log:test a_session_handshakes_runs_the_script_and_reports_the_end ... ok
+step-1.4-dap.log:test an_address_flag_without_debug_is_refused ... ok
+step-1.4-dap.log:test a_forward_jump_inside_one_line_is_not_a_re_entry ... ok
+step-1.4-dap.log:test debug_with_a_removing_pass_is_refused_from_the_command_line ... ok
+step-1.4-dap.log:test a_stopped_frame_shows_its_locals ... ok
+step-1.4-dap.log:test a_breakpoint_on_a_single_line_loop_fires_every_iteration ... ok
+step-1.4-dap.log:test a_suspended_frame_reports_the_call_line_not_the_next_one ... ok
+step-1.4-dap.log:test pause_reaches_a_run_that_never_stops_on_its_own ... ok
+step-1.4-dap.log:test zero_based_clients_get_zero_based_lines_and_working_breakpoints ... ok
+step-1.4-dap.log:test evaluate_answers_in_the_frame_the_editor_chose ... ok
+step-1.4-dap.log:test a_breakpoint_in_a_loop_body_fires_every_iteration ... ok
+step-1.4-dap.log:test step_over_skips_a_call_while_step_in_enters_it ... ok
+step-1.4-dap.log:test line_and_column_bases_are_independent ... ok
+step-1.4-dap.log:test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.66s
+step-1.4-api.log:test checked_in_api_reference_matches_the_generator ... ok
+step-1.4-api.log:test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.15s
+step-1.4-round-trip.log:test effectful_core_constructors_use_the_component_abi ... ok
+step-1.4-round-trip.log:test component_receiver_methods_compile_only_to_the_open_opcode ... ok
+step-1.4-round-trip.log:test round_trip_with_debug_info_is_byte_identical_and_keeps_the_lines ... ok
+step-1.4-round-trip.log:test round_trip_through_text_is_byte_identical ... ok
+step-1.4-round-trip.log:test reparsed_program_matches_the_original_structurally ... ok
+step-1.4-round-trip.log:test the_corpus_covers_every_opcode ... ok
+step-1.4-round-trip.log:test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+step-1.4-registry.log:test the_job_plan_remaining_table_is_registered ... ok
+step-1.4-registry.log:test open_questions_registry_matches_source_markers ... ok
+step-1.4-registry.log:test measure_script_covers_every_registry_id ... ok
+step-1.4-registry.log:test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
