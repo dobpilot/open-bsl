@@ -141,3 +141,22 @@ JIT-корпус. В логе подтверждено исполнение 11 �
 `a_fixed_clock_makes_the_time_reproducible`,
 `jit::a_fixed_clock_survives_a_jit_run`, `two_states_do_not_share_a_clock`
 и конформанса с `.expected`.
+
+## 2.5. Коллекции и свойства
+
+В приватный `value/collections.rs` перенесены конструкторы массива,
+структуры и соответствия, полиморфная индексация, свойства, кэшированный
+доступ и операции добавления/удаления/очистки коллекций. Все пять
+перенесённых блоков текстово совпадают с исходными; изменений видимости
+нет. Общий `index_as_usize` остаётся у `value`, поскольку его использует
+также табличный `table_move`. Алгоритмы `MapData` и `StructureStorage`
+не копировались.
+
+Полные ворота `step-2.5-*.log` прошли: fmt, Clippy, build, workspace
+test (1737 passed, 0 failed, 1 ignored), строгий rustdoc, отдельный
+JIT-корпус. Исполнены `array_index_get_set_roundtrip`,
+`dictionary_structure_does_not_poison_inline_cache_for_shaped_objects`,
+`shape_table_stops_growing_after_degradation`,
+`get_prop_inline_cache_stays_correct_across_different_shapes`,
+`set_prop_inline_cache_stays_correct_across_different_shapes` и тесты
+переходов формы при вставке полей. Маркеры совместимости сохранены.
