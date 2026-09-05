@@ -267,9 +267,6 @@ fn reparsed_program_matches_the_original_structurally() {
                 (y.n_params, y.n_locals, y.n_regs)
             );
             assert_eq!(x.local_names, y.local_names, "{src}");
-            // Кэш инлайн-кэширования не сохраняется, но обязан быть
-            // размером с код — иначе VM промахнётся по индексу.
-            assert_eq!(y.prop_cache().len(), y.instrs.len(), "{src}");
             // Разметка бандлов тоже не сохраняется, но пересчёт при
             // разборе обязан дать в точности таблицу компилятора —
             // иначе скомпилированный и загруженный байт-код разойдутся

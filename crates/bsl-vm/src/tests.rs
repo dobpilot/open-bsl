@@ -11,6 +11,73 @@ fn scheduler_quantum_defaults_to_the_confirmed_value() {
     assert_eq!(SchedulerConfig::default().safe_points_per_quantum, 1_024);
 }
 
+#[test]
+fn a_run_allocates_both_cache_slots_for_every_instruction() {
+    let program = compile_module("Функция Ф(х)\nВозврат х;\nКонецФункции\nРезультат = Ф(1);");
+    let mut builder = bsl_rt::RuntimeBuilder::new();
+    builder.register(bsl_rt::core_library());
+    let registry = builder.build().expect("ядро реестра собирается");
+    let env = bsl_rt::HostEnv::process();
+    let mut execution =
+        ProgramExecution::start_with_registry(&program, &registry, JitMode::Off, &env)
+            .expect("программа связывается");
+
+    assert_eq!(execution.caches.prop.len(), program.chunks.len());
+    assert_eq!(execution.caches.method.len(), program.chunks.len());
+    for (chunk, (props, methods)) in program
+        .chunks
+        .iter()
+        .zip(execution.caches.prop.iter().zip(&execution.caches.method))
+    {
+        assert_eq!(props.len(), chunk.instrs.len());
+        assert_eq!(methods.len(), chunk.instrs.len());
+    }
+
+    let catalog = service_catalog();
+    execution.attach_catalog(&catalog);
+    assert_eq!(execution.catalog_caches.len(), catalog.modules.len());
+    for (module, caches) in catalog.modules.iter().zip(&execution.catalog_caches) {
+        // Длины утверждаются явно: zip молча обрезается по короткому, и
+        // без них модуль с пустыми кэшами прошёл бы проверку зелёным.
+        assert_eq!(caches.prop.len(), module.program.chunks.len());
+        assert_eq!(caches.method.len(), module.program.chunks.len());
+        for (chunk, (props, methods)) in module
+            .program
+            .chunks
+            .iter()
+            .zip(caches.prop.iter().zip(&caches.method))
+        {
+            assert_eq!(props.len(), chunk.instrs.len());
+            assert_eq!(methods.len(), chunk.instrs.len());
+        }
+    }
+}
+
+#[test]
+fn a_second_run_of_the_same_program_starts_with_cold_caches() {
+    let program = compile_module("Результат = 1;");
+    let mut builder = bsl_rt::RuntimeBuilder::new();
+    builder.register(bsl_rt::core_library());
+    let registry = builder.build().expect("ядро реестра собирается");
+    let env = bsl_rt::HostEnv::process();
+    let first = ProgramExecution::start_with_registry(&program, &registry, JitMode::Off, &env)
+        .expect("первый прогон связывается");
+    *first.caches.prop[0][0].borrow_mut() = Some((bsl_rt::ShapeTable::new().empty(), 0));
+    *first.caches.method[0][0].borrow_mut() = Some((0, None));
+
+    let second = ProgramExecution::start_with_registry(&program, &registry, JitMode::Off, &env)
+        .expect("второй прогон связывается");
+    assert!(second.caches.prop[0][0].borrow().is_none());
+    assert!(second.caches.method[0][0].borrow().is_none());
+}
+
+/// Кэш открытого метода хранит адрес таблицы и разрешённый дескриптор;
+/// рост этой ячейки умножается на каждую инструкцию каждого чанка.
+#[test]
+fn method_cache_slot_did_not_grow() {
+    assert_eq!(std::mem::size_of::<MethodCacheSlot>(), 32);
+}
+
 /// Компилятор фрагментов `Выполнить`/`Вычислить` для тестов VM.
 ///
 /// Настоящий живёт в фасаде (`open_bsl::DynamicCode`) вместе с кэшем; VM о
@@ -1947,7 +2014,8 @@ fn corrupt_program(instrs: Vec<Instr>) -> Program {
             c.n_locals = 1;
             c.n_regs = 1;
             // Образ ФИНАЛИЗИРУЕТСЯ, иначе периметр отказывал бы на
-            // длине инлайн-кэша — то есть раньше проверяемого дефекта, и
+            // пометке «трогает объекты», не отвечающей инструкциям, — то
+            // есть раньше проверяемого дефекта, и
             // тесты проходили бы по посторонней причине. Разметка при
             // этом остаётся пустой: поинструкционное исполнение — ровно
             // тот путь, на котором и проверяется `InvalidBytecode`.
@@ -2043,9 +2111,9 @@ fn corrupt_bytecode_inside_a_call_unwinds_to_an_error_not_a_panic() {
     program.function_names = vec!["Вызванная".to_string()];
     program.exported_functions = vec![false];
     // Финализация ПОСЛЕ всех правок, иначе у клонированного чанка
-    // остались бы кэши прежней длины, и периметр отверг бы образ по ним —
-    // до того, как дело дошло бы до кадра вызываемого. Тест был бы зелён и
-    // размотку не проверял.
+    // остались бы разметка и пометка прежней редакции, и периметр отверг
+    // бы образ по ним — до того, как дело дошло бы до кадра вызываемого.
+    // Тест был бы зелён и размотку не проверял.
     bsl_bytecode::image::finalize(&mut program);
     // Периметр этот образ ОТВЕРГАЕТ, и так и должно быть: номер константы
     // вне таблицы он теперь проверяет. Тест про другое — про то, что

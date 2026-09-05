@@ -14,8 +14,6 @@
 
 use bsl_rt::RtError;
 
-use std::cell::RefCell;
-
 use crate::instr::{ArgMode, Instr};
 use crate::{Chunk, Program};
 
@@ -81,7 +79,6 @@ fn finalize_with_bundles(program: &mut Program, bundles: bool) {
         // повторяли дословно кодоген и разбор листинга — с припиской
         // «ответы обязаны совпадать». Теперь ответ один.
         chunk.touches_objects = chunk.instrs.iter().any(Instr::touches_objects);
-        reset_inline_caches(chunk);
         program.chunks[index].bundle_len = if bundles {
             crate::bundle::compute(&program.chunks[index], overlap)
         } else {
@@ -107,7 +104,8 @@ pub fn finalize_lone_chunk(chunk: &mut Chunk) {
 }
 
 /// То же для чанка, о независимости членов которого утверждать НЕЧЕГО:
-/// таблицы на инструкцию заполняются, разметка бандлов остаётся пустой.
+/// пометка «трогает объекты» пересчитывается, разметка бандлов остаётся
+/// пустой.
 ///
 /// Пустая разметка означает поинструкционное исполнение и никакого
 /// утверждения не делает, поэтому она всегда сонадёжна. Существует эта
@@ -126,24 +124,6 @@ pub fn finalize_lone_chunk_unbundled(chunk: &mut Chunk) {
     // означало бы «с прежними бандлами» — то есть с утверждением о
     // независимости, посчитанным для другой редакции инструкций.
     chunk.bundle_len.clear();
-    reset_inline_caches(chunk);
-}
-
-/// Завести по ячейке инлайн-кэша на инструкцию, СБРОСИВ прежние.
-///
-/// Сброс здесь обязателен, а не гигиеничен. Ячейка помнит форму и слот,
-/// но НЕ помнит имя поля, поэтому кэш, прогретый на прежней редакции
-/// инструкций, соврал бы после их правки: `ПолучитьСвойство А`,
-/// заменённое на `ПолучитьСвойство Б` на той же позиции, вернуло бы слот
-/// `А` при совпавшей форме. Сохранять прогретые записи можно было бы
-/// только при доказанной неизменности инструкции, а такого
-/// доказательства у финализации нет — её и зовут после правок.
-fn reset_inline_caches(chunk: &mut Chunk) {
-    let count = chunk.instrs.len();
-    chunk.prop_cache.clear();
-    chunk.prop_cache.resize_with(count, || RefCell::new(None));
-    chunk.method_cache.clear();
-    chunk.method_cache.resize_with(count, || RefCell::new(None));
 }
 
 /// Производные таблицы обязаны отвечать инструкциям своего чанка.
@@ -173,33 +153,6 @@ fn check_bundle_freshness(
     if chunk.bundle_len != crate::bundle::compute(chunk, overlap) {
         return Err(RtError::InvalidBytecode(
             "разметка бандлов не отвечает инструкциям чанка",
-        ));
-    }
-    Ok(())
-}
-
-/// Инлайн-кэши отведены по ячейке на инструкцию.
-///
-/// Короткий кэш VM ловит и сегодня, но ПОСРЕДИ исполнения: доступ идёт
-/// через проверяемый `at`, и отказ приходит на той инструкции, до
-/// которой дошли, — то есть после того, как программа уже что-то
-/// напечатала и что-то изменила. Свойство здесь статическое, и место
-/// ему до первой инструкции.
-///
-/// Пустой кэш законным НЕ считается, в отличие от пустой разметки
-/// бандлов: у разметки пустота означает объявленный отказ от бандлов,
-/// а у кэша — просто отсутствие ячеек, и первое же обращение отказало
-/// бы.
-fn check_inline_caches(chunk: &Chunk) -> Result<(), RtError> {
-    let n = chunk.instrs.len();
-    if chunk.prop_cache.len() != n {
-        return Err(RtError::InvalidBytecode(
-            "инлайн-кэш свойств не по ячейке на инструкцию",
-        ));
-    }
-    if chunk.method_cache.len() != n {
-        return Err(RtError::InvalidBytecode(
-            "инлайн-кэш методов не по ячейке на инструкцию",
         ));
     }
     Ok(())
@@ -403,7 +356,6 @@ pub fn verify(program: &Program) -> Result<(), RtError> {
     // «число аргументов встроенной функции вне её арности» превращалось
     // бы в «разметка не отвечает инструкциям».
     for (index, chunk) in program.chunks.iter().enumerate() {
-        check_inline_caches(chunk)?;
         check_bundle_freshness(chunk, index, program.module_vars.len())?;
     }
     Ok(())
@@ -1144,32 +1096,6 @@ mod tests {
         verify(&p).expect("пустая разметка обязана оставаться законной");
     }
 
-    /// Финализация не сохраняет прогретые ячейки инлайн-кэша.
-    ///
-    /// Ячейка помнит форму и слот, но не имя поля, поэтому пережившая
-    /// правку инструкций запись вернула бы слот ПРЕЖНЕГО свойства при
-    /// совпавшей форме. Проверяется наблюдаемо: ячейка, заполненная
-    /// вручную, после финализации обязана быть пустой.
-    #[test]
-    fn finalization_does_not_keep_warm_inline_caches() {
-        let mut p = valid_program();
-        let shape = bsl_rt::ShapeTable::new().empty();
-        *p.chunks[0].prop_cache[0].borrow_mut() = Some((shape, 0));
-        // Второй кэш проверяется отдельно, а не «заодно»: сегодня оба
-        // сбрасывает один помощник, но требование их два, и разойтись они
-        // могут раньше, чем это заметят.
-        *p.chunks[0].method_cache[0].borrow_mut() = Some((0, None));
-        finalize(&mut p);
-        assert!(
-            p.chunks[0].prop_cache[0].borrow().is_none(),
-            "прогретая ячейка кэша свойств пережила финализацию"
-        );
-        assert!(
-            p.chunks[0].method_cache[0].borrow().is_none(),
-            "прогретая ячейка кэша методов пережила финализацию"
-        );
-    }
-
     /// «Без бандлов» означает пустую разметку и на чанке, который уже
     /// финализировали с ними: иначе имя обещало бы одно, а таблица несла
     /// бы утверждение о независимости от прежней редакции инструкций.
@@ -1285,23 +1211,6 @@ mod tests {
             assert!(
                 verify(&p).is_err(),
                 "модульный слот вне таблицы (запись: {setter}) прошёл проверку"
-            );
-        }
-    }
-
-    /// Короткий инлайн-кэш отвергается ДО первой инструкции.
-    #[test]
-    fn a_short_inline_cache_is_rejected_before_the_first_instruction() {
-        for short_props in [true, false] {
-            let mut p = valid_program();
-            if short_props {
-                p.chunks[0].prop_cache.pop();
-            } else {
-                p.chunks[0].method_cache.pop();
-            }
-            assert!(
-                verify(&p).is_err(),
-                "короткий инлайн-кэш (свойств: {short_props}) прошёл проверку"
             );
         }
     }

@@ -87,6 +87,4 @@ fn a_lone_chunk_has_its_own_finalization() {
     image::finalize_lone_chunk(&mut c);
 
     assert_eq!(c.bundle_len(), bundle::compute(&c, None));
-    assert_eq!(c.prop_cache().len(), c.instrs.len());
-    assert_eq!(c.method_cache().len(), c.instrs.len());
 }

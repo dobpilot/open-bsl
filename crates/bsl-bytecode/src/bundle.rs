@@ -33,9 +33,9 @@
 //! # Производная таблица
 //!
 //! Разметка хранится в [`Chunk::bundle_len`] и в текстовый формат байт-кода
-//! не пишется — при разборе она пересчитывается заново (прецедент:
-//! `prop_cache`). Так `--run-bytecode` не обязан доверять
-//! разметке из файла: единственный производитель таблицы — [`compute`], и
+//! не пишется — при разборе она пересчитывается заново. Так
+//! `--run-bytecode` не обязан доверять разметке из файла: единственный
+//! производитель таблицы — [`compute`], и
 //! заявленная независимость членов всегда доказана этим же анализом.
 //! Пересчёт обязан быть детерминированной функцией сериализуемых полей —
 //! это проверяет побайтовый round-trip текстового формата вместе с
@@ -223,11 +223,7 @@ mod tests {
     // Сами тесты строят чанки из инструкций, а рабочий код модуля после
     // выноса классификации в `analysis` про `Instr` уже не знает.
     use crate::instr::Instr;
-    use std::cell::RefCell;
-
     fn chunk(instrs: Vec<Instr>) -> Chunk {
-        let prop_cache = instrs.iter().map(|_| RefCell::new(None)).collect();
-        let method_cache = instrs.iter().map(|_| RefCell::new(None)).collect();
         let bundle_len = vec![0; instrs.len()];
         Chunk {
             instrs,
@@ -242,8 +238,6 @@ mod tests {
             touches_objects: false,
             n_locals: 8,
             n_regs: 16,
-            prop_cache,
-            method_cache,
             local_names: Vec::new(),
             bundle_len,
         }

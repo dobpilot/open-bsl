@@ -36,6 +36,7 @@ pub(crate) mod jit {
             _frames: &mut Vec<crate::Frame>,
             _stack: &mut Vec<bsl_rt::BslValue>,
             _program: &bsl_bytecode::Program,
+            _caches: &crate::RunCaches,
             _runtime_shapes: &mut bsl_rt::RuntimeShapes,
             _linked: &crate::LinkedComponents<'_>,
             _quantum_remaining: &mut usize,
@@ -1687,6 +1688,47 @@ pub enum ProgramPoll {
     Waiting,
 }
 
+/// Слот инлайн-кэша `GetProp`/`SetProp`: интернированная форма структуры
+/// и номер слота поля в ней.
+type PropCacheSlot = std::cell::RefCell<Option<(std::rc::Rc<bsl_rt::Shape>, u32)>>;
+
+/// Слот инлайн-кэша `CallObjectMethod`: адрес статической таблицы методов
+/// типа-получателя и разрешённый по ней дескриптор. Кэшируется дескриптор
+/// целиком, чтобы попадание не платило отдельно за поиск арности.
+type MethodCacheSlot =
+    std::cell::RefCell<Option<(usize, Option<&'static bsl_rt::MethodDescriptor>)>>;
+
+/// Инлайн-кэши одного запуска: по вектору ячеек на чанк, по одной ячейке
+/// каждого вида на инструкцию.
+struct RunCaches {
+    prop: Vec<Vec<PropCacheSlot>>,
+    method: Vec<Vec<MethodCacheSlot>>,
+}
+
+impl RunCaches {
+    fn for_program(program: &Program) -> Self {
+        let prop = program
+            .chunks
+            .iter()
+            .map(|chunk| {
+                std::iter::repeat_with(|| std::cell::RefCell::new(None))
+                    .take(chunk.instrs.len())
+                    .collect()
+            })
+            .collect();
+        let method = program
+            .chunks
+            .iter()
+            .map(|chunk| {
+                std::iter::repeat_with(|| std::cell::RefCell::new(None))
+                    .take(chunk.instrs.len())
+                    .collect()
+            })
+            .collect();
+        Self { prop, method }
+    }
+}
+
 /// Состояние одного запуска программы, сохраняемое между вызовами `poll`.
 /// Не содержит ссылок на host-сервисы и после завершения освобождает их для
 /// следующего запуска того же `State`.
@@ -1703,6 +1745,17 @@ pub struct ProgramExecution {
     debug: Option<Box<dyn DebugHook>>,
     root_result: Option<(BslValue, Vec<BslValue>)>,
     module_state: ModuleState,
+    /// Кэши корневой программы этого запуска.
+    caches: RunCaches,
+    /// Кэши модулей каталога; индекс совпадает с `session_modules`.
+    ///
+    /// Параллельный вектор, а не третье поле `ModuleInstance`, — потому
+    /// что в цикле `poll_linked` кэши текущего модуля держатся разделяемой
+    /// ссылкой одновременно с мутабельным заимствованием
+    /// `session_modules` через `ModulesCtx`. Слить их — задача стадии 5
+    /// (`modules.rs`) плана `bsl-vm-refactor.md`, вместе с переездом
+    /// `ModuleInstance`.
+    catalog_caches: Vec<RunCaches>,
     /// Экземпляры общих модулей каталога этого сеанса; у одиночной
     /// программы пуст.
     session_modules: SessionModules,
@@ -1761,6 +1814,8 @@ impl ProgramExecution {
             debug: None,
             root_result: None,
             module_state,
+            caches: RunCaches::for_program(program),
+            catalog_caches: Vec::new(),
             session_modules: SessionModules::default(),
             force_scheduled: false,
             cancel_flag: None,
@@ -1771,8 +1826,24 @@ impl ProgramExecution {
     /// Подключает сессионные экземпляры модулей каталога: по одному
     /// `ModuleInstance` на модуль, все в состоянии `NotStarted`. Вызывается
     /// один раз при создании конфигурационного запуска.
+    ///
+    /// `catalog` обязан быть тем же и неизменённым, что и в последующих
+    /// `poll_configuration_*`: кэши и сессия строятся под его модули (см.
+    /// контракт у [`Self::poll_with_registry_and_io`]).
     pub fn attach_catalog(&mut self, catalog: &bsl_bytecode::ConfigurationProgram) {
         self.session_modules = SessionModules::for_catalog(catalog);
+        // Ячейки заводятся ЭНЕРГИЧНО для всех модулей каталога — так
+        // требует спецификация образа («по ячейке на инструкцию до
+        // исполнения первой инструкции»), и это сознательная цена: запуск
+        // платит аллокацией, пропорциональной всему байт-коду каталога,
+        // даже за модули, которых не коснётся. Ленивое заведение по
+        // первому кадру модуля — изменение требования, не оптимизация на
+        // месте (см. риски в `docs/plans/bsl-vm-refactor.md`).
+        self.catalog_caches = catalog
+            .modules
+            .iter()
+            .map(|module| RunCaches::for_program(&module.program))
+            .collect();
     }
 
     /// Включает постоянное квантование — для фонового прогона, которым
@@ -1943,6 +2014,16 @@ impl ProgramExecution {
     /// вызовами. Конечный `host_slice` не блокирует ожидание completion;
     /// `usize::MAX` используется run-to-completion драйвером и ждёт первый.
     ///
+    /// `program` обязана быть ТОЙ ЖЕ и НЕИЗМЕНЁННОЙ программой, что при
+    /// старте: под неё построены таблицы запуска — инлайн-кэши
+    /// ([`RunCaches`]), нативные слоты, слоты модульных переменных.
+    /// Программа с другой геометрией отказывает посреди исполнения, а
+    /// правка `instrs` на месте между poll'ами опаснее — тёплая ячейка
+    /// кэша помнит форму и слот, но не имя поля, и при совпавшей форме
+    /// молча вернёт слот прежнего свойства. Раньше это страховали сброс
+    /// ячеек в `image::finalize` и проверка образа; теперь инвариант
+    /// держится этим контрактом.
+    ///
     /// # Errors
     ///
     /// Возвращает ошибку связывания или исполнения.
@@ -1985,6 +2066,11 @@ impl ProgramExecution {
     /// линкуются на каждый poll — так же, как одиночный путь
     /// перелинковывает свою программу. Перед первым poll должен быть
     /// вызван [`Self::attach_catalog`].
+    ///
+    /// `entry` и `catalog` обязаны быть теми же и неизменёнными, что при
+    /// старте и в `attach_catalog`, — по той же причине, что у
+    /// [`Self::poll_with_registry_and_io`]: таблицы запуска, включая
+    /// инлайн-кэши модулей, построены под них.
     ///
     /// # Errors
     ///
@@ -2105,6 +2191,8 @@ impl ProgramExecution {
             debug,
             root_result,
             module_state,
+            caches,
+            catalog_caches,
             session_modules,
             force_scheduled,
             cancel_flag,
@@ -2259,15 +2347,23 @@ impl ProgramExecution {
                     .last()
                     .expect("инвариант VM: drive всегда держит хотя бы один кадр")
                     .module;
-                let (cur_program, cur_linked) = if cur_module == ROOT_MODULE {
-                    (program, linked)
+                let (cur_program, cur_linked, cur_caches) = if cur_module == ROOT_MODULE {
+                    (program, linked, &*caches)
                 } else {
                     let Some(ctx) = catalog else {
                         return Err(RtError::InvalidBytecode(
                             "кадр модуля конфигурации без каталожного контекста",
                         ));
                     };
-                    (ctx.program(cur_module)?, ctx.linked(cur_module)?)
+                    (
+                        ctx.program(cur_module)?,
+                        ctx.linked(cur_module)?,
+                        at(
+                            &*catalog_caches,
+                            cur_module as usize,
+                            "номер модуля вне таблицы кэшей запуска",
+                        )?,
+                    )
                 };
                 // Нативный путь. Он не обязан ничего исполнить: если на текущей
                 // позиции входа нет, управление просто идёт в `step`, и это же
@@ -2320,6 +2416,15 @@ impl ProgramExecution {
                                 &mut task.frames,
                                 &mut task.stack,
                                 program,
+                                // Корневые кэши, а не `cur_caches`: все три
+                                // аргумента (`program`, кэши, `linked`)
+                                // обязаны быть одного уровня. Сегодня это
+                                // одно и то же — ветка открыта только под
+                                // `cur_module == ROOT_MODULE`, — но стража
+                                // решает про покрытие JIT, а не про кэши,
+                                // и снявший её не должен получить чтение
+                                // ячеек модуля под инструкции корня.
+                                &*caches,
                                 runtime_shapes,
                                 linked,
                                 &mut task.quantum_remaining,
@@ -2450,6 +2555,7 @@ impl ProgramExecution {
                     &mut task.frames,
                     &mut task.stack,
                     cur_program,
+                    cur_caches,
                     step_state,
                     &mut modules_ctx,
                     &mut task.current_exception,
@@ -2912,32 +3018,28 @@ fn numeric_for_next_regular(
 }
 
 /// Ячейка инлайн-кэша, отведённая под инструкцию на позиции `pc`.
-/// `prop_cache` кодоген заводит длиной со всем `instrs`, но чанк мог
-/// прийти и не от него.
+/// Конструктор состояния запуска заводит её вместе со всеми остальными
+/// ячейками программы.
 #[inline]
-fn prop_cache(
-    chunk: &bsl_bytecode::Chunk,
-    pc: usize,
-) -> Result<&bsl_bytecode::PropCacheSlot, RtError> {
-    at(
-        chunk.prop_cache(),
-        pc,
-        "нет ячейки инлайн-кэша для инструкции",
-    )
+fn prop_cache(caches: &RunCaches, func_id: usize, pc: usize) -> Result<&PropCacheSlot, RtError> {
+    let chunk = at(&caches.prop, func_id, "номер чанка вне инлайн-кэша свойств")?;
+    at(chunk, pc, "нет ячейки инлайн-кэша для инструкции")
 }
 
 /// Ячейка инлайн-кэша `CallObjectMethod` на позиции `pc` — см.
 /// [`cached_component_method`].
 #[inline]
 fn method_cache(
-    chunk: &bsl_bytecode::Chunk,
+    caches: &RunCaches,
+    func_id: usize,
     pc: usize,
-) -> Result<&bsl_bytecode::MethodCacheSlot, RtError> {
-    at(
-        chunk.method_cache(),
-        pc,
-        "нет ячейки кэша метода для инструкции",
-    )
+) -> Result<&MethodCacheSlot, RtError> {
+    let chunk = at(
+        &caches.method,
+        func_id,
+        "номер чанка вне инлайн-кэша методов",
+    )?;
+    at(chunk, pc, "нет ячейки кэша метода для инструкции")
 }
 
 /// Разрешение метода компонентного объекта с кэшем на позиции инструкции:
@@ -2947,14 +3049,15 @@ fn method_cache(
 /// перезаписывает ячейку; `None` кэшируется наравне с попаданием — тип без
 /// имени в таблице не платит за строку и хэш на каждый вызов.
 fn cached_component_method(
-    chunk: &bsl_bytecode::Chunk,
+    caches: &RunCaches,
+    func_id: usize,
     pc: usize,
     map: &ComponentMethodMap,
     table: &'static [bsl_rt::MethodDescriptor],
     name: bsl_rt::NameId,
     program: &Program,
 ) -> Result<Option<&'static bsl_rt::MethodDescriptor>, RtError> {
-    let slot = method_cache(chunk, pc)?;
+    let slot = method_cache(caches, func_id, pc)?;
     let key = table.as_ptr() as usize;
     if let Some((cached_table, resolved)) = *slot.borrow()
         && cached_table == key
@@ -3135,6 +3238,7 @@ fn step(
     frames: &mut Vec<Frame>,
     stack: &mut Vec<BslValue>,
     program: &Program,
+    caches: &RunCaches,
     module_state: &mut ModuleState,
     modules: &mut ModulesCtx<'_, '_>,
     current_exception: &mut Option<BslValue>,
@@ -3727,8 +3831,8 @@ fn step(
             }
             Instr::GetProp { dst, obj, name } => {
                 let ov = reg_load(stack, frames[frame_idx].reg_index(obj))?;
-                // Структура резолвится через инлайн-кэш этой ИНСТРУКЦИИ
-                // (см. Chunk::prop_cache): мономорфный сайт вызова после
+                // Структура резолвится через инлайн-кэш этой ИНСТРУКЦИИ,
+                // живущий в состоянии запуска: мономорфный сайт вызова после
                 // первого попадания читает слот напрямую, без HashMap-
                 // поиска в Shape::index. СтрокаТаблицыЗначений заводит
                 // колонки в рантайме и не могла быть интернирована на
@@ -3760,7 +3864,7 @@ fn step(
                         &mut context,
                     )?
                 } else {
-                    match ov.get_field_cached(name, prop_cache(chunk, pc)?) {
+                    match ov.get_field_cached(name, prop_cache(caches, func_id, pc)?) {
                         Err(RtError::NotAnObject) => {
                             ov.get_field_by_name(field_name(program, name)?)?
                         }
@@ -3801,7 +3905,7 @@ fn step(
                     )?;
                 } else {
                     let имя = field_name(program, name)?;
-                    match ov.set_field_cached(name, sv.clone(), prop_cache(chunk, pc)?) {
+                    match ov.set_field_cached(name, sv.clone(), prop_cache(caches, func_id, pc)?) {
                         Err(RtError::NotAnObject) => ov.set_field_by_name(имя, sv)?,
                         other => other?,
                     }
@@ -3903,6 +4007,7 @@ fn step(
                     frames,
                     stack,
                     program,
+                    caches,
                     current_exception,
                     linked,
                     host,
@@ -3985,6 +4090,7 @@ fn step_cold(
     frames: &mut Vec<Frame>,
     stack: &mut Vec<BslValue>,
     program: &Program,
+    caches: &RunCaches,
     current_exception: &Option<BslValue>,
     linked: &LinkedComponents<'_>,
     host: &mut HostIo<'_, '_>,
@@ -4097,7 +4203,9 @@ fn step_cold(
                     &mut context,
                 )?
             } else {
-                match ov.get_field_cached(name_id, prop_cache(chunk, frames[frame_idx].pc)?) {
+                match ov
+                    .get_field_cached(name_id, prop_cache(caches, func_id, frames[frame_idx].pc)?)
+                {
                     Err(RtError::NotAnObject) => {
                         ov.get_field_by_name(field_name(program, name_id)?)?
                     }
@@ -4140,7 +4248,7 @@ fn step_cold(
                 match ov.set_field_cached(
                     name_id,
                     value.clone(),
-                    prop_cache(chunk, frames[frame_idx].pc)?,
+                    prop_cache(caches, func_id, frames[frame_idx].pc)?,
                 ) {
                     Err(RtError::NotAnObject) => {
                         ov.set_field_by_name(field_name(program, name_id)?, value)?
@@ -4317,7 +4425,8 @@ fn step_cold(
                 // строковым `call_method`, там единственный источник
                 // текста ошибки о неизвестном методе.
                 match cached_component_method(
-                    chunk,
+                    caches,
+                    func_id,
                     frames[frame_idx].pc,
                     &linked.component_methods,
                     object.method_table(),
@@ -5041,6 +5150,16 @@ fn call_module_function_in_execution(
     // значениями в начале стека.
     let mut call_stack = args;
     push_own_registers(&mut call_stack, chunk);
+    // ИЗВЕСТНАЯ ЦЕНА: вложенный `drive_linked` — отдельный прогон, и по
+    // требованию изоляции прогонов (спецификация `bytecode-image`,
+    // «Инлайн-кэши принадлежат прогону») он заводит СВЕЖИЕ ячейки на всю
+    // программу и стартует с холодным кэшем на каждый вызов. Для
+    // callback-плотного кода (функция восстановления `ПрочитатьJSON` зовёт
+    // сюда на каждое значение) это аллокация, пропорциональная модулю, и
+    // потеря мономорфности на каждом вызове — раньше ячейки жили в `Chunk`
+    // общей программы и оставались тёплыми. Прогрев через разделение
+    // ячеек с объемлющим прогоном требует поправки требования изоляции,
+    // не локальной правки (см. риски в `docs/plans/bsl-vm-refactor.md`).
     let (value, final_stack) = drive_linked(
         program,
         func_id,

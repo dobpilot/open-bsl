@@ -46,7 +46,7 @@ mod mem;
 mod x64;
 
 use crate::{
-    CallArgs, ComponentMethodMap, ComponentPropertyMap, Frame, HostIo, LinkedComponents,
+    CallArgs, ComponentMethodMap, ComponentPropertyMap, Frame, HostIo, LinkedComponents, RunCaches,
     add_const_op, add_op, at, binop, cached_component_method, call_builtin_with_format, cmp,
     component_prop_get, component_prop_set, field_name, neg_op, numeric_for_next_regular,
     prop_cache, reg_load, reg_store,
@@ -83,6 +83,7 @@ pub struct JitCtx {
     frames: *mut Vec<Frame>,
     stack: *mut Vec<BslValue>,
     program: *const Program,
+    caches: *const RunCaches,
     error: *mut Option<RtError>,
     /// Нужна `GetIndex`: индексация по строке ищет имя поля в этой
     /// таблице. Она переживает весь прогон и живёт в `drive_with`, как и
@@ -129,6 +130,7 @@ impl CompiledChunk {
         frames: &mut Vec<Frame>,
         stack: &mut Vec<BslValue>,
         program: &Program,
+        caches: &RunCaches,
         runtime_shapes: &mut bsl_rt::RuntimeShapes,
         linked: &LinkedComponents<'_>,
         quantum_remaining: &mut usize,
@@ -139,6 +141,7 @@ impl CompiledChunk {
             frames,
             stack,
             program,
+            caches,
             error: &mut error,
             runtime_shapes,
             builtin_methods: linked.builtin_methods.as_ptr(),
@@ -593,25 +596,27 @@ unsafe fn run_prop_shim(
         &Program,
         usize,
         &mut bsl_rt::RuntimeShapes,
+        &RunCaches,
         &ComponentPropertyMap,
     ) -> Result<u64, RtError>,
 ) -> u64 {
     let properties = unsafe { &*(&*ctx).component_properties };
+    let caches = unsafe { &*(&*ctx).caches };
     unsafe {
         run_shim(ctx, pc, |frames, stack, program, idx, shapes| {
-            body(frames, stack, program, idx, shapes, properties)
+            body(frames, stack, program, idx, shapes, caches, properties)
         })
     }
 }
 
 macro_rules! prop_shim {
-    ($name:ident, |$frames:ident, $stack:ident, $program:ident, $idx:ident, $shapes:ident, $props:ident, $pc:ident| $body:block) => {
+    ($name:ident, |$frames:ident, $stack:ident, $program:ident, $idx:ident, $shapes:ident, $caches:ident, $props:ident, $pc:ident| $body:block) => {
         extern "C" fn $name(ctx: *mut JitCtx, pc_arg: u32, _a: u32, _b: u32, _c: u32) -> u64 {
             unsafe {
                 run_prop_shim(
                     ctx,
                     pc_arg,
-                    |$frames, $stack, $program, $idx, $shapes, $props| {
+                    |$frames, $stack, $program, $idx, $shapes, $caches, $props| {
                         let $pc: u32 = pc_arg;
                         $body
                     },
@@ -973,7 +978,7 @@ shim!(shim_call_builtin, |frames,
                           _a,
                           _b,
                           _c| {
-    let (_chunk, instr) = own_instr(frames, program, idx, pc as usize)?;
+    let (_, instr) = own_instr(frames, program, idx, pc as usize)?;
     let Instr::CallBuiltin {
         dst,
         builtin,
@@ -1011,20 +1016,18 @@ shim!(shim_call_builtin, |frames,
 
 /// Своя инструкция шима — по точному `pc`, который нативный код передал
 /// аргументом (`frame.pc` на горячем пути не поддерживается — см.
-/// `run_shim`). Возвращает и чанк — он нужен и под инлайн-кэш свойства, и
-/// под таблицу констант.
-fn own_instr<'a>(
+/// `run_shim`). Возвращает и номер чанка: шимам свойств и открытого
+/// метода он нужен для адресации ячейки инлайн-кэша, а второй раз читать
+/// кадр незачем.
+fn own_instr(
     frames: &[Frame],
-    program: &'a Program,
+    program: &Program,
     idx: usize,
     pc: usize,
-) -> Result<(&'a bsl_bytecode::Chunk, Instr), RtError> {
-    let chunk = at(
-        &program.chunks,
-        frames[idx].func_id,
-        "номер чанка вне таблицы функций",
-    )?;
-    Ok((chunk, *at(&chunk.instrs, pc, "инструкция вне чанка")?))
+) -> Result<(usize, Instr), RtError> {
+    let func_id = frames[idx].func_id;
+    let chunk = at(&program.chunks, func_id, "номер чанка вне таблицы функций")?;
+    Ok((func_id, *at(&chunk.instrs, pc, "инструкция вне чанка")?))
 }
 
 prop_shim!(shim_get_prop, |frames,
@@ -1032,9 +1035,10 @@ prop_shim!(shim_get_prop, |frames,
                            program,
                            idx,
                            shapes,
+                           caches,
                            props,
                            pc| {
-    let (chunk, instr) = own_instr(frames, program, idx, pc as usize)?;
+    let (func_id, instr) = own_instr(frames, program, idx, pc as usize)?;
     let Instr::GetProp { dst, obj, name } = instr else {
         return Err(RtError::InvalidBytecode(
             "шим свойства вызван не на своей инструкции",
@@ -1051,7 +1055,7 @@ prop_shim!(shim_get_prop, |frames,
         let mut context = bsl_rt::CallContext::native(shapes, bsl_format::format_value);
         component_prop_get(object, props, name, program, &mut context)?
     } else {
-        match ov.get_field_cached(name, prop_cache(chunk, pc as usize)?) {
+        match ov.get_field_cached(name, prop_cache(caches, func_id, pc as usize)?) {
             Err(RtError::NotAnObject) => ov.get_field_by_name(field_name(program, name)?)?,
             other => other?,
         }
@@ -1066,9 +1070,10 @@ prop_shim!(shim_set_prop, |frames,
                            program,
                            idx,
                            shapes,
+                           caches,
                            props,
                            pc| {
-    let (chunk, instr) = own_instr(frames, program, idx, pc as usize)?;
+    let (func_id, instr) = own_instr(frames, program, idx, pc as usize)?;
     let Instr::SetProp { obj, name, src } = instr else {
         return Err(RtError::InvalidBytecode(
             "шим свойства вызван не на своей инструкции",
@@ -1082,7 +1087,7 @@ prop_shim!(shim_set_prop, |frames,
         let mut context = bsl_rt::CallContext::native(shapes, bsl_format::format_value);
         component_prop_set(object, props, name, sv, program, &mut context)?;
     } else {
-        match ov.set_field_cached(name, sv.clone(), prop_cache(chunk, pc as usize)?) {
+        match ov.set_field_cached(name, sv.clone(), prop_cache(caches, func_id, pc as usize)?) {
             Err(RtError::NotAnObject) => ov.set_field_by_name(field_name(program, name)?, sv)?,
             other => other?,
         }
@@ -1099,7 +1104,7 @@ shim!(shim_call_method, |frames,
                          _a,
                          _b,
                          _c| {
-    let (_chunk, instr) = own_instr(frames, program, idx, pc as usize)?;
+    let (_, instr) = own_instr(frames, program, idx, pc as usize)?;
     let Instr::CallMethod {
         dst,
         obj,
@@ -1136,9 +1141,10 @@ prop_shim!(shim_get_object_prop, |frames,
                                   program,
                                   idx,
                                   shapes,
+                                  caches,
                                   props,
                                   pc| {
-    let (chunk, instr) = own_instr(frames, program, idx, pc as usize)?;
+    let (func_id, instr) = own_instr(frames, program, idx, pc as usize)?;
     let Instr::GetObjectProp { dst, obj, name } = instr else {
         return Err(RtError::InvalidBytecode(
             "шим открытого свойства вызван не на своей инструкции",
@@ -1150,7 +1156,7 @@ prop_shim!(shim_get_object_prop, |frames,
         let mut context = bsl_rt::CallContext::native(shapes, bsl_format::format_value);
         component_prop_get(object, props, name_id, program, &mut context)?
     } else {
-        match ov.get_field_cached(name_id, prop_cache(chunk, pc as usize)?) {
+        match ov.get_field_cached(name_id, prop_cache(caches, func_id, pc as usize)?) {
             Err(RtError::NotAnObject) => ov.get_field_by_name(field_name(program, name_id)?)?,
             other => other?,
         }
@@ -1165,9 +1171,10 @@ prop_shim!(shim_set_object_prop, |frames,
                                   program,
                                   idx,
                                   shapes,
+                                  caches,
                                   props,
                                   pc| {
-    let (chunk, instr) = own_instr(frames, program, idx, pc as usize)?;
+    let (func_id, instr) = own_instr(frames, program, idx, pc as usize)?;
     let Instr::SetObjectProp { obj, name, src } = instr else {
         return Err(RtError::InvalidBytecode(
             "шим открытого свойства вызван не на своей инструкции",
@@ -1180,7 +1187,11 @@ prop_shim!(shim_set_object_prop, |frames,
         let mut context = bsl_rt::CallContext::native(shapes, bsl_format::format_value);
         component_prop_set(object, props, name_id, sv, program, &mut context)?;
     } else {
-        match ov.set_field_cached(name_id, sv.clone(), prop_cache(chunk, pc as usize)?) {
+        match ov.set_field_cached(
+            name_id,
+            sv.clone(),
+            prop_cache(caches, func_id, pc as usize)?,
+        ) {
             Err(RtError::NotAnObject) => ov.set_field_by_name(field_name(program, name_id)?, sv)?,
             other => other?,
         }
@@ -1198,12 +1209,13 @@ extern "C" fn shim_call_object_method(
     _b: u32,
     _c: u32,
 ) -> u64 {
-    let (table_ptr, table_len, component_methods) = unsafe {
+    let (table_ptr, table_len, component_methods, caches) = unsafe {
         let context = &*ctx;
         (
             context.builtin_methods,
             context.builtin_methods_len,
             &*context.component_methods,
+            &*context.caches,
         )
     };
     // Пустая таблица возможна только у `Vec::new()` — указатель у него
@@ -1211,7 +1223,7 @@ extern "C" fn shim_call_object_method(
     let table = unsafe { std::slice::from_raw_parts(table_ptr, table_len) };
     unsafe {
         run_shim(ctx, pc_arg, |frames, stack, program, idx, shapes| {
-            let (chunk, instr) = own_instr(frames, program, idx, pc_arg as usize)?;
+            let (func_id, instr) = own_instr(frames, program, idx, pc_arg as usize)?;
             let Instr::CallObjectMethod {
                 dst,
                 obj,
@@ -1257,7 +1269,8 @@ extern "C" fn shim_call_object_method(
                 // и `--jit` проигрывал бы интерпретатору в разы (измерено
                 // на xml_parse до этой правки).
                 match cached_component_method(
-                    chunk,
+                    caches,
+                    func_id,
                     pc_arg as usize,
                     component_methods,
                     object.method_table(),
