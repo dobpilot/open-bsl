@@ -126,3 +126,18 @@ JIT-корпус. В выводе подтверждено исполнение 
 test (1737 passed, 0 failed, 1 ignored), строгий rustdoc, отдельный
 JIT-корпус. Строковые unit-тесты, преобразование регистра UUID и
 конформанс с `.expected` исполнены успешно. Эталоны не менялись.
+
+## 2.4. Календарные операции и часы
+
+Календарные методы, их локальные приведения и обращения к `HostEnv`
+перенесены в приватный `value/dates.rs`. Текст блока, включая комментарии,
+совпадает с исходным; изменений видимости нет. Арифметика дат и её
+помощники остаются у ядра `value`. Алгоритмы `date.rs` не менялись.
+
+Полные ворота `step-2.4-*.log` прошли: fmt, Clippy, build, workspace
+test (1737 passed, 0 failed, 1 ignored), строгий rustdoc, отдельный
+JIT-корпус. В логе подтверждено исполнение 11 тестов `date::tests`,
+`a_test_clock_advances_on_its_own_terms`,
+`a_fixed_clock_makes_the_time_reproducible`,
+`jit::a_fixed_clock_survives_a_jit_run`, `two_states_do_not_share_a_clock`
+и конформанса с `.expected`.
