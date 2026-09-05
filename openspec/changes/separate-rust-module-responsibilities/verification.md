@@ -160,3 +160,20 @@ JIT-корпус. Исполнены `array_index_get_set_roundtrip`,
 `get_prop_inline_cache_stays_correct_across_different_shapes`,
 `set_prop_inline_cache_stays_correct_across_different_shapes` и тесты
 переходов формы при вставке полей. Маркеры совместимости сохранены.
+
+## 2.6. Табличные операции
+
+Конструктор таблицы, методы `table_*` и локальные помощники проверки
+аргументов перенесены в приватный `value/tables.rs`. Оба перенесённых
+блока текстово совпадают с исходными; изменений видимости нет.
+Алгоритмы `table.rs` остались на месте, повторных реализаций нет.
+
+Полные ворота `step-2.6-*.log` прошли: fmt, Clippy, build, workspace
+test (1737 passed, 0 failed, 1 ignored), строгий rustdoc, отдельный
+JIT-корпус. В выводе подтверждены тесты таблиц, включая
+`table_copy_makes_an_independent_table`,
+`table_copy_takes_only_the_listed_rows_and_columns`,
+`table_copy_columns_keeps_the_structure_and_drops_the_rows`,
+`table_column_exposes_name_and_type_description`,
+`typed_column_matches_the_platform_byte_for_byte` и
+`composite_column_types_serialize_in_the_canonical_platform_order`.
