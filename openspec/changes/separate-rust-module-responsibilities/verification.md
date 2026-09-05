@@ -229,3 +229,33 @@ workspace test (1737 passed, 0 failed, 1 ignored), строгий rustdoc,
 Последовательные полные ворота `step-2.8-*.log` прошли: fmt, Clippy,
 build, workspace test (1737 passed, 0 failed, 1 ignored), строгий
 rustdoc, отдельный JIT-корпус.
+
+## 2.9. Ревью границы runtime
+
+`error`, `value` и все пять предметных дочерних модулей объявлены через
+приватный `mod`. Корень реэкспортирует `ComponentError`, `RtError`,
+`RtResult` и `BslValue`; прежние публичные модули сохранены. Единственная
+новая явная видимость production-помощника — `as_str: pub(super)`:
+она восстанавливает прежний доступ из корня и его потомков. Видимость
+`new_uuid` и `new_binary_data` была `pub(crate)` уже в базе; поля
+не раскрывались. Два общих тестовых помощника доступны через
+`pub(super)` исключительно при `cfg(test)`.
+
+Сопоставлены перенесённые блоки и владельцы алгоритмов: `string.rs`,
+`date.rs`, `table.rs`, `bindata.rs`, `encoding.rs`, `bsl-number` и
+production-часть `builtin.rs` не менялись. В агрегате перенесённого
+production-кода осталось столько же вхождений `.clone(`, `dyn` и
+`Box`, сколько в исходном `lib.rs` (23, 3 и 5 соответственно);
+поэтапные текстовые сравнения подтверждают отсутствие новых обёрток
+и повторных алгоритмов, а не только совпадение счётчиков.
+
+Манифесты, `Cargo.lock`, профили и `.cargo/config.toml`, generated API,
+`.expected`, реестр, измерительные скрипты и корневой `TASKS.md`
+не менялись. Дерево runtime по-прежнему идёт только через `bsl-number`;
+в normal-дереве VM нет `bsl-syntax`/`bsl-sema`.
+
+Явно прошли три runtime smoke/layout-теста и
+`checked_in_api_reference_matches_the_generator`. Полные последовательные
+ворота `step-2.9-*.log` прошли: fmt, Clippy, build, workspace test
+(1737 passed, 0 failed, 1 ignored), строгий rustdoc, отдельный JIT-корпус.
+Новых открытых вопросов по границе runtime не выявлено.
