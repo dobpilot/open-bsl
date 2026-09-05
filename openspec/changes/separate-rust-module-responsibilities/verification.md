@@ -177,3 +177,25 @@ JIT-корпус. В выводе подтверждены тесты табли
 `table_column_exposes_name_and_type_description`,
 `typed_column_matches_the_platform_byte_for_byte` и
 `composite_column_types_serialize_in_the_canonical_platform_order`.
+
+## 2.7. Ввод-вывод значения
+
+Текстовая запись, двоичные данные/буфер, доступ к байтовому потоку и
+локальный предел разбиения перенесены в приватный `value/io.rs`.
+Четыре блока совпадают с исходными, кроме уточнения двух rustdoc-ссылок
+через `crate::BslString`. Видимость и порядок операций не менялись;
+`bindata`, файловые контракты и кодирование не дублировались. UUID и
+диагностический `Display` остаются у ядра.
+
+Первый строгий rustdoc выявил потерявшие контекст ссылки; они исправлены.
+Параллельная пересборка после этой правки вызвала конфликт артефактов
+`E0460` в doctest `open-bsl`: тот workspace-прогон не засчитан.
+Все ворота повторены последовательно, без параллельных Cargo-команд.
+
+Полные ворота `step-2.7-final-*.log` прошли: fmt, Clippy, build,
+workspace test (1737 passed, 0 failed, 1 ignored), строгий rustdoc,
+отдельный JIT-корпус. Исполнены тесты разбиения/склейки двоичных данных,
+`text_writer_close_keeps_the_buffer_when_flush_fails`,
+`binary_data_reads_through_the_sessions_file_system`,
+`a_failing_close_from_the_session_file_system_is_catchable`,
+`two_states_write_into_their_own_file_systems` и файловые JIT-проверки.
