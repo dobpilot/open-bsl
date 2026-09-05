@@ -1,5 +1,8 @@
 # Активные планы
 
+- [Разделение обязанностей Rust-модулей](../../openspec/changes/separate-rust-module-responsibilities/proposal.md)
+  — предложенный OpenSpec-план по результатам аудита: runtime, фоновые
+  задания и продолжение принятого рефакторинга VM.
 - [`standard-library.md`](standard-library.md) — покрытие главы 16 стандартной
   библиотеки.
 - [`http-client.md`](http-client.md) — совместимость HTTP-клиента Connector.
