@@ -654,6 +654,7 @@ mod tests {
     use super::super::test_support::{engine, number, params};
     use super::super::*;
     use super::*;
+    use std::time::Duration;
 
     /// Закрытие runtime в окне «задание завершилось, право на terminal
     /// ещё не забрано» ОТКАТЫВАЕТ публикацию: claim не выдаётся, запись

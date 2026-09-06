@@ -33,7 +33,7 @@
 - [x] 3.2 Выделить `jobs/runtime.rs` и сохранить `open_bsl::jobs` фасадом; проверить ленивый старт, shutdown во время старта, panic/replacement и прежние публичные пути.
 - [x] 3.3 Выделить `jobs/prepare.rs`; проверить разрешение целей, обязательные аргументы, каталог/entry, импорт библиотек и host-профили без изменения таблиц имён и DTO.
 - [x] 3.4 Выделить `jobs/worker.rs`, сохранив вместе резидентов и гарды; проверить вложенное helping-ожидание, закрепление за потоком и окно commit/shutdown. Перенос — move-only коммит: `git diff --color-moved=dimmed-zebra` показывает чистые переносы (новые строки — только `use` и видимость), инвентарь `lock()`/guard-точек по функциям совпадает до и после.
-- [ ] 3.5 Выделить `jobs/service.rs`; `cargo test -p open-bsl --test job_review_fixes` проходит, включая профили, сообщения, бюджеты и временное хранилище.
+- [x] 3.5 Выделить `jobs/service.rs`; `cargo test -p open-bsl --test job_review_fixes` проходит, включая профили, сообщения, бюджеты и временное хранилище.
 - [ ] 3.6 После всех переносов отдельно запустить `a_shutdown_during_the_commit_window_rolls_back`, `a_terminal_event_in_the_helping_window_is_not_lost`, `wait_first_change_parks_without_periodic_wakeups` и наборы `scheduler`, `http_async`, `configuration`; записать исполнение тестов, а не только код возврата команды с фильтром.
 - [ ] 3.7 Сверить тестовый состав jobs, внешние пути, границу DTO и минимальность видимости; `cargo test -p open-bsl` и полные ворота design проходят.
 - [ ] 3.8 После серии jobs выполнить канарейку: чередующийся замер `background_jobs` против бинарной базы `59e7056`; записать пары и условия — отчёт, не вердикт.
