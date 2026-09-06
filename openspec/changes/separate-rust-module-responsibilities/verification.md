@@ -401,3 +401,26 @@ Workspace-лог подтверждает исполнение
 Полные последовательные ворота `step-3.5-*.log` прошли: fmt,
 Clippy, build, workspace test (1737 passed, 0 failed, 1 ignored),
 строгий rustdoc и отдельный JIT-корпус.
+
+## 3.6. Гонки после всех переносов jobs
+
+Каждый из трёх обязательных тестов запущен отдельно через
+`cargo test -p open-bsl --lib jobs::worker::tests::<имя> -- --exact --nocapture`.
+Во всех трёх логах есть строка соответствующего теста с `... ok`
+и итог `1 passed; 0 failed; 36 filtered out`:
+
+- `a_shutdown_during_the_commit_window_rolls_back`;
+- `a_terminal_event_in_the_helping_window_is_not_lost`;
+- `wait_first_change_parks_without_periodic_wakeups`.
+
+Отдельный прогон `--test scheduler --test http_async --test configuration`
+подтвердил 4, 9 и 22 успешных теста соответственно, без отфильтрованных
+и проигнорированных проверок. В том числе исполнены вложенное ожидание
+на одном worker, ожидание собственного резидента, helping дочернего
+HTTP-задания, отмена припаркованного запроса и shutdown резидентов.
+Логи: `step-3.6-commit-race.log`, `step-3.6-helping-race.log`,
+`step-3.6-first-change.log`, `step-3.6-integration.log`.
+
+Полные последовательные ворота `step-3.6-*.log` прошли: fmt, Clippy,
+build, workspace test (1737 passed, 0 failed, 1 ignored), строгий
+rustdoc и отдельный JIT-корпус. Исходники на этом шаге не менялись.
