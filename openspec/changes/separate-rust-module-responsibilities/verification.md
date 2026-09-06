@@ -335,7 +335,7 @@ build, workspace test (1737 passed, 0 failed, 1 ignored), строгий rustdoc
 
 Прочитан `step-3.3-moved.diff` с `--color-moved=dimmed-zebra`.
 Три перенесённых блока совпадают с исходными после учёта видимости;
-остаток фасада также совпадает. Все 21 точки `lock()` этого исходного
+остаток фасада также совпадает. Все точки `lock()` (21) этого исходного
 файла остались в нём; подготовка не приобрела локов. Таблицы имён,
 разрешение целей, DTO, материализация аргументов и создание entry не
 менялись. Маркеры `JOB.ASYNC.TARGET` и `JOB.MODULE.INIT` перенесены
@@ -348,3 +348,36 @@ build, workspace test (1737 passed, 0 failed, 1 ignored), строгий rustdoc
 Полные последовательные ворота `step-3.3-*.log` прошли: fmt, Clippy,
 build, workspace test (1737 passed, 0 failed, 1 ignored), строгий rustdoc,
 отдельный JIT-корпус.
+
+## 3.4. Worker и его гарды
+
+В приватный `jobs/worker.rs` перенесены цикл worker, `RESIDENTS`,
+`DriveMode`, `drive_local`, `RunningJob`, `StartGuard`, poll,
+claim/commit/finish и шлюзы окон commit/helping. `RunningJob` и все
+его гарды находятся вместе; поля резидента и тестовых шлюзов закрыты.
+Три функции входа и два типа получили `pub(super)` для прежних
+потребителей внутри jobs; новых интерфейсов и обёрток нет.
+
+Четыре теста worker/commit/helping и их локальная сцена перенесены
+из runtime к worker. Общие `engine`, `params`, `number` перемещены
+в один приватный `cfg(test)`-модуль `jobs::test_support`: их тела
+сохранены, копий нет. Это позволяет не раскрывать поля шлюзов тестам
+соседнего модуля. Остальные десять pool-тестов остаются у runtime.
+
+Прочитан `step-3.4-moved.diff` с `--color-moved=dimmed-zebra`.
+Оба production-блока совпадают после учёта видимости и переноса строк
+двух длинных сигнатур rustfmt; тела не менялись. Восемь блоков
+тестов/помощников, оставшийся runtime и сервисная часть фасада также
+совпадают. В совокупности исходных/полученных файлов сохранены все
+60 точек `lock()`; равенство тел подтверждает порядок по функциям,
+границы guard, места `Drop` и отсутствие переносов действий через локи.
+
+Явно прошли четыре worker-теста, 27 `job_review_fixes` и 9 `http_async`.
+Workspace-лог подтверждает исполнение
+`a_nested_job_completes_on_a_single_worker_pool`,
+`a_job_waiting_for_a_co_resident_of_its_own_worker_does_not_deadlock`,
+`a_helper_driven_child_parked_on_http_frees_the_worker`,
+`shutdown_cancels_residents_and_rejects_new_submissions` и всех четырёх
+перенесённых worker-тестов. Полные последовательные ворота
+`step-3.4-*.log` прошли: fmt, Clippy, build, workspace test
+(1737 passed, 0 failed, 1 ignored), строгий rustdoc, отдельный JIT-корпус.
