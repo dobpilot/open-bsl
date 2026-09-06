@@ -258,6 +258,7 @@ production-кода осталось столько же вхождений `.cl
 `checked_in_api_reference_matches_the_generator`. Полные последовательные
 ворота `step-2.9-*.log` прошли: fmt, Clippy, build, workspace test
 (1737 passed, 0 failed, 1 ignored), строгий rustdoc, отдельный JIT-корпус.
+
 Новых открытых вопросов по границе runtime не выявлено.
 
 ## 3.1. Реестр jobs
@@ -292,3 +293,32 @@ admission, ключи, бюджеты, история и claim/terminal прош
 перемещения `pool_tests` полные последовательные ворота
 `step-3.1-final-*.log` прошли: fmt, Clippy, build, workspace test
 (1737 passed, 0 failed, 1 ignored), строгий rustdoc, отдельный JIT-корпус.
+
+## 3.2. Runtime jobs
+
+В приватный `jobs/runtime.rs` перенесены конфигурация, host-профили,
+источники времени/идентификаторов, `JobRuntimeShared`, `JobRuntime`,
+создание/закрытие пула, bootstrap/supervisor и целиком `pool_tests`.
+Семь прежних публичных имён реэкспортированы из `open_bsl::jobs`;
+внутренний путь `jobs::random_uuid` также сохранён. Worker-резиденты,
+`RunningJob` и его гарды остаются в прежнем модуле до шага 3.4.
+
+Для существующих потребителей внутри jobs пять проверок ожидания,
+`SystemJobIds` и одно поле `JobRuntime::shared` получили `pub(super)`.
+Поле `workers` осталось закрытым; остальные поля не раскрывались.
+Условный импорт `Mutex`/`Condvar` в фасаде обслуживает только прежние
+тестовые шлюзы. Новых обёрток и production-операций нет.
+
+Прочитан `step-3.2-moved.diff` с `--color-moved=dimmed-zebra`.
+Три перенесённых блока и весь остаток фасада текстово совпадают после
+учёта импортов/видимости; все 60 точек `lock()` сохранены, порядок
+операций, владение гардами и `Drop` внутри функций неизменны.
+
+Целевой запуск `step-3.2-pool.log` исполнил все 14 pool-тестов, включая
+ленивый старт и shutdown во время `Starting`. Полный workspace-прогон
+также подтвердил `a_worker_panic_fails_the_job_and_the_worker_is_replaced`,
+`three_consecutive_startup_panics_break_the_runtime` и оба jobs smoke-теста.
+Последовательные полные ворота `step-3.2-*.log` прошли: fmt, Clippy,
+build, workspace test (1737 passed, 0 failed, 1 ignored), строгий rustdoc,
+отдельный JIT-корпус. Повтор race-наборов после всей серии ещё предстоит
+в задаче 3.6; текущий запуск её не закрывает.
