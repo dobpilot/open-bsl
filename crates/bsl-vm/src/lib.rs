@@ -54,6 +54,10 @@ pub(crate) mod jit {
 }
 
 mod linking;
+mod modules;
+
+pub use modules::{CatalogContext, ROOT_MODULE, SessionModules};
+use modules::{ModuleInitState, ModuleState, ModulesCtx, ensure_module_ready};
 mod scheduler;
 mod snippet;
 
@@ -75,102 +79,6 @@ use snippet::{DynamicDepthGuard, run_dynamic_snippet};
 use bsl_bytecode::{ArgMode, DynamicCompiler, Instr, Program};
 use bsl_rt::{BslValue, RtError};
 use std::io::Write;
-
-struct ModuleState {
-    slots: Vec<BslValue>,
-}
-
-impl ModuleState {
-    fn new(program: &Program) -> Self {
-        Self {
-            slots: vec![BslValue::Undefined; program.module_vars.len()],
-        }
-    }
-}
-
-/// Номер модуля кадра. `ROOT_MODULE` — программа, переданная в poll
-/// (одиночная либо entry конфигурации); остальные номера — позиции в
-/// каталоге. Сравнение с sentinel дешевле `Option<u32>` в горячем цикле.
-pub const ROOT_MODULE: u32 = u32::MAX;
-
-/// Состояние инициализации общего модуля в ОДНОМ сеансе. Политика ленивая:
-/// тело модуля исполняется при первом обращении к его символу; момент и
-/// повторная попытка после ошибки уточняются замером `JOB.MODULE.INIT`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ModuleInitState {
-    NotStarted,
-    Initializing,
-    Ready,
-    Failed,
-}
-
-/// Экземпляр общего модуля в сеансе: его переменные и стадия
-/// инициализации. Между сеансами и потоками не разделяется.
-struct ModuleInstance {
-    state: ModuleState,
-    init: ModuleInitState,
-}
-
-/// Сессионные экземпляры всех модулей каталога, индекс — `ModuleId`.
-/// У одиночной программы пуст.
-#[derive(Default)]
-pub struct SessionModules {
-    instances: Vec<ModuleInstance>,
-}
-
-impl SessionModules {
-    fn for_catalog(catalog: &bsl_bytecode::ConfigurationProgram) -> Self {
-        Self {
-            instances: catalog
-                .modules
-                .iter()
-                .map(|module| ModuleInstance {
-                    state: ModuleState::new(&module.program),
-                    init: ModuleInitState::NotStarted,
-                })
-                .collect(),
-        }
-    }
-}
-
-/// Каталожный контекст одного poll: программы модулей и их связанные
-/// компонентные таблицы. Живёт не дольше poll, как `LinkedComponents`.
-pub struct CatalogContext<'a> {
-    catalog: &'a bsl_bytecode::ConfigurationProgram,
-    linked: Vec<LinkedComponents<'a>>,
-}
-
-/// Модульный контекст шага: сессия, каталог и корневое состояние одним
-/// указателем. Горячий `step` получает его вместо трёх отдельных
-/// параметров — регистровое давление в цикле диспетчеризации измеримо
-/// (A/B чередованием: +10% `call_overhead` на трёх параметрах).
-struct ModulesCtx<'a, 'b> {
-    session: &'a mut SessionModules,
-    catalog: Option<&'a CatalogContext<'b>>,
-    /// Корневое состояние, когда текущий кадр — модульный (его собственное
-    /// состояние на время шага изъято из сессии); `None` у корневого кадра.
-    root_state: Option<&'a mut ModuleState>,
-}
-
-impl<'a> CatalogContext<'a> {
-    fn program(&self, module: u32) -> Result<&'a Program, RtError> {
-        self.catalog
-            .modules
-            .get(module as usize)
-            .map(|m| &m.program)
-            .ok_or(RtError::InvalidBytecode(
-                "номер модуля кадра вне каталога конфигурации",
-            ))
-    }
-
-    fn linked(&self, module: u32) -> Result<&LinkedComponents<'a>, RtError> {
-        self.linked
-            .get(module as usize)
-            .ok_or(RtError::InvalidBytecode(
-                "номер модуля кадра вне таблиц линковки",
-            ))
-    }
-}
 
 /// Один активный вызов. Регистры кадра не хранятся отдельным `Vec` — все
 /// кадры делят один сквозной стек значений (`Vm::stack`), кадр — это лишь
@@ -4030,67 +3938,6 @@ enum ReturnOutcome {
     Continuing,
 }
 use ReturnOutcome::{Continuing, Done};
-
-/// `frames.pop().expect(...)` ниже — ВНУТРЕННИЙ ИНВАРИАНТ VM, а не входные
-/// данные (см. классификацию в шапке модуля): `step`/`drive` вызывают эту
-/// функцию только пока `frames` не пуст — сам факт того, что мы исполняем
-/// инструкцию, это гарантирует. Никакой байт-код, корректный или нет, сюда
-/// с пустым стеком кадров не приведёт.
-/// Готовит модуль каталога к обращению. `Ok(true)` означает, что кадр
-/// тела модуля запушен и текущая инструкция должна исполниться повторно
-/// после его возврата; `pc` вызывающего при этом не продвинут.
-///
-/// # Errors
-///
-/// Ловимая ошибка при циклической инициализации и при обращении к модулю,
-/// чьё тело уже завершилось ошибкой; политика повторного запуска — за
-/// замером `JOB.MODULE.INIT`.
-fn ensure_module_ready(
-    target: u32,
-    ctx: &CatalogContext<'_>,
-    session: &mut SessionModules,
-    frames: &mut Vec<Frame>,
-    stack: &mut Vec<BslValue>,
-) -> Result<bool, RtError> {
-    let instance = session
-        .instances
-        .get_mut(target as usize)
-        .ok_or(RtError::InvalidBytecode("связь ведёт мимо сессии модулей"))?;
-    match instance.init {
-        ModuleInitState::Ready => Ok(false),
-        ModuleInitState::NotStarted => {
-            if frames.len() >= MAX_CALL_DEPTH {
-                return Err(RtError::StackOverflow {
-                    what: "слишком глубокая рекурсия вызовов",
-                });
-            }
-            instance.init = ModuleInitState::Initializing;
-            let body = ctx.program(target)?;
-            let chunk0 = at(&body.chunks, 0, "у модуля каталога нет тела")?;
-            let call_start = stack.len();
-            let own_base = stack.len();
-            push_own_registers(stack, chunk0);
-            frames.push(Frame {
-                module: target,
-                func_id: 0,
-                pc: 0,
-                param_aliases: Vec::new(),
-                own_base,
-                call_start,
-                return_reg: 0,
-                module_copybacks: Vec::new(),
-                numeric_for_state: None,
-            });
-            Ok(true)
-        }
-        ModuleInitState::Initializing => Err(RtError::DynamicError(
-            "циклическая инициализация общего модуля".into(),
-        )),
-        ModuleInitState::Failed => Err(RtError::DynamicError(
-            "инициализация общего модуля завершилась ошибкой".into(),
-        )),
-    }
-}
 
 fn do_return_with_value(
     frames: &mut Vec<Frame>,
