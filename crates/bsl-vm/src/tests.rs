@@ -311,7 +311,7 @@ fn run_configuration(
     }
 }
 
-fn compile_module(src: &str) -> Program {
+pub(super) fn compile_module(src: &str) -> Program {
     let prog = parse(src).unwrap_or_else(|e| panic!("parse error: {e:?}"));
     let resolved = resolve_program(&prog.items).unwrap_or_else(|e| panic!("sema error: {e:?}"));
     compile_program(&resolved).unwrap_or_else(|e| panic!("compile error: {e:?}"))

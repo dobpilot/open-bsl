@@ -1,4 +1,4 @@
-use super::{Frame, LinkedComponents, MAX_CALL_DEPTH, at, push_own_registers};
+use super::{Frame, LinkedComponents, MAX_CALL_DEPTH, RunCaches, at, push_own_registers};
 use bsl_bytecode::Program;
 use bsl_rt::{BslValue, RtError};
 
@@ -89,12 +89,32 @@ impl<'a> CatalogContext<'a> {
             ))
     }
 
-    pub(super) fn linked(&self, module: u32) -> Result<&LinkedComponents<'a>, RtError> {
+    fn linked(&self, module: u32) -> Result<&LinkedComponents<'a>, RtError> {
         self.linked
             .get(module as usize)
             .ok_or(RtError::InvalidBytecode(
                 "номер модуля кадра вне таблиц линковки",
             ))
+    }
+
+    /// Программа, линковка и кэши одного модуля выбираются общим ключом.
+    /// Кэши заимствуются отдельно от сеанса: шаг одновременно держит их
+    /// разделяемо и изменяет модульные переменные через `ModulesCtx`.
+    /// Порядок проверок сохраняет прежний выбор ошибки при неверном номере.
+    pub(super) fn execution_parts<'s>(
+        &'s self,
+        module: u32,
+        caches: &'s [RunCaches],
+    ) -> Result<(&'a Program, &'s LinkedComponents<'a>, &'s RunCaches), RtError> {
+        Ok((
+            self.program(module)?,
+            self.linked(module)?,
+            at(
+                caches,
+                module as usize,
+                "номер модуля вне таблицы кэшей запуска",
+            )?,
+        ))
     }
 }
 
@@ -156,5 +176,99 @@ pub(super) fn ensure_module_ready(
         ModuleInitState::Failed => Err(RtError::DynamicError(
             "инициализация общего модуля завершилась ошибкой".into(),
         )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn catalog() -> bsl_bytecode::ConfigurationProgram {
+        bsl_bytecode::ConfigurationProgram {
+            modules: ["Возврат 1;", "а = 2; Возврат а;"]
+                .into_iter()
+                .enumerate()
+                .map(|(index, source)| bsl_bytecode::ModuleProgram {
+                    name: format!("Модуль{index}"),
+                    program: crate::tests::compile_module(source),
+                })
+                .collect(),
+        }
+    }
+
+    fn context(catalog: &bsl_bytecode::ConfigurationProgram) -> CatalogContext<'_> {
+        let env = bsl_rt::HostEnv::process();
+        let linked = catalog
+            .modules
+            .iter()
+            .map(|module| {
+                crate::link_components(
+                    &module.program,
+                    None,
+                    env.zone(),
+                    env.files(),
+                    env.random(),
+                    env.network(),
+                    env.background_jobs(),
+                    env.temp_storage(),
+                    env.message_sink(),
+                    bsl_bytecode::DynamicScope::ROOT,
+                )
+                .expect("модуль связывается")
+            })
+            .collect();
+        CatalogContext { catalog, linked }
+    }
+
+    #[test]
+    fn execution_parts_use_one_module_key_without_moving_caches_into_the_session() {
+        let catalog = catalog();
+        let ctx = context(&catalog);
+        let caches: Vec<_> = catalog
+            .modules
+            .iter()
+            .map(|module| RunCaches::for_program(&module.program))
+            .collect();
+        let mut session = SessionModules::for_catalog(&catalog);
+
+        for index in 0..catalog.modules.len() {
+            let (program, linked, selected_caches) = ctx
+                .execution_parts(index as u32, &caches)
+                .expect("согласованные таблицы");
+            assert!(std::ptr::eq(program, &catalog.modules[index].program));
+            assert!(std::ptr::eq(linked, &ctx.linked[index]));
+            assert!(std::ptr::eq(selected_caches, &caches[index]));
+            session.instances[index].init = ModuleInitState::Ready;
+            assert_eq!(selected_caches.prop.len(), program.chunks.len());
+            assert_eq!(session.instances[index].init, ModuleInitState::Ready);
+        }
+    }
+
+    #[test]
+    fn execution_parts_preserve_the_order_and_text_of_invalid_table_errors() {
+        let catalog = catalog();
+        let ctx = CatalogContext {
+            catalog: &catalog,
+            linked: Vec::new(),
+        };
+        assert!(matches!(
+            ctx.execution_parts(2, &[]),
+            Err(RtError::InvalidBytecode(
+                "номер модуля кадра вне каталога конфигурации"
+            ))
+        ));
+        assert!(matches!(
+            ctx.execution_parts(0, &[]),
+            Err(RtError::InvalidBytecode(
+                "номер модуля кадра вне таблиц линковки"
+            ))
+        ));
+        let ctx = context(&catalog);
+        assert!(matches!(
+            ctx.execution_parts(0, &[]),
+            Err(RtError::InvalidBytecode(
+                "номер модуля вне таблицы кэшей запуска"
+            ))
+        ));
     }
 }

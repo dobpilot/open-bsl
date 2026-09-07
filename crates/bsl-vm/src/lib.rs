@@ -814,9 +814,9 @@ pub struct ProgramExecution {
     /// Параллельный вектор, а не третье поле `ModuleInstance`, — потому
     /// что в цикле `poll_linked` кэши текущего модуля держатся разделяемой
     /// ссылкой одновременно с мутабельным заимствованием
-    /// `session_modules` через `ModulesCtx`. Слить их — задача стадии 5
-    /// (`modules.rs`) плана `bsl-vm-refactor.md`, вместе с переездом
-    /// `ModuleInstance`.
+    /// `session_modules` через `ModulesCtx`. Общий ключ программы,
+    /// линковки и кэшей сосредоточен в `CatalogContext::execution_parts`;
+    /// кэши не входят в `ModuleInstance` и сохраняют прежнее владение.
     catalog_caches: Vec<RunCaches>,
     /// Экземпляры общих модулей каталога этого сеанса; у одиночной
     /// программы пуст.
@@ -1417,15 +1417,7 @@ impl ProgramExecution {
                             "кадр модуля конфигурации без каталожного контекста",
                         ));
                     };
-                    (
-                        ctx.program(cur_module)?,
-                        ctx.linked(cur_module)?,
-                        at(
-                            &*catalog_caches,
-                            cur_module as usize,
-                            "номер модуля вне таблицы кэшей запуска",
-                        )?,
-                    )
+                    ctx.execution_parts(cur_module, &*catalog_caches)?
                 };
                 // Нативный путь. Он не обязан ничего исполнить: если на текущей
                 // позиции входа нет, управление просто идёт в `step`, и это же
