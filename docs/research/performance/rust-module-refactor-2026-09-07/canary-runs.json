@@ -1,0 +1,666 @@
+{
+  "base": "59e7056918bb5e18f75d322703ff150597cc2491",
+  "candidate": "a701a34903b8d3337c60edd9b15ee9beb056285f",
+  "environment": "2026-09-07T18:21:59+03:00\nLinux 7.1.8-1-cachyos\nrustc 1.97.1 (8bab26f4f 2026-07-14)\nbinary: rustc\ncommit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452\ncommit-date: 2026-07-14\nhost: x86_64-unknown-linux-gnu\nrelease: 1.97.1\nLLVM version: 22.1.6\ncargo 1.97.1 (c980f4866 2026-06-30)\nperf version 7.1.8-1\nArchitecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           39 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  8\nOn-line CPU(s) list:                     0-7\nVendor ID:                               GenuineIntel\nModel name:                              Intel(R) Core(TM) i5-8250U CPU @ 1.60GHz\nCPU family:                              6\nModel:                                   142\nThread(s) per core:                      2\nCore(s) per socket:                      4\nSocket(s):                               1\nStepping:                                10\nMicrocode version:                       0xf6\nCPU(s) scaling MHz:                      100%\nCPU max MHz:                             1600.0000\nCPU min MHz:                             400.0000\nBogoMIPS:                                3600.00\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf pni pclmulqdq dtes64 monitor ds_cpl vmx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb pti ssbd ibrs ibpb stibp tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust sgx bmi1 avx2 smep bmi2 erms invpcid mpx rdseed adx smap clflushopt intel_pt xsaveopt xsavec xgetbv1 xsaves dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp vnmi md_clear flush_l1d arch_capabilities\nVirtualization:                          VT-x\nL1d cache:                               128 KiB (4 instances)\nL1i cache:                               128 KiB (4 instances)\nL2 cache:                                1 MiB (4 instances)\nL3 cache:                                6 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-7\nVulnerability Gather data sampling:      Mitigation; Microcode\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             KVM: Mitigation: Split huge pages\nVulnerability L1tf:                      Mitigation; PTE Inversion; VMX conditional cache flushes, SMT vulnerable\nVulnerability Mds:                       Mitigation; Clear CPU buffers; SMT vulnerable\nVulnerability Meltdown:                  Mitigation; PTI\nVulnerability Mmio stale data:           Mitigation; Clear CPU buffers; SMT vulnerable\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Mitigation; IBRS\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; IBRS; IBPB conditional; STIBP conditional; RSB filling; PBRSB-eIBRS Not affected; BHI Not affected\nVulnerability Srbds:                     Mitigation; Microcode\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Mitigation; IBPB before exit to userspace\n59e7056918bb5e18f75d322703ff150597cc2491\na701a34903b8d3337c60edd9b15ee9beb056285f\n182da39a1b1190cec009e522fab2f698792cae49\n9d0457d2bc99f7631ca428cb83092034fd05c82e96739314119d090a6ec292d5  .cargo/config.toml\nd01540f1abb1c2dffb36ac4d95960b2a177ba60362b5b0df47171a199cd0d2c3  Cargo.lock\n 18:22:00 up 11 days, 11:14,  1 user,  load average: 7.12, 4.64, 1.94\n1\nperformance\n",
+  "binaries": "3c3f799e386e7bd23046b28501ae43e03311f997db3445525301ec4f9cd3766a  /home/kan/Документы/develop/open-bsl-measure.udXiRDBX/target-base/release/bsl-cli\n7b3346554cc5ab1a30d6de42040a34008cde9ea3a9445b7acf51a0788c6ae40d  /home/kan/Документы/develop/open-bsl-measure.udXiRDBX/target-jobs/release/bsl-cli\nd5beb50dff654f581622c811e26b9853016132ec4b757fbf6b51738738ea0bd7  /home/kan/Документы/develop/open-bsl-measure.udXiRDBX/target-final/release/bsl-cli\n",
+  "runs": [
+    {
+      "scenario": "background_jobs",
+      "pair": 1,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T15:41:34.922Z",
+        "load": [
+          1.33,
+          2.56,
+          3.41
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T15:42:10.063Z",
+        "load": [
+          5.06,
+          3.29,
+          3.62
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 367520407234,
+      "cycles:u": 252812762404,
+      "perf": "# started on Mon Sep  7 18:41:35 2026\n\n367520407234,,instructions:u,163332911987,100.00,,\n252812762404,,cycles:u,163332911987,100.00,,\n",
+      "stdout": "1 заданий: 7137 мс\n2 заданий: 3891 мс\n4 заданий: 2872 мс\n6 заданий: 2356 мс\n8 заданий: 2218 мс\n12 заданий: 2595 мс\n16 заданий: 2365 мс\n24 заданий: 1893 мс\n32 заданий: 1908 мс\n48 заданий: 1933 мс\n64 заданий: 1863 мс\n128 заданий: 1883 мс\n256 заданий: 1918 мс\nгрупп: 13, заданий: 601, строк на группу: 2400000\n34832\n"
+    },
+    {
+      "scenario": "background_jobs",
+      "pair": 1,
+      "side": "jobs",
+      "before": {
+        "time": "2026-09-07T15:46:40.075Z",
+        "load": [
+          1.44,
+          2.18,
+          3.06
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T15:47:15.741Z",
+        "load": [
+          4.35,
+          2.76,
+          3.21
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 367512125761,
+      "cycles:u": 253452334959,
+      "perf": "# started on Mon Sep  7 18:46:40 2026\n\n367512125761,,instructions:u,164086908423,100.00,,\n253452334959,,cycles:u,164086908423,100.00,,\n",
+      "stdout": "1 заданий: 7707 мс\n2 заданий: 4270 мс\n4 заданий: 2633 мс\n6 заданий: 2520 мс\n8 заданий: 2279 мс\n12 заданий: 2421 мс\n16 заданий: 2291 мс\n24 заданий: 1901 мс\n32 заданий: 1923 мс\n48 заданий: 1860 мс\n64 заданий: 1881 мс\n128 заданий: 1902 мс\n256 заданий: 1905 мс\nгрупп: 13, заданий: 601, строк на группу: 2400000\n35493\n"
+    },
+    {
+      "scenario": "background_jobs",
+      "pair": 2,
+      "side": "jobs",
+      "before": {
+        "time": "2026-09-07T15:49:45.749Z",
+        "load": [
+          1.4,
+          2.15,
+          2.91
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T15:50:18.794Z",
+        "load": [
+          4.44,
+          2.79,
+          3.1
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 367507307002,
+      "cycles:u": 242253518583,
+      "perf": "# started on Mon Sep  7 18:49:45 2026\n\n367507307002,,instructions:u,156215062191,100.00,,\n242253518583,,cycles:u,156215062191,100.00,,\n",
+      "stdout": "1 заданий: 7249 мс\n2 заданий: 3540 мс\n4 заданий: 2107 мс\n6 заданий: 2140 мс\n8 заданий: 2414 мс\n12 заданий: 2053 мс\n16 заданий: 1964 мс\n24 заданий: 1886 мс\n32 заданий: 1908 мс\n48 заданий: 1892 мс\n64 заданий: 1871 мс\n128 заданий: 1855 мс\n256 заданий: 2005 мс\nгрупп: 13, заданий: 601, строк на группу: 2400000\n32884\n"
+    },
+    {
+      "scenario": "background_jobs",
+      "pair": 2,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T15:54:48.810Z",
+        "load": [
+          1.43,
+          2.02,
+          2.69
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T15:55:22.479Z",
+        "load": [
+          4.72,
+          2.73,
+          2.9
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 367509871390,
+      "cycles:u": 246911606406,
+      "perf": "# started on Mon Sep  7 18:54:48 2026\n\n367509871390,,instructions:u,158837546959,100.00,,\n246911606406,,cycles:u,158837546959,100.00,,\n",
+      "stdout": "1 заданий: 7141 мс\n2 заданий: 3663 мс\n4 заданий: 2712 мс\n6 заданий: 2322 мс\n8 заданий: 2167 мс\n12 заданий: 1920 мс\n16 заданий: 1992 мс\n24 заданий: 1965 мс\n32 заданий: 1894 мс\n48 заданий: 1945 мс\n64 заданий: 1873 мс\n128 заданий: 1878 мс\n256 заданий: 1899 мс\nгрупп: 13, заданий: 601, строк на группу: 2400000\n33371\n"
+    },
+    {
+      "scenario": "background_jobs",
+      "pair": 3,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T15:57:52.486Z",
+        "load": [
+          1.33,
+          2.07,
+          2.62
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T15:58:25.338Z",
+        "load": [
+          4.35,
+          2.7,
+          2.81
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 367503866116,
+      "cycles:u": 245447061214,
+      "perf": "# started on Mon Sep  7 18:57:52 2026\n\n367503866116,,instructions:u,157769448257,100.00,,\n245447061214,,cycles:u,157769448257,100.00,,\n",
+      "stdout": "1 заданий: 7020 мс\n2 заданий: 3538 мс\n4 заданий: 2057 мс\n6 заданий: 2354 мс\n8 заданий: 2135 мс\n12 заданий: 2027 мс\n16 заданий: 1917 мс\n24 заданий: 1896 мс\n32 заданий: 1968 мс\n48 заданий: 1937 мс\n64 заданий: 1901 мс\n128 заданий: 1872 мс\n256 заданий: 1935 мс\nгрупп: 13, заданий: 601, строк на группу: 2400000\n32557\n"
+    },
+    {
+      "scenario": "background_jobs",
+      "pair": 3,
+      "side": "jobs",
+      "before": {
+        "time": "2026-09-07T16:04:25.355Z",
+        "load": [
+          1.49,
+          2,
+          2.45
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:04:57.765Z",
+        "load": [
+          4.31,
+          2.58,
+          2.63
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 367517227113,
+      "cycles:u": 240427055909,
+      "perf": "# started on Mon Sep  7 19:04:25 2026\n\n367517227113,,instructions:u,154584896419,100.00,,\n240427055909,,cycles:u,154584896419,100.00,,\n",
+      "stdout": "1 заданий: 6892 мс\n2 заданий: 3449 мс\n4 заданий: 2123 мс\n6 заданий: 2102 мс\n8 заданий: 2128 мс\n12 заданий: 2021 мс\n16 заданий: 1983 мс\n24 заданий: 1872 мс\n32 заданий: 1968 мс\n48 заданий: 1920 мс\n64 заданий: 1833 мс\n128 заданий: 1860 мс\n256 заданий: 1915 мс\nгрупп: 13, заданий: 601, строк на группу: 2400000\n32066\n"
+    },
+    {
+      "scenario": "background_jobs",
+      "pair": 4,
+      "side": "jobs",
+      "before": {
+        "time": "2026-09-07T16:07:27.776Z",
+        "load": [
+          1.31,
+          1.98,
+          2.39
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:08:00.565Z",
+        "load": [
+          4.53,
+          2.66,
+          2.6
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 367504231556,
+      "cycles:u": 244508304666,
+      "perf": "# started on Mon Sep  7 19:07:27 2026\n\n367504231556,,instructions:u,157091633808,100.00,,\n244508304666,,cycles:u,157091633808,100.00,,\n",
+      "stdout": "1 заданий: 7097 мс\n2 заданий: 3641 мс\n4 заданий: 2174 мс\n6 заданий: 2268 мс\n8 заданий: 2114 мс\n12 заданий: 1917 мс\n16 заданий: 1918 мс\n24 заданий: 1921 мс\n32 заданий: 1864 мс\n48 заданий: 1869 мс\n64 заданий: 1945 мс\n128 заданий: 1858 мс\n256 заданий: 1943 мс\nгрупп: 13, заданий: 601, строк на группу: 2400000\n32529\n"
+    },
+    {
+      "scenario": "background_jobs",
+      "pair": 4,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:12:30.578Z",
+        "load": [
+          1.22,
+          1.91,
+          2.3
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:13:03.845Z",
+        "load": [
+          4.48,
+          2.6,
+          2.51
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 367516059248,
+      "cycles:u": 249155222339,
+      "perf": "# started on Mon Sep  7 19:12:30 2026\n\n367516059248,,instructions:u,160186261165,100.00,,\n249155222339,,cycles:u,160186261165,100.00,,\n",
+      "stdout": "1 заданий: 6889 мс\n2 заданий: 3437 мс\n4 заданий: 2401 мс\n6 заданий: 2556 мс\n8 заданий: 2115 мс\n12 заданий: 2029 мс\n16 заданий: 1935 мс\n24 заданий: 1961 мс\n32 заданий: 1907 мс\n48 заданий: 1899 мс\n64 заданий: 1893 мс\n128 заданий: 1924 мс\n256 заданий: 1968 мс\nгрупп: 13, заданий: 601, строк на группу: 2400000\n32914\n"
+    },
+    {
+      "scenario": "background_jobs",
+      "pair": 5,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:16:03.858Z",
+        "load": [
+          1.31,
+          2,
+          2.29
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:16:37.944Z",
+        "load": [
+          4.45,
+          2.67,
+          2.5
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 367513872186,
+      "cycles:u": 251730811517,
+      "perf": "# started on Mon Sep  7 19:16:03 2026\n\n367513872186,,instructions:u,162304249779,100.00,,\n251730811517,,cycles:u,162304249779,100.00,,\n",
+      "stdout": "1 заданий: 6952 мс\n2 заданий: 3499 мс\n4 заданий: 2595 мс\n6 заданий: 2381 мс\n8 заданий: 2200 мс\n12 заданий: 2037 мс\n16 заданий: 2250 мс\n24 заданий: 1955 мс\n32 заданий: 2097 мс\n48 заданий: 1961 мс\n64 заданий: 1943 мс\n128 заданий: 1935 мс\n256 заданий: 1977 мс\nгрупп: 13, заданий: 601, строк на группу: 2400000\n33782\n"
+    },
+    {
+      "scenario": "background_jobs",
+      "pair": 5,
+      "side": "jobs",
+      "before": {
+        "time": "2026-09-07T16:19:07.953Z",
+        "load": [
+          1.39,
+          2.08,
+          2.3
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:19:41.386Z",
+        "load": [
+          4.24,
+          2.67,
+          2.49
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 367511340616,
+      "cycles:u": 244757628100,
+      "perf": "# started on Mon Sep  7 19:19:08 2026\n\n367511340616,,instructions:u,157634529241,100.00,,\n244757628100,,cycles:u,157634529241,100.00,,\n",
+      "stdout": "1 заданий: 6955 мс\n2 заданий: 3634 мс\n4 заданий: 2539 мс\n6 заданий: 2245 мс\n8 заданий: 2239 мс\n12 заданий: 1953 мс\n16 заданий: 1958 мс\n24 заданий: 1929 мс\n32 заданий: 1857 мс\n48 заданий: 1869 мс\n64 заданий: 1857 мс\n128 заданий: 1894 мс\n256 заданий: 2237 мс\nгрупп: 13, заданий: 601, строк на группу: 2400000\n33166\n"
+    },
+    {
+      "scenario": "background_jobs",
+      "pair": 6,
+      "side": "jobs",
+      "before": {
+        "time": "2026-09-07T16:22:11.394Z",
+        "load": [
+          1.39,
+          2.1,
+          2.3
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:22:43.810Z",
+        "load": [
+          3.68,
+          2.55,
+          2.44
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 367503030769,
+      "cycles:u": 241423511128,
+      "perf": "# started on Mon Sep  7 19:22:11 2026\n\n367503030769,,instructions:u,155025206127,100.00,,\n241423511128,,cycles:u,155025206127,100.00,,\n",
+      "stdout": "1 заданий: 6861 мс\n2 заданий: 3510 мс\n4 заданий: 2142 мс\n6 заданий: 2584 мс\n8 заданий: 1945 мс\n12 заданий: 1867 мс\n16 заданий: 2051 мс\n24 заданий: 1897 мс\n32 заданий: 1818 мс\n48 заданий: 1919 мс\n64 заданий: 1840 мс\n128 заданий: 1875 мс\n256 заданий: 1903 мс\nгрупп: 13, заданий: 601, строк на группу: 2400000\n32212\n"
+    },
+    {
+      "scenario": "background_jobs",
+      "pair": 6,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:26:43.820Z",
+        "load": [
+          1.49,
+          2.04,
+          2.26
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:27:15.719Z",
+        "load": [
+          4.82,
+          2.75,
+          2.49
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 367529031427,
+      "cycles:u": 241854902404,
+      "perf": "# started on Mon Sep  7 19:26:43 2026\n\n367529031427,,instructions:u,155095570428,100.00,,\n241854902404,,cycles:u,155095570428,100.00,,\n",
+      "stdout": "1 заданий: 6854 мс\n2 заданий: 3421 мс\n4 заданий: 2027 мс\n6 заданий: 2059 мс\n8 заданий: 2093 мс\n12 заданий: 1891 мс\n16 заданий: 1871 мс\n24 заданий: 1915 мс\n32 заданий: 1888 мс\n48 заданий: 1879 мс\n64 заданий: 1959 мс\n128 заданий: 1886 мс\n256 заданий: 1939 мс\nгрупп: 13, заданий: 601, строк на группу: 2400000\n31682\n"
+    },
+    {
+      "scenario": "background_jobs",
+      "pair": 7,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:29:45.727Z",
+        "load": [
+          1.4,
+          2.17,
+          2.31
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:30:18.240Z",
+        "load": [
+          4.16,
+          2.72,
+          2.48
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 367526990715,
+      "cycles:u": 244282136233,
+      "perf": "# started on Mon Sep  7 19:29:45 2026\n\n367526990715,,instructions:u,156782682589,100.00,,\n244282136233,,cycles:u,156782682589,100.00,,\n",
+      "stdout": "1 заданий: 6872 мс\n2 заданий: 3562 мс\n4 заданий: 2115 мс\n6 заданий: 2210 мс\n8 заданий: 2159 мс\n12 заданий: 1963 мс\n16 заданий: 1894 мс\n24 заданий: 1893 мс\n32 заданий: 2052 мс\n48 заданий: 1860 мс\n64 заданий: 1917 мс\n128 заданий: 1889 мс\n256 заданий: 1964 мс\nгрупп: 13, заданий: 601, строк на группу: 2400000\n32350\n"
+    },
+    {
+      "scenario": "background_jobs",
+      "pair": 7,
+      "side": "jobs",
+      "before": {
+        "time": "2026-09-07T16:32:48.249Z",
+        "load": [
+          1.29,
+          2.04,
+          2.26
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:33:20.131Z",
+        "load": [
+          4.09,
+          2.6,
+          2.43
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 367515615784,
+      "cycles:u": 239436513937,
+      "perf": "# started on Mon Sep  7 19:32:48 2026\n\n367515615784,,instructions:u,153662484918,100.00,,\n239436513937,,cycles:u,153662484918,100.00,,\n",
+      "stdout": "1 заданий: 7005 мс\n2 заданий: 3550 мс\n4 заданий: 1998 мс\n6 заданий: 2060 мс\n8 заданий: 1953 мс\n12 заданий: 1929 мс\n16 заданий: 1873 мс\n24 заданий: 1884 мс\n32 заданий: 1893 мс\n48 заданий: 1861 мс\n64 заданий: 1861 мс\n128 заданий: 1872 мс\n256 заданий: 1895 мс\nгрупп: 13, заданий: 601, строк на группу: 2400000\n31634\n"
+    }
+  ]
+}
