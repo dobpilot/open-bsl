@@ -6,6 +6,210 @@ use bsl_number::BslNumber;
 use bsl_sema::resolve_program;
 use bsl_syntax::parse;
 
+/// Один шаг без периметра: неверные индексы здесь проверяют второй рубеж,
+/// а не разрешают повреждённый образ в публичном входе VM.
+fn materialization_step(
+    program: &Program,
+    frames: &mut Vec<Frame>,
+    stack: &mut Vec<BslValue>,
+) -> Result<Step, RtError> {
+    let mut env = bsl_rt::HostEnv::process();
+    let linked = link_verified(
+        program,
+        None,
+        env.zone(),
+        env.files(),
+        env.random(),
+        env.network(),
+        env.background_jobs(),
+        env.temp_storage(),
+        env.message_sink(),
+        bsl_bytecode::DynamicScope::ROOT,
+    )?;
+    let mut execution = ProgramExecution::new_linked(
+        program,
+        0,
+        Vec::new(),
+        JitMode::Off,
+        &linked,
+        ModuleState::new(program),
+        SchedulerConfig::default(),
+    );
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    let dynamic_depth = std::cell::Cell::new(0);
+    let mut host = HostIo {
+        stdout: &mut stdout,
+        stderr: &mut stderr,
+        env: Some(&mut env),
+        dynamic: None,
+        dynamic_depth: &dynamic_depth,
+    };
+    let mut modules = ModulesCtx {
+        session: &mut execution.session_modules,
+        catalog: None,
+        root_state: None,
+    };
+    step(
+        frames,
+        stack,
+        program,
+        &execution.caches,
+        &mut execution.module_state,
+        &mut modules,
+        &mut None,
+        &mut execution.runtime_shapes,
+        &linked,
+        &mut host,
+        false,
+        &mut execution.async_state,
+        0,
+    )
+}
+
+fn materialization_frame(aliases: &[usize]) -> Frame {
+    Frame {
+        module: ROOT_MODULE,
+        func_id: 0,
+        pc: 0,
+        param_aliases: aliases
+            .iter()
+            .map(|&idx| ParamSlot {
+                idx,
+                provided: true,
+            })
+            .collect(),
+        own_base: 0,
+        call_start: 0,
+        return_reg: 0,
+        module_copybacks: Vec::new(),
+        numeric_for_state: None,
+    }
+}
+
+fn materialization_move_program(dst: u8, src: u8) -> Program {
+    let mut program = compile_module("Перем а, б;");
+    program.chunks[0].instrs = vec![Instr::Move { dst, src }];
+    program.chunks[0].n_regs = 2;
+    bsl_bytecode::image::finalize(&mut program);
+    program
+}
+
+#[derive(Debug)]
+struct MaterializationDrop {
+    name: &'static str,
+    events: std::rc::Rc<std::cell::RefCell<Vec<&'static str>>>,
+}
+
+impl bsl_rt::ObjectProtocol for MaterializationDrop {
+    fn type_descriptor(&self) -> &'static bsl_rt::TypeDescriptor {
+        &bsl_rt::TypeDescriptor {
+            package: "test",
+            name: "MaterializationDrop",
+            type_display: "MaterializationDrop",
+            type_names: &[],
+        }
+    }
+}
+
+impl Drop for MaterializationDrop {
+    fn drop(&mut self) {
+        self.events.borrow_mut().push(self.name);
+    }
+}
+
+#[test]
+fn materialization_move_preserves_values_and_parameter_aliases() {
+    let events = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let values = [
+        BslValue::Number(BslNumber::from_i64(42)),
+        BslValue::Str(bsl_rt::BslString::from_str("строка")),
+        BslValue::Boolean(true),
+        BslValue::Undefined,
+        BslValue::Null,
+        BslValue::new_object(MaterializationDrop {
+            name: "source",
+            events: events.clone(),
+        }),
+    ];
+    for value in &values {
+        // Одинаковый регистр, разные регистры, два параметра одного слота
+        // и два параметра разных слотов проходят настоящий arm Move.
+        for (dst, src, aliases) in [
+            (0, 0, vec![]),
+            (1, 0, vec![]),
+            (1, 0, vec![0, 0]),
+            (1, 0, vec![0, 1]),
+        ] {
+            let program = materialization_move_program(dst, src);
+            let mut frames = vec![materialization_frame(&aliases)];
+            let mut stack = vec![value.clone(), BslValue::Undefined];
+            let destination = frames[0].reg_index(dst);
+            assert!(matches!(
+                materialization_step(&program, &mut frames, &mut stack),
+                Ok(Step::Continue)
+            ));
+            assert_eq!(&stack[destination], value);
+            assert_eq!(&stack[0], value);
+            assert_eq!(frames[0].pc, 1);
+            assert!(events.borrow().is_empty());
+        }
+    }
+    drop(values);
+    assert_eq!(&*events.borrow(), &["source"]);
+}
+
+#[test]
+fn materialization_move_drops_only_the_replaced_object() {
+    let events = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let mut stack = ["source", "destination"]
+        .into_iter()
+        .map(|name| {
+            BslValue::new_object(MaterializationDrop {
+                name,
+                events: events.clone(),
+            })
+        })
+        .collect();
+    let mut frames = vec![materialization_frame(&[])];
+    assert!(matches!(
+        materialization_step(&materialization_move_program(1, 0), &mut frames, &mut stack),
+        Ok(Step::Continue)
+    ));
+    assert_eq!(&*events.borrow(), &["destination"]);
+    stack[0] = BslValue::Undefined;
+    assert_eq!(&*events.borrow(), &["destination"]);
+    stack[1] = BslValue::Undefined;
+    assert_eq!(&*events.borrow(), &["destination", "source"]);
+}
+
+#[test]
+fn materialization_move_errors_preserve_destination_and_pc() {
+    for (dst, src, expected) in [
+        (0, 9, "чтение регистра за границей стека значений"),
+        (9, 9, "чтение регистра за границей стека значений"),
+        (9, 0, "запись регистра за границей стека значений"),
+    ] {
+        let events = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let mut stack = vec![BslValue::new_object(MaterializationDrop {
+            name: "kept",
+            events: events.clone(),
+        })];
+        let mut frames = vec![materialization_frame(&[])];
+        let result = materialization_step(
+            &materialization_move_program(dst, src),
+            &mut frames,
+            &mut stack,
+        );
+        assert!(matches!(result, Err(RtError::InvalidBytecode(message)) if message == expected));
+        assert_eq!(frames[0].pc, 0);
+        assert!(events.borrow().is_empty());
+        assert!(stack[0].object_ref().is_some());
+        drop(stack);
+        assert_eq!(&*events.borrow(), &["kept"]);
+    }
+}
+
 #[test]
 fn scheduler_quantum_defaults_to_the_confirmed_value() {
     assert_eq!(SchedulerConfig::default().safe_points_per_quantum, 1_024);
