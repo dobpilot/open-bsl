@@ -1,0 +1,38 @@
+Явные функциональные проверки, 7 сентября 2026 года.
+
+JIT
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 39 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 17 filtered out; finished in 0.00s
+test the_jit_agrees_with_the_interpreter_on_every_script ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 51.74s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+API reference
+test checked_in_api_reference_matches_the_generator ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.14s
+
+Bytecode round-trip
+test effectful_core_constructors_use_the_component_abi ... ok
+test component_receiver_methods_compile_only_to_the_open_opcode ... ok
+test round_trip_through_text_is_byte_identical ... ok
+test reparsed_program_matches_the_original_structurally ... ok
+test round_trip_with_debug_info_is_byte_identical_and_keeps_the_lines ... ok
+test the_corpus_covers_every_opcode ... ok
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+Conformance
+conformance: 48 проверено, 76 пропущено (нет .expected)
+  пропущены: dates, dynamic-execute, n-body-perf, n-body-pow-variant, n-body-precision, n-body-smoke, strings-and-types, table-wave2, table-wave3, measure-all, measure-array-boundaries, measure-ascii-encoding, measure-async, measure-background-jobs, measure-base64, measure-binary, measure-binbuf, measure-builtin-call, measure-chars, measure-concat, measure-connector-stream, measure-current-universal-date, measure-data-hashing, measure-dom-write, measure-dom, measure-empty-string, measure-equality, measure-error-info, measure-goto, measure-http-network, measure-http-objects, measure-http-security-objects, measure-insert-default, measure-json-reader-close, measure-json-writer-settings, measure-json, measure-lvalue, measure-min-max, measure-nstr, measure-pdf-attachments, measure-pdf-read, measure-pdf-write, measure-pdf, measure-regex, measure-regex2, measure-stmtcall, measure-stream-encoding-defaults, measure-stream, measure-string-boundaries, measure-string-find, measure-string-split, measure-temp-files, measure-ternary, measure-text-reader, measure-textdoc, measure-type-description-convert, measure-unsupported, measure-url-codec, measure-uuid-string-functions, measure-value-list, measure-vfile, measure-vstr, measure-xdto-io, measure-xdto-order, measure-xdto-serializer, measure-xdto-validation, measure-xdto, measure-xml-dtd, measure-xml-invalid-chars, measure-xml-string-primitives, measure-xml, measure-xpath, measure-xsd, measure-zip-write, measure-zip, measure-zone
+test conformance_fixtures_match_oracle_output ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 5.50s
+
+Конфиденциальные кейсы
+table_compare2: пропущено — каталог кейсов не задан (OPEN_BSL_TABLE_COMPARE2_CASES)
+test table_compare2_cases_match_the_platform_result_as_a_multiset ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+Окружение: OPEN_BSL_TABLE_COMPARE2_CASES не задан. Итог 1 passed тестового раннера не означает исполнения конфиденциальных кейсов.
+Прежний ignored: bsl-spreadsheet/tests/mxl_oracle.rs::dump_for_the_platform_crosscheck.
+Прежние исключения SLOW_TO_COMPARE для JIT/оптимизирующих проходов: n-body-perf.bsl, n-body-precision.bsl, n-body-pow-variant.bsl.

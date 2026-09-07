@@ -61,3 +61,22 @@ workspace test (1739 passed, 0 failed, 1 ignored), строгий rustdoc
 и отдельный `the_jit_agrees_with_the_interpreter_on_every_script`.
 Все завершились успешно; workspace — 1739 passed, 0 failed, 1 ignored.
 Логи: `step-5.3-*.log`. Производственный код на этом шаге не менялся.
+
+## 5.4. Контракты и пропуски
+
+[final-contracts.txt](final-contracts.txt) сохраняет фактические имена
+и результаты отдельных прогонов: JIT-корпус — 1, API reference — 1,
+bytecode round-trip — 6 тестов. Эталонный конформанс: прежние 48 проверено,
+76 пропущено без `.expected`; полный список сохранён в файле.
+`OPEN_BSL_TABLE_COMPARE2_CASES` не задан, конфиденциальные кейсы не
+исполнялись; раннер явно сообщил пропуск. Единственный прежний ignored —
+`dump_for_the_platform_crosscheck`; сохранены три исключения
+`SLOW_TO_COMPARE` (n-body-perf, n-body-precision, n-body-pow-variant).
+Дополнительных переменных окружения, выключающих тесты, при поиске в
+исходниках тестов не найдено. Проверено на x86-64 Linux; другие target
+этим прогоном не подтверждаются. Ни одного нового пропуска не добавлено.
+
+Повторная проверка diff подтвердила неизменность generated API reference,
+`.expected` и измерительных файлов. Полные последовательные ворота
+`step-5.4-*.log` прошли: fmt, Clippy, build, workspace test
+(1739 passed, 0 failed, 1 ignored), строгий rustdoc, отдельный JIT-корпус.
