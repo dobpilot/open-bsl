@@ -55,7 +55,7 @@ JIT-корпус. Пошаговые экраны и A/B отменены реш
 
 ## 5. Общая приёмка
 
-- [ ] 5.1 Проверить каждый requirement нового delta по его сценариям; сохранить карту requirement → тест либо результат архитектурного ревью, включая недоступность новых модулей извне.
+- [x] 5.1 Проверить каждый requirement нового delta по его сценариям; сохранить карту requirement → тест либо результат архитектурного ревью, включая недоступность новых модулей извне.
 - [ ] 5.2 Проверить деревья зависимостей и неизменность `Cargo.lock`, профилей и `.cargo/config.toml`; `bsl-vm` без normal-зависимости от фронтенда, `bsl-bytecode` без frontend normal/dev-зависимостей.
 - [ ] 5.3 Выполнить `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo build --workspace`, `cargo test --workspace`, `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps`.
 - [ ] 5.4 Явно выполнить JIT-корпус, API-reference и bytecode round-trip; не изменять `.expected`. Отдельно указать, запускался ли конфиденциальный `table_compare2` с `OPEN_BSL_TABLE_COMPARE2_CASES`, и все остальные пропуски окружения.

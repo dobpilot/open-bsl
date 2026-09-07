@@ -1,0 +1,239 @@
+Контроль внешних импортов, 7 сентября 2026 года.
+Команда: rustc --edition=2024 --crate-type=lib --emit=metadata -A unused_imports
+-L dependency=target/debug/deps --extern bsl_rt=target/debug/libbsl_rt.rlib
+--extern bsl_vm=target/debug/libbsl_vm.rlib --extern open_bsl=target/debug/libopen_bsl.rlib
+Положительный контроль прежних публичных типов: exit 0.
+
+use bsl_rt::error;
+exit 1
+error[E0603]: module `error` is private
+  --> /tmp/open-bsl-module-boundaries.hSslAh/negative_0.rs:1:13
+   |
+ 1 | use bsl_rt::error;
+   |             ^^^^^ private module
+   |
+note: the module `error` is defined here
+  --> crates/bsl-rt/src/lib.rs:15:1
+   |
+15 | mod error;
+   | ^^^^^^^^^
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0603`.
+
+use bsl_rt::value;
+exit 1
+error[E0603]: module `value` is private
+  --> /tmp/open-bsl-module-boundaries.hSslAh/negative_1.rs:1:13
+   |
+ 1 | use bsl_rt::value;
+   |             ^^^^^ private module
+   |
+note: the module `value` is defined here
+  --> crates/bsl-rt/src/lib.rs:41:1
+   |
+41 | mod value;
+   | ^^^^^^^^^
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0603`.
+
+use open_bsl::jobs::registry;
+exit 1
+error[E0603]: module `registry` is private
+  --> /tmp/open-bsl-module-boundaries.hSslAh/negative_2.rs:1:21
+   |
+ 1 | use open_bsl::jobs::registry;
+   |                     ^^^^^^^^ private module
+   |
+note: the module `registry` is defined here
+  --> crates/open-bsl/src/jobs.rs:11:1
+   |
+11 | mod registry;
+   | ^^^^^^^^^^^^
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0603`.
+
+use open_bsl::jobs::runtime;
+exit 1
+error[E0603]: module `runtime` is private
+  --> /tmp/open-bsl-module-boundaries.hSslAh/negative_3.rs:1:21
+   |
+ 1 | use open_bsl::jobs::runtime;
+   |                     ^^^^^^^ private module
+   |
+note: the module `runtime` is defined here
+  --> crates/open-bsl/src/jobs.rs:17:1
+   |
+17 | mod runtime;
+   | ^^^^^^^^^^^
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0603`.
+
+use open_bsl::jobs::prepare;
+exit 1
+error[E0603]: module `prepare` is private
+  --> /tmp/open-bsl-module-boundaries.hSslAh/negative_4.rs:1:21
+   |
+ 1 | use open_bsl::jobs::prepare;
+   |                     ^^^^^^^ private module
+   |
+note: the module `prepare` is defined here
+  --> crates/open-bsl/src/jobs.rs:10:1
+   |
+10 | mod prepare;
+   | ^^^^^^^^^^^
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0603`.
+
+use open_bsl::jobs::worker;
+exit 1
+error[E0603]: module `worker` is private
+  --> /tmp/open-bsl-module-boundaries.hSslAh/negative_5.rs:1:21
+   |
+ 1 | use open_bsl::jobs::worker;
+   |                     ^^^^^^ private module
+   |
+note: the module `worker` is defined here
+  --> crates/open-bsl/src/jobs.rs:19:1
+   |
+19 | mod worker;
+   | ^^^^^^^^^^
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0603`.
+
+use open_bsl::jobs::service;
+exit 1
+error[E0603]: module `service` is private
+  --> /tmp/open-bsl-module-boundaries.hSslAh/negative_6.rs:1:21
+   |
+ 1 | use open_bsl::jobs::service;
+   |                     ^^^^^^^ private module
+   |
+note: the module `service` is defined here
+  --> crates/open-bsl/src/jobs.rs:18:1
+   |
+18 | mod service;
+   | ^^^^^^^^^^^
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0603`.
+
+use bsl_vm::snippet;
+exit 1
+error[E0603]: module `snippet` is private
+  --> /tmp/open-bsl-module-boundaries.hSslAh/negative_7.rs:1:13
+   |
+ 1 | use bsl_vm::snippet;
+   |             ^^^^^^^ private module
+   |
+note: the module `snippet` is defined here
+  --> crates/bsl-vm/src/lib.rs:75:1
+   |
+75 | mod snippet;
+   | ^^^^^^^^^^^
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0603`.
+
+use bsl_vm::linking;
+exit 1
+error[E0603]: module `linking` is private
+  --> /tmp/open-bsl-module-boundaries.hSslAh/negative_8.rs:1:13
+   |
+ 1 | use bsl_vm::linking;
+   |             ^^^^^^^ private module
+   |
+note: the module `linking` is defined here
+  --> crates/bsl-vm/src/lib.rs:66:1
+   |
+66 | mod linking;
+   | ^^^^^^^^^^^
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0603`.
+
+use bsl_vm::scheduler;
+exit 1
+error[E0603]: module `scheduler` is private
+  --> /tmp/open-bsl-module-boundaries.hSslAh/negative_9.rs:1:13
+   |
+ 1 | use bsl_vm::scheduler;
+   |             ^^^^^^^^^ private module
+   |
+note: the module `scheduler` is defined here
+  --> crates/bsl-vm/src/lib.rs:74:1
+   |
+74 | mod scheduler;
+   | ^^^^^^^^^^^^^
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0603`.
+
+use bsl_vm::modules;
+exit 1
+error[E0603]: module `modules` is private
+  --> /tmp/open-bsl-module-boundaries.hSslAh/negative_10.rs:1:13
+   |
+ 1 | use bsl_vm::modules;
+   |             ^^^^^^^ private module
+   |
+note: the module `modules` is defined here
+  --> crates/bsl-vm/src/lib.rs:70:1
+   |
+70 | mod modules;
+   | ^^^^^^^^^^^
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0603`.
+
+use bsl_vm::debug;
+exit 1
+error[E0603]: module `debug` is private
+  --> /tmp/open-bsl-module-boundaries.hSslAh/negative_11.rs:1:13
+   |
+ 1 | use bsl_vm::debug;
+   |             ^^^^^ private module
+   |
+note: the module `debug` is defined here
+  --> crates/bsl-vm/src/lib.rs:56:1
+   |
+56 | mod debug;
+   | ^^^^^^^^^
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0603`.
+
+use bsl_vm::entry;
+exit 1
+error[E0603]: module `entry` is private
+  --> /tmp/open-bsl-module-boundaries.hSslAh/negative_12.rs:1:13
+   |
+ 1 | use bsl_vm::entry;
+   |             ^^^^^ private module
+   |
+note: the module `entry` is defined here
+  --> crates/bsl-vm/src/lib.rs:57:1
+   |
+57 | mod entry;
+   | ^^^^^^^^^
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0603`.

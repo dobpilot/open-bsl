@@ -1,0 +1,44 @@
+Сравнение исходных тел с 408f4d5, не машинного кода.
+
+step: identical
+step_cold: identical
+drive_linked: identical
+drive_with: identical
+drive_prologue: identical
+drive: identical
+at: identical
+reg_load: identical
+reg_store: identical
+reg_pair_mut: identical
+add_op: identical
+add_const_op: identical
+add_rhs_op: identical
+arith: identical
+neg_op: identical
+binop: identical
+cmp: identical
+needs_arith_coercion: identical
+do_return_with_value: identical
+find_handler: identical
+unwind_to_handler: identical
+err_to_value: identical
+current_error_info: identical
+prop_cache: identical
+method_cache: identical
+cached_component_method: identical
+field_name: identical
+call_builtin_with_format: identical
+dim_to_usize: identical
+build_nested_array: identical
+push_own_registers: identical
+numeric_for_i64_start: identical
+numeric_for_i64_overflow: identical
+numeric_for_next_regular: identical
+Frame: identical
+ParamSlot: identical
+NumericForState: identical
+CallArgs: identical
+Step: identical
+ReturnOutcome: identical
+
+poll_linked: единственное отличие — вызов CatalogContext::execution_parts вместо прежней тройки выбора.
