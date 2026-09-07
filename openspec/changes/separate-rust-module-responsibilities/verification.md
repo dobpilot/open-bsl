@@ -593,3 +593,20 @@ Clippy, build, workspace test (1737 passed, 0 failed, 1 ignored),
 `step-4.4-accessor-*.log` прошли: fmt, Clippy, build, workspace test
 (1739 passed, 0 failed, 1 ignored), строгий rustdoc, отдельный JIT-корпус.
 Задача 4.4 завершена, стадия 5 отмечена в принятом плане VM.
+
+## 4.5. Поддержка отладчика
+
+В приватный `debug.rs` перенесены `DebugAction`, `DebugPosition`,
+`DebugValues`, `FrameValues` и `DebugHook` с реализациями. Публичные
+интерфейсы реэкспортированы из корня; пять полей `FrameValues` доступны
+существующему драйверу через `pub(super)` по решению владельца.
+Вычисление выражений продолжает вызывать единственный `run_dynamic_snippet`.
+Перенесённый блок совпадает после учёта видимости; остаток `lib.rs`
+изменился только в импортах, включая неизменные `step`/`step_cold`.
+Тесты не редактировались.
+
+Явно прошли 256 VM-тестов (в том числе оба `debug_hook`),
+16 DAP handshake и 13 compiler debug-info. Полные последовательные
+ворота `step-4.5-*.log` прошли: fmt, Clippy, build, workspace test
+(1739 passed, 0 failed, 1 ignored), строгий rustdoc, отдельный JIT-корпус.
+Стадия 6 отмечена в принятом плане VM.
