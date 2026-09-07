@@ -50,3 +50,14 @@ workspace test (1739 passed, 0 failed, 1 ignored), строгий rustdoc
 Новых внешних зависимостей нет. Полные последовательные ворота
 `step-5.2-*.log` прошли: fmt, Clippy, build, workspace test
 (1739 passed, 0 failed, 1 ignored), строгий rustdoc, отдельный JIT-корпус.
+
+## 5.3. Общие ворота
+
+На зафиксированном результате повторно выполнены все команды:
+`cargo fmt --all -- --check`,
+`cargo clippy --workspace --all-targets -- -D warnings`,
+`cargo build --workspace`, `cargo test --workspace`,
+`RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps`
+и отдельный `the_jit_agrees_with_the_interpreter_on_every_script`.
+Все завершились успешно; workspace — 1739 passed, 0 failed, 1 ignored.
+Логи: `step-5.3-*.log`. Производственный код на этом шаге не менялся.
