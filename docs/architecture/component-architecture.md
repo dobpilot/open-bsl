@@ -87,6 +87,10 @@ Crates остаются направленным конвейером. Пред�
 `bsl-bytecode`, переносимые контракты — `bsl-rt`, исполнение — `bsl-vm`, а
 native orchestration и worker pool — фасаду `open-bsl`.
 
+Внутренние владельцы runtime, jobs и VM показаны в
+[карте Rust-модулей](rust-module-boundaries.md); разделение файлов
+не меняет описанные здесь границы компонентов и потоков.
+
 ```mermaid
 flowchart LR
     cli["bsl-cli<br/>файловый граф и adapters"]

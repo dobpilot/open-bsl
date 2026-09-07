@@ -18,6 +18,13 @@
 
 ## Цель
 
+Функциональный статус на 7 сентября 2026 года: стадии 2–7 выполнены,
+включая единый аксессор каталожных таблиц без слияния владельцев кэшей.
+Текущая карта находится в
+[`../architecture/rust-module-boundaries.md`](../architecture/rust-module-boundaries.md).
+Закрывающие измерения, итоговое ревью и архивирование общего пакета
+остаются владельцу; этот статус их не заменяет.
+
 Стадии 2–7 включены в предложенный общий OpenSpec-пакет
 [`separate-rust-module-responsibilities`](../../openspec/changes/separate-rust-module-responsibilities/proposal.md).
 Его `tasks.md` ведёт checklist реализации; этот документ сохраняет
