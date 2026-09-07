@@ -211,6 +211,85 @@ fn materialization_move_errors_preserve_destination_and_pc() {
 }
 
 #[test]
+fn materialization_call_preserves_frame_fields_with_and_without_vec_growth() {
+    let mut program =
+        compile_module("Функция Ф(х)\nПерем а;\nа = х + 1;\nВозврат а;\nКонецФункции\nр = Ф(7);");
+    let call = program.chunks[0]
+        .instrs
+        .iter()
+        .copied()
+        .find(|instr| matches!(instr, Instr::Call { .. }))
+        .unwrap();
+    let Instr::Call {
+        func, base, ret, ..
+    } = call
+    else {
+        unreachable!()
+    };
+    program.chunks[0].instrs = vec![call];
+    bsl_bytecode::image::finalize(&mut program);
+    let callee = &program.chunks[func as usize];
+    let own_count = (callee.n_regs - callee.n_params) as usize;
+    assert_eq!(callee.n_params, 1);
+    assert!(own_count > 0);
+    for grow_frames in [false, true] {
+        for grow_values in [false, true] {
+            // Ёмкость делаем точной и проверяем её, чтобы тест действительно
+            // проходил обе ветви, а не полагался на рост Vec по умолчанию.
+            let mut frames = vec![materialization_frame(&[])]
+                .into_boxed_slice()
+                .into_vec();
+            assert_eq!(frames.len(), frames.capacity());
+            if !grow_frames {
+                frames.reserve_exact(1);
+            }
+            let mut stack = vec![BslValue::Undefined; program.chunks[0].n_regs as usize]
+                .into_boxed_slice()
+                .into_vec();
+            assert_eq!(stack.len(), stack.capacity());
+            stack[base as usize] = BslValue::Number(BslNumber::from_i64(7));
+            if !grow_values {
+                stack.reserve_exact(own_count);
+            }
+            let frame_capacity = frames.capacity();
+            let value_capacity = stack.capacity();
+            let call_start = stack.len();
+
+            assert!(matches!(
+                materialization_step(&program, &mut frames, &mut stack),
+                Ok(Step::Continue)
+            ));
+            assert_eq!(frames.capacity() > frame_capacity, grow_frames);
+            assert_eq!(stack.capacity() > value_capacity, grow_values);
+            assert_eq!(frames.len(), 2);
+            assert_eq!(frames[0].pc, 1);
+            let frame = &frames[1];
+            assert_eq!(frame.module, ROOT_MODULE);
+            assert_eq!(frame.func_id, func as usize);
+            assert_eq!(frame.pc, 0);
+            assert_eq!(frame.own_base, call_start);
+            assert_eq!(frame.call_start, call_start);
+            assert_eq!(frame.return_reg, ret);
+            assert_eq!(frame.param_aliases.len(), 1);
+            assert_eq!(frame.param_aliases[0].idx, base as usize);
+            assert!(frame.param_aliases[0].provided);
+            assert!(frame.module_copybacks.is_empty());
+            assert!(frame.numeric_for_state.is_none());
+            assert_eq!(
+                stack[frame.reg_index(0)],
+                BslValue::Number(BslNumber::from_i64(7))
+            );
+            assert_eq!(stack.len(), call_start + own_count);
+            assert!(
+                stack[call_start..]
+                    .iter()
+                    .all(|value| matches!(value, BslValue::Undefined))
+            );
+        }
+    }
+}
+
+#[test]
 fn scheduler_quantum_defaults_to_the_confirmed_value() {
     assert_eq!(SchedulerConfig::default().safe_points_per_quantum, 1_024);
 }
