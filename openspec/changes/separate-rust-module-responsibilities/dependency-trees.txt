@@ -1,0 +1,27 @@
+cargo tree -p bsl-vm -e normal
+bsl-vm v0.3.1 (/home/kan/Документы/develop/open-bsl/crates/bsl-vm)
+├── bsl-bytecode v0.3.1 (/home/kan/Документы/develop/open-bsl/crates/bsl-bytecode)
+│   ├── bsl-number v0.3.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-number)
+│   │   ├── num-bigint v0.4.8
+│   │   │   ├── num-integer v0.1.46
+│   │   │   │   └── num-traits v0.2.19
+│   │   │   └── num-traits v0.2.19
+│   │   └── num-traits v0.2.19
+│   └── bsl-rt v0.3.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-rt)
+│       └── bsl-number v0.3.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-number) (*)
+├── bsl-format v0.1.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-format)
+│   ├── bsl-number v0.3.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-number) (*)
+│   └── bsl-rt v0.3.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-rt) (*)
+├── bsl-number v0.3.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-number) (*)
+└── bsl-rt v0.3.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-rt) (*)
+
+cargo tree -p bsl-bytecode -e normal,dev
+bsl-bytecode v0.3.1 (/home/kan/Документы/develop/open-bsl/crates/bsl-bytecode)
+├── bsl-number v0.3.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-number)
+│   ├── num-bigint v0.4.8
+│   │   ├── num-integer v0.1.46
+│   │   │   └── num-traits v0.2.19
+│   │   └── num-traits v0.2.19
+│   └── num-traits v0.2.19
+└── bsl-rt v0.3.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-rt)
+    └── bsl-number v0.3.0 (/home/kan/Документы/develop/open-bsl/crates/bsl-number) (*)

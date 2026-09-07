@@ -38,3 +38,15 @@ workspace test (1739 passed, 0 failed, 1 ignored), строгий rustdoc
 и отдельный JIT-корпус. Отдельно прошли runtime smoke/registry и jobs smoke.
 Оговорки окружения и пропуски перечислены в verification; окончательный
 явный прогон контрактов выполняется задачей 5.4.
+
+## 5.2. Зависимости и защищённые файлы
+
+[dependency-trees.txt](dependency-trees.txt) сохраняет normal-дерево VM
+и normal/dev-дерево bytecode: syntax/sema/compiler отсутствуют.
+`git diff --exit-code 408f4d5` подтвердил неизменность `Cargo.lock`,
+корневого и всех вложенных `Cargo.toml` (включая профили),
+`.cargo/config.toml`, корневого `TASKS.md`, generated API reference,
+всех `.expected`, `open_questions.rs` и `tests/conformance/measure`.
+Новых внешних зависимостей нет. Полные последовательные ворота
+`step-5.2-*.log` прошли: fmt, Clippy, build, workspace test
+(1739 passed, 0 failed, 1 ignored), строгий rustdoc, отдельный JIT-корпус.
