@@ -122,7 +122,7 @@ guard-точек по функциям совпадает до и после; п
 шлюзы остаются у runtime/worker, проверяющих соответствующее окно гонки.
 
 Нормативное основание —
-[component-architecture](../../../docs/architecture/component-architecture.md),
+[component-architecture](../../../../docs/architecture/component-architecture.md),
 включая таблицу намеренных расхождений: `std::thread` + `Mutex`/`Condvar`,
 helping вместо нового ABI ожидания, DTO-граница, закрепление резидентов за
 потоком, отсутствие внешнего кода под локом реестра. Перенос не является
@@ -130,7 +130,7 @@ helping вместо нового ABI ожидания, DTO-граница, за
 
 ## 3. VM: продолжить существующее решение
 
-[План VM](../../../docs/plans/bsl-vm-refactor.md) остаётся источником
+[План VM](../../../../docs/plans/bsl-vm-refactor.md) остаётся источником
 подробной карты символов и накопленных измерений. Его стадия 1 завершена;
 здесь учитываются только стадии 2–7: `snippet`, `linking`, `scheduler`,
 `modules`, `debug`, `entry`, именно в этом порядке. Единственный checklist

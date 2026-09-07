@@ -1,13 +1,15 @@
 # Внутренние границы Rust-модулей
 
 Текущая раскладка после функциональной реализации
-[separate-rust-module-responsibilities](../../openspec/changes/separate-rust-module-responsibilities/proposal.md),
+[separate-rust-module-responsibilities](../../openspec/changes/archive/2026-09-07-separate-rust-module-responsibilities/proposal.md),
 7 сентября 2026 года. Публичные Rust-пути и BSL-поведение сохранены.
 Это карта владельцев, не второй checklist: ход приёмки ведётся только в
-[tasks.md пакета](../../openspec/changes/separate-rust-module-responsibilities/tasks.md).
+[tasks.md пакета](../../openspec/changes/archive/2026-09-07-separate-rust-module-responsibilities/tasks.md).
 Измерения серии выполнены по дополнительному поручению владельца:
 [отчёт](../research/performance/rust-module-refactor-2026-09-07.md).
-Вердикт о цене, итоговое ревью и архивирование остаются владельцу.
+Цена принята владельцем 7 сентября 2026 года; итоговое ревью завершено,
+пакет архивирован. Постоянный контракт —
+[спецификация границ](../../openspec/specs/rust-module-boundaries/spec.md).
 
 ## Runtime: одно значение, разные предметные операции
 
@@ -95,9 +97,9 @@
 
 ## Граница выполненной работы
 
-[Карта приёмки](../../openspec/changes/separate-rust-module-responsibilities/acceptance.md)
+[Карта приёмки](../../openspec/changes/archive/2026-09-07-separate-rust-module-responsibilities/acceptance.md)
 содержит соответствие сценариев тестам, проверку приватности,
 инвентарь и оговорки покрытия. Отложенные кандидаты исходного аудита
 (resolver, compiler, XPath, регистрация компонентов и другие)
 этим изменением не реализованы. Исторические результаты измерений
-не пересматриваются; текущий пакет остаётся открытым до задач владельца.
+не пересматриваются; пакет закрыт после принятия цены владельцем.
