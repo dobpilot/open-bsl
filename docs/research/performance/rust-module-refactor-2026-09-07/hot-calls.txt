@@ -1,0 +1,58 @@
+Статические места вызовов; это не число исполненных вызовов.
+GOT-цели разрешены через ELF relocations и таблицу символов.
+Регистровые косвенные вызовы остаются обозначенными регистрами.
+Для сопоставления сняты хеши крейтов и только ожидаемые новые пути:
+bsl_rt::{value,error} и bsl_vm::{linking,modules,scheduler,snippet}.
+Официальный экран и полный diff этой дополнительной нормализации не используют.
+
+--- /home/kan/Документы/develop/open-bsl-measure.udXiRDBX/hot-details/base-4step.resolved-calls	2026-09-07 19:19:41.854161633 +0300
++++ /home/kan/Документы/develop/open-bsl-measure.udXiRDBX/hot-details/final-4step.resolved-calls	2026-09-07 19:19:42.506165249 +0300
+@@ -9,11 +9,11 @@
+ 1 <alloc::raw_vec::RawVec<bsl_vm::Frame>>::grow_one
+ 1 <alloc::raw_vec::RawVec<std::sync::mpmc::waker::Entry>>::grow_one
+ 2 <alloc::raw_vec::RawVecInner>::try_allocate_in
+-48 <alloc::rc::Rc<bsl_number::number::BigDec>>::drop_slow
+-48 <alloc::rc::Rc<bsl_rt::object::BslObject>>::drop_slow
+-44 <alloc::rc::Rc<bsl_rt::string::BslStringData>>::drop_slow
++49 <alloc::rc::Rc<bsl_number::number::BigDec>>::drop_slow
++49 <alloc::rc::Rc<bsl_rt::object::BslObject>>::drop_slow
++45 <alloc::rc::Rc<bsl_rt::string::BslStringData>>::drop_slow
+ 1 <alloc::vec::Vec<bsl_rt::BslValue>>::push_mut
+-2 <alloc::vec::Vec<bsl_rt::BslValue>>::resize
++1 <alloc::vec::Vec<bsl_rt::BslValue>>::resize
+ 1 <alloc::vec::Vec<bsl_vm::ParamSlot>>::push_mut
+ 6 <bsl_rt::BslValue as core::clone::Clone>::clone
+ 2 <bsl_rt::BslValue>::as_condition
+@@ -53,11 +53,12 @@
+ 1 bsl_vm::numeric_for_i64_overflow
+ 1 bsl_vm::numeric_for_i64_start
+ 1 bsl_vm::numeric_for_next_regular
++1 bsl_vm::push_own_registers
+ 1 bsl_vm::step_cold
+ 97 core::panicking::panic_bounds_check
+ 6 core::panicking::panic_in_cleanup
+ 2 core::ptr::drop_glue::<alloc::vec::Vec<bsl_rt::BslValue>>
+-70 core::ptr::drop_glue::<bsl_rt::BslValue>
++69 core::ptr::drop_glue::<bsl_rt::BslValue>
+ 4 core::ptr::drop_glue::<bsl_rt::RtError>
+ 6 core::ptr::drop_glue::<bsl_vm::CallArgs>
+ 1 core::ptr::drop_glue::<bsl_vm::Frame>
+
+--- /home/kan/Документы/develop/open-bsl-measure.udXiRDBX/hot-details/base-9step_cold.resolved-calls	2026-09-07 19:19:41.981162338 +0300
++++ /home/kan/Документы/develop/open-bsl-measure.udXiRDBX/hot-details/final-9step_cold.resolved-calls	2026-09-07 19:19:42.622165893 +0300
+@@ -15,7 +15,6 @@
+ 3 <alloc::rc::Rc<dyn bsl_rt::http::HttpClientFactory>>::drop_slow
+ 1 <alloc::vec::Vec<bsl_rt::BslValue> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<bsl_rt::BslValue, core::iter::adapters::map::Map<core::ops::range::Range<usize>, bsl_vm::build_nested_array::{closure#0}>>>::from_iter
+ 2 <alloc::vec::Vec<bsl_rt::BslValue>>::push_mut
+-1 <alloc::vec::Vec<bsl_rt::BslValue>>::resize
+ 1 <alloc::vec::Vec<bsl_vm::Frame>>::push_mut
+ 1 <alloc::vec::Vec<bsl_vm::ParamSlot>>::push_mut
+ 1 <bsl_number::number::BslNumber>::to_i64_exact
+@@ -45,6 +44,7 @@
+ 1 bsl_vm::component_prop_get
+ 1 bsl_vm::component_prop_set
+ 4 bsl_vm::ensure_module_ready
++1 bsl_vm::push_own_registers
+ 1 bsl_vm::run_dynamic_snippet
+ 1 bsl_vm::step_cold::{closure#1}
+ 49 core::panicking::panic_bounds_check

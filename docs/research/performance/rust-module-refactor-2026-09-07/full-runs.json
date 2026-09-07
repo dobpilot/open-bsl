@@ -1,0 +1,5272 @@
+{
+  "base": "59e7056918bb5e18f75d322703ff150597cc2491",
+  "candidate": "182da39a1b1190cec009e522fab2f698792cae49",
+  "environment": "2026-09-07T18:21:59+03:00\nLinux 7.1.8-1-cachyos\nrustc 1.97.1 (8bab26f4f 2026-07-14)\nbinary: rustc\ncommit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452\ncommit-date: 2026-07-14\nhost: x86_64-unknown-linux-gnu\nrelease: 1.97.1\nLLVM version: 22.1.6\ncargo 1.97.1 (c980f4866 2026-06-30)\nperf version 7.1.8-1\nArchitecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           39 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  8\nOn-line CPU(s) list:                     0-7\nVendor ID:                               GenuineIntel\nModel name:                              Intel(R) Core(TM) i5-8250U CPU @ 1.60GHz\nCPU family:                              6\nModel:                                   142\nThread(s) per core:                      2\nCore(s) per socket:                      4\nSocket(s):                               1\nStepping:                                10\nMicrocode version:                       0xf6\nCPU(s) scaling MHz:                      100%\nCPU max MHz:                             1600.0000\nCPU min MHz:                             400.0000\nBogoMIPS:                                3600.00\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology nonstop_tsc cpuid aperfmperf pni pclmulqdq dtes64 monitor ds_cpl vmx est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch cpuid_fault epb pti ssbd ibrs ibpb stibp tpr_shadow flexpriority ept vpid ept_ad fsgsbase tsc_adjust sgx bmi1 avx2 smep bmi2 erms invpcid mpx rdseed adx smap clflushopt intel_pt xsaveopt xsavec xgetbv1 xsaves dtherm ida arat pln pts hwp hwp_notify hwp_act_window hwp_epp vnmi md_clear flush_l1d arch_capabilities\nVirtualization:                          VT-x\nL1d cache:                               128 KiB (4 instances)\nL1i cache:                               128 KiB (4 instances)\nL2 cache:                                1 MiB (4 instances)\nL3 cache:                                6 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-7\nVulnerability Gather data sampling:      Mitigation; Microcode\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             KVM: Mitigation: Split huge pages\nVulnerability L1tf:                      Mitigation; PTE Inversion; VMX conditional cache flushes, SMT vulnerable\nVulnerability Mds:                       Mitigation; Clear CPU buffers; SMT vulnerable\nVulnerability Meltdown:                  Mitigation; PTI\nVulnerability Mmio stale data:           Mitigation; Clear CPU buffers; SMT vulnerable\nVulnerability Old microcode:             Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Mitigation; IBRS\nVulnerability Spec rstack overflow:      Not affected\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; IBRS; IBPB conditional; STIBP conditional; RSB filling; PBRSB-eIBRS Not affected; BHI Not affected\nVulnerability Srbds:                     Mitigation; Microcode\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Mitigation; IBPB before exit to userspace\n59e7056918bb5e18f75d322703ff150597cc2491\na701a34903b8d3337c60edd9b15ee9beb056285f\n182da39a1b1190cec009e522fab2f698792cae49\n9d0457d2bc99f7631ca428cb83092034fd05c82e96739314119d090a6ec292d5  .cargo/config.toml\nd01540f1abb1c2dffb36ac4d95960b2a177ba60362b5b0df47171a199cd0d2c3  Cargo.lock\n 18:22:00 up 11 days, 11:14,  1 user,  load average: 7.12, 4.64, 1.94\n1\nperformance\n",
+  "binaries": "3c3f799e386e7bd23046b28501ae43e03311f997db3445525301ec4f9cd3766a  /home/kan/Документы/develop/open-bsl-measure.udXiRDBX/target-base/release/bsl-cli\n7b3346554cc5ab1a30d6de42040a34008cde9ea3a9445b7acf51a0788c6ae40d  /home/kan/Документы/develop/open-bsl-measure.udXiRDBX/target-jobs/release/bsl-cli\nd5beb50dff654f581622c811e26b9853016132ec4b757fbf6b51738738ea0bd7  /home/kan/Документы/develop/open-bsl-measure.udXiRDBX/target-final/release/bsl-cli\n",
+  "runs": [
+    {
+      "scenario": "call_overhead",
+      "pair": 1,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:54:14.857Z",
+        "load": [
+          1.43,
+          4.52,
+          4.4
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:54:15.426Z",
+        "load": [
+          1.43,
+          4.52,
+          4.4
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 1921071317,
+      "cycles:u": 644719121,
+      "perf": "# started on Mon Sep  7 19:54:14 2026\n\n1921071317,,instructions:u,413592549,100.00,,\n644719121,,cycles:u,413592549,100.00,,\n",
+      "stdout": "сумма: 500000500000\n380\n"
+    },
+    {
+      "scenario": "call_overhead",
+      "pair": 1,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:54:15.428Z",
+        "load": [
+          1.43,
+          4.52,
+          4.4
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:54:15.875Z",
+        "load": [
+          1.43,
+          4.52,
+          4.4
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 1924017318,
+      "cycles:u": 651971726,
+      "perf": "# started on Mon Sep  7 19:54:15 2026\n\n1924017318,,instructions:u,417359874,100.00,,\n651971726,,cycles:u,417359874,100.00,,\n",
+      "stdout": "сумма: 500000500000\n384\n"
+    },
+    {
+      "scenario": "call_overhead",
+      "pair": 2,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:54:15.877Z",
+        "load": [
+          1.43,
+          4.52,
+          4.4
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:54:16.340Z",
+        "load": [
+          1.43,
+          4.52,
+          4.4
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 1924096765,
+      "cycles:u": 677970514,
+      "perf": "# started on Mon Sep  7 19:54:15 2026\n\n1924096765,,instructions:u,434710333,100.00,,\n677970514,,cycles:u,434710333,100.00,,\n",
+      "stdout": "сумма: 500000500000\n402\n"
+    },
+    {
+      "scenario": "call_overhead",
+      "pair": 2,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:54:16.342Z",
+        "load": [
+          1.43,
+          4.52,
+          4.4
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:54:16.785Z",
+        "load": [
+          1.43,
+          4.52,
+          4.4
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 1921023951,
+      "cycles:u": 649469637,
+      "perf": "# started on Mon Sep  7 19:54:16 2026\n\n1921023951,,instructions:u,415922530,100.00,,\n649469637,,cycles:u,415922530,100.00,,\n",
+      "stdout": "сумма: 500000500000\n377\n"
+    },
+    {
+      "scenario": "call_overhead",
+      "pair": 3,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:54:16.787Z",
+        "load": [
+          1.43,
+          4.52,
+          4.4
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:54:17.233Z",
+        "load": [
+          1.43,
+          4.52,
+          4.4
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 1921050289,
+      "cycles:u": 646601619,
+      "perf": "# started on Mon Sep  7 19:54:16 2026\n\n1921050289,,instructions:u,416516433,100.00,,\n646601619,,cycles:u,416516433,100.00,,\n",
+      "stdout": "сумма: 500000500000\n383\n"
+    },
+    {
+      "scenario": "call_overhead",
+      "pair": 3,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:54:17.235Z",
+        "load": [
+          1.43,
+          4.52,
+          4.4
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:54:17.683Z",
+        "load": [
+          1.43,
+          4.52,
+          4.4
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 1924062883,
+      "cycles:u": 652359223,
+      "perf": "# started on Mon Sep  7 19:54:17 2026\n\n1924062883,,instructions:u,417683095,100.00,,\n652359223,,cycles:u,417683095,100.00,,\n",
+      "stdout": "сумма: 500000500000\n384\n"
+    },
+    {
+      "scenario": "call_overhead",
+      "pair": 4,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:54:17.685Z",
+        "load": [
+          1.43,
+          4.52,
+          4.4
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:54:18.134Z",
+        "load": [
+          1.48,
+          4.48,
+          4.38
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 1924012775,
+      "cycles:u": 655017594,
+      "perf": "# started on Mon Sep  7 19:54:17 2026\n\n1924012775,,instructions:u,419209255,100.00,,\n655017594,,cycles:u,419209255,100.00,,\n",
+      "stdout": "сумма: 500000500000\n384\n"
+    },
+    {
+      "scenario": "call_overhead",
+      "pair": 4,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:54:18.137Z",
+        "load": [
+          1.48,
+          4.48,
+          4.38
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:54:18.580Z",
+        "load": [
+          1.48,
+          4.48,
+          4.38
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 1921097440,
+      "cycles:u": 643455878,
+      "perf": "# started on Mon Sep  7 19:54:18 2026\n\n1921097440,,instructions:u,413434728,100.00,,\n643455878,,cycles:u,413434728,100.00,,\n",
+      "stdout": "сумма: 500000500000\n381\n"
+    },
+    {
+      "scenario": "call_overhead",
+      "pair": 5,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:54:18.582Z",
+        "load": [
+          1.48,
+          4.48,
+          4.38
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:54:19.032Z",
+        "load": [
+          1.48,
+          4.48,
+          4.38
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 1921032986,
+      "cycles:u": 654315671,
+      "perf": "# started on Mon Sep  7 19:54:18 2026\n\n1921032986,,instructions:u,419538035,100.00,,\n654315671,,cycles:u,419538035,100.00,,\n",
+      "stdout": "сумма: 500000500000\n386\n"
+    },
+    {
+      "scenario": "call_overhead",
+      "pair": 5,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:54:19.034Z",
+        "load": [
+          1.48,
+          4.48,
+          4.38
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:54:19.480Z",
+        "load": [
+          1.48,
+          4.48,
+          4.38
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 1924109877,
+      "cycles:u": 652095124,
+      "perf": "# started on Mon Sep  7 19:54:19 2026\n\n1924109877,,instructions:u,417765134,100.00,,\n652095124,,cycles:u,417765134,100.00,,\n",
+      "stdout": "сумма: 500000500000\n381\n"
+    },
+    {
+      "scenario": "call_overhead",
+      "pair": 6,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:54:19.481Z",
+        "load": [
+          1.48,
+          4.48,
+          4.38
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:54:19.938Z",
+        "load": [
+          1.48,
+          4.48,
+          4.38
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 1924056530,
+      "cycles:u": 671845112,
+      "perf": "# started on Mon Sep  7 19:54:19 2026\n\n1924056530,,instructions:u,430106015,100.00,,\n671845112,,cycles:u,430106015,100.00,,\n",
+      "stdout": "сумма: 500000500000\n394\n"
+    },
+    {
+      "scenario": "call_overhead",
+      "pair": 6,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:54:19.940Z",
+        "load": [
+          1.48,
+          4.48,
+          4.38
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:54:20.399Z",
+        "load": [
+          1.48,
+          4.48,
+          4.38
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 1921012520,
+      "cycles:u": 672003609,
+      "perf": "# started on Mon Sep  7 19:54:19 2026\n\n1921012520,,instructions:u,430607562,100.00,,\n672003609,,cycles:u,430607562,100.00,,\n",
+      "stdout": "сумма: 500000500000\n397\n"
+    },
+    {
+      "scenario": "call_overhead",
+      "pair": 7,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:54:20.400Z",
+        "load": [
+          1.48,
+          4.48,
+          4.38
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:54:20.844Z",
+        "load": [
+          1.48,
+          4.48,
+          4.38
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 1921026765,
+      "cycles:u": 643887689,
+      "perf": "# started on Mon Sep  7 19:54:20 2026\n\n1921026765,,instructions:u,414844645,100.00,,\n643887689,,cycles:u,414844645,100.00,,\n",
+      "stdout": "сумма: 500000500000\n383\n"
+    },
+    {
+      "scenario": "call_overhead",
+      "pair": 7,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:54:20.845Z",
+        "load": [
+          1.48,
+          4.48,
+          4.38
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:54:21.305Z",
+        "load": [
+          1.48,
+          4.48,
+          4.38
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 1924089354,
+      "cycles:u": 671546709,
+      "perf": "# started on Mon Sep  7 19:54:20 2026\n\n1924089354,,instructions:u,431257757,100.00,,\n671546709,,cycles:u,431257757,100.00,,\n",
+      "stdout": "сумма: 500000500000\n396\n"
+    },
+    {
+      "scenario": "pi_leibniz",
+      "pair": 1,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:54:52.918Z",
+        "load": [
+          1.31,
+          4.11,
+          4.26
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:54:53.699Z",
+        "load": [
+          1.31,
+          4.11,
+          4.26
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 2778941158,
+      "cycles:u": 1167248019,
+      "perf": "# started on Mon Sep  7 19:54:52 2026\n\n2778941158,,instructions:u,746645316,100.00,,\n1167248019,,cycles:u,746645316,100.00,,\n",
+      "stdout": "3,141591653589793238712644144\n714\n"
+    },
+    {
+      "scenario": "pi_leibniz",
+      "pair": 1,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:54:53.701Z",
+        "load": [
+          1.31,
+          4.11,
+          4.26
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:54:54.469Z",
+        "load": [
+          1.31,
+          4.11,
+          4.26
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 2764942135,
+      "cycles:u": 1155874539,
+      "perf": "# started on Mon Sep  7 19:54:53 2026\n\n2764942135,,instructions:u,738865874,100.00,,\n1155874539,,cycles:u,738865874,100.00,,\n",
+      "stdout": "3,141591653589793238712644144\n703\n"
+    },
+    {
+      "scenario": "pi_leibniz",
+      "pair": 2,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:54:54.470Z",
+        "load": [
+          1.31,
+          4.11,
+          4.26
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:54:55.250Z",
+        "load": [
+          1.31,
+          4.11,
+          4.26
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 2764927342,
+      "cycles:u": 1157715669,
+      "perf": "# started on Mon Sep  7 19:54:54 2026\n\n2764927342,,instructions:u,744457340,100.00,,\n1157715669,,cycles:u,744457340,100.00,,\n",
+      "stdout": "3,141591653589793238712644144\n716\n"
+    },
+    {
+      "scenario": "pi_leibniz",
+      "pair": 2,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:54:55.252Z",
+        "load": [
+          1.31,
+          4.11,
+          4.26
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:54:56.027Z",
+        "load": [
+          1.31,
+          4.11,
+          4.26
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 2778880191,
+      "cycles:u": 1164355117,
+      "perf": "# started on Mon Sep  7 19:54:55 2026\n\n2778880191,,instructions:u,744923531,100.00,,\n1164355117,,cycles:u,744923531,100.00,,\n",
+      "stdout": "3,141591653589793238712644144\n710\n"
+    },
+    {
+      "scenario": "pi_leibniz",
+      "pair": 3,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:54:56.029Z",
+        "load": [
+          1.31,
+          4.11,
+          4.26
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:54:56.817Z",
+        "load": [
+          1.31,
+          4.11,
+          4.26
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 2778862030,
+      "cycles:u": 1178383446,
+      "perf": "# started on Mon Sep  7 19:54:56 2026\n\n2778862030,,instructions:u,757027165,100.00,,\n1178383446,,cycles:u,757027165,100.00,,\n",
+      "stdout": "3,141591653589793238712644144\n725\n"
+    },
+    {
+      "scenario": "pi_leibniz",
+      "pair": 3,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:54:56.818Z",
+        "load": [
+          1.31,
+          4.11,
+          4.26
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:54:57.585Z",
+        "load": [
+          1.31,
+          4.11,
+          4.26
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 2764869673,
+      "cycles:u": 1154183139,
+      "perf": "# started on Mon Sep  7 19:54:56 2026\n\n2764869673,,instructions:u,738794260,100.00,,\n1154183139,,cycles:u,738794260,100.00,,\n",
+      "stdout": "3,141591653589793238712644144\n705\n"
+    },
+    {
+      "scenario": "pi_leibniz",
+      "pair": 4,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:54:57.587Z",
+        "load": [
+          1.31,
+          4.11,
+          4.26
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:54:58.349Z",
+        "load": [
+          1.37,
+          4.07,
+          4.25
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 2764860013,
+      "cycles:u": 1146552958,
+      "perf": "# started on Mon Sep  7 19:54:57 2026\n\n2764860013,,instructions:u,733201232,100.00,,\n1146552958,,cycles:u,733201232,100.00,,\n",
+      "stdout": "3,141591653589793238712644144\n701\n"
+    },
+    {
+      "scenario": "pi_leibniz",
+      "pair": 4,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:54:58.351Z",
+        "load": [
+          1.37,
+          4.07,
+          4.25
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:54:59.160Z",
+        "load": [
+          1.37,
+          4.07,
+          4.25
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 2778862148,
+      "cycles:u": 1215582665,
+      "perf": "# started on Mon Sep  7 19:54:58 2026\n\n2778862148,,instructions:u,779645340,100.00,,\n1215582665,,cycles:u,779645340,100.00,,\n",
+      "stdout": "3,141591653589793238712644144\n744\n"
+    },
+    {
+      "scenario": "pi_leibniz",
+      "pair": 5,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:54:59.162Z",
+        "load": [
+          1.37,
+          4.07,
+          4.25
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:54:59.944Z",
+        "load": [
+          1.37,
+          4.07,
+          4.25
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 2778949001,
+      "cycles:u": 1174338852,
+      "perf": "# started on Mon Sep  7 19:54:59 2026\n\n2778949001,,instructions:u,752075355,100.00,,\n1174338852,,cycles:u,752075355,100.00,,\n",
+      "stdout": "3,141591653589793238712644144\n719\n"
+    },
+    {
+      "scenario": "pi_leibniz",
+      "pair": 5,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:54:59.946Z",
+        "load": [
+          1.37,
+          4.07,
+          4.25
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:55:00.716Z",
+        "load": [
+          1.37,
+          4.07,
+          4.25
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 2764876714,
+      "cycles:u": 1160229084,
+      "perf": "# started on Mon Sep  7 19:54:59 2026\n\n2764876714,,instructions:u,741988278,100.00,,\n1160229084,,cycles:u,741988278,100.00,,\n",
+      "stdout": "3,141591653589793238712644144\n708\n"
+    },
+    {
+      "scenario": "pi_leibniz",
+      "pair": 6,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:55:00.717Z",
+        "load": [
+          1.37,
+          4.07,
+          4.25
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:55:01.527Z",
+        "load": [
+          1.37,
+          4.07,
+          4.25
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 2764935335,
+      "cycles:u": 1210816494,
+      "perf": "# started on Mon Sep  7 19:55:00 2026\n\n2764935335,,instructions:u,778250567,100.00,,\n1210816494,,cycles:u,778250567,100.00,,\n",
+      "stdout": "3,141591653589793238712644144\n746\n"
+    },
+    {
+      "scenario": "pi_leibniz",
+      "pair": 6,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:55:01.529Z",
+        "load": [
+          1.37,
+          4.07,
+          4.25
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:55:02.324Z",
+        "load": [
+          1.37,
+          4.07,
+          4.25
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 2778857117,
+      "cycles:u": 1198668877,
+      "perf": "# started on Mon Sep  7 19:55:01 2026\n\n2778857117,,instructions:u,766356776,100.00,,\n1198668877,,cycles:u,766356776,100.00,,\n",
+      "stdout": "3,141591653589793238712644144\n732\n"
+    },
+    {
+      "scenario": "pi_leibniz",
+      "pair": 7,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:55:02.326Z",
+        "load": [
+          1.37,
+          4.07,
+          4.25
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:55:03.118Z",
+        "load": [
+          1.42,
+          4.04,
+          4.24
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 2778878901,
+      "cycles:u": 1183677103,
+      "perf": "# started on Mon Sep  7 19:55:02 2026\n\n2778878901,,instructions:u,757074445,100.00,,\n1183677103,,cycles:u,757074445,100.00,,\n",
+      "stdout": "3,141591653589793238712644144\n723\n"
+    },
+    {
+      "scenario": "pi_leibniz",
+      "pair": 7,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:55:03.120Z",
+        "load": [
+          1.42,
+          4.04,
+          4.24
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:55:03.892Z",
+        "load": [
+          1.42,
+          4.04,
+          4.24
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 2764857771,
+      "cycles:u": 1159909784,
+      "perf": "# started on Mon Sep  7 19:55:03 2026\n\n2764857771,,instructions:u,742356260,100.00,,\n1159909784,,cycles:u,742356260,100.00,,\n",
+      "stdout": "3,141591653589793238712644144\n710\n"
+    },
+    {
+      "scenario": "bmp_rotate",
+      "pair": 1,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:55:05.998Z",
+        "load": [
+          1.42,
+          4.04,
+          4.24
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:55:06.958Z",
+        "load": [
+          1.42,
+          4.04,
+          4.24
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 3668988527,
+      "cycles:u": 1446572788,
+      "perf": "# started on Mon Sep  7 19:55:06 2026\n\n3668988527,,instructions:u,926849141,100.00,,\n1446572788,,cycles:u,926849141,100.00,,\n",
+      "stdout": "BMP 400x600, байтов: 960054, контрольная сумма: 633613994\n725\n"
+    },
+    {
+      "scenario": "bmp_rotate",
+      "pair": 1,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:55:06.960Z",
+        "load": [
+          1.42,
+          4.04,
+          4.24
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:55:07.908Z",
+        "load": [
+          1.42,
+          4.04,
+          4.24
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 3644581478,
+      "cycles:u": 1435046347,
+      "perf": "# started on Mon Sep  7 19:55:06 2026\n\n3644581478,,instructions:u,919611763,100.00,,\n1435046347,,cycles:u,919611763,100.00,,\n",
+      "stdout": "BMP 400x600, байтов: 960054, контрольная сумма: 633613994\n717\n"
+    },
+    {
+      "scenario": "bmp_rotate",
+      "pair": 2,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:55:07.910Z",
+        "load": [
+          1.42,
+          4.04,
+          4.24
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:55:08.894Z",
+        "load": [
+          1.39,
+          3.99,
+          4.22
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 3644499893,
+      "cycles:u": 1492142465,
+      "perf": "# started on Mon Sep  7 19:55:07 2026\n\n3644499893,,instructions:u,954946627,100.00,,\n1492142465,,cycles:u,954946627,100.00,,\n",
+      "stdout": "BMP 400x600, байтов: 960054, контрольная сумма: 633613994\n743\n"
+    },
+    {
+      "scenario": "bmp_rotate",
+      "pair": 2,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:55:08.896Z",
+        "load": [
+          1.39,
+          3.99,
+          4.22
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:55:09.853Z",
+        "load": [
+          1.39,
+          3.99,
+          4.22
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 3669066931,
+      "cycles:u": 1450036466,
+      "perf": "# started on Mon Sep  7 19:55:08 2026\n\n3669066931,,instructions:u,929133831,100.00,,\n1450036466,,cycles:u,929133831,100.00,,\n",
+      "stdout": "BMP 400x600, байтов: 960054, контрольная сумма: 633613994\n725\n"
+    },
+    {
+      "scenario": "bmp_rotate",
+      "pair": 3,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:55:09.855Z",
+        "load": [
+          1.39,
+          3.99,
+          4.22
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:55:10.804Z",
+        "load": [
+          1.39,
+          3.99,
+          4.22
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 3668987829,
+      "cycles:u": 1437082783,
+      "perf": "# started on Mon Sep  7 19:55:09 2026\n\n3668987829,,instructions:u,918921382,100.00,,\n1437082783,,cycles:u,918921382,100.00,,\n",
+      "stdout": "BMP 400x600, байтов: 960054, контрольная сумма: 633613994\n717\n"
+    },
+    {
+      "scenario": "bmp_rotate",
+      "pair": 3,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:55:10.806Z",
+        "load": [
+          1.39,
+          3.99,
+          4.22
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:55:11.851Z",
+        "load": [
+          1.39,
+          3.99,
+          4.22
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 3644497245,
+      "cycles:u": 1559059944,
+      "perf": "# started on Mon Sep  7 19:55:10 2026\n\n3644497245,,instructions:u,1006677757,100.00,,\n1559059944,,cycles:u,1006677757,100.00,,\n",
+      "stdout": "BMP 400x600, байтов: 960054, контрольная сумма: 633613994\n771\n"
+    },
+    {
+      "scenario": "bmp_rotate",
+      "pair": 4,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:55:11.853Z",
+        "load": [
+          1.39,
+          3.99,
+          4.22
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:55:12.879Z",
+        "load": [
+          1.39,
+          3.99,
+          4.22
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 3644543091,
+      "cycles:u": 1523298947,
+      "perf": "# started on Mon Sep  7 19:55:11 2026\n\n3644543091,,instructions:u,978878116,100.00,,\n1523298947,,cycles:u,978878116,100.00,,\n",
+      "stdout": "BMP 400x600, байтов: 960054, контрольная сумма: 633613994\n767\n"
+    },
+    {
+      "scenario": "bmp_rotate",
+      "pair": 4,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:55:12.881Z",
+        "load": [
+          1.39,
+          3.99,
+          4.22
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:55:13.930Z",
+        "load": [
+          1.43,
+          3.96,
+          4.21
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 3668988608,
+      "cycles:u": 1564708181,
+      "perf": "# started on Mon Sep  7 19:55:12 2026\n\n3668988608,,instructions:u,1010357877,100.00,,\n1564708181,,cycles:u,1010357877,100.00,,\n",
+      "stdout": "BMP 400x600, байтов: 960054, контрольная сумма: 633613994\n795\n"
+    },
+    {
+      "scenario": "bmp_rotate",
+      "pair": 5,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:55:13.932Z",
+        "load": [
+          1.43,
+          3.96,
+          4.21
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:55:14.957Z",
+        "load": [
+          1.43,
+          3.96,
+          4.21
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 3668994636,
+      "cycles:u": 1528748687,
+      "perf": "# started on Mon Sep  7 19:55:13 2026\n\n3668994636,,instructions:u,985728015,100.00,,\n1528748687,,cycles:u,985728015,100.00,,\n",
+      "stdout": "BMP 400x600, байтов: 960054, контрольная сумма: 633613994\n779\n"
+    },
+    {
+      "scenario": "bmp_rotate",
+      "pair": 5,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:55:14.959Z",
+        "load": [
+          1.43,
+          3.96,
+          4.21
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:55:15.945Z",
+        "load": [
+          1.43,
+          3.96,
+          4.21
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 3644563435,
+      "cycles:u": 1472154576,
+      "perf": "# started on Mon Sep  7 19:55:14 2026\n\n3644563435,,instructions:u,948429678,100.00,,\n1472154576,,cycles:u,948429678,100.00,,\n",
+      "stdout": "BMP 400x600, байтов: 960054, контрольная сумма: 633613994\n736\n"
+    },
+    {
+      "scenario": "bmp_rotate",
+      "pair": 6,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:55:15.947Z",
+        "load": [
+          1.43,
+          3.96,
+          4.21
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:55:16.957Z",
+        "load": [
+          1.43,
+          3.96,
+          4.21
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 3644499809,
+      "cycles:u": 1493548365,
+      "perf": "# started on Mon Sep  7 19:55:15 2026\n\n3644499809,,instructions:u,962944155,100.00,,\n1493548365,,cycles:u,962944155,100.00,,\n",
+      "stdout": "BMP 400x600, байтов: 960054, контрольная сумма: 633613994\n751\n"
+    },
+    {
+      "scenario": "bmp_rotate",
+      "pair": 6,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:55:16.959Z",
+        "load": [
+          1.43,
+          3.96,
+          4.21
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:55:17.985Z",
+        "load": [
+          1.48,
+          3.92,
+          4.2
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 3668990294,
+      "cycles:u": 1527351316,
+      "perf": "# started on Mon Sep  7 19:55:16 2026\n\n3668990294,,instructions:u,986348284,100.00,,\n1527351316,,cycles:u,986348284,100.00,,\n",
+      "stdout": "BMP 400x600, байтов: 960054, контрольная сумма: 633613994\n785\n"
+    },
+    {
+      "scenario": "bmp_rotate",
+      "pair": 7,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:55:17.987Z",
+        "load": [
+          1.48,
+          3.92,
+          4.2
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:55:19.032Z",
+        "load": [
+          1.48,
+          3.92,
+          4.2
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 3668994677,
+      "cycles:u": 1536610947,
+      "perf": "# started on Mon Sep  7 19:55:18 2026\n\n3668994677,,instructions:u,992486855,100.00,,\n1536610947,,cycles:u,992486855,100.00,,\n",
+      "stdout": "BMP 400x600, байтов: 960054, контрольная сумма: 633613994\n795\n"
+    },
+    {
+      "scenario": "bmp_rotate",
+      "pair": 7,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:55:19.035Z",
+        "load": [
+          1.48,
+          3.92,
+          4.2
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:55:20.022Z",
+        "load": [
+          1.48,
+          3.92,
+          4.2
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 3644499830,
+      "cycles:u": 1470291891,
+      "perf": "# started on Mon Sep  7 19:55:19 2026\n\n3644499830,,instructions:u,948255584,100.00,,\n1470291891,,cycles:u,948255584,100.00,,\n",
+      "stdout": "BMP 400x600, байтов: 960054, контрольная сумма: 633613994\n748\n"
+    },
+    {
+      "scenario": "json_write",
+      "pair": 1,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:55:22.058Z",
+        "load": [
+          1.48,
+          3.92,
+          4.2
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:55:23.056Z",
+        "load": [
+          1.52,
+          3.89,
+          4.18
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 3307603799,
+      "cycles:u": 1432427760,
+      "perf": "# started on Mon Sep  7 19:55:22 2026\n\n3307603799,,instructions:u,953803330,100.00,,\n1432427760,,cycles:u,953803330,100.00,,\n",
+      "stdout": "длина документа: 5653941, проходов: 3\n926\n"
+    },
+    {
+      "scenario": "json_write",
+      "pair": 1,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:55:53.059Z",
+        "load": [
+          1.45,
+          3.64,
+          4.09
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:55:54.063Z",
+        "load": [
+          1.45,
+          3.64,
+          4.09
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 3271273424,
+      "cycles:u": 1427986411,
+      "perf": "# started on Mon Sep  7 19:55:53 2026\n\n3271273424,,instructions:u,955058090,100.00,,\n1427986411,,cycles:u,955058090,100.00,,\n",
+      "stdout": "длина документа: 5653941, проходов: 3\n926\n"
+    },
+    {
+      "scenario": "json_write",
+      "pair": 2,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:55:54.065Z",
+        "load": [
+          1.45,
+          3.64,
+          4.09
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:55:55.020Z",
+        "load": [
+          1.45,
+          3.64,
+          4.09
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 3277274236,
+      "cycles:u": 1382829451,
+      "perf": "# started on Mon Sep  7 19:55:54 2026\n\n3277274236,,instructions:u,917468397,100.00,,\n1382829451,,cycles:u,917468397,100.00,,\n",
+      "stdout": "длина документа: 5653941, проходов: 3\n888\n"
+    },
+    {
+      "scenario": "json_write",
+      "pair": 2,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:55:55.022Z",
+        "load": [
+          1.45,
+          3.64,
+          4.09
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:55:56.069Z",
+        "load": [
+          1.45,
+          3.64,
+          4.09
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 3307596133,
+      "cycles:u": 1518486914,
+      "perf": "# started on Mon Sep  7 19:55:55 2026\n\n3307596133,,instructions:u,1011791658,100.00,,\n1518486914,,cycles:u,1011791658,100.00,,\n",
+      "stdout": "длина документа: 5653941, проходов: 3\n979\n"
+    },
+    {
+      "scenario": "json_write",
+      "pair": 3,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:55:56.071Z",
+        "load": [
+          1.45,
+          3.64,
+          4.09
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:55:57.088Z",
+        "load": [
+          1.45,
+          3.64,
+          4.09
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 3313691790,
+      "cycles:u": 1460740771,
+      "perf": "# started on Mon Sep  7 19:55:56 2026\n\n3313691790,,instructions:u,974648719,100.00,,\n1460740771,,cycles:u,974648719,100.00,,\n",
+      "stdout": "длина документа: 5653941, проходов: 3\n947\n"
+    },
+    {
+      "scenario": "json_write",
+      "pair": 3,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:55:57.090Z",
+        "load": [
+          1.45,
+          3.64,
+          4.09
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:55:58.080Z",
+        "load": [
+          1.41,
+          3.6,
+          4.07
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 3277300659,
+      "cycles:u": 1408456710,
+      "perf": "# started on Mon Sep  7 19:55:57 2026\n\n3277300659,,instructions:u,940998984,100.00,,\n1408456710,,cycles:u,940998984,100.00,,\n",
+      "stdout": "длина документа: 5653941, проходов: 3\n918\n"
+    },
+    {
+      "scenario": "json_write",
+      "pair": 4,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:55:58.082Z",
+        "load": [
+          1.41,
+          3.6,
+          4.07
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:55:59.062Z",
+        "load": [
+          1.41,
+          3.6,
+          4.07
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 3271444223,
+      "cycles:u": 1403155049,
+      "perf": "# started on Mon Sep  7 19:55:58 2026\n\n3271444223,,instructions:u,938372918,100.00,,\n1403155049,,cycles:u,938372918,100.00,,\n",
+      "stdout": "длина документа: 5653941, проходов: 3\n914\n"
+    },
+    {
+      "scenario": "json_write",
+      "pair": 4,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:55:59.065Z",
+        "load": [
+          1.41,
+          3.6,
+          4.07
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:00.060Z",
+        "load": [
+          1.41,
+          3.6,
+          4.07
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 3307669642,
+      "cycles:u": 1430629323,
+      "perf": "# started on Mon Sep  7 19:55:59 2026\n\n3307669642,,instructions:u,953701548,100.00,,\n1430629323,,cycles:u,953701548,100.00,,\n",
+      "stdout": "длина документа: 5653941, проходов: 3\n923\n"
+    },
+    {
+      "scenario": "json_write",
+      "pair": 5,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:56:00.062Z",
+        "load": [
+          1.41,
+          3.6,
+          4.07
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:01.048Z",
+        "load": [
+          1.41,
+          3.6,
+          4.07
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 3314002922,
+      "cycles:u": 1426467281,
+      "perf": "# started on Mon Sep  7 19:56:00 2026\n\n3314002922,,instructions:u,949552070,100.00,,\n1426467281,,cycles:u,949552070,100.00,,\n",
+      "stdout": "длина документа: 5653941, проходов: 3\n917\n"
+    },
+    {
+      "scenario": "json_write",
+      "pair": 5,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:56:01.050Z",
+        "load": [
+          1.41,
+          3.6,
+          4.07
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:02.010Z",
+        "load": [
+          1.41,
+          3.6,
+          4.07
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 3271165386,
+      "cycles:u": 1390797744,
+      "perf": "# started on Mon Sep  7 19:56:01 2026\n\n3271165386,,instructions:u,925167846,100.00,,\n1390797744,,cycles:u,925167846,100.00,,\n",
+      "stdout": "длина документа: 5653941, проходов: 3\n890\n"
+    },
+    {
+      "scenario": "json_write",
+      "pair": 6,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:56:02.012Z",
+        "load": [
+          1.41,
+          3.6,
+          4.07
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:02.976Z",
+        "load": [
+          1.38,
+          3.56,
+          4.06
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 3271142554,
+      "cycles:u": 1385314803,
+      "perf": "# started on Mon Sep  7 19:56:02 2026\n\n3271142554,,instructions:u,926033561,100.00,,\n1385314803,,cycles:u,926033561,100.00,,\n",
+      "stdout": "длина документа: 5653941, проходов: 3\n894\n"
+    },
+    {
+      "scenario": "json_write",
+      "pair": 6,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:56:02.978Z",
+        "load": [
+          1.38,
+          3.56,
+          4.06
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:03.974Z",
+        "load": [
+          1.38,
+          3.56,
+          4.06
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 3309645305,
+      "cycles:u": 1438381340,
+      "perf": "# started on Mon Sep  7 19:56:03 2026\n\n3309645305,,instructions:u,958640604,100.00,,\n1438381340,,cycles:u,958640604,100.00,,\n",
+      "stdout": "длина документа: 5653941, проходов: 3\n930\n"
+    },
+    {
+      "scenario": "json_write",
+      "pair": 7,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:56:03.977Z",
+        "load": [
+          1.38,
+          3.56,
+          4.06
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:05.028Z",
+        "load": [
+          1.38,
+          3.56,
+          4.06
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 3307935154,
+      "cycles:u": 1511148854,
+      "perf": "# started on Mon Sep  7 19:56:03 2026\n\n3307935154,,instructions:u,1008863381,100.00,,\n1511148854,,cycles:u,1008863381,100.00,,\n",
+      "stdout": "длина документа: 5653941, проходов: 3\n982\n"
+    },
+    {
+      "scenario": "json_write",
+      "pair": 7,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:56:05.030Z",
+        "load": [
+          1.38,
+          3.56,
+          4.06
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:05.999Z",
+        "load": [
+          1.38,
+          3.56,
+          4.06
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 3271469573,
+      "cycles:u": 1399191971,
+      "perf": "# started on Mon Sep  7 19:56:05 2026\n\n3271469573,,instructions:u,928599425,100.00,,\n1399191971,,cycles:u,928599425,100.00,,\n",
+      "stdout": "длина документа: 5653941, проходов: 3\n896\n"
+    },
+    {
+      "scenario": "table_total",
+      "pair": 1,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:56:06.580Z",
+        "load": [
+          1.38,
+          3.56,
+          4.06
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:06.855Z",
+        "load": [
+          1.38,
+          3.56,
+          4.06
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 880412397,
+      "cycles:u": 345087051,
+      "perf": "# started on Mon Sep  7 19:56:06 2026\n\n880412397,,instructions:u,233798201,100.00,,\n345087051,,cycles:u,233798201,100.00,,\n",
+      "stdout": "строк: 200 000, итог: 20000100000\n197\n"
+    },
+    {
+      "scenario": "table_total",
+      "pair": 1,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:56:06.857Z",
+        "load": [
+          1.38,
+          3.56,
+          4.06
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:07.113Z",
+        "load": [
+          1.38,
+          3.56,
+          4.06
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 877713382,
+      "cycles:u": 333704434,
+      "perf": "# started on Mon Sep  7 19:56:06 2026\n\n877713382,,instructions:u,226140357,100.00,,\n333704434,,cycles:u,226140357,100.00,,\n",
+      "stdout": "строк: 200 000, итог: 20000100000\n191\n"
+    },
+    {
+      "scenario": "table_total",
+      "pair": 2,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:56:07.115Z",
+        "load": [
+          1.38,
+          3.56,
+          4.06
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:07.386Z",
+        "load": [
+          1.38,
+          3.56,
+          4.06
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 877822985,
+      "cycles:u": 354581163,
+      "perf": "# started on Mon Sep  7 19:56:07 2026\n\n877822985,,instructions:u,240419991,100.00,,\n354581163,,cycles:u,240419991,100.00,,\n",
+      "stdout": "строк: 200 000, итог: 20000100000\n204\n"
+    },
+    {
+      "scenario": "table_total",
+      "pair": 2,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:56:07.388Z",
+        "load": [
+          1.38,
+          3.56,
+          4.06
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:07.665Z",
+        "load": [
+          1.38,
+          3.56,
+          4.06
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 883330372,
+      "cycles:u": 362179352,
+      "perf": "# started on Mon Sep  7 19:56:07 2026\n\n883330372,,instructions:u,245143222,100.00,,\n362179352,,cycles:u,245143222,100.00,,\n",
+      "stdout": "строк: 200 000, итог: 20000100000\n211\n"
+    },
+    {
+      "scenario": "table_total",
+      "pair": 3,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:56:07.667Z",
+        "load": [
+          1.38,
+          3.56,
+          4.06
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:07.934Z",
+        "load": [
+          1.43,
+          3.53,
+          4.05
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 880307410,
+      "cycles:u": 350750928,
+      "perf": "# started on Mon Sep  7 19:56:07 2026\n\n880307410,,instructions:u,235926108,100.00,,\n350750928,,cycles:u,235926108,100.00,,\n",
+      "stdout": "строк: 200 000, итог: 20000100000\n202\n"
+    },
+    {
+      "scenario": "table_total",
+      "pair": 3,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:56:07.936Z",
+        "load": [
+          1.43,
+          3.53,
+          4.05
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:08.199Z",
+        "load": [
+          1.43,
+          3.53,
+          4.05
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 877753189,
+      "cycles:u": 344545498,
+      "perf": "# started on Mon Sep  7 19:56:07 2026\n\n877753189,,instructions:u,233047368,100.00,,\n344545498,,cycles:u,233047368,100.00,,\n",
+      "stdout": "строк: 200 000, итог: 20000100000\n197\n"
+    },
+    {
+      "scenario": "table_total",
+      "pair": 4,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:56:08.201Z",
+        "load": [
+          1.43,
+          3.53,
+          4.05
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:08.472Z",
+        "load": [
+          1.43,
+          3.53,
+          4.05
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 880741489,
+      "cycles:u": 352326057,
+      "perf": "# started on Mon Sep  7 19:56:08 2026\n\n880741489,,instructions:u,238363503,100.00,,\n352326057,,cycles:u,238363503,100.00,,\n",
+      "stdout": "строк: 200 000, итог: 20000100000\n202\n"
+    },
+    {
+      "scenario": "table_total",
+      "pair": 4,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:56:08.474Z",
+        "load": [
+          1.43,
+          3.53,
+          4.05
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:08.741Z",
+        "load": [
+          1.43,
+          3.53,
+          4.05
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 883313525,
+      "cycles:u": 346942315,
+      "perf": "# started on Mon Sep  7 19:56:08 2026\n\n883313525,,instructions:u,234950926,100.00,,\n346942315,,cycles:u,234950926,100.00,,\n",
+      "stdout": "строк: 200 000, итог: 20000100000\n199\n"
+    },
+    {
+      "scenario": "table_total",
+      "pair": 5,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:56:08.743Z",
+        "load": [
+          1.43,
+          3.53,
+          4.05
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:09.002Z",
+        "load": [
+          1.43,
+          3.53,
+          4.05
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 880371292,
+      "cycles:u": 333397126,
+      "perf": "# started on Mon Sep  7 19:56:08 2026\n\n880371292,,instructions:u,227553925,100.00,,\n333397126,,cycles:u,227553925,100.00,,\n",
+      "stdout": "строк: 200 000, итог: 20000100000\n193\n"
+    },
+    {
+      "scenario": "table_total",
+      "pair": 5,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:56:09.004Z",
+        "load": [
+          1.43,
+          3.53,
+          4.05
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:09.263Z",
+        "load": [
+          1.43,
+          3.53,
+          4.05
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 877759763,
+      "cycles:u": 339344139,
+      "perf": "# started on Mon Sep  7 19:56:09 2026\n\n877759763,,instructions:u,228182692,100.00,,\n339344139,,cycles:u,228182692,100.00,,\n",
+      "stdout": "строк: 200 000, итог: 20000100000\n192\n"
+    },
+    {
+      "scenario": "table_total",
+      "pair": 6,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:56:09.265Z",
+        "load": [
+          1.43,
+          3.53,
+          4.05
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:09.540Z",
+        "load": [
+          1.43,
+          3.53,
+          4.05
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 877708282,
+      "cycles:u": 360495416,
+      "perf": "# started on Mon Sep  7 19:56:09 2026\n\n877708282,,instructions:u,243836981,100.00,,\n360495416,,cycles:u,243836981,100.00,,\n",
+      "stdout": "строк: 200 000, итог: 20000100000\n203\n"
+    },
+    {
+      "scenario": "table_total",
+      "pair": 6,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:56:09.543Z",
+        "load": [
+          1.43,
+          3.53,
+          4.05
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:09.811Z",
+        "load": [
+          1.43,
+          3.53,
+          4.05
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 880368748,
+      "cycles:u": 354862256,
+      "perf": "# started on Mon Sep  7 19:56:09 2026\n\n880368748,,instructions:u,238828888,100.00,,\n354862256,,cycles:u,238828888,100.00,,\n",
+      "stdout": "строк: 200 000, итог: 20000100000\n203\n"
+    },
+    {
+      "scenario": "table_total",
+      "pair": 7,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:56:09.813Z",
+        "load": [
+          1.43,
+          3.53,
+          4.05
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:10.082Z",
+        "load": [
+          1.43,
+          3.53,
+          4.05
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 884912823,
+      "cycles:u": 352951610,
+      "perf": "# started on Mon Sep  7 19:56:09 2026\n\n884912823,,instructions:u,238858800,100.00,,\n352951610,,cycles:u,238858800,100.00,,\n",
+      "stdout": "строк: 200 000, итог: 20000100000\n201\n"
+    },
+    {
+      "scenario": "table_total",
+      "pair": 7,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:56:10.084Z",
+        "load": [
+          1.43,
+          3.53,
+          4.05
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:10.343Z",
+        "load": [
+          1.43,
+          3.53,
+          4.05
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 877705159,
+      "cycles:u": 334331316,
+      "perf": "# started on Mon Sep  7 19:56:10 2026\n\n877705159,,instructions:u,227744668,100.00,,\n334331316,,cycles:u,227744668,100.00,,\n",
+      "stdout": "строк: 200 000, итог: 20000100000\n193\n"
+    },
+    {
+      "scenario": "str_find",
+      "pair": 1,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:56:12.516Z",
+        "load": [
+          1.43,
+          3.53,
+          4.05
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:13.617Z",
+        "load": [
+          1.71,
+          3.56,
+          4.05
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 4834095569,
+      "cycles:u": 1635974654,
+      "perf": "# started on Mon Sep  7 19:56:12 2026\n\n4834095569,,instructions:u,1053560175,100.00,,\n1635974654,,cycles:u,1053560175,100.00,,\n",
+      "stdout": "длина стога: 215 006, позиция: 215 001\n1026\n"
+    },
+    {
+      "scenario": "str_find",
+      "pair": 1,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:56:43.620Z",
+        "load": [
+          1.37,
+          3.29,
+          3.95
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:44.744Z",
+        "load": [
+          1.37,
+          3.29,
+          3.95
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 4822304051,
+      "cycles:u": 1668846743,
+      "perf": "# started on Mon Sep  7 19:56:43 2026\n\n4822304051,,instructions:u,1073360775,100.00,,\n1668846743,,cycles:u,1073360775,100.00,,\n",
+      "stdout": "длина стога: 215 006, позиция: 215 001\n1050\n"
+    },
+    {
+      "scenario": "str_find",
+      "pair": 2,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:56:44.747Z",
+        "load": [
+          1.37,
+          3.29,
+          3.95
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:45.879Z",
+        "load": [
+          1.37,
+          3.29,
+          3.95
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 4834984217,
+      "cycles:u": 1694451539,
+      "perf": "# started on Mon Sep  7 19:56:44 2026\n\n4834984217,,instructions:u,1090017425,100.00,,\n1694451539,,cycles:u,1090017425,100.00,,\n",
+      "stdout": "длина стога: 215 006, позиция: 215 001\n1063\n"
+    },
+    {
+      "scenario": "str_find",
+      "pair": 2,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:56:45.881Z",
+        "load": [
+          1.37,
+          3.29,
+          3.95
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:46.991Z",
+        "load": [
+          1.37,
+          3.29,
+          3.95
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 4840939016,
+      "cycles:u": 1669188766,
+      "perf": "# started on Mon Sep  7 19:56:45 2026\n\n4840939016,,instructions:u,1072158432,100.00,,\n1669188766,,cycles:u,1072158432,100.00,,\n",
+      "stdout": "длина стога: 215 006, позиция: 215 001\n1044\n"
+    },
+    {
+      "scenario": "str_find",
+      "pair": 3,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:56:46.993Z",
+        "load": [
+          1.37,
+          3.29,
+          3.95
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:48.111Z",
+        "load": [
+          1.42,
+          3.27,
+          3.94
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 4841217184,
+      "cycles:u": 1677315380,
+      "perf": "# started on Mon Sep  7 19:56:47 2026\n\n4841217184,,instructions:u,1077169497,100.00,,\n1677315380,,cycles:u,1077169497,100.00,,\n",
+      "stdout": "длина стога: 215 006, позиция: 215 001\n1051\n"
+    },
+    {
+      "scenario": "str_find",
+      "pair": 3,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:56:48.114Z",
+        "load": [
+          1.42,
+          3.27,
+          3.94
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:49.157Z",
+        "load": [
+          1.42,
+          3.27,
+          3.94
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 4840798414,
+      "cycles:u": 1561095556,
+      "perf": "# started on Mon Sep  7 19:56:48 2026\n\n4840798414,,instructions:u,1004618130,100.00,,\n1561095556,,cycles:u,1004618130,100.00,,\n",
+      "stdout": "длина стога: 215 006, позиция: 215 001\n976\n"
+    },
+    {
+      "scenario": "str_find",
+      "pair": 4,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:56:49.160Z",
+        "load": [
+          1.42,
+          3.27,
+          3.94
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:50.210Z",
+        "load": [
+          1.42,
+          3.27,
+          3.94
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 4834083095,
+      "cycles:u": 1578396766,
+      "perf": "# started on Mon Sep  7 19:56:49 2026\n\n4834083095,,instructions:u,1013205478,100.00,,\n1578396766,,cycles:u,1013205478,100.00,,\n",
+      "stdout": "длина стога: 215 006, позиция: 215 001\n986\n"
+    },
+    {
+      "scenario": "str_find",
+      "pair": 4,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:56:50.212Z",
+        "load": [
+          1.42,
+          3.27,
+          3.94
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:51.314Z",
+        "load": [
+          1.42,
+          3.27,
+          3.94
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 4845822943,
+      "cycles:u": 1647113511,
+      "perf": "# started on Mon Sep  7 19:56:50 2026\n\n4845822943,,instructions:u,1059180102,100.00,,\n1647113511,,cycles:u,1059180102,100.00,,\n",
+      "stdout": "длина стога: 215 006, позиция: 215 001\n1032\n"
+    },
+    {
+      "scenario": "str_find",
+      "pair": 5,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:56:51.316Z",
+        "load": [
+          1.42,
+          3.27,
+          3.94
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:52.399Z",
+        "load": [
+          1.42,
+          3.27,
+          3.94
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 4834102131,
+      "cycles:u": 1623399179,
+      "perf": "# started on Mon Sep  7 19:56:51 2026\n\n4834102131,,instructions:u,1043449590,100.00,,\n1623399179,,cycles:u,1043449590,100.00,,\n",
+      "stdout": "длина стога: 215 006, позиция: 215 001\n1020\n"
+    },
+    {
+      "scenario": "str_find",
+      "pair": 5,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:56:52.402Z",
+        "load": [
+          1.42,
+          3.27,
+          3.94
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:56:53.471Z",
+        "load": [
+          1.55,
+          3.27,
+          3.93
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 4841201550,
+      "cycles:u": 1598778443,
+      "perf": "# started on Mon Sep  7 19:56:52 2026\n\n4841201550,,instructions:u,1030173216,100.00,,\n1598778443,,cycles:u,1030173216,100.00,,\n",
+      "stdout": "длина стога: 215 006, позиция: 215 001\n1004\n"
+    },
+    {
+      "scenario": "str_find",
+      "pair": 6,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:57:23.474Z",
+        "load": [
+          1.31,
+          3.05,
+          3.84
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:57:24.544Z",
+        "load": [
+          1.31,
+          3.05,
+          3.84
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 4841229321,
+      "cycles:u": 1591089525,
+      "perf": "# started on Mon Sep  7 19:57:23 2026\n\n4841229321,,instructions:u,1021673779,100.00,,\n1591089525,,cycles:u,1021673779,100.00,,\n",
+      "stdout": "длина стога: 215 006, позиция: 215 001\n997\n"
+    },
+    {
+      "scenario": "str_find",
+      "pair": 6,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:57:24.548Z",
+        "load": [
+          1.31,
+          3.05,
+          3.84
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:57:25.619Z",
+        "load": [
+          1.31,
+          3.05,
+          3.84
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 4845871838,
+      "cycles:u": 1600602801,
+      "perf": "# started on Mon Sep  7 19:57:24 2026\n\n4845871838,,instructions:u,1030013366,100.00,,\n1600602801,,cycles:u,1030013366,100.00,,\n",
+      "stdout": "длина стога: 215 006, позиция: 215 001\n1006\n"
+    },
+    {
+      "scenario": "str_find",
+      "pair": 7,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:57:25.622Z",
+        "load": [
+          1.31,
+          3.05,
+          3.84
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:57:26.734Z",
+        "load": [
+          1.31,
+          3.05,
+          3.84
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 4834126905,
+      "cycles:u": 1663564823,
+      "perf": "# started on Mon Sep  7 19:57:25 2026\n\n4834126905,,instructions:u,1070644459,100.00,,\n1663564823,,cycles:u,1070644459,100.00,,\n",
+      "stdout": "длина стога: 215 006, позиция: 215 001\n1047\n"
+    },
+    {
+      "scenario": "str_find",
+      "pair": 7,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:57:26.737Z",
+        "load": [
+          1.31,
+          3.05,
+          3.84
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:57:27.821Z",
+        "load": [
+          1.31,
+          3.05,
+          3.84
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 4834075196,
+      "cycles:u": 1618921388,
+      "perf": "# started on Mon Sep  7 19:57:26 2026\n\n4834075196,,instructions:u,1042670098,100.00,,\n1618921388,,cycles:u,1042670098,100.00,,\n",
+      "stdout": "длина стога: 215 006, позиция: 215 001\n1018\n"
+    },
+    {
+      "scenario": "table_sort",
+      "pair": 1,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:57:59.300Z",
+        "load": [
+          1.45,
+          2.9,
+          3.76
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:58:00.094Z",
+        "load": [
+          1.45,
+          2.9,
+          3.76
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 2023737178,
+      "cycles:u": 1098404309,
+      "perf": "# started on Mon Sep  7 19:57:59 2026\n\n2023737178,,instructions:u,741814261,100.00,,\n1098404309,,cycles:u,741814261,100.00,,\n",
+      "stdout": "строк: 100 000, нашлась: Да\n256\n"
+    },
+    {
+      "scenario": "table_sort",
+      "pair": 1,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:58:00.096Z",
+        "load": [
+          1.45,
+          2.9,
+          3.76
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:58:00.845Z",
+        "load": [
+          1.45,
+          2.9,
+          3.76
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 2020960923,
+      "cycles:u": 1046337075,
+      "perf": "# started on Mon Sep  7 19:58:00 2026\n\n2020960923,,instructions:u,706722872,100.00,,\n1046337075,,cycles:u,706722872,100.00,,\n",
+      "stdout": "строк: 100 000, нашлась: Да\n231\n"
+    },
+    {
+      "scenario": "table_sort",
+      "pair": 2,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:58:00.850Z",
+        "load": [
+          1.45,
+          2.9,
+          3.76
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:58:01.585Z",
+        "load": [
+          1.45,
+          2.9,
+          3.76
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 2020946365,
+      "cycles:u": 1026914039,
+      "perf": "# started on Mon Sep  7 19:58:00 2026\n\n2020946365,,instructions:u,692488818,100.00,,\n1026914039,,cycles:u,692488818,100.00,,\n",
+      "stdout": "строк: 100 000, нашлась: Да\n232\n"
+    },
+    {
+      "scenario": "table_sort",
+      "pair": 2,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:58:01.587Z",
+        "load": [
+          1.45,
+          2.9,
+          3.76
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:58:02.346Z",
+        "load": [
+          1.45,
+          2.9,
+          3.76
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 2023777542,
+      "cycles:u": 1062355037,
+      "perf": "# started on Mon Sep  7 19:58:01 2026\n\n2023777542,,instructions:u,716809356,100.00,,\n1062355037,,cycles:u,716809356,100.00,,\n",
+      "stdout": "строк: 100 000, нашлась: Да\n229\n"
+    },
+    {
+      "scenario": "table_sort",
+      "pair": 3,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:58:02.349Z",
+        "load": [
+          1.45,
+          2.9,
+          3.76
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:58:03.099Z",
+        "load": [
+          1.49,
+          2.88,
+          3.75
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 2024525499,
+      "cycles:u": 1058768835,
+      "perf": "# started on Mon Sep  7 19:58:02 2026\n\n2024525499,,instructions:u,710672513,100.00,,\n1058768835,,cycles:u,710672513,100.00,,\n",
+      "stdout": "строк: 100 000, нашлась: Да\n222\n"
+    },
+    {
+      "scenario": "table_sort",
+      "pair": 3,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:58:03.101Z",
+        "load": [
+          1.49,
+          2.88,
+          3.75
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:58:03.856Z",
+        "load": [
+          1.49,
+          2.88,
+          3.75
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 2020966876,
+      "cycles:u": 1065997079,
+      "perf": "# started on Mon Sep  7 19:58:03 2026\n\n2020966876,,instructions:u,714468825,100.00,,\n1065997079,,cycles:u,714468825,100.00,,\n",
+      "stdout": "строк: 100 000, нашлась: Да\n221\n"
+    },
+    {
+      "scenario": "table_sort",
+      "pair": 4,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:58:03.858Z",
+        "load": [
+          1.49,
+          2.88,
+          3.75
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:58:04.601Z",
+        "load": [
+          1.49,
+          2.88,
+          3.75
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 2020906008,
+      "cycles:u": 1049196954,
+      "perf": "# started on Mon Sep  7 19:58:03 2026\n\n2020906008,,instructions:u,705426703,100.00,,\n1049196954,,cycles:u,705426703,100.00,,\n",
+      "stdout": "строк: 100 000, нашлась: Да\n226\n"
+    },
+    {
+      "scenario": "table_sort",
+      "pair": 4,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:58:04.603Z",
+        "load": [
+          1.49,
+          2.88,
+          3.75
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:58:05.357Z",
+        "load": [
+          1.49,
+          2.88,
+          3.75
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 2023742340,
+      "cycles:u": 1063173581,
+      "perf": "# started on Mon Sep  7 19:58:04 2026\n\n2023742340,,instructions:u,715642898,100.00,,\n1063173581,,cycles:u,715642898,100.00,,\n",
+      "stdout": "строк: 100 000, нашлась: Да\n224\n"
+    },
+    {
+      "scenario": "table_sort",
+      "pair": 5,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:58:05.359Z",
+        "load": [
+          1.49,
+          2.88,
+          3.75
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:58:06.116Z",
+        "load": [
+          1.49,
+          2.88,
+          3.75
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 2024964449,
+      "cycles:u": 1069494059,
+      "perf": "# started on Mon Sep  7 19:58:05 2026\n\n2024964449,,instructions:u,718786792,100.00,,\n1069494059,,cycles:u,718786792,100.00,,\n",
+      "stdout": "строк: 100 000, нашлась: Да\n232\n"
+    },
+    {
+      "scenario": "table_sort",
+      "pair": 5,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:58:06.119Z",
+        "load": [
+          1.49,
+          2.88,
+          3.75
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:58:06.859Z",
+        "load": [
+          1.49,
+          2.88,
+          3.75
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 2020900763,
+      "cycles:u": 1040630635,
+      "perf": "# started on Mon Sep  7 19:58:06 2026\n\n2020900763,,instructions:u,702121103,100.00,,\n1040630635,,cycles:u,702121103,100.00,,\n",
+      "stdout": "строк: 100 000, нашлась: Да\n235\n"
+    },
+    {
+      "scenario": "table_sort",
+      "pair": 6,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:58:06.861Z",
+        "load": [
+          1.49,
+          2.88,
+          3.75
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:58:07.610Z",
+        "load": [
+          1.49,
+          2.88,
+          3.75
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 2021362591,
+      "cycles:u": 1051713116,
+      "perf": "# started on Mon Sep  7 19:58:06 2026\n\n2021362591,,instructions:u,709057883,100.00,,\n1051713116,,cycles:u,709057883,100.00,,\n",
+      "stdout": "строк: 100 000, нашлась: Да\n233\n"
+    },
+    {
+      "scenario": "table_sort",
+      "pair": 6,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:58:07.612Z",
+        "load": [
+          1.49,
+          2.88,
+          3.75
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:58:08.350Z",
+        "load": [
+          1.53,
+          2.87,
+          3.74
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 2024167682,
+      "cycles:u": 1034443343,
+      "perf": "# started on Mon Sep  7 19:58:07 2026\n\n2024167682,,instructions:u,698205177,100.00,,\n1034443343,,cycles:u,698205177,100.00,,\n",
+      "stdout": "строк: 100 000, нашлась: Да\n221\n"
+    },
+    {
+      "scenario": "table_sort",
+      "pair": 7,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T16:58:38.354Z",
+        "load": [
+          1.32,
+          2.69,
+          3.65
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:58:39.114Z",
+        "load": [
+          1.32,
+          2.69,
+          3.65
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 2024091928,
+      "cycles:u": 1058835431,
+      "perf": "# started on Mon Sep  7 19:58:38 2026\n\n2024091928,,instructions:u,714219531,100.00,,\n1058835431,,cycles:u,714219531,100.00,,\n",
+      "stdout": "строк: 100 000, нашлась: Да\n239\n"
+    },
+    {
+      "scenario": "table_sort",
+      "pair": 7,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T16:58:39.117Z",
+        "load": [
+          1.32,
+          2.69,
+          3.65
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T16:58:39.841Z",
+        "load": [
+          1.32,
+          2.69,
+          3.65
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 2020918037,
+      "cycles:u": 1026353905,
+      "perf": "# started on Mon Sep  7 19:58:39 2026\n\n2020918037,,instructions:u,688906426,100.00,,\n1026353905,,cycles:u,688906426,100.00,,\n",
+      "stdout": "строк: 100 000, нашлась: Да\n218\n"
+    },
+    {
+      "scenario": "background_jobs",
+      "pair": 1,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T17:06:45.650Z",
+        "load": [
+          1.38,
+          2.08,
+          2.99
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T17:07:19.324Z",
+        "load": [
+          3.93,
+          2.6,
+          3.13
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 367378825991,
+      "cycles:u": 247389602610,
+      "perf": "# started on Mon Sep  7 20:06:45 2026\n\n367378825991,,instructions:u,159590247667,100.00,,\n247389602610,,cycles:u,159590247667,100.00,,\n",
+      "stdout": "1 заданий: 7486 мс\n2 заданий: 3849 мс\n4 заданий: 2152 мс\n6 заданий: 2035 мс\n8 заданий: 2054 мс\n12 заданий: 2034 мс\n16 заданий: 1940 мс\n24 заданий: 2104 мс\n32 заданий: 1961 мс\n48 заданий: 1959 мс\n64 заданий: 1953 мс\n128 заданий: 1938 мс\n256 заданий: 1976 мс\nгрупп: 13, заданий: 601, строк на группу: 2400000\n33441\n"
+    },
+    {
+      "scenario": "background_jobs",
+      "pair": 1,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T17:09:19.334Z",
+        "load": [
+          1.5,
+          2.14,
+          2.9
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T17:09:53.010Z",
+        "load": [
+          3.75,
+          2.6,
+          3.02
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 365899229211,
+      "cycles:u": 245251677619,
+      "perf": "# started on Mon Sep  7 20:09:19 2026\n\n365899229211,,instructions:u,158421465383,100.00,,\n245251677619,,cycles:u,158421465383,100.00,,\n",
+      "stdout": "1 заданий: 7709 мс\n2 заданий: 3673 мс\n4 заданий: 2121 мс\n6 заданий: 2266 мс\n8 заданий: 2060 мс\n12 заданий: 2045 мс\n16 заданий: 1927 мс\n24 заданий: 1919 мс\n32 заданий: 1995 мс\n48 заданий: 1926 мс\n64 заданий: 1925 мс\n128 заданий: 1943 мс\n256 заданий: 1950 мс\nгрупп: 13, заданий: 601, строк на группу: 2400000\n33459\n"
+    },
+    {
+      "scenario": "background_jobs",
+      "pair": 2,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T17:12:23.020Z",
+        "load": [
+          1.28,
+          2.02,
+          2.74
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T17:12:56.532Z",
+        "load": [
+          4.25,
+          2.63,
+          2.91
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 365897274084,
+      "cycles:u": 245750318519,
+      "perf": "# started on Mon Sep  7 20:12:23 2026\n\n365897274084,,instructions:u,158593129925,100.00,,\n245750318519,,cycles:u,158593129925,100.00,,\n",
+      "stdout": "1 заданий: 7453 мс\n2 заданий: 3820 мс\n4 заданий: 2183 мс\n6 заданий: 2290 мс\n8 заданий: 2152 мс\n12 заданий: 1958 мс\n16 заданий: 1937 мс\n24 заданий: 1945 мс\n32 заданий: 1908 мс\n48 заданий: 1906 мс\n64 заданий: 1907 мс\n128 заданий: 1922 мс\n256 заданий: 1920 мс\nгрупп: 13, заданий: 601, строк на группу: 2400000\n33301\n"
+    },
+    {
+      "scenario": "background_jobs",
+      "pair": 2,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T17:14:56.538Z",
+        "load": [
+          1.44,
+          2.1,
+          2.68
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T17:15:30.002Z",
+        "load": [
+          4.34,
+          2.71,
+          2.87
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 367399794748,
+      "cycles:u": 247838345088,
+      "perf": "# started on Mon Sep  7 20:14:56 2026\n\n367399794748,,instructions:u,159909353344,100.00,,\n247838345088,,cycles:u,159909353344,100.00,,\n",
+      "stdout": "1 заданий: 7321 мс\n2 заданий: 3663 мс\n4 заданий: 2303 мс\n6 заданий: 2278 мс\n8 заданий: 2211 мс\n12 заданий: 1987 мс\n16 заданий: 1938 мс\n24 заданий: 1944 мс\n32 заданий: 1933 мс\n48 заданий: 1977 мс\n64 заданий: 1923 мс\n128 заданий: 1927 мс\n256 заданий: 1972 мс\nгрупп: 13, заданий: 601, строк на группу: 2400000\n33377\n"
+    },
+    {
+      "scenario": "background_jobs",
+      "pair": 3,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T17:19:00.013Z",
+        "load": [
+          1.47,
+          2.05,
+          2.57
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T17:19:33.920Z",
+        "load": [
+          4.14,
+          2.61,
+          2.73
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 367373583914,
+      "cycles:u": 250836160008,
+      "perf": "# started on Mon Sep  7 20:19:00 2026\n\n367373583914,,instructions:u,161962305016,100.00,,\n250836160008,,cycles:u,161962305016,100.00,,\n",
+      "stdout": "1 заданий: 7367 мс\n2 заданий: 3722 мс\n4 заданий: 2369 мс\n6 заданий: 2277 мс\n8 заданий: 2350 мс\n12 заданий: 2002 мс\n16 заданий: 1960 мс\n24 заданий: 1948 мс\n32 заданий: 1951 мс\n48 заданий: 1957 мс\n64 заданий: 1964 мс\n128 заданий: 1988 мс\n256 заданий: 1960 мс\nгрупп: 13, заданий: 601, строк на группу: 2400000\n33815\n"
+    },
+    {
+      "scenario": "background_jobs",
+      "pair": 3,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T17:21:33.928Z",
+        "load": [
+          1.46,
+          2.09,
+          2.52
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T17:22:07.460Z",
+        "load": [
+          3.67,
+          2.53,
+          2.66
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 365895811909,
+      "cycles:u": 246044637447,
+      "perf": "# started on Mon Sep  7 20:21:34 2026\n\n365895811909,,instructions:u,158885258550,100.00,,\n246044637447,,cycles:u,158885258550,100.00,,\n",
+      "stdout": "1 заданий: 7373 мс\n2 заданий: 3809 мс\n4 заданий: 2480 мс\n6 заданий: 2136 мс\n8 заданий: 2093 мс\n12 заданий: 1981 мс\n16 заданий: 1894 мс\n24 заданий: 2018 мс\n32 заданий: 1944 мс\n48 заданий: 1923 мс\n64 заданий: 1891 мс\n128 заданий: 1918 мс\n256 заданий: 1920 мс\nгрупп: 13, заданий: 601, строк на группу: 2400000\n33380\n"
+    },
+    {
+      "scenario": "background_jobs",
+      "pair": 4,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T17:25:37.473Z",
+        "load": [
+          1.45,
+          1.94,
+          2.39
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T17:26:10.961Z",
+        "load": [
+          4.37,
+          2.56,
+          2.58
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 365889575298,
+      "cycles:u": 243311373081,
+      "perf": "# started on Mon Sep  7 20:25:37 2026\n\n365889575298,,instructions:u,157250403498,100.00,,\n243311373081,,cycles:u,157250403498,100.00,,\n",
+      "stdout": "1 заданий: 7420 мс\n2 заданий: 3734 мс\n4 заданий: 2208 мс\n6 заданий: 2099 мс\n8 заданий: 2072 мс\n12 заданий: 2012 мс\n16 заданий: 1922 мс\n24 заданий: 1958 мс\n32 заданий: 1894 мс\n48 заданий: 1992 мс\n64 заданий: 1907 мс\n128 заданий: 2007 мс\n256 заданий: 2173 мс\nгрупп: 13, заданий: 601, строк на группу: 2400000\n33398\n"
+    },
+    {
+      "scenario": "background_jobs",
+      "pair": 4,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T17:28:40.971Z",
+        "load": [
+          1.34,
+          1.98,
+          2.35
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T17:29:14.479Z",
+        "load": [
+          3.91,
+          2.51,
+          2.51
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 367403248950,
+      "cycles:u": 245784803342,
+      "perf": "# started on Mon Sep  7 20:28:40 2026\n\n367403248950,,instructions:u,158643956272,100.00,,\n245784803342,,cycles:u,158643956272,100.00,,\n",
+      "stdout": "1 заданий: 7373 мс\n2 заданий: 3747 мс\n4 заданий: 2239 мс\n6 заданий: 2075 мс\n8 заданий: 2088 мс\n12 заданий: 2020 мс\n16 заданий: 1972 мс\n24 заданий: 2032 мс\n32 заданий: 1945 мс\n48 заданий: 1992 мс\n64 заданий: 2073 мс\n128 заданий: 1919 мс\n256 заданий: 1945 мс\nгрупп: 13, заданий: 601, строк на группу: 2400000\n33420\n"
+    },
+    {
+      "scenario": "background_jobs",
+      "pair": 5,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T17:32:14.490Z",
+        "load": [
+          1.38,
+          2,
+          2.31
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T17:32:48.619Z",
+        "load": [
+          4.31,
+          2.61,
+          2.5
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 367379096285,
+      "cycles:u": 249681152705,
+      "perf": "# started on Mon Sep  7 20:32:14 2026\n\n367379096285,,instructions:u,161170255527,100.00,,\n249681152705,,cycles:u,161170255527,100.00,,\n",
+      "stdout": "1 заданий: 7428 мс\n2 заданий: 3733 мс\n4 заданий: 2648 мс\n6 заданий: 2408 мс\n8 заданий: 2148 мс\n12 заданий: 1994 мс\n16 заданий: 1989 мс\n24 заданий: 1946 мс\n32 заданий: 1940 мс\n48 заданий: 1939 мс\n64 заданий: 1927 мс\n128 заданий: 1919 мс\n256 заданий: 1944 мс\nгрупп: 13, заданий: 601, строк на группу: 2400000\n33963\n"
+    },
+    {
+      "scenario": "background_jobs",
+      "pair": 5,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T17:35:18.694Z",
+        "load": [
+          1.47,
+          2.07,
+          2.31
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T17:35:51.747Z",
+        "load": [
+          3.77,
+          2.53,
+          2.46
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 365875381874,
+      "cycles:u": 242646999349,
+      "perf": "# started on Mon Sep  7 20:35:18 2026\n\n365875381874,,instructions:u,156459098763,100.00,,\n242646999349,,cycles:u,156459098763,100.00,,\n",
+      "stdout": "1 заданий: 7434 мс\n2 заданий: 3777 мс\n4 заданий: 2130 мс\n6 заданий: 2031 мс\n8 заданий: 2021 мс\n12 заданий: 1962 мс\n16 заданий: 1924 мс\n24 заданий: 1901 мс\n32 заданий: 1890 мс\n48 заданий: 1897 мс\n64 заданий: 1920 мс\n128 заданий: 1992 мс\n256 заданий: 1926 мс\nгрупп: 13, заданий: 601, строк на группу: 2400000\n32805\n"
+    },
+    {
+      "scenario": "background_jobs",
+      "pair": 6,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T17:37:51.753Z",
+        "load": [
+          1.47,
+          2.06,
+          2.29
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T17:38:24.912Z",
+        "load": [
+          4.1,
+          2.63,
+          2.47
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 365881251179,
+      "cycles:u": 243270985778,
+      "perf": "# started on Mon Sep  7 20:37:51 2026\n\n365881251179,,instructions:u,156893493576,100.00,,\n243270985778,,cycles:u,156893493576,100.00,,\n",
+      "stdout": "1 заданий: 7460 мс\n2 заданий: 3763 мс\n4 заданий: 2083 мс\n6 заданий: 1991 мс\n8 заданий: 2060 мс\n12 заданий: 1980 мс\n16 заданий: 1912 мс\n24 заданий: 1899 мс\n32 заданий: 2040 мс\n48 заданий: 1927 мс\n64 заданий: 1941 мс\n128 заданий: 1907 мс\n256 заданий: 1943 мс\nгрупп: 13, заданий: 601, строк на группу: 2400000\n32906\n"
+    },
+    {
+      "scenario": "background_jobs",
+      "pair": 6,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T17:41:54.928Z",
+        "load": [
+          1.5,
+          2.01,
+          2.25
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T17:42:28.216Z",
+        "load": [
+          3.68,
+          2.46,
+          2.39
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 367378252830,
+      "cycles:u": 246766297178,
+      "perf": "# started on Mon Sep  7 20:41:55 2026\n\n367378252830,,instructions:u,159131307891,100.00,,\n246766297178,,cycles:u,159131307891,100.00,,\n",
+      "stdout": "1 заданий: 7267 мс\n2 заданий: 3733 мс\n4 заданий: 2029 мс\n6 заданий: 2026 мс\n8 заданий: 2062 мс\n12 заданий: 1972 мс\n16 заданий: 1959 мс\n24 заданий: 1951 мс\n32 заданий: 1941 мс\n48 заданий: 1966 мс\n64 заданий: 1920 мс\n128 заданий: 2214 мс\n256 заданий: 1997 мс\nгрупп: 13, заданий: 601, строк на группу: 2400000\n33037\n"
+    },
+    {
+      "scenario": "background_jobs",
+      "pair": 7,
+      "side": "base",
+      "before": {
+        "time": "2026-09-07T17:44:28.223Z",
+        "load": [
+          1.41,
+          2,
+          2.23
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T17:45:01.481Z",
+        "load": [
+          3.63,
+          2.44,
+          2.36
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 367392384347,
+      "cycles:u": 247378092890,
+      "perf": "# started on Mon Sep  7 20:44:28 2026\n\n367392384347,,instructions:u,159562999142,100.00,,\n247378092890,,cycles:u,159562999142,100.00,,\n",
+      "stdout": "1 заданий: 7271 мс\n2 заданий: 3738 мс\n4 заданий: 2070 мс\n6 заданий: 2056 мс\n8 заданий: 2125 мс\n12 заданий: 1967 мс\n16 заданий: 1954 мс\n24 заданий: 1951 мс\n32 заданий: 1956 мс\n48 заданий: 1978 мс\n64 заданий: 1975 мс\n128 заданий: 1993 мс\n256 заданий: 1975 мс\nгрупп: 13, заданий: 601, строк на группу: 2400000\n33009\n"
+    },
+    {
+      "scenario": "background_jobs",
+      "pair": 7,
+      "side": "final",
+      "before": {
+        "time": "2026-09-07T17:47:01.489Z",
+        "load": [
+          1.47,
+          1.99,
+          2.2
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "after": {
+        "time": "2026-09-07T17:47:35.058Z",
+        "load": [
+          3.99,
+          2.52,
+          2.37
+        ],
+        "ac": "1",
+        "governors": [
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance",
+          "performance"
+        ]
+      },
+      "instructions:u": 365900450520,
+      "cycles:u": 244574766730,
+      "perf": "# started on Mon Sep  7 20:47:01 2026\n\n365900450520,,instructions:u,157871678136,100.00,,\n244574766730,,cycles:u,157871678136,100.00,,\n",
+      "stdout": "1 заданий: 7522 мс\n2 заданий: 3761 мс\n4 заданий: 2155 мс\n6 заданий: 2082 мс\n8 заданий: 2044 мс\n12 заданий: 1971 мс\n16 заданий: 1930 мс\n24 заданий: 1922 мс\n32 заданий: 2044 мс\n48 заданий: 1943 мс\n64 заданий: 1922 мс\n128 заданий: 2047 мс\n256 заданий: 1947 мс\nгрупп: 13, заданий: 601, строк на группу: 2400000\n33290\n"
+    }
+  ]
+}
