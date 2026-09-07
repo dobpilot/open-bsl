@@ -212,7 +212,19 @@ SHA-256 бинарника F1:
 (`materialization-frame-tests`): fmt, Clippy, build, workspace test
 (1743 passed, 0 failed, 1 ignored), rustdoc и отдельный JIT-тест — PASS.
 [Логи базовой проверки](vm-temporary-materialization-evidence/frame-tests-gates.tar.gz).
+Полные ворота F1 запущены отдельно (`materialization-f1`). Для них
+в `f1-target/debug` скопирован reflink-кэш завершённой базовой проверки;
+изменяемые каталоги сборок не разделяются между сторонами.
 
 Первый запуск полных ворот V1 остановился на лишней пустой строке,
 появившейся при переносе тестов. После штатного rustfmt запущены полные
 ворота заново (`materialization-v1-formatted`); production-код не менялся.
+
+Полные ворота V1 завершены: fmt, Clippy, build, workspace test
+(1742 passed, 0 failed, 1 ignored), rustdoc и отдельный JIT-тест — PASS.
+Проверки сгенерированного API и реестра маркеров также прошли.
+[Логи](vm-temporary-materialization-evidence/v1-gates.tar.gz).
+В [списке тестов V1](vm-temporary-materialization-evidence/v1-test-list.tar.gz)
+259 имён VM: все 256 базовых и три новых теста Move, без потерь.
+Новый тест Frame относится к независимой проверке F1 и в V1 не добавлен.
+Функциональная готовность не заменяет пока отсутствующий принятый A/B.
