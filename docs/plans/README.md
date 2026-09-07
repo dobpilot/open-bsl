@@ -10,6 +10,10 @@
 [`../research/performance/ssa-hotspot-analysis.md`](../research/performance/ssa-hotspot-analysis.md),
 поскольку его решения принимаются по данным профилирования.
 
+Новый [план уменьшения временных BslValue и Frame на машинном стеке VM](../research/performance/vm-temporary-materialization-plan.md)
+также ведётся как измерительное исследование: независимые эксперименты,
+функциональные ворота и A/B; реализация ещё не начата.
+
 Разделение Rust-модулей завершено: [архив OpenSpec](../../openspec/changes/archive/2026-09-07-separate-rust-module-responsibilities/proposal.md).
 [Принятый план VM](bsl-vm-refactor.md) сохранён как карта стадий,
 ограничений и измерений; активного checklist реализации в нём нет.
