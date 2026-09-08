@@ -1,0 +1,54 @@
+рантаймы:
+  bsl-cli   bsl-cli 0.3.1 — интерпретатор BSL (встроенный язык 1С:Предприятие)
+  lua       Lua 5.4.8  Copyright (C) 1994-2025 Lua.org, PUC-Rio
+  luajit    LuaJIT 2.1.1785763465 -- Copyright (C) 2005-2026 Mike Pall. https://luajit.org/
+  python    Python 3.14.6
+  oscript   2.1.0  (oscript)
+
+сценарий      bsl-cli bsl-cli+optimize        lua     luajit     python    oscript        1С
+------------------ ---------- ---------- ---------- ---------- ---------- ---------- ----------
+background_jobs         35182      28667          -          -          - ошибка          -
+bmp_rotate                736        649        316         99        656 ошибка       1339
+call_overhead             387        388         60          3        308       1909       1697
+cbr_rates                 438        440 ошибка ошибка       1739 ошибка        386
+csv_write                3239       2328       2024        271       4732      47887       4658
+csv_write_batched         143        125          -          -         95       1896        217
+edata_writer              256        250          -          -          - ошибка        567
+empty_for                   6          6          7          1         77        399        315
+goto_bench               1603       1617        126         95       1121       6259       2980
+invoice_doc_generator      60544      61019          -          -          - ошибка     760077
+json_parse                677        661       2953       1875        616       3879        829
+json_write                874        805         94         74        713       3604       1129
+numeric_precision        6135       6100        404         27       1468      18345          -
+pi_leibniz                715        686         42          3       2365       2331       1280
+pi_leibniz_15            1052        986          -          -       3263       2802       1450
+regexp                    201        200       4103       3494       2422 ошибка       1003
+simple_parquet_reader       1376       1364        324        115 ошибка ошибка       2427
+str_concat                  4          4       1182       1141       1049       2393        164
+str_find                  936        935        633         76        158         71        140
+str_index                 221        222         63          2        155        429        272
+table_compare           14833      18910      19585       7844       6951     114407      59756
+table_compare2           2052       2045          -          -          - ошибка      10356
+table_save_load          3793       3774          -          -          - ошибка       3737
+table_sort                223        228        898        785        435       1818       3172
+table_total               193        166        458        187        143       1968       3221
+textdoc_invoice          3692       3567        685        367        606 ошибка     247481
+xml_parse                3030       2901       6494       3952       3114       9970       4618
+xml_write                1209       1112        203        219       2624       4122       1954
+zip_read                   69         69          -          -         48        307         38
+zip_write                 153        151          -          -        311        523        316
+
+медиана 5 прогонов, миллисекунды. Прочерк — двойника на этом
+языке нет либо самого рантайма нет в системе.
+тяжёлые сценарии — 3 прогона.
+csv_write* пишет в /tmp/open-bsl-optimize-bench.qXXTRIDo/onec-bench-scratch и после замера сверяется побайтно.
+  csv_write: вывод bsl-cli-optimize совпал с нашим побайтно
+  csv_write: вывод lua совпал с нашим побайтно
+  csv_write: вывод luajit совпал с нашим побайтно
+  csv_write: вывод oscript совпал с нашим побайтно
+  csv_write: вывод python совпал с нашим побайтно
+  csv_write_batched: вывод bsl-cli-optimize совпал с нашим побайтно
+  csv_write_batched: вывод oscript совпал с нашим побайтно
+  csv_write_batched: вывод python совпал с нашим побайтно
+колонка 1С — медиана из benchmarks/1c/combined.platform.txt (снято отдельным прогоном
+на платформе, см. шапку этого файла).
