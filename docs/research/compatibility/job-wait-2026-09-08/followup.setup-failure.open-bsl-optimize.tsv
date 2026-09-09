@@ -1,0 +1,50 @@
+old.object.statement	ok	334	completed
+old.object.expression	error:Вызов процедуры объекта как функции	0	active
+old.object.arg	error:Истекло время ожидания фонового задания	10	active
+old.manager.statement	error:метод «ОжидатьЗавершения» не применим к «МенеджерФоновыхЗаданий»	0	active
+old.manager.expression	error:Вызов процедуры объекта как функции	0	active
+old.manager.zero	error:ожидался тип «Массив фоновых заданий» для операции «ОжидатьЗавершенияВыполнения»	0	active
+old.manager.fraction	error:ожидался тип «Массив фоновых заданий» для операции «ОжидатьЗавершенияВыполнения»	0	active
+old.manager.array	ok	300	completed
+old.manager.negative	error:ожидался тип «Массив фоновых заданий» для операции «ОжидатьЗавершенияВыполнения»	0	active
+old.object.failed	error:Ошибка ожидания завершения фонового задания	300	failed
+old.object.canceled	error:Ошибка ожидания завершения фонового задания	0	canceled
+old.manager.failed	error:метод «ОжидатьЗавершения» не применим к «МенеджерФоновыхЗаданий»	1	active
+old.manager.after_failure	error:метод «ОжидатьЗавершения» не применим к «МенеджерФоновыхЗаданий»	0	active
+old.manager.canceled	error:метод «ОжидатьЗавершения» не применим к «МенеджерФоновыхЗаданий»	0	canceled
+mix.completed.stale.none	array:completed:active	0
+repeat.completed.stale.none	array:completed:active	0
+mix.completed.fresh.none	array:completed:active	0
+repeat.completed.fresh.none	array:completed:active	0
+mix.completed.stale.timeout	array:completed:active	0
+repeat.completed.stale.timeout	array:completed:active	0
+mix.completed.fresh.timeout	array:completed:active	0
+repeat.completed.fresh.timeout	array:completed:active	0
+mix.failed.stale.none	array:failed:active	0
+repeat.failed.stale.none	array:failed:active	1
+mix.failed.fresh.none	array:failed:active	0
+repeat.failed.fresh.none	array:failed:active	0
+mix.failed.stale.timeout	array:failed:active	0
+repeat.failed.stale.timeout	array:failed:active	0
+mix.failed.fresh.timeout	array:failed:active	0
+repeat.failed.fresh.timeout	array:failed:active	0
+mix.canceled.stale.none	array:canceled:active	0
+repeat.canceled.stale.none	array:canceled:active	0
+mix.canceled.fresh.none	array:canceled:active	0
+repeat.canceled.fresh.none	array:canceled:active	0
+mix.canceled.stale.timeout	array:canceled:active	0
+repeat.canceled.stale.timeout	array:canceled:active	0
+mix.canceled.fresh.timeout	array:canceled:active	1
+repeat.canceled.fresh.timeout	array:canceled:active	0
+negative.group.-1	array:completed:active	300
+all.terminal	array:completed:completed
+negative.group.-0.2	array:completed:active	300
+all.terminal	array:completed:completed
+precision.0	ok	0
+precision.0.0001	ok	0
+precision.0.0009	ok	0
+precision.0.0011	ok	108
+precision.0.0019	ok	117
+nested.cancel.object	failed
+nested.cancel.manager	failed
+END	OK

@@ -178,7 +178,8 @@ pub(super) fn drive_local(
                     DriveMode::Worker(_) => &shared.work_available,
                     DriveMode::Until { .. } => &shared.terminal_watch,
                 };
-                HELPING_PARKS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                #[cfg(test)]
+                HELPING_PARKS.with(|count| count.set(count.get() + 1));
                 match deadline {
                     None => {
                         registry = condvar.wait(registry).expect("реестр без отравления");
@@ -591,15 +592,13 @@ fn finish_job(
     shared.terminal_watch.notify_all();
 }
 
-/// Счётчик парковок helping-ожидания первого изменения — пробник для
-/// теста `wait_first_change_parks_without_periodic_wakeups`: ожидание
-/// спит на `terminal_watch` до события, и за сотни миллисекунд тихого
-/// ожидания счётчик растёт на единицы, а не на сотни таймерных тиков.
-/// Счётчик парковок helping-ожидания — пробник для теста
-/// `wait_first_change_parks_without_periodic_wakeups`: ожидание спит до
-/// события, и за сотни миллисекунд тихого ожидания счётчик растёт на
-/// единицы, а не на сотни таймерных тиков.
-static HELPING_PARKS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+// Пробник теста отсутствия периодических пробуждений: счётчик растёт
+// на единицы за сотни миллисекунд, а не на сотни таймерных тиков.
+#[cfg(test)]
+thread_local! {
+    // Парковки других тестов не относятся к измеряемому waiter.
+    static HELPING_PARKS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
 
 /// Тестовый шлюз окна helping-ожидания: удерживает поток МЕЖДУ проверкой
 /// предиката и парковкой — ровно там, где terminal-уведомление терялось
@@ -900,7 +899,6 @@ mod tests {
                 .snapshot
                 .state = JobStateDto::Running;
         }
-        let parks_before = HELPING_PARKS.load(std::sync::atomic::Ordering::Relaxed);
         let shared = Arc::clone(&runtime.shared);
         let id = snapshot.id;
         let waiter = std::thread::spawn(move || {
@@ -912,11 +910,12 @@ mod tests {
                 session_token: [3; 16],
                 profile_index: 0,
             };
-            bsl_rt::BackgroundJobService::wait_first_change(
+            let held = bsl_rt::BackgroundJobService::wait_first_change(
                 &service,
                 &[(id, JobStateDto::Running)],
                 None,
-            )
+            );
+            (held, HELPING_PARKS.with(std::cell::Cell::get))
         });
         std::thread::sleep(Duration::from_millis(300));
         // Изменение публикуется штатной парой finish + notify — ожидание
@@ -930,13 +929,10 @@ mod tests {
             registry.finish(id, JobStateDto::Completed, None, None);
         }
         runtime.shared.terminal_watch.notify_all();
-        let held = waiter
-            .join()
-            .expect("поток ожидания")
-            .expect("ожидание без ошибок");
+        let (held, parks) = waiter.join().expect("поток ожидания");
+        let held = held.expect("ожидание без ошибок");
         assert_eq!(held.len(), 1);
         assert_eq!(held[0].state, JobStateDto::Completed);
-        let parks = HELPING_PARKS.load(std::sync::atomic::Ordering::Relaxed) - parks_before;
         assert!(
             parks <= 8,
             "за 300 мс тихого ожидания {parks} парковок — таймерный поллинг вернулся"

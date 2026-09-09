@@ -331,22 +331,28 @@ fn component_receiver_methods_compile_only_to_the_open_opcode() {
                о.ЗаписатьНачалоОбъекта();\n\
                о.ПрочитатьБайт();\n\
                о.ПолучитьТекст();\n\
-               о.ТекущаяПозиция();";
+               о.ТекущаяПозиция();\n\
+               результат = о.ТекущаяПозиция();";
     let parsed = bsl_syntax::parse(src).unwrap();
     let resolved = bsl_sema::resolve_program_with_registry(&parsed.items, &registry).unwrap();
     let program = bsl_compiler::compile_program(&resolved).unwrap();
 
-    let mut open = 0;
+    let mut open = Vec::new();
     for instruction in &program.chunks[0].instrs {
         match instruction {
-            Instr::CallObjectMethod { .. } => open += 1,
+            Instr::CallObjectMethod {
+                result_required, ..
+            } => open.push(*result_required),
             Instr::CallMethod { method, .. } => {
                 panic!("компонентный метод ушёл в закрытый опкод: {method:?}")
             }
             _ => {}
         }
     }
-    assert_eq!(open, 5);
+    assert_eq!(open, [false, false, false, false, false, true]);
+    let text = bsl_bytecode::write_program(&program, None).unwrap();
+    let restored = bsl_bytecode::parse_program(&text).unwrap();
+    assert_eq!(restored.chunks[0].instrs, program.chunks[0].instrs);
 }
 
 // Оптимизирующие проходы убирают из скомпилированного корпуса целые виды

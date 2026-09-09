@@ -1,0 +1,50 @@
+﻿old.object.statement	ok	317	completed
+old.object.expression	error:Object procedure called as function (ОжидатьЗавершения)	0	active
+old.object.arg	error:Error calling context method (ОжидатьЗавершения)	12	active
+old.manager.statement	error:Not enough actual parameters	1	active
+old.manager.expression	error:Object procedure called as function (ОжидатьЗавершения)	0	active
+old.manager.zero	error:Error calling context method (ОжидатьЗавершения)	1	active
+old.manager.fraction	error:Error calling context method (ОжидатьЗавершения)	0	active
+old.manager.array	ok	308	completed
+old.manager.negative	error:Error calling context method (ОжидатьЗавершения)	0	active
+old.object.failed	error:Error calling context method (ОжидатьЗавершения)	308	failed
+old.object.canceled	error:Error calling context method (ОжидатьЗавершения)	1517	canceled
+old.manager.failed	error:Not enough actual parameters	1	active
+old.manager.after_failure	error:Not enough actual parameters	1	active
+old.manager.canceled	error:Not enough actual parameters	0	active
+mix.completed.stale.none	array:completed:active	0
+repeat.completed.stale.none	array:completed:active	0
+mix.completed.fresh.none	array:completed:active	0
+repeat.completed.fresh.none	array:completed:active	0
+mix.completed.stale.timeout	array:completed:active	0
+repeat.completed.stale.timeout	array:completed:active	1
+mix.completed.fresh.timeout	array:completed:active	0
+repeat.completed.fresh.timeout	array:completed:active	1
+mix.failed.stale.none	array:failed:active	0
+repeat.failed.stale.none	array:failed:active	1
+mix.failed.fresh.none	array:failed:active	1
+repeat.failed.fresh.none	array:failed:active	0
+mix.failed.stale.timeout	array:failed:active	1
+repeat.failed.stale.timeout	array:failed:active	0
+mix.failed.fresh.timeout	array:failed:active	0
+repeat.failed.fresh.timeout	array:failed:active	0
+mix.canceled.stale.none	array:completed:active	0
+repeat.canceled.stale.none	array:completed:active	0
+mix.canceled.fresh.none	array:canceled:active	0
+repeat.canceled.fresh.none	array:canceled:active	0
+mix.canceled.stale.timeout	array:completed:active	0
+repeat.canceled.stale.timeout	array:completed:active	1
+mix.canceled.fresh.timeout	array:completed:active	0
+repeat.canceled.fresh.timeout	array:completed:active	0
+negative.group.-1	array:completed:active	321
+all.terminal	array:completed:completed
+negative.group.-0.2	array:completed:active	307
+all.terminal	array:completed:completed
+precision.0	ok	100
+precision.0.0001	ok	100
+precision.0.0009	ok	99
+precision.0.0011	ok	200
+precision.0.0019	ok	201
+nested.cancel.object	completed:canceled=Yes
+nested.cancel.manager	completed:canceled=Yes
+END	OK

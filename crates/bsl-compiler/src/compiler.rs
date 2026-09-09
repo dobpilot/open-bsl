@@ -1213,6 +1213,15 @@ impl<'a> Compiler<'a> {
     // --- Выражения ------------------------------------------------------
 
     fn compile_expr(&mut self, e: &RExpr, dst: u8) -> Result<(), CompileError> {
+        self.compile_expr_used(e, dst, true)
+    }
+
+    fn compile_expr_used(
+        &mut self,
+        e: &RExpr,
+        dst: u8,
+        result_required: bool,
+    ) -> Result<(), CompileError> {
         match e {
             RExpr::Number(n) => {
                 let k = self.add_const(BslValue::Number(n.clone()))?;
@@ -1498,6 +1507,7 @@ impl<'a> Compiler<'a> {
                         .try_into()
                         .map_err(|_| CompileError::TooManyNames)?;
                     self.emit(Instr::CallObjectMethod {
+                        result_required,
                         dst,
                         obj: o,
                         method,
@@ -1523,6 +1533,7 @@ impl<'a> Compiler<'a> {
                                 .try_into()
                                 .map_err(|_| CompileError::TooManyNames)?;
                             self.emit(Instr::CallObjectMethod {
+                                result_required,
                                 dst,
                                 obj: o,
                                 method,
@@ -1941,7 +1952,7 @@ impl<'a> Compiler<'a> {
                 // Результат вызова-как-оператора отбрасывается, но регистр
                 // под него всё равно нужен на время компиляции выражения.
                 let r = self.alloc_temp()?;
-                self.compile_expr(e, r)?;
+                self.compile_expr_used(e, r, false)?;
                 self.free_temp(1);
             }
             RStmtKind::Return(opt) => match opt {

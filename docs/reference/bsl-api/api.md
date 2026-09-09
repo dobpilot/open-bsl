@@ -202,7 +202,8 @@
 | `Выполнить`, `Execute` | 1…4 |
 | `ПолучитьФоновыеЗадания`, `GetBackgroundJobs` | 0…1 |
 | `НайтиПоУникальномуИдентификатору`, `FindByUUID` | 1 |
-| `ОжидатьЗавершенияВыполнения`, `WaitForExecutionCompletion`, `ОжидатьЗавершения`, `WaitForCompletion` | 1…2 |
+| `ОжидатьЗавершенияВыполнения`, `WaitForExecutionCompletion` | 1…2 |
+| `ОжидатьЗавершения`, `WaitForCompletion` | 1…2 |
 
 ##### `ФоновоеЗадание`
 
@@ -220,7 +221,8 @@
 | Метод | Аргументы |
 |---|---:|
 | `Отменить`, `Cancel` | 0 |
-| `ОжидатьЗавершенияВыполнения`, `WaitForExecutionCompletion`, `ОжидатьЗавершения`, `WaitForCompletion` | 0…1 |
+| `ОжидатьЗавершенияВыполнения`, `WaitForExecutionCompletion` | 0…1 |
+| `ОжидатьЗавершения`, `WaitForCompletion` | 0…1 |
 | `ПолучитьСообщенияПользователю`, `GetUserMessages` | 0…1 |
 
 ##### `СообщениеПользователю`

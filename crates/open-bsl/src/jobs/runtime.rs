@@ -199,6 +199,24 @@ pub(crate) struct JobRuntimeShared {
 pub(crate) type BootstrapGate = (Mutex<bool>, Condvar);
 
 impl JobRuntimeShared {
+    /// Непредставимый дедлайн — ловимая ошибка, а не паника сложения.
+    /// `НЕ ИЗМЕРЕНО(JOB.WAIT.NUMERIC_LIMITS)`: граница зависит от host.
+    pub(super) fn wait_deadline(
+        timeout: Option<Duration>,
+    ) -> Result<Option<std::time::Instant>, HostError> {
+        timeout
+            .map(|duration| {
+                std::time::Instant::now()
+                    .checked_add(duration)
+                    .ok_or_else(|| {
+                        HostError::new(
+                            HostErrorCode::ResourceLimit,
+                            "дедлайн ожидания не представим",
+                        )
+                    })
+            })
+            .transpose()
+    }
     /// Все перечисленные задания terminal (неизвестные считаются
     /// вытесненными и потому terminal).
     pub(super) fn all_terminal(registry: &JobRegistry, ids: &[JobId]) -> bool {
@@ -363,36 +381,15 @@ impl JobRuntimeShared {
             .collect()
     }
 
-    /// Флаги семантики менеджерного ожидания по снимкам, удержанным под
-    /// одним локом: (есть активные, есть изменившиеся, все terminal,
-    /// есть аварийные).
-    pub(super) fn first_change_flags(
-        jobs: &[(JobId, bsl_rt::JobStateDto)],
-        held: &[Arc<JobSnapshotDto>],
-    ) -> (bool, bool, bool, bool) {
-        let mut any_active = false;
-        let mut any_changed = false;
-        let mut all_terminal = true;
-        let mut any_failed = false;
-        for ((_, initial), snapshot) in jobs.iter().zip(held) {
-            let state = snapshot.state;
-            if !state.is_terminal() {
-                any_active = true;
-                all_terminal = false;
-            }
-            if state != *initial {
-                any_changed = true;
-            }
-            if state == JobStateDto::Failed {
-                any_failed = true;
-            }
-        }
-        (any_active, any_changed, all_terminal, any_failed)
+    /// Серверный замер `job-wait-2026-09-08/followup.md`: достаточно
+    /// любого конечного состояния, независимо от возраста входного снимка.
+    /// Внутренний переход `Queued -> Running` условие не меняет.
+    pub(super) fn manager_wait_done(held: &[Arc<JobSnapshotDto>]) -> bool {
+        held.is_empty() || held.iter().any(|snapshot| snapshot.state.is_terminal())
     }
 
-    /// Ожидание по семантике синтакс-помощника: активных нет — сразу;
-    /// с таймаутом — до первого изменения статуса; без — до завершения
-    /// всех либо первого аварийного. Возвращает свежие снимки всех
+    /// Ожидание первого конечного состояния либо таймаута.
+    /// Пустая группа возвращается сразу. Возвращает свежие снимки всех
     /// `jobs`, удержанные под финальным локом, — размер результата равен
     /// размеру запроса, вытеснение во время ожидания — `JobExpired`.
     pub(crate) fn wait_first_change(
@@ -400,7 +397,7 @@ impl JobRuntimeShared {
         jobs: &[(JobId, bsl_rt::JobStateDto)],
         timeout: Option<Duration>,
     ) -> Result<Vec<Arc<JobSnapshotDto>>, HostError> {
-        let deadline = timeout.map(|t| std::time::Instant::now() + t);
+        let deadline = Self::wait_deadline(timeout)?;
         let ids: Vec<JobId> = jobs.iter().map(|(id, _)| *id).collect();
         let mut registry = self.registry.lock().expect("реестр без отравления");
         Self::live_guard(&registry)?;
@@ -413,15 +410,8 @@ impl JobRuntimeShared {
             // (симметрично `wait_terminal_blocking`).
             Self::live_guard(&registry)?;
             let held = Self::held_snapshots(&registry, &ids)?;
-            let (any_active, any_changed, all_terminal, any_failed) =
-                Self::first_change_flags(jobs, &held);
-            if !any_active {
+            if Self::manager_wait_done(&held) {
                 return Ok(held);
-            }
-            match deadline {
-                Some(_) if any_changed => return Ok(held),
-                None if all_terminal || any_failed => return Ok(held),
-                _ => {}
             }
             match deadline {
                 None => {
@@ -474,7 +464,7 @@ impl JobRuntimeShared {
         ids: &[JobId],
         timeout: Option<Duration>,
     ) -> Result<bsl_rt::JobWaitOutcome, HostError> {
-        let deadline = timeout.map(|t| std::time::Instant::now() + t);
+        let deadline = Self::wait_deadline(timeout)?;
         let mut registry = self.registry.lock().expect("реестр без отравления");
         Self::live_guard(&registry)?;
         for id in ids {
@@ -1317,11 +1307,10 @@ mod pool_tests {
         }
     }
 
-    /// Переход `Queued -> Running` — первое изменение статуса по семантике
-    /// менеджерного `ОжидатьЗавершенияВыполнения`: ожидание с таймаутом
-    /// обязано проснуться на нём, а не досидеть до дедлайна.
+    /// Серверная 1С не считает внутренний старт изменением публичного
+    /// состояния: бесконечное задание возвращается только по таймауту.
     #[test]
-    fn a_queued_to_running_transition_wakes_the_manager_wait() {
+    fn a_queued_to_running_transition_does_not_finish_the_manager_wait() {
         let engine = engine();
         let runtime = runtime_for_engine(
             &engine,
@@ -1336,14 +1325,21 @@ mod pool_tests {
         let snapshot = runtime
             .submit("Служебный.Вечно", target, params(&[]), None, None, None, 0)
             .expect("задание принято");
-        // Задание не завершится само: единственное изменение статуса —
-        // старт. Без пробуждения на нём ожидание досидело бы до дедлайна.
+        let start_limit = std::time::Instant::now() + Duration::from_secs(10);
+        while runtime.snapshot(snapshot.id).unwrap().state == JobStateDto::Queued {
+            assert!(
+                std::time::Instant::now() < start_limit,
+                "worker не начал работу"
+            );
+            std::thread::yield_now();
+        }
+        // Задание не завершится само: единственное изменение статуса — старт.
         let started = std::time::Instant::now();
         let held = runtime
             .shared
             .wait_first_change(
                 &[(snapshot.id, JobStateDto::Queued)],
-                Some(Duration::from_secs(20)),
+                Some(Duration::from_millis(50)),
             )
             .expect("ожидание без ошибок");
         let elapsed = started.elapsed();
@@ -1353,15 +1349,15 @@ mod pool_tests {
             JobStateDto::Running,
             "ожидание обязано вернуть свежий снимок «Активно»"
         );
-        assert!(
-            elapsed < Duration::from_secs(10),
-            "ожидание досидело до дедлайна ({elapsed:?}) — переход в Running не будит"
-        );
         runtime.cancel(snapshot.id).expect("отмена");
         assert!(
             runtime
                 .wait_terminal(&[snapshot.id], Some(Duration::from_secs(30)))
                 .expect("ожидание без ошибок")
+        );
+        assert!(
+            elapsed >= Duration::from_millis(50),
+            "внутренний старт завершил ожидание до таймаута: {elapsed:?}"
         );
     }
 
@@ -1376,5 +1372,76 @@ mod pool_tests {
             .wait_terminal(&[JobId([9; 16])], Some(Duration::from_millis(10)))
             .expect_err("неизвестное задание — ошибка");
         assert_eq!(error.code, bsl_rt::HostErrorCode::JobExpired);
+    }
+
+    #[test]
+    fn unrepresentable_wait_deadlines_return_errors_instead_of_panicking() {
+        let engine = engine();
+        let runtime = runtime_for_engine(&engine, BackgroundJobConfig::default()).unwrap();
+        assert_eq!(
+            runtime
+                .wait_terminal(&[], Some(Duration::MAX))
+                .unwrap_err()
+                .code,
+            HostErrorCode::ResourceLimit
+        );
+        assert_eq!(
+            runtime
+                .shared
+                .wait_first_change(&[], Some(Duration::MAX))
+                .unwrap_err()
+                .code,
+            HostErrorCode::ResourceLimit
+        );
+    }
+
+    #[test]
+    fn rust_wait_terminal_still_requires_every_job_in_both_services() {
+        let engine = engine();
+        let runtime = runtime_for_engine(&engine, BackgroundJobConfig::default()).unwrap();
+        let first = runtime
+            .submit_by_name(
+                "Служебный.Сложить",
+                params(&[number(1), number(2)]),
+                None,
+                None,
+            )
+            .unwrap();
+        assert!(
+            runtime
+                .wait_terminal(&[first.id], Some(Duration::from_secs(10)))
+                .unwrap()
+        );
+        let second = runtime
+            .submit_by_name("Служебный.Вечно", params(&[]), None, None)
+            .unwrap();
+        let ids = [first.id, second.id];
+        let foreground = runtime.wait_terminal(&ids, Some(Duration::ZERO)).unwrap();
+        let service = crate::jobs::service::WorkerJobService {
+            shared: Arc::clone(&runtime.shared),
+            engine,
+            session_token: [0; 16],
+            profile_index: 0,
+        };
+        let worker =
+            bsl_rt::BackgroundJobService::wait_terminal(&service, &ids, Some(Duration::ZERO))
+                .unwrap();
+        let overflow =
+            bsl_rt::BackgroundJobService::wait_terminal(&service, &ids, Some(Duration::MAX))
+                .unwrap_err();
+        let manager_overflow =
+            bsl_rt::BackgroundJobService::wait_first_change(&service, &[], Some(Duration::MAX))
+                .unwrap_err();
+        runtime.cancel(second.id).unwrap();
+        assert!(
+            runtime
+                .wait_terminal(&ids, Some(Duration::from_secs(10)))
+                .unwrap()
+        );
+        assert!(!foreground);
+        assert!(!worker.completed);
+        assert_eq!(worker.snapshots.len(), 2);
+        assert_eq!(overflow.code, HostErrorCode::ResourceLimit);
+        assert_eq!(manager_overflow.code, HostErrorCode::ResourceLimit);
     }
 }

@@ -70,12 +70,12 @@ pub trait BackgroundJobService {
     ///
     /// Как у [`BackgroundJobService::wait_terminal`].
     fn take_messages(&self, id: JobId, remove: bool) -> Result<Vec<UserMessageDto>, HostError>;
-    /// Семантика менеджерного `ОжидатьЗавершенияВыполнения` по
-    /// синтакс-помощнику 8.3.27: если активных нет — возврат сразу; с
-    /// таймаутом — до ПЕРВОГО изменения статуса любого из `jobs`
-    /// относительно переданного входного состояния либо до истечения
-    /// таймаута; без таймаута — до завершения всех или первого
-    /// аварийного. Возвращает свежие снимки всех `jobs` в порядке
+    /// Семантика менеджерного `ОжидатьЗавершенияВыполнения` по серверному
+    /// замеру 8.3.27: пустая группа возвращается сразу; непустая ожидает
+    /// любого конечного состояния либо истечения таймаута. Уже конечное
+    /// задание вызывает немедленный возврат. Входное состояние снимка
+    /// не влияет на условие; `Queued` и `Running` публично активны.
+    /// Возвращает свежие снимки всех `jobs` в порядке
     /// запроса, удержанные под финальным локом ожидания, — размер
     /// результата всегда равен размеру запроса.
     ///
@@ -194,8 +194,8 @@ fn job_value(service: &Rc<dyn BackgroundJobService>, snapshot: Arc<JobSnapshotDt
     })
 }
 
-/// Таймаут ожидания из BSL-числа секунд. Ноль и дробные значения — за
-/// замером `JOB.WAIT.TIMEOUT`; пока ноль означает немедленную проверку.
+/// Серверные замеры `job-wait-2026-09-08/followup.md`: усечение секунд
+/// до целых миллисекунд предшествует проверке отрицательного значения.
 fn timeout_from_arg(value: Option<&BslValue>) -> RtResult<Option<Duration>> {
     let Some(value) = value else {
         return Ok(None);
@@ -209,16 +209,17 @@ fn timeout_from_arg(value: Option<&BslValue>) -> RtResult<Option<Duration>> {
             op: "ОжидатьЗавершенияВыполнения",
         });
     };
-    let seconds = number.to_i64_exact().ok_or(RtError::TypeError {
-        expected: "целое число секунд",
-        op: "ОжидатьЗавершенияВыполнения",
-    })?;
-    // ИЗМЕРЕНО (JOB.WAIT.NEGATIVE): отрицательный таймаут — не ошибка,
-    // вызов возвращается немедленно, как и нулевой.
-    if seconds < 0 {
-        return Ok(Some(Duration::ZERO));
+    // `НЕ ИЗМЕРЕНО(JOB.WAIT.NUMERIC_LIMITS)`: крайние величины пока
+    // ограничены i64 миллисекундами; отказ ловимый, без переполнения.
+    let millis = number
+        .mul(&bsl_number::BslNumber::from_i64(1000))?
+        .trunc_to_scale(0)
+        .to_i64_exact()
+        .ok_or_else(|| RtError::ResourceLimit("таймаут фонового задания".into()))?;
+    if millis < 0 {
+        return Ok(None);
     }
-    Ok(Some(Duration::from_secs(seconds as u64)))
+    Ok(Some(Duration::from_millis(millis as u64)))
 }
 
 // --- Методы менеджера --------------------------------------------------
@@ -507,34 +508,35 @@ fn manager_find(
     })
 }
 
+fn wait_ids(args: &[BslValue]) -> RtResult<Vec<JobId>> {
+    let array_error = || RtError::TypeError {
+        expected: "Массив фоновых заданий",
+        op: "ОжидатьЗавершенияВыполнения",
+    };
+    let Some(BslValue::Object(object)) = args.first() else {
+        return Err(array_error());
+    };
+    let crate::BslObject::Array(items) = object.as_ref() else {
+        return Err(array_error());
+    };
+    items
+        .borrow()
+        .iter()
+        .map(|item| job_object_id(item, "ОжидатьЗавершенияВыполнения"))
+        .collect()
+}
+
 fn manager_wait(
     receiver: &dyn ObjectProtocol,
     args: &[BslValue],
     _ctx: &mut CallContext<'_>,
 ) -> RtResult<BslValue> {
     let manager = receiver_of::<BackgroundJobsManager>(receiver, "ОжидатьЗавершенияВыполнения")?;
-    let mut ids = Vec::new();
-    match args.first() {
-        None | Some(BslValue::Undefined) => {}
-        Some(BslValue::Object(object)) => match object.as_ref() {
-            crate::BslObject::Array(items) => {
-                for item in items.borrow().iter() {
-                    ids.push(job_object_id(item, "ОжидатьЗавершенияВыполнения")?);
-                }
-            }
-            _ => ids.push(job_object_id(
-                args.first().expect("ветка Some"),
-                "ОжидатьЗавершенияВыполнения",
-            )?),
-        },
-        Some(other) => {
-            ids.push(job_object_id(other, "ОжидатьЗавершенияВыполнения")?);
-        }
-    }
+    let ids = wait_ids(args)?;
     let timeout = timeout_from_arg(args.get(1))?;
-    // По выписке синтакс-помощника: ожидание до первого изменения статуса
-    // (с таймаутом) либо до завершения всех/первого аварийного (без), а
-    // возврат — МАССИВ обновлённых заданий.
+    // Серверный замер: возврат при любом конечном состоянии либо таймауте.
+    // Состояние в паре сохранено для совместимости сигнатуры Rust-сервиса;
+    // возраст снимка не определяет условие возврата.
     let jobs: Vec<(JobId, JobStateDto)> = ids
         .iter()
         .map(|id| {
@@ -596,6 +598,78 @@ fn job_object_id(value: &BslValue, op: &'static str) -> RtResult<JobId> {
 }
 
 // --- Методы и свойства задания -----------------------------------------
+
+/// Старый API ждёт успеха всех заданий, но прекращается при первом сбое.
+/// Завершённые ID исключаются из следующего ожидания, иначе новый
+/// менеджер немедленно возвращал бы их снова. Rust join-all не меняется.
+fn wait_success(
+    service: &dyn BackgroundJobService,
+    ids: &[JobId],
+    timeout: Option<Duration>,
+) -> RtResult<BslValue> {
+    let started = std::time::Instant::now();
+    let mut pending: Vec<_> = ids.iter().map(|id| (*id, JobStateDto::Queued)).collect();
+    // Сначала свежие состояния, включая уже завершённые при нулевом таймауте.
+    let mut left = Some(Duration::ZERO);
+    loop {
+        let held = service
+            .wait_first_change(&pending, left)
+            .map_err(HostError::raise)?;
+        if held
+            .iter()
+            .any(|job| matches!(job.state, JobStateDto::Failed | JobStateDto::Canceled))
+        {
+            return Err(RtError::Raised(BslValue::Str(
+                "Ошибка ожидания завершения фонового задания".into(),
+            )));
+        }
+        pending = held
+            .iter()
+            .filter(|job| !job.state.is_terminal())
+            .map(|job| (job.id, job.state))
+            .collect();
+        if pending.is_empty() {
+            return Ok(BslValue::Undefined);
+        }
+        left = match timeout {
+            None => None,
+            Some(limit) => match limit.checked_sub(started.elapsed()) {
+                Some(remaining) if !remaining.is_zero() => Some(remaining),
+                _ => {
+                    return Err(RtError::Raised(BslValue::Str(
+                        "Истекло время ожидания фонового задания".into(),
+                    )));
+                }
+            },
+        };
+    }
+}
+
+fn manager_wait_legacy(
+    receiver: &dyn ObjectProtocol,
+    args: &[BslValue],
+    _ctx: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let manager = receiver_of::<BackgroundJobsManager>(receiver, "ОжидатьЗавершения")?;
+    wait_success(
+        manager.service.as_ref(),
+        &wait_ids(args)?,
+        timeout_from_arg(args.get(1))?,
+    )
+}
+
+fn job_wait_legacy(
+    receiver: &dyn ObjectProtocol,
+    args: &[BslValue],
+    _ctx: &mut CallContext<'_>,
+) -> RtResult<BslValue> {
+    let job = receiver_of::<BackgroundJobObject>(receiver, "ОжидатьЗавершения")?;
+    wait_success(
+        job.service.as_ref(),
+        &[job.snapshot.id],
+        timeout_from_arg(args.first())?,
+    )
+}
 
 fn job_cancel(
     receiver: &dyn ObjectProtocol,
@@ -764,31 +838,32 @@ static MANAGER_METHODS: &[MethodDescriptor] = &[
         manager_find,
     ),
     MethodDescriptor::new(
-        &[
-            "ОжидатьЗавершенияВыполнения",
-            "WaitForExecutionCompletion",
-            "ОжидатьЗавершения",
-            "WaitForCompletion",
-        ],
+        &["ОжидатьЗавершенияВыполнения", "WaitForExecutionCompletion"],
         Arity::range(1, 2),
         manager_wait,
     ),
+    MethodDescriptor::new(
+        &["ОжидатьЗавершения", "WaitForCompletion"],
+        Arity::range(1, 2),
+        manager_wait_legacy,
+    )
+    .as_procedure(),
 ];
 
 static JOB_METHODS: &[MethodDescriptor] = &[
     MethodDescriptor::new(&["Отменить", "Cancel"], Arity::exact(0), job_cancel),
-    // «ОжидатьЗавершения» — документированный устаревший синоним
-    // (синтакс-помощник 8.3.27 перечисляет оба имени у задания).
+    // Старое имя — отдельная процедура по серверному замеру.
     MethodDescriptor::new(
-        &[
-            "ОжидатьЗавершенияВыполнения",
-            "WaitForExecutionCompletion",
-            "ОжидатьЗавершения",
-            "WaitForCompletion",
-        ],
+        &["ОжидатьЗавершенияВыполнения", "WaitForExecutionCompletion"],
         Arity::range(0, 1),
         job_wait,
     ),
+    MethodDescriptor::new(
+        &["ОжидатьЗавершения", "WaitForCompletion"],
+        Arity::range(0, 1),
+        job_wait_legacy,
+    )
+    .as_procedure(),
     MethodDescriptor::new(
         &["ПолучитьСообщенияПользователю", "GetUserMessages"],
         Arity::range(0, 1),
@@ -860,4 +935,36 @@ pub(crate) fn construct_manager(
     Ok(BslValue::new_object(BackgroundJobsManager {
         service: Rc::clone(service),
     }))
+}
+
+#[cfg(test)]
+mod wait_tests {
+    use super::*;
+
+    #[test]
+    fn server_wait_timeouts_truncate_milliseconds_before_testing_the_sign() {
+        for (text, expected) in [
+            ("0", Some(0)),
+            ("0.2", Some(200)),
+            ("0.9", Some(900)),
+            ("1.2", Some(1200)),
+            ("1.9", Some(1900)),
+            ("0.0001", Some(0)),
+            ("0.0009", Some(0)),
+            ("0.0011", Some(1)),
+            ("0.0019", Some(1)),
+            ("-0.0001", Some(0)),
+            ("-0.2", None),
+            ("-1", None),
+        ] {
+            let value = BslValue::Number(bsl_number::BslNumber::parse_canonical(text).unwrap());
+            assert_eq!(
+                timeout_from_arg(Some(&value)).unwrap(),
+                expected.map(Duration::from_millis),
+                "таймаут {text}"
+            );
+        }
+        assert_eq!(timeout_from_arg(None).unwrap(), None);
+        assert_eq!(timeout_from_arg(Some(&BslValue::Undefined)).unwrap(), None);
+    }
 }

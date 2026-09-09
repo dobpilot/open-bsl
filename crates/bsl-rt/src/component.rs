@@ -598,6 +598,7 @@ enum MethodImpl {
 #[derive(Debug, Clone, Copy)]
 #[non_exhaustive]
 pub struct MethodDescriptor {
+    procedure: bool,
     names: &'static [&'static str],
     arity: Arity,
     call: MethodImpl,
@@ -612,6 +613,7 @@ impl MethodDescriptor {
             names,
             arity,
             call: MethodImpl::Plain(call),
+            procedure: false,
         }
     }
 
@@ -626,7 +628,28 @@ impl MethodDescriptor {
             names,
             arity,
             call: MethodImpl::Suspending(call),
+            procedure: false,
         }
+    }
+
+    /// Помечает метод как процедуру без возвращаемого значения.
+    pub const fn as_procedure(mut self) -> Self {
+        self.procedure = true;
+        self
+    }
+
+    /// Проверяет использование результата до проверки арности и вызова.
+    ///
+    /// # Errors
+    ///
+    /// Процедура, вызванная как функция, выдаёт ловимую ошибку.
+    pub fn check_result_use(&self, required: bool) -> RtResult<()> {
+        if required && self.procedure {
+            return Err(crate::RtError::Raised(BslValue::Str(
+                "Вызов процедуры объекта как функции".into(),
+            )));
+        }
+        Ok(())
     }
 
     /// Может ли метод вернуть [`CallOutcome::Pending`].

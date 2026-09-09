@@ -1,0 +1,18 @@
+﻿manager.array.none	ok	913	completed:completed
+manager.array.long	ok	910	completed:completed
+manager.array.short	error:Error calling context method (ОжидатьЗавершения)	52	active:active
+manager.array.zero	error:Error calling context method (ОжидатьЗавершения)	0	active:active
+manager.array.negative	ok	907	completed:completed
+manager.array.expression	error:Object procedure called as function (ОжидатьЗавершения)	0	active:active
+manager.array.failed	error:Error calling context method (ОжидатьЗавершения)	308	failed:active
+manager.array.canceled	error:Error calling context method (ОжидатьЗавершения)	0	canceled:active
+manager.empty	ok	1	active:active
+object.timeout.long	ok	307	completed:active
+object.timeout.short	error:Error calling context method (ОжидатьЗавершения)	51	active:active
+object.timeout.zero	error:Error calling context method (ОжидатьЗавершения)	1	active:active
+object.timeout.negative	ok	307	completed:active
+object.twoargs	error:Too many actual parameters	1	active:active
+new.object.submsnegative	ok	1	active:active
+new.manager.canceled.stale	ok	0	canceled:active
+new.manager.canceled.fresh	ok	1	canceled:active
+END	OK

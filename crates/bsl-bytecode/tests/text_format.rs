@@ -24,6 +24,14 @@ fn one_const() -> bsl_bytecode::Program {
 }
 
 #[test]
+fn format_without_method_result_context_is_rejected() {
+    let text = write_program(&one_const(), None).unwrap();
+    let old = text.replacen("bslc 30", "bslc 29", 1);
+    assert_ne!(old, text);
+    assert!(matches!(parse_program(&old), Err(TextError::BadHeader(_))));
+}
+
+#[test]
 fn comments_and_blank_lines_are_ignored_by_the_parser() {
     let program = one_const();
     let text = write_program(&program, Some("файл.bsl")).unwrap();

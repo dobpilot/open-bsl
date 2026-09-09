@@ -110,7 +110,7 @@ impl bsl_rt::BackgroundJobService for WorkerJobService {
         ids: &[JobId],
         timeout: Option<Duration>,
     ) -> Result<bsl_rt::JobWaitOutcome, HostError> {
-        let deadline = timeout.map(|t| std::time::Instant::now() + t);
+        let deadline = JobRuntimeShared::wait_deadline(timeout)?;
         {
             let registry = self.shared.registry.lock().expect("реестр без отравления");
             JobRuntimeShared::live_guard(&registry)?;
@@ -163,7 +163,7 @@ impl bsl_rt::BackgroundJobService for WorkerJobService {
     ) -> Result<Vec<Arc<JobSnapshotDto>>, HostError> {
         // Worker не блокируется впустую: ожидание двигает пул своего
         // потока и глобальную очередь (см. `drive_local`).
-        let deadline = timeout.map(|t| std::time::Instant::now() + t);
+        let deadline = JobRuntimeShared::wait_deadline(timeout)?;
         let ids: Vec<JobId> = jobs.iter().map(|(id, _)| *id).collect();
         {
             let registry = self.shared.registry.lock().expect("реестр без отравления");
@@ -178,15 +178,7 @@ impl bsl_rt::BackgroundJobService for WorkerJobService {
             let Ok(held) = JobRuntimeShared::held_snapshots(registry, &ids) else {
                 return true;
             };
-            let (any_active, any_changed, all_terminal, any_failed) =
-                JobRuntimeShared::first_change_flags(jobs, &held);
-            if !any_active {
-                return true;
-            }
-            match deadline {
-                Some(_) => any_changed,
-                None => all_terminal || any_failed,
-            }
+            JobRuntimeShared::manager_wait_done(&held)
         };
         drive_local(
             &self.shared,

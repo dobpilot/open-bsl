@@ -58,6 +58,12 @@ pub struct Anchor {
 
 pub const OPEN_QUESTIONS: &[OpenQuestion] = &[
     OpenQuestion {
+        id: "JOB.WAIT.NUMERIC_LIMITS",
+        what: "границы числового таймаута серверных методов ожидания: переполнение миллисекунд и дедлайна",
+        chosen: "i64 миллисекунд с ловимой ошибкой вне диапазона; отдельный замер активных заданий отложен",
+        blocks: "align-background-job-waits: крайние числовые таймауты, включая отличие пустой группы от активной",
+    },
+    OpenQuestion {
         id: "SQRT.SMALL_ARG",
         what: "почему `Sqrt(0.02)` на платформе на один ulp меньше, чем даёт IEEE-\
                sqrt: шестнадцатая значащая цифра точного double — `5` с хвостом \

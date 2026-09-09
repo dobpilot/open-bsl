@@ -1,0 +1,18 @@
+manager.array.none	ok	935	completed:completed
+manager.array.long	ok	900	completed:completed
+manager.array.short	error:Истекло время ожидания фонового задания	51	active:active
+manager.array.zero	error:Истекло время ожидания фонового задания	0	active:active
+manager.array.negative	ok	900	completed:completed
+manager.array.expression	error:Вызов процедуры объекта как функции	0	active:active
+manager.array.failed	error:Ошибка ожидания завершения фонового задания	300	failed:active
+manager.array.canceled	error:Ошибка ожидания завершения фонового задания	1	canceled:active
+manager.empty	ok	0	active:active
+object.timeout.long	ok	300	completed:active
+object.timeout.short	error:Истекло время ожидания фонового задания	50	active:active
+object.timeout.zero	error:Истекло время ожидания фонового задания	0	active:active
+object.timeout.negative	ok	300	completed:active
+object.twoargs	error:метод «ОжидатьЗавершения» не применим к «ФоновоеЗадание»	0	active:active
+new.object.submsnegative	ok	0	active:active
+new.manager.canceled.stale	ok	0	canceled:active
+new.manager.canceled.fresh	ok	1	canceled:active
+END	OK

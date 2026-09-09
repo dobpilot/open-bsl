@@ -1,0 +1,29 @@
+group.none.1	array:2:completed:active	1032	live:completed:active
+group.timeout.1	array:2:completed:active	1000	live:completed:active
+group.undefined.1	array:2:completed:active	1000	live:completed:active
+group.none.2	array:2:completed:active	1000	live:completed:active
+group.timeout.2	array:2:completed:active	1000	live:completed:active
+group.undefined.2	array:2:completed:active	1000	live:completed:active
+group.none.3	array:2:completed:active	1000	live:completed:active
+group.timeout.3	array:2:completed:active	1000	live:completed:active
+group.undefined.3	array:2:completed:active	1000	live:completed:active
+group.failed	array:2:failed:active	1000	live:failed:active
+group.running.timeout	array:2:completed:active	1000	live:completed:active
+group.stale.none	array:2:completed:active	0	live:completed:active
+group.stale.timeout	array:2:completed:active	0	live:completed:active
+arg.single	error:ожидался тип «Массив фоновых заданий» для операции «ОжидатьЗавершенияВыполнения»
+arg.undefined	error:ожидался тип «Массив фоновых заданий» для операции «ОжидатьЗавершенияВыполнения»
+arg.missing	error:метод «ОжидатьЗавершенияВыполнения» не применим к «МенеджерФоновыхЗаданий»
+arg.empty	accepted:array:0
+object.none	completed	2500
+object.zero	active	0
+object.negative	completed	2500
+object.negative02	completed	2500
+object.fraction02	active	200
+object.fraction09	active	900
+object.fraction12	active	1200
+object.fraction19	active	1900
+manager.fraction02	array:1:active	200
+manager.fraction12	array:1:active	1200
+manager.negative	array:1:completed	2500
+END	OK

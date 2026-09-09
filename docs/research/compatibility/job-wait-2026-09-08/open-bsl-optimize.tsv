@@ -1,0 +1,29 @@
+group.none.1	array:2:completed:completed	4013	live:completed:completed
+group.timeout.1	array:2:active:active	0	live:active:active
+group.undefined.1	array:2:completed:completed	4000	live:completed:completed
+group.none.2	array:2:completed:completed	4000	live:completed:completed
+group.timeout.2	array:2:active:active	0	live:active:active
+group.undefined.2	array:2:completed:completed	4000	live:completed:completed
+group.none.3	array:2:completed:completed	4000	live:completed:completed
+group.timeout.3	array:2:active:active	0	live:active:active
+group.undefined.3	array:2:completed:completed	4000	live:completed:completed
+group.failed	array:2:failed:active	1000	live:failed:active
+group.running.timeout	array:2:completed:active	1000	live:completed:active
+group.stale.none	array:2:completed:completed	4000	live:completed:completed
+group.stale.timeout	array:2:completed:completed	4000	live:completed:completed
+arg.single	accepted:array:1:completed
+arg.undefined	accepted:array:0
+arg.missing	error:метод «ОжидатьЗавершенияВыполнения» не применим к «МенеджерФоновыхЗаданий»
+arg.empty	accepted:array:0
+object.none	completed	2500
+object.zero	active	0
+object.negative	active	0
+object.negative02	error:ожидался тип «целое число секунд» для операции «ОжидатьЗавершенияВыполнения»
+object.fraction02	error:ожидался тип «целое число секунд» для операции «ОжидатьЗавершенияВыполнения»
+object.fraction09	error:ожидался тип «целое число секунд» для операции «ОжидатьЗавершенияВыполнения»
+object.fraction12	error:ожидался тип «целое число секунд» для операции «ОжидатьЗавершенияВыполнения»
+object.fraction19	error:ожидался тип «целое число секунд» для операции «ОжидатьЗавершенияВыполнения»
+manager.fraction02	error:ожидался тип «целое число секунд» для операции «ОжидатьЗавершенияВыполнения»
+manager.fraction12	error:ожидался тип «целое число секунд» для операции «ОжидатьЗавершенияВыполнения»
+manager.negative	array:1:active	0
+END	OK

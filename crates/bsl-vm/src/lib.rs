@@ -2684,6 +2684,7 @@ fn step_cold(
             frames[frame_idx].pc += 1;
         }
         Instr::CallObjectMethod {
+            result_required,
             dst,
             obj,
             method,
@@ -2761,6 +2762,7 @@ fn step_cold(
                     program,
                 )? {
                     Some(descriptor) => {
+                        descriptor.check_result_use(result_required)?;
                         descriptor.check_arity(count, object.type_descriptor().name)?;
                         match descriptor.invoke(object.as_dyn(), args, &mut context)? {
                             bsl_rt::CallOutcome::Ready(value) => value,

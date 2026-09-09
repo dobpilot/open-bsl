@@ -35,7 +35,7 @@ use crate::instr::{ArgMode, Instr};
 
 /// Номер формата. Меняется при любой правке синтаксиса — загрузчик
 /// сверяет его и отказывается угадывать.
-pub const FORMAT_VERSION: u32 = 29;
+pub const FORMAT_VERSION: u32 = 30;
 
 /// Имена опкодов — те же строки, что печатает `write_instr` и принимает
 /// `parse_instr`. Список публичен, потому что на нём держится тест
@@ -723,13 +723,14 @@ fn write_instr(instr: &Instr) -> String {
             builtin_method_name(*method)
         ),
         Instr::CallObjectMethod {
+            result_required,
             dst,
             obj,
             method,
             base,
             count,
         } => format!(
-            "{op} dst={dst} obj={obj} method={} base={base} count={count}",
+            "{op} dst={dst} obj={obj} method={} base={base} count={count} result_required={result_required}",
             method
         ),
         Instr::GetObjectProp { dst, obj, name } => {
@@ -1996,6 +1997,7 @@ fn parse_instr(no: usize, text: &str) -> Result<Instr> {
             }
         }
         "CallObjectMethod" => Instr::CallObjectMethod {
+            result_required: field_bool(&f, no, "result_required")?,
             dst: dst(&f)?,
             obj: obj(&f)?,
             method: field_u16(&f, no, "method")?,
