@@ -110,9 +110,9 @@
 Отдельная сессия: реализован верный вынос `prop_cache`/`method_cache` из
 `Chunk` в состояние запуска — структура `RunCaches` во владении
 `ProgramExecution`, доступ по `(func_id, pc)` вместо `chunk.prop_cache()[pc]`,
-протянута через `step`/`step_cold` и все четыре шима JIT; поля из `Chunk`
+протянута через `step`/`step_cold`; поля из `Chunk`
 удалены, `image::finalize`/`verify` их больше не заводят и не проверяют.
-Ворота зелёные: `the_jit_agrees_with_the_interpreter_on_every_script`,
+Ворота зелёные: `the_optimizing_passes_agree_with_the_plain_run_on_every_script`,
 конформанс целиком, наборы `bsl-vm`/`bsl-bytecode`. A/B против кэшей в
 `Chunk`, губернатор `performance`, питание от сети (load 2–3,6 — такты
 шумноваты, инструкции стабильны до 0,01 %), 11–15 пар.

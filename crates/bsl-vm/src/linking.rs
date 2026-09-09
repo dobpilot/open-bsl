@@ -11,9 +11,8 @@ use std::io::Write;
 pub(super) struct HostIo<'a, 'd> {
     pub(super) stdout: &'a mut dyn Write,
     pub(super) stderr: &'a mut dyn Write,
-    /// `None` — у вызывающего окружения нет: так работает шим JIT, у
-    /// которого нет и потоков. Функции, которым окружение нужно, туда не
-    /// компилируются, поэтому `None` — запись контракта, а не заглушка.
+    /// `None` бывает только во время переноса окружения во вложенный
+    /// обратный вызов компонента.
     pub(super) env: Option<&'a mut bsl_rt::HostEnv>,
     /// Компилятор динамического кода. Он тоже принадлежит ПРОГОНУ, а не
     /// программе, и лежит здесь по той же причине, что и вывод: VM его
@@ -36,9 +35,8 @@ impl HostIo<'_, '_> {
     ///
     /// # Errors
     ///
-    /// [`RtError::InvalidBytecode`], если сюда дошла функция окружения из
-    /// контекста без окружения — то есть если список исключений JIT
-    /// разошёлся с `bsl_rt::call_builtin_env`.
+    /// [`RtError::InvalidBytecode`], если окружение не было передано во
+    /// вложенный вызов.
     pub(super) fn env(&mut self) -> Result<&mut bsl_rt::HostEnv, RtError> {
         self.env.as_deref_mut().ok_or(RtError::InvalidBytecode(
             "функция окружения вызвана там, где окружения прогона нет",
@@ -94,30 +92,7 @@ pub(super) struct LinkedComponents<'a> {
     /// `Chunk`, её добавление стоит правок формата байт-кода, а выигрыш не
     /// измерен.
     pub(super) component_properties: ComponentPropertyMap,
-    /// Есть ли в реестре библиотека, объявившая
-    /// `ObjectContextNeed::Full`, — то есть такая, чьи методы и
-    /// свойства вправе читать зону прогона и писать в потоки вывода.
-    ///
-    /// Сокращённый контекст JIT-шимов ни того, ни другого не даёт, и для
-    /// ТАКОЙ программы нативный путь за объектные опкоды не берётся
-    /// вовсе. Решение принимается один раз на чанк, при компиляции.
-    /// Проверять получателя на каждом обращении было бы точнее, и это
-    /// измерено: тела шимов делят кодогенерацию с горячим `step`, и
-    /// проверка в них стоила `empty_for` 58 -> 83 млн тактов при
-    /// НЕИЗМЕННОЙ семантике интерпретатора.
-    ///
-    /// Плата приходится только на программу, которая такой компонент
-    /// зарегистрировала, и не на отдельные опкоды, а на ВЕСЬ чанк,
-    /// который их содержит: гранулярность решения — чанк. Движок с
-    /// компонентами дерева не теряет ничего.
-    pub(super) interpreter_only_objects: bool,
-    /// Часовой пояс прогона — единственная возможность окружения, которая
-    /// нужна КОМПОНЕНТАМ, а значит и обеим ветвям исполнения. Лежит здесь,
-    /// а не в `HostIo`, потому что до JIT-шимов доезжает только связанное
-    /// состояние: добавить окружение аргументом `CompiledChunk::run`
-    /// значило бы вернуть тот самый лишний аргумент во внешнем цикле
-    /// диспетчеризации, который при переносе окружения стоил `empty_for`
-    /// +61 % тактов.
+    /// Часовой пояс прогона, доступный компонентам.
     pub(super) zone: std::rc::Rc<dyn bsl_rt::TimeZone>,
     pub(super) files: std::rc::Rc<dyn bsl_rt::FileSystem>,
     pub(super) random: bsl_rt::RandomHandle,
@@ -166,7 +141,7 @@ impl LinkedComponents<'_> {
 
 /// Карта мемоизации «(статическая таблица типа, номер имени) → дескриптор».
 /// Хранится дескриптор, а не голый обработчик: рантаймная проверка арности
-/// метода (арм `CallObjectMethod`, шим JIT) читает из него `arity`.
+/// метода (арм `CallObjectMethod`) читает из него `arity`.
 pub(super) type ComponentMethodMap = std::cell::RefCell<
     std::collections::HashMap<(usize, u32), Option<&'static bsl_rt::MethodDescriptor>>,
 >;
@@ -176,9 +151,7 @@ pub(super) type ComponentMethodMap = std::cell::RefCell<
 /// установившийся режим — поиск по хешу от двух целых, промахи тоже
 /// запоминаются. `None` — имени в таблице нет (или таблица пустая):
 /// вызывающий уходит в строковый `call_method`, чтобы текст ошибки остался
-/// одним, у самого типа. Свободная функция, а не метод: тем же разрешением
-/// пользуется шим открытого метода в JIT, у которого карта приходит сырым
-/// указателем из `JitCtx`.
+/// одним, у самого типа.
 /// Карта мемоизации «(статическая таблица типа, номер имени) → пара
 /// обработчиков свойства».
 pub(super) type ComponentPropertyMap = std::cell::RefCell<
@@ -332,10 +305,6 @@ pub(super) fn link_verified<'a>(
     message_sink: Option<std::rc::Rc<dyn bsl_rt::UserMessageSink>>,
     scope: u64,
 ) -> Result<LinkedComponents<'a>, RtError> {
-    // Список собирается ОДИН РАЗ на программу: у обычного движка он пуст,
-    // и нативный путь остаётся ровно таким, каким был.
-    let interpreter_only_objects =
-        registry.is_some_and(bsl_rt::RuntimeRegistry::has_full_context_objects);
     let Some(core) = program.requirements.first() else {
         return Err(RtError::Link(
             "в требованиях отсутствует bsl-rt".to_string(),
@@ -484,7 +453,6 @@ pub(super) fn link_verified<'a>(
     Ok(LinkedComponents {
         registry,
         scope,
-        interpreter_only_objects,
         zone,
         files,
         random,

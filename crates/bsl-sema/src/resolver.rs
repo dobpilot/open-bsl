@@ -1561,12 +1561,11 @@ impl<'a> Resolver<'a> {
                 // Доступ к свойству всегда компилируется в закрытый
                 // `GetProp`: открытый двойник не несёт информации сверх
                 // закрытого (то же имя в той же таблице `.names`, только
-                // усечённое до u16), а тела совпадают на всех трёх
-                // исполнителях — в интерпретаторе, в JIT-шимах и в
+                // усечённое до u16), а тела совпадают в интерпретаторе и
                 // эффектах бандлов. Для компонентного получателя оба
                 // варианта идут одним строковым `get_property`, а
-                // нативный в закрытом варианте остаётся в горячем цикле
-                // диспетчера — с реестром это измеренные десятки
+                // закрытый вариант остаётся в горячем цикле диспетчера —
+                // с реестром это измеренные десятки
                 // процентов на сценариях с плотным доступом к полям
                 // (`csv_write`). Открытые `GetObjectProp`/`SetObjectProp`
                 // остаются в формате байт-кода ради уже сериализованных
@@ -2520,7 +2519,7 @@ mod tests {
             call,
         }];
         const LIBRARY: bsl_rt::LibraryDescriptor =
-            bsl_rt::LibraryDescriptor::new("test-lib", "0.0.0", bsl_rt::ObjectContextNeed::Reduced)
+            bsl_rt::LibraryDescriptor::new("test-lib", "0.0.0")
                 .with_functions(FUNCTIONS)
                 .with_constructors(CONSTRUCTORS);
         let mut builder = bsl_rt::RuntimeBuilder::new();
@@ -3430,8 +3429,7 @@ mod tests {
             call: construct,
         }];
         const LIBRARY: bsl_rt::LibraryDescriptor =
-            bsl_rt::LibraryDescriptor::new("shadow", "0.0.0", bsl_rt::ObjectContextNeed::Reduced)
-                .with_constructors(CONSTRUCTORS);
+            bsl_rt::LibraryDescriptor::new("shadow", "0.0.0").with_constructors(CONSTRUCTORS);
         let mut builder = bsl_rt::RuntimeBuilder::new();
         builder.register(bsl_rt::core_library()).register(LIBRARY);
         let registry = builder.build().unwrap();

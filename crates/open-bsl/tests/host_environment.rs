@@ -171,39 +171,19 @@ fn states_do_not_consume_each_others_random_sequence() {
     assert!(c.starts_with("22222222"), "{c}");
 }
 
-/// Контракт «окружение НЕ ПОПАДАЕТ в JIT» — не пожелание, а условие
-/// корректности. Сокращённый `CallContext` не несёт окружение:
-/// операция, которой оно нужно, не «отработает медленнее», а вернёт ошибку.
-/// Держится это тем, что встроенные функции окружения и ядровой
-/// конструктор UUID выполняются с полным контекстом.
+/// Проверки того, что внедрённые сервисы окружения доходят до встроенных
+/// функций и компонентов одного запуска.
 ///
-/// Цикл в скрипте — не про скорость: точкой входа JIT делает только
-/// достаточно длинную цепочку компилируемых инструкций, и без неё тест
-/// проверил бы интерпретатор во второй раз. Арифметика внутри
-/// компилируется, обращение к окружению — нет, и прогон переключается
-/// между двумя режимами на каждом витке.
-///
-/// На не-x86-64 флаг принимается и игнорируется — тест там сводится к
-/// повторному прогону интерпретатора и остаётся зелёным.
-mod jit {
+mod injected_services {
     use super::*;
 
-    /// Тот же скрипт под обоими режимами: расхождение — это и есть
-    /// поломка контракта, поэтому сравниваются они между собой, а
-    /// результат вдобавок сверяется с ожидаемым (иначе «сломаны
-    /// одинаково» прошло бы как успех).
-    fn both_modes(script: &str, configure: impl Fn(StateBuilder) -> StateBuilder, expected: &str) {
+    fn run_with(script: &str, configure: impl Fn(StateBuilder) -> StateBuilder, expected: &str) {
         let engine = Engine::builder().build().unwrap();
-        let mut interpreted = configure(engine.state_builder().jit(false)).build();
-        let mut compiled = configure(engine.state_builder().jit(true)).build();
-
-        let a = text(&interpreted.exec(script).unwrap());
-        let b = text(&compiled.exec(script).unwrap());
-        assert_eq!(a, b, "режимы разошлись");
-        assert_eq!(a, expected, "интерпретатор");
+        let mut state = configure(engine.state_builder()).build();
+        assert_eq!(text(&state.exec(script).unwrap()), expected);
     }
 
-    /// Тело с достаточной цепочкой арифметики, чтобы чанк попал в JIT:
+    /// Тело повторяет обращение к сервису окружения на нескольких витках:
     /// внутренний цикл даёт сумму нечётных чисел, то есть 40*40.
     const WARM: &str = "итог = \"\";\n\
                         Для к = 1 По 3 Цикл\n\
@@ -220,8 +200,8 @@ mod jit {
     }
 
     #[test]
-    fn a_fixed_clock_survives_a_jit_run() {
-        both_modes(
+    fn a_fixed_clock_is_used_by_the_run() {
+        run_with(
             &warm_with("Формат(ТекущаяУниверсальнаяДатаВМиллисекундах(), \"ЧГ=0\")"),
             |b| b.clock(TickingClock(0)),
             // Часы шагают на секунду за обращение: три витка — три
@@ -236,8 +216,8 @@ mod jit {
     }
 
     #[test]
-    fn the_arguments_survive_a_jit_run() {
-        both_modes(
+    fn the_arguments_are_used_by_the_run() {
+        run_with(
             &warm_with("АргументыКоманднойСтроки[0]"),
             |b| b.arguments(vec!["раз".into(), "два".into()]),
             "1600=раз;1600=раз;1600=раз;",
@@ -245,8 +225,8 @@ mod jit {
     }
 
     #[test]
-    fn a_given_random_source_survives_a_jit_run() {
-        both_modes(
+    fn a_given_random_source_is_used_by_the_run() {
+        run_with(
             &warm_with("Строка(Новый УникальныйИдентификатор())"),
             |b| b.random(Sequence(vec![[0x11; 16], [0x22; 16], [0x33; 16]])),
             "1600=11111111-1111-4111-9111-111111111111;\
@@ -384,18 +364,8 @@ mod zone {
         let _ = std::fs::remove_file(&schema);
     }
 
-    /// Тот же контракт, что у остальных возможностей окружения, — под
-    /// JIT.
-    ///
-    /// Работает он здесь не потому, что зона доезжает до нативного пути,
-    /// а потому, что доезжать ей некуда: `ЗаписатьДатуJSON` — ГЛОБАЛЬНАЯ
-    /// функция компонента, а из компонентного JIT компилирует только
-    /// объектные опкоды. Сам нативный путь зоны не получает — известное
-    /// ограничение, закреплённое тестом
-    /// `under_the_jit_a_host_reader_of_the_zone_gets_an_error` в
-    /// `embedding.rs`, там же и измерение, почему так.
     #[test]
-    fn the_zone_survives_a_jit_run() {
+    fn the_zone_is_used_by_component_functions() {
         let engine = Engine::builder().build().unwrap();
         let script = "итог = \"\";\n\
                       Для к = 1 По 3 Цикл\n\
@@ -412,14 +382,11 @@ mod zone {
         let expected = "1600=2014-05-10T13:14:15+03:00;\
                         1600=2014-05-10T13:14:15+03:00;\
                         1600=2014-05-10T13:14:15+03:00;";
-        for jit in [false, true] {
-            let mut state = engine
-                .state_builder()
-                .jit(jit)
-                .zone(FixedTimeZone::new(3 * 3600).expect("допустимое смещение"))
-                .build();
-            assert_eq!(text(&state.exec(script).unwrap()), expected, "jit={jit}");
-        }
+        let mut state = engine
+            .state_builder()
+            .zone(FixedTimeZone::new(3 * 3600).expect("допустимое смещение"))
+            .build();
+        assert_eq!(text(&state.exec(script).unwrap()), expected);
     }
 }
 
@@ -552,11 +519,9 @@ mod files {
     }
 
     /// Временный путь, `ДвоичныеДанные.Записать` и удаление остаются внутри
-    /// файловой системы сессии. Открытый `CallObjectMethod .Записать`
-    /// обязан выйти из JIT только на этой инструкции: нативный шим не имеет
-    /// файловой возможности и иначе дал бы иной результат.
+    /// файловой системы сессии.
     #[test]
-    fn temporary_binary_file_agrees_between_interpreter_and_jit() {
+    fn temporary_binary_file_stays_in_the_session_file_system() {
         let engine = Engine::builder().build().unwrap();
         let module = engine
             .compile(
@@ -580,33 +545,22 @@ mod files {
             )
             .unwrap();
 
-        let interpreted_files = MemoryFiles::default();
-        let interpreted = engine
+        let files = MemoryFiles::default();
+        let value = engine
             .state_builder()
-            .files(interpreted_files.clone())
-            .build()
-            .run(&module)
-            .unwrap();
-        let jitted_files = MemoryFiles::default();
-        let jitted = engine
-            .state_builder()
-            .files(jitted_files.clone())
-            .jit(true)
+            .files(files.clone())
             .build()
             .run(&module)
             .unwrap();
 
-        assert_eq!(text(&interpreted), "Да|/|4243|Нет");
-        assert_eq!(text(&jitted), text(&interpreted));
-        assert!(interpreted_files.0.borrow().is_empty());
-        assert!(jitted_files.0.borrow().is_empty());
+        assert_eq!(text(&value), "Да|/|4243|Нет");
+        assert!(files.0.borrow().is_empty());
     }
 
     /// `ЗаписьJSON.ОткрытьФайл`/`ЧтениеJSON.ОткрытьФайл` идут через файловую
     /// систему СЕССИИ (ABI-G), а не мимо неё на диск: объект берёт ФС при
     /// построении и держит её, потому что сама запись происходит в
-    /// `Закрыть()`, а этот метод под JIT исполняется по натуральному пути,
-    /// где контекста с файловой системой нет.
+    /// `Закрыть()`.
     #[test]
     fn json_open_file_round_trips_through_the_sessions_file_system() {
         let engine = Engine::builder().build().unwrap();
@@ -720,14 +674,10 @@ mod files {
         }
     }
 
-    /// Заданная файловая система работает и ПОД JIT — всеми ТРЕМЯ
-    /// путями: две встроенные функции и конструктор `ДвоичныеДанные` через
-    /// `CreateObject`. Держится это тем, что нативный путь ни
-    /// одного из них не компилирует, как и функции окружения; тест
-    /// закрепляет публичный контракт, а не устройство списка исключений,
-    /// поэтому опкод обязан быть в скрипте, а не только в комментарии.
+    /// Заданная файловая система работает тремя путями: две встроенные
+    /// функции и конструктор `ДвоичныеДанные` через `CreateObject`.
     #[test]
-    fn the_file_system_survives_a_jit_run() {
+    fn the_file_system_is_used_by_all_file_operations() {
         let engine = Engine::builder().build().unwrap();
         let script = "итог = \"\";\n\
                       Для к = 1 По 3 Цикл\n\
@@ -741,26 +691,20 @@ mod files {
                       + \"/\" + Формат(д.Размер(), \"ЧГ=0\") + \";\";\n\
                       КонецЦикла;\n\
                       Возврат итог;";
-        for jit in [false, true] {
-            let disk = MemoryFiles::default();
-            disk.0
-                .borrow_mut()
-                .insert("двоичное".to_string(), vec![7; 5]);
-            let mut state = engine.state_builder().jit(jit).files(disk.clone()).build();
-            assert_eq!(
-                text(&state.exec(script).unwrap()),
-                "1600/5;1600/5;1600/5;",
-                "jit={jit}"
-            );
-            // Файл лёг в заданную систему, а не на диск.
-            assert!(disk.0.borrow().contains_key("виток.txt"), "jit={jit}");
-            assert!(!std::path::Path::new("виток.txt").exists());
-        }
+        let disk = MemoryFiles::default();
+        disk.0
+            .borrow_mut()
+            .insert("двоичное".to_string(), vec![7; 5]);
+        let mut state = engine.state_builder().files(disk.clone()).build();
+        assert_eq!(text(&state.exec(script).unwrap()), "1600/5;1600/5;1600/5;");
+        // Файл лёг в заданную систему, а не на диск.
+        assert!(disk.0.borrow().contains_key("виток.txt"));
+        assert!(!std::path::Path::new("виток.txt").exists());
     }
 
-    /// Отказ файловой системы при ЗАКРЫТИИ `ЗаписьТекста` — ловимая ошибка,
-    /// и на интерпретаторе, и под JIT (ABI-G, сквозная проверка канала через
-    /// `StateBuilder::files`). Дескриптор пришёл из файловой системы СЕССИИ
+    /// Отказ файловой системы при ЗАКРЫТИИ `ЗаписьТекста` — ловимая ошибка
+    /// (ABI-G, сквозная проверка канала через `StateBuilder::files`).
+    /// Дескриптор пришёл из файловой системы СЕССИИ
     /// на построении (`NewTextWriter`, интерпретаторный путь), а неудачное
     /// `Закрыть()` ловится `Попыткой`, как любая ошибка рантайма.
     #[test]
@@ -840,9 +784,7 @@ mod files {
                       Исключение\n\
                       \tВозврат \"поймано\";\n\
                       КонецПопытки;";
-        for jit in [false, true] {
-            let mut state = engine.state_builder().jit(jit).files(FailOnClose).build();
-            assert_eq!(text(&state.exec(script).unwrap()), "поймано", "jit={jit}");
-        }
+        let mut state = engine.state_builder().files(FailOnClose).build();
+        assert_eq!(text(&state.exec(script).unwrap()), "поймано");
     }
 }

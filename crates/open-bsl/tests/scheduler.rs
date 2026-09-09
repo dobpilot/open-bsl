@@ -25,7 +25,7 @@ impl SharedWriter {
 }
 
 #[test]
-fn backward_edges_switch_tasks_in_fifo_order_in_interpreter_and_jit() {
+fn backward_edges_switch_tasks_in_fifo_order() {
     let engine = Engine::builder().build().unwrap();
     let module = engine
         .compile(
@@ -48,18 +48,15 @@ fn backward_edges_switch_tasks_in_fifo_order_in_interpreter_and_jit() {
         )
         .unwrap();
 
-    for jit in [false, true] {
-        let output = SharedWriter::default();
-        engine
-            .state_builder()
-            .jit(jit)
-            .safe_points_per_quantum(1)
-            .stdout(output.clone())
-            .build()
-            .run(&module)
-            .unwrap();
-        assert_eq!(output.text(), "A\nB\nA\nB\nA\nB\n", "jit={jit}");
-    }
+    let output = SharedWriter::default();
+    engine
+        .state_builder()
+        .safe_points_per_quantum(1)
+        .stdout(output.clone())
+        .build()
+        .run(&module)
+        .unwrap();
+    assert_eq!(output.text(), "A\nB\nA\nB\nA\nB\n");
 }
 
 #[test]
@@ -77,18 +74,15 @@ fn fast_numeric_for_yields_only_when_another_task_is_live() {
         )
         .unwrap();
 
-    for jit in [false, true] {
-        let output = SharedWriter::default();
-        engine
-            .state_builder()
-            .jit(jit)
-            .safe_points_per_quantum(1)
-            .stdout(output.clone())
-            .build()
-            .run(&module)
-            .unwrap();
-        assert_eq!(output.text(), "long-start\nshort\nlong-end\n");
-    }
+    let output = SharedWriter::default();
+    engine
+        .state_builder()
+        .safe_points_per_quantum(1)
+        .stdout(output.clone())
+        .build()
+        .run(&module)
+        .unwrap();
+    assert_eq!(output.text(), "long-start\nshort\nlong-end\n");
 }
 
 #[test]
@@ -111,18 +105,15 @@ fn backward_goto_and_frame_changes_are_scheduler_safe_points() {
         )
         .unwrap();
 
-    for jit in [false, true] {
-        let output = SharedWriter::default();
-        engine
-            .state_builder()
-            .jit(jit)
-            .safe_points_per_quantum(2)
-            .stdout(output.clone())
-            .build()
-            .run(&module)
-            .unwrap();
-        assert_eq!(output.text(), "long-start\nshort\nlong-end\n", "jit={jit}");
-    }
+    let output = SharedWriter::default();
+    engine
+        .state_builder()
+        .safe_points_per_quantum(2)
+        .stdout(output.clone())
+        .build()
+        .run(&module)
+        .unwrap();
+    assert_eq!(output.text(), "long-start\nshort\nlong-end\n");
 }
 
 #[test]

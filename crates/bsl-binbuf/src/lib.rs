@@ -483,13 +483,9 @@ const FUNCTIONS: &[FunctionDescriptor] = &[
 /// двоичных данных и буфера остаются в переходном слое `bsl-rt`, пока
 /// `bsl-stream`, PDF и XDTO не переведены на общий двоичный протокол.
 pub const fn library() -> LibraryDescriptor {
-    LibraryDescriptor::new(
-        PACKAGE_NAME,
-        PACKAGE_VERSION,
-        bsl_rt::ObjectContextNeed::Reduced,
-    )
-    .with_functions(FUNCTIONS)
-    .with_constructors(CONSTRUCTORS)
+    LibraryDescriptor::new(PACKAGE_NAME, PACKAGE_VERSION)
+        .with_functions(FUNCTIONS)
+        .with_constructors(CONSTRUCTORS)
 }
 
 #[cfg(test)]

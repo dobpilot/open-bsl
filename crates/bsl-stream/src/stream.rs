@@ -907,7 +907,7 @@ pub(crate) static FILE_STREAMS_MANAGER_TYPE: TypeDescriptor = TypeDescriptor {
 #[derive(Debug)]
 struct FileStreamsManager {
     /// Файловая система сессии: менеджер открывает файлы в СВОИХ методах,
-    /// а те под JIT идут нативным путём без контекста, — потому владеет `Rc`.
+    /// поэтому владеет `Rc` и не зависит от времени жизни контекста вызова.
     files: Rc<dyn FileSystem>,
 }
 
@@ -1503,12 +1503,8 @@ mod tests {
     fn a_shared_spelling_without_a_declared_owner_is_rejected() {
         static AMBIGUOUS_TYPES: &[&bsl_rt::TypeDescriptor] =
             &[&MEMORY_STREAM_TYPE, &FILE_STREAM_TYPE];
-        let ambiguous = bsl_rt::LibraryDescriptor::new(
-            crate::PACKAGE_NAME,
-            crate::PACKAGE_VERSION,
-            bsl_rt::ObjectContextNeed::Reduced,
-        )
-        .with_types(AMBIGUOUS_TYPES);
+        let ambiguous = bsl_rt::LibraryDescriptor::new(crate::PACKAGE_NAME, crate::PACKAGE_VERSION)
+            .with_types(AMBIGUOUS_TYPES);
         let mut builder = bsl_rt::RuntimeBuilder::new();
         builder.register(bsl_rt::core_library());
         builder.register(ambiguous);

@@ -115,7 +115,7 @@ mod tests {
 
     fn with_context<T>(f: impl FnOnce(&mut CallContext<'_>) -> T) -> T {
         let mut shapes = bsl_rt::RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
-        let mut context = CallContext::native(&mut shapes, |_value, _spec| {
+        let mut context = CallContext::minimal(&mut shapes, |_value, _spec| {
             unreachable!("методы ЧтениеТекста не форматируют значения")
         });
         f(&mut context)

@@ -242,15 +242,18 @@ run_once() {
 gate_one() {
     local script="$1" mode="$2" rounds="${3:-7}" thresh="${4:-5}" role="${5:-цель}"
     local base_flags="" cand_flags="--optimize=copy-elim"
-    if [ "$mode" = jit ]; then
-        base_flags="--jit"; cand_flags="--jit --optimize=copy-elim"
+    if [ "$mode" = full ]; then
+        # Вторая строка показывает вклад `copy-elim` поверх остальных
+        # проходов голого `--optimize`, а не повторяет одиночный замер.
+        base_flags="--optimize=const-fold,const-prop,ssa-const"
+        cand_flags="--optimize"
     fi
     # Совпал ли байт-код — ФАКТ, который печатается рядом с вердиктом, а
     # не заменяет его. Сравнивается листинг целиком, а не число
     # исполненных инструкций: округлённый до сотых ноль идентичности не
     # доказывает.
     local same=""
-    if diff -q <(emit_full "" "$script") <(emit_full "--optimize=copy-elim" "$script") >/dev/null 2>&1; then
+    if diff -q <(emit_full "$base_flags" "$script") <(emit_full "$cand_flags" "$script") >/dev/null 2>&1; then
         same="  [байт-код тот же]"
     fi
     local i
@@ -318,8 +321,8 @@ section_gate() {
         local role=цель
         [ "$group" = канарейки ] && role=канарейка
         for f in "${list[@]}"; do
-            gate_one "$f" interp "$GATE_ROUNDS" "$GATE_THRESHOLD" "$role" || failed=$((failed + 1))
-            gate_one "$f" jit "$GATE_ROUNDS" "$GATE_THRESHOLD" "$role" || failed=$((failed + 1))
+            gate_one "$f" plain "$GATE_ROUNDS" "$GATE_THRESHOLD" "$role" || failed=$((failed + 1))
+            gate_one "$f" full "$GATE_ROUNDS" "$GATE_THRESHOLD" "$role" || failed=$((failed + 1))
         done
     done
     if [ "$failed" -gt 0 ]; then

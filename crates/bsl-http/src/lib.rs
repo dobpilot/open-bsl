@@ -26,18 +26,14 @@ pub const fn system_factory() -> SystemHttpClientFactory {
 /// Дескриптор HTTP-компонента. Объекты языка добавляются следующим
 /// вертикальным срезом поверх уже готового host-контракта.
 pub const fn library() -> bsl_rt::LibraryDescriptor {
-    bsl_rt::LibraryDescriptor::new(
-        PACKAGE_NAME,
-        PACKAGE_VERSION,
-        bsl_rt::ObjectContextNeed::Full,
-    )
-    .with_dependencies(&[bsl_rt::LibraryDependency {
-        package: bsl_stream::PACKAGE_NAME,
-        version: bsl_stream::PACKAGE_VERSION,
-    }])
-    .with_constructors(CONSTRUCTORS)
-    .with_types(TYPES)
-    .with_object_member_groups(OBJECT_MEMBER_GROUPS)
+    bsl_rt::LibraryDescriptor::new(PACKAGE_NAME, PACKAGE_VERSION)
+        .with_dependencies(&[bsl_rt::LibraryDependency {
+            package: bsl_stream::PACKAGE_NAME,
+            version: bsl_stream::PACKAGE_VERSION,
+        }])
+        .with_constructors(CONSTRUCTORS)
+        .with_types(TYPES)
+        .with_object_member_groups(OBJECT_MEMBER_GROUPS)
 }
 
 const OBJECT_MEMBER_GROUPS: &[&[bsl_rt::ObjectMembersDescriptor]] = &[objects::API_MEMBERS];

@@ -3,7 +3,7 @@
 use bsl_bytecode::Program;
 use bsl_rt::{BslValue, RtError};
 use bsl_vm::{
-    CatalogContext, DebugAction, DebugHook, DebugPosition, DebugValues, ExecutionWaker, JitMode,
+    CatalogContext, DebugAction, DebugHook, DebugPosition, DebugValues, ExecutionWaker,
     ProgramExecution, ProgramPoll, ROOT_MODULE, SchedulerConfig, SessionModules,
 };
 
@@ -55,7 +55,6 @@ fn execution_interfaces_keep_their_root_paths() {
     let _: Option<ProgramExecution> = None;
     let _: Option<ExecutionWaker> = None;
     let _: u32 = ROOT_MODULE;
-    let _: JitMode = JitMode::Off;
     let scheduler = SchedulerConfig {
         safe_points_per_quantum: 7,
     };

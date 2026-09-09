@@ -18,9 +18,8 @@ fn a_run_allocates_both_cache_slots_for_every_instruction() {
     builder.register(bsl_rt::core_library());
     let registry = builder.build().expect("ядро реестра собирается");
     let env = bsl_rt::HostEnv::process();
-    let mut execution =
-        ProgramExecution::start_with_registry(&program, &registry, JitMode::Off, &env)
-            .expect("программа связывается");
+    let mut execution = ProgramExecution::start_with_registry(&program, &registry, &env)
+        .expect("программа связывается");
 
     assert_eq!(execution.caches.prop.len(), program.chunks.len());
     assert_eq!(execution.caches.method.len(), program.chunks.len());
@@ -60,12 +59,12 @@ fn a_second_run_of_the_same_program_starts_with_cold_caches() {
     builder.register(bsl_rt::core_library());
     let registry = builder.build().expect("ядро реестра собирается");
     let env = bsl_rt::HostEnv::process();
-    let first = ProgramExecution::start_with_registry(&program, &registry, JitMode::Off, &env)
+    let first = ProgramExecution::start_with_registry(&program, &registry, &env)
         .expect("первый прогон связывается");
     *first.caches.prop[0][0].borrow_mut() = Some((bsl_rt::ShapeTable::new().empty(), 0));
     *first.caches.method[0][0].borrow_mut() = Some((0, None));
 
-    let second = ProgramExecution::start_with_registry(&program, &registry, JitMode::Off, &env)
+    let second = ProgramExecution::start_with_registry(&program, &registry, &env)
         .expect("второй прогон связывается");
     assert!(second.caches.prop[0][0].borrow().is_none());
     assert!(second.caches.method[0][0].borrow().is_none());
@@ -168,7 +167,6 @@ fn run_unverified(program: &Program) -> Result<BslValue, RtError> {
         program,
         0,
         stack,
-        JitMode::Off,
         &linked,
         &mut host,
         &mut module_state,
@@ -230,7 +228,6 @@ fn run_source_with_hook(src: &str, hook: Box<dyn crate::DebugHook>) -> Result<Bs
         &program,
         0,
         stack,
-        JitMode::Off,
         &linked,
         &mut host,
         &mut module_state,
@@ -239,7 +236,7 @@ fn run_source_with_hook(src: &str, hook: Box<dyn crate::DebugHook>) -> Result<Bs
     .map(|(v, _)| v)
 }
 
-fn run_with_dynamic(program: &Program, jit_mode: JitMode) -> Result<BslValue, RtError> {
+fn run_with_dynamic(program: &Program) -> Result<BslValue, RtError> {
     let mut env = bsl_rt::HostEnv::process();
     let mut stdout = std::io::stdout().lock();
     let mut stderr = std::io::stderr().lock();
@@ -247,7 +244,6 @@ fn run_with_dynamic(program: &Program, jit_mode: JitMode) -> Result<BslValue, Rt
     run_program_with_host(
         program,
         None,
-        jit_mode,
         &mut stdout,
         &mut stderr,
         Some(&mut dynamic),
@@ -259,7 +255,6 @@ fn run_with_dynamic(program: &Program, jit_mode: JitMode) -> Result<BslValue, Rt
 fn run_with_dynamic_and_registry(
     program: &Program,
     registry: &bsl_rt::RuntimeRegistry,
-    jit_mode: JitMode,
 ) -> Result<BslValue, RtError> {
     let mut env = bsl_rt::HostEnv::process();
     let mut stdout = std::io::stdout().lock();
@@ -268,7 +263,6 @@ fn run_with_dynamic_and_registry(
     run_program_with_host(
         program,
         Some(registry),
-        jit_mode,
         &mut stdout,
         &mut stderr,
         Some(&mut dynamic),
@@ -291,8 +285,7 @@ fn run_configuration(
     let mut stdout = std::io::stdout().lock();
     let mut stderr = std::io::stderr().lock();
     let mut dynamic = TestDynamic::bare();
-    let mut execution =
-        ProgramExecution::start_with_registry(entry, &registry, JitMode::Off, &env)?;
+    let mut execution = ProgramExecution::start_with_registry(entry, &registry, &env)?;
     execution.attach_catalog(catalog);
     loop {
         match execution.poll_configuration_with_registry_and_io(
@@ -566,7 +559,7 @@ fn run_src(src: &str) -> BslValue {
     let prog = parse(src).unwrap_or_else(|e| panic!("parse error: {e:?}"));
     let resolved = resolve_program(&prog.items).unwrap_or_else(|e| panic!("sema error: {e:?}"));
     let program = compile_program(&resolved).unwrap_or_else(|e| panic!("compile error: {e:?}"));
-    run_with_dynamic(&program, JitMode::Off).unwrap_or_else(|e| panic!("runtime error: {e:?}"))
+    run_with_dynamic(&program).unwrap_or_else(|e| panic!("runtime error: {e:?}"))
 }
 
 #[test]
@@ -655,20 +648,6 @@ fn await_of_an_ordinary_value_yields_and_returns_that_value() {
 }
 
 #[test]
-fn jit_and_interpreter_agree_on_async_fallbacks() {
-    let program = compile_src(
-        "Асинх Функция Ф() Возврат 42; КонецФункции\n\
-         Асинх Процедура П()\n\
-             Если Ждать Ф() <> 42 Тогда ВызватьИсключение; КонецЕсли;\n\
-         КонецПроцедуры\n\
-         П(); Возврат 7;",
-    );
-    let interpreted = run_with_dynamic(&program, JitMode::Off).unwrap();
-    let jitted = run_with_dynamic(&program, JitMode::On).unwrap();
-    assert_eq!(jitted, interpreted);
-}
-
-#[test]
 fn dynamic_await_is_allowed_only_from_an_async_frame() {
     let value = run_src(
         "Асинх Функция Ответ() Возврат 42; КонецФункции\n\
@@ -697,7 +676,7 @@ fn run_src_with_json(src: &str) -> BslValue {
     let resolved = bsl_sema::resolve_program_with_registry(&prog.items, &registry)
         .unwrap_or_else(|e| panic!("sema error: {e:?}"));
     let program = compile_program(&resolved).unwrap_or_else(|e| panic!("compile error: {e:?}"));
-    run_with_dynamic_and_registry(&program, &registry, JitMode::Off)
+    run_with_dynamic_and_registry(&program, &registry)
         .unwrap_or_else(|e| panic!("runtime error: {e:?}"))
 }
 
@@ -889,20 +868,15 @@ fn test_component_registry() -> bsl_rt::RuntimeRegistry {
         .register(bsl_rt::LibraryDescriptor::new(
             bsl_rt::PACKAGE_NAME,
             bsl_rt::PACKAGE_VERSION,
-            bsl_rt::ObjectContextNeed::Reduced,
         ))
         .register(
-            bsl_rt::LibraryDescriptor::new(
-                "bsl-test-host",
-                "1.2.3",
-                bsl_rt::ObjectContextNeed::Reduced,
-            )
-            .with_dependencies(&[bsl_rt::LibraryDependency {
-                package: bsl_rt::PACKAGE_NAME,
-                version: bsl_rt::PACKAGE_VERSION,
-            }])
-            .with_functions(TEST_COMPONENT_FUNCTIONS)
-            .with_constructors(TEST_COMPONENT_CONSTRUCTORS),
+            bsl_rt::LibraryDescriptor::new("bsl-test-host", "1.2.3")
+                .with_dependencies(&[bsl_rt::LibraryDependency {
+                    package: bsl_rt::PACKAGE_NAME,
+                    version: bsl_rt::PACKAGE_VERSION,
+                }])
+                .with_functions(TEST_COMPONENT_FUNCTIONS)
+                .with_constructors(TEST_COMPONENT_CONSTRUCTORS),
         );
     builder.build().unwrap()
 }
@@ -933,11 +907,7 @@ fn component_function_resolves_compiles_links_and_runs() {
         }
     )));
     assert_eq!(
-        run_with_dynamic_and_registry(&program, &registry, JitMode::Off).unwrap(),
-        num("42")
-    );
-    assert_eq!(
-        run_with_dynamic_and_registry(&program, &registry, JitMode::On).unwrap(),
+        run_with_dynamic_and_registry(&program, &registry).unwrap(),
         num("42")
     );
 }
@@ -951,7 +921,7 @@ fn component_mismatch_is_rejected_before_execution() {
     program.requirements[1].version = "9.9.9".to_string();
 
     assert!(matches!(
-        run_with_dynamic_and_registry(&program, &registry, JitMode::Off),
+        run_with_dynamic_and_registry(&program, &registry),
         Err(RtError::Link(message)) if message.contains("9.9.9")
     ));
 }
@@ -973,7 +943,7 @@ fn component_constructor_resolves_compiles_links_and_runs() {
         }
     )));
     assert_eq!(
-        run_with_dynamic_and_registry(&program, &registry, JitMode::Off).unwrap(),
+        run_with_dynamic_and_registry(&program, &registry).unwrap(),
         num("43")
     );
 }
@@ -982,8 +952,7 @@ fn component_constructor_resolves_compiles_links_and_runs() {
 /// то конвертированный тип со статической таблицей (`ЗаписьJSON`), то
 /// хостовый без неё. Ячейка кэша метода (см. `cached_component_method`)
 /// обязана перечитываться при смене таблицы получателя, а тип без
-/// имени в таблице — уходить строковым путём с прежней ошибкой; JIT
-/// идёт тем же кэшем через шим.
+/// имени в таблице — уходить строковым путём с прежней ошибкой.
 #[test]
 fn a_polymorphic_open_call_site_revalidates_its_method_cache() {
     let mut builder = bsl_rt::RuntimeBuilder::new();
@@ -991,17 +960,13 @@ fn a_polymorphic_open_call_site_revalidates_its_method_cache() {
         .register(bsl_rt::core_library())
         .register(bsl_json::library())
         .register(
-            bsl_rt::LibraryDescriptor::new(
-                "bsl-test-host",
-                "1.2.3",
-                bsl_rt::ObjectContextNeed::Reduced,
-            )
-            .with_dependencies(&[bsl_rt::LibraryDependency {
-                package: bsl_rt::PACKAGE_NAME,
-                version: bsl_rt::PACKAGE_VERSION,
-            }])
-            .with_functions(TEST_COMPONENT_FUNCTIONS)
-            .with_constructors(TEST_COMPONENT_CONSTRUCTORS),
+            bsl_rt::LibraryDescriptor::new("bsl-test-host", "1.2.3")
+                .with_dependencies(&[bsl_rt::LibraryDependency {
+                    package: bsl_rt::PACKAGE_NAME,
+                    version: bsl_rt::PACKAGE_VERSION,
+                }])
+                .with_functions(TEST_COMPONENT_FUNCTIONS)
+                .with_constructors(TEST_COMPONENT_CONSTRUCTORS),
         );
     let registry = builder.build().unwrap();
     let program = compile_with_registry(
@@ -1026,11 +991,7 @@ fn a_polymorphic_open_call_site_revalidates_its_method_cache() {
     );
     let expected = BslValue::Str(bsl_rt::BslString::from_str("+-+-"));
     assert_eq!(
-        run_with_dynamic_and_registry(&program, &registry, JitMode::Off).unwrap(),
-        expected
-    );
-    assert_eq!(
-        run_with_dynamic_and_registry(&program, &registry, JitMode::On).unwrap(),
+        run_with_dynamic_and_registry(&program, &registry).unwrap(),
         expected
     );
 }
@@ -1121,11 +1082,7 @@ fn component_object_owns_properties_methods_and_indexes() {
     );
 
     assert_eq!(
-        run_with_dynamic_and_registry(&program, &registry, JitMode::Off).unwrap(),
-        num("51")
-    );
-    assert_eq!(
-        run_with_dynamic_and_registry(&program, &registry, JitMode::On).unwrap(),
+        run_with_dynamic_and_registry(&program, &registry).unwrap(),
         num("51")
     );
 }
@@ -1137,13 +1094,13 @@ fn dynamic_fragment_resolves_its_own_component_requirement() {
 
     assert_eq!(program.requirements.len(), 1);
     assert_eq!(
-        run_with_dynamic_and_registry(&program, &registry, JitMode::Off).unwrap(),
+        run_with_dynamic_and_registry(&program, &registry).unwrap(),
         num("42")
     );
 }
 
 #[test]
-fn host_streams_are_used_by_builtins_components_dynamic_code_and_jit() {
+fn host_streams_are_used_by_builtins_components_and_dynamic_code() {
     let registry = test_component_registry();
     let program = compile_with_registry(
         "Сообщить(\"main\");\n\
@@ -1152,27 +1109,23 @@ fn host_streams_are_used_by_builtins_components_dynamic_code_and_jit() {
         &registry,
     );
 
-    for jit in [false, true] {
-        let mut stdout = Vec::new();
-        let mut stderr = Vec::new();
-        let jit_mode = if jit { JitMode::On } else { JitMode::Off };
-        let result = run_program_with_registry_and_io(
-            &program,
-            &registry,
-            jit_mode,
-            &mut stdout,
-            &mut stderr,
-            &mut TestDynamic::with_registry(&registry),
-            &mut bsl_rt::HostEnv::process(),
-        );
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    let result = run_program_with_registry_and_io(
+        &program,
+        &registry,
+        &mut stdout,
+        &mut stderr,
+        &mut TestDynamic::with_registry(&registry),
+        &mut bsl_rt::HostEnv::process(),
+    );
 
-        assert_eq!(result.unwrap(), BslValue::Undefined);
-        assert_eq!(
-            String::from_utf8(stdout).unwrap(),
-            "main\ndynamic\ncomponent\n"
-        );
-        assert!(stderr.is_empty());
-    }
+    assert_eq!(result.unwrap(), BslValue::Undefined);
+    assert_eq!(
+        String::from_utf8(stdout).unwrap(),
+        "main\ndynamic\ncomponent\n"
+    );
+    assert!(stderr.is_empty());
 }
 
 struct FailingWriter;
@@ -1198,7 +1151,6 @@ fn host_writer_error_is_returned_without_a_panic() {
         run_program_with_registry_and_io(
             &program,
             &registry,
-            JitMode::Off,
             &mut stdout,
             &mut stderr,
             &mut TestDynamic::with_registry(&registry),
@@ -1299,7 +1251,7 @@ fn run_src_err(src: &str) -> RtError {
     let prog = parse(src).unwrap();
     let resolved = resolve_program(&prog.items).unwrap();
     let program = compile_program(&resolved).unwrap();
-    run_with_dynamic(&program, JitMode::Off).unwrap_err()
+    run_with_dynamic(&program).unwrap_err()
 }
 
 fn num(s: &str) -> BslValue {
@@ -1340,7 +1292,7 @@ fn exception_on_a_non_first_bundle_member_lands_in_the_right_handler() {
          независимо); если компилятор стал раскладывать иначе — \
          подберите скрипту новую пару"
     );
-    let v = run_with_dynamic(&program, JitMode::Off).unwrap();
+    let v = run_with_dynamic(&program).unwrap();
     // `г = 7` исполнилось, деление упало, `г = 100` не исполнялось.
     assert_eq!(v, num("7"));
 }
@@ -2032,51 +1984,39 @@ fn corrupt_program(instrs: Vec<Instr>) -> Program {
 fn corrupt_bytecode_is_an_error_not_a_panic() {
     // Регистр за границей кадра.
     assert!(matches!(
-        run_with_dynamic(
-            &corrupt_program(vec![Instr::Move { dst: 200, src: 0 }]),
-            JitMode::Off
-        ),
+        run_with_dynamic(&corrupt_program(vec![Instr::Move { dst: 200, src: 0 }])),
         Err(RtError::InvalidBytecode(_))
     ));
     // Номер константы за границей таблицы констант.
     assert!(matches!(
-        run_with_dynamic(
-            &corrupt_program(vec![Instr::LoadConst { dst: 0, k: 42 }]),
-            JitMode::Off
-        ),
+        run_with_dynamic(&corrupt_program(vec![Instr::LoadConst { dst: 0, k: 42 }])),
         Err(RtError::InvalidBytecode(_))
     ));
     // Номер вызываемого чанка за границей таблицы функций.
     assert!(matches!(
-        run_with_dynamic(
-            &corrupt_program(vec![Instr::Call {
-                func: 99,
-                base: 0,
-                arg_modes: 0,
-                ret: 0,
-            }]),
-            JitMode::Off
-        ),
+        run_with_dynamic(&corrupt_program(vec![Instr::Call {
+            func: 99,
+            base: 0,
+            arg_modes: 0,
+            ret: 0,
+        }])),
         Err(RtError::InvalidBytecode(_))
     ));
     // Номер формы за границей таблицы форм.
     assert!(matches!(
-        run_with_dynamic(
-            &corrupt_program(vec![Instr::NewStructure {
-                dst: 0,
-                shape: 7,
-                base: 0,
-                count: 0,
-            }]),
-            JitMode::Off
-        ),
+        run_with_dynamic(&corrupt_program(vec![Instr::NewStructure {
+            dst: 0,
+            shape: 7,
+            base: 0,
+            count: 0,
+        }])),
         Err(RtError::InvalidBytecode(_))
     ));
     // Программа вообще без чанка верхнего уровня.
     let mut empty = corrupt_program(Vec::new());
     empty.chunks.clear();
     assert!(matches!(
-        run_with_dynamic(&empty, JitMode::Off),
+        run_with_dynamic(&empty),
         Err(RtError::InvalidBytecode(_))
     ));
 }
@@ -3915,7 +3855,6 @@ fn a_dynamic_fragment_comes_from_the_host_not_from_the_vm() {
     let value = run_program_with_host(
         &program,
         None,
-        JitMode::Off,
         &mut stdout,
         &mut stderr,
         Some(&mut dynamic),
@@ -3950,7 +3889,6 @@ fn a_host_compile_failure_becomes_a_catchable_dynamic_error() {
         run_program_with_host(
             &program,
             None,
-            JitMode::Off,
             &mut stdout,
             &mut stderr,
             Some(&mut dynamic),
@@ -4340,7 +4278,6 @@ fn call_module_function_with_dynamic_eval_inside() {
         &mut stack,
         "Крутить",
         Vec::new(),
-        JitMode::Off,
         &linked,
         &mut host,
     )

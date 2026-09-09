@@ -29,7 +29,6 @@ enum Kind {
     EmitApiReference,
     RunBytecode,
     IngestMeasurements,
-    Jit,
 }
 
 struct Command {
@@ -90,21 +89,6 @@ const COMMANDS: &[Command] = &[
             "Раскладывает вывод в tests/conformance/measure/platform.tsv, сравнивает с",
             "нашим на том же скрипте и печатает расхождения. В КОДЕ НЕ ПРАВИТ НИЧЕГО:",
             "решение по каждому расхождению принимает человек.",
-        ],
-    },
-    Command {
-        flag: "--jit",
-        alias: None,
-        kind: Kind::Jit,
-        args: "<файл.bsl> [аргументы...]",
-        what: "исполнить скрипт, компилируя байт-код в машинный код",
-        details: &[
-            "Только x86-64 Linux; на других платформах ключ принимается и ничего не",
-            "меняет. Компилируются не все инструкции: чего JIT не умеет (вызовы,",
-            "возвраты, Выполнить, работа с объектами) — исполняет интерпретатор, и",
-            "переключение туда-обратно происходит само. Семантика у обоих режимов",
-            "ОДНА: нативный код зовёт те же функции, что и ветки интерпретатора,",
-            "и это проверяется прогоном всего корпуса фикстур обоими путями.",
         ],
     },
     Command {
@@ -200,7 +184,7 @@ fn main() {
     let mut args: Vec<String> = std::env::args().collect();
     // `--optimize` — модификатор, а не команда: он снимается из аргументов
     // до разбора, поэтому одинаково работает и перед именем скрипта, и
-    // рядом с `--jit`. Скрипту он не достаётся.
+    // рядом с именем скрипта. Скрипту он не достаётся.
     if let Some(i) = args
         .iter()
         .position(|a| a == "--optimize" || a.starts_with("--optimize="))
@@ -255,7 +239,7 @@ fn main() {
         Some(path) => {
             // Всё после имени скрипта — его собственные аргументы: скрипт
             // читает их массивом АргументыКоманднойСтроки.
-            run_file(path, Engine::Interpreter, args[2..].to_vec());
+            run_file(path, args[2..].to_vec());
             0
         }
     };
@@ -286,13 +270,6 @@ fn run_command(cmd: &Command, args: &[String]) -> i32 {
             Some(input) => ingest::run(input, args.get(3).map(String::as_str)),
             None => missing_argument(cmd),
         },
-        Kind::Jit => match args.get(2) {
-            Some(path) => {
-                run_file(path, Engine::Jit, args[3..].to_vec());
-                0
-            }
-            None => missing_argument(cmd),
-        },
     }
 }
 
@@ -306,15 +283,7 @@ fn missing_argument(cmd: &Command) -> i32 {
     2
 }
 
-/// Чем исполнять скрипт. По умолчанию — интерпретатором; JIT включается
-/// только ключом, и никогда сам.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Engine {
-    Interpreter,
-    Jit,
-}
-
-fn run_file(path: &str, engine: Engine, arguments: Vec<String>) {
+fn run_file(path: &str, arguments: Vec<String>) {
     // Несовместимость ключей проверяется ДО того, как отладчик начнёт
     // слушать. Иначе редактор подключался бы к прогону, который всё равно
     // откажет на компиляции, — а ждал бы этого подключения тот, кто уже
@@ -436,7 +405,6 @@ fn run_file(path: &str, engine: Engine, arguments: Vec<String>) {
 
     let mut state = host
         .state_builder()
-        .jit(matches!(engine, Engine::Jit))
         .arguments(arguments)
         .message_sink(match debug.as_ref() {
             None => std::rc::Rc::new(StdoutMessageSink) as std::rc::Rc<dyn bsl_rt::UserMessageSink>,
@@ -506,8 +474,8 @@ fn run_file(path: &str, engine: Engine, arguments: Vec<String>) {
 /// по ключам `--debug*` и читаются точками сборки движка.
 ///
 /// `None` — отладка не запрошена. Ключ, как и `--optimize`, модификатор
-/// обычного запуска, а не команда: он сочетается и с `--jit`, и с прямым
-/// запуском файла, поэтому в таблицу `COMMANDS` не входит.
+/// обычного запуска, а не команда: он сочетается с прямым запуском файла,
+/// поэтому в таблицу `COMMANDS` не входит.
 static DEBUG_ENDPOINT: std::sync::OnceLock<Option<std::net::SocketAddr>> =
     std::sync::OnceLock::new();
 
@@ -527,7 +495,7 @@ const DEBUG_PORT_DEFAULT: u16 = 4711;
 /// Выбор оптимизаций процесса: ставится один раз в [`main`] по ключу
 /// `--optimize` и читается всеми точками сборки движка. Ключ — модификатор
 /// обычного запуска, а не команда, поэтому в таблицу `COMMANDS` он не
-/// входит: он сочетается и с `--jit`, и с `--emit-bytecode`.
+/// входит: он сочетается с прямым запуском и с `--emit-bytecode`.
 static OPTIMIZE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 
 /// Имена проходов для `--optimize=список` и их биты. Единый источник:

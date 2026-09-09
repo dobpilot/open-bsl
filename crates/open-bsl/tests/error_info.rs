@@ -1,7 +1,7 @@
 use open_bsl::Engine;
 
 #[test]
-fn error_info_is_a_stable_snapshot_in_interpreter_and_jit() {
+fn error_info_is_a_stable_snapshot() {
     let engine = Engine::builder().build().unwrap();
     let module = engine
         .compile(
@@ -22,15 +22,8 @@ fn error_info_is_a_stable_snapshot_in_interpreter_and_jit() {
         )
         .unwrap();
 
-    for jit in [false, true] {
-        let value = engine
-            .state_builder()
-            .jit(jit)
-            .build()
-            .run(&module)
-            .unwrap();
-        assert_eq!(value.to_string(), "connector-boom");
-    }
+    let value = engine.new_state().run(&module).unwrap();
+    assert_eq!(value.to_string(), "connector-boom");
 }
 
 #[test]

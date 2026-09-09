@@ -94,8 +94,7 @@ pub fn new_pdf_attachments() -> BslValue {
 pub struct DocumentObject {
     pub(crate) state: Rc<RefCell<PdfDocState>>,
     /// Файловая система сессии (ABI-G): пришла к документу при построении и
-    /// держится здесь, потому что `Прочитать`/`Записать` — методы, а под JIT
-    /// метод исполняется по натуральному пути без доступа к контексту.
+    /// держится здесь, потому что `Прочитать`/`Записать` вызываются позже.
     pub(crate) files: Rc<dyn bsl_rt::FileSystem>,
 }
 

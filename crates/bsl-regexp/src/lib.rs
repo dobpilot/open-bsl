@@ -823,14 +823,10 @@ const TYPES: &[&TypeDescriptor] = &[&crate::GROUP_TYPE, &crate::MATCH_TYPE];
 
 /// Дескриптор статически подключаемого regex-компонента.
 pub const fn library() -> LibraryDescriptor {
-    LibraryDescriptor::new(
-        env!("CARGO_PKG_NAME"),
-        env!("CARGO_PKG_VERSION"),
-        bsl_rt::ObjectContextNeed::Reduced,
-    )
-    .with_functions(FUNCTIONS)
-    .with_types(TYPES)
-    .with_object_member_groups(OBJECT_MEMBER_GROUPS)
+    LibraryDescriptor::new(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))
+        .with_functions(FUNCTIONS)
+        .with_types(TYPES)
+        .with_object_member_groups(OBJECT_MEMBER_GROUPS)
 }
 
 #[cfg(test)]
@@ -856,8 +852,8 @@ mod tests {
 
     fn get_property(value: &BslValue, name: &str) -> RtResult<BslValue> {
         let mut shapes = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
-        // Нативный контекст: свойствам regex ни потоки, ни зона не нужны.
-        let mut context = CallContext::native(&mut shapes, |_value, _spec| {
+        // Минимальный контекст: свойствам regex ни потоки, ни зона не нужны.
+        let mut context = CallContext::minimal(&mut shapes, |_value, _spec| {
             unreachable!("форматирование в regex-свойствах не используется")
         });
         value
@@ -868,8 +864,8 @@ mod tests {
 
     fn get_groups(value: &BslValue) -> RtResult<BslValue> {
         let mut shapes = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
-        // Нативный контекст: методу `ПолучитьГруппы` ни потоки, ни зона не нужны.
-        let mut context = CallContext::native(&mut shapes, |_value, _spec| {
+        // Минимальный контекст: методу `ПолучитьГруппы` ни потоки, ни зона не нужны.
+        let mut context = CallContext::minimal(&mut shapes, |_value, _spec| {
             unreachable!("форматирование в regex-методе не используется")
         });
         value.object_ref().ok_or(RtError::NotAnObject)?.call_method(

@@ -187,7 +187,7 @@ onec_median() {
         }' "$ONEC_FILE"
 }
 
-printf '%-18s %10s %10s %10s %10s %10s %10s %10s\n' сценарий bsl-cli bsl-cli+jit lua luajit python oscript 1С
+printf '%-18s %10s %10s %10s %10s %10s %10s %10s\n' сценарий bsl-cli bsl-cli+opt lua luajit python oscript 1С
 printf '%-18s %10s %10s %10s %10s %10s %10s %10s\n' ------------------ ---------- ---------- ---------- ---------- ---------- ---------- ----------
 
 for bsl in benchmarks/*.bsl; do
@@ -201,9 +201,12 @@ for bsl in benchmarks/*.bsl; do
         # Только СВОИ файлы: `$name.1c.out` кладёт отдельный прогон на
         # платформе, и стирать его здесь значило бы каждый раз терять
         # эталон, с которым сличаемся.
-        for rt in bsl-cli bsl-cli-jit lua luajit python oscript; do
+        for rt in bsl-cli bsl-cli-opt lua luajit python oscript; do
             rm -f "$SCRATCH/$name.$rt.out"
         done
+        # След от версии runner с удалённой колонкой `bsl-cli --jit` не
+        # должен участвовать в сверке нового прогона.
+        rm -f "$SCRATCH/$name.bsl-cli-jit.out"
         rm -f "$SCRATCH/test.csv"
         case $name in csv_write*) workdir=$SCRATCH ;; esac
         HEAVY_SEEN=yes
@@ -211,11 +214,10 @@ for bsl in benchmarks/*.bsl; do
 
     ours=$(median_ms "$BSL_CLI" "$bsl" "$workdir") || ours="ошибка"
     is_heavy "$name" && keep_output "$name" bsl-cli
-    # Тот же бинарник с ключом --jit: компиляция байт-кода в машинный код.
-    # Отдельной колонкой, а не заменой: JIT включается только ключом, и
-    # обычное число обязано остаться на виду.
-    jit_ms=$(median_ms "$BSL_CLI --jit" "$bsl" "$workdir") || jit_ms="ошибка"
-    is_heavy "$name" && keep_output "$name" bsl-cli-jit
+    # Тот же бинарник со всеми проходами `--optimize`. Отдельная колонка
+    # сохраняет цену и результат обычной компиляции на виду.
+    optimized_ms=$(median_ms "$BSL_CLI --optimize" "$bsl" "$workdir") || optimized_ms="ошибка"
+    is_heavy "$name" && keep_output "$name" bsl-cli-opt
     lua_ms="-"
     luajit_ms="-"
     python_ms="-"
@@ -240,7 +242,7 @@ for bsl in benchmarks/*.bsl; do
     fi
 
     onec_ms=$(onec_median "$name")
-    printf '%-18s %10s %10s %10s %10s %10s %10s %10s\n' "$name" "$ours" "$jit_ms" "$lua_ms" "$luajit_ms" "$python_ms" "$os_ms" "$onec_ms"
+    printf '%-18s %10s %10s %10s %10s %10s %10s %10s\n' "$name" "$ours" "$optimized_ms" "$lua_ms" "$luajit_ms" "$python_ms" "$os_ms" "$onec_ms"
 done
 
 echo

@@ -112,14 +112,10 @@ const OBJECT_MEMBER_GROUPS: &[&[bsl_rt::ObjectMembersDescriptor]] =
 
 /// Дескриптор статически подключаемого компонента архивов.
 pub const fn library() -> LibraryDescriptor {
-    LibraryDescriptor::new(
-        PACKAGE_NAME,
-        PACKAGE_VERSION,
-        bsl_rt::ObjectContextNeed::Reduced,
-    )
-    .with_constructors(CONSTRUCTORS)
-    .with_types(TYPES)
-    .with_object_member_groups(OBJECT_MEMBER_GROUPS)
+    LibraryDescriptor::new(PACKAGE_NAME, PACKAGE_VERSION)
+        .with_constructors(CONSTRUCTORS)
+        .with_types(TYPES)
+        .with_object_member_groups(OBJECT_MEMBER_GROUPS)
 }
 
 #[cfg(test)]

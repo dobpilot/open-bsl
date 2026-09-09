@@ -80,13 +80,11 @@ fn all_async_http_methods_use_the_execution_promise_table() {
         )
         .unwrap();
 
-    for jit in [false, true] {
-        let factory = ImmediateFactory {
-            requests: Arc::clone(&requests),
-        };
-        let mut state = engine.state_builder().network(factory).jit(jit).build();
-        state.run(&module).unwrap();
-    }
+    let factory = ImmediateFactory {
+        requests: Arc::clone(&requests),
+    };
+    let mut state = engine.state_builder().network(factory).build();
+    state.run(&module).unwrap();
 
     let methods: Vec<_> = requests
         .lock()
@@ -96,10 +94,7 @@ fn all_async_http_methods_use_the_execution_promise_table() {
         .collect();
     assert_eq!(
         methods,
-        [
-            "OPTIONS", "DELETE", "GET", "HEAD", "PATCH", "POST", "PUT", "OPTIONS", "DELETE", "GET",
-            "HEAD", "PATCH", "POST", "PUT"
-        ]
+        ["OPTIONS", "DELETE", "GET", "HEAD", "PATCH", "POST", "PUT"]
     );
 }
 
@@ -122,17 +117,14 @@ fn all_sync_http_methods_use_the_same_wire_mapping() {
         )
         .unwrap();
 
-    for jit in [false, true] {
-        engine
-            .state_builder()
-            .network(ImmediateFactory {
-                requests: Arc::clone(&requests),
-            })
-            .jit(jit)
-            .build()
-            .run(&module)
-            .unwrap();
-    }
+    engine
+        .state_builder()
+        .network(ImmediateFactory {
+            requests: Arc::clone(&requests),
+        })
+        .build()
+        .run(&module)
+        .unwrap();
 
     let methods: Vec<_> = requests
         .lock()
@@ -142,10 +134,7 @@ fn all_sync_http_methods_use_the_same_wire_mapping() {
         .collect();
     assert_eq!(
         methods,
-        [
-            "OPTIONS", "DELETE", "GET", "HEAD", "PATCH", "POST", "PUT", "OPTIONS", "DELETE", "GET",
-            "HEAD", "PATCH", "POST", "PUT"
-        ]
+        ["OPTIONS", "DELETE", "GET", "HEAD", "PATCH", "POST", "PUT"]
     );
 }
 

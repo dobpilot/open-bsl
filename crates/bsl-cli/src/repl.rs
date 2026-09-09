@@ -334,8 +334,8 @@ fn eval_repl_line(line: &str, session: &mut Session) -> Result<BslValue, String>
     stack.resize(unit.chunk.n_regs as usize, BslValue::Undefined);
 
     // Потоки REPL — стандартные потоки процесса: `Сообщить` печатается в
-    // терминал, а не перехватывается; JIT в REPL выключен. Раньше эти три
-    // сервиса были зашиты в самой `run_repl_chunk_with_registry`, теперь она
+    // терминал, а не перехватывается. Раньше эти три сервиса были зашиты в
+    // самой `run_repl_chunk_with_registry`, теперь она
     // принимает их параметрами (см. C.2).
     let mut stdout = std::io::stdout();
     let mut stderr = std::io::stderr();
@@ -350,7 +350,6 @@ fn eval_repl_line(line: &str, session: &mut Session) -> Result<BslValue, String>
         stack,
         requirements.clone(),
         session.engine.registry(),
-        bsl_vm::JitMode::Off,
         &mut stdout,
         &mut stderr,
         &mut session.dynamic,

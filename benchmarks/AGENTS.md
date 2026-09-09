@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This directory contains cross-runtime benchmarks for the Open BSL Rust workspace. Each scenario starts with a `name.bsl` file; matching `name.lua` and `name.py` files provide comparable implementations where practical. `run.sh` discovers scenarios and reports median timings for `bsl-cli`, its JIT, Lua, LuaJIT, Python, OneScript, and recorded 1C results. Static inputs live in `data/`; platform aggregation lives in `1c/`. `lib/slaxml.lua` is vendored and locally patched—preserve the marked `ПРАВКА open-bsl` changes.
+This directory contains cross-runtime benchmarks for the Open BSL Rust workspace. Each scenario starts with a `name.bsl` file; matching `name.lua` and `name.py` files provide comparable implementations where practical. `run.sh` discovers scenarios and reports median timings for plain `bsl-cli`, `bsl-cli --optimize`, Lua, LuaJIT, Python, OneScript, and recorded 1C results. Static inputs live in `data/`; platform aggregation lives in `1c/`. `lib/slaxml.lua` is vendored and locally patched—preserve the marked `ПРАВКА open-bsl` changes.
 
 ## Build, Test, and Development Commands
 

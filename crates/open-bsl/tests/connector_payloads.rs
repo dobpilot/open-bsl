@@ -86,15 +86,12 @@ fn connector_multipart_and_gzip_round_trip_real_payloads() {
 
     let engine = Engine::builder().build().unwrap();
     let module = engine.compile(&source).unwrap();
-    for jit in [false, true] {
-        engine
-            .state_builder()
-            .jit(jit)
-            .random(FixedRandom)
-            .build()
-            .run(&module)
-            .unwrap();
-    }
+    engine
+        .state_builder()
+        .random(FixedRandom)
+        .build()
+        .run(&module)
+        .unwrap();
 }
 
 #[derive(Debug, Clone)]
@@ -227,7 +224,7 @@ BasicСессия.Аутентификация = НоваяАутентифик�
 
     let engine = Engine::builder().build().unwrap();
     let module = engine.compile(&source).unwrap();
-    for jit in [false, true] {
+    {
         let configs = Arc::new(Mutex::new(Vec::new()));
         let requests = Arc::new(Mutex::new(Vec::new()));
         let responses = Arc::new(Mutex::new(VecDeque::from([
@@ -252,7 +249,6 @@ BasicСессия.Аутентификация = НоваяАутентифик�
         ])));
         let result = engine
             .state_builder()
-            .jit(jit)
             .network(ScriptedFactory {
                 configs: Arc::clone(&configs),
                 requests: Arc::clone(&requests),
@@ -262,15 +258,15 @@ BasicСессия.Аутентификация = НоваяАутентифик�
             .run(&module);
         if let Err(error) = result {
             panic!(
-                "Connector flow, jit={jit}, requests={:?}, responses left={}: {error}",
+                "Connector flow, requests={:?}, responses left={}: {error}",
                 requests.lock().unwrap(),
                 responses.lock().unwrap().len()
             );
         }
 
-        assert!(responses.lock().unwrap().is_empty(), "jit={jit}");
+        assert!(responses.lock().unwrap().is_empty());
         let requests = requests.lock().unwrap();
-        assert_eq!(requests.len(), 14, "jit={jit}");
+        assert_eq!(requests.len(), 14);
         assert_eq!(requests[0].method, "GET");
         assert_eq!(requests[0].resource, "/start?q=a%20b");
         assert!(
@@ -310,7 +306,7 @@ BasicСессия.Аутентификация = НоваяАутентифик�
         drop(requests);
 
         let configs = configs.lock().unwrap();
-        assert_eq!(configs.len(), 5, "пул соединений Connector, jit={jit}");
+        assert_eq!(configs.len(), 5, "пул соединений Connector");
         assert_eq!(configs[1].host, "redirect.test");
         assert_eq!(configs[2].host, "other.test");
         assert_eq!(configs[4].host, "basic.test");
@@ -351,7 +347,7 @@ AWSПараметры.Заголовки.Вставить("x-amz-date", "2013052
 
     let engine = Engine::builder().build().unwrap();
     let module = engine.compile(&source).unwrap();
-    for jit in [false, true] {
+    {
         let configs = Arc::new(Mutex::new(Vec::new()));
         let requests = Arc::new(Mutex::new(Vec::new()));
         let responses = Arc::new(Mutex::new(VecDeque::from([
@@ -368,7 +364,6 @@ AWSПараметры.Заголовки.Вставить("x-amz-date", "2013052
         ])));
         let result = engine
             .state_builder()
-            .jit(jit)
             .random(FixedRandom)
             .network(ScriptedFactory {
                 configs: Arc::clone(&configs),
@@ -379,15 +374,15 @@ AWSПараметры.Заголовки.Вставить("x-amz-date", "2013052
             .run(&module);
         if let Err(error) = result {
             panic!(
-                "Connector auth, jit={jit}, requests={:?}, responses left={}: {error}",
+                "Connector auth, requests={:?}, responses left={}: {error}",
                 requests.lock().unwrap(),
                 responses.lock().unwrap().len()
             );
         }
 
-        assert!(responses.lock().unwrap().is_empty(), "jit={jit}");
+        assert!(responses.lock().unwrap().is_empty());
         let requests = requests.lock().unwrap();
-        assert_eq!(requests.len(), 3, "jit={jit}");
+        assert_eq!(requests.len(), 3);
         assert_eq!(requests[0].resource, "/dir/index.html");
         assert_eq!(requests[1].resource, "/dir/index.html");
         assert_eq!(
@@ -398,8 +393,7 @@ AWSПараметры.Заголовки.Вставить("x-amz-date", "2013052
                 .map(|(_, value)| value.as_str()),
             Some(
                 "Digest username=\"Mufasa\", realm=\"testrealm@host.com\", nonce=\"dcd98b7102dd2f0e8b11d0f600bfb0c093\", uri=\"/dir/index.html\", response=\"e14032188dd763dfad9092795bc08573\", opaque=\"5ccc069c403ebaf9f0171e9517f40e41\", algorithm=\"MD5\", qop=\"auth\", nc=00000001, cnonce=\"0000000000004000\""
-            ),
-            "jit={jit}"
+            )
         );
 
         assert_eq!(requests[2].resource, "/?lifecycle=");
@@ -411,8 +405,7 @@ AWSПараметры.Заголовки.Вставить("x-amz-date", "2013052
                 .map(|(_, value)| value.as_str()),
             Some(
                 "AWS4-HMAC-SHA256 Credential=AKIAIOSFODNN7EXAMPLE/20130524/us-east-1/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature=fea454ca298b7da1c68078a5d1bdbfbbe0d65c699e0f91ac7a200a0136783543"
-            ),
-            "jit={jit}"
+            )
         );
     }
 }

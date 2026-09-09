@@ -322,7 +322,6 @@ pub(super) fn prepare_job(
     let mut vm = bsl_vm::ProgramExecution::start_with_registry_and_scheduler(
         &module.program,
         engine.registry(),
-        bsl_vm::JitMode::Off,
         &state.host.env,
         state.scheduler,
     )

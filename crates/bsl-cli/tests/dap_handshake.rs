@@ -670,13 +670,10 @@ fn pause_reaches_a_run_that_never_stops_on_its_own() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// Считает остановки на точке останова, при желании — под `--jit`.
-fn count_stops(script: &std::path::Path, line: u32, jit: bool) -> usize {
+/// Считает остановки на точке останова.
+fn count_stops(script: &std::path::Path, line: u32) -> usize {
     let mut cmd = std::process::Command::new(env!("CARGO_BIN_EXE_bsl-cli"));
     cmd.arg("--debug");
-    if jit {
-        cmd.arg("--jit");
-    }
     let mut child = cmd
         .arg("--debug-port")
         .arg("0")
@@ -741,10 +738,7 @@ fn a_breakpoint_in_a_loop_body_fires_every_iteration() {
         "с = 0;\nДля ш = 1 По 5 Цикл\n    с = с + 1;\nКонецЦикла;\nСообщить(с);\n",
     )
     .expect("скрипт");
-    assert_eq!(count_stops(&script, 3, false), 5, "витков пять");
-    // И то же самое с JIT: нативный путь исполнял целые куски чанка, не
-    // возвращаясь во внешний цикл, и точка не срабатывала НИ РАЗУ.
-    assert_eq!(count_stops(&script, 3, true), 5, "с --jit тоже пять");
+    assert_eq!(count_stops(&script, 3), 5, "витков пять");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -762,7 +756,7 @@ fn a_breakpoint_moved_to_the_next_line_actually_fires_there() {
     // Точка просится на строку 2 (пустую); код — на строке 4.
     std::fs::write(&script, "а = 1;\n\n// комментарий\nб = 2;\n").expect("скрипт");
     assert_eq!(
-        count_stops(&script, 2, false),
+        count_stops(&script, 2),
         1,
         "перенесённая точка обязана сработать"
     );
@@ -947,11 +941,7 @@ fn a_forward_jump_inside_one_line_is_not_a_re_entry() {
     std::fs::create_dir_all(&dir).expect("каталог");
     let script = dir.join("вперёд.bsl");
     std::fs::write(&script, "а = Ложь И Истина;\nСообщить(а);\n").expect("скрипт");
-    assert_eq!(
-        count_stops(&script, 1, false),
-        1,
-        "переход вперёд — не виток"
-    );
+    assert_eq!(count_stops(&script, 1), 1, "переход вперёд — не виток");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -972,7 +962,7 @@ fn a_breakpoint_on_a_single_line_loop_fires_every_iteration() {
         "с = 0;\nДля ш = 1 По 4 Цикл с = с + 1; КонецЦикла;\nСообщить(с);\n",
     )
     .expect("скрипт");
-    assert_eq!(count_stops(&script, 2, false), 4, "витков четыре");
+    assert_eq!(count_stops(&script, 2), 4, "витков четыре");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

@@ -1555,7 +1555,7 @@ impl<'a> Compiler<'a> {
                 // `AExpr::Field`. Открытые `GetObjectProp`/`SetObjectProp`
                 // компилятор не выпускает вовсе; они живут в формате ради
                 // уже сериализованного байт-кода, поэтому их читает
-                // `text.rs` и исполняют интерпретатор и JIT.
+                // `text.rs` и исполняет VM.
                 let o = self.alloc_temp()?;
                 self.compile_expr(obj, o)?;
                 let name = self.names.intern(name);

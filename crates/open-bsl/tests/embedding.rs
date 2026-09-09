@@ -44,7 +44,7 @@ const HOST_FUNCTIONS: &[FunctionDescriptor] = &[FunctionDescriptor {
 }];
 
 fn host_library() -> LibraryDescriptor {
-    LibraryDescriptor::new("example-host", "1.0.0", bsl_rt::ObjectContextNeed::Reduced)
+    LibraryDescriptor::new("example-host", "1.0.0")
         .with_dependencies(&[LibraryDependency {
             package: bsl_rt::PACKAGE_NAME,
             version: bsl_rt::PACKAGE_VERSION,
@@ -77,7 +77,7 @@ fn state_exec_and_eval_hide_the_internal_pipeline() {
 
 #[cfg(feature = "stream")]
 #[test]
-fn binary_data_open_stream_agrees_between_interpreter_and_jit() {
+fn binary_data_opens_a_read_stream() {
     let engine = Engine::builder().build().unwrap();
     let module = engine
         .compile(
@@ -87,15 +87,8 @@ fn binary_data_open_stream_agrees_between_interpreter_and_jit() {
              Возврат чтение.ПрочитатьБайт();",
         )
         .unwrap();
-    let interpreted = engine.new_state().run(&module).unwrap();
-    let jitted = engine
-        .state_builder()
-        .jit(true)
-        .build()
-        .run(&module)
-        .unwrap();
-    assert_eq!(interpreted.to_string(), "65");
-    assert_eq!(jitted.to_string(), interpreted.to_string());
+    let value = engine.new_state().run(&module).unwrap();
+    assert_eq!(value.to_string(), "65");
 }
 
 #[test]
@@ -123,7 +116,6 @@ fn states_use_independent_stdout_and_stderr() {
         .state_builder()
         .stdout(out_b.clone())
         .stderr(err_b.clone())
-        .jit(true)
         .build();
 
     state_a.exec("Сообщить(\"a\");").unwrap();
@@ -582,7 +574,7 @@ const FAILING_FUNCTIONS: &[FunctionDescriptor] = &[FunctionDescriptor {
 }];
 
 fn failing_library() -> LibraryDescriptor {
-    LibraryDescriptor::new("example-host", "1.0.0", bsl_rt::ObjectContextNeed::Reduced)
+    LibraryDescriptor::new("example-host", "1.0.0")
         .with_dependencies(&[LibraryDependency {
             package: bsl_rt::PACKAGE_NAME,
             version: bsl_rt::PACKAGE_VERSION,
@@ -661,8 +653,7 @@ fn a_phase_error_prints_itself_and_is_reachable_through_source() {
 /// Часовой пояс — ПУБЛИЧНАЯ возможность контекста: `CallContext::zone`
 /// доступен любому обработчику стороннего компонента, а не только
 /// глобальным функциям официальных. Значит и метод, и свойство хост-типа
-/// вправе его спросить — и обязаны получить один ответ в обоих режимах
-/// исполнения.
+/// вправе его спросить — и обязан получить зону текущего прогона.
 mod host_zone {
     use super::*;
     use open_bsl::{
@@ -687,10 +678,8 @@ mod host_zone {
         )))
     }
 
-    /// Метод, ПИШУЩИЙ в поток вывода прогона: у нативного пути вывода нет,
-    /// и `stdout()` там ответит `CapabilityMissing` — прежде строка молча
-    /// исчезала бы в стоке. Библиотека потому и объявляет потребность в
-    /// полном контексте.
+    /// Метод, ПИШУЩИЙ в поток вывода прогона: проверяет, что сторонний
+    /// компонент получает тот же поток, который host передал состоянию.
     fn watch_report(
         _receiver: &dyn ObjectProtocol,
         _arguments: &[Value],
@@ -715,8 +704,8 @@ mod host_zone {
         )))
     }
 
-    /// Запись свойства — третий путь до зоны и отдельный шим JIT
-    /// (`SetObjectProp`); значение отбрасывается, важен сам вызов.
+    /// Запись свойства — третий путь до зоны (`SetObjectProp`); значение
+    /// отбрасывается, важен сам вызов.
     fn watch_set_mark(
         _receiver: &dyn ObjectProtocol,
         _value: Value,
@@ -767,7 +756,7 @@ mod host_zone {
     }];
 
     fn watch_library() -> LibraryDescriptor {
-        LibraryDescriptor::new("example-host", "1.0.0", bsl_rt::ObjectContextNeed::Full)
+        LibraryDescriptor::new("example-host", "1.0.0")
             .with_dependencies(&[LibraryDependency {
                 package: bsl_rt::PACKAGE_NAME,
                 version: bsl_rt::PACKAGE_VERSION,
@@ -776,9 +765,7 @@ mod host_zone {
             .with_types(WATCH_TYPES)
     }
 
-    /// Цикл — чтобы чанк дошёл до JIT: короткий скрипт нативной точкой
-    /// входа не становится, и тест выродился бы во второй прогон
-    /// интерпретатора. Обвязка одна на все три пути, тело подставляется.
+    /// Обвязка одна на все три пути к зоне, тело подставляется.
     fn script(body: &str) -> String {
         format!(
             "ч = Новый Часы();\n\
@@ -790,7 +777,7 @@ mod host_zone {
         )
     }
 
-    /// Три пути до зоны, каждый — свой опкод и свой шим JIT:
+    /// Три пути до зоны, каждый — свой опкод:
     /// `CallObjectMethod`, `GetObjectProp`, `SetObjectProp`. Порознь,
     /// потому что первое же обращение обрывает прогон.
     const PATHS: &[(&str, &str)] = &[
@@ -799,7 +786,7 @@ mod host_zone {
         ("запись свойства", "ч.Метка = к;"),
     ];
 
-    /// В ИНТЕРПРЕТАТОРЕ зона доходит до метода и свойства стороннего типа.
+    /// Зона доходит до метода и свойства стороннего типа.
     #[test]
     fn a_host_method_and_property_read_the_zone() {
         let engine = Engine::builder()
@@ -826,62 +813,20 @@ mod host_zone {
         }
     }
 
-    /// И ПОД JIT — тоже.
-    ///
-    /// Нативный путь не несёт возможностей: `stdout()` и `zone()` в нём
-    /// отвечают `CapabilityMissing`, а не молчаливым стоком. Поэтому
-    /// библиотека «Часы» объявила себя
-    /// `ObjectContextNeed::Full`, и чанк, обращающийся к её
-    /// объектам, JIT не компилирует — обращения идут интерпретатором со
-    /// всем окружением. Цена решения и почему оно принимается на чанк, а
-    /// не на получателя, — в комментарии у `LinkedComponents` в `bsl-vm`.
     #[test]
-    fn a_host_method_writing_to_stdout_is_not_swallowed_by_the_jit() {
+    fn a_host_method_writes_to_stdout() {
         let engine = Engine::builder()
             .register_library(watch_library())
             .build()
             .unwrap();
-        for jit in [false, true] {
-            let out = SharedWriter::default();
-            let mut state = engine
-                .state_builder()
-                .jit(jit)
-                .stdout(out.clone())
-                .zone(FixedTimeZone::UTC)
-                .build();
-            state
-                .exec(&script("ч.Отметить();"))
-                .unwrap_or_else(|e| panic!("jit={jit}: {e}"));
-            assert_eq!(out.text().lines().count(), 40, "jit={jit}");
-            assert!(
-                out.text().starts_with("часы: 0"),
-                "jit={jit}: {}",
-                out.text()
-            );
-        }
-    }
-
-    #[test]
-    fn the_zone_reaches_a_host_reader_under_the_jit_too() {
-        let engine = Engine::builder()
-            .register_library(watch_library())
-            .build()
-            .unwrap();
-        for (what, body) in PATHS {
-            let mut state = engine
-                .state_builder()
-                .jit(true)
-                .zone(FixedTimeZone::new(3 * 3600).expect("допустимое смещение"))
-                .build();
-            let value = state
-                .exec(&script(body))
-                .unwrap_or_else(|e| panic!("{what} под JIT: {e}"));
-            let expected = if *what == "запись свойства" {
-                0
-            } else {
-                40 * 3 * 3600
-            };
-            assert_eq!(value.to_string(), expected.to_string(), "{what} под JIT");
-        }
+        let out = SharedWriter::default();
+        let mut state = engine
+            .state_builder()
+            .stdout(out.clone())
+            .zone(FixedTimeZone::UTC)
+            .build();
+        state.exec(&script("ч.Отметить();")).unwrap();
+        assert_eq!(out.text().lines().count(), 40);
+        assert!(out.text().starts_with("часы: 0"), "{}", out.text());
     }
 }

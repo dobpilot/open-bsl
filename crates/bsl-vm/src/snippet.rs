@@ -1,6 +1,6 @@
 use super::{
-    Frame, HostIo, JitMode, LinkedComponents, ModuleState, at, drive_linked, link_components,
-    reg_load, reg_store,
+    Frame, HostIo, LinkedComponents, ModuleState, at, drive_linked, link_components, reg_load,
+    reg_store,
 };
 use bsl_bytecode::{Instr, Program};
 use bsl_rt::{BslValue, RtError};
@@ -242,7 +242,6 @@ pub(super) fn run_dynamic_snippet(
         &snippet_program,
         0,
         snippet_stack,
-        JitMode::Off,
         &snippet_linked,
         host,
         module_state,

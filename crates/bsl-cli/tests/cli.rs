@@ -133,6 +133,14 @@ fn an_unknown_command_is_an_error_pointing_at_help() {
 }
 
 #[test]
+fn the_removed_jit_flag_is_rejected_and_omitted_from_help() {
+    let out = run(&["--jit"]);
+    assert!(!out.status.success(), "удалённый ключ прошёл молча");
+    assert!(String::from_utf8_lossy(&out.stderr).contains("неизвестная команда"));
+    assert!(!stdout_of(&run(&["--help"])).contains("--jit"));
+}
+
+#[test]
 fn a_command_without_its_argument_shows_that_commands_usage() {
     for (flag, expected) in [
         ("--emit-bytecode", "<файл.bsl>"),

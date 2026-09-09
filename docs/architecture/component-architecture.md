@@ -99,7 +99,7 @@ flowchart LR
     sema["bsl-sema<br/>resolved IR и экспорты"]
     compiler["bsl-compiler<br/>Program и links"]
     bytecode["bsl-bytecode<br/>ConfigurationProgram, BytecodeImage"]
-    vm["bsl-vm<br/>Execution, OwnedExecution, JIT"]
+    vm["bsl-vm<br/>Execution, OwnedExecution, interpreter"]
     rt["bsl-rt<br/>BslValue, DTO, host-контракты"]
     number["bsl-number<br/>decimal arithmetic"]
     format["bsl-format<br/>видимый текст"]
@@ -354,7 +354,7 @@ case-insensitive resolution.
 `Instr` остаётся размером 8 байт. Логическая инструкция вызова одна;
 `CallNarrow`/`CallWide` не вводятся. Narrow/wide-кодировка имеет смысл только
 для отдельного будущего бинарного/mmap-представления после профиля памяти, а в
-`Vec<Instr>` лишь дублировала бы VM, JIT и bundle-классификацию. Любой новый
+`Vec<Instr>` лишь дублировала бы VM и bundle-классификацию. Любой новый
 opcode одновременно обновляет `write_instr`, parser, `OPCODES`, image
 validation, effects, bundle verifier, round-trip corpus и `FORMAT_VERSION`.
 Формат 0.4 не читает bytecode других версий; worker принимает каталог без
@@ -432,7 +432,7 @@ sequenceDiagram
 
 ## C. Исполнение
 
-### ARCH-09 — Execution core, safe points и JIT
+### ARCH-09 — Execution core и safe points
 
 ```mermaid
 flowchart TD
@@ -441,25 +441,20 @@ flowchart TD
     owned["RunningJob (роль OwnedExecution)<br/>владеет State, Module и ProgramExecution"]
     runnable["Runnable"]
     quantum["Квант<br/>safe_points_per_quantum"]
-    dispatch{"Interpreter или JIT?"}
-    jit["JIT bundle<br/>уменьшает тот же счётчик"]
     interpreter["Interpreter bundle"]
     barrier{"Барьер?<br/>Await / control flow<br/>may_suspend — НЕ барьер, см. текст"}
     waiting["Waiting(PendingHostCall / PromiseId)"]
     tail["Runnable → хвост локальной FIFO"]
     complete["Complete"]
-    fallback["Fallback в interpreter<br/>только на unsupported/barrier"]
     fast["Foreground fast path<br/>одна BSL-задача"]
     callout["MethodDescriptor::suspending<br/>invoke → CallOutcome<br/>Ready(value) или Pending(typed call)"]
 
     core --> borrowed
     core --> owned
     borrowed --> fast
-    owned --> runnable --> quantum --> dispatch
+    owned --> runnable --> quantum --> interpreter
     owned --> callout --> barrier
-    dispatch --> jit --> barrier
-    dispatch --> interpreter --> barrier
-    jit -->|"unsupported или конец кванта"| fallback --> interpreter
+    interpreter --> barrier
     barrier -->|"pending"| waiting
     barrier -->|"квант исчерпан"| tail
     barrier -->|"terminal"| complete
@@ -468,9 +463,9 @@ flowchart TD
 
 `Await` — барьер VLIW-бандла. **Расхождение реализации:** отдельный барьер для
 `may_suspend` не понадобился и не вводился. Парковка оставляет `pc` на
-инструкции вызова, а вход в середину бандла и так легален — это штатный
-механизм возврата отказавшегося JIT (`bundle_len[pc] == 0` исполняется
-одиночно); повторный диспатч хвоста бандла гасит страж в холодном арме
+инструкции вызова, а вход в середину бандла и так легален:
+`bundle_len[pc] == 0` исполняется одиночно. Повторный диспатч хвоста бандла
+гасит страж в холодном арме
 `CallObjectMethod`. Это не микрооптимизация: проверка приостановки, внесённая
 в горячий `step`, стоила `empty_for` +30% при неизменном числе инструкций
 (DSB 241 → 106 млн uops), поэтому и она, и холодные ветви планировщика
@@ -587,13 +582,9 @@ sequenceDiagram
 против обычного `new`, а `invoke` сам оборачивает результат обычного
 обработчика в `CallOutcome::Ready` — поэтому семь синхронных HTTP-методов
 получили типизированную парковку, а остальные сотни обработчиков компонентов
-не меняли сигнатуру. Парковку умеет только открытый `CallObjectMethod`
-интерпретатора; строковый путь (закрытый `CallMethod`, вызов по имени)
-доводит ту же host-операцию блокирующе, сохраняя прежнюю семантику. Шиму JIT
-`Pending` встретить нельзя структурно: библиотека с приостанавливающими
-методами обязана объявлять `ObjectContextNeed::Full`, а чанк, трогающий
-объекты, при таком реестре нативному пути не отдаётся вовсе; на случай
-нарушения контракта шим несёт защитную ошибку вместо блокировки потока.
+не меняли сигнатуру. Открытый `CallObjectMethod` паркует execution; строковый
+путь (закрытый `CallMethod`, вызов по имени) доводит ту же host-операцию
+блокирующе, сохраняя прежнюю семантику.
 
 Tokio `Future`, `JoinHandle` и ошибки транспорта не входят в VM или BSL.
 `PromiseValue` остаётся непрозрачным `BslObject::Extension`; token закрывается
@@ -1035,7 +1026,7 @@ BSL-модель сообщения измерена (`JOB.MESSAGES`): тип «
 | Принято в архитектуре | Реализовано | Причина | Пересмотр |
 |---|---|---|---|
 | Tokio current-thread + `LocalSet` на worker, coalesced wake-канал (`ARCH-10`) | `std::thread` + `Mutex`/`Condvar`, счётчик `wake_epoch` | `LocalSet` был бы пуст на каждом tick: HTTP-future исполняет process-wide runtime внутри `bsl-http`. Эскалацию «пропускать пустой tick» план записал сам | Когда host-futures поедут на поток worker |
-| `may_suspend` — барьер VLIW-бандла (`ARCH-09`) | Барьера нет; страж повторного диспатча в холодном арме | Вход в середину бандла легален штатно (механизм отказа JIT). Проверка в горячем `step` стоила `empty_for` +30% при равных инструкциях | Не планируется |
+| `may_suspend` — барьер VLIW-бандла (`ARCH-09`) | Барьера нет; страж повторного диспатча в холодном арме | Вход в середину бандла легален штатно. Проверка в горячем `step` стоила `empty_for` +30% при равных инструкциях | Не планируется |
 | `PendingHostCall::BackgroundJobWait` для вложенного ожидания (`ARCH-12`) | Helping-паттерн: родитель сам доводит задания из FIFO | Наблюдаемое свойство идентично и закреплено тестом, ABI ожидания не расширяется | Если helping станет узким местом |
 | Отдельная ручка `background_safe_points_per_quantum` (`ARCH-09`) | Общий бюджет `safe_points_per_quantum` | Замер CPU-bound задания против foreground дал 1,017 — цена квантования неотличима от дрейфа машины | При появлении профиля, где расхождение видно |
 

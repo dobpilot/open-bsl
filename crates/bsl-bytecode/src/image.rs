@@ -74,11 +74,6 @@ pub fn finalize_unbundled(program: &mut Program) {
 fn finalize_with_bundles(program: &mut Program, bundles: bool) {
     for index in 0..program.chunks.len() {
         let overlap = crate::analysis::module_overlap(index, program.module_vars.len());
-        let chunk = &mut program.chunks[index];
-        // Классификация принадлежит самой инструкции, и до сих пор её
-        // повторяли дословно кодоген и разбор листинга — с припиской
-        // «ответы обязаны совпадать». Теперь ответ один.
-        chunk.touches_objects = chunk.instrs.iter().any(Instr::touches_objects);
         program.chunks[index].bundle_len = if bundles {
             crate::bundle::compute(&program.chunks[index], overlap)
         } else {
@@ -104,8 +99,7 @@ pub fn finalize_lone_chunk(chunk: &mut Chunk) {
 }
 
 /// То же для чанка, о независимости членов которого утверждать НЕЧЕГО:
-/// пометка «трогает объекты» пересчитывается, разметка бандлов остаётся
-/// пустой.
+/// разметка бандлов остаётся пустой.
 ///
 /// Пустая разметка означает поинструкционное исполнение и никакого
 /// утверждения не делает, поэтому она всегда сонадёжна. Существует эта
@@ -118,7 +112,6 @@ pub fn finalize_lone_chunk(chunk: &mut Chunk) {
 /// ЛОЖНО. Фрагмент одноразовый, потеря пакетной диспетчеризации на нём
 /// незначима.
 pub fn finalize_lone_chunk_unbundled(chunk: &mut Chunk) {
-    chunk.touches_objects = chunk.instrs.iter().any(Instr::touches_objects);
     // Разметка ОЧИЩАЕТСЯ, а не оставляется как есть. Чанк мог быть
     // финализирован раньше, и тогда «без бандлов» вопреки имени
     // означало бы «с прежними бандлами» — то есть с утверждением о
@@ -138,14 +131,6 @@ fn check_bundle_freshness(
     index: usize,
     module_var_count: usize,
 ) -> Result<(), RtError> {
-    // Классификация «трогает объекты» тоже производная, и расходится она
-    // молча: разобранная программа пошла бы мимо того пути исполнения,
-    // по которому шла скомпилированная.
-    if chunk.touches_objects != chunk.instrs.iter().any(Instr::touches_objects) {
-        return Err(RtError::InvalidBytecode(
-            "пометка «трогает объекты» не отвечает инструкциям чанка",
-        ));
-    }
     if chunk.bundle_len.is_empty() {
         return Ok(());
     }

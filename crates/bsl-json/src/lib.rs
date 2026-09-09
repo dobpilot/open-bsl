@@ -129,15 +129,11 @@ const OBJECT_MEMBER_GROUPS: &[&[bsl_rt::ObjectMembersDescriptor]] = &[objects::A
 
 /// Дескриптор статически подключаемого JSON-компонента.
 pub const fn library() -> LibraryDescriptor {
-    LibraryDescriptor::new(
-        env!("CARGO_PKG_NAME"),
-        env!("CARGO_PKG_VERSION"),
-        bsl_rt::ObjectContextNeed::Reduced,
-    )
-    .with_functions(FUNCTIONS)
-    .with_constructors(CONSTRUCTORS)
-    .with_types(TYPES)
-    .with_object_member_groups(OBJECT_MEMBER_GROUPS)
+    LibraryDescriptor::new(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))
+        .with_functions(FUNCTIONS)
+        .with_constructors(CONSTRUCTORS)
+        .with_types(TYPES)
+        .with_object_member_groups(OBJECT_MEMBER_GROUPS)
 }
 
 #[cfg(test)]

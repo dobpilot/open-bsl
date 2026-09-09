@@ -13,7 +13,6 @@ use crate::error::Error;
 pub struct StateBuilder {
     engine: Engine,
     host: HostServices,
-    jit: bool,
     scheduler: bsl_vm::SchedulerConfig,
     /// Host-профиль фоновых заданий этого сеанса: 0 — системный.
     #[cfg(not(target_arch = "wasm32"))]
@@ -25,7 +24,6 @@ impl StateBuilder {
         Self {
             engine,
             host: HostServices::process(),
-            jit: false,
             scheduler: bsl_vm::SchedulerConfig::default(),
             #[cfg(not(target_arch = "wasm32"))]
             job_profile_index: 0,
@@ -39,11 +37,6 @@ impl StateBuilder {
 
     pub fn stderr(mut self, writer: impl Write + 'static) -> Self {
         self.host.stderr = Box::new(writer);
-        self
-    }
-
-    pub fn jit(mut self, enabled: bool) -> Self {
-        self.jit = enabled;
         self
     }
 
@@ -192,7 +185,6 @@ impl StateBuilder {
             dynamic: self.engine.dynamic_code(),
             engine: self.engine,
             host,
-            jit: self.jit,
             scheduler: self.scheduler,
         }
     }
@@ -235,7 +227,6 @@ pub struct State {
     /// динамический код только исполняет, а компилирует — он. Свой у
     /// каждой сессии, поэтому и кэш фрагментов у сессий раздельный.
     pub(crate) dynamic: DynamicCode,
-    jit: bool,
     pub(crate) scheduler: bsl_vm::SchedulerConfig,
 }
 
@@ -356,15 +347,9 @@ impl State {
         module: &'module Module,
     ) -> Result<Execution<'state, 'module>, Error> {
         self.dynamic.bind_module(module.id);
-        let jit = if self.jit {
-            bsl_vm::JitMode::On
-        } else {
-            bsl_vm::JitMode::Off
-        };
         let mut vm = bsl_vm::ProgramExecution::start_with_registry_and_scheduler(
             &module.program,
             self.engine.registry(),
-            jit,
             &self.host.env,
             self.scheduler,
         )?;
@@ -442,17 +427,10 @@ mod tests {
                 "Возврат Метаданные.ОбщиеМодули.Найти(\"ПолучениеФайловИзИнтернета\") = Неопределено;",
             )
             .expect("компиляция");
-        for jit in [false, true] {
-            assert_eq!(
-                engine
-                    .state_builder()
-                    .jit(jit)
-                    .build()
-                    .run(&module)
-                    .unwrap(),
-                Value::Boolean(true)
-            );
-        }
+        assert_eq!(
+            engine.new_state().run(&module).unwrap(),
+            Value::Boolean(true)
+        );
     }
 
     /// Кэш фрагментов переживает запуск, поэтому обязан быть УСТОЙЧИВЫМ:

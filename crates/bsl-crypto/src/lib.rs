@@ -5,8 +5,8 @@ use std::fmt;
 
 use bsl_rt::{
     Arity, BslValue, CallContext, ConstructorCode, ConstructorDescriptor, EnumValue,
-    LibraryDescriptor, MethodDescriptor, ObjectContextNeed, ObjectProtocol, PropertyDescriptor,
-    RtError, RtResult, TypeDescriptor,
+    LibraryDescriptor, MethodDescriptor, ObjectProtocol, PropertyDescriptor, RtError, RtResult,
+    TypeDescriptor,
 };
 use digest::Digest;
 
@@ -158,7 +158,7 @@ const TYPES: &[&TypeDescriptor] = &[&DATA_HASHING_TYPE];
 /// Дескриптор компонента криптографии.
 #[must_use]
 pub const fn library() -> LibraryDescriptor {
-    LibraryDescriptor::new(PACKAGE_NAME, PACKAGE_VERSION, ObjectContextNeed::Reduced)
+    LibraryDescriptor::new(PACKAGE_NAME, PACKAGE_VERSION)
         .with_constructors(CONSTRUCTORS)
         .with_types(TYPES)
         .with_object_member_groups(OBJECT_MEMBER_GROUPS)

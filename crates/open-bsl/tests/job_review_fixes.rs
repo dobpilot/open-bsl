@@ -309,16 +309,12 @@ const HOST_FUNCTIONS: &[open_bsl::FunctionDescriptor] = &[open_bsl::FunctionDesc
 }];
 
 fn host_library() -> open_bsl::LibraryDescriptor {
-    open_bsl::LibraryDescriptor::new(
-        "example-host",
-        "1.0.0",
-        open_bsl::ObjectContextNeed::Reduced,
-    )
-    .with_dependencies(&[open_bsl::LibraryDependency {
-        package: bsl_rt::PACKAGE_NAME,
-        version: bsl_rt::PACKAGE_VERSION,
-    }])
-    .with_functions(HOST_FUNCTIONS)
+    open_bsl::LibraryDescriptor::new("example-host", "1.0.0")
+        .with_dependencies(&[open_bsl::LibraryDependency {
+            package: bsl_rt::PACKAGE_NAME,
+            version: bsl_rt::PACKAGE_VERSION,
+        }])
+        .with_functions(HOST_FUNCTIONS)
 }
 
 #[test]

@@ -272,12 +272,6 @@ fn reparsed_program_matches_the_original_structurally() {
             // иначе скомпилированный и загруженный байт-код разойдутся
             // по диспетчеризации.
             assert_eq!(x.bundle_len(), y.bundle_len(), "{src}");
-            // Признак обращения к объектам — тоже производный и тоже
-            // пересчитывается разбором. От него зависит, возьмётся ли
-            // за чанк нативный путь (см. `LinkedComponents` в
-            // `bsl-vm`), и потеря его на разборе вернула бы внешний
-            // листинг под JIT молча.
-            assert_eq!(x.touches_objects(), y.touches_objects(), "{src}");
         }
     }
 }
@@ -327,8 +321,7 @@ fn component_receiver_methods_compile_only_to_the_open_opcode() {
         call: construct,
     }];
     const LIBRARY: bsl_rt::LibraryDescriptor =
-        bsl_rt::LibraryDescriptor::new("test-world", "0.0.0", bsl_rt::ObjectContextNeed::Reduced)
-            .with_constructors(CONSTRUCTORS);
+        bsl_rt::LibraryDescriptor::new("test-world", "0.0.0").with_constructors(CONSTRUCTORS);
 
     let mut builder = bsl_rt::RuntimeBuilder::new();
     builder.register(bsl_rt::core_library()).register(LIBRARY);

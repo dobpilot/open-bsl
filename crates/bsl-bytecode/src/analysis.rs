@@ -1456,7 +1456,6 @@ mod tests {
             param_has_default: Vec::new(),
             is_procedure: false,
             is_async: false,
-            touches_objects: false,
             n_locals: 8,
             n_regs: 16,
             local_names: Vec::new(),

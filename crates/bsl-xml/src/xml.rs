@@ -70,8 +70,7 @@ impl XmlReaderState {
 pub struct XmlReaderObject {
     pub(crate) state: Rc<RefCell<XmlReaderState>>,
     /// Файловая система сессии (ABI-G): пришла к объекту при построении и
-    /// держится здесь, потому что `ОткрытьФайл` — метод, а под JIT метод
-    /// исполняется по натуральному пути без доступа к контексту.
+    /// держится здесь, потому что `ОткрытьФайл` вызывается позже.
     files: Rc<dyn bsl_rt::FileSystem>,
 }
 
@@ -79,8 +78,8 @@ pub struct XmlReaderObject {
 #[derive(Debug)]
 pub struct XmlWriterObject {
     writer: Rc<RefCell<Option<XmlWriter>>>,
-    /// Файловая система сессии (ABI-G): запись идёт в `Закрыть()`, метод под
-    /// JIT без контекста, поэтому ФС хранится на объекте с построения.
+    /// Файловая система сессии (ABI-G): запись идёт позже, в `Закрыть()`,
+    /// поэтому ФС хранится на объекте с построения.
     files: Rc<dyn bsl_rt::FileSystem>,
 }
 

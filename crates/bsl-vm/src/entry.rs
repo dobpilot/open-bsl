@@ -1,7 +1,7 @@
 use super::snippet::DynamicDepthGuard;
 use super::{
-    HostIo, JitMode, LinkedComponents, ModuleState, at, drive_linked, link_components,
-    push_own_registers, reg_load, reg_store,
+    HostIo, LinkedComponents, ModuleState, at, drive_linked, link_components, push_own_registers,
+    reg_load, reg_store,
 };
 use bsl_bytecode::{DynamicCompiler, Program};
 use bsl_rt::{BslValue, RtError};
@@ -31,26 +31,12 @@ pub fn run_program(program: &Program) -> Result<BslValue, RtError> {
     let mut stdout = std::io::stdout().lock();
     let mut stderr = std::io::stderr().lock();
     let mut env = bsl_rt::HostEnv::process();
-    run_program_with_host(
-        program,
-        None,
-        JitMode::Off,
-        &mut stdout,
-        &mut stderr,
-        None,
-        &mut env,
-    )
+    run_program_with_host(program, None, &mut stdout, &mut stderr, None, &mut env)
 }
 
 /// Исполняет программу с выводом в потоки, принадлежащие host-приложению.
 /// `Сообщить` пишет только в `stdout`; библиотечный API возвращает ошибки и
 /// не печатает их в `stderr` автоматически.
-///
-/// Это ЕДИНСТВЕННАЯ полная форма запуска: JIT — не суффикс имени, а
-/// параметр `jit`, потому что это ось возможностей, а не отдельная функция.
-/// Формы без ввода-вывода (`*_with_registry`, с JIT и без) удалены: в
-/// workspace их никто не звал, а нужный им путь — это `jit` со стандартными
-/// потоками процесса.
 ///
 /// `dynamic` — компилятор `Выполнить`/`Вычислить` этого прогона. VM
 /// динамический код только исполняет: текст, вид операции и описание
@@ -64,7 +50,6 @@ pub fn run_program(program: &Program) -> Result<BslValue, RtError> {
 pub fn run_program_with_registry_and_io<'a>(
     program: &Program,
     registry: &bsl_rt::RuntimeRegistry,
-    jit: JitMode,
     stdout: &'a mut dyn Write,
     stderr: &'a mut dyn Write,
     dynamic: &'a mut dyn DynamicCompiler,
@@ -73,7 +58,6 @@ pub fn run_program_with_registry_and_io<'a>(
     run_program_with_host(
         program,
         Some(registry),
-        jit,
         stdout,
         stderr,
         Some(dynamic),
@@ -85,7 +69,6 @@ pub fn run_program_with_registry_and_io<'a>(
 pub(super) fn run_program_with_host<'a>(
     program: &Program,
     registry: Option<&bsl_rt::RuntimeRegistry>,
-    jit_mode: JitMode,
     stdout: &'a mut dyn Write,
     stderr: &'a mut dyn Write,
     dynamic: Option<&'a mut dyn DynamicCompiler>,
@@ -121,7 +104,6 @@ pub(super) fn run_program_with_host<'a>(
         program,
         0,
         stack,
-        jit_mode,
         &linked,
         &mut host,
         &mut module_state,
@@ -142,7 +124,7 @@ pub(super) fn run_program_with_host<'a>(
 /// связывания компонентов.
 // Семь параметров сверх `unit` — это состояние REPL-сессии, разложенное по
 // местам: локали, стек и требования собираются вызывающим по одному, а
-// потоки, JIT и окружение — сервисы прогона. Чанк, имена и формы, чей
+// потоки и окружение — сервисы прогона. Чанк, имена и формы, чей
 // инвариант связан позицией, теперь приезжают одним [`SnippetUnit`].
 #[allow(clippy::too_many_arguments)]
 pub fn run_repl_chunk_with_registry<'a>(
@@ -151,7 +133,6 @@ pub fn run_repl_chunk_with_registry<'a>(
     stack: Vec<BslValue>,
     requirements: Vec<bsl_bytecode::LibraryRequirement>,
     registry: &bsl_rt::RuntimeRegistry,
-    jit: JitMode,
     stdout: &'a mut dyn Write,
     stderr: &'a mut dyn Write,
     dynamic: &'a mut dyn DynamicCompiler,
@@ -201,7 +182,6 @@ pub fn run_repl_chunk_with_registry<'a>(
         &program,
         0,
         stack,
-        jit,
         &linked,
         &mut host,
         &mut module_state,
@@ -282,16 +262,11 @@ pub fn call_module_function(
         dynamic: None,
         dynamic_depth: &dynamic_depth,
     };
-    call_module_function_with_host(program, stack, name, args, JitMode::Off, &linked, &mut host)
+    call_module_function_with_host(program, stack, name, args, &linked, &mut host)
 }
 
 /// Вызывает функцию модуля с реестром компонентов и потоками текущего
 /// host-состояния.
-///
-/// `jit` — ось возможностей, как у [`run_program_with_registry_and_io`]:
-/// тонкая обёртка [`call_module_function`] передаёт [`JitMode::Off`], а
-/// полная форма принимает его параметром. Стоит ли фасаду когда-то давать
-/// сюда что-то кроме `Off`, решается замером, а не формой API.
 ///
 /// # Errors
 ///
@@ -304,7 +279,6 @@ pub fn call_module_function_with_registry_and_io<'a>(
     name: &str,
     args: Vec<BslValue>,
     registry: &bsl_rt::RuntimeRegistry,
-    jit: JitMode,
     stdout: &'a mut dyn Write,
     stderr: &'a mut dyn Write,
     dynamic: &'a mut dyn DynamicCompiler,
@@ -330,7 +304,7 @@ pub fn call_module_function_with_registry_and_io<'a>(
         dynamic: Some(dynamic),
         dynamic_depth: &dynamic_depth,
     };
-    call_module_function_with_host(program, stack, name, args, jit, &linked, &mut host)
+    call_module_function_with_host(program, stack, name, args, &linked, &mut host)
 }
 
 pub(super) fn call_module_function_with_host(
@@ -338,7 +312,6 @@ pub(super) fn call_module_function_with_host(
     stack: &mut [BslValue],
     name: &str,
     args: Vec<BslValue>,
-    jit: JitMode,
     linked: &LinkedComponents<'_>,
     host: &mut HostIo<'_, '_>,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
@@ -351,15 +324,8 @@ pub(super) fn call_module_function_with_host(
             .map(|i| reg_load(stack, i))
             .collect::<Result<_, _>>()?,
     };
-    let result = call_module_function_in_execution(
-        program,
-        name,
-        args,
-        jit,
-        linked,
-        host,
-        &mut module_state,
-    );
+    let result =
+        call_module_function_in_execution(program, name, args, linked, host, &mut module_state);
     for (i, value) in module_state.slots.into_iter().enumerate() {
         reg_store(stack, i, value)?;
     }
@@ -371,7 +337,6 @@ pub(super) fn call_module_function_in_execution(
     program: &Program,
     name: &str,
     args: Vec<BslValue>,
-    jit: JitMode,
     linked: &LinkedComponents<'_>,
     host: &mut HostIo<'_, '_>,
     module_state: &mut ModuleState,
@@ -421,7 +386,6 @@ pub(super) fn call_module_function_in_execution(
         program,
         func_id,
         call_stack,
-        jit,
         linked,
         host,
         module_state,

@@ -146,20 +146,16 @@ const OBJECT_MEMBER_GROUPS: &[&[bsl_rt::ObjectMembersDescriptor]] = &[
 
 /// Дескриптор статически подключаемого компонента потоков.
 pub const fn library() -> LibraryDescriptor {
-    LibraryDescriptor::new(
-        PACKAGE_NAME,
-        PACKAGE_VERSION,
-        bsl_rt::ObjectContextNeed::Reduced,
-    )
-    .with_dependencies(&[LibraryDependency {
-        package: bsl_binbuf::PACKAGE_NAME,
-        version: bsl_binbuf::PACKAGE_VERSION,
-    }])
-    .with_byte_stream_factory(binary_data_stream_factory)
-    .with_constructors(CONSTRUCTORS)
-    .with_types(TYPES)
-    .with_object_member_groups(OBJECT_MEMBER_GROUPS)
-    .with_type_aliases(TYPE_ALIASES)
+    LibraryDescriptor::new(PACKAGE_NAME, PACKAGE_VERSION)
+        .with_dependencies(&[LibraryDependency {
+            package: bsl_binbuf::PACKAGE_NAME,
+            version: bsl_binbuf::PACKAGE_VERSION,
+        }])
+        .with_byte_stream_factory(binary_data_stream_factory)
+        .with_constructors(CONSTRUCTORS)
+        .with_types(TYPES)
+        .with_object_member_groups(OBJECT_MEMBER_GROUPS)
+        .with_type_aliases(TYPE_ALIASES)
 }
 
 /// «Файловый поток» — представление ОБОИХ потоков (измерено), но

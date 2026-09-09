@@ -154,9 +154,9 @@ pub enum ContextKind {
     Reduced,
 }
 
-/// Именованная запись сервисов интерпретаторного пути — вместо позиционных
-/// аргументов конструктора. Внешние возможности здесь есть всегда
-/// (интерпретатор их несёт); `function_caller` — `None`, если из этого
+/// Именованная запись сервисов исполнительного пути — вместо позиционных
+/// аргументов конструктора. Внешние возможности здесь есть всегда;
+/// `function_caller` — `None`, если из этого
 /// вызова BSL-функцию модуля звать нельзя.
 pub struct InterpreterServices<'a> {
     pub runtime_shapes: &'a mut RuntimeShapes,
@@ -180,9 +180,10 @@ pub struct InterpreterServices<'a> {
 /// принадлежат сессии, поэтому две VM в одном процессе не разделяют
 /// изменяемое состояние.
 ///
-/// Возможности прогона (`stdout`, `stderr`, `zone`, `files`, `random`, `function_caller`) —
-/// это `Option` В ПОЛЯХ: на НАТИВНОМ пути (JIT-шимы) их нет, и обращение к
-/// отсутствующей отвечает одним типизированным отказом
+/// Возможности прогона (`stdout`, `stderr`, `zone`, `files`, `random`,
+/// `function_caller`) — это `Option` в полях: минимальный контекст для
+/// автономного вызова их не содержит, и обращение к отсутствующей отвечает
+/// одним типизированным отказом
 /// [`RtError::CapabilityMissing`], а не молчаливым стоком или чужим
 /// временем. Путь (`path`) — факт о вызывающем, он попадает в текст отказа.
 pub struct CallContext<'a> {
@@ -192,21 +193,15 @@ pub struct CallContext<'a> {
     /// Каким путём построен контекст: факт о вызывающем, попадает в текст
     /// [`RtError::CapabilityMissing`].
     path: ContextKind,
-    // Возможности: `None` на нативном пути (JIT-шимы).
+    // Возможности: `None` в минимальном контексте.
     stdout: Option<&'a mut dyn Write>,
     stderr: Option<&'a mut dyn Write>,
     /// Часовой пояс ПРОГОНА либо `None` — «этот путь о зоне не знает».
     /// Компоненту зона нужна там, где записанный момент переводится в
-    /// местное время (даты JSON, лексические формы XDTO). `None` приходит с
-    /// нативного пути: у JIT-шимов зоны нет по той же причине, что и вывода
-    /// — реестр компонентов ОТКРЫТ, и метод стороннего типа под `--jit`
-    /// получит `CapabilityMissing` там, где интерпретатор отвечает значением
-    /// (обе стороны закреплены тестами `crates/open-bsl/tests/embedding.rs`).
+    /// местное время (даты JSON, лексические формы XDTO).
     zone: Option<&'a Rc<dyn crate::TimeZone>>,
     /// Файловая система ПРОГОНА либо `None` — «этот путь о ней не знает».
-    /// `None` приходит с нативного пути (JIT-шимы), как и у зоны: объект,
-    /// которому нужна ФС, забирает её у своего КОНСТРУКТОРА (тот идёт
-    /// интерпретатором, `CreateObject` не шимится) и хранит сам, а не
+    /// Объект, которому нужна ФС после конструктора, хранит её сам, а не
     /// спрашивает контекст на каждом вызове метода.
     files: Option<&'a Rc<dyn crate::FileSystem>>,
     random: Option<&'a crate::RandomHandle>,
@@ -219,7 +214,7 @@ pub struct CallContext<'a> {
 }
 
 impl<'a> CallContext<'a> {
-    /// Контекст ИНТЕРПРЕТАТОРНОГО пути: потоки и зона есть всегда.
+    /// Полный контекст исполнительного пути: потоки и зона есть всегда.
     pub fn interpreter(services: InterpreterServices<'a>) -> Self {
         Self {
             runtime_shapes: services.runtime_shapes,
@@ -239,11 +234,12 @@ impl<'a> CallContext<'a> {
         }
     }
 
-    /// Контекст НАТИВНОГО пути (JIT-шимы): ни потоков, ни зоны, ни вызова
-    /// функции модуля — только таблица форм и форматтер. Обращение к
+    /// Минимальный контекст для автономного вызова обработчика: ни потоков,
+    /// ни зоны, ни вызова функции модуля — только таблица форм и форматтер.
+    /// Обращение к
     /// отсутствующей возможности отвечает [`RtError::CapabilityMissing`],
     /// а не молчаливым стоком.
-    pub fn native(runtime_shapes: &'a mut RuntimeShapes, formatter: ValueFormatter) -> Self {
+    pub fn minimal(runtime_shapes: &'a mut RuntimeShapes, formatter: ValueFormatter) -> Self {
         Self {
             runtime_shapes,
             formatter,
@@ -303,9 +299,7 @@ impl<'a> CallContext<'a> {
     ///
     /// # Errors
     ///
-    /// [`RtError::CapabilityMissing`], если контекст построен без вывода
-    /// (нативный путь): прежде JIT-шимы подставляли молчаливый сток, теперь
-    /// компонент, пишущий под `--jit`, получает явный отказ.
+    /// [`RtError::CapabilityMissing`], если контекст построен без вывода.
     pub fn stdout(&mut self) -> RtResult<&mut (dyn Write + 'a)> {
         let path = self.path;
         self.stdout
@@ -321,7 +315,7 @@ impl<'a> CallContext<'a> {
     /// # Errors
     ///
     /// [`RtError::CapabilityMissing`], если контекст построен без потока
-    /// ошибок (нативный путь).
+    /// ошибок.
     pub fn stderr(&mut self) -> RtResult<&mut (dyn Write + 'a)> {
         let path = self.path;
         self.stderr
@@ -370,8 +364,7 @@ impl<'a> CallContext<'a> {
     ///
     /// # Errors
     ///
-    /// [`RtError::CapabilityMissing`], если контекст без файловой системы
-    /// (нативный путь).
+    /// [`RtError::CapabilityMissing`], если контекст без файловой системы.
     pub fn files(&self) -> RtResult<&dyn crate::FileSystem> {
         let path = self.path;
         self.files
@@ -384,8 +377,7 @@ impl<'a> CallContext<'a> {
 
     /// Файловая система прогона В СОБСТВЕННОСТЬ — для компонента, который её
     /// ЗАПОМИНАЕТ и обращается к путям в своих методах (`ТекстовыйДокумент`,
-    /// читатель/писатель архива, менеджер файловых потоков): метод может
-    /// пойти нативным путём под JIT, где контекста с ФС уже нет.
+    /// читатель/писатель архива, менеджер файловых потоков).
     ///
     /// # Errors
     ///
@@ -456,7 +448,7 @@ impl<'a> CallContext<'a> {
     ///
     /// # Errors
     ///
-    /// [`RtError::CapabilityMissing`], если зоны нет (нативный путь).
+    /// [`RtError::CapabilityMissing`], если зоны нет.
     pub fn shapes_and_zone(&mut self) -> RtResult<(&mut RuntimeShapes, &dyn crate::TimeZone)> {
         let zone = self
             .zone
@@ -476,13 +468,13 @@ impl<'a> CallContext<'a> {
     /// нельзя.
     ///
     /// Набор ФИКСИРОВАН: `runtime_shapes`, `stdout`, `stderr`, `zone` и
-    /// необязательный `function_caller`. Потоки и зона обязательны — на
-    /// нативном пути их нет, и построить `ExecutionParts` не выйдет.
+    /// необязательный `function_caller`. Потоки и зона обязательны — из
+    /// минимального контекста построить `ExecutionParts` не выйдет.
     ///
     /// # Errors
     ///
     /// [`RtError::CapabilityMissing`], если вывод, поток ошибок или зона
-    /// отсутствуют (нативный путь), — плюс любая ошибка самого замыкания.
+    /// отсутствуют, — плюс любая ошибка самого замыкания.
     pub fn with_execution_parts<R>(
         &mut self,
         body: impl FnOnce(ExecutionParts<'_, 'a>) -> RtResult<R>,
@@ -565,9 +557,7 @@ pub enum CallOutcome {
 /// Закрытый перечень приостанавливающих host-операций. Перечень намеренно
 /// исчерпывающий, без `Any` и стирания типов: новая операция — новый
 /// вариант, и каждый обслуживающий путь обязан разобрать его явно.
-/// Библиотека, чья таблица методов содержит приостанавливающий
-/// дескриптор, обязана объявлять [`ObjectContextNeed::Full`]: тогда чанк,
-/// трогающий объекты, не отдаётся JIT, и парковка остаётся интерпретатору.
+/// VM обслуживает эту операцию через планировщик сохраняемого запуска.
 pub enum PendingHostCall {
     /// Синхронная HTTP-операция: запрос уже снят с BSL-объектов,
     /// транспорт выполняет его вне VM, `mapper` материализует ответ в
@@ -626,9 +616,7 @@ impl MethodDescriptor {
     }
 
     /// Дескриптор приостанавливающего метода — единственный способ вернуть
-    /// [`CallOutcome::Pending`]. Библиотека с таким методом обязана
-    /// требовать полный контекст объектов ([`ObjectContextNeed::Full`]) —
-    /// см. [`PendingHostCall`].
+    /// [`CallOutcome::Pending`].
     pub const fn suspending(
         names: &'static [&'static str],
         arity: Arity,
@@ -641,8 +629,7 @@ impl MethodDescriptor {
         }
     }
 
-    /// Может ли метод вернуть [`CallOutcome::Pending`]. Пока выполняется
-    /// контракт полного контекста, шим JIT такой дескриптор не встречает.
+    /// Может ли метод вернуть [`CallOutcome::Pending`].
     #[must_use]
     pub const fn may_suspend(&self) -> bool {
         matches!(self.call, MethodImpl::Suspending(_))
@@ -683,8 +670,7 @@ impl MethodDescriptor {
 
     /// Рантаймная проверка арности перед вызовом обработчика — единый
     /// источник для всех путей диспетчеризации: `call_method_from_table`
-    /// (строковый путь и откат шимов JIT), арм `CallObjectMethod` VM и его
-    /// шим JIT. Живёт здесь, а не в `bsl-vm`: горячий цикл VM на грани кеша
+    /// и арм `CallObjectMethod` VM. Живёт здесь, а не в `bsl-vm`: горячий цикл VM на грани кеша
     /// микроопераций, и лишняя функция в его `lib.rs` сдвигает укладку кода
     /// (измерено на `call_overhead`). Измерено `OBJ.METHOD.EXTRA_ARGS`:
     /// платформа отвечает ошибкой и на лишний, и на недостающий аргумент;
@@ -810,9 +796,7 @@ pub fn call_method_from_table(
 ) -> RtResult<BslValue> {
     // Судья равенства имён один — [`crate::folded_eq`]. Он и без аллокаций
     // на общем пути (побайтовое сравнение, свёрнутая строка лишь на входе
-    // вне быстрых алфавитов — см. `fold.rs`), поэтому путь JIT-шимов, где
-    // имя приходит на каждый вызов, платит не больше прежнего посимвольного
-    // сравнения через `to_uppercase`, которому он к тому же тождествен.
+    // вне быстрых алфавитов — см. `fold.rs`).
     for descriptor in table {
         if descriptor
             .names
@@ -821,8 +805,7 @@ pub fn call_method_from_table(
         {
             // Рантаймная проверка арности до вызова обработчика — та же
             // [`MethodDescriptor::check_arity`], что в арме `CallObjectMethod`
-            // у VM. Этот путь проходят строковый `call_method` и его откат в
-            // шимах JIT.
+            // у VM. Этот путь проходит строковый `call_method`.
             let count = u8::try_from(arguments.len()).unwrap_or(u8::MAX);
             descriptor.check_arity(count, type_name)?;
             return match descriptor.invoke(receiver, arguments, context)? {
@@ -985,19 +968,6 @@ pub struct LibraryDependency {
 #[non_exhaustive]
 pub struct LibraryDescriptor {
     package: &'static str,
-    /// Годятся ли объекты этой библиотеки НАТИВНОМУ пути исполнения.
-    ///
-    /// JIT обслуживает обращения к объектам сокращённым [`CallContext`]:
-    /// потоки вывода в нём — стоки, зоны прогона нет. Официальным
-    /// компонентам этого хватает — их методы и свойства ни в вывод, ни в
-    /// зону не ходят, — но реестр открыт, и у стороннего типа обработчик
-    /// вправе делать и то и другое. Библиотека объявляет это сама, а
-    /// связывание сводит объявления реестра к одному признаку
-    /// ([`RuntimeRegistry::has_full_context_objects`]): при нём чанк,
-    /// обращающийся к ОБЪЕКТАМ, целиком минует нативный путь. Различать
-    /// получателей по типу было бы точнее, но цена этого измерена и
-    /// велика — см. `LinkedComponents` в `bsl-vm`.
-    object_context: ObjectContextNeed,
     version: &'static str,
     dependencies: &'static [LibraryDependency],
     functions: &'static [FunctionDescriptor],
@@ -1021,17 +991,10 @@ pub struct LibraryDescriptor {
 
 impl LibraryDescriptor {
     /// Обязательный минимум библиотеки. Остальные таблицы добавляются
-    /// `with_*`; `object_context` входит сюда, а не в умолчание, — потребность
-    /// объектных обработчиков в полном контексте каждая библиотека объявляет
-    /// явно.
-    pub const fn new(
-        package: &'static str,
-        version: &'static str,
-        object_context: ObjectContextNeed,
-    ) -> Self {
+    /// через `with_*`.
+    pub const fn new(package: &'static str, version: &'static str) -> Self {
         Self {
             package,
-            object_context,
             version,
             dependencies: &[],
             functions: &[],
@@ -1103,11 +1066,6 @@ impl LibraryDescriptor {
         self.version
     }
 
-    /// Какой контекст прогона нужен объектным обработчикам библиотеки.
-    pub const fn object_context(&self) -> ObjectContextNeed {
-        self.object_context
-    }
-
     /// Зависимости библиотеки.
     pub const fn dependencies(&self) -> &'static [LibraryDependency] {
         self.dependencies
@@ -1143,25 +1101,6 @@ impl LibraryDescriptor {
     pub const fn byte_stream_factory(&self) -> Option<ByteStreamFactory> {
         self.byte_stream_factory
     }
-}
-
-/// Какой контекст прогона нужен обработчикам объектов этой библиотеки.
-///
-/// Компонент объявляет СВОЮ потребность, а не устройство движка: как
-/// именно тот исполнит обращение — его дело, и в этом ABI ему нет имени.
-///
-/// Умолчания у признака нет намеренно: поле обязательное, и автор
-/// компонента отвечает на вопрос осознанно. Ошибиться в безопасную сторону
-/// всегда можно — [`ObjectContextNeed::Full`] стоит скорости, но не
-/// корректности.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ObjectContextNeed {
-    /// Обработчикам нужен полный контекст: они читают хотя бы одну его внешнюю
-    /// возможность. Движок обязан дать такой контекст или отступить на путь, где он есть.
-    Full,
-    /// Обработчики обходятся сокращённым контекстом и не читают его внешние
-    /// возможности.
-    Reduced,
 }
 
 fn construct_binary_data(
@@ -1296,15 +1235,11 @@ const CORE_OBJECT_MEMBER_GROUPS: &[&[ObjectMembersDescriptor]] = &[
 /// ещё обслуживаются старой таблицей; конструкторы, которым нужны
 /// возможности прогона, проходят обычную компонентную границу.
 pub const fn core_library() -> LibraryDescriptor {
-    LibraryDescriptor::new(
-        crate::PACKAGE_NAME,
-        crate::PACKAGE_VERSION,
-        ObjectContextNeed::Reduced,
-    )
-    .with_functions(CORE_FUNCTION_TABLE)
-    .with_constructors(CORE_CONSTRUCTORS)
-    .with_types(CORE_TYPES)
-    .with_object_member_groups(CORE_OBJECT_MEMBER_GROUPS)
+    LibraryDescriptor::new(crate::PACKAGE_NAME, crate::PACKAGE_VERSION)
+        .with_functions(CORE_FUNCTION_TABLE)
+        .with_constructors(CORE_CONSTRUCTORS)
+        .with_types(CORE_TYPES)
+        .with_object_member_groups(CORE_OBJECT_MEMBER_GROUPS)
 }
 
 /// Глобальные функции ядра, которым нужен контекст прогона: временное
@@ -1835,16 +1770,6 @@ pub struct RuntimeRegistry {
 }
 
 impl RuntimeRegistry {
-    /// Есть ли библиотека, объявившая
-    /// [`ObjectContextNeed::Full`]: её обработчикам нужен полный
-    /// контекст исполнения.
-    #[must_use]
-    pub fn has_full_context_objects(&self) -> bool {
-        self.libraries
-            .iter()
-            .any(|library| library.object_context == ObjectContextNeed::Full)
-    }
-
     pub fn libraries(&self) -> &[LibraryDescriptor] {
         &self.libraries
     }
@@ -2021,7 +1946,7 @@ mod tests {
         assert!(TABLE[0].may_suspend());
 
         let mut shapes = crate::RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
-        let mut context = CallContext::native(&mut shapes, |value, _| Ok(format!("{value:?}")));
+        let mut context = CallContext::minimal(&mut shapes, |value, _| Ok(format!("{value:?}")));
         let value =
             call_method_from_table(TABLE, "ИспытательПауз", &Probe, "Запрос", &[], &mut context)
                 .expect("блокирующая доводка возвращает значение");
@@ -2056,16 +1981,12 @@ mod tests {
     }];
 
     fn core() -> LibraryDescriptor {
-        LibraryDescriptor::new(
-            crate::PACKAGE_NAME,
-            crate::PACKAGE_VERSION,
-            ObjectContextNeed::Reduced,
-        )
-        .with_functions(CORE_FUNCTIONS)
+        LibraryDescriptor::new(crate::PACKAGE_NAME, crate::PACKAGE_VERSION)
+            .with_functions(CORE_FUNCTIONS)
     }
 
     fn json() -> LibraryDescriptor {
-        LibraryDescriptor::new("bsl-json", "0.1.0", ObjectContextNeed::Reduced)
+        LibraryDescriptor::new("bsl-json", "0.1.0")
             .with_dependencies(&[LibraryDependency {
                 package: crate::PACKAGE_NAME,
                 version: crate::PACKAGE_VERSION,
@@ -2101,10 +2022,9 @@ mod tests {
             call: no_call,
         }];
         let mut builder = RuntimeBuilder::new();
-        builder.register(core()).register(
-            LibraryDescriptor::new("other", "1.0.0", ObjectContextNeed::Reduced)
-                .with_functions(DUPLICATE),
-        );
+        builder
+            .register(core())
+            .register(LibraryDescriptor::new("other", "1.0.0").with_functions(DUPLICATE));
 
         assert!(matches!(
             builder.build(),
@@ -2138,7 +2058,7 @@ mod tests {
 
         let mut builder = RuntimeBuilder::new();
         builder.register(core()).register(
-            LibraryDescriptor::new("other", "1", ObjectContextNeed::Reduced)
+            LibraryDescriptor::new("other", "1")
                 .with_types(TYPES)
                 .with_object_member_groups(GROUPS),
         );
@@ -2158,7 +2078,7 @@ mod tests {
 
         let mut builder = RuntimeBuilder::new();
         builder.register(core()).register(
-            LibraryDescriptor::new("other", "1", ObjectContextNeed::Reduced)
+            LibraryDescriptor::new("other", "1")
                 .with_types(TYPES)
                 .with_object_member_groups(GROUPS),
         );
@@ -2174,11 +2094,11 @@ mod tests {
         builder
             .register(core())
             .register(
-                LibraryDescriptor::new("stream-a", "1", ObjectContextNeed::Reduced)
+                LibraryDescriptor::new("stream-a", "1")
                     .with_byte_stream_factory(empty_stream_factory),
             )
             .register(
-                LibraryDescriptor::new("stream-b", "1", ObjectContextNeed::Reduced)
+                LibraryDescriptor::new("stream-b", "1")
                     .with_byte_stream_factory(empty_stream_factory),
             );
         assert_eq!(
@@ -2199,14 +2119,13 @@ mod tests {
         ));
     }
 
-    /// Нативный путь (JIT-шимы) не несёт возможностей: обращение к выводу
-    /// или зоне отвечает ОДНОЙ формой отказа `CapabilityMissing` с пометкой
-    /// пути — а не молчаливым стоком (прежнее поведение) и не чужим
-    /// временем. Это наблюдаемая цель ABI-A.
+    /// Минимальный контекст не несёт внешних возможностей: обращение к
+    /// выводу или зоне отвечает одной формой отказа `CapabilityMissing` с
+    /// пометкой пути. Это наблюдаемая цель ABI-A.
     #[test]
-    fn a_native_context_reports_capability_missing() {
+    fn a_minimal_context_reports_capability_missing() {
         let mut shapes = RuntimeShapes::seeded(Vec::new(), Vec::new(), None);
-        let mut context = CallContext::native(&mut shapes, |_v, _s| unreachable!());
+        let mut context = CallContext::minimal(&mut shapes, |_v, _s| unreachable!());
         assert!(matches!(
             context.stdout(),
             Err(RtError::CapabilityMissing {
@@ -2245,10 +2164,11 @@ mod descriptor_sizes {
     /// Размеры дескрипторов зафиксированы намеренно (ABI-E плана
     /// `docs/archive/refactors/component-abi-f.md`). `LibraryDescriptor`
     /// содержит толстые указатели на `type_aliases` и группы объектных членов
-    /// плюс обычный указатель `byte_stream_factory` — всего 144 байта на
+    /// плюс обычный указатель `byte_stream_factory` — всего 136 байт на
     /// x86-64. Последние 16 байт дают справочнику статическую поверхность
     /// объектов; записи статические, так что рост платится один раз на
-    /// библиотеку, а не на объект. `MethodDescriptor` — 40 байт:
+    /// библиотеку, а не на объект. Удалённая вместе с JIT пометка требований
+    /// к контексту освободила 8 байт. `MethodDescriptor` — 40 байт:
     /// написания, `arity` и обработчик-перечисление `MethodImpl`, чей тег
     /// (обычный или приостанавливающий, план фоновых заданий, этап 5)
     /// стоит 8 байт выравнивания. Union с тегом в паддинге `arity` вернул
@@ -2258,7 +2178,7 @@ mod descriptor_sizes {
     /// ловит незамеченный рост.
     #[test]
     fn descriptors_have_the_expected_size() {
-        assert_eq!(std::mem::size_of::<LibraryDescriptor>(), 144);
+        assert_eq!(std::mem::size_of::<LibraryDescriptor>(), 136);
         assert_eq!(std::mem::size_of::<MethodDescriptor>(), 40);
     }
 }

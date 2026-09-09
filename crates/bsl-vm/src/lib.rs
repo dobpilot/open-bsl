@@ -9,50 +9,6 @@
 //! `Vec`, а времени жизни хватает, потому что в BSL нельзя сохранить ссылку
 //! на переменную за пределы вызова.
 
-/// Компиляция байт-кода в машинный код x86-64. Включается ТОЛЬКО ключом
-/// `--jit`: по умолчанию исполнение идёт интерпретатором, и любой отказ
-/// JIT-а (неподдержанная инструкция, ядро не дало исполняемую страницу,
-/// другая архитектура) молча возвращает на него же.
-#[cfg(all(target_arch = "x86_64", target_os = "linux"))]
-pub(crate) mod jit;
-
-/// На всех прочих платформах JIT-а нет, и `--jit` там просто ничего не
-/// меняет. Заглушка, а не `cfg` на каждом месте использования: условная
-/// компиляция, размазанная по циклу диспетчеризации, читается хуже.
-#[cfg(not(all(target_arch = "x86_64", target_os = "linux")))]
-pub(crate) mod jit {
-    pub const AVAILABLE: bool = false;
-    #[allow(dead_code)]
-    pub(crate) enum NativeOutcome {
-        Continue { pc: usize },
-        Yield { pc: usize },
-    }
-    pub struct CompiledChunk;
-    impl CompiledChunk {
-        #[allow(clippy::too_many_arguments)]
-        pub(crate) fn run(
-            &self,
-            _pc: usize,
-            _frames: &mut Vec<crate::Frame>,
-            _stack: &mut Vec<bsl_rt::BslValue>,
-            _program: &bsl_bytecode::Program,
-            _caches: &crate::RunCaches,
-            _runtime_shapes: &mut bsl_rt::RuntimeShapes,
-            _linked: &crate::LinkedComponents<'_>,
-            _quantum_remaining: &mut usize,
-        ) -> Option<Result<NativeOutcome, bsl_rt::RtError>> {
-            None
-        }
-    }
-    pub fn compile(
-        _chunk: &bsl_bytecode::Chunk,
-        _builtin_methods: &[Option<bsl_rt::BuiltinMethod>],
-        _scheduled: bool,
-    ) -> Option<CompiledChunk> {
-        None
-    }
-}
-
 mod debug;
 mod entry;
 
@@ -83,8 +39,8 @@ pub use scheduler::{ExecutionWaker, SchedulerConfig};
 #[cfg(test)]
 use linking::link_verified;
 use linking::{
-    ComponentMethodMap, ComponentPropertyMap, HostIo, LinkedComponents, component_prop_get,
-    component_prop_set, link_components, resolve_component_method,
+    ComponentMethodMap, HostIo, LinkedComponents, component_prop_get, component_prop_set,
+    link_components, resolve_component_method,
 };
 
 use snippet::run_dynamic_snippet;
@@ -244,7 +200,7 @@ fn drive(
     func_id: usize,
     stack: Vec<BslValue>,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
-    drive_with(program, func_id, stack, JitMode::Off)
+    drive_with(program, func_id, stack)
 }
 
 /// Предел числа одновременно активных кадров BSL. Кадры лежат в куче
@@ -257,20 +213,11 @@ fn drive(
 // нижнюю границу (900 уровней обязаны работать).
 const MAX_CALL_DEPTH: usize = 1000;
 
-/// Включён ли JIT. Отдельный тип, а не `bool`: у вызова `drive(.., true)`
-/// на месте вызова не видно, что именно включается.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum JitMode {
-    Off,
-    On,
-}
-
 #[cfg(test)]
 fn drive_with(
     program: &Program,
     func_id: usize,
     stack: Vec<BslValue>,
-    jit_mode: JitMode,
 ) -> Result<(BslValue, Vec<BslValue>), RtError> {
     let mut env = bsl_rt::HostEnv::process();
     let linked = link_components(
@@ -301,7 +248,6 @@ fn drive_with(
         program,
         func_id,
         stack,
-        jit_mode,
         &linked,
         &mut host,
         &mut module_state,
@@ -310,8 +256,7 @@ fn drive_with(
     Ok((value, module_state.slots))
 }
 
-/// Одноразовая подготовка прогона: таблица имён и форм плюс место под
-/// скомпилированные чанки.
+/// Одноразовая подготовка прогона: таблица имён и форм.
 ///
 /// Отдельная функция, а не первые строки `drive_linked`, и `inline(never)`
 /// здесь — не украшение, а ИЗМЕРЕНИЕ. Пока этот пролог лежал в теле
@@ -326,14 +271,7 @@ fn drive_with(
 /// (−30 % к базе), остальной набор — в пределах ±5 %, число инструкций
 /// везде совпало.
 #[inline(never)]
-fn drive_prologue(
-    program: &Program,
-    jit_mode: JitMode,
-    linked: &LinkedComponents,
-) -> (
-    bsl_rt::RuntimeShapes,
-    Vec<Option<Option<jit::CompiledChunk>>>,
-) {
+fn drive_prologue(program: &Program, linked: &LinkedComponents) -> bsl_rt::RuntimeShapes {
     // Затравлена формами/именами ЭТОЙ программы — см. `bsl_rt::RuntimeShapes`
     // doc comment про то, почему не общий на процесс синглтон: у вложенного
     // `Program` (см. `run_dynamic_snippet`) свои `names`/`shapes`, и рантайм-
@@ -343,21 +281,11 @@ fn drive_prologue(
     // вызовом: промежуточного состояния «формы есть, типов ещё нет» не
     // существует. По ним `Тип("Имя")` находит то, чего нет в закрытом
     // реестре ядра (см. `TypeRef`).
-    let runtime_shapes = bsl_rt::RuntimeShapes::seeded(
+    bsl_rt::RuntimeShapes::seeded(
         program.names.clone(),
         program.shapes.clone(),
         linked.registry,
-    );
-    // Скомпилированные чанки. Внешний `None` — «ещё не пробовали»,
-    // внутренний — «пробовали, JIT отказался»: компилировать чанк заново
-    // на каждом входе в него стоило бы дороже любого выигрыша.
-    let native: Vec<Option<Option<jit::CompiledChunk>>> =
-        if jit_mode == JitMode::On && jit::AVAILABLE {
-            (0..program.chunks.len()).map(|_| None).collect()
-        } else {
-            Vec::new()
-        };
-    (runtime_shapes, native)
+    )
 }
 
 /// Результат продвижения сохраняемого запуска VM.
@@ -415,8 +343,6 @@ impl RunCaches {
 pub struct ProgramExecution {
     async_state: AsyncState,
     runtime_shapes: bsl_rt::RuntimeShapes,
-    native: Vec<Option<Option<jit::CompiledChunk>>>,
-    native_scheduled: Vec<Option<Option<jit::CompiledChunk>>>,
     merge_linear: bool,
     /// Крючок отладчика, если прогон отлаживают.
     ///
@@ -457,7 +383,6 @@ impl ProgramExecution {
         program: &Program,
         func_id: usize,
         stack: Vec<BslValue>,
-        jit_mode: JitMode,
         linked: &LinkedComponents<'_>,
         module_state: ModuleState,
         scheduler: SchedulerConfig,
@@ -480,17 +405,11 @@ impl ProgramExecution {
             quantum_remaining: scheduler.safe_points_per_quantum,
         };
         let async_state = AsyncState::new(root, scheduler.safe_points_per_quantum);
-        let (runtime_shapes, native) = drive_prologue(program, jit_mode, linked);
-        let native_scheduled = (0..native.len()).map(|_| None).collect();
-        // Без JIT `step` может сцеплять линейные цепочки бандлов, не
-        // возвращаясь сюда; JIT требует возврата после каждого бандла.
-        let merge_linear = native.is_empty();
+        let runtime_shapes = drive_prologue(program, linked);
         Self {
             async_state,
             runtime_shapes,
-            native,
-            native_scheduled,
-            merge_linear,
+            merge_linear: true,
             debug: None,
             root_result: None,
             module_state,
@@ -618,13 +537,11 @@ impl ProgramExecution {
     pub fn start_with_registry(
         program: &Program,
         registry: &bsl_rt::RuntimeRegistry,
-        jit_mode: JitMode,
         host_env: &bsl_rt::HostEnv,
     ) -> Result<Self, RtError> {
         Self::start_with_registry_and_scheduler(
             program,
             registry,
-            jit_mode,
             host_env,
             SchedulerConfig::default(),
         )
@@ -638,7 +555,6 @@ impl ProgramExecution {
     pub fn start_with_registry_and_scheduler(
         program: &Program,
         registry: &bsl_rt::RuntimeRegistry,
-        jit_mode: JitMode,
         host_env: &bsl_rt::HostEnv,
         scheduler: SchedulerConfig,
     ) -> Result<Self, RtError> {
@@ -668,7 +584,6 @@ impl ProgramExecution {
             program,
             0,
             stack,
-            jit_mode,
             &linked,
             ModuleState::new(program),
             scheduler,
@@ -696,7 +611,7 @@ impl ProgramExecution {
     ///
     /// `program` обязана быть ТОЙ ЖЕ и НЕИЗМЕНЁННОЙ программой, что при
     /// старте: под неё построены таблицы запуска — инлайн-кэши
-    /// (`RunCaches`), нативные слоты, слоты модульных переменных.
+    /// (`RunCaches`) и слоты модульных переменных.
     /// Программа с другой геометрией отказывает посреди исполнения, а
     /// правка `instrs` на месте между poll'ами опаснее — тёплая ячейка
     /// кэша помнит форму и слот, но не имя поля, и при совпавшей форме
@@ -865,8 +780,6 @@ impl ProgramExecution {
         let Self {
             async_state,
             runtime_shapes,
-            native,
-            native_scheduled,
             merge_linear,
             debug,
             root_result,
@@ -1037,122 +950,9 @@ impl ProgramExecution {
                     };
                     ctx.execution_parts(cur_module, &*catalog_caches)?
                 };
-                // Нативный путь. Он не обязан ничего исполнить: если на текущей
-                // позиции входа нет, управление просто идёт в `step`, и это же
-                // происходит при любом отказе JIT-а.
-                // Нативный код исполняет целые куски чанка, не возвращаясь
-                // во внешний цикл, где стоит крючок, — под отладчиком в
-                // него не входим вовсе. Измерено: с `--jit` точка останова
-                // не срабатывала НИ РАЗУ.
-                if cur_module == ROOT_MODULE && !native.is_empty() && debug.is_none() {
-                    let native_slots = if scheduled {
-                        &mut *native_scheduled
-                    } else {
-                        &mut *native
-                    };
-                    let (fid, pc) = {
-                        let frame = task
-                            .frames
-                            .last()
-                            .expect("инвариант VM: drive всегда держит хотя бы один кадр");
-                        (frame.func_id, frame.pc)
-                    };
-                    if let Some(slot) = native_slots.get_mut(fid) {
-                        if slot.is_none() {
-                            // Чанк, ТРОГАЮЩИЙ объекты, нативному пути не отдаётся,
-                            // если реестр несёт библиотеку «только интерпретатор»:
-                            // её обработчикам нужен полный контекст, а у шимов он
-                            // сокращённый. Решение принимается один раз на чанк —
-                            // сам `jit` при этом не меняется ни на строку, и это
-                            // не педантизм: любая правка его кода сдвигает укладку
-                            // и бьёт по горячему циклу интерпретатора (`empty_for`
-                            // платил 58 -> 83 млн тактов при неизменном числе
-                            // инструкций).
-                            *slot = Some(
-                                program
-                                    .chunks
-                                    .get(fid)
-                                    .filter(|chunk| {
-                                        !chunk.touches_objects() || !linked.interpreter_only_objects
-                                    })
-                                    .and_then(|chunk| {
-                                        jit::compile(chunk, &linked.builtin_methods, scheduled)
-                                    }),
-                            );
-                        }
-                        // Два слоя внутри уже найденной ячейки: пробовали ли этот
-                        // чанк и вышло ли. Повторно искать его в таблице незачем.
-                        if let Some(Some(code)) = slot.as_ref()
-                            && let Some(outcome) = code.run(
-                                pc,
-                                &mut task.frames,
-                                &mut task.stack,
-                                program,
-                                // Корневые кэши, а не `cur_caches`: все три
-                                // аргумента (`program`, кэши, `linked`)
-                                // обязаны быть одного уровня. Сегодня это
-                                // одно и то же — ветка открыта только под
-                                // `cur_module == ROOT_MODULE`, — но стража
-                                // решает про покрытие JIT, а не про кэши,
-                                // и снявший её не должен получить чтение
-                                // ячеек модуля под инструкции корня.
-                                &*caches,
-                                runtime_shapes,
-                                linked,
-                                &mut task.quantum_remaining,
-                            )
-                        {
-                            match outcome {
-                                Ok(jit::NativeOutcome::Continue { pc: next_pc }) => {
-                                    if let Some(frame) = task.frames.last_mut() {
-                                        frame.pc = next_pc;
-                                    }
-                                    continue;
-                                }
-                                Ok(jit::NativeOutcome::Yield { pc: next_pc }) => {
-                                    if let Some(frame) = task.frames.last_mut() {
-                                        frame.pc = next_pc;
-                                    }
-                                    async_state.tasks[task_id] = Some(task);
-                                    async_state.ready.push_back(task_id);
-                                    if let Some(budget) = quanta_budget.as_mut() {
-                                        *budget = budget.saturating_sub(1);
-                                        if *budget == 0 {
-                                            return Ok(ProgramPoll::Runnable);
-                                        }
-                                    }
-                                    break;
-                                }
-                                Err(e) => {
-                                    if !unwind_to_handler(
-                                        &mut task.frames,
-                                        &mut task.stack,
-                                        program,
-                                        catalog,
-                                        session_modules,
-                                        &e,
-                                        &mut task.current_exception,
-                                    ) {
-                                        match task.completion {
-                                            TaskCompletion::Root | TaskCompletion::Detached => {
-                                                return Err(e);
-                                            }
-                                            TaskCompletion::Promise(promise_id) => {
-                                                async_state.resolve_promise(promise_id, Err(e))?;
-                                                break;
-                                            }
-                                        }
-                                    }
-                                    continue;
-                                }
-                            }
-                        }
-                    }
-                }
-
                 // `step` исполняет целый VLIW-бандл (см. `bsl_bytecode::bundle`),
-                // так что проверки fast numeric-for и JIT-входа выше происходят на
-                // границах бандлов, а не на каждой инструкции. При ошибке члена
+                // так что проверка fast numeric-for выше происходит на границах
+                // бандлов, а не на каждой инструкции. При ошибке члена
                 // `pc` стоит на нём самом, и `unwind_to_handler` находит обработчик
                 // как при поинструкционном исполнении; обработчик по построению
                 // разметки — начало бандла.
@@ -1346,7 +1146,6 @@ fn drive_linked(
     program: &Program,
     func_id: usize,
     stack: Vec<BslValue>,
-    jit_mode: JitMode,
     linked: &LinkedComponents,
     host: &mut HostIo<'_, '_>,
     module_state: &mut ModuleState,
@@ -1359,7 +1158,6 @@ fn drive_linked(
         program,
         func_id,
         stack,
-        jit_mode,
         linked,
         owned_module_state,
         SchedulerConfig::default(),
@@ -1762,8 +1560,8 @@ pub mod counters {
 
 /// Выполняет один VLIW-бандл текущего (верхнего) кадра: от одной
 /// инструкции (одиночный бандл) до `Chunk::bundle_len[pc]` подряд — без
-/// возврата в `drive_with` между членами. При `merge_linear` (чисто
-/// интерпретаторный режим, без JIT) исполнение продолжается и через
+/// возврата в `drive_with` между членами. При `merge_linear` исполнение
+/// продолжается и через
 /// границу бандла, пока `pc` идёт линейно: пробы `drive_with` имеют смысл
 /// только там, куда `pc` попадает переходом, вызовом или разматыванием.
 #[allow(clippy::too_many_arguments)]
@@ -1803,8 +1601,8 @@ fn step(
     // хвостовым членом, поэтому кадр и чанк между членами можно не
     // перечитывать: `Call` и `Return` дальше хвоста не встречаются, а
     // `Return` к тому же выходит из функции ранним `return`. Ноль
-    // (середина бандла — сюда возвращается JIT, отказавшийся от
-    // инструкции) и пустая таблица равнозначны одиночному исполнению.
+    // Ноль в середине бандла и пустая таблица равнозначны одиночному
+    // исполнению.
     // Разметке можно верить, потому что из файла она не читается — её
     // всегда пересчитывает `bundle::compute`; ошибка члена оставляет `pc`
     // на нём самом, и `Попытка` ищется ровно как при поинструкционном
@@ -2567,8 +2365,8 @@ fn step(
             }
         }
         if extra == 0 {
-            // Бандл кончился. Без JIT линейная цепочка бандлов
-            // продолжается прямо здесь: смену кадра (`Call`) ловит первая
+            // Бандл кончился. Линейная цепочка бандлов продолжается прямо
+            // здесь: смену кадра (`Call`) ловит первая
             // проверка, взятый переход — вторая, а `Return` вышел из
             // функции ранним `return` ещё в своей ветке. Всё, что
             // осталось, — обычный fallthrough, на котором пробам
@@ -2835,10 +2633,6 @@ fn step_cold(
                         program,
                         name,
                         call_args,
-                        // Обратный вызов функции модуля из компонента всегда
-                        // шёл интерпретатором (форма `..._with_host` зашивала
-                        // `Off`); параметр эту семантику сохраняет.
-                        JitMode::Off,
                         linked,
                         &mut nested_host,
                         module_state,
@@ -3598,8 +3392,7 @@ fn call_builtin_with_format(
         // Не `call_builtin_fn`: `ЗаполнитьЗначенияСвойств` читает таблицу
         // имён, и путь без контекста для неё кончается ошибкой.
         // Куда именно функция ходит наружу, говорит один источник истины —
-        // `BuiltinFn::host_effect`; по нему же JIT решает, чего не
-        // компилировать.
+        // `BuiltinFn::host_effect`.
         other => match other.host_effect() {
             // Часы, часы в миллисекундах и аргументы запуска отвечают из
             // окружения прогона, а не из состояния процесса.
@@ -3629,10 +3422,8 @@ fn call_builtin_with_format(
 
 /// Тело инструкции `Add`.
 ///
-/// Отдельной функцией, потому что её зовут ДВОЕ: ветка `step`
-/// интерпретатора и шим JIT-а. Второй реализации сложения строк в
-/// проекте быть не должно — при расхождении режимов `--jit` и обычного
-/// не сработал бы ни один существующий тест.
+/// Отдельной функцией, чтобы арифметика и конкатенация не раздували ветку
+/// `step` диспетчерского цикла.
 fn add_op(
     frames: &mut [Frame],
     stack: &mut [BslValue],
@@ -3767,7 +3558,7 @@ fn arith(v: &BslValue) -> Result<std::borrow::Cow<'_, BslValue>, RtError> {
 }
 
 /// Тело инструкции `Neg`. Отдельной функцией по той же причине, что и
-/// [`add_op`]: её зовут и интерпретатор, и шим JIT-а.
+/// [`add_op`]: чтобы не раздувать ветку диспетчерского цикла.
 fn neg_op(v: &BslValue) -> Result<BslValue, RtError> {
     // Тот же порядок, что в `binop`: сначала как есть. Унарный минус лежит
     // на горячем пути не меньше сложения (`flip = -flip` в цикле), и

@@ -9,20 +9,13 @@ use open_bsl::{Engine, ExecutionPoll};
 mod support;
 
 #[test]
-fn system_http_runs_end_to_end_through_state_in_interpreter_and_jit() {
+fn system_http_runs_end_to_end_through_state() {
     let engine = Engine::builder().build().unwrap();
-    for jit in [false, true] {
-        let (port, observed, server) = support::start_server();
-        let module = engine.compile(&support::source(port)).unwrap();
-        engine
-            .state_builder()
-            .jit(jit)
-            .build()
-            .run(&module)
-            .unwrap();
-        server.join().unwrap();
-        support::assert_requests(&observed);
-    }
+    let (port, observed, server) = support::start_server();
+    let module = engine.compile(&support::source(port)).unwrap();
+    engine.new_state().run(&module).unwrap();
+    server.join().unwrap();
+    support::assert_requests(&observed);
 }
 
 #[test]

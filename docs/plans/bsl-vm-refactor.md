@@ -76,8 +76,8 @@
 
 1. `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -D
    warnings`, `cargo build --workspace`.
-2. `the_jit_agrees_with_the_interpreter_on_every_script` — весь корпус обоими
-   режимами.
+2. `the_optimizing_passes_agree_with_the_plain_run_on_every_script` — весь
+   корпус с обычной и оптимизированной компиляцией.
 3. `cargo test -p bsl-vm` и полный конформанс `cargo test -p bsl-cli`.
 
 Закрытие серии (после последней стадии): чередующийся A/B двух
@@ -121,8 +121,8 @@
   (delta по `bytecode-image`: кэши уходят из образа, отказ неполному кэшу
   снимается как непредставимый). Поверхность BSL API не задета —
   регенерация `api.md` не нужна, дифф проверяется как страховка.
-- Протянуть `&RunCaches` через `step`/`step_cold` и четыре шима JIT
-  (`JitCtx += caches`), кэши каталожных модулей — в `attach_catalog`.
+- Протянуть `&RunCaches` через `step`/`step_cold`, кэши каталожных модулей —
+  в `attach_catalog`.
 - Измеренная цена (перепроверка 4 сентября, коммит `46d36b4`): ~1 %
   инструкций там, где кэши работают, до +3 % на `call_overhead`; такты в
   шуме; `step` перекладывается (0xb099 → 0xaab2) — записать в A/B.

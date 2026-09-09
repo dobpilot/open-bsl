@@ -1606,11 +1606,9 @@ fn parse_chunk(r: &mut Reader, expected_index: usize) -> Result<(Chunk, Vec<u32>
         instrs.push(parse_instr(no, rest.trim())?);
     }
 
-    // Производные таблицы — `touches_objects` и разметка — здесь не
-    // заполняются: их ставит `image::finalize` в конце `parse_program`.
-    // Единственный писатель на весь крейт.
+    // Производная разметка здесь не заполняется: её ставит
+    // `image::finalize` в конце `parse_program`.
     let chunk = Chunk {
-        touches_objects: false,
         param_has_default,
         is_procedure,
         is_async,

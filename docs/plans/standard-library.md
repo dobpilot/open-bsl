@@ -285,7 +285,7 @@ xref-потоки, FlateDecode идёт через `inflate.rs` этапа 4; в
   `run-on-1c.sh`.
 - Зелёные `cargo fmt --all -- --check`, `cargo clippy --workspace
   --all-targets -- -D warnings`, `cargo test --workspace`, включая
-  `the_jit_agrees_with_the_interpreter_on_every_script`.
+  `the_optimizing_passes_agree_with_the_plain_run_on_every_script`.
 - Новые опкоды (если появились) классифицированы в `bundle.rs`.
 
 Порядок 0 → 1 → 2 жёсткий; этапы 3 и 4 после него независимы; 5 и 6 —

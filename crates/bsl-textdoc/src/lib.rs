@@ -825,14 +825,10 @@ const TYPES: &[&TypeDescriptor] = &[&crate::DOCUMENT_TYPE, &crate::PARAMS_TYPE];
 
 /// Дескриптор статически подключаемого компонента текстовых документов.
 pub const fn library() -> LibraryDescriptor {
-    LibraryDescriptor::new(
-        env!("CARGO_PKG_NAME"),
-        env!("CARGO_PKG_VERSION"),
-        bsl_rt::ObjectContextNeed::Reduced,
-    )
-    .with_constructors(CONSTRUCTORS)
-    .with_types(TYPES)
-    .with_object_member_groups(OBJECT_MEMBER_GROUPS)
+    LibraryDescriptor::new(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))
+        .with_constructors(CONSTRUCTORS)
+        .with_types(TYPES)
+        .with_object_member_groups(OBJECT_MEMBER_GROUPS)
 }
 
 #[cfg(test)]
