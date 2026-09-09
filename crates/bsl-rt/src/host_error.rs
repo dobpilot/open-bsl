@@ -11,6 +11,8 @@
 /// от этого не меняется.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HostErrorCode {
+    /// Отменено выполняющееся задание; преобразуется в неловимую отмену VM.
+    Canceled,
     /// Задание неизвестно runtime: вытеснено из истории либо никогда не
     /// существовало. Live-методы старого снимка не притворяются
     /// успешными и не скрывают потерю истории пустым результатом.
@@ -53,9 +55,12 @@ impl HostError {
         }
     }
 
-    /// Ошибка как ловимое BSL-исключение.
+    /// Ошибка как BSL-исключение; `Canceled` — неловимая отмена VM.
     #[must_use]
     pub fn raise(self) -> crate::RtError {
+        if self.code == HostErrorCode::Canceled {
+            return crate::RtError::Canceled;
+        }
         crate::RtError::Host(Box::new(self))
     }
 }

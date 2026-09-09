@@ -314,6 +314,7 @@ pub(super) fn prepare_job(
         .host
         .env
         .set_background_jobs(std::rc::Rc::new(WorkerJobService {
+            parent_id: id,
             shared: Arc::clone(shared),
             engine: engine.clone(),
             session_token,

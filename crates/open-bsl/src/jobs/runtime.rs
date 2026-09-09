@@ -1418,6 +1418,7 @@ mod pool_tests {
         let ids = [first.id, second.id];
         let foreground = runtime.wait_terminal(&ids, Some(Duration::ZERO)).unwrap();
         let service = crate::jobs::service::WorkerJobService {
+            parent_id: JobId([0; 16]),
             shared: Arc::clone(&runtime.shared),
             engine,
             session_token: [0; 16],

@@ -53,6 +53,8 @@ impl bsl_rt::UserMessageSink for JobMessageRoute {
 /// доводят их сами); helping не меняет ABI и наблюдаемой семантики
 /// ожидания.
 pub(crate) struct WorkerJobService {
+    /// Задание этого сеанса, отмена которого прерывает вложенное ожидание.
+    pub parent_id: JobId,
     pub shared: Arc<JobRuntimeShared>,
     /// Клон worker-движка: живёт только в потоке этого worker.
     pub engine: crate::Engine,
@@ -67,6 +69,26 @@ pub(crate) struct WorkerJobService {
     /// Host-профиль этого job-сеанса: дочерние задания наследуют его —
     /// другого профиля сервису сеанса не передать.
     pub profile_index: u32,
+}
+
+impl WorkerJobService {
+    fn cancel_requested(&self, registry: &JobRegistry) -> bool {
+        registry.record(self.parent_id).is_some_and(|record| {
+            record
+                .cancel_requested
+                .load(std::sync::atomic::Ordering::Acquire)
+        })
+    }
+
+    fn check_canceled(&self, registry: &JobRegistry) -> Result<(), HostError> {
+        if self.cancel_requested(registry) {
+            return Err(HostError::new(
+                bsl_rt::HostErrorCode::Canceled,
+                "выполнение отменено",
+            ));
+        }
+        Ok(())
+    }
 }
 
 impl bsl_rt::BackgroundJobService for WorkerJobService {
@@ -123,7 +145,9 @@ impl bsl_rt::BackgroundJobService for WorkerJobService {
         // может только этот поток), и глобальную очередь, а спит лишь
         // когда двигать нечего. Предикат вычисляется под тем же локом,
         // под которым принимается решение спать.
-        let done = |registry: &JobRegistry| JobRuntimeShared::all_terminal(registry, ids);
+        let done = |registry: &JobRegistry| {
+            self.cancel_requested(registry) || JobRuntimeShared::all_terminal(registry, ids)
+        };
         drive_local(
             &self.shared,
             &self.engine,
@@ -136,6 +160,7 @@ impl bsl_rt::BackgroundJobService for WorkerJobService {
         let registry = self.shared.registry.lock().expect("реестр без отравления");
         // Закрытие runtime во время ожидания — ловимая ошибка, а не
         // молчаливый таймаут.
+        self.check_canceled(&registry)?;
         JobRuntimeShared::live_guard(&registry)?;
         Ok(bsl_rt::JobWaitOutcome {
             completed: JobRuntimeShared::all_terminal(&registry, ids),
@@ -173,6 +198,9 @@ impl bsl_rt::BackgroundJobService for WorkerJobService {
             }
         }
         let done = |registry: &JobRegistry| {
+            if self.cancel_requested(registry) {
+                return true;
+            }
             // Вытеснение во время ожидания прекращает сон: внешняя
             // проверка ниже вернёт по нему ловимую `JobExpired`.
             let Ok(held) = JobRuntimeShared::held_snapshots(registry, &ids) else {
@@ -190,6 +218,7 @@ impl bsl_rt::BackgroundJobService for WorkerJobService {
             },
         );
         let registry = self.shared.registry.lock().expect("реестр без отравления");
+        self.check_canceled(&registry)?;
         JobRuntimeShared::live_guard(&registry)?;
         JobRuntimeShared::held_snapshots(&registry, &ids)
     }

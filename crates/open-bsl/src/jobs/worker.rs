@@ -800,6 +800,7 @@ mod tests {
             // Сервис не `Send` из-за движка — поток строит свой.
             let worker_engine = self::engine();
             let service = WorkerJobService {
+                parent_id: JobId([0; 16]),
                 shared,
                 engine: worker_engine,
                 session_token: [5; 16],
@@ -905,6 +906,7 @@ mod tests {
             // Сервис не `Send` из-за движка — поток строит свой.
             let worker_engine = self::engine();
             let service = WorkerJobService {
+                parent_id: JobId([0; 16]),
                 shared,
                 engine: worker_engine,
                 session_token: [3; 16],

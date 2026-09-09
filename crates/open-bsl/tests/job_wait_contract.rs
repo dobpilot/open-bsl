@@ -338,3 +338,101 @@ fn manager_wait_requires_an_array_through_the_bsl_surface() {
         assert_eq!(format_value(&value, None).unwrap(), expected, "{argument}");
     }
 }
+
+#[test]
+fn canceling_a_waiting_parent_does_not_cancel_its_child() {
+    use open_bsl::{GraphLimits, JobStateDto, RuntimeShapes, SerializedValueGraph};
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
+
+    for (workers, wait) in [1, 3].into_iter().flat_map(|workers| {
+        [
+            "Ребёнок.ОжидатьЗавершенияВыполнения()",
+            "ФоновыеЗадания.ОжидатьЗавершенияВыполнения(Группа)",
+            "Ребёнок.ОжидатьЗавершенияВыполнения(60)",
+            "ФоновыеЗадания.ОжидатьЗавершенияВыполнения(Группа, 60)",
+        ]
+        .map(|wait| (workers, wait))
+    }) {
+        let source = format!(
+            r#"
+Процедура Ребёнок() Экспорт
+    Сообщить("child_started");
+    ПределПробы = ТекущаяУниверсальнаяДатаВМиллисекундах() + 5000;
+    Пока ТекущаяУниверсальнаяДатаВМиллисекундах() < ПределПробы Цикл КонецЦикла;
+    Сообщить("child_finished");
+КонецПроцедуры
+Процедура Родитель() Экспорт
+    Ребёнок = ФоновыеЗадания.Выполнить("Работы.Ребёнок");
+    Группа = Новый Массив;
+    Группа.Добавить(Ребёнок);
+    Попытка
+        {wait};
+        Сообщить("after_wait");
+    Исключение
+        Сообщить("caught");
+    КонецПопытки;
+КонецПроцедуры
+"#
+        );
+        let engine = Engine::builder()
+            .background_jobs(open_bsl::jobs::BackgroundJobConfig {
+                workers: Some(workers),
+                ..Default::default()
+            })
+            .common_module("Работы", &source)
+            .build()
+            .unwrap();
+        let runtime = engine.job_runtime().unwrap();
+        let params = Arc::new(
+            SerializedValueGraph::capture(
+                &[],
+                &RuntimeShapes::seeded(Vec::new(), Vec::new(), None),
+                &GraphLimits::default(),
+            )
+            .unwrap(),
+        );
+        let parent = runtime
+            .submit_by_name("Работы.Родитель", params, None, None)
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        // При одном worker начало ребёнка доказывает вход родителя в helping.
+        let child = loop {
+            if let Some(child) = runtime.snapshots().into_iter().find(|job| {
+                job.method_name == "Работы.Ребёнок"
+                    && !runtime.take_messages(job.id, false).unwrap().is_empty()
+            }) {
+                break child;
+            }
+            assert!(Instant::now() < deadline, "ребёнок не запущен");
+            std::thread::sleep(Duration::from_millis(1));
+        };
+        runtime.cancel(parent.id).unwrap();
+        let canceled_before_child = runtime
+            .wait_terminal(&[parent.id], Some(Duration::from_secs(2)))
+            .unwrap();
+        let child_state = runtime.snapshot(child.id).unwrap().state;
+        // Ребёнок сам завершает работу: отмена родителя не должна оставлять
+        // его без обслуживающего worker. Пять секунд также ограничивают
+        // ошибочный старый путь, который продолжал ждать ребёнка.
+        assert!(
+            runtime
+                .wait_terminal(&[parent.id, child.id], Some(Duration::from_secs(10)))
+                .unwrap()
+        );
+        assert!(
+            canceled_before_child,
+            "родитель продолжал ждать ребёнка: {wait}"
+        );
+        assert!(!child_state.is_terminal(), "каскадная отмена ребёнка");
+        assert_eq!(
+            runtime.snapshot(child.id).unwrap().state,
+            JobStateDto::Completed
+        );
+        assert_eq!(
+            runtime.snapshot(parent.id).unwrap().state,
+            JobStateDto::Canceled
+        );
+        assert!(runtime.take_messages(parent.id, false).unwrap().is_empty());
+    }
+}
