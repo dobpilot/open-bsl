@@ -36,6 +36,17 @@
 
 ## Результаты
 
+При приёмке исправления ожиданий `background_jobs` повторён на серверной
+1С 8.3.27.2342 (`Version8_3_27`) и release open-bsl в обоих режимах:
+в каждой среде прошли 13 групп, 601 задание и 2 400 000 строк на группу.
+Объектное ожидание по-прежнему дожидается каждого задания; новый менеджерный
+метод не заменяет ожидание всей группы. Выводы:
+[1С](../docs/research/compatibility/job-wait-2026-09-08/background_jobs.verified.platform.txt),
+[open-bsl](../docs/research/compatibility/job-wait-2026-09-08/background_jobs.verified.open-bsl.txt),
+[с оптимизацией](../docs/research/compatibility/job-wait-2026-09-08/background_jobs.verified.open-bsl-optimize.txt).
+Это одиночные проверки корректности на работающей машине, не новый A/B-замер;
+исторические медианы таблицы ниже ими не заменяются.
+
 | Сценарий | `bsl-cli`, мс | `bsl-cli --jit`, мс | Lua 5.4, мс | LuaJIT, мс | Python, мс | OneScript, мс | 1С 8.3.27, мс |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | `background_jobs` | 21560 | 21452 | — | — | — | ошибка | — |

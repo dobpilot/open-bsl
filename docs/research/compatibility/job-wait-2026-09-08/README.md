@@ -1,6 +1,8 @@
 # Фактическая семантика ожидания фоновых заданий
 
-Дата: 2026-09-08. Исследование и предложение исправления; runtime пока не изменён.
+Дата исходного исследования: 2026-09-08. Ниже сохранено расхождение до
+исправления runtime; итоговая проверка исправлений — в
+[серверной приёмке](acceptance.md).
 
 ## Среда и свидетельства
 
@@ -17,7 +19,7 @@
 - Общие исходники: [probe.bsl](probe.bsl), [worker.bsl](worker.bsl).
 - Полный вывод: [platform.tsv](platform.tsv), [open-bsl.tsv](open-bsl.tsv),
   [open-bsl-optimize.tsv](open-bsl-optimize.tsv).
-- План: [align-background-job-waits](../../../../openspec/changes/align-background-job-waits/proposal.md).
+- План: [align-background-job-waits](../../../../openspec/changes/archive/2026-09-09-align-background-job-waits/proposal.md).
 - Дополнительный серверный замер после обсуждения плана:
   [отмена родителя, ожидающего ребёнка](cancel-parent.md).
 
@@ -190,5 +192,6 @@ target/release/bsl-cli --optimize docs/research/compatibility/job-wait-2026-09-0
 - `cargo test --workspace` — успешно вне sandbox. Первый запуск внутри
   sandbox остановился на запрете локального слушающего HTTP-сокета;
   повтор с разрешением на запуск вне sandbox завершился с кодом 0.
-- Прохождение существующих тестов не означает исправления найденных
-  расхождений: их новые регрессионные проверки входят в план реализации.
+- Эти проверки исходного исследования не означали исправления найденных
+  расхождений. Новые регрессии и повторные серверные результаты приведены
+  в [acceptance.md](acceptance.md).
